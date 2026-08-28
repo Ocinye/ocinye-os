@@ -134,12 +134,23 @@ fi
 # E o controlo positivo: com os portões verdadeiros, o corredor passa. Sem isto,
 # tudo acima podia estar a recusar por o corredor recusar sempre.
 provas=$((provas + 1))
-if bash "$CORREDOR" >/dev/null 2>&1; then
+saida_do_corredor=$(mktemp)
+if bash "$CORREDOR" >"$saida_do_corredor" 2>&1; then
     printf '  %-52s aceite\n' "portões verdadeiros, todos verdes"
 else
     printf '  %-52s RECUSADO ✗\n' "portões verdadeiros, todos verdes" >&2
+    # E **porquê**, que era o que faltava.
+    #
+    # A saída ia para `/dev/null`, e uma recusa aqui deixava quem a lesse sem
+    # nada: «o corredor não passou» e mais nada. Numa máquina onde ele passa,
+    # isso é indistinguível de um problema de ambiente — e foi exactamente
+    # assim que uma falha na CI ficou por diagnosticar.
+    echo "      ── porque recusou ──" >&2
+    sed 's/^/      /' "$saida_do_corredor" | tail -30 >&2
+    echo "      ── fim ──" >&2
     falhas=$((falhas + 1))
 fi
+rm -f "$saida_do_corredor"
 
 echo
 printf '  %d propriedades exercitadas\n' "$provas"
