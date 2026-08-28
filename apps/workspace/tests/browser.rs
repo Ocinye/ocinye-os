@@ -6872,7 +6872,7 @@ async fn uma_pessoa_constroi_a_cadeia_cientifica_pelo_workspace() {
         &format!(r#"a[href="/workspaces/{ambiente}/science/hypotheses/new"]"#),
     )
     .await;
-    esperar_por(&pagina, "Nova hipótese").await;
+    esperar_por(&pagina, "Uma afirmação que se pode testar").await;
     set_field(&pagina, "textarea[name=statement]", &hipotese).await;
     set_field(
         &pagina,
@@ -6889,7 +6889,7 @@ async fn uma_pessoa_constroi_a_cadeia_cientifica_pelo_workspace() {
         &format!(r#"a[href="/workspaces/{ambiente}/science/methodologies/new"]"#),
     )
     .await;
-    esperar_por(&pagina, "Nova metodologia").await;
+    esperar_por(&pagina, "a identidade durável do método").await;
     set_field(&pagina, "input[name=title]", &metodo).await;
     set_field(
         &pagina,
@@ -6909,7 +6909,7 @@ async fn uma_pessoa_constroi_a_cadeia_cientifica_pelo_workspace() {
     );
 
     clicar(&pagina, "a[href$='/versions/new']").await;
-    esperar_por(&pagina, "Nova versão").await;
+    esperar_por(&pagina, "O que esta versão diz").await;
     set_field(&pagina, "input[name=label]", "v1").await;
     set_field(
         &pagina,
@@ -6971,7 +6971,7 @@ async fn uma_pessoa_constroi_a_cadeia_cientifica_pelo_workspace() {
 
     // ── 4. A execução ───────────────────────────────────────────────────
     clicar(&pagina, "a[href$='/executions/new']").await;
-    esperar_por(&pagina, "Registar execução").await;
+    esperar_por(&pagina, "a reprodutibilidade mora").await;
     set_field(&pagina, "input[name=environment]", "Bancada 2").await;
     set_field(&pagina, "input[name=software_name]", "LabView").await;
     escolher(&pagina, "select[name=methodology_version_id]", &versao_id).await;
@@ -6980,7 +6980,7 @@ async fn uma_pessoa_constroi_a_cadeia_cientifica_pelo_workspace() {
 
     // ── 5. O resultado, de dentro da execução ───────────────────────────
     clicar(&pagina, "a[href$='/results/new']").await;
-    esperar_por(&pagina, "Registar resultado").await;
+    esperar_por(&pagina, "A origem fica registada sozinha").await;
 
     let html = pagina.content().await.expect("conteúdo");
     assert!(
@@ -7133,7 +7133,7 @@ async fn capturas_da_ciencia() {
     let pagina = harness
         .open(&format!("/workspaces/{ambiente}/science/hypotheses/new"))
         .await;
-    esperar_por(&pagina, "Nova hipótese").await;
+    esperar_por(&pagina, "Uma afirmação que se pode testar").await;
     set_field(
         &pagina,
         "textarea[name=statement]",
@@ -7154,7 +7154,7 @@ async fn capturas_da_ciencia() {
     let pagina = harness
         .open(&format!("/workspaces/{ambiente}/science/methodologies/new"))
         .await;
-    esperar_por(&pagina, "Nova metodologia").await;
+    esperar_por(&pagina, "a identidade durável do método").await;
     set_field(&pagina, "input[name=title]", "Medição a quatro pontas").await;
     set_field(
         &pagina,
@@ -7168,7 +7168,7 @@ async fn capturas_da_ciencia() {
     capturar_visivel(&pagina, "ciencia-metodologia-sem-versoes").await;
 
     clicar(&pagina, "a[href$='/versions/new']").await;
-    esperar_por(&pagina, "Nova versão").await;
+    esperar_por(&pagina, "O que esta versão diz").await;
     set_field(&pagina, "input[name=label]", "v1").await;
     set_field(
         &pagina,
@@ -7183,7 +7183,7 @@ async fn capturas_da_ciencia() {
 
     // Uma segunda versão, para a substituição ficar visível na imagem.
     clicar(&pagina, "a[href$='/versions/new']").await;
-    esperar_por(&pagina, "Nova versão").await;
+    esperar_por(&pagina, "O que esta versão diz").await;
     capturar_visivel(&pagina, "ciencia-nova-versao-substitui").await;
     set_field(&pagina, "input[name=label]", "v2").await;
     set_field(
@@ -7228,7 +7228,7 @@ async fn capturas_da_ciencia() {
 
     // ── A execução ──────────────────────────────────────────────────────
     clicar(&pagina, "a[href$='/executions/new']").await;
-    esperar_por(&pagina, "Registar execução").await;
+    esperar_por(&pagina, "a reprodutibilidade mora").await;
     set_field(&pagina, "input[name=environment]", "Bancada 2, sala 104").await;
     set_field(&pagina, "input[name=software_name]", "LabView").await;
     set_field(&pagina, "input[name=software_version]", "2024 Q3").await;
@@ -7240,7 +7240,7 @@ async fn capturas_da_ciencia() {
 
     // ── O resultado ─────────────────────────────────────────────────────
     clicar(&pagina, "a[href$='/results/new']").await;
-    esperar_por(&pagina, "Registar resultado").await;
+    esperar_por(&pagina, "A origem fica registada sozinha").await;
     set_field(
         &pagina,
         "input[name=title]",
