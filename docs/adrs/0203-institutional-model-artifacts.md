@@ -182,5 +182,25 @@ que só se sabem ao afinar o primeiro modelo: que técnica, que artefactos
 acompanham, que avaliação sustenta a promoção.
 
 O que esta ADR fixa é a **decisão** e as classes. A implementação vem com o
-primeiro treino, e a `Definition of Done` dela está escrita em
-[`docs/backups/README.md`](../backups/README.md).
+primeiro treino.
+
+### O portão de entrada
+
+A dívida não fica à espera de que alguém se lembre dela:
+
+> **No first institutional model without continuity.**
+
+As onze perguntas vivem em `continuity::models`, tipadas, cada uma com a razão
+por que é obrigatória. Dez estão `PorResponder`; uma está `Provada`, com a
+evidência a apontar para o ensaio que a sustenta. Um teste percorre as
+migrations e **falha no dia em que o esquema ganhar** `model_artifacts`,
+`model_versions`, `training_runs`, `evaluation_runs` ou `model_checkpoints` com
+perguntas por responder — nomeando-as uma a uma.
+
+Isto inverte a ordem em que estas coisas costumam correr. Normalmente o registo
+aparece primeiro, os modelos entram, e a continuidade descobre-se em falta
+quando um deles se perde. Aqui a continuidade é a condição de entrada.
+
+E uma segunda resposta é aceite: responder à pergunta com evidência que se
+possa ir verificar. Um teste recusa `Provada("sim")` — uma resposta sem
+evidência é uma opinião com aspecto de facto.

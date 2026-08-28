@@ -29,9 +29,11 @@
 pub mod classification;
 pub mod keys;
 pub mod manifest;
+pub mod models;
 pub mod objects;
 
 pub use classification::{inventario, Activo, Classe};
 pub use keys::{legibilidade, viaja_por_canal_proprio, Destino, Legibilidade, Material};
 pub use manifest::{comparar, descrever, Divergencia, Manifesto};
+pub use models::{por_responder, Pergunta, Resposta};
 pub use objects::{conferir, Veredicto};

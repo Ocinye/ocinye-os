@@ -114,7 +114,8 @@ sem que nada falhe.
   autorização:** revogar um acesso depois de confirmar impede a execução, e
   existe teste que o demonstra.
 - **Continuidade institucional: `IMPLEMENTED`. Backup operacional:
-  `NOT CONFIGURED`.** O Core classifica todo o estado em sete classes e diz o
+  `NOT CONFIGURED`. Continuidade de artefactos de modelo: `SPECIFIED`, com
+  portão de entrada.** O Core classifica todo o estado em sete classes e diz o
   que tem de viajar — PostgreSQL, Object Storage e a chave de selagem, as três
   ([ADR-0700](docs/adrs/0700-institutional-continuity-and-portability.md)).
   Quatro comandos respondem a três perguntas diferentes: `verify-snapshot`
@@ -152,7 +153,7 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1242 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1246 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida

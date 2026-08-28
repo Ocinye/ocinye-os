@@ -226,6 +226,23 @@ simplesmente desligado.
 > **`INVALID` não é `FAIL`.** Um verificador que não conseguiu observar não
 > descobriu um problema: não correu.
 
+## Os nove factos operacionais
+
+Medidos a 2026-08-29, sem inferência. `verify.sh` verde demonstra o contrato
+que existe; **não cria política operacional que ainda não foi construída.**
+
+| | |
+|---|---|
+| **Onde ficam fisicamente os backups** | Em lado nenhum. `OCINYE_BACKUP_DIR` não está definida em nenhuma instalação; os conjuntos do ensaio viveram num directório temporário e foram apagados. |
+| **Existe cópia fora da máquina** | **Não.** `OCINYE_BACKUP_REMOTE` não está definida. O ensaio usou uma pasta local a fazer de destino externo, o que prova o caminho e **não** prova a cópia. |
+| **Automático ou manual** | **Manual.** Sem entrada de `cron`, sem agente de `launchd`, sem temporizador. O RPO é *desde o último conjunto que alguém produziu*. |
+| **Os artefactos estão cifrados** | **Não por omissão.** A cifra `age` existe, é opcional, e é **obrigatória para destino externo**: o script recusa enviar em claro. `OCINYE_BACKUP_RECIPIENT` não está definida. |
+| **Que material interpreta estado durável** | Uma peça: `OCINYE_MAIL_KEY`, que interpreta `mailbox_credentials`. É a única coluna de criptograma do esquema, e há dois portões que o mantêm verdadeiro. |
+| **Retenção implementada** | `OCINYE_BACKUP_KEEP` conjuntos completos (7 por omissão) mais **um** resto de tentativa falhada. Exercitada. Nenhuma instalação a define, porque nenhuma produz conjuntos. |
+| **Redis vazio** | O servidor B arrancou com um Redis de 0 chaves e nenhuma verificação falhou. Está classificado `EPHEMERAL`, e essa é a prova de que não é fonte de verdade. |
+| **Sem IA, correio e computação** | `ai_*` e `compute` reportam `no_resource`; `lexical_search` fica `available`. O conhecimento, a pesquisa e a cadeia científica abriram à mesma no servidor migrado. |
+| **Migração completa já executada** | **Sim**, A → B → C. Base, bytes, credenciais de armazenamento rodadas, Redis vazio, e a prova pelo Workspace. Terminou em `EXIT=2`, porque a legibilidade não teve o que observar. |
+
 ## Artefactos de modelo — a terceira forma da memória
 
 Decisão em [ADR-0203](../adrs/0203-institutional-model-artifacts.md).
@@ -262,11 +279,28 @@ para artefactos documentais. Alargá-la seria transformar a fronteira de uploads
 num canal para binários arbitrários. Um modelo precisa do seu próprio caminho
 tipado.
 
-### Definition of Done, quando houver o primeiro treino
+### O portão de entrada
 
-Nenhuma destas está satisfeita hoje, porque não há modelo nenhum para
-preservar. Estão escritas para que a milestone do primeiro *fine-tuning* saiba
-contra o que se medir:
+> **No first institutional model without continuity.**
+
+As perguntas abaixo não são roadmap: são **precondição**, e vivem em código
+(`continuity::models`). No dia em que uma migration criar `model_artifacts`,
+`model_versions`, `training_runs`, `evaluation_runs` ou `model_checkpoints`, o
+portão fecha e nomeia as que continuam abertas.
+
+> **An Ocinye-trained model must not be promoted to durable institutional
+> status until its artifact, exact base-model dependency, training lineage,
+> required runtime components, classification, evaluation evidence and restore
+> path are governed by the continuity system.**
+
+Assim não é preciso fabricar um sistema de treino agora, e a dívida também não
+espera pelo dia em que um `.safetensors` importante está perdido num SSD de
+GPU.
+
+### As onze perguntas
+
+Dez estão por responder, porque não há modelo nenhum para as responder. Uma
+está respondida, e é a fundadora:
 
 | | |
 |---|---|
