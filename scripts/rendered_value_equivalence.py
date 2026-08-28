@@ -31,7 +31,94 @@ import sys
 
 # O commit imediatamente anterior à consolidação. É o «antes» contra o qual a
 # equivalência é medida.
-BASE = "075204e"
+# Os valores dos tokens no estado congelado, lidos de `075204e` enquanto esse
+# commit ainda existia.
+#
+# Estavam a ser lidos com `git show`, e isso partiu-se no dia em que o
+# repositório foi recriado: o commit deixou de existir no remoto, o portão
+# passou a recusar em CI e a passar na máquina onde o objecto solto sobrevivia.
+# «Passa aqui e falha lá» é o pior estado possível para um portão.
+#
+# Congelados como dados, pela mesma razão que `INTRODUZIDOS` sempre o foi: a
+# propriedade que isto guarda — **um token que já existia não muda de valor por
+# baixo** — não precisa de história, precisa dos valores. E esta é a maneira
+# silenciosa de mudar o produto inteiro de uma vez: `--oc-topbar-h` de 52px para
+# 56px passaria despercebido em qualquer revisão.
+#
+# Setenta e um tokens. Se um sair desta tabela de propósito, sai por decisão.
+ANTES = {
+    "--oc-border": "#E4E9F0",
+    "--oc-border-faint": "#F3F6F9",
+    "--oc-border-soft": "#EEF2F6",
+    "--oc-border-strong": "#C3CDD8",
+    "--oc-canvas": "#F6F8FA",
+    "--oc-error": "#B3261E",
+    "--oc-error-bg": "#FCF0EF",
+    "--oc-error-border": "#F1D6D3",
+    "--oc-error-text": "#8C2019",
+    "--oc-font-mono": "'IBM Plex Mono', ui-monospace, monospace",
+    "--oc-font-sans": "'IBM Plex Sans', system-ui, sans-serif",
+    "--oc-gold": "#E0A731",
+    "--oc-gold-bg": "#FDF6E7",
+    "--oc-gold-border": "#F2E3BE",
+    "--oc-gold-text": "#8A6110",
+    "--oc-info": "#2B6CB0",
+    "--oc-info-bg": "#EFF5FB",
+    "--oc-info-border": "#D5E4F0",
+    "--oc-info-text": "#20537F",
+    "--oc-interface-scale": "1.15",
+    "--oc-navy": "#0B2D4A",
+    "--oc-navy-deep": "#071E33",
+    "--oc-navy-hover": "#123C60",
+    "--oc-navy-mid": "#1C4B74",
+    "--oc-on-navy": "#FFFFFF",
+    "--oc-on-navy-32": "rgba(255,255,255,.32)",
+    "--oc-on-navy-42": "rgba(255,255,255,.42)",
+    "--oc-on-navy-50": "rgba(255,255,255,.5)",
+    "--oc-on-navy-70": "rgba(255,255,255,.68)",
+    "--oc-on-navy-active": "rgba(255,255,255,.10)",
+    "--oc-on-navy-hover": "rgba(255,255,255,.07)",
+    "--oc-on-navy-line": "rgba(255,255,255,.08)",
+    "--oc-page-pad": "22px 24px 40px",
+    "--oc-placeholder": "#98A6B4",
+    "--oc-r-2xl": "16px",
+    "--oc-r-lg": "11px",
+    "--oc-r-md": "8px",
+    "--oc-r-sm": "7px",
+    "--oc-r-tile": "20px",
+    "--oc-r-xl": "14px",
+    "--oc-r-xs": "4px",
+    "--oc-row-h": "38px",
+    "--oc-row-h-dense": "30px",
+    "--oc-shadow-card": "0 2px 10px rgba(11,45,74,.06)",
+    "--oc-shadow-input": "0 4px 18px rgba(11,45,74,.06)",
+    "--oc-shadow-logo": "0 18px 50px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.14)",
+    "--oc-shadow-menu": "0 16px 40px rgba(11,45,74,.14)",
+    "--oc-shadow-overlay": "0 30px 80px rgba(7,30,51,.32)",
+    "--oc-sidebar-w": "224px",
+    "--oc-sidebar-w-collapsed": "58px",
+    "--oc-success": "#3E8F66",
+    "--oc-success-bg": "#F0F7F3",
+    "--oc-success-border": "#D8EBE0",
+    "--oc-success-text": "#2E6B4C",
+    "--oc-surface": "#FFFFFF",
+    "--oc-surface-hover": "#F8FAFC",
+    "--oc-surface-muted": "#F3F6F9",
+    "--oc-surface-subtle": "#FAFCFD",
+    "--oc-surface-tint": "#F1F4F8",
+    "--oc-text": "#0F1A24",
+    "--oc-text-body": "#28394A",
+    "--oc-text-faint": "#8A98A6",
+    "--oc-text-ghost": "#A9B5C1",
+    "--oc-text-meta": "#7C8B9A",
+    "--oc-text-muted": "#5F7183",
+    "--oc-text-secondary": "#42546A",
+    "--oc-topbar-h": "52px",
+    "--oc-warning": "#C87A22",
+    "--oc-warning-bg": "#FDF2E7",
+    "--oc-warning-border": "#F2DBBE",
+    "--oc-warning-text": "#8A4B10",
+}
 
 FICHEIRO = "apps/workspace/static/ocinye.css"
 
@@ -85,22 +172,6 @@ def normaliza(css):
 
 
 def main():
-    resultado = subprocess.run(
-        ["git", "show", "%s:%s" % (BASE, FICHEIRO)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if resultado.returncode != 0:
-        print(
-            "NAO VERIFICADO: o commit base `%s` não está disponível.\n"
-            "Isto não é equivalência provada; é equivalência não medida." % BASE,
-            file=sys.stderr,
-        )
-        return 2
-
-    antes_completo = resultado.stdout
-    antes = normaliza(corpo(antes_completo))
 
     # Os tokens que já existiam têm de continuar a valer o mesmo.
     #
@@ -111,7 +182,7 @@ def main():
     #
     # Acrescentar tokens é o que esta consolidação faz e é permitido. Alterar
     # o valor de um que já cá estava não é tokenização: é redesenho.
-    antigos, novos = tokens(antes_completo), tokens(open(FICHEIRO, encoding="utf-8").read())
+    antigos, novos = ANTES, tokens(open(FICHEIRO, encoding="utf-8").read())
     alterados = [
         "%s: base `%s`, agora `%s`" % (nome, valor, novos.get(nome, "removido"))
         for nome, valor in sorted(antigos.items())
@@ -190,7 +261,6 @@ def main():
 
     print(
         "Equivalência de valores renderizados:\n"
-        "  base:  %s\n"
         "  tokens introduzidos: %d\n"
         "  declarações no ficheiro: %d\n"
         "  tokens preexistentes inalterados: %d\n"
@@ -201,7 +271,7 @@ def main():
         "  A comparação do corpo inteiro contra o estado anterior à consolidação\n"
         "  terminou: o arranque institucional é a primeira evolução deliberada do\n"
         "  Design System depois dela."
-        % (BASE, len(INTRODUZIDOS), depois.count(";"), len(antigos))
+        % (len(INTRODUZIDOS), depois.count(";"), len(antigos))
     )
     return 0
 
