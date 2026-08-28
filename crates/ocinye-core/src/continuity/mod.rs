@@ -27,9 +27,11 @@
 //! descrições. A memória institucional continua onde sempre esteve.
 
 pub mod classification;
+pub mod keys;
 pub mod manifest;
 pub mod objects;
 
 pub use classification::{inventario, Activo, Classe};
+pub use keys::{legibilidade, viaja_por_canal_proprio, Destino, Legibilidade, Material};
 pub use manifest::{comparar, descrever, Divergencia, Manifesto};
 pub use objects::{conferir, Veredicto};

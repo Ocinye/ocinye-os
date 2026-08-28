@@ -31,8 +31,9 @@ use std::io::Read;
 
 use anyhow::{bail, Context};
 use ocinye_core::config::CoreConfig;
-use ocinye_core::continuity::{self, Classe, Veredicto};
+use ocinye_core::continuity::{self, Classe, Legibilidade, Veredicto};
 use ocinye_core::db;
+use ocinye_core::password::sealed::{self, Sealed};
 use ocinye_core::storage::ObjectStore;
 use uuid::Uuid;
 
@@ -392,4 +393,124 @@ pub async fn verify_objects() -> anyhow::Result<()> {
         faltam.len(),
         diferem.len()
     );
+}
+
+/// Prova que a chave que chegou abre o que chegou.
+///
+/// # Porque isto é uma terceira pergunta
+///
+/// `verify-snapshot` prova que as **linhas** chegaram. `verify-objects` prova
+/// que os **bytes** chegaram. Nenhum dos dois prova que o que chegou é
+/// **legível**.
+///
+/// `mailbox_credentials` é o caso: as linhas viajam no dump, íntegras, com o
+/// nonce e o criptograma certos, e um restore sem a chave de selagem passa nos
+/// dois verificadores anteriores. A instituição só descobre a falta quando um
+/// membro tenta ver o correio, semanas depois, e a mensagem que recebe fala de
+/// uma caixa que não liga.
+///
+/// > **Um restore que passa estruturalmente e entrega estado ilegível é a pior
+/// > forma de falhar, porque parece sucesso.**
+///
+/// # O que este comando não faz
+///
+/// Não imprime nenhuma senha, nem parte de nenhuma. Abrir e descartar é o
+/// suficiente: o que se quer saber é se a etiqueta de autenticação valida, e
+/// isso é um sim ou um não.
+///
+/// # Errors
+///
+/// Devolve erro quando a base não responde, quando há estado selado e a chave
+/// não está configurada, ou quando alguma linha se recusa a abrir.
+pub async fn verify_keys() -> anyhow::Result<()> {
+    let config = CoreConfig::from_env().context("configuration")?;
+    let pool = db::connect(&config)
+        .await
+        .context("a base institucional não respondeu")?;
+
+    println!("Ocinye OS — verificação do material criptográfico");
+    println!("─────────────────────────────────────────────────");
+    println!();
+    for material in continuity::viaja_por_canal_proprio() {
+        println!("  {}  [{}]", material.variavel, material.destino.as_str());
+        if let Some(estado) = material.interpreta {
+            println!("      interpreta  {estado}");
+        }
+    }
+    println!();
+
+    let seladas: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mailbox_credentials")
+        .fetch_one(&pool)
+        .await
+        .context("contar as credenciais seladas")?;
+
+    // A leitura das linhas só acontece quando há chave; sem ela não há nada a
+    // tentar, e a decisão é a mesma.
+    let mut recusadas: Vec<Uuid> = Vec::new();
+    if let Some(chave) = config.mail.sealing_key.as_ref() {
+        let linhas: Vec<(Uuid, Vec<u8>, Vec<u8>)> =
+            sqlx::query_as("SELECT mailbox_id, nonce, ciphertext FROM mailbox_credentials")
+                .fetch_all(&pool)
+                .await
+                .context("ler as credenciais seladas")?;
+
+        // Todas, e não uma amostra. Uma amostra que abrisse diria «legível»
+        // sobre o que não se leu, e a linha que não se leu é a que costuma ter
+        // sido selada com a chave anterior.
+        for (caixa, nonce, ciphertext) in &linhas {
+            let fechado = Sealed {
+                nonce: nonce.clone(),
+                ciphertext: ciphertext.clone(),
+            };
+            // O texto em claro é descartado imediatamente. O que se guarda é o
+            // veredicto: nenhuma senha, nem parte de nenhuma, chega ao ecrã.
+            if sealed::open(chave, &fechado).is_err() {
+                recusadas.push(*caixa);
+            }
+        }
+    }
+
+    match continuity::legibilidade(config.mail.sealing_key.is_some(), seladas, recusadas.len()) {
+        Legibilidade::NadaParaLer => {
+            println!("  Não há estado selado, e não há chave. Nada foi verificado,");
+            println!("  e é isso que esta linha diz — não que esteja tudo bem.");
+            Ok(())
+        }
+        Legibilidade::ChaveSemEstado => {
+            println!("  Há chave configurada e nenhum estado selado para abrir.");
+            println!("  Nada foi verificado. A chave continua a ser precisa quando houver.");
+            Ok(())
+        }
+        Legibilidade::IlegivelSemChave { seladas } => bail!(
+            "há {seladas} credencial(is) selada(s) nesta base e nenhuma \
+             `OCINYE_MAIL_KEY` configurada.\n\
+             O estado chegou íntegro e ilegível: o dump trouxe o nonce e o \
+             criptograma,\n\
+             e a chave que os interpreta não estava lá dentro — nem devia \
+             estar.\n\
+             Nenhuma chave nova reconstrói isto. Recupere a original."
+        ),
+        Legibilidade::Legivel { abriram } => {
+            println!("  {abriram} credencial(is) selada(s) abriram com a chave desta instalação.");
+            println!("  O que chegou não é apenas íntegro: é interpretável.");
+            Ok(())
+        }
+        Legibilidade::Ilegivel {
+            recusadas: n,
+            total,
+        } => {
+            const MOSTRA: usize = 20;
+            for caixa in recusadas.iter().take(MOSTRA) {
+                eprintln!("  não abre     caixa {caixa}");
+            }
+            if n > MOSTRA {
+                eprintln!("  não abre     … e mais {}, não listadas aqui", n - MOSTRA);
+            }
+            eprintln!();
+            bail!(
+                "{n} de {total} credencial(is) não abriram. A chave desta \
+                 instalação não é a que as selou."
+            )
+        }
+    }
 }
