@@ -164,6 +164,16 @@ step "Biblioteca de ADRs"
 # resolva. Se um domínio está certo é pergunta para uma pessoa.
 python3 scripts/check-adrs.py
 
+step "Contrato de autoria"
+# Os commits pertencem exclusivamente aos autores humanos (`CLAUDE.md` §72).
+#
+# A regra existia desde o primeiro dia e nunca teve portão: duas identidades
+# entraram na mesma — um endereço de outra organização e um bot de dependências
+# — e tornaram-se permanentes assim que foram publicadas, porque uma referência
+# de Pull Request guarda o commit para sempre. Retirá-las obrigou a recriar o
+# repositório.
+python3 scripts/authorship-contract.py
+
 step "Factos da documentação"
 # Propriedades textuais que envelhecem em silêncio: a definição canónica existe
 # uma vez, e uma afirmação que deixou de ser verdade não volta.

@@ -361,6 +361,14 @@ jobs:
       - name: Autoridade de escrita institucional
         run: python3 ./scripts/mutation_authority.py
 
+      # Os commits pertencem exclusivamente aos autores humanos.
+      #
+      # Corre neste job porque é o que já faz `fetch-depth: 0`: um portão de
+      # autoria numa clonagem rasa observaria um commit e afirmaria uma
+      # propriedade sobre a história inteira.
+      - name: Contrato de autoria
+        run: python3 ./scripts/authorship-contract.py
+
       # Tabelas sem leitor: declaradas, ou é finding.
       - name: Consumidores do esquema
         run: python3 ./scripts/schema_consumers.py
