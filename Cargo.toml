@@ -105,7 +105,7 @@ url = "2"
 jsonwebtoken = { version = "11.0", default-features = false, features = [
     "aws_lc_rs",
 ] }
-sha2 = "0.10"
+sha2 = "0.11"
 # Argon2id for password verifiers (ADR-0602). `password-hash` gives the PHC
 # string format, which carries the parameters with the hash and is what makes
 # transparent rehashing possible.
