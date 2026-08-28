@@ -9,6 +9,7 @@
 //! Nenhuma destas se vê a olho: as versões erradas compilam, respondem, e
 //! parecem iguais na interface.
 
+use chrono::SubsecRound;
 use ocinye_core::modules::messaging::{self, Outgoing};
 use ocinye_core::realtime::Realtime;
 use ocinye_core::CoreError;
@@ -488,7 +489,23 @@ async fn a_leitura_avanca_e_nunca_recua() {
         .await
         .expect("abrir");
 
-    let agora = chrono::Utc::now();
+    // Truncado ao microssegundo, que é o que a base sabe guardar.
+    //
+    // `timestamptz` do PostgreSQL tem precisão de microssegundo. Um
+    // `Utc::now()` no Linux traz nanossegundos verdadeiros, e o valor volta da
+    // base truncado: a asserção comparava `…645195318Z` com `…645195Z` e
+    // chamava-lhe recuo.
+    //
+    // No macOS o relógio dá granularidade de microssegundo, pelo que os
+    // nanossegundos são sempre múltiplos de mil e a comparação calhava certa.
+    // O teste estava correcto por acidente de plataforma — passava na máquina
+    // de quem o escreveu e falhava no runner, que é a forma mais cara de um
+    // teste estar errado.
+    //
+    // A propriedade não é sobre precisão: é que marcar como lido com um
+    // instante anterior não faz a leitura recuar. Truncar aqui deixa-a
+    // determinista em qualquer plataforma.
+    let agora = chrono::Utc::now().trunc_subsecs(6);
     let antes = agora - chrono::Duration::hours(1);
 
     messaging::mark_read(&pool, &ana, &plano(), conversa, agora)
