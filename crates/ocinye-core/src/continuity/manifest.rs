@@ -319,6 +319,12 @@ pub async fn descrever(pool: &PgPool) -> CoreResult<Manifesto> {
         // `ORDER BY id` e não a ordem de varrimento: duas leituras da mesma base
         // têm de dar o mesmo manifesto, ou a comparação mede o planeador de
         // consultas em vez do conteúdo.
+        //
+        // O nome da tabela é interpolado, e pode sê-lo: vem de `ESQUEMA`, que é
+        // `&'static str` escrito em código. Nenhum valor de entrada chega aqui,
+        // e nenhum deve passar a chegar — um nome de tabela vindo de fora
+        // deixaria de ser uma consulta parametrizável para passar a ser
+        // estrutura escolhida por quem a enviou.
         let identidades: Vec<Uuid> =
             sqlx::query_scalar(&format!("SELECT id FROM {tabela} ORDER BY id"))
                 .fetch_all(pool)

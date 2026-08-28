@@ -77,7 +77,7 @@ client secret.
 
 | Falta | Estado |
 |---|---|
-| Backups | **Não configurados.** Ver [backups](../backups/README.md). |
+| Backups | **Não configurados.** O procedimento de migração e verificação existe e foi exercitado uma vez; o agendamento e a cópia fora do servidor não. Ver [backups](../backups/README.md). |
 | Métricas e alertas | Não implementados. |
 | Rate limiting | Não implementado. |
 | Runbook de incidente | Não escrito. |

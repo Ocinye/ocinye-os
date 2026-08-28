@@ -94,17 +94,51 @@ set -a && source .env && set +a
 cargo run --bin ocinye-core-server
 ```
 
-Duas subcomandos partilham o binário, e deliberadamente: têm de carregar
+Os subcomandos partilham o binário, e deliberadamente: têm de carregar
 exactamente a mesma configuração que o servidor carregará.
 
 ```bash
 # Cria o primeiro administrador. Corre uma única vez.
 ocinye-core-server bootstrap-admin --name … --username … --email …
 
+# Liga uma caixa de correio a um membro, a partir da linha de comandos.
+ocinye-core-server provision-mailbox …
+
 # Prova as credenciais de correio sem arrancar o Core.
 # Não imprime a password nem conteúdo, e não envia nada.
 ocinye-core-server mail-check
+
+# Gera a chave que sela as credenciais de caixa. 32 bytes, base64.
+ocinye-core-server mail-key
 ```
+
+### Continuidade
+
+Quatro comandos respondem a «um servidor pode desaparecer; o que é preciso
+levar, e como se sabe que chegou?»
+([ADR-0700](../../docs/adrs/0700-institutional-continuity-and-portability.md)).
+
+```bash
+# O que tem de viajar, e porquê. Lê só a classificação, que é código.
+ocinye-core-server continuity-inventory
+
+# Descreve o que esta instalação contém. Manifesto em stdout, resumo em stderr.
+ocinye-core-server snapshot > manifesto.json
+
+# Lê a base local e compara. Sai não-zero e diz onde, quando diverge.
+ocinye-core-server verify-snapshot < manifesto.json
+
+# Lê cada objecto do bucket e recalcula a soma. Caro de propósito.
+ocinye-core-server verify-objects
+```
+
+`verify-snapshot` compara o **registo** dos objectos guardados; passa num
+servidor cujo bucket está vazio. `verify-objects` compara os **bytes**, e
+recusa-se a concluir seja o que for quando o armazenamento não responde — não
+ter conseguido observar não é a mesma coisa que os objectos faltarem.
+
+O procedimento completo está em
+[migrate-to-another-server](../../docs/runbooks/migrate-to-another-server.md).
 
 ## Segurança relevante
 

@@ -781,13 +781,12 @@ fn topbar(
 
             <span class="oc-divider" aria-hidden="true"></span>
 
-            // O sino do dossier (§5.3), visível e declarado indisponível.
+            // O sino do dossier (§5.3).
             //
             // Foi retirado numa auditoria anterior por ser um botão sem handler
-            // com um ponto de «não lidas» que nada alimentava — um contador
-            // falso sobre algo que o Core não tem: não existe conceito de
-            // notificação no domínio. O que voltou é a **forma**, sem o
-            // contador: o ponto só reaparece quando houver o que contar.
+            // com um ponto de «não lidas» que nada alimentava. Voltou quando
+            // passou a haver o que contar: o Core tem notificações, o worker
+            // entrega-as, e o ponto só se pinta quando há por ler.
             {notifications(viewer.unread)}
 
 
@@ -847,17 +846,11 @@ fn topbar(
 /// e ficou sem uso quando ele saiu numa auditoria anterior.
 ///
 /// O que o ponto significa é «tem coisas por ler», e isso é **dado**, não
-/// decoração. Não há notificações no Ocinye Core, portanto não há nada por ler,
-/// e o ponto não se pinta. É a mesma regra que faz os contadores da Home
-/// mostrarem `0` em vez dos `86` do protótipo: o desenho traz um exemplo com
-/// dados, e nós mostramos o que existe.
-///
-/// Quando o Core tiver notificações, este número passa a vir de lá e o ponto
-/// aparece sozinho.
+/// decoração. O número vem do Core, e o ponto pinta-se apenas quando há o que
+/// contar. É a mesma regra que faz os contadores da Home mostrarem `0` em vez
+/// dos `86` do protótipo: o desenho traz um exemplo com dados, e nós mostramos
+/// o que existe.
 fn notifications(unread: usize) -> impl IntoView {
-    // Deixou de estar indisponível: há notificações no Core, e o worker
-    // entrega-as. O ponto continua a significar «tem coisas por ler», e a
-    // pintar-se apenas quando há.
     let title = if unread == 0 {
         "Nada por ler".to_owned()
     } else {

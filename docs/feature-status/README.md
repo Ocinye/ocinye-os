@@ -99,9 +99,12 @@ Os quatro primeiros são apurados em tempo real pelo Core e servidos em
 | **Ferramentas bibliográficas** | `knowledge::review_bibliography`, executada no isolamento WASM/WASI | ecrã em Bibliografia; capability agentic `knowledge.bibliography.review` | n/a | `AVAILABLE` |
 | **Object Storage** | implementado | leitura | não configurado | `NOT_CONFIGURED` |
 | **Auditoria** | implementado | implementado | n/a | `AVAILABLE` |
+| **Continuidade institucional** — classificação, manifesto, verificação | implementado, com teste que cobre o esquema | n/a — é operação, não ecrã | n/a | `AVAILABLE` |
+| **Restore verificado** | `verify-snapshot` distingue restaurar de recriar | n/a | exercitado uma vez à mão a 2026-08-28 | `AVAILABLE` (o procedimento) |
+| **Verificação dos bytes guardados** | `verify-objects` implementado; recusa concluir sem armazenamento acessível | n/a | **nunca correu contra um bucket acessível** | `NOT_CONFIGURED` |
+| **Backup agendado e cópia fora do servidor** | — | — | não existe | `PLANNED` |
 | **Actividade** | implementado | implementado | n/a | `AVAILABLE` |
 | **Administração de membros** | implementado | criar, detalhe, acesso, segurança | n/a | `AVAILABLE` |
-| **Notificações** | **não existe** | removido | n/a | `PLANNED` |
 | **Definições / tema / idioma** | não existe | declarado indisponível | n/a | `PLANNED` |
 
 ## Ocinye AI — estado detalhado

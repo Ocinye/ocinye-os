@@ -113,7 +113,20 @@ sem que nada falhe.
   imediatamente antes de o correr. **Aprovação é consentimento, não
   autorização:** revogar um acesso depois de confirmar impede a execução, e
   existe teste que o demonstra.
-- **49 ADRs** em `docs/adrs/`, **9 runbooks** em `docs/runbooks/`,
+- **Continuidade institucional: `IMPLEMENTED`, backup operacional `NOT CONFIGURED`.**
+  O Core classifica todo o estado em sete classes e diz o que tem de viajar —
+  PostgreSQL, Object Storage e a chave de selagem, as três
+  ([ADR-0700](docs/adrs/0700-institutional-continuity-and-portability.md)).
+  `continuity-inventory`, `snapshot`, `verify-snapshot` e `verify-objects`
+  descrevem esta instalação e provam que o que chegou é o que saiu, identidade
+  a identidade. Um teste percorre as migrations e falha se uma tabela do
+  esquema ficar sem decisão de continuidade. **Um ensaio de restore foi
+  executado a 2026-08-28** contra 166 232 recursos, com o controlo negativo que
+  distingue restaurar de recriar: uma base criada de novo com as mesmas
+  migrations é recusada e as ausências enumeradas. **O transporte do Object
+  Storage não foi exercitado** — o MinIO local não estava a correr, e
+  `verify-objects` recusou-se a concluir seja o que for.
+- **50 ADRs** em `docs/adrs/`, **10 runbooks** em `docs/runbooks/`,
   **41 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -133,8 +146,8 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **Testes: 1201**, todos verdes numa corrida de `./scripts/verify.sh`.
-  **368 deles não correm sem base de dados** — vivem em ficheiros que leem
+- **Testes: 1221**, todos verdes numa corrida de `./scripts/verify.sh`.
+  **369 deles não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se
@@ -171,7 +184,9 @@ sem que nada falhe.
   `UnconfiguredProvider` e todas as capacidades de correio reportam
   `not_configured`. `ocinye-core-server mail-check` prova uma configuração sem
   arrancar o Core, e sem imprimir credenciais ou conteúdo.
-- **Nenhum backup existe. Nenhum restore foi testado.**
+- **Nenhum backup operacional existe.** Não há agendamento, não há cópia fora
+  do servidor, não há retenção, e os artefactos não são cifrados. O RPO real é
+  *desde o último `pg_dump` que alguém correu à mão*, e **3-2-1 não existe**.
 
 Ferramentas disponíveis na máquina de desenvolvimento actual — contexto
 ambiental, **não** compromisso arquitectural: Git 2.50.1, Node.js 25.8.0,
@@ -1493,16 +1508,38 @@ Um health check **nunca** reporta saudável um componente que não verificou.
 
 ---
 
-## 63. Backups
+## 63. Backups e continuidade
 
-Distingue rigorosamente três estados:
+> **Revista em 2026-08-28** por
+> [ADR-0700](docs/adrs/0700-institutional-continuity-and-portability.md), que
+> acrescenta um estado antes dos três que aqui estavam.
 
+Distingue rigorosamente quatro estados:
+
+0. **estado classificado** — sabe-se **o que** tem de viajar, e porquê;
 1. **backup configurado** — existe configuração ou script;
 2. **backup executado** — correu e produziu artefacto verificável;
 3. **restore validado** — foi restaurado com sucesso e verificado.
 
+O estado zero faltava, e é o que torna os outros três possíveis de acertar. Um
+`pg_dump` salva a base; não salva os bytes a que ela aponta, nem a chave sem a
+qual parte das linhas é ilegível. Um backup assim é uma cópia perfeitamente
+íntegra e completamente inútil, e isso só se descobre no dia do desastre.
+
+A resposta a «o que é preciso levar?» **não se descobre a olhar para o
+servidor**. Descobre-se a olhar para o que o domínio considera estado
+autoritativo, e essa é uma decisão do Core (§3), não de quem opera a máquina.
+Por isso vive em código, com um teste que falha quando uma tabela nova aparece
+numa migration sem decisão de continuidade.
+
 > **Um backup só é operacionalmente confiável quando existe procedimento de
 > restore testado.** Cria runbooks.
+
+E, do mesmo lado da mesma linha:
+
+> **Restaurar não é criar o domínio outra vez.** Uma instalação nova com as
+> mesmas migrations tem as mesmas tabelas e nada em comum com a instituição.
+> Um verificador de continuidade que não distinga as duas não verifica nada.
 
 Objectivo futuro: **3-2-1**. **Não declares 3-2-1 antes de existir.**
 

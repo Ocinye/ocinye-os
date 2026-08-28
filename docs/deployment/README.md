@@ -49,7 +49,7 @@ O código já recusa arrancar mal configurado em produção:
 | Imagens de container dos serviços | **Não existem.** Não há Dockerfile de produção. |
 | Terminação TLS e certificados | Não configurados. |
 | Segundo factor de autenticação (MFA) | **Não existe.** O ADR-0103 adiou-o deliberadamente; ver `docs/security/`. |
-| Backups | Não configurados. |
+| Backups | **Não configurados.** Procedimento de continuidade em [backups](../backups/README.md); agendamento e cópia externa por fazer. |
 | Métricas e alertas | Não implementados. |
 | Runbook de deploy e de rollback | Não escritos. |
 | Configuração de WireGuard | Não existe — não há nó. |

@@ -7,6 +7,62 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Continuidade institucional: um servidor pode desaparecer — 2026-08-28
+
+A pergunta parecia de administração de sistemas — «temos backups?» — e não era.
+A pergunta é **o que constitui a instituição, e o que é apenas o sítio onde ela
+estava a correr**, e essa distinção é uma decisão do Core.
+
+**O que passou a existir.**
+
+- `ocinye_core::continuity` classifica todo o estado em sete classes, cada
+  entrada a dizer porquê. A classe `INTERPRETIVE` existe porque
+  `AUTHORITATIVE` não chegava: a `OCINYE_MAIL_KEY` não guarda conhecimento
+  nenhum, e sem ela metade do estado institucional é ruído.
+- Quatro subcomandos: `continuity-inventory`, `snapshot`, `verify-snapshot` e
+  `verify-objects`.
+- [ADR-0700](docs/adrs/0700-institutional-continuity-and-portability.md), o
+  runbook [Mudar a Ocinye para outro servidor](docs/runbooks/migrate-to-another-server.md),
+  e `docs/backups/README.md` reescrito.
+
+**O ensaio.** Executado contra 166 232 recursos. `pg_dump` 1,4 s → 19 MB;
+`pg_restore` numa base limpa 1,9 s; `verify-snapshot` saída zero. E o controlo
+negativo, que é a parte que importa: uma base **criada de novo** com as mesmas
+19 migrations foi recusada com saída 1, e as ausências enumeradas por família.
+
+> **Restaurar não é criar o domínio outra vez.**
+
+**Dois defeitos encontrados a construir isto.**
+
+O manifesto comparava 24 das 62 tabelas e nada dizia sobre as outras 38, entre
+elas `person_roles`, `unit_memberships`, `workspace_memberships` e
+`credentials`. Um restore que perdesse todas as filiações e todos os
+verificadores de palavra-passe teria chegado com a investigação intacta,
+verificado como completo, e sem ninguém capaz de entrar. A lista era escrita à
+mão, e por isso não podia saber que tinha envelhecido; passou a ser derivada de
+uma decisão por tabela, com portão que fecha quando uma migration traz uma
+tabela nova.
+
+A primeira versão de `verify-objects` escreveu o relatório mais alarmante que
+sabe escrever — 303 objectos em falta — contra um MinIO que estava
+simplesmente desligado. `get` devolve o mesmo erro para «não existe» e para
+«ninguém atendeu». Agora sonda o armazenamento antes de concluir seja o que
+for: **`INVALID` não é `FAIL`.**
+
+**O que continua a não existir.** Agendamento, cópia fora do servidor,
+retenção, cifra dos artefactos, rotação da chave de selagem. O RPO real é
+*desde o último dump que alguém correu à mão*, e o transporte do Object Storage
+não foi exercitado. **3-2-1 não existe.**
+
+### Corrigida uma contradição na matriz de estado — 2026-08-28
+
+`docs/feature-status/` listava **Notificações** duas vezes, com estados
+opostos: `AVAILABLE` numa linha, `PLANNED` e «não existe» noutra. Existem — há
+rota, worker que entrega e sino que conta o que está por ler — e a segunda
+linha era resto de uma auditoria em que tinham sido removidas. Removida, e
+corrigida a mesma afirmação obsoleta nos comentários de `shell.rs`, que se
+contradiziam a três linhas de distância.
+
 ### `main` passou a estar protegida pelo servidor — 2026-08-27
 
 A lacuna declarada em 2026-08-23 fechou-se, e não da maneira que a entrada

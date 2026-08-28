@@ -248,6 +248,7 @@ tem depois de aplicar as migrations:
 | Plano agentic: capabilities tipadas, planos, aprovações | implementado |
 | Capability Runtime WASM/WASI, com um consumidor: validação e normalização BibTeX | implementado |
 | Armazenamento de objectos S3-compatible | implementado |
+| **Continuidade institucional**: classificação de todo o estado, manifesto de identidades, verificação de restore | implementado |
 
 **Configuração de instalação** — o que depende de cada ambiente, e não do
 repositório:
@@ -293,6 +294,14 @@ Matriz completa: [docs/feature-status/](docs/feature-status/README.md).
   existe um sistema genérico de extensões instaláveis; cada componente é
   escolhido pelo Core em código
   ([ADR-0501](docs/adrs/0501-capability-runtime-wasm.md)).
+- **Não existe backup operacional.** O procedimento de continuidade existe e foi
+  exercitado uma vez à mão: um servidor novo consegue provar que recebeu as
+  mesmas identidades que saíram, e recusa uma base recriada de raiz
+  ([ADR-0700](docs/adrs/0700-institutional-continuity-and-portability.md)). O que
+  não existe é agendamento, cópia fora do servidor, retenção ou cifra dos
+  artefactos — pelo que o RPO real é *desde o último dump que alguém correu*. A
+  verificação dos bytes no armazenamento de objectos nunca correu contra um
+  bucket acessível.
 - **O envio de correio ainda não é durável.** É síncrono contra o fornecedor. A
   tabela `mail_outbox` permanece no esquema por história de migrações e não
   participa no fluxo actual.
