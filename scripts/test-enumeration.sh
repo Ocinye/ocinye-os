@@ -95,7 +95,7 @@ suites() {
 #
 # Auditado em 2026-08-28, em série, marca a marca. O número continua fixo: uma
 # viagem que deixe de levantar faz a contagem cair e o portão fecha.
-viagens-de-browser|57|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|56
+viagens-de-browser|58|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|57
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

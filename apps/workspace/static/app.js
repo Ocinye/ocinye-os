@@ -2487,3 +2487,68 @@ document.addEventListener('keydown', (event) => {
     }).catch(function () {});
   }
 })();
+
+/* Duplo clique numa data abre uma actividade nesse dia.
+ *
+ * # Porque duplo e não simples
+ *
+ * Porque um clique simples numa célula já significa outra coisa: abrir o dia,
+ * ou abrir a actividade em que se carregou. Um calendário onde tocar sem
+ * querer cria uma marcação é um calendário em que se deixa de tocar.
+ *
+ * # Porque não é `cursor: pointer`
+ *
+ * A célula não se anuncia como botão. Isto é um atalho para quem o conhece, e
+ * a criação continua a ter o seu botão visível — `+ Nova actividade` — que é o
+ * caminho que qualquer pessoa encontra sem ser ensinada.
+ *
+ * Nada aqui cria estado: leva a pessoa ao editor com a data já escolhida, e é
+ * ela que decide se marca. */
+(function () {
+  var calendario = document.querySelector('.oc-page--calendar');
+  if (!calendario) return;
+
+  /* Um dia inteiro, sem hora: o Mês não a tem. A política de omissão escolhe-a
+     no servidor, aplicada a este dia. */
+  function abrirNoDia(dia) {
+    window.location.assign('/calendar/events/new?on=' + encodeURIComponent(dia));
+  }
+
+  /* Uma faixa concreta da Semana ou do Dia: a hora vem de onde se carregou. */
+  function abrirNaFaixa(dia, coluna, y) {
+    var altura = coluna.offsetHeight;
+    if (!altura) return abrirNoDia(dia);
+
+    /* Quarenta e oito faixas de meia hora, as mesmas que a grelha desenha. */
+    var faixa = Math.floor((y / altura) * 48);
+    if (faixa < 0) faixa = 0;
+    if (faixa > 47) faixa = 47;
+
+    var horas = Math.floor(faixa / 2);
+    var minutos = faixa % 2 === 0 ? '00' : '30';
+    var dois = function (n) { return String(n).padStart(2, '0'); };
+
+    window.location.assign(
+      '/calendar/events/new?on=' + encodeURIComponent(dia) +
+      '&at=' + encodeURIComponent(dois(horas) + ':' + minutos),
+    );
+  }
+
+  calendario.addEventListener('dblclick', function (event) {
+    /* Duplo clique **numa actividade** é para a abrir, e não para marcar outra
+       por cima dela. */
+    if (event.target.closest('.oc-cal-bloco, .oc-cal-month__item, .oc-cal-month__more, a, button')) {
+      return;
+    }
+
+    var coluna = event.target.closest('[data-oc-dia].oc-cal-coluna');
+    if (coluna) {
+      var caixa = coluna.getBoundingClientRect();
+      abrirNaFaixa(coluna.dataset.ocDia, coluna, event.clientY - caixa.top);
+      return;
+    }
+
+    var celula = event.target.closest('[data-oc-dia]');
+    if (celula) abrirNoDia(celula.dataset.ocDia);
+  });
+})();

@@ -2120,7 +2120,20 @@ async fn uma_hora_que_nao_existe_e_explicada_a_pessoa() {
 // estado anterior sem compilar uma segunda árvore.
 
 /// A folha de estilos como estava antes da consolidação.
-const CSS_BASE: &str = "075204e";
+///
+/// Um ficheiro, e não um commit.
+///
+/// Era lida com `git show 075204e:…`, e isso partiu-se no dia em que o
+/// repositório foi recriado: o commit deixou de existir, e a viagem passou a
+/// recusar na CI enquanto passava na máquina onde o objecto solto sobrevivia.
+/// Um teste que passa aqui e falha lá ensina que o teste não é de confiança,
+/// não que o código está errado.
+///
+/// Congelada como fixture pela mesma razão que a tabela de tokens em
+/// `scripts/rendered_value_equivalence.py`: a propriedade que isto guarda — os
+/// **primitivos** renderizam hoje como renderizavam antes da consolidação — não
+/// precisa de história, precisa da folha.
+const CSS_BASE: &str = "tests/fixtures/ocinye-pre-consolidacao.css";
 
 /// Um directório de estáticos com a folha de estilos de um commit.
 ///
@@ -2141,20 +2154,21 @@ fn estaticos_de(commit: &str) -> std::path::PathBuf {
         }
     }
 
-    let anterior = std::process::Command::new("git")
-        .args([
-            "show",
-            &format!("{commit}:apps/workspace/static/ocinye.css"),
-        ])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .expect("git show");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(commit);
+    let anterior = std::fs::read(&fixture).unwrap_or_else(|erro| {
+        panic!(
+            "a folha de estilos base não está em {}: {erro}. Sem ela isto seria \
+             uma comparação não medida, e não uma comparação igual",
+            fixture.display()
+        )
+    });
     assert!(
-        anterior.status.success(),
-        "o commit base {commit} não está disponível; isto seria uma comparação \
-         não medida, e não uma comparação igual"
+        anterior.len() > 10_000,
+        "a folha de estilos base tem {} bytes; uma fixture truncada faria a \
+         comparação passar sem observar nada",
+        anterior.len()
     );
-    std::fs::write(destino.join("ocinye.css"), &anterior.stdout).expect("CSS base");
+    std::fs::write(destino.join("ocinye.css"), &anterior).expect("CSS base");
     destino
 }
 
@@ -4888,6 +4902,56 @@ async fn valor_de(page: &Page, seletor: &str) -> String {
         tokio::time::sleep(Duration::from_millis(120)).await;
     }
     String::new()
+}
+
+/// Duplo clique num dia do Mês abre uma actividade nesse dia.
+///
+/// # Porque a prova é a data no campo e não a navegação
+///
+/// Chegar ao editor não prova nada: o botão `+ Nova actividade` também lá
+/// chega. O que este atalho promete é que o dia em que se carregou é o dia que
+/// aparece — e é isso, e só isso, que aqui se verifica.
+#[tokio::test]
+async fn duplo_clique_num_dia_abre_uma_actividade_nesse_dia() {
+    let harness = harness!();
+    let (_pessoa, _credenciais) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // Um dia deste mês que não é hoje: se fosse hoje, a data por omissão do
+    // editor coincidiria e o teste passaria sem o atalho fazer nada.
+    use chrono::Datelike;
+    let hoje = chrono::Utc::now().date_naive();
+    let alvo = if hoje.day() > 15 {
+        hoje.with_day(3).unwrap_or(hoje)
+    } else {
+        hoje.with_day(24).unwrap_or(hoje)
+    };
+    assert_ne!(alvo, hoje, "o dia alvo tem de ser diferente de hoje");
+
+    let page = harness.open("/calendar?view=month").await;
+    esperar_por(&page, "Calendário").await;
+
+    let carregou = page
+        .evaluate(format!(
+            "(() => {{ const c = document.querySelector('[data-oc-dia=\"{alvo}\"]');              if (!c) return false;              c.dispatchEvent(new MouseEvent('dblclick', {{bubbles: true}})); return true; }})()"
+        ))
+        .await
+        .ok()
+        .and_then(|v| v.into_value::<bool>().ok())
+        .unwrap_or(false);
+    assert!(carregou, "não havia célula para o dia {alvo}");
+
+    let destino = wait_until_left(&page, "/calendar?view=month").await;
+    assert!(
+        destino.contains("/calendar/events/new"),
+        "o duplo clique não abriu o editor: {destino}"
+    );
+
+    esperar_por(&page, "Nova actividade").await;
+    let inicio = valor_de(&page, "input[name=starts_at]").await;
+    assert!(
+        inicio.starts_with(&alvo.to_string()),
+        "o editor abriu em «{inicio}» e devia abrir no dia {alvo}"
+    );
 }
 
 /// Espera que uma expressão passe a ser verdadeira na página.

@@ -746,7 +746,7 @@ fn coluna_do_dia(items: &[Item], dia: NaiveDate, zona: TimeZoneName) -> impl Int
     let agora = agora_no_dia(dia, zona);
 
     view! {
-        <div class="oc-cal-coluna">
+        <div class="oc-cal-coluna" data-oc-dia=dia.to_string()>
             {linhas_das_horas()}
             {agora.map(|faixa| view! {
                 <div class=format!("oc-cal-agora oc-cal-l{faixa}") aria-hidden="true"></div>
@@ -1092,7 +1092,11 @@ fn month_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
                 }
 
                 view! {
-                    <div class=classes role="cell">
+                    // A célula leva a sua data. Sem ela, quem quisesse abrir
+                    // uma actividade neste dia teria de a extrair do endereço
+                    // do número — e um endereço é para navegar, não para ser
+                    // lido como dado.
+                    <div class=classes role="cell" data-oc-dia=dia.to_string()>
                         <a
                             class="oc-cal-month__date"
                             href=format!("/calendar?view=today&on={dia}")
