@@ -95,6 +95,21 @@ for ficheiro in list(pathlib.Path().rglob('tests/*.rs')):
         com_postgres += len(re.findall(r'#\[(?:tokio::)?test\]', fonte))
 print(f"testes-com-postgres  {com_postgres}")
 
+# ── Funções de teste escritas na árvore ──────────────────────────────────
+#
+# **Não** é o número de testes que correram: esse é o resultado de uma corrida,
+# e conta cada alvo em que um teste é compilado. Este é um facto da árvore —
+# quantas funções de teste existem escritas — e existe porque a Secção 1
+# carregava um total de corrida mantido à mão, que derivou três vezes numa
+# única sessão sem que nada falhasse. É exactamente o defeito que a própria
+# Secção 1 avisa.
+funcoes = 0
+for ficheiro in pathlib.Path().rglob('*.rs'):
+    if 'target' in ficheiro.parts:
+        continue
+    funcoes += len(re.findall(r'#\[(?:tokio::)?test\]', ficheiro.read_text(errors='replace')))
+print(f"funcoes-de-teste     {funcoes}")
+
 print(f"adrs                 {len(list(pathlib.Path('docs/adrs').glob('[0-9]*.md')))}")
 print(f"runbooks             {len([p for p in pathlib.Path('docs/runbooks').glob('*.md') if p.name != 'README.md'])}")
 print(f"readmes              {len([p for p in pathlib.Path().rglob('README.md') if 'target' not in p.parts and '.git' not in p.parts])}")

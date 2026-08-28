@@ -235,6 +235,22 @@ if [ -n "$VELHOS" ]; then
   feito "$(echo "$VELHOS" | wc -l | tr -d ' ') conjunto(s) removido(s), $KEEP mantido(s)"
 fi
 
+# ── Os incompletos também têm retenção, e é mais curta ──────────────────
+#
+# Não entram na contagem dos conjuntos — não são conjuntos —, e por isso
+# ficariam para sempre: o disco enchia-se de tentativas falhadas, que é uma
+# maneira lenta de impedir a cópia seguinte.
+#
+# Guarda-se **o último**. Quem for ver porque falhou vê a última falha; as
+# anteriores já não dizem nada de novo, e o que interessava delas ficou no
+# registo de quem as correu.
+RESTOS=$(ls -1dt "$OCINYE_BACKUP_DIR"/ocinye-*-INCOMPLETO 2>/dev/null | tail -n +2 || true)
+if [ -n "$RESTOS" ]; then
+  passo "restos de tentativas"
+  echo "$RESTOS" | while read -r resto; do rm -rf "$resto"; done
+  feito "$(echo "$RESTOS" | wc -l | tr -d ' ') removido(s), o mais recente mantido"
+fi
+
 echo
 echo "  Conjunto escrito. Isto é um backup executado."
 echo "  Não é um restore validado — nenhum comando aqui o pode afirmar."

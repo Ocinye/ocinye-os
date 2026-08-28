@@ -86,6 +86,37 @@ Conjunto cifrado com `age` → restaurado → verificado:
 
 **Saiu 2, e está certo.** Nada falhou e uma das três não observou nada.
 
+### A retenção, e os restos
+
+Cinco conjuntos com `OCINYE_BACKUP_KEEP=3`, e corridas falhadas pelo meio:
+
+```
+  ocinye-…232404Z                 ← mantidos: 3
+  ocinye-…232402Z
+  ocinye-…232400Z
+  ocinye-…232401Z-INCOMPLETO      ← não conta como conjunto, e não é apagado
+```
+
+Um `INCOMPLETO` **não entra** na contagem: se entrasse, a rotação apagaria uma
+cópia boa para guardar os restos de uma tentativa. Mas também não fica para
+sempre — guarda-se **o último**, porque o disco a encher-se de tentativas
+falhadas é uma maneira lenta de impedir a cópia seguinte.
+
+### Quando a verificação tem de falhar
+
+Base restaurada, bucket vazio — o pior caso realista, porque é o que uma
+verificação ingénua declara bom:
+
+```
+  as linhas          PASS     29 recursos, 2 objectos, 4 arestas
+  os bytes           FAIL     2 objecto(s) em falta
+  a legibilidade     NOT_RUN
+  EXIT=1
+```
+
+O `verify-snapshot` passa: as linhas chegaram todas. É por isso que ele não
+chega.
+
 ### Pelo produto, e não pelos comandos
 
 No Workspace do servidor B, com sessão nova:

@@ -36,8 +36,10 @@ CONFRONTOS = [
     ("adrs", r"\*\*(\d+) ADRs\*\*", "ADRs"),
     ("runbooks", r"\*\*(\d+) runbooks\*\*", "runbooks"),
     ("readmes", r"\*\*(\d+) READMEs\*\*", "READMEs"),
-    ("testes-com-postgres", r"\*\*(\d+) deles não correm sem base de dados\*\*",
+    ("testes-com-postgres", r"\*\*(\d+) dessas funções não correm sem base de dados\*\*",
      "testes que exigem PostgreSQL"),
+    ("funcoes-de-teste", r"\*\*(\d+) funções de teste\*\* escritas na árvore",
+     "funções de teste na árvore"),
 ]
 
 
