@@ -22,8 +22,19 @@ const LIMITE: Duration = Duration::from_secs(10);
 
 #[test]
 fn o_worker_para_quando_lhe_mandam_sigterm() {
-    let Ok(base) = std::env::var("OCINYE_DATABASE_URL") else {
-        eprintln!("skipping: OCINYE_DATABASE_URL is not set");
+    // A mesma variável que todas as outras suites, e não a de produção.
+    //
+    // Este teste pedia `OCINYE_DATABASE_URL` — que é o nome que o **worker** lê,
+    // e por isso parecia natural. Mas nenhuma outra suite a define: a CI define
+    // `OCINYE_TEST_DATABASE_URL`, e o teste recusou-se a correr lá, como devia.
+    // Localmente aconteceu o mesmo, e a primeira execução reportou `ok` sem ter
+    // corrido nada.
+    //
+    // Uma suite que precisa de uma variável só sua é uma armadilha para quem a
+    // corre. O nome de produção continua a ser o que se passa ao processo filho,
+    // abaixo, que é onde ele pertence.
+    let Ok(base) = std::env::var("OCINYE_TEST_DATABASE_URL") else {
+        eprintln!("skipping: OCINYE_TEST_DATABASE_URL is not set");
         // Na CI isto é defeito: lá a base existe, e um teste de processo que se
         // salta a si mesmo é verde a dizer nada.
         assert!(
