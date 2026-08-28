@@ -20,7 +20,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::policy::{SendDecision, SendPolicy};
-use super::provider::{OutgoingMessage, ProviderAddress, ProviderError};
+use super::provider::{MailProvider, OutgoingMessage, ProviderAddress, ProviderError};
 use super::repository as repo;
 use crate::audit::{self, action, AuditEntry};
 use crate::error::{CoreError, CoreResult};
@@ -1115,4 +1115,105 @@ mod tests {
             assert!(!build_instruction(&request, None).is_empty());
         }
     }
+}
+
+/// Quanto tempo o worker deixa passar antes de voltar a olhar para uma caixa.
+///
+/// # Porque cinco minutos e não cinco segundos
+///
+/// Porque cada passagem é uma sessão IMAP contra um serviço externo, e o
+/// fornecedor conta-as. Correio institucional não é conversa em tempo real: a
+/// diferença entre saber de uma mensagem agora ou daqui a três minutos não muda
+/// nenhuma decisão, e a diferença entre uma ligação por minuto e uma por hora
+/// muda a conta no fim do mês.
+///
+/// Quem precisa de agora tem o botão de sincronizar, que continua a existir.
+pub const INGESTION_INTERVAL: std::time::Duration = std::time::Duration::from_secs(300);
+
+/// O resultado de uma passagem de ingestão sobre todas as caixas ligadas.
+#[derive(Debug, Default)]
+pub struct IngestionOutcome {
+    /// Quantas caixas foram visitadas.
+    pub mailboxes: usize,
+    /// Quantos cabeçalhos entraram no índice.
+    pub indexed: usize,
+    /// Quantas caixas falharam, e não conseguiram ser indexadas.
+    pub failed: usize,
+}
+
+/// Mantém o índice em dia, sem ninguém pedir.
+///
+/// # Porque isto existe
+///
+/// Porque sem ele o correio novo não aparece: a caixa só se actualizava quando
+/// alguém carregava em sincronizar. Uma caixa de correio que se actualiza à mão
+/// é uma página, não uma caixa de correio.
+///
+/// # Porque não recebe um principal
+///
+/// Porque não há membro nenhum a pedir. É o sistema a indexar caixas cujas
+/// credenciais já detém, e indexar não é divulgar — a visibilidade é aplicada
+/// quando alguém lê. Ver [`repo::connected_mailboxes`].
+///
+/// # Porque uma caixa que falha não leva as outras
+///
+/// Um fornecedor pode recusar uma caixa e servir as outras, e uma passagem que
+/// abortasse à primeira falha deixaria a instituição inteira sem correio por
+/// causa de uma conta. A falha fica registada **na caixa**, é ela que a mostra,
+/// e a passagem continua.
+///
+/// # Errors
+///
+/// Devolve erro apenas quando a própria lista de caixas não pode ser lida —
+/// isto é, quando não há sequer por onde começar.
+pub async fn ingest_all(
+    pool: &PgPool,
+    provider: &dyn MailProvider,
+    ids: &CorrelationIds,
+) -> CoreResult<IngestionOutcome> {
+    let caixas = repo::connected_mailboxes(pool).await?;
+    let mut resultado = IngestionOutcome {
+        mailboxes: caixas.len(),
+        ..IngestionOutcome::default()
+    };
+
+    for (mailbox_id, address) in caixas {
+        match provider
+            .list_messages(&address, MailFolder::Inbox, None, SYNC_BATCH)
+            .await
+        {
+            Ok(page) => {
+                let mut indexados = 0_usize;
+                for header in &page.messages {
+                    match repo::upsert_message(pool, mailbox_id, header).await {
+                        Ok(_) => indexados += 1,
+                        // Uma linha que não se escreve não abandona a página. A
+                        // falha aparece na contagem, e não como caixa vazia.
+                        Err(error) => tracing::warn!(
+                            correlation_id = %ids.correlation_id,
+                            cause = %error,
+                            "a message header could not be indexed"
+                        ),
+                    }
+                }
+                repo::record_sync(pool, mailbox_id, None).await?;
+                resultado.indexed += indexados;
+            }
+            Err(error) => {
+                let traduzido = from_provider(error);
+                // Registada na caixa antes de continuar: é lá que quem a abre vê
+                // a razão, em vez de encontrar uma lista vazia sem explicação.
+                repo::record_sync(pool, mailbox_id, Some(&traduzido.to_string())).await?;
+                resultado.failed += 1;
+                tracing::warn!(
+                    correlation_id = %ids.correlation_id,
+                    mailbox = %address,
+                    cause = %traduzido,
+                    "a mailbox could not be refreshed"
+                );
+            }
+        }
+    }
+
+    Ok(resultado)
 }

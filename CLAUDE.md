@@ -74,9 +74,9 @@ sem que nada falhe.
   [ADR-0408](docs/adrs/0408-imap-transport.md)). O transporte IMAP está
   implementado — pastas descobertas do servidor, listagem, corpo, anexos,
   flags, mover — com cifra obrigatória e sem forma de a desligar.
-  **Nenhum serviço de correio está configurado nesta instalação**, e a interface
-  diz isso em vez de mostrar uma caixa vazia. **A sincronização é manual:
-  `mail.sync` reporta `degraded`, porque não existe worker de ingestão.**
+  A interface distingue as ausências em vez de mostrar uma caixa vazia. **A
+  ingestão é periódica**: o worker percorre as caixas ligadas, e uma que recuse
+  não interrompe as outras — a razão fica guardada na caixa que falhou.
 - **19 migrations**, aplicáveis de base vazia; 63 tabelas.
 - **Agentes de IA: `IMPLEMENTED`.** Definíveis e persistidos **sem nó de IA**;
   o estado de execução é derivado da disponibilidade real.
@@ -134,7 +134,7 @@ sem que nada falhe.
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
 - **Testes: 1198**, todos verdes numa corrida de `./scripts/verify.sh`.
-  **366 deles não correm sem base de dados** — vivem em ficheiros que leem
+  **368 deles não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se
@@ -171,8 +171,6 @@ sem que nada falhe.
   `UnconfiguredProvider` e todas as capacidades de correio reportam
   `not_configured`. `ocinye-core-server mail-check` prova uma configuração sem
   arrancar o Core, e sem imprimir credenciais ou conteúdo.
-- **Nenhum worker de ingestão de correio existe.** Correio novo não aparece
-  sozinho; uma pasta é actualizada quando alguém o pede.
 - **Nenhum backup existe. Nenhum restore foi testado.**
 
 Ferramentas disponíveis na máquina de desenvolvimento actual — contexto

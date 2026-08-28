@@ -55,6 +55,16 @@ async fn main() -> anyhow::Result<()> {
     let mut lembretes = tokio::time::interval(reminders::POLL_INTERVAL);
     lembretes.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
+    // O correio novo deixa de esperar que alguém carregue em sincronizar.
+    //
+    // O adaptador vem do mesmo construtor que o Core usa: uma instalação sem
+    // correio configurado recebe o fornecedor que recusa tudo, e a passagem
+    // regista a razão em cada caixa em vez de as deixar vazias sem explicação.
+    let correio = ocinye_core::modules::mail::from_config(&config);
+    let mut ingestao =
+        tokio::time::interval(ocinye_core::modules::mail::service::INGESTION_INTERVAL);
+    ingestao.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
     // O sinal de paragem é armado **uma vez**, fora do ciclo.
     //
     // # Porque isto era um defeito e não um detalhe
@@ -90,6 +100,31 @@ async fn main() -> anyhow::Result<()> {
                     Ok(0) => {}
                     Ok(count) => tracing::info!(count, "reminders delivered"),
                     Err(error) => tracing::error!(error = %error, "reminder pass failed"),
+                }
+            }
+            _ = ingestao.tick() => {
+                // Uma passagem do worker não vem de um pedido HTTP: não há cabeçalhos de
+                // onde herdar correlação, e por isso gera-se uma nova. É o que liga
+                // as linhas desta passagem umas às outras nos registos.
+                let ids = ocinye_observability::CorrelationIds::from_headers(None, None);
+                match ocinye_core::modules::mail::service::ingest_all(
+                    &pool,
+                    correio.as_ref(),
+                    &ids,
+                )
+                .await
+                {
+                    Ok(passagem) if passagem.mailboxes == 0 => {}
+                    Ok(passagem) => tracing::info!(
+                        mailboxes = passagem.mailboxes,
+                        indexed = passagem.indexed,
+                        failed = passagem.failed,
+                        "mail index refreshed"
+                    ),
+                    // Uma passagem que falha regista-se e não derruba o worker:
+                    // o correio não pode levar consigo o escoamento do outbox,
+                    // que serve o resto da instituição.
+                    Err(error) => tracing::error!(error = %error, "mail ingestion pass failed"),
                 }
             }
             drained = outbox::drain(&pool, BATCH_SIZE) => {

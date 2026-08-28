@@ -832,6 +832,32 @@ pub async fn forget_credential<'e>(
     Ok(())
 }
 
+/// As caixas ligadas, para o worker as manter indexadas.
+///
+/// # Porque não recebe um principal
+///
+/// Porque não há membro nenhum a pedir isto. É o sistema a manter em dia um
+/// índice de caixas cujas credenciais já detém, e indexar não é divulgar: a
+/// visibilidade continua a ser aplicada quando alguém **lê**, por
+/// `accessible_mailboxes` e `accessible_message`.
+///
+/// A distinção é a do ADR-0407 — o Ocinye indexa, não arquiva. O que fica aqui
+/// são metadados para desenhar uma lista, e o corpo vai-se buscar ao fornecedor
+/// no momento em que alguém autorizado o abre.
+///
+/// # Errors
+///
+/// Devolve erro quando a leitura falha.
+pub async fn connected_mailboxes<'e>(
+    executor: impl PgExecutor<'e>,
+) -> CoreResult<Vec<(Uuid, String)>> {
+    let linhas: Vec<(Uuid, String)> =
+        sqlx::query_as("SELECT id, address FROM mailboxes WHERE connected = true ORDER BY address")
+            .fetch_all(executor)
+            .await?;
+    Ok(linhas)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

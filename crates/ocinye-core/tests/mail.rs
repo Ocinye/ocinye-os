@@ -1105,3 +1105,194 @@ async fn provisionar_cria_a_caixa_e_recusa_o_que_nao_e_da_instituicao() {
         "uma segunda caixa pessoal devia ser recusada com uma razão: {segunda:?}"
     );
 }
+
+// ── Ingestão automática ────────────────────────────────────────────────
+
+/// O erro que este fornecedor de teste devolve quando recusa.
+///
+/// A variante exacta vem do contrato do fornecedor, e escrevê-la num sítio só
+/// evita que uma mudança lá obrigue a caçá-la aqui em cinco métodos.
+fn indisponivel() -> ocinye_core::modules::mail::ProviderError {
+    ocinye_core::modules::mail::ProviderError::Unavailable
+}
+
+/// Um fornecedor que serve uma caixa e recusa a outra.
+///
+/// Existe para provar a única coisa que interessa numa passagem sobre várias
+/// caixas: que uma falha não leva as restantes.
+struct ProviderParcial {
+    /// O endereço que este fornecedor recusa servir.
+    recusa: String,
+}
+
+#[async_trait]
+impl MailProvider for ProviderParcial {
+    fn adapter_name(&self) -> &'static str {
+        "parcial"
+    }
+
+    async fn health(&self) -> ProviderHealth {
+        ProviderHealth {
+            endpoints: vec!["parcial:0".to_owned()],
+            can_read: true,
+            can_send: false,
+            // A senha não foi recusada: este fornecedor serve uma caixa e
+            // recusa a outra por indisponibilidade, que é outra coisa.
+            rejected_credential: false,
+            detail: "Fornecedor de teste.".to_owned(),
+        }
+    }
+
+    async fn list_messages(
+        &self,
+        mailbox_address: &str,
+        _folder: MailFolder,
+        _cursor: Option<&str>,
+        _limit: u32,
+    ) -> ProviderResult<MessagePage> {
+        if mailbox_address == self.recusa {
+            return Err(indisponivel());
+        }
+        Ok(MessagePage {
+            messages: Vec::new(),
+            next_cursor: None,
+        })
+    }
+
+    async fn fetch_message(
+        &self,
+        _mailbox_address: &str,
+        _folder: MailFolder,
+        _provider_id: &str,
+    ) -> ProviderResult<FetchedMessage> {
+        Err(indisponivel())
+    }
+
+    async fn fetch_attachment(
+        &self,
+        _mailbox_address: &str,
+        _folder: MailFolder,
+        _provider_id: &str,
+        _part_id: &str,
+    ) -> ProviderResult<Vec<u8>> {
+        Err(indisponivel())
+    }
+
+    async fn send_message(
+        &self,
+        _mailbox_address: &str,
+        _message: &OutgoingMessage,
+    ) -> ProviderResult<Option<String>> {
+        Err(indisponivel())
+    }
+
+    async fn set_read(
+        &self,
+        _mailbox_address: &str,
+        _folder: MailFolder,
+        _provider_id: &str,
+        _read: bool,
+    ) -> ProviderResult<()> {
+        Ok(())
+    }
+
+    async fn set_starred(
+        &self,
+        _mailbox_address: &str,
+        _folder: MailFolder,
+        _provider_id: &str,
+        _starred: bool,
+    ) -> ProviderResult<()> {
+        Ok(())
+    }
+
+    async fn move_message(
+        &self,
+        _mailbox_address: &str,
+        _folder: MailFolder,
+        _provider_id: &str,
+        _destination: MailFolder,
+    ) -> ProviderResult<()> {
+        Ok(())
+    }
+}
+
+/// Uma caixa que falha não leva as outras.
+///
+/// # Porque esta é a propriedade que importa
+///
+/// Porque uma passagem que abortasse à primeira falha deixaria a instituição
+/// inteira sem correio por causa de uma conta com a senha mudada. A falha
+/// pertence à caixa, é ela que a mostra, e a passagem continua.
+///
+/// # Porque as asserções são sobre estas duas caixas e não sobre contagens
+///
+/// Porque a base de testes é partilhada e acumula caixas de execuções
+/// anteriores — mil e oitocentas, quando escrevi isto. Uma asserção sobre o
+/// total mede o resíduo; uma asserção sobre as caixas que este teste criou mede
+/// o que este teste faz.
+#[tokio::test]
+async fn uma_caixa_que_falha_nao_leva_as_outras() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    // Duas pessoas, porque o domínio impõe uma caixa pessoal por pessoa
+    // (`uq_mailboxes_personal_owner`) — e é assim que a instituição funciona.
+    let alice = person(&pool, org, &["research_member"]).await;
+    let bruno = person(&pool, org, &["research_member"]).await;
+
+    let boa = personal_mailbox(&pool, org, alice.person_id).await;
+    let ma = personal_mailbox(&pool, org, bruno.person_id).await;
+
+    let endereco_mau: String = sqlx::query_scalar("SELECT address FROM mailboxes WHERE id = $1")
+        .bind(ma)
+        .fetch_one(&pool)
+        .await
+        .expect("endereço");
+
+    let provider = ProviderParcial {
+        recusa: endereco_mau,
+    };
+    let passagem = ocinye_core::modules::mail::service::ingest_all(
+        &pool,
+        &provider,
+        &CorrelationIds::generate(),
+    )
+    .await
+    .expect("passagem");
+
+    // A passagem chegou ao fim apesar da recusa. Se abortasse, a caixa boa
+    // ficaria sem registo de sincronização — e é isso que se verifica a seguir.
+    assert!(
+        passagem.failed >= 1,
+        "a caixa que recusa não foi contada como falhada"
+    );
+
+    // A razão ficou **na caixa**, que é onde quem a abre a vai ler.
+    let razao: Option<String> =
+        sqlx::query_scalar("SELECT last_sync_error FROM mailboxes WHERE id = $1")
+            .bind(ma)
+            .fetch_one(&pool)
+            .await
+            .expect("razão");
+    assert!(
+        razao.is_some(),
+        "a caixa que falhou não guardou a razão: quem a abrir vê uma lista vazia sem explicação"
+    );
+
+    // E a que funcionou ficou sem erro e com a hora da sincronização — prova de
+    // que a passagem continuou depois da recusa.
+    let (erro, quando): (Option<String>, Option<chrono::DateTime<chrono::Utc>>) =
+        sqlx::query_as("SELECT last_sync_error, last_synced_at FROM mailboxes WHERE id = $1")
+            .bind(boa)
+            .fetch_one(&pool)
+            .await
+            .expect("estado");
+    assert!(
+        erro.is_none(),
+        "a caixa que funcionou ficou marcada com erro"
+    );
+    assert!(
+        quando.is_some(),
+        "a caixa que funcionou não foi sincronizada: a passagem parou na que falhou"
+    );
+}

@@ -46,3 +46,70 @@ pub use service::{
     provision_personal_mailbox, read_message, safe_filename, send, sender_identity, set_flag, sync,
     AssistRequest, AssistResult, MailboxConnection, ReadableMessage, SyncOutcome,
 };
+
+/// Constrói o adaptador de correio a partir da configuração desta instalação.
+///
+/// # Porque vive aqui e não em cada serviço
+///
+/// Porque o Core e o worker precisam do mesmo adaptador, e dois construtores
+/// seriam dois sítios a decidir o que conta como «correio configurado» — que é
+/// a maneira de um deles passar a ligar-se em texto simples sem ninguém dar por
+/// isso.
+///
+/// Uma instalação sem correio devolve o fornecedor que recusa tudo da mesma
+/// maneira, e di-lo. Nunca `None`: uma ausência silenciosa acabaria testada com
+/// um `unwrap_or_default` algures.
+#[must_use]
+pub fn from_config(config: &crate::config::CoreConfig) -> std::sync::Arc<dyn MailProvider> {
+    if !config.mail.is_configured() {
+        // Duas ausências diferentes, e dizer-lhes o mesmo manda quem lê
+        // procurar no sítio errado. Sem transporte não há serviço nenhum; com
+        // transporte e sem conta de serviço há correio, e é de cada pessoa.
+        if config.mail.transport_configured() {
+            tracing::info!(
+                imap = %config.mail.imap_host,
+                smtp = %config.mail.smtp_host,
+                "Ocinye Mail transport is configured with no institutional service \
+                 account; each member connects their own mailbox (ADR-0409)"
+            );
+        } else {
+            tracing::info!("Ocinye Mail is not configured on this deployment");
+        }
+        return std::sync::Arc::new(crate::modules::mail::provider::UnconfiguredProvider);
+    }
+
+    let settings = crate::modules::mail::imap_smtp::ImapSmtpConfig {
+        imap_host: config.mail.imap_host.clone(),
+        imap_port: config.mail.imap_port,
+        imap_security: config.mail.imap_security,
+        smtp_host: config.mail.smtp_host.clone(),
+        smtp_port: config.mail.smtp_port,
+        smtp_security: config.mail.smtp_security,
+        username: config.mail.username.clone(),
+        password: crate::password::Secret::new(config.mail.password.clone()),
+    };
+
+    match crate::modules::mail::imap_smtp::ImapSmtpProvider::new(settings) {
+        Ok(provider) => {
+            // Hosts and ports only. The username is an address and the password
+            // is never anywhere near a log line (briefing §57).
+            tracing::info!(
+                imap = %config.mail.imap_host,
+                imap_port = config.mail.imap_port,
+                imap_security = config.mail.imap_security.as_str(),
+                smtp = %config.mail.smtp_host,
+                smtp_port = config.mail.smtp_port,
+                smtp_security = config.mail.smtp_security.as_str(),
+                "Ocinye Mail adapter ready"
+            );
+            std::sync::Arc::new(provider)
+        }
+        Err(error) => {
+            tracing::error!(
+                cause = %error,
+                "Ocinye Mail adapter could not be built; mail will report as unavailable"
+            );
+            std::sync::Arc::new(crate::modules::mail::provider::UnconfiguredProvider)
+        }
+    }
+}

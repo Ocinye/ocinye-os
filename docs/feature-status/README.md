@@ -58,7 +58,7 @@ Os quatro primeiros são apurados em tempo real pelo Core e servidos em
 | **Correio — modelo, permissões, política** | implementado | n/a | n/a | `AVAILABLE` |
 | **Correio — leitura e envio** | implementado | 7 ecrãs | serviço ausente | `NOT_CONFIGURED` |
 | **Correio — transporte IMAP** | implementado | n/a | serviço ausente | `NOT_CONFIGURED` |
-| **Correio — sincronização (`mail.sync`)** | manual, implementada | botão «Actualizar» | sem worker de ingestão | `DEGRADED` |
+| **Correio — sincronização (`mail.sync`)** | manual e periódica, implementadas | botão «Actualizar» e passagem do worker | n/a | `AVAILABLE` |
 | **Correio — assistência de escrita** | implementado | implementado | sem nó de IA | `NO_RESOURCE` |
 | **Correio — anexos no envio** | modelo definido | — | depende de armazenamento institucional | `PLANNED` |
 | **Correio — descarga de anexos** | adaptador lê-os | declarada indisponível | falta rota e ecrã | `PLANNED` |

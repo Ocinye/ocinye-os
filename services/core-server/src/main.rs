@@ -15,11 +15,7 @@ use std::time::Duration;
 use anyhow::Context;
 use ocinye_core::config::CoreConfig;
 use ocinye_core::modules::identity::{Authenticator, Throttle};
-use ocinye_core::modules::mail::imap_smtp::{ImapSmtpConfig, ImapSmtpProvider};
-use ocinye_core::modules::mail::provider::UnconfiguredProvider;
-use ocinye_core::modules::mail::MailProvider;
 use ocinye_core::modules::organisation;
-use ocinye_core::password::Secret;
 use ocinye_core::password::{Hasher, HashingParams};
 use ocinye_core::storage::ObjectStore;
 use ocinye_core::{authn::TokenVerifier, db};
@@ -124,7 +120,7 @@ async fn main() -> anyhow::Result<()> {
     // not configured the unconfigured adapter takes its place and says so on
     // every call — an interface that shows an empty inbox instead of a reason
     // is the failure mode this avoids (briefing §60).
-    let mail_provider = build_mail_provider(&config);
+    let mail_provider = ocinye_core::modules::mail::from_config(&config);
 
     // Os componentes lêem-se uma vez, no arranque. Um que não esteja construído
     // não impede o Core de subir: a operação que precisar dele recusa com uma
@@ -216,60 +212,6 @@ async fn ensure_default_backend(
 /// the Ocinye Core from starting: research, knowledge, identity and governance
 /// have nothing to do with email, and taking the whole institution offline
 /// because a mail host is down would be a self-inflicted outage.
-fn build_mail_provider(config: &CoreConfig) -> Arc<dyn MailProvider> {
-    if !config.mail.is_configured() {
-        // Duas ausências diferentes, e dizer-lhes o mesmo manda quem lê
-        // procurar no sítio errado. Sem transporte não há serviço nenhum; com
-        // transporte e sem conta de serviço há correio, e é de cada pessoa.
-        if config.mail.transport_configured() {
-            tracing::info!(
-                imap = %config.mail.imap_host,
-                smtp = %config.mail.smtp_host,
-                "Ocinye Mail transport is configured with no institutional service \
-                 account; each member connects their own mailbox (ADR-0409)"
-            );
-        } else {
-            tracing::info!("Ocinye Mail is not configured on this deployment");
-        }
-        return Arc::new(UnconfiguredProvider);
-    }
-
-    let settings = ImapSmtpConfig {
-        imap_host: config.mail.imap_host.clone(),
-        imap_port: config.mail.imap_port,
-        imap_security: config.mail.imap_security,
-        smtp_host: config.mail.smtp_host.clone(),
-        smtp_port: config.mail.smtp_port,
-        smtp_security: config.mail.smtp_security,
-        username: config.mail.username.clone(),
-        password: Secret::new(config.mail.password.clone()),
-    };
-
-    match ImapSmtpProvider::new(settings) {
-        Ok(provider) => {
-            // Hosts and ports only. The username is an address and the password
-            // is never anywhere near a log line (briefing §57).
-            tracing::info!(
-                imap = %config.mail.imap_host,
-                imap_port = config.mail.imap_port,
-                imap_security = config.mail.imap_security.as_str(),
-                smtp = %config.mail.smtp_host,
-                smtp_port = config.mail.smtp_port,
-                smtp_security = config.mail.smtp_security.as_str(),
-                "Ocinye Mail adapter ready"
-            );
-            Arc::new(provider)
-        }
-        Err(error) => {
-            tracing::error!(
-                cause = %error,
-                "Ocinye Mail adapter could not be built; mail will report as unavailable"
-            );
-            Arc::new(UnconfiguredProvider)
-        }
-    }
-}
-
 async fn shutdown_signal() {
     let ctrl_c = async {
         signal::ctrl_c().await.expect("install Ctrl+C handler");
