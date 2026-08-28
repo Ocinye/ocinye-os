@@ -109,41 +109,197 @@ pub struct Auditoria {
     pub ultimo: Option<String>,
 }
 
-/// As famílias que constituem estado institucional autoritativo.
+/// Como cada tabela do esquema entra — ou não entra — na comparação.
 ///
-/// # Porque uma lista escrita, e não «todas as tabelas»
+/// Existe para que a pergunta não tenha resposta implícita. Uma tabela nova
+/// aparece numa migration; se a decisão sobre ela pudesse ficar por tomar, o
+/// manifesto continuaria a passar por completo enquanto deixava de cobrir
+/// aquilo que a tabela guarda.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Comparacao {
+    /// Identidade a identidade, pela coluna `id`.
+    Identidades,
+    /// Comparada por outro mecanismo deste manifesto, nomeado aqui.
+    Noutro(&'static str),
+    /// Deliberadamente fora da comparação, com a razão escrita.
+    Fora(&'static str),
+}
+
+/// O esquema inteiro, e a decisão de continuidade de cada tabela.
 ///
-/// Porque nem toda a tabela guarda identidade institucional. `search_documents`
-/// é uma projecção; `sessions` é efémero. Compará-las obrigaria um snapshot
-/// legítimo a falhar por uma sessão ter expirado entre as duas leituras.
+/// # Porque a lista é exaustiva, e não uma selecção
 ///
-/// O que está aqui é o que tem de sobreviver com a **mesma identidade**.
-const FAMILIAS: &[&str] = &[
-    "organisations",
-    "people",
-    "units",
-    "research_workspaces",
-    "ideas",
-    "projects",
-    "sources",
-    "notes",
-    "documents",
-    "datasets",
-    "dataset_versions",
-    "hypotheses",
-    "methodologies",
-    "methodology_versions",
-    "studies",
-    "study_executions",
-    "results",
-    "result_validations",
-    "tasks",
-    "calendar_events",
-    "conversations",
-    "mailboxes",
-    "storage_objects",
-    "explicit_access_grants",
+/// Porque uma selecção envelhece em silêncio. A versão anterior deste ficheiro
+/// comparava vinte e quatro tabelas de sessenta e duas e não dizia nada sobre
+/// as outras trinta e oito — entre elas `person_roles`, `unit_memberships` e
+/// `credentials`. Um restore que perdesse todas as filiações passaria por
+/// íntegro: as famílias comparadas chegariam completas, e ninguém conseguiria
+/// entrar.
+///
+/// Aqui, uma tabela que não esteja nesta lista faz o portão fechar. A decisão
+/// pode ser «fora», e várias são — mas tem de ser tomada por alguém.
+const ESQUEMA: &[(&str, Comparacao)] = &[
+    // ── Identidade e autoridade ─────────────────────────────────────────
+    //
+    // Perder uma linha destas não perde conhecimento: perde quem lhe pode
+    // chegar. Um restore que trouxesse a investigação inteira e nenhuma
+    // filiação seria um arquivo, e não uma instituição a funcionar.
+    ("organisations", Comparacao::Identidades),
+    ("people", Comparacao::Identidades),
+    ("credentials", Comparacao::Identidades),
+    ("person_roles", Comparacao::Identidades),
+    ("units", Comparacao::Identidades),
+    ("unit_memberships", Comparacao::Identidades),
+    ("workspace_memberships", Comparacao::Identidades),
+    ("explicit_access_grants", Comparacao::Identidades),
+    ("invitations", Comparacao::Identidades),
+    // ── Investigação ────────────────────────────────────────────────────
+    ("research_workspaces", Comparacao::Identidades),
+    ("ideas", Comparacao::Identidades),
+    ("projects", Comparacao::Identidades),
+    ("tasks", Comparacao::Identidades),
+    ("activity_entries", Comparacao::Identidades),
+    ("comments", Comparacao::Identidades),
+    // ── Conhecimento e dados ────────────────────────────────────────────
+    ("sources", Comparacao::Identidades),
+    ("notes", Comparacao::Identidades),
+    ("note_revisions", Comparacao::Identidades),
+    ("documents", Comparacao::Identidades),
+    ("datasets", Comparacao::Identidades),
+    ("dataset_versions", Comparacao::Identidades),
+    ("dataset_files", Comparacao::Identidades),
+    // ── Ciência e proveniência ──────────────────────────────────────────
+    ("hypotheses", Comparacao::Identidades),
+    ("methodologies", Comparacao::Identidades),
+    ("methodology_versions", Comparacao::Identidades),
+    ("studies", Comparacao::Identidades),
+    ("study_executions", Comparacao::Identidades),
+    ("results", Comparacao::Identidades),
+    ("result_validations", Comparacao::Identidades),
+    // ── Comunicação institucional ───────────────────────────────────────
+    ("conversations", Comparacao::Identidades),
+    ("conversation_participants", Comparacao::Identidades),
+    ("messages", Comparacao::Identidades),
+    ("calendar_events", Comparacao::Identidades),
+    ("reminders", Comparacao::Identidades),
+    ("notifications", Comparacao::Identidades),
+    ("mailboxes", Comparacao::Identidades),
+    ("shared_mailbox_memberships", Comparacao::Identidades),
+    ("mail_drafts", Comparacao::Identidades),
+    ("mail_draft_attachments", Comparacao::Identidades),
+    ("mail_outbox", Comparacao::Identidades),
+    ("mail_provider_settings", Comparacao::Identidades),
+    // ── Plataforma ──────────────────────────────────────────────────────
+    ("storage_backends", Comparacao::Identidades),
+    ("storage_objects", Comparacao::Identidades),
+    ("compute_nodes", Comparacao::Identidades),
+    ("node_credentials", Comparacao::Identidades),
+    ("ai_agents", Comparacao::Identidades),
+    ("ai_models", Comparacao::Identidades),
+    ("ai_jobs", Comparacao::Identidades),
+    ("action_plans", Comparacao::Identidades),
+    // ── Comparadas por outro mecanismo ──────────────────────────────────
+    (
+        "research_links",
+        Comparacao::Noutro(
+            "aresta a aresta, com a origem, no campo `proveniencia`: uma \
+             relação é as suas duas pontas e quem a afirmou, e não um `id`",
+        ),
+    ),
+    (
+        "audit_events",
+        Comparacao::Noutro(
+            "pelo número e pelas datas extremas, no campo `auditoria`: são \
+             demasiados para enumerar, e uma auditoria recriada denuncia-se \
+             pela data do primeiro evento",
+        ),
+    ),
+    // ── Deliberadamente fora ────────────────────────────────────────────
+    (
+        "search_documents",
+        Comparacao::Fora(
+            "projecção de pesquisa, reconstruível a partir do que indexa. \
+             Exigir que coincidisse faria uma reindexação legítima passar por \
+             perda de memória",
+        ),
+    ),
+    (
+        "sessions",
+        Comparacao::Fora(
+            "quem estava autenticado volta a entrar. Identidade persiste; \
+             autoridade restabelece-se (ADR-0411). Uma sessão que expire \
+             entre as duas leituras faria um restore correcto falhar",
+        ),
+    ),
+    (
+        "authentication_attempts",
+        Comparacao::Fora(
+            "registo de throttling com prazo. Não é memória institucional, e \
+             a janela move-se sozinha entre as duas leituras",
+        ),
+    ),
+    (
+        "outbox_events",
+        Comparacao::Fora(
+            "fila de entrega, não estado. Drena-se antes do corte — está no \
+             runbook — e comparar uma fila em movimento mediria o worker",
+        ),
+    ),
+    (
+        "mail_messages",
+        Comparacao::Fora(
+            "índice sobre correio que vive no fornecedor, não arquivo \
+             (ADR-0407). Volta a preencher-se da caixa de origem",
+        ),
+    ),
+    (
+        "reminder_deliveries",
+        Comparacao::Fora(
+            "registo de entregas já feitas, sem identidade própria. Existe \
+             para não repetir um aviso, e não para o recordar",
+        ),
+    ),
+    (
+        "mailbox_credentials",
+        Comparacao::Fora(
+            "não tem `id`: é a credencial selada da caixa a que pertence, e \
+             viaja com ela. O que decide se chega legível é a chave de \
+             selagem, que não está na base",
+        ),
+    ),
+    (
+        "mail_preferences",
+        Comparacao::Fora("linha-filha sem identidade própria; viaja com a caixa"),
+    ),
+    (
+        "action_approvals",
+        Comparacao::Fora("linha-filha sem identidade própria; viaja com o plano"),
+    ),
+    (
+        "calendar_event_participants",
+        Comparacao::Fora("linha-filha sem identidade própria; viaja com o evento"),
+    ),
+    (
+        "message_mentions",
+        Comparacao::Fora("linha-filha sem identidade própria; viaja com a mensagem"),
+    ),
+    (
+        "message_reactions",
+        Comparacao::Fora("linha-filha sem identidade própria; viaja com a mensagem"),
+    ),
 ];
+
+/// As famílias comparadas identidade a identidade.
+///
+/// Derivada de [`ESQUEMA`], e nunca escrita à mão em paralelo: duas listas do
+/// mesmo facto divergem, e a que ninguém lê é a que fica errada.
+fn familias_por_identidade() -> Vec<&'static str> {
+    ESQUEMA
+        .iter()
+        .filter(|(_, como)| matches!(como, Comparacao::Identidades))
+        .map(|(tabela, _)| *tabela)
+        .collect()
+}
 
 /// Lê o que esta instalação contém.
 ///
@@ -157,8 +313,9 @@ pub async fn descrever(pool: &PgPool) -> CoreResult<Manifesto> {
             .fetch_one(pool)
             .await?;
 
-    let mut familias = Vec::with_capacity(FAMILIAS.len());
-    for tabela in FAMILIAS {
+    let por_identidade = familias_por_identidade();
+    let mut familias = Vec::with_capacity(por_identidade.len());
+    for tabela in por_identidade {
         // `ORDER BY id` e não a ordem de varrimento: duas leituras da mesma base
         // têm de dar o mesmo manifesto, ou a comparação mede o planeador de
         // consultas em vez do conteúdo.
@@ -167,7 +324,7 @@ pub async fn descrever(pool: &PgPool) -> CoreResult<Manifesto> {
                 .fetch_all(pool)
                 .await?;
         familias.push(Familia {
-            tabela: (*tabela).to_owned(),
+            tabela: tabela.to_owned(),
             quantos: identidades.len(),
             identidades,
         });
@@ -224,6 +381,15 @@ pub async fn descrever(pool: &PgPool) -> CoreResult<Manifesto> {
             ultimo,
         },
     })
+}
+
+/// Como se escreve um instante que pode não existir.
+///
+/// Uma base sem auditoria nenhuma não tem primeiro evento, e «`None`» é a
+/// palavra de uma linguagem de programação, não a de quem está a migrar um
+/// servidor às três da manhã.
+fn quando(instante: Option<&str>) -> String {
+    instante.map_or_else(|| "nenhum".to_owned(), ToOwned::to_owned)
 }
 
 /// Uma diferença entre o que se esperava e o que chegou.
@@ -345,6 +511,30 @@ pub fn comparar(antes: &Manifesto, depois: &Manifesto) -> Vec<Divergencia> {
             Some(_) => {}
         }
     }
+    // E o sentido contrário. Um objecto que não estava no snapshot e está aqui
+    // foi criado algures entre a saída e a chegada — por um serviço que ficou a
+    // correr contra a base antiga, ou por um restore que escreveu por cima de
+    // uma instalação que já tinha vida. Nas famílias isto já era divergência;
+    // aqui era silêncio.
+    let esperados: std::collections::BTreeSet<Uuid> = antes.objectos.iter().map(|o| o.id).collect();
+    let intrusos: Vec<Uuid> = depois
+        .objectos
+        .iter()
+        .map(|o| o.id)
+        .filter(|id| !esperados.contains(id))
+        .collect();
+    if !intrusos.is_empty() {
+        divergencias.push(Divergencia {
+            onde: "storage_objects".to_owned(),
+            o_que: format!(
+                "{} objecto(s) apareceram do nada, por exemplo {:?}. O destino \
+                 não estava vazio, ou alguém continuou a escrever na origem \
+                 depois do snapshot",
+                intrusos.len(),
+                &intrusos[..intrusos.len().min(5)]
+            ),
+        });
+    }
 
     // ── A proveniência ──────────────────────────────────────────────────
     //
@@ -363,6 +553,17 @@ pub fn comparar(antes: &Manifesto, depois: &Manifesto) -> Vec<Divergencia> {
             ),
         });
     }
+    let inventadas = depois_arestas.difference(&antes_arestas).count();
+    if inventadas > 0 {
+        divergencias.push(Divergencia {
+            onde: "research_links".to_owned(),
+            o_que: format!(
+                "{inventadas} aresta(s) de proveniência apareceram do nada. Uma \
+                 relação que o snapshot não continha afirma uma origem que \
+                 ninguém observou nem declarou deste lado"
+            ),
+        });
+    }
 
     // ── A auditoria ─────────────────────────────────────────────────────
     if depois.auditoria.eventos < antes.auditoria.eventos {
@@ -378,10 +579,11 @@ pub fn comparar(antes: &Manifesto, depois: &Manifesto) -> Vec<Divergencia> {
         divergencias.push(Divergencia {
             onde: "audit_events".to_owned(),
             o_que: format!(
-                "o evento mais antigo mudou de data: {:?} → {:?}. Um restore que \
+                "o evento mais antigo mudou de data: {} → {}. Um restore que \
                  recriasse a auditoria teria datas de hoje, e a evidência \
                  desapareceria exactamente quando é mais precisa",
-                antes.auditoria.primeiro, depois.auditoria.primeiro
+                quando(antes.auditoria.primeiro.as_deref()),
+                quando(depois.auditoria.primeiro.as_deref())
             ),
         });
     }
@@ -514,6 +716,179 @@ mod tests {
         }];
         let divergencias = comparar(&antes, &vazio());
         assert!(divergencias.iter().any(|d| d.onde == "research_links"));
+    }
+
+    /// Toda a tabela do esquema tem uma decisão de continuidade, e só uma.
+    ///
+    /// # O defeito que isto guarda
+    ///
+    /// Alguém acrescenta uma tabela numa migration. O manifesto continua a ser
+    /// produzido, a comparação continua a passar, e o que a tabela nova guarda
+    /// deixa de ser verificado — sem erro nenhum, porque a lista que a devia
+    /// conter é escrita à mão e não sabe que ficou incompleta.
+    ///
+    /// Foi assim que `person_roles`, `unit_memberships`, `workspace_memberships`
+    /// e `credentials` ficaram trinta e oito tabelas fora de uma verificação que
+    /// se dizia de estado institucional.
+    #[test]
+    fn toda_a_tabela_do_esquema_tem_uma_decisao() {
+        let raiz = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("migrations");
+
+        let mut ficheiros: Vec<_> = std::fs::read_dir(&raiz)
+            .expect("migrations")
+            .filter_map(Result::ok)
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|e| e == "sql"))
+            .collect();
+        ficheiros.sort();
+        assert!(
+            !ficheiros.is_empty(),
+            "não há migrations para observar; isto seria verde por vazio"
+        );
+
+        let mut esquema: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for ficheiro in &ficheiros {
+            let sql = std::fs::read_to_string(ficheiro).expect("ler migration");
+            for linha in sql.lines() {
+                if let Some(resto) = linha.trim().strip_prefix("CREATE TABLE ") {
+                    let nome = resto
+                        .trim_start_matches("IF NOT EXISTS ")
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or_default()
+                        .trim_end_matches('(')
+                        .to_owned();
+                    if !nome.is_empty() {
+                        esquema.insert(nome);
+                    }
+                }
+            }
+        }
+        assert!(
+            esquema.len() > 40,
+            "só {} tabelas encontradas; a leitura das migrations partiu-se",
+            esquema.len()
+        );
+
+        let decididas: std::collections::BTreeSet<String> =
+            ESQUEMA.iter().map(|(t, _)| (*t).to_owned()).collect();
+
+        let sem_decisao: Vec<&String> = esquema.difference(&decididas).collect();
+        assert!(
+            sem_decisao.is_empty(),
+            "estas tabelas existem no esquema e ninguém decidiu o que lhes \
+             acontece numa migração de servidor: {sem_decisao:?}. \
+             Acrescentar a `ESQUEMA` com `Identidades`, `Noutro` ou `Fora` — \
+             qualquer uma serve, desde que seja uma decisão"
+        );
+
+        let fantasmas: Vec<&String> = decididas.difference(&esquema).collect();
+        assert!(
+            fantasmas.is_empty(),
+            "estas tabelas estão decididas e já não existem no esquema: \
+             {fantasmas:?}. Uma entrada que não corresponde a nada dá a \
+             impressão de cobertura que não existe"
+        );
+
+        assert_eq!(
+            decididas.len(),
+            ESQUEMA.len(),
+            "há uma tabela decidida duas vezes em `ESQUEMA`, e a segunda \
+             decisão nunca se lê"
+        );
+    }
+
+    /// Uma decisão de exclusão diz sempre porquê.
+    ///
+    /// Sem isto, a exaustividade acima seria satisfeita por uma tabela
+    /// acrescentada com `Fora("")` para calar o portão — uma cópia da decisão
+    /// em vez da decisão.
+    #[test]
+    fn nenhuma_excepcao_e_muda() {
+        for (tabela, como) in ESQUEMA {
+            let razao = match como {
+                Comparacao::Identidades => continue,
+                Comparacao::Noutro(r) | Comparacao::Fora(r) => r,
+            };
+            assert!(
+                razao.split_whitespace().count() >= 6,
+                "`{tabela}` sai da comparação sem razão que se leia: «{razao}»"
+            );
+        }
+    }
+
+    /// A autoridade viaja comparada, e não por confiança.
+    ///
+    /// As filiações e os verificadores de senha são o que separa uma
+    /// instituição a funcionar de um arquivo que ninguém abre. Este teste
+    /// nomeia-os um a um para que reclassificá-los seja um acto deliberado.
+    #[test]
+    fn a_autoridade_e_comparada_identidade_a_identidade() {
+        for tabela in [
+            "people",
+            "credentials",
+            "person_roles",
+            "unit_memberships",
+            "workspace_memberships",
+            "explicit_access_grants",
+        ] {
+            let (_, como) = ESQUEMA
+                .iter()
+                .find(|(t, _)| *t == tabela)
+                .unwrap_or_else(|| panic!("`{tabela}` desapareceu de `ESQUEMA`"));
+            assert_eq!(
+                *como,
+                Comparacao::Identidades,
+                "`{tabela}` deixou de ser comparada: um restore que a perdesse \
+                 chegaria com a investigação toda e sem ninguém que lhe pudesse \
+                 chegar"
+            );
+        }
+    }
+
+    /// Um objecto que apareceu do nada diverge.
+    ///
+    /// O destino não estava vazio, ou a origem continuou a receber escritas
+    /// depois do snapshot. Nos dois casos, o que está no servidor novo não é o
+    /// que se levou, e a diferença é a favor de ninguém.
+    #[test]
+    fn um_objecto_aparecido_do_nada_e_uma_divergencia() {
+        let mut depois = vazio();
+        depois.objectos = vec![Objecto {
+            id: Uuid::new_v4(),
+            chave: "research/z/intruso.bin".to_owned(),
+            sha256: "c".repeat(64),
+            bytes: 4,
+        }];
+        let divergencias = comparar(&vazio(), &depois);
+        assert!(
+            divergencias
+                .iter()
+                .any(|d| d.onde == "storage_objects" && d.o_que.contains("apareceram do nada")),
+            "um objecto criado do lado de lá passou por igual: {divergencias:?}"
+        );
+    }
+
+    /// Uma aresta de proveniência que ninguém afirmou diverge.
+    #[test]
+    fn uma_aresta_inventada_e_uma_divergencia() {
+        let mut depois = vazio();
+        depois.proveniencia = vec![Aresta {
+            de: Uuid::new_v4(),
+            relacao: "validates".to_owned(),
+            para: Uuid::new_v4(),
+            origem: "declared".to_owned(),
+        }];
+        let divergencias = comparar(&vazio(), &depois);
+        assert!(
+            divergencias
+                .iter()
+                .any(|d| d.onde == "research_links" && d.o_que.contains("apareceram do nada")),
+            "uma relação inventada no destino passou por proveniência: {divergencias:?}"
+        );
     }
 
     /// Restaurar para outro nível de esquema é dito, e não descoberto.

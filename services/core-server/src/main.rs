@@ -7,7 +7,7 @@
 
 #![forbid(unsafe_code)]
 
-use ocinye_core_server::{bootstrap, mail_check, provision, routes};
+use ocinye_core_server::{bootstrap, continuity, mail_check, provision, routes};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,6 +44,20 @@ async fn main() -> anyhow::Result<()> {
     }
     if argv.first().map(String::as_str) == Some("mail-check") {
         return mail_check::run().await;
+    }
+    // ── Continuidade institucional ──────────────────────────────────────
+    //
+    // Um servidor é uma instância de execução. Estes três respondem às
+    // perguntas que uma migração faz: o que é preciso levar, o que esta
+    // instalação contém, e se o que chegou é o mesmo que saiu.
+    if argv.first().map(String::as_str) == Some("continuity-inventory") {
+        return continuity::inventory();
+    }
+    if argv.first().map(String::as_str) == Some("snapshot") {
+        return continuity::snapshot().await;
+    }
+    if argv.first().map(String::as_str) == Some("verify-snapshot") {
+        return continuity::verify_snapshot().await;
     }
     // Uma chave nova para `OCINYE_MAIL_KEY`.
     //

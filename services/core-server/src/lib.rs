@@ -13,6 +13,7 @@
 //! than a reconstruction of it that would be free to drift.
 
 pub mod bootstrap;
+pub mod continuity;
 pub mod error;
 pub mod extract;
 pub mod mail_check;
