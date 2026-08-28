@@ -44,6 +44,30 @@ pub enum Classe {
     /// Caches, presença, sessões efémeras. Se perder isto significar perder
     /// conhecimento institucional, o defeito é arquitectural e não de backup.
     Efemero,
+    /// Capacidade adquirida, guardada em pesos que ninguém mais tem.
+    ///
+    /// Um modelo que a instituição treinou ou afinou. O que ele sabe não está
+    /// no PostgreSQL nem se reconstrói a olhar para ele: está nos parâmetros,
+    /// e foi pago com dados, tempo e computação.
+    ///
+    /// > **Weights without lineage are an artefact. Weights with lineage are
+    /// > institutional capability.**
+    ///
+    /// Distinto de [`Self::Autoritativo`] porque os bytes são enormes e a
+    /// política de retenção é outra: um checkpoint intermédio não é a versão
+    /// promovida. Distinto de [`Self::Externo`] porque **ninguém fora da
+    /// Ocinye os tem**.
+    DuravelArtefactoDeModelo,
+    /// Vive noutro sistema e pode voltar a obter-se — sob condições.
+    ///
+    /// Um modelo base publicado é isto **se e só se** a versão exacta estiver
+    /// identificada, houver soma para a confrontar, e a licença permitir
+    /// voltar a obtê-la. Sem as três, «está publicado» é uma esperança e não
+    /// uma classe.
+    ///
+    /// A distinção importa por causa dos adaptadores: um LoRA sem o modelo
+    /// base **exacto** é ruído com a forma certa.
+    ExternoReadquirivel,
     /// Vive noutro sistema, sob outra autoridade.
     ///
     /// O serviço de correio tem as mensagens; o fornecedor de IA tem os pesos.
@@ -68,6 +92,8 @@ impl Classe {
             Self::DerivadoDuravel => "DURABLE_DERIVED",
             Self::Reconstruivel => "REBUILDABLE",
             Self::Efemero => "EPHEMERAL",
+            Self::DuravelArtefactoDeModelo => "DURABLE_MODEL_ARTIFACT",
+            Self::ExternoReadquirivel => "EXTERNAL_REACQUIRABLE",
             Self::Externo => "EXTERNAL",
             Self::CredencialOperacional => "OPERATIONAL_CREDENTIAL",
         }
@@ -79,7 +105,10 @@ impl Classe {
     /// autoritativo chega ilegível.
     #[must_use]
     pub const fn viaja(self) -> bool {
-        matches!(self, Self::Autoritativo | Self::Interpretativo)
+        matches!(
+            self,
+            Self::Autoritativo | Self::Interpretativo | Self::DuravelArtefactoDeModelo
+        )
     }
 }
 
@@ -161,13 +190,25 @@ pub fn inventario() -> Vec<Activo> {
                      conteúdo vive no fornecedor, e é dele que volta.",
         },
         Activo {
-            nome: "Pesos de modelos de IA",
-            onde: "nó de inferência",
-            classe: Classe::Externo,
-            porque: "O modelo é runtime substituível. O que a instituição \
-                     preserva é a **identidade** do modelo quando uma operação \
-                     científica dependeu dela — não centenas de gigabytes por \
-                     snapshot.",
+            nome: "Pesos de modelo base publicado",
+            onde: "publicador externo, replicado no nó de inferência",
+            classe: Classe::ExternoReadquirivel,
+            porque: "Volta a obter-se do publicador — mas só se a versão exacta \
+                     estiver identificada, houver soma para a confrontar e a \
+                     licença permitir. Sem as três, «está publicado» é uma \
+                     esperança. `Qwen X revisão A` e `revisão B` podem não ser \
+                     cientificamente equivalentes.",
+        },
+        Activo {
+            nome: "Artefactos de modelo treinados pela Ocinye",
+            onde: "Object Storage institucional, nunca só no nó que os treinou",
+            classe: Classe::DuravelArtefactoDeModelo,
+            porque: "Pesos, adaptadores, tokenizer e configuração de um modelo \
+                     que a instituição afinou. O que ele sabe não está no \
+                     PostgreSQL e não se reconstrói a partir de nada: foi pago \
+                     com dados, tempo e computação. Perder o nó de treino não \
+                     pode ser perder meses de aprendizagem — o nó **produz** \
+                     artefactos institucionais, não os **detém**.",
         },
         Activo {
             nome: "Credenciais de fornecedor",
@@ -236,6 +277,27 @@ mod tests {
         assert!(
             !viajam.contains(&"Credenciais de fornecedor"),
             "credenciais operacionais rodam-se, não se copiam"
+        );
+
+        // ── A capacidade adquirida ──────────────────────────────────────
+        //
+        // Se a Ocinye passar meses a afinar um modelo e perder o nó GPU, não
+        // pode voltar ao ponto zero. O que o modelo aprendeu não está no
+        // PostgreSQL, e nenhum RAG o reconstrói.
+        assert!(
+            viajam.contains(&"Artefactos de modelo treinados pela Ocinye"),
+            "um modelo que a instituição treinou tem de viajar: o que ele sabe \
+             não existe em mais lado nenhum"
+        );
+        // E o modelo base publicado **não** viaja no snapshot: volta a
+        // obter-se. Confundir os dois enche cada cópia com dezenas de
+        // gigabytes que o publicador já guarda — ou, ao contrário, deixa para
+        // trás os únicos pesos que ninguém mais tem.
+        assert!(
+            !viajam.contains(&"Pesos de modelo base publicado"),
+            "o modelo base readquire-se; carregá-lo em cada snapshot é peso \
+             morto, e tratá-lo como o modelo afinado apaga a diferença que \
+             importa"
         );
     }
 

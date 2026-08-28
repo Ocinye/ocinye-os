@@ -135,6 +135,7 @@ Onde o material da instituição vive, e o que o acompanha.
 - [ADR-0200](0200-object-storage.md) — Object Storage S3-compatible
 - [ADR-0201](0201-data-residency.md) — Residência de dados explícita
 - [ADR-0202](0202-search-fts-pgvector.md) — Pesquisa: PostgreSQL FTS agora, pgvector preparado
+- [ADR-0203](0203-institutional-model-artifacts.md) — Artefactos de modelo como memória institucional
 
 ### 0300–0399 · IA, Controlo Agentic e Inferência
 
@@ -219,6 +220,7 @@ preencher.
 | [0200](0200-object-storage.md) | Object Storage S3-compatible | Data | `HIGH` | Accepted |
 | [0201](0201-data-residency.md) | Residência de dados explícita | Data | `MEDIUM` | Accepted |
 | [0202](0202-search-fts-pgvector.md) | Pesquisa: PostgreSQL FTS agora, pgvector preparado | Knowledge | `MEDIUM` | Accepted |
+| [0203](0203-institutional-model-artifacts.md) | Artefactos de modelo como memória institucional | Data | `FOUNDATIONAL` | Accepted |
 | [0300](0300-ai-gateway.md) | AI Gateway orientado a capacidades | AI | `HIGH` | Accepted |
 | [0301](0301-agentic-control-plane.md) | O Agentic Control Plane: Main Agent, Runtime, Registry | Agentic | `HIGH` | Accepted |
 | [0302](0302-agent-access-intersection.md) | Effective Agent Access é uma intersecção | Agentic | `HIGH` | Accepted |

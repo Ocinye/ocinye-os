@@ -106,6 +106,11 @@ Os quatro primeiros são apurados em tempo real pelo Core e servidos em
 | **Cópia, restauro e verificação operacionais** | `institutional-backup` · `-restore` · `-verify`; cifra `age`, somas reconferidas, retenção, conjunto incompleto marcado | n/a | destino externo e cifra configuráveis; **sem agendamento** | `AVAILABLE` (o procedimento); `NOT_CONFIGURED` (a operação) |
 | **Backup agendado e cópia externa em funcionamento** | — | — | não existe: o RPO real é «desde o último conjunto que alguém produziu» | `PLANNED` |
 | **Rotação da chave de selagem** | — | — | `OCINYE_MAIL_KEY` viaja como está | `PLANNED` |
+| **Classificação de artefactos de modelo** | duas classes de continuidade decididas ([ADR-0203](../adrs/0203-institutional-model-artifacts.md)) | n/a | n/a | `AVAILABLE` (a decisão) |
+| **Registo de artefactos de modelo** — `Model`, `ModelVersion`, `ModelArtifact`, `TrainingRun` | **não existe.** `ai_models` é inventário reportado pelo nó, não registo de artefacto | — | 0 nós, 0 treinos, 0 artefactos | `NOT IMPLEMENTED` |
+| **Caminho para carregar pesos** | **não existe.** A lista de tipos aceites recusa binários arbitrários, e alargá-la seria a correcção errada | — | — | `NOT IMPLEMENTED` |
+| **Linhagem de treino** | os quinze verbos chegam; faltam os tipos de recurso e as tabelas | — | — | `PLANNED` |
+| **Promoção, avaliação e retenção de modelos** | — | — | — | `NOT IMPLEMENTED` |
 | **Actividade** | implementado | implementado | n/a | `AVAILABLE` |
 | **Administração de membros** | implementado | criar, detalhe, acesso, segurança | n/a | `AVAILABLE` |
 | **Definições / tema / idioma** | não existe | declarado indisponível | n/a | `PLANNED` |

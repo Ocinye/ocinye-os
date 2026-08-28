@@ -7,6 +7,48 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Um modelo que a Ocinye treine é memória, não runtime — 2026-08-29
+
+A continuidade tratava a memória institucional como **explícita**: documentos,
+datasets, resultados, proveniência. Com RAG isso é completo — o modelo é
+intercambiável e o conhecimento fica nos dados. Com *fine-tuning* deixa de ser:
+parte da capacidade passa a existir nos pesos, e não se reconstrói a olhar para
+o PostgreSQL. Perder o servidor GPU passaria a ser voltar ao ponto zero.
+
+[ADR-0203](docs/adrs/0203-institutional-model-artifacts.md) decide as classes.
+`DURABLE_MODEL_ARTIFACT` viaja — ninguém fora da Ocinye tem esses pesos.
+`EXTERNAL_REACQUIRABLE` não viaja, **e só é essa classe** se a versão exacta
+estiver identificada, houver soma e a licença permitir: um adaptador LoRA sem o
+modelo base exacto é ruído com a forma certa.
+
+**A auditoria encontrou dois problemas.**
+
+`ai_models` não é um registo de artefactos. É um inventário reportado:
+`replace_reported_models` apaga as linhas do nó e volta a inseri-las a cada
+relatório — identificadores novos de cada vez — e `ON DELETE CASCADE` fá-las
+desaparecer com o nó. **Hoje é a computação que detém o modelo**, que é o
+inverso do que se decidiu. E isso expôs um defeito no manifesto desta mesma
+milestone: `ai_models` estava a ser comparada por identidade. Passa hoje porque
+há zero nós, e partia-se no dia em que o primeiro ligasse. Corrigido, com um
+teste que lê o código que justifica a decisão — para que ela não sobreviva à
+sua própria causa.
+
+Um artefacto de modelo também não tem por onde entrar: a lista de tipos aceites
+recusa `application/octet-stream`. Está certa a recusar, e alargá-la seria
+transformar a fronteira de uploads documentais num canal para binários
+arbitrários. Um modelo precisa do seu próprio caminho tipado.
+
+**O que não foi construído.** Não existe `Model`, `ModelVersion`,
+`ModelArtifact`, `TrainingRun` nem `EvaluationRun`; não existe promoção,
+retenção aplicada nem registo de licença. Não há nó, não há treino, não há um
+único artefacto para preservar, e a forma correcta destas tabelas depende do
+que só se sabe ao afinar o primeiro modelo. A `Definition of Done` está
+escrita, por responder, em `docs/backups/README.md`.
+
+> **Trained models may embody institutional capability, but they do not replace
+> the institutional evidence and provenance from which that capability was
+> derived.**
+
 ### Os bytes atravessaram, e a chave também — 2026-08-29
 
 A entrada de ontem provava que o **estado estruturado** sobrevive a uma

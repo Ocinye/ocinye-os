@@ -195,7 +195,19 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     ("compute_nodes", Comparacao::Identidades),
     ("node_credentials", Comparacao::Identidades),
     ("ai_agents", Comparacao::Identidades),
-    ("ai_models", Comparacao::Identidades),
+    (
+        "ai_models",
+        Comparacao::Fora(
+            "inventário reportado pelo nó, e não um registo de artefacto. \
+             `replace_reported_models` apaga as linhas do nó e volta a \
+             inseri-las a cada relatório, pelo que os identificadores são \
+             novos de cada vez; e `node_id ON DELETE CASCADE` faz a linha \
+             desaparecer com o nó. Compará-los faria um restore correcto \
+             falhar assim que o primeiro nó ligasse. Um modelo que a \
+             instituição treine é um artefacto institucional e precisa de \
+             registo próprio, que ainda não existe (ADR-0203)",
+        ),
+    ),
     ("ai_jobs", Comparacao::Identidades),
     ("action_plans", Comparacao::Identidades),
     // ── Comparadas por outro mecanismo ──────────────────────────────────
@@ -894,6 +906,40 @@ mod tests {
                 .iter()
                 .any(|d| d.onde == "research_links" && d.o_que.contains("apareceram do nada")),
             "uma relação inventada no destino passou por proveniência: {divergencias:?}"
+        );
+    }
+
+    /// A razão para `ai_models` ficar de fora continua a existir no código.
+    ///
+    /// # O defeito que isto guarda
+    ///
+    /// A decisão diz que os identificadores de `ai_models` são refeitos a cada
+    /// relatório do nó, e por isso não se comparam. Se alguém tornar esse
+    /// caminho estável — um `UPSERT` sem o `DELETE` — a decisão passa a estar
+    /// errada, e o manifesto continua a não comparar uma família que já podia
+    /// comparar. Ninguém repararia: não há sintoma.
+    ///
+    /// Este teste lê o código que justifica a decisão. Quando ele mudar, a
+    /// decisão tem de ser revista.
+    #[test]
+    fn a_razao_para_excluir_ai_models_ainda_e_verdade() {
+        let caminho = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/modules/compute/repository.rs");
+        let fonte = std::fs::read_to_string(&caminho).expect("ler o repositório de compute");
+
+        let inicio = fonte.find("pub async fn replace_reported_models").expect(
+            "`replace_reported_models` desapareceu; a decisão sobre `ai_models` fica sem base",
+        );
+        let corpo = &fonte[inicio..];
+        let fim = corpo.find("\npub ").unwrap_or(corpo.len());
+        let corpo = &corpo[..fim];
+
+        assert!(
+            corpo.contains("DELETE FROM ai_models WHERE node_id"),
+            "`replace_reported_models` deixou de apagar as linhas do nó. Se os \
+             identificadores passaram a ser estáveis, `ai_models` pode voltar a \
+             ser comparada por identidade — e a decisão em `ESQUEMA` tem de ser \
+             revista, porque a razão que lá está deixou de ser verdade"
         );
     }
 

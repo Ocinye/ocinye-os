@@ -132,7 +132,7 @@ sem que nada falhe.
   percorre, o `RESTRICTED` continua a recusar e a auditoria não é recriada. O
   ensaio terminou em **saída 2**, e correctamente: a legibilidade não chegou a
   ser observada porque não havia estado selado.
-- **50 ADRs** em `docs/adrs/`, **10 runbooks** em `docs/runbooks/`,
+- **51 ADRs** em `docs/adrs/`, **10 runbooks** em `docs/runbooks/`,
   **41 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -185,6 +185,17 @@ sem que nada falhe.
   linguagem natural devolvem indisponível **com a razão e com o que ainda
   funciona**. Nenhum agente executa nada sozinho, e nenhum trabalho proactivo,
   agendado ou por evento existe.
+- **Nenhum artefacto de modelo institucional existe, e não há onde o guardar.**
+  A Ocinye não treinou nem afinou nenhum modelo. `ai_models` é um **inventário
+  reportado pelo nó** — apagado e reinserido a cada relatório, e removido em
+  cascata com o nó — e não um registo de artefactos: hoje é a computação que
+  detém o modelo, que é o inverso do que a
+  [ADR-0203](docs/adrs/0203-institutional-model-artifacts.md) decide. Não
+  existe `Model`, `ModelVersion`, `ModelArtifact`, `TrainingRun` nem
+  `EvaluationRun`, não existe caminho para carregar pesos, e não existe
+  promoção nem retenção. A **classificação** de continuidade já distingue o
+  modelo base readquirível do artefacto treinado, e o segundo viaja; o resto
+  vem com o primeiro treino.
 - **Nenhuma infraestrutura física da Ocinye existe.** CAM-01 não existe.
 - **Nenhum serviço de correio está configurado.** O adaptador em uso é
   `UnconfiguredProvider` e todas as capacidades de correio reportam

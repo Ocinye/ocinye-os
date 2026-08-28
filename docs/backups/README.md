@@ -195,6 +195,73 @@ simplesmente desligado.
 > **`INVALID` não é `FAIL`.** Um verificador que não conseguiu observar não
 > descobriu um problema: não correu.
 
+## Artefactos de modelo — a terceira forma da memória
+
+Decisão em [ADR-0203](../adrs/0203-institutional-model-artifacts.md).
+
+Até aqui a memória institucional era **explícita**: documentos, datasets,
+resultados, proveniência. No dia em que a Ocinye afinar um modelo, parte da
+capacidade passa a existir **nos pesos**, e não se reconstrói a olhar para o
+PostgreSQL.
+
+A classificação de continuidade já distingue os dois casos, e o
+`continuity-inventory` responde:
+
+| | Viaja | |
+|---|---|---|
+| `DURABLE_MODEL_ARTIFACT` | **sim** | o que a Ocinye treinou. Ninguém mais o tem. |
+| `EXTERNAL_REACQUIRABLE` | não | o modelo base publicado — **se** a versão exacta, a soma e a licença o permitirem. |
+
+### O que a auditoria de 2026-08-29 encontrou
+
+**`ai_models` não é um registo de artefactos.** É um inventário reportado pelo
+nó: `replace_reported_models` apaga e volta a inserir a cada relatório, pelo
+que os identificadores são novos de cada vez, e `ON DELETE CASCADE` faz a linha
+desaparecer com o nó. **Hoje é o nó que detém o modelo** — o inverso do que
+`ADR-0203` decide.
+
+Isto expôs um defeito no próprio manifesto: `ai_models` estava a ser comparada
+por identidade. Passa hoje porque há zero nós, e **partia-se no dia em que o
+primeiro ligasse**. Corrigido, com a razão escrita e um teste que lê o código
+que a justifica.
+
+**Um artefacto de modelo não tem por onde entrar.** A lista de tipos aceites
+recusa `application/octet-stream` — correctamente, é uma lista de permissões
+para artefactos documentais. Alargá-la seria transformar a fronteira de uploads
+num canal para binários arbitrários. Um modelo precisa do seu próprio caminho
+tipado.
+
+### Definition of Done, quando houver o primeiro treino
+
+Nenhuma destas está satisfeita hoje, porque não há modelo nenhum para
+preservar. Estão escritas para que a milestone do primeiro *fine-tuning* saiba
+contra o que se medir:
+
+| | |
+|---|---|
+| os artefactos sobrevivem à perda do nó de treino | por responder |
+| os pesos vivem fora do nó de computação | por responder |
+| cada versão liga ao modelo base **exacto**, com soma e licença | por responder |
+| as versões de dataset de treino são preservadas | por responder |
+| a receita de treino é preservada | por responder |
+| tokenizer, configuração e adaptadores acompanham os pesos | por responder |
+| os checkpoints seguem a política de retenção | por responder |
+| o modelo restaurado mantém as somas idênticas | por responder |
+| a linhagem inspecciona-se **sem** o servidor GPU original | por responder |
+| o conhecimento continua acessível com o modelo em baixo | **sim** — é a arquitectura actual |
+| um modelo treinado sobre dados sensíveis não vira contorno de autorização | por responder |
+
+### O que não foi construído, e porquê
+
+Não existe `Model`, `ModelVersion`, `ModelArtifact`, `TrainingRun` nem
+`EvaluationRun`. Não existe promoção, retenção aplicada nem registo de licença.
+
+Não por esquecimento: não há nó de computação, não há treino, e não há um único
+artefacto para preservar. A forma correcta destas tabelas depende do que só se
+sabe ao afinar o primeiro modelo — que técnica, que ficheiros acompanham, que
+avaliação sustenta a promoção. Construí-la agora seria desenhar contra
+imaginação.
+
 ## O que continua a não existir
 
 - **Nenhum agendamento.** O procedimento existe e corre-se à mão. Enquanto não
