@@ -31,6 +31,7 @@ pub mod authority;
 pub mod avatar;
 pub mod capabilities;
 pub mod config;
+pub mod continuity;
 pub mod db;
 pub mod error;
 pub mod modules;
