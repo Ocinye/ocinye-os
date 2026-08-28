@@ -1049,10 +1049,35 @@ impl Harness {
             if !url.contains("/boot") && !url.is_empty() && url != "about:blank" {
                 return page;
             }
-            assert!(
-                inicio.elapsed() < std::time::Duration::from_secs(45),
-                "o arranque não entregou em vinte e cinco segundos; ficou em «{url}»"
-            );
+            if inicio.elapsed() >= std::time::Duration::from_secs(45) {
+                // **Porque** ficou, e não só que ficou.
+                //
+                // A mensagem dizia «vinte e cinco segundos» com um limite de
+                // quarenta e cinco: o limite foi subido e o texto não, que é o
+                // sinal de que isto já falhou antes e a resposta foi esperar
+                // mais. Esperar mais não diagnostica nada.
+                //
+                // O arranque decide com o que o Core lhe diz. Sem ver o que a
+                // página mostrava, «ficou em /boot» não distingue um Core que
+                // não respondeu de um script que não correu.
+                let mostrado = page
+                    .content()
+                    .await
+                    .map(|html| {
+                        let texto: String = html
+                            .split('>')
+                            .filter_map(|p| p.split('<').next())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        texto.split_whitespace().collect::<Vec<_>>().join(" ")
+                    })
+                    .unwrap_or_else(|erro| format!("(sem conteúdo: {erro})"));
+                panic!(
+                    "o arranque não entregou em quarenta e cinco segundos; ficou \
+                     em «{url}» a mostrar: {}",
+                    &mostrado[..mostrado.len().min(400)]
+                );
+            }
             tokio::time::sleep(std::time::Duration::from_millis(120)).await;
         }
     }
