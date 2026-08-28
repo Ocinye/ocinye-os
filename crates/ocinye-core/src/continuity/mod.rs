@@ -28,6 +28,8 @@
 
 pub mod classification;
 pub mod manifest;
+pub mod objects;
 
 pub use classification::{inventario, Activo, Classe};
 pub use manifest::{comparar, descrever, Divergencia, Manifesto};
+pub use objects::{conferir, Veredicto};

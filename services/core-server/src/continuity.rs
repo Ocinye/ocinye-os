@@ -31,8 +31,10 @@ use std::io::Read;
 
 use anyhow::{bail, Context};
 use ocinye_core::config::CoreConfig;
-use ocinye_core::continuity::{self, Classe};
+use ocinye_core::continuity::{self, Classe, Veredicto};
 use ocinye_core::db;
+use ocinye_core::storage::ObjectStore;
+use uuid::Uuid;
 
 /// Descreve o que esta instalação contém.
 ///
@@ -216,4 +218,178 @@ fn textwrap(texto: &str, largura: usize) -> Vec<String> {
         linhas.push(actual);
     }
     linhas
+}
+
+/// Verifica os bytes, e não a linha que aponta para eles.
+///
+/// # Porque isto é um comando separado
+///
+/// Porque `verify-snapshot` compara o **registo** dos objectos: identidades,
+/// chaves e as somas que a base guarda. Provar que esses números coincidem dos
+/// dois lados prova que o `pg_dump` chegou inteiro — não prova que existe um
+/// único byte no Object Storage do servidor novo.
+///
+/// > **Uma soma que nunca foi recalculada não é evidência de integridade.**
+///
+/// Aqui cada objecto é lido do bucket e a sua soma recalculada. É caro de
+/// propósito: é a única forma de a resposta significar alguma coisa.
+///
+/// # Custo
+///
+/// Lê todos os bytes do Object Storage. Não há amostragem: uma amostra que
+/// passasse diria «verificado» sobre o que não se leu, e é precisamente o
+/// objecto não lido que costuma faltar.
+///
+/// # Errors
+///
+/// Devolve erro quando a base não responde, quando o Object Storage não está
+/// configurado — verificar sem alvo não é passar, é não ter corrido — ou
+/// quando algum objecto falta, não se lê, ou chega com outro conteúdo.
+pub async fn verify_objects() -> anyhow::Result<()> {
+    let config = CoreConfig::from_env().context("configuration")?;
+    let pool = db::connect(&config)
+        .await
+        .context("a base institucional não respondeu")?;
+
+    // Sem loja configurada isto é `NOT_RUN`, e nunca `PASS`. Um verificador que
+    // não encontrou o que devia observar não teve sucesso: observou zero.
+    let Some(loja) = ObjectStore::new(config.storage.clone()) else {
+        bail!(
+            "o Object Storage não está configurado nesta instalação.\n\
+             Não há nada para verificar, e isso não é o mesmo que estar certo:\n\
+             metade do estado autoritativo não foi observada."
+        );
+    };
+
+    // ── Antes de concluir seja o que for, provar que há quem responda ──
+    //
+    // `get` devolve o mesmo erro para «o objecto não existe» e para «o serviço
+    // não atende». Sem esta sonda, um MinIO em baixo produzia o relatório mais
+    // alarmante que este comando sabe escrever — trezentos objectos em falta —
+    // quando o que houve foi um verificador que não observou nada.
+    //
+    // `INVALID` não é `FAIL`. Um verificador que não encontrou o que devia
+    // observar não teve sucesso nem descobriu um problema: não correu.
+    let saude = loja.health().await;
+    if saude.status != "ok" {
+        bail!(
+            "o Object Storage respondeu «{}».\n\
+             Nada foi verificado. Isto não é a mesma coisa que os objectos \
+             faltarem:\n\
+             é não se ter conseguido olhar para eles.",
+            saude.status
+        );
+    }
+
+    let objectos: Vec<(Uuid, String, String, i64)> = sqlx::query_as(
+        "SELECT id, object_key, checksum_sha256, size_bytes
+           FROM storage_objects ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .context("ler os objectos registados")?;
+
+    println!("Ocinye OS — verificação dos bytes");
+    println!("─────────────────────────────────");
+    println!("  bucket        {}", loja.bucket());
+    println!("  objectos      {}", objectos.len());
+    println!();
+
+    if objectos.is_empty() {
+        println!("  Não há objectos registados. Nada foi verificado, e é isso");
+        println!("  que esta linha diz — não que esteja tudo bem.");
+        return Ok(());
+    }
+
+    let mut faltam = Vec::new();
+    let mut diferem = Vec::new();
+    let mut bytes_lidos: u64 = 0;
+    // Contado entre os que **chegaram a ser lidos**, e não sobre a tabela: um
+    // objecto em falta não é um objecto sem soma, e juntá-los faria a linha do
+    // resumo dizer que se leram trezentos e três coisas que não existem.
+    let mut sem_soma: usize = 0;
+
+    for (id, chave, soma_registada, tamanho) in &objectos {
+        match loja.get(chave).await {
+            Err(_) => faltam.push((*id, chave.clone())),
+            Ok(conteudo) => {
+                bytes_lidos += conteudo.len() as u64;
+                match continuity::conferir(soma_registada, *tamanho, &conteudo) {
+                    Veredicto::Igual => {}
+                    Veredicto::SemSoma => sem_soma += 1,
+                    Veredicto::OutroConteudo { esperada, obtida } => {
+                        diferem.push((*id, chave.clone(), esperada, obtida));
+                    }
+                    Veredicto::OutroTamanho { esperados, obtidos } => diferem.push((
+                        *id,
+                        chave.clone(),
+                        format!("{esperados} bytes"),
+                        format!("{obtidos} bytes"),
+                    )),
+                }
+            }
+        }
+    }
+
+    let lidos = objectos.len() - faltam.len();
+    println!("  lidos         {lidos} objecto(s), {bytes_lidos} bytes");
+    if sem_soma > 0 {
+        println!(
+            "  sem soma      {sem_soma} desses foram lidos e não puderam ser \
+             comparados:"
+        );
+        println!("                a base não guardou soma para eles.");
+    }
+    println!();
+
+    // ── O corte é dito, e não silencioso ────────────────────────────────
+    //
+    // Uma lista de milhares de linhas não se lê, e uma lista cortada sem o
+    // dizer faz o problema parecer menor do que é.
+    const MOSTRA: usize = 20;
+    for (id, chave) in faltam.iter().take(MOSTRA) {
+        eprintln!("  em falta      {id}  «{chave}»");
+    }
+    if faltam.len() > MOSTRA {
+        eprintln!(
+            "  em falta      … e mais {}, não listados aqui",
+            faltam.len() - MOSTRA
+        );
+    }
+    for (id, chave, esperada, obtida) in diferem.iter().take(MOSTRA) {
+        eprintln!("  outro conteúdo {id}  «{chave}»");
+        eprintln!(
+            "                esperava {}…, leu {}…",
+            &esperada[..esperada.len().min(12)],
+            &obtida[..obtida.len().min(12)]
+        );
+    }
+    if diferem.len() > MOSTRA {
+        eprintln!(
+            "  outro conteúdo … e mais {}, não listados aqui",
+            diferem.len() - MOSTRA
+        );
+    }
+
+    if faltam.is_empty() && diferem.is_empty() {
+        if sem_soma == objectos.len() {
+            println!("  Nenhuma soma pôde ser comparada. Os objectos existem no");
+            println!("  bucket; que sejam os certos não foi verificado por nada.");
+            return Ok(());
+        }
+        println!(
+            "  {} objecto(s) foram lidos do bucket e as suas somas recalculadas.",
+            objectos.len() - sem_soma
+        );
+        println!("  Os bytes que a instituição cita são os bytes que ela guardou.");
+        return Ok(());
+    }
+
+    eprintln!();
+    bail!(
+        "{} objecto(s) em falta e {} com outro conteúdo. A base viajou; \
+         os bytes não.",
+        faltam.len(),
+        diferem.len()
+    );
 }

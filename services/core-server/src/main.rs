@@ -56,6 +56,9 @@ async fn main() -> anyhow::Result<()> {
     if argv.first().map(String::as_str) == Some("snapshot") {
         return continuity::snapshot().await;
     }
+    if argv.first().map(String::as_str) == Some("verify-objects") {
+        return continuity::verify_objects().await;
+    }
     if argv.first().map(String::as_str) == Some("verify-snapshot") {
         return continuity::verify_snapshot().await;
     }
