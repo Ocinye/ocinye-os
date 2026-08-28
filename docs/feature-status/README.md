@@ -101,8 +101,11 @@ Os quatro primeiros são apurados em tempo real pelo Core e servidos em
 | **Auditoria** | implementado | implementado | n/a | `AVAILABLE` |
 | **Continuidade institucional** — classificação, manifesto, verificação | implementado, com teste que cobre o esquema | n/a — é operação, não ecrã | n/a | `AVAILABLE` |
 | **Restore verificado** | `verify-snapshot` distingue restaurar de recriar | n/a | exercitado uma vez à mão a 2026-08-28 | `AVAILABLE` (o procedimento) |
-| **Verificação dos bytes guardados** | `verify-objects` implementado; recusa concluir sem armazenamento acessível | n/a | **nunca correu contra um bucket acessível** | `NOT_CONFIGURED` |
-| **Backup agendado e cópia fora do servidor** | — | — | não existe | `PLANNED` |
+| **Verificação dos bytes guardados** | `verify-objects`: lê cada objecto e recalcula a soma; distingue bucket inacessível de objecto ausente; nomeia órfãos sem falhar | n/a | exercitado a 2026-08-29 contra dois endpoints S3, com oito controlos | `AVAILABLE` |
+| **Continuidade criptográfica** | `verify-keys`; inventário fechado com portão sobre o esquema e sobre o código | n/a | veredicto idêntico antes e depois do restauro | `AVAILABLE` |
+| **Cópia, restauro e verificação operacionais** | `institutional-backup` · `-restore` · `-verify`; cifra `age`, somas reconferidas, retenção, conjunto incompleto marcado | n/a | destino externo e cifra configuráveis; **sem agendamento** | `AVAILABLE` (o procedimento); `NOT_CONFIGURED` (a operação) |
+| **Backup agendado e cópia externa em funcionamento** | — | — | não existe: o RPO real é «desde o último conjunto que alguém produziu» | `PLANNED` |
+| **Rotação da chave de selagem** | — | — | `OCINYE_MAIL_KEY` viaja como está | `PLANNED` |
 | **Actividade** | implementado | implementado | n/a | `AVAILABLE` |
 | **Administração de membros** | implementado | criar, detalhe, acesso, segurança | n/a | `AVAILABLE` |
 | **Definições / tema / idioma** | não existe | declarado indisponível | n/a | `PLANNED` |

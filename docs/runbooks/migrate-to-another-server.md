@@ -7,10 +7,19 @@ prova que o que chegou é o que saiu. Serve tanto para uma migração planeada
 como para uma recuperação depois de perder a máquina — a diferença está no
 [passo 1](#1-parar-de-escrever), que só é possível no primeiro caso.
 
-**Estado deste procedimento:** os passos 2 a 8 foram executados a 2026-08-28
-contra uma base institucional de 166 232 recursos, com o resultado registado em
-[`docs/backups/README.md`](../backups/README.md). O transporte do Object
-Storage (passo 4) **não** foi exercitado.
+**Estado deste procedimento:** executado de ponta a ponta a 2026-08-29,
+incluindo o transporte do Object Storage entre dois endpoints S3-compatible e
+um restauro para um servidor inteiramente limpo. Resultados em
+[`docs/backups/README.md`](../backups/README.md).
+
+**O caminho curto.** Os passos abaixo são o que os três comandos fazem, e
+existem para quem precise de os fazer à mão ou de perceber o que correu mal:
+
+```bash
+./scripts/institutional-backup.sh                 # no servidor antigo
+./scripts/institutional-restore.sh <conjunto>     # no novo, base vazia
+./scripts/institutional-verify.sh <conjunto>      # e leia o código de saída
+```
 
 ## Antes de começar
 
@@ -133,6 +142,20 @@ vazio. Corra os dois.
 Se `verify-objects` disser que o Object Storage não está acessível, **nada foi
 verificado** — o que não é a mesma coisa que estar tudo bem.
 
+Um objecto no bucket sem linha na base é um **órfão**: é nomeado e não falha,
+porque uma escrita falhada deixa um destes. Mas num servidor acabado de
+restaurar quer dizer que o destino não estava vazio.
+
+E a terceira pergunta, que as outras duas deixam passar:
+
+```bash
+ocinye-core-server verify-keys
+echo $?
+```
+
+`mailbox_credentials` viaja no dump íntegra. Sem a chave de selagem chega
+ilegível, e os dois comandos anteriores passam. Este recusa.
+
 ## 8. Só então, arrancar
 
 ```bash
@@ -148,15 +171,15 @@ ilegível, e é uma avaria da chave, não do restore.
 
 ## RPO e RTO
 
-Medido a 2026-08-28, base de 101 MB, 166 232 recursos, num MacBook local. São
-grandezas para orientar, não compromissos:
+Medido numa máquina local, em duas escalas. São grandezas para orientar, não
+compromissos:
 
-| | Medido |
-|---|---|
-| `pg_dump` | 1,4 s → 19 MB |
-| `pg_restore` numa base limpa | 1,9 s |
-| `snapshot` | ~2 s → 8 MB de manifesto |
-| `verify-snapshot` | ~2 s |
+| | 166 232 recursos | 29 recursos, 2 objectos |
+|---|---|---|
+| `pg_dump` | 1,4 s → 19 MB | 0,18 s → 266 KB |
+| `pg_restore` numa base limpa | 1,9 s | 0,36 s |
+| `snapshot` | ~2 s → 8 MB de manifesto | <1 s → 7,4 KB |
+| conjunto cifrado completo | — | 328 KB |
 
 **RTO** — o tempo entre ter as cópias e ter a instituição de pé — é dominado
 pelo transporte e pela instalação do servidor novo, não por estes comandos.
@@ -168,9 +191,10 @@ escrita para que não passe por resolvida.
 
 ## O que este runbook não cobre
 
-- **Cópia fora do servidor.** Um dump que só existe na máquina que ardeu não é
-  um backup. Não há política de retenção nem destino remoto definido.
-- **Agendamento.** Não existe.
+- **Agendamento.** Não existe. O `institutional-backup.sh` corre quando alguém
+  o corre, e é isso que define o RPO real.
+- **Um destino externo configurado.** O script aceita um e **recusa-se a usá-lo
+  sem cifra**; nenhuma instalação o tem definido.
 - **Rotação da chave de selagem.** `OCINYE_MAIL_KEY` viaja como está. Trocá-la
   exige reselar `mailbox_credentials`, e não há procedimento escrito.
 - **3-2-1.** Não existe, e não deve ser declarado.

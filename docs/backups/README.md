@@ -15,16 +15,123 @@ Os três estados obrigatórios de `CLAUDE.md` §63, e um quarto que faltava:
 | Estado | Situação |
 |---|---|
 | **Classificado** — sabe-se o que tem de viajar | **Sim**, em código, com teste que cobre o esquema |
-| **Configurado** — existe agendamento e destino | **Não** |
-| **Executado** — correu e produziu artefacto verificável | **Sim, uma vez, à mão**, a 2026-08-28 |
-| **Restore validado** — foi restaurado e verificado | **Sim, uma vez**, a 2026-08-28 |
+| **Configurado** — existe procedimento e destino configurável | **Sim**, `scripts/institutional-backup.sh`. **Sem agendamento.** |
+| **Executado** — correu e produziu artefacto verificável | **Sim**, cifrado, com somas reconferidas |
+| **Restore validado** — foi restaurado e verificado | **Sim, para a base e para os bytes**, a 2026-08-29 |
 
 **Continua a não existir backup operacional.** Um ensaio executado uma vez à
 mão, numa máquina de desenvolvimento, prova que o procedimento funciona. Não
 prova que existe uma cópia da instituição em qualquer momento dado — porque não
 existe.
 
-## O ensaio de 2026-08-28
+## O trio
+
+```bash
+./scripts/institutional-backup.sh                 # produz um conjunto
+./scripts/institutional-restore.sh <conjunto>     # repõe numa base vazia
+./scripts/institutional-verify.sh <conjunto>      # as três perguntas
+```
+
+Nenhum deles imprime «backup completed successfully» porque o `pg_dump`
+terminou com zero. O `backup` recusa enviar um conjunto em claro para fora do
+servidor; o `restore` recusa escrever por cima de uma base com estado; o
+`verify` sai **2** — nem 0 nem 1 — quando nada falhou e alguma coisa não chegou
+a ser observada.
+
+A chave de selagem **nunca** entra no conjunto. Viaja por canal próprio, e é
+por isso que perder um conjunto não é perder tudo.
+
+Não há dependência de fornecedor: o comando que move os objectos é
+configuração (`OCINYE_OBJECT_SYNC_CMD`), e recebe a pasta em
+`$OCINYE_OBJECT_DIR`. Serve `mc`, `rclone`, `aws s3` ou o que a instalação
+tiver.
+
+## O ensaio de 2026-08-29 — A → B → C
+
+Uma instituição construída de propósito, pela API, e migrada duas vezes: uma
+unidade, uma ideia com o seu ambiente, dois documentos com bytes reais, a
+cadeia científica completa — hipótese, metodologia, versão publicada, estudo,
+execução, resultado `RESTRICTED`, validação — e dois membros.
+
+### Os bytes, oito controlos
+
+| | Resultado |
+|---|---|
+| destino vazio | **FAIL**, com os dois objectos nomeados |
+| endpoint inacessível | **INVALID** — «nada foi verificado», e não «em falta» |
+| storage não configurado | **INVALID** — «metade do estado não foi observada» |
+| transporte real dos bytes | 2 objectos, 4 616 bytes |
+| restore completo | **PASS**, somas recalculadas |
+| um objecto corrompido | **FAIL** por soma: esperava `436d6db0b98c…`, leu `2535afb9654c…` |
+| um objecto apagado | **FAIL** por ausência |
+| um objecto a mais | **passa, e é dito**: órfão nomeado, nada apagado |
+
+O terceiro e o segundo são a razão de este comando existir. A primeira versão
+dele escreveu «303 objectos em falta» contra um MinIO desligado.
+
+### O servidor C, inteiramente limpo
+
+Base vazia, bucket vazio, Redis vazio, sem fornecedor de IA, sem nó de
+computação, e **credenciais de armazenamento novas** — as antigas deixam de
+funcionar, que é o que «substituível» quer dizer.
+
+Conjunto cifrado com `age` → restaurado → verificado:
+
+```
+  as linhas          PASS     29 recursos, 2 objectos, 4 arestas
+  os bytes           PASS
+  a legibilidade     NOT_RUN  não havia estado selado para abrir
+  EXIT=2
+```
+
+**Saiu 2, e está certo.** Nada falhou e uma das três não observou nada.
+
+### Pelo produto, e não pelos comandos
+
+No Workspace do servidor B, com sessão nova:
+
+| | |
+|---|---|
+| o membro autentica-se | sessão nova; as antigas não viajam |
+| o ambiente abre | com os dois documentos |
+| a cadeia científica | hipótese, metodologia, estudo e resultado no ecrã |
+| o resultado | mesmo identificador, `produzido por`, `segue`, «Validação confirmou» |
+| a linhagem | montante e jusante percorrem-se, com `origem: operation` |
+| o documento | descarrega e a soma bate: `436d6db0b98c…` nos três sítios |
+| `RESTRICTED` | um membro sem acesso recebe `not_found` — nem a existência |
+| a auditoria | mesmo primeiro evento; a actividade nova fica por cima |
+| sem IA | `ai_general: no_resource`, e o conhecimento e a pesquisa abrem à mesma |
+
+### A chave
+
+A base de desenvolvimento tem 318 credenciais seladas reais. Dump, restauro
+para base limpa, e `verify-keys` dos dois lados:
+
+```
+  origem:  235 de 318 não abriram
+  destino: 235 de 318 não abriram
+```
+
+**Idêntico.** As 83 que abrem são as seladas com a chave configurada, e abrem
+nos dois lados: o restauro preservou a interpretabilidade exactamente. As 235
+são fixtures acumuladas por testes, cada uma selada com uma chave efémera —
+resíduo do ambiente de desenvolvimento, não defeito.
+
+E sem a chave:
+
+```
+  Error: há 318 credencial(is) selada(s) nesta base e nenhuma
+  `OCINYE_MAIL_KEY` configurada. O estado chegou íntegro e ilegível.
+```
+
+É o único estado que os outros dois verificadores deixam passar os dois.
+
+**O que não foi produzido:** um `verify-keys` inteiramente verde sobre a
+instituição construída de propósito. Ligar uma caixa exige um servidor IMAP a
+responder — o Core recusa guardar credenciais que não conseguiu provar — e o
+ensaio não tinha nenhum.
+
+## O ensaio anterior, de 2026-08-28
 
 Executado contra a base institucional local: 19 migrations, 166 232 recursos,
 303 objectos registados, 91 arestas de proveniência, 39 165 eventos de
@@ -90,13 +197,17 @@ simplesmente desligado.
 
 ## O que continua a não existir
 
-- **Nenhuma cópia fora do servidor.** Um dump que só existe na máquina que ardeu
-  não é um backup.
-- **Nenhum agendamento.** O RPO real é *desde o último dump que alguém correu à
-  mão*.
-- **Nenhuma política de retenção.**
-- **Nenhuma cifra dos artefactos de backup.** Um dump não cifrado é uma cópia de
-  tudo o que a instituição classificou.
-- **Nenhum procedimento de rotação da chave de selagem.**
+- **Nenhum agendamento.** O procedimento existe e corre-se à mão. Enquanto não
+  houver `cron`, `systemd timer` ou equivalente configurado numa instalação
+  real, **o RPO é *desde o último conjunto que alguém produziu*.**
+- **Nenhum destino externo configurado.** O script suporta um
+  (`OCINYE_BACKUP_REMOTE`) e recusa-se a usá-lo sem cifra. Nenhuma instalação o
+  tem definido, porque nenhuma instalação existe fora de desenvolvimento.
+- **Nenhum procedimento de rotação da chave de selagem.** A `OCINYE_MAIL_KEY`
+  viaja como está. Trocá-la exige reselar `mailbox_credentials`, e isso não
+  está escrito nem implementado.
+- **Nenhum ensaio periódico.** O de 2026-08-29 foi executado uma vez. Um
+  procedimento que se prova uma vez e nunca mais é um procedimento que se
+  descobre partido no dia em que é preciso.
 - **3-2-1 não existe.** Três cópias, dois meios, uma fora do local.
   **Não declarar antes de existir.**

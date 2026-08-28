@@ -7,6 +7,59 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Os bytes atravessaram, e a chave também — 2026-08-29
+
+A entrada de ontem provava que o **estado estruturado** sobrevive a uma
+reinstalação. Provava-o bem, e não provava a outra metade: que os artefactos
+que a instituição cita chegam intactos e continuam interpretáveis.
+
+**O ensaio A → B → C.** Uma instituição construída de propósito, pela API —
+unidade, ideia, dois documentos com bytes reais, hipótese, metodologia, versão
+publicada, estudo, execução, resultado `RESTRICTED`, validação, dois membros —
+migrada para um servidor B e depois para um servidor C inteiramente limpo:
+base vazia, bucket vazio, Redis vazio, sem IA, sem nó de computação, e
+**credenciais de armazenamento novas**.
+
+Oito controlos sobre os bytes, e os dois que interessam mais são os que
+distinguem não-observar de observar-mal: **um endpoint inacessível dá
+`INVALID`**, e um bucket não configurado também. Um objecto corrompido falha
+por soma; um apagado falha por ausência; um objecto a mais é nomeado e **não**
+falha, porque uma escrita falhada deixa um destes — mas num servidor acabado
+de restaurar quer dizer que o destino não estava vazio.
+
+**Pelo produto.** No Workspace do servidor novo: o membro entra, o ambiente
+abre com os documentos, a cadeia científica está no ecrã, o resultado mantém o
+identificador, a linhagem percorre-se com `origem: operation`, o documento
+descarrega com a soma certa, um membro sem acesso recebe `not_found` sobre o
+`RESTRICTED` — nem a existência —, e a auditoria mantém o primeiro evento com
+a actividade nova por cima. A IA reporta `no_resource` e o conhecimento abre à
+mesma.
+
+**A chave.** `verify-keys` responde à pergunta que as outras duas deixam
+passar: `mailbox_credentials` viaja íntegra no dump e, sem a chave de selagem,
+chega ilegível — com os dois verificadores anteriores a passar. Sobre 318
+credenciais seladas reais, o veredicto é **idêntico antes e depois** do
+restauro; sem a chave, o comando diz que o estado chegou íntegro e ilegível.
+
+**O trio operacional.** `institutional-backup`, `-restore`, `-verify`. O
+primeiro recusa enviar em claro para fora do servidor; o segundo recusa
+escrever por cima de uma base com estado; o terceiro sai **2** quando nada
+falhou e alguma coisa não chegou a ser observada. O ensaio no servidor C
+terminou exactamente assim, e está certo.
+
+**Três defeitos encontrados a correr isto.** O `LEIA-ME.txt` que descreve o que
+falta no conjunto ficava fora das somas — o único ficheiro que explica o
+conjunto era o único que nada cobria. Uma corrida falhada deixava um conjunto
+parcial indistinguível de um bom, que é o que alguém escolhe no dia do
+desastre. E a marca que passou a existir para o evitar viajava dentro do
+conjunto cifrado, fazendo o restauro recusar uma cópia boa — apanhado porque o
+guarda recusou.
+
+**O que continua a não existir.** Agendamento. Sem ele o RPO é *desde o último
+conjunto que alguém produziu à mão*. Nenhum destino externo configurado,
+nenhum ensaio periódico, nenhuma rotação da chave de selagem. **3-2-1 não
+existe.**
+
 ### Continuidade institucional: um servidor pode desaparecer — 2026-08-28
 
 A pergunta parecia de administração de sistemas — «temos backups?» — e não era.

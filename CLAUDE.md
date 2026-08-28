@@ -113,19 +113,25 @@ sem que nada falhe.
   imediatamente antes de o correr. **Aprovação é consentimento, não
   autorização:** revogar um acesso depois de confirmar impede a execução, e
   existe teste que o demonstra.
-- **Continuidade institucional: `IMPLEMENTED`, backup operacional `NOT CONFIGURED`.**
-  O Core classifica todo o estado em sete classes e diz o que tem de viajar —
-  PostgreSQL, Object Storage e a chave de selagem, as três
+- **Continuidade institucional: `IMPLEMENTED`. Backup operacional:
+  `NOT CONFIGURED`.** O Core classifica todo o estado em sete classes e diz o
+  que tem de viajar — PostgreSQL, Object Storage e a chave de selagem, as três
   ([ADR-0700](docs/adrs/0700-institutional-continuity-and-portability.md)).
-  `continuity-inventory`, `snapshot`, `verify-snapshot` e `verify-objects`
-  descrevem esta instalação e provam que o que chegou é o que saiu, identidade
-  a identidade. Um teste percorre as migrations e falha se uma tabela do
-  esquema ficar sem decisão de continuidade. **Um ensaio de restore foi
-  executado a 2026-08-28** contra 166 232 recursos, com o controlo negativo que
-  distingue restaurar de recriar: uma base criada de novo com as mesmas
-  migrations é recusada e as ausências enumeradas. **O transporte do Object
-  Storage não foi exercitado** — o MinIO local não estava a correr, e
-  `verify-objects` recusou-se a concluir seja o que for.
+  Quatro comandos respondem a três perguntas diferentes: `verify-snapshot`
+  prova que as **linhas** chegaram, identidade a identidade; `verify-objects`
+  lê cada objecto do bucket e **recalcula a soma**, e distingue um bucket
+  inacessível de um objecto ausente; `verify-keys` prova que o que chegou se
+  consegue **ler**. Dois portões impedem a cobertura de envelhecer: uma tabela
+  nova numa migration sem decisão de continuidade fecha o portão, e uma coluna
+  nova de criptograma sem chave declarada também. **Ensaio A → B → C executado
+  a 2026-08-29** contra uma instituição construída pela API, com dois endpoints
+  S3-compatible, credenciais de armazenamento rodadas no destino e Redis
+  vazio: oito controlos sobre os bytes — destino vazio, endpoint inacessível,
+  objecto corrompido, objecto apagado, objecto a mais — e a prova pelo
+  Workspace de que o resultado mantém o identificador, a proveniência se
+  percorre, o `RESTRICTED` continua a recusar e a auditoria não é recriada. O
+  ensaio terminou em **saída 2**, e correctamente: a legibilidade não chegou a
+  ser observada porque não havia estado selado.
 - **50 ADRs** em `docs/adrs/`, **10 runbooks** em `docs/runbooks/`,
   **41 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
@@ -184,9 +190,11 @@ sem que nada falhe.
   `UnconfiguredProvider` e todas as capacidades de correio reportam
   `not_configured`. `ocinye-core-server mail-check` prova uma configuração sem
   arrancar o Core, e sem imprimir credenciais ou conteúdo.
-- **Nenhum backup operacional existe.** Não há agendamento, não há cópia fora
-  do servidor, não há retenção, e os artefactos não são cifrados. O RPO real é
-  *desde o último `pg_dump` que alguém correu à mão*, e **3-2-1 não existe**.
+- **Nenhum backup operacional existe.** O procedimento existe, é cifrável, tem
+  retenção e recusa enviar em claro para fora do servidor — e **não está
+  agendado em lado nenhum**, porque nenhuma instalação existe fora de
+  desenvolvimento. O RPO real é *desde o último conjunto que alguém produziu à
+  mão*, **3-2-1 não existe**, e a rotação da chave de selagem não está escrita.
 
 Ferramentas disponíveis na máquina de desenvolvimento actual — contexto
 ambiental, **não** compromisso arquitectural: Git 2.50.1, Node.js 25.8.0,
