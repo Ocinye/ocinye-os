@@ -1,0 +1,3726 @@
+/*
+ * Ocinye Workspace — sistema visual.
+ *
+ * Valores retirados de design/DESIGN_TOKENS.md, que é a versão canónica.
+ * Nenhum componente define cor, tamanho ou raio soltos: tudo passa por estas
+ * custom properties.
+ */
+
+/* ─── Tokens ─────────────────────────────────────────────────────────── */
+
+:root {
+  /* Marca */
+  --oc-navy:            #0B2D4A;
+  --oc-navy-deep:       #071E33;
+  --oc-navy-hover:      #123C60;
+  --oc-navy-mid:        #1C4B74;
+  --oc-gold:            #E0A731;
+
+  /* Superfícies */
+  --oc-canvas:          #F6F8FA;
+  --oc-surface:         #FFFFFF;
+  --oc-surface-subtle:  #FAFCFD;
+  --oc-surface-muted:   #F3F6F9;
+  --oc-surface-tint:    #F1F4F8;
+  --oc-surface-hover:   #F8FAFC;
+
+  /* Linhas */
+  --oc-border:          #E4E9F0;
+  --oc-border-soft:     #EEF2F6;
+  --oc-border-faint:    #F3F6F9;
+  --oc-border-strong:   #C3CDD8;
+
+  /* Texto */
+  --oc-text:            #0F1A24;
+  --oc-text-body:       #28394A;
+  --oc-text-secondary:  #42546A;
+  --oc-text-muted:      #5F7183;
+  --oc-text-meta:       #7C8B9A;
+  --oc-text-faint:      #8A98A6;
+  --oc-text-ghost:      #A9B5C1;
+  --oc-placeholder:     #98A6B4;
+
+  /* Funcionais */
+  --oc-success: #3E8F66; --oc-success-text: #2E6B4C;
+  --oc-success-bg: #F0F7F3; --oc-success-border: #D8EBE0;
+  --oc-info: #2B6CB0; --oc-info-text: #20537F;
+  --oc-info-bg: #EFF5FB; --oc-info-border: #D5E4F0;
+  --oc-warning: #C87A22; --oc-warning-text: #8A4B10;
+  --oc-warning-bg: #FDF2E7; --oc-warning-border: #F2DBBE;
+  --oc-error: #B3261E; --oc-error-text: #8C2019;
+  --oc-error-bg: #FCF0EF; --oc-error-border: #F1D6D3;
+  --oc-gold-text: #8A6110; --oc-gold-bg: #FDF6E7; --oc-gold-border: #F2E3BE;
+
+  /* Sobre navy */
+  --oc-on-navy:        #FFFFFF;
+  --oc-on-navy-70:     rgba(255,255,255,.68);
+  --oc-on-navy-50:     rgba(255,255,255,.5);
+  --oc-on-navy-42:     rgba(255,255,255,.42);
+  --oc-on-navy-32:     rgba(255,255,255,.32);
+  --oc-on-navy-hover:  rgba(255,255,255,.07);
+  --oc-on-navy-active: rgba(255,255,255,.10);
+  --oc-on-navy-line:   rgba(255,255,255,.08);
+  --oc-on-navy-veil:   rgba(255,255,255,.03);
+  --oc-gold-line:      rgba(224,167,49,.3);
+
+  /* Tipografia */
+  --oc-font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --oc-font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  /* Radius */
+  --oc-r-xs: 4px;  --oc-r-sm: 7px;  --oc-r-md: 8px;
+  --oc-r-lg: 11px; --oc-r-xl: 14px; --oc-r-2xl: 16px; --oc-r-tile: 20px;
+
+  /* Sombras */
+  --oc-shadow-card:    0 2px 10px rgba(11,45,74,.06);
+  --oc-shadow-input:   0 4px 18px rgba(11,45,74,.06);
+  --oc-shadow-menu:    0 16px 40px rgba(11,45,74,.14);
+  --oc-shadow-overlay: 0 30px 80px rgba(7,30,51,.32);
+  --oc-shadow-logo:    0 18px 50px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.14);
+
+  /* Escala de apresentação. Ver o bloco «Escala da interface». */
+  --oc-interface-scale: 1.15;
+
+  /* Layout */
+  --oc-sidebar-w: 224px;
+  --oc-sidebar-w-collapsed: 58px;
+  --oc-topbar-h: 52px;
+  --oc-row-h: 38px;
+  --oc-row-h-dense: 30px;
+  --oc-page-pad: 22px 24px 40px;
+
+  /* ── Espaçamento ───────────────────────────────────────────────────────
+   *
+   * A escala sai da medição, não do gosto: são os oito valores que mais
+   * aparecem neste ficheiro, por esta ordem de frequência — 8px (41 vezes),
+   * 10px (40), 12px (39), 6px (33), 4px (23), 14px (21), 16px (17), 24px (8).
+   *
+   * O Ocinye é uma interface densa e afinada à mão, e não uma grelha de 8pt.
+   * Continuam a existir valores ímpares — 5, 7, 9, 11, 13, 15 — em composições
+   * concretas, e ficam onde estão: são geometria de um componente, não a
+   * linguagem do sistema.
+   *
+   * O objectivo não é zero números no CSS. É que um módulo novo tenha nomes
+   * para alcançar, em vez de inventar a sua própria linguagem de espaçamento.
+   */
+  --oc-space-1: 4px;
+  --oc-space-2: 6px;
+  --oc-space-3: 8px;
+  --oc-space-4: 10px;
+  --oc-space-5: 12px;
+  --oc-space-6: 14px;
+  --oc-space-7: 16px;
+  --oc-space-8: 24px;
+
+  /* ── Movimento ─────────────────────────────────────────────────────────
+   *
+   * As durações são as três que este ficheiro já usa. A `normal` é a de longe
+   * mais frequente (22 das 30 transições).
+   *
+   * As três curvas resolvem hoje todas para `ease`, que é a única em uso.
+   * Existem separadas de propósito: dão vocabulário a quem entra — para que o
+   * Boot, o Centro Temporal e um módulo futuro não escolham curvas diferentes —
+   * e podem divergir mais tarde por decisão. Hoje não mudam um pixel.
+   */
+  --oc-duration-fast: .12s;
+  --oc-duration-normal: .15s;
+  --oc-duration-slow: .18s;
+  --oc-ease-standard: ease;
+  --oc-ease-enter: ease;
+  --oc-ease-exit: ease;
+
+  /* ── Camadas de sobreposição ───────────────────────────────────────────
+   *
+   * Semânticas, e não numéricas. Um módulo não precisa de saber que `modal` é
+   * 200; precisa de saber que um popover não passa por cima de um modal.
+   *
+   * `sticky`, `toast` e `critical` ainda não têm consumidor. Ficam declaradas
+   * porque a hierarquia tem de ser decidida uma vez, e não negociada por cada
+   * superfície que apareça — o ecrã de arranque terá aqui o seu lugar.
+   */
+  --oc-z-base: 1;
+  --oc-z-sticky: 20;
+  --oc-z-dropdown: 40;
+  --oc-z-popover: 60;
+  --oc-z-skip: 100;
+  --oc-z-modal: 200;
+  --oc-z-toast: 300;
+  --oc-z-critical: 400;
+
+  /* ── Foco ──────────────────────────────────────────────────────────────
+   *
+   * Um só tratamento, atravessando tudo. Havia dois: o anel global afasta-se
+   * 1px e dois sítios afastavam-se 2px, sem que nada explicasse a diferença.
+   */
+  --oc-focus-color: var(--oc-gold);
+  --oc-focus-width: 2px;
+  --oc-focus-offset: 1px;
+  /* Quando o anel envolve um contentor cujo filho tem o foco, afasta-se
+   * mais para livrar a borda do próprio contentor. São dois casos, e não
+   * dois acidentes. */
+  --oc-focus-offset-wrap: 2px;
+}
+
+/* ─── Reset ──────────────────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ─── Escala da interface ──────────────────────────────────────────────────
+
+   Um único número, e é o único sítio onde se muda o tamanho da interface.
+
+   # Porque é uma escala, e não medidas maiores
+
+   As medidas dos componentes estão validadas contra o protótipo em
+   `design/prototype/`, e `design_fidelity.rs` compara-as uma a uma. Aumentar
+   cada valor à mão poria o CSS em desacordo com o desenho, e a única forma de
+   voltar ao verde seria reescrever a expectativa — ou seja, afirmar que o
+   protótipo mudou quando não mudou.
+
+   Uma escala na raiz diz outra coisa, e diz a verdade: o desenho é o que está
+   no dossier, e a instituição escolhe apresentá-lo maior. Nenhuma proporção se
+   altera, nenhuma medida de referência se perde, e o teste de fidelidade
+   continua a apanhar qualquer componente que derive por sua conta.
+
+   # Consequências reais
+
+   Os `@media` passam a comparar com o viewport já dividido pela escala, pelo
+   que os pontos de quebra acontecem numa janela proporcionalmente maior. É o
+   comportamento correcto: o conteúdo também é maior, e precisa do espaço mais
+   cedo.
+
+   `zoom` é propriedade padrão (CSS Viewport), e não a antiga extensão. Escala
+   caixa e texto juntos — que é o ponto, porque escalar só a tipografia deixaria
+   as alturas fixas dos controlos por trás. */
+html { zoom: var(--oc-interface-scale); }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: var(--oc-font-sans);
+  font-size: 12.5px;
+  color: var(--oc-text);
+  background: var(--oc-canvas);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Uma ligação é navy e passa a dourado ao passar o rato, como no protótipo. */
+a { color: var(--oc-navy); text-decoration: none; }
+a:hover { color: var(--oc-gold); }
+
+/* Excepções ao dourado acima. No protótipo, linhas de tabela, itens de
+   navegação, botões e itens de menu não são ligações; aqui são, para
+   funcionarem com o teclado e com o clique do meio. Sem isto, herdariam um
+   realce que o design não lhes dá. */
+.oc-nav:hover,
+.oc-btn:hover,
+.oc-table__row:hover,
+.oc-palette__item:hover,
+.oc-create__item:hover,
+.oc-card--clickable:hover,
+.oc-tab:hover,
+.oc-side__foot a:hover { color: inherit; }
+
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+input, textarea, select { font: inherit; color: inherit; }
+input::placeholder, textarea::placeholder { color: var(--oc-placeholder); }
+ul, ol { margin: 0; padding: 0; list-style: none; }
+h1, h2, h3, h4, p { margin: 0; }
+svg { display: block; flex-shrink: 0; }
+
+/* Barras de deslocamento finas: numa interface densa, a barra do sistema rouba
+   largura útil a cada tabela e a cada painel. */
+/* Barras de deslocamento: presentes quando servem, ausentes quando não.
+
+   Declarar `::-webkit-scrollbar` desliga as barras sobrepostas do macOS, que
+   se apagam sozinhas — e sem isso ficava uma linha permanente em cada área que
+   transborda, que não é navegação nem conteúdo.
+
+   O polegar transparente devolve esse comportamento. `:hover` casa com o
+   elemento apontado, e o pseudo-elemento só existe em quem tem deslocamento,
+   pelo que a regra alcança exactamente a área a ser usada — incluindo um
+   contentor que role e esteja a ser percorrido por dentro. */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 9px;
+  transition: background var(--oc-duration-slow) ease;
+}
+:hover::-webkit-scrollbar-thumb,
+:focus-within::-webkit-scrollbar-thumb { background: #CFD8E3; }
+
+/* O Firefox não conhece os pseudo-elementos do WebKit; faz o mesmo por aqui. */
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+*:hover, *:focus-within { scrollbar-color: #CFD8E3 transparent; }
+
+/* Focus ring dourado, global e visível. */
+:focus-visible { outline: var(--oc-focus-width) solid var(--oc-focus-color);
+  outline-offset: var(--oc-focus-offset); }
+
+.oc-sr {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.oc-skip {
+  position: absolute; left: -9999px; z-index: var(--oc-z-skip);
+  background: var(--oc-surface); padding: 8px 14px;
+  border-radius: var(--oc-r-md); box-shadow: var(--oc-shadow-menu);
+}
+.oc-skip:focus { left: 12px; top: 12px; }
+
+/* ─── Animações ──────────────────────────────────────────────────────── */
+
+@keyframes ocFade  { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+@keyframes ocPulse { 0%, 100% { opacity: .35 } 50% { opacity: 1 } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* ─── Shell ──────────────────────────────────────────────────────────── */
+
+.oc-shell { position: fixed; inset: 0; display: flex; background: var(--oc-canvas); }
+
+/* Sidebar ─────────────────────────────────────────────────────────────── */
+
+.oc-side {
+  width: var(--oc-sidebar-w);
+  flex-shrink: 0;
+  background: var(--oc-navy);
+  display: flex;
+  flex-direction: column;
+  transition: width var(--oc-duration-slow) ease;
+}
+.oc-shell[data-side="collapsed"] .oc-side { width: var(--oc-sidebar-w-collapsed); }
+
+.oc-side__head {
+  height: var(--oc-topbar-h);
+  display: flex; align-items: center; gap: 9px;
+  padding: 0 10px; flex-shrink: 0;
+}
+.oc-side__tile {
+  width: 26px; height: 26px; border-radius: var(--oc-r-sm);
+  background: var(--oc-surface); flex-shrink: 0;
+  display: grid; place-items: center;
+}
+.oc-side__tile img { width: 20px; height: 20px; object-fit: contain; }
+.oc-side__names { min-width: 0; flex: 1; overflow: hidden; }
+.oc-side__title {
+  display: block; line-height: 1;
+  font: 600 11.5px var(--oc-font-sans); letter-spacing: .14em;
+  color: var(--oc-on-navy); white-space: nowrap;
+}
+.oc-side__sub {
+  display: block; margin-top: 3px; line-height: 1;
+  font: 400 9.5px var(--oc-font-mono); letter-spacing: .1em;
+  color: var(--oc-on-navy-42); white-space: nowrap;
+}
+.oc-side__collapse {
+  width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0;
+  display: grid; place-items: center; color: var(--oc-on-navy-50);
+}
+.oc-side__collapse:hover { background: var(--oc-on-navy-hover); color: var(--oc-on-navy); }
+
+.oc-side__nav { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 8px; }
+
+/* A barra de deslocamento da navegação só aparece quando serve.
+
+   A regra global pinta um polegar `#CFD8E3`, pensado para as superfícies
+   claras. Sobre o navy da barra lateral salta à vista, e desde que a navegação
+   passou a mostrar os ecrãs todos passa a caber-lhe sempre — ficava ali uma
+   linha clara permanente que não é navegação nem conteúdo.
+
+   Declarar `::-webkit-scrollbar` desliga as barras sobrepostas do macOS, que
+   desapareceriam sozinhas. Isto devolve esse comportamento: transparente em
+   repouso, visível ao passar o rato e ao entrar com o teclado — `focus-within`
+   está lá para que quem navega por tabulação veja onde está.
+
+   `scrollbar-color` faz o mesmo no Firefox, que não conhece os pseudo-elementos
+   do WebKit. */
+/* Sobre o navy, o polegar claro do resto da interface saltaria à vista. O
+   comportamento — aparecer só quando serve — vem da regra global. */
+.oc-side__nav:hover,
+.oc-side__nav:focus-within { scrollbar-color: rgba(255,255,255,.18) transparent; }
+.oc-side__nav:hover::-webkit-scrollbar-thumb,
+.oc-side__nav:focus-within::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.18);
+}
+.oc-side__group { font: 500 9.5px var(--oc-font-mono); letter-spacing: .16em;
+  color: var(--oc-on-navy-32); padding: 12px 8px 5px; white-space: nowrap; }
+
+.oc-nav {
+  height: 32px; padding: 0 9px; border-radius: var(--oc-r-md);
+  display: flex; align-items: center; gap: 10px;
+  color: var(--oc-on-navy-70);
+  font: 500 12.5px var(--oc-font-sans);
+}
+.oc-nav:hover { background: var(--oc-on-navy-hover); }
+.oc-nav[aria-current="page"] { background: var(--oc-on-navy-active); color: var(--oc-on-navy); }
+.oc-nav:hover { color: var(--oc-on-navy); }
+.oc-nav span { white-space: nowrap; overflow: hidden; }
+
+/* Um ecrã que a pessoa não pode abrir. Continua na barra, porque a instituição
+   tem-no; fica esbatido e sem destino, porque ela não lhe chega. */
+.oc-nav--unavailable {
+  color: var(--oc-on-navy-42);
+  cursor: default;
+}
+.oc-nav--unavailable:hover { background: transparent; color: var(--oc-on-navy-42); }
+
+/* ─── Barra lateral estreita ───────────────────────────────────────────────
+
+   A barra estreita por duas vias independentes: o membro recolhe-a, ou a
+   janela fica abaixo dos 1024px. As regras viviam duplicadas, uma cópia por
+   via — e uma correcção aplicada a uma delas não chegava à outra. Foi
+   exactamente isso que aconteceu com o cabeçalho: corrigido no modo recolhido,
+   continuava partido em janela estreita.
+
+   Uma container query pergunta o que de facto importa — «esta barra é
+   estreita?» — em vez de perguntar porquê. Uma cópia só, e as duas vias
+   passam por ela. */
+.oc-side { container-type: inline-size; }
+
+@container (max-width: 120px) {
+  .oc-side__names, .oc-side__group, .oc-nav span,
+  .oc-side__foot-label, .oc-profile__text,
+  .oc-profile > svg { display: none; }
+  .oc-nav { justify-content: center; padding: 0; }
+
+  /* Estreita, o rodapé continua a servir: o ponto do sistema fica centrado e
+     conserva o seu nome no `aria-label`, e o avatar continua a abrir o mesmo
+     menu. O popover não depende do texto da barra — mede-se pelo gatilho, e o
+     gatilho é o avatar. */
+  .oc-profile { justify-content: center; padding: 7px 0; }
+  .oc-account__menu { left: 0; width: 268px; }
+
+  /* Estreita, a barra tem 58px e o cabeçalho traz duas coisas: o logótipo
+     (26px) e o botão que a volta a abrir (22px). Lado a lado com o espaço
+     entre eles são 57px em 58 — meio pixel de cada lado, e o logótipo
+     encostava ao extremo.
+
+     Empilhados, cada um fica centrado com 16px de folga. O cabeçalho cresce, e
+     pode: não tem borda inferior, o navy é contínuo até à navegação, e não há
+     linha nenhuma a desalinhar com a topbar. Alinhar com ela quando expandida
+     é que importa, porque aí os dois cabeçalhos vêem-se lado a lado.
+
+     Nenhum dos dois se esconde. O logótipo é a identidade e o botão é o único
+     caminho de volta — estreitar a barra não é razão para perder qualquer um. */
+  .oc-side__head {
+    height: auto;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+    padding: 13px 0;
+  }
+}
+
+
+.oc-side__foot { border-top: 1px solid var(--oc-on-navy-line); padding: 6px 8px 8px; }
+/* `>` e não descendente: o popover de conta também vive dentro do rodapé, e
+   com o seletor solto estas regras alcançavam-lhe as ligações — 30px de altura
+   e o cinzento do navy sobre uma superfície branca de duas linhas. Um seletor
+   escrito para três itens a apanhar uma superfície inteira que ainda não
+   existia quando foi escrito. */
+.oc-side__foot > a, .oc-side__foot-item {
+  height: 30px; padding: 0 9px; border-radius: var(--oc-r-md);
+  display: flex; align-items: center; gap: 10px;
+  font: 400 12px var(--oc-font-sans); color: rgba(255,255,255,.62);
+}
+.oc-side__foot > a:hover {
+  background: var(--oc-on-navy-hover); color: var(--oc-on-navy);
+}
+
+/* Indisponível: distinto do activo, mas ainda legível.
+   `--oc-on-navy-50` sobre `--oc-navy` dá 4.6:1 — passa AA, ao contrário de
+   uma opacidade decorativa, que descia para 2.4:1. */
+.oc-side__foot-item[aria-disabled="true"] { color: var(--oc-on-navy-50); cursor: default; }
+
+/* Conta e sessão ─────────────────────────────────────────────────────────
+
+   O estado do Core esteve aqui, numa linha própria da barra lateral. Está na
+   topbar, em `.oc-core-pill`, desde que o arranque passou a decidi-lo a partir
+   de `/ready`. As regras antigas ficaram para trás e não se aplicavam a nada:
+   nenhum ecrã escrevia `oc-side__system`. */
+
+/* A âncora do popover. `position: relative` aqui e não no rodapé inteiro: o
+   menu alinha-se pelo botão de conta, que é o que o abriu. */
+.oc-account { position: relative; margin-top: 4px; }
+
+.oc-profile {
+  padding: 7px 8px; border-radius: var(--oc-r-md);
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  background: none; border: 0; cursor: pointer; text-align: left;
+}
+.oc-profile:hover { background: var(--oc-on-navy-hover); }
+/* Aberto, o gatilho fica com a mesma superfície do item activo da navegação:
+   uma só linguagem para «isto é o que está em foco agora». */
+.oc-profile[aria-expanded="true"] { background: var(--oc-on-navy-active); }
+/* O avatar ────────────────────────────────────────────────────────────────
+   Um só componente para barra lateral, menu de conta e Definições. A imagem
+   cobre o círculo em vez de o esticar, e as iniciais ficam por baixo dela — não
+   como alternativa a escrever noutro sítio, mas literalmente por baixo.
+
+   É isso que faz a fotografia partida desaparecer sem deixar buraco: o `<img>`
+   que não carrega não pinta nada, e o que estava por trás continua lá. Sem
+   JavaScript, sem `onerror`, sem ícone de imagem partida. */
+.oc-avatar {
+  position: relative; flex-shrink: 0; overflow: hidden;
+  border-radius: 50%;
+  background: var(--oc-navy-mid); color: var(--oc-on-navy);
+  display: grid; place-items: center;
+  font: 600 9.5px var(--oc-font-sans); letter-spacing: .02em;
+}
+.oc-avatar img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; object-fit: cover;
+  border-radius: 50%;
+}
+/* As iniciais debaixo da imagem. `i` porque é o que o componente escreve, e não
+   por semântica: não é ênfase, é o fundo. */
+.oc-avatar i { font-style: normal; }
+
+.oc-avatar--sm { width: 24px; height: 24px; }
+.oc-avatar--md { width: 32px; height: 32px; font-size: 11.5px; }
+.oc-avatar--lg { width: 72px; height: 72px; font-size: 24px; }
+
+/* Sobre superfície clara o círculo das iniciais precisa de outro fundo. */
+.oc-avatar-edit .oc-avatar { background: var(--oc-navy); }
+.oc-profile__text { min-width: 0; text-align: left; flex: 1; }
+.oc-profile__name {
+  display: block;
+  font: 500 11.5px var(--oc-font-sans); color: var(--oc-on-navy);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.oc-profile__sub {
+  display: block; margin-top: 1px;
+  font: 400 10px var(--oc-font-mono); color: var(--oc-on-navy-42);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* A seta diz que há um menu; roda quando ele abre. */
+.oc-profile > svg { flex-shrink: 0; color: var(--oc-on-navy-42); transition: transform var(--oc-duration-normal) ease; }
+.oc-profile[aria-expanded="true"] > svg { transform: rotate(180deg); }
+
+/* O popover ───────────────────────────────────────────────────────────────
+   Abre para cima porque o gatilho está no fundo, e para a direita porque a
+   barra é estreita. `max-width` com `100vw` impede-o de sair da viewport
+   quando a janela é pequena. */
+.oc-account__menu {
+  position: absolute; bottom: calc(100% + 8px); left: 0;
+  width: 276px; max-width: calc(100vw - 24px);
+  z-index: var(--oc-z-dropdown);
+
+  /* Uma superfície, não uma caixa.
+     A translucidez é ligeira de propósito — 88% — e serve para o menu se ler
+     como algo pousado por cima da barra, e não como um rectângulo colado a ela.
+     Onde o browser não souber desfocar, o fundo continua quase opaco e nada se
+     perde: o texto nunca depende do que está por trás. */
+  background: color-mix(in srgb, var(--oc-surface) 88%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+
+  border: 1px solid color-mix(in srgb, var(--oc-border) 70%, transparent);
+  border-radius: 13px;
+  /* Três camadas: o assentamento largo, o contacto curto, e um fio de luz na
+     aresta de cima que dá a espessura. */
+  box-shadow:
+    0 16px 40px rgba(11,26,45,.20),
+    0 2px 8px rgba(11,26,45,.10),
+    inset 0 1px 0 rgba(255,255,255,.60);
+  padding: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.oc-account__menu[hidden] { display: none; }
+
+.oc-account__id {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 10px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--oc-border) 70%, transparent);
+  margin-bottom: 5px;
+}
+.oc-account__id .oc-avatar { background: var(--oc-navy); }
+.oc-account__id-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.oc-account__id-text b {
+  font: 600 12.5px var(--oc-font-sans); color: var(--oc-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.oc-account__id-text span {
+  font: 400 10.5px var(--oc-font-sans); color: var(--oc-text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.oc-account__handle { font-family: var(--oc-font-mono) !important; font-size: 10px !important; }
+
+.oc-account__group { display: flex; flex-direction: column; gap: 1px; }
+
+.oc-account__item {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 7px 9px; border-radius: var(--oc-r-md);
+  width: 100%; background: none; border: 0; cursor: pointer; text-align: left;
+  color: var(--oc-text);
+}
+.oc-account__item > svg { flex-shrink: 0; margin-top: 1px; color: var(--oc-text-muted); }
+.oc-account__item b { display: block; font: 500 12px var(--oc-font-sans); color: var(--oc-text); }
+.oc-account__item em {
+  display: block; margin-top: 1px; font-style: normal;
+  font: 400 10.5px var(--oc-font-sans); color: var(--oc-text-muted);
+}
+.oc-account__item {
+  transition: background var(--oc-duration-fast) ease;
+}
+.oc-account__item:hover {
+  background: color-mix(in srgb, var(--oc-navy) 6%, transparent);
+  color: var(--oc-text);
+}
+.oc-account__item:hover > svg { color: var(--oc-navy); }
+
+.oc-account__session {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  padding: 9px 10px; margin-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--oc-border) 70%, transparent);
+}
+.oc-account__session-label {
+  font: 500 9.5px var(--oc-font-mono); letter-spacing: .06em; color: var(--oc-text-muted);
+  text-transform: uppercase;
+}
+.oc-account__session-value {
+  font: 400 10.5px var(--oc-font-sans); color: var(--oc-text-muted); text-align: right;
+}
+
+/* Terminar sessão é a única acção daqui que destrói alguma coisa, e é a única
+   separada por um divisor. */
+.oc-account__out {
+  border-top: 1px solid color-mix(in srgb, var(--oc-border) 70%, transparent);
+  padding-top: 5px; margin-top: 2px;
+}
+.oc-account__item--out b { color: var(--oc-error); }
+.oc-account__item--out > svg { color: var(--oc-error); }
+.oc-account__item--out:hover {
+  background: color-mix(in srgb, var(--oc-error) 8%, transparent);
+}
+
+/* Escolher a imagem de perfil ───────────────────────────────────────────── */
+.oc-avatar-edit {
+  display: flex; align-items: center; gap: 16px;
+  padding: 4px 0 10px;
+}
+.oc-avatar-edit p { margin: 0; max-width: 42ch; }
+
+.oc-avatars {
+  display: grid; grid-template-columns: repeat(auto-fill, 44px); gap: 10px;
+  margin-top: 6px;
+}
+/* O logótipo traz o seu próprio fundo. Envolvê-lo num círculo branco fazia-o
+   destoar dos doze motivos, que são navy até à borda. */
+.oc-avatars__cell { display: contents; }
+.oc-avatars__pick {
+  width: 44px; height: 44px; padding: 0; border-radius: 50%;
+  background: none; border: 2px solid transparent; cursor: pointer;
+  display: block; overflow: hidden;
+}
+.oc-avatars__pick img { width: 100%; height: 100%; border-radius: 50%; display: block; }
+.oc-avatars__pick:hover { border-color: var(--oc-border-strong); }
+/* O escolhido não se marca com um visto por cima da imagem: o anel diz o mesmo
+   sem tapar aquilo que se está a escolher. */
+.oc-avatars__pick--on { border-color: var(--oc-gold); }
+
+.oc-avatar-upload {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 6px;
+}
+.oc-avatar-upload input[type="file"] {
+  flex: 1; min-width: 220px;
+  font: 400 12px var(--oc-font-sans); color: var(--oc-text-secondary);
+}
+
+/* Topbar ──────────────────────────────────────────────────────────────── */
+
+.oc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+.oc-top {
+  height: var(--oc-topbar-h); flex-shrink: 0;
+  background: var(--oc-surface);
+  border-bottom: 1px solid var(--oc-border);
+  padding: 0 16px; gap: 16px;
+  display: flex; align-items: center;
+}
+
+.oc-crumb {
+  min-width: 150px; white-space: nowrap;
+  font: 400 11.5px var(--oc-font-mono); color: var(--oc-text-meta);
+}
+.oc-crumb i { color: var(--oc-border-strong); font-style: normal; margin: 0 5px; }
+.oc-crumb b { font-weight: 500; color: var(--oc-navy); }
+
+.oc-search {
+  flex: 0 1 420px; min-width: 180px; height: 33px;
+  background: var(--oc-surface-muted); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-md); padding: 0 11px; gap: 9px;
+  display: flex; align-items: center; color: var(--oc-text-faint);
+  transition: background var(--oc-duration-normal), border-color var(--oc-duration-normal);
+}
+.oc-search:hover { background: var(--oc-surface); border-color: var(--oc-border-strong); }
+/* A Universal Command Surface é um campo, não um rótulo: escreve-se nela. */
+.oc-search__input {
+  flex: 1; min-width: 0; border: 0; background: transparent; outline: none;
+  font: 400 12.5px var(--oc-font-sans); color: var(--oc-text);
+}
+.oc-search__input::placeholder { color: var(--oc-placeholder); }
+.oc-search__input::-webkit-search-cancel-button { display: none; }
+
+.oc-search span { flex: 1; text-align: left; font: 400 12.5px var(--oc-font-sans);
+  color: var(--oc-text-faint); }
+.oc-kbd {
+  font: 500 10px var(--oc-font-mono); color: var(--oc-text-meta);
+  background: var(--oc-surface); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-xs); padding: 2px 5px;
+}
+
+.oc-spacer { flex: 1; }
+.oc-divider { width: 1px; height: 22px; background: var(--oc-border); }
+
+.oc-icon-btn {
+  width: 29px; height: 29px; border-radius: var(--oc-r-md);
+  display: grid; place-items: center; color: var(--oc-text-muted);
+  position: relative;
+}
+.oc-icon-btn:hover { background: var(--oc-surface-muted); }
+.oc-icon-btn i {
+  position: absolute; top: 4px; right: 4px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--oc-gold); box-shadow: 0 0 0 1.5px var(--oc-surface);
+}
+
+.oc-core-pill {
+  height: 24px; padding: 0 8px; gap: 6px;
+  display: flex; align-items: center;
+  background: var(--oc-success-bg); border: 1px solid var(--oc-success-border);
+  border-radius: var(--oc-r-sm);
+}
+.oc-core-pill i { width: 6px; height: 6px; border-radius: 50%;
+  background: var(--oc-success); animation: ocPulse 2.6s infinite; }
+.oc-core-pill span { font: 500 10px var(--oc-font-mono); letter-spacing: .06em;
+  color: var(--oc-success-text); }
+
+/* Aqui esteve uma segunda definição de `.oc-avatar`, escrita antes de o
+   componente existir. Como vinha depois na folha, ganhava-lhe: o círculo da
+   topbar recebia o fundo e o tamanho desta regra, e a fotografia do membro não
+   aparecia lá.
+
+   A topbar deixou de mostrar avatar — no lugar dele está o relógio — e a classe
+   passou a ter uma definição só, junto às restantes medidas do componente. */
+
+/* O relógio da topbar ─────────────────────────────────────────────────────
+   Duas linhas para não crescer em altura: a hora, e a data por baixo em corpo
+   menor. `tabular-nums` porque os dígitos mudam a cada minuto e uma largura
+   variável faria a topbar respirar sozinha. */
+.oc-clock {
+  display: flex; flex-direction: column; align-items: flex-end;
+  line-height: 1.15; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  padding-left: 2px;
+}
+.oc-clock[hidden] { display: none; }
+.oc-clock b {
+  font: 500 13px var(--oc-font-mono); color: var(--oc-text);
+  letter-spacing: .01em;
+}
+.oc-clock span {
+  font: 400 9.5px var(--oc-font-sans); color: var(--oc-text-meta);
+  text-transform: uppercase; letter-spacing: .05em;
+}
+
+/* Content ─────────────────────────────────────────────────────────────── */
+
+.oc-content { flex: 1; min-height: 0; overflow-y: auto; }
+.oc-page { padding: var(--oc-page-pad); }
+.oc-page--home { max-width: 1560px; }
+.oc-page--narrow { max-width: 1060px; }
+.oc-page--feed { max-width: 900px; }
+
+/* ─── Botões ─────────────────────────────────────────────────────────── */
+
+.oc-btn {
+  height: 31px; padding: 0 12px; gap: 7px; border-radius: var(--oc-r-md);
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 500 12px var(--oc-font-sans); white-space: nowrap;
+  transition: background var(--oc-duration-normal), border-color var(--oc-duration-normal), filter var(--oc-duration-normal);
+}
+.oc-btn--primary { background: var(--oc-navy); color: var(--oc-on-navy); }
+.oc-btn--primary:hover { background: var(--oc-navy-hover); }
+
+.oc-btn--gold { background: var(--oc-gold); color: var(--oc-navy); font-weight: 600; }
+.oc-btn--gold:hover { filter: brightness(1.06); }
+
+.oc-btn--secondary {
+  background: var(--oc-surface); color: var(--oc-navy);
+  border: 1px solid var(--oc-border);
+}
+.oc-btn--secondary:hover { border-color: var(--oc-navy); }
+
+.oc-btn--on-navy {
+  height: 30px; border-radius: var(--oc-r-sm);
+  background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.18);
+  color: var(--oc-on-navy);
+}
+
+.oc-btn__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--oc-gold); }
+
+/* ─── Menu + Criar ───────────────────────────────────────────────────── */
+
+.oc-create { position: relative; }
+.oc-create__menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: var(--oc-z-popover);
+  width: 212px; padding: 6px;
+  background: var(--oc-surface); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-lg); box-shadow: var(--oc-shadow-menu);
+  animation: ocFade var(--oc-duration-fast) var(--oc-ease-enter);
+}
+.oc-create__menu[hidden] { display: none; }
+.oc-create__item {
+  width: 100%; height: 31px; padding: 0 9px; border-radius: var(--oc-r-sm);
+  display: flex; align-items: center; gap: 9px;
+  font: 400 12.5px var(--oc-font-sans); color: var(--oc-text);
+}
+.oc-create__item:hover { background: var(--oc-surface-tint); }
+.oc-create__item .oc-kbd { margin-left: auto; }
+
+/* Tile de acesso rápido (Home). Não é um botão comum: mais alto, alinhado à
+   esquerda e em navy, tal como no dossier. */
+.oc-quick {
+  height: 36px; padding: 0 11px; gap: 9px; border-radius: var(--oc-r-md);
+  display: flex; align-items: center; justify-content: flex-start;
+  border: 1px solid var(--oc-border); color: var(--oc-navy);
+  font: 500 12px var(--oc-font-sans);
+  transition: background var(--oc-duration-normal), border-color var(--oc-duration-normal);
+}
+.oc-quick:hover { border-color: var(--oc-navy); background: var(--oc-surface-hover); }
+.oc-quick .oc-btn__dot { width: 5px; height: 5px; }
+
+/* ─── Acções ainda sem ecrã ──────────────────────────────────────────────
+   O dossier exige que estas acções apareçam; o que não podem é fingir que
+   levam a algum lado. Ficam visíveis e declaradas indisponíveis.
+
+   Cor, não opacidade: uma opacidade empilha-se sobre fundos diferentes e
+   descia o contraste para 2.4:1. `--oc-text-ghost` é o tom que o dossier
+   atribui a «indisponível», e o compound com `[aria-disabled]` garante que
+   ganha ao estilo base do botão ou do item de menu. */
+.oc-unavailable[aria-disabled="true"] {
+  color: var(--oc-text-ghost); cursor: default;
+  background: transparent; border-color: var(--oc-border-soft);
+}
+.oc-unavailable[aria-disabled="true"]:hover {
+  background: transparent; color: var(--oc-text-ghost);
+  border-color: var(--oc-border-soft);
+}
+.oc-unavailable[aria-disabled="true"] .oc-btn__dot { background: var(--oc-border-strong); }
+
+/* Um botão dourado indisponível continua dourado, esbatido.
+
+   A regra acima despe o fundo, e isso servia enquanto as acções indisponíveis
+   eram raras. Desde que deixaram de desaparecer a quem não tem a permissão, o
+   `+ Criar` da barra de topo passa a maior parte do tempo neste estado — e sem
+   o dourado deixava de se reconhecer como o botão que o dossier desenha (§7.1).
+   Esbatido diz «isto está aqui e não podes usar»; transparente diz «isto é
+   outra coisa». */
+.oc-btn--gold.oc-unavailable[aria-disabled="true"],
+.oc-btn--gold.oc-unavailable[aria-disabled="true"]:hover {
+  background: var(--oc-gold); border-color: transparent;
+  color: var(--oc-navy); opacity: .45;
+}
+
+/* ─── Command palette ────────────────────────────────────────────────── */
+
+.oc-palette {
+  position: fixed; inset: 0; z-index: var(--oc-z-modal);
+  background: rgba(7,30,51,.42); backdrop-filter: blur(2px);
+  display: flex; justify-content: center; align-items: flex-start;
+  padding: 14vh 20px 20px;
+}
+.oc-palette[hidden] { display: none; }
+.oc-palette__panel {
+  width: 600px; max-width: 92vw;
+  background: var(--oc-surface); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-xl);
+  box-shadow: var(--oc-shadow-overlay); overflow: hidden;
+  /* `.14s` não está na escala. Fica literal de propósito: passá-lo para
+   * `normal` seriam 10ms de diferença — imperceptíveis, e ainda assim uma
+   * alteração que este corte não autoriza. Snap deliberado, se algum dia,
+   * é uma decisão à parte. */
+  animation: ocFade .14s var(--oc-ease-enter);
+}
+.oc-palette__field {
+  height: 50px; padding: 0 14px; gap: 10px;
+  display: flex; align-items: center;
+  border-bottom: 1px solid var(--oc-border-soft);
+  color: var(--oc-text-faint);
+}
+.oc-palette__field input {
+  flex: 1; border: 0; outline: 0; background: none;
+  font: 400 13.5px var(--oc-font-sans); color: var(--oc-text);
+}
+.oc-palette__field input::placeholder { color: var(--oc-placeholder); }
+.oc-palette__list { max-height: 52vh; overflow-y: auto; padding: 6px; }
+.oc-palette__group {
+  font: 500 9.5px var(--oc-font-mono); letter-spacing: .16em;
+  color: var(--oc-text-meta); padding: 10px 9px 5px;
+}
+.oc-palette__item {
+  width: 100%; height: 34px; padding: 0 9px; border-radius: var(--oc-r-sm);
+  display: flex; align-items: center; gap: 10px;
+  font: 400 12.5px var(--oc-font-sans); color: var(--oc-text);
+}
+.oc-palette__item:hover, .oc-palette__item[data-active] { background: var(--oc-surface-tint); }
+.oc-palette__item i { width: 6px; height: 6px; border-radius: 50%; background: var(--oc-border-strong); }
+.oc-palette__item--action i { background: var(--oc-gold); }
+.oc-palette__item .oc-kbd { margin-left: auto; }
+
+/* ─── Cabeçalho de página ────────────────────────────────────────────── */
+
+.oc-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+.oc-head__text { flex: 1; min-width: 0; }
+.oc-head h1 { font: 600 19px var(--oc-font-sans); letter-spacing: -.01em; color: var(--oc-text); }
+.oc-head h1.oc-head--lg { font-size: 21px; }
+.oc-head p { margin-top: 4px; font: 400 12.5px var(--oc-font-sans); color: var(--oc-text-muted); }
+.oc-head__actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* ─── Cartões ────────────────────────────────────────────────────────── */
+
+.oc-card {
+  background: var(--oc-surface); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-lg);
+}
+.oc-card--clickable { transition: border-color var(--oc-duration-normal), box-shadow var(--oc-duration-normal); }
+.oc-card--clickable:hover { border-color: var(--oc-border-strong); box-shadow: var(--oc-shadow-card); }
+
+.oc-card__head {
+  padding: 13px 15px; border-bottom: 1px solid var(--oc-border-soft);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.oc-card__head h2, .oc-card__head h3 { font: 600 13px var(--oc-font-sans); color: var(--oc-text); }
+.oc-card__action { font: 500 11.5px var(--oc-font-sans); color: var(--oc-navy); }
+.oc-card__meta { font: 400 11px var(--oc-font-mono); color: var(--oc-text-faint); }
+.oc-card__body { padding: 15px; }
+
+.oc-grid { display: grid; gap: 12px; align-items: start; }
+.oc-grid--4 { grid-template-columns: repeat(4, 1fr); }
+.oc-grid--main { grid-template-columns: 1.35fr 1fr; }
+.oc-grid--detail { grid-template-columns: 1.5fr 1fr; }
+.oc-grid--ws { grid-template-columns: 1.4fr 1fr 1fr; }
+.oc-grid--form { grid-template-columns: 1.25fr 1fr; }
+
+/* ─── Badges ─────────────────────────────────────────────────────────── */
+
+.oc-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font: 500 10px var(--oc-font-mono); letter-spacing: .04em;
+  padding: 2.5px 6px; border-radius: var(--oc-r-xs); border: 1px solid;
+  white-space: nowrap;
+}
+.oc-badge i { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+.oc-badge--ok   { color: var(--oc-success-text); background: var(--oc-success-bg); border-color: var(--oc-success-border); }
+.oc-badge--ok i { background: var(--oc-success); }
+.oc-badge--gold { color: var(--oc-gold-text); background: var(--oc-gold-bg); border-color: var(--oc-gold-border); }
+.oc-badge--gold i { background: var(--oc-gold); }
+.oc-badge--navy { color: var(--oc-navy); background: #F1F5F9; border-color: #DCE4EC; }
+.oc-badge--navy i { background: var(--oc-navy); }
+.oc-badge--blue { color: var(--oc-info-text); background: var(--oc-info-bg); border-color: var(--oc-info-border); }
+.oc-badge--blue i { background: var(--oc-info); }
+.oc-badge--gray { color: var(--oc-text-muted); background: #F5F7F9; border-color: var(--oc-border); }
+.oc-badge--gray i { background: var(--oc-text-ghost); }
+.oc-badge--warn { color: var(--oc-warning-text); background: var(--oc-warning-bg); border-color: var(--oc-warning-border); }
+.oc-badge--warn i { background: var(--oc-warning); }
+.oc-badge--err  { color: var(--oc-error-text); background: var(--oc-error-bg); border-color: var(--oc-error-border); }
+.oc-badge--err i { background: var(--oc-error); }
+
+.oc-pill {
+  font: 500 9.5px var(--oc-font-mono); letter-spacing: .1em;
+  background: var(--oc-surface-tint); color: var(--oc-text-meta);
+  padding: 3px 7px; border-radius: var(--oc-r-xs); white-space: nowrap;
+}
+.oc-mono { font: 400 11.5px var(--oc-font-mono); color: var(--oc-text-meta); }
+.oc-muted { color: var(--oc-text-muted); }
+
+/* ─── Tabs ───────────────────────────────────────────────────────────── */
+
+.oc-tabs { display: flex; align-items: center; gap: 4px; }
+
+.oc-tab {
+  height: 27px; padding: 0 11px; border-radius: var(--oc-r-sm);
+  display: inline-flex; align-items: center; white-space: nowrap;
+  font: 500 12px var(--oc-font-sans); color: var(--oc-text-muted);
+  transition: background var(--oc-duration-normal), color var(--oc-duration-normal);
+}
+.oc-tab:hover { background: var(--oc-surface-tint); }
+.oc-tab[aria-selected="true"] { background: var(--oc-navy); color: var(--oc-on-navy); }
+
+.oc-tabs--ctx {
+  gap: 2px; overflow-x: auto; scrollbar-width: thin;
+  border-bottom: 1px solid var(--oc-border);
+}
+.oc-tabs--ctx .oc-tab {
+  height: 32px; padding: 0 12px; border-radius: var(--oc-r-md) var(--oc-r-md) 0 0;
+}
+
+.oc-tabs--under { border-bottom: 1px solid var(--oc-border); margin-bottom: 16px; }
+
+/* ─── Tabela ─────────────────────────────────────────────────────────── */
+
+.oc-table { overflow: hidden; }
+.oc-table__scroll { overflow-x: auto; }
+
+.oc-table__bar {
+  height: 44px; padding: 0 12px; gap: 10px;
+  display: flex; align-items: center;
+  border-bottom: 1px solid var(--oc-border-soft);
+}
+.oc-table__search {
+  width: 250px; height: 29px; padding: 0 10px; gap: 8px;
+  display: flex; align-items: center;
+  background: var(--oc-surface-muted); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-sm); color: var(--oc-text-faint);
+}
+.oc-table__search input {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: none;
+  font: 400 12px var(--oc-font-sans); color: var(--oc-text);
+}
+.oc-table__search input::placeholder { color: var(--oc-placeholder); }
+
+.oc-table__filter {
+  height: 29px; padding: 0 10px; gap: 6px; border-radius: var(--oc-r-sm);
+  display: inline-flex; align-items: center;
+  border: 1px solid var(--oc-border); color: var(--oc-text-muted);
+  font: 500 11.5px var(--oc-font-sans);
+}
+.oc-table__filter:hover { border-color: var(--oc-navy); color: var(--oc-navy); }
+
+.oc-table__head, .oc-table__row {
+  display: grid; gap: 14px; padding: 0 16px; align-items: center;
+}
+.oc-table__head {
+  height: 34px; background: var(--oc-surface-subtle);
+  border-bottom: 1px solid var(--oc-border-soft);
+}
+.oc-table__head span {
+  font: 500 10px var(--oc-font-mono); letter-spacing: .1em;
+  color: var(--oc-text-meta); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+.oc-table__row {
+  min-height: var(--oc-row-h);
+  border-bottom: 1px solid var(--oc-border-faint);
+  text-align: left; width: 100%;
+  transition: background var(--oc-duration-fast);
+}
+.oc-table__row:last-child { border-bottom: 0; }
+.oc-table__row:hover { background: var(--oc-surface-hover); }
+.oc-table[data-dense="true"] .oc-table__row { min-height: var(--oc-row-h-dense); }
+
+.oc-cell { min-width: 0; display: flex; align-items: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oc-cell--r { justify-content: flex-end; }
+.oc-cell--first { font: 500 12.5px var(--oc-font-sans); color: var(--oc-text); }
+.oc-cell--text { font: 400 12px var(--oc-font-sans); color: var(--oc-text-muted); }
+.oc-cell--mono { font: 400 11.5px var(--oc-font-mono); color: var(--oc-text-muted); }
+
+
+/* ─── Formas das tabelas ───────────────────────────────────────────────────
+
+   As colunas de cada tabela vivem aqui, e não num atributo `style`.
+
+   A Content-Security-Policy do Workspace declara `style-src 'self'` sem
+   `'unsafe-inline'` — uma decisão registada no threat model e no baseline de
+   segurança, onde um botão chegou a ser retirado por causa dela em vez de a
+   política ser alargada. Um `style="grid-template-columns:…"` é, para o
+   browser, exactamente o que essa directiva recusa: chegava correcto no HTML e
+   era descartado antes de pintar. Sem colunas, `display: grid` cai para uma só
+   e o cabeçalho empilhava-se por cima das linhas.
+
+   Uma classe por forma resolve-o sem tocar na política. As larguras não são
+   dados: são desenho, e desenho pertence à folha de estilos. */
+.oc-table--units .oc-table__head,
+.oc-table--units .oc-table__row {
+  grid-template-columns: minmax(240px,2.2fr) 110px 140px 70px 70px 90px 110px;
+  min-width: 1000px;
+}
+.oc-table--ideas .oc-table__head,
+.oc-table--ideas .oc-table__row {
+  grid-template-columns: minmax(260px,2.4fr) 100px 130px 130px 90px 110px 90px;
+  min-width: 1080px;
+}
+.oc-table--projects .oc-table__head,
+.oc-table--projects .oc-table__row {
+  grid-template-columns: 120px minmax(230px,2.2fr) 100px 130px 120px 150px 90px 90px;
+  min-width: 1180px;
+}
+.oc-table--bibliography .oc-table__head,
+.oc-table--bibliography .oc-table__row {
+  grid-template-columns: minmax(280px,2.6fr) 150px 60px 150px 90px 130px 80px;
+  min-width: 1140px;
+}
+.oc-table--datasets .oc-table__head,
+.oc-table--datasets .oc-table__row {
+  grid-template-columns: minmax(230px,2.2fr) 130px 110px 70px 90px 70px 120px 100px;
+  min-width: 1220px;
+}
+.oc-table--agents .oc-table__head,
+.oc-table--agents .oc-table__row {
+  grid-template-columns: minmax(200px,1.6fr) minmax(220px,2fr) 200px 120px 130px 110px;
+  min-width: 1080px;
+}
+.oc-table--members .oc-table__head,
+.oc-table--members .oc-table__row {
+  grid-template-columns: minmax(160px,1.4fr) minmax(200px,1.8fr) 110px 130px 110px 100px 90px;
+  min-width: 1140px;
+}
+.oc-table--audit .oc-table__head,
+.oc-table--audit .oc-table__row {
+  grid-template-columns: 150px 120px 170px minmax(180px,1.6fr) 120px 100px 150px;
+  min-width: 1240px;
+}
+.oc-table--compute .oc-table__head,
+.oc-table--compute .oc-table__row {
+  grid-template-columns: 140px 110px 150px 80px 90px 110px 130px 100px;
+  min-width: 1000px;
+}
+
+/* Cabeçalho alinhado à direita. Era `style="text-align:right"`, pela mesma
+   razão inerte que o resto. */
+.oc-table__head span.oc-th--r { text-align: right; }
+
+.oc-table__foot {
+  height: 42px; padding: 0 14px; gap: 8px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-top: 1px solid var(--oc-border-soft);
+}
+/* A contagem fica ao centro mesmo quando só existe um dos lados: sem isto, uma
+   primeira página empurrava «1–50 de 213» para a esquerda e a última para a
+   direita, e o texto saltava de sítio ao mudar de página. */
+.oc-table__foot .oc-table__count { flex: 1; text-align: center; }
+.oc-page-link {
+  padding: 5px 11px; border-radius: var(--oc-r-md);
+  border: 1px solid var(--oc-border);
+  font: 500 12px var(--oc-font-sans); color: var(--oc-text-secondary);
+  white-space: nowrap;
+}
+.oc-page-link:hover { background: var(--oc-surface-hover); color: var(--oc-navy); }
+.oc-table__count { flex: 1; font: 400 11.5px var(--oc-font-mono); color: var(--oc-text-faint); }
+.oc-page-btn {
+  width: 27px; height: 27px; border-radius: var(--oc-r-sm);
+  display: grid; place-items: center;
+  border: 1px solid var(--oc-border); color: var(--oc-text-faint);
+  font: 400 12px var(--oc-font-mono);
+}
+.oc-page-btn:hover:not([disabled]) { border-color: var(--oc-navy); color: var(--oc-navy); }
+.oc-page-btn[disabled] { opacity: .4; cursor: default; }
+
+/* ─── Progresso ──────────────────────────────────────────────────────── */
+
+.oc-progress { display: flex; align-items: center; gap: 8px; width: 100%; }
+.oc-progress__track {
+  flex: 1; height: 5px; border-radius: 3px; background: var(--oc-border-soft); overflow: hidden;
+}
+.oc-progress__fill { height: 100%; border-radius: 3px; background: var(--oc-navy); }
+.oc-progress__pct { font: 500 11px var(--oc-font-mono); color: var(--oc-text-muted); }
+
+.oc-donut {
+  width: 88px; height: 88px; border-radius: 50%;
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.oc-donut__core {
+  width: 66px; height: 66px; border-radius: 50%; background: var(--oc-surface);
+  display: grid; place-items: center;
+  font: 600 17px var(--oc-font-sans); color: var(--oc-text);
+}
+
+/* ─── Campos ─────────────────────────────────────────────────────────── */
+
+.oc-field { display: block; margin-bottom: 13px; }
+.oc-field__label {
+  display: block; margin-bottom: 6px;
+  font: 500 11.5px var(--oc-font-sans); color: var(--oc-text-secondary);
+}
+.oc-input, .oc-textarea, .oc-select {
+  width: 100%; background: var(--oc-surface);
+  border: 1px solid var(--oc-border); border-radius: var(--oc-r-md);
+  padding: 0 11px; font: 400 12.5px var(--oc-font-sans); color: var(--oc-text);
+  transition: border-color var(--oc-duration-normal);
+}
+.oc-input, .oc-select { height: 36px; }
+.oc-textarea { padding: 9px 11px; line-height: 1.6; resize: vertical; }
+.oc-input:focus, .oc-textarea:focus, .oc-select:focus { border-color: var(--oc-navy); }
+.oc-input::placeholder, .oc-textarea::placeholder { color: var(--oc-placeholder); }
+/* Um campo desactivado tem de se ler: nestes ecrãs o seu conteúdo é muitas
+   vezes a explicação de por que está vazio. Daí fundo apagado em vez de
+   opacidade, que tornaria a frase ilegível. `background-color` e não
+   `background`, para não apagar a seta do `.oc-select`. */
+.oc-input:disabled, .oc-textarea:disabled, .oc-select:disabled {
+  background-color: var(--oc-surface-subtle);
+  color: var(--oc-text-meta); cursor: default;
+}
+.oc-select { appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--oc-text-meta) 50%),
+                    linear-gradient(135deg, var(--oc-text-meta) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 16px, calc(100% - 11px) 16px;
+  background-size: 4px 4px, 4px 4px; background-repeat: no-repeat; }
+
+.oc-check { display: flex; align-items: center; gap: 9px; padding: 6px 0;
+  font: 400 12.5px var(--oc-font-sans); color: var(--oc-text-secondary); }
+.oc-check input { width: 14px; height: 14px; accent-color: var(--oc-navy);
+  border-radius: var(--oc-r-xs); }
+
+/* Não há aqui um interruptor. Existiu `.oc-toggle`, e nenhum ecrã do Ocinye OS
+   escreve um: as escolhas binárias são caixas (`.oc-check`) ou segmentos
+   (`.oc-seg`), que dizem o que fazem por escrito. */
+
+.oc-seg { display: flex; gap: 5px; }
+.oc-seg button {
+  flex: 1; height: 30px; border-radius: var(--oc-r-sm);
+  border: 1px solid var(--oc-border); background: var(--oc-surface);
+  font: 500 11.5px var(--oc-font-sans); color: var(--oc-text-muted);
+}
+.oc-seg button[aria-pressed="true"] { background: var(--oc-navy); border-color: var(--oc-navy); color: var(--oc-on-navy); }
+
+/* ─── Estado vazio ───────────────────────────────────────────────────── */
+
+.oc-empty { padding: 56px 24px; display: flex; flex-direction: column;
+  align-items: center; text-align: center; gap: 14px; }
+.oc-empty__tile {
+  width: 78px; height: 78px; border-radius: var(--oc-r-tile);
+  background: var(--oc-surface-subtle); border: 1px solid var(--oc-border);
+  display: grid; place-items: center; color: var(--oc-navy);
+}
+.oc-empty__tile--sm { width: 58px; height: 58px; border-radius: 15px; }
+/* O tile do Prompt é ligeiramente menor e mais arredondado que o das tabelas:
+   o dossier distingue os dois, e a diferença é visível lado a lado. */
+.oc-empty__tile--prompt { width: 56px; height: 56px; border-radius: var(--oc-r-2xl); }
+.oc-empty h3 { font: 600 15.5px var(--oc-font-sans); color: var(--oc-text); }
+.oc-empty p { max-width: 430px; font: 400 12.5px/1.65 var(--oc-font-sans); color: var(--oc-text-muted); }
+.oc-empty__actions { display: flex; gap: 8px; margin-top: 2px; }
+
+/* ─── Login ──────────────────────────────────────────────────────────── */
+
+.oc-login {
+  position: fixed; inset: 0; background: var(--oc-navy-deep);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.oc-login__layer { position: absolute; inset: 0; pointer-events: none; }
+.oc-login__glow {
+  background:
+    radial-gradient(120% 90% at 78% 12%, rgba(21,73,116,.85), transparent 60%),
+    radial-gradient(90% 70% at 12% 96%, rgba(224,167,49,.13), transparent 62%);
+}
+.oc-login__ring { position: absolute; border-radius: 50%; border: 1px solid; }
+.oc-login__ring--a { width: 78vh; height: 78vh; top: -22vh; left: -16vh; border-color: rgba(255,255,255,.055); }
+.oc-login__ring--b { width: 64vh; height: 64vh; top: -8vh; left: -4vh; border-color: rgba(224,167,49,.14); }
+.oc-login__ring--c { width: 96vh; height: 96vh; bottom: -40vh; right: -30vh; border-color: rgba(255,255,255,.05); }
+.oc-login__grid {
+  opacity: .5; background-size: 56px 56px;
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,.028) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,.028) 1px, transparent 1px);
+}
+
+.oc-login__bar {
+  position: relative; z-index: var(--oc-z-base); flex-shrink: 0;
+  height: 44px; padding: 0 20px; display: flex; align-items: center; gap: 10px;
+}
+.oc-login__state { display: flex; align-items: center; gap: 8px; }
+.oc-login__state i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #4FA97B; box-shadow: 0 0 0 3px rgba(79,169,123,.15);
+}
+.oc-login__state span {
+  font: 500 11px var(--oc-font-mono); letter-spacing: .1em; color: var(--oc-on-navy-50);
+}
+.oc-login__clock { margin-left: auto; font: 400 11px var(--oc-font-mono); color: rgba(255,255,255,.4); }
+
+.oc-login__center {
+  position: relative; z-index: var(--oc-z-base);
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 34px; padding: 24px;
+}
+.oc-login__brand { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.oc-login__tile {
+  width: 78px; height: 78px; border-radius: var(--oc-r-tile);
+  background: var(--oc-surface); display: grid; place-items: center;
+  box-shadow: var(--oc-shadow-logo);
+}
+.oc-login__tile img { width: 60px; height: 60px; object-fit: contain; }
+.oc-login__wordmark {
+  font: 600 25px var(--oc-font-sans); letter-spacing: .14em; color: var(--oc-on-navy);
+}
+.oc-login__sub {
+  font: 400 12px var(--oc-font-mono); letter-spacing: .22em; color: var(--oc-gold);
+}
+
+.oc-login__card {
+  width: 352px; max-width: 100%;
+  background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.11);
+  border-radius: var(--oc-r-2xl); padding: 26px 24px 22px;
+  backdrop-filter: blur(14px);
+}
+.oc-login__who { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 20px; }
+.oc-login__avatar {
+  width: 52px; height: 52px; border-radius: 50%; overflow: hidden;
+  background: linear-gradient(180deg, #1C4B74, #0E3454);
+  border: 1px solid rgba(255,255,255,.18);
+  display: grid; place-items: center;
+  font: 600 18px var(--oc-font-sans); color: var(--oc-on-navy);
+}
+/* O logótipo cobre o círculo. Se o ficheiro faltar, o gradiente e a borda
+   continuam lá: o cartão não abre um buraco. */
+.oc-login__avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.oc-login__name { font: 500 14px var(--oc-font-sans); color: var(--oc-on-navy); }
+.oc-login__mail { font: 400 11px var(--oc-font-mono); color: rgba(255,255,255,.45); }
+
+.oc-login__field {
+  height: 40px; margin-bottom: 10px; padding: 0 12px; gap: 9px;
+  display: flex; align-items: center;
+  background: rgba(7,30,51,.5); border: 1px solid rgba(255,255,255,.13);
+  border-radius: 9px; color: rgba(255,255,255,.55);
+  transition: border-color var(--oc-duration-normal);
+}
+.oc-login__field:focus-within { border-color: var(--oc-gold); }
+.oc-login__field input {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: none;
+  font: 400 13px var(--oc-font-sans); color: var(--oc-on-navy);
+}
+.oc-login__field input::placeholder { color: rgba(255,255,255,.35); }
+.oc-login__field input[type="password"] { letter-spacing: .14em; }
+
+/* Autofill do browser.
+
+   O campo é transparente de propósito: o cartão é vidro sobre o fundo, e o que
+   se vê por baixo do texto é o `.oc-login__field` com `backdrop-filter`. Quando
+   o browser preenche a palavra-passe, o WebKit pinta um fundo próprio ao nível
+   do user-agent — e esse fundo é claro. Não se apaga com `background`, porque
+   não é o `background` do elemento: era por isso que o campo ficava branco até
+   exactamente onde o botão «Mostrar» começa, que é onde o `<input>` acaba.
+
+   `background-clip: text` recorta esse fundo aos glifos, e o `text-fill-color`
+   pinta-os por cima. O realce deixa de ter área visível e a transparência do
+   desenho mantém-se — ao contrário de lhe sobrepor uma cor opaca, que teria de
+   adivinhar o gradiente que passa por trás do cartão e falharia consoante o
+   tamanho da janela.
+
+   As duas regras estão separadas por necessidade: um browser que não conheça um
+   dos selectores descarta a regra inteira onde ele aparece, e agrupá-los faria
+   com que o desconhecido levasse o conhecido com ele. */
+.oc-login__field input:-webkit-autofill,
+.oc-login__field input:-webkit-autofill:hover,
+.oc-login__field input:-webkit-autofill:focus,
+.oc-login__field input:-webkit-autofill:active {
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: var(--oc-on-navy);
+  caret-color: var(--oc-on-navy);
+}
+/* O Firefox aplica o realce com um filtro, e não com um fundo. */
+.oc-login__field input:autofill {
+  filter: none;
+  -webkit-text-fill-color: var(--oc-on-navy);
+  caret-color: var(--oc-on-navy);
+}
+
+.oc-login__submit {
+  width: 100%; height: 42px; margin-top: 6px; gap: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--oc-gold); color: var(--oc-navy);
+  font: 600 13px var(--oc-font-sans); border-radius: 9px;
+  /* `.1s` no transform é composição deste elemento, e não a escala. */
+  transition: filter var(--oc-duration-normal), transform .1s;
+}
+.oc-login__submit:hover { filter: brightness(1.07); }
+.oc-login__submit:active { transform: translateY(1px); }
+
+.oc-login__row {
+  margin-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.oc-login__alt { font: 400 11px var(--oc-font-sans); color: rgba(255,255,255,.5); }
+.oc-login__alt:hover { color: var(--oc-gold); }
+.oc-login__lang { font: 400 11px var(--oc-font-mono); color: rgba(255,255,255,.4);  white-space: nowrap;}
+
+.oc-login__note {
+  width: 352px; max-width: 100%; margin-top: -18px;
+  padding: 10px 12px; border-radius: 9px;
+  background: rgba(179,38,30,.12); border: 1px solid rgba(255,255,255,.12);
+  font: 400 11.5px/1.5 var(--oc-font-sans); color: rgba(255,255,255,.82);
+}
+
+.oc-login__foot {
+  position: relative; z-index: var(--oc-z-base); flex-shrink: 0;
+  border-top: 1px solid rgba(255,255,255,.07);
+  height: 46px; display: flex; align-items: center; justify-content: center; gap: 26px;
+}
+.oc-login__foot a, .oc-login__foot span {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: 400 11.5px var(--oc-font-sans); color: rgba(255,255,255,.55);
+}
+.oc-login__foot a:hover { color: var(--oc-on-navy); }
+
+/* ─── Responsividade ─────────────────────────────────────────────────── */
+
+/* Desktop-first. A densidade não é sacrificada: abaixo de 1180px as tabelas
+   ganham scroll horizontal em vez de encolherem as linhas. */
+/* ─── Estruturas de ecrã ─────────────────────────────────────────────────
+   Padrões que se repetem entre ecrãs. Nomeados em vez de repetidos inline:
+   é o que o dossier quer dizer com «nenhuma duplicação por ecrã». */
+
+/* Faixa de cabeçalho: título e tabs sobre superfície, antes do conteúdo. */
+.oc-band {
+  background: var(--oc-surface); border-bottom: 1px solid var(--oc-border);
+  padding: 18px 24px 0;
+}
+
+.oc-grid--2 { grid-template-columns: 1fr 1fr; }
+.oc-grid--tight { gap: 8px; }
+
+/* Corpo de cartão. */
+.oc-card__body { padding: 14px 15px; }
+.oc-card__body--block { display: block; }
+.oc-card__body--subtle { background: var(--oc-surface-subtle); }
+.oc-card__body--tile {
+  background: var(--oc-surface); min-height: 118px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.oc-card__head--flush { padding-bottom: 10px; }
+
+/* Painéis divididos por uma linha de 1px, feita com o fundo da grelha. */
+.oc-split {
+  margin-top: 16px; display: grid; gap: 1px;
+  background: var(--oc-border-soft); border: 1px solid var(--oc-border-soft);
+  border-radius: 9px; overflow: hidden;
+}
+.oc-split--2 { grid-template-columns: 1fr 1fr; }
+.oc-split--3 { grid-template-columns: repeat(3, 1fr); }
+.oc-split__cell { background: var(--oc-surface); padding: 12px 4px; text-align: center; }
+
+/* Linhas de lista dentro de um cartão. O dossier tem duas espécies: a que
+   ocupa a largura do cartão, e a de leitura corrida do feed. */
+.oc-list__row {
+  height: 44px; padding: 0 15px; gap: 12px;
+  display: flex; align-items: center;
+  border-bottom: 1px solid var(--oc-border-faint);
+}
+.oc-list__row:last-child { border-bottom: 0; }
+.oc-feed__row {
+  padding: 9px 0; gap: 11px; display: flex;
+  border-bottom: 1px solid var(--oc-border-faint);
+}
+.oc-feed__row:last-child { border-bottom: 0; }
+.oc-list__meta { min-width: 88px; text-align: right; flex-shrink: 0; }
+
+/* Ponto institucional que marca uma entrada do feed. */
+.oc-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  background: var(--oc-navy); margin-top: 6px;
+}
+
+/* Etiqueta neutra: uma palavra-chave, um termo, um método. */
+.oc-tag {
+  background: var(--oc-surface-muted); border: 1px solid var(--oc-border);
+  border-radius: 6px; padding: 4px 9px;
+  font: 400 11.5px var(--oc-font-sans); color: var(--oc-text-secondary);
+}
+
+/* `.oc-avatar--sm` está definido com as restantes medidas do componente. */
+
+/* Aviso de erro num formulário. */
+.oc-alert {
+  padding: 12px 14px; margin-bottom: 12px;
+  border-color: var(--oc-error-border); background: var(--oc-error-bg);
+  color: var(--oc-error-text); font: 400 12.5px var(--oc-font-sans);
+}
+/* A mesma caixa, quando a notícia é boa. */
+.oc-alert--ok {
+  border-color: var(--oc-success-border); background: var(--oc-success-bg);
+  color: var(--oc-success-text);
+}
+
+/* O ponto de notificação sobre o sino está em `.oc-icon-btn i`, mais acima, e é
+   de lá que se pinta. Houve aqui um `.oc-bell__dot` com a declaração idêntica,
+   de quando a marcação era outra; nenhum elemento a recebia. */
+
+/* Painel de inteligência da Home: o único bloco navy do corpo. */
+.oc-ai-panel {
+  background: var(--oc-navy); border-color: var(--oc-navy);
+  padding: 16px; margin-bottom: 12px;
+  position: relative; overflow: hidden;
+}
+.oc-ai-panel__ring {
+  position: absolute; top: -40px; right: -40px;
+  width: 140px; height: 140px; border-radius: 50%;
+  border: 1px solid rgba(224, 167, 49, .22);
+}
+.oc-ai-panel h2 { font: 500 14.5px var(--oc-font-sans); color: var(--oc-on-navy); margin: 7px 0 6px; }
+.oc-ai-panel p { font: 400 12px/1.6 var(--oc-font-sans); color: var(--oc-on-navy-70); margin-bottom: 13px; }
+
+/* Estado do Core em baixo. Cor e paragem da animação vêm juntas: um ponto a
+   pulsar em vermelho leria-se como actividade, e o Core está parado. */
+.oc-core-pill--off { background: var(--oc-error-bg); border-color: var(--oc-error-border); }
+.oc-core-pill--off i { background: var(--oc-error); animation: none; }
+.oc-core-pill--off span { color: var(--oc-error-text); }
+
+/* Ponto de tipo de actividade: só a cor varia com o tipo. */
+.oc-feed__dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+
+/* Espaçadores verticais fixos, onde um `gap` não serve. */
+.oc-vspace { height: 12px; }
+
+/* ─── Prompt Ocinye ──────────────────────────────────────────────────────
+   O dossier exige que esta seja a peça mais bem resolvida da interface, e não
+   um chat genérico. Todas as medidas abaixo vêm do protótipo. */
+
+.oc-prompt { display: flex; flex-direction: column; height: 100%; background: var(--oc-surface); }
+
+.oc-prompt__bar {
+  height: var(--oc-topbar-h); flex-shrink: 0;
+  display: flex; align-items: center; gap: 12px; padding: 0 24px;
+  border-bottom: 1px solid var(--oc-border);
+}
+/* O contexto não é um alerta: é um facto. Fica em superfície neutra, e é o
+   código do Research Workspace que carrega a informação. */
+.oc-prompt__context {
+  height: 31px; padding: 0 11px; border-radius: var(--oc-r-md);
+  display: flex; align-items: center; gap: 7px;
+  background: var(--oc-surface-muted);
+}
+.oc-prompt__context b { font: 500 11.5px var(--oc-font-sans); color: var(--oc-text); white-space: nowrap; }
+.oc-prompt__context i {
+  font: 400 10.5px var(--oc-font-mono); letter-spacing: .08em;
+  color: var(--oc-text-meta); font-style: normal;
+}
+
+/* Capacidade não é uma tab: é um estado do motor. Daí o chip próprio. */
+.oc-caps { display: flex; gap: 5px; }
+.oc-cap {
+  height: 29px; padding: 0 11px; border-radius: var(--oc-r-md);
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--oc-border); color: var(--oc-text-secondary);
+  font: 500 11.5px var(--oc-font-sans); white-space: nowrap;
+}
+.oc-cap[aria-selected="true"] { border-color: var(--oc-navy); color: var(--oc-navy); }
+.oc-cap[aria-disabled="true"] { color: var(--oc-text-ghost); border-color: var(--oc-border-soft); cursor: default; }
+.oc-cap small { font: 400 9.5px var(--oc-font-mono); opacity: .8; }
+
+.oc-prompt__conv {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 48px 24px; gap: 26px;
+}
+.oc-prompt__hero {
+  max-width: 560px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+}
+.oc-prompt__hero h1 { font: 600 18px/1.3 var(--oc-font-sans); color: var(--oc-text); }
+.oc-prompt__suggestions {
+  max-width: 720px;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+}
+.oc-suggestion {
+  height: 32px; padding: 0 12px; border-radius: var(--oc-r-md);
+  display: inline-flex; align-items: center;
+  border: 1px solid var(--oc-border); color: var(--oc-text-secondary);
+  font: 400 12px var(--oc-font-sans);
+  transition: background var(--oc-duration-normal), border-color var(--oc-duration-normal);
+}
+.oc-suggestion:hover:not([disabled]) { border-color: var(--oc-navy); background: var(--oc-surface-subtle); }
+/* Um controlo desactivado tem de o parecer: o cursor não chega, e sem IA
+   estas sugestões não disparam nada. Mesma opacidade do `.oc-page-btn`. */
+.oc-suggestion[disabled] { opacity: .4; cursor: default; }
+
+.oc-prompt__dock { flex-shrink: 0; padding: 0 24px 22px; }
+.oc-prompt__input {
+  max-width: 880px; margin: 0 auto;
+  background: var(--oc-surface); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-xl); box-shadow: var(--oc-shadow-input);
+  padding: 14px 15px 11px;
+}
+.oc-prompt__input:focus-within { border-color: var(--oc-navy); }
+.oc-prompt__input textarea {
+  width: 100%; height: 62px; border: 0; outline: 0; padding: 0; resize: none;
+  background: transparent; font: 400 13.5px/1.6 var(--oc-font-sans); color: var(--oc-text);
+}
+.oc-prompt__actions { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.oc-chip {
+  height: 29px; padding: 0 10px; border-radius: var(--oc-r-md);
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--oc-border); color: var(--oc-text-muted);
+  font: 400 11.5px var(--oc-font-sans); white-space: nowrap;
+  transition: border-color var(--oc-duration-normal), color var(--oc-duration-normal);
+}
+.oc-chip:hover { border-color: var(--oc-navy); color: var(--oc-navy); }
+.oc-prompt__send {
+  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+  display: grid; place-items: center;
+  background: var(--oc-gold); color: var(--oc-navy);
+  transition: filter var(--oc-duration-normal);
+}
+.oc-prompt__send:hover:not([disabled]) { filter: brightness(1.06); }
+.oc-prompt__send[disabled] { opacity: .4; cursor: default; }
+.oc-prompt__note {
+  max-width: 880px; margin: 10px auto 0; text-align: center;
+  font: 400 10.5px var(--oc-font-sans); color: var(--oc-text-ghost);
+}
+
+/* A camada utilitária fica no fim da cascata de propósito: acompanha um
+   componente e tem de poder ajustá-lo. Antes dos componentes, perdia — e
+   um `margin-bottom` utilitário era silenciosamente ignorado. */
+/* ═══ Camada utilitária ══════════════════════════════════════════════════
+   O dossier exige «zero valores de cor/tamanho soltos nos componentes». As
+   vistas precisam, ainda assim, de compor layout. Esta camada dá-lhes o
+   vocabulário para o fazerem sem escrever medidas: cada classe é um valor da
+   escala de espaçamento ou um papel da escala tipográfica do dossier, e
+   nenhuma introduz um valor novo.
+
+   Não é um framework utilitário genérico. É fechada: só existe aqui o que o
+   dossier define. Uma medida que não esteja na escala não tem classe — e
+   nesse caso o certo é um componente nomeado, não uma excepção. */
+
+/* Eixos ------------------------------------------------------------------ */
+.oc-ink { color: var(--oc-navy); }
+.oc-flex { display: flex; }
+.oc-row { display: flex; align-items: center; }
+.oc-row--top { display: flex; align-items: flex-start; }
+.oc-row--between { display: flex; align-items: center; justify-content: space-between; }
+.oc-row--end { display: flex; align-items: center; justify-content: flex-end; }
+.oc-row--wrap { flex-wrap: wrap; }
+.oc-col { display: flex; flex-direction: column; }
+.oc-fill { flex: 1; min-width: 0; }
+.oc-fill-y { flex: 1; min-height: 0; }
+.oc-fixed { flex-shrink: 0; }
+.oc-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oc-center { align-items: center; justify-content: center; }
+
+/* Espaçamento — os múltiplos que o dossier lista, e mais nenhum -----------
+
+   Nem todos os degraus têm hoje um ecrã que os use, e isso não os torna código
+   morto. É a mesma razão pela qual o catálogo de ícones espelha o sprite
+   inteiro: uma escala com buracos leva a próxima pessoa a escrever `10px` à
+   mão, que é exactamente o que os guardas do Design System existem para
+   recusar. A escala é o dossier; a utilização é o produto num dia. */
+.oc-gap-1 { gap: 4px; }   .oc-gap-2 { gap: 5px; }   .oc-gap-3 { gap: 6px; }
+.oc-gap-4 { gap: 7px; }   .oc-gap-5 { gap: 8px; }   .oc-gap-6 { gap: 9px; }
+.oc-gap-7 { gap: 10px; }  .oc-gap-8 { gap: 11px; }  .oc-gap-9 { gap: 12px; }
+.oc-gap-10 { gap: 14px; } .oc-gap-11 { gap: 16px; }
+
+.oc-mt-1 { margin-top: 3px; }  .oc-mt-2 { margin-top: 4px; }
+.oc-mt-3 { margin-top: 6px; }  .oc-mt-4 { margin-top: 8px; }
+.oc-mt-5 { margin-top: 9px; }  .oc-mt-6 { margin-top: 10px; }
+.oc-mt-7 { margin-top: 12px; } .oc-mt-8 { margin-top: 14px; }
+.oc-mt-9 { margin-top: 16px; } .oc-mt-10 { margin-top: 18px; }
+
+.oc-mb-1 { margin-bottom: 5px; }  .oc-mb-2 { margin-bottom: 6px; }
+.oc-mb-3 { margin-bottom: 8px; }  .oc-mb-4 { margin-bottom: 10px; }
+.oc-mb-5 { margin-bottom: 12px; } .oc-mb-6 { margin-bottom: 13px; }
+.oc-mb-7 { margin-bottom: 14px; } .oc-mb-8 { margin-bottom: 16px; }
+
+/* Escala tipográfica — os papéis de `DESIGN_TOKENS.md` --------------------
+
+   Um papel sem utilizador continua a ser um papel. Ver a nota da escala de
+   espaçamento acima. */
+.oc-t-screen { font: 600 19px var(--oc-font-sans); letter-spacing: -.01em; color: var(--oc-text); }
+.oc-t-home { font: 600 21px var(--oc-font-sans); letter-spacing: -.01em; color: var(--oc-text); }
+.oc-t-prompt { font: 600 18px var(--oc-font-sans); color: var(--oc-text); }
+.oc-t-section { font: 600 13px var(--oc-font-sans); color: var(--oc-text); }
+.oc-t-lead { font: 500 14.5px var(--oc-font-sans); }
+.oc-t-strong { font: 600 12.5px var(--oc-font-sans); color: var(--oc-text); }
+.oc-t-kpi { font: 600 25px var(--oc-font-sans); line-height: 1; color: var(--oc-text); }
+.oc-t-kpi--lg { font-size: 27px; }
+.oc-t-body { font: 400 12.5px/1.7 var(--oc-font-sans); color: var(--oc-text-secondary); }
+.oc-t-prose { font: 400 12.5px/1.5 var(--oc-font-sans); color: var(--oc-text-body); }
+.oc-t-note { font: 400 12px/1.45 var(--oc-font-sans); color: var(--oc-text-body); }
+.oc-t-soft { font: 400 12px/1.6 var(--oc-font-sans); color: var(--oc-text-faint); }
+.oc-t-cell { font: 500 12.5px var(--oc-font-sans); color: var(--oc-text); }
+.oc-t-cell-2 { font: 400 12px var(--oc-font-sans); color: var(--oc-text-muted); }
+.oc-t-item { font: 500 13px var(--oc-font-sans); color: var(--oc-text); }
+.oc-t-caption { font: 400 11.5px var(--oc-font-sans); color: var(--oc-text-faint); }
+.oc-t-caption--muted { font: 400 11.5px/1.65 var(--oc-font-sans); color: var(--oc-text-muted); }
+.oc-t-hint { font: 400 11px var(--oc-font-sans); color: var(--oc-text-faint); }
+.oc-t-ghost { font: 400 10.5px var(--oc-font-sans); color: var(--oc-text-ghost); }
+.oc-t-meta { font: 500 11px var(--oc-font-mono); letter-spacing: .1em; color: var(--oc-text-meta); }
+.oc-t-group { font: 500 9.5px var(--oc-font-mono); letter-spacing: .16em; color: var(--oc-text-meta); }
+.oc-t-group--gold { color: var(--oc-gold); }
+
+@media (max-width: 1360px) {
+  .oc-grid--ws { grid-template-columns: 1.4fr 1fr; }
+  .oc-grid--ws > :nth-child(3) { grid-column: 1 / -1; }
+}
+@media (max-width: 1180px) {
+  .oc-grid--4 { grid-template-columns: repeat(2, 1fr); }
+  .oc-grid--main, .oc-grid--detail, .oc-grid--form { grid-template-columns: 1fr; }
+  .oc-search { flex-basis: 260px; }
+}
+@media (max-width: 1024px) {
+  /* Só a largura. O que a barra estreita faz por dentro está na container
+     query acima, e vale para as duas vias. */
+  .oc-side { width: var(--oc-sidebar-w-collapsed); }
+  .oc-grid--ws { grid-template-columns: 1fr; }
+  .oc-grid--ws > :nth-child(3) { grid-column: auto; }
+  .oc-crumb { display: none; }
+}
+
+/* Alternador «Mostrar palavra-passe». Um gestor de palavras-passe escreve numa
+   caixa que o membro não consegue ler; poder confirmar o que foi colado evita
+   uma tentativa falhada e uma contagem no throttle (briefing §9). */
+/* «Mostrar / Ocultar» é um item da linha, e não uma etiqueta sobreposta.
+
+   Em absoluto, o botão flutuava por cima do `<input>`, que continuava a ocupar
+   a largura toda. Uma palavra-passe curta cabia à esquerda dele e parecia bem;
+   uma frase longa — que este ecrã aceita de propósito, e a partir de 15
+   caracteres — passava-lhe por baixo. O botão existe para se poder ler o que se
+   escreveu, e escondia exactamente isso.
+
+   Como item flex, o `flex: 1` do campo encolhe sozinho para o espaço que sobra,
+   seja qual for o rótulo. É também porque não há aqui número mágico nenhum a
+   sincronizar com a largura da palavra «Ocultar». */
+.oc-reveal {
+  flex: none;
+  font: 500 11px var(--oc-font-sans); color: var(--oc-on-navy-70);
+  background: none; border: 0; padding: 4px 6px; border-radius: var(--oc-r-sm);
+  cursor: pointer;
+}
+.oc-reveal:hover { color: var(--oc-on-navy); }
+.oc-login__field { position: relative; }
+
+/* ─── Valores que vinham em `style` ────────────────────────────────────────
+
+   Tudo o que segue existia como atributo `style`, e a CSP descartava-o. Nada
+   aqui é dado do membro: são estados finitos e medidas de desenho. */
+
+/* Percentagem. É o único valor verdadeiramente contínuo da interface, por isso
+   é enumerado uma vez — de 0 a 100 — e lido por quem precisa dele. Uma
+   propriedade personalizada herda, logo basta declará-la no elemento de fora.
+
+   Enumerar em vez de calcular é deliberado: a alternativa seria abrir a
+   política a estilos inline, e uma barra de progresso não é razão para isso. */
+[data-pct="0"]{--oc-pct:0%}[data-pct="1"]{--oc-pct:1%}[data-pct="2"]{--oc-pct:2%}[data-pct="3"]{--oc-pct:3%}[data-pct="4"]{--oc-pct:4%}[data-pct="5"]{--oc-pct:5%}[data-pct="6"]{--oc-pct:6%}[data-pct="7"]{--oc-pct:7%}[data-pct="8"]{--oc-pct:8%}[data-pct="9"]{--oc-pct:9%}[data-pct="10"]{--oc-pct:10%}[data-pct="11"]{--oc-pct:11%}[data-pct="12"]{--oc-pct:12%}[data-pct="13"]{--oc-pct:13%}[data-pct="14"]{--oc-pct:14%}[data-pct="15"]{--oc-pct:15%}[data-pct="16"]{--oc-pct:16%}[data-pct="17"]{--oc-pct:17%}[data-pct="18"]{--oc-pct:18%}[data-pct="19"]{--oc-pct:19%}[data-pct="20"]{--oc-pct:20%}[data-pct="21"]{--oc-pct:21%}[data-pct="22"]{--oc-pct:22%}[data-pct="23"]{--oc-pct:23%}[data-pct="24"]{--oc-pct:24%}[data-pct="25"]{--oc-pct:25%}[data-pct="26"]{--oc-pct:26%}[data-pct="27"]{--oc-pct:27%}[data-pct="28"]{--oc-pct:28%}[data-pct="29"]{--oc-pct:29%}[data-pct="30"]{--oc-pct:30%}[data-pct="31"]{--oc-pct:31%}[data-pct="32"]{--oc-pct:32%}[data-pct="33"]{--oc-pct:33%}[data-pct="34"]{--oc-pct:34%}[data-pct="35"]{--oc-pct:35%}[data-pct="36"]{--oc-pct:36%}[data-pct="37"]{--oc-pct:37%}[data-pct="38"]{--oc-pct:38%}[data-pct="39"]{--oc-pct:39%}[data-pct="40"]{--oc-pct:40%}[data-pct="41"]{--oc-pct:41%}[data-pct="42"]{--oc-pct:42%}[data-pct="43"]{--oc-pct:43%}[data-pct="44"]{--oc-pct:44%}[data-pct="45"]{--oc-pct:45%}[data-pct="46"]{--oc-pct:46%}[data-pct="47"]{--oc-pct:47%}[data-pct="48"]{--oc-pct:48%}[data-pct="49"]{--oc-pct:49%}[data-pct="50"]{--oc-pct:50%}[data-pct="51"]{--oc-pct:51%}[data-pct="52"]{--oc-pct:52%}[data-pct="53"]{--oc-pct:53%}[data-pct="54"]{--oc-pct:54%}[data-pct="55"]{--oc-pct:55%}[data-pct="56"]{--oc-pct:56%}[data-pct="57"]{--oc-pct:57%}[data-pct="58"]{--oc-pct:58%}[data-pct="59"]{--oc-pct:59%}[data-pct="60"]{--oc-pct:60%}[data-pct="61"]{--oc-pct:61%}[data-pct="62"]{--oc-pct:62%}[data-pct="63"]{--oc-pct:63%}[data-pct="64"]{--oc-pct:64%}[data-pct="65"]{--oc-pct:65%}[data-pct="66"]{--oc-pct:66%}[data-pct="67"]{--oc-pct:67%}[data-pct="68"]{--oc-pct:68%}[data-pct="69"]{--oc-pct:69%}[data-pct="70"]{--oc-pct:70%}[data-pct="71"]{--oc-pct:71%}[data-pct="72"]{--oc-pct:72%}[data-pct="73"]{--oc-pct:73%}[data-pct="74"]{--oc-pct:74%}[data-pct="75"]{--oc-pct:75%}[data-pct="76"]{--oc-pct:76%}[data-pct="77"]{--oc-pct:77%}[data-pct="78"]{--oc-pct:78%}[data-pct="79"]{--oc-pct:79%}[data-pct="80"]{--oc-pct:80%}[data-pct="81"]{--oc-pct:81%}[data-pct="82"]{--oc-pct:82%}[data-pct="83"]{--oc-pct:83%}[data-pct="84"]{--oc-pct:84%}[data-pct="85"]{--oc-pct:85%}[data-pct="86"]{--oc-pct:86%}[data-pct="87"]{--oc-pct:87%}[data-pct="88"]{--oc-pct:88%}[data-pct="89"]{--oc-pct:89%}[data-pct="90"]{--oc-pct:90%}[data-pct="91"]{--oc-pct:91%}[data-pct="92"]{--oc-pct:92%}[data-pct="93"]{--oc-pct:93%}[data-pct="94"]{--oc-pct:94%}[data-pct="95"]{--oc-pct:95%}[data-pct="96"]{--oc-pct:96%}[data-pct="97"]{--oc-pct:97%}[data-pct="98"]{--oc-pct:98%}[data-pct="99"]{--oc-pct:99%}[data-pct="100"]{--oc-pct:100%}
+
+.oc-progress__fill { width: var(--oc-pct, 0%); }
+.oc-donut {
+  background: conic-gradient(
+    var(--oc-gold) 0 var(--oc-pct, 0%),
+    var(--oc-border-soft) var(--oc-pct, 0%) 100%
+  );
+}
+
+/* Variação de um KPI: sobe ou desce, e mais nada. */
+.oc-kpi__delta { font: 500 10.5px var(--oc-font-mono); }
+.oc-kpi__delta--up { color: var(--oc-success); }
+.oc-kpi__delta--down { color: var(--oc-text-faint); }
+
+/* O ponto do feed de actividade. A cor vem do tipo de entrada, que é um
+   conjunto fechado.
+
+   O tom neutro está no selector com `[data-kind]` e não em `.oc-feed__dot` sozinho:
+   assim a omissão cobre apenas os tipos que o `match` não conhece, e não
+   redefine o ponto por omissão de quem nunca declara um tipo. */
+.oc-feed__dot[data-kind] { background: var(--oc-text-ghost); }
+.oc-feed__dot[data-kind="created"] { background: var(--oc-navy); }
+.oc-feed__dot[data-kind="published"],
+.oc-feed__dot[data-kind="state_changed"] { background: var(--oc-gold); }
+.oc-feed__dot[data-kind="member_added"] { background: var(--oc-success); }
+.oc-feed__dot[data-kind="attached"] { background: var(--oc-info); }
+
+/* Alturas das áreas de texto. Três, e são as três que a aplicação usa. */
+.oc-textarea--sm { height: 64px; }
+.oc-textarea--md { height: 92px; }
+.oc-textarea--lg { height: 120px; }
+
+/* Acção de cartão que precisa de caixa própria para respeitar a margem. */
+.oc-inline-block { display: inline-block; }
+
+/* ─── Administração de identidade ─────────────────────────────────────── */
+
+/* Ajuda por baixo de um campo. Diz a regra antes de o Core a impor: descobrir
+   um requisito por rejeição é pior experiência e mais uma tentativa gasta. */
+.oc-field__hint {
+  margin-top: 5px;
+  font: 400 11px/1.5 var(--oc-font-sans); color: var(--oc-text-meta);
+}
+.oc-field__hint strong { color: var(--oc-text); font-weight: 600; }
+
+/* Caixa de aviso. Nunca só a cor: o texto carrega o sentido (§51). */
+.oc-callout {
+  padding: 11px 13px; border-radius: var(--oc-r-md);
+  border: 1px solid var(--oc-border);
+  font: 400 12px/1.6 var(--oc-font-sans); color: var(--oc-text);
+  margin-bottom: 12px;
+}
+.oc-callout--error {
+  background: var(--oc-error-bg); border-color: var(--oc-error-border);
+  color: var(--oc-error-text);
+}
+.oc-callout--warning {
+  background: var(--oc-surface-subtle); border-color: var(--oc-gold);
+}
+
+/* Apresentação da credencial temporária. */
+.oc-credential .oc-credential__value {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 12px; margin-top: 4px;
+  background: var(--oc-surface-subtle);
+  border: 1px solid var(--oc-border); border-radius: var(--oc-r-md);
+  font-size: 13px;
+}
+/* Espaçada, porque é lida em voz alta ou transcrita à mão. */
+.oc-credential__secret { letter-spacing: .08em; }
+
+/* Pares rótulo/valor. */
+.oc-facts { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; margin: 0; }
+.oc-facts dt, .oc-facts > span:nth-child(odd) {
+  font: 500 11.5px var(--oc-font-sans); color: var(--oc-text-meta);
+}
+.oc-facts dd, .oc-facts > span:nth-child(even) {
+  margin: 0; font: 400 12.5px var(--oc-font-sans); color: var(--oc-text);
+}
+.oc-facts--dense { gap: 5px 18px; font-size: 11.5px; }
+
+.oc-span-2 { grid-column: 1 / -1; }
+.oc-wrap { flex-wrap: wrap; }
+.oc-justify-end { justify-content: flex-end; }
+
+/* Primeiro acesso. Herda o ecrã de login, mas o seu texto explicativo vive
+   dentro do cartão navy: sem estas regras herdaria tinta escura sobre fundo
+   escuro, e a regra que o membro precisa de ler seria a que não se lê. */
+.oc-first__lead {
+  font: 400 11.5px/1.6 var(--oc-font-sans);
+  color: var(--oc-on-navy-70);
+  margin: 0 0 14px;
+}
+.oc-first__rules {
+  list-style: none; margin: 12px 0 16px; padding: 0;
+  font: 400 11px/1.7 var(--oc-font-sans);
+  color: var(--oc-on-navy-70);
+}
+.oc-first__rules li { padding-left: 14px; position: relative; }
+/* Marcador dourado em vez de bullet: o estado não se comunica só por cor, mas
+   um marcador consistente ajuda a ler quatro regras de relance. */
+.oc-first__rules li::before {
+  content: "·"; position: absolute; left: 4px; color: var(--oc-gold);
+}
+/* «Terminar sessão» é um POST, logo um botão. Tem de ler-se como a ligação
+   que substitui. */
+.oc-login__alt--button {
+  background: none; border: 0; padding: 0; cursor: pointer; font: inherit;
+}
+
+/* ─── Pesquisa institucional ──────────────────────────────────────────── */
+
+.oc-search-form { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+.oc-search-form__field { flex: 1; max-width: 720px; }
+
+.oc-search-modes { display: flex; gap: 4px; margin-bottom: 6px; }
+
+.oc-results { display: flex; flex-direction: column; gap: 8px; }
+
+/* Um resultado é um `<a>` quando tem destino e um `<div>` quando não tem, e o
+   cursor diz qual é qual sem que o membro tenha de descobrir clicando. */
+.oc-result {
+  display: block; padding: 13px 15px;
+  background: var(--oc-surface);
+  border: 1px solid var(--oc-border); border-radius: var(--oc-r-md);
+  color: inherit;
+}
+a.oc-result:hover { border-color: var(--oc-navy); }
+div.oc-result { cursor: default; }
+.oc-result .oc-muted { margin: 4px 0 0; font-size: 12px; }
+
+/* Separador de lista declarado indisponível: legível, mas sem o affordance de
+   clique que teria se parecesse activo. */
+.oc-tab.oc-unavailable[aria-disabled="true"] {
+  color: var(--oc-text-ghost); cursor: default; background: transparent;
+}
+.oc-tab.oc-unavailable[aria-disabled="true"]:hover { background: transparent; }
+
+/* Grupo de opções mutuamente exclusivas, sobre radios reais. O input fica fora
+   de vista mas continua no fluxo de foco e acessível a leitor de ecrã. */
+.oc-seg-group { border: 0; padding: 0; margin: 0; }
+.oc-seg-group legend { padding: 0; margin-bottom: 6px; }
+.oc-seg__option { position: relative; display: inline-flex; }
+.oc-seg__option input {
+  position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0;
+  cursor: pointer;
+}
+.oc-seg__option span {
+  display: inline-flex; align-items: center; height: 30px; padding: 0 13px;
+  font: 500 12px var(--oc-font-sans); color: var(--oc-text-meta);
+  border: 1px solid var(--oc-border); background: var(--oc-surface);
+}
+.oc-seg__option:first-child span { border-radius: var(--oc-r-md) 0 0 var(--oc-r-md); }
+.oc-seg__option:last-child span { border-radius: 0 var(--oc-r-md) var(--oc-r-md) 0; }
+.oc-seg__option:not(:first-child) span { border-left: 0; }
+.oc-seg__option input:checked + span {
+  background: var(--oc-navy); border-color: var(--oc-navy); color: var(--oc-on-navy);
+}
+/* O anel de foco tem de aparecer no rótulo, porque o input está invisível. */
+.oc-seg__option input:focus-visible + span {
+  outline: var(--oc-focus-width) solid var(--oc-focus-color);
+  outline-offset: var(--oc-focus-offset-wrap);
+}
+.oc-seg__option input:disabled + span { opacity: .4; cursor: default; }
+
+/* Aviso do Prompt: a resposta do Core, como estado do ecrã. */
+.oc-prompt__notice { max-width: 880px; margin: 0 auto 16px; }
+.oc-prompt__notice p { margin: 4px 0 0; }
+
+/* Ecrãs de excepção: 404, falha, recusa. Centrados e sem shell — a shell exige
+   um contexto que, nestes momentos, pode não existir. */
+.oc-notice {
+  max-width: 520px; margin: 96px auto; padding: 0 24px; text-align: center;
+}
+.oc-notice__tile {
+  display: inline-grid; place-items: center;
+  width: 56px; height: 56px; margin-bottom: 18px;
+  border-radius: var(--oc-r-lg);
+  background: var(--oc-surface-subtle); border: 1px solid var(--oc-border);
+  color: var(--oc-text-meta);
+}
+.oc-notice h1 { font: 600 19px var(--oc-font-sans); color: var(--oc-text); margin: 0 0 10px; }
+.oc-notice p { font: 400 13px/1.65 var(--oc-font-sans); color: var(--oc-text-muted); margin: 0 0 18px; }
+.oc-notice__reference { font-size: 11.5px; color: var(--oc-text-meta); }
+.oc-notice .oc-row { justify-content: center; }
+
+/* ─── Ocinye Mail ────────────────────────────────────────────────────── */
+
+/* Três colunas fixas em vez de percentagens: a lista de mensagens tem de
+   manter largura previsível enquanto se lê, ou o texto salta de posição
+   sempre que se abre uma mensagem mais larga. */
+.oc-mail {
+  display: grid;
+  grid-template-columns: 200px 300px minmax(0, 1fr);
+  gap: 12px; align-items: start;
+}
+
+/* Abaixo de 1200px a coluna de leitura passa para baixo em vez de encolher
+   até deixar de ser legível. O desktop continua a ser o alvo (§50). */
+@media (max-width: 1200px) {
+  .oc-mail { grid-template-columns: 180px minmax(0, 1fr); }
+  .oc-mail__pane { grid-column: 1 / -1; }
+}
+@media (max-width: 820px) {
+  .oc-mail { grid-template-columns: minmax(0, 1fr); }
+}
+
+.oc-mail__banner { display: flex; align-items: flex-start; gap: 9px; }
+.oc-mail__banner p { flex: 1; min-width: 0; margin: 0; }
+.oc-mail__banner svg { flex-shrink: 0; margin-top: 2px; color: var(--oc-text-muted); }
+.oc-mail__banner .oc-btn { flex-shrink: 0; }
+
+/* A sugestão de IA é o único bloco do correio com a marca dourada — é o que
+   distingue texto gerado de texto escrito, e tem de ser visível sem ser lido
+   apenas pela cor (§51): o texto diz «ainda não foi enviado». */
+.oc-mail__banner--ai {
+  background: var(--oc-gold-bg); border-color: var(--oc-gold-border);
+  color: var(--oc-gold-text);
+}
+.oc-mail__banner--ai .oc-btn__dot { background: var(--oc-gold); margin-top: 5px; }
+
+/* ── Coluna 1: identidades e pastas ── */
+
+.oc-mail__rail { display: flex; flex-direction: column; gap: 10px; }
+
+.oc-mail__box {
+  background: var(--oc-surface); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-lg); padding: 10px;
+}
+.oc-mail__box[data-active="true"] { border-color: var(--oc-navy); }
+
+.oc-mail__box-head { display: flex; align-items: center; gap: 6px; }
+.oc-mail__box-name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 600 12px var(--oc-font-sans); color: var(--oc-text);
+}
+.oc-mail__box-address {
+  display: block; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.oc-mail__box-error {
+  margin-top: 6px; padding: 6px 8px; border-radius: var(--oc-r-sm);
+  background: var(--oc-warning-bg); border: 1px solid var(--oc-warning-border);
+  font: 400 11px/1.5 var(--oc-font-sans); color: var(--oc-warning-text);
+}
+
+.oc-mail__folders { list-style: none; margin: 8px 0 0; padding: 0; }
+.oc-mail__folder {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 7px; border-radius: var(--oc-r-sm);
+  font: 400 12px var(--oc-font-sans); color: var(--oc-text-body);
+}
+.oc-mail__folder span:first-child { flex: 1; min-width: 0; }
+.oc-mail__folder:hover { background: var(--oc-surface-hover); color: var(--oc-text); }
+.oc-mail__folder[aria-current="page"] {
+  background: var(--oc-surface-tint); color: var(--oc-text); font-weight: 600;
+}
+.oc-mail__count {
+  min-width: 18px; padding: 1px 5px; border-radius: 9px; text-align: center;
+  background: var(--oc-navy); color: var(--oc-on-navy);
+  font: 600 10px var(--oc-font-mono);
+}
+
+/* ── Coluna 2: a lista ── */
+
+.oc-mail__list {
+  background: var(--oc-surface); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-lg); overflow: hidden;
+}
+
+.oc-mail__search {
+  display: flex; align-items: center; gap: 6px;
+  padding: 9px 10px; border-bottom: 1px solid var(--oc-border-soft);
+}
+.oc-mail__search .oc-input { flex: 1; min-width: 0; }
+.oc-mail__search-icon { display: inline-flex; color: var(--oc-text-meta); }
+.oc-mail__result-count {
+  padding: 7px 12px; border-bottom: 1px solid var(--oc-border-faint);
+  font: 400 11.5px var(--oc-font-sans); color: var(--oc-text-muted);
+}
+
+.oc-mail__items { list-style: none; margin: 0; padding: 0; }
+.oc-mail__item {
+  display: block; padding: 10px 12px;
+  border-bottom: 1px solid var(--oc-border-faint);
+  color: var(--oc-text-body);
+}
+.oc-mail__item:hover { background: var(--oc-surface-hover); color: var(--oc-text-body); }
+.oc-mail__item[aria-current="page"] {
+  background: var(--oc-surface-tint);
+  box-shadow: inset 2px 0 0 var(--oc-navy);
+}
+
+.oc-mail__item-top { display: flex; align-items: baseline; gap: 6px; }
+.oc-mail__from {
+  flex-shrink: 0; max-width: 55%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 600 12px var(--oc-font-sans); color: var(--oc-text);
+}
+/* O endereço ao lado do nome, nunca em vez dele: um remetente que se
+   apresenta como «Ocinye» a partir de outro domínio não pode esconder o
+   domínio (§14). */
+.oc-mail__address {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.oc-mail__when { flex-shrink: 0; }
+
+.oc-mail__item-mid { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+/* Não-lida marcada por ponto **e** por peso: nunca só por cor (§51). */
+.oc-mail__dot {
+  flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--oc-navy);
+}
+.oc-mail__subject {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 400 12.5px var(--oc-font-sans); color: var(--oc-text);
+}
+.oc-mail__item[data-unread="true"] .oc-mail__subject { font-weight: 600; }
+.oc-mail__star { color: var(--oc-gold); display: inline-flex; }
+.oc-mail__clip { color: var(--oc-text-meta); display: inline-flex; }
+.oc-mail__preview {
+  margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 400 11.5px var(--oc-font-sans); color: var(--oc-text-muted);
+}
+
+/* ── Coluna 3: a leitura ── */
+
+.oc-mail__pane {
+  background: var(--oc-surface); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-lg); padding: 16px 18px;
+}
+.oc-mail__pane--empty { display: grid; place-items: center; min-height: 220px; }
+
+.oc-mail__pane-head { border-bottom: 1px solid var(--oc-border-soft); padding-bottom: 12px; }
+.oc-mail__pane-head h2 {
+  font: 600 16px var(--oc-font-sans); letter-spacing: -.01em; color: var(--oc-text);
+}
+.oc-mail__meta { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.oc-mail__recipients {
+  margin-top: 3px; font: 400 11.5px var(--oc-font-sans); color: var(--oc-text-muted);
+}
+.oc-mail__actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 11px; }
+.oc-mail__flag { display: inline-flex; }
+/* Actualizar é um formulário, não uma ligação: altera estado, e um `GET` que
+   altera estado é disparado por qualquer pré-carregamento do browser. */
+.oc-mail__sync { display: inline-flex; }
+
+/* O corpo da mensagem. É o único HTML alheio do Workspace, já higienizado
+   pelo Ocinye Core. As regras abaixo contêm-no: sem posicionamento, sem
+   imagens fora da coluna, sem tipografia que domine a interface à volta. */
+.oc-mail__body {
+  padding: 14px 0; overflow-x: auto;
+  font: 400 13px/1.65 var(--oc-font-sans); color: var(--oc-text-body);
+  word-break: break-word;
+}
+.oc-mail__body * { max-width: 100%; position: static !important; float: none !important; }
+.oc-mail__body img { height: auto; }
+.oc-mail__body table { border-collapse: collapse; }
+.oc-mail__body td, .oc-mail__body th { padding: 4px 8px; border: 1px solid var(--oc-border); }
+.oc-mail__body blockquote {
+  margin: 8px 0; padding-left: 12px;
+  border-left: 2px solid var(--oc-border-strong); color: var(--oc-text-muted);
+}
+.oc-mail__body pre { overflow-x: auto; font: 400 11.5px var(--oc-font-mono); }
+.oc-mail__body a { text-decoration: underline; }
+
+.oc-mail__domains {
+  padding-top: 10px; border-top: 1px solid var(--oc-border-faint);
+  font: 400 11px/1.6 var(--oc-font-sans); color: var(--oc-text-meta);
+}
+
+.oc-mail__attachments { padding-top: 12px; border-top: 1px solid var(--oc-border-soft); }
+.oc-mail__attachments h3 {
+  font: 500 9.5px var(--oc-font-mono); letter-spacing: .16em;
+  text-transform: uppercase; color: var(--oc-text-meta); margin-bottom: 7px;
+}
+.oc-mail__attachments ul { list-style: none; margin: 0; padding: 0; }
+.oc-mail__attachment {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 9px; margin-bottom: 5px;
+  border: 1px solid var(--oc-border); border-radius: var(--oc-r-sm);
+  background: var(--oc-surface-subtle);
+}
+.oc-mail__attachment svg { color: var(--oc-text-meta); flex-shrink: 0; }
+.oc-mail__attachment-name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 400 12px var(--oc-font-sans); color: var(--oc-text);
+}
+.oc-mail__attachment-meta { flex-shrink: 0; }
+
+/* ── O composer ── */
+
+.oc-mail__compose {
+  max-width: 760px;
+  background: var(--oc-surface); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-lg); padding: 18px;
+}
+.oc-mail__compose .oc-card { margin: 14px 0; }
+.oc-mail__compose-actions {
+  display: flex; align-items: center; gap: 8px;
+  padding-top: 14px; border-top: 1px solid var(--oc-border-soft);
+}
+.oc-mail__no-identity {
+  padding: 10px 12px; margin-bottom: 12px; border-radius: var(--oc-r-md);
+  background: var(--oc-warning-bg); border: 1px solid var(--oc-warning-border);
+  font: 400 12px/1.6 var(--oc-font-sans); color: var(--oc-warning-text);
+}
+.oc-mail__assist-note {
+  font: 400 11.5px/1.6 var(--oc-font-sans); color: var(--oc-text-muted);
+  margin-bottom: 9px;
+}
+.oc-mail__assist-link { font: 500 11.5px var(--oc-font-sans); }
+
+/* ── Definições ── */
+
+.oc-mail__status { list-style: none; margin: 0 0 12px; padding: 0; }
+.oc-mail__status li {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 7px 0; border-bottom: 1px solid var(--oc-border-faint);
+  font: 400 12.5px var(--oc-font-sans); color: var(--oc-text-body);
+}
+.oc-mail__status li:last-child { border-bottom: 0; }
+.oc-mail__endpoints { margin-top: 8px; word-break: break-all; }
+
+/* ─── Universal Command Surface ──────────────────────────────────────── */
+
+.oc-ask {
+  background: var(--oc-surface); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-lg); padding: 14px 16px; margin-bottom: 16px;
+}
+.oc-ask__field { display: flex; align-items: center; gap: 9px; }
+.oc-ask__field svg { color: var(--oc-text-meta); flex-shrink: 0; }
+.oc-ask__field .oc-input { flex: 1; min-width: 0; }
+
+/* As três intenções são uma escolha explícita, não uma adivinhação: uma frase
+   ambígua interpretada como «executar» é como uma pergunta se torna uma acção
+   que ninguém pediu (§31). */
+.oc-ask__intents {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin: 12px 0 0; padding: 0; border: 0;
+}
+.oc-intent {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 7px 11px; border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-md); cursor: pointer;
+}
+.oc-intent:hover { border-color: var(--oc-border-strong); }
+.oc-intent input { position: absolute; opacity: 0; pointer-events: none; }
+.oc-intent:has(input:checked) {
+  border-color: var(--oc-navy); background: var(--oc-surface-tint);
+}
+.oc-intent:has(input:focus-visible) {
+  outline: var(--oc-focus-width) solid var(--oc-focus-color);
+  outline-offset: var(--oc-focus-offset-wrap);
+}
+.oc-intent__label { font: 600 12px var(--oc-font-sans); color: var(--oc-text); }
+.oc-intent__hint { font: 400 10.5px var(--oc-font-sans); color: var(--oc-text-meta); }
+
+.oc-ask__note { display: flex; align-items: flex-start; gap: 9px; }
+.oc-ask__note p { margin: 0; }
+.oc-ask__note svg { flex-shrink: 0; margin-top: 2px; color: var(--oc-text-muted); }
+.oc-ask__note-text {
+  font: 400 11.5px/1.6 var(--oc-font-sans); color: var(--oc-text-muted);
+  margin: 10px 0;
+}
+
+.oc-ask__results { list-style: none; margin: 0; padding: 0; }
+.oc-ask__result {
+  padding: 11px 13px; margin-bottom: 7px;
+  background: var(--oc-surface); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-md);
+}
+.oc-ask__result-top { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.oc-ask__result-title {
+  flex: 1; min-width: 0; font: 600 12.5px var(--oc-font-sans); color: var(--oc-text);
+}
+.oc-ask__excerpt {
+  margin-top: 4px; font: 400 11.5px/1.6 var(--oc-font-sans); color: var(--oc-text-muted);
+}
+.oc-ask__count { font: 400 11.5px var(--oc-font-sans); color: var(--oc-text-meta); }
+.oc-ask__summary { font: 500 13px var(--oc-font-sans); color: var(--oc-text); margin-bottom: 12px; }
+
+/* O plano. O que vai acontecer — nunca o raciocínio do modelo (§48, §183). */
+.oc-plan { list-style: none; margin: 0; padding: 0; counter-reset: oc-step; }
+.oc-plan__step {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid var(--oc-border-faint);
+  counter-increment: oc-step;
+}
+.oc-plan__step:last-child { border-bottom: 0; }
+.oc-plan__step::before {
+  content: counter(oc-step); flex-shrink: 0;
+  width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--oc-surface-tint); color: var(--oc-text-muted);
+  font: 600 10px var(--oc-font-mono);
+}
+.oc-plan__step-body { flex: 1; min-width: 0; }
+.oc-plan__summary { font: 400 12.5px var(--oc-font-sans); color: var(--oc-text); flex: 1; }
+.oc-plan__detail {
+  margin-top: 3px; font: 400 11.5px/1.6 var(--oc-font-sans); color: var(--oc-text-muted);
+}
+.oc-plan__actions {
+  display: flex; align-items: center; gap: 8px;
+  padding-top: 14px; border-top: 1px solid var(--oc-border-soft); margin-top: 4px;
+}
+.oc-plan__actions form { display: inline-flex; }
+
+.oc-ask__legend {
+  padding: 0 0 7px; font: 400 11.5px var(--oc-font-sans); color: var(--oc-text-muted);
+}
+
+/* ─── Superfície contextual de assistência ───────────────────────────── */
+
+/* Prompt everywhere, not chat everywhere: um painel discreto dentro do
+   contexto científico, não uma janela de conversa que dominaria o ecrã e
+   sugeriria que a aplicação é o modelo (§6.11, regra 9). */
+.oc-assist {
+  grid-column: 1 / -1;
+  background: var(--oc-surface-tint); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-lg); padding: 13px 15px;
+}
+.oc-assist__head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.oc-assist__head svg { color: var(--oc-navy); flex-shrink: 0; }
+.oc-assist__title { font: 600 12.5px var(--oc-font-sans); color: var(--oc-text); margin: 0; }
+.oc-assist__scope {
+  font: 400 11.5px var(--oc-font-sans); color: var(--oc-text-meta);
+  margin-left: auto;
+}
+
+.oc-assist__form { display: flex; align-items: center; gap: 8px; }
+.oc-assist__form .oc-input { flex: 1; min-width: 0; }
+
+.oc-assist__suggestions {
+  list-style: none; display: flex; flex-wrap: wrap; gap: 6px;
+  margin: 10px 0 0; padding: 0;
+}
+
+/* O estado, quando não há nó de IA. Não é um erro: é a instalação a dizer o
+   que é verdade, e a lembrar o que continua a funcionar (§66). */
+.oc-assist__state {
+  margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--oc-border);
+  font: 400 11.5px/1.6 var(--oc-font-sans); color: var(--oc-text-muted);
+}
+
+/* ── Arranque ───────────────────────────────────────────────────────────
+ *
+ * Composição do ecrã de arranque. Tudo o que é linguagem do sistema — cor,
+ * tipografia, espaçamento, movimento, foco, camadas — vem dos tokens; aqui só
+ * vive a disposição desta superfície.
+ *
+ * A moldura é a do ecrã de entrada (`.oc-login`), de propósito: sair do arranque
+ * e chegar ao Login não pode parecer que abriu outro produto.
+ */
+.oc-boot__panel {
+  width: 100%;
+  max-width: 460px;
+  margin-top: var(--oc-space-8);
+  padding: var(--oc-space-7);
+  border: 1px solid var(--oc-on-navy-line);
+  border-radius: var(--oc-r-lg);
+  background: var(--oc-on-navy-veil);
+  text-align: center;
+}
+.oc-boot__title {
+  margin: 0;
+  font: 600 15px var(--oc-font-sans);
+  letter-spacing: .14em;
+  color: var(--oc-on-navy);
+}
+.oc-boot--blocked .oc-boot__title,
+.oc-boot--unreachable .oc-boot__title { color: var(--oc-gold-text); }
+.oc-boot__lede {
+  margin: var(--oc-space-4) 0 0;
+  font: 400 12.5px/1.7 var(--oc-font-sans);
+  color: var(--oc-on-navy-70);
+}
+.oc-boot__list {
+  margin: var(--oc-space-6) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--oc-space-2);
+  text-align: left;
+}
+.oc-boot__item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--oc-space-5);
+  padding: var(--oc-space-3) var(--oc-space-4);
+  border: 1px solid var(--oc-on-navy-line);
+  border-radius: var(--oc-r-xs);
+}
+.oc-boot__list--blocking .oc-boot__item { border-color: var(--oc-gold-line); }
+.oc-boot__item-name {
+  font: 500 10px var(--oc-font-mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--oc-on-navy-70);
+}
+.oc-boot__item-reason {
+  font: 400 11.5px var(--oc-font-sans);
+  color: var(--oc-on-navy-50);
+  text-align: right;
+}
+.oc-boot__actions { margin: var(--oc-space-7) 0 0; }
+.oc-boot__retry { width: 100%; justify-content: center; }
+
+@media (max-width: 560px) {
+  .oc-boot__panel { max-width: none; padding: var(--oc-space-5); }
+  .oc-boot__item { flex-direction: column; gap: var(--oc-space-1); }
+  .oc-boot__item-reason { text-align: left; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Calendário
+   ═══════════════════════════════════════════════════════════════════════════
+
+   O Rust emitia vinte e nove classes `oc-cal-*` e esta folha não tinha
+   nenhuma. O Mês descia como uma lista de números, os cabeçalhos saíam colados
+   — `SegTerQuaQuiSexSábDom` — e a Semana era texto corrido. Não era um
+   calendário por polir: era marcação sem desenho.
+
+   O que se segue é a geometria temporal. Uma superfície contínua, não um
+   conjunto de cartões: o tempo não tem descontinuidades, e desenhá-lo com
+   sombras separadas por dia diria que tem. */
+
+/* O Calendário mede-se pelo ecrã, e não pelo conteúdo.
+   
+   Uma página normal cresce com o que tem dentro e a janela rola. Um mês não:
+   as seis semanas são a unidade, e ver cinco delas obrigando a rolar para a
+   sexta é perder a coisa que a grelha existe para dar — o mês de relance.
+   
+   Por isso a página ocupa a altura da área principal e a grelha divide o que
+   sobra depois do cabeçalho e da barra. As linhas encolhem juntas, e param num
+   mínimo abaixo do qual o dia deixa de ser legível; aí sim, rola. */
+.oc-page--calendar {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    /* A altura vem do contentor, não de uma conta sobre a janela.
+    
+       Estava `calc(100dvh - var(--oc-topbar-h))`, e falhava por duas razões ao
+       mesmo tempo: contava a barra mas não o preenchimento da página, e o
+       a escala de apresentação, aplicada na raiz, faz `dvh` deixar de
+       coincidir com o espaço real. O `.oc-content` já é `flex: 1; min-height: 0` dentro
+       de uma shell `position: fixed` — mede exactamente o que sobra, e sabe-o
+       melhor do que qualquer conta feita aqui. */
+    height: 100%;
+    /* Quando a janela é baixa de mais para seis semanas legíveis, a página rola.
+    
+       A alternativa era encolher as linhas até caberem, e foi o que fiz
+       primeiro: a 1024×720 a célula do dia cheio ficou mais baixa do que o que
+       tinha dentro, os itens saíram para fora dela e o `+8` passou a contar por
+       cima de linhas cortadas a meio. Uma contagem sobre conteúdo escondido é
+       pior do que uma barra de deslocamento. */
+    overflow: auto;
+}
+
+/* O cabeçalho do Calendário diz o nome e mais nada.
+   
+   Tinha duas linhas de prosa a explicar de onde vêm os prazos. A barra lateral
+   já diz «Calendário» e está realçada; o período diz «Agosto 2026»; e a
+   explicação sobre a origem dos prazos pertence a onde um prazo aparece, não
+   ao topo de todos os meses do ano. Noventa píxeis de altura recuperados para
+   a grelha. */
+.oc-page--calendar .oc-head { margin-bottom: var(--oc-space-4); }
+.oc-page--calendar .oc-head__text p { display: none; }
+
+/* ── A barra ─────────────────────────────────────────────────────────────
+   Uma linha, duas metades. À esquerda o tempo, à direita a forma de o ver. */
+
+.oc-cal-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--oc-space-4);
+    flex-wrap: wrap;
+    padding-bottom: var(--oc-space-3);
+    margin-bottom: var(--oc-space-4);
+    border-bottom: 1px solid var(--oc-border-soft);
+}
+
+.oc-cal-bar__tempo {
+    display: flex;
+    align-items: center;
+    gap: var(--oc-space-2);
+}
+
+.oc-cal-bar__periodo {
+    /* O título do período é o maior texto da barra e o único que muda quando se
+       navega. Largura mínima para o mês não empurrar as setas ao mudar de
+       «Maio» para «Setembro» — um controlo que salta de sítio ao ser usado é um
+       controlo que se erra. */
+    min-width: 13ch;
+    margin: 0;
+    font-family: var(--oc-font-sans);
+    font-size: 1.0625rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--oc-text);
+    letter-spacing: -0.01em;
+}
+
+.oc-cal-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--oc-border-soft);
+    border-radius: var(--oc-r-xs);
+    color: var(--oc-text-secondary);
+    background: var(--oc-surface);
+    transition: background var(--oc-duration-fast) var(--oc-ease-standard),
+                border-color var(--oc-duration-fast) var(--oc-ease-standard),
+                color var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-cal-nav:hover {
+    background: var(--oc-surface-hover);
+    border-color: var(--oc-border);
+    color: var(--oc-text);
+}
+
+.oc-cal-nav:active { background: var(--oc-surface-muted); }
+
+.oc-cal-nav:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: var(--oc-focus-offset);
+}
+
+/* O galo do sistema, orientado. Não há setas no sprite, e acrescentá-las seria
+   acrescentar iconografia para dizer o que esta já diz noutra direcção. */
+.oc-cal-nav__glifo {
+    display: inline-flex;
+    line-height: 0;
+}
+
+.oc-cal-nav__glifo--anterior { transform: rotate(-90deg); }
+.oc-cal-nav__glifo--seguinte { transform: rotate(90deg); }
+
+.oc-cal-hoje {
+    margin-left: var(--oc-space-2);
+    padding: 0 var(--oc-space-3);
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--oc-border-soft);
+    border-radius: var(--oc-r-xs);
+    font-family: var(--oc-font-sans);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--oc-text-secondary);
+    background: var(--oc-surface);
+    transition: background var(--oc-duration-fast) var(--oc-ease-standard),
+                color var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-cal-hoje:hover {
+    background: var(--oc-surface-hover);
+    color: var(--oc-text);
+}
+
+.oc-cal-hoje:active { background: var(--oc-surface-muted); }
+
+.oc-cal-hoje:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: var(--oc-focus-offset);
+}
+
+/* As vistas. Um segmento, não separadores soltos: são alternativas exclusivas
+   sobre a mesma coisa, e um grupo desenhado di-lo sem uma palavra. */
+.oc-cal-vistas {
+    display: inline-flex;
+    padding: 2px;
+    gap: 2px;
+    border: 1px solid var(--oc-border-soft);
+    border-radius: var(--oc-r-xs);
+    background: var(--oc-surface-subtle);
+}
+
+.oc-cal-vista {
+    padding: 0 var(--oc-space-3);
+    height: 1.75rem;
+    display: inline-flex;
+    align-items: center;
+    border-radius: calc(var(--oc-r-xs) - 1px);
+    font-family: var(--oc-font-sans);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--oc-text-muted);
+    transition: background var(--oc-duration-fast) var(--oc-ease-standard),
+                color var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-cal-vista:hover { color: var(--oc-text); }
+
+.oc-cal-vista--activa {
+    background: var(--oc-surface);
+    color: var(--oc-text);
+    font-weight: 600;
+    box-shadow: var(--oc-shadow-input);
+}
+
+.oc-cal-vista:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: var(--oc-focus-offset);
+}
+
+/* ── O Mês ───────────────────────────────────────────────────────────────
+   Sete colunas, seis linhas, uma superfície. As fronteiras internas são de uma
+   linha só e partilhadas: a grelha desenha-se com o `gap` sobre um fundo, e
+   não com uma borda por célula que duplicaria em cada encontro. */
+
+.oc-cal-month {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    /* A primeira linha é o cabeçalho e mede o que o texto pedir. Sem isto ela
+       herdava o `grid-auto-rows` das semanas e abria uma faixa vazia da altura
+       de uma semana inteira entre os nomes dos dias e o primeiro dia do mês. */
+    grid-template-rows: auto;
+    /* O mínimo é o que uma célula cheia precisa: o número do dia, três itens e
+       a contagem do resto. Abaixo disto o conteúdo deixa de caber e a célula
+       passa a esconder o que promete mostrar. */
+    grid-auto-rows: minmax(5.75rem, 1fr);
+    gap: 1px;
+    /* Cresce para ocupar o que sobra, mas não encolhe abaixo do mínimo das
+       linhas.
+    
+       Estava `flex: 1; min-height: 0`, e o `min-height: 0` autorizava-a a
+       encolher abaixo do que as próprias linhas pedem: numa janela baixa as
+       células ficavam mais curtas do que o seu conteúdo, os itens saíam para
+       fora e o `+8` contava por cima de linhas cortadas. Agora ela mantém a
+       altura que precisa e é a página que rola.
+    
+       `1 1 auto` **sem** `min-height: 0`: encolhe até as linhas chegarem ao seu
+       mínimo e pára aí, porque a altura mínima automática de um item flex é o
+       seu conteúdo. Com `min-height: 0` passava esse limite e comprimia as
+       células; com `flex-shrink: 0` não encolhia nada e a última semana ficava
+       de fora mesmo quando havia espaço para ela. */
+    flex: 1 1 auto;
+    background: var(--oc-border-faint);
+    border: 1px solid var(--oc-border-soft);
+    border-radius: var(--oc-r-lg);
+    overflow: hidden;
+}
+
+.oc-cal-month__weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-column: 1 / -1;
+    background: var(--oc-surface-subtle);
+}
+
+.oc-cal-month__weekdays > span {
+    padding: var(--oc-space-2) var(--oc-space-3);
+    font-family: var(--oc-font-sans);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--oc-text-meta);
+    text-align: left;
+}
+
+.oc-cal-month__cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--oc-space-2);
+    min-width: 0;
+    /* Nada sai da célula. Sem isto os itens de um dia cheio invadiam o dia
+       seguinte quando a linha era mais baixa do que eles. */
+    overflow: hidden;
+    background: var(--oc-surface);
+    transition: background var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-cal-month__cell:hover { background: var(--oc-surface-hover); }
+
+/* Os dias do mês anterior e do seguinte continuam a existir: a semana não se
+   parte a meio por o mês ter acabado. Recuam de tom, não de estrutura. */
+.oc-cal-month__cell--outside { background: var(--oc-surface-subtle); }
+.oc-cal-month__cell--outside .oc-cal-month__date { color: var(--oc-text-ghost); }
+.oc-cal-month__cell--outside:hover { background: var(--oc-surface-muted); }
+
+.oc-cal-month__date {
+    align-self: flex-start;
+    min-width: 1.625rem;
+    height: 1.625rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-family: var(--oc-font-sans);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--oc-text-secondary);
+    transition: background var(--oc-duration-fast) var(--oc-ease-standard),
+                color var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-cal-month__date:hover {
+    background: var(--oc-surface-muted);
+    color: var(--oc-text);
+}
+
+.oc-cal-month__date:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: var(--oc-focus-offset);
+}
+
+/* O dia escolhido. Um anel, não um preenchimento.
+   
+   Tem de conviver com «hoje» na mesma célula sem que nenhum dos dois deixe de
+   se ler: hoje preenche, o escolhido contorna. Quando são o mesmo dia vê-se o
+   círculo navy dentro do anel, e continuam a ser duas afirmações legíveis. */
+.oc-cal-month__cell--selected { background: var(--oc-surface-hover); }
+
+.oc-cal-month__cell--selected .oc-cal-month__date {
+    box-shadow: 0 0 0 1.5px var(--oc-navy-mid);
+    color: var(--oc-text);
+    font-weight: 600;
+}
+
+.oc-cal-month__cell--selected.oc-cal-month__cell--today { background: var(--oc-surface-tint); }
+
+.oc-cal-month__cell--selected.oc-cal-month__cell--today .oc-cal-month__date {
+    box-shadow: 0 0 0 1.5px var(--oc-navy-mid), 0 0 0 3px var(--oc-surface);
+}
+
+/* Hoje. Reconhecível de relance e sem gritar: o número passa a sólido sobre o
+   navy da instituição, e a célula recebe um tom de fundo. Duas pistas, porque
+   uma só — cor — deixaria de fora quem não a distingue. */
+.oc-cal-month__cell--today { background: var(--oc-surface-tint); }
+
+.oc-cal-month__cell--today .oc-cal-month__date {
+    background: var(--oc-navy);
+    color: var(--oc-on-navy);
+    font-weight: 600;
+}
+
+.oc-cal-month__cell--today .oc-cal-month__date:hover { background: var(--oc-navy-hover); }
+
+/* Um item é uma marca temporal compacta, não um cartão. Sem sombra, sem raio
+   grande, sem moldura: o que o separa do dia é uma superfície ligeiramente
+   diferente e a linha de acento à esquerda. */
+.oc-cal-month__item {
+    display: flex;
+    align-items: baseline;
+    gap: var(--oc-space-1);
+    padding: 2px var(--oc-space-2);
+    min-width: 0;
+    border-left: 2px solid var(--oc-navy-mid);
+    border-radius: 0 var(--oc-r-xs) var(--oc-r-xs) 0;
+    background: var(--oc-surface-subtle);
+    font-family: var(--oc-font-sans);
+    font-size: 0.75rem;
+    line-height: 1.45;
+    color: var(--oc-text-body);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-cal-month__item:hover {
+    background: var(--oc-surface-muted);
+    color: var(--oc-text);
+}
+
+.oc-cal-month__item:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: 1px;
+}
+
+.oc-cal-month__item[data-kind="deadline"] { border-left-color: var(--oc-gold-line); }
+
+.oc-cal-month__titulo {
+    /* Sem isto o título é um item flex com largura mínima automática: recusa-se
+       a encolher, transborda a célula e as reticências nunca chegam a aparecer.
+       Cortava a meio da palavra, sem dizer que tinha cortado. */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.oc-cal-month__time {
+    flex: none;
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--oc-text-meta);
+}
+
+/* O excedente. Uma célula não cresce sem fim: passado o limite, o resto conta-se
+   e abre-se no dia. */
+.oc-cal-month__more {
+    align-self: flex-start;
+    padding: 0 var(--oc-space-1);
+    font-family: var(--oc-font-sans);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--oc-text-muted);
+    transition: color var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-cal-month__more:hover { color: var(--oc-navy); }
+
+.oc-cal-month__more:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: var(--oc-focus-offset);
+}
+
+@media (max-width: 900px) {
+    .oc-cal-month { grid-auto-rows: minmax(5.25rem, 1fr); }
+    .oc-cal-month__weekdays > span { padding: var(--oc-space-2) var(--oc-space-2); }
+    .oc-cal-bar { gap: var(--oc-space-3); }
+}
+
+/* ── Semana e Dia: a superfície temporal ────────────────────────────────
+   
+   A mesma geometria com larguras diferentes. Um eixo de horas à esquerda,
+   colunas de dias à direita, e cada actividade colocada em percentagem do dia —
+   a altura de uma hora vive aqui, e a aritmética do Rust não sabe dela. */
+
+.oc-cal-tempo {
+    --oc-cal-hora: 3rem;
+    --oc-cal-eixo-w: 3.75rem;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    border: 1px solid var(--oc-border-soft);
+    border-radius: var(--oc-r-lg);
+    background: var(--oc-surface);
+    overflow: hidden;
+}
+
+.oc-cal-cabecas {
+    display: grid;
+    grid-template-columns: var(--oc-cal-eixo-w) repeat(7, minmax(0, 1fr));
+    border-bottom: 1px solid var(--oc-border-soft);
+    background: var(--oc-surface-subtle);
+}
+
+.oc-cal-tempo--dia .oc-cal-cabecas { grid-template-columns: var(--oc-cal-eixo-w) 1fr; }
+
+.oc-cal-cabeca {
+    display: flex;
+    align-items: baseline;
+    gap: var(--oc-space-2);
+    padding: var(--oc-space-2) var(--oc-space-3);
+    border-left: 1px solid var(--oc-border-faint);
+    transition: background var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-cal-cabeca:hover { background: var(--oc-surface-hover); }
+
+.oc-cal-cabeca:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: calc(var(--oc-focus-offset) * -1);
+}
+
+.oc-cal-cabeca__dia {
+    font-family: var(--oc-font-sans);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--oc-text-meta);
+}
+
+.oc-cal-cabeca__numero {
+    font-family: var(--oc-font-sans);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--oc-text);
+}
+
+.oc-cal-cabeca--hoje .oc-cal-cabeca__dia,
+.oc-cal-cabeca--hoje .oc-cal-cabeca__numero { color: var(--oc-navy); }
+
+/* A faixa de dia inteiro só existe quando há alguma. Permanente, roubaria
+   altura ao dia todos os dias por causa dos poucos em que é usada. */
+.oc-cal-diainteiro {
+    display: grid;
+    grid-template-columns: var(--oc-cal-eixo-w) 1fr;
+    border-bottom: 1px solid var(--oc-border-soft);
+    background: var(--oc-surface-subtle);
+}
+
+.oc-cal-diainteiro__rotulo {
+    padding: var(--oc-space-2);
+    font-family: var(--oc-font-sans);
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--oc-text-meta);
+    text-align: right;
+}
+
+.oc-cal-diainteiro__dias {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.oc-cal-tempo--dia .oc-cal-diainteiro__dias { grid-template-columns: 1fr; }
+
+.oc-cal-diainteiro__dia {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--oc-space-1) var(--oc-space-2);
+    min-width: 0;
+    border-left: 1px solid var(--oc-border-faint);
+}
+
+/* O corpo rola; os cabeçalhos ficam. Uma semana cujo cabeçalho desaparece ao
+   descer é uma semana onde se deixa de saber que coluna se está a ler. */
+.oc-cal-corpo {
+    padding-top: 0.5em;
+    display: grid;
+    grid-template-columns: var(--oc-cal-eixo-w) 1fr;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.oc-cal-eixo {
+    /* O rótulo das 00:00 senta-se meia linha acima da sua faixa, como todos os
+       outros, e sem esta folga sairia por cima da moldura. */
+    padding-top: 0.5em;
+    display: grid;
+    grid-auto-rows: var(--oc-cal-hora);
+    border-right: 1px solid var(--oc-border-faint);
+}
+
+.oc-cal-eixo__hora {
+    /* A etiqueta pertence à linha que a hora começa, e por isso senta-se no
+       topo da sua própria faixa, deslocada meia linha para cima para alinhar
+       com o traço em vez de flutuar a meio da hora. */
+    position: relative;
+    top: -0.5em;
+    padding-right: var(--oc-space-2);
+    font-family: var(--oc-font-mono);
+    font-size: 0.625rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--oc-text-ghost);
+    text-align: right;
+}
+
+.oc-cal-colunas {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.oc-cal-colunas--uma { grid-template-columns: 1fr; }
+
+.oc-cal-coluna {
+    /* Quarenta e oito faixas de meia hora, e quatro colunas para as
+       sobreposições. Cada bloco declara a sua linha e a sua coluna por classe,
+       porque `style-src 'self'` descarta atributos de estilo — e um bloco sem
+       posição é um evento que existe e não se vê. */
+    position: relative;
+    display: grid;
+    grid-template-rows: repeat(48, calc(var(--oc-cal-hora) / 2));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-left: 1px solid var(--oc-border-faint);
+}
+
+.oc-cal-linhas {
+    grid-area: 1 / 1 / -1 / -1;
+    display: grid;
+    grid-auto-rows: var(--oc-cal-hora);
+}
+
+.oc-cal-linhas > span { border-top: 1px solid var(--oc-border-faint); }
+
+/* A hora a que estamos. Uma linha e um ponto, e nada mais: é orientação, não
+   um evento. */
+.oc-cal-agora {
+    grid-column: 1 / -1;
+    align-self: start;
+    position: relative;
+    height: 0;
+    border-top: 1.5px solid var(--oc-gold);
+    pointer-events: none;
+    z-index: var(--oc-z-base);
+}
+
+.oc-cal-agora::before {
+    content: "";
+    position: absolute;
+    left: -3px;
+    top: -3.5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--oc-gold);
+}
+
+/* Um bloco ocupa o tempo que a actividade ocupa. Sem sombra e sem raio grande:
+   é uma extensão da superfície temporal, não um objecto pousado nela. */
+.oc-cal-bloco {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 2px var(--oc-space-2);
+    min-height: 0;
+    min-width: 0;
+    border-left: 2px solid var(--oc-navy-mid);
+    border-radius: 0 var(--oc-r-xs) var(--oc-r-xs) 0;
+    background: var(--oc-surface-tint);
+    overflow: hidden;
+    transition: background var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-cal-bloco:hover { background: var(--oc-surface-hover); }
+
+.oc-cal-bloco:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: -1px;
+}
+
+.oc-cal-bloco[data-kind="deadline"] { border-left-color: var(--oc-gold-line); }
+
+.oc-cal-bloco--diainteiro {
+    grid-area: auto;
+    border-radius: var(--oc-r-xs);
+    background: var(--oc-surface-muted);
+}
+
+.oc-cal-bloco__hora {
+    font-family: var(--oc-font-sans);
+    font-size: 0.625rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--oc-text-meta);
+}
+
+.oc-cal-bloco__titulo {
+    font-family: var(--oc-font-sans);
+    font-size: 0.75rem;
+    line-height: 1.3;
+    color: var(--oc-text-body);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── O Ano ───────────────────────────────────────────────────────────────
+   Uma superfície, doze meses. Não doze cartões: o ano é contínuo. */
+
+.oc-cal-ano {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--oc-space-6) var(--oc-space-5);
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--oc-space-2);
+}
+
+.oc-cal-mini { min-width: 0; }
+
+.oc-cal-mini__nome {
+    display: block;
+    margin-bottom: var(--oc-space-2);
+    font-family: var(--oc-font-sans);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--oc-text);
+    transition: color var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-cal-mini__nome:hover { color: var(--oc-navy); }
+
+.oc-cal-mini__nome:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: var(--oc-focus-offset);
+}
+
+.oc-cal-mini__semana,
+.oc-cal-mini__dias {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 1px;
+}
+
+.oc-cal-mini__semana > span {
+    padding-bottom: 2px;
+    font-family: var(--oc-font-sans);
+    font-size: 0.5625rem;
+    font-weight: 600;
+    color: var(--oc-text-ghost);
+    text-align: center;
+}
+
+.oc-cal-mini__dia {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--oc-r-xs);
+    font-family: var(--oc-font-sans);
+    font-size: 0.625rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--oc-text-secondary);
+    transition: background var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-cal-mini__dia:hover { background: var(--oc-surface-muted); }
+
+.oc-cal-mini__dia:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: 0;
+}
+
+.oc-cal-mini__dia--fora { color: var(--oc-text-ghost); opacity: 0.55; }
+
+/* Há alguma coisa neste dia. Um ponto, não um número: a esta escala a
+   contagem não se lê, e fingir que se lê seria pior do que não a dar. */
+.oc-cal-mini__dia--ocupado { font-weight: 600; color: var(--oc-text); }
+
+.oc-cal-mini__dia--ocupado::after {
+    content: "";
+    position: absolute;
+    transform: translateY(0.65em);
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--oc-navy-mid);
+}
+
+.oc-cal-mini__dia--hoje {
+    background: var(--oc-navy);
+    color: var(--oc-on-navy);
+    font-weight: 600;
+}
+
+.oc-cal-mini__dia--hoje::after { background: var(--oc-on-navy); }
+
+@media (max-width: 1200px) {
+    .oc-cal-ano { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 860px) {
+    .oc-cal-ano { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ── A Agenda ────────────────────────────────────────────────────────────
+   A única lista, e a única que pode dizer por palavras que está vazia. */
+
+.oc-cal-agenda {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.oc-cal-agenda--vazia {
+    align-items: center;
+    justify-content: center;
+    padding: var(--oc-space-8);
+    color: var(--oc-text-muted);
+    font-family: var(--oc-font-sans);
+    font-size: 0.875rem;
+}
+
+.oc-cal-grupo {
+    display: grid;
+    grid-template-columns: 7rem minmax(0, 1fr);
+    gap: var(--oc-space-4);
+    padding: var(--oc-space-4) 0;
+    border-top: 1px solid var(--oc-border-faint);
+}
+
+.oc-cal-grupo:first-child { border-top: none; }
+
+.oc-cal-grupo__data {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
+}
+
+.oc-cal-grupo__numero {
+    font-family: var(--oc-font-sans);
+    font-size: 1.375rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+    color: var(--oc-text);
+}
+
+.oc-cal-grupo__dia,
+.oc-cal-grupo__mes {
+    font-family: var(--oc-font-sans);
+    font-size: 0.6875rem;
+    color: var(--oc-text-meta);
+}
+
+.oc-cal-grupo--hoje .oc-cal-grupo__numero,
+.oc-cal-grupo--hoje .oc-cal-grupo__dia { color: var(--oc-navy); }
+
+.oc-cal-grupo__itens {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.oc-cal-linha {
+    display: flex;
+    align-items: center;
+    gap: var(--oc-space-3);
+    padding: var(--oc-space-2) var(--oc-space-3);
+    border-left: 2px solid var(--oc-navy-mid);
+    border-radius: 0 var(--oc-r-xs) var(--oc-r-xs) 0;
+    background: var(--oc-surface-subtle);
+    transition: background var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-cal-linha:hover { background: var(--oc-surface-hover); }
+
+.oc-cal-linha:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: var(--oc-focus-offset);
+}
+
+.oc-cal-linha[data-kind="deadline"] { border-left-color: var(--oc-gold-line); }
+
+.oc-cal-linha__hora {
+    flex: none;
+    min-width: 4.5rem;
+    font-family: var(--oc-font-sans);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--oc-text-meta);
+}
+
+.oc-cal-linha__titulo {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--oc-font-sans);
+    font-size: 0.8125rem;
+    color: var(--oc-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.oc-cal-linha__tipo {
+    flex: none;
+    font-family: var(--oc-font-sans);
+    font-size: 0.6875rem;
+    color: var(--oc-text-ghost);
+}
+
+/* As faixas do dia. Geradas, e não escritas à mão: quarenta e oito linhas de
+   meia hora, quarenta e oito durações e as combinações de coluna até quatro
+   sobreposições. Uma regra em falta seria um evento sem sítio. */
+.oc-cal-l0 { grid-row-start: 1; }
+.oc-cal-l1 { grid-row-start: 2; }
+.oc-cal-l2 { grid-row-start: 3; }
+.oc-cal-l3 { grid-row-start: 4; }
+.oc-cal-l4 { grid-row-start: 5; }
+.oc-cal-l5 { grid-row-start: 6; }
+.oc-cal-l6 { grid-row-start: 7; }
+.oc-cal-l7 { grid-row-start: 8; }
+.oc-cal-l8 { grid-row-start: 9; }
+.oc-cal-l9 { grid-row-start: 10; }
+.oc-cal-l10 { grid-row-start: 11; }
+.oc-cal-l11 { grid-row-start: 12; }
+.oc-cal-l12 { grid-row-start: 13; }
+.oc-cal-l13 { grid-row-start: 14; }
+.oc-cal-l14 { grid-row-start: 15; }
+.oc-cal-l15 { grid-row-start: 16; }
+.oc-cal-l16 { grid-row-start: 17; }
+.oc-cal-l17 { grid-row-start: 18; }
+.oc-cal-l18 { grid-row-start: 19; }
+.oc-cal-l19 { grid-row-start: 20; }
+.oc-cal-l20 { grid-row-start: 21; }
+.oc-cal-l21 { grid-row-start: 22; }
+.oc-cal-l22 { grid-row-start: 23; }
+.oc-cal-l23 { grid-row-start: 24; }
+.oc-cal-l24 { grid-row-start: 25; }
+.oc-cal-l25 { grid-row-start: 26; }
+.oc-cal-l26 { grid-row-start: 27; }
+.oc-cal-l27 { grid-row-start: 28; }
+.oc-cal-l28 { grid-row-start: 29; }
+.oc-cal-l29 { grid-row-start: 30; }
+.oc-cal-l30 { grid-row-start: 31; }
+.oc-cal-l31 { grid-row-start: 32; }
+.oc-cal-l32 { grid-row-start: 33; }
+.oc-cal-l33 { grid-row-start: 34; }
+.oc-cal-l34 { grid-row-start: 35; }
+.oc-cal-l35 { grid-row-start: 36; }
+.oc-cal-l36 { grid-row-start: 37; }
+.oc-cal-l37 { grid-row-start: 38; }
+.oc-cal-l38 { grid-row-start: 39; }
+.oc-cal-l39 { grid-row-start: 40; }
+.oc-cal-l40 { grid-row-start: 41; }
+.oc-cal-l41 { grid-row-start: 42; }
+.oc-cal-l42 { grid-row-start: 43; }
+.oc-cal-l43 { grid-row-start: 44; }
+.oc-cal-l44 { grid-row-start: 45; }
+.oc-cal-l45 { grid-row-start: 46; }
+.oc-cal-l46 { grid-row-start: 47; }
+.oc-cal-l47 { grid-row-start: 48; }
+.oc-cal-f1 { grid-row-end: span 1; }
+.oc-cal-f2 { grid-row-end: span 2; }
+.oc-cal-f3 { grid-row-end: span 3; }
+.oc-cal-f4 { grid-row-end: span 4; }
+.oc-cal-f5 { grid-row-end: span 5; }
+.oc-cal-f6 { grid-row-end: span 6; }
+.oc-cal-f7 { grid-row-end: span 7; }
+.oc-cal-f8 { grid-row-end: span 8; }
+.oc-cal-f9 { grid-row-end: span 9; }
+.oc-cal-f10 { grid-row-end: span 10; }
+.oc-cal-f11 { grid-row-end: span 11; }
+.oc-cal-f12 { grid-row-end: span 12; }
+.oc-cal-f13 { grid-row-end: span 13; }
+.oc-cal-f14 { grid-row-end: span 14; }
+.oc-cal-f15 { grid-row-end: span 15; }
+.oc-cal-f16 { grid-row-end: span 16; }
+.oc-cal-f17 { grid-row-end: span 17; }
+.oc-cal-f18 { grid-row-end: span 18; }
+.oc-cal-f19 { grid-row-end: span 19; }
+.oc-cal-f20 { grid-row-end: span 20; }
+.oc-cal-f21 { grid-row-end: span 21; }
+.oc-cal-f22 { grid-row-end: span 22; }
+.oc-cal-f23 { grid-row-end: span 23; }
+.oc-cal-f24 { grid-row-end: span 24; }
+.oc-cal-f25 { grid-row-end: span 25; }
+.oc-cal-f26 { grid-row-end: span 26; }
+.oc-cal-f27 { grid-row-end: span 27; }
+.oc-cal-f28 { grid-row-end: span 28; }
+.oc-cal-f29 { grid-row-end: span 29; }
+.oc-cal-f30 { grid-row-end: span 30; }
+.oc-cal-f31 { grid-row-end: span 31; }
+.oc-cal-f32 { grid-row-end: span 32; }
+.oc-cal-f33 { grid-row-end: span 33; }
+.oc-cal-f34 { grid-row-end: span 34; }
+.oc-cal-f35 { grid-row-end: span 35; }
+.oc-cal-f36 { grid-row-end: span 36; }
+.oc-cal-f37 { grid-row-end: span 37; }
+.oc-cal-f38 { grid-row-end: span 38; }
+.oc-cal-f39 { grid-row-end: span 39; }
+.oc-cal-f40 { grid-row-end: span 40; }
+.oc-cal-f41 { grid-row-end: span 41; }
+.oc-cal-f42 { grid-row-end: span 42; }
+.oc-cal-f43 { grid-row-end: span 43; }
+.oc-cal-f44 { grid-row-end: span 44; }
+.oc-cal-f45 { grid-row-end: span 45; }
+.oc-cal-f46 { grid-row-end: span 46; }
+.oc-cal-f47 { grid-row-end: span 47; }
+.oc-cal-f48 { grid-row-end: span 48; }
+.oc-cal-c1de1 { grid-column: 1 / span 4; }
+.oc-cal-c1de2 { grid-column: 1 / span 2; }
+.oc-cal-c2de2 { grid-column: 3 / span 2; }
+.oc-cal-c1de3 { grid-column: 1 / span 1; }
+.oc-cal-c2de3 { grid-column: 2 / span 1; }
+.oc-cal-c3de3 { grid-column: 3 / span 1; }
+.oc-cal-c1de4 { grid-column: 1 / span 1; }
+.oc-cal-c2de4 { grid-column: 2 / span 1; }
+.oc-cal-c3de4 { grid-column: 3 / span 1; }
+.oc-cal-c4de4 { grid-column: 4 / span 1; }
+
+/* ── O calendário do sistema ─────────────────────────────────────────────
+   
+   Ancorado no relógio da barra. Não é uma segunda aplicação de calendário nem
+   uma lista suspensa genérica: é a extensão da superfície onde vive, e por isso
+   herda a mesma elevação, o mesmo raio e a mesma fronteira que os outros
+   painéis da barra. */
+
+.oc-datepop {
+    position: absolute;
+    top: calc(var(--oc-topbar-h) - var(--oc-space-2));
+    right: var(--oc-space-4);
+    width: 17.5rem;
+    padding: var(--oc-space-4);
+    border: 1px solid var(--oc-border-soft);
+    border-radius: var(--oc-r-lg);
+    background: var(--oc-surface);
+    box-shadow: var(--oc-shadow-menu);
+    z-index: var(--oc-z-popover);
+}
+
+.oc-datepop[hidden] { display: none; }
+
+.oc-datepop__cabeca {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: var(--oc-space-3);
+    margin-bottom: var(--oc-space-3);
+    border-bottom: 1px solid var(--oc-border-faint);
+}
+
+.oc-datepop__dia {
+    font-family: var(--oc-font-sans);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--oc-text-meta);
+}
+
+.oc-datepop__data {
+    font-family: var(--oc-font-sans);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--oc-text);
+}
+
+.oc-datepop__mes {
+    margin-bottom: var(--oc-space-2);
+    font-family: var(--oc-font-sans);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--oc-text-secondary);
+}
+
+.oc-datepop__semana,
+.oc-datepop__dias {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.oc-datepop__semana > span {
+    padding-bottom: var(--oc-space-1);
+    font-family: var(--oc-font-sans);
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: var(--oc-text-ghost);
+    text-align: center;
+}
+
+.oc-datepop__dia-cel {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--oc-font-sans);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--oc-text-secondary);
+}
+
+.oc-datepop__dia-cel--fora { color: var(--oc-text-ghost); }
+
+/* A semana em que estamos, sem a apontar: um fundo, não uma moldura. Serve
+   para situar de relance, e uma moldura competiria com o dia de hoje. */
+.oc-datepop__dia-cel--semana { background: var(--oc-surface-subtle); }
+.oc-datepop__dia-cel--semana:first-child { border-radius: var(--oc-r-xs) 0 0 var(--oc-r-xs); }
+
+.oc-datepop__dia-cel--hoje {
+    border-radius: 50%;
+    background: var(--oc-navy);
+    color: var(--oc-on-navy);
+    font-weight: 600;
+}
+
+.oc-datepop__accoes {
+    margin-top: var(--oc-space-3);
+    padding-top: var(--oc-space-3);
+    border-top: 1px solid var(--oc-border-faint);
+}
+
+.oc-datepop__abrir {
+    display: block;
+    padding: var(--oc-space-2);
+    border-radius: var(--oc-r-xs);
+    font-family: var(--oc-font-sans);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--oc-navy);
+    text-align: center;
+    transition: background var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-datepop__abrir:hover { background: var(--oc-surface-hover); }
+
+.oc-datepop__abrir:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: var(--oc-focus-offset);
+}
+
+/* ── O editor de actividade ──────────────────────────────────────────────
+   
+   Três perguntas em sequência — o que é, quando é, de quem é — numa coluna com
+   largura de leitura. Não é um cartão nem três: é a mesma superfície do
+   Workspace, com as secções separadas por uma linha e por espaço. */
+
+.oc-editor {
+    max-width: 42rem;
+}
+
+.oc-editor__cabeca { margin-bottom: var(--oc-space-6); }
+
+.oc-editor__cabeca h1 {
+    margin: 0;
+    font-family: var(--oc-font-sans);
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--oc-text);
+}
+
+.oc-editor__form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--oc-space-7);
+}
+
+.oc-editor__bloco {
+    display: flex;
+    flex-direction: column;
+    gap: var(--oc-space-4);
+}
+
+.oc-editor__bloco + .oc-editor__bloco {
+    padding-top: var(--oc-space-6);
+    border-top: 1px solid var(--oc-border-faint);
+}
+
+.oc-editor__seccao {
+    margin: 0;
+    font-family: var(--oc-font-sans);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--oc-text-meta);
+}
+
+/* O rótulo por cima e não ao lado. Ao lado, o campo começa onde a palavra mais
+   comprida acabar, e a coluna de entrada deixa de ter uma margem esquerda. */
+.oc-campo {
+    display: flex;
+    flex-direction: column;
+    gap: var(--oc-space-1);
+    min-width: 0;
+}
+
+.oc-campo--estreito { max-width: 22rem; }
+
+.oc-campo__rotulo {
+    font-family: var(--oc-font-sans);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--oc-text-secondary);
+}
+
+.oc-entrada {
+    width: 100%;
+    height: 2.25rem;
+    padding: 0 var(--oc-space-3);
+    border: 1px solid var(--oc-border);
+    border-radius: var(--oc-r-xs);
+    background: var(--oc-surface);
+    font-family: var(--oc-font-sans);
+    font-size: 0.875rem;
+    color: var(--oc-text);
+    transition: border-color var(--oc-duration-fast) var(--oc-ease-standard),
+                box-shadow var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-entrada::placeholder { color: var(--oc-placeholder); }
+
+.oc-entrada:hover { border-color: var(--oc-border-strong); }
+
+.oc-entrada:focus {
+    outline: none;
+    border-color: var(--oc-navy-mid);
+    box-shadow: var(--oc-shadow-input);
+}
+
+.oc-entrada:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: var(--oc-focus-offset);
+}
+
+.oc-entrada:disabled {
+    background: var(--oc-surface-muted);
+    color: var(--oc-text-muted);
+}
+
+/* O título é o campo principal, e lê-se como tal. */
+.oc-entrada--titulo {
+    height: 2.75rem;
+    font-size: 1.0625rem;
+    font-weight: 500;
+}
+
+.oc-entrada--texto {
+    height: auto;
+    min-height: 5rem;
+    padding: var(--oc-space-2) var(--oc-space-3);
+    line-height: 1.5;
+    resize: vertical;
+}
+
+select.oc-entrada {
+    /* O `select` nativo com a moldura do sistema destoa de todos os outros
+       campos. A seta continua a ser a do browser — substituí-la exigiria
+       reconstruir a lista, e uma lista reconstruída perde o teclado. */
+    appearance: none;
+    padding-right: var(--oc-space-6);
+    cursor: pointer;
+}
+
+/* Início e Fim lado a lado: são a mesma pergunta em duas metades. */
+.oc-quando {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--oc-space-4);
+    max-width: 30rem;
+}
+
+.oc-interruptor {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--oc-space-2);
+    cursor: pointer;
+}
+
+.oc-interruptor input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+}
+
+.oc-interruptor__marca {
+    width: 1.125rem;
+    height: 1.125rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--oc-border-strong);
+    border-radius: var(--oc-r-xs);
+    background: var(--oc-surface);
+    transition: background var(--oc-duration-fast) var(--oc-ease-standard),
+                border-color var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-interruptor input:checked + .oc-interruptor__marca {
+    border-color: var(--oc-navy);
+    background: var(--oc-navy);
+}
+
+.oc-interruptor input:checked + .oc-interruptor__marca::after {
+    content: "";
+    width: 0.3125rem;
+    height: 0.5625rem;
+    margin-top: -2px;
+    border: solid var(--oc-on-navy);
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
+}
+
+.oc-interruptor input:focus-visible + .oc-interruptor__marca {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: var(--oc-focus-offset);
+}
+
+.oc-interruptor__texto {
+    font-family: var(--oc-font-sans);
+    font-size: 0.875rem;
+    color: var(--oc-text);
+}
+
+/* A zona é contexto, e lê-se como contexto. */
+.oc-zona {
+    display: flex;
+    align-items: baseline;
+    gap: var(--oc-space-2);
+    margin: 0;
+}
+
+.oc-zona__rotulo {
+    font-family: var(--oc-font-sans);
+    font-size: 0.75rem;
+    color: var(--oc-text-meta);
+}
+
+.oc-zona__valor {
+    font-family: var(--oc-font-mono);
+    font-size: 0.75rem;
+    color: var(--oc-text-secondary);
+}
+
+.oc-editor__accoes {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--oc-space-3);
+    padding-top: var(--oc-space-5);
+    border-top: 1px solid var(--oc-border-faint);
+}
+
+/* Um elemento escondido está escondido.
+   
+   O atributo `hidden` traz `display: none` da folha do browser, e qualquer
+   regra de componente com `display` o derrota por especificidade. Foi o que
+   aconteceu ao editor: os selectores de Unidade e de Ambiente tinham `hidden`
+   na marcação e apareciam os dois na mesma, vazios, fosse qual fosse o âmbito.
+   
+   Esta é a última regra do ficheiro de propósito. */
+[hidden] { display: none !important; }
+
+/* ── Participantes ───────────────────────────────────────────────────────
+   
+   Referências institucionais, não etiquetas de texto. Cada uma é uma pessoa que
+   o Core sabe autorizar e notificar — e o desenho di-lo: compacto, com o nome a
+   ler-se, e a remoção a existir sem gritar. */
+
+.oc-pessoas {
+    list-style: none;
+    margin: 0;
+    padding: var(--oc-space-1);
+    max-height: 13rem;
+    max-width: 22rem;
+    overflow-y: auto;
+    border: 1px solid var(--oc-border-soft);
+    border-radius: var(--oc-r-xs);
+    background: var(--oc-surface);
+    box-shadow: var(--oc-shadow-menu);
+}
+
+.oc-pessoa {
+    display: block;
+    width: 100%;
+    padding: var(--oc-space-2) var(--oc-space-3);
+    border: none;
+    border-radius: var(--oc-r-xs);
+    background: none;
+    font-family: var(--oc-font-sans);
+    font-size: 0.8125rem;
+    color: var(--oc-text);
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-pessoa:hover { background: var(--oc-surface-hover); }
+
+.oc-pessoa:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: calc(var(--oc-focus-offset) * -1);
+}
+
+/* Uma procura sem resultados diz-se, e diz-se pequeno. Uma lista vazia sem
+   explicação parece a interface a ter deixado de responder. */
+.oc-pessoas__nada {
+    margin: 0;
+    font-family: var(--oc-font-sans);
+    font-size: 0.75rem;
+    color: var(--oc-text-meta);
+}
+
+.oc-escolhidos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--oc-space-2);
+}
+
+.oc-escolhidos:empty { display: none; }
+
+.oc-escolhido {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--oc-space-2);
+    padding: .2rem .35rem .2rem var(--oc-space-3);
+    border: 1px solid var(--oc-border-soft);
+    border-radius: 999px;
+    background: var(--oc-surface-subtle);
+    font-family: var(--oc-font-sans);
+    font-size: 0.8125rem;
+    color: var(--oc-text);
+}
+
+.oc-escolhido__tirar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.125rem;
+    height: 1.125rem;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: none;
+    font-family: var(--oc-font-sans);
+    font-size: 0.875rem;
+    line-height: 1;
+    color: var(--oc-text-meta);
+    cursor: pointer;
+    transition: background var(--oc-duration-fast) var(--oc-ease-standard),
+                color var(--oc-duration-fast) var(--oc-ease-standard);
+}
+
+.oc-escolhido__tirar:hover {
+    background: var(--oc-surface-muted);
+    color: var(--oc-text);
+}
+
+.oc-escolhido__tirar:focus-visible {
+    outline: var(--oc-focus-width) solid var(--oc-focus-color);
+    outline-offset: 1px;
+}

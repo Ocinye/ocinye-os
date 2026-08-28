@@ -1,0 +1,173 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ocinye-contracts",
+    "crates/ocinye-domain",
+    "crates/ocinye-observability",
+    "crates/ocinye-core",
+    "crates/ocinye-capabilities",
+    "services/core-server",
+    "services/worker",
+    "services/node-agent",
+    "apps/workspace",
+]
+# Capabilities compile to wasm32-wasip1 and are built separately; including them
+# in the host workspace would force them into every native `cargo build`.
+exclude = ["wasm/capabilities/bibtex-import"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.98"
+license = "UNLICENSED"
+publish = false
+
+[workspace.dependencies]
+# --- internal ---------------------------------------------------------------
+ocinye-contracts = { path = "crates/ocinye-contracts" }
+ocinye-domain = { path = "crates/ocinye-domain" }
+ocinye-observability = { path = "crates/ocinye-observability" }
+ocinye-core = { path = "crates/ocinye-core" }
+ocinye-core-server = { path = "services/core-server" }
+ocinye-capabilities = { path = "crates/ocinye-capabilities" }
+
+# --- runtime ----------------------------------------------------------------
+tokio = { version = "1.53", features = ["full"] }
+axum = { version = "0.8", features = ["macros", "multipart"] }
+tower = { version = "0.5", features = ["util"] }
+# Só para o avatar, e só três formatos.
+#
+# `default-features = false` não é higiene: cada codec é um analisador de bytes
+# vindos de fora, e os que não estão aqui — GIF, TIFF, BMP, DDS, farbfeld — são
+# superfície de ataque que ninguém pediu. SVG não entra de todo: é um documento
+# com script, não uma imagem.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+tower-http = { version = "0.7", features = ["trace", "cors", "limit", "set-header", "fs"] }
+hyper = "1"
+
+# --- persistence ------------------------------------------------------------
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "macros", "migrate",
+] }
+redis = { version = "0.32", features = ["tokio-comp", "connection-manager"] }
+
+# --- object storage ---------------------------------------------------------
+#
+# `default-features = false`, and then every feature of the default set **except
+# `rustls`**.
+#
+# That feature is the SDK's *legacy* TLS stack. Enabling it alongside
+# `default-https-client` — which is what the default set does — resolves and
+# links a second copy of the whole HTTP stack: `hyper 0.14`, `h2 0.3`,
+# `rustls 0.21` and `rustls-webpki 0.101`, none of which the client ever uses
+# and all of which carry open RustSec advisories (RUSTSEC-2026-0258,
+# RUSTSEC-2026-0098/0099/0104). Code that is linked is code that can be
+# reached; the cheapest way not to have to argue about reachability is not to
+# link it (`CLAUDE.md` §54).
+#
+# `default-https-client` provides TLS, over `rustls 0.23` with `aws-lc-rs`.
+aws-sdk-s3 = { version = "1", default-features = false, features = [
+    "behavior-version-latest", "default-https-client", "rt-tokio", "http-1x", "sigv4a",
+] }
+aws-credential-types = "1"
+
+# --- serialisation & types --------------------------------------------------
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+# Fusos horários IANA, com as regras de horário de Verão que os acompanham.
+#
+# Um evento institucional não é só um instante: «14:00 em Paris» é uma intenção
+# humana com uma zona de origem, e essa zona tem regras que mudam ao longo do
+# ano. Um offset fixo — `+01:00` — não as representa, e converter DST à mão é
+# reescrever mal uma base de dados que já existe e é mantida.
+chrono-tz = { version = "0.10", features = ["serde"] }
+url = "2"
+
+# --- security ---------------------------------------------------------------
+# A versão 10 exige que o backend criptográfico seja escolhido, e a escolha aqui
+# é medida, não estética.
+#
+# `aws_lc_rs` e não `rust_crypto` porque o `aws-lc-rs` já está na árvore através
+# do `rustls`, e porque o `rust_crypto` traria o crate `rsa` — exactamente o que
+# a excepção RUSTSEC-2023-0071 do `.cargo/audit.toml` declara não ser compilado.
+# Escolher o outro backend tornaria essa excepção falsa.
+#
+# `default-features = false` deixa de fora o `use_pem`: o verificador constrói as
+# chaves a partir dos componentes do JWK e nunca a partir de PEM, e os testes
+# assinam a partir de DER. Assim o binário de produção não leva consigo um
+# leitor de ASN.1 que ninguém invoca — e, o que importa mais, os testes correm
+# com exactamente as mesmas features do binário que é enviado.
+jsonwebtoken = { version = "11.0", default-features = false, features = [
+    "aws_lc_rs",
+] }
+sha2 = "0.10"
+# Argon2id for password verifiers (ADR-0602). `password-hash` gives the PHC
+# string format, which carries the parameters with the hash and is what makes
+# transparent rehashing possible.
+argon2 = { version = "0.5", features = ["std"] }
+password-hash = { version = "0.5", features = ["std"] }
+subtle = "2"
+zeroize = { version = "1", features = ["derive"] }
+# NFC normalisation of passwords before hashing (ADR-0104). Without it the same
+# passphrase typed on two input methods produces two different byte sequences.
+unicode-normalization = "0.1"
+
+# --- Ocinye Mail (ADR-0400) ------------------------------------------------
+# Nada disto é implementado à mão: SMTP, MIME e sanitização de HTML são
+# problemas resolvidos, e resolvê-los outra vez seria escrever criptografia
+# própria com outro nome (`CLAUDE.md` §16-A, briefing §5).
+lettre = { version = "0.11", default-features = false, features = [
+    "smtp-transport", "tokio1-rustls", "builder", "hostname", "webpki-roots", "ring",
+] }
+async-imap = { version = "0.11", default-features = false, features = ["runtime-tokio"] }
+# TLS para o IMAP. `async-imap` fala com qualquer stream tokio e não traz TLS
+# próprio, de propósito: a escolha é nossa. Rustls e não OpenSSL, pela mesma
+# razão que o resto da árvore — uma dependência de sistema a menos, e sem via
+# para desligar a verificação do certificado.
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+webpki-roots = "1"
+mail-parser = "0.11"
+# Sanitização por lista de permissão, com o parser HTML5 dos browsers.
+ammonia = "4"
+rand = "0.10"
+base64 = "0.23"
+hex = "0.4"
+
+# --- errors, logging, misc --------------------------------------------------
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["multipart", "json", "rustls-tls"] }
+async-trait = "0.1"
+futures = "0.3"
+
+# --- workspace UI -----------------------------------------------------------
+leptos = { version = "0.8", features = ["ssr"] }
+
+# --- capability runtime -----------------------------------------------------
+# O `wasmtime` e o `wasmtime-wasi` andam sempre juntos: o segundo liga-se aos
+# tipos do primeiro, e duas versões diferentes no mesmo grafo dão um `Linker`
+# que não é o `Linker` que a outra metade espera.
+wasmtime = "48"
+wasmtime-wasi = "48"
+
+# A árvore de dependências desta workspace (axum, sqlx, aws-sdk, leptos,
+# wasmtime) gera vários GB de informação de depuração em `target/debug`. Basta
+# a informação de linha para que um backtrace continue a apontar ficheiro e
+# linha, e a diferença em disco é de uma ordem de grandeza.
+[profile.dev]
+debug = "line-tables-only"
+
+# Os testes correm a mesma configuração: o objectivo é diagnosticar uma falha,
+# não inspeccionar variáveis num debugger.
+[profile.test]
+debug = "line-tables-only"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"

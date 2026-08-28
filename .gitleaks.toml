@@ -1,0 +1,24 @@
+# Configuração do gitleaks para o Ocinye OS.
+#
+# Estende o conjunto de regras por omissão — não o substitui. Substituí-lo seria
+# escolher a dedo o que a ferramenta procura, que é o contrário do que ela serve.
+#
+# # Porque existe
+#
+# `gitleaks dir .` numa máquina de desenvolvimento percorre também `target/`, e
+# encontra lá oito «chaves privadas»: são os cabeçalhos PEM que as crates
+# `pkcs8` e `pem_rfc7468` trazem nos seus metadados de compilação. Não são
+# segredos, não estão versionados, e não existem sequer num checkout limpo — a
+# CI nunca os vê.
+#
+# Sem esta lista, o comando falharia sempre localmente e passaria sempre na CI.
+# Um gate que só é verde no sítio onde ninguém olha deixa de ser um gate.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Artefactos de compilação, que não são versionados"
+paths = [
+    '''(^|/)target/''',
+]

@@ -1,0 +1,53 @@
+[package]
+name = "ocinye-workspace"
+description = "Ocinye Workspace — the principal human interface of the Ocinye OS"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "ocinye_workspace"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ocinye-workspace"
+path = "src/main.rs"
+
+[dependencies]
+ocinye-contracts = { workspace = true }
+ocinye-observability = { workspace = true }
+
+axum = { workspace = true }
+tokio = { workspace = true }
+tower-http = { workspace = true }
+leptos = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+rand = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+ocinye-core = { workspace = true }
+ocinye-core-server = { workspace = true }
+sqlx = { workspace = true }
+ocinye-observability = { workspace = true }
+# Cliente do Chrome DevTools Protocol, só para os testes de browser.
+#
+# `default-features = false` e **sem** o `fetcher`: o descarregador de browsers é
+# exactamente o que não queremos. O harness conduz o Chrome que já está instalado
+# na máquina, e a CI aponta-lhe o seu. Descarregar um browser por cada corrida
+# seria centenas de megabytes para repetir o que já existe (ADR-0004: Rust-first,
+# e não reinventar infraestrutura madura).
+chromiumoxide = { version = "0.9.1", default-features = false }
+# Só para a sonda de rotas: leva pedidos ao `Router` real em memória, sem abrir
+# socket nenhum. É a peça mínima que prova que `ROUTES` descreve o servidor que
+# a aplicação constrói, e não o servidor que julgamos ter construído.
+tower = { workspace = true }

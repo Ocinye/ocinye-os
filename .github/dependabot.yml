@@ -1,0 +1,40 @@
+# Actualizações de dependências.
+#
+# As actualizações de **segurança** não dependem deste ficheiro: são conduzidas
+# pelos alertas e já estão activas no repositório. O que aqui se configura são as
+# actualizações de **versão**, que é outra coisa — manutenção de rotina, e não
+# resposta a um advisory.
+#
+# Semanal, e não diário, por uma razão concreta: um caudal de pull requests
+# diários deixa de ser lido, e uma actualização de segurança perdida no meio
+# desse caudal é pior do que não ter caudal nenhum.
+#
+# Nada é feito merge automaticamente. Um pull request do Dependabot passa pela
+# mesma CI que qualquer outro — incluindo os portões de advisories do ADR-0105 —
+# e por revisão humana.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Um pull request por família em vez de um por crate. O `Cargo.lock` desta
+      # árvore tem 662 entradas; sem agrupamento, uma semana normal produziria
+      # dezenas de pull requests que ninguém consegue rever com atenção.
+      patches:
+        update-types: ["patch"]
+      minors:
+        update-types: ["minor"]
+
+  # As acções da CI estão pinadas por SHA de commit, o que é a política certa e
+  # também as torna invisíveis a qualquer aviso de versão. Sem isto, um SHA
+  # pinado envelhece em silêncio e nunca recebe correcções.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3

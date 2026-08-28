@@ -1,0 +1,16 @@
+{
+  "identifier": "ocinye.bibtex-import",
+  "name": "BibTeX import",
+  "version": "0.1.0",
+  "description": "Valida referências BibTeX, devolve os registos institucionais que conseguiu ler e escreve o que leu numa forma canónica. Só metadados: nunca vai buscar texto integral e não tem acesso à rede.",
+  "inputs": ["text/x-bibtex"],
+  "outputs": ["application/json"],
+  "network": { "mode": "none" },
+  "filesystem": { "mode": "none" },
+  "limits": {
+    "fuel": 200000000,
+    "memory_bytes": 33554432,
+    "wall_time_ms": 5000
+  },
+  "runtime": "wasm32-wasip1"
+}

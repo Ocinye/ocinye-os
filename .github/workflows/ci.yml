@@ -1,0 +1,522 @@
+# CI do Ocinye OS.
+#
+# CI vermelho significa milestone incompleta (CLAUDE.md §61). Nada aqui é
+# tolerante: um teste saltado por falta de infraestrutura seria cobertura
+# perdida em silêncio, pelo que a infraestrutura é sempre fornecida.
+#
+# # O que esta CI existe para tornar impossível
+#
+# > Verde no GitHub porque as suites que importam não correram.
+#
+# As 123 suites contra PostgreSQL **saltam-se** sem `OCINYE_TEST_DATABASE_URL`,
+# e saem com zero. «Zero testes, zero falhas» é indistinguível de sucesso num
+# exit code. Por isso a base de dados é sempre fornecida, e um passo explícito
+# conta os testes que correram e falha se forem menos do que a baseline
+# conhecida.
+#
+# # Actions de terceiros
+#
+# Fixadas ao SHA do commit, não à tag: uma tag move-se, e uma action que se move
+# é código de outra pessoa a mudar sob os nossos pés sem revisão
+# (`CLAUDE.md` §54). Cada uma tem a versão legível ao lado para que a
+# actualização seja um acto deliberado.
+#
+# São três, todas da GitHub ou amplamente auditadas. O resto corre com
+# ferramentas do próprio ecossistema Rust.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  # Um advisory novo não chega por push. Publica-se contra código que já está
+  # no `main` há semanas, e sem um relógio ninguém pergunta outra vez.
+  schedule:
+    - cron: "17 6 * * *"
+
+# Least privilege, no topo e por omissão para todos os jobs.
+#
+# Esta CI lê o repositório, compila e testa. Não escreve, não publica, não abre
+# PRs, não faz deploy. Um job que precise de mais declara-o para si próprio, e
+# nenhum precisa hoje.
+permissions:
+  contents: read
+
+# Um push novo sobre a mesma branch torna o run anterior obsoleto. Cancelá-lo
+# poupa runner e não perde cobertura: o que interessa é o estado da ponta.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Testes que a invocação `cargo test --workspace` tem de correr.
+  #
+  # **858, e não 864.** O total do projecto é 864; os outros 6 são os testes da
+  # capacidade WASM, que vivem numa workspace separada e correm noutra invocação
+  # — com um passo próprio, que falha por si se eles falharem.
+  #
+  # A distinção importa porque é este número que apanha uma suite saltada, e as
+  # que precisam de PostgreSQL estão todas nesta invocação. Um número menor
+  # significa que alguma deixou de correr; maior é crescimento normal, e
+  # actualiza-se aqui de propósito.
+  MINIMUM_WORKSPACE_TESTS: 858
+  # Espaço livre exigido depois da limpeza, antes de qualquer compilação.
+  #
+  # Medido, e não escolhido. Uma execução completa do job `Testes` no runner:
+  #
+  #     à chegada                      13.1 GB   (não chega, e é o que matava)
+  #     depois da limpeza              37.5 GB
+  #     antes das capacidades WASM     27.6 GB
+  #     antes dos testes do workspace  27.6 GB
+  #     antes das viagens de browser   23.4 GB
+  #     antes dos builds de release    21.8 GB
+  #     no fim                         21.4 GB
+  #
+  # Consumo real: **16.1 GB**. A limpeza recupera 24.4 GB.
+  #
+  # 22 GB dá cerca de 6 GB de folga sobre o pico — para o linker, ficheiros
+  # temporários e o Docker — e fica bem abaixo dos 37.5 GB disponíveis, por isso
+  # não dispara em falso. As sondas `medir` continuam no job: se este consumo
+  # subir, aparece no log antes de aparecer como avaria.
+  OCINYE_CI_MIN_DISK_GB: "22"
+
+jobs:
+  # Falha cedo e barato: formatação, lint e a ausência de segredos não precisam
+  # de base de dados.
+  static:
+    name: Formatação, lint e segredos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.3.0
+        with:
+          # Necessário para o scan de segredos poder ver o histórico do push.
+          fetch-depth: 0
+
+      - name: Toolchain
+        # Instalado a partir de rust-toolchain.toml, para que a CI use
+        # exactamente o mesmo compilador que um programador.
+        run: |
+          rustup show active-toolchain
+          rustup component add rustfmt clippy
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.8.1
+
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Clippy das capacidades WASM
+        run: |
+          rustup target add wasm32-wasip1
+          cargo clippy --manifest-path wasm/capabilities/bibtex-import/Cargo.toml \
+            --target wasm32-wasip1 --all-targets -- -D warnings
+
+      # Gitleaks corre como binário oficial, e não através da action.
+      #
+      # `gitleaks/gitleaks-action` exige uma licença comprada para repositórios
+      # de **organização** — o que este é. A ferramenta em si é open source, e é
+      # a ferramenta que interessa: o wrapper não acrescenta detecção nenhuma.
+      #
+      # Fixada à versão, e verificada por checksum antes de correr: um binário
+      # descarregado sem verificação seria uma dependência de cadeia de
+      # fornecimento a fingir que é um passo de segurança.
+      - name: Scan de segredos (gitleaks)
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          set -euo pipefail
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -fsSL -o "$archive" "$base/$archive"
+          curl -fsSL -o checksums.txt "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep " $archive\$" checksums.txt | sha256sum -c -
+          tar -xzf "$archive" gitleaks
+          ./gitleaks dir . --no-banner --redact --exit-code 1
+
+      - name: Varredura de segredos do projecto
+        # O grep canónico que `./scripts/verify.sh` corre, para que local e CI
+        # apliquem a mesma regra além do gitleaks.
+        run: |
+          if grep -rniE "(password|secret|api[_-]?key|token)[[:space:]]*[:=][[:space:]]*['\"][A-Za-z0-9+/=_-]{16,}" \
+               --include='*.rs' --include='*.toml' --include='*.yml' --include='*.json' \
+               . 2>/dev/null | grep -v '^./target' | grep -viE 'CHANGE_ME|_dev_only|_ci_only|example|placeholder'; then
+            echo "ENCONTRADO: possível segredo no repositório" >&2
+            exit 1
+          fi
+          echo "nenhum segredo encontrado"
+
+      - name: Biblioteca de ADRs
+        run: python3 scripts/check-adrs.py
+
+  # Vulnerabilidades conhecidas nas dependências.
+  #
+  # `cargo audit` e não `rustsec/audit-check`: as excepções vivem em
+  # `.cargo/audit.toml`, cada uma com a razão escrita, e é o binário que as lê.
+  # Uma action que as ignorasse daria um verde que o sweep local não dá.
+  # ── Segurança da cadeia de fornecimento ─────────────────────────────────
+  #
+  # Três jobs e não um, porque respondem a perguntas diferentes e um único tique
+  # verde a dizer «segurança» esconderia exactamente isso.
+  #
+  # Foi assim que o `GHSA-h395-gr6q-cpjc` conseguiu viver aqui: o Dependabot
+  # tinha um alerta aberto, o `cargo audit` reportava zero vulnerabilidades, e
+  # ambos diziam a verdade sobre a base que consultam. O que estava errado era a
+  # conclusão tirada de um tique só.
+  #
+  # E a divergência não é num sentido só. O RUSTSEC-2023-0071 marca o `rsa`
+  # 0.9.10; o GitHub tem o mesmo defeito como `GHSA-c38w-74pg-36hr` mas dá-o por
+  # corrigido desde a 0.9.7. Nenhuma das bases contém a outra.
+
+  rustsec:
+    name: Advisories RustSec (cargo audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.3.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.8.1
+      - name: cargo audit
+        run: |
+          cargo install cargo-audit --locked
+          # Sem flags. O comportamento por omissão é o que se quer aqui: busca a
+          # base RustSec e recusa correr sobre uma cópia obsoleta. Existe um
+          # `--stale` que a aceitaria na mesma, e uma auditoria que responde
+          # depressa a partir de uma base velha é a pior combinação possível.
+          cargo audit
+
+  advisories:
+    name: Advisories do GitHub (Cargo.lock)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.3.0
+
+      # A Dependency Review Action do GitHub faria isto para o diff de um PR,
+      # mas devolve 404 neste repositório: é privado e a organização está no
+      # plano gratuito, onde a comparação do grafo de dependências não está
+      # disponível. Medido, não assumido — ver ADR-0105.
+      #
+      # A base de advisories do GitHub, essa, responde a qualquer plano. Isto
+      # pergunta-lhe pelo `Cargo.lock` inteiro, o que é mais forte do que rever
+      # só o que o PR mudou: apanha também uma versão que já cá estava e sobre a
+      # qual saiu um advisory ontem.
+      - name: Guardas de versões vulneráveis conhecidas
+        run: ./scripts/known-vulnerable-versions.sh
+
+      - name: Política dos portões, contra fixtures
+        run: python3 scripts/test_supply_chain.py
+
+      - name: Base de advisories do GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/advisory_gate.py --lock Cargo.lock
+
+  posture:
+    name: Postura do branch canónico
+    runs-on: ubuntu-latest
+    # Só no `main` e no relógio. Nunca em pull request: um alerta continua
+    # aberto até a correcção chegar ao branch por omissão, e uma regra assim num
+    # PR reprovaria justamente o PR que o vem fechar.
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.3.0
+
+      # Este é o portão. Confronta o `Cargo.lock` do branch canónico com a base
+      # de advisories do GitHub — a mesma base que o Dependabot lê.
+      #
+      # No relógio diário isto é a regressão principal deste incidente: um
+      # advisory novo não chega por push, publica-se contra código que já cá
+      # está. Foi assim que o GHSA-h395-gr6q-cpjc apareceu, e é assim que o
+      # próximo aparecerá. Contra o lockfile de antes da correcção, este mesmo
+      # comando encontra-o.
+      - name: Advisories do GitHub contra o branch canónico
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/advisory_gate.py --lock Cargo.lock
+
+      # E os alertas do próprio repositório, quando puderem ser lidos.
+      #
+      # Foi medido que não podem com o `GITHUB_TOKEN`: a API de alertas Dependabot
+      # responde 403 mesmo com `security-events: read`, porque o token de Actions
+      # não tem âmbito para ela. Aumentar permissões não resolve — não existe a
+      # permissão que faltaria.
+      #
+      # Fica preparado para um token institucional de leitura, se algum dia
+      # houver. Até lá o passo diz o que não foi consultado, em vez de ficar
+      # verde a fingir — e o portão acima cobre a mesma base de advisories sem
+      # precisar de permissão nenhuma. Ver ADR-0105.
+      - name: Alertas Dependabot abertos
+        env:
+          GH_TOKEN: ${{ secrets.OCINYE_SECURITY_READ_TOKEN }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "NAO CONSULTADO: não há token com âmbito de leitura de alertas."
+            echo
+            echo "O GITHUB_TOKEN das Actions responde 403 nesta API — medido, não"
+            echo "suposto. O passo anterior consulta a mesma base de advisories a"
+            echo "partir do Cargo.lock e não precisa desta permissão."
+            exit 0
+          fi
+          python3 scripts/dependabot_posture.py --repository "${{ github.repository }}"
+
+  tests:
+    name: Testes
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # pgvector: exigido pela migration 0006.
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: ocinye
+          POSTGRES_PASSWORD: ocinye_ci_only
+          POSTGRES_DB: ocinye_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ocinye"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      OCINYE_TEST_DATABASE_URL: postgres://ocinye:ocinye_ci_only@localhost:5432/ocinye_test
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.3.0
+        with:
+          # A comparação com o estado anterior à consolidação precisa do
+          # commit base na história. Um checkout superficial não o traz, e o
+          # portão recusa-se — correctamente — a comparar o que não alcança.
+          fetch-depth: 0
+
+      # O runner traz ~14 GB livres e este workspace não cabe lá.
+      #
+      # `cargo test --workspace --all-targets` mais os builds de release mais o
+      # cliente de browser passam disso, e o sintoma é `No space left on device`
+      # a meio de um `rustc` — que se lê como avaria do código e não é. O erro
+      # aparece longe da causa e manda quem investiga para o sítio errado.
+      #
+      # Medir, libertar, exigir. A ordem é a tese: o que se apaga são ferramentas
+      # que a imagem traz e este projecto não usa, e o que se exige vem do
+      # consumo medido nos passos seguintes, não de um número escolhido a gosto.
+      - name: Capacidade de disco do runner
+        run: |
+          ./scripts/ci-disk.sh libertar
+          ./scripts/ci-disk.sh exigir "$OCINYE_CI_MIN_DISK_GB"
+
+      - name: Toolchain
+        run: |
+          rustup show active-toolchain
+          rustup target add wasm32-wasip1
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.8.1
+
+      # As capacidades são compiladas ANTES dos testes: sem o artefacto, os
+      # testes do sandbox WASM saltam-se, e a CI não pode perder essa cobertura.
+      # O harness de browser conduz o Chrome do runner. Não se descarrega
+      # nenhum: o `ubuntu-latest` já traz um, e baixar centenas de megabytes por
+      # corrida para repetir o que existe seria custo sem proveito.
+      - name: Localizar o Chrome do runner
+        run: |
+          set -euo pipefail
+          for caminho in /usr/bin/google-chrome /usr/bin/chromium-browser /usr/bin/chromium; do
+            if [ -x "$caminho" ]; then
+              echo "OCINYE_TEST_CHROME=$caminho" >> "$GITHUB_ENV"
+              echo "browser: $caminho"
+              exit 0
+            fi
+          done
+          echo "ERRO: não há Chrome no runner; o harness de browser saltar-se-ia" >&2
+          exit 1
+
+      # Primeiro de todos. Os portões seguintes verificam o Ocinye; este
+      # verifica-os a eles.
+      - name: Integridade do sistema de verificação
+        run: ./scripts/harness-integrity.sh
+
+      - name: Fronteiras arquitecturais
+        run: ./scripts/architecture-gates.sh
+
+      # Dependência de produção sem consumidor: lixo, promoção silenciosa de
+      # teste para produção, ou intenção por cumprir. Ver o cabeçalho do script.
+      - name: Consumidores das dependências
+        run: python3 ./scripts/dependency_consumers.py
+
+      # Configuração lida e não documentada, ou documentada e não lida.
+      - name: Superfície de configuração
+        run: python3 ./scripts/configuration_surface.py
+
+      # Nenhuma escrita institucional fora do Core.
+      - name: Autoridade de escrita institucional
+        run: python3 ./scripts/mutation_authority.py
+
+      # Tabelas sem leitor: declaradas, ou é finding.
+      - name: Consumidores do esquema
+        run: python3 ./scripts/schema_consumers.py
+
+      # Ligações internas partidas na documentação.
+      - name: Ligações da documentação
+        run: python3 ./scripts/documentation_links.py
+
+      - name: Disco antes de capacidades WASM
+        run: ./scripts/ci-disk.sh medir "capacidades WASM"
+
+      - name: Compilar as capacidades WASM
+        run: ./scripts/build-capabilities.sh
+
+      - name: Validar migrations a partir de base vazia
+        run: |
+          cargo install sqlx-cli --no-default-features --features postgres,rustls --locked
+          DATABASE_URL="$OCINYE_TEST_DATABASE_URL" sqlx migrate run --source migrations
+
+      - name: Disco antes de testes do workspace
+        run: ./scripts/ci-disk.sh medir "testes do workspace"
+
+      - name: Testes do workspace
+        # `pipefail` é obrigatório aqui: sem ele, `cargo test | tee` devolve o
+        # estado do `tee`, que é sempre zero — e uma suite vermelha passaria por
+        # verde. O shell por omissão das Actions traz `-e`, e não isto.
+        run: |
+          set -o pipefail
+          cargo test --workspace --all-targets 2>&1 | tee test-output.txt
+
+      # A prova de que as suites contra base de dados **correram**.
+      #
+      # Sem isto, a CI ficaria verde com as 123 suites de PostgreSQL saltadas:
+      # elas saem com zero quando `OCINYE_TEST_DATABASE_URL` está ausente, e
+      # «zero testes, zero falhas» é indistinguível de sucesso num exit code.
+      - name: Confirmar que as suites contra PostgreSQL correram
+        run: |
+          set -euo pipefail
+          if grep -qi "SKIPPED\|skipping" test-output.txt; then
+            echo "ERRO: uma suite saltou-se. A base de dados devia estar disponível." >&2
+            grep -i "SKIPPED\|skipping" test-output.txt >&2
+            exit 1
+          fi
+          total=$(grep -oE '^test result: ok\. [0-9]+ passed' test-output.txt \
+                  | awk '{s+=$4} END {print s+0}')
+          echo "testes que correram: $total (mínimo: $MINIMUM_WORKSPACE_TESTS)"
+          if [ "$total" -lt "$MINIMUM_WORKSPACE_TESTS" ]; then
+            echo "ERRO: correram menos testes do que a baseline conhecida." >&2
+            echo "      Ou uma suite deixou de correr, ou MINIMUM_WORKSPACE_TESTS está desactualizado." >&2
+            exit 1
+          fi
+
+      - name: Testes das capacidades WASM
+        run: cargo test --manifest-path wasm/capabilities/bibtex-import/Cargo.toml
+
+      # Explícito, e não apenas incluído no conjunto acima: se a suite de
+      # autorização alguma vez deixar de correr, isso tem de ser visível.
+      - name: Testes de autorização
+        run: cargo test -p ocinye-core --test authorization -- --nocapture
+
+      # ADR-0307, e o mesmo raciocínio: estas guardas são o que torna «duas
+      # entradas, uma operação» verificável em vez de declarado, e uma delas a
+      # deixar de correr seria a afirmação a perder a prova sem ninguém reparar.
+      # O Core detém a verdade institucional; a Experience detém a sua
+      # apresentação. Quatro portões com nome, porque um tique agregado a dizer
+      # «arquitectura» esconderia exactamente o que cada um prova.
+      #
+      # Os três primeiros não têm data de validade. O quarto é um invariante
+      # desta migração — prova que a tokenização não mudou um pixel — e sai por
+      # decisão quando o Design System evoluir de propósito.
+      - name: Guardas do catálogo de operações
+        # Inclui `is_delegable_to_agents` ↔ catálogo (a guarda de arranque e a
+        # classificação não podem discordar) e a fronteira do ContextEnvelope
+        # (a inferência recebe identificadores, nunca o registry interno).
+        run: cargo test -p ocinye-core --lib operations -- --nocapture
+
+      # Explícito: se o harness de browser deixar de correr, isso tem de ser
+      # visível — é a única prova de que uma pessoa consegue usar o produto.
+      - name: Disco antes de viagens de browser
+        run: ./scripts/ci-disk.sh medir "viagens de browser"
+
+      - name: Viagens de browser
+        run: cargo test -p ocinye-workspace --test browser -- --nocapture
+
+      # Verde não chega para uma suite crítica.
+      #
+      # `cargo test` devolve zero quando nada falhou, e não diz nada sobre o que
+      # não correu. Um teste que retorna cedo é contado como passado e nunca
+      # aparece como saltado — foi assim que treze das catorze viagens de
+      # browser nunca correram durante uma milestone inteira, com a CI verde.
+      #
+      # Isto exige que os testes esperados de cada suite crítica tenham sido
+      # descobertos, tenham corrido, e tenham passado. Ver CLAUDE.md §59.
+      - name: Contrato de enumeração das suites críticas
+        run: ./scripts/test-enumeration.sh
+
+
+      - name: Paridade das duas entradas
+        # Router HTTP real e executor real, comparados pelo rasto que deixam.
+        run: cargo test -p ocinye-core-server --test parity -- --nocapture
+
+      - name: A matriz corresponde ao catálogo
+        # A matriz versionada é emitida pelo catálogo tipado. Este passo recusa
+        # um commit em que o catálogo mudou e o documento ficou para trás — foi
+        # assim que três contagens diferentes chegaram a circular ao mesmo tempo.
+        run: ./scripts/operation-matrix.sh --check
+
+      - name: Disco antes de builds de release
+        run: ./scripts/ci-disk.sh medir "builds de release"
+
+      - name: Builds de release
+        run: cargo build --release --workspace
+
+      # O `FixtureProvider` é infraestrutura de testes e não pode entrar no
+      # binário do servidor. A verificação é estrutural: pergunta ao Cargo com
+      # que features o binário do servidor resolve o `ocinye-core`.
+      - name: Disco no fim
+        run: ./scripts/ci-disk.sh medir "fim"
+
+      - name: Isolamento do fornecedor de teste
+        run: |
+          set -euo pipefail
+          resolved="$(cargo tree -p ocinye-core-server -e features --format '{p} [{f}]' \
+              | grep -E 'ocinye-core v[0-9]' || true)"
+          if [ -z "$resolved" ]; then
+            echo "ERRO: não foi possível resolver as features de ocinye-core" >&2
+            exit 1
+          fi
+          if printf '%s' "$resolved" | grep -q 'test-fixtures'; then
+            echo "ENCONTRADO: o binário do servidor resolve ocinye-core com test-fixtures" >&2
+            printf '  %s\n' "$resolved" >&2
+            exit 1
+          fi
+          echo "o servidor não activa test-fixtures"
+
+  compose:
+    name: Stack local
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.3.0
+
+      - name: Validar o Docker Compose
+        run: docker compose -f infra/compose/docker-compose.yml config --quiet
+
+      - name: Levantar os serviços de dados
+        run: |
+          docker compose -f infra/compose/docker-compose.yml \
+            up -d postgres redis minio minio-init
+
+      - name: Esperar pela prontidão
+        run: |
+          for _ in $(seq 1 30); do
+            if docker compose -f infra/compose/docker-compose.yml \
+                 exec -T postgres pg_isready -U ocinye; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "a infraestrutura não ficou pronta"
+          docker compose -f infra/compose/docker-compose.yml logs
+          exit 1
+
+      - name: Verificar que o bucket é privado
+        run: |
+          docker compose -f infra/compose/docker-compose.yml logs minio-init \
+            | grep -q "bucket ready and private"

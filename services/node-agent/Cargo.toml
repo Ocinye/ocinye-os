@@ -1,0 +1,24 @@
+[package]
+name = "ocinye-node-agent"
+description = "Ocinye Node Runtime — the agent that enrolls a compute node and reports its state"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "ocinye-node-agent"
+path = "src/main.rs"
+
+[dependencies]
+ocinye-contracts = { workspace = true }
+ocinye-observability = { workspace = true }
+
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+sysinfo = "0.39"

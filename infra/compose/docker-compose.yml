@@ -1,0 +1,93 @@
+# Ocinye OS — local development stack.
+#
+# Brings up everything the platform needs to run end to end: PostgreSQL with
+# pgvector, Redis, S3-compatible object storage and the Identity Provider,
+# alongside the Core, Worker and Workspace.
+#
+# Development only. Every credential here is a placeholder and is expected to be
+# overridden per environment; none of these values may ever reach staging or
+# production (CLAUDE.md §56).
+
+name: ocinye
+
+services:
+  postgres:
+    # pgvector image: the extension is required by migration 0006.
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ocinye}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ocinye_dev_only}
+      POSTGRES_DB: ${POSTGRES_DB:-ocinye}
+    ports:
+      # Ligado ao loopback, e não a todas as interfaces.
+      #
+      # `- "5442:5432"` publica em `0.0.0.0`: numa rede de que não se é dono,
+      # isso é uma base de dados com uma password conhecida à escuta para quem
+      # a queira. Esta stack é de desenvolvimento (`CLAUDE.md` §56) e não tem
+      # de ser alcançável de outra máquina; quem precisar disso muda a variável.
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5442}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ocinye} -d ${POSTGRES_DB:-ocinye}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
+    ports:
+      # Loopback, pela mesma razão do PostgreSQL — e o Redis nem password tem.
+      - "${REDIS_BIND:-127.0.0.1}:${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-ocinye_dev}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-ocinye_dev_only}
+    ports:
+      # Loopback: o bucket é privado, mas as credenciais de raiz estão neste
+      # ficheiro e a consola é uma sessão administrativa.
+      - "${MINIO_BIND:-127.0.0.1}:${MINIO_PORT:-9000}:9000"
+      - "${MINIO_BIND:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Creates the artefact bucket once MinIO is healthy, then exits.
+  # The bucket stays private: objects are served only through signed URLs
+  # issued by the Core after authorization (ADR-0200).
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-ocinye_dev}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-ocinye_dev_only}
+      OCINYE_STORAGE_BUCKET: ${OCINYE_STORAGE_BUCKET:-ocinye-artifacts}
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" &&
+      mc mb --ignore-existing local/\"$$OCINYE_STORAGE_BUCKET\" &&
+      mc anonymous set none local/\"$$OCINYE_STORAGE_BUCKET\" &&
+      echo 'bucket ready and private'
+      "
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

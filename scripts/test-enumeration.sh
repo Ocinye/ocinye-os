@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+#
+# Uma suite só é prova se os testes que se esperava dela foram descobertos e
+# correram.
+#
+# # Porque é que isto existe
+#
+# `cargo test` devolve zero quando nada falhou. Não devolve nada sobre o que
+# **não correu**. Um teste que retorna cedo — por uma pré-condição em falta, por
+# um `.ok()?` num arranque, por um `else { return }` — é contado como passado e
+# nunca aparece como salto.
+#
+# No Ocinye isto escondeu treze das catorze viagens de browser durante uma
+# milestone inteira. Todas partilhavam o directório de perfil do Chrome, só a
+# primeira arrancava, e as outras saíam em silêncio a dizer `ok`. A CI ficou
+# verde e a ADR-0410 foi aceite com uma linha de prova que dizia catorze.
+#
+# O Calendar não estava errado — quando as catorze correram de facto, passaram
+# todas. O que estava errado era a **evidência** com que a cobertura foi
+# declarada. É essa a classe que isto fecha.
+#
+# # O contrato
+#
+#     esperados == passados        descobertos == passados + ignorados        saltados == 0
+#
+# `esperados` vem da tabela abaixo, que é deliberada: o número muda quando
+# alguém decide mudá-lo, e não quando uma suite encolhe sozinha. É o número de
+# testes que têm de **passar**, e não o número que existe.
+#
+# `ignorados` conta à parte de propósito. Um `#[ignore]` é descoberto e não é
+# prova, e um teste que passe a ignorado sem ninguém reparar tira cobertura
+# exactamente como um que se salta — a diferença é que este foi uma decisão.
+# Fica visível para que continue a ser uma.
+#
+# `descobertos` vem de `--list`, que enumera sem correr. É o que separa «a suite
+# encolheu» de «a suite falhou»: se um ficheiro de testes deixar de compilar
+# para dentro do alvo, ou um `#[cfg]` os apagar, a descoberta baixa e o exit
+# code não muda.
+#
+# `passados` vem da execução — e não chega.
+#
+# Isto foi verificado por reversão, e a primeira versão deste contrato **não
+# apanhava** o defeito que o motivou: com o salto silencioso de volta, os treze
+# testes saíam cedo, imprimiam `... ok`, e não emitiam marca de salto nenhuma.
+# Catorze descobertos, catorze «passados», zero saltados, e treze por correr.
+#
+# A ausência de uma marca de salto não é prova de execução. Por isso uma suite
+# pode declarar uma **marca positiva**, emitida no ponto em que já não é
+# possível sair sem correr, e o contrato exige que apareça uma vez por teste:
+#
+#     marcas == esperados
+#
+# As viagens de browser emitem `VIAGEM LEVANTADA` quando o harness levanta o
+# Core, o Workspace e o browser. Um teste que não chegue lá não a imprime.
+#
+# O número de marcas não tem de ser igual ao de testes, e aqui não é: a suite
+# tem quinze testes e emite quinze marcas, e as duas contagens baterem é
+# coincidência, não identidade:
+#
+#     13 testes levantam um browser cada                  13 marcas
+#      1 controlo visual levanta dois — um por estado      2 marcas
+#      1 teste estrutural lê o ficheiro do ecrã            0 marcas
+#     ──                                                  ──
+#     15 testes                                           15 marcas
+#
+# Exigir uma marca por teste seria exigir um browser ao teste estrutural, que
+# nunca precisou de um, e perdoar ao controlo visual metade do trabalho que
+# faz. A marca conta execuções, não testes.
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+falhas=0
+
+# ── A fonte de expectativa ──────────────────────────────────────────────────
+#
+# Cada linha: <nome> <esperados> <invocação...>
+#
+# Só suites críticas. Não é o inventário de tudo o que se testa: é a lista das
+# suites cuja contagem, se cair sem ninguém reparar, faz uma afirmação de
+# cobertura passar a ser falsa.
+#
+# Mudar um número aqui é uma decisão. Um número que precisa de descer merece a
+# pergunta de porquê.
+suites() {
+    cat <<'TABELA'
+viagens-de-browser|47|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|46
+paridade|6|-p ocinye-core-server --test parity
+verificador-de-tokens|31|-p ocinye-core --test authn
+autorizacao|12|-p ocinye-core --test authorization
+catalogo-de-operacoes|11|-p ocinye-core --lib operations
+TABELA
+}
+
+verifica() {
+    local nome="$1" esperados="$2" invocacao="$3" marca="${4:-}" marcas_esperadas="${5:-0}"
+    local saida descobertos passados ignorados saltados marcas
+
+    # shellcheck disable=SC2086
+    descobertos=$(cargo test $invocacao -- --list 2>/dev/null | grep -c ': test$' || true)
+
+    saida=$(mktemp)
+    # shellcheck disable=SC2086
+    if ! cargo test $invocacao -- --nocapture >"$saida" 2>&1; then
+        printf '  %-24s a suite falhou\n' "$nome" >&2
+        sed 's/^/      /' "$saida" | tail -20 >&2
+        rm -f "$saida"
+        falhas=$((falhas + 1))
+        return
+    fi
+
+    passados=$(grep -cE '^test .+ \.\.\. ok$' "$saida" || true)
+    ignorados=$(grep -cE '^test .+ \.\.\. ignored' "$saida" || true)
+    saltados=$(grep -c '^skipping:' "$saida" || true)
+    marcas=0
+    [ -n "$marca" ] && marcas=$(grep -cF "$marca" "$saida" || true)
+    rm -f "$saida"
+
+    if [ "$((descobertos - ignorados))" -ne "$esperados" ]; then
+        printf '  %-24s descobertos %s, ignorados %s, esperados %s\n' \
+            "$nome" "$descobertos" "$ignorados" "$esperados" >&2
+        echo "      A suite encolheu ou cresceu sem que a expectativa mudasse." >&2
+        echo "      Se foi de propósito, actualize a tabela em $0." >&2
+        falhas=$((falhas + 1))
+        return
+    fi
+
+    if [ "$saltados" -gt 0 ]; then
+        printf '  %-24s %s teste(s) saltaram-se\n' "$nome" "$saltados" >&2
+        echo "      Um teste saltado reporta ok e conta como cobertura que não existe." >&2
+        falhas=$((falhas + 1))
+        return
+    fi
+
+    if [ "$passados" -ne "$esperados" ]; then
+        printf '  %-24s passaram %s, esperados %s\n' "$nome" "$passados" "$esperados" >&2
+        falhas=$((falhas + 1))
+        return
+    fi
+
+    if [ -n "$marca" ] && [ "$marcas" -ne "$marcas_esperadas" ]; then
+        printf '  %-24s correram %s, passaram %s, esperadas %s execuções\n' \
+            "$nome" "$marcas" "$passados" "$marcas_esperadas" >&2
+        echo "      A suite passou sem que todos os testes tivessem corrido." >&2
+        echo "      A marca é emitida no ponto em que já não é possível sair" >&2
+        echo "      sem correr, e apareceu $marcas vez(es) em $marcas_esperadas." >&2
+        falhas=$((falhas + 1))
+        return
+    fi
+
+    local nota=""
+    [ "$ignorados" -gt 0 ] && nota="$nota · $ignorados ignorado(s)"
+    [ -n "$marca" ] && nota="$nota · $marcas correram de facto"
+    printf '  %-24s %s esperados · %s descobertos · %s passados · 0 saltados%s\n' \
+        "$nome" "$esperados" "$descobertos" "$passados" "$nota"
+}
+
+echo "Contrato de enumeração das suites críticas:"
+
+while IFS='|' read -r nome esperados invocacao marca marcas_esperadas; do
+    [ -z "$nome" ] && continue
+    verifica "$nome" "$esperados" "$invocacao" "${marca:-}" "${marcas_esperadas:-0}"
+done < <(suites)
+
+if [ "$falhas" -gt 0 ]; then
+    echo >&2
+    echo "$falhas suite(s) não provaram o que se espera delas." >&2
+    echo >&2
+    echo "Verde não chega. Uma suite só é prova se os testes que se esperava" >&2
+    echo "dela foram descobertos e correram." >&2
+    exit 1
+fi

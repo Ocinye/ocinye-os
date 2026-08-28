@@ -1,0 +1,17 @@
+[package]
+name = "ocinye-capabilities"
+description = "Ocinye Capability Runtime — sandboxed institutional capabilities on WebAssembly/WASI"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+ocinye-contracts = { workspace = true }
+
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

@@ -1,0 +1,41 @@
+[package]
+name = "ocinye-core-server"
+description = "HTTP surface of the Ocinye Core (Core Runtime)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "ocinye_core_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ocinye-core-server"
+path = "src/main.rs"
+
+[dependencies]
+ocinye-contracts = { workspace = true }
+ocinye-core = { workspace = true }
+ocinye-domain = { workspace = true }
+ocinye-observability = { workspace = true }
+
+axum = { workspace = true }
+tokio = { workspace = true }
+tower-http = { workspace = true }
+sqlx = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+
+[dev-dependencies]
+# `tower::ServiceExt::oneshot` só é usado pelas suites de HTTP, que conduzem o
+# router real sem levantar um porto. Estava em `[dependencies]`, o que a fazia
+# entrar nos binários de produção — a mesma promoção silenciosa de teste para
+# produção que `scripts/architecture_boundaries.py` recusa entre crates
+# internos, mas que nada apanhava para dependências externas.
+tower = { workspace = true }

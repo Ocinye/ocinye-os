@@ -1,0 +1,29 @@
+# Build output
+/target
+**/target
+
+# Local configuration. `.env.example` is committed; `.env` never is.
+.env
+.env.*
+!.env.example
+
+# Secrets of any kind. Belt and braces alongside the rule that they are never
+# written into the repository in the first place (CLAUDE.md §39).
+*.pem
+*.key
+*.p12
+*.pfx
+*.token
+secrets/
+
+# Rust tooling leftovers
+*.rs.bk
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local data
+/data

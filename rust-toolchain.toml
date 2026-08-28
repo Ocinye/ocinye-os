@@ -1,0 +1,14 @@
+# Pinned toolchain for the Ocinye OS.
+#
+# A Rust-first institutional platform (ADR-0004) builds reproducibly: everyone,
+# including CI, uses the same compiler. rustup installs this automatically on
+# first build, so no manual step is required.
+#
+# `wasm32-wasip1` is the target of the Capability Runtime guests (ADR-0501);
+# `wasm32-unknown-unknown` is reserved for the future hydrated Workspace
+# (ADR-0600), which is PLANNED and not yet built.
+[toolchain]
+channel = "1.98.0"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-wasip1"]
+profile = "minimal"

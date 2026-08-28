@@ -1,0 +1,195 @@
+//! Search persistence.
+
+use ocinye_contracts::Classification;
+use ocinye_domain::policy::VisibilityFilter;
+use sqlx::PgExecutor;
+use uuid::Uuid;
+
+use super::model::SearchHit;
+use crate::error::CoreResult;
+use crate::visibility::{to_sql, VisibilityColumns};
+
+/// Text search configuration.
+///
+/// `simple` avoids single-language stemming: the corpus is bilingual
+/// (Portuguese content, English terminology) and a Portuguese stemmer would
+/// degrade the English half, and vice versa (ADR-0202).
+pub const TS_CONFIG: &str = "simple";
+
+/// Longest excerpt retained. The index is a finding aid, not a second corpus.
+pub const MAX_EXCERPT: usize = 400;
+
+/// Insert or update the index row for an entity.
+///
+/// # Errors
+///
+/// Returns an error when the upsert fails.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "um parâmetro por coluna: a alternativa é uma struct que só existe para atravessar esta chamada"
+)]
+pub async fn upsert<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    unit_id: Option<Uuid>,
+    workspace_id: Option<Uuid>,
+    entity_type: &str,
+    entity_id: Uuid,
+    title: &str,
+    text: &str,
+    classification: Classification,
+) -> CoreResult<()> {
+    let excerpt: String = text.chars().take(MAX_EXCERPT).collect();
+    let document = format!("{title}\n{text}");
+
+    sqlx::query(
+        "INSERT INTO search_documents
+             (organisation_id, unit_id, workspace_id, entity_type, entity_id,
+              title, excerpt, classification, search_vector, indexed_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8, to_tsvector($9::regconfig, $10), now())
+         ON CONFLICT (entity_type, entity_id) DO UPDATE
+            SET organisation_id = EXCLUDED.organisation_id,
+                unit_id = EXCLUDED.unit_id,
+                workspace_id = EXCLUDED.workspace_id,
+                title = EXCLUDED.title,
+                excerpt = EXCLUDED.excerpt,
+                classification = EXCLUDED.classification,
+                search_vector = EXCLUDED.search_vector,
+                indexed_at = now(),
+                updated_at = now()",
+    )
+    .bind(organisation_id)
+    .bind(unit_id)
+    .bind(workspace_id)
+    .bind(entity_type)
+    .bind(entity_id)
+    .bind(title)
+    .bind(excerpt)
+    .bind(classification.as_str())
+    .bind(TS_CONFIG)
+    .bind(document)
+    .execute(executor)
+    .await?;
+    Ok(())
+}
+
+/// Remove an entity from the index.
+///
+/// # Errors
+///
+/// Returns an error when the delete fails.
+pub async fn delete<'e>(
+    executor: impl PgExecutor<'e>,
+    entity_type: &str,
+    entity_id: Uuid,
+) -> CoreResult<()> {
+    sqlx::query("DELETE FROM search_documents WHERE entity_type = $1 AND entity_id = $2")
+        .bind(entity_type)
+        .bind(entity_id)
+        .execute(executor)
+        .await?;
+    Ok(())
+}
+
+/// What is being searched for.
+#[derive(Debug, Clone, Copy)]
+pub struct SearchTerms<'a> {
+    /// The caller's query text.
+    pub query: &'a str,
+    /// Restrict to these kinds of artefact.
+    pub entity_types: Option<&'a [String]>,
+    /// Restrict to one research workspace.
+    pub workspace_id: Option<Uuid>,
+}
+
+/// Run a permission-aware lexical search.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn search<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    visibility: &VisibilityFilter,
+    terms: SearchTerms<'_>,
+    limit: i64,
+    offset: i64,
+) -> CoreResult<Vec<SearchHit>> {
+    let predicate = to_sql(visibility, VisibilityColumns::default());
+
+    let hits = sqlx::query_as::<_, SearchHit>(&format!(
+        "SELECT entity_type, entity_id, title, excerpt, classification, workspace_id,
+                ts_rank(search_vector, websearch_to_tsquery($2::regconfig, $3)) AS rank
+           FROM search_documents
+          WHERE organisation_id = $1
+            AND search_vector @@ websearch_to_tsquery($2::regconfig, $3)
+            AND ($4::text[] IS NULL OR entity_type = ANY($4))
+            AND ($5::uuid IS NULL OR workspace_id = $5)
+            AND {predicate}
+          ORDER BY rank DESC, title
+          LIMIT $6 OFFSET $7"
+    ))
+    .bind(organisation_id)
+    .bind(TS_CONFIG)
+    .bind(terms.query)
+    .bind(terms.entity_types)
+    .bind(terms.workspace_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(executor)
+    .await?;
+    Ok(hits)
+}
+
+/// Count matches within the authorised set.
+///
+/// Uses exactly the same predicate as [`search`], so a total can never reveal
+/// rows the caller may not see.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn count<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    visibility: &VisibilityFilter,
+    terms: SearchTerms<'_>,
+) -> CoreResult<i64> {
+    let predicate = to_sql(visibility, VisibilityColumns::default());
+
+    let total = sqlx::query_scalar::<_, i64>(&format!(
+        "SELECT COUNT(*) FROM search_documents
+          WHERE organisation_id = $1
+            AND search_vector @@ websearch_to_tsquery($2::regconfig, $3)
+            AND ($4::text[] IS NULL OR entity_type = ANY($4))
+            AND ($5::uuid IS NULL OR workspace_id = $5)
+            AND {predicate}"
+    ))
+    .bind(organisation_id)
+    .bind(TS_CONFIG)
+    .bind(terms.query)
+    .bind(terms.entity_types)
+    .bind(terms.workspace_id)
+    .fetch_one(executor)
+    .await?;
+    Ok(total)
+}
+
+/// Number of indexed documents that carry an embedding.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn embedded_count<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+) -> CoreResult<i64> {
+    let total = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM search_documents
+          WHERE organisation_id = $1 AND embedding IS NOT NULL",
+    )
+    .bind(organisation_id)
+    .fetch_one(executor)
+    .await?;
+    Ok(total)
+}
