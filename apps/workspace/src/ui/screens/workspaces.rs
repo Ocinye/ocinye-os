@@ -102,6 +102,14 @@ fn tabs(labels: &[&'static str], workspace_id: &str) -> Vec<Tab> {
                 format!("/ai/prompt?workspace={workspace_id}"),
                 false,
             ),
+            // Experiências e Resultados são duas leituras da mesma cadeia
+            // científica, e por isso levam ao mesmo ecrã. Duas páginas que
+            // partissem a cadeia ao meio obrigariam a saltar entre elas para
+            // seguir uma linhagem — que é a única coisa que a cadeia serve
+            // para fazer.
+            "Experiências" | "Resultados" => {
+                Tab::link(*label, format!("/workspaces/{workspace_id}/science"), false)
+            }
             other => Tab::inert(other),
         })
         .collect()

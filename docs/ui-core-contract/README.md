@@ -151,3 +151,51 @@ Detalhe: [ADR-0603](../adrs/0603-boot-and-institutional-readiness.md) e
 Nenhum contador, badge ou estatística é escrito à mão. Se o Core não devolveu
 uma contagem — porque recusou, ou porque não respondeu — o cartão **não aparece**.
 Mostrar `0` diria «não existe nenhum» a quem apenas não pode ver.
+
+## 7. Um selector não é segurança
+
+A criação científica trouxe selectores que oferecem recursos: a versão de
+metodologia que um estudo segue, a versão de dataset que entra numa execução, a
+execução que sustenta uma reprodução. Estes selectores fazem duas coisas
+diferentes, e nenhuma delas é autorizar.
+
+**Seguem o contrato em vez de esperarem pela recusa.** A matriz de proveniência
+aceita `Study → MethodologyVersion` e recusa `Study → Methodology`; o selector
+oferece versões. Oferecer a metodologia mutável poria no ecrã uma escolha que o
+Core recusa, e deixaria o `422` ensinar a regra a quem já tinha preenchido o
+resto.
+
+**E oferecem apenas o que quem escolhe já alcança**, porque a lista vem do Core
+com o principal de quem pergunta.
+
+Mas o Core revalida **tudo**, sempre: o tipo, a existência do recurso, a
+autorização, a semântica da versão, a compatibilidade da relação e a autoridade
+corrente. Uma escolha que não passe pelo selector — escrita à mão, ou vinda de
+outro lado — bate na mesma recusa.
+
+> **O selector é conveniência e honestidade. A decisão é do Core.**
+
+## 8. O que a interface não pergunta
+
+Alguns campos não existem no formulário de propósito, e a ausência é a
+propriedade.
+
+**A origem da proveniência.** Um resultado é registado **de dentro** da execução
+que o produziu, e a operação escreve a aresta na mesma transacção. Não há um passo
+a seguir a pedir «agora indique de onde veio», e não há um selector de `origin`:
+`operation` significa que o Core **observou** a relação, e uma pessoa a marcá-lo
+estaria a afirmar que o sistema viu o que não viu.
+
+**O que o caminho já diz.** Se o formulário abriu dentro de uma execução, o
+identificador dessa execução não é um campo — é o contexto.
+
+## 9. O vocabulário do domínio é lido no Core
+
+Estados como `succeeded`, `published` ou `draft` são vocabulário do domínio, em
+inglês, e a interface é em português. A leitura — «Correu bem», «Em vigor»,
+«Rascunho» — vem do Core, ao lado do vocabulário que traduz.
+
+Uma tabela de tradução no cliente seria um segundo vocabulário, a divergir do
+primeiro no dia em que alguém acrescentasse um estado. Pela mesma razão, um campo
+de estado é um conjunto fechado no ecrã: uma cadeia de caracteres livre chegaria
+a um `CHECK` da base, e um erro de quem preenche voltaria como avaria.

@@ -85,11 +85,25 @@ falhas=0
 # pergunta de porquê.
 suites() {
     cat <<'TABELA'
-viagens-de-browser|47|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|46
-paridade|6|-p ocinye-core-server --test parity
+# 56 viagens e 55 marcas, e os números **não** têm de coincidir.
+#
+# A marca conta levantamentos de harness, não viagens. Duas das 56 são análise
+# estática sobre a árvore e não abrem browser nenhum; e
+# `a_consolidacao_nao_mudou_o_que_a_pessoa_ve` levanta **dois** harnesses — um
+# com os estáticos actuais, outro com o estado anterior — porque a propriedade
+# que mede é a comparação entre os dois. 54 viagens × 1 + 1 extra = 55.
+#
+# Auditado em 2026-08-28, em série, marca a marca. O número continua fixo: uma
+# viagem que deixe de levantar faz a contagem cair e o portão fecha.
+viagens-de-browser|57|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|56
+paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
-catalogo-de-operacoes|11|-p ocinye-core --lib operations
+catalogo-de-operacoes|13|-p ocinye-core --lib operations
+estado-do-correio|3|-p ocinye-core-server --test mail_status_http
+isolamento-de-caixas|10|-p ocinye-core --test mailbox_isolation
+validacao-cientifica|6|-p ocinye-core --test scientific_validation
+linhagem-cientifica|3|-p ocinye-core --test scientific_lineage
 TABELA
 }
 
@@ -104,6 +118,20 @@ verifica() {
     # shellcheck disable=SC2086
     if ! cargo test $invocacao -- --nocapture >"$saida" 2>&1; then
         printf '  %-24s a suite falhou\n' "$nome" >&2
+
+        # O pânico primeiro, e só depois o fim.
+        #
+        # Com `--nocapture` a mensagem de pânico sai **no momento em que
+        # acontece**, e não no bloco de resumo. Numa suite de cinquenta e seis
+        # testes isso deixa-a a meio do ficheiro, e um `tail -20` mostrava só
+        # a lista de nomes que falharam — «a suite falhou», sem dizer porquê.
+        # Uma viagem de browser intermitente ficava por classificar entre
+        # defeito e infraestrutura, que são coisas diferentes.
+        if grep -q "panicked at" "$saida"; then
+            echo "      ── onde falhou ──" >&2
+            grep -n -A 4 "panicked at" "$saida" | sed 's/^/      /' | head -40 >&2
+            echo "      ── fim da corrida ──" >&2
+        fi
         sed 's/^/      /' "$saida" | tail -20 >&2
         rm -f "$saida"
         falhas=$((falhas + 1))
@@ -151,7 +179,7 @@ verifica() {
 
     local nota=""
     [ "$ignorados" -gt 0 ] && nota="$nota · $ignorados ignorado(s)"
-    [ -n "$marca" ] && nota="$nota · $marcas correram de facto"
+    [ -n "$marca" ] && nota="$nota · $marcas levantamentos de harness"
     printf '  %-24s %s esperados · %s descobertos · %s passados · 0 saltados%s\n' \
         "$nome" "$esperados" "$descobertos" "$passados" "$nota"
 }
@@ -159,7 +187,13 @@ verifica() {
 echo "Contrato de enumeração das suites críticas:"
 
 while IFS='|' read -r nome esperados invocacao marca marcas_esperadas; do
+    # Linhas em branco e comentários não são suites.
+    #
+    # Sem a segunda metade, um comentário dentro da tabela virava uma suite com
+    # invocação vazia — e o contrato reportava dez falhas onde havia zero,
+    # enterrando a única verdadeira no meio delas.
     [ -z "$nome" ] && continue
+    case "$nome" in \#*) continue ;; esac
     verifica "$nome" "$esperados" "$invocacao" "${marca:-}" "${marcas_esperadas:-0}"
 done < <(suites)
 

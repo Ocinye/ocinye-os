@@ -36,15 +36,30 @@ use crate::WorkspaceState;
 pub const ROUTES: &[&str] = &[
     "/",
     "/my-work",
+    "/messages",
+    "/messages/{conversation}",
+    "/messages/start",
+    "/messages/assist",
+    "/messages/people",
+    "/messages/{conversation}/typing",
+    "/messages/{conversation}/send",
+    "/messages/{conversation}/react",
+    "/messages/{conversation}/read",
+    "/messages/{conversation}/members",
+    "/messages/{conversation}/leave",
+    "/messages/{conversation}/remove",
     "/mail",
     "/mail/{mailbox_id}",
     "/mail/{mailbox_id}/sync",
     "/mail/message/{message_id}",
     "/mail/message/{message_id}/flags",
     "/mail/compose",
+    "/mail/people",
     "/mail/assist",
     "/mail/send",
     "/mail/settings",
+    "/mail/{mailbox_id}/connect",
+    "/mail/{mailbox_id}/disconnect",
     "/units",
     "/units/{unit_id}",
     "/ideas",
@@ -58,6 +73,7 @@ pub const ROUTES: &[&str] = &[
     "/calendar/events/{event_id}/edit",
     "/calendar/events/{event_id}/cancel",
     "/notifications",
+    "/notifications/recent",
     "/notifications/{notification_id}/read",
     "/help",
     "/settings",
@@ -73,6 +89,18 @@ pub const ROUTES: &[&str] = &[
     "/projects",
     "/projects/{project_id}",
     "/workspaces/{workspace_id}",
+    "/workspaces/{workspace_id}/science",
+    "/workspaces/{workspace_id}/science/hypotheses/new",
+    "/workspaces/{workspace_id}/science/methodologies/new",
+    "/workspaces/{workspace_id}/science/studies/new",
+    "/methodologies/{methodology_id}",
+    "/methodologies/{methodology_id}/versions/new",
+    "/studies/{study_id}",
+    "/studies/{study_id}/executions/new",
+    "/executions/{execution_id}",
+    "/executions/{execution_id}/results/new",
+    "/results/{result_id}",
+    "/results/{result_id}/validate",
     "/knowledge",
     "/bibliography",
     "/bibliography/tools",
@@ -105,14 +133,35 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/", get(home))
         .route("/my-work", get(my_work))
         // Correio
+        // ── Mensagens ───────────────────────────────────────────────────
+        .route(ui::screens::messaging::ROUTE, get(messaging))
+        .route("/messages/{conversation}", get(messaging_conversation))
+        .route("/messages/start", post(messaging_start))
+        .route("/messages/assist", post(messaging_assist))
+        .route("/messages/people", get(messaging_people))
+        .route("/messages/{conversation}/typing", get(messaging_typing))
+        .route("/messages/{conversation}/send", post(messaging_send))
+        .route("/messages/{conversation}/react", post(messaging_react))
+        .route("/messages/{conversation}/read", post(messaging_read))
+        .route(
+            "/messages/{conversation}/members",
+            post(messaging_add_member),
+        )
+        .route("/messages/{conversation}/leave", post(messaging_leave))
+        .route("/messages/{conversation}/remove", post(messaging_remove))
         .route("/mail", get(mail))
         .route("/mail/compose", get(compose))
+        .route("/mail/people", get(mail_people))
         .route("/mail/assist", post(assist))
         .route("/mail/send", post(send_mail))
         .route(
             "/mail/settings",
             get(mail_settings).post(save_mail_settings),
         )
+        // Declaradas antes de `/mail/{mailbox_id}`: são caminhos literais sob
+        // um identificador, e a rota genérica apanhá-las-ia primeiro.
+        .route("/mail/{mailbox_id}/connect", post(mail_connect))
+        .route("/mail/{mailbox_id}/disconnect", post(mail_disconnect))
         .route("/mail/message/{message_id}", get(mail_message))
         .route("/mail/message/{message_id}/flags", post(mail_flags))
         // Declarada depois das anteriores: `/mail/compose` tem de bater na
@@ -138,6 +187,7 @@ pub fn router(state: WorkspaceState) -> Router {
             post(cancel_calendar_event),
         )
         .route("/notifications", get(notifications_page))
+        .route("/notifications/recent", get(notifications_recent))
         .route(
             "/notifications/{notification_id}/read",
             post(mark_notification_read),
@@ -172,6 +222,47 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/projects", get(projects))
         .route("/projects/{project_id}", get(project_workspace))
         .route("/workspaces/{workspace_id}", get(research_workspace))
+        // A cadeia científica do ambiente, e um resultado com a sua
+        // proveniência. `/results/{id}` é raiz e não está debaixo do
+        // ambiente: um resultado é citável, e um caminho que exigisse saber
+        // em que ambiente ele vive obrigaria quem tem o link a descobri-lo.
+        .route("/workspaces/{workspace_id}/science", get(scientific_chain))
+        // Cada criação abre a partir do sítio onde a pergunta nasce, e leva o
+        // contexto consigo em vez de o pedir. É o que faz a proveniência
+        // acontecer sozinha: quem regista um resultado dentro de uma execução
+        // não declara depois que aquela execução o produziu.
+        .route(
+            "/workspaces/{workspace_id}/science/hypotheses/new",
+            get(new_hypothesis).post(create_hypothesis),
+        )
+        .route(
+            "/workspaces/{workspace_id}/science/methodologies/new",
+            get(new_methodology).post(create_methodology),
+        )
+        .route(
+            "/workspaces/{workspace_id}/science/studies/new",
+            get(new_study).post(create_study),
+        )
+        .route("/methodologies/{methodology_id}", get(methodology_detail))
+        .route(
+            "/methodologies/{methodology_id}/versions/new",
+            get(new_version).post(publish_version),
+        )
+        .route("/studies/{study_id}", get(study_detail))
+        .route(
+            "/studies/{study_id}/executions/new",
+            get(new_execution).post(record_execution),
+        )
+        .route("/executions/{execution_id}", get(execution_detail))
+        .route(
+            "/executions/{execution_id}/results/new",
+            get(new_result).post(create_result),
+        )
+        .route("/results/{result_id}", get(result_detail))
+        .route(
+            "/results/{result_id}/validate",
+            get(validate_result_form).post(record_validation),
+        )
         // Conhecimento
         .route("/knowledge", get(knowledge))
         .route("/bibliography", get(bibliography))
@@ -497,6 +588,11 @@ async fn health() -> &'static str {
 struct Member {
     session: Session,
     correlation_id: String,
+    /// A zona em que este membro está a olhar para o sistema.
+    ///
+    /// Vem do browser. Sem ela, cai em UTC — que é a resposta menos errada
+    /// quando não se sabe onde a pessoa está, e não uma preferência.
+    zona: ocinye_contracts::temporal::TimeZoneName,
 }
 
 fn current_member(state: &WorkspaceState, headers: &HeaderMap) -> Option<Member> {
@@ -508,6 +604,7 @@ fn current_member(state: &WorkspaceState, headers: &HeaderMap) -> Option<Member>
     Some(Member {
         session,
         correlation_id: Uuid::new_v4().to_string(),
+        zona: ui::tempo::zona_declarada(session::zone_from_cookies(cookie).as_deref()),
     })
 }
 
@@ -629,23 +726,19 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
         .unwrap_or_default();
 
     Viewer {
+        zona: member.zona,
         name: member.session.display_name.clone(),
-        // O username vem da sessão local — é aquele com que a pessoa entrou.
-        // O Core confirma-o em `/api/v1/me`; quando responde, é a resposta dele
-        // que manda, porque é lá que o registo vive.
-        username: me
-            .get("username")
-            .and_then(Value::as_str)
-            .map(str::to_owned)
-            .or_else(|| {
-                let entrada = member.session.username.trim();
-                (!entrada.is_empty()).then(|| entrada.to_owned())
-            }),
+        // O endereço vem do Core, que é onde o registo vive. A sessão local
+        // serve de recurso: é aquele com que a pessoa entrou, e é o mesmo.
         email: me
             .get("email")
             .and_then(Value::as_str)
             .filter(|value| !value.is_empty())
-            .map(str::to_owned),
+            .map(str::to_owned)
+            .or_else(|| {
+                let entrada = member.session.email.trim();
+                (!entrada.is_empty()).then(|| entrada.to_owned())
+            }),
         session_expires_in: member
             .session
             .expires_at
@@ -719,9 +812,21 @@ fn failure_response(failure: &ApiFailure) -> Response {
         // Uma dependência em falta não é uma avaria, e a página não pode
         // dizer «erro» a quem precisa de saber que a instalação não tem uma
         // peça de pé. A capacidade existe; falta o serviço.
-        ApiFailure::Unavailable => (
+        ApiFailure::Unavailable(razao) => (
             StatusCode::SERVICE_UNAVAILABLE,
-            page("Indisponível", ui::screens::notice::unavailable()),
+            page(
+                "Indisponível",
+                ui::screens::notice::unavailable(razao.clone()),
+            ),
+        )
+            .into_response(),
+
+        // Uma recusa por conteúdo é uma resposta, e não uma avaria. Quem
+        // chega aqui vindo de um formulário devia tê-la apanhado antes, para
+        // a mostrar ao lado do campo; esta é a rede para quem não o fez.
+        ApiFailure::Rejected(message) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            page("Pedido recusado", ui::screens::notice::rejected(message)),
         )
             .into_response(),
 
@@ -1134,7 +1239,7 @@ async fn mail_screen(
         &viewer,
         Screen::Mail,
         Vec::new(),
-        ui::screens::mail::mail(&viewer, &view, &messages, open.as_ref()),
+        ui::screens::mail::mail(&viewer, &view, &messages, open.as_ref(), None),
     )
 }
 
@@ -1291,12 +1396,44 @@ async fn compose(
         }
     }
 
+    // O correio por baixo, e o compositor por cima.
+    //
+    // Era uma página só com o formulário. Escrever passou a acontecer a olhar
+    // para a caixa — que é como se escreve: a confirmar um nome, a reler o que
+    // se responde, a ver o que entretanto chegou.
+    let messages = match view
+        .mailboxes
+        .as_array()
+        .and_then(|caixas| {
+            view.active_mailbox.as_ref().map_or_else(
+                || caixas.first(),
+                |querida| {
+                    caixas.iter().find(|caixa| {
+                        caixa.get("id").and_then(Value::as_str) == Some(querida.as_str())
+                    })
+                },
+            )
+        })
+        .and_then(|caixa| caixa.get("id"))
+        .and_then(Value::as_str)
+    {
+        Some(id) => {
+            optional(
+                &state,
+                &member,
+                &format!("/api/v1/mail/mailboxes/{id}/messages?folder=inbox"),
+            )
+            .await
+        }
+        None => Value::Null,
+    };
+
     shell_page(
         "Nova mensagem",
         &viewer,
         Screen::Mail,
         vec![Crumb::to(Screen::Mail)],
-        ui::screens::mail::compose(&view, &draft),
+        ui::screens::mail::mail(&viewer, &view, &messages, None, Some(&draft)),
     )
 }
 
@@ -1492,6 +1629,578 @@ async fn mail_settings(State(state): State<WorkspaceState>, headers: HeaderMap) 
     )
 }
 
+// ── Mensagens ────────────────────────────────────────────────────────────
+
+/// A aplicação Mensagens, sem conversa aberta.
+async fn messaging(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    render_messaging(&state, &member, None).await
+}
+
+/// A aplicação Mensagens, com uma conversa aberta.
+async fn messaging_conversation(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(conversation): Path<String>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    render_messaging(&state, &member, Some(&conversation)).await
+}
+
+/// Desenha a aplicação.
+///
+/// # Porque a lista vem sempre
+///
+/// Porque a aplicação continua a ser as Mensagens mesmo quando não há conversa
+/// aberta. Substituir o módulo inteiro por uma frase seria trocar a aplicação
+/// por um aviso.
+async fn render_messaging(
+    state: &WorkspaceState,
+    member: &Member,
+    conversation: Option<&str>,
+) -> Response {
+    let viewer = viewer(state, member).await;
+
+    // Erro e vazio não se dizem da mesma maneira. Uma lista que falhou a
+    // carregar e aparecesse como «ainda não falou com ninguém» faria alguém
+    // concluir que perdeu conversas.
+    let (lista, failure) = match required(state, member, "/api/v1/messaging/conversations").await {
+        Ok(valor) => (valor.as_array().cloned().unwrap_or_default(), None),
+        Err(erro) => (Vec::new(), Some(erro.to_string())),
+    };
+
+    // A conversa aberta e as suas mensagens, quando há uma.
+    let (aberta, mensagens) = match conversation {
+        None => (None, Vec::new()),
+        Some(id) => {
+            let detalhe = optional(
+                state,
+                member,
+                &format!("/api/v1/messaging/conversations/{id}"),
+            )
+            .await;
+            let historico = optional(
+                state,
+                member,
+                &format!("/api/v1/messaging/conversations/{id}/messages"),
+            )
+            .await;
+            // O Core devolve da mais recente para trás; o fluxo lê-se ao
+            // contrário.
+            let mut mensagens: Vec<Value> = historico.as_array().cloned().unwrap_or_default();
+            mensagens.reverse();
+            ((!detalhe.is_null()).then_some(detalhe), mensagens)
+        }
+    };
+
+    // A assistência só aparece se houver quem a sirva. Um botão que promete
+    // melhorar um texto e falha depois é pior do que não existir.
+    // A prontidão vem do `/ready`, que é onde ela vive — e não de um pedido de
+    // domínio que por acaso falha quando a capacidade não existe.
+    let prontidao = api::core_ready(state).await.unwrap_or(Value::Null);
+    let disponivel = |componente: &str| {
+        prontidao
+            .get("components")
+            .and_then(Value::as_array)
+            .is_some_and(|todos| {
+                todos.iter().any(|c| {
+                    c.get("component").and_then(Value::as_str) == Some(componente)
+                        && c.get("state").and_then(Value::as_str) == Some("available")
+                })
+            })
+    };
+
+    let ai = viewer.can(ocinye_contracts::Permission::MessagingAiUse) && disponivel("intelligence");
+    let realtime = disponivel("realtime");
+
+    // Quem está a olhar. O identificador vem do Core, e não da sessão local:
+    // é ele que decide quem é o principal.
+    let eu = optional(state, member, "/api/v1/me").await;
+    let me = quem_sou(&eu);
+
+    let pagina = ui::screens::messaging::messaging(&ui::screens::messaging::MessagingPage {
+        conversations: &lista,
+        open: aberta.as_ref(),
+        messages: &mensagens,
+        me,
+        zona: member.zona,
+        ai,
+        realtime,
+        failure,
+    });
+
+    let trilho = vec![Crumb::to(Screen::Messaging)];
+    shell_page("Mensagens", &viewer, Screen::Messaging, trilho, pagina)
+}
+
+#[derive(Deserialize)]
+struct StartForm {
+    #[serde(default)]
+    with: Option<Uuid>,
+    #[serde(default)]
+    name: Option<String>,
+    /// Identificadores separados por vírgula, como o formulário os envia.
+    #[serde(default)]
+    members: String,
+}
+
+/// Começa uma conversa — directa ou de grupo — e abre-a.
+async fn messaging_start(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<StartForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let membros: Vec<Uuid> = form
+        .members
+        .split(',')
+        .filter_map(|parte| Uuid::parse_str(parte.trim()).ok())
+        .collect();
+
+    let corpo = serde_json::json!({
+        "with": form.with,
+        "name": form.name.as_deref().map(str::trim).filter(|n| !n.is_empty()),
+        "members": membros,
+    });
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/messaging/conversations",
+        &corpo,
+    )
+    .await
+    {
+        Ok(valor) => {
+            let id = valor.get("id").and_then(Value::as_str).unwrap_or_default();
+            Redirect::to(&format!("/messages/{id}")).into_response()
+        }
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+#[derive(Deserialize)]
+struct ProcuraDePessoas {
+    #[serde(default)]
+    q: String,
+}
+
+/// Procura pessoas da instituição para começar uma conversa.
+///
+/// # Porque filtra no servidor
+///
+/// Porque uma instituição não cabe num `select`, e carregá-la inteira para
+/// filtrar no browser seria mandar a lista de toda a gente para cada pessoa que
+/// abre as Mensagens. O universo continua a ser o que o Core autoriza — este
+/// caminho não alarga nada.
+async fn messaging_people(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(procura): Query<ProcuraDePessoas>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let termo = procura.q.trim().to_lowercase();
+    if termo.chars().count() < 2 {
+        // Duas letras é o mínimo. Com uma, a resposta seria metade da
+        // instituição, e a lista deixaria de ajudar a escolher.
+        return axum::Json(serde_json::json!({ "people": [] })).into_response();
+    }
+
+    let pagina = optional(&state, &member, "/api/v1/people?page_size=200").await;
+    let eu = eu_id(&state, &member).await;
+
+    let pessoas: Vec<Value> = pagina
+        .get("items")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|p| {
+            // Nunca a própria: uma conversa consigo mesmo não existe, e o Core
+            // recusa-a na mesma.
+            p.get("id").and_then(Value::as_str) != Some(&eu.to_string())
+                && p.get("status").and_then(Value::as_str) != Some("deactivated")
+        })
+        .filter(|p| {
+            let campo = |nome: &str| {
+                p.get(nome)
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_lowercase()
+            };
+            campo("full_name").contains(&termo)
+                || campo("display_name").contains(&termo)
+                || campo("email").contains(&termo)
+        })
+        .take(20)
+        .map(|p| {
+            serde_json::json!({
+                "id": p.get("id"),
+                "name": p
+                    .get("display_name")
+                    .and_then(Value::as_str)
+                    .filter(|n| !n.is_empty())
+                    .or_else(|| p.get("full_name").and_then(Value::as_str))
+                    .unwrap_or_default(),
+                "email": p.get("email"),
+            })
+        })
+        .collect();
+
+    axum::Json(serde_json::json!({ "people": pessoas })).into_response()
+}
+
+/// Quem se pode pôr num «Para».
+///
+/// # Porque não reutiliza a rota das Mensagens
+///
+/// Porque as duas respondem a perguntas diferentes. Mensagens procura **com
+/// quem conversar**, e por isso exclui a própria pessoa: uma conversa consigo
+/// mesmo não existe. Escrever a si próprio existe, e é normal — um lembrete,
+/// um teste de configuração, uma cópia de arquivo.
+///
+/// Partilhar a rota faria uma das duas mentir. Aqui procura-se por **nome ou
+/// endereço institucional**, que desde o [ADR-0106] é a identidade humana;
+/// nome de utilizador não existe.
+///
+/// [ADR-0106]: https://github.com/Ocinye/ocinye-os/blob/main/docs/adrs/0106-email-as-the-single-credential.md
+async fn mail_people(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(procura): Query<ProcuraDePessoas>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let termo = procura.q.trim().to_lowercase();
+    if termo.chars().count() < 2 {
+        // Com uma letra a resposta seria metade da instituição, e uma lista
+        // dessas não ajuda a escolher.
+        return axum::Json(serde_json::json!({ "people": [] })).into_response();
+    }
+
+    let pagina = optional(&state, &member, "/api/v1/people?page_size=200").await;
+
+    let pessoas: Vec<Value> = pagina
+        .get("items")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|p| p.get("status").and_then(Value::as_str) != Some("deactivated"))
+        .filter(|p| {
+            let campo = |nome: &str| {
+                p.get(nome)
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_lowercase()
+            };
+            campo("full_name").contains(&termo)
+                || campo("display_name").contains(&termo)
+                || campo("email").contains(&termo)
+        })
+        // Sem endereço não há para onde escrever, e oferecê-lo seria oferecer
+        // um destinatário que não recebe.
+        .filter(|p| {
+            p.get("email")
+                .and_then(Value::as_str)
+                .is_some_and(|e| !e.is_empty())
+        })
+        .take(20)
+        .map(|p| {
+            serde_json::json!({
+                "name": p
+                    .get("display_name")
+                    .and_then(Value::as_str)
+                    .filter(|n| !n.is_empty())
+                    .or_else(|| p.get("full_name").and_then(Value::as_str))
+                    .unwrap_or_default(),
+                "email": p.get("email"),
+            })
+        })
+        .collect();
+
+    axum::Json(serde_json::json!({ "people": pessoas })).into_response()
+}
+
+#[derive(Deserialize)]
+struct AssistForm {
+    action: String,
+    draft: String,
+}
+
+/// Pede ao Ocinye para trabalhar um rascunho.
+///
+/// # Porque devolve JSON e não uma página
+///
+/// Porque o que volta é uma **proposta**, e o rascunho da pessoa tem de ficar
+/// exactamente onde estava. Recarregar a página para mostrar uma sugestão
+/// perderia o que ela estava a escrever.
+async fn messaging_assist(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<AssistForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/messaging/assist",
+        &serde_json::json!({ "action": form.action, "draft": form.draft }),
+    )
+    .await
+    {
+        Ok(valor) => axum::Json(valor).into_response(),
+        // Uma assistência que falha não perde o que estava escrito, e diz
+        // porquê em vez de ficar calada.
+        Err(falha) => axum::Json(serde_json::json!({
+            "text": null,
+            "reason": falha.to_string(),
+        }))
+        .into_response(),
+    }
+}
+
+/// Quem está a escrever nesta conversa.
+async fn messaging_typing(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(conversation): Path<String>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let resposta = optional(
+        &state,
+        &member,
+        &format!("/api/v1/messaging/typing?conversation={conversation}"),
+    )
+    .await;
+
+    axum::Json(resposta).into_response()
+}
+
+#[derive(Deserialize)]
+struct SendForm {
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    reply_to: Option<Uuid>,
+    /// Identificadores separados por vírgula.
+    #[serde(default)]
+    mentions: String,
+    /// A chave que torna o envio idempotente.
+    ///
+    /// Vem do formulário porque é o cliente que sabe que **este** é o mesmo
+    /// envio que já tentou. Um duplo-clique traz a mesma, e o Core devolve a
+    /// mensagem que a primeira escreveu.
+    #[serde(default)]
+    idempotency_key: String,
+}
+
+/// Envia uma mensagem.
+async fn messaging_send(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(conversation): Path<String>,
+    Form(form): Form<SendForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let mencoes: Vec<Uuid> = form
+        .mentions
+        .split(',')
+        .filter_map(|parte| Uuid::parse_str(parte.trim()).ok())
+        .collect();
+
+    // O autor não vai daqui. Vai do principal, no Core.
+    let corpo = serde_json::json!({
+        "body": form.body,
+        "reply_to": form.reply_to,
+        "mentions": mencoes,
+        "idempotency_key": (!form.idempotency_key.trim().is_empty())
+            .then(|| form.idempotency_key.trim()),
+    });
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/messaging/conversations/{conversation}/messages"),
+        &corpo,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!("/messages/{conversation}")).into_response(),
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+#[derive(Deserialize)]
+struct ReactForm {
+    message: Uuid,
+    emoji: String,
+}
+
+/// Põe ou tira uma reacção.
+async fn messaging_react(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(conversation): Path<String>,
+    Form(form): Form<ReactForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let caminho = format!(
+        "/api/v1/messaging/conversations/{conversation}/messages/{}/reactions",
+        form.message
+    );
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &caminho,
+        &serde_json::json!({ "emoji": form.emoji }),
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!("/messages/{conversation}")).into_response(),
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+#[derive(Deserialize)]
+struct ReadForm {
+    until: String,
+}
+
+/// Marca a conversa como lida até um instante.
+async fn messaging_read(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(conversation): Path<String>,
+    Form(form): Form<ReadForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/messaging/conversations/{conversation}/read"),
+        &serde_json::json!({ "until": form.until }),
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!("/messages/{conversation}")).into_response(),
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+#[derive(Deserialize)]
+struct MemberForm {
+    who: Uuid,
+}
+
+/// Acrescenta alguém ao grupo.
+async fn messaging_add_member(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(conversation): Path<String>,
+    Form(form): Form<MemberForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/messaging/conversations/{conversation}/members"),
+        &serde_json::json!({ "who": form.who }),
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!("/messages/{conversation}")).into_response(),
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+/// Retira alguém do grupo.
+async fn messaging_remove(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(conversation): Path<String>,
+    Form(form): Form<MemberForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    match api::delete(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!(
+            "/api/v1/messaging/conversations/{conversation}/members/{}",
+            form.who
+        ),
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!("/messages/{conversation}")).into_response(),
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+/// Quem está a agir, tal como o Core o identifica.
+async fn eu_id(state: &WorkspaceState, member: &Member) -> Uuid {
+    quem_sou(&optional(state, member, "/api/v1/me").await)
+}
+
+/// Lê o identificador da pessoa da resposta de `/api/v1/me`.
+///
+/// # O campo chama-se `person_id`
+///
+/// E isto esteve a ler `id`. O `unwrap_or_default()` devolvia o UUID nulo, que
+/// não é ninguém — e como ninguém é o autor de nada, **nenhuma mensagem era
+/// própria**. Sem erro, sem aviso: a conversa inteira aparecia alinhada como se
+/// fosse de outra pessoa.
+///
+/// Uma chave errada num JSON não dá erro. É por isso que existe o guarda em
+/// `quem_sou_le_o_campo_que_o_core_escreve`, que compara com a forma real.
+fn quem_sou(me: &Value) -> Uuid {
+    me.get("person_id")
+        .and_then(Value::as_str)
+        .and_then(|s| Uuid::parse_str(s).ok())
+        .unwrap_or_default()
+}
+
+/// Sai do grupo.
+async fn messaging_leave(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(conversation): Path<String>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    match api::delete(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!(
+            "/api/v1/messaging/conversations/{conversation}/members/{}",
+            eu_id(&state, &member).await
+        ),
+    )
+    .await
+    {
+        // Depois de sair, a conversa deixa de existir para quem saiu.
+        Ok(_) => Redirect::to(ui::screens::messaging::ROUTE).into_response(),
+        Err(failure) => failure_response(&failure),
+    }
+}
+
 #[derive(Deserialize)]
 struct MailSettingsForm {
     #[serde(default)]
@@ -1518,6 +2227,82 @@ async fn save_mail_settings(
         &member.correlation_id,
         "/api/v1/mail/preferences",
         &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to("/mail/settings").into_response(),
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+/// O que o formulário de ligação envia.
+#[derive(serde::Deserialize)]
+struct LigacaoDeCaixa {
+    /// A senha **da caixa**, no serviço de correio.
+    ///
+    /// Não é a credencial do Ocinye: essa é o endereço institucional
+    /// (ADR-0106), com a palavra-passe do Ocinye OS. Esta é outra, e nenhuma
+    /// serve para obter a outra.
+    ///
+    /// Havia aqui um `username` ao lado, com o argumento de que nem todos os
+    /// serviços usam o endereço como conta. É verdade em geral e não é verdade
+    /// aqui — e o custo de o manter era deixar o browser escolher a conta com
+    /// que o Ocinye se autentica. O Core resolve-a a partir da caixa que já
+    /// autorizou (ADR-0409). Se um dia houver um serviço que peça outra coisa,
+    /// isso é uma decisão de instalação e não um campo no ecrã de quem liga.
+    password: String,
+}
+
+/// Liga uma caixa com a credencial de quem a está a ligar.
+///
+/// # Porque a senha não volta a passar por aqui
+///
+/// Atravessa este processo uma vez, a caminho do Core, e nunca regressa: o
+/// formulário abre sempre vazio, e não há endpoint que a devolva. O que a
+/// Experience sabe de uma caixa ligada é que está ligada.
+async fn mail_connect(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(mailbox_id): Path<String>,
+    Form(form): Form<LigacaoDeCaixa>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    // Só a senha. O endereço não viaja: o Core resolve-o a partir da caixa que
+    // já autorizou para esta pessoa, e um endereço vindo do formulário deixaria
+    // o browser escolher a conta com que a sessão de correio abre.
+    let body = serde_json::json!({
+        "password": form.password,
+    });
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/mail/mailboxes/{mailbox_id}/connect"),
+        &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to("/mail/settings").into_response(),
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+/// Desliga uma caixa e esquece a credencial.
+async fn mail_disconnect(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(mailbox_id): Path<String>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/mail/mailboxes/{mailbox_id}/disconnect"),
+        &serde_json::json!({}),
     )
     .await
     {
@@ -1815,8 +2600,6 @@ struct NewMemberForm {
     #[serde(default)]
     full_name: String,
     #[serde(default)]
-    username: String,
-    #[serde(default)]
     email: String,
     #[serde(default)]
     position: String,
@@ -1837,7 +2620,6 @@ async fn create_member(
 
     let mut body = serde_json::json!({
         "full_name": form.full_name,
-        "username": form.username,
         "email": form.email,
         "role": form.role,
     });
@@ -1868,8 +2650,12 @@ async fn create_member(
                 Screen::Admin,
                 vec![Crumb::to(Screen::Admin)],
                 ui::screens::administration::issued_credential(
+                    // O Core devolve `email`. Lia-se `username`, e desde o
+                    // ADR-0106 essa chave não existe: o ecrã que entrega uma
+                    // credencial nova mostrava o endereço **em branco**, e
+                    // ninguém o via porque um campo vazio parece um campo.
                     credential
-                        .get("username")
+                        .get("email")
                         .and_then(Value::as_str)
                         .unwrap_or(""),
                     credential
@@ -2227,6 +3013,1260 @@ async fn research_workspace(
         });
 
     shell_page("Research Workspace", &viewer, screen, trail, content)
+}
+
+// ── Ciência ──────────────────────────────────────────────────────────────
+
+/// A cadeia científica de um Research Workspace.
+async fn scientific_chain(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(workspace_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    // A visão geral é a leitura que autoriza. Se o ambiente não é alcançável,
+    // nada mais é pedido — e a resposta é a mesma que daria a um identificador
+    // inventado.
+    let overview = match api::get::<Value>(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/workspaces/{workspace_id}"),
+    )
+    .await
+    {
+        Ok(overview) => overview,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    let viewer = viewer(&state, &member).await;
+
+    let hypotheses_path = format!("/api/v1/workspaces/{workspace_id}/hypotheses");
+    let methodologies_path = format!("/api/v1/workspaces/{workspace_id}/methodologies");
+    let studies_path = format!("/api/v1/workspaces/{workspace_id}/studies");
+    let results_path = format!("/api/v1/workspaces/{workspace_id}/results");
+
+    let (hypotheses, methodologies, studies, results) = tokio::join!(
+        optional(&state, &member, &hypotheses_path),
+        optional(&state, &member, &methodologies_path),
+        optional(&state, &member, &studies_path),
+        optional(&state, &member, &results_path),
+    );
+
+    let is_project = overview.get("project").is_some_and(|p| !p.is_null());
+    let screen = if is_project {
+        Screen::Projects
+    } else {
+        Screen::Ideas
+    };
+    let trail = vec![
+        Crumb::to(screen),
+        Crumb {
+            label: "Research Workspace".to_owned(),
+            href: format!("/workspaces/{workspace_id}"),
+        },
+    ];
+
+    // Quem decide é o Core, e para este ambiente.
+    //
+    // `viewer.can` responde no âmbito institucional, e `science.create` chega
+    // pela pertença à unidade e ao ambiente — nunca por papel técnico. Usá-lo
+    // aqui escondia a criação a toda a gente, incluindo a quem lidera o
+    // ambiente. Esconder o botão nunca foi segurança; a operação recusa na
+    // mesma. É para não prometer o que não se cumpre.
+    let pode_criar = overview
+        .get("workspace")
+        .and_then(|w| w.get("may_create"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let content = ui::screens::science::scientific_chain(ui::screens::science::ChainView {
+        overview,
+        hypotheses,
+        methodologies,
+        studies,
+        results,
+        may_create: pode_criar,
+    });
+
+    shell_page("Ciência", &viewer, screen, trail, content)
+}
+
+/// De onde veio um resultado, e o que dependeu dele.
+async fn result_detail(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(result_id): Path<Uuid>,
+    Query(query): Query<LineageQuery>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let result = match api::get::<Value>(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/results/{result_id}"),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    let viewer = viewer(&state, &member).await;
+
+    // As duas travessias são pedidas sempre, e não só a que se mostra: as tabs
+    // trocam de sentido sem ir buscar nada, e uma delas vazia é informação
+    // — «nada depende disto» — que se quer ver de imediato.
+    let validations_path = format!("/api/v1/results/{result_id}/validations");
+    let upstream_path = format!("/api/v1/lineage/result/{result_id}?direction=upstream");
+    let downstream_path = format!("/api/v1/lineage/result/{result_id}?direction=downstream");
+
+    let (validations, upstream, downstream) = tokio::join!(
+        optional(&state, &member, &validations_path),
+        optional(&state, &member, &upstream_path),
+        optional(&state, &member, &downstream_path),
+    );
+
+    let direction = if query.direction.as_deref() == Some("downstream") {
+        "downstream"
+    } else {
+        "upstream"
+    };
+
+    let workspace_id = result
+        .get("workspace_id")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+
+    let mut trail = vec![Crumb::to(Screen::Ideas)];
+    if let Some(workspace_id) = workspace_id {
+        trail.push(Crumb {
+            label: "Ciência".to_owned(),
+            href: format!("/workspaces/{workspace_id}/science"),
+        });
+    }
+
+    let result_may_validate = result
+        .get("may_validate")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let content = ui::screens::science::result_detail(ui::screens::science::ResultView {
+        result,
+        validations,
+        upstream,
+        downstream,
+        direction,
+        // Vem do Core, com o contexto deste resultado: `results.validate`
+        // chega pela liderança do ambiente ou pela gestão da unidade, e as
+        // capacidades que o `/identity/me` publica são as institucionais,
+        // onde uma permissão de ambiente nunca aparece.
+        may_validate: result_may_validate,
+    });
+
+    shell_page("Resultado", &viewer, Screen::Ideas, trail, content)
+}
+
+// ── Construir a cadeia ───────────────────────────────────────────────────
+
+/// O ambiente, resolvido pelo Core, que autoriza tudo o que se segue.
+///
+/// Se ele não é alcançável, nada mais é pedido — e a resposta é a mesma que
+/// daria a um identificador inventado.
+async fn ambiente_ou_recusa(
+    state: &WorkspaceState,
+    member: &Member,
+    workspace_id: Uuid,
+) -> Result<Value, api::ApiFailure> {
+    let overview = api::get::<Value>(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/workspaces/{workspace_id}"),
+    )
+    .await?;
+    Ok(overview.get("workspace").cloned().unwrap_or(Value::Null))
+}
+
+/// Se este membro pode criar no ambiente que contém aquele recurso.
+///
+/// A resposta é do Core, e para aquele ambiente. `viewer.can` responde no
+/// âmbito institucional, e `science.create` chega pela pertença à unidade e ao
+/// ambiente — nunca por papel técnico. Perguntá-lo ao viewer escondia a criação
+/// a toda a gente, incluindo a quem lidera o ambiente.
+///
+/// Sem ambiente conhecido, ou com o Core em silêncio, a resposta é não: é a
+/// única conservadora, e não prometer é melhor do que prometer uma recusa.
+async fn pode_criar_no_ambiente(state: &WorkspaceState, member: &Member, recurso: &Value) -> bool {
+    let Some(workspace_id) = recurso.get("workspace_id").and_then(Value::as_str) else {
+        return false;
+    };
+    optional(state, member, &format!("/api/v1/workspaces/{workspace_id}"))
+        .await
+        .get("workspace")
+        .and_then(|w| w.get("may_create"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+/// A recusa que volta ao formulário, e a que não volta.
+///
+/// Só o que a pessoa pode resolver preenchendo outra vez: o conteúdo que o
+/// Core não aceitou, ou a autoridade que lhe falta. Uma avaria, uma sessão
+/// caída ou um recurso inalcançável não se corrigem no campo.
+fn motivo_para_o_formulario(failure: &api::ApiFailure) -> Option<String> {
+    match failure {
+        api::ApiFailure::Rejected(mensagem) => Some(mensagem.clone()),
+        api::ApiFailure::Forbidden => {
+            Some("Não tem autorização para criar isto neste ambiente.".to_owned())
+        }
+        _ => None,
+    }
+}
+
+/// As versões de metodologia publicadas num ambiente, prontas para um selector.
+///
+/// **Versões**, e nunca metodologias: a matriz de proveniência aceita
+/// `Study → MethodologyVersion` e recusa a metodologia mutável. Oferecer a
+/// metodologia poria no ecrã uma escolha que o Core recusa, e deixaria o `422`
+/// ensinar a regra a quem já tinha preenchido o resto.
+async fn versoes_de_metodologia(
+    state: &WorkspaceState,
+    member: &Member,
+    workspace_id: Uuid,
+) -> Vec<(String, String)> {
+    let metodologias = optional(
+        state,
+        member,
+        &format!("/api/v1/workspaces/{workspace_id}/methodologies"),
+    )
+    .await;
+
+    let mut opcoes = Vec::new();
+    for metodologia in metodologias.as_array().into_iter().flatten() {
+        let Some(id) = metodologia.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        let titulo = metodologia
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or("Metodologia");
+        let versoes = optional(
+            state,
+            member,
+            &format!("/api/v1/methodologies/{id}/versions"),
+        )
+        .await;
+        for versao in versoes.as_array().into_iter().flatten() {
+            // Só publicadas: uma versão em rascunho ainda não é o que a
+            // proveniência pode citar.
+            if versao.get("status").and_then(Value::as_str) != Some("published") {
+                continue;
+            }
+            let Some(version_id) = versao.get("id").and_then(Value::as_str) else {
+                continue;
+            };
+            let etiqueta = versao
+                .get("label")
+                .and_then(Value::as_str)
+                .unwrap_or("versão");
+            opcoes.push((version_id.to_owned(), format!("{titulo} · {etiqueta}")));
+        }
+    }
+    opcoes
+}
+
+/// As versões de dataset alcançáveis a partir de um ambiente.
+async fn versoes_de_dataset(
+    state: &WorkspaceState,
+    member: &Member,
+    workspace_id: Uuid,
+) -> Vec<(String, String)> {
+    let datasets = optional(
+        state,
+        member,
+        &format!("/api/v1/datasets?workspace_id={workspace_id}"),
+    )
+    .await;
+
+    let linhas = datasets
+        .get("items")
+        .and_then(Value::as_array)
+        .cloned()
+        .or_else(|| datasets.as_array().cloned())
+        .unwrap_or_default();
+
+    let mut opcoes = Vec::new();
+    for dataset in &linhas {
+        let Some(id) = dataset.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        let nome = dataset
+            .get("title")
+            .or_else(|| dataset.get("name"))
+            .and_then(Value::as_str)
+            .unwrap_or("Dataset");
+        let versoes = optional(state, member, &format!("/api/v1/datasets/{id}/versions")).await;
+        let linhas_v = versoes
+            .get("items")
+            .and_then(Value::as_array)
+            .cloned()
+            .or_else(|| versoes.as_array().cloned())
+            .unwrap_or_default();
+        for versao in &linhas_v {
+            let Some(version_id) = versao.get("id").and_then(Value::as_str) else {
+                continue;
+            };
+            let etiqueta = versao
+                .get("label")
+                .and_then(Value::as_str)
+                .unwrap_or("versão");
+            opcoes.push((version_id.to_owned(), format!("{nome} · {etiqueta}")));
+        }
+    }
+    opcoes
+}
+
+// ── Hipótese ─────────────────────────────────────────────────────────────
+
+async fn new_hypothesis(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(workspace_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    match pagina_de_hipotese(&state, &member, workspace_id, None).await {
+        Ok(resposta) => resposta,
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+async fn pagina_de_hipotese(
+    state: &WorkspaceState,
+    member: &Member,
+    workspace_id: Uuid,
+    message: Option<String>,
+) -> Result<Response, api::ApiFailure> {
+    let workspace = ambiente_ou_recusa(state, member, workspace_id).await?;
+    let viewer = viewer(state, member).await;
+    Ok(shell_page(
+        "Nova hipótese",
+        &viewer,
+        Screen::Ideas,
+        trilho_da_ciencia(workspace_id),
+        ui::screens::science::nova_hipotese(ui::screens::science::Contexto { workspace, message }),
+    ))
+}
+
+#[derive(Deserialize)]
+struct NovaHipoteseForm {
+    #[serde(default)]
+    statement: String,
+    #[serde(default)]
+    rationale: String,
+    #[serde(default)]
+    classification: String,
+}
+
+async fn create_hypothesis(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(workspace_id): Path<Uuid>,
+    Form(form): Form<NovaHipoteseForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let corpo = serde_json::json!({
+        "statement": form.statement,
+        "rationale": blank_to_none(form.rationale),
+        "classification": blank_to_none(form.classification),
+    });
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/workspaces/{workspace_id}/hypotheses"),
+        &corpo,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!("/workspaces/{workspace_id}/science")).into_response(),
+        Err(failure) => match motivo_para_o_formulario(&failure) {
+            Some(motivo) => {
+                match pagina_de_hipotese(&state, &member, workspace_id, Some(motivo)).await {
+                    Ok(resposta) => resposta,
+                    Err(failure) => failure_response(&failure),
+                }
+            }
+            None => failure_response(&failure),
+        },
+    }
+}
+
+fn trilho_da_ciencia(workspace_id: Uuid) -> Vec<Crumb> {
+    vec![
+        Crumb::to(Screen::Ideas),
+        Crumb {
+            label: "Ciência".to_owned(),
+            href: format!("/workspaces/{workspace_id}/science"),
+        },
+    ]
+}
+
+// ── Metodologia e versões ────────────────────────────────────────────────
+
+async fn new_methodology(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(workspace_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    match pagina_de_metodologia(&state, &member, workspace_id, None).await {
+        Ok(resposta) => resposta,
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+async fn pagina_de_metodologia(
+    state: &WorkspaceState,
+    member: &Member,
+    workspace_id: Uuid,
+    message: Option<String>,
+) -> Result<Response, api::ApiFailure> {
+    let workspace = ambiente_ou_recusa(state, member, workspace_id).await?;
+    let viewer = viewer(state, member).await;
+    Ok(shell_page(
+        "Nova metodologia",
+        &viewer,
+        Screen::Ideas,
+        trilho_da_ciencia(workspace_id),
+        ui::screens::science::nova_metodologia(ui::screens::science::Contexto {
+            workspace,
+            message,
+        }),
+    ))
+}
+
+#[derive(Deserialize)]
+struct NovaMetodologiaForm {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    purpose: String,
+    #[serde(default)]
+    classification: String,
+}
+
+async fn create_methodology(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(workspace_id): Path<Uuid>,
+    Form(form): Form<NovaMetodologiaForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let corpo = serde_json::json!({
+        "title": form.title,
+        "purpose": blank_to_none(form.purpose),
+        "classification": blank_to_none(form.classification),
+    });
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/workspaces/{workspace_id}/methodologies"),
+        &corpo,
+    )
+    .await
+    {
+        Ok(criada) => {
+            // Para a metodologia, e não de volta à lista: o passo seguinte é
+            // publicar uma versão, e é lá que ele está.
+            match criada.get("id").and_then(Value::as_str) {
+                Some(id) => Redirect::to(&format!("/methodologies/{id}")).into_response(),
+                None => {
+                    Redirect::to(&format!("/workspaces/{workspace_id}/science")).into_response()
+                }
+            }
+        }
+        Err(failure) => match motivo_para_o_formulario(&failure) {
+            Some(motivo) => {
+                match pagina_de_metodologia(&state, &member, workspace_id, Some(motivo)).await {
+                    Ok(resposta) => resposta,
+                    Err(failure) => failure_response(&failure),
+                }
+            }
+            None => failure_response(&failure),
+        },
+    }
+}
+
+async fn methodology_detail(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(methodology_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let methodology = match api::get::<Value>(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/methodologies/{methodology_id}"),
+    )
+    .await
+    {
+        Ok(valor) => valor,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    let versions = optional(
+        &state,
+        &member,
+        &format!("/api/v1/methodologies/{methodology_id}/versions"),
+    )
+    .await;
+    let pode_criar = pode_criar_no_ambiente(&state, &member, &methodology).await;
+    let viewer = viewer(&state, &member).await;
+    let workspace_id = methodology
+        .get("workspace_id")
+        .and_then(Value::as_str)
+        .and_then(|v| Uuid::parse_str(v).ok());
+
+    let trail = workspace_id.map_or_else(|| vec![Crumb::to(Screen::Ideas)], trilho_da_ciencia);
+
+    shell_page(
+        "Metodologia",
+        &viewer,
+        Screen::Ideas,
+        trail,
+        ui::screens::science::metodologia(ui::screens::science::MetodologiaView {
+            methodology,
+            versions,
+            may_create: pode_criar,
+        }),
+    )
+}
+
+async fn new_version(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(methodology_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    match pagina_de_versao(&state, &member, methodology_id, None).await {
+        Ok(resposta) => resposta,
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+async fn pagina_de_versao(
+    state: &WorkspaceState,
+    member: &Member,
+    methodology_id: Uuid,
+    message: Option<String>,
+) -> Result<Response, api::ApiFailure> {
+    let methodology = api::get::<Value>(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/methodologies/{methodology_id}"),
+    )
+    .await?;
+
+    let versions = optional(
+        state,
+        member,
+        &format!("/api/v1/methodologies/{methodology_id}/versions"),
+    )
+    .await;
+
+    // A que está em vigor é a publicada que ninguém substituiu.
+    let em_vigor = versions.as_array().and_then(|linhas| {
+        linhas
+            .iter()
+            .find(|v| {
+                v.get("status").and_then(Value::as_str) == Some("published")
+                    && v.get("superseded_by_id").is_none_or(Value::is_null)
+            })
+            .cloned()
+    });
+
+    let viewer = viewer(state, member).await;
+    Ok(shell_page(
+        "Nova versão",
+        &viewer,
+        Screen::Ideas,
+        vec![
+            Crumb::to(Screen::Ideas),
+            Crumb {
+                label: "Metodologia".to_owned(),
+                href: format!("/methodologies/{methodology_id}"),
+            },
+        ],
+        ui::screens::science::nova_versao(ui::screens::science::NovaVersaoView {
+            methodology,
+            em_vigor,
+            message,
+        }),
+    ))
+}
+
+#[derive(Deserialize)]
+struct NovaVersaoForm {
+    #[serde(default)]
+    label: String,
+    #[serde(default)]
+    summary: String,
+}
+
+async fn publish_version(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(methodology_id): Path<Uuid>,
+    Form(form): Form<NovaVersaoForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let corpo = serde_json::json!({"label": form.label, "summary": form.summary});
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/methodologies/{methodology_id}/versions"),
+        &corpo,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!("/methodologies/{methodology_id}")).into_response(),
+        Err(failure) => match motivo_para_o_formulario(&failure) {
+            Some(motivo) => {
+                match pagina_de_versao(&state, &member, methodology_id, Some(motivo)).await {
+                    Ok(resposta) => resposta,
+                    Err(failure) => failure_response(&failure),
+                }
+            }
+            None => failure_response(&failure),
+        },
+    }
+}
+
+// ── Estudo e execuções ───────────────────────────────────────────────────
+
+async fn new_study(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(workspace_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    match pagina_de_estudo(&state, &member, workspace_id, None).await {
+        Ok(resposta) => resposta,
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+async fn pagina_de_estudo(
+    state: &WorkspaceState,
+    member: &Member,
+    workspace_id: Uuid,
+    message: Option<String>,
+) -> Result<Response, api::ApiFailure> {
+    let workspace = ambiente_ou_recusa(state, member, workspace_id).await?;
+    let hypotheses = optional(
+        state,
+        member,
+        &format!("/api/v1/workspaces/{workspace_id}/hypotheses"),
+    )
+    .await;
+    let methodology_versions = versoes_de_metodologia(state, member, workspace_id).await;
+    let viewer = viewer(state, member).await;
+
+    Ok(shell_page(
+        "Novo estudo",
+        &viewer,
+        Screen::Ideas,
+        trilho_da_ciencia(workspace_id),
+        ui::screens::science::novo_estudo(ui::screens::science::NovoEstudoView {
+            workspace,
+            hypotheses,
+            methodology_versions,
+            message,
+        }),
+    ))
+}
+
+#[derive(Deserialize)]
+struct NovoEstudoForm {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    kind: String,
+    #[serde(default)]
+    objective: String,
+    #[serde(default)]
+    hypothesis_id: String,
+    #[serde(default)]
+    methodology_version_id: String,
+    #[serde(default)]
+    classification: String,
+}
+
+async fn create_study(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(workspace_id): Path<Uuid>,
+    Form(form): Form<NovoEstudoForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let corpo = serde_json::json!({
+        "title": form.title,
+        "kind": form.kind,
+        "objective": blank_to_none(form.objective),
+        "hypothesis_id": blank_to_none(form.hypothesis_id),
+        "methodology_version_id": blank_to_none(form.methodology_version_id),
+        "classification": blank_to_none(form.classification),
+    });
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/workspaces/{workspace_id}/studies"),
+        &corpo,
+    )
+    .await
+    {
+        Ok(criado) => match criado.get("id").and_then(Value::as_str) {
+            Some(id) => Redirect::to(&format!("/studies/{id}")).into_response(),
+            None => Redirect::to(&format!("/workspaces/{workspace_id}/science")).into_response(),
+        },
+        Err(failure) => match motivo_para_o_formulario(&failure) {
+            Some(motivo) => {
+                match pagina_de_estudo(&state, &member, workspace_id, Some(motivo)).await {
+                    Ok(resposta) => resposta,
+                    Err(failure) => failure_response(&failure),
+                }
+            }
+            None => failure_response(&failure),
+        },
+    }
+}
+
+async fn study_detail(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(study_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let study = match api::get::<Value>(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/studies/{study_id}"),
+    )
+    .await
+    {
+        Ok(valor) => valor,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    let executions = optional(
+        &state,
+        &member,
+        &format!("/api/v1/studies/{study_id}/executions"),
+    )
+    .await;
+    let pode_criar = pode_criar_no_ambiente(&state, &member, &study).await;
+    let viewer = viewer(&state, &member).await;
+    let trail = study
+        .get("workspace_id")
+        .and_then(Value::as_str)
+        .and_then(|v| Uuid::parse_str(v).ok())
+        .map_or_else(|| vec![Crumb::to(Screen::Ideas)], trilho_da_ciencia);
+
+    shell_page(
+        "Estudo",
+        &viewer,
+        Screen::Ideas,
+        trail,
+        ui::screens::science::estudo(ui::screens::science::EstudoView {
+            study,
+            executions,
+            may_create: pode_criar,
+        }),
+    )
+}
+
+async fn new_execution(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(study_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    match pagina_de_execucao(&state, &member, study_id, None).await {
+        Ok(resposta) => resposta,
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+async fn pagina_de_execucao(
+    state: &WorkspaceState,
+    member: &Member,
+    study_id: Uuid,
+    message: Option<String>,
+) -> Result<Response, api::ApiFailure> {
+    let study = api::get::<Value>(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/studies/{study_id}"),
+    )
+    .await?;
+
+    let workspace_id = study
+        .get("workspace_id")
+        .and_then(Value::as_str)
+        .and_then(|v| Uuid::parse_str(v).ok());
+
+    let (methodology_versions, dataset_versions) = match workspace_id {
+        Some(id) => (
+            versoes_de_metodologia(state, member, id).await,
+            versoes_de_dataset(state, member, id).await,
+        ),
+        None => (Vec::new(), Vec::new()),
+    };
+
+    let viewer = viewer(state, member).await;
+    Ok(shell_page(
+        "Registar execução",
+        &viewer,
+        Screen::Ideas,
+        vec![
+            Crumb::to(Screen::Ideas),
+            Crumb {
+                label: "Estudo".to_owned(),
+                href: format!("/studies/{study_id}"),
+            },
+        ],
+        ui::screens::science::nova_execucao(ui::screens::science::NovaExecucaoView {
+            study,
+            methodology_versions,
+            dataset_versions,
+            message,
+        }),
+    ))
+}
+
+#[derive(Deserialize)]
+struct NovaExecucaoForm {
+    #[serde(default)]
+    status: String,
+    #[serde(default)]
+    environment: String,
+    #[serde(default)]
+    software_name: String,
+    #[serde(default)]
+    software_version: String,
+    #[serde(default)]
+    notes: String,
+    #[serde(default)]
+    methodology_version_id: String,
+    #[serde(default)]
+    dataset_version_id: String,
+}
+
+async fn record_execution(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(study_id): Path<Uuid>,
+    Form(form): Form<NovaExecucaoForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let datasets: Vec<String> = blank_to_none(form.dataset_version_id).into_iter().collect();
+
+    let corpo = serde_json::json!({
+        "status": blank_to_none(form.status),
+        "environment": blank_to_none(form.environment),
+        "software_name": blank_to_none(form.software_name),
+        "software_version": blank_to_none(form.software_version),
+        "notes": blank_to_none(form.notes),
+        "methodology_version_id": blank_to_none(form.methodology_version_id),
+        "dataset_version_ids": datasets,
+    });
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/studies/{study_id}/executions"),
+        &corpo,
+    )
+    .await
+    {
+        Ok(criada) => match criada.get("id").and_then(Value::as_str) {
+            Some(id) => Redirect::to(&format!("/executions/{id}")).into_response(),
+            None => Redirect::to(&format!("/studies/{study_id}")).into_response(),
+        },
+        Err(failure) => match motivo_para_o_formulario(&failure) {
+            Some(motivo) => match pagina_de_execucao(&state, &member, study_id, Some(motivo)).await
+            {
+                Ok(resposta) => resposta,
+                Err(failure) => failure_response(&failure),
+            },
+            None => failure_response(&failure),
+        },
+    }
+}
+
+// ── Execução e resultado ─────────────────────────────────────────────────
+
+async fn execution_detail(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(execution_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let (execution, study, results) = match cadeia_da_execucao(&state, &member, execution_id).await
+    {
+        Ok(tudo) => tudo,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    let pode_criar = pode_criar_no_ambiente(&state, &member, &study).await;
+    let viewer = viewer(&state, &member).await;
+    shell_page(
+        "Execução",
+        &viewer,
+        Screen::Ideas,
+        vec![
+            Crumb::to(Screen::Ideas),
+            Crumb {
+                label: "Estudo".to_owned(),
+                href: format!("/studies/{}", text_de(&study, "id")),
+            },
+        ],
+        ui::screens::science::execucao(ui::screens::science::ExecucaoView {
+            execution,
+            study,
+            results,
+            may_create: pode_criar,
+        }),
+    )
+}
+
+/// Uma execução, o estudo a que pertence, e o que ela produziu.
+///
+/// Os resultados vêm do ambiente e são filtrados por esta execução: não há
+/// listagem por execução no Core, e inventar uma rota só para o ecrã seria pôr
+/// no Core uma pergunta que só a interface faz.
+async fn cadeia_da_execucao(
+    state: &WorkspaceState,
+    member: &Member,
+    execution_id: Uuid,
+) -> Result<(Value, Value, Value), api::ApiFailure> {
+    let execution = api::get::<Value>(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/executions/{execution_id}"),
+    )
+    .await?;
+
+    let study_id = text_de(&execution, "study_id");
+    let study = api::get::<Value>(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/studies/{study_id}"),
+    )
+    .await?;
+
+    let workspace_id = text_de(&study, "workspace_id");
+    let todos = optional(
+        state,
+        member,
+        &format!("/api/v1/workspaces/{workspace_id}/results"),
+    )
+    .await;
+
+    let esperado = execution_id.to_string();
+    let meus: Vec<Value> = todos
+        .as_array()
+        .map(|linhas| {
+            linhas
+                .iter()
+                .filter(|r| r.get("execution_id").and_then(Value::as_str) == Some(&esperado))
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok((execution, study, Value::Array(meus)))
+}
+
+fn text_de(valor: &Value, chave: &str) -> String {
+    valor
+        .get(chave)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned()
+}
+
+async fn new_result(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(execution_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    match pagina_de_resultado(&state, &member, execution_id, None).await {
+        Ok(resposta) => resposta,
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+async fn pagina_de_resultado(
+    state: &WorkspaceState,
+    member: &Member,
+    execution_id: Uuid,
+    message: Option<String>,
+) -> Result<Response, api::ApiFailure> {
+    let (execution, study, _) = cadeia_da_execucao(state, member, execution_id).await?;
+    let viewer = viewer(state, member).await;
+    Ok(shell_page(
+        "Registar resultado",
+        &viewer,
+        Screen::Ideas,
+        vec![
+            Crumb::to(Screen::Ideas),
+            Crumb {
+                label: "Execução".to_owned(),
+                href: format!("/executions/{execution_id}"),
+            },
+        ],
+        ui::screens::science::novo_resultado(ui::screens::science::NovoResultadoView {
+            execution,
+            study,
+            message,
+        }),
+    ))
+}
+
+#[derive(Deserialize)]
+struct NovoResultadoForm {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    summary: String,
+    #[serde(default)]
+    classification: String,
+}
+
+async fn create_result(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(execution_id): Path<Uuid>,
+    Form(form): Form<NovoResultadoForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    // O ambiente vem do estudo, e a origem vem do caminho.
+    //
+    // A pessoa nunca escolhe de onde o resultado veio: abriu este formulário
+    // dentro de uma execução, e é essa execução que a operação do Core liga —
+    // na mesma transacção, com `origin = operation`.
+    let (_, study, _) = match cadeia_da_execucao(&state, &member, execution_id).await {
+        Ok(tudo) => tudo,
+        Err(failure) => return failure_response(&failure),
+    };
+    let workspace_id = text_de(&study, "workspace_id");
+
+    let corpo = serde_json::json!({
+        "title": form.title,
+        "summary": form.summary,
+        "execution_id": execution_id,
+        "classification": blank_to_none(form.classification),
+    });
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/workspaces/{workspace_id}/results"),
+        &corpo,
+    )
+    .await
+    {
+        Ok(criado) => match criado.get("id").and_then(Value::as_str) {
+            Some(id) => Redirect::to(&format!("/results/{id}")).into_response(),
+            None => Redirect::to(&format!("/executions/{execution_id}")).into_response(),
+        },
+        Err(failure) => match motivo_para_o_formulario(&failure) {
+            Some(motivo) => {
+                match pagina_de_resultado(&state, &member, execution_id, Some(motivo)).await {
+                    Ok(resposta) => resposta,
+                    Err(failure) => failure_response(&failure),
+                }
+            }
+            None => failure_response(&failure),
+        },
+    }
+}
+
+/// O sentido da linhagem que se está a ver.
+#[derive(serde::Deserialize)]
+struct LineageQuery {
+    direction: Option<String>,
+}
+
+/// Campos de uma validação.
+#[derive(Deserialize)]
+struct ValidationForm {
+    #[serde(default)]
+    kind: String,
+    #[serde(default)]
+    outcome: String,
+    #[serde(default)]
+    execution_id: String,
+    #[serde(default)]
+    note: String,
+}
+
+/// O formulário de validação de um resultado.
+async fn validate_result_form(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(result_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    match validation_page(&state, &member, result_id, None).await {
+        Ok(response) => response,
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+/// Regista a afirmação, em nome de quem a faz.
+async fn record_validation(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(result_id): Path<Uuid>,
+    Form(form): Form<ValidationForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    // Uma cadeia vazia no `<select>` é «nenhuma», e não um identificador
+    // inválido: submeter `""` como UUID faria o Core recusar por má forma em
+    // vez de aceitar a ausência, que é o que a pessoa escolheu.
+    let execution_id = (!form.execution_id.is_empty()).then_some(form.execution_id.as_str());
+    let note = (!form.note.trim().is_empty()).then(|| form.note.trim());
+
+    let body = serde_json::json!({
+        "kind": form.kind,
+        "outcome": form.outcome,
+        "execution_id": execution_id,
+        "note": note,
+    });
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/results/{result_id}/validations"),
+        &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!("/results/{result_id}")).into_response(),
+        Err(failure) => {
+            // A recusa do Core volta ao formulário, com o que ele disse. Um
+            // ecrã de erro genérico perderia a razão — e a razão aqui é a
+            // parte útil: falta a execução, ou falta a autoridade.
+            // Só as recusas que a pessoa pode resolver voltam ao formulário:
+            // falta a prova, ou falta a autoridade. Uma avaria, uma sessão
+            // caída ou um recurso inalcançável não são coisas que se corrijam
+            // preenchendo o campo outra vez.
+            let motivo = match &failure {
+                api::ApiFailure::Rejected(mensagem) => Some(mensagem.clone()),
+                api::ApiFailure::Forbidden => Some(
+                    "Validar ou dar por reproduzido um resultado exige liderança do \
+                     ambiente ou gestão da unidade."
+                        .to_owned(),
+                ),
+                _ => None,
+            };
+
+            match motivo {
+                Some(motivo) => {
+                    match validation_page(&state, &member, result_id, Some(motivo)).await {
+                        Ok(response) => response,
+                        Err(failure) => failure_response(&failure),
+                    }
+                }
+                None => failure_response(&failure),
+            }
+        }
+    }
+}
+
+/// O ecrã de validação, com o resultado e as execuções que servem de prova.
+async fn validation_page(
+    state: &WorkspaceState,
+    member: &Member,
+    result_id: Uuid,
+    message: Option<String>,
+) -> Result<Response, api::ApiFailure> {
+    let result = api::get::<Value>(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/results/{result_id}"),
+    )
+    .await?;
+
+    // As execuções que podem servir de prova são as do estudo que produziu
+    // este resultado. Sem execução de origem não há estudo conhecido, e a
+    // lista fica vazia — que é o que o ecrã precisa de saber para explicar
+    // porque a reprodução não está disponível.
+    let executions = match result.get("execution_id").and_then(Value::as_str) {
+        Some(execution_id) => {
+            let execution =
+                optional(state, member, &format!("/api/v1/executions/{execution_id}")).await;
+            match execution.get("study_id").and_then(Value::as_str) {
+                Some(study_id) => {
+                    optional(
+                        state,
+                        member,
+                        &format!("/api/v1/studies/{study_id}/executions"),
+                    )
+                    .await
+                }
+                None => Value::Null,
+            }
+        }
+        None => Value::Null,
+    };
+
+    let viewer = viewer(state, member).await;
+    let trail = vec![
+        Crumb::to(Screen::Ideas),
+        Crumb {
+            label: "Resultado".to_owned(),
+            href: format!("/results/{result_id}"),
+        },
+    ];
+
+    Ok(shell_page(
+        "Validar resultado",
+        &viewer,
+        Screen::Ideas,
+        trail,
+        ui::screens::science::validate_result(ui::screens::science::ValidateView {
+            result,
+            executions,
+            message,
+        }),
+    ))
 }
 
 // ── Conhecimento ─────────────────────────────────────────────────────────
@@ -3106,7 +5146,7 @@ fn avatar_outcome(resultado: Result<serde_json::Value, ApiFailure>) -> Response 
         // falhou em vez do que se passa. Quem carregou uma fotografia conclui
         // que a fotografia tem alguma coisa de errado, e volta a tentar com
         // outra.
-        Err(ApiFailure::Unavailable) => avatar_error(
+        Err(ApiFailure::Unavailable(_)) => avatar_error(
             "O armazenamento institucional não está a responder. \
              A fotografia não foi guardada — não é um problema com a imagem, \
              e os avatares Ocinye e as iniciais continuam disponíveis.",
@@ -3262,7 +5302,7 @@ async fn change_password(
             let session_id = state.sessions.create(Session {
                 access_token: session.token,
                 display_name: session.display_name,
-                username: member.session.username.clone(),
+                email: member.session.email.clone(),
                 must_change_password: session.must_change_password,
                 expires_at: Instant::now() + state.config.session_ttl,
             });
@@ -3676,7 +5716,7 @@ async fn login(State(state): State<WorkspaceState>) -> Response {
 #[derive(Deserialize)]
 struct LoginForm {
     #[serde(default)]
-    username: String,
+    email: String,
     #[serde(default)]
     password: String,
 }
@@ -3693,7 +5733,7 @@ async fn login_submit(
         &correlation_id,
         "/api/v1/auth/login",
         &serde_json::json!({
-            "username": form.username,
+            "email": form.email,
             "password": form.password,
         }),
     )
@@ -3727,7 +5767,7 @@ async fn login_submit(
     let session_id = state.sessions.create(Session {
         access_token: session.token,
         display_name: session.display_name,
-        username: form.username.clone(),
+        email: form.email.clone(),
         must_change_password: session.must_change_password,
         expires_at: Instant::now() + ttl,
     });
@@ -3803,7 +5843,7 @@ async fn first_access(State(state): State<WorkspaceState>, headers: HeaderMap) -
         "Defina a sua palavra-passe",
         ui::screens::first_access::first_access(
             &member.session.display_name,
-            &member.session.username,
+            &member.session.email,
             None,
         ),
     )
@@ -3854,7 +5894,7 @@ async fn first_access_submit(
                     "Defina a sua palavra-passe",
                     ui::screens::first_access::first_access(
                         &member.session.display_name,
-                        &member.session.username,
+                        &member.session.email,
                         Some(message),
                     ),
                 ),
@@ -3879,7 +5919,7 @@ async fn first_access_submit(
         // O nome de utilizador não muda ao trocar a palavra-passe: vem da
         // sessão anterior, porque este formulário não o pede nem o deveria
         // pedir.
-        username: member.session.username.clone(),
+        email: member.session.email.clone(),
         must_change_password: false,
         expires_at: Instant::now() + state.config.session_ttl,
     });
@@ -4387,6 +6427,7 @@ struct CalendarQuery {
 fn calendar_range(
     view: ui::screens::calendar::CalendarView,
     anchor: chrono::NaiveDate,
+    zona: ocinye_contracts::temporal::TimeZoneName,
 ) -> (chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>) {
     use chrono::{Datelike, Duration, TimeZone, Utc};
     use ui::screens::calendar::{month_grid_start, week_start, CalendarView};
@@ -4404,8 +6445,22 @@ fn calendar_range(
         }
         CalendarView::Agenda => anchor,
     };
-    let meia_noite =
-        |d: chrono::NaiveDate| Utc.from_utc_datetime(&d.and_hms_opt(0, 0, 0).unwrap_or_default());
+    // A meia-noite **civil**, e não a de Greenwich.
+    //
+    // O que se pede ao Core é o instante em que o dia começa onde a pessoa
+    // está. Com a meia-noite de UTC, a primeira hora de cada dia civil a leste
+    // caía fora do pedido, e as margens de doze e vinte e quatro horas abaixo
+    // existiam para o tapar — tapavam o sintoma e mantinham o defeito.
+    let meia_noite = |d: chrono::NaiveDate| {
+        ocinye_contracts::temporal::resolve_local(d.and_hms_opt(0, 0, 0).unwrap_or_default(), zona)
+            .unwrap_or_else(|_| {
+                // Uma meia-noite que não existe acontece: em algumas zonas o
+                // relógio salta de 23:59 para 01:00. Nesse dia o dia civil
+                // começa uma hora depois, e insistir na hora que não existe
+                // seria pedir um instante que nunca houve.
+                Utc.from_utc_datetime(&d.and_hms_opt(0, 0, 0).unwrap_or_default())
+            })
+    };
 
     // O Ano pede exactamente o ano, e sem margens.
     //
@@ -4472,8 +6527,15 @@ async fn calendar_page(
     // O Mês é a vista por omissão: é a que responde à pergunta com que a maior
     // parte das pessoas abre um calendário — «o que tenho este mês».
     let view = CalendarView::parse(query.view.as_deref().unwrap_or("month"));
-    let anchor = query.on.unwrap_or_else(|| chrono::Utc::now().date_naive());
-    let (de, ate) = calendar_range(view, anchor);
+    // «Hoje» é hoje onde a pessoa está, e não em Greenwich.
+    //
+    // Com `Utc::now().date_naive()`, quem abrisse o Calendário às 00:30 em
+    // Lisboa via o dia anterior — e o compromisso que tinha acabado de marcar
+    // para «hoje» não estava lá.
+    let anchor = query
+        .on
+        .unwrap_or_else(|| ui::tempo::hoje_civil(chrono::Utc::now(), member.zona));
+    let (de, ate) = calendar_range(view, anchor, member.zona);
 
     // Erro e vazio não se dizem da mesma maneira. Uma consulta falhada que
     // aparecesse como «nenhuma actividade» faria alguém faltar a uma reunião.
@@ -4495,6 +6557,7 @@ async fn calendar_page(
             items: &items,
             may_create: viewer.can(ocinye_contracts::Permission::CalendarCreate),
             failure,
+            zona: member.zona,
         }),
     )
 }
@@ -4553,6 +6616,7 @@ async fn new_event_form(
             None,
             Some(proposto),
             &pessoas,
+            member.zona,
         ),
     )
 }
@@ -4704,6 +6768,7 @@ async fn event_form_error(
             Some(motivo),
             None,
             &serde_json::Value::Null,
+            member.zona,
         ),
     )
 }
@@ -4734,6 +6799,7 @@ async fn event_detail_page(
                 ui::screens::calendar::event_detail(
                     &evento,
                     viewer.can(ocinye_contracts::Permission::CalendarEdit),
+                    member.zona,
                 ),
             )
         }
@@ -4801,6 +6867,7 @@ async fn edit_event_form(
             None,
             None,
             &serde_json::Value::Null,
+            member.zona,
         ),
     )
 }
@@ -4862,6 +6929,19 @@ async fn cancel_calendar_event(
     }
 }
 
+/// As notificações recentes, para o painel do sino.
+///
+/// # Porque uma rota própria e não a página
+///
+/// Porque o painel abre a pedido, e a página é um histórico. Renderizar a lista
+/// em cada navegação seria pedir ao Core tudo isto a cada clique, para o
+/// esconder quase sempre.
+async fn notifications_recent(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    let resposta = optional(&state, &member, "/api/v1/notifications?page_size=12").await;
+    axum::Json(resposta).into_response()
+}
+
 async fn notifications_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
     let member = member_or_login!(state, headers);
     let viewer = viewer(&state, &member).await;
@@ -4908,6 +6988,11 @@ async fn mark_notification_read(
 
 #[cfg(test)]
 mod intervalos_do_calendario {
+
+    /// A zona destes testes, declarada e não herdada da máquina.
+    fn zona_de_teste() -> ocinye_contracts::temporal::TimeZoneName {
+        "UTC".to_owned().try_into().expect("fuso conhecido")
+    }
     use super::*;
     use chrono::Datelike;
     use ui::screens::calendar::CalendarView;
@@ -4949,7 +7034,7 @@ mod intervalos_do_calendario {
 
         for vista in CalendarView::all() {
             for ancora in ancoras {
-                let (de, ate) = calendar_range(vista, ancora);
+                let (de, ate) = calendar_range(vista, ancora, zona_de_teste());
                 assert!(
                     ate > de,
                     "{vista:?} em {ancora}: o intervalo acaba antes de começar"
@@ -4972,7 +7057,7 @@ mod intervalos_do_calendario {
     #[test]
     fn o_ano_cobre_o_ano_inteiro() {
         for (ancora, dias) in [(dia(2026, 6, 15), 365), (dia(2028, 6, 15), 366)] {
-            let (de, ate) = calendar_range(CalendarView::Year, ancora);
+            let (de, ate) = calendar_range(CalendarView::Year, ancora, zona_de_teste());
             assert_eq!(
                 (ate - de).num_days(),
                 dias,

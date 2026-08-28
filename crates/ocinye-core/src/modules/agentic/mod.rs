@@ -40,7 +40,12 @@ pub mod lifecycle;
 pub mod planner;
 pub mod registry;
 pub mod repository;
-pub mod resolver;
+/// O resolvedor mudou-se para o Core.
+///
+/// Continua a ser usado aqui, e deixou de ser propriedade deste plano: a
+/// pergunta «este identificador nomeia um recurso que esta pessoa pode ler»
+/// é do Core, e a proveniência científica também a faz.
+pub use crate::resources as resolver;
 pub mod runtime;
 
 pub use context::{ContextEnvelope, ContextSource};

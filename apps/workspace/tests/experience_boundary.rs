@@ -417,3 +417,86 @@ fn conteudo_do_dominio_nunca_vira_marcacao() {
         );
     }
 }
+
+/// Nenhuma vista decide um dia civil em Greenwich.
+///
+/// # A invariante
+///
+/// «Em que dia isto cai» tem **uma** resposta no Ocinye, e ela vive em
+/// `ui::tempo`. Quando cada vista a calculava por si, todas escreviam
+/// `date_naive()` sobre um instante em UTC — e o Calendário mostrava um
+/// compromisso das 00:30 em Lisboa no dia anterior, às 23:30.
+///
+/// O defeito não estava numa vista. Estava em não haver sítio nenhum onde a
+/// pergunta se fizesse uma vez. Este portão existe para que a próxima vista não
+/// possa voltar a decidi-lo sozinha.
+#[test]
+fn nenhuma_vista_decide_um_dia_civil_em_greenwich() {
+    let raiz = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ui");
+
+    /// Onde a conversão pode viver, e porquê.
+    ///
+    /// Uma lista de excepções declaradas, e não uma ausência de portão: uma
+    /// excepção nova tem de ser escrita aqui por alguém, com a razão.
+    const AUTORIZADOS: [(&str, &str); 1] = [(
+        "tempo.rs",
+        "é a primitiva. É aqui que a conversão acontece, e é por isso que ela \
+         existe num sítio só.",
+    )];
+
+    let mut ficheiros = Vec::new();
+    let mut por_visitar = vec![raiz.clone()];
+    while let Some(dir) = por_visitar.pop() {
+        for entrada in std::fs::read_dir(&dir).expect("ler a pasta da interface") {
+            let caminho = entrada.expect("entrada").path();
+            if caminho.is_dir() {
+                por_visitar.push(caminho);
+            } else if caminho.extension().is_some_and(|e| e == "rs") {
+                ficheiros.push(caminho);
+            }
+        }
+    }
+
+    assert!(
+        ficheiros.len() > 5,
+        "o portão não encontrou a interface: {} ficheiros",
+        ficheiros.len()
+    );
+
+    let mut infractores = Vec::new();
+    for caminho in &ficheiros {
+        let nome = caminho
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        if AUTORIZADOS.iter().any(|(f, _)| *f == nome) {
+            continue;
+        }
+        let texto = std::fs::read_to_string(caminho).expect("ler");
+        for (n, linha) in texto.lines().enumerate() {
+            let codigo = linha.split("//").next().unwrap_or_default();
+            if codigo.contains("date_naive()") || codigo.contains("naive_local()") {
+                infractores.push(format!("{nome}:{}: {}", n + 1, linha.trim()));
+            }
+        }
+    }
+
+    assert!(
+        infractores.is_empty(),
+        "estas linhas decidem um dia civil fora da primitiva, e portanto em \
+         Greenwich:\n  {}\n\nUse `ui::tempo::dia_civil` ou `hora_civil`, que \
+         exigem a zona de quem olha.",
+        infractores.join("\n  ")
+    );
+
+    // Uma excepção que ficou sem dono é uma excepção que ninguém volta a
+    // questionar.
+    for (ficheiro, _) in AUTORIZADOS {
+        assert!(
+            ficheiros
+                .iter()
+                .any(|c| c.file_name().and_then(|n| n.to_str()) == Some(ficheiro)),
+            "«{ficheiro}» está autorizado e já não existe"
+        );
+    }
+}

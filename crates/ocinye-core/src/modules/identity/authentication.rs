@@ -36,10 +36,10 @@ pub const PASSWORD_CHANGE_SESSION_MINUTES: i64 = 30;
 
 /// The single message returned for every failed sign-in.
 ///
-/// One string for wrong username, wrong password, expired credential and
+/// One string for wrong address, wrong password, expired credential and
 /// suspended account. Anything finer is an account-enumeration oracle
 /// (briefing §35).
-const SIGN_IN_REFUSED: &str = "Nome de utilizador ou palavra-passe inválidos.";
+const SIGN_IN_REFUSED: &str = "Endereço ou palavra-passe inválidos.";
 
 /// What a caller needs after a successful sign-in.
 #[derive(Debug)]
@@ -90,15 +90,15 @@ impl Outcome {
 /// Throttling thresholds.
 ///
 /// Deliberately not a lockout. Locking an account after N failures hands anyone
-/// who knows a username a denial-of-service against that person (briefing §37).
+/// who knows an address a denial-of-service against that person (briefing §37).
 /// Instead the response is delayed and then refused for a window that ends by
 /// itself.
 #[derive(Debug, Clone, Copy)]
 pub struct Throttle {
     /// Failures from one network prefix before refusal.
     pub per_ip: i64,
-    /// Failures against one username before refusal.
-    pub per_username: i64,
+    /// Failures against one address before refusal.
+    pub per_email: i64,
     /// Window over which failures are counted, in minutes.
     pub window_minutes: i64,
 }
@@ -107,7 +107,7 @@ impl Default for Throttle {
     fn default() -> Self {
         Self {
             per_ip: 20,
-            per_username: 10,
+            per_email: 10,
             window_minutes: 15,
         }
     }
@@ -165,7 +165,10 @@ impl Authenticator {
         }
     }
 
-    /// Authenticate a username and password.
+    /// Autentica um endereço institucional e uma palavra-passe.
+    ///
+    /// O endereço é a credencial única do Ocinye (ADR-0106): não há username, e
+    /// não há segundo identificador aceite em silêncio.
     ///
     /// # The shape of a refusal
     ///
@@ -181,15 +184,15 @@ impl Authenticator {
     pub async fn sign_in(
         &self,
         pool: &PgPool,
-        username: &str,
+        email: &str,
         password: &Secret,
         context: &AttemptContext,
         ids: &CorrelationIds,
     ) -> CoreResult<IssuedSession> {
-        let username = username.trim();
+        let email = email.trim();
 
-        if self.is_throttled(pool, username, context).await? {
-            record_attempt(pool, username, context, Outcome::RateLimited).await;
+        if self.is_throttled(pool, email, context).await? {
+            record_attempt(pool, email, context, Outcome::RateLimited).await;
             return Err(CoreError::RateLimited(
                 "Demasiadas tentativas. Aguarde alguns minutos.".to_owned(),
             ));
@@ -199,22 +202,22 @@ impl Authenticator {
         // an unauthenticated caller must not be able to choose how much work
         // the server does.
         if password.len_bytes() > policy::MAX_BYTES {
-            record_attempt(pool, username, context, Outcome::BadCredentials).await;
+            record_attempt(pool, email, context, Outcome::BadCredentials).await;
             return Err(CoreError::Unauthenticated(SIGN_IN_REFUSED.to_owned()));
         }
 
         let candidate = policy::normalise(password);
-        let person = repo::find_by_username(pool, username).await?;
+        let person = repo::find_by_email(pool, email).await?;
 
         let Some(person) = person else {
             self.burn_equivalent_work(&candidate);
-            record_attempt(pool, username, context, Outcome::BadCredentials).await;
+            record_attempt(pool, email, context, Outcome::BadCredentials).await;
             return Err(CoreError::Unauthenticated(SIGN_IN_REFUSED.to_owned()));
         };
 
         if !person.account_status().may_authenticate() {
             self.burn_equivalent_work(&candidate);
-            record_attempt(pool, username, context, Outcome::AccountNotAuthenticable).await;
+            record_attempt(pool, email, context, Outcome::AccountNotAuthenticable).await;
             return Err(CoreError::Unauthenticated(SIGN_IN_REFUSED.to_owned()));
         }
 
@@ -252,7 +255,7 @@ impl Authenticator {
             if permanent.is_none() && temporary.is_none() {
                 self.burn_equivalent_work(&candidate);
             }
-            record_attempt(pool, username, context, outcome).await;
+            record_attempt(pool, email, context, outcome).await;
             return Err(CoreError::Unauthenticated(SIGN_IN_REFUSED.to_owned()));
         };
 
@@ -302,7 +305,7 @@ impl Authenticator {
         .await?;
         tx.commit().await?;
 
-        record_attempt(pool, username, context, Outcome::Succeeded).await;
+        record_attempt(pool, email, context, Outcome::Succeeded).await;
 
         Ok(IssuedSession {
             token,
@@ -314,7 +317,7 @@ impl Authenticator {
 
     /// Spend roughly the work a real verification costs.
     ///
-    /// Without this, "no such username" returns in microseconds while a wrong
+    /// Without this, "no such address" returns in microseconds while a wrong
     /// password takes the Argon2 time, and the difference is measurable over
     /// the network. The dummy verifier is a real Argon2id hash of a value
     /// nobody holds.
@@ -337,23 +340,23 @@ impl Authenticator {
     async fn is_throttled(
         &self,
         pool: &PgPool,
-        username: &str,
+        email: &str,
         context: &AttemptContext,
     ) -> CoreResult<bool> {
         let window = Duration::minutes(self.throttle.window_minutes);
 
-        let by_username: i64 = sqlx::query_scalar(
+        let by_email: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM authentication_attempts
-              WHERE lower(username) = lower($1)
+              WHERE lower(email) = lower($1)
                 AND outcome <> 'succeeded'
                 AND attempted_at > now() - $2",
         )
-        .bind(username)
+        .bind(email)
         .bind(window)
         .fetch_one(pool)
         .await?;
 
-        if by_username >= self.throttle.per_username {
+        if by_email >= self.throttle.per_email {
             return Ok(true);
         }
 
@@ -382,12 +385,12 @@ impl Authenticator {
 ///
 /// Best-effort: a failure to write evidence must not change the authentication
 /// outcome, but it must be loud in the log.
-async fn record_attempt(pool: &PgPool, username: &str, context: &AttemptContext, outcome: Outcome) {
+async fn record_attempt(pool: &PgPool, email: &str, context: &AttemptContext, outcome: Outcome) {
     let result = sqlx::query(
-        "INSERT INTO authentication_attempts (username, ip_prefix, outcome)
+        "INSERT INTO authentication_attempts (email, ip_prefix, outcome)
          VALUES ($1, $2, $3)",
     )
-    .bind(username.chars().take(64).collect::<String>())
+    .bind(email.chars().take(320).collect::<String>())
     .bind(context.ip_prefix.as_deref())
     .bind(outcome.as_str())
     .execute(pool)
@@ -424,8 +427,8 @@ mod tests {
     #[test]
     fn throttling_counts_both_account_and_origin() {
         let throttle = Throttle::default();
-        assert!(throttle.per_username > 0);
-        assert!(throttle.per_ip > throttle.per_username);
+        assert!(throttle.per_email > 0);
+        assert!(throttle.per_ip > throttle.per_email);
         assert!(throttle.window_minutes > 0);
     }
 

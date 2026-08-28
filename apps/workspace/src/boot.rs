@@ -6,7 +6,7 @@
 //! prontidão institucional — e a diferença é toda: uma animação enche o tempo
 //! enquanto se espera, e isto mostra uma decisão que o Core já tomou.
 //!
-//!     O Core decide se o sistema está pronto. A Experience apresenta a resposta.
+//! > O Core decide se o sistema está pronto. A Experience apresenta a resposta.
 //!
 //! Nada neste módulo conclui prontidão. Ele pergunta, lê a resposta tipada e
 //! escolhe que superfície mostrar. Contar componentes verdes aqui seria uma
@@ -212,8 +212,8 @@ pub fn marker_cookie(secure: bool) -> String {
 /// mesma, portanto um marcador inventado não faz um Core bloqueado parecer
 /// pronto; e a sessão é resolvida na mesma, portanto não autentica ninguém.
 ///
-///     O arranque-concluído pode ser guardado como estado de apresentação.
-///     A autoridade sobre prontidão não pode.
+/// > O arranque-concluído pode ser guardado como estado de apresentação.
+/// > A autoridade sobre prontidão não pode.
 #[must_use]
 pub fn has_marker(cookies: Option<&str>) -> bool {
     cookies.is_some_and(|cabecalho| {

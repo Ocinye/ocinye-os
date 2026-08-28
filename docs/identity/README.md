@@ -10,7 +10,7 @@ Autorização (distinta de identidade): [docs/authorization/](../authorization/R
 
 | | |
 |---|---|
-| Autenticação | **`CURRENT`** — nome de utilizador e palavra-passe, no Ocinye Core |
+| Autenticação | **`CURRENT`** — endereço institucional e palavra-passe, no Ocinye Core |
 | MFA | **`NOT IMPLEMENTED`**, e **não exigido** nesta fase |
 | Passkeys / WebAuthn | `PLANNED` |
 | Recuperação por link seguro | `PLANNED` — hoje a recuperação é administrativa |
@@ -61,8 +61,7 @@ exclusivamente para o seu titular definir a sua própria palavra-passe.
 ```bash
 ocinye-core-server bootstrap-admin \
   --name "Nome Completo" \
-  --username nome.utilizador \
-  --email pessoa@ocinye.com
+    --email pessoa@ocinye.com
 ```
 
 Corre **uma única vez**: recusa se já existir um `platform_admin` utilizável na
@@ -74,7 +73,7 @@ O primeiro administrador começa, como toda a gente, com credencial temporária.
 Runbook: [Bootstrap do primeiro administrador](../runbooks/bootstrap-first-administrator.md).
 Perda de acesso administrativo: [Recuperar acesso administrativo](../runbooks/recover-administrative-access.md).
 
-## Nome de utilizador
+## Endereço institucional
 
 | Regra | Valor |
 |---|---|

@@ -31,6 +31,7 @@ pub mod ids;
 pub mod intelligence;
 pub mod mail;
 pub mod page;
+pub mod provenance;
 pub mod readiness;
 pub mod research;
 pub mod roles;
@@ -55,7 +56,8 @@ pub use research::{IdeaState, ProjectState, TaskState, WorkspaceKind};
 pub use roles::{InstitutionalPosition, TechnicalRole, UnitRole, WorkspaceRole};
 pub use storage::{MigrationState, Residency};
 pub use system_capability::{
-    SystemCapabilities, SystemCapability, SystemCapabilityReport, SystemCapabilityState,
+    MailReachability, MemberMailboxState, SystemCapabilities, SystemCapability,
+    SystemCapabilityReport, SystemCapabilityState,
 };
 
 /// Version of the HTTP contract exposed by the Ocinye Core.

@@ -110,6 +110,7 @@ pub const fn role_permissions(role: TechnicalRole) -> &'static [Permission] {
             P::MailAdminister,
             // A sua própria caixa. `MailUse` nunca alcança mais do que isso —
             // por isso concedê-la a quem administra a plataforma não abre nada.
+            P::MessagingUse,
             P::MailUse,
             P::CalendarView,
             P::CalendarCreate,
@@ -136,6 +137,7 @@ pub const fn role_permissions(role: TechnicalRole) -> &'static [Permission] {
             P::ProjectsView,
             P::AgentsView,
             P::ComputeView,
+            P::MessagingUse,
             P::MailUse,
             P::CalendarView,
             P::CalendarCreate,
@@ -166,6 +168,7 @@ pub const fn role_permissions(role: TechnicalRole) -> &'static [Permission] {
             // Correio institucional: o membro tem uma caixa e escreve a partir
             // dela. `MailUse` e `MailSend` só alcançam caixas que sejam suas ou
             // partilhadas de que faça parte.
+            P::MessagingUse,
             P::MailUse,
             // A agenda. Todo o membro tem a sua: um evento pessoal alcança-se
             // por ser de quem é, e a instituição não o vê. `CalendarView` é o
@@ -175,6 +178,7 @@ pub const fn role_permissions(role: TechnicalRole) -> &'static [Permission] {
             P::CalendarCreate,
             P::CalendarEdit,
             P::MailSend,
+            P::MessagingAiUse,
             P::MailAiUse,
             P::MailSharedView,
             P::MailSharedSend,
@@ -187,6 +191,7 @@ pub const fn role_permissions(role: TechnicalRole) -> &'static [Permission] {
         TechnicalRole::Collaborator => &[
             P::OrganisationView,
             P::AgentsView,
+            P::MessagingUse,
             P::MailUse,
             P::MailSend,
             P::CalendarView,
@@ -222,12 +227,15 @@ pub const fn unit_role_permissions(role: UnitRole) -> &'static [Permission] {
             P::ProjectsCreate,
             P::ProjectsEdit,
             P::ProjectsManage,
+            P::ResultsValidate,
             P::ResearchMembersManage,
             P::BibliographyView,
             P::BibliographyCreate,
             P::BibliographyEdit,
             P::NotesView,
+            P::ScienceView,
             P::NotesCreate,
+            P::ScienceCreate,
             P::LinksCreate,
             P::NotesEdit,
             P::DocumentsView,
@@ -261,6 +269,7 @@ pub const fn unit_role_permissions(role: UnitRole) -> &'static [Permission] {
             P::ProjectsView,
             P::BibliographyView,
             P::NotesView,
+            P::ScienceView,
             P::DocumentsView,
             P::DatasetsView,
             P::AiUse,
@@ -282,12 +291,15 @@ pub const fn workspace_role_permissions(role: WorkspaceRole) -> &'static [Permis
             P::ProjectsView,
             P::ProjectsEdit,
             P::ProjectsManage,
+            P::ResultsValidate,
             P::ResearchMembersManage,
             P::BibliographyView,
             P::BibliographyCreate,
             P::BibliographyEdit,
             P::NotesView,
+            P::ScienceView,
             P::NotesCreate,
+            P::ScienceCreate,
             P::LinksCreate,
             P::NotesEdit,
             P::DocumentsView,
@@ -324,7 +336,9 @@ pub const fn workspace_role_permissions(role: WorkspaceRole) -> &'static [Permis
             P::BibliographyCreate,
             P::BibliographyEdit,
             P::NotesView,
+            P::ScienceView,
             P::NotesCreate,
+            P::ScienceCreate,
             P::LinksCreate,
             P::NotesEdit,
             P::TasksView,
@@ -355,6 +369,7 @@ pub const fn workspace_role_permissions(role: WorkspaceRole) -> &'static [Permis
             P::ProjectsView,
             P::BibliographyView,
             P::NotesView,
+            P::ScienceView,
             P::TasksView,
             P::CalendarView,
             P::DocumentsView,
@@ -386,6 +401,9 @@ const fn touches_content(permission: Permission) -> bool {
             | P::NotesView
             | P::NotesCreate
             | P::NotesEdit
+            | P::ScienceView
+            | P::ScienceCreate
+            | P::ResultsValidate
             | P::DocumentsView
             | P::DocumentsUpload
             | P::DocumentsDownload

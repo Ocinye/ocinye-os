@@ -11,9 +11,7 @@ use serde_json::{json, Value};
 use sqlx::{PgExecutor, PgPool};
 use uuid::Uuid;
 
-use super::model::{
-    ContentRight, Document, DocumentKind, Note, ResearchLink, Source, SourceType, ALLOWED_RELATIONS,
-};
+use super::model::{ContentRight, Document, DocumentKind, Note, ResearchLink, Source, SourceType};
 use super::repository::{self as repo, NewSourceRow};
 use crate::audit::{self, action, AuditEntry};
 use crate::capabilities::{Capabilities, Component};
@@ -919,6 +917,13 @@ pub async fn attach_full_text(
 )]
 pub async fn link_objects(
     tx: &mut Tx<'_>,
+    // O pool, para resolver as pontas.
+    //
+    // A resolução consulta os serviços que detêm cada leitura, e esses recebem
+    // um pool. Fora da transacção é o correcto: o que se pergunta é se o
+    // recurso existe e é alcançável **agora**, e não o que a transacção ainda
+    // não escreveu.
+    pool: &PgPool,
     principal: &Principal,
     ids: &CorrelationIds,
     workspace_id: Uuid,
@@ -934,17 +939,79 @@ pub async fn link_objects(
     authorize(principal, Action::Create, &ctx)
         .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
 
-    if !ALLOWED_RELATIONS.contains(&relation) {
+    let Some(verbo) = ocinye_contracts::provenance::ProvenanceRelation::parse(relation) else {
         return Err(CoreError::Validation(format!(
-            "Unknown relation. Allowed relations are: {}.",
-            ALLOWED_RELATIONS.join(", ")
+            "Relação desconhecida. As permitidas são: {}.",
+            ocinye_contracts::provenance::ProvenanceRelation::all()
+                .iter()
+                .map(|r| r.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )));
+    };
+
+    // ── As duas pontas são recursos, e são desta pessoa ─────────────────
+    //
+    // Autorizar o Research Workspace não é autorizar o que se liga a partir
+    // dele. Esta operação recebia dois pares `(tipo, identificador)` como
+    // texto livre e escrevia-os: conhecer um UUID bastava para afirmar, na
+    // memória institucional, que a nota de outra unidade se relaciona com a
+    // nossa — e a afirmação passava a aparecer na listagem, com o
+    // identificador alheio lá dentro.
+    //
+    // A guarda existia, e estava **numa das entradas**: a capability agentic
+    // resolvia os extremos antes de chamar, e a rota HTTP passava as cadeias
+    // cruas. Duas portas para a mesma operação, uma delas sem a autoridade da
+    // outra — que é precisamente o que Dual Entry existe para impedir.
+    //
+    // Resolver aqui recusa três coisas de uma vez: um tipo que o domínio não
+    // conhece, um recurso que não existe, e um recurso que esta pessoa não
+    // alcança. As três respondem o mesmo, porque distingui-las diria a quem
+    // pergunta qual das três era (ADR-0100).
+    let ponta = |nome: &str, id: Uuid| -> CoreResult<ocinye_contracts::agentic::ResourceRef> {
+        let kind = ocinye_contracts::agentic::ResourceKind::parse(nome).ok_or_else(|| {
+            CoreError::NotFound("Um dos recursos da relação não foi encontrado.".to_owned())
+        })?;
+        Ok(ocinye_contracts::agentic::ResourceRef {
+            kind,
+            id,
+            label: None,
+        })
+    };
+
+    let origem = ponta(source_type_name, source_id)?;
+    let destino = ponta(target_type_name, target_id)?;
+
+    for referencia in [&origem, &destino] {
+        crate::resources::resolve(pool, principal, referencia)
+            .await
+            .map_err(|_| {
+                CoreError::NotFound("Um dos recursos da relação não foi encontrado.".to_owned())
+            })?;
+    }
+
+    // ── E o verbo tem de fazer sentido entre estes dois tipos ───────────
+    //
+    // Um vocabulário fechado impede verbos inventados; não impede
+    // combinações absurdas. Quinze verbos e vinte e cinco tipos dão nove mil
+    // pares, e quase todos não querem dizer nada — «uma pessoa produzida por
+    // um dataset», «uma hipótese que substitui um nó de computação».
+    //
+    // Uma afirmação sem sentido na linhagem é indistinguível de uma afirmação
+    // errada: as duas dizem oficialmente que uma coisa deriva de outra.
+    if !verbo.accepts(origem.kind, destino.kind) {
+        return Err(CoreError::Validation(format!(
+            "«{}» não é uma relação possível entre {} e {}.",
+            verbo.label(),
+            origem.kind.label(),
+            destino.kind.label()
         )));
     }
 
     let link = repo::insert_link(
         &mut **tx,
         principal.organisation_id,
-        workspace.id,
+        Some(workspace.id),
         source_type_name,
         source_id,
         relation,
@@ -952,6 +1019,13 @@ pub async fn link_objects(
         target_id,
         note,
         principal.person_id,
+        // Declarada: alguém afirmou esta relação.
+        //
+        // `operation` é reservado às operações que **conhecem** a relação sem
+        // ambiguidade, e não se pode fabricar por esta porta: uma rota de
+        // declaração manual que pudesse escrever `operation` tornaria
+        // indistinguível o que uma pessoa afirmou do que o sistema observou.
+        ocinye_contracts::provenance::ProvenanceOrigin::Declared.as_str(),
     )
     .await?;
 
@@ -967,6 +1041,72 @@ pub async fn link_objects(
     .await?;
 
     Ok(link)
+}
+
+/// Record a relation the operation itself knows, inside its transaction.
+///
+/// # Porque isto existe além de `link_objects`
+///
+/// Porque são duas coisas diferentes, e confundi-las apagaria a distinção que
+/// `origin` existe para guardar.
+///
+/// `link_objects` é a porta da **declaração**: alguém afirma que dois recursos
+/// se relacionam, e por isso tem de provar que alcança ambos, que o verbo faz
+/// sentido entre aqueles tipos, e que a relação não é inventada.
+///
+/// Isto é a porta da **observação**: a operação que produziu o facto já sabe a
+/// relação — criar um resultado a partir de uma execução *é* a relação. Não há
+/// nada a resolver, porque quem chama acabou de autorizar as duas pontas para
+/// as escrever; e não há nada a confirmar, porque pedir a alguém que declare o
+/// que acabou de fazer seria pedir que repetisse.
+///
+/// Vive aqui, e não no módulo científico, porque quem detém `research_links` é
+/// o Conhecimento. Um segundo sítio a escrever nessa tabela seria um segundo
+/// dono, e dois donos acabam com duas ideias sobre o que lá pode estar.
+///
+/// # Errors
+///
+/// Returns an error when the insert fails.
+#[allow(clippy::too_many_arguments)]
+pub async fn record_operation_provenance(
+    tx: &mut Tx<'_>,
+    organisation_id: Uuid,
+    workspace_id: Option<Uuid>,
+    source_kind: ocinye_contracts::agentic::ResourceKind,
+    source_id: Uuid,
+    relation: ocinye_contracts::provenance::ProvenanceRelation,
+    target_kind: ocinye_contracts::agentic::ResourceKind,
+    target_id: Uuid,
+    created_by: Uuid,
+) -> CoreResult<ResearchLink> {
+    // A matriz vale aqui também.
+    //
+    // Uma operação não escreve relações absurdas por ser uma operação: se um
+    // par deixar de fazer sentido, é aqui que se descobre — e não meses depois,
+    // ao ler a linhagem.
+    if !relation.accepts(source_kind, target_kind) {
+        return Err(CoreError::Validation(format!(
+            "«{}» não é uma relação possível entre {} e {}.",
+            relation.label(),
+            source_kind.label(),
+            target_kind.label()
+        )));
+    }
+
+    repo::insert_link(
+        &mut **tx,
+        organisation_id,
+        workspace_id,
+        source_kind.as_str(),
+        source_id,
+        relation.as_str(),
+        target_kind.as_str(),
+        target_id,
+        None,
+        created_by,
+        ocinye_contracts::provenance::ProvenanceOrigin::Operation.as_str(),
+    )
+    .await
 }
 
 /// List the relations of a workspace.

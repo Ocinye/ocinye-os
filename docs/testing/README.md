@@ -160,6 +160,12 @@ Verificados directamente contra PostgreSQL 17, além dos testes Rust:
 7. Um segundo backend de storage por omissão é rejeitado.
 8. Uma relação que aponta para si própria é rejeitada.
 9. pgvector está operacional.
+10. Uma relação de proveniência com origem desconhecida é rejeitada: `origin` só
+    aceita `declared` e `operation`.
+11. Cada estado do ciclo científico é um vocabulário fechado — hipótese, versão de
+    metodologia, estudo, execução e resultado.
+12. Duas execuções do mesmo estudo não podem ter a mesma sequência.
+13. Uma versão de metodologia não pode substituir-se a si própria.
 
 ## O Capability Runtime nos testes
 
@@ -213,6 +219,35 @@ Declarado, não escondido:
 - **Drenagem do outbox sob concorrência.**
 - **Property-based testing** dos workflows. Considerado; ainda não escrito.
 - **Fuzzing** do parser BibTeX e do protocolo de nó.
+- **A reprodução entre execuções como aresta.** O verbo existe na matriz e
+  nenhuma operação o escreve, pelo que não há o que testar ainda.
+- **A proveniência de computação.** Uma execução aceita um nó; a aresta
+  `executed_on` não é escrita.
+
+## As suites da cadeia científica
+
+Três propriedades que nenhuma delas prova sozinha:
+
+| Suite | O que guarda |
+|---|---|
+| `ocinye-core --test scientific_lineage` | Uma fronteira de autorização escondida é indistinguível de uma folha visível; a linhagem visível aparece; um ciclo não prende a travessia |
+| `ocinye-core --test scientific_validation` | Escrever no ambiente não dá o direito de validar; uma reprodução sem execução é recusada; publicar uma versão substitui a anterior; nenhuma capability alcança a validação; a operação continua atrás da fronteira de afirmação |
+| `ocinye-workspace --test browser` | Uma pessoa constrói a cadeia inteira por formulários, sem API, e a proveniência aparece sem ninguém a declarar |
+
+E a paridade, em `ocinye-core-server --test parity`, prova que a entrada humana e
+a agentic convergem na mesma Core Operation — pelo rasto de auditoria, que é
+escrito **dentro** da operação e não no handler nem na capability.
+
+### Duas asserções que valem por si
+
+**Nenhuma capability alcança `science::record_validation`.** Medido percorrendo o
+registry inteiro, e não verificando a ausência de uma entrada com um nome
+escolhido: um agente não precisa de uma capability chamada «validar», precisa de
+qualquer uma que execute aquela operação.
+
+**Nenhum identificador aparece como texto na linhagem.** A viagem de browser
+extrai o texto entre etiquetas e recusa encontrar lá um `UUID`. Os identificadores
+vivem nos `href`, que é onde pertencem.
 
 ## Controlo positivo em testes de segurança
 

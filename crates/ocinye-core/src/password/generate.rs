@@ -49,7 +49,7 @@ pub fn entropy_bits() -> f64 {
 /// Drawn from the operating system CSPRNG. Grouped with hyphens purely so a
 /// human can read it back accurately; the hyphens are part of the credential.
 ///
-/// Nothing about the person is used as input — not the name, the username, the
+/// Nothing about the person is used as input — not the name, the address, the
 /// email nor the date (briefing §16).
 #[must_use]
 pub fn temporary_credential() -> Secret {

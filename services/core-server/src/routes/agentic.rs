@@ -141,10 +141,14 @@ async fn invoke(
         ));
     }
 
-    let capabilities =
-        platform::system_capabilities(&state.pool, &state.config, state.store.is_some())
-            .await
-            .map_err(|error| ApiError::new(error, &ids))?;
+    let capabilities = platform::system_capabilities(
+        &state.pool,
+        &state.config,
+        state.store.is_some(),
+        state.mail_registry.reachability().await,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
 
     let outcome = agentic::invoke(
         &state.pool,
@@ -385,9 +389,16 @@ async fn execute(
     CurrentPrincipal(principal): CurrentPrincipal,
     Path(plan_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let executed = lifecycle::execute(&state.pool, &state.capabilities, &principal, &ids, plan_id)
-        .await
-        .map_err(|error| ApiError::new(error, &ids))?;
+    let executed = lifecycle::execute(
+        &state.pool,
+        &state.capabilities,
+        &state.realtime,
+        &principal,
+        &ids,
+        plan_id,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
 
     Ok(Json(serde_json::json!({
         "state": executed.state.as_str(),

@@ -20,7 +20,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::policy::{SendDecision, SendPolicy};
-use super::provider::{MailProvider, OutgoingMessage, ProviderAddress, ProviderError};
+use super::provider::{OutgoingMessage, ProviderAddress, ProviderError};
 use super::repository as repo;
 use crate::audit::{self, action, AuditEntry};
 use crate::error::{CoreError, CoreResult};
@@ -30,7 +30,7 @@ use crate::error::{CoreError, CoreResult};
 /// The provider's own words never reach a member: an adapter has already
 /// translated, and this maps the translated cause onto the right HTTP shape
 /// (briefing §103).
-fn from_provider(error: ProviderError) -> CoreError {
+pub(super) fn from_provider(error: ProviderError) -> CoreError {
     match error {
         ProviderError::NotConfigured => CoreError::CapabilityUnavailable(
             "O correio institucional ainda não foi configurado nesta instalação do \
@@ -42,9 +42,13 @@ fn from_provider(error: ProviderError) -> CoreError {
              mensagem foi enviada."
                 .to_owned(),
         ),
+        // Não diz «as credenciais configuradas»: desde o ADR-0409 a sessão
+        // tanto pode ter sido aberta com a credencial da instituição como com
+        // a do próprio membro, e nomear a errada manda-o resolver o problema no
+        // sítio onde ele não está.
         ProviderError::AuthenticationFailed => CoreError::CapabilityUnavailable(
-            "O serviço de correio recusou as credenciais configuradas. Contacte quem \
-             administra o Ocinye OS."
+            "O serviço de correio recusou as credenciais desta caixa. Volte a ligá-la \
+             com a sua senha, ou contacte quem administra o Ocinye OS."
                 .to_owned(),
         ),
         ProviderError::NotFound => {
@@ -140,13 +144,17 @@ const SYNC_BATCH: u32 = 200;
 /// say why the list is stale.
 pub async fn sync(
     pool: &PgPool,
-    provider: &dyn MailProvider,
+    registry: &super::ProviderRegistry,
     principal: &Principal,
     mailbox_id: Uuid,
     folder: MailFolder,
     ids: &CorrelationIds,
 ) -> CoreResult<SyncOutcome> {
     let mailbox = mailbox(pool, principal, mailbox_id).await?;
+    // Depois de a caixa estar autorizada, e não antes: escolher a credencial de
+    // uma caixa que a pessoa não alcança seria decifrar um segredo por conta de
+    // um identificador adivinhado.
+    let provider = registry.for_mailbox(pool, mailbox_id).await?;
 
     let page = match provider
         .list_messages(&mailbox.address, folder, None, SYNC_BATCH)
@@ -210,7 +218,7 @@ pub async fn sync(
 /// reach, and a capability error when the service cannot be reached.
 pub async fn set_flag(
     pool: &PgPool,
-    provider: &dyn MailProvider,
+    registry: &super::ProviderRegistry,
     principal: &Principal,
     message_id: Uuid,
     read: Option<bool>,
@@ -218,12 +226,13 @@ pub async fn set_flag(
 ) -> CoreResult<()> {
     require(principal, Permission::MailUse)?;
 
-    let (indexed, _mailbox_id, mailbox_address) =
+    let (indexed, mailbox_id, mailbox_address) =
         repo::accessible_message(pool, principal.person_id, message_id)
             .await?
             .ok_or_else(|| CoreError::NotFound("Mensagem não encontrada.".to_owned()))?;
 
     let folder = MailFolder::parse(&indexed.folder).unwrap_or(MailFolder::Inbox);
+    let provider = registry.for_mailbox(pool, mailbox_id).await?;
 
     if let Some(read) = read {
         provider
@@ -307,7 +316,7 @@ pub fn safe_filename(raw: &str) -> String {
 /// caller may reach, and a capability error when the provider cannot serve it.
 pub async fn read_message(
     pool: &PgPool,
-    provider: &dyn MailProvider,
+    registry: &super::ProviderRegistry,
     principal: &Principal,
     message_id: Uuid,
     allow_remote: bool,
@@ -315,7 +324,7 @@ pub async fn read_message(
 ) -> CoreResult<ReadableMessage> {
     require(principal, Permission::MailUse)?;
 
-    let (indexed, _mailbox_id, mailbox_address) =
+    let (indexed, mailbox_id, mailbox_address) =
         repo::accessible_message(pool, principal.person_id, message_id)
             .await?
             .ok_or_else(|| CoreError::NotFound("Mensagem não encontrada.".to_owned()))?;
@@ -324,6 +333,7 @@ pub async fn read_message(
     // only unique within one. Taking it from the index — which recorded it —
     // rather than assuming the inbox.
     let folder = MailFolder::parse(&indexed.folder).unwrap_or(MailFolder::Inbox);
+    let provider = registry.for_mailbox(pool, mailbox_id).await?;
 
     let fetched = provider
         .fetch_message(&mailbox_address, folder, &indexed.provider_id)
@@ -621,7 +631,7 @@ pub async fn evaluate_send(
 )]
 pub async fn send(
     pool: &PgPool,
-    provider: &dyn MailProvider,
+    registry: &super::ProviderRegistry,
     principal: &Principal,
     mailbox_id: Uuid,
     message: OutgoingMessage,
@@ -643,6 +653,11 @@ pub async fn send(
             "Não possui autorização para enviar a partir desta caixa de correio.".to_owned(),
         ));
     }
+
+    // A sessão de quem envia, quando ele ligou a sua caixa. É o que faz o
+    // servidor de correio ver o autor verdadeiro de cada mensagem, em vez de
+    // toda a instituição a enviar sob a mesma conta (ADR-0409).
+    let provider = registry.for_mailbox(pool, mailbox_id).await?;
 
     if !message.from.address.eq_ignore_ascii_case(&mailbox.address) {
         return Err(CoreError::PermissionDenied(
@@ -721,6 +736,277 @@ pub fn sender_identity(address: &str, display_name: Option<String>) -> ProviderA
         address: address.to_lowercase(),
         display_name,
     }
+}
+
+/// Tudo o que estabelecer uma ligação a uma caixa precisa.
+///
+/// Existe como tipo, e não como quatro parâmetros, porque são quatro partes de
+/// um acto só — e porque uma lista longa de referências do mesmo feitio é uma
+/// lista onde duas trocam de lugar sem o compilador reparar.
+pub struct MailboxConnection<'a> {
+    /// A chave desta instalação, ausente quando não foi configurada.
+    pub chave: Option<&'a crate::password::sealed::SealingKey>,
+    /// Quem diz se a credencial abre sessão, antes de ela ser guardada.
+    pub sonda: &'a dyn super::provider::CredentialProbe,
+    /// Ausente de propósito: o Core resolve-o.
+    ///
+    /// Havia aqui um `username`, e ele vinha do formulário. O browser
+    /// escolhia a conta com que o Ocinye se autentica no servidor de correio —
+    /// e a caixa cujo endereço aparecia no ecrã podia não ser a conta com que
+    /// a sessão abria.
+    ///
+    /// A conta é agora o endereço da própria caixa, que já foi autorizada para
+    /// quem está a ligar. **Um identificador vindo do cliente nomeia âmbito;
+    /// não o concede** (`CLAUDE.md` §34.2).
+    /// A senha, que atravessa este processo uma vez e não regressa.
+    pub senha: &'a str,
+}
+
+impl std::fmt::Debug for MailboxConnection<'_> {
+    /// Sem a senha. Um `Debug` derivado punha-a na primeira linha de qualquer
+    /// registo que alguma vez imprimisse esta estrutura.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MailboxConnection")
+            .field("chave", &self.chave)
+            .field("senha", &"<oculta>")
+            .finish_non_exhaustive()
+    }
+}
+
+/// Liga uma caixa, com a credencial de quem a liga.
+///
+/// # Porque a ligação é verificada antes de ser guardada
+///
+/// Porque uma credencial que não abre sessão não serve, e guardá-la deixaria a
+/// caixa a dizer que está ligada quando não está. Quem a ligou descobriria pela
+/// ausência de correio — que é indistinguível de não ter recebido nada.
+///
+/// # Porque só se liga a sua própria caixa
+///
+/// Escrever uma credencial em nome de outra pessoa é escrever um segredo que ela
+/// não deu. A autorização é a mesma que governa o acesso à caixa: quem lá pode
+/// chegar pode ligá-la.
+///
+/// # Errors
+///
+/// Recusa quando a pessoa não alcança a caixa, quando a credencial não abre
+/// sessão, e quando não há chave de cifra configurada nesta instalação.
+pub async fn connect_mailbox(
+    pool: &PgPool,
+    principal: &Principal,
+    mailbox_id: Uuid,
+    ligacao: &MailboxConnection<'_>,
+    ids: &CorrelationIds,
+) -> CoreResult<()> {
+    let MailboxConnection {
+        chave,
+        sonda,
+        senha,
+    } = *ligacao;
+    // A caixa tem de ser alcançável por quem a está a ligar. É a mesma
+    // autorização que governa lê-la.
+    let caixa = mailbox(pool, principal, mailbox_id).await?;
+
+    // A conta é o endereço da caixa, e o Core é que o sabe.
+    //
+    // Vinha do formulário, e por isso o browser escolhia com que conta o
+    // Ocinye se autenticava — enquanto o ecrã mostrava outro endereço.
+    let username = caixa.address.as_str();
+
+    let Some(chave) = chave else {
+        return Err(CoreError::CapabilityUnavailable(
+            "Esta instalação não tem chave de cifra de correio configurada, e sem ela \
+             uma credencial não pode ser guardada em segurança."
+                .to_owned(),
+        ));
+    };
+
+    if senha.is_empty() {
+        return Err(CoreError::Validation(
+            "Ligar uma caixa precisa da senha da caixa.".to_owned(),
+        ));
+    }
+
+    // Experimentada antes de ser escrita.
+    //
+    // Guardar primeiro e falhar depois deixaria caixas que dizem estar ligadas
+    // e não estão — e o membro descobria-o pela ausência de correio, que é
+    // indistinguível de não ter recebido nada (ADR-0409 §8).
+    sonda
+        .verify(&caixa.address, username.trim(), senha)
+        .await
+        .map_err(from_provider)?;
+
+    let fechado = crate::password::sealed::seal(chave, senha)?;
+
+    // Credencial e auditoria numa transacção só.
+    //
+    // O que diz que uma caixa está ligada é a existência desta linha, e não uma
+    // segunda coluna a repeti-lo: duas escritas que afirmam o mesmo facto são
+    // duas escritas que podem discordar. A coluna `mailboxes.connected` governa
+    // outra coisa — se a caixa existe para a instituição — e mexer-lhe aqui
+    // fá-la-ia desaparecer da lista ao desligar, sem forma de voltar a ligar.
+    let mut tx = pool.begin().await?;
+    repo::save_credential(
+        &mut *tx,
+        mailbox_id,
+        username.trim(),
+        &fechado,
+        principal.person_id,
+    )
+    .await?;
+    audit::record(
+        &mut tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::UPDATE, "mailbox").resource(mailbox_id),
+    )
+    .await?;
+    tx.commit().await?;
+
+    // O endereço, e nunca a credencial. Nem o nome de utilizador: em quase todos
+    // os serviços ele **é** o endereço, mas onde não for, é metade de um segredo.
+    tracing::info!(
+        correlation_id = %ids.correlation_id,
+        mailbox = %caixa.address,
+        "a mailbox was connected"
+    );
+
+    Ok(())
+}
+
+/// Desliga uma caixa e esquece a credencial.
+///
+/// # Errors
+///
+/// Recusa quando a pessoa não alcança a caixa.
+pub async fn disconnect_mailbox(
+    pool: &PgPool,
+    principal: &Principal,
+    mailbox_id: Uuid,
+    ids: &CorrelationIds,
+) -> CoreResult<()> {
+    let caixa = mailbox(pool, principal, mailbox_id).await?;
+
+    let mut tx = pool.begin().await?;
+    repo::forget_credential(&mut *tx, mailbox_id).await?;
+    audit::record(
+        &mut tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::UPDATE, "mailbox").resource(mailbox_id),
+    )
+    .await?;
+    tx.commit().await?;
+
+    tracing::info!(
+        correlation_id = %ids.correlation_id,
+        mailbox = %caixa.address,
+        "a mailbox was disconnected"
+    );
+
+    Ok(())
+}
+
+/// Cria a caixa pessoal de uma pessoa da instituição.
+///
+/// # Porque isto existe como operação e não como linha escrita à mão
+///
+/// Porque ligar uma caixa pressupõe que ela existe, e até aqui nada no Ocinye a
+/// criava: os únicos `INSERT INTO mailboxes` do repositório estavam dentro de
+/// testes. Uma instalação a sério ficava com o correio inalcançável, e a saída
+/// era alguém escrever na base — sem verificação de domínio, sem auditoria, e
+/// sem nada que impedisse dar a uma pessoa o endereço de outra.
+///
+/// # O que recusa
+///
+/// Um endereço fora dos domínios da instituição, porque essa caixa não é da
+/// Ocinye para provisionar. Uma pessoa desactivada. E uma segunda caixa pessoal
+/// para quem já tem uma — regra que a base já impõe, e que aqui se explica em
+/// vez de aparecer como violação de restrição.
+///
+/// # Errors
+///
+/// Devolve erro quando a pessoa não existe, o endereço não é institucional, ou
+/// a caixa já existe.
+pub async fn provision_personal_mailbox(
+    pool: &PgPool,
+    dominios: &[String],
+    email_do_dono: &str,
+    endereco: &str,
+    display_name: Option<&str>,
+    ids: &CorrelationIds,
+) -> CoreResult<Uuid> {
+    let endereco = endereco.trim().to_ascii_lowercase();
+
+    let dominio = endereco.rsplit_once('@').map(|(_, d)| d).ok_or_else(|| {
+        CoreError::Validation(format!("«{endereco}» não é um endereço de correio."))
+    })?;
+
+    if !dominios.iter().any(|d| d.eq_ignore_ascii_case(dominio)) {
+        return Err(CoreError::Validation(format!(
+            "«{endereco}» não pertence a nenhum domínio da instituição ({}). Uma caixa \
+             fora do domínio não é da Ocinye para provisionar.",
+            dominios.join(", ")
+        )));
+    }
+
+    let dono: Option<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT id, organisation_id FROM people
+          WHERE lower(email) = lower($1) AND deactivated_at IS NULL",
+    )
+    .bind(email_do_dono)
+    .fetch_optional(pool)
+    .await?;
+
+    let (owner_id, organisation_id) = dono.ok_or_else(|| {
+        CoreError::NotFound(format!(
+            "Não há nenhuma pessoa activa com o endereço «{email_do_dono}»."
+        ))
+    })?;
+
+    let ja_tem: Option<String> = sqlx::query_scalar(
+        "SELECT address FROM mailboxes WHERE kind = 'personal' AND owner_id = $1",
+    )
+    .bind(owner_id)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(existente) = ja_tem {
+        return Err(CoreError::Conflict(format!(
+            "«{email_do_dono}» já tem uma caixa pessoal: «{existente}». Uma pessoa \
+             tem uma."
+        )));
+    }
+
+    let mut tx = pool.begin().await?;
+    let id: Uuid = sqlx::query_scalar(
+        "INSERT INTO mailboxes (organisation_id, address, display_name, kind, owner_id)
+              VALUES ($1, $2, $3, 'personal', $4) RETURNING id",
+    )
+    .bind(organisation_id)
+    .bind(&endereco)
+    .bind(display_name)
+    .bind(owner_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    audit::record(
+        &mut tx,
+        None,
+        ids,
+        AuditEntry::new(action::CREATE, "mailbox").resource(id),
+    )
+    .await?;
+    tx.commit().await?;
+
+    tracing::info!(
+        correlation_id = %ids.correlation_id,
+        mailbox = %endereco,
+        "a personal mailbox was provisioned"
+    );
+
+    Ok(id)
 }
 
 #[cfg(test)]

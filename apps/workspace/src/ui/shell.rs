@@ -24,6 +24,8 @@ pub enum Screen {
     MyWork,
     /// Correio institucional.
     Mail,
+    /// Mensagens entre membros.
+    Messaging,
     /// Unidades científicas.
     Units,
     /// Ideias.
@@ -70,6 +72,7 @@ impl Screen {
             Self::Home => "/",
             Self::MyWork => "/my-work",
             Self::Mail => "/mail",
+            Self::Messaging => "/messages",
             Self::Units => "/units",
             Self::Ideas => "/ideas",
             Self::Projects => "/projects",
@@ -100,6 +103,7 @@ impl Screen {
             Self::Home => "Home",
             Self::MyWork => "O Meu Trabalho",
             Self::Mail => "Correio",
+            Self::Messaging => "Mensagens",
             Self::Units => "Unidades",
             Self::Ideas => "Ideias",
             Self::Projects => "Projectos",
@@ -127,6 +131,7 @@ impl Screen {
             Self::MyWork => Icon::MyWork,
             Self::Calendar => Icon::Calendar,
             Self::Mail => Icon::Mail,
+            Self::Messaging => Icon::Messaging,
             Self::Units => Icon::Units,
             Self::Ideas => Icon::Idea,
             Self::Projects => Icon::Project,
@@ -153,7 +158,13 @@ const GROUPS: [(&str, &[Screen]); 5] = [
     // metade das pessoas não encontra.
     (
         "PESSOAL",
-        &[Screen::Home, Screen::MyWork, Screen::Calendar, Screen::Mail],
+        &[
+            Screen::Home,
+            Screen::MyWork,
+            Screen::Calendar,
+            Screen::Messaging,
+            Screen::Mail,
+        ],
     ),
     (
         "INVESTIGAÇÃO",
@@ -209,20 +220,26 @@ impl CoreStatus {
 /// O que a shell precisa de saber sobre quem está a usá-la.
 #[derive(Debug, Clone)]
 pub struct Viewer {
+    /// A zona em que este membro está a olhar para o sistema.
+    ///
+    /// Vem do browser. Decide em que dia civil as coisas caem — e é por isso
+    /// que está aqui, no que a casca inteira já recebe, em vez de ser passada a
+    /// cada ecrã que dela precise.
+    pub zona: ocinye_contracts::temporal::TimeZoneName,
     /// Nome do membro.
     pub name: String,
     /// Instituição, para o wordmark.
     pub organisation: String,
-    /// Nome de início de sessão, tal como o Core o guarda.
+    /// O endereço institucional do membro.
     ///
-    /// `None` quando o Core não respondeu, ou para registos anteriores ao
-    /// ADR-0103. Ausente é diferente de vazio: a interface omite a linha em vez
-    /// de mostrar um `@` sozinho.
-    pub username: Option<String>,
-    /// Correio institucional do membro.
+    /// É a identidade **e** a credencial desde o ADR-0106. Havia aqui um
+    /// `username` ao lado dele, e o painel mostrava a mesma pessoa duas vezes:
+    /// `@fidel` e `fidel@ocinye.com`.
     ///
-    /// Vem do registo da própria pessoa, não do principal: autorização e
+    /// Vem do registo da própria pessoa, e não do principal: autorização e
     /// identidade são coisas diferentes, e o principal só carrega a primeira.
+    /// `None` quando o Core não respondeu — ausente é diferente de vazio, e a
+    /// interface omite a linha em vez de mostrar um espaço.
     pub email: Option<String>,
     /// Quanto falta para a sessão do Workspace expirar.
     ///
@@ -290,6 +307,7 @@ const fn screen_permission(screen: Screen) -> Option<Permission> {
         // dá acesso aos eventos de unidade, workspace e instituição.
         Screen::Calendar => Some(Permission::CalendarView),
         Screen::Mail => Some(Permission::MailUse),
+        Screen::Messaging => Some(Permission::MessagingUse),
         Screen::Units => Some(Permission::UnitsView),
         Screen::Ideas => Some(Permission::IdeasView),
         Screen::Projects => Some(Permission::ProjectsView),
@@ -549,17 +567,12 @@ fn sidebar(viewer: &Viewer, avatar: &str, active: Screen) -> impl IntoView {
 fn account(viewer: &Viewer, avatar: &str) -> impl IntoView {
     let name = viewer.name.clone();
     let avatar = avatar.to_owned();
-    let username = viewer.username.clone();
     let email = viewer.email.clone();
     let trigger_title = format!("{name} — conta e sessão");
 
-    // A linha secundária do botão fechado é a identidade, não o sistema.
-    // Prefere-se o username por ser curto e caber na barra; o correio serve de
-    // recurso quando o registo é anterior ao ADR-0103 e não tem username.
-    let subtitulo = username
-        .as_ref()
-        .map(|u| format!("@{u}"))
-        .or_else(|| email.clone());
+    // A linha secundária do botão fechado é a identidade, não o sistema. É o
+    // endereço, que é a identidade inteira desde o ADR-0106.
+    let subtitulo = email.clone();
 
     view! {
         <div class="oc-account" data-oc="account">
@@ -593,8 +606,9 @@ fn account(viewer: &Viewer, avatar: &str) -> impl IntoView {
                     {crate::ui::components::avatar(&viewer.avatar, &avatar, AvatarSize::Medium)}
                     <span class="oc-account__id-text">
                         <b>{name}</b>
-                        {email.map(|e| view! { <span>{e}</span> })}
-                        {username.map(|u| view! { <span class="oc-account__handle">{format!("@{u}")}</span> })}
+                        {email.map(|e| view! {
+                            <span class="oc-account__handle">{e}</span>
+                        })}
                     </span>
                 </div>
 
@@ -673,6 +687,8 @@ fn topbar(
     core_status: &CoreStatus,
     can_create: bool,
 ) -> impl IntoView {
+    // O dia de hoje onde a pessoa está, e não em Greenwich.
+    let hoje = crate::ui::tempo::hoje_civil(chrono::Utc::now(), viewer.zona);
     // O último degrau é a página, e não o ecrã a que ela pertence.
     //
     // Era `active.label()`, e em todos os ecrãs com trilho isso repetia o
@@ -819,7 +835,7 @@ fn topbar(
                 <span></span>
             </button>
 
-            {crate::ui::screens::calendar::system_calendar(chrono::Utc::now().date_naive())}
+            {crate::ui::screens::calendar::system_calendar(hoje)}
         </header>
     }
 }
@@ -849,10 +865,68 @@ fn notifications(unread: usize) -> impl IntoView {
     };
 
     view! {
-        <a class="oc-icon-btn" href="/notifications" title=title.clone() aria-label=title>
-            {icon(Icon::Bell, 16)}
-            {(unread > 0).then(|| view! { <i aria-hidden="true"></i> })}
-        </a>
+        <div class="oc-sino">
+            // Abre um painel, e não uma página.
+            //
+            // Ver o que chegou é um relance, e não uma navegação: levar a
+            // pessoa a outro ecrã fá-la perder o sítio onde estava para depois
+            // ter de voltar.
+            //
+            // A página continua a existir, e é para onde o rodapé leva: um
+            // painel mostra o que é recente, e um histórico é outra coisa.
+            <button
+                type="button"
+                class="oc-icon-btn"
+                data-oc="abrir-notificacoes"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+                aria-controls="oc-notificacoes"
+                title=title.clone()
+                aria-label=title
+            >
+                {icon(Icon::Bell, 16)}
+                {(unread > 0).then(|| view! { <i aria-hidden="true"></i> })}
+            </button>
+
+            <div
+                class="oc-pop oc-sino__painel"
+                id="oc-notificacoes"
+                data-oc="notificacoes"
+                role="dialog"
+                aria-label="Notificações"
+                hidden
+            >
+                <header class="oc-pop__head">
+                    <span class="oc-pop__title">"Notificações"</span>
+                    <span class="oc-pop__meta" data-oc="notificacoes-contagem">
+                        {if unread == 0 {
+                            "tudo lido".to_owned()
+                        } else {
+                            format!("{unread} por ler")
+                        }}
+                    </span>
+                </header>
+
+                // O conteúdo chega quando o painel abre. Renderizá-lo em cada
+                // página seria pedir ao Core a lista inteira a cada navegação,
+                // para a esconder quase sempre.
+                <div class="oc-sino__lista" data-oc="notificacoes-lista">
+                    <p class="oc-pop__empty">"A carregar…"</p>
+                </div>
+
+                <div class="oc-pop__foot">
+                    // Ícone e legenda, como as linhas do painel da conta: um
+                    // rodapé com uma frase solta lê-se como um resto.
+                    <a class="oc-pop__item" href="/notifications">
+                        {icon(Icon::ArrowRight, 14)}
+                        <span>
+                            <b>"Ver todas"</b>
+                            <em>"O histórico completo de avisos"</em>
+                        </span>
+                    </a>
+                </div>
+            </div>
+        </div>
     }
 }
 
@@ -977,7 +1051,7 @@ fn create_menu(viewer: &Viewer) -> impl IntoView {
 
 /// Todos os ecrãs, incluindo os que não estão na navegação lateral.
 ///
-/// `PALETTE_NAV` é a lista dos quinze destinos institucionais. Esta é maior:
+/// `PALETTE_NAV` é a lista dos dezassete destinos institucionais. Esta é maior:
 /// junta-lhe os ecrãs do próprio membro, que existem no rodapé e não na
 /// navegação, mas que continuam a precisar de estado activo e de posse de
 /// rotas como qualquer outro.
@@ -985,10 +1059,11 @@ fn create_menu(viewer: &Viewer) -> impl IntoView {
     not(test),
     allow(dead_code, reason = "lida pela auditoria de estado activo")
 )]
-const SCREENS: [Screen; 20] = [
+const SCREENS: [Screen; 21] = [
     Screen::Home,
     Screen::MyWork,
     Screen::Calendar,
+    Screen::Messaging,
     Screen::Mail,
     Screen::Units,
     Screen::Ideas,
@@ -1053,10 +1128,11 @@ impl Screen {
 }
 
 /// Os destinos da command palette.
-const PALETTE_NAV: [Screen; 16] = [
+const PALETTE_NAV: [Screen; 17] = [
     Screen::Home,
     Screen::MyWork,
     Screen::Calendar,
+    Screen::Messaging,
     Screen::Mail,
     Screen::Units,
     Screen::Ideas,
@@ -1192,8 +1268,8 @@ mod tests {
     /// Um membro com exactamente as permissões indicadas.
     fn viewer_with(permissions: &[Permission]) -> Viewer {
         Viewer {
+            zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
             avatar: ocinye_contracts::AvatarChoice::Initials,
-            username: Some("jmanuel".to_owned()),
             email: Some("jmanuel@ocinye.com".to_owned()),
             session_expires_in: Some(std::time::Duration::from_secs(8 * 3600)),
             name: "João Manuel".to_owned(),

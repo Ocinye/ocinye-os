@@ -49,7 +49,7 @@ uma instituição fica sem administrador e sem caminho de volta.
 
 ```bash
 psql "$OCINYE_DATABASE_URL" -c "
-  SELECT status, deactivated_at FROM people WHERE username = '<nome>'"
+  SELECT status, deactivated_at FROM people WHERE endereço = '<nome>'"
 
 psql "$OCINYE_DATABASE_URL" -c "
   SELECT count(*) FROM sessions

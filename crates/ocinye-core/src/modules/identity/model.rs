@@ -27,8 +27,6 @@ pub struct Person {
     pub orcid: Option<String>,
     /// Short biography.
     pub biography: Option<String>,
-    /// Sign-in name. `None` only for rows predating ADR-0103.
-    pub username: Option<String>,
     /// Account status.
     pub status: String,
     /// Last activity.

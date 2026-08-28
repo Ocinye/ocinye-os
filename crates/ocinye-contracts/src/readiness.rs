@@ -178,6 +178,12 @@ pub enum ReadinessComponentId {
     Compute,
     /// Calendário.
     Calendar,
+    /// O plano de tempo real: propagação, presença e `typing`.
+    ///
+    /// Opcional por construção. Uma instalação sem ele continua inteira: o
+    /// histórico lê-se, as operações duráveis acontecem, e o que se perde é a
+    /// chegada instantânea (ADR-0012 §9).
+    Realtime,
 }
 
 impl ReadinessComponentId {
@@ -194,6 +200,7 @@ impl ReadinessComponentId {
             Self::Intelligence => "intelligence",
             Self::Compute => "compute",
             Self::Calendar => "calendar",
+            Self::Realtime => "realtime",
         }
     }
 
@@ -210,12 +217,13 @@ impl ReadinessComponentId {
             Self::Intelligence => "Inteligência",
             Self::Compute => "Computação",
             Self::Calendar => "Calendário",
+            Self::Realtime => "Tempo real",
         }
     }
 
     /// Tudo o que a projecção pública sabe nomear.
     #[must_use]
-    pub const fn all() -> [Self; 9] {
+    pub const fn all() -> [Self; 10] {
         [
             Self::Core,
             Self::Persistence,
@@ -226,6 +234,7 @@ impl ReadinessComponentId {
             Self::Intelligence,
             Self::Compute,
             Self::Calendar,
+            Self::Realtime,
         ]
     }
 }

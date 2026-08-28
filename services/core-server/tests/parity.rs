@@ -25,6 +25,7 @@
 //! Salta quando `OCINYE_TEST_DATABASE_URL` não está definida; **falha** quando
 //! está e a base não responde.
 
+use ocinye_core::realtime::Realtime;
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -102,12 +103,17 @@ fn state(pool: PgPool, organisation_id: Uuid) -> AppState {
         }),
         Throttle {
             per_ip: config.auth.throttle_per_ip,
-            per_username: config.auth.throttle_per_username,
+            per_email: config.auth.throttle_per_email,
             window_minutes: config.auth.throttle_window_minutes,
         },
         config.auth.temporary_credential_hours,
     ));
 
+    let mail_registry = Arc::new(ocinye_core::modules::mail::ProviderRegistry::new(
+        Arc::new(UnconfiguredProvider),
+        config.mail.clone(),
+        config.mail.sealing_key.clone(),
+    ));
     AppState {
         pool,
         config: Arc::new(config),
@@ -118,7 +124,12 @@ fn state(pool: PgPool, organisation_id: Uuid) -> AppState {
         // o teste dependente de infraestrutura que não exercita.
         store: None,
         inference: Arc::new(ocinye_core::modules::intelligence::NoProvider),
-        mail_provider: Arc::new(UnconfiguredProvider),
+        mail_registry,
+        // Estes testes medem HTTP, e não tempo real. Um plano ausente aceita
+        // tudo e não propaga nada — que é o que uma instalação sem Redis faz,
+        // e não um sítio por preencher.
+        realtime: Arc::new(ocinye_core::realtime::Realtime::ausente()),
+        mail_probe: Arc::new(SondaDoHarness),
         capabilities: std::sync::Arc::new(
             ocinye_core::capabilities::Capabilities::empty().expect("motor de capacidades"),
         ),
@@ -147,8 +158,8 @@ async fn member(
     let handle = format!("m{}", Uuid::new_v4().simple());
 
     let person_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO people (organisation_id, full_name, email, username, status)
-             VALUES ($1, $2, $3, $2, 'active') RETURNING id",
+        "INSERT INTO people (organisation_id, full_name, email, status)
+             VALUES ($1, $2, $3, 'active') RETURNING id",
     )
     .bind(organisation_id)
     .bind(&handle)
@@ -263,6 +274,7 @@ async fn via_agent(
     agentic::execute(
         pool,
         capacidades(),
+        &Realtime::ausente(),
         actor,
         &runtime::main_agent_boundary(),
         None,
@@ -741,6 +753,81 @@ async fn identity_choose_preset_tem_as_duas_entradas() {
 // ── Apoio ───────────────────────────────────────────────────────────────
 
 /// A unit, created through the route a member would use.
+/// Registar um resultado científico.
+///
+/// # Porque este par é o que importa provar
+///
+/// Porque `science::create_result` faz **duas** coisas na mesma transacção:
+/// escreve o resultado e, quando conhece a execução que o produziu, escreve a
+/// aresta `produced_by` com `origin = operation`. Uma segunda escrita paralela
+/// — no handler HTTP, ou na capability — daria duas proveniências diferentes
+/// para a mesma coisa, consoante a porta por onde se entrou.
+///
+/// A auditoria coincidir prova que não há duas: as duas entradas passaram pelo
+/// mesmo código, e é lá dentro que a aresta nasce.
+#[tokio::test]
+async fn science_create_result_tem_as_duas_entradas() {
+    let (pool, org, state) = institution!();
+    let (unidade, admin) = unidade(&pool, org, &state).await;
+
+    let (submissor, token) = member(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let (agente, _) = member(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    membro_da_unidade(&pool, &admin, unidade, submissor.person_id).await;
+    membro_da_unidade(&pool, &admin, unidade, agente.person_id).await;
+    let submissor_lido = principal(&pool, submissor.person_id).await;
+    let agente = principal(&pool, agente.person_id).await;
+
+    let ambiente = workspace(&pool, unidade, &submissor_lido).await;
+
+    let (status, corpo) = via_workspace(
+        &state,
+        &token,
+        &format!("/api/v1/workspaces/{ambiente}/results"),
+        json!({
+            "title": "Resultado pela interface",
+            "summary": "O que a corrida mostrou."
+        }),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a rota do Workspace recusou: {corpo}"
+    );
+    let pela_ui = identificador(&corpo, &["id"]);
+
+    let resultado = via_agent(
+        &pool,
+        &agente,
+        &instituicao(org),
+        &capability_de("science::create_result"),
+        json!({
+            "title": "Resultado pelo agente",
+            "summary": "O que a corrida mostrou."
+        }),
+        vec![ResourceRef {
+            kind: AgenticKind::Workspace,
+            id: ambiente,
+            label: None,
+        }],
+    )
+    .await;
+    assert_eq!(
+        resultado.status,
+        ExecutionStatus::Succeeded,
+        "a capability recusou: {}",
+        resultado.detail
+    );
+
+    convergem(
+        &pool,
+        "science::create_result",
+        (pela_ui, submissor.person_id),
+        (criado(&resultado), agente.person_id),
+    )
+    .await;
+}
+
 async fn unidade(pool: &PgPool, org: Uuid, state: &AppState) -> (Uuid, Principal) {
     let (admin, token) = member(pool, org, &[TechnicalRole::PlatformAdmin]).await;
     let (status, corpo) = via_workspace(
@@ -838,4 +925,21 @@ fn capacidades() -> &'static ocinye_core::capabilities::Capabilities {
         ))
         .expect("motor de capacidades")
     })
+}
+
+/// A sonda do harness: aceita, porque não há servidor de correio para
+/// perguntar. O que o harness assume fica escrito, em vez de a verificação
+/// desaparecer do caminho que estes testes percorrem.
+struct SondaDoHarness;
+
+#[async_trait::async_trait]
+impl ocinye_core::modules::mail::provider::CredentialProbe for SondaDoHarness {
+    async fn verify(
+        &self,
+        _endereco: &str,
+        _username: &str,
+        _senha: &str,
+    ) -> ocinye_core::modules::mail::provider::ProviderResult<()> {
+        Ok(())
+    }
 }

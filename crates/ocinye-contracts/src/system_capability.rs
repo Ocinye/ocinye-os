@@ -420,3 +420,308 @@ mod tests {
         assert!(!report.is_usable());
     }
 }
+
+/// O que uma sonda ao **transporte** de correio observou.
+///
+/// # Porque isto existe, em vez de um booleano de configuração
+///
+/// O estado do correio era `config.mail.is_configured()`: quatro variáveis
+/// preenchidas queriam dizer «disponível». Uma instalação com o anfitrião
+/// errado, a rede fechada ou a senha recusada anunciava o correio como
+/// disponível e apresentava uma Entrada vazia — indistinguível de não ter
+/// recebido nada.
+///
+/// Configuração é uma **intenção**. Isto é uma observação.
+///
+/// Vive nos contratos e não no módulo de correio porque quem o consome é o
+/// plano de plataforma, e um módulo não importa os internals de outro
+/// (`CLAUDE.md` §17).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MailReachability {
+    /// Sem configuração. O estado normal de uma instalação nova, e não uma
+    /// avaria.
+    NotConfigured,
+    /// Configurado, e a sonda entrou nas duas pontas.
+    Ready,
+    /// Configurado, e só uma das pontas respondeu.
+    Partial {
+        /// A leitura por IMAP respondeu.
+        leitura: bool,
+        /// O envio por SMTP respondeu.
+        envio: bool,
+    },
+    /// Configurado, e nenhuma ponta respondeu — ou as credenciais foram
+    /// recusadas, que para quem espera correio dá no mesmo: não chega.
+    Unreachable,
+}
+
+impl MailReachability {
+    /// A partir do que a sonda devolveu.
+    #[must_use]
+    pub const fn observed(configurado: bool, leitura: bool, envio: bool) -> Self {
+        if !configurado {
+            Self::NotConfigured
+        } else if leitura && envio {
+            Self::Ready
+        } else if leitura || envio {
+            Self::Partial { leitura, envio }
+        } else {
+            Self::Unreachable
+        }
+    }
+
+    /// O estado que esta observação vale para uma capacidade de correio.
+    ///
+    /// # O que **não** entra aqui
+    ///
+    /// A ausência de indexação autónoma institucional. Houve uma versão desta
+    /// função em que uma instalação sem conta de serviço dava `Degraded` no
+    /// `Mail` — o raciocínio era «sem conta, nada indexa sozinho, logo o
+    /// correio está degradado».
+    ///
+    /// Está errado por duas razões. A indexação autónoma **não é uma
+    /// capacidade obrigatória do Ocinye Mail v1**: um membro com a caixa
+    /// ligada lê, escreve e envia sem ela. E ela já tem casa própria —
+    /// `SystemCapability::MailSync`, que se declara `Degraded` e nomeia o que
+    /// falta. Degradar também o `Mail` fazia a mesma ausência aparecer duas
+    /// vezes, uma delas no sítio errado.
+    ///
+    /// > **A ausência de uma capacidade futura e opcional não pode fazer uma
+    /// > capacidade implementada e saudável parecer defeituosa.**
+    ///
+    /// > **Readiness descreve capacidade implementada, e não arquitectura
+    /// > pretendida.**
+    #[must_use]
+    pub const fn state(self) -> SystemCapabilityState {
+        match self {
+            Self::NotConfigured => SystemCapabilityState::NotConfigured,
+            Self::Ready => SystemCapabilityState::Available,
+            Self::Partial { .. } => SystemCapabilityState::Degraded,
+            Self::Unreachable => SystemCapabilityState::Unavailable,
+        }
+    }
+}
+
+#[cfg(test)]
+mod alcance_do_correio {
+    use super::*;
+
+    /// Configurado e em baixo **não** é «não configurado».
+    ///
+    /// # O defeito que isto guarda
+    ///
+    /// São dois factos operacionais diferentes e pedem coisas diferentes a
+    /// quem administra: um pede que se configure, o outro que se vá ver porque
+    /// é que o serviço não responde. Juntá-los manda a pessoa mexer no sítio
+    /// onde o problema não está.
+    #[test]
+    fn configurado_e_em_baixo_nao_e_por_configurar() {
+        let em_baixo = MailReachability::observed(true, false, false);
+        assert_eq!(em_baixo, MailReachability::Unreachable);
+        assert_eq!(em_baixo.state(), SystemCapabilityState::Unavailable);
+        assert_ne!(em_baixo.state(), SystemCapabilityState::NotConfigured);
+    }
+
+    /// Credenciais recusadas não são uma Entrada vazia.
+    ///
+    /// Uma senha errada faz a listagem falhar, e a sonda vê `leitura = false`.
+    /// O estado é indisponível — nunca disponível com zero mensagens, que é
+    /// indistinguível de não ter recebido nada.
+    #[test]
+    fn credencial_recusada_nao_e_caixa_vazia() {
+        let recusada = MailReachability::observed(true, false, true);
+        assert!(matches!(
+            recusada,
+            MailReachability::Partial {
+                leitura: false,
+                envio: true
+            }
+        ));
+        assert_ne!(recusada.state(), SystemCapabilityState::Available);
+    }
+
+    /// Disponível exige que as duas pontas tenham respondido.
+    ///
+    /// Era `config.mail.is_configured()`: quatro variáveis preenchidas queriam
+    /// dizer disponível, sem ninguém ter falado com o servidor.
+    #[test]
+    fn disponivel_exige_as_duas_pontas() {
+        assert_eq!(
+            MailReachability::observed(true, true, true).state(),
+            SystemCapabilityState::Available
+        );
+        for (leitura, envio) in [(true, false), (false, true), (false, false)] {
+            assert_ne!(
+                MailReachability::observed(true, leitura, envio).state(),
+                SystemCapabilityState::Available,
+                "leitura={leitura} envio={envio} não pode valer disponível"
+            );
+        }
+    }
+
+    /// Sem configuração, continua a ser «não configurado».
+    ///
+    /// Uma instalação nova não tem correio, e isso não é uma avaria.
+    #[test]
+    fn sem_configuracao_e_por_configurar() {
+        for (leitura, envio) in [(true, true), (false, false)] {
+            assert_eq!(
+                MailReachability::observed(false, leitura, envio),
+                MailReachability::NotConfigured
+            );
+        }
+        assert_eq!(
+            MailReachability::NotConfigured.state(),
+            SystemCapabilityState::NotConfigured
+        );
+    }
+}
+
+/// O estado da caixa de **um membro**, que não é o estado do serviço.
+///
+/// # Porque é um tipo e não três booleanos
+///
+/// Porque os estados excluem-se, e três booleanos deixam exprimir combinações
+/// que não existem — «ligada e não ligada», «recusada e disponível». Um tipo
+/// que não deixa escrever o impossível não precisa de um teste a proibi-lo.
+///
+/// # A distinção que este tipo existe para manter
+///
+/// | | |
+/// |---|---|
+/// | **transporte** | esta instalação alcança o serviço de correio |
+/// | **caixa** | esta pessoa tem uma credencial que entra |
+///
+/// Um membro sem caixa ligada não é uma avaria da infraestrutura, e uma
+/// infraestrutura em baixo não é culpa da credencial de ninguém. Confundi-los
+/// manda a pessoa errada resolver o problema errado.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemberMailboxState {
+    /// Esta pessoa ainda não ligou a sua credencial.
+    ///
+    /// O caminho existe e é dela: ninguém o pode percorrer em seu nome, porque
+    /// a senha é da caixa dela (ADR-0409).
+    NotLinked,
+    /// A credencial guardada entra, e a caixa lê-se e envia-se.
+    Available,
+    /// O serviço recusou a credencial guardada.
+    ///
+    /// Distinto de [`Self::NotLinked`]: há uma credencial, e deixou de servir
+    /// — a senha mudou no fornecedor, ou a conta perdeu acesso. O que se faz a
+    /// seguir é voltar a ligar a caixa, e não ligá-la pela primeira vez.
+    AuthenticationFailed,
+    /// A caixa está ligada e o serviço não responde agora.
+    ///
+    /// Nada se perdeu: as mensagens estão no servidor. É a única leitura em
+    /// que a resposta certa é esperar.
+    TemporarilyUnavailable,
+}
+
+impl MemberMailboxState {
+    /// Representação estável.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::NotLinked => "not_linked",
+            Self::Available => "available",
+            Self::AuthenticationFailed => "authentication_failed",
+            Self::TemporarilyUnavailable => "temporarily_unavailable",
+        }
+    }
+
+    /// A partir do que se sabe da caixa desta pessoa.
+    ///
+    /// `recusada` só se consulta quando há credencial: sem ela, não houve nada
+    /// para recusar.
+    #[must_use]
+    pub const fn observed(ligada: bool, utilizavel: bool, recusada: bool) -> Self {
+        if !ligada {
+            Self::NotLinked
+        } else if utilizavel {
+            Self::Available
+        } else if recusada {
+            Self::AuthenticationFailed
+        } else {
+            Self::TemporarilyUnavailable
+        }
+    }
+
+    /// Se esta pessoa consegue usar o correio agora.
+    #[must_use]
+    pub const fn is_usable(self) -> bool {
+        matches!(self, Self::Available)
+    }
+}
+
+#[cfg(test)]
+mod estado_da_caixa {
+    use super::*;
+
+    /// A ausência de indexação autónoma não degrada o correio.
+    ///
+    /// # A regra que isto guarda
+    ///
+    /// > A ausência de uma capacidade futura e opcional não pode fazer uma
+    /// > capacidade implementada e saudável parecer defeituosa.
+    ///
+    /// Houve uma versão em que uma instalação sem conta de serviço dava
+    /// `Degraded` no `Mail`, porque sem conta nada indexa sozinho. Mas a
+    /// indexação autónoma não é requisito do Ocinye Mail v1 — um membro com a
+    /// caixa ligada lê, escreve e envia sem ela — e já tem casa própria em
+    /// `MailSync`. Degradar o `Mail` fazia a mesma ausência aparecer duas
+    /// vezes, uma delas no sítio errado.
+    #[test]
+    fn transporte_a_responder_e_disponivel() {
+        assert_eq!(
+            MailReachability::observed(true, true, true).state(),
+            SystemCapabilityState::Available,
+            "o transporte responde nas duas pontas e o estado não é disponível"
+        );
+    }
+
+    /// Não ligada, recusada e sem resposta são três coisas.
+    ///
+    /// Cada uma pede algo diferente: ligar a caixa, voltar a ligá-la, ou
+    /// esperar. Um único «não consegue ler» manda a pessoa adivinhar qual.
+    #[test]
+    fn os_tres_modos_de_nao_ler_sao_distintos() {
+        assert_eq!(
+            MemberMailboxState::observed(false, false, false),
+            MemberMailboxState::NotLinked
+        );
+        assert_eq!(
+            MemberMailboxState::observed(true, false, true),
+            MemberMailboxState::AuthenticationFailed
+        );
+        assert_eq!(
+            MemberMailboxState::observed(true, false, false),
+            MemberMailboxState::TemporarilyUnavailable
+        );
+        assert_eq!(
+            MemberMailboxState::observed(true, true, false),
+            MemberMailboxState::Available
+        );
+
+        // E nenhum dos três se confunde com estar utilizável.
+        for estado in [
+            MemberMailboxState::NotLinked,
+            MemberMailboxState::AuthenticationFailed,
+            MemberMailboxState::TemporarilyUnavailable,
+        ] {
+            assert!(!estado.is_usable(), "{} não é utilizável", estado.as_str());
+        }
+        assert!(MemberMailboxState::Available.is_usable());
+    }
+
+    /// Sem credencial não houve nada para recusar.
+    ///
+    /// Uma caixa por ligar nunca pode ler-se como credencial recusada: são
+    /// caminhos diferentes, e o segundo culpa uma senha que ninguém deu.
+    #[test]
+    fn sem_credencial_nao_ha_recusa() {
+        assert_eq!(
+            MemberMailboxState::observed(false, false, true),
+            MemberMailboxState::NotLinked
+        );
+    }
+}

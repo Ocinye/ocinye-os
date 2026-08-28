@@ -100,6 +100,7 @@ fn component(
 pub async fn public_snapshot(
     pool: &PgPool,
     capabilities: Option<&SystemCapabilities>,
+    realtime: Option<&crate::realtime::Realtime>,
 ) -> PublicReadiness {
     let mut components = Vec::with_capacity(ReadinessComponentId::all().len());
 
@@ -217,6 +218,37 @@ pub async fn public_snapshot(
         SystemCapabilityState::Available,
         Criticality::Optional,
         reasons::AVAILABLE,
+    ));
+
+    // O tempo real, tal como está agora.
+    //
+    // `Optional`, e é deliberado: sem ele o histórico lê-se, as operações
+    // duráveis acontecem, e o que se perde é a chegada instantânea. Torná-lo
+    // crítico deitaria a instituição abaixo por causa de um serviço de
+    // coordenação efémera (ADR-0012 §9).
+    //
+    // Três estados e não dois: «não configurado» é uma escolha desta
+    // instalação, e «registado e sem resposta» é uma avaria. Dizer o mesmo aos
+    // dois faria quem administra procurar uma avaria que não existe.
+    let (tempo_real, razao_do_tempo_real) = match realtime {
+        None => (
+            SystemCapabilityState::NotConfigured,
+            reasons::NOT_CONFIGURED,
+        ),
+        Some(plano) if plano.saudavel() => (SystemCapabilityState::Available, reasons::AVAILABLE),
+        Some(plano) if plano.configurado() => {
+            (SystemCapabilityState::Unavailable, reasons::UNAVAILABLE)
+        }
+        Some(_) => (
+            SystemCapabilityState::NotConfigured,
+            reasons::NOT_CONFIGURED,
+        ),
+    };
+    components.push(component(
+        ReadinessComponentId::Realtime,
+        tempo_real,
+        Criticality::Optional,
+        razao_do_tempo_real,
     ));
 
     let overall = decide(&components);

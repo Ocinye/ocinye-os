@@ -298,6 +298,20 @@ pub enum Permission {
     NotesView,
     /// Create notes.
     NotesCreate,
+    /// Ler o trabalho científico de um ambiente: hipóteses, metodologias,
+    /// estudos, execuções, resultados e a linhagem que os liga.
+    ScienceView,
+    /// Descrever trabalho científico: enunciar hipóteses, criar metodologias e
+    /// versões, desenhar estudos, registar execuções e resultados.
+    ScienceCreate,
+    /// Afirmar que um resultado se confirma, se contradiz, ou que uma execução
+    /// o reproduziu.
+    ///
+    /// Separada de [`Permission::ScienceCreate`] porque é outra coisa:
+    /// descrever trabalho é registar o que se fez; validar é afirmar o que a
+    /// instituição sabe. Quem pode escrever um resultado não fica por isso
+    /// habilitado a declarar que ele está certo.
+    ResultsValidate,
     /// Edit notes.
     NotesEdit,
     /// Relate two research objects to each other.
@@ -377,6 +391,26 @@ pub enum Permission {
     /// Administer the compute plane.
     ComputeAdmin,
 
+    // ── Mensagens ───────────────────────────────────────────────────────
+    /// Abrir as Mensagens, ler as suas conversas e escrever nelas.
+    ///
+    /// # Porque não há uma segunda permissão para enviar
+    ///
+    /// Porque no correio enviar é sair da instituição, e por isso é uma decisão
+    /// à parte. Uma mensagem interna não sai de lado nenhum: quem pode ler uma
+    /// conversa pode falar nela, e separá-lo daria uma pessoa que assiste sem
+    /// poder responder.
+    ///
+    /// Quem alcança **cada** conversa não se decide aqui. Decide-se pela
+    /// participação, que é um facto da base — e um `PlatformAdmin` não lê a
+    /// conversa de ninguém por ter esta permissão.
+    MessagingUse,
+    /// Usar a assistência do Ocinye ao escrever uma mensagem.
+    ///
+    /// Separada, pela mesma razão que [`Permission::MailAiUse`]: pode confiar-se
+    /// a alguém o assistente de investigação e não um que lhe lê as conversas.
+    MessagingAiUse,
+
     // ── Mail ────────────────────────────────────────────────────────────
     /// Open Ocinye Mail and read one's own mailbox.
     MailUse,
@@ -442,6 +476,9 @@ impl Permission {
             Self::BibliographyEdit => "bibliography.edit",
             Self::NotesView => "notes.view",
             Self::NotesCreate => "notes.create",
+            Self::ScienceView => "science.view",
+            Self::ScienceCreate => "science.create",
+            Self::ResultsValidate => "results.validate",
             Self::NotesEdit => "notes.edit",
             Self::LinksCreate => "links.create",
             Self::TasksView => "tasks.view",
@@ -478,6 +515,8 @@ impl Permission {
             Self::ComputeManageNodes => "compute.manage_nodes",
             Self::ComputeAdmin => "compute.admin",
 
+            Self::MessagingUse => "messaging.use",
+            Self::MessagingAiUse => "messaging.ai_use",
             Self::MailUse => "mail.use",
             Self::MailSend => "mail.send",
             Self::MailAiUse => "mail.ai.use",
@@ -506,7 +545,7 @@ impl Permission {
 
     /// Every permission in the catalogue.
     #[must_use]
-    pub const fn all() -> [Self; 67] {
+    pub const fn all() -> [Self; 72] {
         [
             Self::OrganisationView,
             Self::OrganisationManage,
@@ -530,6 +569,9 @@ impl Permission {
             Self::BibliographyEdit,
             Self::NotesView,
             Self::NotesCreate,
+            Self::ScienceView,
+            Self::ScienceCreate,
+            Self::ResultsValidate,
             Self::NotesEdit,
             Self::LinksCreate,
             Self::TasksView,
@@ -562,6 +604,8 @@ impl Permission {
             Self::ComputeManageJobs,
             Self::ComputeManageNodes,
             Self::ComputeAdmin,
+            Self::MessagingUse,
+            Self::MessagingAiUse,
             Self::MailUse,
             Self::MailSend,
             Self::MailAiUse,

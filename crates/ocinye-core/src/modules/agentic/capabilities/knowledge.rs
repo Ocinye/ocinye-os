@@ -665,6 +665,7 @@ impl CapabilityHandler for CreateLink {
         let mut tx = ctx.pool.begin().await?;
         let link = knowledge::link_objects(
             &mut tx,
+            ctx.pool,
             ctx.principal,
             ctx.ids,
             workspace_id,

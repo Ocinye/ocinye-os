@@ -24,6 +24,7 @@ use ocinye_contracts::{
 use ocinye_core::modules::agentic::{self, resolver, runtime};
 use ocinye_core::modules::intelligence::fixture::FixtureProvider;
 use ocinye_core::modules::intelligence::provider::InferenceProvider;
+use ocinye_core::realtime::Realtime;
 use ocinye_domain::{Principal, ResourceContext, ResourceKind};
 use ocinye_observability::CorrelationIds;
 use sqlx::PgPool;
@@ -71,8 +72,8 @@ async fn person(pool: &PgPool, organisation_id: Uuid, roles: &[&str]) -> Princip
     let handle = format!("p{}", Uuid::new_v4().simple());
 
     let person_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO people (organisation_id, full_name, email, username, status)
-              VALUES ($1, $2, $3, $2, 'active') RETURNING id",
+        "INSERT INTO people (organisation_id, full_name, email, status)
+              VALUES ($1, $2, $3, 'active') RETURNING id",
     )
     .bind(organisation_id)
     .bind(&handle)
@@ -588,6 +589,7 @@ async fn a_step_naming_a_foreign_resource_is_refused() {
     let result = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &world.outsider,
         &runtime::main_agent_boundary(),
         None,
@@ -622,6 +624,7 @@ async fn a_hallucinated_resource_reaches_nothing() {
     let result = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &world.insider,
         &runtime::main_agent_boundary(),
         None,
@@ -655,6 +658,7 @@ async fn a_refused_resource_does_not_describe_the_input() {
     let result = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &world.outsider,
         &runtime::main_agent_boundary(),
         None,
@@ -701,6 +705,7 @@ async fn a_relation_refuses_an_endpoint_the_member_cannot_reach() {
     let result = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &world.insider,
         &runtime::main_agent_boundary(),
         None,
@@ -745,6 +750,7 @@ async fn a_relation_between_two_reachable_resources_is_created() {
     let result = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &world.insider,
         &runtime::main_agent_boundary(),
         None,
@@ -792,6 +798,7 @@ async fn an_invented_relation_is_refused() {
     let result = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &world.insider,
         &runtime::main_agent_boundary(),
         None,
@@ -887,6 +894,7 @@ async fn invoke_one(
     agentic::execute(
         pool,
         capacidades(),
+        &Realtime::ausente(),
         actor,
         &runtime::main_agent_boundary(),
         None,
@@ -910,6 +918,7 @@ async fn run(pool: &PgPool, actor: &Principal, plan: &ActionPlan) -> Vec<Capabil
             agentic::execute(
                 pool,
                 capacidades(),
+                &Realtime::ausente(),
                 actor,
                 &agent,
                 None,
@@ -1344,6 +1353,7 @@ async fn promoting_the_same_idea_twice_produces_one_project() {
     let first = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &lead,
         &agent,
         None,
@@ -1361,6 +1371,7 @@ async fn promoting_the_same_idea_twice_produces_one_project() {
     let second = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &lead,
         &agent,
         None,
@@ -1421,6 +1432,7 @@ async fn an_idea_that_is_not_a_candidate_cannot_be_promoted() {
     let result = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &lead,
         &runtime::main_agent_boundary(),
         None,
@@ -4240,4 +4252,104 @@ fn capacidades() -> &'static ocinye_core::capabilities::Capabilities {
         ))
         .expect("motor de capacidades")
     })
+}
+
+/// A operação canónica recusa uma ponta que o actor não alcança.
+///
+/// # A fuga que isto guarda
+///
+/// A relação tem duas entradas — a rota HTTP e a capability agentic — e só a
+/// segunda resolvia os extremos antes de ligar. `link_objects` autorizava o
+/// **Research Workspace** e escrevia a aresta com os identificadores que lhe
+/// dessem, sem perguntar se eles existem, de que tipo são, ou se quem liga os
+/// alcança.
+///
+/// Conhecer um UUID bastava, portanto, para escrever no sistema que a nota de
+/// outra unidade se relaciona com a nossa — e essa afirmação passa a aparecer
+/// na listagem do workspace, com o identificador da nota alheia lá dentro.
+///
+/// > **Um identificador nomeia âmbito; nunca o concede** (`CLAUDE.md` §34.2).
+///
+/// A guarda tem de estar na operação, e não numa das entradas: é o que Dual
+/// Entry significa — as duas portas atravessam a mesma autoridade.
+#[tokio::test]
+async fn a_relacao_recusa_uma_ponta_que_o_actor_nao_alcanca() {
+    let Some(pool) = pool().await else { return };
+    let world = world(&pool).await;
+    let ids = CorrelationIds::generate();
+
+    // O controlo positivo: duas notas do próprio workspace ligam-se.
+    let mut tx = pool.begin().await.expect("transacção");
+    ocinye_core::modules::knowledge::link_objects(
+        &mut tx,
+        &pool,
+        &world.insider,
+        &ids,
+        world.workspace_a,
+        "note",
+        world.note_a,
+        "relates_to",
+        "source",
+        world.source_a,
+        None,
+    )
+    .await
+    .expect("duas pontas alcançáveis ligam-se");
+    tx.commit().await.expect("commit");
+
+    // E a nota da outra unidade não.
+    let mut tx = pool.begin().await.expect("transacção");
+    let alheia = ocinye_core::modules::knowledge::link_objects(
+        &mut tx,
+        &pool,
+        &world.insider,
+        &ids,
+        world.workspace_a,
+        "note",
+        world.note_a,
+        "relates_to",
+        "note",
+        world.note_b,
+        None,
+    )
+    .await;
+
+    assert!(
+        alheia.is_err(),
+        "a operação ligou-se a uma nota de outra unidade só porque o \
+         identificador foi fornecido"
+    );
+}
+
+/// Um tipo que não existe não é um recurso.
+///
+/// O par `(tipo, identificador)` era duas colunas de texto livre com quarenta
+/// e oito caracteres. `«gato» produces «chapéu»` era uma aresta válida, e
+/// ficava guardada na memória institucional como se descrevesse alguma coisa.
+#[tokio::test]
+async fn um_tipo_desconhecido_nao_e_um_recurso() {
+    let Some(pool) = pool().await else { return };
+    let world = world(&pool).await;
+    let ids = CorrelationIds::generate();
+
+    let mut tx = pool.begin().await.expect("transacção");
+    let inventado = ocinye_core::modules::knowledge::link_objects(
+        &mut tx,
+        &pool,
+        &world.insider,
+        &ids,
+        world.workspace_a,
+        "gato",
+        world.note_a,
+        "produces",
+        "chapeu",
+        world.source_a,
+        None,
+    )
+    .await;
+
+    assert!(
+        inventado.is_err(),
+        "a operação aceitou tipos que não existem no domínio"
+    );
 }

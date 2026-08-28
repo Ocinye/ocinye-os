@@ -62,7 +62,7 @@ pub async fn resolve_capability(
 
     if candidates.is_empty() {
         return Err(CoreError::CapabilityUnavailable(
-            "No Ocinye node currently provides this capability.".to_owned(),
+            "Nenhum nó do Ocinye OS fornece esta capacidade nesta instalação.".to_owned(),
         ));
     }
 
@@ -73,7 +73,8 @@ pub async fn resolve_capability(
             .find(|model| &model.model_name == configured)
             .ok_or_else(|| {
                 CoreError::CapabilityUnavailable(
-                    "The model configured for this capability is not currently available."
+                    "O modelo configurado para esta capacidade não está disponível \
+                     neste momento."
                         .to_owned(),
                 )
             });
@@ -81,7 +82,7 @@ pub async fn resolve_capability(
 
     candidates.into_iter().next().ok_or_else(|| {
         CoreError::CapabilityUnavailable(
-            "No Ocinye node currently provides this capability.".to_owned(),
+            "Nenhum nó do Ocinye OS fornece esta capacidade nesta instalação.".to_owned(),
         )
     })
 }

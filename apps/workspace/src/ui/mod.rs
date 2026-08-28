@@ -145,8 +145,8 @@ mod render_tests {
     /// shell em vez da filtragem por permissão.
     fn viewer() -> Viewer {
         Viewer {
+            zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
             avatar: ocinye_contracts::AvatarChoice::Initials,
-            username: Some("jmanuel".to_owned()),
             email: Some("jmanuel@ocinye.com".to_owned()),
             session_expires_in: Some(std::time::Duration::from_secs(8 * 3600)),
             name: "João Manuel".to_owned(),
@@ -250,6 +250,7 @@ mod render_tests {
                                 query: String::new(),
                             },
                             &json!({"items": []}),
+                            None,
                             None,
                         ),
                     ),
@@ -534,8 +535,8 @@ pub(crate) mod link_tests {
     /// shell em vez da filtragem por permissão.
     fn viewer() -> Viewer {
         Viewer {
+            zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
             avatar: ocinye_contracts::AvatarChoice::Initials,
-            username: Some("jmanuel".to_owned()),
             email: Some("jmanuel@ocinye.com".to_owned()),
             session_expires_in: Some(std::time::Duration::from_secs(8 * 3600)),
             name: "João Manuel".to_owned(),
@@ -629,6 +630,43 @@ pub(crate) mod link_tests {
     /// Uma só lista serve dois fins: o varrimento de ligações mortas e o
     /// despejo para inspecção visual. Se um ecrã novo não for acrescentado
     /// aqui, deixa de ser coberto por ambos.
+    /// O ambiente onde a cadeia científica acontece.
+    fn ambiente_cientifico() -> serde_json::Value {
+        json!({
+            "id": "55555555-5555-5555-5555-555555555555",
+            "code": "AI-PROJ-001",
+            "unit_code": "AI"
+        })
+    }
+
+    /// Um estudo com tudo o que os ecrãs lêem dele.
+    fn estudo_de_referencia() -> serde_json::Value {
+        json!({
+            "id": "77777777-7777-7777-7777-777777777773",
+            "workspace_id": "55555555-5555-5555-5555-555555555555",
+            "title": "Ensaio de carga",
+            "kind": "physical_experiment",
+            "kind_label": "Experimento",
+            "status_label": "Concluído",
+            "objective": "Medir a queda de resistência sob carga.",
+            "status": "completed",
+            "classification": "INTERNAL"
+        })
+    }
+
+    /// Uma corrida concreta desse estudo.
+    fn execucao_de_referencia() -> serde_json::Value {
+        json!({
+            "id": "77777777-7777-7777-7777-777777777776",
+            "study_id": "77777777-7777-7777-7777-777777777773",
+            "sequence": 3,
+            "status": "succeeded",
+            "environment": "Bancada 2",
+            "software_name": "OpenFOAM",
+            "software_version": "11"
+        })
+    }
+
     pub(crate) fn catalogue() -> Vec<(&'static str, String)> {
         let empty = json!({"items": [], "total": 0});
 
@@ -855,6 +893,290 @@ pub(crate) mod link_tests {
                     may_use_assistance: true,
                 })
             ),
+            // A cadeia científica, com trabalho lá dentro. Uma fixture vazia
+            // mostraria o estado vazio e nenhum dos guardas veria uma linha —
+            // que é onde os links, os badges e a classificação vivem.
+            page!(
+                "science-chain",
+                Screen::Ideas,
+                screens::science::scientific_chain(screens::science::ChainView {
+                    overview: workspace_overview.clone(),
+                    hypotheses: json!([{
+                        "id": "77777777-7777-7777-7777-777777777771",
+                        "statement": "A dopagem reduz a resistência de contacto",
+                        "status": "open", "status_label": "Aberta",
+                        "classification": "INTERNAL"
+                    }]),
+                    methodologies: json!([{
+                        "id": "77777777-7777-7777-7777-777777777772",
+                        "title": "Medição a quatro pontas",
+                        "status": "active",
+                        "classification": "INTERNAL"
+                    }]),
+                    studies: json!([{
+                        "id": "77777777-7777-7777-7777-777777777773",
+                        "title": "Ensaio de carga",
+                        "status": "completed", "status_label": "Concluído",
+                        "classification": "INTERNAL"
+                    }]),
+                    results: json!([{
+                        "id": "77777777-7777-7777-7777-777777777774",
+                        "title": "A resistência caiu 18%",
+                        "status": "draft", "status_label": "Registado",
+                        "classification": "INTERNAL"
+                    }]),
+                    may_create: true,
+                })
+            ),
+            // O mesmo ecrã sem nada registado: o estado vazio é uma superfície
+            // própria, e tem o seu próprio texto conforme quem lê possa ou não
+            // começar a cadeia.
+            page!(
+                "science-chain-vazia",
+                Screen::Ideas,
+                screens::science::scientific_chain(screens::science::ChainView {
+                    overview: workspace_overview.clone(),
+                    hypotheses: json!([]),
+                    methodologies: json!([]),
+                    studies: json!([]),
+                    results: json!([]),
+                    may_create: false,
+                })
+            ),
+            // Um resultado com proveniência dos dois lados, e com as duas
+            // origens: uma aresta que a operação observou e uma que alguém
+            // declarou. A distinção é visível, e o guarda vê-a.
+            page!(
+                "result-detail",
+                Screen::Ideas,
+                screens::science::result_detail(screens::science::ResultView {
+                    result: json!({
+                        "id": "77777777-7777-7777-7777-777777777774",
+                        "workspace_id": "55555555-5555-5555-5555-555555555555",
+                        "title": "A resistência caiu 18%",
+                        "summary": "Três corridas independentes, mesma direcção.",
+                        "status": "draft", "status_label": "Registado",
+                        "classification": "INTERNAL"
+                    }),
+                    validations: json!([{
+                        "id": "77777777-7777-7777-7777-777777777775",
+                        "label": "Reprodução confirmou",
+                        "note": "Segunda corrida, outro operador."
+                    }]),
+                    upstream: json!({
+                        "truncada": false,
+                        "passos": [{
+                            "profundidade": 1,
+                            "de": {"kind": "result", "label": "A resistência caiu 18%"},
+                            "relacao_legivel": "produzido por",
+                            "para": {"kind": "study_execution", "label": "Ensaio de carga · execução 3"},
+                            "origem": "operation"
+                        }, {
+                            "profundidade": 2,
+                            "de": {"kind": "study_execution", "label": "Ensaio de carga · execução 3"},
+                            "relacao_legivel": "usou a metodologia",
+                            "para": {"kind": "methodology_version", "label": "Medição a quatro pontas · v2"},
+                            "origem": "declared"
+                        }]
+                    }),
+                    downstream: json!({"truncada": true, "passos": []}),
+                    direction: "upstream",
+                    may_validate: true,
+                })
+            ),
+            // O mesmo resultado a jusante, para quem não pode validar: sem
+            // botão, porque o Core recusaria e prometer uma recusa é pior do
+            // que não prometer nada.
+            page!(
+                "result-detail-jusante",
+                Screen::Ideas,
+                screens::science::result_detail(screens::science::ResultView {
+                    result: json!({
+                        "id": "77777777-7777-7777-7777-777777777774",
+                        "workspace_id": "55555555-5555-5555-5555-555555555555",
+                        "title": "A resistência caiu 18%",
+                        "summary": "Três corridas independentes, mesma direcção.",
+                        "status": "draft", "status_label": "Registado",
+                        "classification": "INTERNAL"
+                    }),
+                    validations: json!([]),
+                    upstream: json!({"truncada": false, "passos": []}),
+                    downstream: json!({"truncada": false, "passos": []}),
+                    direction: "downstream",
+                    may_validate: false,
+                })
+            ),
+            // Os seis ecrãs por onde uma pessoa constrói a cadeia.
+            //
+            // Entram aqui pela mesma razão que todos os outros: os quatro
+            // guardas percorrem este catálogo, e um ecrã que não esteja nele
+            // não é auditado — nem os botões, nem os campos, nem as âncoras.
+            page!(
+                "science-nova-hipotese",
+                Screen::Ideas,
+                screens::science::nova_hipotese(screens::science::Contexto {
+                    workspace: ambiente_cientifico(),
+                    message: None,
+                })
+            ),
+            page!(
+                "science-nova-metodologia",
+                Screen::Ideas,
+                screens::science::nova_metodologia(screens::science::Contexto {
+                    workspace: ambiente_cientifico(),
+                    message: Some("A classificação pedida excede a do ambiente.".to_owned()),
+                })
+            ),
+            page!(
+                "science-metodologia",
+                Screen::Ideas,
+                screens::science::metodologia(screens::science::MetodologiaView {
+                    methodology: json!({
+                        "id": "88888888-8888-8888-8888-888888888881",
+                        "workspace_id": "55555555-5555-5555-5555-555555555555",
+                        "title": "Medição a quatro pontas",
+                        "purpose": "Separar a resistência de contacto da do material.",
+                        "classification": "INTERNAL"
+                    }),
+                    versions: json!([
+                        {"id": "88888888-8888-8888-8888-888888888883", "label": "v2",
+                         "summary": "Corrente reduzida para 1 mA.", "status": "published", "status_label": "Em vigor"},
+                        {"id": "88888888-8888-8888-8888-888888888882", "label": "v1",
+                         "summary": "Primeira redacção.", "status": "superseded", "status_label": "Substituída",
+                         "superseded_by_id": "88888888-8888-8888-8888-888888888883"}
+                    ]),
+                    may_create: true,
+                })
+            ),
+            page!(
+                "science-nova-versao",
+                Screen::Ideas,
+                screens::science::nova_versao(screens::science::NovaVersaoView {
+                    methodology: json!({
+                        "id": "88888888-8888-8888-8888-888888888881",
+                        "title": "Medição a quatro pontas"
+                    }),
+                    em_vigor: Some(json!({"label": "v2"})),
+                    message: None,
+                })
+            ),
+            page!(
+                "science-novo-estudo",
+                Screen::Ideas,
+                screens::science::novo_estudo(screens::science::NovoEstudoView {
+                    workspace: ambiente_cientifico(),
+                    hypotheses: json!([{
+                        "id": "77777777-7777-7777-7777-777777777771",
+                        "statement": "A dopagem reduz a resistência de contacto"
+                    }]),
+                    methodology_versions: vec![(
+                        "88888888-8888-8888-8888-888888888883".to_owned(),
+                        "Medição a quatro pontas · v2".to_owned(),
+                    )],
+                    message: None,
+                })
+            ),
+            // O mesmo formulário sem nenhuma versão publicada: o selector diz
+            // porque está vazio em vez de o parecer por engano.
+            page!(
+                "science-novo-estudo-sem-versoes",
+                Screen::Ideas,
+                screens::science::novo_estudo(screens::science::NovoEstudoView {
+                    workspace: ambiente_cientifico(),
+                    hypotheses: json!([]),
+                    methodology_versions: Vec::new(),
+                    message: None,
+                })
+            ),
+            page!(
+                "science-estudo",
+                Screen::Ideas,
+                screens::science::estudo(screens::science::EstudoView {
+                    study: estudo_de_referencia(),
+                    executions: json!([{
+                        "id": "77777777-7777-7777-7777-777777777776",
+                        "sequence": 3,
+                        "status": "succeeded",
+                        "environment": "Bancada 2"
+                    }]),
+                    may_create: true,
+                })
+            ),
+            page!(
+                "science-nova-execucao",
+                Screen::Ideas,
+                screens::science::nova_execucao(screens::science::NovaExecucaoView {
+                    study: estudo_de_referencia(),
+                    methodology_versions: vec![(
+                        "88888888-8888-8888-8888-888888888883".to_owned(),
+                        "Medição a quatro pontas · v2".to_owned(),
+                    )],
+                    dataset_versions: vec![(
+                        "99999999-9999-9999-9999-999999999991".to_owned(),
+                        "SCADA Parque A · v4".to_owned(),
+                    )],
+                    message: None,
+                })
+            ),
+            page!(
+                "science-execucao",
+                Screen::Ideas,
+                screens::science::execucao(screens::science::ExecucaoView {
+                    execution: execucao_de_referencia(),
+                    study: estudo_de_referencia(),
+                    results: json!([{
+                        "id": "77777777-7777-7777-7777-777777777774",
+                        "title": "A resistência caiu 18%",
+                        "classification": "INTERNAL"
+                    }]),
+                    may_create: true,
+                })
+            ),
+            page!(
+                "science-novo-resultado",
+                Screen::Ideas,
+                screens::science::novo_resultado(screens::science::NovoResultadoView {
+                    execution: execucao_de_referencia(),
+                    study: estudo_de_referencia(),
+                    message: None,
+                })
+            ),
+            // O formulário de validação com prova disponível: a reprodução é
+            // escolhível porque há uma execução que a sustenta.
+            page!(
+                "result-validate",
+                Screen::Ideas,
+                screens::science::validate_result(screens::science::ValidateView {
+                    result: json!({
+                        "id": "77777777-7777-7777-7777-777777777774",
+                        "title": "A resistência caiu 18%",
+                        "execution_id": "77777777-7777-7777-7777-777777777776"
+                    }),
+                    executions: json!([{
+                        "id": "77777777-7777-7777-7777-777777777776",
+                        "sequence": 3,
+                        "status": "succeeded"
+                    }]),
+                    message: None,
+                })
+            ),
+            // O mesmo formulário sem execução nenhuma: a reprodução aparece
+            // desactivada **com o motivo**, e não simplesmente ausente. Quem
+            // procura a opção precisa de saber porque não a pode usar.
+            page!(
+                "result-validate-sem-prova",
+                Screen::Ideas,
+                screens::science::validate_result(screens::science::ValidateView {
+                    result: json!({
+                        "id": "77777777-7777-7777-7777-777777777774",
+                        "title": "A resistência caiu 18%"
+                    }),
+                    executions: json!([]),
+                    message: Some(
+                        "Uma reprodução precisa da execução que a reproduziu.".to_owned(),
+                    ),
+                })
+            ),
             // O mesmo ecrã para quem não pode usar assistência: a superfície
             // não aparece de todo. É a alínea B do contrato — o Core recusaria
             // na mesma, e mostrar o campo seria convidar a uma recusa.
@@ -896,7 +1218,13 @@ pub(crate) mod link_tests {
             page!(
                 "mail-unavailable",
                 Screen::Mail,
-                screens::mail::mail(&viewer(), &mail_view(false, false), &json!(null), None,)
+                screens::mail::mail(
+                    &viewer(),
+                    &mail_view(false, false),
+                    &json!(null),
+                    None,
+                    None
+                )
             ),
             page!(
                 "mail",
@@ -917,6 +1245,7 @@ pub(crate) mod link_tests {
                         "is_starred": false,
                         "has_attachments": true
                     }]}),
+                    None,
                     None,
                 )
             ),
@@ -952,6 +1281,7 @@ pub(crate) mod link_tests {
                         "to": ["ana@ocinye.com"],
                         "cc": []
                     })),
+                    None,
                 )
             ),
             page!(
@@ -965,6 +1295,7 @@ pub(crate) mod link_tests {
                         view
                     },
                     &json!({"items": []}),
+                    None,
                     None,
                 )
             ),
@@ -1106,7 +1437,6 @@ pub(crate) mod link_tests {
                 screens::administration::member_detail(
                     &json!({
                         "full_name": "Ana Fernandes",
-                        "username": "afernandes",
                         "email": "ana@ocinye.com",
                         "status": "active",
                         "institutional_position": "founder"
@@ -1198,7 +1528,6 @@ pub(crate) mod link_tests {
                     &json!({
                         "id": "44444444-4444-4444-4444-444444444444",
                         "full_name": "João Manuel",
-                        "username": "jmanuel",
                         "email": "jmanuel@ocinye.com",
                         "status": "active"
                     }),
@@ -1218,7 +1547,6 @@ pub(crate) mod link_tests {
                     &json!({
                         "id": "44444444-4444-4444-4444-444444444444",
                         "display_name": "João Manuel",
-                        "username": "jmanuel",
                         "email": "jmanuel@ocinye.com",
                         "status": "active"
                     }),

@@ -48,6 +48,75 @@ use crate::password::Secret;
 /// «indisponível» while somebody is still watching.
 const IMAP_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Quanto tempo a sonda de transporte espera por cada aperto de mão.
+///
+/// Curta de propósito: a sonda responde a uma pergunta de estado, e um estado
+/// que demora trinta segundos a apurar bloqueia a página que o mostra.
+const SONDA_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// O transporte responde, sem apresentar credencial nenhuma.
+///
+/// # Porque isto existe separado da saúde do adaptador
+///
+/// Porque são duas perguntas, e a segunda precisa de uma senha:
+///
+/// - **o serviço está lá?** — TCP abre, o TLS aperta a mão, e o certificado
+///   valida para este nome. Nada disto exige uma conta.
+/// - **esta conta entra?** — exige a conta.
+///
+/// A instalação que o [ADR-0409] descreve não tem conta de serviço
+/// institucional: cada membro traz a sua. Sem esta sonda, a primeira pergunta
+/// ficava sem resposta possível, e o estado do correio passava a descrever a
+/// ausência da conta em vez do estado do serviço.
+///
+/// **Uma capacidade implementada e saudável não deve parecer defeituosa por
+/// faltar uma capacidade que ainda não foi decidida.**
+///
+/// # O que uma falha aqui significa
+///
+/// Que ninguém vai ler nem enviar correio nesta instalação, seja com que
+/// credencial for. É a única leitura honesta de «indisponível» ao nível da
+/// instituição.
+///
+/// [ADR-0409]: https://github.com/Ocinye/ocinye-os/blob/main/docs/adrs/0409-mailbox-credentials-per-member.md
+pub async fn transporte_responde(host: &str, porto: u16) -> bool {
+    if host.is_empty() {
+        return false;
+    }
+
+    let Ok(server) = ServerName::try_from(host.to_owned()) else {
+        return false;
+    };
+
+    // A mesma loja de raízes do adaptador, e a mesma recusa de certificados
+    // que não validam. Uma sonda mais permissiva do que o caminho verdadeiro
+    // daria verde a um serviço que depois recusa tudo.
+    let roots = RootCertStore {
+        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+    };
+    let Ok(construtor) = ClientConfig::builder_with_provider(Arc::new(
+        tokio_rustls::rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions() else {
+        return false;
+    };
+    let tls = construtor
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+
+    let Ok(Ok(tcp)) = tokio::time::timeout(SONDA_TIMEOUT, TcpStream::connect((host, porto))).await
+    else {
+        return false;
+    };
+
+    tokio::time::timeout(
+        SONDA_TIMEOUT,
+        TlsConnector::from(Arc::new(tls)).connect(server, tcp),
+    )
+    .await
+    .is_ok_and(|resultado| resultado.is_ok())
+}
+
 /// An authenticated IMAP session over TLS.
 type ImapSession = Session<TlsStream<TcpStream>>;
 
@@ -453,12 +522,47 @@ impl MailProvider for ImapSmtpProvider {
         "imap_smtp"
     }
 
+    /// O que este adaptador consegue mesmo fazer, agora.
+    ///
+    /// # As duas pontas são sondadas, e nenhuma é assumida
+    ///
+    /// `can_read` era a constante `true`, com o argumento de que abrir uma
+    /// sessão IMAP para responder a uma pergunta de saúde custaria um `LOGIN`
+    /// por chamada. O custo é real; a conclusão é que a resposta se **guarda**,
+    /// e não que se inventa.
+    ///
+    /// Com `true` fixo, uma instalação com o anfitrião errado, a rede fechada
+    /// ou a senha recusada dizia «pode ler» e apresentava uma Entrada vazia —
+    /// indistinguível de não ter correio nenhum, que é o pior desfecho
+    /// possível para quem espera uma mensagem.
+    ///
+    /// Listar uma mensagem da Entrada é a operação mais barata que obriga a
+    /// TCP, TLS, `LOGIN`, `SELECT` e `SEARCH`: falha exactamente onde a
+    /// leitura falharia.
     async fn health(&self) -> ProviderHealth {
-        // Only SMTP is probed: `lettre` exposes a connection test, and opening
-        // an IMAP session merely to answer a health question would cost a
-        // login on every call. IMAP reachability surfaces through the sync
-        // worker's own error state instead (briefing §105).
         let can_send = self.smtp.test_connection().await.unwrap_or(false);
+        let leitura = self
+            .list_messages(&self.config.username, MailFolder::Inbox, None, 1)
+            .await;
+        let can_read = leitura.is_ok();
+
+        let recusada = matches!(leitura, Err(ProviderError::AuthenticationFailed));
+
+        // A razão é o que distingue «não responde» de «recusou a senha», e é a
+        // distinção que decide o que quem administra tem de ir mudar.
+        let detail = match (can_read, can_send, leitura) {
+            (true, true, _) => "O serviço de correio está a responder.".to_owned(),
+            (false, _, Err(ProviderError::AuthenticationFailed)) => {
+                "O serviço de correio recusou as credenciais desta instalação.".to_owned()
+            }
+            (false, false, _) => {
+                "O serviço de correio não está a responder nesta instalação.".to_owned()
+            }
+            (false, true, _) => {
+                "O envio responde; a leitura de correio não está a responder.".to_owned()
+            }
+            (true, false, _) => "O serviço de envio de correio não está a responder.".to_owned(),
+        };
 
         ProviderHealth {
             // Hosts e portos, para o ecrã de administração. Nunca a credencial.
@@ -466,13 +570,10 @@ impl MailProvider for ImapSmtpProvider {
                 format!("imap {}:{}", self.config.imap_host, self.config.imap_port),
                 format!("smtp {}:{}", self.config.smtp_host, self.config.smtp_port),
             ],
-            can_read: true,
+            can_read,
             can_send,
-            detail: if can_send {
-                "O serviço de correio está a responder.".to_owned()
-            } else {
-                "O serviço de envio de correio não está a responder.".to_owned()
-            },
+            detail,
+            rejected_credential: recusada,
         }
     }
 

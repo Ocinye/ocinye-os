@@ -53,11 +53,32 @@ cd "$raiz"
 # vazia, porque um filtro não encontrou nada, porque o binário arrancou e saiu —
 # seria contado como propriedade satisfeita. Saída zero sem evidência é a outra
 # metade da mesma classe: silêncio lido como confirmação.
+#
+# As contagens são deliberadas, e mudam **por decisão**. Uma suite que encolheu
+# sozinha tem de dar vermelho; por isso acrescentar um teste obriga a vir aqui,
+# e isso é a funcionalidade e não o atrito.
+#
+# Contagens actualizadas em 2026-08-27:
+#
+#   Experience Structural Boundary  6 → 7
+#     `nenhuma_vista_decide_um_dia_civil_em_greenwich`, do plano de tempo real
+#     (24a0b96). O portão esteve INVALID desde esse commit — não FAIL: a
+#     propriedade continuou satisfeita, e o que faltou foi a prova bater certo.
+#     Ninguém o viu porque `architecture-gates.sh` não voltou a correr.
+#
+#   Design System Integrity  23 → 29
+#     Mais um em 2026-08-27: `nenhum_ecra_pede_um_nome_de_utilizador`, que mede
+#     a superfície e não o repositório — `autocomplete="username"` e o claim
+#     `preferred_username` continuam legítimos.
+#     Cinco portões novos da mesma sessão: as mensagens próprias do outro lado,
+#     tudo o que o arranque chama existe, os painéis igualam o painel da conta,
+#     as regras partilhadas fora de uma media query, e a superfície de um painel
+#     não se reescreve.
 portoes() {
     cat <<'TABELA'
 Architecture Dependency Boundary|python3 scripts/architecture_boundaries.py|Fronteiras arquitecturais:
-Experience Structural Boundary|cargo test -q -p ocinye-workspace --test experience_boundary|test result: ok. 6 passed
-Design System Integrity|cargo test -q -p ocinye-workspace --test design_fidelity|test result: ok. 23 passed
+Experience Structural Boundary|cargo test -q -p ocinye-workspace --test experience_boundary|test result: ok. 7 passed
+Design System Integrity|cargo test -q -p ocinye-workspace --test design_fidelity|test result: ok. 29 passed
 Rendered-Value Equivalence|python3 scripts/rendered_value_equivalence.py|Equivalência de valores renderizados:
 TABELA
 }

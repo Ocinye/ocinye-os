@@ -20,6 +20,7 @@ Ou copie o conteúdo do `<symbol>` directamente para o componente de ícone do s
 | `oc-idea` | `0 0 16 16` | nav Ideias |
 | `oc-project` | `0 0 16 16` | nav Projectos |
 | `oc-knowledge` | `0 0 16 16` | nav Conhecimento |
+| `oc-science` | `0 0 16 16` | cadeia científica e linhagem: três nós ligados |
 | `oc-bibliography` | `0 0 16 16` | nav Bibliografia |
 | `oc-data` | `0 0 16 16` | nav Dados |
 | `oc-ai` | `0 0 16 16` | nav Ocinye AI |
@@ -32,6 +33,7 @@ Ou copie o conteúdo do `<symbol>` directamente para o componente de ícone do s
 | `oc-help` | `0 0 16 16` | Ajuda (rodapé sidebar) |
 | `oc-search` | `0 0 16 16` | pesquisa global, tabelas, command palette |
 | `oc-plus` | `0 0 12 12` | botões + Criar / + Nova… |
+| `oc-close` | `0 0 12 12` | fechar uma janela — o compositor |
 | `oc-bell` | `0 0 16 16` | notificações (topbar) |
 | `oc-calendar` | `0 0 16 16` | calendário e Centro Temporal |
 | `oc-filter` | `0 0 14 14` | botão Filtrar (tabelas) |
@@ -55,6 +57,7 @@ que o dossier e `static/icons.svg` continuem a descrever o mesmo conjunto
 
 | `id` | `viewBox` | Uso |
 |---|---|---|
+| `oc-messaging` | `0 0 16 16` | nav Mensagens, estados vazios das conversas |
 | `oc-mail` | `0 0 16 16` | nav Correio, estados vazios de correio |
 | `oc-star` | `0 0 16 16` | mensagem assinalada |
 | `oc-reply` | `0 0 16 16` | acção Responder |

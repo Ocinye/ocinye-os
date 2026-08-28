@@ -127,33 +127,52 @@ módulos **lêem** o ambiente para obter o seu contexto de autorização, atrav�
 
 ## Research objects
 
-Artefactos científicos são objectos relacionáveis, não registos isolados:
+Artefactos científicos são objectos relacionáveis, não registos isolados. As
+relações vivem em `research_links`, como linhas tipadas de primeira classe, e uma
+relação só existe se a tripla **tipo de origem + verbo + tipo de destino** for
+permitida pela matriz de compatibilidade — que falha fechada.
 
-```
-Idea → Source          Project → Dataset         Experiment → Model
-Idea → Dataset         Project → CodeRepository  Experiment → Result
-Idea → Project         Experiment → Dataset      Result → Document
-                       Project → Funding         Result → Publication
+```text
+Hipótese   ←  testa           ←  Estudo
+Estudo     →  segue           →  Versão de metodologia
+Dataset·v  →  entra em        →  Execução
+Resultado  →  produzido por   →  Execução
+Resultado  →  sustenta/refuta →  Hipótese
+Versão     →  substitui       →  Versão anterior
 ```
 
-`research_links` guarda estas relações como linhas tipadas de primeira classe —
-a semente do futuro **Ocinye Knowledge Graph**, sem precisar de graph database
-agora.
+**A versão, e nunca o objecto mutável.** Um estudo segue uma `MethodologyVersion`
+e nunca a `Methodology`; uma `DatasetVersion` entra numa execução e nunca o
+`Dataset`. É o que torna a proveniência estável no tempo.
+
+O vocabulário completo — dezassete entradas, contando os dois valores de origem —
+vive em
+[`crates/ocinye-contracts/src/provenance.rs`](../../crates/ocinye-contracts/src/provenance.rs).
+O ciclo, a proveniência e a linhagem estão em
+[docs/architecture/scientific-lifecycle.md](../architecture/scientific-lifecycle.md).
+
+Isto é a base do futuro **Ocinye Knowledge Graph**, e continua sem precisar de
+uma base de dados de grafos.
 
 ## System of record
 
 O Core deve poder responder: quem criou isto, quando, porquê, em que unidade,
 ligado a que ideia, a que projecto, com que dataset, que versão, que código, que
-experiência, quem aprovou, com que classificação, onde residiam os dados, quem
-teve acesso.
+estudo, que execução, quem aprovou, com que classificação, onde residiam os
+dados, quem teve acesso.
 
 **A rastreabilidade nasce com o sistema.** Cada entidade transporta autoria,
 momento, unidade e classificação desde a primeira migration.
 
 ## Endereçável por agentes
 
-Sete tipos de artefacto deste domínio são endereçáveis pelo Agentic Control
-Plane: `Idea`, `Project`, `Workspace`, `Note`, `Source`, `Document` e `Task`.
+Os artefactos deste domínio endereçáveis pelo Agentic Control Plane incluem
+`Idea`, `Project`, `Workspace`, `Note`, `Source`, `Document` e `Task`, e — desde o
+ciclo científico — `Hypothesis`, `Methodology`, `MethodologyVersion`, `Study`,
+`StudyExecution`, `Result` e `DatasetVersion`. A lista completa é o
+`ResourceKind` de
+[`crates/ocinye-contracts/src/agentic.rs`](../../crates/ocinye-contracts/src/agentic.rs),
+que é a fonte.
 
 Endereçável **não** significa acessível. Um `ResourceRef` identifica; resolvê-lo
 continua sujeito ao actor, ao âmbito do agente, à pertença, à política do
@@ -168,6 +187,15 @@ produziria cem portas por testar.
 
 ## Ainda não modelado
 
-Declarado: `Experiment`, `Model`, `Result`, `Publication`, `IntellectualProperty`,
-`Funding` e `CodeRepository` estão na visão arquitectural e **não** têm tabelas.
-São a próxima camada do domínio.
+`Model`, `Publication`, `IntellectualProperty`, `Funding` e `CodeRepository` estão
+na visão arquitectural e **não** têm tabelas. São a próxima camada do domínio, e a
+proveniência foi desenhada para os suportar quando existirem.
+
+`Result` deixou de estar nesta lista: existe, com tabela própria, desde a
+[migration 0019](../../migrations/0019_scientific_lifecycle.sql).
+
+**`Experiment` não vai existir como entidade.** O domínio adoptou `Study` com um
+género fechado — experiência física, simulação ou análise — porque os três
+partilham tudo o que importa a esta camada, e três tabelas obrigariam a triplicar
+cada consulta de linhagem
+([ADR-0412](../adrs/0412-scientific-lifecycle-and-provenance.md)).

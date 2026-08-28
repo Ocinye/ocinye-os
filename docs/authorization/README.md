@@ -120,6 +120,24 @@ consultar.
 **Classificar** e **gerir membros** exigem `lead`, gestor de unidade ou admin.
 Mudar uma classificação exige um **motivo**, registado na auditoria.
 
+**Validar um resultado científico** exige `results.validate`, e é o exemplo mais
+nítido de uma permissão que não decorre de poder escrever. Descrever trabalho e
+afirmar o que a instituição sabe são actos diferentes:
+
+| Permissão | Quem a recebe | O que permite |
+|---|---|---|
+| `science.view` | Quem lê no ambiente, incluindo `viewer` | Ler hipóteses, metodologias, estudos, execuções, resultados e a linhagem |
+| `science.create` | Quem escreve no ambiente | Descrever trabalho: enunciar, criar, publicar versões, registar execuções e resultados |
+| `results.validate` | `lead` do ambiente, gestor da unidade | Afirmar que um resultado se confirma, se contradiz, ou que foi reproduzido |
+
+As três chegam por **pertença à unidade e ao ambiente**, e nunca por papel
+técnico institucional: um título não concede acesso científico.
+
+Quem pode escrever um resultado não fica por isso habilitado a declarar que ele
+está certo. Sem esta separação, `results.validate` existiria no catálogo e não
+governaria nada — a distinção viveria só no botão que a interface desenha, e a
+interface nunca decide.
+
 ## Listagens: o espelho SQL
 
 A regra existe duas vezes: como decisão e como `WHERE`. `VisibilityFilter` é a
@@ -193,6 +211,21 @@ usa-as para **não mostrar** o que o membro não pode usar: barra lateral, menu
 Core, e escrever o caminho à mão bate na mesma recusa. O que a filtragem evita é
 enviar ao cliente uma lista de coisas que ele não devia sequer saber que existem
 (`CLAUDE.md` §4, briefing §65).
+
+### As permissões de âmbito não aparecem no âmbito institucional
+
+`GET /api/v1/me` responde no contexto da **organização**. Uma permissão que chega
+por pertença a uma unidade ou a um ambiente — como as três científicas — nunca
+aparece nessa resposta, e é correcto que não apareça: a pergunta é outra.
+
+Uma interface que perguntasse ali «posso criar ciência?» receberia sempre não, e
+esconderia a criação a toda a gente, incluindo a quem lidera o ambiente. A
+resposta certa vem do recurso: a visão geral de um ambiente traz `may_create`, e
+um resultado traz `may_validate`, avaliados pelo Core com o contexto daquele
+recurso.
+
+Continua a não ser autorização. É o que a interface pode oferecer sem prometer
+uma recusa, e a operação volta a exigir a permissão quando correr.
 
 ## Verificação
 

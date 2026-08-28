@@ -90,6 +90,7 @@ fn not_implemented(
 pub fn catalogue() -> Vec<OperationEntry> {
     let mut entries = Vec::new();
     entries.extend(research());
+    entries.extend(science());
     entries.extend(knowledge());
     entries.extend(collaboration());
     entries.extend(mail());
@@ -157,6 +158,74 @@ fn research() -> Vec<OperationEntry> {
 }
 
 /// Conhecimento — referências, notas, documentos, ligações.
+/// O ciclo científico.
+///
+/// # O que é endereçável, e o que não é
+///
+/// Descrever trabalho científico — enunciar uma hipótese, desenhar um estudo,
+/// registar uma execução — é endereçável: um agente pode propor, e o Core
+/// autoriza antes de escrever.
+///
+/// **Validar um resultado não é.** Uma validação é uma afirmação institucional
+/// sobre o que a instituição sabe: dizer «este resultado confirma-se» tem o
+/// peso de quem o diz, e delegá-lo separaria a afirmação da pessoa que a
+/// sustenta. Não é uma questão de risco — é de autoria.
+fn science() -> Vec<OperationEntry> {
+    vec![
+        addressable(
+            "science",
+            "science::create_hypothesis",
+            "science.hypothesis.create",
+            "Enunciar uma hipótese num ambiente de investigação.",
+        ),
+        addressable(
+            "science",
+            "science::create_methodology",
+            "science.methodology.create",
+            "Criar uma metodologia.",
+        ),
+        addressable(
+            "science",
+            "science::publish_methodology_version",
+            "science.methodology.publish_version",
+            "Publicar uma versão de uma metodologia.",
+        ),
+        addressable(
+            "science",
+            "science::create_study",
+            "science.study.create",
+            "Desenhar um estudo: experimento, simulação ou análise.",
+        ),
+        addressable(
+            "science",
+            "science::record_execution",
+            "science.execution.record",
+            "Registar uma execução de um estudo.",
+        ),
+        addressable(
+            "science",
+            "science::create_result",
+            "science.result.create",
+            "Registar um resultado, com a proveniência que a operação conhece.",
+        ),
+        non_delegable(
+            "science",
+            "science::record_validation",
+            "Validar ou dar por reproduzido um resultado.",
+            TrustBoundary::InstitutionalClaimBoundary,
+            "Validar ou dar por reproduzido um resultado é uma afirmação \
+             institucional sobre o que a Ocinye sabe. O peso dela é de quem a \
+             faz, e delegá-la separaria a afirmação da pessoa que a sustenta.",
+        ),
+        addressable(
+            "science",
+            "science::lineage",
+            "science.lineage.read",
+            "Percorrer a linhagem de um recurso, a montante ou a jusante.",
+        ),
+    ]
+}
+
 fn knowledge() -> Vec<OperationEntry> {
     vec![
         addressable(
@@ -323,6 +392,49 @@ fn data() -> Vec<OperationEntry> {
             "data::create_dataset",
             "data.dataset.create",
             "Criar um dataset com os seus metadados.",
+        ),
+        // ── Mensagens ───────────────────────────────────────────────────
+        addressable(
+            "messaging",
+            "messaging::open_direct",
+            "messaging.direct.open",
+            "Abrir a conversa directa com alguém.",
+        ),
+        addressable(
+            "messaging",
+            "messaging::create_group",
+            "messaging.group.create",
+            "Criar um grupo de conversa.",
+        ),
+        addressable(
+            "messaging",
+            "messaging::send",
+            "messaging.message.send",
+            "Enviar uma mensagem numa conversa.",
+        ),
+        addressable(
+            "messaging",
+            "messaging::add_member",
+            "messaging.group.add_member",
+            "Acrescentar alguém a um grupo.",
+        ),
+        // Retirar alguém de um grupo, ou sair dele, não se delega.
+        //
+        // Cai na `AuthorityBoundary` pela definição dela: o efeito principal é
+        // **quem pode ler e escrever ali a partir dali**. Não é o impacto que
+        // fecha isto — é a natureza da fronteira.
+        //
+        // Reagir e marcar como lida ficam fora do catálogo, e não por
+        // esquecimento: são estado de interacção de uma pessoa, e o `mail`
+        // classifica `set_flag` da mesma maneira — não classifica.
+        non_delegable(
+            "messaging",
+            "messaging::remove_member",
+            "Retirar alguém de um grupo, ou sair dele.",
+            TrustBoundary::AuthorityBoundary,
+            "Retirar alguém de uma conversa muda quem ouve o que lá se diz a \
+             partir desse momento. É autoridade sobre a conversa, e não um \
+             efeito que se desfaz.",
         ),
         addressable(
             "calendar",
@@ -534,12 +646,20 @@ fn nao_implementadas() -> Vec<OperationEntry> {
             "Submeter um trabalho de computação.",
             "Não há trabalhos de computação no Core: o módulo regista nós e mais nada.",
         ),
-        not_implemented(
-            "knowledge",
-            "knowledge::create_result",
-            "Registar um resultado de investigação.",
-            "A entidade Resultado ainda não existe no domínio.",
-        ),
+        // `knowledge::create_result` saiu daqui.
+        //
+        // Estava declarada `not_implemented` com a razão «A entidade Resultado
+        // ainda não existe no domínio», e a razão deixou de valer: existe, com
+        // identidade, estado, execução de origem e proveniência escrita na
+        // mesma transacção.
+        //
+        // Não ficou disponível **neste módulo**: um resultado não é
+        // conhecimento bibliográfico, e o Conhecimento não é dono dele. A
+        // operação é `science::create_result`, e é lá que está declarada.
+        //
+        // A entrada não se manteve como sinónimo: dois identificadores para a
+        // mesma operação são duas disposições sobre a mesma coisa, e o
+        // catálogo tem um teste que os recusa.
     ]
 }
 
@@ -1001,11 +1121,7 @@ mod contagem {
             "> **Non-delegability is determined by the nature of the trust boundary crossed, \
              not by risk level alone.**\n"
         );
-        for fronteira in [
-            TrustBoundary::SecretBoundary,
-            TrustBoundary::AuthorityBoundary,
-            TrustBoundary::UserMediatedBinaryBoundary,
-        ] {
+        for fronteira in TrustBoundary::all() {
             let quais: Vec<&str> = catalogo
                 .iter()
                 .filter(|e| e.exposure.boundary() == Some(fronteira))
@@ -1022,6 +1138,44 @@ mod contagem {
                     .join(", ")
             );
         }
+    }
+
+    /// Toda a operação não-delegável aparece numa secção de fronteira.
+    ///
+    /// # O defeito que isto guarda
+    ///
+    /// A matriz emitia as fronteiras percorrendo um array escrito ao lado do
+    /// tipo. Quando a `INSTITUTIONAL_CLAIM_BOUNDARY` nasceu, a secção passou a
+    /// somar catorze operações onde a tabela dizia quinze — e nada falhou. Quem
+    /// lesse a matriz para saber o que um agente não alcança ficava com uma
+    /// operação a menos, que é o pior sítio para faltar uma.
+    ///
+    /// O `all()` do tipo corrige a causa; isto mede o efeito, que é a
+    /// propriedade que interessa: **a soma das secções é o total.**
+    #[test]
+    fn a_soma_das_fronteiras_e_o_total_das_nao_delegaveis() {
+        let catalogo = catalogue();
+
+        let nao_delegaveis = catalogo
+            .iter()
+            .filter(|e| e.exposure.boundary().is_some())
+            .count();
+
+        let somadas: usize = TrustBoundary::all()
+            .into_iter()
+            .map(|fronteira| {
+                catalogo
+                    .iter()
+                    .filter(|e| e.exposure.boundary() == Some(fronteira))
+                    .count()
+            })
+            .sum();
+
+        assert_eq!(
+            somadas, nao_delegaveis,
+            "há operações não-delegáveis que nenhuma secção de fronteira mostra. \
+             Provavelmente nasceu uma classe de `TrustBoundary` e o `all()` não a conhece"
+        );
     }
 
     /// A fronteira de autoridade contém exactamente estas operações.
@@ -1049,6 +1203,11 @@ mod contagem {
             "governance::create_grant",
             "governance::revoke_grant",
             "organisation::add_unit_member",
+            // Retirar alguém de uma conversa muda quem lê o que lá se diz a
+            // partir dali. É a mesma natureza que revogar uma concessão: o
+            // efeito principal é o acesso de outra pessoa, e não um resultado
+            // que se desfaça (ADR-0307, `Native Messaging v1`).
+            "messaging::remove_member",
         ]
         .into_iter()
         .collect();
@@ -1064,6 +1223,36 @@ mod contagem {
             real, decidida,
             "a fronteira de autoridade mudou. Se foi de propósito, actualizar \
              também ADR-0307 e a matriz; se não foi, é um erro de classificação"
+        );
+    }
+
+    /// A fronteira de afirmação institucional é a que foi decidida.
+    ///
+    /// O mesmo atrito que `a_fronteira_de_autoridade_e_a_que_foi_decidida`
+    /// impõe, e pela mesma razão. Uma classe nova é onde se despeja o que não
+    /// coube nas outras, se ninguém a fechar: «esta operação é importante»
+    /// serve para tudo, e uma fronteira que serve para tudo deixa de dizer o
+    /// que a fecha.
+    ///
+    /// O critério, e só ele: **o efeito é uma afirmação cujo peso vem de quem a
+    /// assina.** Não «é grave», não «é irreversível» — irreversível é
+    /// `science::record_execution`, e é endereçável.
+    #[test]
+    fn a_fronteira_de_afirmacao_e_a_que_foi_decidida() {
+        let decidida: BTreeSet<&str> = ["science::record_validation"].into_iter().collect();
+
+        let catalogo = catalogue();
+        let real: BTreeSet<&str> = catalogo
+            .iter()
+            .filter(|e| e.exposure.boundary() == Some(TrustBoundary::InstitutionalClaimBoundary))
+            .map(|e| e.id.as_str())
+            .collect();
+
+        assert_eq!(
+            real, decidida,
+            "a fronteira de afirmação institucional mudou. Se foi de propósito, \
+             actualizar também ADR-0307 e a matriz; se não foi, é provável que \
+             a operação seja apenas irreversível — o que não é o mesmo"
         );
     }
 

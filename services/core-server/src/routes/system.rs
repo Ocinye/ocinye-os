@@ -39,9 +39,14 @@ async fn capabilities(
     Ids(ids): Ids,
     CurrentPrincipal(_principal): CurrentPrincipal,
 ) -> Result<Json<SystemCapabilities>, ApiError> {
-    let report = platform::system_capabilities(&state.pool, &state.config, state.store.is_some())
-        .await
-        .map_err(|error| ApiError::new(error, &ids))?;
+    let report = platform::system_capabilities(
+        &state.pool,
+        &state.config,
+        state.store.is_some(),
+        state.mail_registry.reachability().await,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
 
     Ok(Json(report))
 }

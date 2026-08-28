@@ -488,7 +488,12 @@ pub async fn object_location<'e>(
 pub async fn insert_link<'e>(
     executor: impl PgExecutor<'e>,
     organisation_id: Uuid,
-    workspace_id: Uuid,
+    // Ausente quando a relação atravessa ambientes.
+    //
+    // `NULL` diz que a aresta **não está confinada a um ambiente**. Nunca diz
+    // que é legível ou escrevível por toda a gente: a autoridade vem sempre
+    // das duas pontas e da política corrente.
+    workspace_id: Option<Uuid>,
     source_type_name: &str,
     source_id: Uuid,
     relation: &str,
@@ -496,12 +501,22 @@ pub async fn insert_link<'e>(
     target_id: Uuid,
     note: Option<&str>,
     created_by: Uuid,
+    // De onde veio a afirmação: alguém a declarou, ou a operação conhecia-a.
+    origin: &str,
 ) -> CoreResult<ResearchLink> {
     let link = sqlx::query_as::<_, ResearchLink>(
         "INSERT INTO research_links
              (organisation_id, workspace_id, source_type_name, source_id, relation,
-              target_type_name, target_id, note, created_by_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+              target_type_name, target_id, note, created_by_id, origin)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         -- Uma relação já afirmada não se afirma outra vez.
+         --
+         -- Sem isto, repetir a operação criaria uma segunda aresta idêntica, e
+         -- a linhagem passaria a mostrar o mesmo facto duas vezes. O índice
+         -- único já o impediria — com um erro de integridade, que não é uma
+         -- resposta que se mostre a quem só repetiu um pedido.
+         ON CONFLICT (source_type_name, source_id, relation, target_type_name, target_id)
+         DO UPDATE SET note = COALESCE(EXCLUDED.note, research_links.note)
          RETURNING id, workspace_id, source_type_name, source_id, relation,
                    target_type_name, target_id, note, created_at",
     )
@@ -514,6 +529,7 @@ pub async fn insert_link<'e>(
     .bind(target_id)
     .bind(note)
     .bind(created_by)
+    .bind(origin)
     .fetch_one(executor)
     .await?;
     Ok(link)

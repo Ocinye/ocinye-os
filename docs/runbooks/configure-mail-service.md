@@ -21,6 +21,55 @@ integrado por iframe** e não é a interface do Ocinye OS: o Ocinye Mail é um
 módulo nativo que fala IMAP e SMTP directamente
 ([ADR-0400](../adrs/0400-mail-as-institutional-surface.md)).
 
+### Porquê `mail.ocinye.com` e não `mail67.lwspanel.com`
+
+O painel da LWS oferece os dois nomes para o mesmo serviço. Resolvem para o
+mesmo endereço, e a escolha é do nome institucional — mas não por preferência
+estética. Verificado em 2026-08-27:
+
+```text
+$ dig +short A mail.ocinye.com         → 185.135.132.69
+$ dig +short A mail67.lwspanel.com     → 185.135.132.69
+$ dig +short MX ocinye.com             → 10 mail.ocinye.com.
+```
+
+E o certificado apresentado em `mail.ocinye.com`, nos dois portos:
+
+```text
+subject   CN = mail.ocinye.com
+SAN       imap.ocinye.com, mail.ocinye.com, pop.ocinye.com, smtp.ocinye.com
+emissor   Let's Encrypt
+validade  2026-08-22 → 2026-11-20
+TLS       1.3 em 993 e em 465
+Verify return code: 0 (ok)
+```
+
+O nome do fornecedor apresenta um certificado *wildcard* `*.lwspanel.com`, que
+também valida. Nenhum dos dois obriga a baixar a guarda — **e é isso que o
+torna uma escolha e não uma imposição.** Usa-se `mail.ocinye.com` porque é o
+nome da instituição e é para ele que o MX aponta; `mail67.lwspanel.com` fica
+como instrumento de diagnóstico, para separar «o serviço está em baixo» de «o
+nome institucional deixou de resolver».
+
+**Nunca desligar a verificação de certificado para usar qualquer um deles.** Se
+um nome deixar de validar, isso é o achado — não um obstáculo a contornar.
+
+### O DNS de envio, auditado e não alterado
+
+O correio de `ocinye.com` já funciona, e a integração do Ocinye OS como
+*cliente* não é razão para lhe tocar. Estado verificado em 2026-08-27:
+
+| Registo | Valor | Leitura |
+|---|---|---|
+| MX | `10 mail.ocinye.com.` | aponta para a infraestrutura LWS |
+| SPF | `v=spf1 mx:ocinye.com a:mail.ocinye.com a:mailphp.lws-hosting.com -all` | cobre o anfitrião de envio, e recusa o resto (`-all`) |
+| DKIM | selector `dkim`, RSA | a LWS assina; o Ocinye Core **não** assina |
+| DMARC | `v=DMARC1; p=quarantine;` | política existente |
+
+Nada disto é configuração do Ocinye Core, e nada disto está no código: são
+questões do domínio e do fornecedor. O runbook regista-as porque quem diagnostica
+uma entrega falhada precisa de saber o que era verdade.
+
 ## Antes de começar
 
 Precisa de seis valores, obtidos junto do fornecedor de correio:

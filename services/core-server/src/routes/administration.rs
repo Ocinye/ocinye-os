@@ -82,7 +82,6 @@ fn require(
 #[derive(Deserialize)]
 struct CreateMemberRequest {
     full_name: String,
-    username: String,
     email: String,
     #[serde(default)]
     position: Option<String>,
@@ -97,7 +96,7 @@ struct CreateMemberRequest {
 /// exists only in whatever the administrator did with it (briefing §18, §19).
 #[derive(Serialize)]
 struct IssuedCredential {
-    username: String,
+    email: String,
     /// Shown once. Never stored, never recoverable.
     temporary_password: String,
     expires_at: DateTime<Utc>,
@@ -108,7 +107,7 @@ struct IssuedCredential {
 impl IssuedCredential {
     fn new(credential: TemporaryCredential) -> Self {
         Self {
-            username: credential.username,
+            email: credential.email,
             temporary_password: credential.secret.expose().to_owned(),
             expires_at: credential.expires_at,
             shown_once: true,
@@ -168,7 +167,6 @@ async fn create_member(
         &principal,
         &NewMember {
             full_name: request.full_name,
-            username: request.username,
             email: request.email,
             position,
             role,

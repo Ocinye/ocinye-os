@@ -33,7 +33,7 @@ ocinye-capabilities = { path = "crates/ocinye-capabilities" }
 
 # --- runtime ----------------------------------------------------------------
 tokio = { version = "1.53", features = ["full"] }
-axum = { version = "0.8", features = ["macros", "multipart"] }
+axum = { version = "0.8", features = ["macros", "multipart", "ws"] }
 tower = { version = "0.5", features = ["util"] }
 # Só para o avatar, e só três formatos.
 #
@@ -49,6 +49,9 @@ hyper = "1"
 sqlx = { version = "0.8", default-features = false, features = [
     "runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "macros", "migrate",
 ] }
+# Declarado desde o ADR-0011, e usado desde o ADR-0012: presença, `typing` e
+# fanout entre instâncias do Core. Nunca fonte de verdade — o que ele guarda
+# expira por TTL e não falta a ninguém.
 redis = { version = "0.32", features = ["tokio-comp", "connection-manager"] }
 
 # --- object storage ---------------------------------------------------------
@@ -107,6 +110,12 @@ sha2 = "0.10"
 # string format, which carries the parameters with the hash and is what makes
 # transparent rehashing possible.
 argon2 = { version = "0.5", features = ["std"] }
+# Cifra autenticada, para as credenciais de caixa que o Core tem de poder
+# apresentar ao servidor de correio (ADR-0409). Da mesma família do `argon2` que
+# já usamos, e autenticada e não apenas cifrada: sem autenticação, quem
+# escrevesse na base podia alterar um criptograma e o sistema apresentaria o
+# resultado como senha.
+chacha20poly1305 = "0.11"
 password-hash = { version = "0.5", features = ["std"] }
 subtle = "2"
 zeroize = { version = "1", features = ["derive"] }

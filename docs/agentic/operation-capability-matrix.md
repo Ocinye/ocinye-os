@@ -20,6 +20,14 @@ Cada operação aparece na sua linha. Duas operações distintas nunca são agru
 | `research::get_project` | research | Addressable | `research.project.read` | — | — |
 | `research::transition_project` | research | Addressable | `research.project.transition` | — | — |
 | `research::get_workspace_overview` | research | Addressable | `research.workspace.overview` | — | — |
+| `science::create_hypothesis` | science | Addressable | `science.hypothesis.create` | — | — |
+| `science::create_methodology` | science | Addressable | `science.methodology.create` | — | — |
+| `science::publish_methodology_version` | science | Addressable | `science.methodology.publish_version` | — | — |
+| `science::create_study` | science | Addressable | `science.study.create` | — | — |
+| `science::record_execution` | science | Addressable | `science.execution.record` | — | — |
+| `science::create_result` | science | Addressable | `science.result.create` | — | — |
+| `science::record_validation` | science | NonDelegable | — | `INSTITUTIONAL_CLAIM_BOUNDARY` | Validar ou dar por reproduzido um resultado é uma afirmação institucional sobre o que a Ocinye sabe. O peso dela é de quem a faz, e delegá-la separaria a afirmação da pessoa que a sustenta. |
+| `science::lineage` | science | Addressable | `science.lineage.read` | — | — |
 | `knowledge::create_source` | knowledge | Addressable | `knowledge.source.create` | — | — |
 | `knowledge::review_bibliography` | knowledge | Addressable | `knowledge.bibliography.review` | — | — |
 | `knowledge::get_source` | knowledge | Addressable | `knowledge.source.read` | — | — |
@@ -44,6 +52,11 @@ Cada operação aparece na sua linha. Duas operações distintas nunca são agru
 | `compute::list_nodes` | compute | Addressable | `compute.node.list` | — | — |
 | `organisation::create_unit` | organisation | Addressable | `organisation.unit.create` | — | — |
 | `data::create_dataset` | data | Addressable | `data.dataset.create` | — | — |
+| `messaging::open_direct` | messaging | Addressable | `messaging.direct.open` | — | — |
+| `messaging::create_group` | messaging | Addressable | `messaging.group.create` | — | — |
+| `messaging::send` | messaging | Addressable | `messaging.message.send` | — | — |
+| `messaging::add_member` | messaging | Addressable | `messaging.group.add_member` | — | — |
+| `messaging::remove_member` | messaging | NonDelegable | — | `AUTHORITY_BOUNDARY` | Retirar alguém de uma conversa muda quem ouve o que lá se diz a partir desse momento. É autoridade sobre a conversa, e não um efeito que se desfaz. |
 | `calendar::create_event` | calendar | Addressable | `calendar.event.create` | — | — |
 | `calendar::update_event` | calendar | Addressable | `calendar.event.update` | — | — |
 | `calendar::cancel_event` | calendar | Addressable | `calendar.event.cancel` | — | — |
@@ -64,18 +77,17 @@ Cada operação aparece na sua linha. Duas operações distintas nunca são agru
 | `identity::bootstrap_platform_admin` | identity | NonDelegable | — | `SECRET_BOUNDARY` | Emite a credencial inicial da instalação, e acontece quando ainda não há ninguém para autorizar seja o que for. É um acto de arranque, não uma operação institucional. |
 | `identity::set_photograph` | identity | NonDelegable | — | `USER_MEDIATED_BINARY_BOUNDARY` | A execução segura exige entrada binária mediada pela pessoa através da fronteira autenticada de carregamento. Bytes de ficheiro, caminhos locais, URLs arbitrários e credenciais de armazenamento não são entradas agentic. |
 | `compute::submit_job` | compute | NotImplemented | — | — | Não há trabalhos de computação no Core: o módulo regista nós e mais nada. |
-| `knowledge::create_result` | knowledge | NotImplemented | — | — | A entidade Resultado ainda não existe no domínio. |
 
 ## Contagens
 
 | | |
 |---|---|
-| Operações institucionais significativas | **53** |
-| `Addressable` | **38** |
-| `NonDelegable` | **13** |
-| `NotImplemented` | **2** |
+| Operações institucionais significativas | **65** |
+| `Addressable` | **49** |
+| `NonDelegable` | **15** |
+| `NotImplemented` | **1** |
 | Sem classificação | **0** |
-| Capabilities no registry | **38** |
+| Capabilities no registry | **49** |
 
 ## Fronteiras de confiança
 
@@ -83,8 +95,10 @@ Cada operação aparece na sua linha. Duas operações distintas nunca são agru
 
 **`SECRET_BOUNDARY`** — 5 operações: `identity::change_own_password`, `identity::reset_password`, `identity::create_member`, `identity::create_invitation`, `identity::bootstrap_platform_admin`
 
-**`AUTHORITY_BOUNDARY`** — 6 operações: `identity::grant_role`, `identity::revoke_role`, `identity::set_account_status`, `governance::create_grant`, `governance::revoke_grant`, `organisation::add_unit_member`
+**`AUTHORITY_BOUNDARY`** — 7 operações: `messaging::remove_member`, `identity::grant_role`, `identity::revoke_role`, `identity::set_account_status`, `governance::create_grant`, `governance::revoke_grant`, `organisation::add_unit_member`
 
 **`USER_MEDIATED_BINARY_BOUNDARY`** — 2 operações: `data::add_version_file`, `identity::set_photograph`
+
+**`INSTITUTIONAL_CLAIM_BOUNDARY`** — 1 operações: `science::record_validation`
 
 .

@@ -96,16 +96,16 @@ mod tests {
         #[derive(Debug)]
         #[allow(dead_code)]
         struct LoginRequest {
-            username: String,
+            email: String,
             password: Secret,
         }
 
         let request = LoginRequest {
-            username: "fmonteiro".into(),
+            email: "fidel@ocinye.com".into(),
             password: Secret::new("a very long passphrase indeed"),
         };
         let rendered = format!("{request:?}");
-        assert!(rendered.contains("fmonteiro"));
+        assert!(rendered.contains("fidel@ocinye.com"));
         assert!(!rendered.contains("passphrase"));
     }
 

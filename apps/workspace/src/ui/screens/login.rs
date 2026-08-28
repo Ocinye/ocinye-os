@@ -6,7 +6,8 @@
 //! # O que este ecrã deliberadamente não tem
 //!
 //! MFA, códigos de seis dígitos, registo público, login social, magic links,
-//! banners. A fase actual autentica com **nome de utilizador e palavra-passe**,
+//! banners. A fase actual autentica com **endereço institucional e
+//! palavra-passe** (ADR-0106),
 //! e mais nada (ADR-0103). MFA está `PLANNED`, não implementado.
 //!
 //! # Quem decide
@@ -86,18 +87,28 @@ pub fn login(core_ready: bool, message: Option<String>) -> impl IntoView {
 
                     <form method="post" action="/login">
                         <div class="oc-login__field">
-                            {icon(Icon::User, 13)}
-                            <label class="oc-sr" for="login-user">"Utilizador"</label>
+                            {icon(Icon::Mail, 13)}
+                            <label class="oc-sr" for="login-user">
+                                "Endereço institucional"
+                            </label>
+                            // `type="email"` e `autocomplete="username"`.
+                            //
+                            // Não é contradição: `username` é o nome que os
+                            // gestores de palavras-passe conhecem para «a
+                            // conta», e é com ele que guardam o par certo. O
+                            // que muda é o que lá se escreve — o endereço, que
+                            // desde o ADR-0106 é a credencial única.
                             <input
                                 id="login-user"
-                                name="username"
-                                type="text"
+                                name="email"
+                                type="email"
+                                inputmode="email"
                                 autocomplete="username"
                                 autocapitalize="none"
                                 autocorrect="off"
                                 spellcheck="false"
                                 required
-                                placeholder="Utilizador"
+                                placeholder="Endereço institucional"
                             />
                         </div>
 
@@ -188,7 +199,8 @@ mod tests {
         let html = login(true, None).to_html();
         assert!(html.contains(r#"method="post""#));
         assert!(html.contains(r#"action="/login""#));
-        assert!(html.contains(r#"name="username""#));
+        assert!(html.contains(r#"name="email""#));
+        assert!(html.contains(r#"type="email""#));
         assert!(html.contains(r#"name="password""#));
         assert!(html.contains(r#"type="password""#));
     }

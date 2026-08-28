@@ -38,8 +38,8 @@ pub const DEFAULT_TEMPORARY_CREDENTIAL_HOURS: i64 = 24;
 pub struct TemporaryCredential {
     /// The credential. Shown once, never recoverable (briefing §18).
     pub secret: Secret,
-    /// Sign-in name it belongs to.
-    pub username: String,
+    /// O endereço a que pertence.
+    pub email: String,
     /// When it stops working.
     pub expires_at: DateTime<Utc>,
 }
@@ -49,9 +49,7 @@ pub struct TemporaryCredential {
 pub struct NewMember {
     /// Full name.
     pub full_name: String,
-    /// Sign-in name.
-    pub username: String,
-    /// Institutional email.
+    /// O endereço institucional. É a identidade e a credencial (ADR-0106).
     pub email: String,
     /// Institutional position. Grants nothing (ADR-0100).
     pub position: Option<InstitutionalPosition>,
@@ -61,47 +59,51 @@ pub struct NewMember {
     pub unit_id: Option<Uuid>,
 }
 
-/// Validate a username against the shape the database will accept.
+/// Valida um endereço institucional.
 ///
-/// Checked here as well as in the constraint so the caller gets a usable
-/// message rather than a constraint violation.
+/// # Porque validar aqui e não só na base
+///
+/// Para que quem escreve mal receba uma frase que se lê, e não uma violação de
+/// restrição. A validação é deliberadamente frouxa: um endereço é o que o
+/// servidor de correio aceitar, e um analisador rigoroso de RFC recusaria
+/// endereços legítimos que existem por aí.
 ///
 /// # Errors
 ///
-/// Returns [`CoreError::Validation`] when the name is not acceptable.
-pub fn validate_username(username: &str) -> CoreResult<String> {
-    let trimmed = username.trim();
+/// Returns [`CoreError::Validation`] quando o endereço não é aceitável.
+pub fn validate_email(email: &str) -> CoreResult<String> {
+    let trimmed = email.trim().to_lowercase();
 
-    if trimmed.chars().count() < 3 || trimmed.chars().count() > 64 {
+    if trimmed.chars().count() < 5 || trimmed.chars().count() > 320 {
         return Err(CoreError::Validation(
-            "O nome de utilizador deve ter entre 3 e 64 caracteres.".to_owned(),
+            "O endereço deve ter entre 5 e 320 caracteres.".to_owned(),
         ));
     }
 
-    let mut chars = trimmed.chars();
-    let first = chars.next().unwrap_or(' ');
-    if !first.is_ascii_alphabetic() {
+    // Uma arroba, e uma só: `a@b@c` não é um endereço, e um `@` sozinho
+    // também não.
+    let partes: Vec<&str> = trimmed.split('@').collect();
+    if partes.len() != 2 || partes[0].is_empty() || partes[1].is_empty() {
         return Err(CoreError::Validation(
-            "O nome de utilizador deve começar por uma letra.".to_owned(),
+            "O endereço deve ter a forma «nome@dominio».".to_owned(),
         ));
     }
 
-    if !trimmed
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
-    {
+    // O domínio precisa de um ponto: `alguem@localhost` não é um endereço
+    // institucional.
+    if !partes[1].contains('.') || partes[1].starts_with('.') || partes[1].ends_with('.') {
         return Err(CoreError::Validation(
-            "O nome de utilizador só admite letras, dígitos, ponto, hífen e underscore.".to_owned(),
+            "O domínio do endereço não é válido.".to_owned(),
         ));
     }
 
-    if !trimmed.ends_with(|c: char| c.is_ascii_alphanumeric()) {
+    if trimmed.chars().any(char::is_whitespace) {
         return Err(CoreError::Validation(
-            "O nome de utilizador deve terminar em letra ou dígito.".to_owned(),
+            "Um endereço não tem espaços.".to_owned(),
         ));
     }
 
-    Ok(trimmed.to_owned())
+    Ok(trimmed)
 }
 
 /// Create a member account and issue its temporary credential.
@@ -112,7 +114,7 @@ pub fn validate_username(username: &str) -> CoreResult<String> {
 ///
 /// # Errors
 ///
-/// Returns [`CoreError::Validation`] for a bad username or email,
+/// Returns [`CoreError::Validation`] for a bad address,
 /// [`CoreError::Conflict`] when either is taken, and a database error otherwise.
 pub async fn create_member(
     pool: &PgPool,
@@ -121,18 +123,11 @@ pub async fn create_member(
     new: &NewMember,
     ids: &CorrelationIds,
 ) -> CoreResult<(Person, TemporaryCredential)> {
-    let username = validate_username(&new.username)?;
-    let email = new.email.trim().to_lowercase();
+    let email = validate_email(&new.email)?;
 
-    if !email.contains('@') || email.len() < 5 {
-        return Err(CoreError::Validation(
-            "Endereço de email inválido.".to_owned(),
-        ));
-    }
-
-    if repo::username_taken(pool, actor.organisation_id, &username).await? {
+    if repo::email_taken_in(pool, actor.organisation_id, &email).await? {
         return Err(CoreError::Conflict(
-            "Este nome de utilizador já está em uso.".to_owned(),
+            "Já existe uma conta com este endereço.".to_owned(),
         ));
     }
     if repo::email_taken(pool, &email).await? {
@@ -148,7 +143,6 @@ pub async fn create_member(
     let person = repo::insert_person(
         &mut *tx,
         actor.organisation_id,
-        &username,
         &email,
         new.full_name.trim(),
         new.position.map(InstitutionalPosition::as_str),
@@ -185,7 +179,7 @@ pub async fn create_member(
         ids,
         AuditEntry::new(action::MEMBER_CREATED, "person")
             .resource(person.id)
-            .detail("username", username.clone())
+            .detail("email", email.clone())
             .detail("role", new.role.as_str()),
     )
     .await?;
@@ -207,7 +201,7 @@ pub async fn create_member(
         person,
         TemporaryCredential {
             secret,
-            username,
+            email: email.clone(),
             expires_at,
         },
     ))
@@ -431,7 +425,7 @@ pub async fn reset_password(
 
     Ok(TemporaryCredential {
         secret,
-        username: person.username.clone().unwrap_or_default(),
+        email: person.email.clone(),
         expires_at,
     })
 }
@@ -518,13 +512,12 @@ const BOOTSTRAP_LOCK_CLASS: i32 = 0x0C11_0001_u32 as i32;
 /// # Errors
 ///
 /// Returns [`CoreError::Conflict`] when a platform administrator already
-/// exists, and [`CoreError::Validation`] for a bad username or email.
+/// exists, and [`CoreError::Validation`] for a bad address.
 pub async fn bootstrap_platform_admin(
     pool: &PgPool,
     authenticator: &Authenticator,
     organisation_id: Uuid,
     full_name: &str,
-    username: &str,
     email: &str,
     ids: &CorrelationIds,
 ) -> CoreResult<(Person, TemporaryCredential)> {
@@ -534,13 +527,7 @@ pub async fn bootstrap_platform_admin(
         ));
     }
 
-    let username = validate_username(username)?;
-    let email = email.trim().to_lowercase();
-    if !email.contains('@') {
-        return Err(CoreError::Validation(
-            "Endereço de email inválido.".to_owned(),
-        ));
-    }
+    let email = validate_email(email)?;
 
     let secret = generate::temporary_credential();
     let verifier = authenticator.hasher.hash(&secret)?;
@@ -552,7 +539,7 @@ pub async fn bootstrap_platform_admin(
     //
     // The re-check below is necessary and was not sufficient: a plain `SELECT`
     // under `READ COMMITTED` blocks nobody, so two concurrent runs both saw no
-    // administrator, both inserted a person with a different username, and both
+    // administrator, both inserted a person with a different address, and both
     // committed. Nothing in the schema forbids a second `platform_admin`, so
     // the installation ended up with two.
     //
@@ -577,7 +564,6 @@ pub async fn bootstrap_platform_admin(
     let person = repo::insert_person(
         &mut *tx,
         organisation_id,
-        &username,
         &email,
         full_name.trim(),
         Some(InstitutionalPosition::Founder.as_str()),
@@ -612,7 +598,7 @@ pub async fn bootstrap_platform_admin(
         AuditEntry::new(action::BOOTSTRAP_ADMIN, "person")
             .resource(person.id)
             .actor(person.id, organisation_id)
-            .detail("username", username.clone())
+            .detail("email", email.clone())
             .detail("expires_at", expires_at.to_rfc3339()),
     )
     .await?;
@@ -623,7 +609,7 @@ pub async fn bootstrap_platform_admin(
         person,
         TemporaryCredential {
             secret,
-            username,
+            email: email.clone(),
             expires_at,
         },
     ))
@@ -634,52 +620,60 @@ mod tests {
     use super::*;
 
     #[test]
-    fn acceptable_usernames_are_accepted() {
-        for username in ["fmonteiro", "f.monteiro", "a_b-c", "abc", "Joao123"] {
-            assert!(
-                validate_username(username).is_ok(),
-                "{username:?} should be accepted"
-            );
+    fn enderecos_aceitaveis_sao_aceites() {
+        for email in [
+            "fidel@ocinye.com",
+            "fidel.monteiro@ocinye.com",
+            "f+etiqueta@ocinye.com",
+            "a@b.co",
+            "nome-com-hifen@sub.dominio.pt",
+        ] {
+            assert!(validate_email(email).is_ok(), "{email:?} devia ser aceite");
         }
     }
 
     #[test]
-    fn unacceptable_usernames_are_refused() {
-        for username in [
-            "ab",           // too short
-            "1monteiro",    // does not start with a letter
-            ".monteiro",    // does not start with a letter
-            "f monteiro",   // space
-            "f@ocinye.com", // not a username
-            "monteiro-",    // ends with a separator
-            "monteiro.",    // ends with a separator
+    fn enderecos_inaceitaveis_sao_recusados() {
+        for email in [
+            "fidel",                 // sem arroba
+            "@ocinye.com",           // sem nome
+            "fidel@",                // sem domínio
+            "a@b@c.com",             // duas arrobas
+            "fidel@localhost",       // domínio sem ponto
+            "fidel@.com",            // domínio a começar por ponto
+            "fidel@ocinye.",         // domínio a acabar em ponto
+            "fidel monteiro@oc.com", // espaço
+            "a@b",                   // curto de mais e sem ponto
             "",
-            "  ",
-            "fmontéiro", // non-ASCII: ambiguous to type and to match
+            "   ",
         ] {
             assert!(
-                validate_username(username).is_err(),
-                "{username:?} should be refused"
+                validate_email(email).is_err(),
+                "{email:?} devia ser recusado"
             );
         }
     }
 
     #[test]
-    fn a_username_is_trimmed_but_not_otherwise_altered() {
-        assert_eq!(validate_username("  fmonteiro  ").unwrap(), "fmonteiro");
-        // Case is preserved: the person chose it.
-        assert_eq!(validate_username("FMonteiro").unwrap(), "FMonteiro");
+    fn um_endereco_e_normalizado_para_minusculas() {
+        // Um endereço não distingue maiúsculas para efeitos de identidade, e
+        // guardá-lo como foi escrito deixaria duas contas a poderem existir
+        // com o mesmo nome visto por uma pessoa.
+        assert_eq!(
+            validate_email("  Fidel.Monteiro@Ocinye.COM  ").unwrap(),
+            "fidel.monteiro@ocinye.com"
+        );
     }
 
     #[test]
     fn a_temporary_credential_is_not_debug_printable() {
         let credential = TemporaryCredential {
             secret: Secret::new("abcd-efgh-ijkl"),
-            username: "fmonteiro".into(),
+            email: "fidel@ocinye.com".into(),
             expires_at: Utc::now(),
         };
         let rendered = format!("{credential:?}");
-        assert!(rendered.contains("fmonteiro"));
+        assert!(rendered.contains("fidel@ocinye.com"));
         assert!(
             !rendered.contains("abcd-efgh-ijkl"),
             "the credential leaked through Debug"

@@ -45,7 +45,7 @@ Se houver período de aviso e a pessoa continuar a trabalhar, **suspenda apenas 
 
 ```bash
 psql "$OCINYE_DATABASE_URL" -c "
-  SELECT status, deactivated_at FROM people WHERE username = '<nome>'"
+  SELECT status, deactivated_at FROM people WHERE endereço = '<nome>'"
 
 psql "$OCINYE_DATABASE_URL" -c "
   SELECT count(*) FROM sessions WHERE person_id = '<uuid>' AND state <> 'revoked'"

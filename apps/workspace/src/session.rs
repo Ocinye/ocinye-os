@@ -31,16 +31,16 @@ pub struct Session {
     pub access_token: String,
     /// Display name, for the interface.
     pub display_name: String,
-    /// The username the member signed in with.
+    /// O endereço com que a pessoa entrou.
     ///
     /// Held only so the first-access screen can tell a password manager which
     /// account the new password belongs to. Without it the browser saves the
     /// credential with no name and, at the next sign-in, fills the password
-    /// while leaving the username empty.
+    /// while leaving the account empty.
     ///
     /// It is never sent to the Core and never authorises anything: the session
     /// token is what identifies the member.
-    pub username: String,
+    pub email: String,
     /// Whether the member still owes the Core a permanent password.
     ///
     /// Mirrors the Core's session state so the Workspace can send them to the
@@ -210,15 +210,93 @@ pub fn session_id_from_cookies(header: Option<&str>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+/// O nome do cookie onde o browser declara a sua zona horária.
+///
+/// Escrito por JavaScript, e por isso sem `HttpOnly`: o que ele leva é o nome de
+/// um fuso — `Europe/Lisbon` —, que não é segredo nem identifica ninguém.
+pub const ZONE_COOKIE: &str = "oc_tz";
+
+/// A zona que o browser declarou, se declarou.
+///
+/// # Porque o browser, e não uma preferência guardada
+///
+/// Porque o Ocinye não tem preferência de fuso por pessoa, e inventar uma
+/// enquanto se corrige um agrupamento seria decidir uma coisa que ninguém pediu.
+/// O browser já é a fonte de onde o formulário de marcação tira a zona de quem
+/// marca; é a mesma fonte, para a mesma pergunta.
+#[must_use]
+pub fn zone_from_cookies(header: Option<&str>) -> Option<String> {
+    let bruto = header?
+        .split(';')
+        .filter_map(|pair| pair.trim().split_once('='))
+        .find(|(name, _)| *name == ZONE_COOKIE)
+        .map(|(_, value)| value.trim().to_owned())
+        .filter(|value| !value.is_empty())?;
+
+    Some(descodificar(&bruto)).filter(|valor| !valor.is_empty())
+}
+
+/// Descodifica os `%XX` que o browser escreve.
+///
+/// # Porque isto é preciso
+///
+/// `encodeURIComponent('Europe/Lisbon')` dá `Europe%2FLisbon`, e um nome de fuso
+/// com `%2F` não existe em base de dados de fusos nenhuma. Sem esta conversão a
+/// zona era sempre inválida, caía em UTC, e o Calendário continuava a agrupar em
+/// Greenwich — com um cookie a dizer o contrário, que é a pior maneira de um
+/// defeito se esconder.
+///
+/// Só descodifica; não interpreta. O que sair daqui continua a ter de ser um
+/// fuso conhecido para ser aceite.
+fn descodificar(valor: &str) -> String {
+    let bytes = valor.as_bytes();
+    let mut saida = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("");
+            if let Ok(byte) = u8::from_str_radix(hex, 16) {
+                saida.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        saida.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8(saida).unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_zona_do_browser_chega_descodificada() {
+        // `encodeURIComponent('Europe/Lisbon')` dá `Europe%2FLisbon`, e sem
+        // descodificar isto o fuso era sempre inválido — e o Calendário
+        // agrupava em UTC com um cookie a dizer que não.
+        assert_eq!(
+            zone_from_cookies(Some("oc_tz=Europe%2FLisbon")).as_deref(),
+            Some("Europe/Lisbon")
+        );
+        assert_eq!(
+            zone_from_cookies(Some("a=b; oc_tz=America%2FSao_Paulo; c=d")).as_deref(),
+            Some("America/Sao_Paulo")
+        );
+        // Já descodificado passa na mesma.
+        assert_eq!(zone_from_cookies(Some("oc_tz=UTC")).as_deref(), Some("UTC"));
+        assert_eq!(zone_from_cookies(Some("outro=x")), None);
+        assert_eq!(zone_from_cookies(None), None);
+        // Um `%` solto não faz rebentar nada.
+        assert_eq!(zone_from_cookies(Some("oc_tz=%")).as_deref(), Some("%"));
+    }
 
     fn session() -> Session {
         Session {
             access_token: "token".into(),
             display_name: "Member".into(),
-            username: "member".into(),
+            email: "member@ocinye.com".into(),
             must_change_password: false,
             expires_at: Instant::now() + Duration::from_secs(60),
         }
@@ -339,7 +417,7 @@ mod tests {
         Session {
             access_token: "t".to_owned(),
             display_name: "Alguém".to_owned(),
-            username: "alguem".to_owned(),
+            email: "alguem@ocinye.com".to_owned(),
             must_change_password: false,
             expires_at: Instant::now() + Duration::from_secs(600),
         }

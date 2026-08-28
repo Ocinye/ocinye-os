@@ -477,23 +477,23 @@ pub async fn live_grants<'e>(
 /// Returns an error when the query fails.
 pub async fn attempt_summary<'e>(
     executor: impl PgExecutor<'e> + Copy,
-    username: &str,
+    email: &str,
 ) -> CoreResult<(Option<DateTime<Utc>>, i64)> {
     let last: Option<DateTime<Utc>> = sqlx::query_scalar(
         "SELECT max(attempted_at) FROM authentication_attempts
-          WHERE lower(username) = lower($1) AND outcome = 'succeeded'",
+          WHERE lower(email) = lower($1) AND outcome = 'succeeded'",
     )
-    .bind(username)
+    .bind(email)
     .fetch_one(executor)
     .await?;
 
     let failures: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM authentication_attempts
-          WHERE lower(username) = lower($1)
+          WHERE lower(email) = lower($1)
             AND outcome <> 'succeeded'
             AND attempted_at > now() - interval '7 days'",
     )
-    .bind(username)
+    .bind(email)
     .fetch_one(executor)
     .await?;
 

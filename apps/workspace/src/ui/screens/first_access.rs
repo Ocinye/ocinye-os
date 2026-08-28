@@ -25,10 +25,10 @@ const MIN_LENGTH: usize = 15;
 ///
 /// `message` traz a recusa do Core — comprimento, blocklist, reutilização da
 /// credencial temporária — tal como o Core a redigiu.
-pub fn first_access(display_name: &str, username: &str, message: Option<String>) -> impl IntoView {
+pub fn first_access(display_name: &str, email: &str, message: Option<String>) -> impl IntoView {
     let initials = crate::ui::initials(display_name);
     let name = display_name.to_owned();
-    let username = username.to_owned();
+    let email = email.to_owned();
 
     view! {
         <div class="oc-login">
@@ -92,7 +92,7 @@ pub fn first_access(display_name: &str, username: &str, message: Option<String>)
                         <input
                             type="text"
                             name="_username"
-                            value=username.clone()
+                            value=email.clone()
                             autocomplete="username"
                             aria-hidden="true"
                             tabindex="-1"

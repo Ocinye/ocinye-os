@@ -41,6 +41,15 @@ pub struct Button {
     icon: Option<Icon>,
     /// Ponto dourado à esquerda do rótulo, como nas acções de IA.
     dot: bool,
+    /// O gancho que a camada de interacção ouve, quando o botão não navega.
+    ///
+    /// # Porque existe
+    ///
+    /// Porque um botão sem destino e sem gancho é um botão que submete — e nem
+    /// toda a acção é uma submissão. «Nova conversa» abre um diálogo, e sem
+    /// isto ficava desenhado, alcançável pelo teclado, e mudo. Que é
+    /// exactamente o que aconteceu.
+    action: Option<String>,
     /// Por que razão a acção não está disponível, quando não está.
     ///
     /// A razão viaja com o botão porque **são várias**: o ecrã de destino pode
@@ -59,8 +68,19 @@ impl Button {
             href: None,
             icon: None,
             dot: false,
+            action: None,
             unavailable: None,
         }
+    }
+
+    /// Dá-lhe um gancho para a camada de interacção.
+    ///
+    /// O botão passa a ser `type="button"`: não submete nada, e o que faz é o
+    /// que o `app.js` decidir para este nome.
+    #[must_use]
+    pub fn with_action(mut self, action: impl Into<String>) -> Self {
+        self.action = Some(action.into());
+        self
     }
 
     /// Torna-o uma ligação.
@@ -107,6 +127,7 @@ pub fn button(spec: Button) -> impl IntoView {
         href,
         icon: kind,
         dot,
+        action,
         unavailable,
     } = spec;
     let class = variant.class();
@@ -149,6 +170,18 @@ pub fn button(spec: Button) -> impl IntoView {
     // componente que não seja um link nem tenha `data-oc` existe para submeter
     // alguma coisa — se não existir formulário à volta dele, é o formulário que
     // falta, e o teste estrutural passou a exigi-lo.
+    // Com gancho, é um `<button type="button">`: não submete, e a interacção
+    // decide o que acontece.
+    if let Some(action) = action {
+        let content = inner(label.clone());
+        return view! {
+            <button type="button" class=class data-oc=action>
+                {content}
+            </button>
+        }
+        .into_any();
+    }
+
     href.map_or_else(
         || {
             let content = inner(label.clone());

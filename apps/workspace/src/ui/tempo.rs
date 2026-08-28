@@ -19,7 +19,8 @@
 //! deixar de ser, isto passa a receber um locale — e nessa altura o sítio onde
 //! mexer é um só, que é precisamente a razão de existir.
 
-use chrono::{Datelike, NaiveDate};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, Utc};
+use ocinye_contracts::temporal::TimeZoneName;
 
 /// Os meses, de Janeiro a Dezembro.
 const MESES: [&str; 12] = [
@@ -404,5 +405,182 @@ mod horario {
         let valor = para_campo(quando(2026, 8, 26, 19, 30));
         assert_eq!(valor, "2026-08-26T19:30");
         assert!(!valor.contains(':') || valor.matches(':').count() == 1);
+    }
+}
+
+// ── O dia civil ─────────────────────────────────────────────────────────
+//
+// # Porque isto é uma primitiva e não uma linha em cada vista
+//
+// Porque «em que dia isto cai» tem de ter **uma** resposta no Ocinye inteiro.
+// Quando cada vista a calculava por si, todas escreviam `instante.date_naive()`
+// — que é a data em UTC — e o Calendário passou a mostrar um compromisso das
+// 00:30 em Lisboa no dia anterior, às 23:30.
+//
+// O defeito não estava numa vista. Estava em não haver sítio nenhum onde a
+// pergunta se fizesse uma vez.
+
+/// A data civil de um instante, na zona em que se está a olhar.
+///
+/// # Porque a zona é um parâmetro obrigatório
+///
+/// Porque não existe «a data» de um instante. Existe a data **em algum sítio**,
+/// e um valor por omissão aqui seria um sítio escolhido em silêncio. Obrigar a
+/// dizê-lo torna o defeito impossível de escrever por distracção.
+#[must_use]
+pub fn dia_civil(instante: DateTime<Utc>, zona: TimeZoneName) -> NaiveDate {
+    ocinye_contracts::temporal::in_zone(instante, zona).date()
+}
+
+/// A hora civil de um instante, na zona em que se está a olhar.
+#[must_use]
+pub fn hora_civil(instante: DateTime<Utc>, zona: TimeZoneName) -> NaiveDateTime {
+    ocinye_contracts::temporal::in_zone(instante, zona)
+}
+
+/// O dia de hoje, na zona em que se está a olhar.
+///
+/// Substitui `Utc::now().date_naive()`, que responde «hoje em Greenwich» a quem
+/// pergunta «hoje aqui».
+#[must_use]
+pub fn hoje_civil(agora: DateTime<Utc>, zona: TimeZoneName) -> NaiveDate {
+    dia_civil(agora, zona)
+}
+
+/// A zona em que não se sabe onde a pessoa está.
+///
+/// UTC é a resposta menos errada quando o browser ainda não disse a sua — e não
+/// uma preferência institucional. Uma instalação que queira outra coisa
+/// decide-o noutro sítio, e não aqui.
+#[must_use]
+pub fn zona_por_omissao() -> TimeZoneName {
+    "UTC"
+        .to_owned()
+        .try_into()
+        .unwrap_or_else(|_| unreachable!("UTC é uma zona conhecida da base de dados de fusos"))
+}
+
+/// Lê a zona que o browser declarou, ou devolve a de omissão.
+///
+/// # Porque vem do browser e não de uma preferência guardada
+///
+/// Porque o Ocinye ainda não tem preferência de fuso por pessoa, e inventar uma
+/// nesta correcção seria decidir uma coisa que ninguém pediu. O browser já é a
+/// fonte que o repositório usa para saber onde alguém está — é dela que o
+/// formulário de marcação tira a zona de quem marca.
+///
+/// Uma zona desconhecida ou ausente cai em UTC, em vez de recusar: não saber
+/// onde a pessoa está não é razão para não lhe mostrar o calendário.
+#[must_use]
+pub fn zona_declarada(valor: Option<&str>) -> TimeZoneName {
+    valor
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .and_then(|v| TimeZoneName::try_from(v.to_owned()).ok())
+        .unwrap_or_else(zona_por_omissao)
+}
+
+#[cfg(test)]
+mod dia_civil_e_da_zona {
+    use super::*;
+
+    fn zona(nome: &str) -> TimeZoneName {
+        nome.to_owned().try_into().expect("fuso conhecido")
+    }
+
+    fn instante(texto: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(texto)
+            .expect("instante")
+            .with_timezone(&Utc)
+    }
+
+    #[test]
+    fn meia_noite_e_meia_em_lisboa_pertence_ao_dia_de_lisboa() {
+        // O caso que motivou esta primitiva. `2026-08-26T23:30Z` é
+        // `2026-08-27T00:30` em Lisboa: pertence ao dia 27, e não ao 26.
+        let quando = instante("2026-08-26T23:30:00Z");
+
+        assert_eq!(
+            dia_civil(quando, zona("Europe/Lisbon")),
+            NaiveDate::from_ymd_opt(2026, 8, 27).unwrap(),
+            "um compromisso das 00:30 em Lisboa apareceu no dia anterior"
+        );
+        // E em UTC continua a ser o 26, que é o que se guarda — e que não é o
+        // que se mostra.
+        assert_eq!(
+            dia_civil(quando, zona("UTC")),
+            NaiveDate::from_ymd_opt(2026, 8, 26).unwrap()
+        );
+    }
+
+    #[test]
+    fn a_fronteira_ao_contrario_tambem_conta() {
+        // A oeste, o dia civil fica **atrás** do de UTC. `2026-08-27T02:00Z` é
+        // ainda dia 26 em São Paulo.
+        let quando = instante("2026-08-27T02:00:00Z");
+
+        assert_eq!(
+            dia_civil(quando, zona("America/Sao_Paulo")),
+            NaiveDate::from_ymd_opt(2026, 8, 26).unwrap(),
+            "a oeste, o dia civil pode estar atrás do de UTC"
+        );
+    }
+
+    #[test]
+    fn a_hora_mostrada_e_a_hora_de_quem_olha() {
+        // Não é só o dia. `clock()` formatava o instante em UTC, e uma pessoa em
+        // Lisboa via «23:30» num compromisso que marcou para as «00:30».
+        let quando = instante("2026-08-26T23:30:00Z");
+        let civil = hora_civil(quando, zona("Europe/Lisbon"));
+
+        assert_eq!(civil.format("%H:%M").to_string(), "00:30");
+    }
+
+    #[test]
+    fn um_dia_de_mudanca_de_hora_nao_tem_vinte_e_quatro_horas() {
+        // Em Lisboa, o último domingo de Outubro tem 25 horas. Um agrupamento
+        // que assumisse 24 punha a última hora do dia no dia seguinte.
+        //
+        // 2026-10-25: às 02:00 locais recua para 01:00. `2026-10-25T01:30Z` é
+        // `01:30` locais (já depois do recuo, porque o recuo é às 01:00 UTC).
+        let antes = instante("2026-10-25T00:30:00Z");
+        let depois = instante("2026-10-25T01:30:00Z");
+        let lisboa = zona("Europe/Lisbon");
+
+        assert_eq!(
+            dia_civil(antes, lisboa),
+            NaiveDate::from_ymd_opt(2026, 10, 25).unwrap()
+        );
+        assert_eq!(
+            dia_civil(depois, lisboa),
+            NaiveDate::from_ymd_opt(2026, 10, 25).unwrap()
+        );
+        // As duas horas locais são diferentes, e a diferença entre elas não é
+        // uma hora: é isso que uma mudança de hora significa.
+        let h1 = hora_civil(antes, lisboa).format("%H:%M").to_string();
+        let h2 = hora_civil(depois, lisboa).format("%H:%M").to_string();
+        assert_eq!(h1, "01:30");
+        assert_eq!(h2, "01:30", "a hora repete-se quando o relógio recua");
+    }
+
+    #[test]
+    fn uma_zona_desconhecida_cai_em_utc_em_vez_de_recusar() {
+        assert_eq!(zona_declarada(Some("Marte/Olympus")).as_str(), "UTC");
+        assert_eq!(zona_declarada(None).as_str(), "UTC");
+        assert_eq!(zona_declarada(Some("  ")).as_str(), "UTC");
+        assert_eq!(
+            zona_declarada(Some("Europe/Lisbon")).as_str(),
+            "Europe/Lisbon"
+        );
+    }
+
+    #[test]
+    fn hoje_e_hoje_onde_a_pessoa_esta() {
+        let quando = instante("2026-08-26T23:30:00Z");
+        assert_eq!(
+            hoje_civil(quando, zona("Europe/Lisbon")),
+            NaiveDate::from_ymd_opt(2026, 8, 27).unwrap(),
+            "«Hoje» respondeu com o dia de Greenwich a quem está em Lisboa"
+        );
     }
 }

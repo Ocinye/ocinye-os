@@ -76,6 +76,18 @@
   --oc-shadow-overlay: 0 30px 80px rgba(7,30,51,.32);
   --oc-shadow-logo:    0 18px 50px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.14);
 
+  /* Painéis pousados — ver «Painéis pousados» */
+  --oc-pop-surface: color-mix(in srgb, var(--oc-surface) 88%, transparent);
+  --oc-pop-blur:    blur(18px) saturate(140%);
+  --oc-pop-line:    color-mix(in srgb, var(--oc-border) 70%, transparent);
+  --oc-pop-radius:  13px;
+  --oc-pop-hover:   color-mix(in srgb, var(--oc-navy) 6%, transparent);
+  --oc-pop-pad:     6px;
+  --oc-pop-shadow:
+    0 16px 40px rgba(11,26,45,.20),
+    0 2px 8px rgba(11,26,45,.10),
+    inset 0 1px 0 rgba(255,255,255,.60);
+
   /* Escala de apresentação */
   --oc-interface-scale: 1.15;
 
@@ -181,6 +193,86 @@ Semânticas, e nunca numéricas. Um módulo não precisa de saber que `modal` va
 
 Três não têm consumidor. Ficam declaradas porque a hierarquia se decide uma vez,
 e não se negoceia a cada superfície que aparece.
+
+## Painéis pousados
+
+Um painel que abre por cima da interface — o menu da conta, o sino das
+notificações, o calendário da barra — não é um cartão. É uma **superfície
+pousada**: lê-se como algo por cima do que está por baixo, e não como um
+rectângulo colado.
+
+| Token | Valor |
+| --- | --- |
+| `--oc-pop-surface` | `color-mix(in srgb, var(--oc-surface) 88%, transparent)` |
+| `--oc-pop-blur` | `blur(18px) saturate(140%)` |
+| `--oc-pop-line` | `color-mix(in srgb, var(--oc-border) 70%, transparent)` |
+| `--oc-pop-radius` | 13px |
+| `--oc-pop-shadow` | três camadas — ver abaixo |
+| `--oc-pop-hover` | `color-mix(in srgb, var(--oc-navy) 6%, transparent)` |
+| `--oc-pop-pad` | 6px |
+
+A translucidez é ligeira **de propósito**. A 88% o painel deixa adivinhar o que
+está por baixo sem que o texto dependa disso: onde o browser não souber
+desfocar, o fundo continua quase opaco e não se perde nada.
+
+A sombra tem três camadas, e cada uma faz uma coisa:
+
+```
+0 16px 40px rgba(11,26,45,.20)      o assentamento largo — o painel está longe do fundo
+0 2px 8px rgba(11,26,45,.10)        o contacto curto — a aresta encosta a algo
+inset 0 1px 0 rgba(255,255,255,.60) o fio de luz em cima — dá a espessura
+```
+
+### Como se escreve um painel novo
+
+Não se escolhe nada. A classe traz a superfície inteira:
+
+```html
+<div class="oc-pop meu-painel" hidden>
+  <div class="oc-pop__head">
+    <span class="oc-pop__title">Título</span>
+    <span class="oc-pop__meta">3 POR LER</span>
+  </div>
+  <a class="oc-pop__item" href="…">
+    <svg …/>
+    <span><b>O assunto</b><em>o que isto é</em></span>
+  </a>
+  <div class="oc-pop__foot">…</div>
+</div>
+```
+
+A regra própria do painel declara **só o que o distingue** — onde abre e que
+largura tem:
+
+```css
+.meu-painel { top: calc(100% + 8px); right: 0; width: 320px; }
+```
+
+O ritmo das linhas faz parte do acabamento tanto como a superfície: ícone à
+esquerda, assunto a negrito, e por baixo uma linha a dizer o que aquilo é. Um
+painel com a superfície certa e linhas de texto seco lê-se como menos acabado
+do que os outros, e foi assim que o sino ficou durante um dia.
+
+### O que está fechado
+
+Os valores vivem nos tokens e em mais lado nenhum. Reescrevê-los numa regra
+nova falha o portão `a_superficie_de_um_painel_nao_se_reescreve`, em
+`apps/workspace/tests/design_fidelity.rs`.
+
+O portão não procura a classe — procura o **valor repetido**. Um portão que
+exigisse `.oc-pop` seria satisfeito por quem acrescentasse a classe e depois a
+sobrepusesse; o que falha é a cópia, e é a cópia que se mede.
+
+Isto não é zelo abstracto. Três painéis chegaram a este acabamento nesta
+interface, e as três vezes por cópia. Das três, uma foi parar dentro de uma
+`@media` e não se aplicava em ecrã normal, outra reescreveu a referência em vez
+de a seguir, e a terceira ficou com a superfície certa e o conteúdo por acabar.
+Nenhuma delas apareceu num portão; as três apareceram numa captura.
+
+**O menu da conta é a referência e não participa.** Continua a escrever as
+propriedades à mão — pelos tokens, com os mesmos valores — porque uma referência
+que participa deixa de ser referência: passa a poder mudar com o grupo, e no dia
+em que mudar não há contra o quê comparar.
 
 ## Foco
 

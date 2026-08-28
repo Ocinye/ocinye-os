@@ -44,7 +44,7 @@ pub fn routes() -> Router<AppState> {
 /// Credentials presented at sign-in.
 #[derive(Deserialize)]
 struct LoginRequest {
-    username: String,
+    email: String,
     password: Secret,
 }
 
@@ -150,7 +150,7 @@ async fn login(
         .authenticator
         .sign_in(
             &state.pool,
-            &request.username,
+            &request.email,
             &request.password,
             &context,
             &ids,
@@ -198,7 +198,7 @@ async fn logout(
 #[derive(Serialize)]
 struct RestrictedIdentity {
     display_name: String,
-    username: Option<String>,
+
     state: &'static str,
     must_change_password: bool,
     /// Minimum password length, so the interface can state the rule without
@@ -215,7 +215,6 @@ async fn session(
 ) -> Json<RestrictedIdentity> {
     Json(RestrictedIdentity {
         display_name: person.preferred_name().to_owned(),
-        username: person.username.clone(),
         state: session.state.as_str(),
         must_change_password: !session.state.permits_ordinary_work(),
         minimum_password_length: policy::MIN_LENGTH,

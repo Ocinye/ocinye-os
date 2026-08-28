@@ -153,6 +153,13 @@ jobs:
       - name: Biblioteca de ADRs
         run: python3 scripts/check-adrs.py
 
+      # Os nomes dos *required checks* de `main` correspondem a jobs que
+      # existem. Renomear um job não falha: o check deixa de ser reportado, e o
+      # Pull Request espera indefinidamente por um resultado que ninguém
+      # produz — com o aspecto de uma CI lenta.
+      - name: Contrato da protecção de main
+        run: python3 scripts/branch_protection_contract.py
+
   # Vulnerabilidades conhecidas nas dependências.
   #
   # `cargo audit` e não `rustsec/audit-check`: as excepções vivem em

@@ -114,6 +114,7 @@ O que o Ocinye OS é, onde reside a autoridade, e sobre que runtime assenta.
 - [ADR-0009](0009-postgresql-sqlx.md) — PostgreSQL com SQLx e SQL explícito
 - [ADR-0010](0010-events-outbox.md) — Eventos de domínio com transactional outbox
 - [ADR-0011](0011-redis.md) — Redis para filas e coordenação
+- [ADR-0012](0012-realtime-plane.md) — O plano realtime: uma ligação que dura, sobre uma autoridade que não
 
 ### 0100–0199 · Identidade, Segurança, Autorização e Governação
 
@@ -124,6 +125,7 @@ Quem entra, o que pode, e como fica registado.
 - [ADR-0102](0102-identity-provider.md) — Identity Provider dedicado (Keycloak) — **Superseded**
 - [ADR-0103](0103-core-owned-authentication.md) — Autenticação no Ocinye Core (username + password)
 - [ADR-0104](0104-password-policy-and-hashing.md) — Política de palavras-passe e armazenamento de verificadores
+- [ADR-0106](0106-email-as-the-single-credential.md) — O endereço institucional é a credencial única
 - [ADR-0105](0105-dependency-advisory-coverage.md) — Nenhuma base de advisories é tratada como exaustiva
 
 ### 0200–0299 · Conhecimento, Dados, Armazenamento e Memória Institucional
@@ -161,7 +163,9 @@ Decisões próprias de cada módulo do Ocinye OS.
 - [ADR-0407](0407-mail-index-not-archive.md) — `mail_messages` é um índice, não um arquivo
 - [ADR-0408](0408-imap-transport.md) — O transporte IMAP: cifra obrigatória, pastas descobertas, sessão por operação
 - [ADR-0411](0411-execution-time-principal-freshness.md) — Autoridade estabelece-se na execução, não no planeamento
+- [ADR-0409](0409-mailbox-credentials-per-member.md) — Duas credenciais de correio: a da instituição e a de cada membro
 - [ADR-0410](0410-temporal-center-and-native-calendar.md) — Ocinye Temporal Center e Calendário Nativo
+- [ADR-0412](0412-scientific-lifecycle-and-provenance.md) — Ciclo de vida científico e proveniência de primeira classe
 
 ### 0500–0599 · Computação, Nós e Capability Runtime
 
@@ -200,6 +204,7 @@ nenhuma ADR será criada apenas para as preencher.
 | [0009](0009-postgresql-sqlx.md) | PostgreSQL com SQLx e SQL explícito | Foundation | `HIGH` | Accepted |
 | [0010](0010-events-outbox.md) | Eventos de domínio com transactional outbox | Foundation | `HIGH` | Accepted |
 | [0011](0011-redis.md) | Redis para filas e coordenação | Foundation | `MEDIUM` | Accepted |
+| [0012](0012-realtime-plane.md) | O plano realtime: uma ligação que dura, sobre uma autoridade que não | Foundation | `HIGH` | Accepted |
 | [0100](0100-authorization-model.md) | RBAC + ABAC contextual, fail closed | Security | `FOUNDATIONAL` | Accepted |
 | [0101](0101-permissions-scopes-and-grants.md) | Permissões nomeadas, âmbitos e grants explícitos | Security | `HIGH` | Accepted |
 | [0102](0102-identity-provider.md) | Identity Provider dedicado (Keycloak) | Identity | `HIGH` | Superseded |
@@ -225,8 +230,10 @@ nenhuma ADR será criada apenas para as preencher.
 | [0406](0406-ai-generated-is-not-sent.md) | Texto gerado não é mensagem enviada | Mail | `MEDIUM` | Accepted |
 | [0407](0407-mail-index-not-archive.md) | `mail_messages` é um índice, não um arquivo | Mail | `MEDIUM` | Accepted |
 | [0408](0408-imap-transport.md) | O transporte IMAP: cifra obrigatória, pastas descobertas, sessão por operação | Mail | `LOCAL` | Accepted |
+| [0409](0409-mailbox-credentials-per-member.md) | Duas credenciais de correio: a da instituição e a de cada membro | Mail | `HIGH` | Accepted |
 | [0410](0410-temporal-center-and-native-calendar.md) | Ocinye Temporal Center e Calendário Nativo | Calendar | `HIGH` | Accepted |
 | [0411](0411-execution-time-principal-freshness.md) | Autoridade estabelece-se na execução, não no planeamento | Security | `HIGH` | Accepted |
+| [0412](0412-scientific-lifecycle-and-provenance.md) | Ciclo de vida científico e proveniência de primeira classe | Science | `HIGH` | Accepted |
 | [0500](0500-compute-registry-node-agent.md) | Compute Registry e Node Agent | Compute | `HIGH` | Accepted |
 | [0501](0501-capability-runtime-wasm.md) | Capability Runtime em WebAssembly/WASI | Compute | `HIGH` | Accepted |
 | [0600](0600-leptos-workspace-runtime.md) | Leptos para o Workspace Runtime | Workspace | `MEDIUM` | Accepted |

@@ -15,8 +15,11 @@ mod identity;
 mod intelligence;
 mod knowledge;
 mod mail;
+mod messaging;
 mod organisation;
+pub mod realtime;
 mod research;
+mod science;
 mod search;
 mod system;
 
@@ -63,8 +66,11 @@ pub fn router(state: AppState) -> Router {
         .merge(organisation::routes())
         .merge(research::routes())
         .merge(knowledge::routes())
+        .merge(science::routes())
         .merge(collaboration::routes())
         .merge(mail::routes())
+        .merge(messaging::routes())
+        .merge(realtime::routes())
         .merge(search::routes())
         .merge(intelligence::routes())
         .merge(compute::routes())

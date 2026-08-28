@@ -93,6 +93,36 @@ ou a exposição de investigação e de dados sob restrições contratuais.
 | **Audit tampering** | Trigger na base de dados rejeita `UPDATE` e `DELETE`. | Implementado, verificado. |
 | **Insider misuse** | Auditoria com actor, momento, alvo, classificação e correlação; mudanças de classificação exigem motivo. | Implementado. |
 
+### Proveniência e linhagem científica
+
+A linhagem é uma superfície nova: percorre relações entre recursos, e a **forma
+do grafo é ela própria informação**. Saber que um resultado depende de mais três
+coisas já diz que há três coisas, e a que unidade pertencem costuma deduzir-se do
+resto.
+
+| Ameaça | Mitigação | Estado |
+|---|---|---|
+| **Travessia por trás de uma fronteira** | Cada nó é resolvido pelo serviço que o detém, com a política de quem percorre; um nó recusado termina a travessia e as suas arestas não são seguidas. | Implementado, testado. |
+| **Canal lateral pela topologia** | Um nó recusado não devolve nada: nem identificador, nem tipo, nem título, nem ambiente, nem contagem. Uma fronteira escondida é indistinguível de uma folha visível. | Implementado, testado por comparação de respostas. |
+| **`truncated` como sinal de existência** | `truncated` significa apenas que a consulta atingiu o limite de profundidade **entre os recursos visíveis**; um nó recusado nunca o activa. | Implementado, testado. |
+| **Aresta para um recurso inalcançável** | Ambas as pontas são resolvidas com a política de quem escreve, antes de a relação existir. Um identificador nomeia âmbito; não o concede. | Implementado, testado. |
+| **Relação semanticamente impossível** | Matriz de compatibilidade sobre a tripla tipo + verbo + tipo, fail closed. | Implementado, testado. |
+| **Travessia sem fim** | Conjunto de visitados e tecto de profundidade: um ciclo científico legítimo não prende a consulta. | Implementado, testado. |
+| **`workspace_id NULL` lido como acesso global** | `NULL` significa que a relação não está confinada a um ambiente; a visibilidade continua a decidir-se pelas duas pontas. | Implementado. |
+
+### Afirmação institucional indevida
+
+Um actor indevidamente capaz de validar um resultado não está a alterar
+metadados. Está a produzir uma **afirmação institucional**: o registo passa a
+dizer que a Ocinye tem aquele resultado por confirmado, e diz em nome de alguém.
+
+| Ameaça | Mitigação | Estado |
+|---|---|---|
+| **Validar sem autoridade** | `results.validate` é uma permissão própria, que não decorre de poder escrever no ambiente; a operação exige-a. | Implementado, testado. |
+| **Delegação a um agente** | `science::record_validation` é `non_delegable` atrás da `INSTITUTIONAL_CLAIM_BOUNDARY`; nenhuma capability a executa, e uma aprovação não a abre. | Implementado, testado percorrendo o registry. |
+| **Rótulo sem evidência** | Uma reprodução exige a execução que a sustenta. | Implementado, testado. |
+| **Proveniência inventada por inferência** | `origin = operation` só é escrito por operações que observaram a relação; o caminho agentic escreve `declared`. | Implementado. |
+
 ### Inteligência
 
 | Ameaça | Mitigação | Estado |

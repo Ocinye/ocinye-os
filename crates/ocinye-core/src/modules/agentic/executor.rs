@@ -94,6 +94,16 @@ pub struct ExecutionContext<'a> {
     /// Está aqui e não dentro do handler porque a escolha do componente é do
     /// Core: um handler recebe a porta, e nunca a abre por conta própria.
     pub capabilities: &'a crate::capabilities::Capabilities,
+    /// O plano de tempo real.
+    ///
+    /// Está aqui pela mesma razão que o Capability Runtime: uma operação que
+    /// propaga tem de propagar por qualquer entrada. Sem ele, a capability de
+    /// mensagens teria de chamar uma variante que não publica — e passaria a
+    /// haver duas maneiras de enviar, que é exactamente o que o ADR-0307 recusa.
+    ///
+    /// O plano agentic **não** fala com o Redis: passa isto à operação do Core,
+    /// e é ela que decide o que anuncia e quando.
+    pub realtime: &'a crate::realtime::Realtime,
     /// Describe the effect instead of causing it.
     pub dry_run: bool,
     /// Correlation, carried end to end.
@@ -304,6 +314,7 @@ fn refused(
 pub async fn execute(
     pool: &PgPool,
     capabilities: &crate::capabilities::Capabilities,
+    realtime: &crate::realtime::Realtime,
     principal: &Principal,
     agent: &AgentBoundary,
     agent_id: Option<Uuid>,
@@ -449,6 +460,7 @@ pub async fn execute(
         input: &request.input,
         resources: &resolved,
         capabilities,
+        realtime,
         dry_run: request.dry_run,
         ids,
     };

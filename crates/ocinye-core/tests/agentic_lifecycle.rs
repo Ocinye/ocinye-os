@@ -28,6 +28,7 @@ use ocinye_contracts::PageRequest;
 use ocinye_core::modules::agentic::{lifecycle, repository as plan_repo, runtime};
 use ocinye_core::modules::intelligence::fixture::FixtureProvider;
 use ocinye_core::modules::intelligence::InferenceProvider;
+use ocinye_core::realtime::Realtime;
 use ocinye_core::CoreError;
 use ocinye_domain::Principal;
 use ocinye_observability::CorrelationIds;
@@ -64,8 +65,8 @@ async fn person(pool: &PgPool, organisation_id: Uuid, roles: &[&str]) -> Princip
     let handle = format!("p{}", Uuid::new_v4().simple());
 
     let person_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO people (organisation_id, full_name, email, username, status)
-         VALUES ($1, $2, $3, $2, 'active') RETURNING id",
+        "INSERT INTO people (organisation_id, full_name, email, status)
+         VALUES ($1, $2, $3, 'active') RETURNING id",
     )
     .bind(organisation_id)
     .bind(&handle)
@@ -388,9 +389,16 @@ async fn another_actor_cannot_reach_a_plan_by_knowing_its_identifier() {
             .await
             .err(),
         lifecycle::reject(&pool, &carlos, &ids, plan.id).await.err(),
-        lifecycle::execute(&pool, capacidades(), &carlos, &ids, plan.id)
-            .await
-            .err(),
+        lifecycle::execute(
+            &pool,
+            capacidades(),
+            &Realtime::ausente(),
+            &carlos,
+            &ids,
+            plan.id,
+        )
+        .await
+        .err(),
     ] {
         let error = outcome.expect("every operation must refuse");
         assert!(
@@ -480,7 +488,15 @@ async fn one_persons_consent_does_not_serve_another() {
     .expect("membership");
     let carlos = reload(&pool, carlos.person_id).await;
 
-    let outcome = lifecycle::execute(&pool, capacidades(), &carlos, &ids, plan.id).await;
+    let outcome = lifecycle::execute(
+        &pool,
+        capacidades(),
+        &Realtime::ausente(),
+        &carlos,
+        &ids,
+        plan.id,
+    )
+    .await;
     assert!(
         matches!(outcome, Err(CoreError::NotFound(_))),
         "somebody else spent a confirmation that was not theirs: {outcome:?}"
@@ -518,7 +534,15 @@ async fn an_expired_confirmation_executes_nothing() {
     .await
     .expect("expire");
 
-    let outcome = lifecycle::execute(&pool, capacidades(), &actor, &ids, plan.id).await;
+    let outcome = lifecycle::execute(
+        &pool,
+        capacidades(),
+        &Realtime::ausente(),
+        &actor,
+        &ids,
+        plan.id,
+    )
+    .await;
     assert!(
         matches!(outcome, Err(CoreError::Validation(_))),
         "an expired confirmation still ran the plan: {outcome:?}"
@@ -558,7 +582,15 @@ async fn a_rejected_plan_can_never_run() {
         "{approved:?}"
     );
 
-    let executed = lifecycle::execute(&pool, capacidades(), &actor, &ids, plan.id).await;
+    let executed = lifecycle::execute(
+        &pool,
+        capacidades(),
+        &Realtime::ausente(),
+        &actor,
+        &ids,
+        plan.id,
+    )
+    .await;
     assert!(
         matches!(executed, Err(CoreError::Conflict(_))),
         "{executed:?}"
@@ -618,9 +650,16 @@ async fn revoking_access_after_approval_stops_the_execution() {
     // The principal is rebuilt, exactly as the next request would build it.
     let actor = reload(&pool, actor.person_id).await;
 
-    let executed = lifecycle::execute(&pool, capacidades(), &actor, &ids, plan.id)
-        .await
-        .expect("the lifecycle answers rather than failing");
+    let executed = lifecycle::execute(
+        &pool,
+        capacidades(),
+        &Realtime::ausente(),
+        &actor,
+        &ids,
+        plan.id,
+    )
+    .await
+    .expect("the lifecycle answers rather than failing");
 
     assert_ne!(
         executed.state,
@@ -689,9 +728,16 @@ async fn raising_classification_after_approval_stops_the_execution() {
     .expect("revoke");
 
     let actor = reload(&pool, actor.person_id).await;
-    let executed = lifecycle::execute(&pool, capacidades(), &actor, &ids, plan.id)
-        .await
-        .expect("answers");
+    let executed = lifecycle::execute(
+        &pool,
+        capacidades(),
+        &Realtime::ausente(),
+        &actor,
+        &ids,
+        plan.id,
+    )
+    .await
+    .expect("answers");
 
     assert_ne!(executed.state, PlanState::Completed);
     assert_eq!(notes_in(&pool, ws.id).await, 0);
@@ -733,9 +779,16 @@ async fn the_whole_lifecycle_changes_institutional_state_exactly_once() {
         .expect("approve");
 
     // 3. Execution.
-    let executed = lifecycle::execute(&pool, capacidades(), &actor, &ids, plan.id)
-        .await
-        .expect("execute");
+    let executed = lifecycle::execute(
+        &pool,
+        capacidades(),
+        &Realtime::ausente(),
+        &actor,
+        &ids,
+        plan.id,
+    )
+    .await
+    .expect("execute");
 
     assert_eq!(
         executed.state,
@@ -758,7 +811,15 @@ async fn the_whole_lifecycle_changes_institutional_state_exactly_once() {
     assert!(!settled.is_open());
 
     // 5. A retry does not do it again.
-    let again = lifecycle::execute(&pool, capacidades(), &actor, &ids, plan.id).await;
+    let again = lifecycle::execute(
+        &pool,
+        capacidades(),
+        &Realtime::ausente(),
+        &actor,
+        &ids,
+        plan.id,
+    )
+    .await;
     assert!(
         matches!(again, Err(CoreError::Conflict(_))),
         "a completed plan accepted a second execution: {again:?}"
@@ -805,7 +866,17 @@ async fn two_concurrent_executions_produce_one_effect() {
             let pool = pool.clone();
             let actor = actor.clone();
             let ids = ids.clone();
-            async move { lifecycle::execute(&pool, capacidades(), &actor, &ids, plan.id).await }
+            async move {
+                lifecycle::execute(
+                    &pool,
+                    capacidades(),
+                    &Realtime::ausente(),
+                    &actor,
+                    &ids,
+                    plan.id,
+                )
+                .await
+            }
         };
 
         let (first, second) = tokio::join!(run(), run());
@@ -878,7 +949,15 @@ async fn approve_and_reject_cannot_both_win() {
         // And the property that actually protects anything: if the refusal won,
         // nothing can run afterwards.
         if detail.stored.state == PlanState::Rejected {
-            let executed = lifecycle::execute(&pool, capacidades(), &actor, &ids, plan.id).await;
+            let executed = lifecycle::execute(
+                &pool,
+                capacidades(),
+                &Realtime::ausente(),
+                &actor,
+                &ids,
+                plan.id,
+            )
+            .await;
             assert!(
                 matches!(executed, Err(CoreError::Conflict(_))),
                 "round {round}: a rejected plan was executable: {executed:?}"
@@ -928,7 +1007,15 @@ async fn an_external_effect_never_runs_unconfirmed_through_the_lifecycle() {
     assert!(detail.requires_approval);
 
     // Straight to execution, with no confirmation.
-    let executed = lifecycle::execute(&pool, capacidades(), &actor, &ids, plan.id).await;
+    let executed = lifecycle::execute(
+        &pool,
+        capacidades(),
+        &Realtime::ausente(),
+        &actor,
+        &ids,
+        plan.id,
+    )
+    .await;
     assert!(
         matches!(executed, Err(CoreError::Validation(_))),
         "an unconfirmed external effect was admitted: {executed:?}"
@@ -979,7 +1066,15 @@ async fn a_plan_that_cannot_be_read_settles_instead_of_staying_claimed() {
     .await
     .expect("insert");
 
-    let executed = lifecycle::execute(&pool, capacidades(), &actor, &ids, plan_id).await;
+    let executed = lifecycle::execute(
+        &pool,
+        capacidades(),
+        &Realtime::ausente(),
+        &actor,
+        &ids,
+        plan_id,
+    )
+    .await;
     assert!(
         matches!(executed, Err(CoreError::Internal(_))),
         "a plan that does not match its digest was run: {executed:?}"
@@ -1061,9 +1156,16 @@ async fn a_plan_cannot_run_on_authority_captured_before_it_was_revoked() {
     );
 
     // The stale snapshot goes in. Nothing reloads it.
-    let executed = lifecycle::execute(&pool, capacidades(), &stale, &ids, plan.id)
-        .await
-        .expect("the lifecycle answers");
+    let executed = lifecycle::execute(
+        &pool,
+        capacidades(),
+        &Realtime::ausente(),
+        &stale,
+        &ids,
+        plan.id,
+    )
+    .await
+    .expect("the lifecycle answers");
 
     assert_ne!(
         executed.state,
@@ -1104,7 +1206,15 @@ async fn a_suspended_account_executes_nothing() {
         .await
         .expect("suspend");
 
-    let executed = lifecycle::execute(&pool, capacidades(), &stale, &ids, plan.id).await;
+    let executed = lifecycle::execute(
+        &pool,
+        capacidades(),
+        &Realtime::ausente(),
+        &stale,
+        &ids,
+        plan.id,
+    )
+    .await;
 
     assert!(
         executed.is_err(),
@@ -1157,9 +1267,16 @@ async fn a_revoked_role_stops_the_execution() {
         "a autoridade não mudou de facto: o teste não mede nada"
     );
 
-    let executed = lifecycle::execute(&pool, capacidades(), &stale, &ids, plan.id)
-        .await
-        .expect("the lifecycle answers");
+    let executed = lifecycle::execute(
+        &pool,
+        capacidades(),
+        &Realtime::ausente(),
+        &stale,
+        &ids,
+        plan.id,
+    )
+    .await
+    .expect("the lifecycle answers");
 
     assert_ne!(executed.state, PlanState::Completed);
     assert_eq!(notes_in(&pool, ws.id).await, 0);

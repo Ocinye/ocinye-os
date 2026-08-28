@@ -78,6 +78,27 @@
   --oc-shadow-overlay: 0 30px 80px rgba(7,30,51,.32);
   --oc-shadow-logo:    0 18px 50px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.14);
 
+  /* Painéis pousados — a superfície de qualquer popover.
+     Um painel que abre por cima da interface não é um cartão: é uma superfície
+     pousada. A translucidez é ligeira de propósito — 88% — para se ler como
+     algo por cima do que está por baixo, e não como um rectângulo colado. Onde
+     o browser não souber desfocar, o fundo continua quase opaco e nada se
+     perde: o texto nunca depende do que está atrás dele.
+     Definido aqui **uma vez**. Quem escrever um painel novo usa `.oc-pop` e
+     herda isto sem o repetir — e há um portão que recusa quem o repetir. */
+  --oc-pop-surface: color-mix(in srgb, var(--oc-surface) 88%, transparent);
+  --oc-pop-blur:    blur(18px) saturate(140%);
+  --oc-pop-line:    color-mix(in srgb, var(--oc-border) 70%, transparent);
+  --oc-pop-radius:  13px;
+  --oc-pop-hover:   color-mix(in srgb, var(--oc-navy) 6%, transparent);
+  --oc-pop-pad:     6px;
+  /* Três camadas: o assentamento largo, o contacto curto, e um fio de luz na
+     aresta de cima que dá a espessura. */
+  --oc-pop-shadow:
+    0 16px 40px rgba(11,26,45,.20),
+    0 2px 8px rgba(11,26,45,.10),
+    inset 0 1px 0 rgba(255,255,255,.60);
+
   /* Escala de apresentação. Ver o bloco «Escala da interface». */
   --oc-interface-scale: 1.15;
 
@@ -398,7 +419,8 @@ svg { display: block; flex-shrink: 0; }
      menu. O popover não depende do texto da barra — mede-se pelo gatilho, e o
      gatilho é o avatar. */
   .oc-profile { justify-content: center; padding: 7px 0; }
-  .oc-account__menu { left: 0; width: 268px; }
+  
+.oc-account__menu { left: 0; width: 268px; }
 
   /* Estreita, a barra tem 58px e o cabeçalho traz duas coisas: o logótipo
      (26px) e o botão que a volta a abrir (22px). Lado a lado com o espaço
@@ -511,29 +533,123 @@ svg { display: block; flex-shrink: 0; }
    Abre para cima porque o gatilho está no fundo, e para a direita porque a
    barra é estreita. `max-width` com `100vw` impede-o de sair da viewport
    quando a janela é pequena. */
+/* ── A superfície de um painel ───────────────────────────────────────────
+ *
+ * Um painel do Ocinye é uma **superfície pousada**, e não um rectângulo colado
+ * à barra. A translucidez é ligeira de propósito — 88% —, e onde o browser não
+ * souber desfocar o fundo continua quase opaco: o texto nunca depende do que
+ * está por trás.
+ *
+ * Três camadas de sombra: o assentamento largo, o contacto curto, e um fio de
+ * luz na aresta de cima que dá a espessura.
+ *
+ * Isto esteve escrito só no painel da conta, e os outros dois — o sino e o
+ * calendário — eram caixas planas. Um sistema onde o mesmo gesto abre coisas
+ * com acabamentos diferentes é um sistema que parece montado por pessoas que
+ * não falaram umas com as outras. */
+
+.oc-pop {
+  position: absolute;
+  z-index: var(--oc-z-popover);
+  max-width: calc(100vw - 24px);
+  padding: var(--oc-pop-pad);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  background: var(--oc-pop-surface);
+  backdrop-filter: var(--oc-pop-blur);
+  -webkit-backdrop-filter: var(--oc-pop-blur);
+
+  border: 1px solid var(--oc-pop-line);
+  border-radius: var(--oc-pop-radius);
+  box-shadow: var(--oc-pop-shadow);
+}
+
+.oc-pop[hidden] { display: none; }
+
+/* O cabeçalho de um painel: o que ele é, e o que se pode fazer com tudo. */
+.oc-pop__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--oc-space-4);
+  padding: 10px 10px 11px;
+  border-bottom: 1px solid var(--oc-pop-line);
+  margin-bottom: 4px;
+}
+
+.oc-pop__title {
+  font: 600 12.5px var(--oc-font-sans);
+  color: var(--oc-text);
+}
+
+.oc-pop__meta {
+  font: 500 9.5px var(--oc-font-mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--oc-text-muted);
+}
+
+/* Uma linha do painel. Mesma altura, mesmo raio e mesmo realce que as do
+   painel da conta — é o mesmo gesto. */
+.oc-pop__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 9px;
+  border-radius: var(--oc-r-md);
+  width: 100%;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  color: var(--oc-text);
+  transition: background var(--oc-duration-fast) ease;
+}
+
+.oc-pop__item:hover { background: var(--oc-pop-hover); }
+.oc-pop__item b { display: block; font: 500 12px var(--oc-font-sans); color: var(--oc-text); }
+
+.oc-pop__item em {
+  display: block;
+  margin-top: 1px;
+  font-style: normal;
+  font: 400 10.5px var(--oc-font-sans);
+  color: var(--oc-text-muted);
+}
+
+.oc-pop__foot {
+  padding: 8px 10px 6px;
+  margin-top: 3px;
+  border-top: 1px solid var(--oc-pop-line);
+}
+
+.oc-pop__empty {
+  padding: 18px 10px 20px;
+  text-align: center;
+  font: 400 11.5px var(--oc-font-sans);
+  color: var(--oc-text-muted);
+}
+
 .oc-account__menu {
   position: absolute; bottom: calc(100% + 8px); left: 0;
   width: 276px; max-width: calc(100vw - 24px);
   z-index: var(--oc-z-dropdown);
 
-  /* Uma superfície, não uma caixa.
-     A translucidez é ligeira de propósito — 88% — e serve para o menu se ler
-     como algo pousado por cima da barra, e não como um rectângulo colado a ela.
-     Onde o browser não souber desfocar, o fundo continua quase opaco e nada se
-     perde: o texto nunca depende do que está por trás. */
-  background: color-mix(in srgb, var(--oc-surface) 88%, transparent);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  /* A superfície dos painéis pousados. Foi aqui que ela nasceu; hoje vive nos
+     tokens `--oc-pop-*`, e é de lá que todos os painéis a tiram. Este continua
+     a escrevê-la à mão em vez de usar `.oc-pop` por uma razão só: é a
+     referência, e uma referência que participa deixa de ser referência. */
+  background: var(--oc-pop-surface);
+  backdrop-filter: var(--oc-pop-blur);
+  -webkit-backdrop-filter: var(--oc-pop-blur);
 
-  border: 1px solid color-mix(in srgb, var(--oc-border) 70%, transparent);
-  border-radius: 13px;
-  /* Três camadas: o assentamento largo, o contacto curto, e um fio de luz na
-     aresta de cima que dá a espessura. */
-  box-shadow:
-    0 16px 40px rgba(11,26,45,.20),
-    0 2px 8px rgba(11,26,45,.10),
-    inset 0 1px 0 rgba(255,255,255,.60);
-  padding: 6px;
+  border: 1px solid var(--oc-pop-line);
+  border-radius: var(--oc-pop-radius);
+  box-shadow: var(--oc-pop-shadow);
+  padding: var(--oc-pop-pad);
   display: flex; flex-direction: column; gap: 2px;
 }
 .oc-account__menu[hidden] { display: none; }
@@ -541,7 +657,7 @@ svg { display: block; flex-shrink: 0; }
 .oc-account__id {
   display: flex; align-items: center; gap: 11px;
   padding: 10px 10px 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--oc-border) 70%, transparent);
+  border-bottom: 1px solid var(--oc-pop-line);
   margin-bottom: 5px;
 }
 .oc-account__id .oc-avatar { background: var(--oc-navy); }
@@ -574,7 +690,7 @@ svg { display: block; flex-shrink: 0; }
   transition: background var(--oc-duration-fast) ease;
 }
 .oc-account__item:hover {
-  background: color-mix(in srgb, var(--oc-navy) 6%, transparent);
+  background: var(--oc-pop-hover);
   color: var(--oc-text);
 }
 .oc-account__item:hover > svg { color: var(--oc-navy); }
@@ -582,7 +698,7 @@ svg { display: block; flex-shrink: 0; }
 .oc-account__session {
   display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
   padding: 9px 10px; margin-top: 4px;
-  border-top: 1px solid color-mix(in srgb, var(--oc-border) 70%, transparent);
+  border-top: 1px solid var(--oc-pop-line);
 }
 .oc-account__session-label {
   font: 500 9.5px var(--oc-font-mono); letter-spacing: .06em; color: var(--oc-text-muted);
@@ -595,7 +711,7 @@ svg { display: block; flex-shrink: 0; }
 /* Terminar sessão é a única acção daqui que destrói alguma coisa, e é a única
    separada por um divisor. */
 .oc-account__out {
-  border-top: 1px solid color-mix(in srgb, var(--oc-border) 70%, transparent);
+  border-top: 1px solid var(--oc-pop-line);
   padding-top: 5px; margin-top: 2px;
 }
 .oc-account__item--out b { color: var(--oc-error); }
@@ -742,6 +858,18 @@ svg { display: block; flex-shrink: 0; }
 .oc-page--home { max-width: 1560px; }
 .oc-page--narrow { max-width: 1060px; }
 .oc-page--feed { max-width: 900px; }
+
+/* O Correio ocupa o ecrã e não o transborda.
+   A altura é a do que sobra abaixo da topbar, e o que passa disso rola
+   **dentro** dos painéis. Sem isto, a página inteira ganhava barra e o
+   cabeçalho — com o «Escrever» — desaparecia ao descer a lista. */
+.oc-page--mail {
+  height: calc(100vh - var(--oc-topbar-h));
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+}
 
 /* ─── Botões ─────────────────────────────────────────────────────────── */
 
@@ -909,6 +1037,12 @@ svg { display: block; flex-shrink: 0; }
 
 .oc-grid { display: grid; gap: 12px; align-items: start; }
 .oc-grid--4 { grid-template-columns: repeat(4, 1fr); }
+/* Duas colunas iguais, para conteúdos que são pares.
+   `--detail` é 1.5fr 1fr de propósito: um painel principal e um lado. As
+   quatro etapas de uma cadeia científica não têm principal nem lado — e usar
+   `--detail` fazia as duas filas partirem em sítios diferentes, porque cada
+   uma tinha o seu conteúdo. Duas filas desalinhadas lêem-se como um erro. */
+.oc-grid--pares { grid-template-columns: 1fr 1fr; }
 .oc-grid--main { grid-template-columns: 1.35fr 1fr; }
 .oc-grid--detail { grid-template-columns: 1.5fr 1fr; }
 .oc-grid--ws { grid-template-columns: 1.4fr 1fr 1fr; }
@@ -1657,7 +1791,9 @@ svg { display: block; flex-shrink: 0; }
 }
 @media (max-width: 1180px) {
   .oc-grid--4 { grid-template-columns: repeat(2, 1fr); }
-  .oc-grid--main, .oc-grid--detail, .oc-grid--form { grid-template-columns: 1fr; }
+  .oc-grid--main, .oc-grid--detail, .oc-grid--form, .oc-grid--pares {
+    grid-template-columns: 1fr;
+  }
   .oc-search { flex-basis: 260px; }
 }
 @media (max-width: 1024px) {
@@ -1878,6 +2014,14 @@ div.oc-result { cursor: default; }
 .oc-notice {
   max-width: 520px; margin: 96px auto; padding: 0 24px; text-align: center;
 }
+/* O aparte de um aviso: o que continua verdadeiro, e não o que aconteceu.
+   Vive por baixo da explicação e pesa menos — quem lê precisa primeiro de saber
+   o que falta, e só depois de que não foi culpa sua. */
+.oc-notice__aside {
+  font: 400 12px var(--oc-font-sans);
+  color: var(--oc-text-muted);
+}
+
 .oc-notice__tile {
   display: inline-grid; place-items: center;
   width: 56px; height: 56px; margin-bottom: 18px;
@@ -1895,24 +2039,475 @@ div.oc-result { cursor: default; }
 /* Três colunas fixas em vez de percentagens: a lista de mensagens tem de
    manter largura previsível enquanto se lê, ou o texto salta de posição
    sempre que se abre uma mensagem mais larga. */
+/* ─── Ocinye Mail ──────────────────────────────────────────────────────
+
+   Uma superfície, e não três cartões.
+
+   As três colunas eram três caixas, cada uma com o seu contorno e o seu raio,
+   dentro de uma página dentro de uma casca. Três molduras encaixadas lêem-se
+   como um painel de administração; uma aplicação de correio é **um sítio**,
+   dividido por linhas finas e pelos separadores que a pessoa arrasta.
+
+   As larguras vivem em variáveis porque quem manda nelas é quem está a olhar.
+   O JavaScript escreve-as no elemento; o CSS não sabe de onde vieram, e o Core
+   não sabe que existem. */
 .oc-mail {
   display: grid;
-  grid-template-columns: 200px 300px minmax(0, 1fr);
-  gap: 12px; align-items: start;
+  grid-template-columns:
+    var(--oc-mail-pastas, 224px)
+    auto
+    var(--oc-mail-lista, 330px)
+    auto
+    minmax(0, 1fr);
+  align-items: stretch;
+
+  background: var(--oc-surface);
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-lg);
+  overflow: hidden;
+
+  /* Ocupa o que sobra na página, e não uma altura calculada à mão.
+     Era `min-height: calc(100vh - topbar - 140px)` — um número estimado para
+     o cabeçalho, que ficava errado assim que um aviso aparecia por cima. A
+     página é agora uma coluna com altura própria, e o grid fica com o resto:
+     ninguém tem de adivinhar quanto. */
+  flex: 1;
+  min-height: 0;
 }
 
-/* Abaixo de 1200px a coluna de leitura passa para baixo em vez de encolher
-   até deixar de ser legível. O desktop continua a ser o alvo (§50). */
-@media (max-width: 1200px) {
-  .oc-mail { grid-template-columns: 180px minmax(0, 1fr); }
-  .oc-mail__pane { grid-column: 1 / -1; }
+/* Cada painel na sua coluna, dita e não deduzida.
+
+   Sem isto a colocação era automática, e a colocação automática **ignora os
+   elementos escondidos**: recolher as pastas fazia a lista e a leitura
+   deslizarem para as colunas de trás, e o painel de leitura ia ocupar a faixa
+   estreita da lista. Recolher as pastas encolhia a leitura — o contrário do
+   que o gesto promete. */
+.oc-mail__rail { grid-column: 1; }
+.oc-mail__split[data-oc-separador="pastas"] { grid-column: 2; }
+.oc-mail__list { grid-column: 3; }
+.oc-mail__split[data-oc-separador="lista"] { grid-column: 4; }
+.oc-mail__pane { grid-column: 5; }
+
+/* Cada painel rola por dentro, e a página não rola por fora: uma lista longa
+   não deve empurrar a leitura para fora do ecrã. */
+.oc-mail__rail,
+.oc-mail__list,
+.oc-mail__pane {
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
 }
-@media (max-width: 820px) {
+
+/* ── Os separadores ─────────────────────────────────────────────────────
+
+   A área sensível é maior do que a linha: uma linha de um pixel é bonita e é
+   impossível de agarrar. O elemento tem largura de sobra e a linha desenha-se
+   ao meio dele. */
+.oc-mail__split {
+  width: 9px;
+  cursor: col-resize;
+  display: flex;
+  justify-content: center;
+  background: none;
+  border: 0;
+  padding: 0;
+  touch-action: none;
+}
+
+.oc-mail__split-linha {
+  width: 1px;
+  background: var(--oc-border);
+  transition: background var(--oc-duration-fast) ease, width var(--oc-duration-fast) ease;
+}
+
+.oc-mail__split:hover .oc-mail__split-linha,
+.oc-mail__split[data-oc-activo="true"] .oc-mail__split-linha {
+  width: 3px;
+  background: var(--oc-navy);
+}
+
+.oc-mail__split:focus-visible {
+  outline: var(--oc-focus-width) solid var(--oc-focus-color);
+  outline-offset: calc(var(--oc-focus-offset) * -1);
+}
+
+/* Enquanto se arrasta, o cursor é o do separador em todo o lado e nada
+   selecciona texto: sem isto, arrastar sobre a lista pinta-a de azul. */
+.oc-mail[data-oc-arrastar="true"] {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* ── Quando o ecrã não chega para três ──────────────────────────────────
+
+   Três painéis exigem espaço para os três: 150px de pastas, 240px de lista e
+   380px de leitura são os mínimos abaixo dos quais cada um deixa de mostrar o
+   que existe para mostrar. Quando a soma não cabe, comprimi-los todos dá três
+   colunas inúteis — e foi o que aconteceu antes de isto existir: a leitura
+   ficou com duzentos pixéis, e uma mensagem não se lê em duzentos pixéis.
+
+   Portanto **escolhe-se**. Primeiro cai a divisão entre lista e leitura: a
+   leitura passa para baixo, com toda a largura. Depois caem as pastas.
+
+   Os separadores desaparecem com as divisões que deixam de existir: um
+   separador que não separa nada oferece um gesto sem efeito. */
+@media (max-width: 1260px) {
+  .oc-mail {
+    grid-template-columns: var(--oc-mail-pastas, 190px) auto minmax(0, 1fr);
+  }
+  .oc-mail__split[data-oc-separador="lista"] { display: none; }
+  .oc-mail__list { grid-column: 3; }
+  .oc-mail__pane { grid-column: 1 / -1; border-top: 1px solid var(--oc-border); }
+  .oc-mail[data-oc-pastas="recolhido"] {
+    grid-template-columns: 0 0 minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 860px) {
   .oc-mail { grid-template-columns: minmax(0, 1fr); }
+  .oc-mail__rail { border-bottom: 1px solid var(--oc-border); }
+  .oc-mail__list { border-bottom: 1px solid var(--oc-border); }
+  .oc-mail__split { display: none; }
+  .oc-mail__rail,
+  .oc-mail__list,
+  .oc-mail__pane { grid-column: 1; }
+  /* Numa janela estreita a preferência do desktop não manda: as colunas já
+     não existem, e uma largura guardada não pode ressuscitá-las. */
+  .oc-mail[data-oc-pastas="recolhido"] { grid-template-columns: minmax(0, 1fr); }
+  .oc-mail[data-oc-pastas="recolhido"] .oc-mail__rail { display: none; }
+}
+
+/* ── Pastas recolhidas ──────────────────────────────────────────────────
+
+   A coluna vai a zero e o separador que lhe pertence desaparece com ela: um
+   separador que não separa nada continuaria a ocupar espaço e a oferecer um
+   gesto sem efeito. O caminho de volta é o botão da barra, que fica premido —
+   não depende de passar o rato por cima de uma zona invisível. */
+.oc-mail[data-oc-pastas="recolhido"] {
+  grid-template-columns: 0 0 var(--oc-mail-lista, 330px) auto minmax(0, 1fr);
+}
+.oc-mail[data-oc-pastas="recolhido"] .oc-mail__rail,
+.oc-mail[data-oc-pastas="recolhido"] .oc-mail__split[data-oc-separador="pastas"] {
+  display: none;
+}
+
+/* Os comandos de disposição ficam encostados ao resto das acções, e pesam
+   menos: mudam o espaço, não o correio. */
+.oc-mail__disposicao { display: flex; gap: 2px; margin-right: 4px; }
+
+/* ─── O compositor ─────────────────────────────────────────────────────
+
+   Uma janela sobre o correio, e não uma página à parte: escrever faz-se a
+   olhar para a caixa.
+
+   A posição e o tamanho vivem em variáveis porque quem manda neles é quem
+   está a escrever. Os valores por omissão põem-na em baixo à direita, que é
+   onde não tapa a lista nem o que se está a responder. */
+.oc-comp {
+  position: fixed;
+  right: var(--oc-comp-direita, 28px);
+  bottom: var(--oc-comp-fundo, 0px);
+  width: var(--oc-comp-largura, 620px);
+  height: var(--oc-comp-altura, 560px);
+  z-index: var(--oc-z-modal);
+
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  background: var(--oc-surface);
+  border: 1px solid var(--oc-border-strong);
+  border-radius: var(--oc-r-lg) var(--oc-r-lg) 0 0;
+  box-shadow: var(--oc-pop-shadow);
+}
+
+/* Expandido: quase tudo o que há, e reversível pelo mesmo botão.
+   Não é ecrã inteiro do browser — a casca do Workspace continua visível, e
+   sair disto não é sair da aplicação. */
+.oc-comp[data-oc-expandido="true"] {
+  right: 4vw;
+  bottom: 3vh;
+  /* Ancorada **em cima**, e não por altura.
+     Era `height: 88vh` a partir do fundo, e a barra de título saía pela borda
+     superior: a janela ficava sem a pega, sem o botão de repor e sem o de
+     fechar. Fixando o topo abaixo da topbar, a barra está sempre lá — e o
+     caminho de volta com ela. */
+  top: calc(var(--oc-topbar-h) + 16px);
+  height: auto;
+  width: min(92vw, 1100px);
+  left: auto;
+  border-radius: var(--oc-r-lg);
+}
+
+.oc-comp__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--oc-navy);
+  color: var(--oc-on-navy);
+  cursor: move;
+  flex-shrink: 0;
+}
+.oc-comp__titulo { font: 600 13px var(--oc-font-sans); margin: 0; }
+.oc-comp__janela { display: flex; gap: 2px; }
+.oc-comp__janela .oc-icon-btn { color: var(--oc-on-navy); }
+.oc-comp__janela .oc-icon-btn:hover { background: var(--oc-on-navy-hover); }
+
+.oc-comp__erro,
+.oc-comp__gerado {
+  margin: 0;
+  padding: 9px 14px;
+  font: 400 12px var(--oc-font-sans);
+  border-bottom: 1px solid var(--oc-border-soft);
+}
+.oc-comp__erro { background: var(--oc-error-bg); color: var(--oc-error-text); }
+.oc-comp__gerado { background: var(--oc-gold-bg); color: var(--oc-gold-text); }
+
+.oc-comp__forma {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+/* ── As linhas de cabeçalho ─────────────────────────────────────────────
+
+   Rótulo estreito à esquerda, campo a ocupar o resto. Sem caixas com borda
+   em torno de cada um: um cabeçalho de mensagem é uma lista de factos, e
+   emoldurar cada facto é o que fazia isto parecer um formulário. */
+.oc-comp__linha {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--oc-border-faint);
+}
+.oc-comp__linha[hidden] { display: none; }
+
+.oc-comp__rotulo {
+  flex-shrink: 0;
+  width: 34px;
+  padding-top: 5px;
+  font: 400 11.5px var(--oc-font-sans);
+  color: var(--oc-text-meta);
+}
+
+.oc-comp__campo { flex: 1; min-width: 0; position: relative; }
+
+.oc-comp__de { padding-top: 4px; font-size: 12.5px; color: var(--oc-text); }
+.oc-comp__sem-identidade {
+  padding-top: 4px;
+  font: 400 12px var(--oc-font-sans);
+  color: var(--oc-error-text);
+}
+
+/* O campo de texto sem aspecto de campo de texto: a moldura é a linha. */
+.oc-comp__entrada {
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 4px 0;
+  font: 400 12.5px var(--oc-font-sans);
+  color: var(--oc-text);
+}
+.oc-comp__entrada:focus { outline: none; }
+.oc-comp__entrada::placeholder { color: var(--oc-placeholder); }
+
+.oc-comp__cc {
+  flex-shrink: 0;
+  border: 0;
+  background: none;
+  padding: 5px 6px;
+  font: 500 11.5px var(--oc-font-sans);
+  color: var(--oc-text-meta);
+  cursor: pointer;
+  border-radius: var(--oc-r-xs);
+}
+.oc-comp__cc:hover { background: var(--oc-surface-muted); color: var(--oc-navy); }
+
+/* ── As fichas ──────────────────────────────────────────────────────────
+
+   Um destinatário aceite deixa de ser texto e passa a ser uma coisa: vê-se
+   quantos são, vê-se qual é qual, e tira-se um sem apagar letras. */
+.oc-chips { display: flex; flex-wrap: wrap; gap: 4px; padding-bottom: 4px; }
+.oc-chips[hidden] { display: none; }
+
+.oc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 4px 2px 8px;
+  border-radius: 11px;
+  background: var(--oc-surface-tint);
+  font: 400 11.5px var(--oc-font-sans);
+  color: var(--oc-text);
+}
+.oc-chip > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oc-chip button {
+  border: 0;
+  background: none;
+  padding: 0 3px;
+  cursor: pointer;
+  color: var(--oc-text-meta);
+  line-height: 1;
+}
+.oc-chip button:hover { color: var(--oc-error); }
+
+/* ── As sugestões ───────────────────────────────────────────────────────
+
+   Nome e endereço, porque dois colegas podem chamar-se o mesmo. Nunca um
+   nome de utilizador: ele não existe (ADR-0106). */
+.oc-sugestoes {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: var(--oc-z-popover);
+  margin: 4px 0 0;
+  padding: var(--oc-pop-pad);
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+
+  background: var(--oc-pop-surface);
+  backdrop-filter: var(--oc-pop-blur);
+  -webkit-backdrop-filter: var(--oc-pop-blur);
+  border: 1px solid var(--oc-pop-line);
+  border-radius: var(--oc-pop-radius);
+  box-shadow: var(--oc-pop-shadow);
+}
+.oc-sugestoes[hidden] { display: none; }
+
+.oc-sugestao {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  background: none;
+  border-radius: var(--oc-r-md);
+  text-align: left;
+  cursor: pointer;
+}
+.oc-sugestao:hover,
+.oc-sugestao[data-oc-activa="true"] { background: var(--oc-pop-hover); }
+.oc-sugestao b { font: 500 12px var(--oc-font-sans); color: var(--oc-text); }
+.oc-sugestao em {
+  font: 400 10.5px var(--oc-font-mono);
+  font-style: normal;
+  color: var(--oc-text-muted);
+}
+
+/* ── Assunto e corpo ────────────────────────────────────────────────────
+
+   O corpo é a superfície dominante: é onde a mensagem acontece, e tudo o
+   resto é cabeçalho. */
+.oc-comp__assunto {
+  border: 0;
+  border-bottom: 1px solid var(--oc-border-faint);
+  background: none;
+  padding: 10px 14px;
+  font: 500 13.5px var(--oc-font-sans);
+  color: var(--oc-text);
+}
+.oc-comp__assunto:focus { outline: none; background: var(--oc-surface-subtle); }
+.oc-comp__assunto::placeholder { color: var(--oc-placeholder); font-weight: 400; }
+
+.oc-comp__corpo {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  border: 0;
+  background: none;
+  padding: 14px;
+  font: 400 13px var(--oc-font-sans);
+  line-height: 1.6;
+  color: var(--oc-text-body);
+}
+.oc-comp__corpo:focus { outline: none; }
+
+.oc-comp__confirmar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--oc-border-faint);
+  font: 400 12px var(--oc-font-sans);
+  color: var(--oc-text-body);
+}
+
+/* ── A barra ────────────────────────────────────────────────────────────
+
+   Enviar à direita, com o peso de acção primária. A assistência à esquerda,
+   em verbos e não num cartão. */
+.oc-comp__barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--oc-border);
+  background: var(--oc-surface-subtle);
+  flex-shrink: 0;
+}
+
+.oc-comp__ia { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; min-width: 0; }
+.oc-comp__ia-accao {
+  border: 0;
+  background: none;
+  padding: 4px 8px;
+  border-radius: var(--oc-r-sm);
+  font: 400 11.5px var(--oc-font-sans);
+  color: var(--oc-text-secondary);
+  cursor: pointer;
+}
+.oc-comp__ia-accao:hover { background: var(--oc-surface-muted); color: var(--oc-navy); }
+.oc-comp__ia-nota { font: 400 11px var(--oc-font-sans); color: var(--oc-text-meta); }
+.oc-comp__ia-link { font: 400 11px var(--oc-font-sans); color: var(--oc-navy); }
+
+.oc-comp__enviar { flex-shrink: 0; }
+.oc-comp__enviar .oc-btn { display: inline-flex; align-items: center; gap: 6px; }
+
+/* O puxador do canto. Uma área de agarrar, não uma decoração. */
+.oc-comp__puxador {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+/* Estreito, a janela deixa de ser janela: ocupa o ecrã, porque num ecrã
+   estreito não há nada por trás que valha a pena continuar a ver. */
+@media (max-width: 860px) {
+  .oc-comp {
+    right: 0;
+    bottom: 0;
+    left: 0;
+    top: var(--oc-topbar-h);
+    width: auto;
+    height: auto;
+    border-radius: 0;
+  }
+  .oc-comp__puxador { display: none; }
 }
 
 .oc-mail__banner { display: flex; align-items: flex-start; gap: 9px; }
 .oc-mail__banner p { flex: 1; min-width: 0; margin: 0; }
+/* A acção fica à direita do texto e não encolhe: um botão que quebra a meio
+   deixa de se ler como um botão. */
+.oc-mail__banner > .oc-btn { flex-shrink: 0; align-self: center; }
 .oc-mail__banner svg { flex-shrink: 0; margin-top: 2px; color: var(--oc-text-muted); }
 .oc-mail__banner .oc-btn { flex-shrink: 0; }
 
@@ -1929,11 +2524,15 @@ div.oc-result { cursor: default; }
 
 .oc-mail__rail { display: flex; flex-direction: column; gap: 10px; }
 
-.oc-mail__box {
-  background: var(--oc-surface); border: 1px solid var(--oc-border);
-  border-radius: var(--oc-r-lg); padding: 10px;
+/* A caixa deixa de ser um cartão: a moldura é a superfície inteira, e uma
+   moldura dentro de outra é a cardificação que este redesenho existe para
+   tirar. O que distingue a caixa activa é o peso do nome, não uma borda. */
+.oc-mail__box { padding: 10px 8px; }
+.oc-mail__box + .oc-mail__box {
+  border-top: 1px solid var(--oc-border-faint);
+  margin-top: 4px;
+  padding-top: 10px;
 }
-.oc-mail__box[data-active="true"] { border-color: var(--oc-navy); }
 
 .oc-mail__box-head { display: flex; align-items: center; gap: 6px; }
 .oc-mail__box-name {
@@ -1956,7 +2555,27 @@ div.oc-result { cursor: default; }
   padding: 5px 7px; border-radius: var(--oc-r-sm);
   font: 400 12px var(--oc-font-sans); color: var(--oc-text-body);
 }
-.oc-mail__folder span:first-child { flex: 1; min-width: 0; }
+/* O rótulo empurra a contagem para a direita.
+   Era `span:first-child`, e o ícone passou a ser o primeiro filho: nenhum
+   `span` casava, o rótulo perdia o `flex` e a contagem colava-se-lhe.
+   Selecciona-se pelo que a coisa **é** — o que não é a contagem — e não pela
+   posição que ela ocupava antes de haver ícone. */
+.oc-mail__folder > span:not(.oc-mail__count) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* O ícone acompanha, e não compete: fica em cinzento até a pasta ser a
+   activa. */
+.oc-mail__folder > svg {
+  flex-shrink: 0;
+  color: var(--oc-text-faint);
+}
+.oc-mail__folder:hover > svg,
+.oc-mail__folder[aria-current="page"] > svg { color: var(--oc-navy); }
 .oc-mail__folder:hover { background: var(--oc-surface-hover); color: var(--oc-text); }
 .oc-mail__folder[aria-current="page"] {
   background: var(--oc-surface-tint); color: var(--oc-text); font-weight: 600;
@@ -1970,8 +2589,19 @@ div.oc-result { cursor: default; }
 /* ── Coluna 2: a lista ── */
 
 .oc-mail__list {
-  background: var(--oc-surface); border: 1px solid var(--oc-border);
-  border-radius: var(--oc-r-lg); overflow: hidden;
+  background: none;
+  /* A lista responde à **sua** largura, e não à da janela: quem a estreita é a
+     pessoa, arrastando o separador, e nesse momento a janela não mudou de
+     tamanho nenhum. Uma media query nunca saberia disto. */
+  container-type: inline-size;
+}
+
+/* Estreita, a pesquisa fica só com o campo.
+   O botão cortava-se ao meio — «Pesquisar nes» — e um rótulo cortado é pior
+   do que rótulo nenhum. O formulário continua a submeter-se com Enter, que é
+   como uma caixa de pesquisa se usa. */
+@container (max-width: 320px) {
+  .oc-mail__search > .oc-btn { display: none; }
 }
 
 .oc-mail__search {
@@ -2033,11 +2663,36 @@ div.oc-result { cursor: default; }
 
 /* ── Coluna 3: a leitura ── */
 
-.oc-mail__pane {
-  background: var(--oc-surface); border: 1px solid var(--oc-border);
-  border-radius: var(--oc-r-lg); padding: 16px 18px;
+.oc-mail__pane { padding: 18px 22px; }
+
+/* A leitura tem uma largura confortável mesmo quando o painel é largo: uma
+   linha de duzentos caracteres não se lê, e dar todo o ecrã ao texto não é o
+   mesmo que dar-lho ao parágrafo. O painel cresce; a coluna de texto pára. */
+.oc-mail__pane > * { max-width: 78ch; }
+/* Nada seleccionado é um estado discreto, e não um anúncio.
+   Era um cartão de estado vazio com ícone grande e dois parágrafos, do mesmo
+   tamanho de um erro — e nada seleccionado não é um erro: é o repouso. */
+.oc-mail__pane--empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  color: var(--oc-text-faint);
 }
-.oc-mail__pane--empty { display: grid; place-items: center; min-height: 220px; }
+.oc-mail__pane--empty > * { max-width: none; }
+
+/* O corpo de uma mensagem em texto simples.
+   Não tinha regra nenhuma, e um `<pre>` sem regra é o defeito do browser:
+   monoespaçado e **sem quebra de linha**. Uma mensagem normal saía cortada
+   pela direita, e o que faltava não tinha como ser lido. */
+.oc-mail__plain {
+  margin: 0;
+  font: 400 13px var(--oc-font-sans);
+  line-height: 1.6;
+  color: var(--oc-text-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 .oc-mail__pane-head { border-bottom: 1px solid var(--oc-border-soft); padding-bottom: 12px; }
 .oc-mail__pane-head h2 {
@@ -2069,7 +2724,14 @@ div.oc-result { cursor: default; }
   margin: 8px 0; padding-left: 12px;
   border-left: 2px solid var(--oc-border-strong); color: var(--oc-text-muted);
 }
-.oc-mail__body pre { overflow-x: auto; font: 400 11.5px var(--oc-font-mono); }
+/* Um `<pre>` **dentro** do corpo é código citado, e continua monoespaçado.
+   O corpo inteiro em texto simples não é: tem a sua própria classe, e uma
+   regra de elemento não a deve apanhar — `.oc-mail__body pre` tem mais
+   especificidade do que `.oc-mail__plain`, e ganhava-lhe. */
+.oc-mail__body pre:not(.oc-mail__plain) {
+  overflow-x: auto;
+  font: 400 11.5px var(--oc-font-mono);
+}
 .oc-mail__body a { text-decoration: underline; }
 
 .oc-mail__domains {
@@ -2109,6 +2771,15 @@ div.oc-result { cursor: default; }
   display: flex; align-items: center; gap: 8px;
   padding-top: 14px; border-top: 1px solid var(--oc-border-soft);
 }
+/* O endereço de quem envia, quando não há escolha a fazer. Lê-se como um
+   facto, e não como um campo por preencher. */
+.oc-mail__de {
+  margin: 0;
+  padding: 8px 0 0;
+  font: 400 13px var(--oc-font-mono);
+  color: var(--oc-text);
+}
+
 .oc-mail__no-identity {
   padding: 10px 12px; margin-bottom: 12px; border-radius: var(--oc-r-md);
   background: var(--oc-warning-bg); border: 1px solid var(--oc-warning-border);
@@ -3290,20 +3961,14 @@ div.oc-result { cursor: default; }
    herda a mesma elevação, o mesmo raio e a mesma fronteira que os outros
    painéis da barra. */
 
+/* O calendário da barra: a superfície é a `.oc-pop`; aqui fica só onde ele se
+   ancora e quanto ocupa. Era uma caixa plana ao lado de um painel polido. */
 .oc-datepop {
-    position: absolute;
     top: calc(var(--oc-topbar-h) - var(--oc-space-2));
     right: var(--oc-space-4);
     width: 17.5rem;
     padding: var(--oc-space-4);
-    border: 1px solid var(--oc-border-soft);
-    border-radius: var(--oc-r-lg);
-    background: var(--oc-surface);
-    box-shadow: var(--oc-shadow-menu);
-    z-index: var(--oc-z-popover);
 }
-
-.oc-datepop[hidden] { display: none; }
 
 .oc-datepop__cabeca {
     display: flex;
@@ -3623,6 +4288,41 @@ select.oc-entrada {
    na marcação e apareciam os dois na mesma, vazios, fosse qual fosse o âmbito.
    
    Esta é a última regra do ficheiro de propósito. */
+/* ── Ligação de uma caixa de correio ─────────────────────────────────────
+   Cada membro liga a sua própria caixa com a sua própria senha. O cartão
+   mostra o endereço, o estado, e o que falta fazer — nunca a credencial,
+   que não volta a sair do Core (ADR-0409). */
+
+.oc-mail__ligacao-nota { margin: 0 0 var(--oc-space-7); }
+
+.oc-mail__ligacao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--oc-space-5);
+  padding: var(--oc-space-7) 0;
+  border-top: 1px solid var(--oc-border-soft);
+}
+
+.oc-mail__ligacao:first-of-type { border-top: 0; padding-top: 0; }
+
+.oc-mail__ligacao-caixa {
+  display: flex;
+  align-items: center;
+  gap: var(--oc-space-5);
+  margin: 0;
+}
+
+.oc-mail__ligacao-form {
+  display: grid;
+  gap: var(--oc-space-5);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+@media (max-width: 720px) {
+  .oc-mail__ligacao-form { grid-template-columns: minmax(0, 1fr); }
+}
+
 [hidden] { display: none !important; }
 
 /* ── Participantes ───────────────────────────────────────────────────────
@@ -3644,8 +4344,19 @@ select.oc-entrada {
     box-shadow: var(--oc-shadow-menu);
 }
 
+/* Nome e endereço, com o mesmo ritmo das linhas do painel da conta: dois
+   colegas podem chamar-se o mesmo, e o endereço não.
+
+   Era `display: block` com o nome em texto solto. A primeira escrita disto
+   acrescentou uma segunda regra `.oc-pessoa` mais abaixo em vez de alterar
+   esta — e uma segunda regra com o mesmo selector não completa a primeira:
+   sobrepõe-se-lhe, e leva consigo o que a primeira dizia sobre coisas que não
+   estavam em causa. */
 .oc-pessoa {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    align-items: flex-start;
     width: 100%;
     padding: var(--oc-space-2) var(--oc-space-3);
     border: none;
@@ -3664,6 +4375,14 @@ select.oc-entrada {
 .oc-pessoa:focus-visible {
     outline: var(--oc-focus-width) solid var(--oc-focus-color);
     outline-offset: calc(var(--oc-focus-offset) * -1);
+}
+
+.oc-pessoa b { font: 500 12px var(--oc-font-sans); color: var(--oc-text); }
+
+.oc-pessoa em {
+    font: 400 10.5px var(--oc-font-mono);
+    font-style: normal;
+    color: var(--oc-text-muted);
 }
 
 /* Uma procura sem resultados diz-se, e diz-se pequeno. Uma lista vazia sem
@@ -3723,4 +4442,1003 @@ select.oc-entrada {
 .oc-escolhido__tirar:focus-visible {
     outline: var(--oc-focus-width) solid var(--oc-focus-color);
     outline-offset: 1px;
+}
+
+/* ══ MENSAGENS ═══════════════════════════════════════════════════════════
+ *
+ * Duas colunas: as conversas e a conversa. A navegação institucional continua
+ * a ser a barra lateral do Ocinye — esta lista é navegação de dentro do
+ * módulo, e por isso é mais estreita, mais densa e sem o peso visual dela.
+ *
+ * Nada de balões grandes, nada de um cartão por mensagem. Uma conversa lê-se
+ * de relance: quem falou, quando, e o quê. */
+
+.oc-page--messaging { padding: 0; height: 100%; min-height: 0; }
+
+.oc-msg {
+  display: grid;
+  grid-template-columns: 292px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  background: var(--oc-surface);
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-lg);
+  overflow: hidden;
+}
+
+/* ── A lista ───────────────────────────────────────────────────────────── */
+
+.oc-msg__lista {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--oc-border);
+  background: var(--oc-surface-subtle);
+}
+
+.oc-msg__lista-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--oc-space-5);
+  padding: var(--oc-space-6) var(--oc-space-6) var(--oc-space-5);
+  border-bottom: 1px solid var(--oc-border-soft);
+}
+
+.oc-msg__titulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--oc-text);
+}
+
+.oc-msg__degradado {
+  margin: 0;
+  padding: var(--oc-space-4) var(--oc-space-6);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--oc-warning-text);
+  background: var(--oc-warning-bg);
+  border-bottom: 1px solid var(--oc-warning-border);
+}
+
+.oc-msg__conversas {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--oc-space-3) var(--oc-space-3) var(--oc-space-6);
+}
+
+.oc-msg__sem-conversas {
+  margin: 0;
+  padding: var(--oc-space-7) var(--oc-space-5);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--oc-text-muted);
+}
+
+/* Uma linha por conversa. Densa de propósito: numa lista de trinta, cada
+ * pixel de altura é uma conversa que deixa de caber no ecrã. */
+.oc-msg .oc-conversa {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--oc-space-5);
+  align-items: center;
+  padding: var(--oc-space-4) var(--oc-space-5);
+  border-radius: var(--oc-r-md);
+  text-decoration: none;
+  color: inherit;
+  transition: background var(--oc-duration-fast) ease;
+}
+
+.oc-msg .oc-conversa:hover { background: var(--oc-surface-hover); }
+
+.oc-msg .oc-conversa[aria-current="page"] {
+  background: var(--oc-surface-tint);
+  box-shadow: inset 2px 0 0 var(--oc-navy);
+}
+
+.oc-conversa__quem { position: relative; display: flex; }
+
+.oc-conversa__grupo {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--oc-r-sm);
+  background: var(--oc-surface-muted);
+  color: var(--oc-text-secondary);
+}
+
+.oc-conversa__avatar { position: relative; display: flex; }
+
+.oc-conversa__corpo { display: grid; gap: 2px; min-width: 0; }
+
+.oc-conversa__topo,
+.oc-conversa__fundo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--oc-space-4);
+  min-width: 0;
+}
+
+.oc-conversa__titulo {
+  font-size: 13px;
+  color: var(--oc-text-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.oc-conversa__quando {
+  font-size: 10.5px;
+  color: var(--oc-text-meta);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.oc-conversa__ultima {
+  font-size: 11.5px;
+  color: var(--oc-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Por ler diz-se de três maneiras — peso, marcador e contagem — porque uma
+ * pessoa que não distinga cores continua a precisar de ver o que falta. */
+.oc-conversa--por-ler .oc-conversa__titulo { font-weight: 600; color: var(--oc-text); }
+.oc-conversa--por-ler .oc-conversa__ultima { color: var(--oc-text-secondary); }
+
+.oc-conversa__contagem {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--oc-navy);
+  color: var(--oc-on-navy);
+  flex-shrink: 0;
+}
+
+.oc-conversa__contagem--mencao { background: var(--oc-gold); color: var(--oc-navy); }
+
+/* ── Presença ──────────────────────────────────────────────────────────── */
+
+.oc-presenca {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--oc-surface);
+  background: var(--oc-text-ghost);
+}
+
+.oc-presenca--disponivel    { background: var(--oc-success); }
+.oc-presenca--ocupado       { background: var(--oc-warning); }
+.oc-presenca--nao_incomodar { background: var(--oc-error); }
+.oc-presenca--ausente       { background: var(--oc-text-faint); }
+.oc-presenca--offline       { background: var(--oc-border-strong); }
+
+/* Fora de um avatar — no cabeçalho e na lista de participantes — a presença
+ * é um ponto em linha, e não um selo sobreposto. */
+.oc-msg__estado .oc-presenca,
+.oc-msg__participante .oc-presenca {
+  position: static;
+  border: 0;
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+}
+
+/* ── A conversa ────────────────────────────────────────────────────────── */
+
+.oc-msg__conversa { display: flex; min-width: 0; min-height: 0; }
+
+.oc-msg__painel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.oc-msg__cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--oc-space-5);
+  padding: var(--oc-space-5) var(--oc-space-8);
+  border-bottom: 1px solid var(--oc-border-soft);
+}
+
+.oc-msg__identidade { display: flex; align-items: center; gap: var(--oc-space-5); }
+.oc-msg__quem { display: grid; gap: 1px; }
+
+.oc-msg__nome {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--oc-text);
+}
+
+.oc-msg__estado {
+  display: flex;
+  align-items: center;
+  gap: var(--oc-space-2);
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--oc-text-muted);
+}
+
+/* ── Detalhes do grupo ─────────────────────────────────────────────────── */
+
+.oc-msg__detalhes {
+  padding: var(--oc-space-6) var(--oc-space-8);
+  border-bottom: 1px solid var(--oc-border-soft);
+  background: var(--oc-surface-subtle);
+}
+
+.oc-msg__detalhes-titulo {
+  margin: 0 0 var(--oc-space-4);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--oc-text-meta);
+}
+
+.oc-msg__participantes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--oc-space-3); }
+
+.oc-msg__participante {
+  display: flex;
+  align-items: center;
+  gap: var(--oc-space-4);
+  font-size: 12.5px;
+  color: var(--oc-text-body);
+}
+
+.oc-msg__participante-nome { flex: 1; min-width: 0; }
+.oc-msg__detalhes-accoes { display: flex; gap: var(--oc-space-4); margin-top: var(--oc-space-6); }
+
+/* ── O fluxo ───────────────────────────────────────────────────────────── */
+
+.oc-msg__fluxo {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--oc-space-7) var(--oc-space-8);
+  scroll-behavior: smooth;
+}
+
+.oc-msg__primeira {
+  margin: 0;
+  padding: var(--oc-space-8) 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--oc-text-muted);
+}
+
+.oc-msg__blocos { display: grid; gap: 2px; }
+
+.oc-msg__dia,
+.oc-msg__novas {
+  display: flex;
+  align-items: center;
+  gap: var(--oc-space-5);
+  margin: var(--oc-space-7) 0 var(--oc-space-5);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--oc-text-meta);
+}
+
+.oc-msg__dia::before, .oc-msg__dia::after,
+.oc-msg__novas::before, .oc-msg__novas::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--oc-border-soft);
+}
+
+.oc-msg__novas { color: var(--oc-navy); }
+.oc-msg__novas::before, .oc-msg__novas::after { background: var(--oc-navy-mid); opacity: .28; }
+
+/* Uma mensagem. Sem cartão e sem balão: a coluna do avatar, o corpo, e as
+ * acções que só aparecem quando o rato ou o foco lá está. */
+.oc-msg__mensagem {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: var(--oc-space-5);
+  padding: 3px var(--oc-space-6) 3px var(--oc-space-3);
+  border-radius: var(--oc-r-md);
+}
+
+.oc-msg__mensagem:hover { background: var(--oc-surface-hover); }
+
+.oc-msg__mensagem--seguida { padding-top: 0; }
+.oc-msg__mensagem--seguida:not(.oc-msg__mensagem--minha) .oc-msg__mensagem-corpo {
+  grid-column: 2;
+}
+
+.oc-msg__mensagem-avatar { grid-column: 1; align-self: start; padding-top: 2px; }
+.oc-msg__mensagem-corpo { grid-column: 2; min-width: 0; }
+
+.oc-msg__mensagem-topo {
+  display: flex;
+  align-items: baseline;
+  gap: var(--oc-space-4);
+  margin: 0 0 1px;
+}
+
+.oc-msg__mensagem-autor { font-size: 12.5px; font-weight: 600; color: var(--oc-text); }
+
+.oc-msg__mensagem-hora {
+  font-size: 10.5px;
+  color: var(--oc-text-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A mensagem própria fica do lado direito.
+ *
+ * É a convenção que toda a gente já leu mil vezes, e ler uma conversa sem
+ * lados obriga a procurar o nome em cada linha para saber quem falou.
+ *
+ * Contida, e não um balão gigante: uma superfície subtil, largura máxima para
+ * a linha continuar legível, e o mesmo corpo de letra. O que se pediu foi um
+ * lado, não um clone de aplicação de telemóvel. */
+.oc-msg__mensagem--minha {
+  grid-template-columns: minmax(0, 1fr) 30px;
+  justify-items: end;
+}
+
+.oc-msg__mensagem--minha .oc-msg__mensagem-avatar { grid-column: 2; }
+.oc-msg__mensagem--minha .oc-msg__mensagem-corpo { grid-column: 1; }
+
+.oc-msg__mensagem--minha .oc-msg__mensagem-corpo {
+  /* Nunca a largura toda: uma linha que atravessa o ecrã inteiro deixa de se
+   * ler, e do lado direito seria pior — o olho não sabe onde recomeçar. */
+  max-width: 68%;
+  padding: var(--oc-space-4) var(--oc-space-5);
+  border-radius: var(--oc-r-lg);
+  background: var(--oc-surface-tint);
+}
+
+/* O nome e a hora ficam à direita, com o resto. O nome próprio é redundante e
+ * sai: quem escreveu já se sabe pelo lado. */
+.oc-msg__mensagem--minha .oc-msg__mensagem-topo { justify-content: flex-end; }
+.oc-msg__mensagem--minha .oc-msg__mensagem-autor { display: none; }
+.oc-msg__mensagem--minha .oc-msg__reaccoes { justify-content: flex-end; }
+.oc-msg__mensagem--minha .oc-msg__accoes { right: auto; left: var(--oc-space-6); }
+
+/* Seguidas, alinham por baixo da anterior em vez de voltarem à coluna. */
+.oc-msg__mensagem--minha.oc-msg__mensagem--seguida .oc-msg__mensagem-corpo {
+  grid-column: 1;
+}
+
+.oc-msg__texto {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--oc-text-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.oc-msg__editada {
+  font-size: 10px;
+  color: var(--oc-text-faint);
+  margin-left: var(--oc-space-3);
+}
+
+.oc-msg__citada {
+  display: grid;
+  gap: 1px;
+  margin: 0 0 var(--oc-space-3);
+  padding: var(--oc-space-3) var(--oc-space-5);
+  border-left: 2px solid var(--oc-border-strong);
+  border-radius: 0 var(--oc-r-xs) var(--oc-r-xs) 0;
+  background: var(--oc-surface-muted);
+  text-decoration: none;
+  color: inherit;
+}
+
+.oc-msg__citada:hover { background: var(--oc-surface-tint); }
+.oc-msg__citada-quem { font-size: 11px; font-weight: 600; color: var(--oc-text-secondary); }
+
+.oc-msg__citada-texto {
+  font-size: 11.5px;
+  color: var(--oc-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.oc-msg__reaccoes { display: flex; flex-wrap: wrap; gap: var(--oc-space-2); margin-top: var(--oc-space-3); }
+
+.oc-msg__reaccao {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--oc-border);
+  border-radius: 11px;
+  background: var(--oc-surface);
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--oc-text-secondary);
+  cursor: pointer;
+}
+
+.oc-msg__reaccao:hover { border-color: var(--oc-border-strong); }
+
+.oc-msg__reaccao--minha {
+  border-color: var(--oc-navy-mid);
+  background: var(--oc-surface-tint);
+  color: var(--oc-navy);
+}
+
+.oc-msg__reaccao-conta { font-variant-numeric: tabular-nums; }
+
+.oc-msg__accoes {
+  position: absolute;
+  top: -10px;
+  right: var(--oc-space-6);
+  display: none;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-md);
+  background: var(--oc-surface);
+  box-shadow: var(--oc-shadow-card);
+  z-index: var(--oc-z-base);
+}
+
+.oc-msg__mensagem:hover .oc-msg__accoes,
+.oc-msg__mensagem:focus-within .oc-msg__accoes { display: flex; }
+
+.oc-msg__accao {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--oc-r-xs);
+  background: transparent;
+  color: var(--oc-text-muted);
+  cursor: pointer;
+}
+
+.oc-msg__accao:hover { background: var(--oc-surface-muted); color: var(--oc-text-body); }
+
+/* ── `typing` ──────────────────────────────────────────────────────────── */
+
+/* Altura reservada, e não `display:none`: sem isto, a linha aparece e
+ * desaparece e a conversa inteira salta de cada vez que alguém escreve. */
+.oc-msg__escrita {
+  margin: 0;
+  min-height: 18px;
+  padding: 0 var(--oc-space-8);
+  font-size: 11.5px;
+  color: var(--oc-text-muted);
+  font-style: italic;
+}
+
+.oc-msg__escrita[hidden] { display: block; visibility: hidden; }
+
+/* ── O composer ────────────────────────────────────────────────────────── */
+
+.oc-msg__composer {
+  position: relative;
+  padding: var(--oc-space-5) var(--oc-space-8) var(--oc-space-6);
+  border-top: 1px solid var(--oc-border-soft);
+}
+
+.oc-msg__resposta,
+.oc-msg__sugestao {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--oc-space-5);
+  margin-bottom: var(--oc-space-4);
+  padding: var(--oc-space-4) var(--oc-space-5);
+  border-radius: var(--oc-r-md);
+  background: var(--oc-surface-muted);
+  border-left: 2px solid var(--oc-navy-mid);
+}
+
+.oc-msg__resposta-texto { display: grid; gap: 1px; min-width: 0; }
+.oc-msg__resposta-quem { font-size: 11px; font-weight: 600; color: var(--oc-text-secondary); }
+
+.oc-msg__resposta-excerto {
+  font-size: 11.5px;
+  color: var(--oc-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A assistência usa o dourado com parcimónia: uma marca, e não um painel
+ * amarelo. É uma capacidade integrada, não um segundo produto. */
+.oc-msg__sugestao {
+  display: block;
+  border-left-color: var(--oc-gold);
+  background: var(--oc-gold-bg);
+}
+
+.oc-msg__sugestao-topo {
+  display: flex;
+  align-items: center;
+  gap: var(--oc-space-3);
+  margin: 0 0 var(--oc-space-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--oc-gold-text);
+}
+
+.oc-msg__sugestao-texto {
+  margin: 0 0 var(--oc-space-4);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--oc-text-body);
+  white-space: pre-wrap;
+}
+
+.oc-msg__sugestao-accoes { display: flex; gap: var(--oc-space-4); }
+
+.oc-msg__caixa {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--oc-space-4);
+  padding: var(--oc-space-3) var(--oc-space-4) var(--oc-space-3) var(--oc-space-5);
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-lg);
+  background: var(--oc-surface);
+  transition: border-color var(--oc-duration-fast) ease, box-shadow var(--oc-duration-fast) ease;
+}
+
+.oc-msg__caixa:focus-within {
+  border-color: var(--oc-navy);
+  box-shadow: var(--oc-shadow-input);
+}
+
+.oc-msg__entrada {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  resize: none;
+  padding: var(--oc-space-4) 0;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--oc-text-body);
+  background: transparent;
+  max-height: 160px;
+}
+
+.oc-msg__entrada::placeholder { color: var(--oc-placeholder); }
+
+.oc-msg__ferramentas { display: flex; align-items: center; gap: var(--oc-space-2); }
+
+.oc-msg__ferramenta {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--oc-r-sm);
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  color: var(--oc-text-muted);
+  cursor: pointer;
+}
+
+.oc-msg__ferramenta:hover { background: var(--oc-surface-muted); color: var(--oc-text-body); }
+.oc-msg__ferramenta--assist { color: var(--oc-gold-text); }
+
+.oc-msg__assist { position: relative; }
+
+.oc-msg__assist-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  display: grid;
+  min-width: 168px;
+  padding: var(--oc-space-2);
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-md);
+  background: var(--oc-surface);
+  box-shadow: var(--oc-shadow-menu);
+  z-index: var(--oc-z-dropdown);
+}
+
+.oc-msg__assist-item {
+  padding: var(--oc-space-4) var(--oc-space-5);
+  border: 0;
+  border-radius: var(--oc-r-xs);
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--oc-text-body);
+  cursor: pointer;
+}
+
+.oc-msg__assist-item:hover { background: var(--oc-surface-muted); }
+
+.oc-msg__enviar { flex-shrink: 0; }
+
+.oc-msg__ajuda {
+  display: flex;
+  align-items: center;
+  gap: var(--oc-space-2);
+  margin: var(--oc-space-3) 0 0;
+  font-size: 10.5px;
+  color: var(--oc-text-faint);
+}
+
+.oc-msg__emoji {
+  position: absolute;
+  right: var(--oc-space-8);
+  bottom: calc(100% - var(--oc-space-3));
+  display: grid;
+  grid-template-columns: repeat(6, 32px);
+  gap: 2px;
+  padding: var(--oc-space-3);
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-md);
+  background: var(--oc-surface);
+  box-shadow: var(--oc-shadow-menu);
+  z-index: var(--oc-z-popover);
+}
+
+.oc-msg__emoji-item {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--oc-r-xs);
+  background: transparent;
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.oc-msg__emoji-item:hover { background: var(--oc-surface-muted); }
+
+.oc-msg__mencoes {
+  position: absolute;
+  left: var(--oc-space-8);
+  right: var(--oc-space-8);
+  bottom: calc(100% - var(--oc-space-3));
+  display: grid;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: var(--oc-space-2);
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-md);
+  background: var(--oc-surface);
+  box-shadow: var(--oc-shadow-menu);
+  z-index: var(--oc-z-popover);
+}
+
+.oc-msg__mencao {
+  display: flex;
+  align-items: center;
+  gap: var(--oc-space-4);
+  padding: var(--oc-space-3) var(--oc-space-4);
+  border: 0;
+  border-radius: var(--oc-r-xs);
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--oc-text-body);
+  cursor: pointer;
+}
+
+.oc-msg__mencao:hover,
+.oc-msg__mencao[aria-selected="true"] { background: var(--oc-surface-tint); }
+
+.oc-msg__vazio { display: grid; place-items: center; width: 100%; padding: var(--oc-space-8); }
+
+/* ── Estreito ──────────────────────────────────────────────────────────── */
+
+/* Uma coluna de cada vez, e não duas espremidas: a lista leva à conversa, e
+ * a conversa tem por onde voltar. */
+@media (max-width: 900px) {
+  .oc-msg { grid-template-columns: minmax(0, 1fr); }
+  .oc-msg__lista { border-right: 0; }
+  .oc-msg[data-oc-aberta] .oc-msg__lista { display: none; }
+  .oc-msg:not([data-oc-aberta]) .oc-msg__conversa { display: none; }
+  .oc-msg__voltar { display: inline-flex; }
+}
+
+.oc-msg__voltar { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .oc-msg__fluxo { scroll-behavior: auto; }
+  .oc-msg .oc-conversa,
+  .oc-msg__caixa { transition: none; }
+}
+
+/* Elementos que a interacção cria: o aviso de mensagens novas, o realce de
+ * uma mensagem citada, e a paleta de reacção ancorada à mensagem. */
+
+.oc-msg__aviso-novas {
+  position: absolute;
+  left: 50%;
+  bottom: 92px;
+  transform: translateX(-50%);
+  height: 28px;
+  padding: 0 var(--oc-space-6);
+  border: 1px solid var(--oc-navy-mid);
+  border-radius: 14px;
+  background: var(--oc-navy);
+  color: var(--oc-on-navy);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--oc-shadow-card);
+  z-index: var(--oc-z-sticky);
+}
+
+.oc-msg__painel { position: relative; }
+
+.oc-msg__mensagem--realcada {
+  background: var(--oc-gold-bg);
+  box-shadow: inset 2px 0 0 var(--oc-gold);
+}
+
+.oc-msg__emoji--reaccao {
+  right: 0;
+  bottom: calc(100% + 4px);
+  grid-template-columns: repeat(6, 30px);
+}
+
+.oc-msg__accoes { position: absolute; }
+
+/* ── Nova conversa ─────────────────────────────────────────────────────── */
+
+.oc-msg__nova {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--oc-space-8);
+  z-index: var(--oc-z-modal);
+}
+
+.oc-msg__nova-fundo {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 30, 51, .32);
+}
+
+.oc-msg__nova-caixa {
+  position: relative;
+  width: min(460px, 100%);
+  max-height: min(640px, 90vh);
+  display: flex;
+  flex-direction: column;
+  gap: var(--oc-space-5);
+  padding: var(--oc-space-7);
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-xl);
+  background: var(--oc-surface);
+  box-shadow: var(--oc-shadow-overlay);
+}
+
+.oc-msg__nova-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--oc-space-5);
+}
+
+.oc-msg__nova-titulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--oc-text);
+}
+
+.oc-msg__nova-modo {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--oc-r-md);
+  background: var(--oc-surface-muted);
+}
+
+.oc-msg__modo {
+  padding: var(--oc-space-3) var(--oc-space-6);
+  border: 0;
+  border-radius: var(--oc-r-sm);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--oc-text-muted);
+  cursor: pointer;
+}
+
+.oc-msg__modo--activo {
+  background: var(--oc-surface);
+  color: var(--oc-text);
+  font-weight: 600;
+  box-shadow: var(--oc-shadow-card);
+}
+
+.oc-msg__escolhidos { display: flex; flex-wrap: wrap; gap: var(--oc-space-2); }
+
+.oc-msg__escolhido {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--oc-space-3);
+  height: 24px;
+  padding: 0 var(--oc-space-2) 0 var(--oc-space-4);
+  border-radius: 12px;
+  background: var(--oc-surface-tint);
+  font-size: 11.5px;
+  color: var(--oc-navy);
+}
+
+.oc-msg__escolhido-tirar {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--oc-navy-mid);
+  cursor: pointer;
+}
+
+.oc-msg__escolhido-tirar:hover { background: var(--oc-surface-muted); }
+
+.oc-msg__resultados {
+  display: grid;
+  gap: 1px;
+  min-height: 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.oc-msg__resultado {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--oc-space-5);
+  padding: var(--oc-space-4) var(--oc-space-5);
+  border: 0;
+  border-radius: var(--oc-r-md);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.oc-msg__resultado:hover { background: var(--oc-surface-hover); }
+
+.oc-msg__resultado-nome {
+  font-size: 13px;
+  color: var(--oc-text-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.oc-msg__resultado-email {
+  font-size: 11px;
+  color: var(--oc-text-meta);
+  white-space: nowrap;
+}
+
+.oc-msg__nova-estado {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--oc-text-muted);
+}
+
+.oc-msg__nova-accoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--oc-space-4);
+  padding-top: var(--oc-space-3);
+  border-top: 1px solid var(--oc-border-soft);
+}
+
+/* ── O sino ──────────────────────────────────────────────────────────────── */
+
+.oc-sino { position: relative; display: flex; }
+
+.oc-sino__painel {
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+}
+
+.oc-sino__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+/* Uma notificação por ler distingue-se pelo peso e por um ponto, e não só por
+   cor: quem não distinga cores continua a ver o que falta ver. */
+/* Uma linha do sino tem o mesmo ritmo de uma linha do painel da conta: ícone
+   à esquerda, título e legenda empilhados, e a hora encostada à direita. */
+.oc-sino__linha {
+  position: relative;
+  align-items: flex-start;
+  padding: 7px 9px;
+}
+
+.oc-sino__icone {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--oc-text-muted);
+}
+
+.oc-sino__linha:hover .oc-sino__icone { color: var(--oc-navy); }
+
+.oc-sino__texto { min-width: 0; }
+
+.oc-sino__texto b {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.oc-sino__linha--por-ler b { font-weight: 600; }
+
+/* O ponto vive **dentro** do acolchoamento da linha, alinhado com a primeira
+   letra do título. Estava em `-1px` e saía para fora da superfície, o que numa
+   captura se lê como um defeito de desenho. */
+.oc-sino__ponto {
+  position: absolute;
+  top: 14px;
+  left: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--oc-navy);
+}
+
+.oc-sino__linha--por-ler { padding-left: 18px; }
+
+/* O ponto acompanha a primeira linha do texto, e não o meio da linha inteira:
+   com duas linhas, o meio já não é onde o título está. */
+.oc-sino__linha--por-ler .oc-sino__ponto { top: 13px; }
+
+.oc-sino__quando {
+  margin-left: auto;
+  margin-top: 2px;
+  padding-left: var(--oc-space-4);
+  font: 400 10px var(--oc-font-sans);
+  color: var(--oc-text-meta);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }

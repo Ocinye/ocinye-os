@@ -24,7 +24,7 @@ que contorna segurança não é uma funcionalidade concluída.
 
 ## Autenticação
 
-**Estado actual: `username + password`, no Ocinye Core**
+**Estado actual: `endereço + palavra-passe`, no Ocinye Core**
 ([ADR-0103](../adrs/0103-core-owned-authentication.md), que substitui o
 [ADR-0102](../adrs/0102-identity-provider.md)).
 
@@ -286,7 +286,7 @@ Declarado, não escondido:
 
 | Controlo | Estado |
 |---|---|
-| Rate limiting geral | **Não implementado.** A autenticação **tem** throttling — por prefixo de rede e por nome de utilizador, com janela que expira e sem bloqueio de conta. As restantes rotas não têm. |
+| Rate limiting geral | **Não implementado.** A autenticação **tem** throttling — por prefixo de rede e por endereço institucional, com janela que expira e sem bloqueio de conta. As restantes rotas não têm. |
 | Antimalware em uploads | **Não implementado.** O hook existe; o scan não. |
 | Antimalware em anexos de correio | **Não implementado.** A descarga de anexos está declarada indisponível, o que hoje remove a via. Reabrir quando os anexos forem ligados. |
 | Ingestão IMAP | **Não implementada.** `mail.sync` reporta `planned`. |

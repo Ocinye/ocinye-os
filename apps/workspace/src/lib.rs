@@ -27,6 +27,14 @@
 //! Hydration remains the declared destination; the components are already
 //! Leptos, so adopting it is a build-chain change rather than a rewrite.
 
+// O tipo de uma vista Leptos é a árvore inteira, escrita à mão pelo compilador.
+// A aplicação Mensagens tem duas colunas, um fluxo e um composer, e o tipo
+// resultante passa o limite por omissão.
+//
+// A alternativa era partir a vista em `AnyView` até o tipo caber — o que
+// esconderia a árvore atrás de apagamentos feitos por causa do compilador, e não
+// por causa do desenho.
+#![recursion_limit = "512"]
 #![forbid(unsafe_code)]
 
 //! # Porque isto é uma biblioteca além de um binário

@@ -150,6 +150,65 @@ Tão importante como a lista acima:
 | **Registar base legal de conteúdo integral** | Decisão jurídica de uma pessoa. Ver a posição da instituição em [`docs/knowledge/`](../knowledge/README.md). |
 | **Edição de Notas existentes** | Criar acrescenta; editar a prosa de outra pessoa através de um agente é uma pergunta diferente, ainda não respondida. |
 | **Pesquisa por tipo de entidade** | `knowledge.search` já cobre os seis tipos indexados, com a política aplicada dentro da query. Uma capability por tipo seria duplicação. |
+| **Validação de resultados científicos** | Uma afirmação institucional cujo peso é de quem a faz. Ver abaixo. |
+
+### As quatro classes de fronteira
+
+Uma operação não-delegável declara **porquê**, e a razão é um tipo, não prosa. As
+três primeiras fecham-se por causa do que a operação **alcança**; a quarta,
+por causa de quem a **assina**.
+
+| Classe | O que a operação atravessa |
+|---|---|
+| `SECRET_BOUNDARY` | A execução segura exigiria revelar um segredo ao plano agentic |
+| `AUTHORITY_BOUNDARY` | O efeito primário é mudar a fronteira de autorização, ou a capacidade de outra pessoa aceder |
+| `USER_MEDIATED_BINARY_BOUNDARY` | O conteúdo entra por um acto material da pessoa — um ficheiro que ela escolhe |
+| `INSTITUTIONAL_CLAIM_BOUNDARY` | O efeito é uma afirmação institucional cujo peso vem de quem a assina |
+
+A quarta nasceu com o ciclo científico e tem hoje uma única operação:
+`science::record_validation`.
+
+Validar um resultado não muda o acesso de ninguém, não revela nada, e nem sequer
+é difícil de desfazer — uma validação errada corrige-se com outra, e o domínio
+guarda as duas. O que não se desfaz é a atribuição: o registo diz que **alguém
+afirmou aquilo**.
+
+**Não se resolve com aprovação**, que é a resposta habitual a «isto é sério demais
+para um agente fazer sozinho». Uma confirmação humana continuaria a deixar a
+afirmação escrita como se tivesse sido *feita*, e não *assumida*.
+
+A classificação de cada operação, e a lista por classe, estão na
+[matriz](operation-capability-matrix.md), emitida pelo catálogo
+([ADR-0307](../adrs/0307-dual-entry-single-authority.md)).
+
+### O que um agente faz com a proveniência
+
+> **AI may suggest provenance. AI may not assert institutional provenance merely
+> by inference.**
+>
+> **Model inference is not institutional provenance.**
+
+As capabilities científicas descrevem trabalho: enunciar uma hipótese, criar uma
+metodologia, publicar uma versão, desenhar um estudo, registar uma execução ou um
+resultado, e percorrer a linhagem. As arestas de proveniência que essas operações
+produzem são escritas **pela operação**, na mesma transacção, com
+`origin = operation` — nenhuma entrada do esquema lhes toca.
+
+Um agente que queira afirmar uma relação que nenhuma operação observou usa
+`knowledge.link.create`, e a aresta fica marcada `declared`. Nenhum caminho
+agentic escreve `operation`.
+
+E o recurso vem sempre por `resources`, resolvido pelo executor com a política de
+quem age: um estudo segue a `MethodologyVersion` que o executor resolveu, e não um
+identificador que o modelo compôs.
+
+### A linhagem que um agente vê é a de quem o usa
+
+`science.lineage.read` percorre a proveniência com o principal do actor. Um nó que
+essa política recuse termina a travessia e não devolve nada sobre si — nem
+existência, nem contagem. Um agente não vê mais grafo do que a pessoa que o
+conduz, e `Effective Agent Access = Actor ∩ Agent Scope ∩ Resource Policy`
+continua a valer aqui.
 
 ## Endereçar recursos
 

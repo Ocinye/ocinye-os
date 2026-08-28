@@ -39,8 +39,10 @@ mod compute;
 mod data;
 mod knowledge;
 mod mail;
+mod messaging;
 mod organisation;
 mod research;
+mod science;
 mod self_service;
 
 /// Every handler, in the order they are registered.
@@ -48,6 +50,11 @@ pub fn all() -> Vec<Arc<dyn CapabilityHandler>> {
     vec![
         // Knowledge: the read that works with zero AI nodes, then the artefacts
         // themselves, then the edges between them.
+        // Mensagens. Cada uma chama a mesma operação que o composer chama.
+        Arc::new(messaging::SendMessage),
+        Arc::new(messaging::OpenDirect),
+        Arc::new(messaging::CreateGroup),
+        Arc::new(messaging::AddMember),
         Arc::new(knowledge::Search),
         Arc::new(knowledge::ReadNote),
         Arc::new(knowledge::ReadSource),
@@ -57,6 +64,15 @@ pub fn all() -> Vec<Arc<dyn CapabilityHandler>> {
         Arc::new(knowledge::ReviseNote),
         Arc::new(knowledge::CreateSource),
         Arc::new(knowledge::CreateLink),
+        // O ciclo científico. `science::record_validation` não está aqui, e é
+        // deliberado: é `non_delegable`, atrás de uma fronteira de autoridade.
+        Arc::new(science::StateHypothesis),
+        Arc::new(science::CreateMethodology),
+        Arc::new(science::PublishMethodologyVersion),
+        Arc::new(science::DesignStudy),
+        Arc::new(science::RecordExecution),
+        Arc::new(science::RecordResult),
+        Arc::new(science::ReadLineage),
         // A primeira capacidade que atravessa o Capability Runtime. Não muda
         // nada, é determinística, e é útil onde um modelo costuma tropeçar:
         // uma bibliografia que ele redigiu é texto plausível até alguém a ler.

@@ -261,7 +261,12 @@ async fn workspace_overview(
     let overview = research::get_workspace_overview(&state.pool, &principal, workspace_id).await?;
 
     Ok(Json(OverviewView {
-        workspace: WorkspaceView::from(&overview.workspace),
+        // `for_principal`, e não `from`: a vista sem principal responde
+        // `may_create: false` por ser a resposta conservadora quando não se
+        // sabe quem pergunta — e aqui sabe-se. Servir o `false` fixo fazia
+        // toda a superfície de criação do ambiente desaparecer para toda a
+        // gente, incluindo para quem o lidera.
+        workspace: WorkspaceView::for_principal(&overview.workspace, &principal),
         idea: overview.idea.map(IdeaView::from),
         project: overview.project.map(ProjectView::from),
         members: overview

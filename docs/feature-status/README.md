@@ -36,9 +36,16 @@ Os quatro primeiros são apurados em tempo real pelo Core e servidos em
 | **Unidades** | implementado | implementado | n/a | `AVAILABLE` |
 | **Ideias** | implementado | lista, criação, workspace | n/a | `AVAILABLE` |
 | **Projectos** | implementado | lista, workspace | n/a | `AVAILABLE` |
-| **Research Workspaces** | implementado | 13 tabs, 2 funcionais | n/a | `AVAILABLE` (parcial — ver abaixo) |
+| **Research Workspaces** | implementado | 13 tabs, 4 funcionais | n/a | `AVAILABLE` (parcial — ver abaixo) |
 | **Ideia → Projecto** | implementado, idempotente | botão declarado indisponível | falta ecrã de conversão | `AVAILABLE` pela API e pelo plano agentic; `PLANNED` no ecrã |
-| **Relações tipadas entre artefactos** | implementado | listagem | n/a | `AVAILABLE` |
+| **Relações tipadas entre artefactos** | implementado, com matriz de compatibilidade | listagem | n/a | `AVAILABLE` |
+| **Ciclo científico** — hipóteses, metodologias e versões, estudos, execuções, resultados | implementado | cadeia do ambiente, criação por formulário, detalhes | n/a | `AVAILABLE` |
+| **Validação e reprodução de resultados** | implementado, `non_delegable` | formulário, com prova exigida na reprodução | n/a | `AVAILABLE` |
+| **Proveniência científica** | tipada, transaccional, com `origin` e referências exactas a versões | apresentada no resultado | n/a | `AVAILABLE` |
+| **Linhagem científica** — montante e jusante | projecção sobre `research_links`, tecto de 5 saltos | navegável no resultado | n/a | `AVAILABLE` |
+| **Proveniência de computação e de software** | campos na execução; sem aresta para nó | — | 0 nós | `PLANNED` |
+| **Reprodução entre execuções como aresta** | verbo na matriz, nenhuma operação o escreve | — | n/a | `PLANNED` |
+| **Protótipos, publicações, propriedade intelectual** | — | — | n/a | `PLANNED` |
 | **Bibliografia** | implementado | lista | n/a | `AVAILABLE` |
 | **Notas, documentos, datasets** | implementado | leitura | MinIO local; nenhum armazenamento institucional | `AVAILABLE` em desenvolvimento |
 | **Pesquisa textual** | implementado | implementado | PostgreSQL FTS | `AVAILABLE` |
@@ -146,14 +153,15 @@ capacidades existe para garantir.
 
 ## Research Workspace — tabs
 
-Treze tabs por dossier. Duas navegam, as restantes estão **declaradas
+Treze tabs por dossier. Quatro navegam, as restantes estão **declaradas
 indisponíveis** e não são clicáveis:
 
 | Tab | Estado |
 |---|---|
 | Visão geral | `AVAILABLE` |
 | IA | `AVAILABLE` — leva ao Prompt vinculado |
-| Bibliografia · Fontes · Notas · Documentos · Datasets · Código · Experiências · Resultados · Tarefas · Actividade · Histórico | `PLANNED` |
+| Experiências · Resultados | `AVAILABLE` — as duas levam à cadeia científica do ambiente |
+| Bibliografia · Fontes · Notas · Documentos · Datasets · Código · Tarefas · Actividade · Histórico | `PLANNED` |
 
 ## Listas — recortes
 

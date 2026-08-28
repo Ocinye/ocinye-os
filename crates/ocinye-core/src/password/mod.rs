@@ -1,6 +1,6 @@
 //! Password handling: secrets, policy, hashing and generation.
 //!
-//! Ocinye Core owns username-and-password authentication (ADR-0103, which
+//! Ocinye Core owns address-and-password authentication (ADR-0103 e ADR-0106, que
 //! supersedes ADR-0102). This module is the whole of the credential surface
 //! that decision created, deliberately kept in one place so it can be reviewed
 //! as one thing.
@@ -22,6 +22,7 @@ pub mod blocklist;
 pub mod generate;
 pub mod hashing;
 pub mod policy;
+pub mod sealed;
 pub mod secret;
 
 pub use blocklist::BlockReason;

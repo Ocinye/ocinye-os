@@ -82,12 +82,17 @@ fn state(pool: PgPool, organisation_id: Uuid) -> AppState {
         }),
         Throttle {
             per_ip: config.auth.throttle_per_ip,
-            per_username: config.auth.throttle_per_username,
+            per_email: config.auth.throttle_per_email,
             window_minutes: config.auth.throttle_window_minutes,
         },
         config.auth.temporary_credential_hours,
     ));
 
+    let mail_registry = Arc::new(ocinye_core::modules::mail::ProviderRegistry::new(
+        Arc::new(UnconfiguredProvider),
+        config.mail.clone(),
+        config.mail.sealing_key.clone(),
+    ));
     AppState {
         pool,
         config: Arc::new(config),
@@ -98,7 +103,12 @@ fn state(pool: PgPool, organisation_id: Uuid) -> AppState {
         // o teste dependente de infraestrutura que não exercita.
         store: None,
         inference: Arc::new(ocinye_core::modules::intelligence::NoProvider),
-        mail_provider: Arc::new(UnconfiguredProvider),
+        mail_registry,
+        // Estes testes medem HTTP, e não tempo real. Um plano ausente aceita
+        // tudo e não propaga nada — que é o que uma instalação sem Redis faz,
+        // e não um sítio por preencher.
+        realtime: Arc::new(ocinye_core::realtime::Realtime::ausente()),
+        mail_probe: Arc::new(SondaDoHarness),
         capabilities: std::sync::Arc::new(
             ocinye_core::capabilities::Capabilities::empty().expect("motor de capacidades"),
         ),
@@ -127,8 +137,8 @@ async fn member(
     let handle = format!("m{}", Uuid::new_v4().simple());
 
     let person_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO people (organisation_id, full_name, email, username, status)
-             VALUES ($1, $2, $3, $2, 'active') RETURNING id",
+        "INSERT INTO people (organisation_id, full_name, email, status)
+             VALUES ($1, $2, $3, 'active') RETURNING id",
     )
     .bind(organisation_id)
     .bind(&handle)
@@ -667,4 +677,21 @@ async fn lembretes_e_notificacoes_pelo_http() {
         depois["unread"], 0,
         "marcar como lida não baixou o contador"
     );
+}
+
+/// A sonda do harness: aceita, porque não há servidor de correio para
+/// perguntar. O que o harness assume fica escrito, em vez de a verificação
+/// desaparecer do caminho que estes testes percorrem.
+struct SondaDoHarness;
+
+#[async_trait::async_trait]
+impl ocinye_core::modules::mail::provider::CredentialProbe for SondaDoHarness {
+    async fn verify(
+        &self,
+        _endereco: &str,
+        _username: &str,
+        _senha: &str,
+    ) -> ocinye_core::modules::mail::provider::ProviderResult<()> {
+        Ok(())
+    }
 }

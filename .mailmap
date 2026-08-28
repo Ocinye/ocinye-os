@@ -1,0 +1,26 @@
+# Uma pessoa, um nome.
+#
+# Dois endereços autoram commits neste repositório, e são da mesma pessoa: o
+# endereço pessoal e o `noreply` que o GitHub gera para a conta `fm65`.
+#
+# Houve um terceiro — de outra organização, em três commits — e esses foram
+# reescritos: já não existe nenhum commit com ele.
+#
+# # O que este ficheiro faz, e o que não faz
+#
+# Faz: `git log`, `git shortlog`, `git blame` e `git check-mailmap` passam a
+# mostrar uma identidade única. É a leitura de quem abre o repositório.
+#
+# **Não faz**: a lista de «Contributors» do GitHub não lê este ficheiro. Essa
+# lista sai dos endereços **ligados a contas** do GitHub, e muda-se nas
+# definições da conta — não aqui, e não reescrevendo história.
+#
+# # Um clone anterior a 2026-08-28 tem história divergente
+#
+# Nessa data os três commits do endereço de outra organização foram reescritos,
+# e com eles os 64 descendentes. Um clone feito antes tem SHA que já não existem
+# aqui: a forma correcta de o alinhar é voltar a clonar, e não fazer merge.
+#
+# Formato: <nome canónico> <email canónico> <email a mapear>
+
+Fidel Monteiro <fidelrmonteiro@gmail.com> <56933720+fm65@users.noreply.github.com>

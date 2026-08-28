@@ -32,7 +32,6 @@ use ocinye_observability::CorrelationIds;
 #[derive(Debug, Default)]
 struct Args {
     name: Option<String>,
-    username: Option<String>,
     email: Option<String>,
 }
 
@@ -50,10 +49,6 @@ fn parse_args(argv: &[String]) -> anyhow::Result<Args> {
         match flag.as_str() {
             "--name" => {
                 args.name = Some(value()?);
-                iter.next();
-            }
-            "--username" => {
-                args.username = Some(value()?);
                 iter.next();
             }
             "--email" => {
@@ -74,7 +69,6 @@ fn print_usage() {
     eprintln!(
         "Uso: ocinye-core-server bootstrap-admin \\
   --name \"Nome Completo\" \\
-  --username nome.utilizador \\
   --email pessoa@ocinye.com
 
 Cria o primeiro PlatformAdmin da instalação e imprime uma palavra-passe
@@ -94,10 +88,9 @@ Corre uma única vez. Se já existir um administrador utilizável, recusa."
 pub async fn run(argv: &[String]) -> anyhow::Result<()> {
     let args = parse_args(argv)?;
 
-    let (Some(name), Some(username), Some(email)) = (&args.name, &args.username, &args.email)
-    else {
+    let (Some(name), Some(email)) = (&args.name, &args.email) else {
         print_usage();
-        bail!("--name, --username e --email são obrigatórios");
+        bail!("--name e --email são obrigatórios");
     };
 
     let config = CoreConfig::from_env().context("configuração")?;
@@ -124,7 +117,7 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
         }),
         Throttle {
             per_ip: config.auth.throttle_per_ip,
-            per_username: config.auth.throttle_per_username,
+            per_email: config.auth.throttle_per_email,
             window_minutes: config.auth.throttle_window_minutes,
         },
         config.auth.temporary_credential_hours,
@@ -135,7 +128,6 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
         &authenticator,
         organisation.id,
         name,
-        username,
         email,
         &ids,
     )
@@ -159,7 +151,7 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
     println!("  Administrador principal criado.");
     println!();
     println!("  Nome                 {}", person.full_name);
-    println!("  Utilizador           {}", credential.username);
+    println!("  Utilizador           {}", credential.email);
     println!("  Palavra-passe        {}", credential.secret.expose());
     println!(
         "  Válida até           {}",
@@ -187,15 +179,12 @@ mod tests {
         let args = parse_args(&argv(&[
             "--name",
             "Filipe Monteiro",
-            "--username",
-            "fmonteiro",
             "--email",
             "filipe@ocinye.com",
         ]))
         .unwrap();
 
         assert_eq!(args.name.as_deref(), Some("Filipe Monteiro"));
-        assert_eq!(args.username.as_deref(), Some("fmonteiro"));
         assert_eq!(args.email.as_deref(), Some("filipe@ocinye.com"));
     }
 

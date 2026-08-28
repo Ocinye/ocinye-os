@@ -38,6 +38,8 @@ pub mod operations;
 pub mod outbox;
 pub mod password;
 pub mod readiness;
+pub mod realtime;
+pub mod resources;
 pub mod storage;
 pub mod visibility;
 

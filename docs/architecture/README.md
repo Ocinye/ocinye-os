@@ -1,13 +1,76 @@
 # Arquitectura do Ocinye OS
 
-O Ocinye OS é o **sistema operacional institucional da Ocinye**: não um website
-com área privada, mas a infraestrutura digital através da qual a instituição
-opera.
+Esta página é a **fonte canónica** da definição do Ocinye OS, dos seus planos e
+das suas fronteiras de autoridade. Os outros documentos resumem e ligam para
+aqui; não redefinem.
 
-Esta distinção não é retórica. Determina o modelo de dados (proveniência desde o
-início, não acrescentada anos depois), a autorização (contextual, não `admin`/`user`),
-a pesquisa (permission-aware em SQL, não filtrada no cliente) e a evolução (zero
-ou N nós, sem reconstrução).
+## O que é o Ocinye OS
+
+> **O Ocinye OS é a infraestrutura digital institucional através da qual a
+> Ocinye organiza, governa, preserva e transforma conhecimento, dados,
+> investigação e engenharia em capacidade tecnológica duradoura.**
+
+Não um website com área privada. Não uma colecção de aplicações internas. Não uma
+plataforma de IA. A decisão que recusa esse caminho está em
+[ADR-0001](../adrs/0001-ocinye-os-definition.md); esta secção é a formulação
+corrente do que ela produziu.
+
+**A Ocinye** é uma instituição angolana de investigação aplicada, engenharia e
+infraestruturas tecnológicas. **O Ocinye OS** é a sua infraestrutura digital
+institucional. Não se confundem: a instituição tem existência própria, e o
+sistema existe para a suportar.
+
+### Porque existe
+
+> **People may leave. Projects may end. Software may be replaced. AI models may
+> change. Institutional knowledge must remain.**
+
+Investigadores saem. Projectos terminam. Equipamentos mudam. Financiamentos
+acabam. Software é substituído, e modelos de IA são trocados por outros melhores.
+A resposta por omissão a cada uma dessas necessidades é construir mais uma
+aplicação — e ao fim de alguns anos a instituição tem sete sistemas que não se
+conhecem e nenhuma memória.
+
+> **Ocinye OS should preserve institutional knowledge independently of the
+> continued presence of any individual member, software implementation, AI model
+> or compute node.**
+
+E daí a finalidade, que não é a de preservar software:
+
+> **The purpose of Ocinye OS is not to preserve software. It is to preserve and
+> amplify the institution's capacity to know, investigate, engineer and build.**
+
+### As três propriedades que decorrem disto
+
+**A inteligência artificial é uma capacidade transversal do sistema.** Aumenta a
+capacidade de compreender, investigar, simular, criar e operar — e não substitui
+a autoridade institucional, a evidência científica nem a memória da organização.
+
+> **AI is a transversal capability, not the institutional substrate.**
+
+**A proveniência científica é uma propriedade fundamental.** Resultados
+relevantes permanecem rastreáveis às pessoas, dados, métodos, versões,
+ferramentas, execuções e evidências que os produziram
+([ciclo de vida científico](scientific-lifecycle.md)).
+
+**A autoridade institucional reside no Core, e nada a partilha.** É a fronteira
+que a secção [Core, Experience e Design System](#core-experience-e-design-system)
+descreve.
+
+Estas distinções não são retóricas. Determinam o modelo de dados (proveniência
+desde o início, não acrescentada anos depois), a autorização (contextual, não
+`admin`/`user`), a pesquisa (permission-aware em SQL, não filtrada no cliente) e a
+evolução (zero ou N nós, sem reconstrução).
+
+## Duas dimensões, dois diagramas
+
+O Ocinye OS lê-se por duas perguntas diferentes, e cada uma tem o seu diagrama.
+Juntá-las num só produziria um esquema que não responde a nenhuma.
+
+| Pergunta | Onde está a resposta |
+|---|---|
+| **Quem pode produzir efeitos?** | [Planos](#planos) e [Core, Experience e Design System](#core-experience-e-design-system) |
+| **Para que serve o sistema?** | [Infraestrutura horizontal e produção científica](#infraestrutura-horizontal-e-produção-científica) |
 
 ## Planos
 
@@ -243,6 +306,73 @@ Um verificador só é evidência quando se pode demonstrar que observou o object
 certo, exerceu a violação certa e falhou pela razão esperada. Qualquer outro
 desfecho é `INVALID` — nunca «passou».
 
+## Infraestrutura horizontal e produção científica
+
+Os planos acima respondem a *quem pode produzir efeitos*. Esta secção responde a
+*para que serve o sistema*, e organiza-o noutro eixo: o que é infraestrutura para
+toda a instituição, e o que é produção de conhecimento.
+
+```mermaid
+flowchart TB
+    subgraph Horizontal["Infraestrutura institucional horizontal"]
+        direction LR
+        IDN["Identidade<br/>Autorização"]
+        COL["Colaboração<br/>Tarefas · Calendário · Mensagens · Correio"]
+        KNW["Conhecimento<br/>Bibliografia · Notas · Documentos"]
+        DAT["Dados<br/>Datasets · versões"]
+        INF["Inteligência<br/>Computação"]
+        AGT["Plano agentic"]
+    end
+
+    subgraph Cientifica["Camada de produção científica"]
+        direction LR
+        IDP["Ideias · Projectos<br/>ambientes de investigação"]
+        HYP["Hipóteses"]
+        MET["Metodologias<br/>versões"]
+        STU["Estudos<br/>execuções"]
+        RES["Resultados<br/>validações"]
+    end
+
+    PROV["Proveniência<br/>relações tipadas, datadas e autorizadas"]
+    LIN["Linhagem científica<br/>projecção navegável"]
+    MEM["Memória institucional"]
+
+    Horizontal --> Cientifica
+    Cientifica --> PROV
+    PROV --> LIN
+    LIN --> MEM
+    Horizontal --> MEM
+```
+
+**A infraestrutura horizontal serve toda a instituição.** Identidade,
+autorização, colaboração, conhecimento, dados, correio, calendário, mensagens,
+inteligência e computação não são domínios científicos: são o substrato sobre o
+qual qualquer trabalho institucional acontece. O correio, as mensagens e o
+calendário são módulos nativos desta camada
+([ADR-0003](../adrs/0003-native-modules.md)) — não o centro conceptual do
+sistema.
+
+**A camada científica produz conhecimento.** É onde uma pergunta se torna
+hipótese, a hipótese se torna estudo, o estudo corre e produz resultado, e o
+resultado é validado ou reproduzido.
+
+**A proveniência liga as duas.** Cada relação é tipada, datada, autorizada e
+guarda se foi observada pela operação ou declarada por alguém. A linhagem é a
+projecção navegável dessas relações — não uma segunda base de dados.
+
+**A memória institucional emerge**, e não é um módulo: nasce da composição
+governada do conhecimento, dos dados, dos projectos, dos resultados, dos
+documentos, da auditoria e da proveniência.
+
+Detalhe: [ciclo de vida científico, proveniência e linhagem](scientific-lifecycle.md).
+
+### Comunicação não é conhecimento
+
+Um email, uma mensagem ou uma reunião não se tornam automaticamente evidência
+científica, conhecimento institucional ou proveniência. A promoção é deliberada e
+passa por uma operação: alguém decide que aquilo passa a fazer parte do registo
+institucional, e essa decisão fica registada como qualquer outra.
+
 ## Onde vive cada plano
 
 | Plano | Implementação | Estado |
@@ -251,6 +381,7 @@ desfecho é `INVALID` — nunca «passou».
 | Agentic Control | `ocinye-core::modules::agentic`, `ocinye-domain::policy::agentic` | `CURRENT`; inferência `NO_RESOURCE` |
 | Control | `crates/ocinye-core`, `services/core-server` | `CURRENT` |
 | Knowledge & Data | `ocinye-core::modules::{knowledge,data,search}` + PostgreSQL + MinIO | `CURRENT` |
+| Produção científica | `ocinye-core::modules::science` | `CURRENT`; linhagem com tecto de 5 saltos |
 | Intelligence | `ocinye-core::modules::intelligence` | `CURRENT` (arquitectura); 0 fornecedores |
 | Compute | `ocinye-core::modules::compute`, `services/node-agent` | `CURRENT` (registo); 0 nós |
 | Capability | `crates/ocinye-capabilities`, `wasm/capabilities` | `CURRENT`; primeiro consumidor: `knowledge::review_bibliography` |
@@ -366,7 +497,8 @@ Detalhe: [docs/security/](../security/README.md) e
 
 ## Decisões arquitecturais
 
-16 ADRs em [docs/adrs/](../adrs/README.md). As que mais moldam o resto:
+O índice completo está em [docs/adrs/](../adrs/README.md). As que mais moldam o
+resto:
 
 - [ADR-0004](../adrs/0004-rust-first.md) — Rust-first como princípio da instituição.
 - [ADR-0006](../adrs/0006-modular-monolith.md) — modular monolith com fronteiras explícitas.
@@ -375,6 +507,8 @@ Detalhe: [docs/security/](../security/README.md) e
 - [ADR-0300](../adrs/0300-ai-gateway.md) — capacidades, nunca modelos.
 - [ADR-0500](../adrs/0500-compute-registry-node-agent.md) — 0..N nós, identidade de máquina.
 - [ADR-0501](../adrs/0501-capability-runtime-wasm.md) — WASM onde ganha o seu lugar.
+- [ADR-0307](../adrs/0307-dual-entry-single-authority.md) — Dual Entry, Single Authority, e as quatro classes de fronteira.
+- [ADR-0412](../adrs/0412-scientific-lifecycle-and-provenance.md) — ciclo de vida científico e proveniência de primeira classe.
 
 ## Como isto evolui sem ser reconstruído
 

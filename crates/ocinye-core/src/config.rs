@@ -129,7 +129,7 @@ pub struct AuthConfig {
     /// Failed attempts from one origin before refusal.
     pub throttle_per_ip: i64,
     /// Failed attempts against one account before refusal.
-    pub throttle_per_username: i64,
+    pub throttle_per_email: i64,
     /// Window over which failures are counted, in minutes.
     pub throttle_window_minutes: i64,
 }
@@ -243,6 +243,17 @@ pub struct MailConfig {
     pub password: String,
     /// Largest message the composer accepts, attachments included.
     pub max_message_bytes: u64,
+    /// A chave que cifra as credenciais de cada caixa, ausente quando esta
+    /// instalação não a configurou.
+    ///
+    /// # Porque é `Option` e não um valor gerado
+    ///
+    /// Uma chave gerada ao arranque abriria as credenciais desta execução e de
+    /// mais nenhuma: ao reiniciar, todas as caixas ligadas ficariam ilegíveis
+    /// sem que ninguém tivesse pedido nada. Ausente, ligar uma caixa recusa com
+    /// a razão dita — que é o comportamento correcto de uma instalação sem
+    /// chave, e não um sítio por preencher (ADR-0409).
+    pub sealing_key: Option<crate::password::sealed::SealingKey>,
 }
 
 impl std::fmt::Debug for MailConfig {
@@ -260,34 +271,69 @@ impl std::fmt::Debug for MailConfig {
             .field("username", &self.username)
             .field("password", &"<redacted>")
             .field("max_message_bytes", &self.max_message_bytes)
+            .field("sealing_key", &self.sealing_key)
             .finish()
     }
 }
 
 impl MailConfig {
-    /// Whether enough is configured to build a real adapter.
+    /// Whether the installation knows **where** the mail service is.
     ///
-    /// All four parts or none. A half-configured adapter fails at the moment
-    /// somebody tries to send, which is the worst possible moment to discover
-    /// it.
+    /// # Transporte e credencial são coisas separadas
+    ///
+    /// Esta distinção não existia: as quatro variáveis eram um bloco, e uma
+    /// instalação com anfitriões mas sem conta de serviço era recusada como
+    /// «meio configurada». Isso é anterior ao [ADR-0409], que trouxe a
+    /// credencial de cada membro — e desde então há uma instalação
+    /// perfeitamente coerente que o modelo antigo não sabia exprimir:
+    ///
+    /// > o Ocinye OS sabe onde é o servidor, e **cada pessoa entra com a sua
+    /// > própria senha**.
+    ///
+    /// Nessa instalação não existe conta de serviço institucional, e não é uma
+    /// falta: é uma decisão. Ninguém guarda uma senha que abre a caixa de toda
+    /// a gente.
+    ///
+    /// [ADR-0409]: https://github.com/Ocinye/ocinye-os/blob/main/docs/adrs/0409-mailbox-credentials-per-member.md
+    #[must_use]
+    pub fn transport_configured(&self) -> bool {
+        !self.imap_host.is_empty() && !self.smtp_host.is_empty()
+    }
+
+    /// Whether an institutional service account exists.
+    ///
+    /// A conta com que o `worker` indexa e com que o trabalho agentic age. Não
+    /// pertence a ninguém, e por isso não pode representar ninguém — é por
+    /// isso que a sua ausência não impede um membro de ler o seu correio.
+    #[must_use]
+    pub fn has_institutional_credential(&self) -> bool {
+        !self.username.is_empty() && !self.password.is_empty()
+    }
+
+    /// Whether enough is configured to build a real institutional adapter.
     #[must_use]
     pub fn is_configured(&self) -> bool {
-        !self.imap_host.is_empty()
-            && !self.smtp_host.is_empty()
-            && !self.username.is_empty()
-            && !self.password.is_empty()
+        self.transport_configured() && self.has_institutional_credential()
     }
 
     /// Whether some parts are set and others are not.
+    ///
+    /// Duas metades independentes, e cada uma tem de estar inteira:
+    ///
+    /// - **transporte** — os dois anfitriões, ou nenhum. Um sem o outro deixa
+    ///   metade do correio a apontar para lado nenhum.
+    /// - **credencial** — utilizador e senha, ou nenhum. Um sem o outro nunca
+    ///   autentica.
+    ///
+    /// E uma credencial sem transporte é uma credencial para lado nenhum.
     #[must_use]
     pub fn is_partially_configured(&self) -> bool {
-        let parts = [
-            !self.imap_host.is_empty(),
-            !self.smtp_host.is_empty(),
-            !self.username.is_empty(),
-            !self.password.is_empty(),
-        ];
-        parts.iter().any(|set| *set) && !parts.iter().all(|set| *set)
+        let transporte_meio = !self.imap_host.is_empty() != !self.smtp_host.is_empty();
+        let credencial_meio = !self.username.is_empty() != !self.password.is_empty();
+        let credencial_sem_destino =
+            self.has_institutional_credential() && !self.transport_configured();
+
+        transporte_meio || credencial_meio || credencial_sem_destino
     }
 }
 
@@ -447,7 +493,7 @@ impl CoreConfig {
                 argon2_parallelism: parse_number("OCINYE_ARGON2_PARALLELISM", 1),
                 temporary_credential_hours: parse_number("OCINYE_TEMPORARY_CREDENTIAL_HOURS", 24),
                 throttle_per_ip: parse_number("OCINYE_THROTTLE_PER_IP", 20),
-                throttle_per_username: parse_number("OCINYE_THROTTLE_PER_USERNAME", 10),
+                throttle_per_email: parse_number("OCINYE_THROTTLE_PER_EMAIL", 10),
                 throttle_window_minutes: parse_number("OCINYE_THROTTLE_WINDOW_MINUTES", 15),
             },
             storage: StorageConfig {
@@ -494,6 +540,10 @@ impl CoreConfig {
                 username: or_default("OCINYE_MAIL_USERNAME", ""),
                 password: or_default("OCINYE_MAIL_PASSWORD", ""),
                 max_message_bytes: parse_number("OCINYE_MAIL_MAX_MESSAGE_BYTES", 25 * 1024 * 1024),
+                sealing_key: match optional("OCINYE_MAIL_KEY") {
+                    None => None,
+                    Some(valor) => Some(crate::password::sealed::SealingKey::from_base64(&valor)?),
+                },
             },
             cors_allowed_origins: or_default("OCINYE_CORS_ALLOWED_ORIGINS", "")
                 .split(',')
@@ -532,7 +582,7 @@ impl CoreConfig {
                     .to_owned(),
             ));
         }
-        if self.auth.throttle_per_username <= 0 || self.auth.throttle_per_ip <= 0 {
+        if self.auth.throttle_per_email <= 0 || self.auth.throttle_per_ip <= 0 {
             return Err(CoreError::Configuration(
                 "throttling thresholds must be positive".to_owned(),
             ));
@@ -542,15 +592,18 @@ impl CoreConfig {
         // fails at the moment somebody presses Enviar.
         if self.mail.is_partially_configured() {
             return Err(CoreError::Configuration(
-                "Ocinye Mail is partially configured: OCINYE_MAIL_IMAP_HOST, \
-                 OCINYE_MAIL_SMTP_HOST, OCINYE_MAIL_USERNAME and OCINYE_MAIL_PASSWORD \
-                 must all be set, or all be absent"
+                "Ocinye Mail is partially configured. Transport and credential are \
+                 separate: OCINYE_MAIL_IMAP_HOST and OCINYE_MAIL_SMTP_HOST are both \
+                 set or both absent, and OCINYE_MAIL_USERNAME and \
+                 OCINYE_MAIL_PASSWORD are both set or both absent. Transport \
+                 without an institutional credential is a valid installation: \
+                 every member connects their own mailbox (ADR-0409)."
                     .to_owned(),
             ));
         }
-        if self.mail.is_configured() && self.mail.institutional_domains.is_empty() {
+        if self.mail.transport_configured() && self.mail.institutional_domains.is_empty() {
             return Err(CoreError::Configuration(
-                "OCINYE_MAIL_INSTITUTIONAL_DOMAINS must be set when mail is configured: \
+                "OCINYE_MAIL_INSTITUTIONAL_DOMAINS must be set when mail transport is configured: \
                  without it every recipient counts as external"
                     .to_owned(),
             ));
@@ -626,7 +679,7 @@ mod tests {
                 argon2_parallelism: 1,
                 temporary_credential_hours: 24,
                 throttle_per_ip: 20,
-                throttle_per_username: 10,
+                throttle_per_email: 10,
                 throttle_window_minutes: 15,
             },
             storage: StorageConfig {
@@ -659,6 +712,7 @@ mod tests {
                 username: String::new(),
                 password: String::new(),
                 max_message_bytes: 1024,
+                sealing_key: None,
             },
             cors_allowed_origins: vec![],
             capability_components_dir: "target/wasm32-wasip1/release".to_owned(),
@@ -702,7 +756,7 @@ mod tests {
         );
 
         let mut no_throttle = config_fixture(Environment::Development);
-        no_throttle.auth.throttle_per_username = 0;
+        no_throttle.auth.throttle_per_email = 0;
         assert!(no_throttle.validate().is_err());
     }
 

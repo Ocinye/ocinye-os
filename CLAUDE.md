@@ -32,8 +32,15 @@ descrevem o mesmo sistema: quando divergirem, é defeito, e corrige-se nas duas.
 
 > Factos verificados, não intenções. Não uses esta secção para roadmap.
 
-**Verificado em 2026-08-23.** Cada afirmação abaixo é verificável correndo
+**Verificado em 2026-08-28.** Cada afirmação abaixo é verificável correndo
 `./scripts/verify.sh` no repositório.
+
+Os **números** desta secção não são escritos à mão: saem de
+`./scripts/repository-facts.sh`, que os deriva da árvore e só lê. Já houve aqui
+quatro contagens em circulação ao mesmo tempo — 62 caminhos contra 131, 12
+migrations contra 19, 45 tabelas contra 63, 64 permissões contra 72 — porque
+cada uma era mantida por quem se lembrasse. Um número escrito à mão envelhece
+sem que nada falhe.
 
 **Existe e funciona hoje:**
 
@@ -42,8 +49,8 @@ descrevem o mesmo sistema: quando divergirem, é defeito, e corrige-se nas duas.
   3 serviços (`core-server`, `worker`, `node-agent`) e 1 aplicação
   (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED`, não deployado.** 62 caminhos e 94 operações sob
-  `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
+- **Ocinye Core: `IMPLEMENTED`, não deployado.** 131 caminhos e 155 operações
+  sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`.
 - **Autenticação: `IMPLEMENTED`, no Core** — nome de utilizador e palavra-passe,
@@ -51,13 +58,13 @@ descrevem o mesmo sistema: quando divergirem, é defeito, e corrige-se nas duas.
   que expiram, throttling ([ADR-0103](docs/adrs/0103-core-owned-authentication.md),
   [ADR-0104](docs/adrs/0104-password-policy-and-hashing.md)).
   **`MFA = NOT IMPLEMENTED`** e não exigido nesta fase (§33).
-- **Autorização por permissões nomeadas: `IMPLEMENTED`.** 64 permissões, quatro
+- **Autorização por permissões nomeadas: `IMPLEMENTED`.** 72 permissões, quatro
   âmbitos, grants explícitos atribuíveis e revogáveis, e acesso explicável
   ([ADR-0101](docs/adrs/0101-permissions-scopes-and-grants.md)).
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED`, não deployado.** 34 ecrãs em Leptos SSR,
+- **Ocinye Workspace: `IMPLEMENTED`, não deployado.** 65 ecrãs em Leptos SSR,
   sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
   pelas permissões que o Core calcula.
 - **Ocinye Mail: `IMPLEMENTED`, `NOT CONFIGURED`.** Módulo do Core com
@@ -70,7 +77,7 @@ descrevem o mesmo sistema: quando divergirem, é defeito, e corrige-se nas duas.
   **Nenhum serviço de correio está configurado nesta instalação**, e a interface
   diz isso em vez de mostrar uma caixa vazia. **A sincronização é manual:
   `mail.sync` reporta `degraded`, porque não existe worker de ingestão.**
-- **12 migrations**, aplicáveis de base vazia; 45 tabelas.
+- **19 migrations**, aplicáveis de base vazia; 63 tabelas.
 - **Agentes de IA: `IMPLEMENTED`.** Definíveis e persistidos **sem nó de IA**;
   o estado de execução é derivado da disponibilidade real.
 - **Agentic Control Plane: `IMPLEMENTED`, sem inferência.** Capability Registry
@@ -83,6 +90,20 @@ descrevem o mesmo sistema: quando divergirem, é defeito, e corrige-se nas duas.
   **`Pesquisar` funciona com zero nós de IA**; `Perguntar` e `Executar`
   declaram-se indisponíveis com a razão. Nenhuma capability alcança shell, SQL,
   ficheiros, rede ou segredos, e existe um teste que o verifica.
+- **Ciclo de vida científico e proveniência: `IMPLEMENTED`.** Hipótese,
+  metodologia, versão de metodologia, estudo, execução, resultado, e a
+  validação ou reprodução que alguém registou
+  ([ADR-0412](docs/adrs/0412-scientific-lifecycle-and-provenance.md)). As
+  relações vivem em `research_links`, com quinze verbos, uma matriz que diz que
+  pares de tipos cada um aceita, e a **origem** guardada: `declared` — alguém
+  afirmou — ou `operation` — o Core observou, na mesma transacção que produziu
+  o efeito. A **linhagem é uma projecção**, não uma tabela: cada travessia lê a
+  proveniência agora e resolve cada nó com a política de quem percorre. Um nó
+  que essa política recuse termina a travessia e **não aparece** — nem
+  contagem, nem `truncated`, que fala só do limite de profundidade. No
+  Workspace lê-se por títulos, sem um único identificador no ecrã.
+  **Validar um resultado não é delegável** a nenhum agente: é uma afirmação
+  institucional, e o peso dela é de quem a faz.
 - **Lifecycle de planos agentic: `IMPLEMENTED`.** Uma proposta validada é
   persistida como `ActionPlan` imutável, recuperável por
   `GET /api/v1/agentic/plans` e `…/plans/{id}`, e passível de aprovação,
@@ -92,19 +113,30 @@ descrevem o mesmo sistema: quando divergirem, é defeito, e corrige-se nas duas.
   imediatamente antes de o correr. **Aprovação é consentimento, não
   autorização:** revogar um acesso depois de confirmar impede a execução, e
   existe teste que o demonstra.
-- **40 ADRs** em `docs/adrs/`, **9 runbooks** em `docs/runbooks/`,
+- **49 ADRs** em `docs/adrs/`, **9 runbooks** em `docs/runbooks/`,
   **41 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
   `infra/compose/docker-compose.yml` (postgres, redis, minio).
-- **Repositório institucional: [`Ocinye/ocinye-os`](https://github.com/Ocinye/ocinye-os), privado.**
+- **Repositório institucional: [`Ocinye/ocinye-os`](https://github.com/Ocinye/ocinye-os), público.**
   Primeiro commit em 2026-08-23, com identidade humana. A CI corre no GitHub
   Actions contra PostgreSQL efémero, e um passo conta os testes que correram
   para que uma suite saltada não possa passar por verde.
-- **Testes: 638**, todos verdes. Incluem **123 contra PostgreSQL real**
-  (autorização, identidade, correio, investigação e conhecimento, plano agentic
-  e o lifecycle de planos), quatro guardas que percorrem todos os ecrãs e falham se algum
+- **`main` está protegida por regra do GitHub.** *Branch protection* clássica,
+  verificada em 2026-08-27 pela API: alterações entram por Pull Request, com
+  cinco *required status checks* — `Testes`, `Stack local`, `Formatação, lint e
+  segredos`, `Advisories RustSec (cargo audit)`, `Advisories do GitHub
+  (Cargo.lock)` — em modo *strict*, pelo que a branch tem de estar actualizada
+  com `main` antes de entrar. `enforce_admins` está activo, *force push* e
+  eliminação da branch estão bloqueados, e a resolução de conversas é exigida.
+  Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
+  vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
+  seria um sítio a mais onde discordar.
+- **Testes: 1198**, todos verdes numa corrida de `./scripts/verify.sh`.
+  **366 deles não correm sem base de dados** — vivem em ficheiros que leem
+  `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
+  mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
   completo contra um fornecedor determinístico — **sem GPU** —, e a Provider
@@ -117,11 +149,6 @@ descrevem o mesmo sistema: quando divergirem, é defeito, e corrige-se nas duas.
 
 **Continua a não existir:**
 
-- **`main` não está protegida por regra do GitHub.** Não por omissão: a
-  organização está no plano **Free**, e nesse plano tanto os *rulesets* como a
-  *branch protection* clássica são recusados num repositório privado — a API
-  responde «Upgrade to GitHub Pro or make this repository public». O que existe
-  é disciplina escrita (§73), não impedimento técnico. Ver §73 e o CHANGELOG.
 - **Nenhum segundo factor de autenticação.** Uma palavra-passe comprometida é
   acesso comprometido. Limitação assumida, não omissão: ver ADR-0103.
 - **Nenhuma conta existe** numa instalação nova até alguém correr o bootstrap.
@@ -1720,10 +1747,17 @@ relacionados com Claude, Anthropic ou IA. Não uses `--author` para o efeito.
 
 ## 73. Disciplina Git
 
-> **Revista em 2026-08-23.** Até essa data esta secção dizia «não inicializes o
-> repositório Git». O repositório institucional existe agora —
-> [`Ocinye/ocinye-os`](https://github.com/Ocinye/ocinye-os), privado, na
+> **Revista em 2026-08-23**, e outra vez em **2026-08-27**. Até 2026-08-23 esta
+> secção dizia «não inicializes o repositório Git». O repositório institucional
+> existe agora — [`Ocinye/ocinye-os`](https://github.com/Ocinye/ocinye-os), na
 > organização — e a regra que faltava passa a ser esta.
+>
+> A revisão de 2026-08-27 corrige o parágrafo que dizia `main` tecnicamente
+> desprotegida. Era verdade enquanto o repositório era privado num plano que
+> recusava a funcionalidade; deixou de o ser quando o repositório passou a
+> público e a protecção foi activada. **O que era verdade ontem não é uma
+> verdade permanente**, e uma limitação descrita no presente sobrevive à sua
+> própria causa se ninguém a for corrigir.
 
 O repositório pertence à **instituição**, não a quem escreve o commit. Todo o
 commit tem uma identidade humana responsável.
@@ -1754,11 +1788,19 @@ branch de trabalho → Pull Request → CI verde → revisão quando houver → 
 
 O primeiro commit foi a excepção natural: `main` ainda não existia.
 
-> **`main` não está tecnicamente protegida.** O plano Free do GitHub recusa
-> *rulesets* e *branch protection* em repositórios privados. Escrever isto aqui
-> não a protege — descreve honestamente que, hoje, o que separa `main` de um
-> push directo é disciplina e não o servidor (`CLAUDE.md` §69). Fechar essa
-> lacuna é uma decisão institucional: plano **Team**, ou repositório público.
+> **`main` está tecnicamente protegida.** Já não é só disciplina: o servidor
+> recusa. Verificado pela API em 2026-08-27 e descrito por inteiro na §1 —
+> Pull Request obrigatória, cinco *required checks* em modo *strict*,
+> `enforce_admins` activo, *force push* e eliminação bloqueados, resolução de
+> conversas exigida.
+>
+> A decisão institucional que fechou a lacuna foi **tornar o repositório
+> público**, e não subir de plano. As duas alternativas estavam escritas aqui;
+> a escolhida evita depender de Actions pagas.
+>
+> O portão canónico de `main` continua a correr **depois** do merge, e não é um
+> *required check* de PR: um portão que só pode correr no estado que ainda não
+> existe não pode ser condição para lá chegar.
 
 ### Boas práticas
 

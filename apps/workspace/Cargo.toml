@@ -34,6 +34,13 @@ rand = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+# `async-trait`, só para as sondas de credencial dos harnesses.
+#
+# `CredentialProbe` é um trait assíncrono, e um harness sem servidor de correio
+# tem de declarar a sua própria sonda em vez de a verificação desaparecer do
+# caminho que estes testes percorrem (ADR-0409 §8). Em `[dev-dependencies]`
+# porque nada em produção a precisa.
+async-trait = { workspace = true }
 futures = { workspace = true }
 ocinye-core = { workspace = true }
 ocinye-core-server = { workspace = true }

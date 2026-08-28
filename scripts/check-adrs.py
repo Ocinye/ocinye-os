@@ -21,7 +21,8 @@ STATUS = {"Proposed", "Accepted", "Superseded", "Rejected", "Deprecated"}
 IMPACT = {"FOUNDATIONAL", "HIGH", "MEDIUM", "LOCAL"}
 DOMAINS = {
     "Foundation", "Security", "Identity", "Data", "Knowledge",
-    "Agentic", "AI", "Mail", "Calendar", "Compute", "Workspace", "Operations",
+    "Agentic", "AI", "Mail", "Calendar", "Science", "Compute", "Workspace",
+    "Operations",
 }
 FAMILIES = [
     (1, 99, "Foundations"), (100, 199, "Identity/Security"),

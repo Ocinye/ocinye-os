@@ -66,6 +66,14 @@ impl Tone {
             "ON HOLD" | "ON_HOLD" | "PAUSADO" | "AVISO" | "RESTRITO" => Self::Warn,
             "COMPLETED" => Self::Navy,
 
+            // Ciclo científico
+            "ABERTA" | "REGISTADO" | "PLANEADO" | "RASCUNHO" => Self::Gray,
+            "A CORRER" | "EM REVISÃO" => Self::Blue,
+            "SUSTENTADA" | "VALIDADO" | "EM VIGOR" => Self::Ok,
+            "REFUTADA" | "INVALIDADO" => Self::Err,
+            "INCONCLUSIVA" | "ABANDONADO" => Self::Warn,
+            "RETIRADA" | "SUBSTITUÍDA" | "SUBSTITUÍDO" => Self::Gray,
+
             // Operacional
             "EM CURSO" | "UNIDADE" => Self::Blue,
             "SUSPENSA" | "DESACTIVADO" | "PESSOAL" | "BAIXA" => Self::Gray,

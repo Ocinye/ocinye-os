@@ -344,7 +344,11 @@ pub struct ResearchLink {
     /// Identifier.
     pub id: Uuid,
     /// Owning workspace.
-    pub workspace_id: Uuid,
+    /// The environment the relation was declared in, when there was one.
+    ///
+    /// `None` diz que a aresta atravessa ambientes — nunca que é de toda a
+    /// gente. A autoridade vem das duas pontas.
+    pub workspace_id: Option<Uuid>,
     /// Kind of the source object.
     pub source_type_name: String,
     /// Identifier of the source object.
@@ -361,19 +365,19 @@ pub struct ResearchLink {
     pub created_at: DateTime<Utc>,
 }
 
-/// Relations a research link may express.
-///
-/// A closed set: an arbitrary relation string would make the future Knowledge
-/// Graph unqueryable.
-pub const ALLOWED_RELATIONS: &[&str] = &[
-    "cites",
-    "supports",
-    "refutes",
-    "derived_from",
-    "uses",
-    "produces",
-    "relates_to",
-];
+// O vocabulário das relações mudou de casa, e não encolheu.
+//
+// Estavam aqui sete cadeias — `cites`, `supports`, `refutes`, `derived_from`,
+// `uses`, `produces`, `relates_to` — e o ciclo científico trouxe mais oito. As
+// quinze vivem agora em `ocinye_contracts::provenance::ProvenanceRelation`,
+// que além do verbo declara **entre que tipos** ele faz sentido: uma lista
+// fechada de verbos impede verbos inventados e não impede combinações
+// absurdas.
+//
+// As sete originais estão lá todas, e há um teste que o exige. Retirar uma do
+// vocabulário não apagaria as arestas que a usam: tornava-as ilegíveis, e a
+// memória institucional passaria a conter afirmações que o sistema não sabe
+// ler.
 
 #[cfg(test)]
 mod tests {

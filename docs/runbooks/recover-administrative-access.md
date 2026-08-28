@@ -13,7 +13,7 @@ auditoria.
 
 ```bash
 psql "$OCINYE_DATABASE_URL" -c "
-  SELECT p.username, p.status
+  SELECT p.endereço, p.status
     FROM people p JOIN person_roles r ON r.person_id = p.id
    WHERE r.role = 'platform_admin' AND r.revoked_at IS NULL"
 ```
@@ -51,11 +51,11 @@ O guard do bootstrap conta apenas administradores **utilizáveis**
 # 1. Confirme que a conta antiga está mesmo fora de uso.
 psql "$OCINYE_DATABASE_URL" -c "
   UPDATE people SET status = 'disabled', deactivated_at = now()
-   WHERE username = '<antigo>'"
+   WHERE endereço = '<antigo>'"
 
 # 2. Crie um novo administrador pelo caminho normal.
 ocinye-core-server bootstrap-admin \
-  --name "Nome Completo" --username novo.admin --email pessoa@ocinye.com
+  --name "Nome Completo" --endereço novo.admin --email pessoa@ocinye.com
 ```
 
 Segue-se o [bootstrap normal](bootstrap-first-administrator.md): credencial

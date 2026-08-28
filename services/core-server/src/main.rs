@@ -7,7 +7,7 @@
 
 #![forbid(unsafe_code)]
 
-use ocinye_core_server::{bootstrap, mail_check, routes};
+use ocinye_core_server::{bootstrap, mail_check, provision, routes};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -41,8 +41,22 @@ async fn main() -> anyhow::Result<()> {
     }
     // Answers "do these credentials work?" without starting the Core, and
     // without printing anything that would be unsafe to paste into a ticket.
+    // Regista no Ocinye uma caixa que já existe no serviço de correio. Sem
+    // isto, ligar uma caixa pressupunha uma caixa que nada criava.
+    if argv.first().map(String::as_str) == Some("provision-mailbox") {
+        return provision::run(&argv[1..]).await;
+    }
     if argv.first().map(String::as_str) == Some("mail-check") {
         return mail_check::run().await;
+    }
+    // Uma chave nova para `OCINYE_MAIL_KEY`.
+    //
+    // Escreve-a e mais nada: a saída deste comando destina-se a ir directa para
+    // o cofre de segredos da instalação, e uma frase à volta seria uma frase que
+    // alguém colava com ela.
+    if argv.first().map(String::as_str) == Some("mail-key") {
+        println!("{}", ocinye_core::password::sealed::SealingKey::generate());
+        return Ok(());
     }
 
     let config = CoreConfig::from_env().context("configuration")?;
@@ -100,7 +114,7 @@ async fn main() -> anyhow::Result<()> {
         }),
         Throttle {
             per_ip: config.auth.throttle_per_ip,
-            per_username: config.auth.throttle_per_username,
+            per_email: config.auth.throttle_per_email,
             window_minutes: config.auth.throttle_window_minutes,
         },
         config.auth.temporary_credential_hours,
@@ -121,6 +135,19 @@ async fn main() -> anyhow::Result<()> {
             .context("capability runtime")?,
     );
 
+    // Construído antes de a configuração ir para dentro do `Arc`: o registo
+    // guarda o transporte e a chave, e não a configuração inteira.
+    let mail_registry = Arc::new(ocinye_core::modules::mail::ProviderRegistry::new(
+        mail_provider,
+        config.mail.clone(),
+        config.mail.sealing_key.clone(),
+    ));
+
+    // O plano realtime. Nunca falha o arranque: sem Redis, o Ocinye continua
+    // inteiro e o que se perde é propagação instantânea, presença e `typing`
+    // (ADR-0012 §9).
+    let realtime = Arc::new(ocinye_core::realtime::Realtime::connect(&config.redis_url).await);
+
     let state = AppState {
         pool,
         config: Arc::new(config),
@@ -131,7 +158,10 @@ async fn main() -> anyhow::Result<()> {
         // an adapter replaces this and **nothing above it changes**
         // (ADR-0002, ADR-0301).
         inference: Arc::new(ocinye_core::modules::intelligence::NoProvider),
-        mail_provider,
+        mail_probe: Arc::clone(&mail_registry)
+            as Arc<dyn ocinye_core::modules::mail::provider::CredentialProbe>,
+        mail_registry,
+        realtime,
         capabilities,
         organisation_id: organisation.id,
     };
@@ -188,7 +218,19 @@ async fn ensure_default_backend(
 /// because a mail host is down would be a self-inflicted outage.
 fn build_mail_provider(config: &CoreConfig) -> Arc<dyn MailProvider> {
     if !config.mail.is_configured() {
-        tracing::info!("Ocinye Mail is not configured on this deployment");
+        // Duas ausências diferentes, e dizer-lhes o mesmo manda quem lê
+        // procurar no sítio errado. Sem transporte não há serviço nenhum; com
+        // transporte e sem conta de serviço há correio, e é de cada pessoa.
+        if config.mail.transport_configured() {
+            tracing::info!(
+                imap = %config.mail.imap_host,
+                smtp = %config.mail.smtp_host,
+                "Ocinye Mail transport is configured with no institutional service \
+                 account; each member connects their own mailbox (ADR-0409)"
+            );
+        } else {
+            tracing::info!("Ocinye Mail is not configured on this deployment");
+        }
         return Arc::new(UnconfiguredProvider);
     }
 

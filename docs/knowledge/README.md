@@ -85,6 +85,22 @@ que agente, que capability, que plano — fica na auditoria, separada da autoria
 do artefacto. Um modelo que prepara texto não se torna autor institucional
 (`CLAUDE.md` §72, briefing §87).
 
+### Isto não é a proveniência científica
+
+O que está acima é **proveniência de artefacto**: quem criou isto, quando, a
+partir de que registo original, com que checksum. Responde à pergunta da autoria.
+
+A **proveniência científica** responde a outra: de que dados, versões, métodos,
+estudos e execuções **deriva** um resultado. Vive em `research_links`, é tipada, e
+guarda se a relação foi observada pela operação ou declarada por alguém.
+
+E nenhuma das duas é auditoria. A auditoria responde ao que aconteceu no sistema;
+um registo de auditoria completo não responde à pergunta científica, e uma
+proveniência completa não responde à operacional.
+
+Detalhe: [ciclo de vida científico, proveniência e
+linhagem](../architecture/scientific-lifecycle.md).
+
 ## Ler não é processar com IA
 
 Duas coisas diferentes, e o tecto da segunda é mais baixo:

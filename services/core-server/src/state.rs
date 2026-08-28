@@ -7,7 +7,9 @@ use ocinye_core::capabilities::Capabilities;
 use ocinye_core::config::CoreConfig;
 use ocinye_core::modules::identity::Authenticator;
 use ocinye_core::modules::intelligence::InferenceProvider;
-use ocinye_core::modules::mail::MailProvider;
+use ocinye_core::modules::mail::provider::CredentialProbe;
+use ocinye_core::modules::mail::ProviderRegistry;
+use ocinye_core::realtime::Realtime;
 use ocinye_core::storage::ObjectStore;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -33,14 +35,26 @@ pub struct AppState {
     /// call with a stated reason — the correct behaviour of an installation
     /// without inference, not a placeholder for one.
     pub inference: Arc<dyn InferenceProvider>,
-    /// The mail adapter.
+    /// O correio, e qual credencial abre a sessão de cada acção.
     ///
-    /// Never `None`. When mail is not configured this holds
-    /// [`ocinye_core::modules::mail::provider::UnconfiguredProvider`], which
-    /// answers every call with a stated reason rather than a blank page. An
-    /// `Option` here would push that decision into every handler, and one of
-    /// them would eventually get it wrong.
-    pub mail_provider: Arc<dyn MailProvider>,
+    /// A da instituição para indexar e para o trabalho agentic, a de cada
+    /// membro para o que ele faz. A escolha vive num sítio só porque escolher
+    /// mal não dá erro: dá uma acção correcta atribuída à pessoa errada
+    /// (ADR-0409).
+    ///
+    /// Nunca ausente. Sem correio configurado, o adaptador da instituição é o
+    /// [`ocinye_core::modules::mail::provider::UnconfiguredProvider`], que
+    /// responde a cada chamada com uma razão em vez de uma página vazia — um
+    /// `Option` empurraria essa decisão para dentro de cada handler, e um deles
+    /// acabaria por a tomar mal.
+    pub mail_registry: Arc<ProviderRegistry>,
+    /// Quem diz se uma credencial de caixa abre sessão, antes de ser guardada.
+    ///
+    /// Em produção é o próprio registo, que tenta um `LOGIN`. É um campo — e
+    /// não uma chamada dentro do serviço — porque um harness sem servidor de
+    /// correio tem de poder declarar o que assume, em vez de a verificação
+    /// desaparecer do caminho que os testes percorrem (ADR-0409 §8).
+    pub mail_probe: Arc<dyn CredentialProbe>,
     /// O Capability Runtime, com os componentes que esta instalação construiu.
     ///
     /// Nunca `None`. Uma instalação sem os componentes construídos tem aqui um
@@ -49,6 +63,12 @@ pub struct AppState {
     /// razão: um `Option` empurraria a decisão para dentro de cada handler, e um
     /// deles acabaria por a tomar mal.
     pub capabilities: Arc<Capabilities>,
+    /// O plano realtime: propagação, presença e `typing`.
+    ///
+    /// Nunca ausente. Sem Redis configurado é um plano que aceita tudo e não
+    /// propaga nada — o comportamento correcto de uma instalação sem tempo
+    /// real, e não um sítio por preencher (ADR-0012 §9).
+    pub realtime: Arc<Realtime>,
     /// The organisation this deployment serves.
     pub organisation_id: Uuid,
 }

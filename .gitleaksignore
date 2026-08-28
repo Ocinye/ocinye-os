@@ -1,0 +1,20 @@
+# Achados dispensados, um a um.
+#
+# Este ficheiro não desliga regras nem cega o scanner para nenhum caminho: cada
+# linha é a impressão digital de **um** achado concreto. O ficheiro continua a
+# ser varrido, e um segredo novo lá dentro dispara na mesma.
+#
+# Cada entrada tem de trazer a razão. Uma dispensa sem dono é uma dispensa que
+# ninguém volta a questionar.
+
+# `OCINYE_MAIL_KEY` no `.env` local — a chave que cifra as credenciais de caixa
+# (ADR-0409). É onde ela deve estar: o `.env.example` documenta-o, o git ignora
+# o `.env`, e a CI trabalha sobre um checkout onde ele não existe.
+#
+# Sem esta linha o portão ficava vermelho em todas as máquinas de trabalho e
+# verde na CI — e um portão que só é verde onde ninguém olha deixa de ser um
+# portão, que é o argumento já escrito no `.gitleaks.toml` para o `target/`.
+#
+# A impressão digital inclui a linha. Rodar a chave, ou movê-la, repõe o
+# vermelho — o que é próprio: cada chave nova merece ser vista uma vez.
+.env:generic-api-key:179

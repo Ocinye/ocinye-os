@@ -49,7 +49,6 @@ struct Me {
     person_id: Uuid,
     display_name: String,
     /// Sign-in name. `None` for rows predating ADR-0103.
-    username: Option<String>,
     /// Institutional email.
     email: String,
     /// Account status, as the organisation records it.
@@ -121,7 +120,6 @@ async fn me(
     Ok(Json(Me {
         person_id: principal.person_id,
         display_name: principal.display_name.clone(),
-        username: person.username,
         email: person.email,
         status: person.status,
         avatar,

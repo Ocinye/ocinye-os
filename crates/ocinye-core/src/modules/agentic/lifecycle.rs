@@ -338,6 +338,7 @@ pub async fn reject(
 pub async fn execute(
     pool: &PgPool,
     capabilities: &crate::capabilities::Capabilities,
+    realtime: &crate::realtime::Realtime,
     principal: &Principal,
     ids: &CorrelationIds,
     plan_id: Uuid,
@@ -362,7 +363,7 @@ pub async fn execute(
     //
     // `Failed` is the honest landing place. It is terminal, it is visible, and
     // it does not claim anything happened.
-    let outcome = run_claimed(pool, capabilities, principal, ids, &stored).await;
+    let outcome = run_claimed(pool, capabilities, realtime, principal, ids, &stored).await;
 
     match outcome {
         Ok(executed) => Ok(executed),
@@ -382,6 +383,7 @@ pub async fn execute(
 async fn run_claimed(
     pool: &PgPool,
     capabilities: &crate::capabilities::Capabilities,
+    realtime: &crate::realtime::Realtime,
     principal: &Principal,
     ids: &CorrelationIds,
     stored: &StoredPlan,
@@ -449,6 +451,7 @@ async fn run_claimed(
         let result = executor::execute(
             pool,
             capabilities,
+            realtime,
             principal,
             &agent,
             None,

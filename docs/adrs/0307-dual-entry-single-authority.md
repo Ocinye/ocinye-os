@@ -190,11 +190,16 @@ O plano agentic continua a poder ajudar: abrir a Administração, explicar a
 operação, resolver o contexto para mostrar. O que não faz é emitir um plano
 executável para estas.
 
-### As três classes de fronteira
+### As quatro classes de fronteira
+
+> **Revisto com a `Scientific Infrastructure v1`**, que acrescentou a quarta
+> classe. Até aí eram três. A prosa desta secção também estava partida ao meio
+> da tabela — a explicação de `messaging::remove_member` ficara entre duas
+> linhas dela, e a última linha deixara de aparecer como linha. Corrigido aqui.
 
 Um critério em texto livre obriga quem lê a inferir, e inferir é onde as
 classificações se confundem umas com as outras. As razões deixam de ser prosa e
-passam a ser um tipo, `TrustBoundary`, com exactamente três variantes:
+passam a ser um tipo, `TrustBoundary`:
 
 > **Non-delegability is determined by the nature of the trust boundary crossed,
 > not by risk level alone.**
@@ -204,12 +209,48 @@ passam a ser um tipo, `TrustBoundary`, com exactamente três variantes:
 | `SECRET_BOUNDARY` | a execução segura exigiria revelar um segredo ao plano agentic |
 | `AUTHORITY_BOUNDARY` | o efeito primário é mudar a fronteira de autorização, ou a capacidade de outra pessoa aceder ao sistema |
 | `USER_MEDIATED_BINARY_BOUNDARY` | o conteúdo entra por um acto material da pessoa — um ficheiro que ela escolhe — e não por texto que um modelo componha |
+| `INSTITUTIONAL_CLAIM_BOUNDARY` | o efeito é uma afirmação institucional cujo peso vem de quem a assina |
 
-A terceira classe é a mais fácil de perder de vista. `data::add_version_file` e
-`identity::set_photograph` não são perigosas nem tocam em autoridade: são
-simplesmente operações cujo conteúdo **não existe no espaço em que um modelo
-opera**. Um agente pode preparar tudo à volta — os metadados, a versão, a
-descrição — e a escolha do binário continua a ser da pessoa.
+**Sobre `AUTHORITY_BOUNDARY`.** `messaging::remove_member` entrou nela com as
+Mensagens v1. Retirar alguém de uma conversa — ou sair dela — muda quem lê o
+que lá se diz a partir desse momento, que é a mesma natureza de revogar uma
+concessão. O que fecha a delegação não é o impacto: é o vector. Conteúdo de uma
+conversa é lido pelo plano agentic, e uma frase colocada lá por alguém não pode
+acabar a excluir uma pessoa dessa conversa.
+
+**Sobre `USER_MEDIATED_BINARY_BOUNDARY`.** É a mais fácil de perder de vista.
+`data::add_version_file` e `identity::set_photograph` não são perigosas nem
+tocam em autoridade: são simplesmente operações cujo conteúdo **não existe no
+espaço em que um modelo opera**. Um agente pode preparar tudo à volta — os
+metadados, a versão, a descrição — e a escolha do binário continua a ser da
+pessoa.
+
+**Sobre `INSTITUTIONAL_CLAIM_BOUNDARY`.** As outras três fecham-se por causa do
+que a operação **alcança**: um segredo, a autoridade de alguém, bytes que só a
+pessoa tem. Esta fecha-se por causa de quem a **assina**.
+
+`science::record_validation` é a única, e o exemplo explica a classe. Validar um
+resultado científico — ou dá-lo por reproduzido — não muda o acesso de ninguém,
+não revela nada, e nem sequer é difícil de desfazer: uma validação errada
+corrige-se com outra, e o domínio guarda as duas. O que não se desfaz é a
+atribuição. O registo diz que **alguém afirmou aquilo**, e é essa pessoa que lhe
+dá valor; um agente a produzi-la deixaria a instituição com uma afirmação sem
+ninguém por trás.
+
+E é por isso que não se resolve com aprovação, que é a resposta habitual a «isto
+é sério demais para um agente fazer sozinho». Uma confirmação humana continuaria
+a deixar a afirmação escrita como se tivesse sido *feita*, e não *assumida* — e
+a diferença entre as duas é toda a razão de a validação existir. É a mesma linha
+que a `Scientific Infrastructure v1` traça para a proveniência:
+
+> **AI may suggest provenance. AI may not invent institutional provenance.**
+
+O critério é estreito de propósito, e o teste
+`a_fronteira_de_afirmacao_e_a_que_foi_decidida` fixa a lista para que não deixe
+de o ser. **Irreversível não é afirmação institucional**:
+`science::record_execution` é irreversível — uma corrida aconteceu, e apagar o
+registo não a desfaz — e é endereçável. O que a distingue é que registar uma
+execução descreve o que se passou; validar afirma o que a instituição sabe.
 
 Quem lê a [matriz](../agentic/operation-capability-matrix.md) vê a classe ao lado
 de cada operação não-delegável, e não tem de a deduzir de uma frase.

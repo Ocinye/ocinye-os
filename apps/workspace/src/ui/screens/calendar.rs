@@ -15,6 +15,7 @@
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate, Timelike, Utc};
 use leptos::prelude::*;
+use ocinye_contracts::temporal::TimeZoneName;
 use serde_json::Value;
 
 use crate::ui::components::classification_badge;
@@ -182,16 +183,29 @@ impl Item {
     }
 
     /// Em que dia civil isto cai, para efeitos de agrupamento.
+    ///
+    /// # Porque a zona é obrigatória
+    ///
+    /// Porque não existe «o dia» de um instante — existe o dia **onde se está a
+    /// olhar**. Isto lia `date_naive()`, que é a data em Greenwich, e o
+    /// Calendário mostrava um compromisso das 00:30 em Lisboa no dia anterior.
+    ///
+    /// Um dia inteiro não passa por aqui: já é uma data civil, e converter uma
+    /// data que não tem hora seria inventar-lhe uma.
     #[must_use]
-    pub fn day(&self) -> NaiveDate {
+    pub fn day(&self, zona: TimeZoneName) -> NaiveDate {
         self.starts_on
-            .or_else(|| self.starts_at.map(|i| i.date_naive()))
-            .unwrap_or_else(|| Utc::now().date_naive())
+            .or_else(|| self.starts_at.map(|i| crate::ui::tempo::dia_civil(i, zona)))
+            .unwrap_or_else(|| crate::ui::tempo::hoje_civil(Utc::now(), zona))
     }
 
-    /// A hora, quando tem.
-    fn clock(&self) -> Option<String> {
-        self.starts_at.map(|i| i.format("%H:%M").to_string())
+    /// A hora, quando tem, na zona de quem olha.
+    fn clock(&self, zona: TimeZoneName) -> Option<String> {
+        self.starts_at.map(|i| {
+            crate::ui::tempo::hora_civil(i, zona)
+                .format("%H:%M")
+                .to_string()
+        })
     }
 
     /// O que dizer sobre quando isto acontece.
@@ -200,7 +214,7 @@ impl Item {
     /// intervalo meio-aberto é a forma de o guardar sem erros de um dia; não é
     /// forma de o contar a alguém.
     #[must_use]
-    pub fn when(&self) -> String {
+    pub fn when(&self, zona: TimeZoneName) -> String {
         if self.all_day {
             let dias = self
                 .starts_on
@@ -213,7 +227,7 @@ impl Item {
                 format!("Dia inteiro · {dias} dias")
             }
         } else {
-            let inicio = self.clock().unwrap_or_else(|| "—".to_owned());
+            let inicio = self.clock(zona).unwrap_or_else(|| "—".to_owned());
             let fim = self
                 .ends_at
                 .map(|i| i.format("%H:%M").to_string())
@@ -289,6 +303,13 @@ pub struct CalendarPage<'a> {
     /// `Some` é erro. `None` com lista vazia é uma agenda vazia — e as duas
     /// coisas nunca se dizem da mesma maneira.
     pub failure: Option<String>,
+    /// A zona em que se está a olhar.
+    ///
+    /// Decide em que dia civil cada compromisso cai e a que horas se mostra.
+    /// Não tem valor por omissão aqui de propósito: um calendário renderizado
+    /// em Greenwich a quem está noutro sítio mostra as coisas no dia errado, e
+    /// era exactamente isso que acontecia.
+    pub zona: TimeZoneName,
 }
 
 /// O Calendário.
@@ -299,10 +320,12 @@ pub fn calendar(page: &CalendarPage<'_>) -> impl IntoView {
         items,
         may_create,
         failure,
+        zona,
     } = page;
     let view = *view;
     let anchor = *anchor;
     let may_create = *may_create;
+    let zona = *zona;
 
     view! {
         <div class="oc-page oc-page--calendar">
@@ -350,11 +373,11 @@ pub fn calendar(page: &CalendarPage<'_>) -> impl IntoView {
                 // di-lo dentro de si própria: é uma lista, e uma lista vazia não
                 // tem estrutura nenhuma para preservar.
                 None => match view {
-                    CalendarView::Day => today_view(items, anchor).into_any(),
-                    CalendarView::Week => week_view(items, anchor).into_any(),
-                    CalendarView::Month => month_view(items, anchor).into_any(),
-                    CalendarView::Year => year_view(items, anchor).into_any(),
-                    CalendarView::Agenda => agenda_view(items).into_any(),
+                    CalendarView::Day => today_view(items, anchor, zona).into_any(),
+                    CalendarView::Week => week_view(items, anchor, zona).into_any(),
+                    CalendarView::Month => month_view(items, anchor, zona).into_any(),
+                    CalendarView::Year => year_view(items, anchor, zona).into_any(),
+                    CalendarView::Agenda => agenda_view(items, zona).into_any(),
                 },
             }}
         </div>
@@ -565,11 +588,16 @@ const COLUNAS_MAX: usize = 4;
 ///
 /// Um evento sem fim declarado, ou com fim igual ao início, não tem altura — e
 /// um bloco de zero linhas é um evento que existe e não se vê.
-fn faixa_do_dia(item: &Item, dia: NaiveDate) -> Option<(usize, usize)> {
+fn faixa_do_dia(item: &Item, dia: NaiveDate, zona: TimeZoneName) -> Option<(usize, usize)> {
     const MINIMO: f64 = 30.0;
 
-    let inicio = item.starts_at?;
-    let inicio_local = inicio.date_naive();
+    // A hora civil, e não a de Greenwich.
+    //
+    // Isto lia `inicio.date_naive()` e `inicio.time()` — o instante em UTC — e
+    // punha os blocos na linha errada da grelha para toda a gente que não
+    // estivesse em Greenwich. Um compromisso das 00:30 aparecia às 22:30.
+    let inicio = crate::ui::tempo::hora_civil(item.starts_at?, zona);
+    let inicio_local = inicio.date();
 
     // Um evento que começou ontem e atravessa a meia-noite ocupa esta coluna
     // desde o topo. Cortá-lo faria desaparecer da grelha um compromisso que
@@ -582,8 +610,8 @@ fn faixa_do_dia(item: &Item, dia: NaiveDate) -> Option<(usize, usize)> {
         f64::from(inicio.time().num_seconds_from_midnight()) / 60.0
     };
 
-    let acaba = match item.ends_at {
-        Some(fim) if fim.date_naive() > dia => MINUTOS_DO_DIA,
+    let acaba = match item.ends_at.map(|f| crate::ui::tempo::hora_civil(f, zona)) {
+        Some(fim) if fim.date() > dia => MINUTOS_DO_DIA,
         Some(fim) => f64::from(fim.time().num_seconds_from_midnight()) / 60.0,
         None => comeca + MINIMO,
     };
@@ -616,11 +644,11 @@ struct Colocado {
 ///
 /// Não é um escalonador. Não resolve prioridades nem sugere horários; resolve
 /// **legibilidade**, que é o problema que a vista tem.
-fn dispor(items: &[Item], dia: NaiveDate) -> Vec<Colocado> {
+fn dispor(items: &[Item], dia: NaiveDate, zona: TimeZoneName) -> Vec<Colocado> {
     let mut faixas: Vec<(Item, usize, usize)> = items
         .iter()
         .filter(|i| !i.all_day)
-        .filter_map(|i| faixa_do_dia(i, dia).map(|(l, n)| (i.clone(), l, n)))
+        .filter_map(|i| faixa_do_dia(i, dia, zona).map(|(l, n)| (i.clone(), l, n)))
         .collect();
     faixas.sort_by_key(|(_, linha, _)| *linha);
 
@@ -682,9 +710,11 @@ fn dispor(items: &[Item], dia: NaiveDate) -> Vec<Colocado> {
 
 /// A que altura do dia estamos agora, em percentagem — ou nada, se o dia não é
 /// hoje.
-fn agora_no_dia(dia: NaiveDate) -> Option<usize> {
-    let agora = Utc::now();
-    (agora.date_naive() == dia).then(|| {
+fn agora_no_dia(dia: NaiveDate, zona: TimeZoneName) -> Option<usize> {
+    // O agora de quem olha. Em Greenwich, a linha do «agora» aparecia à hora
+    // errada — e no dia errado, uma vez por dia.
+    let agora = crate::ui::tempo::hora_civil(Utc::now(), zona);
+    (agora.date() == dia).then(|| {
         let minutos = f64::from(agora.time().num_seconds_from_midnight()) / 60.0;
         ((minutos / 30.0).floor() as usize).min(FAIXAS - 1)
     })
@@ -711,9 +741,9 @@ fn linhas_das_horas() -> impl IntoView {
 }
 
 /// Uma coluna de dia com as suas actividades colocadas.
-fn coluna_do_dia(items: &[Item], dia: NaiveDate) -> impl IntoView {
-    let colocados = dispor(items, dia);
-    let agora = agora_no_dia(dia);
+fn coluna_do_dia(items: &[Item], dia: NaiveDate, zona: TimeZoneName) -> impl IntoView {
+    let colocados = dispor(items, dia, zona);
+    let agora = agora_no_dia(dia, zona);
 
     view! {
         <div class="oc-cal-coluna">
@@ -729,7 +759,7 @@ fn coluna_do_dia(items: &[Item], dia: NaiveDate) -> impl IntoView {
                     "oc-cal-bloco oc-cal-l{} oc-cal-f{} oc-cal-c{}de{}",
                     c.linha, c.faixas, c.coluna + 1, c.colunas
                 );
-                let hora = c.item.clock().unwrap_or_default();
+                let hora = c.item.clock(zona).unwrap_or_default();
                 view! {
                     <a
                         class=classes
@@ -788,10 +818,10 @@ fn faixa_de_dia_inteiro(dias: &[(NaiveDate, Vec<Item>)]) -> Option<impl IntoView
 ///
 /// Era «Ao longo do dia» seguido de uma lista, e nada nela dizia a que horas as
 /// coisas aconteciam nem quanto duravam.
-fn today_view(items: &[Item], anchor: NaiveDate) -> impl IntoView {
+fn today_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl IntoView {
     let do_dia: Vec<Item> = items
         .iter()
-        .filter(|i| i.day() == anchor)
+        .filter(|i| i.day(zona) == anchor)
         .cloned()
         .collect();
     let dias = vec![(anchor, do_dia.clone())];
@@ -811,7 +841,7 @@ fn today_view(items: &[Item], anchor: NaiveDate) -> impl IntoView {
             <div class="oc-cal-corpo" data-oc="linha-do-tempo">
                 {eixo_das_horas()}
                 <div class="oc-cal-colunas oc-cal-colunas--uma">
-                    {coluna_do_dia(&do_dia, anchor)}
+                    {coluna_do_dia(&do_dia, anchor, zona)}
                 </div>
             </div>
         </div>
@@ -827,7 +857,7 @@ fn today_view(items: &[Item], anchor: NaiveDate) -> impl IntoView {
 /// Funciona com teclado, com leitor de ecrã e numa janela estreita sem depender
 /// de geometria — é a vista mais robusta que o Calendário tem, e é por isso que
 /// existe além das outras.
-fn agenda_view(items: &[Item]) -> AnyView {
+fn agenda_view(items: &[Item], zona: TimeZoneName) -> AnyView {
     if items.is_empty() {
         return view! {
             <div class="oc-cal-agenda oc-cal-agenda--vazia">
@@ -839,14 +869,14 @@ fn agenda_view(items: &[Item]) -> AnyView {
 
     let mut dias: Vec<(NaiveDate, Vec<Item>)> = Vec::new();
     for item in items {
-        let dia = item.day();
+        let dia = item.day(zona);
         match dias.last_mut() {
             Some((anterior, lista)) if *anterior == dia => lista.push(item.clone()),
             _ => dias.push((dia, vec![item.clone()])),
         }
     }
 
-    let hoje = Utc::now().date_naive();
+    let hoje = crate::ui::tempo::hoje_civil(Utc::now(), zona);
 
     view! {
         <div class="oc-cal-agenda">
@@ -877,7 +907,7 @@ fn agenda_view(items: &[Item]) -> AnyView {
                                         data-kind=item.kind.clone()
                                     >
                                         <span class="oc-cal-linha__hora">
-                                            {item.clock().unwrap_or_else(|| "Dia inteiro".to_owned())}
+                                            {item.clock(zona).unwrap_or_else(|| "Dia inteiro".to_owned())}
                                         </span>
                                         <span class="oc-cal-linha__titulo">
                                             {item.title.clone()}
@@ -898,14 +928,18 @@ fn agenda_view(items: &[Item]) -> AnyView {
     .into_any()
 }
 
-fn week_view(items: &[Item], anchor: NaiveDate) -> impl IntoView {
+fn week_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl IntoView {
     let inicio = week_start(anchor);
-    let hoje = Utc::now().date_naive();
+    let hoje = crate::ui::tempo::hoje_civil(Utc::now(), zona);
 
     let dias: Vec<(NaiveDate, Vec<Item>)> = (0..7)
         .map(|offset| {
             let dia = inicio + Duration::days(offset);
-            let do_dia = items.iter().filter(|i| i.day() == dia).cloned().collect();
+            let do_dia = items
+                .iter()
+                .filter(|i| i.day(zona) == dia)
+                .cloned()
+                .collect();
             (dia, do_dia)
         })
         .collect();
@@ -939,7 +973,7 @@ fn week_view(items: &[Item], anchor: NaiveDate) -> impl IntoView {
             <div class="oc-cal-corpo" data-oc="linha-do-tempo">
                 {eixo_das_horas()}
                 <div class="oc-cal-colunas">
-                    {dias.iter().map(|(dia, do_dia)| coluna_do_dia(do_dia, *dia)).collect_view()}
+                    {dias.iter().map(|(dia, do_dia)| coluna_do_dia(do_dia, *dia, zona)).collect_view()}
                 </div>
             </div>
         </div>
@@ -959,13 +993,14 @@ fn week_view(items: &[Item], anchor: NaiveDate) -> impl IntoView {
 /// Porque um ano é contínuo. Doze superfícies com sombra própria diriam que
 /// Janeiro e Fevereiro são objectos separados, e a única coisa que os separa é
 /// uma linha.
-fn year_view(items: &[Item], anchor: NaiveDate) -> impl IntoView {
-    let hoje = Utc::now().date_naive();
+fn year_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl IntoView {
+    let hoje = crate::ui::tempo::hoje_civil(Utc::now(), zona);
     let ano = anchor.year();
 
     // Que dias do ano têm alguma coisa. Um conjunto, e não uma contagem por
     // célula: a Year não diz quantas, diz se há.
-    let ocupados: std::collections::BTreeSet<NaiveDate> = items.iter().map(Item::day).collect();
+    let ocupados: std::collections::BTreeSet<NaiveDate> =
+        items.iter().map(|i| i.day(zona)).collect();
 
     view! {
         <div class="oc-cal-ano">
@@ -1017,10 +1052,10 @@ fn year_view(items: &[Item], anchor: NaiveDate) -> impl IntoView {
     }
 }
 
-fn month_view(items: &[Item], anchor: NaiveDate) -> impl IntoView {
+fn month_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl IntoView {
     let inicio = month_grid_start(anchor);
     let mes = anchor.month();
-    let hoje = Utc::now().date_naive();
+    let hoje = crate::ui::tempo::hoje_civil(Utc::now(), zona);
 
     view! {
         <div class="oc-cal-month" role="table" aria-label="Mês">
@@ -1032,7 +1067,7 @@ fn month_view(items: &[Item], anchor: NaiveDate) -> impl IntoView {
             {(0..42).map(|offset| {
                 let dia = inicio + Duration::days(offset);
                 let do_dia: Vec<Item> =
-                    items.iter().filter(|item| item.day() == dia).cloned().collect();
+                    items.iter().filter(|item| item.day(zona) == dia).cloned().collect();
                 let excedente = do_dia.len().saturating_sub(MONTH_CELL_LIMIT);
                 let fora_do_mes = dia.month() != mes;
 
@@ -1073,7 +1108,7 @@ fn month_view(items: &[Item], anchor: NaiveDate) -> impl IntoView {
                                 title=item.title.clone()
                             >
                                 <span class="oc-cal-month__time">
-                                    {item.clock().unwrap_or_default()}
+                                    {item.clock(zona).unwrap_or_default()}
                                 </span>
                                 // O título num elemento próprio, e não num nó
                                 // de texto solto: um nó de texto não recebe
@@ -1135,7 +1170,7 @@ pub fn system_calendar(hoje: NaiveDate) -> impl IntoView {
 
     view! {
         <div
-            class="oc-datepop"
+            class="oc-pop oc-datepop"
             id="oc-temporal-centre"
             data-oc="temporal-centre"
             role="dialog"
@@ -1249,6 +1284,7 @@ pub fn event_form(
     error: Option<String>,
     proposto: Option<chrono::NaiveDateTime>,
     pessoas: &Value,
+    zona: TimeZoneName,
 ) -> impl IntoView {
     let a_alterar = editing.is_some();
     let titulo = editing.map(|i| i.title.clone()).unwrap_or_default();
@@ -1256,7 +1292,7 @@ pub fn event_form(
         || "/calendar/events/new".to_owned(),
         |i| format!("/calendar/events/{}/edit", i.id),
     );
-    let hoje = Utc::now().date_naive();
+    let hoje = crate::ui::tempo::hoje_civil(Utc::now(), zona);
 
     // Os campos abrem com um horário que se aceita sem pensar.
     //
@@ -1302,7 +1338,7 @@ pub fn event_form(
     // A Experience não decide quem pode participar: mostra o que lhe foi
     // autorizado, e o Core volta a verificar cada identificador antes de
     // escrever seja o que for.
-    let participaveis: Vec<(String, String)> = pessoas
+    let participaveis: Vec<(String, String, String)> = pessoas
         .get("items")
         .or(Some(pessoas))
         .and_then(Value::as_array)
@@ -1315,8 +1351,18 @@ pub fn event_form(
                         linha
                             .get("display_name")
                             .or_else(|| linha.get("name"))
+                            .or_else(|| linha.get("full_name"))
                             .and_then(Value::as_str)
+                            .filter(|nome| !nome.is_empty())
                             .unwrap_or("—")
+                            .to_owned(),
+                        // O endereço institucional, que é a identidade humana
+                        // desde o ADR-0106. Dois colegas podem chamar-se o
+                        // mesmo; o endereço não.
+                        linha
+                            .get("email")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
                             .to_owned(),
                     ))
                 })
@@ -1451,7 +1497,7 @@ pub fn event_form(
                                 class="oc-entrada"
                                 type="search"
                                 data-oc="procura-pessoa"
-                                placeholder="Nome ou nome de utilizador"
+                                placeholder="Nome ou endereço institucional"
                                 autocomplete="off"
                                 aria-controls="oc-pessoas"
                             />
@@ -1462,7 +1508,7 @@ pub fn event_form(
                         // pessoa, e filtrá-lo aqui evita um pedido por cada
                         // tecla — sem alargar o que ela pode ver.
                         <ul class="oc-pessoas" id="oc-pessoas" data-oc="lista-pessoas" hidden>
-                            {participaveis.iter().map(|(id, nome)| view! {
+                            {participaveis.iter().map(|(id, nome, email)| view! {
                                 <li>
                                     <button
                                         type="button"
@@ -1470,8 +1516,10 @@ pub fn event_form(
                                         data-oc="pessoa"
                                         data-id=id.clone()
                                         data-nome=nome.clone()
+                                        data-email=email.clone()
                                     >
-                                        {nome.clone()}
+                                        <b>{nome.clone()}</b>
+                                        <em>{email.clone()}</em>
                                     </button>
                                 </li>
                             }).collect_view()}
@@ -1544,7 +1592,7 @@ pub fn event_form(
     }
 }
 
-pub fn event_detail(event: &Value, may_change: bool) -> impl IntoView {
+pub fn event_detail(event: &Value, may_change: bool, zona: TimeZoneName) -> impl IntoView {
     let campo = |chave: &str| {
         event
             .get(chave)
@@ -1573,7 +1621,7 @@ pub fn event_detail(event: &Value, may_change: bool) -> impl IntoView {
             <div class="oc-head">
                 <div class="oc-head__text">
                     <h1>{campo("title")}</h1>
-                    <p>{item.as_ref().map(Item::when).unwrap_or_default()}</p>
+                    <p>{item.as_ref().map(|i| i.when(zona)).unwrap_or_default()}</p>
                 </div>
                 {(may_change && !cancelado).then(|| view! {
                     <div class="oc-head__actions">
@@ -1595,7 +1643,7 @@ pub fn event_detail(event: &Value, may_change: bool) -> impl IntoView {
 
             <dl class="oc-detail">
                 <dt>"Quando"</dt>
-                <dd>{item.as_ref().map(Item::when).unwrap_or_default()}</dd>
+                <dd>{item.as_ref().map(|i| i.when(zona)).unwrap_or_default()}</dd>
                 {(!campo("timezone").is_empty()).then(|| view! {
                     <>
                         <dt>"Zona horária"</dt>
@@ -1675,6 +1723,11 @@ pub fn notifications(payload: &Value, failure: Option<String>) -> impl IntoView 
                             let destino = match campo("resource_type").as_str() {
                                 "calendar_event" => Some(format!("/calendar/events/{}", campo("resource_id"))),
                                 "task" => Some("/my-work".to_owned()),
+                                "conversation" => Some(format!(
+                                    "{}/{}",
+                                    crate::ui::screens::messaging::ROUTE,
+                                    campo("resource_id")
+                                )),
                                 _ => None,
                             };
 
@@ -1714,6 +1767,14 @@ pub fn notifications(payload: &Value, failure: Option<String>) -> impl IntoView 
 mod grelha_do_mes {
     use super::*;
 
+    /// A zona destes testes.
+    ///
+    /// Explícita, e não «a do sistema»: um teste que dependesse do fuso da
+    /// máquina passaria aqui e falharia em CI, ou ao contrário.
+    fn zona_de_teste() -> TimeZoneName {
+        "UTC".to_owned().try_into().expect("fuso conhecido")
+    }
+
     fn dia(a: i32, m: u32, d: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(a, m, d).expect("data válida")
     }
@@ -1725,6 +1786,7 @@ mod grelha_do_mes {
             items,
             may_create: true,
             failure: None,
+            zona: zona_de_teste(),
         })
         .to_html()
     }
@@ -1842,7 +1904,7 @@ mod grelha_do_mes {
     /// O dia escolhido e o dia de hoje são coisas diferentes.
     #[test]
     fn o_dia_escolhido_nao_se_confunde_com_hoje() {
-        let hoje = Utc::now().date_naive();
+        let hoje = crate::ui::tempo::hoje_civil(Utc::now(), zona_de_teste());
         let outro = hoje + Duration::days(3);
         let html = pagina(&[], outro);
 
@@ -1869,7 +1931,7 @@ mod grelha_do_mes {
     /// Quando coincidem, continuam os dois legíveis.
     #[test]
     fn hoje_escolhido_diz_as_duas_coisas() {
-        let hoje = Utc::now().date_naive();
+        let hoje = crate::ui::tempo::hoje_civil(Utc::now(), zona_de_teste());
         let html = pagina(&[], hoje);
 
         assert!(html.contains("oc-cal-month__cell--today"));
@@ -1972,6 +2034,14 @@ mod grelha_do_mes {
 mod vistas_temporais {
     use super::*;
 
+    /// A zona destes testes.
+    ///
+    /// Explícita, e não «a do sistema»: um teste que dependesse do fuso da
+    /// máquina passaria aqui e falharia em CI, ou ao contrário.
+    fn zona_de_teste() -> TimeZoneName {
+        "UTC".to_owned().try_into().expect("fuso conhecido")
+    }
+
     fn dia(a: i32, m: u32, d: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(a, m, d).expect("data válida")
     }
@@ -2004,6 +2074,7 @@ mod vistas_temporais {
             items,
             may_create: true,
             failure: None,
+            zona: zona_de_teste(),
         })
         .to_html()
     }
@@ -2234,8 +2305,25 @@ mod vistas_temporais {
 mod editor_de_actividade {
     use super::*;
 
+    /// A zona destes testes.
+    ///
+    /// Explícita, e não «a do sistema»: um teste que dependesse do fuso da
+    /// máquina passaria aqui e falharia em CI, ou ao contrário.
+    fn zona_de_teste() -> TimeZoneName {
+        "UTC".to_owned().try_into().expect("fuso conhecido")
+    }
+
     fn render(units: &Value, workspaces: &Value) -> String {
-        event_form(None, units, workspaces, None, None, &pessoas()).to_html()
+        event_form(
+            None,
+            units,
+            workspaces,
+            None,
+            None,
+            &pessoas(),
+            zona_de_teste(),
+        )
+        .to_html()
     }
 
     fn pessoas() -> Value {
@@ -2371,6 +2459,7 @@ mod editor_de_actividade {
             None,
             None,
             &serde_json::Value::Null,
+            zona_de_teste(),
         )
         .to_html();
 
@@ -2389,6 +2478,14 @@ mod editor_de_actividade {
 mod horario_e_participantes {
     use super::*;
 
+    /// A zona destes testes.
+    ///
+    /// Explícita, e não «a do sistema»: um teste que dependesse do fuso da
+    /// máquina passaria aqui e falharia em CI, ou ao contrário.
+    fn zona_de_teste() -> TimeZoneName {
+        "UTC".to_owned().try_into().expect("fuso conhecido")
+    }
+
     fn quando(a: i32, m: u32, d: u32, h: u32, min: u32) -> chrono::NaiveDateTime {
         NaiveDate::from_ymd_opt(a, m, d)
             .expect("data")
@@ -2405,7 +2502,7 @@ mod horario_e_participantes {
 
     fn editor(proposto: Option<chrono::NaiveDateTime>, gente: &Value) -> String {
         let vazio = serde_json::json!([]);
-        event_form(None, &vazio, &vazio, None, proposto, gente).to_html()
+        event_form(None, &vazio, &vazio, None, proposto, gente, zona_de_teste()).to_html()
     }
 
     /// O editor abre com um horário que se aceita sem pensar.

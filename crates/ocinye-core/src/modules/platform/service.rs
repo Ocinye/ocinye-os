@@ -1,7 +1,7 @@
 //! Assembling the capability report.
 
 use ocinye_contracts::{
-    AiCapability, SystemCapabilities, SystemCapability, SystemCapabilityReport,
+    AiCapability, MailReachability, SystemCapabilities, SystemCapability, SystemCapabilityReport,
     SystemCapabilityState,
 };
 use sqlx::PgPool;
@@ -31,6 +31,7 @@ pub async fn system_capabilities(
     pool: &PgPool,
     config: &CoreConfig,
     storage_configured: bool,
+    correio: MailReachability,
 ) -> CoreResult<SystemCapabilities> {
     let mut capabilities = Vec::with_capacity(SystemCapability::all().len());
 
@@ -181,68 +182,111 @@ pub async fn system_capabilities(
     // have both while ingestion is still not built. Collapsing them into one
     // "mail: available" would hide exactly the distinction a member needs
     // (briefing §61, §105).
-    let mail_configured = config.mail.is_configured();
+    // O estado do correio vem de uma **observação**, e não da presença de
+    // configuração.
+    //
+    // Era `config.mail.is_configured()`: quatro variáveis preenchidas queriam
+    // dizer «disponível». Uma instalação com o anfitrião errado, a rede
+    // fechada ou a senha recusada anunciava o correio como disponível e
+    // apresentava uma Entrada vazia — indistinguível de não ter recebido nada,
+    // que é o pior desfecho possível para quem espera uma mensagem.
+    let mail_configurado = correio != MailReachability::NotConfigured;
 
-    capabilities.push(if mail_configured {
-        SystemCapabilityReport::new(
-            SystemCapability::Mail,
-            SystemCapabilityState::Available,
-            "Correio institucional configurado.",
-        )
-    } else {
-        SystemCapabilityReport::new(
+    capabilities.push(match correio {
+        MailReachability::NotConfigured => SystemCapabilityReport::new(
             SystemCapability::Mail,
             SystemCapabilityState::NotConfigured,
             "O correio institucional não está configurado nesta instalação do \
              Ocinye OS.",
         )
-        .depending_on("Configuração de um serviço IMAP/SMTP institucional")
+        .depending_on("Configuração de um serviço IMAP/SMTP institucional"),
+        MailReachability::Ready => SystemCapabilityReport::new(
+            SystemCapability::Mail,
+            SystemCapabilityState::Available,
+            "O serviço de correio institucional está configurado e a responder. Cada \
+             membro lê e envia com a credencial da sua própria caixa.",
+        ),
+        MailReachability::Partial { leitura: true, .. } => SystemCapabilityReport::new(
+            SystemCapability::Mail,
+            SystemCapabilityState::Degraded,
+            "A leitura de correio responde; o envio não.",
+        )
+        .depending_on("Serviço SMTP institucional"),
+        MailReachability::Partial { .. } => SystemCapabilityReport::new(
+            SystemCapability::Mail,
+            SystemCapabilityState::Degraded,
+            "O envio responde; a leitura de correio não.",
+        )
+        .depending_on("Serviço IMAP institucional"),
+        MailReachability::Unreachable => SystemCapabilityReport::new(
+            SystemCapability::Mail,
+            SystemCapabilityState::Unavailable,
+            "O correio institucional está configurado, mas o serviço não está a \
+             responder nesta instalação.",
+        )
+        .depending_on("Serviço IMAP/SMTP institucional"),
     });
 
-    capabilities.push(if mail_configured {
-        SystemCapabilityReport::new(
-            SystemCapability::MailSend,
-            SystemCapabilityState::Available,
-            "Envio por SMTP disponível.",
-        )
-    } else {
-        SystemCapabilityReport::new(
+    capabilities.push(match correio {
+        MailReachability::NotConfigured => SystemCapabilityReport::new(
             SystemCapability::MailSend,
             SystemCapabilityState::NotConfigured,
             "Nenhum serviço de envio está configurado. Nenhuma mensagem pode ser \
              enviada a partir do Ocinye Workspace.",
         )
-        .depending_on("Configuração de um serviço SMTP institucional")
+        .depending_on("Configuração de um serviço SMTP institucional"),
+        MailReachability::Ready | MailReachability::Partial { envio: true, .. } => {
+            SystemCapabilityReport::new(
+                SystemCapability::MailSend,
+                SystemCapabilityState::Available,
+                "Envio por SMTP disponível.",
+            )
+        }
+        MailReachability::Partial { .. } | MailReachability::Unreachable => {
+            SystemCapabilityReport::new(
+                SystemCapability::MailSend,
+                SystemCapabilityState::Unavailable,
+                "O serviço de envio está configurado, mas não está a responder. \
+                 Nenhuma mensagem sai desta instalação enquanto assim for.",
+            )
+            .depending_on("Serviço SMTP institucional")
+        }
     });
 
-    // `Degraded` and not `Available`: a member can refresh a folder, and
-    // nothing refreshes it for them. Reporting this as fully available because
-    // the button exists would misdescribe what the system does — new mail does
-    // not appear on its own (`CLAUDE.md` §69).
-    capabilities.push(if mail_configured {
-        SystemCapabilityReport::new(
-            SystemCapability::MailSync,
-            SystemCapabilityState::Degraded,
-            "A sincronização é manual: cada pasta é actualizada quando pedida. \
-             Não existe ainda um processo que actualize o correio recebido \
-             automaticamente.",
-        )
-        .depending_on("Worker de ingestão periódica")
-    } else {
-        SystemCapabilityReport::new(
+    // `Degraded` e não `Available` mesmo quando tudo responde: um membro pode
+    // actualizar uma pasta, e nada a actualiza por ele. Dizer disponível
+    // porque o botão existe descreveria mal o que o sistema faz — correio novo
+    // não aparece sozinho (`CLAUDE.md` §69).
+    capabilities.push(match correio {
+        MailReachability::NotConfigured => SystemCapabilityReport::new(
             SystemCapability::MailSync,
             SystemCapabilityState::NotConfigured,
             "A sincronização depende do correio institucional, que não está \
              configurado.",
         )
-        .depending_on("mail")
+        .depending_on("mail"),
+        MailReachability::Unreachable => SystemCapabilityReport::new(
+            SystemCapability::MailSync,
+            SystemCapabilityState::Unavailable,
+            "A sincronização depende do correio institucional, que não está a \
+             responder.",
+        )
+        .depending_on("mail"),
+        MailReachability::Ready | MailReachability::Partial { .. } => SystemCapabilityReport::new(
+            SystemCapability::MailSync,
+            SystemCapabilityState::Degraded,
+            "A sincronização é manual: cada pasta é actualizada quando pedida. \
+                 Não existe ainda um processo que actualize o correio recebido \
+                 automaticamente.",
+        )
+        .depending_on("Worker de ingestão periódica"),
     });
 
     let ai_usable = capabilities
         .iter()
         .any(|report| report.capability == SystemCapability::AiGeneral && report.is_usable());
 
-    capabilities.push(if !mail_configured {
+    capabilities.push(if !mail_configurado {
         SystemCapabilityReport::new(
             SystemCapability::MailAiAssist,
             SystemCapabilityState::NotConfigured,

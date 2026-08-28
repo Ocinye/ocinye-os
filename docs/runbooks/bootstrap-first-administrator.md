@@ -15,8 +15,7 @@
 ```bash
 ocinye-core-server bootstrap-admin \
   --name "Nome Completo" \
-  --username nome.utilizador \
-  --email pessoa@ocinye.com
+    --email pessoa@ocinye.com
 ```
 
 Saída, **uma única vez**:
@@ -52,7 +51,7 @@ mão não contorna nada.
 
 ```bash
 psql "$OCINYE_DATABASE_URL" -c "
-  SELECT p.username, p.status, r.role
+  SELECT p.endereço, p.status, r.role
     FROM people p JOIN person_roles r ON r.person_id = p.id
    WHERE r.role = 'platform_admin' AND r.revoked_at IS NULL"
 ```
@@ -81,7 +80,7 @@ Não há como prolongá-la. Suspenda a conta criada e volte a correr o bootstrap
 
 ```bash
 psql "$OCINYE_DATABASE_URL" -c \
-  "UPDATE people SET status = 'suspended' WHERE username = 'nome.utilizador'"
+  "UPDATE people SET status = 'suspended' WHERE endereço = 'nome.utilizador'"
 ```
 
 O guard conta apenas administradores **utilizáveis**, pelo que o bootstrap volta

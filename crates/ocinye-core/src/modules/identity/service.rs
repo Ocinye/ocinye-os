@@ -507,10 +507,7 @@ pub async fn attempt_summary(
     pool: &PgPool,
     person: &Person,
 ) -> CoreResult<(Option<chrono::DateTime<chrono::Utc>>, i64)> {
-    let Some(username) = person.username.as_deref() else {
-        return Ok((None, 0));
-    };
-    super::credentials::attempt_summary(pool, username).await
+    super::credentials::attempt_summary(pool, &person.email).await
 }
 
 #[cfg(test)]

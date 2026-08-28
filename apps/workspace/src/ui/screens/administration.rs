@@ -77,7 +77,7 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
         <div class="oc-page">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Adicionar utilizador"</h1>
+                    <h1>"Adicionar membro"</h1>
                     <p>
                         "O Ocinye Core gera uma palavra-passe temporária. O membro terá de
                          definir a sua no primeiro acesso."
@@ -99,23 +99,29 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                             <input class="oc-input" id="m-name" name="full_name" required
                                    placeholder="Ex.: Ana Maria Fernandes" />
                         </div>
+                        // Um campo, e não dois.
+                        //
+                        // Havia aqui o antigo campo de nome de utilizador,
+                        // renomeado para `email` quando o username saiu
+                        // (ADR-0106) e deixado ao lado do verdadeiro. Ficaram
+                        // dois `input` com o mesmo `id` e o mesmo `name` — e o
+                        // primeiro trazia ainda o `pattern` do username, que
+                        // **não admite `@`**.
+                        //
+                        // O efeito era pior do que desarrumação: nenhum
+                        // endereço válido passava a validação do browser, e
+                        // ninguém conseguia criar um membro por este ecrã.
                         <div class="oc-field">
-                            <label class="oc-field__label" for="m-username">
-                                "Nome de utilizador"
+                            <label class="oc-field__label" for="m-email">
+                                "Endereço institucional"
                             </label>
-                            <input class="oc-input" id="m-username" name="username" required
-                                   autocapitalize="none" spellcheck="false"
-                                   pattern="[A-Za-z][A-Za-z0-9._-]{1,62}[A-Za-z0-9]"
-                                   placeholder="afernandes" />
-                            <p class="oc-field__hint">
-                                "3 a 64 caracteres. Letras, dígitos, ponto, hífen e underscore.
-                                 Começa por letra. Não é alterável pelo próprio."
-                            </p>
-                        </div>
-                        <div class="oc-field">
-                            <label class="oc-field__label" for="m-email">"Email institucional"</label>
                             <input class="oc-input" id="m-email" name="email" type="email" required
-                                   placeholder="ana@ocinye.com" />
+                                   autocapitalize="none" spellcheck="false"
+                                   placeholder="ana.fernandes@ocinye.com" />
+                            <p class="oc-field__hint">
+                                "É a identidade e a credencial de entrada. A convenção da
+                                 instituição é primeiro.ultimo@ocinye.com, em minúsculas."
+                            </p>
                         </div>
                     </div>
                 </section>
@@ -210,7 +216,7 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
 
                     <div class="oc-row oc-gap-5 oc-justify-end">
                         {button(Button::new("Cancelar", Variant::Secondary).href("/admin"))}
-                        <button type="submit" class="oc-btn oc-btn--primary">"Criar utilizador"</button>
+                        <button type="submit" class="oc-btn oc-btn--primary">"Criar membro"</button>
                     </div>
                 </div>
             </form>
@@ -222,8 +228,8 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
 ///
 /// Depois de sair desta página não há forma de a recuperar. Não existe endpoint
 /// que a leia de volta, nem para o administrador principal.
-pub fn issued_credential(username: &str, password: &str, expires_at: &str) -> impl IntoView {
-    let username = username.to_owned();
+pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl IntoView {
+    let email = email.to_owned();
     let password = password.to_owned();
     let expires = expires_at.get(..16).unwrap_or(expires_at).replace('T', " ");
 
@@ -239,8 +245,8 @@ pub fn issued_credential(username: &str, password: &str, expires_at: &str) -> im
             <section class="oc-card oc-credential">
                 <div class="oc-card__body">
                     <div class="oc-field">
-                        <span class="oc-field__label">"Nome de utilizador"</span>
-                        <div class="oc-credential__value oc-mono">{username}</div>
+                        <span class="oc-field__label">"Endereço institucional"</span>
+                        <div class="oc-credential__value oc-mono">{email}</div>
                     </div>
 
                     <div class="oc-field">
@@ -282,7 +288,7 @@ pub fn issued_credential(username: &str, password: &str, expires_at: &str) -> im
 
                     <div class="oc-callout oc-callout--warning" role="alert">
                         <strong>"Esta palavra-passe só é apresentada uma vez."</strong>
-                        " Transmita-a ao utilizador através de um canal seguro — presencialmente,
+                        " Transmita-a ao membro através de um canal seguro — presencialmente,
                          por voz, ou por mensagem efémera cifrada. Nunca por email, SMS ou chat.
                          Depois de fechar esta página, ninguém a consegue recuperar."
                     </div>
@@ -545,11 +551,8 @@ fn source_label(source: &str) -> &'static str {
 /// sete que não existem.
 pub fn member_detail(person: &Value, security: &Value, access: &Value) -> impl IntoView {
     let name = text(person, "full_name").to_owned();
-    let username = person
-        .get("username")
-        .and_then(Value::as_str)
-        .unwrap_or("—")
-        .to_owned();
+    // O endereço, uma vez. Havia aqui um `username` ao lado dele, e a linha
+    // mostrava a mesma pessoa duas vezes: `afernandes · afernandes@ocinye.com`.
     let email = text(person, "email").to_owned();
     let status = text(person, "status").to_owned();
     let position = person
@@ -572,7 +575,7 @@ pub fn member_detail(person: &Value, security: &Value, access: &Value) -> impl I
                         <h1 class="oc-t-screen">{name}</h1>
                         {badge(status.clone(), Tone::of(&status))}
                     </div>
-                    <div class="oc-mono oc-mt-3">{username}" · "{email}</div>
+                    <div class="oc-mono oc-mt-3">{email}</div>
                     <div class="oc-muted oc-mt-3">
                         "Posição institucional: "{position}
                         " — não concede acesso."
@@ -653,17 +656,25 @@ mod tests {
 
     #[test]
     fn a_credencial_e_declarada_como_apresentada_uma_unica_vez() {
-        let html =
-            issued_credential("afernandes", "AAAA-BBBB-CCCC", "2026-08-23T10:00:00Z").to_html();
+        let html = issued_credential(
+            "afernandes@ocinye.com",
+            "AAAA-BBBB-CCCC",
+            "2026-08-23T10:00:00Z",
+        )
+        .to_html();
         assert!(html.contains("só é apresentada uma vez"));
-        assert!(html.contains("afernandes"));
+        assert!(html.contains("afernandes@ocinye.com"));
         assert!(html.contains("2026-08-23 10:00"));
     }
 
     #[test]
     fn a_credencial_esta_coberta_por_omissao() {
-        let html =
-            issued_credential("afernandes", "AAAA-BBBB-CCCC", "2026-08-23T10:00:00Z").to_html();
+        let html = issued_credential(
+            "afernandes@ocinye.com",
+            "AAAA-BBBB-CCCC",
+            "2026-08-23T10:00:00Z",
+        )
+        .to_html();
         // O valor está no atributo para o botão «Mostrar», mas o texto visível
         // é a máscara: um ecrã partilhado não a revela sozinho.
         assert!(html.contains("••••"));
@@ -742,8 +753,7 @@ mod tests {
         let html = member_detail(
             &json!({
                 "full_name": "Ana Fernandes",
-                "username": "afernandes",
-                "email": "ana@ocinye.com",
+                "email": "afernandes@ocinye.com",
                 "status": "active",
                 "institutional_position": "founder"
             }),
@@ -753,7 +763,7 @@ mod tests {
         .to_html();
 
         assert!(html.contains("Ana Fernandes"));
-        assert!(html.contains("afernandes"));
+        assert!(html.contains("afernandes@ocinye.com"));
         assert!(
             html.contains("não concede acesso"),
             "o detalhe tem de dizer que «Fundador» não é uma permissão"
@@ -763,7 +773,7 @@ mod tests {
     #[test]
     fn o_detalhe_nunca_expoe_material_de_credencial() {
         let html = member_detail(
-            &json!({"full_name": "A", "username": "a", "email": "a@b.c", "status": "active"}),
+            &json!({"full_name": "A", "email": "a@b.c", "status": "active"}),
             &json!({"account_status": "active", "has_permanent_password": true, "live_sessions": []}),
             &json!({"roles": [], "grants": [], "institution_permissions": []}),
         )

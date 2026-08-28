@@ -30,7 +30,6 @@ use futures::StreamExt;
 use ocinye_contracts::{CredentialKind, TechnicalRole, UnitRole};
 use ocinye_core::config::CoreConfig;
 use ocinye_core::modules::identity::{Authenticator, Throttle};
-use ocinye_core::modules::mail::provider::UnconfiguredProvider;
 use ocinye_core::password::Secret;
 use ocinye_core::password::{Hasher, HashingParams};
 use ocinye_core_server::state::AppState;
@@ -112,7 +111,8 @@ macro_rules! harness {
 
 /// O que é preciso para voltar a entrar como alguém.
 struct Credenciais {
-    username: String,
+    /// O endereço institucional. É a credencial única desde o ADR-0106.
+    email: String,
     password: String,
 }
 
@@ -393,13 +393,14 @@ impl Harness {
                 .expect("organização");
 
         let handle = format!("e{}", Uuid::new_v4().simple());
+        let email = format!("{handle}@ocinye.com");
         let person_id: Uuid = sqlx::query_scalar(
-            "INSERT INTO people (organisation_id, full_name, email, username, status)
-                 VALUES ($1, $2, $3, $2, 'active') RETURNING id",
+            "INSERT INTO people (organisation_id, full_name, email, status)
+                 VALUES ($1, $2, $3, 'active') RETURNING id",
         )
         .bind(organisation_id)
         .bind(&handle)
-        .bind(format!("{handle}@ocinye.com"))
+        .bind(&email)
         .fetch_one(&self.pool)
         .await
         .expect("pessoa");
@@ -445,7 +446,7 @@ impl Harness {
         // aceitar e o browser falhar, o problema está no caminho do Workspace.
         let directo = reqwest::Client::new()
             .post(format!("{}/api/v1/auth/login", self.core_url))
-            .json(&serde_json::json!({ "username": handle, "password": password }))
+            .json(&serde_json::json!({ "email": email, "password": password }))
             .send()
             .await
             .expect("pedido ao Core");
@@ -480,14 +481,14 @@ impl Harness {
             );
         }
 
-        elemento(&page, "input[name=username]")
+        elemento(&page, "input[name=email]")
             .await
             .click()
             .await
             .expect("foco")
-            .type_str(&handle)
+            .type_str(&email)
             .await
-            .expect("nome");
+            .expect("endereço");
         elemento(&page, "input[name=password]")
             .await
             .click()
@@ -536,18 +537,12 @@ impl Harness {
                 .collect();
 
             panic!(
-                "a entrada não passou.\n  utilizador: {handle}\n  credencial: {credenciais:?}\n  \
+                "a entrada não passou.\n  endereço: {email}\n  credencial: {credenciais:?}\n  \
                  página: {visivel}"
             );
         }
 
-        (
-            person_id,
-            Credenciais {
-                username: handle,
-                password,
-            },
-        )
+        (person_id, Credenciais { email, password })
     }
 
     /// Entra com uma credencial temporária, como quem recebe um primeiro acesso.
@@ -557,13 +552,14 @@ impl Harness {
     /// é pelo formulário verdadeiro, tal como na entrada ordinária.
     async fn entrar_com_credencial_temporaria(&self) -> Credenciais {
         let handle = format!("t{}", Uuid::new_v4().simple());
+        let email = format!("{handle}@ocinye.com");
         let person_id: Uuid = sqlx::query_scalar(
-            "INSERT INTO people (organisation_id, full_name, email, username, status)
-                 VALUES ($1, $2, $3, $2, 'active') RETURNING id",
+            "INSERT INTO people (organisation_id, full_name, email, status)
+                 VALUES ($1, $2, $3, 'active') RETURNING id",
         )
         .bind(self.organisation_id)
         .bind(&handle)
-        .bind(format!("{handle}@ocinye.com"))
+        .bind(&email)
         .fetch_one(&self.pool)
         .await
         .expect("pessoa");
@@ -591,10 +587,7 @@ impl Harness {
         .await
         .expect("credencial temporária");
 
-        let credenciais = Credenciais {
-            username: handle,
-            password,
-        };
+        let credenciais = Credenciais { email, password };
         self.login_as(&credenciais).await;
         credenciais
     }
@@ -611,7 +604,7 @@ impl Harness {
     /// Descobri-o pela CI: localmente passava, e no runner não.
     async fn login_as(&self, credenciais: &Credenciais) {
         let page = self.open("/login").await;
-        set_field(&page, "input[name=username]", &credenciais.username).await;
+        set_field(&page, "input[name=email]", &credenciais.email).await;
         set_field(&page, "input[name=password]", &credenciais.password).await;
         submit(&page, "form").await;
 
@@ -619,7 +612,7 @@ impl Harness {
         assert!(
             !destino.ends_with("/login"),
             "não foi possível voltar a entrar como «{}»",
-            credenciais.username
+            credenciais.email
         );
     }
 
@@ -662,6 +655,123 @@ impl Harness {
         workspace_id
     }
 
+    /// Prepara a cadeia científica pelas operações do Core, como aquela pessoa.
+    ///
+    /// Devolve `(hipótese, estudo, execução, resultado)`.
+    ///
+    /// # Porque não é um `INSERT`
+    ///
+    /// Porque um `INSERT` afirmaria a ideia que o teste tem do que um estudo é,
+    /// e não a do domínio. As operações validam vocabulário, aplicam
+    /// classificação, autorizam e — no caso científico — escrevem na mesma
+    /// transacção a proveniência que **observaram**. Uma fixture que salte isso
+    /// deixa a viagem a percorrer arestas que ninguém escreveu, e a viagem
+    /// existe precisamente para as ver chegar ao ecrã.
+    ///
+    /// # Porque não passa pelo HTTP
+    ///
+    /// Porque o que se prepara é estado, e o que se mede é o percurso. Que a
+    /// entrada HTTP e a agentic convergem na mesma operação é provado onde se
+    /// pode provar — pelo rasto de auditoria, em `parity.rs`. As rotas de
+    /// leitura e a da linhagem são exercidas por esta viagem, porque é por elas
+    /// que o Workspace vai buscar o que desenha.
+    async fn cadeia_cientifica(
+        &self,
+        person_id: Uuid,
+        ambiente: Uuid,
+        titulos: (&str, &str, &str),
+    ) -> (Uuid, Uuid, Uuid, Uuid) {
+        use ocinye_contracts::Classification;
+        use ocinye_core::modules::science;
+        use ocinye_observability::CorrelationIds;
+
+        let registo = ocinye_core::modules::identity::person_by_id(&self.pool, person_id)
+            .await
+            .expect("consulta")
+            .expect("pessoa");
+        let quem = ocinye_core::modules::identity::principal_for_person(&self.pool, &registo)
+            .await
+            .expect("principal");
+        let ids = CorrelationIds::generate();
+        let (hipotese, estudo, resultado) = titulos;
+
+        // Uma transacção por passo: cada operação resolve o recurso de que
+        // depende através do `pool`, e não da transacção em curso, tal como
+        // acontece num pedido HTTP.
+        let mut tx = self.pool.begin().await.expect("transacção");
+        let h = science::create_hypothesis(
+            &mut tx,
+            &quem,
+            &ids,
+            ambiente,
+            hipotese,
+            None,
+            Classification::Internal,
+        )
+        .await
+        .expect("hipótese");
+        tx.commit().await.expect("commit");
+
+        let mut tx = self.pool.begin().await.expect("transacção");
+        let e = science::create_study(
+            &mut tx,
+            &self.pool,
+            &quem,
+            &ids,
+            ambiente,
+            Some(h.id),
+            None,
+            estudo,
+            "physical_experiment",
+            None,
+            Classification::Internal,
+        )
+        .await
+        .expect("estudo");
+        tx.commit().await.expect("commit");
+
+        let mut tx = self.pool.begin().await.expect("transacção");
+        let x = science::record_execution(
+            &mut tx,
+            &self.pool,
+            &quem,
+            &ids,
+            e.id,
+            &science::ExecutionRecord {
+                status: "succeeded",
+                compute_node_id: None,
+                environment: None,
+                software_name: None,
+                software_version: None,
+                software_commit: None,
+                notes: None,
+                methodology_version_id: None,
+                dataset_version_ids: &[],
+            },
+        )
+        .await
+        .expect("execução");
+        tx.commit().await.expect("commit");
+
+        let mut tx = self.pool.begin().await.expect("transacção");
+        let r = science::create_result(
+            &mut tx,
+            &self.pool,
+            &quem,
+            &ids,
+            ambiente,
+            Some(x.id),
+            resultado,
+            "Três corridas, mesma direcção.",
+            Classification::Internal,
+        )
+        .await
+        .expect("resultado");
+        tx.commit().await.expect("commit");
+
+        (h.id, e.id, x.id, r.id)
+    }
+
     async fn manages_a_unit(&self, person_id: Uuid) -> Uuid {
         let organisation_id: Uuid =
             sqlx::query_scalar("SELECT organisation_id FROM people WHERE id = $1")
@@ -691,6 +801,69 @@ impl Harness {
             .expect("pertença");
 
         unit_id
+    }
+
+    /// Cria outra pessoa da instituição, com um nome que se possa procurar.
+    /// A organização vem de **quem entrou**, e não da mais recente.
+    ///
+    /// Com cinquenta viagens a correr ao mesmo tempo, «a organização mais
+    /// recente» é a de outro teste — e a pessoa criada aqui aparecia num
+    /// universo que esta sessão não alcança.
+    async fn outra_pessoa(&self, quem: Uuid, nome: &str) -> Uuid {
+        let organisation_id: Uuid =
+            sqlx::query_scalar("SELECT organisation_id FROM people WHERE id = $1")
+                .bind(quem)
+                .fetch_one(&self.pool)
+                .await
+                .expect("organização");
+
+        let handle = format!("o{}", &Uuid::new_v4().simple().to_string()[..10]);
+        let id: Uuid = sqlx::query_scalar(
+            "INSERT INTO people (organisation_id, full_name, email, status)
+                  VALUES ($1, $2, $3, 'active') RETURNING id",
+        )
+        .bind(organisation_id)
+        .bind(nome)
+        .bind(format!("{handle}@ocinye.com"))
+        .bind(&handle)
+        .fetch_one(&self.pool)
+        .await
+        .expect("pessoa");
+
+        sqlx::query(
+            "INSERT INTO person_roles (person_id, role, granted_by_id)
+                  VALUES ($1, 'research_member', $1)",
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .expect("papel");
+
+        id
+    }
+
+    /// Dá a esta pessoa uma caixa de correio pessoal.
+    async fn has_a_mailbox(&self, person_id: Uuid) -> (Uuid, String) {
+        let organisation_id: Uuid =
+            sqlx::query_scalar("SELECT organisation_id FROM people WHERE id = $1")
+                .bind(person_id)
+                .fetch_one(&self.pool)
+                .await
+                .expect("organização");
+
+        let endereco = format!("cx{}@ocinye.com", &Uuid::new_v4().simple().to_string()[..8]);
+        let id: Uuid = sqlx::query_scalar(
+            "INSERT INTO mailboxes (organisation_id, address, kind, owner_id)
+                  VALUES ($1, $2, 'personal', $3) RETURNING id",
+        )
+        .bind(organisation_id)
+        .bind(&endereco)
+        .bind(person_id)
+        .fetch_one(&self.pool)
+        .await
+        .expect("caixa");
+
+        (id, endereco)
     }
 
     /// Marca um evento pela interface, e devolve o título e o identificador.
@@ -835,11 +1008,40 @@ impl Harness {
     ///
     /// O que aqui se espera é o estado observável: já não estar no arranque.
     async fn open(&self, path: &str) -> Page {
-        let page = self
-            .browser
-            .new_page(format!("{}{path}", self.workspace_url))
-            .await
-            .expect("página");
+        self.open_em(path, None).await
+    }
+
+    /// Abre uma página com o browser noutro fuso.
+    ///
+    /// # Porque o fuso é por página
+    ///
+    /// Porque `Emulation.setTimezoneOverride` é do CDP e aplica-se à página, e
+    /// não ao browser. Uma viagem que o pusesse numa página e abrisse outra
+    /// voltaria ao fuso da máquina — e `app.js` reescrevia o cookie da zona com
+    /// ele, apagando o que a viagem tinha declarado.
+    async fn open_em(&self, path: &str, fuso: Option<&str>) -> Page {
+        let page = if let Some(fuso) = fuso {
+            // Em branco primeiro: o fuso tem de estar posto **antes** de a
+            // página que o vai ler começar a carregar.
+            let page = self
+                .browser
+                .new_page("about:blank")
+                .await
+                .expect("página em branco");
+            use chromiumoxide::cdp::browser_protocol::emulation::SetTimezoneOverrideParams;
+            page.execute(SetTimezoneOverrideParams::new(fuso))
+                .await
+                .expect("emular o fuso");
+            page.goto(format!("{}{path}", self.workspace_url))
+                .await
+                .expect("navegar");
+            page
+        } else {
+            self.browser
+                .new_page(format!("{}{path}", self.workspace_url))
+                .await
+                .expect("página")
+        };
 
         let inicio = std::time::Instant::now();
         loop {
@@ -955,6 +1157,18 @@ fn capacidades() -> &'static std::sync::Arc<ocinye_core::capabilities::Capabilit
     })
 }
 
+/// A chave que cifra as credenciais de caixa, uma por processo de teste.
+fn chave_do_correio() -> &'static ocinye_core::password::sealed::SealingKey {
+    static CHAVE: std::sync::OnceLock<ocinye_core::password::sealed::SealingKey> =
+        std::sync::OnceLock::new();
+    CHAVE.get_or_init(|| {
+        ocinye_core::password::sealed::SealingKey::from_base64(
+            &ocinye_core::password::sealed::SealingKey::generate(),
+        )
+        .expect("uma chave acabada de gerar tem de abrir")
+    })
+}
+
 fn core_state(pool: PgPool, organisation_id: Uuid, database_url: &str) -> AppState {
     use std::sync::Once;
     static ONCE: Once = Once::new();
@@ -971,12 +1185,76 @@ fn core_state(pool: PgPool, organisation_id: Uuid, database_url: &str) -> AppSta
         }),
         Throttle {
             per_ip: config.auth.throttle_per_ip,
-            per_username: config.auth.throttle_per_username,
+            per_email: config.auth.throttle_per_email,
             window_minutes: config.auth.throttle_window_minutes,
         },
         config.auth.temporary_credential_hours,
     ));
 
+    // A chave de cifra do correio, gerada uma vez por processo de teste.
+    //
+    // Não vem do ambiente de propósito: se viesse, esta jornada passaria nesta
+    // máquina — onde o `.env` a tem — e falharia em CI, onde não a tem. E a
+    // alternativa, um valor fixo no ficheiro, seria uma coisa com forma de
+    // segredo dentro do repositório.
+    // Um serviço que responde, e não a ausência de serviço.
+    //
+    // Era o `UnconfiguredProvider`, que descreve uma instalação sem correio.
+    // Serve para medir a ausência, e não serve para medir o produto: abrir uma
+    // mensagem passa pelo fornecedor, e um que recusa faz o leitor nunca
+    // aparecer — as viagens que abrem correio mediriam a recusa.
+    //
+    // O estado «sem serviço» continua provado, e nos sítios onde é a pergunta:
+    // nos testes de ecrã (`tres_ausencias`) e nos do Core
+    // (`mail_status_http`), que constroem a instalação que descrevem em vez de
+    // a herdarem de um harness partilhado.
+    // Uma chave só, e não duas.
+    //
+    // A credencial é **selada** com `config.mail.sealing_key` — o caminho de
+    // ligar a caixa lê-a de lá — e **aberta** com a do registo. O harness dava
+    // ao registo a sua chave e deixava a do `config` vir do ambiente: selava
+    // com uma e abria com outra.
+    //
+    // Não falhava a ligar: a sonda aceita, a credencial guarda-se, e o ecrã
+    // diz «Ligada». Falhava depois, ao abrir uma mensagem — e como nenhuma
+    // viagem abria mensagens, nunca ninguém o viu.
+    let mut config = config;
+    config.mail.sealing_key = Some(chave_do_correio().clone());
+
+    let mail_registry = Arc::new(
+        ocinye_core::modules::mail::ProviderRegistry::new(
+            Arc::new(ServicoQueResponde),
+            ocinye_core::config::MailConfig {
+                sealing_key: Some(chave_do_correio().clone()),
+                // O transporte é fixado aqui, e não herdado do ambiente.
+                //
+                // Herdá-lo fazia estas viagens descreverem instalações diferentes
+                // consoante a máquina: com `OCINYE_MAIL_IMAP_HOST` no `.env` local
+                // o Correio diz «ligue a sua caixa», e sem ele diz «não está
+                // configurado». Duas Experiences distintas, e o teste mediria a
+                // que a máquina por acaso tivesse.
+                //
+                // Um anfitrião que não existe é deliberado: nada nestas viagens se
+                // liga a servidor nenhum — o adaptador é o `UnconfiguredProvider`,
+                // e o que se mede é o que a instalação **diz saber**, não o que
+                // alcança.
+                imap_host: "mail.invalido.test".to_owned(),
+                smtp_host: "mail.invalido.test".to_owned(),
+                username: String::new(),
+                password: String::new(),
+                ..config.mail.clone()
+            },
+            Some(chave_do_correio().clone()),
+        )
+        // Uma caixa ligada também fala com o duplo.
+        //
+        // Sem isto, ligar a caixa produzia um cliente IMAP verdadeiro contra um
+        // anfitrião que não existe, e abrir uma mensagem dava erro: as viagens que
+        // medem o produto mediam a rede — offline, mediam a sua ausência.
+        .com_construtor(Box::new(|_| {
+            Ok(Arc::new(ServicoQueResponde) as Arc<dyn ocinye_core::modules::mail::MailProvider>)
+        })),
+    );
     AppState {
         pool,
         config: Arc::new(config),
@@ -984,7 +1262,12 @@ fn core_state(pool: PgPool, organisation_id: Uuid, database_url: &str) -> AppSta
         authenticator,
         store: None,
         inference: Arc::new(ocinye_core::modules::intelligence::NoProvider),
-        mail_provider: Arc::new(UnconfiguredProvider),
+        mail_registry,
+        // Estes testes medem HTTP, e não tempo real. Um plano ausente aceita
+        // tudo e não propaga nada — que é o que uma instalação sem Redis faz,
+        // e não um sítio por preencher.
+        realtime: Arc::new(ocinye_core::realtime::Realtime::ausente()),
+        mail_probe: Arc::new(SondaDoHarness),
         // O Capability Runtime com o componente a sério, e um só por processo.
         //
         // Um harness que carregasse um conjunto vazio provaria que a interface
@@ -2427,9 +2710,18 @@ async fn perder_o_acesso_esconde_o_evento_tambem_pelo_identificador() {
         "INSERT INTO calendar_events
              (organisation_id, scope, unit_id, title, all_day, starts_at, ends_at,
               timezone, classification, created_by_id)
+             -- Ao meio-dia do dia que a agenda vai mostrar.
+             --
+             -- O que esta viagem mede é **revogação de acesso**, e não
+             -- fronteiras de fuso. Com um deslocamento a partir de agora, o
+             -- evento atravessava a meia-noite de quem olha durante duas horas
+             -- por dia e a viagem falhava a dizer «o gestor não vê o evento da
+             -- sua unidade» — que é a mensagem de um defeito de autorização
+             -- que não existia. A fronteira tem a sua própria viagem.
              SELECT organisation_id, 'unit', $1, $3, FALSE,
-                    now() + interval '2 hours', now() + interval '3 hours',
-                    'Europe/Lisbon', 'RESTRICTED', $2
+                    (((now() AT TIME ZONE 'UTC')::date + time '12:00') AT TIME ZONE 'UTC'),
+                    (((now() AT TIME ZONE 'UTC')::date + time '13:00') AT TIME ZONE 'UTC'),
+                    'UTC', 'RESTRICTED', $2
                FROM people WHERE id = $2
          RETURNING id",
     )
@@ -2441,11 +2733,17 @@ async fn perder_o_acesso_esconde_o_evento_tambem_pelo_identificador() {
     .expect("evento");
 
     // Controlo positivo primeiro: sem isto, um mundo onde nada se vê passaria.
+    // Quem olha está em UTC, declarado: assim a data que este teste calcula e o
+    // dia civil que o produto agrupa são o mesmo, e uma falha aqui só pode ser
+    // de autorização.
     let agenda = harness
-        .open(&format!(
-            "/calendar?view=today&on={}",
-            chrono::Utc::now().date_naive()
-        ))
+        .open_em(
+            &format!(
+                "/calendar?view=today&on={}",
+                chrono::Utc::now().date_naive()
+            ),
+            Some("UTC"),
+        )
         .await
         .content()
         .await
@@ -3881,7 +4179,7 @@ async fn entrar_em(harness: &Harness, workspace_url: &str, credenciais: &Credenc
         .await
         .expect("página");
     esperar_pelo_login(&page).await;
-    set_field(&page, "input[name=username]", &credenciais.username).await;
+    set_field(&page, "input[name=email]", &credenciais.email).await;
     set_field(&page, "input[name=password]", &credenciais.password).await;
     submit(&page, "form").await;
     wait_until_left(&page, "/login").await;
@@ -4665,6 +4963,49 @@ async fn capturar_visivel(page: &Page, nome: &str) {
     capturar_com(page, nome, JANELA, false).await;
 }
 
+/// Um clique entregue ao elemento, e não a um par de coordenadas.
+///
+/// # Quando é isto e não `clicar`
+///
+/// `clicar` clica **onde** o elemento está, e é o que se quer na maioria das
+/// viagens: mede também que o elemento está alcançável.
+///
+/// Não serve quando a viagem emula uma janela maior do que a janela real do
+/// Chrome. O `SetDeviceMetricsOverride` muda o que a página julga ter, e não o
+/// tamanho da janela do sistema: um controlo que a página coloca em x=1340
+/// pode cair fora da janela verdadeira, e o clique não chega a lado nenhum. O
+/// sintoma é um teste a dizer que o botão não fez nada — quando o que não
+/// aconteceu foi o clique.
+///
+/// Verificado: com `clicar`, o compositor expandido não voltava ao tamanho; com
+/// isto, volta. O manípulo estava certo desde o princípio.
+async fn clicar_por_script(page: &Page, seletor: &str) {
+    page.evaluate(format!("document.querySelector('{seletor}').click()"))
+        .await
+        .unwrap_or_else(|erro| panic!("«{seletor}» não pôde ser clicado: {erro:?}"));
+}
+
+/// Fixa a janela desta página, sem gravar imagem nenhuma.
+///
+/// As viagens partilham o browser, e a janela por omissão é estreita. Uma que
+/// meça uma disposição de desktop tem de a pedir — senão mede o modo de coluna
+/// única e conclui que o desktop está partido.
+async fn janela(page: &Page, medidas: (i64, i64)) {
+    use chromiumoxide::cdp::browser_protocol::emulation::SetDeviceMetricsOverrideParams;
+
+    page.execute(
+        SetDeviceMetricsOverrideParams::builder()
+            .width(medidas.0)
+            .height(medidas.1)
+            .device_scale_factor(1.0)
+            .mobile(false)
+            .build()
+            .expect("métricas da janela"),
+    )
+    .await
+    .expect("aplicar as métricas");
+}
+
 /// O mesmo, numa janela escolhida — para ver o que acontece quando aperta.
 async fn capturar_em(page: &Page, nome: &str, janela: (i64, i64)) {
     capturar_com(page, nome, janela, true).await;
@@ -4900,4 +5241,2001 @@ async fn o_ano_inteiro_nao_e_um_pedido_impossivel() {
             "o Ano de {ano} não mostrou doze meses"
         );
     }
+}
+
+/// Uma pessoa liga a sua caixa de correio a partir do Workspace.
+///
+/// # O que esta viagem guarda
+///
+/// Duas coisas que a suite do Core não pode ver, porque acontecem no browser.
+///
+/// A primeira é que a senha atravessa o Workspace uma vez, a caminho do Core, e
+/// não regressa: o campo abre vazio, a página de regresso não a contém, e não há
+/// endpoint que a devolva. A asserção pergunta ao HTML inteiro, e não ao campo —
+/// um campo vazio com a senha num atributo de outro elemento continuaria a ser
+/// uma senha no browser.
+///
+/// A segunda é que a caixa muda de estado à vista: «Por ligar» antes, «Ligada»
+/// depois. Sem isso, o formulário podia estar a submeter para o vazio.
+#[tokio::test(flavor = "multi_thread")]
+async fn uma_pessoa_liga_a_sua_caixa_de_correio() {
+    let harness = harness!();
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let (_caixa, endereco) = harness.has_a_mailbox(person_id).await;
+
+    // A senha da caixa. Nunca a do Ocinye: são coisas distintas, e nenhuma
+    // serve para obter a outra.
+    const SENHA: &str = "senha-so-do-imap-9134";
+
+    let page = harness.open("/mail/settings").await;
+    esperar_por(&page, "As suas caixas").await;
+
+    let html = page.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&endereco),
+        "a caixa da pessoa não apareceu nas definições de correio"
+    );
+    assert!(
+        html.contains("Por ligar"),
+        "a caixa por ligar não se apresentou como tal"
+    );
+
+    // ── O formulário pede a senha, e só a senha ─────────────────────────
+    //
+    // Havia aqui um campo de conta, pré-preenchido com o endereço da caixa, e
+    // esta viagem escrevia-o. Um campo editável convida a editar — e o que se
+    // editava era a conta com que o Ocinye se autentica no servidor de
+    // correio, enquanto o ecrã continuava a mostrar o endereço da caixa.
+    //
+    // O Core resolve-a: `principal → MemberId → endereço institucional`. Aqui
+    // mede-se a ausência, porque uma ausência que não se mede volta.
+    let editaveis: Option<f64> = page
+        .evaluate(
+            "document.querySelectorAll(\
+               '[data-oc=ligar-caixa] input:not([type=password]):not([readonly])'\
+             ).length",
+        )
+        .await
+        .expect("contagem")
+        .into_value()
+        .ok();
+    assert_eq!(
+        editaveis,
+        Some(0.0),
+        "o formulário de ligação tem um campo editável que não é a senha"
+    );
+
+    set_field(&page, "[data-oc=ligar-caixa] input[name=password]", SENHA).await;
+    submit(&page, "[data-oc=ligar-caixa]").await;
+
+    esperar_por(&page, "Ligada").await;
+    let depois = page.content().await.expect("conteúdo");
+
+    assert!(
+        !depois.contains(SENHA),
+        "a senha da caixa voltou no documento"
+    );
+
+    // E também não na barra de endereço.
+    //
+    // Perguntar só ao documento deixava passar uma senha na URL — que fica no
+    // histórico do browser, no `Referer` do pedido seguinte, e no log de acesso
+    // de qualquer coisa pelo meio. Descobri-o por reversão: pus a senha na URL
+    // de regresso e esta viagem continuou verde.
+    let url = page.url().await.expect("endereço").unwrap_or_default();
+    assert!(
+        !url.contains(SENHA),
+        "a senha da caixa foi parar à barra de endereço: {url}"
+    );
+    assert!(
+        depois.contains("Desligar e esquecer a senha"),
+        "a caixa ligada não oferece o caminho de volta"
+    );
+
+    // E a senha também não ficou legível na base de dados.
+    let cifrado: Vec<u8> = sqlx::query_scalar(
+        "SELECT c.ciphertext FROM mailbox_credentials c
+           JOIN mailboxes m ON m.id = c.mailbox_id
+          WHERE m.address = $1",
+    )
+    .bind(&endereco)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("credencial guardada");
+
+    assert!(
+        !String::from_utf8_lossy(&cifrado).contains(SENHA),
+        "a senha ficou legível na base de dados"
+    );
+}
+
+/// A sonda do harness: aceita, porque não há servidor de correio para
+/// perguntar. O que o harness assume fica escrito, em vez de a verificação
+/// desaparecer do caminho que estes testes percorrem.
+struct SondaDoHarness;
+
+#[async_trait::async_trait]
+impl ocinye_core::modules::mail::provider::CredentialProbe for SondaDoHarness {
+    async fn verify(
+        &self,
+        _endereco: &str,
+        _username: &str,
+        _senha: &str,
+    ) -> ocinye_core::modules::mail::provider::ProviderResult<()> {
+        Ok(())
+    }
+}
+
+/// Um compromisso à meia-noite e meia aparece no dia certo de quem olha.
+///
+/// # O defeito que esta viagem guarda
+///
+/// O Calendário agrupava dias em UTC. Um compromisso marcado para as 00:30 em
+/// Lisboa fica guardado às 23:30 do dia anterior em UTC — e aparecia lá: no dia
+/// errado, à hora errada.
+///
+/// Não é um erro de fuso na apresentação de uma hora. É o dia civil inteiro a
+/// ser decidido no sítio errado, e por isso atravessava o Dia, a Semana, o Mês,
+/// a Agenda e o «Hoje».
+///
+/// # Porque a zona é declarada pelo teste
+///
+/// Para que a viagem não dependa do fuso da máquina onde corre. Declarada, a
+/// mesma asserção vale nesta estação de trabalho e em CI.
+#[tokio::test(flavor = "multi_thread")]
+async fn um_compromisso_a_meia_noite_e_meia_aparece_no_dia_de_quem_olha() {
+    let harness = harness!();
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.manages_a_unit(person_id).await;
+
+    // Um dia fixo, longe de hoje: o que se mede é a fronteira, e não o
+    // calendário de hoje.
+    let dia = chrono::NaiveDate::from_ymd_opt(2026, 3, 12).expect("data");
+    let titulo = unique_title("Madrugada");
+
+    // Um fuso a leste, sem mudança de hora e sem nomes antigos.
+    //
+    // `Asia/Tbilisi` está em UTC+4 o ano inteiro: as 00:30 de lá são 20:30 do
+    // **dia anterior** em UTC, que é a discrepância que o agrupamento em UTC
+    // produzia. Lisboa não serviria — em Março está em UTC+0 e não há fronteira
+    // para atravessar. `Europe/Kyiv` também não: o Chrome devolve-lhe o nome
+    // antigo, `Europe/Kiev`, e a viagem passaria a medir alcunhas de fusos.
+    let zona = "Asia/Tbilisi";
+
+    let quando = format!("{dia}T00:30");
+    let fim = format!("{dia}T01:30");
+
+    let formulario = harness.open_em("/calendar/events/new", Some(zona)).await;
+    set_field(&formulario, "input[name=title]", &titulo).await;
+    set_field(&formulario, "input[name=starts_at]", &quando).await;
+    set_field(&formulario, "input[name=ends_at]", &fim).await;
+    set_field(&formulario, "input[name=timezone]", zona).await;
+    submit(&formulario, "form.oc-editor__form").await;
+    wait_until_left(&formulario, "/calendar/events/new").await;
+
+    // O instante guardado é mesmo do dia anterior em UTC. Sem esta verificação,
+    // a viagem podia passar por o evento nunca ter atravessado a fronteira.
+    let guardado: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT starts_at FROM calendar_events WHERE title = $1")
+            .bind(&titulo)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("o evento devia ter sido guardado");
+    assert_eq!(
+        guardado.date_naive(),
+        dia - chrono::Duration::days(1),
+        "o controlo desta viagem falhou: em UTC o instante devia cair no dia \
+         anterior, e caiu em {}",
+        guardado.date_naive()
+    );
+
+    // O `app.js` do formulário já declarou o fuso ao servidor. Confirma-se, para
+    // que uma falha na declaração se leia como tal e não como um agrupamento
+    // errado.
+    let declarado: Option<String> = formulario
+        .evaluate("document.cookie")
+        .await
+        .expect("cookie")
+        .into_value()
+        .ok();
+    assert!(
+        declarado.unwrap_or_default().contains("Tbilisi"),
+        "o browser não declarou o fuso ao servidor"
+    );
+
+    for vista in ["day", "week", "month", "agenda"] {
+        let pagina = harness
+            .open_em(&format!("/calendar?view={vista}&on={dia}"), Some(zona))
+            .await;
+        let html = pagina.content().await.expect("conteúdo");
+        assert!(
+            html.contains(&titulo),
+            "«{vista}» agrupou o compromisso pelo dia de Greenwich em vez do dia \
+             de quem olha"
+        );
+    }
+
+    // E não aparece no dia anterior, que é onde o defeito o punha.
+    let anterior = harness
+        .open_em(
+            &format!("/calendar?view=day&on={}", dia - chrono::Duration::days(1)),
+            Some(zona),
+        )
+        .await
+        .content()
+        .await
+        .expect("conteúdo");
+    assert!(
+        !anterior.contains(&titulo),
+        "o compromisso continuou a aparecer no dia anterior"
+    );
+}
+
+/// Uma pessoa começa uma conversa e envia a primeira mensagem.
+///
+/// # A viagem que prova que a aplicação existe
+///
+/// Carregar em «Nova conversa», procurar alguém pelo nome, escolher, escrever e
+/// enviar. Se qualquer botão não estiver ligado, esta viagem pára — que é
+/// exactamente o que aconteceu com o `+` e o «Nova conversa» antes de existir
+/// selector nenhum.
+#[tokio::test(flavor = "multi_thread")]
+async fn uma_pessoa_comeca_uma_conversa_e_envia_a_primeira_mensagem() {
+    let harness = harness!();
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // Alguém com quem falar. O nome é único para a procura não apanhar outros.
+    let colega = unique_title("Bartolomeu");
+    let outro = harness.outra_pessoa(person_id, &colega).await;
+
+    let page = harness.open("/messages").await;
+    esperar_por(&page, "Mensagens").await;
+
+    let inicial = page.content().await.expect("conteúdo");
+    assert!(
+        inicial.contains("Comece uma conversa"),
+        "sem conversas, a aplicação devia convidar a começar uma"
+    );
+
+    // O botão abre o selector.
+    clicar(&page, "[data-oc=\"nova-conversa\"]").await;
+    let dialogo = wait_visible(&page, "[data-oc=\"procurar-pessoa\"]").await;
+    let _ = dialogo;
+
+    // Procurar pelo nome, e esperar que o servidor responda.
+    set_field(&page, "[data-oc=\"procurar-pessoa\"]", &colega).await;
+    esperar_por(&page, &colega).await;
+
+    let com_resultados = page.content().await.expect("conteúdo");
+    assert!(
+        com_resultados.contains("oc-msg__resultado"),
+        "a procura não devolveu ninguém"
+    );
+
+    // Escolher abre a conversa directa.
+    clicar(&page, "[data-oc=\"escolher-pessoa\"]").await;
+    let destino = wait_until_left(&page, "/messages").await;
+    assert!(
+        destino.contains("/messages/"),
+        "escolher alguém não abriu a conversa: {destino}"
+    );
+
+    // Escrever e enviar.
+    esperar_por(&page, "Escrever mensagem").await;
+    set_field(&page, "[data-oc=\"texto\"]", "Ola, ja terminei a revisao").await;
+    clicar(&page, "[data-oc=\"enviar\"]").await;
+    esperar_por(&page, "Ola, ja terminei a revisao").await;
+
+    // E aparece do **lado de quem a escreveu**.
+    //
+    // Sem isto, o Workspace lia `id` numa resposta cujo campo se chama
+    // `person_id`, o `unwrap_or_default()` devolvia o UUID nulo, e nenhuma
+    // mensagem era própria — a conversa inteira alinhava como se fosse de
+    // outra pessoa. Uma chave errada num JSON não dá erro, e por isso a
+    // asserção tem de estar aqui, sobre o que a página desenhou.
+    let enviada = page.content().await.expect("conteúdo");
+    assert!(
+        enviada.contains("oc-msg__mensagem--minha"),
+        "a mensagem que esta pessoa acabou de enviar não ficou marcada como sua"
+    );
+
+    // A mensagem ficou guardada, com a autora certa e no sítio certo.
+    let guardada: (Uuid, String) = sqlx::query_as(
+        "SELECT m.author_id, m.body
+           FROM messages m
+           JOIN conversation_participants p ON p.conversation_id = m.conversation_id
+          WHERE p.person_id = $1 AND m.body = $2
+          LIMIT 1",
+    )
+    .bind(outro)
+    .bind("Ola, ja terminei a revisao")
+    .fetch_one(&harness.pool)
+    .await
+    .expect("a mensagem devia estar guardada");
+
+    assert_ne!(
+        guardada.0, outro,
+        "o autor da mensagem ficou a ser quem a recebeu"
+    );
+
+    // E aparece na lista de conversas.
+    let lista = harness
+        .open("/messages")
+        .await
+        .content()
+        .await
+        .expect("conteúdo");
+    assert!(
+        lista.contains(&colega),
+        "a conversa não apareceu na lista de quem a começou"
+    );
+}
+
+/// Uma pessoa cria um grupo com duas pessoas.
+#[tokio::test(flavor = "multi_thread")]
+async fn uma_pessoa_cria_um_grupo_com_duas_pessoas() {
+    let harness = harness!();
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    let primeira = unique_title("Casimiro");
+    let segunda = unique_title("Doroteia");
+    harness.outra_pessoa(person_id, &primeira).await;
+    harness.outra_pessoa(person_id, &segunda).await;
+
+    let nome_do_grupo = unique_title("Projecto");
+
+    let page = harness.open("/messages").await;
+    esperar_por(&page, "Mensagens").await;
+    clicar(&page, "[data-oc=\"nova-conversa\"]").await;
+    wait_visible(&page, "[data-oc=\"procurar-pessoa\"]").await;
+
+    // Passar a grupo, dar-lhe nome, e escolher duas pessoas.
+    clicar(&page, "[data-oc-modo=\"grupo\"]").await;
+    set_field(&page, "[data-oc=\"nome-do-grupo\"]", &nome_do_grupo).await;
+
+    for quem in [&primeira, &segunda] {
+        set_field(&page, "[data-oc=\"procurar-pessoa\"]", quem).await;
+        esperar_por(&page, quem).await;
+        clicar(&page, "[data-oc=\"escolher-pessoa\"]").await;
+        // A etiqueta de escolhido aparece.
+        esperar_por(&page, quem).await;
+    }
+
+    clicar(&page, "[data-oc=\"criar-conversa\"]").await;
+    let destino = wait_until_left(&page, "/messages").await;
+    assert!(
+        destino.contains("/messages/"),
+        "o grupo não abriu: {destino}"
+    );
+
+    // Três pessoas: as duas escolhidas e quem o criou.
+    let quantos: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM conversation_participants p
+           JOIN conversations c ON c.id = p.conversation_id
+          WHERE c.name = $1 AND p.left_at IS NULL",
+    )
+    .bind(&nome_do_grupo)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("contagem");
+
+    assert_eq!(quantos, 3, "o grupo não ficou com as três pessoas");
+
+    let html = page.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&nome_do_grupo),
+        "o grupo abriu sem o seu nome"
+    );
+    assert!(
+        html.contains("3 participantes"),
+        "o cabeçalho não conta quem lá está"
+    );
+}
+
+/// O sino abre um painel, e o painel mostra o que chegou.
+///
+/// # O que esta viagem guarda
+///
+/// Três coisas que se perdem em silêncio. Que o sino **não navega** — levar a
+/// pessoa a outro ecrã fá-la perder o sítio onde estava. Que o painel vai
+/// mesmo buscar as notificações, em vez de ficar no «A carregar…». E que o que
+/// ele desenha é o que o Core escreveu — uma chave errada num JSON não dá erro,
+/// e já custou uma conversa inteira alinhada do lado errado.
+#[tokio::test(flavor = "multi_thread")]
+async fn o_sino_abre_um_painel_com_o_que_chegou() {
+    let harness = harness!();
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // Uma notificação a sério, escrita como o Core a escreve.
+    let titulo = unique_title("Ermelinda");
+    let organisation_id: Uuid =
+        sqlx::query_scalar("SELECT organisation_id FROM people WHERE id = $1")
+            .bind(person_id)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("organização");
+
+    sqlx::query(
+        "INSERT INTO notifications (organisation_id, recipient_id, kind, title)
+              VALUES ($1, $2, 'reminder', $3)",
+    )
+    .bind(organisation_id)
+    .bind(person_id)
+    .bind(&titulo)
+    .execute(&harness.pool)
+    .await
+    .expect("notificação");
+
+    let page = harness.open("/").await;
+    esperar_por(&page, "OCINYE").await;
+
+    let antes = page.url().await.ok().flatten().unwrap_or_default();
+    clicar(&page, "[data-oc=\"abrir-notificacoes\"]").await;
+    esperar_por(&page, &titulo).await;
+
+    let depois = page.url().await.ok().flatten().unwrap_or_default();
+    assert_eq!(antes, depois, "o sino navegou em vez de abrir um painel");
+
+    let html = page.content().await.expect("conteúdo");
+    assert!(
+        html.contains("oc-sino__linha"),
+        "o painel abriu sem desenhar a notificação"
+    );
+    assert!(
+        !html.contains("A carregar…"),
+        "o painel ficou preso no estado de carregamento"
+    );
+
+    // ── O acabamento, medido em vez de comparado de olho ────────────────
+    //
+    // A superfície e o ritmo das linhas. O painel da conta é a referência: se
+    // um destes deixar de coincidir, o sino passa a parecer menos acabado do
+    // que ele — que foi exactamente o que aconteceu duas vezes.
+    let medidas: Option<String> = page
+        .evaluate(
+            "(() => { \
+               const iguais = (a, b, props) => props.every(p => \
+                 getComputedStyle(a).getPropertyValue(p) === \
+                 getComputedStyle(b).getPropertyValue(p)); \
+               const conta = document.querySelector('[data-oc=\"account-menu\"]'); \
+               const sino = document.querySelector('[data-oc=\"notificacoes\"]'); \
+               const linha = document.querySelector('.oc-sino__linha'); \
+               return JSON.stringify({ \
+                 superficie: iguais(conta, sino, \
+                   ['background-color','backdrop-filter','box-shadow','border-radius']), \
+                 temIcone: !!(linha && linha.querySelector('svg')), \
+                 temTitulo: !!(linha && linha.querySelector('b')), \
+                 temLegenda: !!(linha && linha.querySelector('em')), \
+               }); })()",
+        )
+        .await
+        .expect("medidas")
+        .into_value()
+        .ok();
+
+    let medidas = medidas.unwrap_or_default();
+    assert!(
+        medidas.contains(r#""superficie":true"#),
+        "o painel do sino não tem o acabamento do painel da conta: {medidas}"
+    );
+    assert!(
+        medidas.contains(r#""temIcone":true"#)
+            && medidas.contains(r#""temTitulo":true"#)
+            && medidas.contains(r#""temLegenda":true"#),
+        "uma linha do sino não tem o ritmo das linhas do painel da conta — \
+         ícone, título e legenda: {medidas}"
+    );
+
+    // E fecha por `Escape`, como o painel da conta fecha.
+    page.evaluate("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))")
+        .await
+        .expect("escape");
+
+    let aberto: Option<bool> = page
+        .evaluate("document.querySelector('[data-oc=\"notificacoes\"]').hidden === false")
+        .await
+        .expect("estado")
+        .into_value()
+        .ok();
+    assert_eq!(aberto, Some(false), "o painel não fechou com Escape");
+}
+
+/// Os três painéis da barra, para revisão visual.
+///
+/// # Porque os três na mesma corrida
+///
+/// Porque o que se compara é o acabamento **entre** eles. Capturados em alturas
+/// diferentes, comparar-se-iam de memória — e foi de memória que eu concluí que
+/// o painel da conta precisava de mudar, quando o que precisava era de ficar
+/// como estava.
+#[tokio::test]
+#[ignore = "grava ficheiros; serve a revisão visual, não a verificação"]
+async fn capturas_dos_paineis_da_barra() {
+    let harness = harness!();
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    let organisation_id: Uuid =
+        sqlx::query_scalar("SELECT organisation_id FROM people WHERE id = $1")
+            .bind(person_id)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("organização");
+
+    // Duas notificações, para o painel do sino ter o que mostrar — uma por ler
+    // e uma lida, que é o que distingue os dois acabamentos de linha.
+    for (titulo, lida) in [("Ana Silva", false), ("Lembrete de revisão", true)] {
+        sqlx::query(
+            "INSERT INTO notifications
+                 (organisation_id, recipient_id, kind, title, read_at)
+              VALUES ($1, $2, 'reminder', $3, CASE WHEN $4 THEN now() ELSE NULL END)",
+        )
+        .bind(organisation_id)
+        .bind(person_id)
+        .bind(titulo)
+        .bind(lida)
+        .execute(&harness.pool)
+        .await
+        .expect("notificação");
+    }
+
+    let page = harness.open("/").await;
+    esperar_por(&page, "OCINYE").await;
+
+    // ── O painel da conta: a referência ─────────────────────────────────
+    clicar(&page, "[data-oc=\"account-toggle\"]").await;
+    esperar_por(&page, "A minha conta").await;
+    capturar_visivel(&page, "painel-conta").await;
+    page.evaluate("document.body.click()")
+        .await
+        .expect("fechar");
+
+    // ── O sino ──────────────────────────────────────────────────────────
+    clicar(&page, "[data-oc=\"abrir-notificacoes\"]").await;
+    esperar_por(&page, "Ana Silva").await;
+    capturar_visivel(&page, "painel-sino").await;
+    page.evaluate("document.body.click()")
+        .await
+        .expect("fechar");
+
+    // ── O calendário da barra ───────────────────────────────────────────
+    open_temporal_centre(&page).await;
+    capturar_visivel(&page, "painel-calendario").await;
+
+    // ── E os três acabamentos, medidos e não comparados de olho ────────
+    //
+    // A captura mostra; ela não prova. O que prova é isto: as três superfícies
+    // têm de dar exactamente os mesmos valores computados. Duas vezes nesta
+    // sessão um painel ficou visivelmente menos acabado do que o da conta com
+    // o CSS aparentemente escrito — uma vez por a regra estar presa dentro de
+    // uma `@media`, outra por o selector encontrado não ser o pretendido.
+    let medidas = estilo_computado(
+        &page,
+        &[
+            (
+                "[data-oc=\"account-menu\"]",
+                "background-color,backdrop-filter,box-shadow,border-radius,border-top-color",
+            ),
+            (
+                "[data-oc=\"notificacoes\"]",
+                "background-color,backdrop-filter,box-shadow,border-radius,border-top-color",
+            ),
+            (
+                "[data-oc=\"temporal-centre\"]",
+                "background-color,backdrop-filter,box-shadow,border-radius,border-top-color",
+            ),
+        ],
+    )
+    .await;
+
+    let acabamentos: Vec<&str> = medidas
+        .lines()
+        .map(|linha| linha.split_once(' ').map(|(_, resto)| resto).unwrap_or(""))
+        .collect();
+    assert_eq!(acabamentos.len(), 3, "faltou um painel:\n{medidas}");
+    assert!(
+        !acabamentos.iter().any(|a| a.is_empty()),
+        "um dos painéis não estava no documento:\n{medidas}"
+    );
+    assert!(
+        acabamentos.windows(2).all(|par| par[0] == par[1]),
+        "os painéis da barra não partilham o acabamento do painel da conta:\n{medidas}"
+    );
+}
+
+/// A matriz de estados do Correio, em imagens.
+///
+/// # Porque uma matriz e não uma captura
+///
+/// Porque o Correio tem seis estados que se parecem e pedem coisas
+/// diferentes, e o defeito desta família não é uma cor errada: é o **estado
+/// errado** — a página a mandar alguém falar com quem administra quando o que
+/// falta é a senha dela, ou a dizer que não há mensagens quando o que há é um
+/// serviço em baixo.
+///
+/// Cada asserção destas já existe como teste. O que as imagens acrescentam é a
+/// única pergunta que nenhuma asserção responde: *isto parece a aplicação
+/// final?* Duas vezes nesta sessão a resposta foi não com todos os portões
+/// verdes.
+///
+/// # Ignorado por omissão
+///
+/// Grava ficheiros e serve a revisão visual. A verificação vive nos testes que
+/// afirmam o comportamento; isto mostra-o.
+#[tokio::test]
+#[ignore = "grava ficheiros; serve a revisão visual, não a verificação"]
+async fn capturas_do_correio() {
+    let harness = harness!();
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.has_a_mailbox(person_id).await;
+
+    // ── A caixa por ligar ───────────────────────────────────────────────
+    let page = harness.open("/mail").await;
+    esperar_por(&page, "Correio").await;
+    capturar_visivel(&page, "correio-por-ligar").await;
+
+    let definicoes = harness.open("/mail/settings").await;
+    esperar_por(&definicoes, "As suas caixas").await;
+    capturar_visivel(&definicoes, "correio-definicoes-por-ligar").await;
+
+    // ── Ligada, e sem mensagens ─────────────────────────────────────────
+    set_field(
+        &definicoes,
+        "[data-oc=ligar-caixa] input[name=password]",
+        "senha-so-do-imap-4471",
+    )
+    .await;
+    submit(&definicoes, "[data-oc=ligar-caixa]").await;
+    esperar_por(&definicoes, "Ligada").await;
+    capturar_visivel(&definicoes, "correio-definicoes-ligada").await;
+
+    // A caixa que **a interface** ligou, e não uma que o teste tenha escolhido.
+    //
+    // A pessoa tem mais do que uma, e o formulário liga a primeira. Escrever
+    // as mensagens noutra deixava a lista vazia, com o aspecto de o índice não
+    // ter funcionado — e a captura teria mostrado exactamente isso.
+    let (caixa, endereco): (Uuid, String) = sqlx::query_as(
+        "SELECT m.id, m.address FROM mailboxes m
+           JOIN mailbox_credentials c ON c.mailbox_id = m.id
+          WHERE m.owner_id = $1",
+    )
+    .bind(person_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("a caixa ligada");
+
+    let vazia = harness.open(&format!("/mail/{caixa}")).await;
+    esperar_por(&vazia, "Correio").await;
+    capturar_visivel(&vazia, "correio-entrada-vazia").await;
+
+    // ── Com correio ─────────────────────────────────────────────────────
+    //
+    // Escrito no índice, que é de onde a lista lê. Não passa por servidor
+    // nenhum: o que se está a fotografar é a Experience, e um servidor real
+    // tornaria a imagem dependente de uma rede.
+    for (assunto, remetente, lida) in [
+        (
+            "Relatório trimestral da unidade",
+            "ana.silva@exemplo.com",
+            false,
+        ),
+        (
+            "Re: dados do ensaio de Fevereiro",
+            "j.mendes@universidade.ao",
+            false,
+        ),
+        (
+            "Convite — seminário de infraestruturas",
+            "eventos@exemplo.org",
+            true,
+        ),
+        ("Confirmação de recepção", "secretaria@exemplo.com", true),
+    ] {
+        sqlx::query(
+            "INSERT INTO mail_messages
+                    (mailbox_id, provider_id, folder, from_address, from_display_name,
+                     subject, snippet, sent_at, is_read)
+                  VALUES ($1, $2, 'inbox', $3, $4, $5, $6, now() - ($7 * interval '1 hour'), $8)",
+        )
+        .bind(caixa)
+        .bind(Uuid::new_v4().to_string())
+        .bind(remetente)
+        .bind(remetente.split('@').next().unwrap_or(remetente))
+        .bind(assunto)
+        .bind("As primeiras linhas da mensagem, como aparecem na lista.")
+        .bind(f64::from(u32::from(lida)) * 3.0 + 1.0)
+        .bind(lida)
+        .execute(&harness.pool)
+        .await
+        .expect("mensagem");
+    }
+
+    // A caixa **desta** viagem, e não a primeira que a página escolheria.
+    //
+    // A pessoa tem mais do que uma caixa, e `/mail` abre a primeira. As
+    // mensagens foram escritas nesta; sem a nomear, a lista mostrava a outra —
+    // vazia, e com o aspecto de o índice não ter funcionado.
+    let cheia = harness.open(&format!("/mail/{caixa}")).await;
+    esperar_por(&cheia, "Relatório trimestral").await;
+    capturar_visivel(&cheia, "correio-entrada-com-mensagens").await;
+
+    // ── A leitura ───────────────────────────────────────────────────────
+    // A primeira linha da lista, seja ela qual for.
+    //
+    // A primeira escrita esperava por «Relatório trimestral» depois do clique,
+    // e a lista ordena por data: a primeira linha é outra mensagem. O teste
+    // falhava a dizer que o assunto não apareceu — e ele estava lá, noutra
+    // linha, exactamente onde devia estar.
+    clicar(&cheia, ".oc-mail__item").await;
+    esperar_por(&cheia, "oc-mail__pane-head").await;
+    capturar_visivel(&cheia, "correio-leitura").await;
+
+    // ── O compositor ────────────────────────────────────────────────────
+    let compositor = harness
+        .open(&format!("/mail/compose?mailbox={caixa}"))
+        .await;
+    janela(&compositor, JANELA).await;
+    esperar_por(&compositor, "Nova mensagem").await;
+    capturar_visivel(&compositor, "correio-compositor").await;
+
+    // Com destinatários, e com a cópia aberta.
+    for endereco in ["ana.silva@exemplo.com", "j.mendes@universidade.ao"] {
+        set_field(
+            &compositor,
+            "[data-oc-campo=to] [data-oc=destino-entrada]",
+            endereco,
+        )
+        .await;
+        compositor
+            .evaluate(
+                "document.querySelector('[data-oc-campo=to] [data-oc=destino-entrada]')\
+                   .dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}))",
+            )
+            .await
+            .expect("aceitar o destinatário");
+    }
+    clicar(&compositor, "[data-oc=mostrar-cc]").await;
+    set_field(
+        &compositor,
+        ".oc-comp__assunto",
+        "Consolidação dos números do trimestre",
+    )
+    .await;
+    set_field(
+        &compositor,
+        "[data-oc=compositor-corpo]",
+        "Bom dia,\n\nSegue o resumo do trimestre. Fico a aguardar comentários antes \
+         de o fechar.\n\nCumprimentos,\nFidel",
+    )
+    .await;
+    capturar_visivel(&compositor, "correio-compositor-preenchido").await;
+
+    clicar(&compositor, "[data-oc=compositor-expandir]").await;
+    capturar_visivel(&compositor, "correio-compositor-expandido").await;
+
+    // ── A disposição, comandada ─────────────────────────────────────────
+    let arrumado = harness.open(&format!("/mail/{caixa}")).await;
+    janela(&arrumado, JANELA).await;
+    esperar_por(&arrumado, "Relatório trimestral").await;
+    arrumado
+        .evaluate("window.localStorage.removeItem('oc-mail-disposicao')")
+        .await
+        .expect("limpar");
+
+    let arrumado = harness.open(&format!("/mail/{caixa}")).await;
+    janela(&arrumado, JANELA).await;
+    esperar_por(&arrumado, "Relatório trimestral").await;
+    capturar_visivel(&arrumado, "correio-tri-painel").await;
+
+    clicar(&arrumado, "[data-oc=alternar-pastas]").await;
+    capturar_visivel(&arrumado, "correio-pastas-recolhidas").await;
+
+    clicar(&arrumado, "[data-oc=focar-leitura]").await;
+    capturar_visivel(&arrumado, "correio-leitura-dominante").await;
+
+    // ── E o mesmo, apertado ─────────────────────────────────────────────
+    //
+    // Três painéis num ecrã estreito não se comprimem: escolhe-se um.
+    let estreita = harness.open(&format!("/mail/{caixa}")).await;
+    esperar_por(&estreita, "Correio").await;
+    capturar_em(&estreita, "correio-estreito-lista", (760, 900)).await;
+
+    assert!(
+        !endereco.is_empty(),
+        "a caixa tem de ter endereço para as capturas fazerem sentido"
+    );
+}
+
+/// Um serviço de correio que responde, para as viagens que precisam de um.
+///
+/// # Porque o harness precisa dos dois
+///
+/// O `UnconfiguredProvider` descreve uma instalação sem serviço, e é o estado
+/// certo para as viagens que medem **a ausência**. Não serve para as que medem
+/// o produto: abrir uma mensagem passa pelo fornecedor, e um fornecedor que
+/// recusa faz a leitura nunca aparecer.
+///
+/// # O que este duplo não faz
+///
+/// Não inventa correio. A lista vem do índice — é lá que as viagens escrevem —
+/// e o que este devolve é o corpo de quem já está indexado. Um duplo que
+/// gerasse mensagens faria as viagens medirem o duplo.
+struct ServicoQueResponde;
+
+#[async_trait::async_trait]
+impl ocinye_core::modules::mail::MailProvider for ServicoQueResponde {
+    fn adapter_name(&self) -> &'static str {
+        "servico-de-ensaio"
+    }
+
+    async fn health(&self) -> ocinye_core::modules::mail::provider::ProviderHealth {
+        ocinye_core::modules::mail::provider::ProviderHealth {
+            endpoints: vec!["imap ensaio:993".to_owned(), "smtp ensaio:465".to_owned()],
+            can_read: true,
+            can_send: true,
+            detail: "O serviço de correio está a responder.".to_owned(),
+            rejected_credential: false,
+        }
+    }
+
+    async fn list_messages(
+        &self,
+        _mailbox_address: &str,
+        _folder: ocinye_contracts::MailFolder,
+        _cursor: Option<&str>,
+        _limit: u32,
+    ) -> ocinye_core::modules::mail::provider::ProviderResult<
+        ocinye_core::modules::mail::provider::MessagePage,
+    > {
+        Ok(ocinye_core::modules::mail::provider::MessagePage {
+            messages: Vec::new(),
+            next_cursor: None,
+        })
+    }
+
+    async fn fetch_message(
+        &self,
+        _mailbox_address: &str,
+        folder: ocinye_contracts::MailFolder,
+        provider_id: &str,
+    ) -> ocinye_core::modules::mail::provider::ProviderResult<
+        ocinye_core::modules::mail::provider::FetchedMessage,
+    > {
+        Ok(ocinye_core::modules::mail::provider::FetchedMessage {
+            header: ocinye_core::modules::mail::provider::MessageHeader {
+                provider_id: provider_id.to_owned(),
+                message_id: None,
+                thread_key: None,
+                folder,
+                from: ocinye_core::modules::mail::service::sender_identity(
+                    "ana.silva@exemplo.com",
+                    Some("Ana Silva".to_owned()),
+                ),
+                to: Vec::new(),
+                cc: Vec::new(),
+                subject: Some("Relatório trimestral da unidade".to_owned()),
+                snippet: None,
+                sent_at: chrono::Utc::now(),
+                is_read: false,
+                is_starred: false,
+                has_attachments: false,
+                size_bytes: None,
+            },
+            text_body: Some(
+                "Bom dia,\n\nSegue o relatório trimestral da unidade, com os números \
+                 consolidados e as notas de método.\n\nCumprimentos,\nAna"
+                    .to_owned(),
+            ),
+            html_body: None,
+            attachments: Vec::new(),
+            bcc: Vec::new(),
+        })
+    }
+
+    async fn fetch_attachment(
+        &self,
+        _mailbox_address: &str,
+        _folder: ocinye_contracts::MailFolder,
+        _provider_id: &str,
+        _part_id: &str,
+    ) -> ocinye_core::modules::mail::provider::ProviderResult<Vec<u8>> {
+        Err(ocinye_core::modules::mail::ProviderError::NotFound)
+    }
+
+    async fn send_message(
+        &self,
+        _mailbox_address: &str,
+        _message: &ocinye_core::modules::mail::provider::OutgoingMessage,
+    ) -> ocinye_core::modules::mail::provider::ProviderResult<Option<String>> {
+        Ok(None)
+    }
+
+    async fn move_message(
+        &self,
+        _mailbox_address: &str,
+        _folder: ocinye_contracts::MailFolder,
+        _provider_id: &str,
+        _destination: ocinye_contracts::MailFolder,
+    ) -> ocinye_core::modules::mail::provider::ProviderResult<()> {
+        Ok(())
+    }
+
+    async fn set_read(
+        &self,
+        _mailbox_address: &str,
+        _folder: ocinye_contracts::MailFolder,
+        _provider_id: &str,
+        _read: bool,
+    ) -> ocinye_core::modules::mail::provider::ProviderResult<()> {
+        Ok(())
+    }
+
+    async fn set_starred(
+        &self,
+        _mailbox_address: &str,
+        _folder: ocinye_contracts::MailFolder,
+        _provider_id: &str,
+        _starred: bool,
+    ) -> ocinye_core::modules::mail::provider::ProviderResult<()> {
+        Ok(())
+    }
+}
+
+/// A pessoa comanda o espaço; o sistema protege a utilidade.
+///
+/// # O que estas asserções medem
+///
+/// Redimensionar é uma promessa fácil de fazer e difícil de manter: um
+/// separador que se arrasta e não move nada, um mínimo que não existe e deixa
+/// um painel a zero, um painel recolhido sem caminho de volta. Cada uma destas
+/// falhas é invisível a um teste de marcação — o HTML fica igual.
+///
+/// Mede-se a largura **computada** dos painéis, antes e depois de cada gesto.
+#[tokio::test]
+async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
+    let harness = harness!();
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.has_a_mailbox(person_id).await;
+
+    let page = harness.open("/mail").await;
+    esperar_por(&page, "Caixa de entrada").await;
+
+    // Uma janela de desktop, que é onde três painéis existem.
+    janela(&page, JANELA).await;
+
+    // Sem preferência herdada.
+    //
+    // O perfil do browser é partilhado entre viagens, e uma preferência
+    // guardada por outra descreveria uma janela diferente. O que se mede aqui
+    // é a disposição **por omissão** e o que os gestos lhe fazem.
+    page.evaluate("window.localStorage.removeItem('oc-mail-disposicao')")
+        .await
+        .expect("limpar");
+    let page = harness.open("/mail").await;
+    janela(&page, JANELA).await;
+    esperar_por(&page, "Caixa de entrada").await;
+
+    /// A largura de um painel, em pixéis.
+    async fn largura(page: &Page, seletor: &str) -> f64 {
+        page.evaluate(format!(
+            "document.querySelector('{seletor}')?.getBoundingClientRect().width ?? -1"
+        ))
+        .await
+        .expect("medida")
+        .into_value::<f64>()
+        .unwrap_or(-1.0)
+    }
+
+    let pastas_inicial = largura(&page, ".oc-mail__rail").await;
+    let leitura_inicial = largura(&page, ".oc-mail__pane").await;
+    assert!(
+        pastas_inicial > 100.0 && leitura_inicial > 300.0,
+        "a disposição inicial já não é utilizável: pastas={pastas_inicial} \
+         leitura={leitura_inicial}"
+    );
+
+    // ── O teclado move o separador ──────────────────────────────────────
+    //
+    // Pelo teclado e não pelo rato: um `role="separator"` que só responde ao
+    // rato promete uma operação que não entrega, e é a promessa que este
+    // portão mede.
+    page.evaluate("document.querySelector('[data-oc-separador=\"pastas\"]').focus()")
+        .await
+        .expect("foco");
+    for _ in 0..4 {
+        page.evaluate(
+            "document.querySelector('[data-oc-separador=\"pastas\"]').dispatchEvent(\
+               new KeyboardEvent('keydown', {key: 'ArrowRight', bubbles: true}))",
+        )
+        .await
+        .expect("seta");
+    }
+    let pastas_maiores = largura(&page, ".oc-mail__rail").await;
+    assert!(
+        pastas_maiores > pastas_inicial,
+        "as setas não moveram o separador: {pastas_inicial} → {pastas_maiores}"
+    );
+
+    // ── E o mínimo aguenta ──────────────────────────────────────────────
+    //
+    // Cem setas para a esquerda. Sem limite, o painel chegava a zero e a
+    // pessoa ficava com uma aplicação partida e sem forma óbvia de a
+    // desfazer.
+    for _ in 0..100 {
+        page.evaluate(
+            "document.querySelector('[data-oc-separador=\"pastas\"]').dispatchEvent(\
+               new KeyboardEvent('keydown', {key: 'ArrowLeft', shiftKey: true, bubbles: true}))",
+        )
+        .await
+        .expect("seta");
+    }
+    let pastas_minimas = largura(&page, ".oc-mail__rail").await;
+    assert!(
+        pastas_minimas >= 160.0,
+        "o painel das pastas passou o mínimo e ficou inutilizável: {pastas_minimas}px"
+    );
+
+    // ── Recolher, e voltar ──────────────────────────────────────────────
+    clicar(&page, "[data-oc=alternar-pastas]").await;
+    let recolhidas = largura(&page, ".oc-mail__rail").await;
+    assert!(
+        recolhidas <= 0.0,
+        "as pastas não recolheram: {recolhidas}px"
+    );
+
+    let leitura_com_pastas_recolhidas = largura(&page, ".oc-mail__pane").await;
+    assert!(
+        leitura_com_pastas_recolhidas > leitura_inicial,
+        "recolher as pastas não deu o espaço a quem lê: {leitura_inicial} → \
+         {leitura_com_pastas_recolhidas}"
+    );
+
+    // O caminho de volta existe e é o mesmo botão, que ficou premido.
+    let premido: Option<String> = page
+        .evaluate(
+            "document.querySelector('[data-oc=alternar-pastas]').getAttribute('aria-pressed')",
+        )
+        .await
+        .expect("estado")
+        .into_value()
+        .ok();
+    assert_eq!(
+        premido.as_deref(),
+        Some("true"),
+        "o botão não diz que as pastas estão recolhidas — quem as recolheu não \
+         sabe como as trazer de volta"
+    );
+
+    clicar(&page, "[data-oc=alternar-pastas]").await;
+    let de_volta = largura(&page, ".oc-mail__rail").await;
+    assert!(de_volta > 100.0, "as pastas não voltaram: {de_volta}px");
+
+    // ── O grampo vale mesmo quando não se consegue medir ────────────────
+    //
+    // `limitar` desistia do mínimo quando o contentor media zero — e uma
+    // largura de zero acontece: o elemento ainda não foi disposto, a página
+    // está escondida, o browser está com trabalho a mais. O pedido cru era
+    // aplicado, a coluna ficava abaixo do utilizável, e lá ficava, porque
+    // `normalizar` também desistia sem total.
+    //
+    // Esconder o contentor força exactamente esse estado, sem esperar que ele
+    // aconteça sozinho. É a diferença entre observar um defeito intermitente e
+    // conseguir provar que ele já não existe.
+    let sob_minimo: f64 = page
+        .evaluate(
+            "(() => {
+               const mail = document.querySelector('[data-oc=mail]');
+               // Partir de um valor conhecido: a sonda mede o grampo, e não o
+               // que os arrastos anteriores deixaram para trás.
+               mail.style.setProperty('--oc-mail-lista', '260px');
+               const antes = mail.style.display;
+               mail.style.display = 'none';
+               const separador =
+                 document.querySelector('[data-oc-separador=lista]');
+               for (let i = 0; i < 6; i += 1) {
+                 separador.dispatchEvent(
+                   new KeyboardEvent('keydown', {key: 'ArrowLeft', shiftKey: true,
+                                                 bubbles: true}));
+               }
+               const lista = parseFloat(
+                 getComputedStyle(mail).getPropertyValue('--oc-mail-lista'));
+               mail.style.display = antes;
+               return Number.isFinite(lista) ? lista : -1;
+             })()",
+        )
+        .await
+        .expect("medida")
+        .into_value::<f64>()
+        .unwrap_or(-1.0);
+    assert!(
+        sob_minimo >= 240.0,
+        "com o contentor por medir, o grampo desistiu e a lista passou o \
+         mínimo: {sob_minimo}px"
+    );
+
+    // ── Dar o ecrã à leitura, e desfazer ────────────────────────────────
+    let lista_antes = largura(&page, ".oc-mail__list").await;
+    clicar(&page, "[data-oc=focar-leitura]").await;
+
+    // A promessa, e não um efeito lateral dela.
+    //
+    // Estava escrito «deu mais espaço do que recolher as pastas», e isso
+    // depende de a lista ainda ter por onde encolher: depois dos arrastos
+    // acima ela já podia estar no mínimo, e a asserção falhava sem que nada
+    // estivesse errado. O que o modo promete é isto: pastas recolhidas, lista
+    // no mínimo, o resto para quem lê.
+    let lista_focada = largura(&page, ".oc-mail__list").await;
+    let pastas_focadas = largura(&page, ".oc-mail__rail").await;
+    assert!(
+        pastas_focadas <= 0.0,
+        "o modo de leitura não recolheu as pastas: {pastas_focadas}px"
+    );
+    assert!(
+        lista_focada <= lista_antes,
+        "o modo de leitura alargou a lista em vez de a estreitar: \
+         {lista_antes} → {lista_focada}"
+    );
+    // A promessa medida numa só leitura, e não contra um número de há bocado.
+    //
+    // Estava `leitura_focada >= leitura_com_pastas_recolhidas`: duas larguras
+    // absolutas medidas em momentos diferentes. Entre os dois momentos o
+    // contentor muda de largura por razões que nada têm a ver com o modo de
+    // leitura — medido, 1182.56 → 1148.28 — e a asserção atribuía essa
+    // diferença ao modo. Passava quase sempre e falhava de vez em quando, que
+    // é a forma mais cara de um teste estar errado.
+    //
+    // O que o modo promete é uma **repartição**, e uma repartição verifica-se
+    // dentro da mesma leitura: as pastas recolhidas, a lista no mínimo, e tudo
+    // o que sobra para quem lê.
+    let reparticao: (f64, f64, f64) = page
+        .evaluate(
+            "(() => {
+               const m = document.querySelector('[data-oc=mail]');
+               const w = s => { const el = document.querySelector(s);
+                                return el ? el.getBoundingClientRect().width : 0; };
+               return [m.getBoundingClientRect().width,
+                       w('.oc-mail__rail') + w('.oc-mail__list'),
+                       w('.oc-mail__pane')];
+             })()",
+        )
+        .await
+        .expect("repartição")
+        .into_value::<(f64, f64, f64)>()
+        .expect("três medidas");
+
+    let (total, outras, leitura_focada) = reparticao;
+    assert!(
+        leitura_focada > outras,
+        "o modo de leitura não deu a maior parte a quem lê: leitura={leitura_focada} \
+         contra {outras} nas outras colunas"
+    );
+    // O que sobra são os separadores e as margens: uma dezena de pixéis, não
+    // uma coluna escondida.
+    assert!(
+        total - outras - leitura_focada < 32.0,
+        "há espaço por explicar entre as colunas: total={total} outras={outras} \
+         leitura={leitura_focada}"
+    );
+
+    clicar(&page, "[data-oc=focar-leitura]").await;
+    let lista_depois = largura(&page, ".oc-mail__list").await;
+    assert!(
+        (lista_depois - lista_antes).abs() < 2.0,
+        "desfazer o modo de leitura não repôs a lista onde estava: \
+         {lista_antes} → {lista_depois}"
+    );
+
+    // ── E a preferência atravessa uma recarga ───────────────────────────
+    page.evaluate(
+        "document.querySelector('[data-oc=\"mail\"]').style.setProperty(\
+           '--oc-mail-lista', '260px')",
+    )
+    .await
+    .expect("largura");
+    clicar(&page, "[data-oc=alternar-pastas]").await;
+
+    let outra = harness.open("/mail").await;
+    esperar_por(&outra, "Caixa de entrada").await;
+    let recolhidas_ainda = largura(&outra, ".oc-mail__rail").await;
+    assert!(
+        recolhidas_ainda <= 0.0,
+        "a preferência não sobreviveu à recarga: as pastas voltaram sozinhas \
+         ({recolhidas_ainda}px)"
+    );
+}
+
+/// O compositor obedece, e nunca perde o que se escreveu.
+///
+/// # O que isto mede que a marcação não mostra
+///
+/// Uma janela que se redimensiona é fácil de dizer e fácil de partir: um
+/// mínimo que não existe e ela desaparece; um limite que não existe e ela sai
+/// do ecrã com o rascunho lá dentro; um gesto que volta a desenhar o
+/// formulário e o texto some-se sem erro nenhum.
+///
+/// A última é a que mais dói e a que menos se vê: quem estava a escrever há
+/// dez minutos não tem como saber que foi o botão de expandir que lhe apagou o
+/// texto.
+#[tokio::test]
+async fn o_compositor_obedece_e_guarda_o_que_se_escreveu() {
+    let harness = harness!();
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let (caixa, _) = harness.has_a_mailbox(person_id).await;
+
+    let page = harness
+        .open(&format!("/mail/compose?mailbox={caixa}"))
+        .await;
+    janela(&page, JANELA).await;
+    esperar_por(&page, "Nova mensagem").await;
+
+    const RASCUNHO: &str = "Um parágrafo que não se pode perder por causa de um botão.";
+
+    set_field(&page, "[data-oc=compositor-corpo]", RASCUNHO).await;
+
+    /// O que o corpo do compositor contém agora.
+    async fn corpo(page: &Page) -> String {
+        page.evaluate("document.querySelector('[data-oc=compositor-corpo]').value")
+            .await
+            .expect("corpo")
+            .into_value::<String>()
+            .unwrap_or_default()
+    }
+
+    async fn medida(page: &Page, propriedade: &str) -> f64 {
+        page.evaluate(format!(
+            "document.querySelector('[data-oc=compositor]')\
+               .getBoundingClientRect().{propriedade}"
+        ))
+        .await
+        .expect("medida")
+        .into_value::<f64>()
+        .unwrap_or(-1.0)
+    }
+
+    assert_eq!(corpo(&page).await, RASCUNHO, "o rascunho não ficou escrito");
+
+    // ── Expandir, e voltar ──────────────────────────────────────────────
+    let largura_inicial = medida(&page, "width").await;
+    clicar_por_script(&page, "[data-oc=compositor-expandir]").await;
+    let expandida = medida(&page, "width").await;
+    assert!(
+        expandida > largura_inicial,
+        "expandir não alargou o compositor: {largura_inicial} → {expandida}"
+    );
+
+    // E a barra de título continua no ecrã.
+    //
+    // Expandida, a janela era ancorada pelo fundo com uma altura em `vh`, e a
+    // barra saía pela borda de cima: ficava sem pega, sem o botão de repor e
+    // sem o de fechar — expandida para sempre, com o rascunho lá dentro.
+    let topo_expandido = medida(&page, "top").await;
+    assert!(
+        topo_expandido >= 0.0,
+        "a barra de título do compositor saiu pela borda de cima: {topo_expandido}"
+    );
+    assert_eq!(
+        corpo(&page).await,
+        RASCUNHO,
+        "expandir apagou o que estava escrito"
+    );
+
+    clicar_por_script(&page, "[data-oc=compositor-expandir]").await;
+    let reposta = medida(&page, "width").await;
+    assert!(
+        (reposta - largura_inicial).abs() < 2.0,
+        "repor o tamanho não voltou ao que era: {largura_inicial} → {reposta}"
+    );
+    assert_eq!(
+        corpo(&page).await,
+        RASCUNHO,
+        "repor o tamanho apagou o que estava escrito"
+    );
+
+    // ── Redimensionar, com chão ─────────────────────────────────────────
+    //
+    // Um arrasto absurdo: se não houver mínimo, a janela colapsa e leva o
+    // rascunho com ela.
+    page.evaluate(
+        "(() => { const p = document.querySelector('[data-oc=compositor-puxador]'); \
+           const r = p.getBoundingClientRect(); \
+           const op = {bubbles: true, pointerId: 1, clientX: r.x, clientY: r.y}; \
+           p.setPointerCapture = () => {}; \
+           p.dispatchEvent(new PointerEvent('pointerdown', op)); \
+           p.dispatchEvent(new PointerEvent('pointermove', \
+             {...op, clientX: r.x + 4000, clientY: r.y + 4000})); \
+           p.dispatchEvent(new PointerEvent('pointerup', op)); })()",
+    )
+    .await
+    .expect("arrastar o puxador");
+
+    let encolhida = medida(&page, "width").await;
+    let alta = medida(&page, "height").await;
+    assert!(
+        encolhida >= 360.0 && alta >= 300.0,
+        "o compositor passou o mínimo: {encolhida}×{alta}"
+    );
+    assert_eq!(
+        corpo(&page).await,
+        RASCUNHO,
+        "redimensionar apagou o que estava escrito"
+    );
+
+    // ── E não sai do ecrã ───────────────────────────────────────────────
+    page.evaluate(
+        "(() => { const h = document.querySelector('[data-oc=compositor-pega]'); \
+           const r = h.getBoundingClientRect(); \
+           const op = {bubbles: true, pointerId: 2, clientX: r.x + 40, clientY: r.y + 10}; \
+           h.setPointerCapture = () => {}; \
+           h.dispatchEvent(new PointerEvent('pointerdown', op)); \
+           h.dispatchEvent(new PointerEvent('pointermove', \
+             {...op, clientX: r.x - 5000, clientY: r.y - 5000})); \
+           h.dispatchEvent(new PointerEvent('pointerup', op)); })()",
+    )
+    .await
+    .expect("arrastar a janela");
+
+    let esquerda = medida(&page, "left").await;
+    let topo = medida(&page, "top").await;
+    assert!(
+        esquerda > -20.0 && topo > -20.0,
+        "o compositor saiu do ecrã e levou o rascunho com ele: \
+         esquerda={esquerda} topo={topo}"
+    );
+    assert_eq!(
+        corpo(&page).await,
+        RASCUNHO,
+        "mover apagou o que estava escrito"
+    );
+}
+
+/// A página do Correio não rola; os painéis é que rolam.
+///
+/// # O defeito que isto guarda
+///
+/// Com a barra na página inteira, descer uma lista longa levava consigo o
+/// cabeçalho e a barra de acções: depois de rolar, deixava de haver
+/// «Escrever» no ecrã. Numa aplicação de correio a moldura fica, e o que se
+/// percorre é o conteúdo.
+///
+/// # Porque se mede o documento e não a folha de estilos
+///
+/// Porque «tem `overflow: hidden`» não é a propriedade que interessa. O que
+/// interessa é se o documento é mais alto do que a janela — e isso depende do
+/// cabeçalho, dos avisos que apareçam por cima, e da altura que o grid
+/// acabar por tomar. Só o browser sabe a soma.
+#[tokio::test]
+async fn o_correio_rola_por_dentro_e_nao_por_fora() {
+    let harness = harness!();
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let (caixa, _) = harness.has_a_mailbox(person_id).await;
+
+    // Mensagens que cheguem para a lista passar do ecrã.
+    for indice in 0..40 {
+        sqlx::query(
+            "INSERT INTO mail_messages
+                    (mailbox_id, provider_id, folder, from_address, subject, sent_at)
+                  VALUES ($1, $2, 'inbox', 'externo@exemplo.com', $3,
+                          now() - ($4 * interval '1 minute'))",
+        )
+        .bind(caixa)
+        .bind(Uuid::new_v4().to_string())
+        .bind(format!("Mensagem número {indice}"))
+        .bind(f64::from(indice))
+        .execute(&harness.pool)
+        .await
+        .expect("mensagem");
+    }
+
+    let page = harness.open(&format!("/mail/{caixa}")).await;
+    janela(&page, JANELA).await;
+    esperar_por(&page, "Mensagem número 0").await;
+
+    let medidas: Option<String> = page
+        .evaluate(
+            "(() => { const d = document.documentElement; \
+               const lista = document.querySelector('.oc-mail__list'); \
+               return JSON.stringify({ \
+                 documento: d.scrollHeight, \
+                 janela: d.clientHeight, \
+                 listaConteudo: lista.scrollHeight, \
+                 listaVisivel: lista.clientHeight, \
+               }); })()",
+        )
+        .await
+        .expect("medidas")
+        .into_value()
+        .ok();
+    let medidas = medidas.unwrap_or_default();
+
+    let numero = |chave: &str| -> f64 {
+        medidas
+            .split(&format!("\"{chave}\":"))
+            .nth(1)
+            .and_then(|resto| resto.split([',', '}']).next())
+            .and_then(|valor| valor.trim().parse().ok())
+            .unwrap_or(-1.0)
+    };
+
+    // A lista tem mais conteúdo do que espaço — sem isto, o teste passaria
+    // num mundo onde não há nada para rolar.
+    assert!(
+        numero("listaConteudo") > numero("listaVisivel") + 20.0,
+        "a lista não transbordou, e por isso este teste não observou nada: {medidas}"
+    );
+
+    // E o documento não passa da janela.
+    assert!(
+        numero("documento") <= numero("janela") + 2.0,
+        "a página do Correio ganhou barra de deslocamento: {medidas}"
+    );
+}
+
+/// A cadeia científica, percorrida como uma pessoa a percorre.
+///
+/// # O que esta viagem prova, e nenhuma metade prova sozinha
+///
+/// Que a cadeia se **navega**: da hipótese ao resultado, e do resultado de
+/// volta ao que o produziu — no browser, através do Workspace, contra o Core a
+/// sério. Um teste de serviço mostra que a proveniência é escrita; um teste de
+/// renderização mostra que o ecrã desenha o que lhe dão. Nenhum dos dois mostra
+/// que a aresta escrita pela operação chega ao ecrã e é legível.
+///
+/// # E que não se lê um único identificador
+///
+/// A linhagem mostra títulos. Um `UUID` no ecrã seria a resposta a outra
+/// pergunta — a de quem está a depurar uma consulta — e a asserção está aqui
+/// porque a tentação de mostrar o identificador «só para desenvolvimento»
+/// resolve-se sempre a favor de o deixar ficar.
+#[tokio::test]
+async fn a_cadeia_cientifica_percorre_se_do_resultado_ate_a_origem() {
+    let harness = harness!();
+    let (pessoa, _credenciais) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let ambiente = harness.owns_a_workspace(pessoa).await;
+
+    // A cadeia inteira nasce pelas operações do Core, através da API — que é
+    // por onde o Workspace escreve. Escrevê-la com `INSERT` provaria que o
+    // ecrã desenha linhas, e não que a cadeia existe.
+    let hipotese = unique_title("A dopagem reduz a resistência");
+    let estudo = unique_title("Ensaio de carga");
+    let resultado = unique_title("A resistência caiu 18%");
+
+    let (hipotese_id, estudo_id, execucao_id, resultado_id) = harness
+        .cadeia_cientifica(pessoa, ambiente, (&hipotese, &estudo, &resultado))
+        .await;
+
+    // ── A cadeia do ambiente ────────────────────────────────────────────
+    let pagina = harness
+        .open(&format!("/workspaces/{ambiente}/science"))
+        .await;
+    esperar_por(&pagina, &resultado).await;
+    let html = pagina.content().await.expect("conteúdo");
+    for etapa in [&hipotese, &estudo, &resultado] {
+        assert!(
+            html.contains(etapa.as_str()),
+            "a cadeia não mostra «{etapa}»"
+        );
+    }
+
+    // ── Do resultado até à origem, a clicar ─────────────────────────────
+    clicar(&pagina, &format!(r#"a[href="/results/{resultado_id}"]"#)).await;
+    let detalhe = wait_until_left(&pagina, &format!("/workspaces/{ambiente}/science")).await;
+    assert!(
+        detalhe.contains(&format!("/results/{resultado_id}")),
+        "clicar no resultado não levou ao resultado: {detalhe}"
+    );
+
+    esperar_por(&pagina, "Proveniência").await;
+    let html = pagina.content().await.expect("conteúdo");
+
+    // A aresta que a operação observou está lá, e diz que a observou.
+    assert!(
+        html.contains(&estudo),
+        "a montante do resultado não aparece a execução que o produziu"
+    );
+    assert!(
+        html.contains("Observada"),
+        "a proveniência não distingue o que a operação viu do que alguém declarou"
+    );
+
+    // E lê-se por títulos. O identificador do resultado está no `href` das
+    // tabs de sentido, que é onde pertence; o que não pode aparecer é um
+    // identificador **como texto**, entre `>` e `<`.
+    let texto: String = html
+        .split('>')
+        .filter_map(|p| p.split('<').next())
+        .collect::<Vec<_>>()
+        .join(" ");
+    for identificador in [resultado_id, execucao_id, estudo_id, hipotese_id] {
+        let identificador = identificador.to_string();
+        assert!(
+            !texto.contains(&identificador),
+            "o ecrã mostra um identificador a quem só queria saber de onde veio isto: \
+             {identificador}"
+        );
+    }
+
+    // ── E de volta, a jusante ───────────────────────────────────────────
+    clicar(
+        &pagina,
+        &format!(r#"a[href="/results/{resultado_id}?direction=downstream"]"#),
+    )
+    .await;
+    esperar_por(&pagina, "Nada depende deste resultado.").await;
+}
+
+/// Uma pessoa constrói a cadeia científica inteira pelo Workspace.
+///
+/// # A propriedade
+///
+/// > **Uma pessoa autorizada constrói a cadeia científica sem API, sem CLI e
+/// > sem agente.**
+///
+/// Enquanto uma hipótese ou uma execução só puderem nascer por `curl` ou por um
+/// agente, o Ocinye OS tem excelente infraestrutura agentic e não tem
+/// infraestrutura científica institucional: a IA aumenta a capacidade humana,
+/// não substitui a interface humana da instituição.
+///
+/// # Nenhum objecto desta cadeia é preparado por fixture
+///
+/// Hipótese, metodologia, versão, estudo, execução, resultado e validação
+/// nascem todos de formulários submetidos neste browser. As fixtures dão apenas
+/// o que não faz parte da propriedade — a pessoa, a unidade e o ambiente.
+///
+/// # E a proveniência não é pedida a ninguém
+///
+/// O resultado é registado **de dentro** da execução, e a aresta `produzido
+/// por` aparece na linhagem sem que nenhum campo a tenha pedido. É a diferença
+/// entre o que o sistema observou e o que alguém declarou.
+#[tokio::test(flavor = "multi_thread")]
+async fn uma_pessoa_constroi_a_cadeia_cientifica_pelo_workspace() {
+    let harness = harness!();
+    let (pessoa, _credenciais) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let ambiente = harness.owns_a_workspace(pessoa).await;
+
+    let hipotese = unique_title("A dopagem reduz a resistência");
+    let metodo = unique_title("Medição a quatro pontas");
+    let estudo = unique_title("Ensaio de carga");
+    let resultado = unique_title("A resistência caiu 18%");
+
+    // ── 1. A hipótese ───────────────────────────────────────────────────
+    let pagina = harness
+        .open(&format!("/workspaces/{ambiente}/science"))
+        .await;
+    esperar_por(&pagina, "Ciência").await;
+
+    clicar_por_script(
+        &pagina,
+        &format!(r#"a[href="/workspaces/{ambiente}/science/hypotheses/new"]"#),
+    )
+    .await;
+    esperar_por(&pagina, "Nova hipótese").await;
+    set_field(&pagina, "textarea[name=statement]", &hipotese).await;
+    set_field(
+        &pagina,
+        "textarea[name=rationale]",
+        "O que se sabe hoje não explica a queda medida.",
+    )
+    .await;
+    submit(&pagina, "form[action$='/hypotheses/new']").await;
+    esperar_por(&pagina, &hipotese).await;
+
+    // ── 2. A metodologia, e a sua primeira versão ───────────────────────
+    clicar_por_script(
+        &pagina,
+        &format!(r#"a[href="/workspaces/{ambiente}/science/methodologies/new"]"#),
+    )
+    .await;
+    esperar_por(&pagina, "Nova metodologia").await;
+    set_field(&pagina, "input[name=title]", &metodo).await;
+    set_field(
+        &pagina,
+        "textarea[name=purpose]",
+        "Separar a resistência de contacto da do material.",
+    )
+    .await;
+    submit(&pagina, "form[action$='/methodologies/new']").await;
+
+    // Criar leva à metodologia, porque o passo seguinte é publicar a versão —
+    // e é lá que ele está.
+    esperar_por(&pagina, "Versões").await;
+    let html = pagina.content().await.expect("conteúdo");
+    assert!(
+        html.contains("Um estudo só pode seguir uma versão publicada"),
+        "a metodologia sem versões não explica porque isso importa"
+    );
+
+    clicar(&pagina, "a[href$='/versions/new']").await;
+    esperar_por(&pagina, "Nova versão").await;
+    set_field(&pagina, "input[name=label]", "v1").await;
+    set_field(
+        &pagina,
+        "textarea[name=summary]",
+        "Quatro pontas, corrente de 10 mA.",
+    )
+    .await;
+    submit(&pagina, "form[action$='/versions/new']").await;
+    esperar_por(&pagina, "v1").await;
+
+    // ── 3. O estudo, ligado à hipótese e à **versão** ───────────────────
+    let pagina = harness
+        .open(&format!("/workspaces/{ambiente}/science/studies/new"))
+        .await;
+    esperar_por(&pagina, "Novo estudo").await;
+
+    // O selector oferece versões, e o rótulo di-lo. Se oferecesse a
+    // metodologia mutável, a matriz recusaria a aresta — e a pessoa só
+    // descobriria depois de preencher o resto.
+    let opcoes = pagina
+        .content()
+        .await
+        .expect("conteúdo")
+        .split(r#"name="methodology_version_id""#)
+        .nth(1)
+        .unwrap_or_default()
+        .split("</select>")
+        .next()
+        .unwrap_or_default()
+        .to_owned();
+    assert!(
+        opcoes.contains(&format!("{metodo} · v1")),
+        "o selector do estudo não oferece a versão publicada"
+    );
+
+    set_field(&pagina, "input[name=title]", &estudo).await;
+    set_field(
+        &pagina,
+        "textarea[name=objective]",
+        "Medir a queda sob carga.",
+    )
+    .await;
+    let hipotese_id = valor_de(&pagina, "select[name=hypothesis_id] option:nth-child(2)").await;
+    escolher(&pagina, "select[name=hypothesis_id]", &hipotese_id).await;
+    let versao_id = valor_de(
+        &pagina,
+        "select[name=methodology_version_id] option:nth-child(2)",
+    )
+    .await;
+    escolher(&pagina, "select[name=methodology_version_id]", &versao_id).await;
+    submit(&pagina, "form[action$='/studies/new']").await;
+
+    esperar_por(&pagina, "Execuções").await;
+    let html = pagina.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&estudo),
+        "o estudo não abriu depois de criado"
+    );
+
+    // ── 4. A execução ───────────────────────────────────────────────────
+    clicar(&pagina, "a[href$='/executions/new']").await;
+    esperar_por(&pagina, "Registar execução").await;
+    set_field(&pagina, "input[name=environment]", "Bancada 2").await;
+    set_field(&pagina, "input[name=software_name]", "LabView").await;
+    escolher(&pagina, "select[name=methodology_version_id]", &versao_id).await;
+    submit(&pagina, "form[action$='/executions/new']").await;
+    esperar_por(&pagina, "A corrida").await;
+
+    // ── 5. O resultado, de dentro da execução ───────────────────────────
+    clicar(&pagina, "a[href$='/results/new']").await;
+    esperar_por(&pagina, "Registar resultado").await;
+
+    let html = pagina.content().await.expect("conteúdo");
+    assert!(
+        html.contains("A origem fica registada sozinha"),
+        "o formulário não diz que a proveniência já é conhecida"
+    );
+    assert!(
+        !html.contains(r#"name="execution_id""#),
+        "o formulário pede a origem que o caminho já diz"
+    );
+
+    set_field(&pagina, "input[name=title]", &resultado).await;
+    set_field(
+        &pagina,
+        "textarea[name=summary]",
+        "Três corridas, mesma direcção.",
+    )
+    .await;
+    submit(&pagina, "form[action$='/results/new']").await;
+    esperar_por(&pagina, "Proveniência").await;
+
+    // ── 6. A proveniência apareceu sem ninguém a declarar ───────────────
+    let html = pagina.content().await.expect("conteúdo");
+    assert!(
+        html.contains("Observada"),
+        "a aresta que a operação produziu não aparece como observada"
+    );
+    assert!(
+        html.contains(&estudo),
+        "a montante não mostra a execução que produziu o resultado"
+    );
+
+    // E lê-se por títulos: nenhum identificador aparece como texto.
+    let texto: String = html
+        .split('>')
+        .filter_map(|p| p.split('<').next())
+        .collect::<Vec<_>>()
+        .join(" ");
+    for identificador in [&hipotese_id, &versao_id] {
+        assert!(
+            !texto.contains(identificador.as_str()),
+            "o ecrã mostra um identificador a quem só queria saber de onde veio isto"
+        );
+    }
+
+    // ── 7. A jusante, e de volta ────────────────────────────────────────
+    let resultado_url = pagina.url().await.expect("url").unwrap_or_default();
+    let resultado_id = resultado_url
+        .rsplit('/')
+        .next()
+        .unwrap_or_default()
+        .split('?')
+        .next()
+        .unwrap_or_default()
+        .to_owned();
+    clicar_por_script(
+        &pagina,
+        &format!(r#"a[href="/results/{resultado_id}?direction=downstream"]"#),
+    )
+    .await;
+    esperar_por(&pagina, "Nada depende deste resultado.").await;
+
+    // ── 8. A validação, como pessoa autorizada ──────────────────────────
+    //
+    // Pelo **botão**, e não pelo URL. Ir directamente ao caminho provaria que
+    // o formulário existe e não que alguém lá chega: quem decide se a acção
+    // aparece é o Core, com o contexto deste resultado, e uma interface a
+    // decidi-lo sozinha responderia no âmbito institucional — onde uma
+    // permissão de ambiente nunca aparece, e o botão desapareceria para toda a
+    // gente.
+    let pagina = harness.open(&format!("/results/{resultado_id}")).await;
+    esperar_por(&pagina, "Proveniência").await;
+    clicar_por_script(
+        &pagina,
+        &format!(r#"a[href="/results/{resultado_id}/validate"]"#),
+    )
+    .await;
+    esperar_por(&pagina, "Validar resultado").await;
+
+    let html = pagina.content().await.expect("conteúdo");
+    assert!(
+        html.contains("Isto fica em seu nome"),
+        "o formulário não diz de quem é o peso da afirmação"
+    );
+
+    // A reprodução está disponível, porque **há** execução.
+    //
+    // Reprodutibilidade é evidência: o Core recusa uma reprodução sem a corrida
+    // que a sustenta, e o formulário desactiva a opção quando não há nenhuma. O
+    // que não pode acontecer é desactivá-la quando há — a pessoa procuraria a
+    // opção, não a encontraria, e não teria como saber porquê.
+    let reproducao_desactivada = html
+        .split(r#"value="reproduction""#)
+        .nth(1)
+        .unwrap_or_default()
+        .split('>')
+        .next()
+        .unwrap_or_default()
+        .contains("disabled");
+    assert!(
+        !reproducao_desactivada,
+        "este resultado veio de uma execução e a reprodução aparece indisponível"
+    );
+
+    set_field(
+        &pagina,
+        "textarea[name=note]",
+        "Reli os três ensaios e a direcção mantém-se.",
+    )
+    .await;
+    submit(&pagina, "form[action$='/validate']").await;
+    esperar_por(&pagina, "Validação confirmou").await;
+
+    // ── 9. E persiste ───────────────────────────────────────────────────
+    let pagina = harness.open(&format!("/results/{resultado_id}")).await;
+    esperar_por(&pagina, "Validação confirmou").await;
+    let html = pagina.content().await.expect("conteúdo");
+    assert!(
+        html.contains("Reli os três ensaios"),
+        "o que a pessoa observou não sobreviveu a recarregar"
+    );
+    assert!(
+        html.contains("Observada"),
+        "a proveniência não sobreviveu a recarregar"
+    );
+}
+
+/// As capturas da cadeia científica, para revisão visual.
+///
+/// Constrói a cadeia inteira pelo Workspace — como uma pessoa — e fotografa
+/// cada superfície pelo caminho. Não verifica nada: as asserções vivem em
+/// `uma_pessoa_constroi_a_cadeia_cientifica_pelo_workspace`, e misturar as duas
+/// coisas daria um teste que grava ficheiros e um conjunto de imagens que
+/// ninguém olha porque «o teste passou».
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "grava ficheiros; serve a revisão visual, não a verificação"]
+async fn capturas_da_ciencia() {
+    let harness = harness!();
+    let (pessoa, _credenciais) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let ambiente = harness.owns_a_workspace(pessoa).await;
+
+    // ── O estado vazio, que também é uma superfície ─────────────────────
+    let pagina = harness
+        .open(&format!("/workspaces/{ambiente}/science"))
+        .await;
+    esperar_por(&pagina, "Ciência").await;
+    capturar_visivel(&pagina, "ciencia-vazia").await;
+
+    // ── A hipótese ──────────────────────────────────────────────────────
+    let pagina = harness
+        .open(&format!("/workspaces/{ambiente}/science/hypotheses/new"))
+        .await;
+    esperar_por(&pagina, "Nova hipótese").await;
+    set_field(
+        &pagina,
+        "textarea[name=statement]",
+        "A dopagem reduz a resistência de contacto",
+    )
+    .await;
+    set_field(
+        &pagina,
+        "textarea[name=rationale]",
+        "O modelo actual não explica a queda medida acima de 2 A.",
+    )
+    .await;
+    capturar_visivel(&pagina, "ciencia-nova-hipotese").await;
+    submit(&pagina, "form[action$='/hypotheses/new']").await;
+    esperar_por(&pagina, "A dopagem reduz").await;
+
+    // ── A metodologia e a versão ────────────────────────────────────────
+    let pagina = harness
+        .open(&format!("/workspaces/{ambiente}/science/methodologies/new"))
+        .await;
+    esperar_por(&pagina, "Nova metodologia").await;
+    set_field(&pagina, "input[name=title]", "Medição a quatro pontas").await;
+    set_field(
+        &pagina,
+        "textarea[name=purpose]",
+        "Separar a resistência de contacto da do material.",
+    )
+    .await;
+    capturar_visivel(&pagina, "ciencia-nova-metodologia").await;
+    submit(&pagina, "form[action$='/methodologies/new']").await;
+    esperar_por(&pagina, "Versões").await;
+    capturar_visivel(&pagina, "ciencia-metodologia-sem-versoes").await;
+
+    clicar(&pagina, "a[href$='/versions/new']").await;
+    esperar_por(&pagina, "Nova versão").await;
+    set_field(&pagina, "input[name=label]", "v1").await;
+    set_field(
+        &pagina,
+        "textarea[name=summary]",
+        "Quatro pontas, corrente de 10 mA, três repetições por amostra.",
+    )
+    .await;
+    capturar_visivel(&pagina, "ciencia-nova-versao").await;
+    submit(&pagina, "form[action$='/versions/new']").await;
+    esperar_por(&pagina, "v1").await;
+    capturar_visivel(&pagina, "ciencia-metodologia").await;
+
+    // Uma segunda versão, para a substituição ficar visível na imagem.
+    clicar(&pagina, "a[href$='/versions/new']").await;
+    esperar_por(&pagina, "Nova versão").await;
+    capturar_visivel(&pagina, "ciencia-nova-versao-substitui").await;
+    set_field(&pagina, "input[name=label]", "v2").await;
+    set_field(
+        &pagina,
+        "textarea[name=summary]",
+        "Corrente reduzida para 1 mA: a de 10 aquecia o contacto.",
+    )
+    .await;
+    submit(&pagina, "form[action$='/versions/new']").await;
+    esperar_por(&pagina, "v2").await;
+    capturar_visivel(&pagina, "ciencia-metodologia-com-duas-versoes").await;
+
+    // ── O estudo ────────────────────────────────────────────────────────
+    let pagina = harness
+        .open(&format!("/workspaces/{ambiente}/science/studies/new"))
+        .await;
+    esperar_por(&pagina, "Novo estudo").await;
+    set_field(
+        &pagina,
+        "input[name=title]",
+        "Ensaio de carga em contactos dopados",
+    )
+    .await;
+    set_field(
+        &pagina,
+        "textarea[name=objective]",
+        "Medir a queda de resistência entre 0.5 e 5 A.",
+    )
+    .await;
+    let hipotese_id = valor_de(&pagina, "select[name=hypothesis_id] option:nth-child(2)").await;
+    escolher(&pagina, "select[name=hypothesis_id]", &hipotese_id).await;
+    let versao_id = valor_de(
+        &pagina,
+        "select[name=methodology_version_id] option:nth-child(2)",
+    )
+    .await;
+    escolher(&pagina, "select[name=methodology_version_id]", &versao_id).await;
+    capturar_visivel(&pagina, "ciencia-novo-estudo").await;
+    submit(&pagina, "form[action$='/studies/new']").await;
+    esperar_por(&pagina, "Execuções").await;
+    capturar_visivel(&pagina, "ciencia-estudo").await;
+
+    // ── A execução ──────────────────────────────────────────────────────
+    clicar(&pagina, "a[href$='/executions/new']").await;
+    esperar_por(&pagina, "Registar execução").await;
+    set_field(&pagina, "input[name=environment]", "Bancada 2, sala 104").await;
+    set_field(&pagina, "input[name=software_name]", "LabView").await;
+    set_field(&pagina, "input[name=software_version]", "2024 Q3").await;
+    escolher(&pagina, "select[name=methodology_version_id]", &versao_id).await;
+    capturar_visivel(&pagina, "ciencia-nova-execucao").await;
+    submit(&pagina, "form[action$='/executions/new']").await;
+    esperar_por(&pagina, "A corrida").await;
+    capturar_visivel(&pagina, "ciencia-execucao").await;
+
+    // ── O resultado ─────────────────────────────────────────────────────
+    clicar(&pagina, "a[href$='/results/new']").await;
+    esperar_por(&pagina, "Registar resultado").await;
+    set_field(
+        &pagina,
+        "input[name=title]",
+        "A resistência caiu 18% acima de 2 A",
+    )
+    .await;
+    set_field(
+        &pagina,
+        "textarea[name=summary]",
+        "Três corridas independentes, mesma direcção e magnitude comparável.",
+    )
+    .await;
+    capturar_visivel(&pagina, "ciencia-novo-resultado").await;
+    submit(&pagina, "form[action$='/results/new']").await;
+    esperar_por(&pagina, "Proveniência").await;
+    capturar_visivel(&pagina, "ciencia-resultado-montante").await;
+
+    let resultado_url = pagina.url().await.expect("url").unwrap_or_default();
+    let resultado_id = resultado_url
+        .rsplit('/')
+        .next()
+        .unwrap_or_default()
+        .split('?')
+        .next()
+        .unwrap_or_default()
+        .to_owned();
+
+    clicar_por_script(
+        &pagina,
+        &format!(r#"a[href="/results/{resultado_id}?direction=downstream"]"#),
+    )
+    .await;
+    esperar_por(&pagina, "Nada depende deste resultado.").await;
+    capturar_visivel(&pagina, "ciencia-resultado-jusante").await;
+
+    // ── A validação ─────────────────────────────────────────────────────
+    let pagina = harness.open(&format!("/results/{resultado_id}")).await;
+    esperar_por(&pagina, "Proveniência").await;
+    clicar_por_script(
+        &pagina,
+        &format!(r#"a[href="/results/{resultado_id}/validate"]"#),
+    )
+    .await;
+    esperar_por(&pagina, "Validar resultado").await;
+    set_field(
+        &pagina,
+        "textarea[name=note]",
+        "Reli os três ensaios e a direcção mantém-se dentro da incerteza.",
+    )
+    .await;
+    capturar_visivel(&pagina, "ciencia-validar").await;
+    submit(&pagina, "form[action$='/validate']").await;
+    esperar_por(&pagina, "Validação confirmou").await;
+    capturar_visivel(&pagina, "ciencia-resultado-validado").await;
+
+    // ── A cadeia povoada ────────────────────────────────────────────────
+    let pagina = harness
+        .open(&format!("/workspaces/{ambiente}/science"))
+        .await;
+    esperar_por(&pagina, "Resultados").await;
+    capturar_visivel(&pagina, "ciencia-cadeia").await;
 }

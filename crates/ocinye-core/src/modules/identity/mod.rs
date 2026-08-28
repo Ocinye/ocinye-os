@@ -28,7 +28,7 @@ mod service;
 
 pub use accounts::{
     bootstrap_platform_admin, change_own_password, create_member, reset_password,
-    set_account_status, set_permanent_password, validate_username, NewMember, TemporaryCredential,
+    set_account_status, set_permanent_password, validate_email, NewMember, TemporaryCredential,
     DEFAULT_TEMPORARY_CREDENTIAL_HOURS,
 };
 pub use authentication::{

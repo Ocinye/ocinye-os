@@ -147,10 +147,14 @@ async fn list_agents(
 ) -> Result<Json<AgentList>, ApiError> {
     require(&principal, Permission::AgentsView, &ids)?;
 
-    let capabilities =
-        platform::system_capabilities(&state.pool, &state.config, state.store.is_some())
-            .await
-            .map_err(|error| ApiError::new(error, &ids))?;
+    let capabilities = platform::system_capabilities(
+        &state.pool,
+        &state.config,
+        state.store.is_some(),
+        state.mail_registry.reachability().await,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
 
     let agents = intelligence::agents::list(&state.pool, &principal, &capabilities)
         .await
@@ -297,10 +301,14 @@ async fn submit_prompt(
 
     let capability = parse_capability(request.capability.as_deref(), &ids)?;
 
-    let capabilities =
-        platform::system_capabilities(&state.pool, &state.config, state.store.is_some())
-            .await
-            .map_err(|error| ApiError::new(error, &ids))?;
+    let capabilities = platform::system_capabilities(
+        &state.pool,
+        &state.config,
+        state.store.is_some(),
+        state.mail_registry.reachability().await,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
 
     let system = match capability {
         AiCapability::General => SystemCapability::AiGeneral,

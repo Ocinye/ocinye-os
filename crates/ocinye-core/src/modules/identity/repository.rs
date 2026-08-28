@@ -19,7 +19,7 @@ pub async fn find_by_subject<'e>(
 ) -> CoreResult<Option<Person>> {
     let person = sqlx::query_as::<_, Person>(
         "SELECT id, organisation_id, oidc_subject, email, full_name, display_name,
-                institutional_position, orcid, biography, username, status,
+                institutional_position, orcid, biography, status,
                 last_seen_at, deactivated_at, created_at
            FROM people
           WHERE oidc_subject = $1",
@@ -41,7 +41,7 @@ pub async fn find_unbound_by_email<'e>(
 ) -> CoreResult<Option<Person>> {
     let person = sqlx::query_as::<_, Person>(
         "SELECT id, organisation_id, oidc_subject, email, full_name, display_name,
-                institutional_position, orcid, biography, username, status,
+                institutional_position, orcid, biography, status,
                 last_seen_at, deactivated_at, created_at
            FROM people
           WHERE lower(email) = lower($1) AND oidc_subject IS NULL",
@@ -64,7 +64,7 @@ pub async fn find_by_id<'e>(
 ) -> CoreResult<Option<Person>> {
     let person = sqlx::query_as::<_, Person>(
         "SELECT id, organisation_id, oidc_subject, email, full_name, display_name,
-                institutional_position, orcid, biography, username, status,
+                institutional_position, orcid, biography, status,
                 last_seen_at, deactivated_at, created_at
            FROM people
           WHERE id = $1 AND organisation_id = $2",
@@ -89,7 +89,7 @@ pub async fn list<'e>(
 ) -> CoreResult<Vec<Person>> {
     let people = sqlx::query_as::<_, Person>(
         "SELECT id, organisation_id, oidc_subject, email, full_name, display_name,
-                institutional_position, orcid, biography, username, status,
+                institutional_position, orcid, biography, status,
                 last_seen_at, deactivated_at, created_at
            FROM people
           WHERE organisation_id = $1
@@ -374,7 +374,7 @@ pub async fn insert_person_from_invitation<'e>(
              (organisation_id, email, full_name, institutional_position, status)
          VALUES ($1, $2, $3, $4, 'invited')
          RETURNING id, organisation_id, oidc_subject, email, full_name, display_name,
-                   institutional_position, orcid, biography, username, status,
+                   institutional_position, orcid, biography, status,
                    last_seen_at, deactivated_at, created_at",
     )
     .bind(invitation.organisation_id)
@@ -434,41 +434,45 @@ pub async fn mark_invitation_expired<'e>(
 /// # Errors
 ///
 /// Returns an error when the query fails.
-pub async fn find_by_username<'e>(
+pub async fn find_by_email<'e>(
     executor: impl PgExecutor<'e>,
-    username: &str,
+    email: &str,
 ) -> CoreResult<Option<Person>> {
     let person = sqlx::query_as::<_, Person>(
         "SELECT id, organisation_id, oidc_subject, email, full_name, display_name,
-                institutional_position, orcid, biography, username, status,
+                institutional_position, orcid, biography, status,
                 last_seen_at, deactivated_at, created_at
            FROM people
-          WHERE lower(username) = lower($1)",
+          WHERE lower(email) = lower($1)",
     )
-    .bind(username)
+    .bind(email)
     .fetch_optional(executor)
     .await?;
     Ok(person)
 }
 
-/// Whether a username is already taken, case-insensitively.
+/// Whether an address is already taken **nesta organização**.
+///
+/// Distinto de [`email_taken`], que pergunta pelo sistema inteiro: desde o
+/// ADR-0106 o endereço é a credencial, e a unicidade que a autenticação precisa
+/// é dentro da instituição — que é onde o índice único também a impõe.
 ///
 /// # Errors
 ///
 /// Returns an error when the query fails.
-pub async fn username_taken<'e>(
+pub async fn email_taken_in<'e>(
     executor: impl PgExecutor<'e>,
     organisation_id: Uuid,
-    username: &str,
+    email: &str,
 ) -> CoreResult<bool> {
     let taken: bool = sqlx::query_scalar(
         "SELECT EXISTS (
              SELECT 1 FROM people
-              WHERE organisation_id = $1 AND lower(username) = lower($2)
+              WHERE organisation_id = $1 AND lower(email) = lower($2)
          )",
     )
     .bind(organisation_id)
-    .bind(username)
+    .bind(email)
     .fetch_one(executor)
     .await?;
     Ok(taken)
@@ -481,26 +485,23 @@ pub async fn username_taken<'e>(
 ///
 /// # Errors
 ///
-/// Returns an error when the insert fails, including on a duplicate username
-/// or email.
+/// Returns an error when the insert fails, including on a duplicate address.
 pub async fn insert_person<'e>(
     executor: impl PgExecutor<'e>,
     organisation_id: Uuid,
-    username: &str,
     email: &str,
     full_name: &str,
     position: Option<&str>,
 ) -> CoreResult<Person> {
     let person = sqlx::query_as::<_, Person>(
         "INSERT INTO people
-             (organisation_id, username, email, full_name, institutional_position, status)
-         VALUES ($1, $2, $3, $4, $5, 'invited')
+             (organisation_id, email, full_name, institutional_position, status)
+         VALUES ($1, $2, $3, $4, 'invited')
          RETURNING id, organisation_id, oidc_subject, email, full_name, display_name,
-                   institutional_position, orcid, biography, username, status,
+                   institutional_position, orcid, biography, status,
                    last_seen_at, deactivated_at, created_at",
     )
     .bind(organisation_id)
-    .bind(username)
     .bind(email)
     .bind(full_name)
     .bind(position)
@@ -619,7 +620,7 @@ pub async fn find_by_id_unscoped<'e>(
 ) -> CoreResult<Option<Person>> {
     let person = sqlx::query_as::<_, Person>(
         "SELECT id, organisation_id, oidc_subject, email, full_name, display_name,
-                institutional_position, orcid, biography, username, status,
+                institutional_position, orcid, biography, status,
                 last_seen_at, deactivated_at, created_at
            FROM people
           WHERE id = $1",

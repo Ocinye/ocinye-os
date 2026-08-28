@@ -46,7 +46,7 @@ fn authenticator() -> Authenticator {
         }),
         Throttle {
             per_ip: 1_000,
-            per_username: 1_000,
+            per_email: 1_000,
             window_minutes: 15,
         },
         24,
@@ -63,7 +63,7 @@ fn strict_authenticator() -> Authenticator {
         }),
         Throttle {
             per_ip: 1_000,
-            per_username: 3,
+            per_email: 3,
             window_minutes: 15,
         },
         24,
@@ -80,16 +80,19 @@ async fn organisation(pool: &PgPool) -> Uuid {
         .expect("organisation")
 }
 
-/// A unique username per test run.
-fn username() -> String {
-    format!("u{}", Uuid::new_v4().simple())
+/// Um endereço único por corrida.
+///
+/// Desde o ADR-0106 o endereço **é** a credencial: não há um nome de entrada e
+/// um endereço, e por isso não há dois valores a compor aqui.
+fn endereco() -> String {
+    format!("u{}@ocinye.com", Uuid::new_v4().simple())
 }
 
 /// The bootstrap administrator of an organisation, already past first login.
 async fn admin(pool: &PgPool, organisation_id: Uuid) -> ocinye_domain::Principal {
     let auth = authenticator();
     let ids = CorrelationIds::generate();
-    let name = username();
+    let name = endereco();
 
     let (person, credential) = identity::bootstrap_platform_admin(
         pool,
@@ -97,7 +100,6 @@ async fn admin(pool: &PgPool, organisation_id: Uuid) -> ocinye_domain::Principal
         organisation_id,
         "Administrador",
         &name,
-        &format!("{name}@ocinye.com"),
         &ids,
     )
     .await
@@ -138,7 +140,7 @@ async fn member(
 ) -> (ocinye_core::modules::identity::Person, Secret, String) {
     let auth = authenticator();
     let ids = CorrelationIds::generate();
-    let name = username();
+    let name = endereco();
 
     let (person, credential) = identity::create_member(
         pool,
@@ -146,8 +148,7 @@ async fn member(
         admin,
         &NewMember {
             full_name: "Investigadora".into(),
-            username: name.clone(),
-            email: format!("{name}@ocinye.com"),
+            email: name.clone(),
             position: None,
             role,
             unit_id: None,
@@ -646,7 +647,7 @@ async fn no_password_is_ever_stored_in_the_clear() {
 
         let in_attempts: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM authentication_attempts
-              WHERE coalesce(username, '') LIKE '%' || $1 || '%'",
+              WHERE coalesce(email, '') LIKE '%' || $1 || '%'",
         )
         .bind(needle)
         .fetch_one(&pool)
@@ -689,14 +690,13 @@ async fn a_second_bootstrap_is_refused() {
     let org = organisation(&pool).await;
     let _admin = admin(&pool, org).await;
 
-    let name = username();
+    let name = endereco();
     let result = identity::bootstrap_platform_admin(
         &pool,
         &authenticator(),
         org,
         "Segundo",
         &name,
-        &format!("{name}@ocinye.com"),
         &CorrelationIds::generate(),
     )
     .await;
@@ -708,7 +708,7 @@ async fn a_second_bootstrap_is_refused() {
 }
 
 #[tokio::test]
-async fn usernames_are_unique_case_insensitively() {
+async fn os_enderecos_sao_unicos_ignorando_maiusculas() {
     let pool = skip_without_database!();
     let org = organisation(&pool).await;
     let admin = admin(&pool, org).await;
@@ -720,8 +720,8 @@ async fn usernames_are_unique_case_insensitively() {
         &admin,
         &NewMember {
             full_name: "Homónimo".into(),
-            username: name.to_uppercase(),
-            email: format!("other-{name}@ocinye.com"),
+            // O mesmo endereço em maiúsculas é o mesmo endereço.
+            email: name.clone().to_uppercase(),
             position: None,
             role: TechnicalRole::ResearchMember,
             unit_id: None,
@@ -782,15 +782,14 @@ async fn two_concurrent_bootstraps_produce_one_administrator() {
 
         let attempt = |suffix: &str| {
             let pool = pool.clone();
-            let username = format!("{}{suffix}", username());
-            let email = format!("{username}@example.org");
+            let email = format!("u{suffix}-{}", endereco());
+
             async move {
                 identity::bootstrap_platform_admin(
                     &pool,
                     &authenticator(),
                     organisation_id,
                     "Primeiro Administrador",
-                    &username,
                     &email,
                     &CorrelationIds::generate(),
                 )
@@ -1077,8 +1076,7 @@ async fn um_membro_le_o_seu_proprio_registo_sem_permissao_de_directorio() {
         .expect("o membro tem de conseguir ler o seu próprio registo");
 
     assert_eq!(proprio.id, person.id);
-    assert_eq!(proprio.username.as_deref(), Some(name.as_str()));
-    assert_eq!(proprio.email, format!("{name}@ocinye.com"));
+    assert_eq!(proprio.email, name.clone());
     // `invited`, e não `active`: o membro acabou de ser criado e ainda deve ao
     // Core uma palavra-passe permanente. É o estado real, e é isso que o ecrã
     // da conta passa a mostrar em vez de um traço.
@@ -1113,8 +1111,8 @@ async fn a_leitura_da_propria_identidade_nao_alcanca_terceiros() {
         .await
         .expect("própria");
 
-    assert_eq!(vista_uma.username.as_deref(), Some(nome_uma.as_str()));
-    assert_eq!(vista_outra.username.as_deref(), Some(nome_outra.as_str()));
+    assert_eq!(vista_uma.email, nome_uma.clone());
+    assert_eq!(vista_outra.email, nome_outra.clone());
     assert_ne!(vista_uma.id, vista_outra.id);
 }
 
@@ -1797,4 +1795,131 @@ async fn sem_backend_registado_a_recusa_diz_a_causa() {
         registar_backend(&pool, store.bucket()).await;
     })
     .await;
+}
+
+// ── O endereço é a credencial ───────────────────────────────────────────
+
+/// Não há segundo identificador aceite em silêncio.
+///
+/// # Porque isto é um teste e não uma leitura do código
+///
+/// Porque um sistema que aceitasse dois teria duas superfícies de
+/// autenticação — e a segunda seria a que ninguém revê. O ADR-0106 diz que há
+/// uma; este teste é o que o torna verdade.
+#[tokio::test]
+async fn so_o_endereco_autentica() {
+    let Some(pool) = pool().await else { return };
+    let email = endereco();
+    let (_, credencial) = identity::bootstrap_platform_admin(
+        &pool,
+        &authenticator(),
+        organisation(&pool).await,
+        "Quem Entra",
+        &email,
+        &CorrelationIds::generate(),
+    )
+    .await
+    .expect("bootstrap");
+
+    let auth = authenticator();
+    let contexto = AttemptContext::default();
+    let ids = CorrelationIds::generate();
+
+    // Com o endereço, entra.
+    auth.sign_in(&pool, &email, &credencial.secret, &contexto, &ids)
+        .await
+        .expect("o endereço tem de autenticar");
+
+    // Com a parte antes da arroba — o que teria sido um username —, não.
+    let parte = email.split('@').next().expect("parte local").to_owned();
+    let resultado = auth
+        .sign_in(&pool, &parte, &credencial.secret, &contexto, &ids)
+        .await;
+    assert!(
+        resultado.is_err(),
+        "a parte local do endereço autenticou: haveria dois identificadores"
+    );
+}
+
+/// O endereço não distingue maiúsculas para entrar.
+///
+/// Quem escreve `Fidel@Ocinye.com` está a escrever o mesmo endereço, e um
+/// sistema que o recusasse mandava uma pessoa adivinhar como se escreveu a si
+/// própria no dia em que a conta foi criada.
+#[tokio::test]
+async fn o_endereco_nao_distingue_maiusculas_para_entrar() {
+    let Some(pool) = pool().await else { return };
+    let email = endereco();
+
+    let (_, credencial) = identity::bootstrap_platform_admin(
+        &pool,
+        &authenticator(),
+        organisation(&pool).await,
+        "Quem Entra",
+        &email,
+        &CorrelationIds::generate(),
+    )
+    .await
+    .expect("bootstrap");
+
+    authenticator()
+        .sign_in(
+            &pool,
+            &email.to_uppercase(),
+            &credencial.secret,
+            &AttemptContext::default(),
+            &CorrelationIds::generate(),
+        )
+        .await
+        .expect("o mesmo endereço em maiúsculas é o mesmo endereço");
+}
+
+/// A limitação de tentativas conta por endereço.
+///
+/// Contava por username. Se tivesse ficado a contar por uma coluna que já não
+/// existe, deixaria de contar de todo — e a protecção desaparecia em silêncio.
+#[tokio::test]
+async fn as_tentativas_falhadas_contam_por_endereco() {
+    let Some(pool) = pool().await else { return };
+    let email = endereco();
+
+    let (_, _) = identity::bootstrap_platform_admin(
+        &pool,
+        &authenticator(),
+        organisation(&pool).await,
+        "Quem Entra",
+        &email,
+        &CorrelationIds::generate(),
+    )
+    .await
+    .expect("bootstrap");
+
+    let auth = authenticator();
+    let contexto = AttemptContext::default();
+    let errada = Secret::new("isto-nao-e-a-palavra-passe");
+
+    for _ in 0..3 {
+        let _ = auth
+            .sign_in(
+                &pool,
+                &email,
+                &errada,
+                &contexto,
+                &CorrelationIds::generate(),
+            )
+            .await;
+    }
+
+    let contadas: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM authentication_attempts WHERE lower(email) = lower($1)",
+    )
+    .bind(&email)
+    .fetch_one(&pool)
+    .await
+    .expect("contagem");
+
+    assert!(
+        contadas >= 3,
+        "as tentativas contra este endereço não ficaram registadas: {contadas}"
+    );
 }

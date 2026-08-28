@@ -17,5 +17,6 @@ pub mod error;
 pub mod extract;
 pub mod mail_check;
 pub mod middleware;
+pub mod provision;
 pub mod routes;
 pub mod state;

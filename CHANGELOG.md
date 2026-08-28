@@ -7,6 +7,81 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### `main` passou a estar protegida pelo servidor — 2026-08-27
+
+A lacuna declarada em 2026-08-23 fechou-se, e não da maneira que a entrada
+desse dia previa como mais provável.
+
+O repositório era privado, e o plano Free recusava tanto *rulesets* como
+*branch protection* em repositórios privados. Estavam escritas duas saídas:
+subir ao plano **Team**, ou tornar o repositório **público**. A instituição
+escolheu a segunda — evita depender de Actions pagas — e activou a protecção a
+seguir.
+
+**Estado verificado pela API em 2026-08-27:**
+
+| | |
+|---|---|
+| Visibilidade | **Pública** |
+| `main` | **Protegida**, *branch protection* clássica |
+| Entrada de alterações | Pull Request obrigatória |
+| *Required checks* | `Testes` · `Stack local` · `Formatação, lint e segredos` · `Advisories RustSec (cargo audit)` · `Advisories do GitHub (Cargo.lock)` |
+| Modo | *strict* — a branch tem de estar actualizada com `main` |
+| `enforce_admins` | **Activo** |
+| Force push · eliminação da branch | **Bloqueados** |
+| Resolução de conversas | **Exigida** |
+| Aprovações humanas exigidas | **Zero por número** — a revisão acontece, e não é uma contagem |
+| Histórico linear | Não exigido: *merge commits* são permitidos |
+| *Rulesets* | **Nenhum** |
+| Secret scanning · push protection | **Activos** — deixaram de ser indisponíveis com a visibilidade |
+
+**Porquê nenhum *ruleset*.** A política cabe inteira na *branch protection*, e
+um segundo mecanismo a dizer o mesmo é um sítio a mais onde discordar — no dia
+em que discordarem, nenhum dos dois é a política.
+
+**O portão canónico de `main` continua depois do merge**, e não como *required
+check* de PR. Um portão que só pode correr no estado que ainda não existe não
+pode ser condição para lá chegar.
+
+#### O que isto corrige na documentação
+
+A entrada de 2026-08-23 fica como está: descrevia o que era verdade nesse dia.
+O que foi corrigido é o `CLAUDE.md`, onde a limitação estava escrita **no
+presente** — e uma limitação descrita no presente sobrevive à sua própria causa
+se ninguém a for corrigir. Estava a ser citada como verdade corrente quatro
+dias depois de ter deixado de o ser.
+
+
+### A superfície dos painéis passou a ser design system — 2026-08-27
+
+Os painéis pousados — o menu da conta, o sino das notificações, o calendário da
+barra — partilhavam um acabamento que estava escrito à mão em cada um. Passou a
+haver **tokens `--oc-pop-*`**, e a classe `.oc-pop` entrega-o inteiro: um painel
+novo escreve onde abre e que largura tem, e nada mais.
+
+A superfície é a mesma que era. O que mudou é que deixou de se poder copiar: o
+portão `a_superficie_de_um_painel_nao_se_reescreve` recusa os literais do
+acabamento fora do bloco de tokens. Procura o **valor repetido** e não a classe,
+porque um portão que exigisse `.oc-pop` seria satisfeito por quem a
+acrescentasse e depois a sobrepusesse.
+
+O menu da conta continua a ser a referência e não participa: escreve as
+propriedades pelo seu nome, com os mesmos valores, porque uma referência que
+participa deixa de o ser.
+
+#### O leitor de tokens estava cego a meia declaração
+
+Ao escrever a sombra em três linhas — uma por camada — descobriu-se que
+`custom_properties` lia linha a linha: `--oc-pop-shadow:` era um par com valor
+**vazio**, vazio no dossier igualava vazio no CSS, e a paridade dava verde sem
+comparar nada. Verificou-se por reversão, com uma sombra deliberadamente errada
+no dossier: passou.
+
+O leitor passou a acumular até ao `;`, confinado a nomes de propriedade
+verdadeiros para não engolir a prosa em markdown à volta. A mesma reversão falha
+agora, e nomeia o token.
+
+
 ### Repositório institucional estabelecido — 2026-08-23
 
 O Ocinye OS passou a estar versionado. Não é uma release, não é uma versão 1.0,

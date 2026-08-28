@@ -22,6 +22,7 @@ use ocinye_contracts::agentic::{
 };
 use ocinye_contracts::{Classification, Permission, WorkspaceRole};
 use ocinye_core::modules::agentic::{self, planner, registry::registry, runtime};
+use ocinye_core::realtime::Realtime;
 use ocinye_domain::{AgentBoundary, AgenticRefusal, Principal, ResourceContext, ResourceKind};
 use ocinye_observability::CorrelationIds;
 use sqlx::PgPool;
@@ -53,8 +54,8 @@ async fn person(pool: &PgPool, organisation_id: Uuid, roles: &[&str]) -> Princip
     let handle = format!("p{}", Uuid::new_v4().simple());
 
     let person_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO people (organisation_id, full_name, email, username, status)
-              VALUES ($1, $2, $3, $2, 'active') RETURNING id",
+        "INSERT INTO people (organisation_id, full_name, email, status)
+              VALUES ($1, $2, $3, 'active') RETURNING id",
     )
     .bind(organisation_id)
     .bind(&handle)
@@ -123,6 +124,7 @@ async fn a_capability_that_does_not_exist_executes_nothing() {
         let result = agentic::execute(
             &pool,
             capacidades(),
+            &Realtime::ausente(),
             &actor,
             &runtime::main_agent_boundary(),
             None,
@@ -142,34 +144,104 @@ async fn a_capability_that_does_not_exist_executes_nothing() {
     }
 }
 
+/// As palavras que nomeiam infraestrutura.
+///
+/// Shell, SQL, ficheiros, rede e segredos (briefing §6, §7). Escritas uma vez,
+/// porque a lista e a comparação **são** a propriedade: uma cópia ao lado do
+/// teste de controlo passaria a estar verde enquanto o original mudava.
+const PALAVRAS_DE_INFRAESTRUTURA: [&str; 13] = [
+    "shell",
+    "exec",
+    "command",
+    "sql",
+    "raw",
+    "http",
+    "fetch",
+    "file",
+    "fs",
+    "secret",
+    "token",
+    "credential",
+    "env",
+];
+
+/// Se um identificador de capability nomeia infraestrutura.
+///
+/// # Palavras, e não sub-cadeias
+///
+/// A versão anterior comparava sub-cadeias, e `science.execution.record` deu
+/// vermelho por conter «exec» dentro de «execution». Uma execução de estudo é
+/// vocabulário do domínio científico e não alcança infraestrutura nenhuma — e o
+/// caminho errado seria renomear a operação institucional para agradar a um
+/// teste.
+///
+/// Partir por `.`, `_` e `-` mantém a força: `knowledge.exec_shell` continua a
+/// dar duas palavras proibidas, e uma capability que tentasse esconder-se num
+/// segmento composto não o consegue. O que deixa de dar é uma palavra que por
+/// acaso contenha outra.
+fn nomeia_infraestrutura(id: &str) -> Option<&'static str> {
+    let palavras: Vec<&str> = id.split(['.', '_', '-']).collect();
+    PALAVRAS_DE_INFRAESTRUTURA
+        .into_iter()
+        .find(|proibida| palavras.contains(proibida))
+}
+
 /// There is no capability that reaches infrastructure. Not one.
 #[tokio::test]
 async fn no_capability_reaches_infrastructure() {
-    // A afirmação mais forte desta arquitectura, e a mais barata de verificar:
-    // nenhuma entrada do registry nomeia shell, SQL, ficheiros, rede ou
-    // segredos (briefing §6, §7).
+    // A afirmação mais forte desta arquitectura, e a mais barata de verificar.
     for descriptor in registry().all() {
         let id = descriptor.id.as_str();
-        for forbidden in [
-            "shell",
-            "exec",
-            "command",
-            "sql",
-            "query_raw",
-            "http",
-            "fetch",
-            "file",
-            "fs",
-            "secret",
-            "token",
-            "credential",
-            "env",
-        ] {
-            assert!(
-                !id.contains(forbidden),
-                "`{id}` parece alcançar infraestrutura («{forbidden}»)"
-            );
-        }
+        assert!(
+            nomeia_infraestrutura(id).is_none(),
+            "`{id}` parece alcançar infraestrutura («{}»)",
+            nomeia_infraestrutura(id).unwrap_or_default()
+        );
+    }
+}
+
+/// E a detecção continua a apanhar o que existe para apanhar.
+///
+/// # Porque isto é preciso
+///
+/// Porque quando `science.execution.record` deu um falso positivo, a correcção
+/// foi afrouxar a comparação de sub-cadeia para palavra. Uma comparação
+/// afrouxada pode passar a não recusar nada, e um guarda que não recusa nada é
+/// verde a dizer o mesmo que a ausência de guarda.
+///
+/// Exercita a **mesma** função que o registry atravessa — e não uma cópia dela
+/// escrita aqui ao lado, que ficaria verde enquanto o original mudava.
+#[test]
+fn a_deteccao_de_infraestrutura_distingue_palavra_de_letras() {
+    for nomeia in [
+        "system.execute_shell",
+        "system.run_command",
+        "data.execute_sql",
+        "knowledge.exec",
+        "identity.read_secret",
+        "identity.token.mint",
+        "storage.file.read",
+        "network.http.fetch",
+        "system.env",
+        "data.query_raw",
+    ] {
+        assert!(
+            nomeia_infraestrutura(nomeia).is_some(),
+            "`{nomeia}` nomeia infraestrutura e passou"
+        );
+    }
+
+    for nao_nomeia in [
+        "science.execution.record",
+        "science.lineage.read",
+        "research.idea.create",
+        "knowledge.note.revise",
+        "calendar.event.create",
+    ] {
+        assert!(
+            nomeia_infraestrutura(nao_nomeia).is_none(),
+            "`{nao_nomeia}` é vocabulário do domínio e foi recusado"
+        );
     }
 }
 
@@ -190,6 +262,7 @@ async fn an_agent_never_widens_the_person_using_it() {
         let result = agentic::execute(
             &pool,
             capacidades(),
+            &Realtime::ausente(),
             &powerless,
             &widest,
             None,
@@ -231,6 +304,7 @@ async fn a_capability_outside_the_agent_definition_is_refused() {
     let result = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &narrow,
         None,
@@ -381,6 +455,7 @@ async fn an_external_effect_never_runs_unconfirmed() {
     let result = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &runtime::main_agent_boundary(),
         None,
@@ -419,6 +494,7 @@ async fn malformed_input_is_refused_before_anything_runs() {
         let result = agentic::execute(
             &pool,
             capacidades(),
+            &Realtime::ausente(),
             &actor,
             &runtime::main_agent_boundary(),
             None,
@@ -580,6 +656,7 @@ async fn every_attempt_is_audited_without_the_input() {
     let _ = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &runtime::main_agent_boundary(),
         None,
@@ -908,6 +985,7 @@ async fn the_whole_path_runs_end_to_end_without_a_gpu() {
     let result = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &runtime::main_agent_boundary(),
         None,
@@ -1019,6 +1097,7 @@ async fn find_read_and_prepare_a_reply_then_stop() {
     let found = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &agent,
         None,
@@ -1040,6 +1119,7 @@ async fn find_read_and_prepare_a_reply_then_stop() {
     let read = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &agent,
         None,
@@ -1059,6 +1139,7 @@ async fn find_read_and_prepare_a_reply_then_stop() {
     let drafted = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &agent,
         None,
@@ -1113,6 +1194,7 @@ async fn sending_demands_confirmation_and_without_it_nothing_happens() {
     let drafted = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &agent,
         None,
@@ -1132,6 +1214,7 @@ async fn sending_demands_confirmation_and_without_it_nothing_happens() {
     let unconfirmed = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &agent,
         None,
@@ -1163,6 +1246,7 @@ async fn the_send_policy_answers_before_the_send() {
     let drafted = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &agent,
         None,
@@ -1181,6 +1265,7 @@ async fn the_send_policy_answers_before_the_send() {
     let evaluated = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &agent,
         None,
@@ -1223,6 +1308,7 @@ async fn transforming_without_a_model_leaves_the_draft_untouched() {
     let drafted = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &agent,
         None,
@@ -1241,6 +1327,7 @@ async fn transforming_without_a_model_leaves_the_draft_untouched() {
     let transformed = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &agent,
         None,
@@ -1295,6 +1382,7 @@ async fn no_mail_capability_reaches_another_persons_mailbox() {
         let result = agentic::execute(
             &pool,
             capacidades(),
+            &Realtime::ausente(),
             &administrator,
             &agent,
             None,
@@ -1458,6 +1546,7 @@ async fn a_provider_cannot_claim_prior_approval() {
     let refused = agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &runtime::main_agent_boundary(),
         None,

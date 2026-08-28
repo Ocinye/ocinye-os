@@ -178,8 +178,8 @@ async fn recarregar(pool: &PgPool, person_id: Uuid) -> Principal {
 async fn pessoa(pool: &PgPool, organisation_id: Uuid, unit_id: Uuid) -> Principal {
     let handle = format!("p{}", Uuid::new_v4().simple());
     let person_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO people (organisation_id, full_name, email, username, status)
-             VALUES ($1, $2, $3, $2, 'active') RETURNING id",
+        "INSERT INTO people (organisation_id, full_name, email, status)
+             VALUES ($1, $2, $3, 'active') RETURNING id",
     )
     .bind(organisation_id)
     .bind(&handle)

@@ -142,12 +142,34 @@ pub enum ResourceKind {
     MailDraft,
     /// A mailbox.
     Mailbox,
+    /// Uma conversa das Mensagens.
+    Conversation,
+    /// Uma mensagem dentro de uma conversa.
+    Message,
     /// An agent definition.
     Agent,
     /// A compute node.
     ComputeNode,
     /// A compute job.
     ComputeJob,
+    /// Uma hipótese científica.
+    Hypothesis,
+    /// Uma metodologia, com identidade própria.
+    Methodology,
+    /// Uma **versão** de metodologia.
+    ///
+    /// Um recurso, e não um campo. É o que torna a proveniência honesta: um
+    /// resultado produzido com a versão 2 continua a dizer «versão 2» depois
+    /// de a versão 5 existir.
+    MethodologyVersion,
+    /// Uma **versão** de dataset. Pela mesma razão.
+    DatasetVersion,
+    /// Um estudo: experimento físico, simulação ou análise.
+    Study,
+    /// Uma execução concreta de um estudo.
+    StudyExecution,
+    /// Um resultado científico.
+    Result,
 }
 
 impl ResourceKind {
@@ -170,9 +192,18 @@ impl ResourceKind {
             Self::MailMessage => "mail_message",
             Self::MailDraft => "mail_draft",
             Self::Mailbox => "mailbox",
+            Self::Conversation => "conversation",
+            Self::Message => "message",
             Self::Agent => "agent",
             Self::ComputeNode => "compute_node",
             Self::ComputeJob => "compute_job",
+            Self::Hypothesis => "hypothesis",
+            Self::Methodology => "methodology",
+            Self::MethodologyVersion => "methodology_version",
+            Self::DatasetVersion => "dataset_version",
+            Self::Study => "study",
+            Self::StudyExecution => "study_execution",
+            Self::Result => "result",
         }
     }
 
@@ -184,7 +215,7 @@ impl ResourceKind {
 
     /// Every kind.
     #[must_use]
-    pub const fn all() -> [Self; 18] {
+    pub const fn all() -> [Self; 25] {
         [
             Self::Idea,
             Self::Project,
@@ -204,6 +235,13 @@ impl ResourceKind {
             Self::Agent,
             Self::ComputeNode,
             Self::ComputeJob,
+            Self::Hypothesis,
+            Self::Methodology,
+            Self::MethodologyVersion,
+            Self::DatasetVersion,
+            Self::Study,
+            Self::StudyExecution,
+            Self::Result,
         ]
     }
 
@@ -226,9 +264,18 @@ impl ResourceKind {
             Self::MailMessage => "Mensagem",
             Self::MailDraft => "Rascunho",
             Self::Mailbox => "Caixa de correio",
+            Self::Conversation => "Conversa",
+            Self::Message => "Mensagem",
             Self::Agent => "Agente",
             Self::ComputeNode => "Nó de computação",
             Self::ComputeJob => "Job",
+            Self::Hypothesis => "Hipótese",
+            Self::Methodology => "Metodologia",
+            Self::MethodologyVersion => "Versão da metodologia",
+            Self::DatasetVersion => "Versão do dataset",
+            Self::Study => "Estudo",
+            Self::StudyExecution => "Execução",
+            Self::Result => "Resultado",
         }
     }
 }
@@ -515,6 +562,23 @@ pub enum TrustBoundary {
     /// multipart, validação, normalização, armazenamento. Bytes, caminhos locais
     /// e URLs arbitrários não são entradas agentic.
     UserMediatedBinaryBoundary,
+    /// O efeito é uma afirmação institucional cujo peso vem de quem a faz.
+    ///
+    /// As outras três fronteiras fecham-se por causa do que a operação
+    /// **alcança**: um segredo, a autoridade de alguém, bytes que só a pessoa
+    /// tem. Esta fecha-se por causa de quem a **assina**.
+    ///
+    /// Validar um resultado científico não muda o acesso de ninguém, não revela
+    /// nada e não é difícil de desfazer — uma validação errada corrige-se com
+    /// outra, e o domínio guarda as duas. O que não se desfaz é a atribuição:
+    /// o registo diz que alguém afirmou aquilo, e é essa pessoa que lhe dá
+    /// valor. Um agente a produzi-la deixaria a instituição com uma afirmação
+    /// sem ninguém por trás.
+    ///
+    /// Não é risco. É autoria — e por isso não se resolve com aprovação: uma
+    /// confirmação humana continuaria a deixar a afirmação escrita como se
+    /// tivesse sido feita, e não assumida.
+    InstitutionalClaimBoundary,
 }
 
 impl TrustBoundary {
@@ -525,7 +589,26 @@ impl TrustBoundary {
             Self::SecretBoundary => "SECRET_BOUNDARY",
             Self::AuthorityBoundary => "AUTHORITY_BOUNDARY",
             Self::UserMediatedBinaryBoundary => "USER_MEDIATED_BINARY_BOUNDARY",
+            Self::InstitutionalClaimBoundary => "INSTITUTIONAL_CLAIM_BOUNDARY",
         }
+    }
+
+    /// Todas as fronteiras, para quem tem de as percorrer sem as esquecer.
+    ///
+    /// # Porque isto existe
+    ///
+    /// Porque o gerador da matriz iterava um array escrito ao lado, e quando a
+    /// `INSTITUTIONAL_CLAIM_BOUNDARY` nasceu a secção de fronteiras passou a
+    /// somar catorze de quinze — sem nada falhar. Uma lista mantida à parte do
+    /// tipo que enumera é uma lista que fica para trás.
+    #[must_use]
+    pub const fn all() -> [Self; 4] {
+        [
+            Self::SecretBoundary,
+            Self::AuthorityBoundary,
+            Self::UserMediatedBinaryBoundary,
+            Self::InstitutionalClaimBoundary,
+        ]
     }
 }
 

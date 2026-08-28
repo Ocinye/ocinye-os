@@ -17,26 +17,83 @@ const ICONS_SVG: &str = include_str!("../static/icons.svg");
 const DESIGN_README: &str = include_str!("../../../design/README.md");
 
 /// Extrai `--oc-nome: valor;` de um texto.
+///
+/// # Porque acumula em vez de ler linha a linha
+///
+/// Uma declaração pode ocupar várias linhas — `--oc-pop-shadow` tem três
+/// camadas, uma por linha, porque cada uma faz uma coisa diferente e escrevê-las
+/// seguidas esconde isso.
+///
+/// A versão anterior lia linha a linha. Nessa leitura, `--oc-pop-shadow:` era
+/// um par com valor **vazio**, e vazio no dossier igualava vazio no CSS: a
+/// paridade dava verde sem comparar coisa nenhuma. Verificou-se por reversão —
+/// uma sombra deliberadamente errada no dossier passou o portão.
+///
+/// Por isso o texto entra num acumulador e só se fecha um par ao encontrar o
+/// `;`. Uma declaração que nunca feche arrasta o que vem a seguir e aparece
+/// como valor errado, que é a direcção certa para falhar: ruidosa, e não muda.
 fn custom_properties(source: &str) -> BTreeMap<String, String> {
+    /// Um nome de propriedade, e não uma frase que começa por `--oc-`.
+    ///
+    /// O dossier é markdown: tem tabelas e prosa onde os nomes aparecem em
+    /// texto corrido. Sem isto, uma frase como «`--oc-interface-scale` é
+    /// aplicada uma vez, na raiz:» seria lida como uma declaração aberta e
+    /// arrastaria as secções seguintes para dentro do seu valor.
+    fn e_um_nome(nome: &str) -> bool {
+        nome.starts_with("--oc-")
+            && nome
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    }
+
     let mut found = BTreeMap::new();
+    let mut aberta: Option<String> = None;
 
     for line in source.lines() {
         let line = line.split("/*").next().unwrap_or(line).trim();
-        for chunk in line.split(';') {
-            let chunk = chunk.trim();
-            if !chunk.starts_with("--oc-") {
-                continue;
+
+        // Uma declaração que ficou por fechar continua nesta linha.
+        if let Some(mut acumulada) = aberta.take() {
+            acumulada.push(' ');
+            acumulada.push_str(line);
+            match acumulada.find(';') {
+                Some(fim) => registar(&mut found, &acumulada[..fim], e_um_nome),
+                None => aberta = Some(acumulada),
             }
-            if let Some((name, value)) = chunk.split_once(':') {
-                found.insert(
-                    name.trim().to_owned(),
-                    value.split_whitespace().collect::<Vec<_>>().join(" "),
-                );
+            continue;
+        }
+
+        let mut pedacos = line.split(';').peekable();
+        while let Some(pedaco) = pedacos.next() {
+            if pedacos.peek().is_some() {
+                // Fechado por `;` nesta mesma linha.
+                registar(&mut found, pedaco, e_um_nome);
+            } else if pedaco.trim().starts_with("--oc-") && pedaco.contains(':') {
+                let (nome, _) = pedaco.split_once(':').unwrap_or((pedaco, ""));
+                if e_um_nome(nome.trim()) {
+                    aberta = Some(pedaco.trim().to_owned());
+                }
             }
         }
     }
 
     found
+}
+
+/// Guarda um par, se o que está antes de `:` for mesmo um nome de propriedade.
+fn registar(found: &mut BTreeMap<String, String>, chunk: &str, e_um_nome: fn(&str) -> bool) {
+    let chunk = chunk.trim();
+    let Some((nome, valor)) = chunk.split_once(':') else {
+        return;
+    };
+    let nome = nome.trim();
+    if !e_um_nome(nome) {
+        return;
+    }
+    found.insert(
+        nome.to_owned(),
+        valor.split_whitespace().collect::<Vec<_>>().join(" "),
+    );
 }
 
 /// Todos os tokens do dossier existem no CSS, com o mesmo valor.
@@ -100,7 +157,16 @@ fn o_sprite_e_o_catalogo_de_icones_cobrem_se_mutuamente() {
         .filter(|id| id.starts_with("oc-"))
         .collect();
 
-    assert_eq!(declared.len(), 44, "o dossier declara 44 ícones");
+    // Quarenta e sete desde 2026-08-28: `oc-science` entrou com a cadeia
+    // científica. Três nós ligados por duas arestas, e não um frasco de
+    // laboratório: o que o ecrã mostra é proveniência, e o Ocinye OS não é um
+    // caderno de laboratório electrónico (ADR-0412).
+    //
+    // Quarenta e seis desde 2026-08-27: `oc-close` entrou porque o conjunto não
+    // tinha um glifo de fechar, e o compositor fechava com uma seta — que se
+    // lê como «seguinte». O número muda **por decisão**, e é isso que este
+    // teste protege: um ícone que desapareça do dossier tem de dar vermelho.
+    assert_eq!(declared.len(), 47, "o dossier declara 47 ícones");
 
     for id in &declared {
         assert!(
@@ -1097,5 +1163,347 @@ fn a_topbar_nao_mostra_o_avatar_do_membro() {
     assert!(
         !OCINYE_CSS.contains(".oc-avatar--bar"),
         "a medida do avatar da topbar voltou; ela já não mostra avatar"
+    );
+}
+
+/// As mensagens próprias ficam de um lado, e as das outras pessoas do outro.
+///
+/// # Porque isto é um portão da folha de estilo
+///
+/// Porque a marca `--minha` está no HTML e é o CSS que decide o lado. Um teste
+/// sobre a marcação passaria com a folha a alinhar tudo à esquerda — que é
+/// exactamente o estado de que este portão nos tirou.
+#[test]
+fn as_mensagens_proprias_ficam_do_outro_lado() {
+    let css = include_str!("../static/ocinye.css");
+
+    // A **regra**, e não a primeira ocorrência do nome: ele aparece antes
+    // dentro de um `:not(...)`, e um `split` posicional lia o bloco errado.
+    let inicio = css
+        .find(".oc-msg__mensagem--minha {")
+        .expect("a regra das mensagens próprias tem de existir");
+    let bloco = &css[inicio..css[inicio..].find('}').map_or(css.len(), |f| inicio + f)];
+
+    assert!(
+        bloco.contains("justify-items: end"),
+        "as mensagens próprias não estão alinhadas ao lado oposto"
+    );
+
+    // E não só por cor: a superfície e a largura máxima também as distinguem.
+    let regras: String = css
+        .match_indices(".oc-msg__mensagem--minha")
+        .map(|(i, _)| &css[i..(i + 400).min(css.len())])
+        .collect();
+    assert!(
+        regras.contains("max-width"),
+        "uma linha que atravessa o ecrã inteiro deixa de se ler"
+    );
+    assert!(
+        regras.contains("background"),
+        "as mensagens próprias precisam de uma superfície própria"
+    );
+}
+
+/// Nenhuma função chamada no arranque deixa de existir.
+///
+/// # O defeito que isto guarda
+///
+/// `start()` chama uma função por ecrã. Uma chamada a uma função que não foi
+/// escrita é um `ReferenceError` — e o que ele parte não é só essa: parte
+/// **tudo o que vem depois** dela na mesma sequência.
+///
+/// Aconteceu: uma edição inseriu `initSino()` na lista e falhou a escrever a
+/// função, porque a âncora de texto não coincidiu. O JavaScript continuou
+/// sintacticamente válido, a página carregou, e a barra lateral, a paleta e o
+/// centro temporal deixaram de responder — sem uma linha vermelha em lado
+/// nenhum.
+#[test]
+fn tudo_o_que_o_arranque_chama_existe() {
+    let js = include_str!("../static/app.js");
+
+    let inicio = js
+        .find("const start = () => {")
+        .expect("o arranque tem de existir");
+    let fim = inicio
+        + js[inicio..]
+            .find("\n  };")
+            .expect("o arranque tem de fechar");
+    let corpo = &js[inicio..fim];
+
+    let chamadas: Vec<&str> = corpo
+        .lines()
+        .filter_map(|linha| linha.trim().strip_suffix("();"))
+        .filter(|nome| nome.starts_with("init"))
+        .collect();
+
+    assert!(
+        chamadas.len() > 5,
+        "o arranque devia chamar vários inicializadores, e encontrou {}",
+        chamadas.len()
+    );
+
+    let em_falta: Vec<&str> = chamadas
+        .iter()
+        .filter(|nome| !js.contains(&format!("function {nome}(")))
+        .copied()
+        .collect();
+
+    assert!(
+        em_falta.is_empty(),
+        "o arranque chama funções que não existem: {em_falta:?}\n\nUm `ReferenceError` \
+         aqui não parte só esta — parte tudo o que vem depois dela."
+    );
+}
+
+/// Os painéis novos igualam o acabamento do painel da conta.
+///
+/// # A direcção importa
+///
+/// O painel da conta é a **referência**, e não um participante. Foi ele que
+/// definiu o acabamento — translucidez ligeira, três camadas de sombra, o fio de
+/// luz na aresta — e é ele que os outros têm de igualar.
+///
+/// Este portão nasceu virado ao contrário: mediu que os três partilhavam uma
+/// classe, e para isso a primeira escrita reescreveu o painel da conta. Igualar
+/// não é mexer em quem já estava certo.
+///
+/// Por isso a asserção não é sobre classes partilhadas: é sobre os **valores**
+/// do painel da conta aparecerem nos outros. Quem mudar a referência tem de
+/// mudar os que a seguem, e não o contrário.
+#[test]
+fn os_paineis_novos_igualam_o_painel_da_conta() {
+    let css = include_str!("../static/ocinye.css");
+
+    /// O bloco de uma regra, e não a primeira ocorrência do seu nome.
+    ///
+    /// O mesmo selector aparece duas vezes: uma regra de uma linha dentro de
+    /// uma media query, e a regra a sério. Corta-se em `}` — a chaveta que
+    /// fecha a regra — e fica-se com a maior das duas, que é a que declara o
+    /// acabamento.
+    ///
+    /// Cortar em `\n}` seria mais tolerante e é o que estava aqui: a regra de
+    /// uma linha estendia-se então até ao fim da media query inteira, ficava a
+    /// maior, e o portão passou a ler o bloco errado no dia em que a regra a
+    /// sério encurtou. Um portão que lê o sítio errado é um portão que dá
+    /// verde por acidente.
+    fn bloco<'a>(css: &'a str, seletor: &str) -> &'a str {
+        css.match_indices(seletor)
+            .filter_map(|(inicio, _)| {
+                css[inicio..]
+                    .find('}')
+                    .map(|fim| &css[inicio..inicio + fim])
+            })
+            .max_by_key(|bloco| bloco.len())
+            .unwrap_or_else(|| panic!("a regra «{seletor}» tem de existir"))
+    }
+
+    let referencia = bloco(css, ".oc-account__menu {");
+    let partilhada = bloco(css, ".oc-pop {");
+
+    // O acabamento saiu das duas regras e passou a viver nos tokens. Cada uma
+    // continua a tê-lo — pelo nome, e não pelo valor.
+    for token in [
+        "background: var(--oc-pop-surface)",
+        "backdrop-filter: var(--oc-pop-blur)",
+        "border: 1px solid var(--oc-pop-line)",
+        "border-radius: var(--oc-pop-radius)",
+        "box-shadow: var(--oc-pop-shadow)",
+    ] {
+        assert!(
+            referencia.contains(token),
+            "a referência mudou e este portão ficou obsoleto: «{token}» já não \
+             está no painel da conta"
+        );
+        assert!(
+            partilhada.contains(token),
+            "os painéis novos não igualam a referência: falta «{token}»"
+        );
+    }
+
+    // E os tokens continuam a valer o que o painel da conta escreveu. Sem
+    // isto, os dois lados podiam concordar num acabamento errado.
+    let raiz = bloco(css, ":root {");
+    for valor in [
+        "--oc-pop-surface: color-mix(in srgb, var(--oc-surface) 88%, transparent)",
+        "--oc-pop-blur:    blur(18px) saturate(140%)",
+        "--oc-pop-line:    color-mix(in srgb, var(--oc-border) 70%, transparent)",
+        "--oc-pop-radius:  13px",
+        "0 16px 40px rgba(11,26,45,.20)",
+        "0 2px 8px rgba(11,26,45,.10)",
+        "inset 0 1px 0 rgba(255,255,255,.60)",
+    ] {
+        assert!(
+            raiz.contains(valor),
+            "o acabamento mudou de valor: «{valor}» já não está nos tokens"
+        );
+    }
+
+    // E os painéis novos usam-na. O da conta **não** — continua com a sua
+    // regra, intocada.
+    let shell = include_str!("../src/ui/shell.rs");
+    let calendario = include_str!("../src/ui/screens/calendar.rs");
+    assert!(shell.contains("oc-pop oc-sino__painel"), "o sino não a usa");
+    assert!(
+        calendario.contains("oc-pop oc-datepop"),
+        "o calendário não a usa"
+    );
+    assert!(
+        !shell.contains("oc-pop oc-account__menu"),
+        "o painel da conta foi alterado; ele é a referência, e não um participante"
+    );
+}
+
+/// As regras que a interface toda usa vivem ao nível de topo.
+///
+/// # O defeito que isto guarda
+///
+/// Uma regra escrita **dentro** de uma media query só se aplica quando a
+/// condição dela é verdadeira. A `.oc-pop` foi lá parar por engano — a inserção
+/// procurou o primeiro `.oc-account__menu {` do ficheiro, e o primeiro está
+/// dentro de um `@media` para ecrãs estreitos.
+///
+/// O resultado: a folha de estilo válida, os portões todos verdes, e os painéis
+/// sem superfície nenhuma num ecrã normal. Só uma captura o mostrou.
+#[test]
+fn as_regras_partilhadas_nao_estao_dentro_de_uma_media_query() {
+    let css = include_str!("../static/ocinye.css");
+
+    /// A que profundidade de chavetas está a primeira ocorrência.
+    fn profundidade(css: &str, seletor: &str) -> i32 {
+        let inicio = css
+            .find(seletor)
+            .unwrap_or_else(|| panic!("a regra «{seletor}» tem de existir"));
+        let antes = &css[..inicio];
+        i32::try_from(antes.matches('{').count()).unwrap_or(i32::MAX)
+            - i32::try_from(antes.matches('}').count()).unwrap_or(0)
+    }
+
+    for seletor in [".oc-pop {", ".oc-pop__item {", ".oc-pop__head {"] {
+        assert_eq!(
+            profundidade(css, seletor),
+            0,
+            "«{seletor}» está dentro de outro bloco — provavelmente uma media \
+             query — e por isso não se aplica no ecrã normal"
+        );
+    }
+}
+
+/// A superfície de um painel escreve-se uma vez, e herda-se sempre.
+///
+/// # O que este portão resolve
+///
+/// Nada disto tem valor enquanto a alternativa continuar disponível. Três
+/// painéis chegaram ao mesmo acabamento nesta interface, e nas três vezes o
+/// caminho foi o mesmo: copiar seis declarações de um sítio para outro. Nas
+/// três vezes correu mal de maneira diferente — uma cópia foi parar dentro de
+/// uma `@media`, outra reescreveu a referência em vez de a seguir, e a
+/// terceira ficou com a superfície certa e o conteúdo por acabar.
+///
+/// Por isso os valores vivem agora em `--oc-pop-*`, e este portão fecha a
+/// porta a quem os volte a escrever à mão: **fora do bloco de tokens, os
+/// literais do acabamento não podem aparecer.** Um painel novo escreve
+/// `class="oc-pop …"` e fica acabado sem decidir nada.
+///
+/// # Porque não basta procurar a classe
+///
+/// Porque um portão que exigisse `.oc-pop` em cada painel seria satisfeito por
+/// quem acrescentasse a classe e depois a sobrepusesse. O que se mede é o que
+/// falha: o valor repetido.
+#[test]
+fn a_superficie_de_um_painel_nao_se_reescreve() {
+    let css = include_str!("../static/ocinye.css");
+
+    // O bloco de tokens é onde os literais **devem** estar. Tudo o resto da
+    // folha é território onde não podem aparecer.
+    let fim_da_raiz = css
+        .find(":root {")
+        .and_then(|inicio| css[inicio..].find("\n}").map(|fim| inicio + fim))
+        .expect("o bloco de tokens tem de existir");
+    let resto = &css[fim_da_raiz..];
+
+    for literal in [
+        "blur(18px) saturate(140%)",
+        "0 16px 40px rgba(11,26,45,.20)",
+        "inset 0 1px 0 rgba(255,255,255,.60)",
+        "border-radius: 13px",
+    ] {
+        assert!(
+            !resto.contains(literal),
+            "«{literal}» foi escrito à mão fora dos tokens. A superfície de um \
+             painel não se copia: usa-se `.oc-pop`, ou o token `--oc-pop-*` que \
+             a declara"
+        );
+    }
+}
+
+/// Nenhum ecrã corrente pede um nome de utilizador.
+///
+/// # Porque isto não é um grep sobre o repositório
+///
+/// Porque `username` continua a ser legítimo em dois sítios, e um portão que
+/// os apanhasse seria desligado na primeira vez que incomodasse:
+///
+/// - `autocomplete="username"` é o nome que os gestores de palavras-passe do
+///   browser esperam no campo da conta. É convenção do HTML, não conceito do
+///   Ocinye, e o ecrã de entrada usa-o **no campo do endereço**.
+/// - `preferred_username` é um *claim* do OIDC, guardado para uma federação
+///   futura ([ADR-0103](../../docs/adrs/0103-core-owned-authentication.md)).
+///
+/// Por isso o que se mede é a **superfície**: o texto que uma pessoa lê e os
+/// campos que ela preenche. É aí que o conceito reaparece, e foi aí que ele
+/// esteve escondido — um campo com a etiqueta «Nome de utilizador», o `pattern`
+/// do username e o `name="email"`, ao lado do campo do endereço verdadeiro.
+///
+/// # O que esse campo fazia
+///
+/// O `pattern` não admitia `@`. Nenhum endereço válido passava a validação do
+/// browser, e **ninguém conseguia criar um membro** por aquele ecrã. Não deu
+/// erro em lado nenhum: o botão simplesmente não submetia.
+#[test]
+fn nenhum_ecra_pede_um_nome_de_utilizador() {
+    let mut problemas = Vec::new();
+
+    for caminho in std::fs::read_dir("src/ui/screens").expect("ecrãs") {
+        let caminho = caminho.expect("entrada").path();
+        if caminho.extension().and_then(|e| e.to_str()) != Some("rs") {
+            continue;
+        }
+        let fonte = std::fs::read_to_string(&caminho).expect("ler");
+        let ecra = caminho
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("?")
+            .to_owned();
+
+        for (numero, linha) in fonte.lines().enumerate() {
+            let limpa = linha.trim();
+            // Comentários e documentação falam do passado, e devem poder
+            // continuar a falar dele.
+            if limpa.starts_with("//") {
+                continue;
+            }
+            let baixa = limpa.to_lowercase();
+
+            if baixa.contains("nome de utilizador") {
+                problemas.push(format!(
+                    "{ecra}:{} pede «nome de utilizador» a quem lê",
+                    numero + 1
+                ));
+            }
+            // Um campo chamado `username` num formulário. O atributo
+            // `autocomplete` tem o mesmo texto e é outra coisa.
+            if baixa.contains("name=\"username\"") {
+                problemas.push(format!(
+                    "{ecra}:{} tem um campo `username` no formulário",
+                    numero + 1
+                ));
+            }
+        }
+    }
+
+    assert!(
+        problemas.is_empty(),
+        "o nome de utilizador voltou à superfície:\n  {}",
+        problemas.join("\n  ")
     );
 }

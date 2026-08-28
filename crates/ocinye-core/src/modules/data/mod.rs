@@ -18,6 +18,6 @@ mod service;
 
 pub use model::{Dataset, DatasetFile, DatasetOrigin, DatasetState, DatasetVersion, VersionStatus};
 pub use service::{
-    add_version_file, create_dataset, create_version, get_dataset, list_datasets, list_versions,
-    publish_version, NewDataset, NewVersion,
+    add_version_file, create_dataset, create_version, get_dataset, get_dataset_version,
+    list_datasets, list_versions, publish_version, NewDataset, NewVersion,
 };

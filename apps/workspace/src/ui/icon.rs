@@ -1,6 +1,6 @@
 //! Ícones.
 //!
-//! O conjunto vem exclusivamente de `static/icons.svg` — os 44 símbolos do
+//! O conjunto vem exclusivamente de `static/icons.svg` — os 47 símbolos do
 //! design, em traço fino e `currentColor`. Não se misturam bibliotecas com
 //! pesos de traço diferentes: a coerência do conjunto depende disso
 //! (`design/icons/ICONS.md`).
@@ -40,6 +40,13 @@ pub enum Icon {
     ChevronUp,
     Search,
     Plus,
+    /// Fechar uma janela.
+    ///
+    /// O conjunto não tinha nenhum, e o compositor fechava com uma seta — que
+    /// se lê como «seguinte». Acrescentar ao conjunto canónico é o contrário
+    /// de abrir um segundo: um glifo em falta preenche-se onde os outros
+    /// vivem.
+    Close,
     Bell,
     /// Calendário.
     Calendar,
@@ -53,6 +60,7 @@ pub enum Icon {
     Idea,
     Project,
     Knowledge,
+    Science,
     Bibliography,
     Data,
     Ai,
@@ -71,6 +79,8 @@ pub enum Icon {
     Tools,
     Send,
     Mail,
+    /// Mensagens.
+    Messaging,
     Star,
     Reply,
     Archive,
@@ -95,6 +105,7 @@ impl Icon {
             Self::ChevronUp => "oc-chevron-up",
             Self::Search => "oc-search",
             Self::Plus => "oc-plus",
+            Self::Close => "oc-close",
             Self::Bell => "oc-bell",
             Self::Calendar => "oc-calendar",
             Self::Filter => "oc-filter",
@@ -106,6 +117,7 @@ impl Icon {
             Self::Idea => "oc-idea",
             Self::Project => "oc-project",
             Self::Knowledge => "oc-knowledge",
+            Self::Science => "oc-science",
             Self::Bibliography => "oc-bibliography",
             Self::Data => "oc-data",
             Self::Ai => "oc-ai",
@@ -123,6 +135,7 @@ impl Icon {
             Self::Tools => "oc-tools",
             Self::Send => "oc-send",
             Self::Mail => "oc-mail",
+            Self::Messaging => "oc-messaging",
             Self::Star => "oc-star",
             Self::Reply => "oc-reply",
             Self::Archive => "oc-archive",
@@ -139,7 +152,7 @@ impl Icon {
     #[must_use]
     pub const fn view_box(self) -> &'static str {
         match self {
-            Self::Plus => "0 0 12 12",
+            Self::Plus | Self::Close => "0 0 12 12",
             Self::User
             | Self::Lock
             | Self::ArrowRight
@@ -192,7 +205,7 @@ mod tests {
     /// O sprite é a fonte de verdade. Se um símbolo for removido ou renomeado
     /// lá, os dois testes abaixo falham em vez de a interface renderizar um
     /// espaço vazio.
-    const ALL: [Icon; 44] = [
+    const ALL: [Icon; 47] = [
         Icon::User,
         Icon::Lock,
         Icon::ArrowRight,
@@ -203,6 +216,7 @@ mod tests {
         Icon::ChevronUp,
         Icon::Search,
         Icon::Plus,
+        Icon::Close,
         Icon::Bell,
         Icon::Calendar,
         Icon::Filter,
@@ -214,6 +228,7 @@ mod tests {
         Icon::Idea,
         Icon::Project,
         Icon::Knowledge,
+        Icon::Science,
         Icon::Bibliography,
         Icon::Data,
         Icon::Ai,
@@ -231,6 +246,7 @@ mod tests {
         Icon::Tools,
         Icon::Send,
         Icon::Mail,
+        Icon::Messaging,
         Icon::Star,
         Icon::Reply,
         Icon::Archive,

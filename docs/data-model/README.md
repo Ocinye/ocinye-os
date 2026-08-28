@@ -93,14 +93,67 @@ Não apenas pela aplicação — pela própria base:
 - **Ideias abandonadas ficam, com o motivo.** Porque foi abandonada é memória
   institucional, não ruído.
 
-## Grafo de conhecimento
+## Ciclo científico
 
-`research_links` é a semente do futuro Ocinye Knowledge Graph: relações tipadas
-como linhas de primeira classe, não colunas ad-hoc, para que o grafo possa ser
-construído sem remodelar o domínio.
+Introduzido pela migration `0019`, sob o
+[ADR-0412](../adrs/0412-scientific-lifecycle-and-provenance.md). Sete tabelas
+entre a ideia e o dado:
 
-Relações permitidas: `cites`, `supports`, `refutes`, `derived_from`, `uses`,
-`produces`, `relates_to`.
+| Tabela | O que guarda |
+|---|---|
+| `hypotheses` | Uma afirmação que se pode testar, e onde ela está |
+| `methodologies` | A identidade conceptual durável de um método |
+| `methodology_versions` | O que esse método diz numa altura concreta |
+| `studies` | Um estudo, com género fechado e a hipótese que testa |
+| `study_executions` | Uma corrida concreta, com sequência monotónica dentro do estudo |
+| `results` | O que a corrida mostrou |
+| `result_validations` | A evidência de que alguém validou ou reproduziu |
+
+As invariantes que o esquema impõe, e que importam mais do que as colunas:
+
+- **A versão é uma linha, e não um campo.** `methodology_versions` tem
+  identidade própria, sequência monotónica por metodologia, e
+  `superseded_by_id` — que uma publicação nova preenche. A versão anterior fica:
+  não se apaga o que a proveniência já cita.
+- **Cada estado é um vocabulário fechado**, imposto por `CHECK`. Uma hipótese
+  está aberta, sustentada, refutada, inconclusiva ou retirada; um estudo é
+  planeado, a correr, concluído ou abandonado; uma execução é registada, a
+  correr, bem-sucedida, falhada ou interrompida; um resultado é rascunho, em
+  revisão, validado, substituído ou invalidado. **Um resultado negativo é um
+  resultado**, e o esquema representa-o.
+- **A sequência de uma execução é única dentro do estudo.** Duas corridas nunca
+  se chamam a mesma coisa.
+- **Uma reprodução aponta para a execução que a sustenta.** O serviço recusa
+  registá-la sem ela: reprodutibilidade é evidência, e não um rótulo.
+
+## Proveniência e o grafo de conhecimento
+
+`research_links` é a **fonte de verdade das arestas de proveniência**, e continua
+a ser a semente do futuro Ocinye Knowledge Graph: relações tipadas como linhas de
+primeira classe, não colunas ad-hoc. Não existe tabela de proveniência paralela,
+e não existe tabela de linhagem — a linhagem é uma projecção lida no momento.
+
+A tabela evoluiu com a `0019`, e não foi duplicada:
+
+- **O vocabulário cresceu de sete para quinze verbos**, acrescentando os do
+  ciclo científico: `tests`, `follows`, `input_to`, `produced_by`, `executed_on`,
+  `validates`, `reproduces`, `supersedes`. A lista canónica vive em
+  [`crates/ocinye-contracts/src/provenance.rs`](../../crates/ocinye-contracts/src/provenance.rs).
+- **`origin` distingue o observado do afirmado.** `operation` quando foi a
+  própria operação determinística a produzir a relação; `declared` quando alguém
+  a afirmou. `CHECK` fecha os dois valores, e não existe um terceiro.
+- **`workspace_id` passou a ser anulável**, para relações que atravessam
+  ambientes. **`NULL` nunca significa acesso global**: significa que a relação não
+  está confinada a um único ambiente, e a visibilidade decide-se pelas duas
+  pontas, cada uma pela política do seu recurso.
+
+Uma relação só existe se a tripla **tipo de origem + verbo + tipo de destino**
+for permitida pela matriz de compatibilidade, que falha fechada. A matriz é
+código, não esquema: o `CHECK` da base guarda o vocabulário, e a matriz guarda o
+que cada verbo aceita.
+
+Detalhe: [ciclo de vida científico, proveniência e
+linhagem](../architecture/scientific-lifecycle.md).
 
 ## Migrations
 
@@ -113,9 +166,18 @@ Relações permitidas: `cites`, `supports`, `refutes`, `derived_from`, `uses`,
 | 0005 | Tarefas, comentários, actividade |
 | 0006 | Índice de pesquisa, pgvector |
 | 0007 | Compute Registry, credenciais de nó, registo de modelos, jobs de IA |
-| 0008 | Identidade: `username`, credenciais, sessões, tentativas, grants |
+| 0008 | Identidade: credenciais, sessões, tentativas, grants |
 | 0009 | Agentes de IA |
 | 0010 | Correio: caixas, pertenças, índice de mensagens, rascunhos, outbox, preferências |
+| 0011 | Plano agentic: agentes, planos de acção, aprovações |
+| 0012 | Guarda contra truncatura da auditoria |
+| 0013 | Avatar do membro |
+| 0014 | Calendário: eventos, participantes, lembretes |
+| 0015 | Credenciais de caixa por membro |
+| 0016 | Mensagens: conversas, pertenças, mensagens |
+| 0017 | Notificações de mensagem |
+| 0018 | O endereço institucional passa a ser a credencial única |
+| 0019 | Ciclo científico: hipóteses, metodologias e versões, estudos, execuções, resultados, validações |
 
 Toda a alteração de schema é uma migration nova. Migrations aplicadas não se
 editam.
@@ -125,14 +187,21 @@ editam.
 Introduzido pela migration `0008`, sob o
 [ADR-0103](../adrs/0103-core-owned-authentication.md).
 
-### `people.username`
+### `people.email`
 
-Nome de início de sessão. Único por organização e **insensível a maiúsculas**,
-por índice sobre `lower(username)`. Guardado tal como foi escrito, para que a
-interface mostre a forma que a pessoa escolheu.
+O endereço institucional. É a identidade **e** a credencial de autenticação
+([ADR-0106](../adrs/0106-email-as-the-single-credential.md)): não existe um
+segundo identificador, e não existe uma coluna reservada para o caso de.
 
-A forma é imposta por constraint: 3–64 caracteres, ASCII, começa por letra,
-termina em letra ou dígito.
+Único por organização e insensível a maiúsculas, por índice sobre
+`lower(email)`. Guardado em minúsculas: um endereço não distingue caixa para
+efeitos de identidade, e guardá-lo como foi escrito deixaria duas contas a
+poderem existir com o mesmo nome visto por uma pessoa.
+
+O identificador estável continua a ser `people.id`. Mudar de endereço não cria
+uma conta nova.
+
+A coluna `username` existiu entre a `0008` e a `0018`, e saiu com o ADR-0106.
 
 `people.oidc_subject` mantém-se, agora vestigial: existe para que federar um
 fornecedor externo no futuro não exija migração.

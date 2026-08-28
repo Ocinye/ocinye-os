@@ -105,6 +105,20 @@ pub enum ResourceKind {
     ComputeNode,
     /// An AI capability request.
     AiCapability,
+    /// Uma hipótese científica.
+    Hypothesis,
+    /// Uma metodologia.
+    Methodology,
+    /// Uma versão de metodologia — um recurso, e não um campo.
+    MethodologyVersion,
+    /// Uma versão de dataset.
+    DatasetVersion,
+    /// Um estudo: experimento, simulação ou análise.
+    Study,
+    /// Uma execução de um estudo.
+    StudyExecution,
+    /// Um resultado científico.
+    Result,
     /// The platform itself.
     Platform,
 }

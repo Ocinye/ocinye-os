@@ -242,6 +242,19 @@ pub struct ProviderHealth {
     pub can_send: bool,
     /// A sentence safe to show a member.
     pub detail: String,
+    /// Whether the service refused the credential this adapter carries.
+    ///
+    /// # Porque é um campo e não uma leitura de `detail`
+    ///
+    /// A primeira escrita deduzia-o de `detail` conter «recusou as
+    /// credenciais». Uma frase não é um guarda: reescrevê-la — traduzi-la,
+    /// suavizá-la, acrescentar-lhe um ponto — mudaria o estado da caixa de
+    /// alguém, em silêncio e sem nada a falhar.
+    ///
+    /// Distingue «esta senha não entra» de «o serviço não responde», e a
+    /// distinção decide o que a pessoa faz a seguir: voltar a ligar a caixa,
+    /// ou esperar.
+    pub rejected_credential: bool,
 }
 
 /// A mail provider.
@@ -377,6 +390,8 @@ impl MailProvider for UnconfiguredProvider {
             detail: "O correio institucional ainda não foi configurado nesta instalação \
                      do Ocinye OS."
                 .to_owned(),
+            // Sem serviço não houve credencial nenhuma para recusar.
+            rejected_credential: false,
         }
     }
 
@@ -446,6 +461,25 @@ impl MailProvider for UnconfiguredProvider {
     ) -> ProviderResult<()> {
         Err(ProviderError::NotConfigured)
     }
+}
+
+/// Quem sabe dizer se uma credencial de caixa abre sessão.
+///
+/// # Porque é um trait e não uma chamada directa
+///
+/// Porque verificar uma credencial é falar com um servidor de correio, e o que
+/// os testes precisam de exercitar é o que o Core faz com a resposta — guardar
+/// quando abre, não guardar quando não abre. Uma chamada directa tornaria essa
+/// decisão inobservável sem um servidor a sério (ADR-0409 §8).
+#[async_trait]
+pub trait CredentialProbe: Send + Sync {
+    /// Tenta abrir sessão com esta credencial.
+    ///
+    /// # Errors
+    ///
+    /// Devolve erro quando a credencial não abre, ou quando esta instalação não
+    /// tem transporte configurado para a experimentar.
+    async fn verify(&self, endereco: &str, username: &str, senha: &str) -> ProviderResult<()>;
 }
 
 #[cfg(test)]

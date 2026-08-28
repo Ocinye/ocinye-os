@@ -655,6 +655,7 @@ async fn create_link(
     let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
     let link = knowledge::link_objects(
         &mut tx,
+        &state.pool,
         &principal,
         &ids,
         workspace_id,

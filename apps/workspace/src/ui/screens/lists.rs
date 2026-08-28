@@ -1936,8 +1936,8 @@ mod tests {
     /// filtragem por permissão.
     fn viewer() -> Viewer {
         Viewer {
+            zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
             avatar: ocinye_contracts::AvatarChoice::Initials,
-            username: Some("jmanuel".to_owned()),
             email: Some("jmanuel@ocinye.com".to_owned()),
             session_expires_in: Some(std::time::Duration::from_secs(8 * 3600)),
             name: "Teste".to_owned(),
@@ -1956,8 +1956,8 @@ mod tests {
     /// Um membro sem permissão nenhuma.
     fn viewer_sem_permissoes() -> Viewer {
         Viewer {
+            zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
             avatar: ocinye_contracts::AvatarChoice::Initials,
-            username: Some("jmanuel".to_owned()),
             email: Some("jmanuel@ocinye.com".to_owned()),
             session_expires_in: Some(std::time::Duration::from_secs(8 * 3600)),
             name: "Teste".to_owned(),

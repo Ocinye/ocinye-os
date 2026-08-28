@@ -35,6 +35,12 @@ pub struct AccessibleMailbox {
     pub last_synced_at: Option<DateTime<Utc>>,
     /// Why the last synchronisation failed, if it did.
     pub last_sync_error: Option<String>,
+    /// Se há uma credencial guardada para esta caixa.
+    ///
+    /// Deriva da existência da linha em `mailbox_credentials` e de mais nada:
+    /// uma segunda coluna a afirmar o mesmo facto é uma coluna que pode
+    /// discordar dele (ADR-0409).
+    pub has_credential: bool,
 }
 
 impl AccessibleMailbox {
@@ -73,7 +79,10 @@ pub async fn accessible_mailboxes<'e>(
 ) -> CoreResult<Vec<AccessibleMailbox>> {
     let rows = sqlx::query(
         "SELECT m.id, m.address, m.display_name, m.kind, m.last_synced_at, m.last_sync_error,
-                s.role AS shared_role
+                s.role AS shared_role,
+                EXISTS (
+                    SELECT 1 FROM mailbox_credentials c WHERE c.mailbox_id = m.id
+                ) AS has_credential
            FROM mailboxes m
            LEFT JOIN shared_mailbox_memberships s
                   ON s.mailbox_id = m.id
@@ -110,7 +119,10 @@ pub async fn accessible_mailbox<'e>(
 ) -> CoreResult<Option<AccessibleMailbox>> {
     let row = sqlx::query(
         "SELECT m.id, m.address, m.display_name, m.kind, m.last_synced_at, m.last_sync_error,
-                s.role AS shared_role
+                s.role AS shared_role,
+                EXISTS (
+                    SELECT 1 FROM mailbox_credentials c WHERE c.mailbox_id = m.id
+                ) AS has_credential
            FROM mailboxes m
            LEFT JOIN shared_mailbox_memberships s
                   ON s.mailbox_id = m.id
@@ -146,6 +158,7 @@ fn mailbox_from_row(row: sqlx::postgres::PgRow) -> CoreResult<AccessibleMailbox>
         role: role.as_deref().and_then(SharedMailboxRole::parse),
         last_synced_at: row.try_get("last_synced_at")?,
         last_sync_error: row.try_get("last_sync_error")?,
+        has_credential: row.try_get("has_credential")?,
     })
 }
 
@@ -721,6 +734,104 @@ pub async fn save_preferences<'e>(
     Ok(())
 }
 
+/// Uma credencial de caixa, tal como está guardada.
+pub struct StoredCredential {
+    /// O nome de utilizador com que a caixa se autentica.
+    pub username: String,
+    /// A senha cifrada.
+    pub sealed: crate::password::sealed::Sealed,
+    /// Quando foi guardada pela última vez.
+    ///
+    /// É o que distingue uma credencial de outra sem a abrir: uma sessão em
+    /// cache que foi aberta com a senha anterior tem de ser descartada, e
+    /// comparar o instante custa uma leitura em vez de uma decifragem.
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A credencial de uma caixa, tal como está guardada.
+///
+/// # Errors
+///
+/// Devolve erro quando a leitura falha.
+pub async fn credential_of<'e>(
+    executor: impl PgExecutor<'e>,
+    mailbox_id: Uuid,
+) -> CoreResult<Option<StoredCredential>> {
+    /// Uma linha de `mailbox_credentials`, tal como o SQL a devolve.
+    type Linha = (String, Vec<u8>, Vec<u8>, DateTime<Utc>);
+
+    let linha: Option<Linha> = sqlx::query_as(
+        "SELECT username, nonce, ciphertext, updated_at
+           FROM mailbox_credentials
+          WHERE mailbox_id = $1",
+    )
+    .bind(mailbox_id)
+    .fetch_optional(executor)
+    .await?;
+
+    Ok(linha.map(
+        |(username, nonce, ciphertext, updated_at)| StoredCredential {
+            username,
+            sealed: crate::password::sealed::Sealed { nonce, ciphertext },
+            updated_at,
+        },
+    ))
+}
+
+/// Guarda, ou substitui, a credencial de uma caixa.
+///
+/// # Porque substitui em vez de acumular
+///
+/// Porque uma caixa tem uma senha. Guardar a anterior seria guardar um segredo
+/// que já não serve para nada e que continua a poder ser lido.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn save_credential<'e>(
+    executor: impl PgExecutor<'e>,
+    mailbox_id: Uuid,
+    username: &str,
+    fechado: &crate::password::sealed::Sealed,
+    connected_by: Uuid,
+) -> CoreResult<()> {
+    sqlx::query(
+        "INSERT INTO mailbox_credentials
+                (mailbox_id, username, nonce, ciphertext, connected_by)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (mailbox_id) DO UPDATE
+            SET username = EXCLUDED.username,
+                nonce = EXCLUDED.nonce,
+                ciphertext = EXCLUDED.ciphertext,
+                connected_by = EXCLUDED.connected_by,
+                updated_at = now()",
+    )
+    .bind(mailbox_id)
+    .bind(username)
+    .bind(&fechado.nonce)
+    .bind(&fechado.ciphertext)
+    .bind(connected_by)
+    .execute(executor)
+    .await?;
+    Ok(())
+}
+
+/// Esquece a credencial de uma caixa.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn forget_credential<'e>(
+    executor: impl PgExecutor<'e>,
+    mailbox_id: Uuid,
+) -> CoreResult<()> {
+    sqlx::query("DELETE FROM mailbox_credentials WHERE mailbox_id = $1")
+        .bind(mailbox_id)
+        .execute(executor)
+        .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -734,6 +845,7 @@ mod tests {
             role,
             last_synced_at: None,
             last_sync_error: None,
+            has_credential: false,
         }
     }
 

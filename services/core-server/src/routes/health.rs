@@ -76,12 +76,17 @@ async fn health() -> Json<Health> {
 async fn ready(State(state): State<AppState>, Query(query): Query<ReadinessQuery>) -> Response {
     // O catálogo canónico. Sem ele — porque a base não responde — os módulos
     // opcionais ficam indisponíveis, e não disponíveis por omissão.
-    let capabilities =
-        platform::system_capabilities(&state.pool, &state.config, state.store.is_some())
-            .await
-            .ok();
+    let capabilities = platform::system_capabilities(
+        &state.pool,
+        &state.config,
+        state.store.is_some(),
+        state.mail_registry.reachability().await,
+    )
+    .await
+    .ok();
 
-    let mut snapshot = readiness::public_snapshot(&state.pool, capabilities.as_ref()).await;
+    let mut snapshot =
+        readiness::public_snapshot(&state.pool, capabilities.as_ref(), Some(&state.realtime)).await;
 
     // Compatibilidade: um Core saudável que fala outro contrato não é um sistema
     // pronto. Dizê-lo aqui evita rebentar mais tarde num erro de desserialização

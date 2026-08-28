@@ -164,6 +164,31 @@ step "Biblioteca de ADRs"
 # resolva. Se um domínio está certo é pergunta para uma pessoa.
 python3 scripts/check-adrs.py
 
+step "Factos da documentação"
+# Propriedades textuais que envelhecem em silêncio: a definição canónica existe
+# uma vez, e uma afirmação que deixou de ser verdade não volta.
+#
+# Só texto. Propriedades estruturais medem-se onde a estrutura existe — no
+# catálogo tipado, no registry, na matriz. Inferir arquitectura por substring já
+# custou uma regressão.
+python3 scripts/documentation-facts.py
+
+step "Contrato da Secção 1"
+# Os números do CLAUDE.md §1 são os da árvore.
+#
+# Derivá-los não chega: um número derivado que ninguém confronta com o
+# documento é um número que o documento pode contradizer à vontade — e foi
+# assim que quatro contagens envelheceram em silêncio.
+python3 scripts/section-one-contract.py
+
+step 'Contrato da protecção de `main`'
+# Os nomes dos *required checks* correspondem a jobs que existem.
+#
+# Renomear um job não falha nada: o check exigido deixa de ser reportado e o
+# Pull Request fica à espera de um resultado que ninguém produz. Um merge
+# bloqueado indefinidamente, com o aspecto de uma CI lenta.
+python3 scripts/branch_protection_contract.py
+
 step "Segredos"
 # Duas varreduras, e não uma. O grep abaixo é a regra do próprio projecto; o
 # gitleaks traz cerca de cento e cinquenta regras que ninguém aqui escreveria à

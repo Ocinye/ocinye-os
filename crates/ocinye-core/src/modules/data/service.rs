@@ -16,7 +16,9 @@ use super::repository as repo;
 use crate::audit::{self, action, AuditEntry};
 use crate::error::{CoreError, CoreResult};
 use crate::modules::collaboration::{record_activity, ActivityKind};
-use crate::modules::research::{get_workspace, readable_artefact_workspace, workspace_context};
+use crate::modules::research::{
+    get_workspace, readable_artefact_workspace, workspace_context, ResearchWorkspace,
+};
 use crate::modules::search;
 use crate::outbox::{self, event};
 use crate::storage::{self, ObjectStore};
@@ -164,6 +166,46 @@ pub async fn create_dataset(
 }
 
 /// Load a dataset the caller may read.
+///
+/// # Errors
+///
+/// Returns [`CoreError::NotFound`] when absent or not readable.
+/// Load one dataset version, with the dataset and workspace that govern it.
+///
+/// # Porque uma versão se lê pelo dataset
+///
+/// Porque uma versão não tem classificação própria: uma que pudesse ser menos
+/// estrita do que o dataset seria um caminho à volta da classificação dele.
+///
+/// # Errors
+///
+/// Returns [`CoreError::NotFound`] when absent or not readable.
+pub async fn get_dataset_version(
+    pool: &PgPool,
+    principal: &Principal,
+    version_id: Uuid,
+) -> CoreResult<(DatasetVersion, Dataset, ResearchWorkspace)> {
+    let version = repo::find_version_by_id(pool, version_id)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Dataset version not found.".to_owned()))?;
+
+    let dataset = repo::find_dataset(pool, version.dataset_id, principal.organisation_id)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Dataset version not found.".to_owned()))?;
+
+    let workspace = readable_artefact_workspace(
+        pool,
+        principal,
+        dataset.workspace_id,
+        ResourceKind::DatasetVersion,
+        dataset.classification(),
+    )
+    .await?;
+
+    Ok((version, dataset, workspace))
+}
+
+/// Load one dataset the caller may read.
 ///
 /// # Errors
 ///

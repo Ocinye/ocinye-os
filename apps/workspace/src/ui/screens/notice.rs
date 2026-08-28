@@ -89,15 +89,56 @@ pub fn access_denied() -> impl IntoView {
 ///
 /// A Ajuda separa os dois estados para o membro, e a interface tem de os
 /// separar também: um pede que se volte mais tarde, o outro que se reporte.
-pub fn unavailable() -> impl IntoView {
+///
+/// # A razão vem do Core, quando ele a der
+///
+/// O Core sabe **qual** é a peça que falta, e escreve-o: «o correio
+/// institucional ainda não foi configurado nesta instalação». O Workspace
+/// deitava essa frase fora e mostrava só o parágrafo genérico, que acaba em
+/// «quem administra o sistema saberá o que falta» — e quem estava a ler era,
+/// muitas vezes, precisamente quem administra o sistema.
+pub fn unavailable(razao: Option<String>) -> impl IntoView {
+    // A frase do Core substitui a genérica, e não se acumula com ela: duas
+    // explicações da mesma coisa lêem-se como se fossem duas coisas.
+    let explicacao = razao.unwrap_or_else(|| {
+        "Um serviço de que esta operação depende não está a responder nesta \
+         instalação — quem administra o sistema saberá qual."
+            .to_owned()
+    });
     view! {
         <div class="oc-notice">
             <span class="oc-notice__tile">{icon(Icon::SystemStatus, 26)}</span>
             <h1>"Esta operação não está disponível agora"</h1>
-            <p>
-                "A capacidade existe no Ocinye OS, mas um serviço de que ela depende não
-                 está a responder nesta instalação. Não é um problema com o que fez nem
-                 com o seu acesso — quem administra o sistema saberá o que falta."
+            <p>{explicacao}</p>
+            <p class="oc-notice__aside">
+                "A capacidade existe no Ocinye OS. Não é um problema com o que fez nem
+                 com o seu acesso."
+            </p>
+            <div class="oc-row oc-gap-5">
+                {button(Button::new("O Meu Trabalho", Variant::Primary).href("/my-work"))}
+            </div>
+        </div>
+    }
+}
+
+/// O Core percebeu o pedido e recusou-o pelo conteúdo.
+///
+/// # Porque não é um erro
+///
+/// Porque nada correu mal. A operação foi entendida e não pode acontecer como
+/// foi pedida — e o Core diz porquê, numa frase escrita para quem a lê. Uma
+/// página de erro com uma referência de log mandaria a pessoa perguntar a
+/// alguém aquilo que a frase já responde.
+pub fn rejected(razao: &str) -> impl IntoView {
+    let razao = razao.to_owned();
+    view! {
+        <div class="oc-notice">
+            <span class="oc-notice__tile">{icon(Icon::SystemStatus, 26)}</span>
+            <h1>"O pedido não foi aceite"</h1>
+            <p>{razao}</p>
+            <p class="oc-notice__aside">
+                "Nada correu mal. O Ocinye OS percebeu o pedido e não o pode registar
+                 tal como foi feito."
             </p>
             <div class="oc-row oc-gap-5">
                 {button(Button::new("O Meu Trabalho", Variant::Primary).href("/my-work"))}
@@ -109,6 +150,39 @@ pub fn unavailable() -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A razão que o Core deu chega ao membro.
+    ///
+    /// # O defeito que isto guarda
+    ///
+    /// O Core respondeu «o correio institucional ainda não foi configurado
+    /// nesta instalação do Ocinye OS» — a frase que diz exactamente o que
+    /// falta. O Workspace mapeava o `503` para uma variante sem campos, a
+    /// frase morria no cliente, e a página dizia «quem administra o sistema
+    /// saberá o que falta» a quem administrava o sistema.
+    #[test]
+    fn a_razao_do_core_aparece_em_vez_da_frase_generica() {
+        let razao = "O correio institucional ainda não foi configurado nesta \
+                     instalação do Ocinye OS.";
+        let html = unavailable(Some(razao.to_owned())).to_html();
+
+        assert!(html.contains(razao), "a razão do Core não chegou ao ecrã");
+        assert!(
+            !html.contains("saberá qual"),
+            "a frase genérica ficou por baixo da razão; são duas explicações da \
+             mesma coisa e lêem-se como duas coisas"
+        );
+        // O que continua verdadeiro seja qual for a razão.
+        assert!(html.contains("Não é um problema com o que fez"));
+    }
+
+    /// Sem razão, a página continua a dizer alguma coisa.
+    #[test]
+    fn sem_razao_a_pagina_explica_o_que_pode() {
+        let html = unavailable(None).to_html();
+        assert!(html.contains("não está a responder nesta instalação"));
+        assert!(html.contains("Esta operação não está disponível agora"));
+    }
 
     #[test]
     fn o_404_oferece_uma_saida_e_nao_ecoa_o_caminho() {

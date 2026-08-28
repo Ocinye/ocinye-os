@@ -33,6 +33,13 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 
 [dev-dependencies]
+# `async-trait`, só para as sondas de credencial dos harnesses.
+#
+# `CredentialProbe` é um trait assíncrono, e um harness sem servidor de correio
+# tem de declarar a sua própria sonda em vez de a verificação desaparecer do
+# caminho que estes testes percorrem (ADR-0409 §8). Em `[dev-dependencies]`
+# porque nada em produção a precisa.
+async-trait = { workspace = true }
 # `tower::ServiceExt::oneshot` só é usado pelas suites de HTTP, que conduzem o
 # router real sem levantar um porto. Estava em `[dependencies]`, o que a fazia
 # entrar nos binários de produção — a mesma promoção silenciosa de teste para

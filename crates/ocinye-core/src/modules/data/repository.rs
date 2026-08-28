@@ -264,6 +264,29 @@ pub async fn insert_version<'e>(
 /// # Errors
 ///
 /// Returns an error when the query fails.
+/// One version, by its own identifier.
+///
+/// Existe além de [`find_version`] porque a proveniência conhece a versão e
+/// não o dataset: uma aresta aponta para `dataset_version`, e exigir também o
+/// dataset obrigaria quem a percorre a saber de antemão a resposta que está a
+/// procurar.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn find_version_by_id<'e>(
+    executor: impl PgExecutor<'e>,
+    version_id: Uuid,
+) -> CoreResult<Option<DatasetVersion>> {
+    let version = sqlx::query_as::<_, DatasetVersion>(&format!(
+        "SELECT {VERSION_COLUMNS} FROM dataset_versions WHERE id = $1"
+    ))
+    .bind(version_id)
+    .fetch_optional(executor)
+    .await?;
+    Ok(version)
+}
+
 pub async fn find_version<'e>(
     executor: impl PgExecutor<'e>,
     dataset_id: Uuid,

@@ -31,15 +31,18 @@
 pub mod imap_smtp;
 pub mod policy;
 pub mod provider;
+pub mod registry;
 pub mod repository;
 pub mod sanitize;
 pub mod service;
 
 pub use policy::{SendDecision, SendPolicy};
 pub use provider::{MailProvider, ProviderError, ProviderHealth, ProviderResult};
+pub use registry::ProviderRegistry;
 pub use repository::{AccessibleMailbox, IndexedMessage, MailDraft, MailPreferences};
 pub use sanitize::{sanitize_html, text_to_html, SanitizedBody};
 pub use service::{
-    assist, evaluate_send, mailbox, mailboxes, read_message, safe_filename, send, sender_identity,
-    set_flag, sync, AssistRequest, AssistResult, ReadableMessage, SyncOutcome,
+    assist, connect_mailbox, disconnect_mailbox, evaluate_send, mailbox, mailboxes,
+    provision_personal_mailbox, read_message, safe_filename, send, sender_identity, set_flag, sync,
+    AssistRequest, AssistResult, MailboxConnection, ReadableMessage, SyncOutcome,
 };

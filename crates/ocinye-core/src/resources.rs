@@ -1,3 +1,20 @@
+//! Resolver uma referência tipada sob a política de quem a apresenta.
+//!
+//! # Porque isto é do Core e não do plano agentic
+//!
+//! Viveu em `modules::agentic::resolver`, e ficou lá por ser o plano agentic o
+//! primeiro a precisar. Mas a pergunta que este módulo responde não é agentic:
+//!
+//! > este par `(tipo, identificador)` nomeia um recurso que existe, e que esta
+//! > pessoa pode ler?
+//!
+//! É a mesma pergunta que qualquer operação tem de fazer quando recebe um
+//! identificador vindo de fora — e a proveniência científica recebe dois de
+//! cada vez. Deixá-lo no plano agentic obrigava o domínio a chamar o seu
+//! próprio cliente, que é a dependência ao contrário.
+//!
+//! O plano agentic continua a ser um consumidor. Passou a não ser o dono.
+//!
 //! Turning a name an agent used into a resource it is allowed to touch.
 //!
 //! # The gap this closes
@@ -39,7 +56,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::error::{CoreError, CoreResult};
-use crate::modules::{calendar, collaboration, knowledge, research};
+use crate::modules::{calendar, collaboration, data, knowledge, research, science};
 
 /// A reference that survived resolution.
 ///
@@ -172,6 +189,13 @@ fn mask(error: CoreError) -> CoreError {
 }
 
 /// Find the resource behind a reference, through the service that owns it.
+///
+/// # Os recursos científicos entram aqui, e não num resolvedor próprio
+///
+/// A proveniência recebe dois pares `(tipo, identificador)` de cada vez e tem
+/// de os provar a ambos. Um segundo resolvedor para a ciência seria uma
+/// segunda política de leitura — e duas políticas acabam por discordar no dia
+/// em que uma delas for corrigida.
 async fn locate(
     pool: &PgPool,
     principal: &Principal,
@@ -311,6 +335,89 @@ async fn locate(
 
         // Kinds this plane does not address. A reference to one resolves to
         // nothing rather than to a guess — including the mail kinds, whose
+        // ── Os recursos científicos ─────────────────────────────────
+        //
+        // Cada um passa pelo serviço que detém a sua leitura, e é esse que
+        // aplica a política de quem pergunta. Este módulo não consulta a base
+        // e não decide: dá forma ao que os serviços devolvem.
+        AgenticKind::Hypothesis => {
+            let (hypothesis, workspace) =
+                science::get_hypothesis(pool, principal, reference.id).await?;
+            Ok(Located {
+                kind: ResourceKind::Hypothesis,
+                title: hypothesis.statement.clone(),
+                classification: stricter(hypothesis.classification(), workspace.classification()),
+                unit_id: hypothesis.unit_id,
+                workspace_id: hypothesis.workspace_id,
+            })
+        }
+        AgenticKind::Methodology => {
+            let (methodology, workspace) =
+                science::get_methodology(pool, principal, reference.id).await?;
+            Ok(Located {
+                kind: ResourceKind::Methodology,
+                title: methodology.title.clone(),
+                classification: stricter(methodology.classification(), workspace.classification()),
+                unit_id: methodology.unit_id,
+                workspace_id: methodology.workspace_id,
+            })
+        }
+        AgenticKind::MethodologyVersion => {
+            let (version, methodology, workspace) =
+                science::get_methodology_version(pool, principal, reference.id).await?;
+            Ok(Located {
+                kind: ResourceKind::MethodologyVersion,
+                // O título diz de quem é a versão: «Método X — v2» lê-se; «v2»
+                // sozinho não diz de quê.
+                title: format!("{} — {}", methodology.title, version.label),
+                classification: stricter(methodology.classification(), workspace.classification()),
+                unit_id: methodology.unit_id,
+                workspace_id: methodology.workspace_id,
+            })
+        }
+        AgenticKind::Study => {
+            let (study, workspace) = science::get_study(pool, principal, reference.id).await?;
+            Ok(Located {
+                kind: ResourceKind::Study,
+                title: study.title.clone(),
+                classification: stricter(study.classification(), workspace.classification()),
+                unit_id: study.unit_id,
+                workspace_id: study.workspace_id,
+            })
+        }
+        AgenticKind::StudyExecution => {
+            let (execution, study, workspace) =
+                science::get_execution(pool, principal, reference.id).await?;
+            Ok(Located {
+                kind: ResourceKind::StudyExecution,
+                title: format!("{} — execução {}", study.title, execution.sequence),
+                classification: stricter(study.classification(), workspace.classification()),
+                unit_id: study.unit_id,
+                workspace_id: study.workspace_id,
+            })
+        }
+        AgenticKind::Result => {
+            let (result, workspace) = science::get_result(pool, principal, reference.id).await?;
+            Ok(Located {
+                kind: ResourceKind::Result,
+                title: result.title.clone(),
+                classification: stricter(result.classification(), workspace.classification()),
+                unit_id: result.unit_id,
+                workspace_id: result.workspace_id,
+            })
+        }
+        AgenticKind::DatasetVersion => {
+            let (version, dataset, workspace) =
+                data::get_dataset_version(pool, principal, reference.id).await?;
+            Ok(Located {
+                kind: ResourceKind::DatasetVersion,
+                title: format!("{} — {}", dataset.title, version.label),
+                classification: stricter(dataset.classification(), workspace.classification()),
+                unit_id: dataset.unit_id,
+                workspace_id: Some(dataset.workspace_id),
+            })
+        }
+
         // capabilities carry their own identifiers and never route through here.
         AgenticKind::Person
         | AgenticKind::Dataset
@@ -319,7 +426,12 @@ async fn locate(
         | AgenticKind::Mailbox
         | AgenticKind::Agent
         | AgenticKind::ComputeNode
-        | AgenticKind::ComputeJob => Err(not_found()),
+        | AgenticKind::ComputeJob
+        // Uma conversa e uma mensagem não se desreferenciam por identificador
+        // escrito por um modelo. As capacidades das Mensagens resolvem os seus
+        // alvos a partir de quem se nomeia, e a participação decide o resto.
+        | AgenticKind::Conversation
+        | AgenticKind::Message => Err(not_found()),
     }
 }
 

@@ -53,7 +53,7 @@ fn facto(rotulo: &'static str, valor: String) -> impl IntoView {
 
 /// `Definições → Conta`.
 ///
-/// Em leitura. Nome, utilizador e correio institucional não têm hoje um fluxo
+/// Em leitura. Nome e correio institucional não têm hoje um fluxo
 /// de alteração seguro — mudar um endereço institucional exige verificação, e
 /// inventar aqui um campo editável seria prometer um processo que não existe.
 pub fn account(
@@ -64,7 +64,6 @@ pub fn account(
     done: bool,
 ) -> impl IntoView {
     let nome = text(me, "display_name");
-    let utilizador = text(me, "username");
     let correio = text(me, "email");
     let estado = text(me, "status");
     let instituicao = text(organisation, "name");
@@ -94,7 +93,6 @@ pub fn account(
                 section_head("A SUA CONTA", None, None),
                 view! {
                     {facto("NOME", nome)}
-                    {facto("UTILIZADOR", utilizador)}
                     {facto("CORREIO INSTITUCIONAL", correio)}
                     {facto("ESTADO", estado)}
                     {facto("INSTITUIÇÃO", instituicao)}

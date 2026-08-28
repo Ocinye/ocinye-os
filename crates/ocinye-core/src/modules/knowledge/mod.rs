@@ -22,6 +22,6 @@ pub use model::{ContentRight, Document, DocumentKind, Note, Source, SourceType};
 pub use service::{
     attach_full_text, create_document, create_note, create_source, get_document, get_note,
     get_source, issue_download, link_objects, list_accessible_documents, list_accessible_sources,
-    list_documents, list_links, list_notes, list_sources, review_bibliography, update_note,
-    NewDocument, NewNote, NewSource, UploadedFile,
+    list_documents, list_links, list_notes, list_sources, record_operation_provenance,
+    review_bibliography, update_note, NewDocument, NewNote, NewSource, UploadedFile,
 };

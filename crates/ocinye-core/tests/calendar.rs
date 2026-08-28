@@ -17,6 +17,7 @@ use ocinye_contracts::temporal::{resolve_local, LocalTimeProblem, Occurrence, Ti
 use ocinye_contracts::{Classification, TechnicalRole, UnitRole};
 use ocinye_core::modules::calendar::{self, NewEvent, TimeRange};
 use ocinye_core::modules::{identity, organisation, research};
+use ocinye_core::realtime::Realtime;
 use ocinye_core::CoreError;
 use ocinye_domain::Principal;
 use ocinye_observability::CorrelationIds;
@@ -65,8 +66,8 @@ async fn organizacao(pool: &PgPool) -> Uuid {
 async fn pessoa(pool: &PgPool, organisation_id: Uuid, roles: &[TechnicalRole]) -> Principal {
     let handle = format!("c{}", Uuid::new_v4().simple());
     let person_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO people (organisation_id, full_name, email, username, status)
-             VALUES ($1, $2, $3, $2, 'active') RETURNING id",
+        "INSERT INTO people (organisation_id, full_name, email, status)
+             VALUES ($1, $2, $3, 'active') RETURNING id",
     )
     .bind(organisation_id)
     .bind(&handle)
@@ -1954,6 +1955,7 @@ async fn um_plano_do_calendario_nao_corre_com_autoridade_revogada() {
     let com_autoridade = ocinye_core::modules::agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &actor,
         &ocinye_core::modules::agentic::runtime::main_agent_boundary(),
         None,
@@ -2003,6 +2005,7 @@ async fn um_plano_do_calendario_nao_corre_com_autoridade_revogada() {
     let com_autoridade_revogada = ocinye_core::modules::agentic::execute(
         &pool,
         capacidades(),
+        &Realtime::ausente(),
         &obsoleto,
         &ocinye_core::modules::agentic::runtime::main_agent_boundary(),
         None,

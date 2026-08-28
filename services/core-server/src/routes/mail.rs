@@ -11,8 +11,8 @@ use axum::extract::{Path, Query, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use ocinye_contracts::{
-    Classification, ComposeAction, MailAddress, MailFolder, MailboxKind, Permission,
-    RemoteContentPolicy,
+    Classification, ComposeAction, MailAddress, MailFolder, MailboxKind, MemberMailboxState,
+    Permission, RemoteContentPolicy,
 };
 use ocinye_core::modules::mail::{self, provider::OutgoingMessage};
 use ocinye_core::modules::platform;
@@ -30,6 +30,8 @@ pub fn routes() -> Router<AppState> {
         .route("/mail/mailboxes", get(list_mailboxes))
         .route("/mail/mailboxes/{mailbox_id}/messages", get(list_messages))
         .route("/mail/mailboxes/{mailbox_id}/sync", post(sync))
+        .route("/mail/mailboxes/{mailbox_id}/connect", post(connect))
+        .route("/mail/mailboxes/{mailbox_id}/disconnect", post(disconnect))
         .route("/mail/messages/{message_id}", get(read_message))
         .route("/mail/messages/{message_id}/flags", post(set_flags))
         .route("/mail/send", post(send))
@@ -54,6 +56,8 @@ struct MailboxView {
     /// Whether replies may go out as this identity.
     may_reply: bool,
     last_synced_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Se a caixa já tem credencial guardada.
+    connected: bool,
     /// Why the last synchronisation failed. Institutional language, never a
     /// protocol error.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -98,6 +102,7 @@ async fn list_mailboxes(
             may_send: mailbox.may_send(),
             may_reply: mailbox.may_reply(),
             last_synced_at: mailbox.last_synced_at,
+            connected: mailbox.has_credential,
             last_sync_error: mailbox.last_sync_error.clone(),
             unread: MailFolder::all()
                 .into_iter()
@@ -114,6 +119,64 @@ async fn list_mailboxes(
     }
 
     Ok(Json(views))
+}
+
+// ── Ligação de uma caixa ────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct ConnectBody {
+    /// A senha da caixa, e nada mais.
+    ///
+    /// Havia aqui um `username`. Vinha do cliente, e era com ele que o Ocinye
+    /// se autenticava — pelo que o browser escolhia a conta enquanto o ecrã
+    /// mostrava outro endereço. O Core resolve-a a partir da caixa que já
+    /// autorizou para quem está a ligar.
+    password: String,
+}
+
+/// `POST /mail/mailboxes/{id}/connect`
+///
+/// # A senha entra e não sai
+///
+/// Não há endpoint que devolva uma credencial guardada. Esta é a única porta
+/// por onde uma senha de caixa atravessa o Core, e atravessa-a uma vez, a
+/// caminho da cifra (ADR-0409).
+async fn connect(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(mailbox_id): Path<Uuid>,
+    Json(body): Json<ConnectBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    mail::connect_mailbox(
+        &state.pool,
+        &principal,
+        mailbox_id,
+        &mail::MailboxConnection {
+            chave: state.config.mail.sealing_key.as_ref(),
+            sonda: state.mail_probe.as_ref(),
+            senha: &body.password,
+        },
+        &ids,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+
+    Ok(Json(serde_json::json!({ "connected": true })))
+}
+
+/// `POST /mail/mailboxes/{id}/disconnect`
+async fn disconnect(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(mailbox_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    mail::disconnect_mailbox(&state.pool, &principal, mailbox_id, &ids)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+
+    Ok(Json(serde_json::json!({ "connected": false })))
 }
 
 // ── Messages ────────────────────────────────────────────────────────────
@@ -212,7 +275,7 @@ async fn read_message(
 ) -> Result<Json<mail::ReadableMessage>, ApiError> {
     let message = mail::read_message(
         &state.pool,
-        state.mail_provider.as_ref(),
+        state.mail_registry.as_ref(),
         &principal,
         message_id,
         query.allow_remote,
@@ -252,7 +315,7 @@ async fn set_flags(
 
     mail::set_flag(
         &state.pool,
-        state.mail_provider.as_ref(),
+        state.mail_registry.as_ref(),
         &principal,
         message_id,
         request.read,
@@ -290,7 +353,7 @@ async fn sync(
 
     let outcome = mail::sync(
         &state.pool,
-        state.mail_provider.as_ref(),
+        state.mail_registry.as_ref(),
         &principal,
         mailbox_id,
         folder,
@@ -383,7 +446,7 @@ async fn send(
 
     mail::send(
         &state.pool,
-        state.mail_provider.as_ref(),
+        state.mail_registry.as_ref(),
         &principal,
         request.mailbox_id,
         message,
@@ -428,10 +491,14 @@ async fn assist(
         )
     })?;
 
-    let capabilities =
-        platform::system_capabilities(&state.pool, &state.config, state.store.is_some())
-            .await
-            .map_err(|error| ApiError::new(error, &ids))?;
+    let capabilities = platform::system_capabilities(
+        &state.pool,
+        &state.config,
+        state.store.is_some(),
+        state.mail_registry.reachability().await,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
 
     let result = mail::assist(
         &state.pool,
@@ -536,6 +603,23 @@ struct MailStatus {
     endpoints: Vec<String>,
     /// The adapter in use.
     adapter: &'static str,
+    /// Whether this installation knows where the mail service is.
+    ///
+    /// Separado da credencial desde o ADR-0409: uma instalação pode saber o
+    /// anfitrião e não ter conta de serviço nenhuma, e isso é uma decisão.
+    transport_configured: bool,
+    /// The acting person's mailbox state, as one of four exclusive facts.
+    ///
+    /// `mailbox_linked` continua por ser a pergunta mais frequente da
+    /// interface, e um booleano lê-se num sítio onde uma comparação de strings
+    /// seria ruído. Este diz o resto.
+    mailbox_state: &'static str,
+    /// Whether the acting person has a mailbox connected.
+    ///
+    /// Separado de `can_read`: uma caixa por ligar e um serviço em baixo dão
+    /// ambos «não consegue ler», e pedem coisas diferentes a quem lê — uma
+    /// pede uma acção da própria pessoa, a outra pede que se espere.
+    mailbox_linked: bool,
 }
 
 /// `GET /mail/status`
@@ -544,26 +628,78 @@ async fn status(
     Ids(ids): Ids,
     CurrentPrincipal(principal): CurrentPrincipal,
 ) -> Result<Json<MailStatus>, ApiError> {
-    let health = state.mail_provider.health().await;
+    // ── O estado é sobre quem perguntou ─────────────────────────────────
+    //
+    // Duas perguntas diferentes viviam numa só: «esta instalação fala com o
+    // serviço?» e «esta pessoa ligou a sua caixa?». A resposta era sempre a
+    // primeira, e desde o ADR-0409 ela não descreve ninguém — numa instalação
+    // sem conta de serviço, o adaptador institucional está ausente por
+    // decisão, e responder com ele diria «indisponível» a quem tem a caixa a
+    // funcionar.
+    //
+    // Sonda-se a caixa desta pessoa. Não havendo nenhuma ligada, isso é um
+    // facto sobre ela — e não uma avaria do serviço.
+    let caixas = mail::mailboxes(&state.pool, &principal)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    let ligada = caixas.iter().find(|caixa| caixa.has_credential);
 
-    let capabilities =
-        platform::system_capabilities(&state.pool, &state.config, state.store.is_some())
+    let health = match ligada {
+        Some(caixa) => state
+            .mail_registry
+            .health_for(&state.pool, caixa.id)
             .await
-            .map_err(|error| ApiError::new(error, &ids))?;
+            .map_err(|error| ApiError::new(error, &ids))?,
+        None => state.mail_registry.institutional_health().await,
+    };
+    let mailbox_linked = ligada.is_some();
+
+    // Quatro estados que se excluem, e não três bandeiras que deixam escrever
+    // o impossível. «Recusada» distingue-se de «não responde» porque o que se
+    // faz a seguir é diferente: uma pede que se volte a ligar a caixa, a outra
+    // pede que se espere.
+    let mailbox_state = MemberMailboxState::observed(
+        mailbox_linked,
+        health.can_read && health.can_send,
+        health.rejected_credential,
+    );
+
+    let capabilities = platform::system_capabilities(
+        &state.pool,
+        &state.config,
+        state.store.is_some(),
+        state.mail_registry.reachability().await,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
 
     let institution = ocinye_domain::ResourceContext::organisation(
         ocinye_domain::ResourceKind::Person,
         principal.organisation_id,
     );
 
+    // Sem caixa ligada, a instalação pode estar perfeitamente de pé e esta
+    // pessoa continua sem ler nada. É um estado dela, com um caminho próprio
+    // — ligar a caixa — e não um serviço em baixo.
+    let detail = if mailbox_linked || !state.config.mail.transport_configured() {
+        health.detail.clone()
+    } else {
+        "A sua caixa de correio ainda não está ligada. Ligue-a em Correio → \
+         Definições para ler e enviar em seu nome."
+            .to_owned()
+    };
+
     Ok(Json(MailStatus {
-        can_read: health.can_read,
-        can_send: health.can_send,
+        can_read: mailbox_linked && health.can_read,
+        can_send: mailbox_linked && health.can_send,
+        transport_configured: state.config.mail.transport_configured(),
+        mailbox_linked,
+        mailbox_state: mailbox_state.as_str(),
         ai_assist_available: capabilities.any_ai_usable(),
         may_use_ai: ocinye_domain::can(&principal, Permission::MailAiUse, &institution, None)
             .allowed,
-        detail: health.detail,
+        detail,
         endpoints: health.endpoints,
-        adapter: state.mail_provider.adapter_name(),
+        adapter: state.mail_registry.institutional().adapter_name(),
     }))
 }
