@@ -241,6 +241,21 @@ fn textwrap(texto: &str, largura: usize) -> Vec<String> {
 /// passasse diria «verificado» sobre o que não se leu, e é precisamente o
 /// objecto não lido que costuma faltar.
 ///
+/// # Um objecto a mais não é uma falha, e é uma notícia
+///
+/// Um objecto no bucket sem linha na base é um **órfão**. Existem
+/// legitimamente: uma escrita que falhou depois de gravar, um avatar
+/// substituído cuja remoção não passou — o próprio `ObjectStore::delete`
+/// regista quando deixa um para trás. Fazer disto uma falha tornaria a
+/// verificação vermelha por uma limpeza que ninguém fez, e uma verificação que
+/// está sempre vermelha deixa de ser lida.
+///
+/// Mas cala-lo seria pior noutro sentido: **num servidor recém-restaurado, um
+/// órfão significa que o destino não estava vazio.** Por isso são contados e
+/// nomeados, e o comando continua a sair zero. Nunca são apagados: apagar
+/// automaticamente o que não se compreende é como se perde um artefacto que
+/// alguém ainda ia ligar.
+///
 /// # Errors
 ///
 /// Devolve erro quando a base não responde, quando o Object Storage não está
@@ -332,6 +347,19 @@ pub async fn verify_objects() -> anyhow::Result<()> {
         }
     }
 
+    // A pergunta inversa: o que está no bucket e a base não regista.
+    let registadas: std::collections::BTreeSet<&str> = objectos
+        .iter()
+        .map(|(_, chave, _, _)| chave.as_str())
+        .collect();
+    let orfaos: Vec<String> = loja
+        .keys()
+        .await
+        .context("listar o bucket")?
+        .into_iter()
+        .filter(|chave| !registadas.contains(chave.as_str()))
+        .collect();
+
     let lidos = objectos.len() - faltam.len();
     println!("  lidos         {lidos} objecto(s), {bytes_lidos} bytes");
     if sem_soma > 0 {
@@ -342,6 +370,27 @@ pub async fn verify_objects() -> anyhow::Result<()> {
         println!("                a base não guardou soma para eles.");
     }
     println!();
+
+    if !orfaos.is_empty() {
+        const AMOSTRA: usize = 5;
+        println!(
+            "  órfãos        {} objecto(s) no bucket sem linha na base:",
+            orfaos.len()
+        );
+        for chave in orfaos.iter().take(AMOSTRA) {
+            println!("                «{chave}»");
+        }
+        if orfaos.len() > AMOSTRA {
+            println!(
+                "                … e mais {}, não listados aqui",
+                orfaos.len() - AMOSTRA
+            );
+        }
+        println!("                Não é falha: uma escrita falhada deixa um destes.");
+        println!("                Mas num servidor acabado de restaurar quer dizer");
+        println!("                que o destino não estava vazio. Nada foi apagado.");
+        println!();
+    }
 
     // ── O corte é dito, e não silencioso ────────────────────────────────
     //

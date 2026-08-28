@@ -268,6 +268,53 @@ impl ObjectStore {
         Ok(bytes.into_bytes().to_vec())
     }
 
+    /// Every key in the bucket.
+    ///
+    /// # Porque isto existe, e porque não tem limite
+    ///
+    /// Existe para a verificação de continuidade poder responder à pergunta
+    /// inversa da que `get` responde: não «o que a base regista está lá?», mas
+    /// «o que está lá é registado?». Um objecto sem linha é um órfão, e num
+    /// servidor recém-restaurado significa que o destino não estava vazio.
+    ///
+    /// Não aceita prefixo nem limite de propósito. Um varrimento parcial
+    /// responderia «não há órfãos» sobre a parte que não olhou, e a parte que
+    /// não se olha é onde eles estão.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::StorageUnavailable`] when the listing fails.
+    pub async fn keys(&self) -> CoreResult<Vec<String>> {
+        let mut chaves = Vec::new();
+        let mut continuation: Option<String> = None;
+        loop {
+            let mut pedido = self.client.list_objects_v2().bucket(&self.config.bucket);
+            if let Some(token) = continuation {
+                pedido = pedido.continuation_token(token);
+            }
+            let pagina = pedido.send().await.map_err(|error| {
+                tracing::error!(error = ?error, "object storage listing failed");
+                CoreError::StorageUnavailable("The bucket could not be listed.".to_owned())
+            })?;
+
+            chaves.extend(
+                pagina
+                    .contents()
+                    .iter()
+                    .filter_map(|objecto| objecto.key().map(ToOwned::to_owned)),
+            );
+
+            // `is_truncated` a `true` sem token é um servidor a contradizer-se;
+            // parar é preferível a repetir a mesma página para sempre.
+            continuation = pagina.next_continuation_token().map(ToOwned::to_owned);
+            if continuation.is_none() {
+                break;
+            }
+        }
+        chaves.sort();
+        Ok(chaves)
+    }
+
     /// Remove an object.
     ///
     /// Deliberately infallible from the caller's side. It is used to clean up
