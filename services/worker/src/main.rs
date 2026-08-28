@@ -55,9 +55,25 @@ async fn main() -> anyhow::Result<()> {
     let mut lembretes = tokio::time::interval(reminders::POLL_INTERVAL);
     lembretes.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
+    // O sinal de paragem é armado **uma vez**, fora do ciclo.
+    //
+    // # Porque isto era um defeito e não um detalhe
+    //
+    // Estava dentro do `select!`, e um `select!` dentro de um ciclo constrói os
+    // seus futuros de novo a cada iteração: o handler de `SIGTERM` era instalado,
+    // descartado e reinstalado a cada passagem. Um sinal que chegasse enquanto
+    // outro ramo corria não encontrava ninguém à escuta e perdia-se — o worker
+    // ignorava `SIGTERM` e só morria com `SIGKILL`, que é o que aconteceu todas
+    // as vezes que reiniciei a stack.
+    //
+    // Um sinal segurado numa variável fica armado entre iterações. `&mut` no
+    // `select!` porque o futuro é consumido a cada tentativa e tem de sobreviver
+    // à seguinte.
+    let mut paragem = std::pin::pin!(shutdown_signal());
+
     loop {
         tokio::select! {
-            () = shutdown_signal() => {
+            () = &mut paragem => {
                 tracing::info!("Ocinye Worker stopping");
                 break;
             }
