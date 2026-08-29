@@ -25,6 +25,8 @@
 pub mod repository;
 pub mod service;
 
+pub use repository::FileRecord;
 pub use service::{
-    add_version, create_with_first_version, current_version, FileContext, FileVersionRecord,
+    add_version, create, create_with_first_version, current_version, download_url, file_context,
+    get, get_version, upload_version, FileContext, FileVersionRecord, NewFile,
 };

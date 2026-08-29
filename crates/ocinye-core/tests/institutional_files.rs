@@ -116,8 +116,8 @@ async fn objecto(pool: &PgPool, ctx: &Contexto, marca: char) -> Uuid {
 /// autor inventado tornaria a autoria de uma versão uma decoração.
 async fn pessoa(pool: &PgPool, ctx: &Contexto) -> Uuid {
     sqlx::query_scalar(
-        "INSERT INTO people (organisation_id, full_name, email)
-         VALUES ($1, 'Quem carrega', $2) RETURNING id",
+        "INSERT INTO people (organisation_id, full_name, email, status)
+         VALUES ($1, 'Quem carrega', $2, 'active') RETURNING id",
     )
     .bind(ctx.organisation_id)
     .bind(format!("p{}@ocinye.com", Uuid::new_v4().simple()))
@@ -637,5 +637,315 @@ async fn a_classificacao_do_ficheiro_tem_vocabulario_fechado() {
     assert!(
         erro.to_string().contains("ck_files_classification"),
         "recusado por outra razão: {erro}"
+    );
+}
+
+// ── O ficheiro institucional que não é documento ────────────────────────
+
+/// O `ObjectStore` de teste, quando existe um serviço S3-compatível.
+fn test_store() -> Option<ocinye_core::storage::ObjectStore> {
+    ocinye_core::storage::ObjectStore::new(ocinye_core::config::StorageConfig {
+        endpoint_url: std::env::var("OCINYE_TEST_STORAGE_ENDPOINT").ok()?,
+        region: std::env::var("OCINYE_TEST_STORAGE_REGION")
+            .unwrap_or_else(|_| "us-east-1".to_owned()),
+        access_key: std::env::var("OCINYE_TEST_STORAGE_ACCESS_KEY").ok()?,
+        secret_key: std::env::var("OCINYE_TEST_STORAGE_SECRET_KEY").ok()?,
+        bucket: std::env::var("OCINYE_TEST_STORAGE_BUCKET")
+            .unwrap_or_else(|_| "ocinye-test-artifacts".to_owned()),
+        backend_code: "test".to_owned(),
+        location_label: "test".to_owned(),
+        residency: ocinye_contracts::storage::Residency::Undeclared,
+        max_upload_bytes: 32 * 1024 * 1024,
+    })
+}
+
+/// Um membro com papel no ambiente, para poder criar e ler.
+async fn membro(pool: &PgPool, ctx: &Contexto, papel: &str) -> ocinye_domain::Principal {
+    let id = pessoa(pool, ctx).await;
+    sqlx::query("INSERT INTO person_roles (person_id, role) VALUES ($1, 'research_member')")
+        .bind(id)
+        .execute(pool)
+        .await
+        .expect("papel técnico");
+    sqlx::query(
+        "INSERT INTO workspace_memberships (workspace_id, person_id, role) VALUES ($1, $2, $3)",
+    )
+    .bind(ctx.workspace_id)
+    .bind(id)
+    .bind(papel)
+    .execute(pool)
+    .await
+    .expect("filiação no ambiente");
+
+    principal_do_teste(pool, ctx, id).await
+}
+
+/// Alguém da organização sem qualquer relação com o ambiente.
+async fn estranho(pool: &PgPool, ctx: &Contexto) -> ocinye_domain::Principal {
+    let id = pessoa(pool, ctx).await;
+    sqlx::query("INSERT INTO person_roles (person_id, role) VALUES ($1, 'research_member')")
+        .bind(id)
+        .execute(pool)
+        .await
+        .expect("papel técnico");
+    principal_do_teste(pool, ctx, id).await
+}
+
+async fn principal_do_teste(
+    pool: &PgPool,
+    _ctx: &Contexto,
+    person_id: Uuid,
+) -> ocinye_domain::Principal {
+    let registo = ocinye_core::modules::identity::person_by_id(pool, person_id)
+        .await
+        .expect("ler a pessoa")
+        .expect("a pessoa existe");
+    ocinye_core::modules::identity::principal_for_person(pool, &registo)
+        .await
+        .expect("principal")
+}
+
+/// Uma fotografia de uma montagem experimental é um ficheiro institucional.
+///
+/// # A propriedade que isto fecha
+///
+/// `File` deixou de existir para servir `Document`. Um PNG tem identidade,
+/// contexto, classificação e histórico — e o sistema **não inventou** para ele
+/// significado documental, científico ou de dados.
+///
+/// > **Carregar um ficheiro não é o mesmo que afirmar conhecimento
+/// > institucional.**
+#[tokio::test]
+async fn um_png_e_um_ficheiro_institucional_sem_ser_documento() {
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else {
+        eprintln!("saltado: OCINYE_TEST_STORAGE_ENDPOINT não está definida");
+        return;
+    };
+    let ctx = contexto(&pool).await;
+    backend_por_omissao(&pool).await;
+    let quem = membro(&pool, &ctx, "lead").await;
+
+    let antes = contagens(&pool).await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    let criado = ocinye_core::modules::files::create(
+        &mut tx,
+        &quem,
+        &ocinye_observability::CorrelationIds::generate(),
+        &store,
+        "prova",
+        ctx.workspace_id,
+        ocinye_core::modules::files::NewFile {
+            filename: "montagem-experimental.png".to_owned(),
+            content_type: "image/png".to_owned(),
+            data: b"\x89PNG\r\n\x1a\n prova".to_vec(),
+            classification: None,
+        },
+    )
+    .await
+    .expect("o PNG não foi aceite como ficheiro institucional");
+    tx.commit().await.expect("commit");
+
+    assert_eq!(criado.sequence, 1, "a primeira versão não é a número 1");
+
+    let depois = contagens(&pool).await;
+    assert_eq!(
+        depois.documentos, antes.documentos,
+        "carregar um ficheiro criou um documento de conhecimento"
+    );
+    assert_eq!(
+        depois.datasets, antes.datasets,
+        "carregar um ficheiro criou um dataset"
+    );
+    assert_eq!(
+        depois.fontes, antes.fontes,
+        "carregar um ficheiro criou uma fonte bibliográfica"
+    );
+
+    // E é legível por quem o criou, pelo caminho de produção.
+    let mut conn = pool.acquire().await.expect("ligação");
+    let (ficheiro, _) = ocinye_core::modules::files::get(&mut conn, &quem, criado.file_id)
+        .await
+        .expect("quem carregou não consegue ler");
+    assert_eq!(ficheiro.name, "montagem-experimental.png");
+}
+
+struct Contagens {
+    documentos: i64,
+    datasets: i64,
+    fontes: i64,
+}
+
+async fn contagens(pool: &PgPool) -> Contagens {
+    let (documentos, datasets, fontes): (i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM documents),
+                (SELECT count(*) FROM datasets),
+                (SELECT count(*) FROM sources)",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("contagens");
+    Contagens {
+        documentos,
+        datasets,
+        fontes,
+    }
+}
+
+async fn backend_por_omissao(pool: &PgPool) {
+    sqlx::query(
+        "INSERT INTO storage_backends (code, display_name, location_label, bucket, is_default, is_active)
+         SELECT $1, 'omissão', 'local', 'prova', TRUE, TRUE
+          WHERE NOT EXISTS (SELECT 1 FROM storage_backends WHERE is_default AND is_active)",
+    )
+    .bind(format!("d{}", Uuid::new_v4().simple()))
+    .execute(pool)
+    .await
+    .expect("backend por omissão");
+}
+
+/// Conhecer o identificador não é uma forma de entrar.
+///
+/// # As três portas que se tentam
+///
+/// Quem não alcança o ambiente não pode chegar ao artefacto por nenhuma das
+/// identidades que o compõem:
+///
+/// ```text
+/// FileId          → recusado
+/// FileVersionId   → recusado, pelo ficheiro que a governa
+/// StorageObjectId → não é sequer uma porta: não há operação que o aceite
+/// ```
+///
+/// A do meio é a que importa aqui. Uma versão **não tem autoridade própria**:
+/// resolvê-la significa resolver o ficheiro e decidir por ele. Se a versão
+/// respondesse sozinha, conhecer um identificador de versão seria contornar o
+/// recurso que a contém.
+#[tokio::test]
+async fn conhecer_o_identificador_nao_contorna_a_autorizacao() {
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else { return };
+    let ctx = contexto(&pool).await;
+    backend_por_omissao(&pool).await;
+    let dono = membro(&pool, &ctx, "lead").await;
+    let forasteiro = estranho(&pool, &ctx).await;
+
+    // Um ficheiro CONFIDENCIAL: acima de INTERNAL, logo exige filiação.
+    let mut tx = pool.begin().await.expect("tx");
+    let criado = ocinye_core::modules::files::create(
+        &mut tx,
+        &dono,
+        &ocinye_observability::CorrelationIds::generate(),
+        &store,
+        "prova",
+        ctx.workspace_id,
+        ocinye_core::modules::files::NewFile {
+            filename: "reservado.png".to_owned(),
+            content_type: "image/png".to_owned(),
+            data: b"\x89PNG reservado".to_vec(),
+            classification: Some(ocinye_contracts::Classification::Confidential),
+        },
+    )
+    .await
+    .expect("criar");
+    tx.commit().await.expect("commit");
+
+    let mut conn = pool.acquire().await.expect("ligação");
+
+    // Porta 1: o identificador do ficheiro.
+    let pelo_ficheiro =
+        ocinye_core::modules::files::get(&mut conn, &forasteiro, criado.file_id).await;
+    assert!(
+        pelo_ficheiro.is_err(),
+        "um estranho leu um ficheiro CONFIDENCIAL de um ambiente onde não entra"
+    );
+
+    // Porta 2: o identificador da versão. É esta que prova que a versão não
+    // tem autoridade própria.
+    let pela_versao =
+        ocinye_core::modules::files::get_version(&mut conn, &forasteiro, criado.version_id).await;
+    assert!(
+        pela_versao.is_err(),
+        "conhecer o identificador da versão contornou o ficheiro que a governa"
+    );
+
+    // E o dono alcança as duas, para que a recusa acima signifique alguma coisa.
+    ocinye_core::modules::files::get(&mut conn, &dono, criado.file_id)
+        .await
+        .expect("quem tem filiação não alcança o próprio ficheiro");
+    let (versao, ficheiro) =
+        ocinye_core::modules::files::get_version(&mut conn, &dono, criado.version_id)
+            .await
+            .expect("quem tem filiação não alcança a versão");
+    assert_eq!(versao.file_id, ficheiro.id);
+    assert_eq!(
+        ficheiro.classification(),
+        ocinye_contracts::Classification::Confidential
+    );
+}
+
+/// A descarga e a leitura decidem pela mesma composição, explicitamente.
+///
+/// # A fragilidade que isto fecha
+///
+/// Nos documentos, a leitura dobra a classificação do ambiente com a do
+/// artefacto e a descarga usa só a do artefacto — funcionam igual porque um
+/// portão anterior cobre a diferença. Aqui as duas chamam `file_context`, que
+/// compõe sempre da mesma maneira. Se um dia divergirem, será por decisão
+/// escrita na política de acção, e não porque um chamador se esqueceu.
+#[tokio::test]
+async fn a_descarga_recusa_a_quem_a_leitura_recusa() {
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else { return };
+    let ctx = contexto(&pool).await;
+    backend_por_omissao(&pool).await;
+    let dono = membro(&pool, &ctx, "lead").await;
+    let forasteiro = estranho(&pool, &ctx).await;
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    let mut tx = pool.begin().await.expect("tx");
+    let criado = ocinye_core::modules::files::create(
+        &mut tx,
+        &dono,
+        &ids,
+        &store,
+        "prova",
+        ctx.workspace_id,
+        ocinye_core::modules::files::NewFile {
+            filename: "restrito.png".to_owned(),
+            content_type: "image/png".to_owned(),
+            data: b"\x89PNG restrito".to_vec(),
+            classification: Some(ocinye_contracts::Classification::Restricted),
+        },
+    )
+    .await
+    .expect("criar");
+    tx.commit().await.expect("commit");
+
+    let mut tx = pool.begin().await.expect("tx");
+    let negada = ocinye_core::modules::files::download_url(
+        &mut tx,
+        &forasteiro,
+        &ids,
+        &store,
+        criado.file_id,
+    )
+    .await;
+    tx.rollback().await.expect("desfazer");
+    assert!(
+        negada.is_err(),
+        "um estranho obteve ligação de descarga para material RESTRITO"
+    );
+
+    let mut tx = pool.begin().await.expect("tx");
+    let permitida =
+        ocinye_core::modules::files::download_url(&mut tx, &dono, &ids, &store, criado.file_id)
+            .await;
+    tx.commit().await.expect("commit");
+    assert!(
+        permitida.is_ok(),
+        "quem tem filiação no ambiente não conseguiu descarregar: {:?}",
+        permitida.err()
     );
 }

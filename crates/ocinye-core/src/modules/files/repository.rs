@@ -141,3 +141,105 @@ pub async fn current_storage_object<'e>(
     .await?;
     Ok(linha)
 }
+
+/// Um ficheiro institucional, tal como a base o guarda.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct FileRecord {
+    /// A identidade estável.
+    pub id: Uuid,
+    /// A unidade. Não pode discordar da do ambiente.
+    pub unit_id: Uuid,
+    /// O ambiente que o governa.
+    pub workspace_id: Uuid,
+    /// O nome visível.
+    pub name: String,
+    /// A classificação do artefacto, tal como está guardada.
+    ///
+    /// Texto, e lida por [`FileRecord::classification`]. O padrão é o do resto
+    /// do domínio: um valor que a base não reconheça cai no **mais
+    /// restritivo**, e não no mais permissivo. Uma classificação ilegível não
+    /// pode ser uma porta aberta.
+    classification: String,
+}
+
+impl FileRecord {
+    /// A classificação, interpretada.
+    #[must_use]
+    pub fn classification(&self) -> Classification {
+        Classification::parse(&self.classification).unwrap_or(Classification::Restricted)
+    }
+}
+
+/// Lê um ficheiro dentro da organização de quem pergunta.
+///
+/// O `organisation_id` está na consulta e não numa verificação a seguir: um
+/// identificador de outra organização devolve «não existe», e não «existe e
+/// não podes».
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn find_file<'e>(
+    executor: impl PgExecutor<'e>,
+    file_id: Uuid,
+    organisation_id: Uuid,
+) -> CoreResult<Option<FileRecord>> {
+    let linha = sqlx::query_as::<_, FileRecord>(
+        "SELECT id, unit_id, workspace_id, name, classification
+           FROM files WHERE id = $1 AND organisation_id = $2",
+    )
+    .bind(file_id)
+    .bind(organisation_id)
+    .fetch_optional(executor)
+    .await?;
+    Ok(linha)
+}
+
+/// Lê uma versão pelo seu identificador, **sem autorizar**.
+///
+/// Devolve o ficheiro a que pertence para que quem chama autorize por ele. Não
+/// é `pub` para o mundo por acidente: é `pub(super)` porque só o serviço a deve
+/// usar, e o serviço autoriza sempre a seguir.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub(super) async fn find_version<'e>(
+    executor: impl PgExecutor<'e>,
+    version_id: Uuid,
+) -> CoreResult<Option<super::service::FileVersionRecord>> {
+    let linha = sqlx::query_as::<_, (Uuid, Uuid, i32, Uuid)>(
+        "SELECT id, file_id, sequence, storage_object_id FROM file_versions WHERE id = $1",
+    )
+    .bind(version_id)
+    .fetch_optional(executor)
+    .await?;
+    Ok(
+        linha.map(|(version_id, file_id, sequence, storage_object_id)| {
+            super::service::FileVersionRecord {
+                file_id,
+                version_id,
+                sequence,
+                storage_object_id,
+            }
+        }),
+    )
+}
+
+/// Onde estão os bytes de um objecto guardado.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub(super) async fn object_location<'e>(
+    executor: impl PgExecutor<'e>,
+    object_id: Uuid,
+) -> CoreResult<Option<(String, String)>> {
+    let linha = sqlx::query_as::<_, (String, String)>(
+        "SELECT object_key, original_filename FROM storage_objects WHERE id = $1",
+    )
+    .bind(object_id)
+    .fetch_optional(executor)
+    .await?;
+    Ok(linha)
+}
