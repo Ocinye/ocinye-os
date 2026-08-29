@@ -359,18 +359,39 @@ fn fundir(
 pub async fn semantic_availability(
     pool: &PgPool,
     principal: &Principal,
+    provider: Option<&dyn crate::modules::intelligence::embeddings::EmbeddingProvider>,
 ) -> CoreResult<SemanticAvailability> {
     let embedded = repo::embedded_count(pool, principal.organisation_id).await?;
+    let conjuntos = repo::embedding_set_count(pool, principal.organisation_id).await?;
+    let total = embedded + conjuntos;
+
+    // Três estados, e não dois.
+    //
+    // «Indisponível por política ou por falta de infraestrutura» e «erro» são
+    // coisas diferentes, e uma interface que as confunda ensina que a pesquisa
+    // está partida quando não está. A pesquisa lexical continua inteira nos
+    // dois casos, e a mensagem di-lo.
+    let (available, message) = match (provider, total) {
+        (None, _) => (
+            false,
+            "A pesquisa semântica não está disponível nesta instalação: não há \
+             nenhum provider de embeddings configurado. A pesquisa textual não é \
+             afectada."
+                .to_owned(),
+        ),
+        (Some(_), 0) => (
+            false,
+            "A pesquisa semântica ainda não tem nada indexado: há um provider \
+             configurado, mas nenhum conteúdo foi ainda processado. A pesquisa \
+             textual não é afectada."
+                .to_owned(),
+        ),
+        (Some(_), _) => (true, "A pesquisa semântica está disponível.".to_owned()),
+    };
 
     Ok(SemanticAvailability {
-        available: embedded > 0,
-        embedded_documents: embedded,
-        message: if embedded > 0 {
-            "Semantic search is available.".to_owned()
-        } else {
-            "Semantic search is unavailable: no embeddings exist, because no Ocinye AI node \
-             is enrolled. Lexical search is unaffected."
-                .to_owned()
-        },
+        available,
+        embedded_documents: total,
+        message,
     })
 }

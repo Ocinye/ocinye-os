@@ -54,12 +54,15 @@ Os quatro primeiros são apurados em tempo real pelo Core e servidos em
 | **Pesquisa lexical do corpo** | implementado, sem modelo de IA | secção própria, com excerto e página | PostgreSQL FTS | `AVAILABLE` |
 | **OCR de documentos digitalizados** | — | um PDF sem texto declara-se não pesquisável | n/a | `PLANNED` |
 | **Pesquisa textual** | implementado | implementado | PostgreSQL FTS | `AVAILABLE` |
-| **Pesquisa semântica** | preparado | declarada indisponível | sem embeddings | `NO_RESOURCE` |
+| **Pesquisa semântica do corpo** | implementado, com identidade de modelo fechada | declarada com a razão, nunca como avaria | sem provider configurado | `NOT_CONFIGURED` |
+| **Recuperação híbrida** | lexical + semântica, fusão por posição recíproca | integrada no Search universal | — | `AVAILABLE` (lexical inteira sem provider) |
+| **Conteúdo de ficheiros para agentes** | `files.content.read`, com tectos de exposição | — | n/a | `AVAILABLE` |
+| **Citações estruturadas nas respostas** | envelope transporta versão e localizador | ecrã por construir | n/a | `PLANNED` |
 | **Agentes de IA** | implementado | lista, criação | não requer nó | `AVAILABLE` |
 | **Execução de agentes** | — | estado derivado | sem nó de IA | `NO_RESOURCE` |
 | **Prompt Ocinye** | endpoint implementado | implementado | sem nó de IA | `NO_RESOURCE` |
 | **Inferência (IA geral/coding/reasoning)** | Gateway preparado | integrado | sem nó de IA | `NO_RESOURCE` |
-| **Embeddings** | preparado | — | sem nó de IA | `NO_RESOURCE` |
+| **Embeddings** | contrato próprio, exercido por provider determinístico | — | sem provider real | `NOT_CONFIGURED` |
 | **Correio — modelo, permissões, política** | implementado | n/a | n/a | `AVAILABLE` |
 | **Correio — leitura e envio** | implementado | 7 ecrãs | serviço ausente | `NOT_CONFIGURED` |
 | **Correio — transporte IMAP** | implementado | n/a | serviço ausente | `NOT_CONFIGURED` |

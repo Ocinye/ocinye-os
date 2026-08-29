@@ -35,6 +35,12 @@ pub struct AppState {
     /// call with a stated reason — the correct behaviour of an installation
     /// without inference, not a placeholder for one.
     pub inference: Arc<dyn InferenceProvider>,
+    /// O provider de embeddings, quando esta instalação tem um.
+    ///
+    /// `None` é um estado normal: a pesquisa lexical não depende disto, e a
+    /// interface declara a semântica indisponível em vez de fingir que a tem.
+    pub embeddings:
+        Option<Arc<dyn ocinye_core::modules::intelligence::embeddings::EmbeddingProvider>>,
     /// O correio, e qual credencial abre a sessão de cada acção.
     ///
     /// A da instituição para indexar e para o trabalho agentic, a de cada

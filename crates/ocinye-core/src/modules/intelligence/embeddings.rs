@@ -297,3 +297,22 @@ impl EmbeddingProvider for DeterministicEmbeddings {
             .collect())
     }
 }
+
+/// O provider que esta instalação configurou, se algum.
+///
+/// # Porque devolve `None` em silêncio
+///
+/// Porque «esta instalação não tem embeddings» é um estado normal e não um
+/// erro. A pesquisa lexical não depende disto, e declarar indisponibilidade é
+/// mais honesto do que falhar a arrancar.
+///
+/// Um nome que não se reconheça também dá `None`, e não um provider por
+/// omissão: adivinhar aqui seria escolher por alguém qual o modelo que descreve
+/// a memória da instituição.
+#[must_use]
+pub fn from_config(config: &crate::config::AiConfig) -> Option<Box<dyn EmbeddingProvider>> {
+    match config.embedding_provider.as_str() {
+        "deterministic" => Some(Box::new(DeterministicEmbeddings::default())),
+        _ => None,
+    }
+}

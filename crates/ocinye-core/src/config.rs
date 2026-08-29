@@ -100,6 +100,18 @@ pub struct AiConfig {
     /// Whether an explicitly registered external provider may be selected.
     /// Off by default; turning it on is an institutional decision.
     pub allow_external_providers: bool,
+    /// Qual provider de embeddings esta instalação usa.
+    ///
+    /// `none` por omissão: sem embeddings, a pesquisa semântica é declarada
+    /// indisponível e a lexical continua inteira. **Isso não é degradação** —
+    /// é a instalação que a Ocinye tem hoje.
+    ///
+    /// `deterministic` liga o provider de prova, que não é um modelo e diz que
+    /// não é: a identidade que ele grava chama-se `not-a-model`, para que
+    /// ninguém confunda um registo de proveniência de teste com um real.
+    /// Existe para que a CI possa exercer o caminho inteiro — Core, contrato,
+    /// pgvector, recuperação — sem depender de um serviço externo.
+    pub embedding_provider: String,
 }
 
 /// Compute Plane settings.
@@ -514,6 +526,7 @@ impl CoreConfig {
             ai: AiConfig {
                 capability_map: parse_capability_map(&or_default("OCINYE_AI_CAPABILITY_MAP", "")),
                 allow_external_providers: parse_flag("OCINYE_AI_ALLOW_EXTERNAL_PROVIDERS", false),
+                embedding_provider: or_default("OCINYE_AI_EMBEDDING_PROVIDER", "none"),
             },
             compute: ComputeConfig {
                 enrollment_token_ttl: Duration::from_secs(parse_number(
@@ -696,6 +709,7 @@ mod tests {
             ai: AiConfig {
                 capability_map: BTreeMap::new(),
                 allow_external_providers: false,
+                embedding_provider: "none".to_owned(),
             },
             compute: ComputeConfig {
                 enrollment_token_ttl: Duration::from_secs(60),

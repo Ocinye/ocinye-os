@@ -77,7 +77,7 @@ sem que nada falhe.
   A interface distingue as ausências em vez de mostrar uma caixa vazia. **A
   ingestão é periódica**: o worker percorre as caixas ligadas, e uma que recuse
   não interrompe as outras — a razão fica guardada na caixa que falhou.
-- **25 migrations**, aplicáveis de base vazia; 68 tabelas.
+- **26 migrations**, aplicáveis de base vazia; 70 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -109,7 +109,21 @@ sem que nada falhe.
   descarregável, e o ecrã diz «Ficheiro guardado. Não foi possível tornar o
   conteúdo pesquisável» em vez de «o carregamento falhou». `file_chunks` **não
   guarda classificação**: restringir um ambiente esconde o corpo sem reindexar
-  nada. **Não existe ainda** OCR, embeddings, nem recuperação híbrida.
+  nada.
+  A recuperação é **híbrida**: lexical e semântica como geradores independentes,
+  fundidos por posição recíproca
+  ([ADR-0206](docs/adrs/0206-embeddings-and-hybrid-retrieval.md)). Um
+  `EmbeddingSet` guarda `(provider, model, revision, dimensions, profile)` e é
+  esse tuplo que decide o que se compara — **compatibilidade semântica não é «o
+  mesmo tamanho de vector»** —, e só responde quando está completo. Um provider
+  externo fecha em `PUBLIC` por omissão, e a pergunta é feita antes de o texto
+  sair. Sem provider, a híbrida devolve exactamente o que a lexical devolve:
+  **não é degradação**, é a capacidade determinística inteira.
+  Os agentes lêem conteúdo por `files.content.read`, uma exposição separada de
+  `knowledge.document.read` — que continua com `content_included: false`. A
+  capacidade não concede autoridade, e o que chega ao modelo não tem caminho
+  nenhum para os bytes. **Não existe ainda** OCR, citações estruturadas nas
+  respostas do Prompt, nem um provider de embeddings real integrado.
 - **Agentes de IA: `IMPLEMENTED`.** Definíveis e persistidos **sem nó de IA**;
   o estado de execução é derivado da disponibilidade real.
 - **Agentic Control Plane: `IMPLEMENTED`, sem inferência.** Capability Registry
@@ -168,7 +182,7 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **53 ADRs** em `docs/adrs/`, **10 runbooks** em `docs/runbooks/`,
+- **54 ADRs** em `docs/adrs/`, **10 runbooks** em `docs/runbooks/`,
   **41 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -188,14 +202,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1293 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1311 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **416 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **434 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

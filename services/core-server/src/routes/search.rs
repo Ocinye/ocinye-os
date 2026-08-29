@@ -132,8 +132,17 @@ async fn run_body_search(
             .unwrap_or(ocinye_contracts::page::DEFAULT_PAGE_SIZE),
     };
 
-    let (hits, total) =
-        search::search_bodies(&state.pool, &principal, &query.q, query.workspace_id, page).await?;
+    // Híbrida quando há provider, lexical quando não há. É a mesma pesquisa:
+    // sem embeddings devolve exactamente o que sempre devolveu.
+    let (hits, total) = search::search_hybrid(
+        &state.pool,
+        &principal,
+        &query.q,
+        query.workspace_id,
+        page,
+        state.embeddings.as_deref(),
+    )
+    .await?;
 
     Ok(Json(Page::new(
         hits.into_iter()
@@ -162,6 +171,6 @@ async fn semantic_availability(
     CurrentPrincipal(principal): CurrentPrincipal,
 ) -> Result<Json<search::SemanticAvailability>, ApiError> {
     Ok(Json(
-        search::semantic_availability(&state.pool, &principal).await?,
+        search::semantic_availability(&state.pool, &principal, state.embeddings.as_deref()).await?,
     ))
 }

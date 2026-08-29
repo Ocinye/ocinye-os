@@ -433,3 +433,25 @@ pub async fn search_semantic<'e>(
     .await?;
     Ok(hits)
 }
+
+/// Quantos conjuntos de embeddings completos esta organização tem.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn embedding_set_count<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+) -> CoreResult<i64> {
+    let total: i64 = sqlx::query_scalar(
+        "SELECT count(*)
+           FROM embedding_sets es
+           JOIN file_versions v ON v.id = es.file_version_id
+           JOIN files f ON f.id = v.file_id
+          WHERE f.organisation_id = $1 AND es.status = 'AVAILABLE'",
+    )
+    .bind(organisation_id)
+    .fetch_one(executor)
+    .await?;
+    Ok(total)
+}

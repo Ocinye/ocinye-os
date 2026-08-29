@@ -1327,6 +1327,11 @@ fn core_state(pool: PgPool, organisation_id: Uuid, database_url: &str) -> AppSta
         // viagem de Ficheiros provar o contrário do que se quer provar. A
         // jornada que carrega bytes diz em voz alta quando não pode correr.
         store: store_de_teste().map(std::sync::Arc::new),
+        // O provider determinístico, para as viagens que provam recuperação
+        // semântica. Não é um modelo, e a identidade que grava di-lo.
+        embeddings: Some(std::sync::Arc::new(
+            ocinye_core::modules::intelligence::embeddings::DeterministicEmbeddings::default(),
+        )),
         inference: Arc::new(ocinye_core::modules::intelligence::NoProvider),
         mail_registry,
         // Estes testes medem HTTP, e não tempo real. Um plano ausente aceita
@@ -8186,4 +8191,150 @@ async fn a_previsualizacao_mostra_o_mesmo_texto_que_a_pesquisa_encontra() {
 
     let resultados = harness.open(&format!("/search?q={frase}")).await;
     esperar_por(&resultados, "No conteúdo dos ficheiros").await;
+}
+
+/// Corre o indexador semântico, como o worker o corre.
+async fn indexar_semanticamente(harness: &Harness, file_id: Uuid) {
+    let versao: Uuid = sqlx::query_scalar(
+        "SELECT id FROM file_versions WHERE file_id = $1 ORDER BY sequence DESC LIMIT 1",
+    )
+    .bind(file_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("versão corrente");
+
+    let provider =
+        ocinye_core::modules::intelligence::embeddings::DeterministicEmbeddings::default();
+    let mut tx = harness.pool.begin().await.expect("tx");
+    ocinye_core::modules::files::embedding::process(&mut tx, &provider, versao)
+        .await
+        .expect("indexação semântica");
+    tx.commit().await.expect("commit");
+}
+
+/// Uma paráfrase encontra o documento, e a pesquisa textual sozinha não a
+/// encontrava.
+///
+/// # O controlo que torna isto uma prova
+///
+/// A pergunta não contém a frase do documento. Antes da indexação semântica, a
+/// pesquisa não devolve nada — e é isso que separa «o semântico funciona» de
+/// «os dois encontraram e eu não sei qual trabalhou».
+#[tokio::test]
+async fn uma_parafrase_encontra_o_documento_pelo_workspace() {
+    let harness = harness!();
+
+    if store_de_teste().is_none() {
+        exigir_armazenamento("uma_parafrase_encontra_o_documento_pelo_workspace");
+        return;
+    }
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+
+    let alfa = format!("alfa{}", Uuid::new_v4().simple());
+    let beta = format!("beta{}", Uuid::new_v4().simple());
+    let pdf = pdf_com_paginas(&[&format!("{alfa} {beta} medicao registada no ensaio")]);
+    let b64 = {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD.encode(&pdf)
+    };
+
+    let pagina = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&pagina, "Largue ficheiros aqui").await;
+
+    let nome = format!("{}.pdf", unique_title("semantico").replace(' ', "-"));
+    let script = format!(
+        "(() => {{ \
+           const forma = document.querySelector('form[data-drop=\"1\"]'); \
+           const cru = atob('{b64}'); \
+           const bytes = new Uint8Array(cru.length); \
+           for (let i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i); \
+           const f = new File([bytes], '{nome}', {{ type: 'application/pdf' }}); \
+           const dt = new DataTransfer(); dt.items.add(f); \
+           forma.dispatchEvent(new DragEvent('drop', \
+             {{ bubbles: true, cancelable: true, dataTransfer: dt }})); \
+           return 'largado'; }})()"
+    );
+    let _ = pagina.evaluate(script).await.expect("largar");
+
+    let limite = std::time::Instant::now();
+    let file_id = loop {
+        let encontrado: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND name = $2")
+                .bind(workspace_id)
+                .bind(&nome)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("procura");
+        if let Some(id) = encontrado {
+            break id;
+        }
+        assert!(
+            limite.elapsed() < DEADLINE,
+            "o PDF não chegou ao PostgreSQL"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    };
+
+    correr_o_worker(&harness, file_id).await;
+
+    // A pergunta: uma das marcas mais uma palavra que o documento não tem.
+    // `websearch_to_tsquery` exige todos os termos, pelo que o lexical falha.
+    let pergunta = format!("{alfa} inexistentepalavra");
+
+    let antes = harness.open(&format!("/search?q={pergunta}")).await;
+    let html = antes.content().await.expect("conteúdo");
+    assert!(
+        !html.contains(&nome),
+        "o controlo falhou: a pesquisa textual já encontrava isto sozinha"
+    );
+
+    indexar_semanticamente(&harness, file_id).await;
+
+    let depois = harness.open(&format!("/search?q={pergunta}")).await;
+    esperar_por(&depois, "No conteúdo dos ficheiros").await;
+    let html = depois.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&nome),
+        "a paráfrase não encontrou o documento"
+    );
+    assert!(
+        html.contains(&format!("/files/{file_id}")),
+        "o resultado não leva ao ficheiro certo"
+    );
+    assert!(
+        html.contains("v1"),
+        "o resultado não cita a versão de onde saiu"
+    );
+}
+
+/// Sem pesquisa semântica, a interface di-lo — e não diz que está partida.
+#[tokio::test]
+async fn a_pesquisa_semantica_indisponivel_nao_e_um_erro() {
+    let harness = harness!();
+
+    let (_, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let pagina = harness.open("/search?q=hidrogenio").await;
+    let html = pagina.content().await.expect("conteúdo");
+
+    // O harness **tem** provider, por isso o que se afirma aqui é o outro lado:
+    // o modo semântico é declarado, com o seu estado, e nunca como avaria.
+    assert!(
+        html.contains("Semântica"),
+        "o modo semântico não está declarado na interface"
+    );
+    for palavra in ["degradad", "avaria", "Erro na pesquisa"] {
+        assert!(
+            !html.contains(palavra),
+            "a interface descreve a pesquisa como partida: «{palavra}»"
+        );
+    }
+    // E a textual continua a funcionar, que é o que não pode cair.
+    assert!(
+        html.contains("Pesquisar no Ocinye"),
+        "a página de pesquisa não abriu"
+    );
 }

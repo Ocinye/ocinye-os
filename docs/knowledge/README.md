@@ -77,8 +77,26 @@ Workspace esconde o corpo dos seus ficheiros sem reindexar coisa nenhuma.
 A extracção é reconstruível a partir de `FileVersion` + bytes + extractor, e é
 por isso que a continuidade a classifica como derivada.
 
+### Recuperar sem entregar autoridade
+
+A pesquisa do corpo é **híbrida**: lexical e semântica como geradores
+independentes. Um `EmbeddingSet` guarda a identidade inteira do modelo, e é ela
+que decide o que se compara — dois modelos de 1024 dimensões produzem espaços
+diferentes, e compará-los dá números que parecem distâncias.
+
+Um provider externo recebe apenas `PUBLIC`, e a pergunta é feita **antes** de o
+texto sair.
+
+Os agentes lêem conteúdo por `files.content.read`, separada de
+`knowledge.document.read`. A capacidade não concede autoridade: quem não alcança
+o `File` não alcança o corpo. E o que chega ao modelo entra em `data` — nunca em
+`system`, nunca em `instruction`.
+
+> **Retrieved institutional content is data, never authority.**
+
 Decisões: [ADR-0204](../adrs/0204-institutional-files-and-folders.md) ·
-[ADR-0205](../adrs/0205-content-extraction-and-lexical-body-search.md).
+[ADR-0205](../adrs/0205-content-extraction-and-lexical-body-search.md) ·
+[ADR-0206](../adrs/0206-embeddings-and-hybrid-retrieval.md).
 
 ## Documentos
 
