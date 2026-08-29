@@ -671,3 +671,89 @@ pub async fn move_to_folder(
 
     Ok(())
 }
+
+/// O histórico de versões de um ficheiro.
+///
+/// A autorização é a do ficheiro, e corre antes de o histórico existir. Quem
+/// não alcança o ficheiro não aprende quantas versões tem, nem quem as
+/// carregou, nem quando — o histórico é informação sobre o ficheiro, e segue a
+/// mesma autoridade.
+///
+/// # Errors
+///
+/// Devolve erro quando o ficheiro não é alcançável ou quando a autorização
+/// recusa.
+pub async fn versions(
+    executor: &mut sqlx::PgConnection,
+    principal: &Principal,
+    file_id: Uuid,
+) -> CoreResult<Vec<repo::VersionListing>> {
+    let (ficheiro, _) = get(&mut *executor, principal, file_id).await?;
+    repo::list_versions(&mut *executor, ficheiro.id).await
+}
+
+/// Uma ligação de descarga para **uma versão determinada**.
+///
+/// A versão corrente muda quando alguém carrega outra. Uma citação que aponte
+/// para «o ficheiro» aponta, no dia seguinte, para bytes diferentes; é por isso
+/// que descarregar uma versão exacta é uma operação própria e não um parâmetro
+/// da outra.
+///
+/// A autoridade continua a ser a do ficheiro: a versão não tem classificação
+/// própria e não abre nada que o ficheiro feche.
+///
+/// # Errors
+///
+/// Devolve erro quando a versão não é alcançável, quando a autorização recusa,
+/// ou quando o objecto não está disponível.
+pub async fn version_download_url(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    store: &ObjectStore,
+    version_id: Uuid,
+) -> CoreResult<String> {
+    let (versao, ficheiro) = get_version(tx, principal, version_id).await?;
+
+    // O ambiente relê-se aqui, e não se reaproveita o que `get_version`
+    // possa ter visto: a composição da classificação decide-se contra o
+    // estado corrente, no momento da descarga.
+    let (_, workspace) = get(tx, principal, versao.file_id).await?;
+
+    // Nota honesta sobre o que segue: hoje a política define `Download` como
+    // «segue a autorização de leitura», por isso esta chamada **não pode**
+    // recusar onde `get` já deixou passar — foi retirada numa reversão e o
+    // teste continuou verde. Quem recusa é o `get` acima.
+    //
+    // Fica na mesma, e não por decoração: é aqui que a decisão é registada sob
+    // a acção que realmente aconteceu, e é este o sítio já correcto no dia em
+    // que `Download` divergir de `Read` — como `Export` já divergiu.
+
+    authorize(
+        principal,
+        Action::Download,
+        &file_context(&workspace, ficheiro.classification()),
+    )
+    .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+
+    let (chave, nome) = repo::object_location(&mut **tx, versao.storage_object_id)
+        .await?
+        .ok_or_else(|| {
+            CoreError::StorageUnavailable("Este objecto não está disponível.".to_owned())
+        })?;
+
+    let url = store.presigned_download(&chave, &nome).await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::DOWNLOAD, "file_version")
+            .resource(version_id)
+            .context(&file_context(&workspace, ficheiro.classification()))
+            .classified(ficheiro.classification()),
+    )
+    .await?;
+
+    Ok(url)
+}

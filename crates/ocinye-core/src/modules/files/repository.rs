@@ -454,3 +454,61 @@ pub async fn folder_path<'e>(
     .await?;
     Ok(linhas)
 }
+
+/// Uma versão, como o histórico a mostra.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct VersionListing {
+    /// A identidade da versão. É por aqui que se cita e se descarrega.
+    pub id: Uuid,
+    /// O número. Começa em 1, e a maior é a corrente.
+    pub sequence: i32,
+    /// O nome com que os bytes foram carregados. Pode mudar entre versões.
+    pub original_filename: String,
+    /// O tipo declarado no carregamento.
+    pub content_type: String,
+    /// O tamanho em bytes.
+    pub size_bytes: i64,
+    /// A soma que distingue estes bytes de outros quaisquer.
+    pub checksum_sha256: String,
+    /// A nota de quem carregou, quando a escreveu.
+    pub note: Option<String>,
+    /// Quem carregou, pelo nome visível. `None` quando a pessoa já não existe.
+    pub created_by: Option<String>,
+    /// Quando.
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// O histórico completo de um ficheiro, da versão mais recente para a mais
+/// antiga.
+///
+/// Não autoriza nada: quem chama tem de ter passado pela autoridade do
+/// ficheiro primeiro.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_versions<'e>(
+    executor: impl PgExecutor<'e>,
+    file_id: Uuid,
+) -> CoreResult<Vec<VersionListing>> {
+    let linhas = sqlx::query_as::<_, VersionListing>(
+        "SELECT v.id,
+                v.sequence,
+                o.original_filename,
+                o.content_type,
+                o.size_bytes,
+                o.checksum_sha256,
+                v.note,
+                p.display_name AS created_by,
+                v.created_at
+           FROM file_versions v
+           JOIN storage_objects o ON o.id = v.storage_object_id
+           LEFT JOIN people p ON p.id = v.created_by_id
+          WHERE v.file_id = $1
+          ORDER BY v.sequence DESC",
+    )
+    .bind(file_id)
+    .fetch_all(executor)
+    .await?;
+    Ok(linhas)
+}

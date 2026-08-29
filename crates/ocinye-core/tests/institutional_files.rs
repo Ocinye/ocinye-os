@@ -1653,3 +1653,137 @@ async fn duas_pastas_irmas_nao_partilham_o_nome() {
     tx.rollback().await.expect("desfazer");
     let _ = erro;
 }
+
+/// O histórico é informação **sobre** o ficheiro, e segue a autoridade do
+/// ficheiro.
+///
+/// Saber que um ficheiro tem sete versões, carregadas por três pessoas ao longo
+/// de dois meses, é saber alguma coisa sobre o trabalho de uma unidade. Quem não
+/// alcança o ficheiro não deve aprender isso por perguntar pelo histórico.
+#[tokio::test]
+async fn o_historico_de_versoes_segue_a_autoridade_do_ficheiro() {
+    let Some(pool) = pool().await else { return };
+    let ctx = contexto(&pool).await;
+    let dono = membro(&pool, &ctx, "lead").await;
+    let de_fora = estranho(&pool, &ctx).await;
+
+    let file_id = ficheiro(&pool, &ctx).await;
+    // RESTRICTED: é a classificação em que a recusa é observável. Num ficheiro
+    // INTERNAL qualquer membro activo lê, e o teste passaria sem provar nada.
+    sqlx::query("UPDATE files SET classification = 'RESTRICTED' WHERE id = $1")
+        .bind(file_id)
+        .execute(&pool)
+        .await
+        .expect("restringir");
+    for (n, marca) in [(1, 'a'), (2, 'b'), (3, 'c')] {
+        let objecto_id = objecto(&pool, &ctx, marca).await;
+        versao(&pool, file_id, n, objecto_id)
+            .await
+            .expect("versão de prova");
+    }
+
+    let mut conn = pool.acquire().await.expect("ligação");
+    let historico = ocinye_core::modules::files::versions(&mut conn, &dono, file_id)
+        .await
+        .expect("quem alcança o ficheiro não vê o histórico");
+
+    assert_eq!(historico.len(), 3, "o histórico não traz todas as versões");
+    assert_eq!(
+        historico.iter().map(|v| v.sequence).collect::<Vec<_>>(),
+        vec![3, 2, 1],
+        "o histórico não vem da mais recente para a mais antiga"
+    );
+
+    // E para quem não alcança o ficheiro, o histórico não existe.
+    let recusa = ocinye_core::modules::files::versions(&mut conn, &de_fora, file_id).await;
+    assert!(
+        recusa.is_err(),
+        "quem não alcança o ficheiro leu o histórico das suas versões"
+    );
+}
+
+/// Uma versão exacta descarrega-se pela sua própria identidade, e essa
+/// identidade não abre nada que o ficheiro feche.
+///
+/// Citar «o ficheiro» é citar bytes que mudam quando alguém carrega outra
+/// versão. Por isso a descarga de uma versão determinada é uma operação própria
+/// — e por isso ela tem de voltar a passar pela autoridade do ficheiro, e não
+/// pela sorte de quem conhece um `UUID`.
+#[tokio::test]
+async fn descarregar_uma_versao_exacta_passa_pela_autoridade_do_ficheiro() {
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else {
+        eprintln!("saltado: OCINYE_TEST_STORAGE_ENDPOINT não está definida");
+        return;
+    };
+    let ctx = contexto(&pool).await;
+    let dono = membro(&pool, &ctx, "lead").await;
+    let de_fora = estranho(&pool, &ctx).await;
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    let primeira = criar_ficheiro(
+        &pool,
+        &dono,
+        &store,
+        ctx.workspace_id,
+        ocinye_core::modules::files::NewFile {
+            filename: "ensaio.pdf".to_owned(),
+            content_type: "application/pdf".to_owned(),
+            data: b"%PDF-1.4 primeira".to_vec(),
+            classification: Some(ocinye_contracts::Classification::Restricted),
+        },
+    )
+    .await;
+
+    // Uma segunda versão: a corrente passa a ser outra, e a primeira continua
+    // citável exactamente como estava.
+    let mut tx = pool.begin().await.expect("tx");
+    let segunda = ocinye_core::modules::files::upload_version(
+        &mut tx,
+        &dono,
+        &ids,
+        &store,
+        "prova",
+        primeira.file_id,
+        ocinye_core::modules::files::NewFile {
+            filename: "ensaio.pdf".to_owned(),
+            content_type: "application/pdf".to_owned(),
+            data: b"%PDF-1.4 segunda".to_vec(),
+            classification: None,
+        },
+    )
+    .await
+    .expect("segunda versão");
+    tx.commit().await.expect("commit");
+    assert_eq!(segunda.sequence, 2, "a segunda versão não é a número 2");
+
+    // Quem alcança o ficheiro descarrega a versão antiga pela identidade dela.
+    let mut tx = pool.begin().await.expect("tx");
+    let url = ocinye_core::modules::files::version_download_url(
+        &mut tx,
+        &dono,
+        &ids,
+        &store,
+        primeira.version_id,
+    )
+    .await
+    .expect("quem alcança o ficheiro não descarregou a versão antiga");
+    tx.commit().await.expect("commit");
+    assert!(!url.is_empty(), "a ligação de descarga veio vazia");
+
+    // E quem não o alcança não descarrega, mesmo sabendo o identificador exacto
+    // da versão.
+    let mut tx = pool.begin().await.expect("tx");
+    let recusa = ocinye_core::modules::files::version_download_url(
+        &mut tx,
+        &de_fora,
+        &ids,
+        &store,
+        primeira.version_id,
+    )
+    .await;
+    assert!(
+        recusa.is_err(),
+        "conhecer o identificador da versão bastou para descarregar"
+    );
+}
