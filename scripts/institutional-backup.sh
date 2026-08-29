@@ -42,7 +42,35 @@
 #                               Por omissão `rsync -a`. É assim que não há
 #                               dependência de fornecedor: quem opera escolhe
 #                               `rsync`, `rclone`, `aws s3 cp` ou outro
-#     OCINYE_BACKUP_KEEP        quantos conjuntos manter (por omissão 7)
+#     OCINYE_BACKUP_VERIFY_CMD  comando que **lê de volta** a soma do que
+#                               chegou ao destino, e escreve-a no `stdout`. O
+#                               nome do ficheiro chega em `$OCINYE_BACKUP_ARTEFACTO`
+#                               — variável e não posicional, porque dentro de
+#                               um `eval` o `$1` é o do script e expande vazio.
+#                               Exemplo:
+#                                 mc cat cofre/conjuntos/"$OCINYE_BACKUP_ARTEFACTO".sha256
+#                               Sem ele a cópia é declarada **enviada e não
+#                               confirmada** — nunca «ok»
+#
+# # Cuidado com o ficheiro de ambiente
+#
+# Um valor com espaços **tem de vir entre aspas**. Em `sh`, a linha
+#
+#     OCINYE_BACKUP_REMOTE_CMD=mc cp --quiet
+#
+# não define variável nenhuma: corre `cp --quiet` com a variável apenas no
+# ambiente desse comando. O script cai então no `rsync -a` por omissão, e
+# `rsync` copia alegremente para uma pasta local com o nome do destino. Foi
+# assim que uma cópia «fora do servidor» acabou dentro da árvore de trabalho, e
+# foi declarada feita.
+#     OCINYE_BACKUP_KEEP        quantos conjuntos manter **aqui** (por omissão 7)
+#     OCINYE_BACKUP_REMOTE_PRUNE_CMD
+#                               comando que aplica retenção no destino. Recebe
+#                               `$OCINYE_BACKUP_KEEP`. Sem ele o cofre acumula,
+#                               e isso é dito em cada corrida — um cofre cheio
+#                               impede a cópia seguinte tão bem como um disco
+#                               cheio. Exemplo com `mc`:
+#                                 mc rm --recursive --force --older-than 30d cofre/conjuntos/
 #     OCINYE_OBJECT_SYNC_CMD    comando que espelha o bucket para uma pasta.
 #                               A pasta chega-lhe em `$OCINYE_OBJECT_DIR` — por
 #                               variável e não por argumento, porque na cópia
@@ -88,6 +116,13 @@ abandonar() {
         mv "$DESTINO" "$DESTINO-INCOMPLETO" 2>/dev/null || true
         printf "\n  O conjunto ficou por terminar e foi marcado INCOMPLETO.\n" >&2
         printf "  Não é uma cópia: é o que restou de uma tentativa.\n\n" >&2
+    elif [ "$codigo" -ne 0 ]; then
+        # Depois da cifra já não há pasta para marcar: o conjunto é um
+        # ficheiro. Sem esta linha, uma falha aqui saía sem dizer nada, e uma
+        # recusa muda obriga quem a lê a adivinhar.
+        printf "\n  A cópia falhou depois de o conjunto estar cifrado.\n" >&2
+        printf "  O ficheiro local existe; o que falhou foi levá-lo para fora\n" >&2
+        printf "  ou confirmar que lá chegou.\n\n" >&2
     fi
     exit "$codigo"
 }
@@ -191,6 +226,15 @@ if [ -n "${OCINYE_BACKUP_RECIPIENT:-}" ]; then
     || fatal "a cifra falhou."
   rm -rf "$DESTINO"
   DESTINO="$DESTINO.tar.age"
+
+  # ── A soma do pacote, guardada **fora** dele ────────────────────────
+  #
+  # O `age` é cifra autenticada: um pacote adulterado não abre. Mas essa
+  # verificação só acontece na chegada, com a chave privada em mãos. Esta soma
+  # responde a outra pergunta, e mais cedo: **o que está no destino é o que
+  # saiu daqui?** Serve para quem opera o transporte, que não tem — e não deve
+  # ter — a chave.
+  shasum -a 256 "$DESTINO" | awk '{print $1}' > "$DESTINO.sha256"
   feito "$(wc -c < "$DESTINO" | tr -d ' ') bytes"
   CIFRADO=sim
 else
@@ -212,7 +256,39 @@ if [ -n "${OCINYE_BACKUP_REMOTE:-}" ]; then
   passo "cópia externa"
   CMD="${OCINYE_BACKUP_REMOTE_CMD:-rsync -a}"
   $CMD "$DESTINO" "$OCINYE_BACKUP_REMOTE" || fatal "a cópia externa falhou."
-  feito
+  $CMD "$DESTINO.sha256" "$OCINYE_BACKUP_REMOTE" \
+    || fatal "a soma não chegou ao destino. Sem ela, quem lá está não tem
+  como saber se o pacote que recebeu é o que saiu."
+
+  # ── «O comando saiu zero» não é «a cópia chegou» ────────────────────
+  #
+  # Um `rsync` mal configurado copia para uma pasta local com o nome do
+  # destino e sai zero. Um `cp` para um caminho que não existe cria-o. Nos dois
+  # casos o transporte declara sucesso e o cofre fica vazio — e a instituição
+  # descobre-o no dia em que precisa dele.
+  #
+  # Por isso a confirmação lê **de volta** o que chegou. Sem comando que a
+  # faça, a cópia não é declarada feita: é declarada enviada.
+  if [ -n "${OCINYE_BACKUP_VERIFY_CMD:-}" ]; then
+      # O `|| true` é deliberado. Sem ele, um comando de confirmação que
+      # falhe — porque o objecto não está lá, que é justamente o caso a
+      # apanhar — mataria o script pelo `set -e` **antes** de haver mensagem,
+      # e a recusa sairia muda. Uma recusa sem razão obriga quem a lê a
+      # adivinhar, e quem adivinha às três da manhã adivinha mal.
+      LA=$(OCINYE_BACKUP_ARTEFACTO="$(basename "$DESTINO")" \
+           eval "$OCINYE_BACKUP_VERIFY_CMD" 2>/dev/null | tr -d "[:space:]" || true)
+      AQUI=$(cat "$DESTINO.sha256" | tr -d "[:space:]")
+      [ -n "$LA" ] || fatal "a confirmação não devolveu soma nenhuma.
+  O comando correu e não disse o que está lá. Isso não é uma confirmação."
+      [ "$LA" = "$AQUI" ] || fatal "o que chegou ao destino não é o que saiu.
+  aqui:    $AQUI
+  destino: $LA"
+      feito "confirmada por leitura de volta"
+  else
+      printf 'ENVIADA, NÃO CONFIRMADA\n'
+      echo "      OCINYE_BACKUP_VERIFY_CMD não está definida. O comando de"
+      echo "      transporte saiu zero, e ninguém foi ver se o pacote está lá."
+  fi
 else
   echo "  cópia externa                          NÃO EXISTE"
   echo "      OCINYE_BACKUP_REMOTE não está definida. Este conjunto vive"
@@ -233,6 +309,24 @@ if [ -n "$VELHOS" ]; then
   passo "retenção"
   echo "$VELHOS" | while read -r velho; do rm -rf "$velho"; done
   feito "$(echo "$VELHOS" | wc -l | tr -d ' ') conjunto(s) removido(s), $KEEP mantido(s)"
+fi
+
+# ── A retenção do destino, que não é a nossa ────────────────────────────
+#
+# O `KEEP` acima governa esta máquina. O cofre é de quem o opera, e apagar lá
+# dentro por iniciativa própria seria decidir por ele. Mas deixá-lo crescer em
+# silêncio também não serve.
+if [ -n "${OCINYE_BACKUP_REMOTE:-}" ]; then
+  if [ -n "${OCINYE_BACKUP_REMOTE_PRUNE_CMD:-}" ]; then
+    passo "retenção no destino"
+    eval "$OCINYE_BACKUP_REMOTE_PRUNE_CMD" >/dev/null \
+      || fatal "a retenção no destino falhou."
+    feito
+  else
+    echo "  retenção no destino                    NÃO APLICADA"
+    echo "      OCINYE_BACKUP_REMOTE_PRUNE_CMD não está definida. O cofre"
+    echo "      acumula, e um cofre cheio recusa a cópia seguinte."
+  fi
 fi
 
 # ── Os incompletos também têm retenção, e é mais curta ──────────────────

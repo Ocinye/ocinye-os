@@ -226,6 +226,94 @@ simplesmente desligado.
 > **`INVALID` não é `FAIL`.** Um verificador que não conseguiu observar não
 > descobriu um problema: não correu.
 
+## O ensaio operacional de 2026-08-29 — A → cofre → B
+
+O anterior provou **portabilidade**. Este prova o **processo**: cópia
+automática, cifrada, para um endpoint S3 fora do servidor, restaurada num
+servidor inteiramente limpo, com as **três** verificações a observar.
+
+A instituição de origem tinha as três coisas ao mesmo tempo: 165 641 recursos,
+dois objectos com bytes reais, e **83 credenciais seladas que abrem com a chave
+da instalação**.
+
+### A cadeia
+
+```
+servidor A ── cópia automática, sem terminal ──▶ pacote cifrado com `age`
+                                                        │
+                                          cofre S3 fora do servidor
+                                                        │
+servidor B (base vazia, bucket vazio, Redis vazio, credenciais novas)
+                                                        │
+                                                    restauro
+                                                        │
+                                              verificação institucional
+```
+
+| | |
+|---|---|
+| cópia automática, sem terminal e sem `stdin` | `EXIT=0` |
+| pacote cifrado | 28 279 736 bytes, com a soma ao lado |
+| cópia para o cofre | **confirmada por leitura de volta** |
+| soma do pacote recebido em B | confere |
+| restauro para base vazia | 2 objectos repostos |
+| **as linhas** | `PASS` — 165 641 recursos, 2 objectos, 91 arestas |
+| **os bytes** | `PASS` |
+| **a legibilidade** | `PASS` — 83 credenciais abriram |
+| | **`EXIT=0`** |
+
+**É a primeira verificação institucional inteiramente verde**: as três
+perguntas observaram, e as três passaram.
+
+### O controlo negativo que o par exige
+
+Mesmo restauro, mesma base, mesmos bytes — **sem a chave durável**:
+
+```
+  as linhas          PASS
+  os bytes           PASS
+  a legibilidade     FAIL
+      O estado chegou íntegro e ilegível.
+  EXIT=1
+```
+
+Bytes correctos e indecifráveis também são conhecimento perdido, e o
+verificador diz que sim.
+
+### Pelo produto, no servidor B
+
+Entrada no Workspace, o ambiente abre com os dois documentos, e o documento
+descarrega com a soma `436d6db0b98c…` — a mesma da origem.
+
+### Três defeitos meus, encontrados a correr isto
+
+**A cópia «fora do servidor» ficou dentro do repositório.** O ficheiro de
+ambiente tinha `OCINYE_BACKUP_REMOTE_CMD=mc cp --quiet` **sem aspas**. Em `sh`,
+`VAR=valor comando` corre o comando com a variável apenas no ambiente dele — a
+variável nunca foi definida, o script caiu no `rsync -a` por omissão, e o
+`rsync` copiou alegremente para uma pasta local chamada `OFF/`, dentro da
+árvore de trabalho. E saiu zero. **A cópia externa foi declarada feita sem
+nunca ter acontecido.**
+
+A correcção não é ensinar aspas a quem escreve o ficheiro: é **ler de volta**.
+`OCINYE_BACKUP_VERIFY_CMD` devolve a soma do que está no destino, e o script
+compara. Sem esse comando, a cópia é declarada **«ENVIADA, NÃO CONFIRMADA»** —
+nunca «ok».
+
+> **«O comando de transporte saiu zero» não é «a cópia chegou».**
+
+**A recusa saía muda.** Com o transporte a fingir, o script recusava — e sem
+dizer porquê: o `set -e` matava-o na substituição antes de a mensagem existir,
+e o `trap` calava-se porque depois da cifra já não há pasta para marcar. Uma
+recusa sem razão obriga quem a lê a adivinhar, e quem adivinha às três da manhã
+adivinha mal.
+
+**O cofre crescia sem limite.** A retenção governava só esta máquina. Quatro
+corridas com `KEEP=2` deixavam dois conjuntos aqui e cinco pacotes lá. Um cofre
+cheio impede a cópia seguinte tão bem como um disco cheio.
+`OCINYE_BACKUP_REMOTE_PRUNE_CMD` aplica retenção no destino; sem ele, cada
+corrida diz **«NÃO APLICADA»**.
+
 ## Os nove factos operacionais
 
 Medidos a 2026-08-29, sem inferência. `verify.sh` verde demonstra o contrato
@@ -234,14 +322,14 @@ que existe; **não cria política operacional que ainda não foi construída.**
 | | |
 |---|---|
 | **Onde ficam fisicamente os backups** | Em lado nenhum. `OCINYE_BACKUP_DIR` não está definida em nenhuma instalação; os conjuntos do ensaio viveram num directório temporário e foram apagados. |
-| **Existe cópia fora da máquina** | **Não.** `OCINYE_BACKUP_REMOTE` não está definida. O ensaio usou uma pasta local a fazer de destino externo, o que prova o caminho e **não** prova a cópia. |
-| **Automático ou manual** | **Manual.** Sem entrada de `cron`, sem agente de `launchd`, sem temporizador. O RPO é *desde o último conjunto que alguém produziu*. |
-| **Os artefactos estão cifrados** | **Não por omissão.** A cifra `age` existe, é opcional, e é **obrigatória para destino externo**: o script recusa enviar em claro. `OCINYE_BACKUP_RECIPIENT` não está definida. |
-| **Que material interpreta estado durável** | Uma peça: `OCINYE_MAIL_KEY`, que interpreta `mailbox_credentials`. É a única coluna de criptograma do esquema, e há dois portões que o mantêm verdadeiro. |
-| **Retenção implementada** | `OCINYE_BACKUP_KEEP` conjuntos completos (7 por omissão) mais **um** resto de tentativa falhada. Exercitada. Nenhuma instalação a define, porque nenhuma produz conjuntos. |
+| **Existe cópia fora da máquina** | **O mecanismo existe e foi exercitado** contra um endpoint S3 separado, com confirmação por leitura de volta e retenção no destino. **Nenhuma instalação o tem configurado**, porque nenhuma instalação existe. |
+| **Automático ou manual** | **Executável sem terminal e sem `stdin`, com estado de saída inequívoco** — provado. As unidades de agendamento estão escritas em [`infra/scheduling/`](../../infra/scheduling/) e **não estão instaladas em lado nenhum**: agendar é configuração de um servidor que não existe. Até lá, o RPO é *desde o último conjunto que alguém produziu*. |
+| **Os artefactos estão cifrados** | **Quando se pede.** A cifra `age` é opcional e **obrigatória para destino externo**: o script recusa enviar em claro. O pacote leva a soma ao lado, guardada fora dele, para quem transporta poder conferir sem ter a chave. `OCINYE_BACKUP_RECIPIENT` não está definida em nenhuma instalação. |
+| **Que material interpreta estado durável** | Uma peça: `OCINYE_MAIL_KEY`, que interpreta `mailbox_credentials`. É a única coluna de criptograma do esquema, há dois portões que o mantêm verdadeiro, e **está provado nas duas direcções**: com a chave, 83 credenciais abrem no servidor novo; sem ela, a verificação recusa. |
+| **Retenção implementada** | `OCINYE_BACKUP_KEEP` conjuntos completos (7 por omissão) mais **um** resto de tentativa falhada, **e** retenção no destino por comando configurável. Exercitada nas duas pontas: quatro corridas com `KEEP=2` deixaram dois aqui e dois no cofre. Nenhuma instalação a define, porque nenhuma produz conjuntos. |
 | **Redis vazio** | O servidor B arrancou com um Redis de 0 chaves e nenhuma verificação falhou. Está classificado `EPHEMERAL`, e essa é a prova de que não é fonte de verdade. |
 | **Sem IA, correio e computação** | `ai_*` e `compute` reportam `no_resource`; `lexical_search` fica `available`. O conhecimento, a pesquisa e a cadeia científica abriram à mesma no servidor migrado. |
-| **Migração completa já executada** | **Sim**, A → B → C. Base, bytes, credenciais de armazenamento rodadas, Redis vazio, e a prova pelo Workspace. Terminou em `EXIT=2`, porque a legibilidade não teve o que observar. |
+| **Migração completa já executada** | **Sim, duas vezes.** A → B → C provou a portabilidade e terminou em `EXIT=2` (a legibilidade não teve o que observar). A → cofre → B provou o processo e terminou em **`EXIT=0`, com as três a observar** — incluindo 83 credenciais seladas que abriram do outro lado. |
 
 ## Artefactos de modelo — a terceira forma da memória
 

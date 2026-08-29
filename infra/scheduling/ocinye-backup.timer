@@ -1,0 +1,11 @@
+[Unit]
+Description=Cópia de continuidade institucional do Ocinye OS, diária
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+# Se a máquina esteve desligada à hora marcada, corre ao voltar. Uma cópia
+# saltada é RPO perdido, e ninguém repara numa que simplesmente não aconteceu.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
