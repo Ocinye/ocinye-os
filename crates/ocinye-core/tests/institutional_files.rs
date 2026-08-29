@@ -746,7 +746,7 @@ async fn um_png_e_um_ficheiro_institucional_sem_ser_documento() {
     let ctx = contexto(&pool).await;
     let quem = membro(&pool, &ctx, "lead").await;
 
-    let antes = contagens(&pool).await;
+    let antes = contagens(&pool, ctx.workspace_id).await;
 
     let criado = criar_ficheiro(
         &pool,
@@ -764,7 +764,7 @@ async fn um_png_e_um_ficheiro_institucional_sem_ser_documento() {
 
     assert_eq!(criado.sequence, 1, "a primeira versão não é a número 1");
 
-    let depois = contagens(&pool).await;
+    let depois = contagens(&pool, ctx.workspace_id).await;
     assert_eq!(
         depois.documentos, antes.documentos,
         "carregar um ficheiro criou um documento de conhecimento"
@@ -792,12 +792,17 @@ struct Contagens {
     fontes: i64,
 }
 
-async fn contagens(pool: &PgPool) -> Contagens {
+/// Contagens **do ambiente sob prova**, nunca da base inteira: outros testes
+/// correm ao mesmo tempo e criam documentos legítimos. Uma contagem global
+/// transforma a asserção «carregar não cria conhecimento» numa asserção sobre
+/// o que mais está a acontecer na máquina.
+async fn contagens(pool: &PgPool, workspace_id: Uuid) -> Contagens {
     let (documentos, datasets, fontes): (i64, i64, i64) = sqlx::query_as(
-        "SELECT (SELECT count(*) FROM documents),
-                (SELECT count(*) FROM datasets),
-                (SELECT count(*) FROM sources)",
+        "SELECT (SELECT count(*) FROM documents WHERE workspace_id = $1),
+                (SELECT count(*) FROM datasets   WHERE workspace_id = $1),
+                (SELECT count(*) FROM sources    WHERE workspace_id = $1)",
     )
+    .bind(workspace_id)
     .fetch_one(pool)
     .await
     .expect("contagens");
@@ -977,7 +982,7 @@ async fn a_descarga_recusa_a_quem_a_leitura_recusa() {
     let ctx = contexto(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let forasteiro = estranho(&pool, &ctx).await;
-    let ids = ocinye_observability::CorrelationIds::generate();
+    let _ids = ocinye_observability::CorrelationIds::generate();
 
     let criado = criar_ficheiro(
         &pool,
@@ -1137,7 +1142,7 @@ async fn a_matriz_de_acesso_e_a_mesma_depois_do_ficheiro_governar() {
     let ctx = contexto(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let e = elenco(&pool, &ctx).await;
-    let ids = ocinye_observability::CorrelationIds::generate();
+    let _ids = ocinye_observability::CorrelationIds::generate();
 
     for (nivel, esperado) in [
         // (organização, ambiente, unidade, gestor, administrador)
@@ -1229,7 +1234,7 @@ async fn o_ambiente_restringe_o_artefacto_na_leitura() {
     let ctx = contexto(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let forasteiro = estranho(&pool, &ctx).await;
-    let ids = ocinye_observability::CorrelationIds::generate();
+    let _ids = ocinye_observability::CorrelationIds::generate();
 
     // O ambiente ainda é INTERNO: o ficheiro nasce INTERNO de facto.
     let criado = criar_ficheiro(
@@ -1422,7 +1427,7 @@ async fn mover_para_uma_pasta_chamada_publico_nao_muda_o_acesso() {
     let ctx = contexto(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let fora = estranho(&pool, &ctx).await;
-    let ids = ocinye_observability::CorrelationIds::generate();
+    let _ids = ocinye_observability::CorrelationIds::generate();
 
     let criado = criar_ficheiro(
         &pool,
@@ -1503,7 +1508,7 @@ async fn mover_para_outro_ambiente_e_recusado() {
     let outro = outro_ambiente(&pool, &ctx).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let dono_do_outro = membro(&pool, &outro, "lead").await;
-    let ids = ocinye_observability::CorrelationIds::generate();
+    let _ids = ocinye_observability::CorrelationIds::generate();
 
     let criado = criar_ficheiro(
         &pool,
@@ -1555,7 +1560,7 @@ async fn navegar_mostra_a_arvore_e_o_caminho() {
     let Some(store) = test_store() else { return };
     let ctx = contexto(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
-    let ids = ocinye_observability::CorrelationIds::generate();
+    let _ids = ocinye_observability::CorrelationIds::generate();
 
     let mut tx = pool.begin().await.expect("tx");
     let engenharia = ocinye_core::modules::files::create_folder(
