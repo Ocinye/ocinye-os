@@ -165,6 +165,12 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     ("notes", Comparacao::Identidades),
     ("note_revisions", Comparacao::Identidades),
     ("documents", Comparacao::Identidades),
+    // Um ficheiro institucional e as suas versões. As identidades viajam
+    // porque são o que a proveniência aponta: um resultado sustentado pela
+    // versão 2 de um relatório continua a dizer «versão 2» depois de existirem
+    // sete, e um identificador refeito no destino apagaria essa frase.
+    ("files", Comparacao::Identidades),
+    ("file_versions", Comparacao::Identidades),
     ("datasets", Comparacao::Identidades),
     ("dataset_versions", Comparacao::Identidades),
     ("dataset_files", Comparacao::Identidades),
