@@ -37,6 +37,7 @@ mod calendar;
 mod collaboration;
 mod compute;
 mod data;
+mod files;
 mod knowledge;
 mod mail;
 mod messaging;
@@ -59,6 +60,7 @@ pub fn all() -> Vec<Arc<dyn CapabilityHandler>> {
         Arc::new(knowledge::ReadNote),
         Arc::new(knowledge::ReadSource),
         Arc::new(knowledge::ReadDocument),
+        Arc::new(files::ReadFileContent),
         Arc::new(knowledge::ListLinks),
         Arc::new(knowledge::CreateNote),
         Arc::new(knowledge::ReviseNote),

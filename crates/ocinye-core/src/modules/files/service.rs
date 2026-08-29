@@ -955,3 +955,33 @@ pub async fn content(
     let (_, _) = get(&mut *executor, principal, file_id).await?;
     super::extraction::text_of_current(&mut *executor, file_id, max_chars).await
 }
+
+/// Excertos do corpo de uma versão determinada, para quem a pode ler.
+///
+/// # A autoridade é a do ficheiro, e é reavaliada aqui
+///
+/// Não se confia em o chamador ter autorizado antes. `get_version` resolve a
+/// versão **através** do ficheiro, e é o ficheiro que decide — pelo que
+/// conhecer o identificador de uma versão não abre um caminho paralelo para o
+/// conteúdo dela.
+///
+/// # Errors
+///
+/// Devolve erro quando a versão não é alcançável ou quando a autorização
+/// recusa.
+pub async fn excerpts(
+    executor: &mut sqlx::PgConnection,
+    principal: &Principal,
+    file_version_id: Uuid,
+    max_excerpts: usize,
+    max_chars: usize,
+) -> CoreResult<Vec<super::extraction::Excerpt>> {
+    let (versao, _) = get_version(&mut *executor, principal, file_version_id).await?;
+    super::extraction::excerpts_of_version(
+        &mut *executor,
+        versao.version_id,
+        max_excerpts,
+        max_chars,
+    )
+    .await
+}

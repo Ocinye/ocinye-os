@@ -622,3 +622,51 @@ pub async fn text_of_current<'e>(
     }
     Ok(Some(texto.chars().take(max_chars).collect()))
 }
+
+/// Um excerto do corpo, com onde ele está.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct Excerpt {
+    /// A ordem dentro da extracção.
+    pub ordinal: i32,
+    /// O texto.
+    pub text: String,
+    /// Onde está: `{"page": 4}` para PDF.
+    pub locator: serde_json::Value,
+}
+
+/// Os primeiros excertos de uma versão determinada.
+///
+/// Quem chama tem de ter autorizado o ficheiro primeiro: isto não decide nada.
+/// A porta autorizada é [`crate::modules::files::excerpts`].
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn excerpts_of_version<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+    file_version_id: Uuid,
+    max_excerpts: usize,
+    max_chars: usize,
+) -> CoreResult<Vec<Excerpt>> {
+    let limite = i64::try_from(max_excerpts).unwrap_or(i64::MAX);
+    let excertos = sqlx::query_as::<_, Excerpt>(
+        "SELECT c.ordinal, c.text, c.locator
+           FROM file_chunks c
+           JOIN file_extractions e ON e.id = c.extraction_id
+          WHERE e.file_version_id = $1
+          ORDER BY c.ordinal
+          LIMIT $2",
+    )
+    .bind(file_version_id)
+    .bind(limite)
+    .fetch_all(executor)
+    .await?;
+
+    Ok(excertos
+        .into_iter()
+        .map(|mut excerto| {
+            excerto.text = excerto.text.chars().take(max_chars).collect();
+            excerto
+        })
+        .collect())
+}
