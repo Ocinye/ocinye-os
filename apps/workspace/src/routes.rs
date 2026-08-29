@@ -102,6 +102,13 @@ pub const ROUTES: &[&str] = &[
     "/results/{result_id}",
     "/results/{result_id}/validate",
     "/knowledge",
+    "/files",
+    "/files/upload",
+    "/files/folder",
+    "/files/{file_id}",
+    "/files/{file_id}/version",
+    "/files/{file_id}/download",
+    "/file-versions/{version_id}/download",
     "/bibliography",
     "/bibliography/tools",
     "/datasets",
@@ -271,6 +278,22 @@ pub fn router(state: WorkspaceState) -> Router {
             get(bibliography_tools).post(review_bibliography),
         )
         .route("/datasets", get(datasets))
+        .route("/files", get(files_browse))
+        .route(
+            "/files/upload",
+            post(files_upload).layer(DefaultBodyLimit::max(FILE_BODY_LIMIT_BYTES)),
+        )
+        .route("/files/folder", post(files_new_folder))
+        .route("/files/{file_id}", get(file_detail))
+        .route(
+            "/files/{file_id}/version",
+            post(file_new_version).layer(DefaultBodyLimit::max(FILE_BODY_LIMIT_BYTES)),
+        )
+        .route("/files/{file_id}/download", get(file_download))
+        .route(
+            "/file-versions/{version_id}/download",
+            get(version_download),
+        )
         // Inteligência
         .route("/ai", get(ai_hub))
         .route("/ai/agents", get(agents))
@@ -7067,5 +7090,560 @@ mod intervalos_do_calendario {
             assert_eq!(de.date_naive(), dia(ancora.year(), 1, 1));
             assert_eq!(ate.date_naive(), dia(ancora.year() + 1, 1, 1));
         }
+    }
+}
+
+// ── Ficheiros institucionais ─────────────────────────────────────────────
+//
+// > **Uma pasta é uma estrutura de navegação dentro de um contentor de
+// > autoridade.** Arrumar não classifica, e carregar não afirma conhecimento.
+//
+// Nada aqui decide acesso. Cada handler leva o membro ao Core e mostra o que o
+// Core deixou; um identificador escrito à mão na barra de endereço chega ao
+// mesmo sítio que qualquer outro, e recebe a mesma resposta.
+
+/// O maior corpo que o Workspace aceita num ficheiro institucional.
+///
+/// O mesmo limite do Core, mais o envelope multipart.
+const FILE_BODY_LIMIT_BYTES: usize = 640 * 1024 * 1024 + 64 * 1024;
+
+/// O maior conteúdo que a pré-visualização lê.
+///
+/// Não é o limite do ficheiro: é o limite do que faz sentido desenhar numa
+/// página. Acima disto a página diz que é grande de mais, que é verdade, em vez
+/// de mostrar um pedaço e deixar acreditar que é o todo.
+const PREVIEW_LIMIT_BYTES: usize = 256 * 1024;
+
+#[derive(Deserialize)]
+struct FilesQuery {
+    #[serde(default)]
+    workspace: Option<Uuid>,
+    #[serde(default)]
+    folder: Option<Uuid>,
+    #[serde(default)]
+    ok: Option<String>,
+    #[serde(default)]
+    erro: Option<String>,
+}
+
+/// Os ambientes que este membro alcança, em pares `(id, nome)`.
+fn ambientes(payload: &Value) -> Vec<(String, String)> {
+    payload
+        .get("items")
+        .and_then(Value::as_array)
+        .or_else(|| payload.as_array())
+        .map(|linhas| {
+            linhas
+                .iter()
+                .filter_map(|linha| {
+                    let id = linha.get("id").and_then(Value::as_str)?;
+                    let nome = linha
+                        .get("title")
+                        .and_then(Value::as_str)
+                        .unwrap_or("Ambiente");
+                    Some((id.to_owned(), nome.to_owned()))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Navegar nos ficheiros de um ambiente.
+async fn files_browse(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(query): Query<FilesQuery>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+
+    let lista = optional(&state, &member, "/api/v1/workspaces?page_size=100").await;
+    let workspaces = ambientes(&lista);
+
+    let Some(workspace_id) = query.workspace else {
+        let content = ui::screens::files::files(ui::screens::files::FilesView {
+            workspaces,
+            workspace_id: None,
+            workspace_name: String::new(),
+            folder_id: None,
+            path: vec![],
+            folders: vec![],
+            files: vec![],
+            may_upload: false,
+            notice: None,
+        });
+        return shell_page(
+            "Ficheiros",
+            &viewer,
+            Screen::Files,
+            vec![Crumb::to(Screen::Files)],
+            content,
+        );
+    };
+
+    let caminho = query.folder.map_or_else(
+        || format!("/api/v1/workspaces/{workspace_id}/files"),
+        |folder| format!("/api/v1/workspaces/{workspace_id}/files?folder={folder}"),
+    );
+
+    // A navegação é a leitura que autoriza. Se o ambiente não é alcançável, a
+    // resposta é a mesma que daria um identificador inventado.
+    let conteudo = match api::get::<Value>(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &caminho,
+    )
+    .await
+    {
+        Ok(conteudo) => conteudo,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    let nome = workspaces
+        .iter()
+        .find(|(id, _)| id == &workspace_id.to_string())
+        .map_or_else(|| "Ambiente".to_owned(), |(_, nome)| nome.clone());
+
+    let listagem = |chave: &str| {
+        conteudo
+            .get(chave)
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+
+    let content = ui::screens::files::files(ui::screens::files::FilesView {
+        workspaces,
+        workspace_id: Some(workspace_id.to_string()),
+        workspace_name: nome,
+        folder_id: query.folder.map(|f| f.to_string()),
+        path: listagem("path"),
+        folders: listagem("folders"),
+        files: listagem("files"),
+        // A resposta do Core, e não a lista institucional do `/me`: o direito
+        // de carregar é do ambiente, e quem gere uma unidade tem-no lá sem o ter
+        // à escala da instituição.
+        may_upload: conteudo
+            .get("may_create")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        notice: aviso_de(query.ok.as_deref(), query.erro.as_deref()),
+    });
+
+    shell_page(
+        "Ficheiros",
+        &viewer,
+        Screen::Files,
+        vec![Crumb::to(Screen::Files)],
+        content,
+    )
+}
+
+/// Traduz o resultado da operação anterior numa mensagem.
+///
+/// Vem da barra de endereço porque a operação anterior foi um POST que
+/// redireccionou, e o estado que sobrevive a um redireccionamento é o que vai
+/// no caminho. O que **não** vai por aqui é conteúdo institucional: só um
+/// código que esta função conhece.
+fn aviso_de(ok: Option<&str>, erro: Option<&str>) -> Option<(bool, String)> {
+    match (ok, erro) {
+        (Some("carregado"), _) => Some((true, "Ficheiro carregado.".to_owned())),
+        (Some("pasta"), _) => Some((true, "Pasta criada.".to_owned())),
+        (Some("versao"), _) => Some((true, "Nova versão carregada.".to_owned())),
+        (_, Some("vazio")) => Some((false, "Escolha um ficheiro antes de confirmar.".to_owned())),
+        (_, Some("nome")) => Some((
+            false,
+            "A pasta precisa de um nome. Já existe uma pasta com esse nome aqui?".to_owned(),
+        )),
+        (_, Some("recusado")) => Some((
+            false,
+            "O Core recusou esta operação. Não tem acesso a este ambiente, \
+             ou a classificação escolhida não lhe está disponível."
+                .to_owned(),
+        )),
+        (_, Some("armazenamento")) => Some((
+            false,
+            "O armazenamento institucional não está a responder. O ficheiro não foi guardado."
+                .to_owned(),
+        )),
+        _ => None,
+    }
+}
+
+/// Lê o ficheiro e os campos de um multipart.
+async fn ler_carregamento(
+    mut multipart: Multipart,
+) -> (
+    Option<(String, String, Vec<u8>)>,
+    std::collections::HashMap<String, String>,
+) {
+    let mut ficheiro = None;
+    let mut campos = std::collections::HashMap::new();
+
+    while let Ok(Some(field)) = multipart.next_field().await {
+        match field.name().map(ToOwned::to_owned) {
+            Some(nome) if nome == "file" => {
+                let filename = field.file_name().unwrap_or("ficheiro").to_owned();
+                let tipo = field
+                    .content_type()
+                    .unwrap_or("application/octet-stream")
+                    .to_owned();
+                if let Ok(bytes) = field.bytes().await {
+                    ficheiro = Some((filename, tipo, bytes.to_vec()));
+                }
+            }
+            Some(nome) => {
+                if let Ok(valor) = field.text().await {
+                    campos.insert(nome, valor);
+                }
+            }
+            None => {}
+        }
+    }
+
+    (ficheiro, campos)
+}
+
+/// Para onde voltar depois de uma operação, com uma mensagem.
+///
+/// O destino vem do formulário, mas nunca se confia nele: só se aceita um
+/// caminho desta aplicação. Um `return_to` para outro sítio seria uma redirecção
+/// aberta oferecida a quem soubesse construir o formulário.
+fn regresso(campos: &std::collections::HashMap<String, String>, sufixo: &str) -> Response {
+    let destino = campos
+        .get("return_to")
+        .filter(|caminho| caminho.starts_with("/files") && !caminho.starts_with("//"))
+        .cloned()
+        .unwrap_or_else(|| "/files".to_owned());
+
+    let junta = if destino.contains('?') { '&' } else { '?' };
+    Redirect::to(&format!("{destino}{junta}{sufixo}")).into_response()
+}
+
+/// Carrega um ficheiro institucional.
+async fn files_upload(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    multipart: Multipart,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let (ficheiro, campos) = ler_carregamento(multipart).await;
+
+    let Some(workspace_id) = campos.get("workspace_id").cloned() else {
+        return Redirect::to("/files").into_response();
+    };
+    let Some((nome, tipo, dados)) = ficheiro else {
+        return regresso(&campos, "erro=vazio");
+    };
+    if dados.is_empty() {
+        return regresso(&campos, "erro=vazio");
+    }
+
+    let resultado = api::upload_with_fields(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/workspaces/{workspace_id}/files"),
+        nome,
+        tipo,
+        dados,
+        vec![
+            (
+                "classification",
+                campos.get("classification").cloned().unwrap_or_default(),
+            ),
+            (
+                "folder_id",
+                campos.get("folder_id").cloned().unwrap_or_default(),
+            ),
+        ],
+    )
+    .await;
+
+    match resultado {
+        Ok(_) => regresso(&campos, "ok=carregado"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(ApiFailure::Unavailable(_)) => regresso(&campos, "erro=armazenamento"),
+        Err(_) => regresso(&campos, "erro=recusado"),
+    }
+}
+
+#[derive(Deserialize)]
+struct NewFolderForm {
+    workspace_id: Uuid,
+    #[serde(default)]
+    parent_id: String,
+    name: String,
+    #[serde(default)]
+    return_to: String,
+}
+
+/// Cria uma pasta.
+async fn files_new_folder(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<NewFolderForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let mut campos = std::collections::HashMap::new();
+    campos.insert("return_to".to_owned(), form.return_to);
+
+    if form.name.trim().is_empty() {
+        return regresso(&campos, "erro=nome");
+    }
+
+    let mut corpo = serde_json::json!({ "name": form.name.trim() });
+    if let Ok(pai) = Uuid::parse_str(&form.parent_id) {
+        corpo["parent_id"] = serde_json::json!(pai);
+    }
+
+    let workspace_id = form.workspace_id;
+    let resultado = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/workspaces/{workspace_id}/folders"),
+        &corpo,
+    )
+    .await;
+
+    match resultado {
+        Ok(_) => regresso(&campos, "ok=pasta"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        // Um nome repetido entre irmãs é a recusa mais provável, e a mensagem
+        // di-lo em vez de falar de restrições da base.
+        Err(_) => regresso(&campos, "erro=nome"),
+    }
+}
+
+/// A página de um ficheiro.
+async fn file_detail(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(file_id): Path<Uuid>,
+    Query(query): Query<FilesQuery>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+
+    let file = match api::get::<Value>(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/files/{file_id}"),
+    )
+    .await
+    {
+        Ok(file) => file,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    let versions = optional(
+        &state,
+        &member,
+        &format!("/api/v1/files/{file_id}/versions"),
+    )
+    .await
+    .as_array()
+    .cloned()
+    .unwrap_or_default();
+
+    let preview = previsualizar(&state, &member, file_id, versions.first()).await;
+
+    let may_upload = file
+        .get("may_write")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let content = ui::screens::files::file_detail(ui::screens::files::FileDetailView {
+        file,
+        versions,
+        preview,
+        // Do Core, pela mesma razão do ecrã de navegação: o direito de
+        // acrescentar uma versão é deste ficheiro, não da instituição.
+        may_upload,
+        notice: aviso_de(query.ok.as_deref(), query.erro.as_deref()),
+    });
+
+    shell_page(
+        "Ficheiro",
+        &viewer,
+        Screen::Files,
+        vec![Crumb::to(Screen::Files)],
+        content,
+    )
+}
+
+/// O que se pode honestamente mostrar do conteúdo.
+///
+/// Só texto, e só até um limite. Uma imagem exigiria que a `Content-Security-
+/// Policy` desta aplicação — hoje `img-src 'self' data:` — passasse a aceitar o
+/// host do armazenamento, que é configurável e pode ser externo. Essa é uma
+/// decisão de segurança, e não uma consequência de alguém querer ver uma
+/// miniatura.
+async fn previsualizar(
+    state: &WorkspaceState,
+    member: &Member,
+    file_id: Uuid,
+    corrente: Option<&Value>,
+) -> ui::screens::files::Preview {
+    use ui::screens::files::Preview;
+
+    let Some(corrente) = corrente else {
+        return Preview::Unavailable("Este ficheiro ainda não tem versões.".to_owned());
+    };
+
+    let tipo = corrente
+        .get("content_type")
+        .and_then(Value::as_str)
+        .unwrap_or("application/octet-stream")
+        .to_owned();
+    let tamanho = corrente
+        .get("size_bytes")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+
+    let e_texto = tipo.starts_with("text/")
+        || matches!(
+            tipo.as_str(),
+            "application/json" | "application/xml" | "application/x-yaml" | "application/yaml"
+        );
+
+    if !e_texto {
+        return Preview::UnsupportedType(tipo);
+    }
+    if tamanho > PREVIEW_LIMIT_BYTES as i64 {
+        return Preview::TooLarge(tamanho);
+    }
+
+    // A ligação assinada é pedida com a sessão deste membro: se o Core recusa,
+    // não há pré-visualização — e é a mesma recusa que o botão de descarga daria.
+    let assinada = match api::get::<Value>(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/files/{file_id}/download"),
+    )
+    .await
+    {
+        Ok(resposta) => resposta
+            .get("url")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        Err(_) => {
+            return Preview::Unavailable(
+                "O Core não autorizou a leitura do conteúdo agora.".to_owned(),
+            )
+        }
+    };
+
+    if assinada.is_empty() {
+        return Preview::Unavailable("O armazenamento não devolveu uma ligação.".to_owned());
+    }
+
+    match api::fetch_bounded(state, &assinada, PREVIEW_LIMIT_BYTES).await {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            Ok(texto) => Preview::Text(texto),
+            Err(_) => Preview::UnsupportedType(format!("{tipo} (não é texto legível)")),
+        },
+        Err(_) => Preview::Unavailable(
+            "O armazenamento institucional não respondeu ao pedido do conteúdo.".to_owned(),
+        ),
+    }
+}
+
+/// Carrega uma versão nova de um ficheiro que já existe.
+async fn file_new_version(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(file_id): Path<Uuid>,
+    multipart: Multipart,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let (ficheiro, _) = ler_carregamento(multipart).await;
+
+    let destino = format!("/files/{file_id}");
+    let Some((nome, tipo, dados)) = ficheiro else {
+        return Redirect::to(&format!("{destino}?erro=vazio")).into_response();
+    };
+    if dados.is_empty() {
+        return Redirect::to(&format!("{destino}?erro=vazio")).into_response();
+    }
+
+    let resultado = api::upload_with_fields(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/files/{file_id}/versions"),
+        nome,
+        tipo,
+        dados,
+        vec![],
+    )
+    .await;
+
+    match resultado {
+        Ok(_) => Redirect::to(&format!("{destino}?ok=versao")).into_response(),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(ApiFailure::Unavailable(_)) => {
+            Redirect::to(&format!("{destino}?erro=armazenamento")).into_response()
+        }
+        Err(_) => Redirect::to(&format!("{destino}?erro=recusado")).into_response(),
+    }
+}
+
+/// Descarrega a versão corrente.
+async fn file_download(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(file_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    ligacao_assinada(
+        &state,
+        &member,
+        &format!("/api/v1/files/{file_id}/download"),
+    )
+    .await
+}
+
+/// Descarrega uma versão exacta.
+async fn version_download(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(version_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    ligacao_assinada(
+        &state,
+        &member,
+        &format!("/api/v1/file-versions/{version_id}/download"),
+    )
+    .await
+}
+
+/// Pede a ligação ao Core e encaminha para lá.
+///
+/// A ligação não é escrita na página: é pedida no momento do clique e usada uma
+/// vez. Uma URL assinada colada num `href` ficaria no histórico do browser e em
+/// qualquer registo pelo caminho, e continuaria a valer depois de a pessoa
+/// deixar de ter acesso.
+async fn ligacao_assinada(state: &WorkspaceState, member: &Member, caminho: &str) -> Response {
+    match api::get::<Value>(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        caminho,
+    )
+    .await
+    {
+        Ok(resposta) => resposta.get("url").and_then(Value::as_str).map_or_else(
+            || failure_response(&ApiFailure::Unavailable(None)),
+            |url| Redirect::to(url).into_response(),
+        ),
+        Err(failure) => failure_response(&failure),
     }
 }

@@ -157,6 +157,11 @@ fn o_sprite_e_o_catalogo_de_icones_cobrem_se_mutuamente() {
         .filter(|id| id.starts_with("oc-"))
         .collect();
 
+    // Quarenta e nove desde 2026-08-29: `oc-files` e `oc-folder` entraram com o
+    // ecrã de Ficheiros. Uma pasta e uma folha, e não um disco ou uma nuvem: o
+    // que o ecrã mostra é arrumação institucional, não armazenamento — a pasta
+    // não decide nada sobre quem lê o que está dentro dela.
+    //
     // Quarenta e sete desde 2026-08-28: `oc-science` entrou com a cadeia
     // científica. Três nós ligados por duas arestas, e não um frasco de
     // laboratório: o que o ecrã mostra é proveniência, e o Ocinye OS não é um
@@ -166,7 +171,7 @@ fn o_sprite_e_o_catalogo_de_icones_cobrem_se_mutuamente() {
     // tinha um glifo de fechar, e o compositor fechava com uma seta — que se
     // lê como «seguinte». O número muda **por decisão**, e é isso que este
     // teste protege: um ícone que desapareça do dossier tem de dar vermelho.
-    assert_eq!(declared.len(), 47, "o dossier declara 47 ícones");
+    assert_eq!(declared.len(), 49, "o dossier declara 49 ícones");
 
     for id in &declared {
         assert!(

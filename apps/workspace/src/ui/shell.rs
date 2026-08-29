@@ -38,6 +38,8 @@ pub enum Screen {
     Bibliography,
     /// Datasets.
     Datasets,
+    /// Ficheiros institucionais.
+    Files,
     /// Hub de IA.
     Ai,
     /// Agentes de IA.
@@ -79,6 +81,7 @@ impl Screen {
             Self::Knowledge => "/knowledge",
             Self::Bibliography => "/bibliography",
             Self::Datasets => "/datasets",
+            Self::Files => "/files",
             Self::Ai => "/ai",
             Self::Agents => "/ai/agents",
             Self::Compute => "/compute",
@@ -110,6 +113,7 @@ impl Screen {
             Self::Knowledge => "Conhecimento",
             Self::Bibliography => "Bibliografia",
             Self::Datasets => "Dados",
+            Self::Files => "Ficheiros",
             Self::Ai => "Ocinye AI",
             Self::Agents => "Agentes",
             Self::Compute => "Computação",
@@ -138,6 +142,7 @@ impl Screen {
             Self::Knowledge => Icon::Knowledge,
             Self::Bibliography => Icon::Bibliography,
             Self::Datasets => Icon::Data,
+            Self::Files => Icon::Files,
             Self::Ai | Self::Prompt => Icon::Ai,
             Self::Search => Icon::Search,
             Self::Ask => Icon::Ai,
@@ -172,7 +177,12 @@ const GROUPS: [(&str, &[Screen]); 5] = [
     ),
     (
         "CONHECIMENTO",
-        &[Screen::Knowledge, Screen::Bibliography, Screen::Datasets],
+        &[
+            Screen::Knowledge,
+            Screen::Files,
+            Screen::Bibliography,
+            Screen::Datasets,
+        ],
     ),
     (
         "INTELIGÊNCIA",
@@ -313,6 +323,14 @@ const fn screen_permission(screen: Screen) -> Option<Permission> {
         Screen::Projects => Some(Permission::ProjectsView),
         Screen::Knowledge | Screen::Bibliography => Some(Permission::BibliographyView),
         Screen::Datasets => Some(Permission::DatasetsView),
+        // Ficheiros institucionais. `DocumentsView` é o mesmo direito que já
+        // governa o acervo documental: um ficheiro não é um substantivo novo
+        // com um direito novo, é o objecto sobre o qual o Document se apoia.
+        //
+        // Ver a entrada na navegação não é ver ficheiro nenhum: quem entra sem
+        // alcançar nada vê um ambiente vazio, porque é o Core que decide o que
+        // existe para cada pessoa.
+        Screen::Files => Some(Permission::DocumentsView),
         Screen::Ai => Some(Permission::AiUse),
         Screen::Agents => Some(Permission::AgentsView),
         Screen::Compute => Some(Permission::ComputeView),
@@ -1044,7 +1062,7 @@ fn create_menu(viewer: &Viewer) -> impl IntoView {
 
 /// Todos os ecrãs, incluindo os que não estão na navegação lateral.
 ///
-/// `PALETTE_NAV` é a lista dos dezassete destinos institucionais. Esta é maior:
+/// `PALETTE_NAV` é a lista dos dezoito destinos institucionais. Esta é maior:
 /// junta-lhe os ecrãs do próprio membro, que existem no rodapé e não na
 /// navegação, mas que continuam a precisar de estado activo e de posse de
 /// rotas como qualquer outro.
@@ -1052,7 +1070,7 @@ fn create_menu(viewer: &Viewer) -> impl IntoView {
     not(test),
     allow(dead_code, reason = "lida pela auditoria de estado activo")
 )]
-const SCREENS: [Screen; 21] = [
+const SCREENS: [Screen; 22] = [
     Screen::Home,
     Screen::MyWork,
     Screen::Calendar,
@@ -1062,6 +1080,7 @@ const SCREENS: [Screen; 21] = [
     Screen::Ideas,
     Screen::Projects,
     Screen::Knowledge,
+    Screen::Files,
     Screen::Bibliography,
     Screen::Datasets,
     Screen::Ai,
@@ -1121,7 +1140,7 @@ impl Screen {
 }
 
 /// Os destinos da command palette.
-const PALETTE_NAV: [Screen; 17] = [
+const PALETTE_NAV: [Screen; 18] = [
     Screen::Home,
     Screen::MyWork,
     Screen::Calendar,
@@ -1131,6 +1150,7 @@ const PALETTE_NAV: [Screen; 17] = [
     Screen::Ideas,
     Screen::Projects,
     Screen::Knowledge,
+    Screen::Files,
     Screen::Bibliography,
     Screen::Datasets,
     Screen::Ai,

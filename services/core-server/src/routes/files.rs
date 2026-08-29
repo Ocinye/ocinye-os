@@ -29,17 +29,15 @@ pub fn routes() -> Router<AppState> {
         // pasta onde o ficheiro cai.
         .route(
             "/workspaces/{workspace_id}/files",
-            get(browse).post(
-                upload_file.layer(DefaultBodyLimit::max(super::UPLOAD_BODY_LIMIT_BYTES)),
-            ),
+            get(browse)
+                .post(upload_file.layer(DefaultBodyLimit::max(super::UPLOAD_BODY_LIMIT_BYTES))),
         )
         .route("/workspaces/{workspace_id}/folders", post(create_folder))
         .route("/files/{file_id}", get(show_file))
         .route(
             "/files/{file_id}/versions",
-            get(list_versions).post(
-                upload_version.layer(DefaultBodyLimit::max(super::UPLOAD_BODY_LIMIT_BYTES)),
-            ),
+            get(list_versions)
+                .post(upload_version.layer(DefaultBodyLimit::max(super::UPLOAD_BODY_LIMIT_BYTES))),
         )
         .route("/files/{file_id}/download", get(download_file))
         // A versão exacta tem caminho próprio porque é um recurso próprio: «o
@@ -97,6 +95,8 @@ impl From<files::FileListing> for FileView {
 
 #[derive(Serialize)]
 struct FolderContentsView {
+    /// Se quem navega pode criar aqui. Cortesia de renderização, nunca autoridade.
+    may_create: bool,
     /// Da raiz até à pasta actual. Vazio na raiz.
     path: Vec<FolderView>,
     folders: Vec<FolderView>,
@@ -149,6 +149,7 @@ async fn browse(
 ) -> Result<Json<FolderContentsView>, ApiError> {
     let contents = files::browse(&state.pool, &principal, workspace_id, query.folder).await?;
     Ok(Json(FolderContentsView {
+        may_create: contents.may_create,
         path: contents.path.into_iter().map(FolderView::from).collect(),
         folders: contents.folders.into_iter().map(FolderView::from).collect(),
         files: contents.files.into_iter().map(FileView::from).collect(),
@@ -162,7 +163,15 @@ async fn show_file(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut conn = state.pool.acquire().await.map_err(CoreError::from)?;
     let (ficheiro, workspace) = files::get(&mut conn, &principal, file_id).await?;
+
+    // A mesma pergunta que `upload_version` faz. Vem daqui e não da lista de
+    // capacidades do `/me`, que é de âmbito institucional: quem pode escrever
+    // neste ficheiro pode não ter esse direito à escala da instituição, e o
+    // contrário também é verdade.
+    let may_write = files::may_write(&principal, &workspace, ficheiro.classification());
+
     Ok(Json(serde_json::json!({
+        "may_write": may_write,
         "id": ficheiro.id,
         "name": ficheiro.name,
         "classification": ficheiro.classification().as_str(),

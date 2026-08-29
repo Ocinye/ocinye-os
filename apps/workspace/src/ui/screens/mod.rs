@@ -13,6 +13,7 @@ pub mod ask;
 pub mod boot;
 pub mod calendar;
 pub mod compute;
+pub mod files;
 pub mod first_access;
 pub mod help;
 pub mod home;

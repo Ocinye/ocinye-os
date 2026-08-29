@@ -387,6 +387,91 @@ pub async fn upload(
     interpret(response).await
 }
 
+/// Um upload com campos ao lado do ficheiro.
+///
+/// O `upload` acima serve o caso de um ficheiro sozinho — a fotografia. Os
+/// ficheiros institucionais trazem escolhas da pessoa que os carrega: a pasta
+/// onde ficam e a classificação que declaram. Vão como campos do mesmo
+/// multipart porque é o Core que os lê, e vão sem interpretação nenhuma daqui:
+/// esta função não decide o que é uma classificação válida.
+///
+/// # Errors
+///
+/// Devolve erro quando o multipart não se forma, quando o Core não responde, ou
+/// quando o Core recusa.
+#[allow(clippy::too_many_arguments)]
+pub async fn upload_with_fields(
+    state: &WorkspaceState,
+    token: &str,
+    correlation_id: &str,
+    path: &str,
+    filename: String,
+    content_type: String,
+    data: Vec<u8>,
+    fields: Vec<(&str, String)>,
+) -> Result<Value, ApiFailure> {
+    let part = reqwest::multipart::Part::bytes(data)
+        .file_name(filename)
+        .mime_str(&content_type)
+        .map_err(|_| ApiFailure::Failed("the upload is malformed".to_owned()))?;
+
+    let mut form = reqwest::multipart::Form::new().part("file", part);
+    for (nome, valor) in fields {
+        if !valor.is_empty() {
+            form = form.text(nome.to_owned(), valor);
+        }
+    }
+
+    let response = state
+        .http
+        .post(format!("{}{path}", state.config.core_url))
+        .bearer_auth(token)
+        .header(ocinye_observability::CORRELATION_ID_HEADER, correlation_id)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|error| ApiFailure::Failed(format!("the Core is unreachable: {error}")))?;
+
+    interpret(response).await
+}
+
+/// Lê bytes de uma ligação assinada, até um limite.
+///
+/// Serve a pré-visualização: o Workspace lê o conteúdo com a mesma sessão com
+/// que já lê tudo o resto, e devolve-o à página. Não guarda nada, e o limite
+/// existe para que um ficheiro grande não passe a ser um problema de memória
+/// desta aplicação.
+///
+/// # Errors
+///
+/// Devolve erro quando a ligação não responde ou responde com falha.
+pub async fn fetch_bounded(
+    state: &WorkspaceState,
+    url: &str,
+    limite: usize,
+) -> Result<Vec<u8>, ApiFailure> {
+    let response = state
+        .http
+        .get(url)
+        .send()
+        .await
+        .map_err(|error| ApiFailure::Failed(format!("the object is unreachable: {error}")))?;
+
+    if !response.status().is_success() {
+        return Err(ApiFailure::Failed(format!(
+            "the object store answered {}",
+            response.status()
+        )));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| ApiFailure::Failed(format!("the object could not be read: {error}")))?;
+
+    Ok(bytes.into_iter().take(limite).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

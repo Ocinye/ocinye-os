@@ -566,6 +566,18 @@ pub async fn create_folder(
 
 /// O que uma pasta contém: pastas e ficheiros que quem pergunta alcança.
 pub struct FolderContents {
+    /// Se quem está a navegar pode criar aqui.
+    ///
+    /// # Porque vem do Core, e não da lista de capacidades
+    ///
+    /// Porque a lista que o `/me` devolve é de âmbito institucional, e o
+    /// direito de carregar um ficheiro é do ambiente: quem gere uma unidade
+    /// carrega nos ambientes dela e em mais nenhum. Perguntar à lista
+    /// institucional escondia o botão a quem o Core teria aceitado — um
+    /// controlo ausente é tão enganador como um que não funciona.
+    ///
+    /// Continua a ser cortesia e não segurança: `create` volta a decidir.
+    pub may_create: bool,
     /// O caminho até à raiz, para migalhas.
     pub path: Vec<repo::FolderRecord>,
     /// As pastas imediatamente dentro.
@@ -586,7 +598,16 @@ pub async fn browse(
     folder_id: Option<Uuid>,
 ) -> CoreResult<FolderContents> {
     let workspace = crate::modules::research::get_workspace(pool, principal, workspace_id).await?;
-    let _ = &workspace;
+
+    // A mesma pergunta que `create` faz, contra a classificação do ambiente:
+    // um ficheiro criado sem declarar classificação herda-a, e é essa a decisão
+    // que o ecrã precisa de antecipar.
+    let may_create = authorize(
+        principal,
+        Action::Create,
+        &file_context(&workspace, workspace.classification()),
+    )
+    .is_ok();
 
     let path = match folder_id {
         None => Vec::new(),
@@ -606,6 +627,7 @@ pub async fn browse(
     let files = repo::list_files(pool, workspace_id, folder_id, &filtro).await?;
 
     Ok(FolderContents {
+        may_create,
         path,
         folders,
         files,
@@ -670,6 +692,26 @@ pub async fn move_to_folder(
     .await?;
 
     Ok(())
+}
+
+/// Se este principal pode acrescentar uma versão a este ficheiro.
+///
+/// A mesma pergunta que `upload_version` faz, e feita aqui para que um ecrã
+/// possa antecipá-la sem repetir a política fora do Core. Continua a ser
+/// cortesia de renderização: `upload_version` volta a decidir, e é a decisão
+/// dela que vale.
+#[must_use]
+pub fn may_write(
+    principal: &Principal,
+    workspace: &crate::modules::research::ResearchWorkspace,
+    classification: Classification,
+) -> bool {
+    authorize(
+        principal,
+        Action::Update,
+        &file_context(workspace, classification),
+    )
+    .is_ok()
 }
 
 /// O histórico de versões de um ficheiro.

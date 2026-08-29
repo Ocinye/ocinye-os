@@ -76,6 +76,10 @@ pub enum Icon {
     Attach,
     Dataset,
     Document,
+    /// Ficheiros institucionais.
+    Files,
+    /// Uma pasta de navegação.
+    Folder,
     Tools,
     Send,
     Mail,
@@ -132,6 +136,8 @@ impl Icon {
             Self::Attach => "oc-attach",
             Self::Dataset => "oc-dataset",
             Self::Document => "oc-document",
+            Self::Files => "oc-files",
+            Self::Folder => "oc-folder",
             Self::Tools => "oc-tools",
             Self::Send => "oc-send",
             Self::Mail => "oc-mail",
@@ -205,7 +211,7 @@ mod tests {
     /// O sprite é a fonte de verdade. Se um símbolo for removido ou renomeado
     /// lá, os dois testes abaixo falham em vez de a interface renderizar um
     /// espaço vazio.
-    const ALL: [Icon; 47] = [
+    const ALL: [Icon; 49] = [
         Icon::User,
         Icon::Lock,
         Icon::ArrowRight,
@@ -243,6 +249,8 @@ mod tests {
         Icon::Attach,
         Icon::Dataset,
         Icon::Document,
+        Icon::Files,
+        Icon::Folder,
         Icon::Tools,
         Icon::Send,
         Icon::Mail,

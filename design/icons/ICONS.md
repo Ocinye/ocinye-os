@@ -43,6 +43,8 @@ Ou copie o conteúdo do `<symbol>` directamente para o componente de ícone do s
 | `oc-attach` | `0 0 14 14` | acção Anexar (prompt input) |
 | `oc-dataset` | `0 0 14 14` | acção Dataset (prompt input) |
 | `oc-document` | `0 0 14 14` | acção Documento (prompt input) |
+| `oc-files` | `0 0 14 14` | nav Ficheiros; zona de largada do carregamento |
+| `oc-folder` | `0 0 14 14` | raiz do trilho de pastas em Ficheiros |
 | `oc-tools` | `0 0 14 14` | acção Ferramentas (prompt input) |
 | `oc-send` | `0 0 16 16` | botão circular de envio (Sunrise Gold) |
 | `oc-compute-lg` | `0 0 32 32` | estado vazio Computação |

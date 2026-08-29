@@ -28,6 +28,6 @@ pub mod service;
 pub use repository::{FileListing, FileRecord, FolderRecord, VersionListing};
 pub use service::{
     add_version, browse, create, create_folder, create_with_first_version, current_version,
-    download_url, file_context, get, get_version, move_to_folder, upload_version,
+    download_url, file_context, get, get_version, may_write, move_to_folder, upload_version,
     version_download_url, versions, FileContext, FileVersionRecord, FolderContents, NewFile,
 };

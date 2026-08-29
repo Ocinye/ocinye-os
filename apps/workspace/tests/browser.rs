@@ -1194,6 +1194,26 @@ fn chave_do_correio() -> &'static ocinye_core::password::sealed::SealingKey {
     })
 }
 
+/// O armazenamento de objectos das viagens que carregam bytes.
+///
+/// `None` quando as variáveis não estão postas. Quem chama tem de o dizer — um
+/// teste que se salta em silêncio é verde a afirmar nada.
+fn store_de_teste() -> Option<ocinye_core::storage::ObjectStore> {
+    ocinye_core::storage::ObjectStore::new(ocinye_core::config::StorageConfig {
+        endpoint_url: std::env::var("OCINYE_TEST_STORAGE_ENDPOINT").ok()?,
+        region: std::env::var("OCINYE_TEST_STORAGE_REGION")
+            .unwrap_or_else(|_| "us-east-1".to_owned()),
+        access_key: std::env::var("OCINYE_TEST_STORAGE_ACCESS_KEY").ok()?,
+        secret_key: std::env::var("OCINYE_TEST_STORAGE_SECRET_KEY").ok()?,
+        bucket: std::env::var("OCINYE_TEST_STORAGE_BUCKET")
+            .unwrap_or_else(|_| "ocinye-test-artifacts".to_owned()),
+        backend_code: "ocinye-test-default".to_owned(),
+        location_label: "test".to_owned(),
+        residency: ocinye_contracts::storage::Residency::Undeclared,
+        max_upload_bytes: 32 * 1024 * 1024,
+    })
+}
+
 fn core_state(pool: PgPool, organisation_id: Uuid, database_url: &str) -> AppState {
     use std::sync::Once;
     static ONCE: Once = Once::new();
@@ -1285,7 +1305,13 @@ fn core_state(pool: PgPool, organisation_id: Uuid, database_url: &str) -> AppSta
         config: Arc::new(config),
         verifier,
         authenticator,
-        store: None,
+        // O armazenamento entra quando está configurado, e só então.
+        //
+        // Com `None` o Core recusa carregamentos com «storage unavailable», que
+        // é a resposta certa numa instalação sem armazenamento — mas faria a
+        // viagem de Ficheiros provar o contrário do que se quer provar. A
+        // jornada que carrega bytes diz em voz alta quando não pode correr.
+        store: store_de_teste().map(std::sync::Arc::new),
         inference: Arc::new(ocinye_core::modules::intelligence::NoProvider),
         mail_registry,
         // Estes testes medem HTTP, e não tempo real. Um plano ausente aceita
@@ -7341,4 +7367,340 @@ async fn capturas_da_ciencia() {
         .await;
     esperar_por(&pagina, "Resultados").await;
     capturar_visivel(&pagina, "ciencia-cadeia").await;
+}
+
+// ── Ficheiros institucionais, pelo browser ───────────────────────────────
+
+/// Semeia um ficheiro com uma versão, sem passar pelo armazenamento.
+///
+/// A navegação, o histórico e a autorização não dependem de os bytes estarem
+/// num bucket: dependem das linhas. Semear assim deixa a viagem humana ser
+/// verificada mesmo numa máquina sem MinIO — e a viagem que **precisa** de
+/// bytes diz em voz alta quando não pode correr.
+async fn semear_ficheiro(
+    harness: &Harness,
+    workspace_id: Uuid,
+    nome: &str,
+    classificacao: &str,
+) -> Uuid {
+    let (organisation_id, unit_id): (Uuid, Uuid) =
+        sqlx::query_as("SELECT organisation_id, unit_id FROM research_workspaces WHERE id = $1")
+            .bind(workspace_id)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("ambiente");
+
+    let backend_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO storage_backends (code, display_name, location_label, bucket)
+         VALUES ($1, 'Harness', 'test', 'prova') RETURNING id",
+    )
+    .bind(format!("b{}", &Uuid::new_v4().simple().to_string()[..12]))
+    .fetch_one(&harness.pool)
+    .await
+    .expect("backend");
+
+    let object_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO storage_objects
+             (organisation_id, backend_id, object_key, original_filename,
+              content_type, size_bytes, checksum_sha256, status, classification)
+         VALUES ($1, $2, $3, $4, 'text/plain', 42, $5, 'stored', $6) RETURNING id",
+    )
+    .bind(organisation_id)
+    .bind(backend_id)
+    .bind(format!("prova/{}", Uuid::new_v4()))
+    .bind(nome)
+    .bind(format!("{:064x}", rand_like()))
+    .bind(classificacao)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("objecto");
+
+    let file_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO files (organisation_id, unit_id, workspace_id, name, classification)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id",
+    )
+    .bind(organisation_id)
+    .bind(unit_id)
+    .bind(workspace_id)
+    .bind(nome)
+    .bind(classificacao)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("ficheiro");
+
+    sqlx::query(
+        "INSERT INTO file_versions (file_id, sequence, storage_object_id)
+         VALUES ($1, 1, $2)",
+    )
+    .bind(file_id)
+    .bind(object_id)
+    .execute(&harness.pool)
+    .await
+    .expect("versão");
+
+    file_id
+}
+
+/// Uma soma distinta por chamada, sem depender de um gerador aleatório.
+fn rand_like() -> u128 {
+    Uuid::new_v4().as_u128()
+}
+
+/// Uma pessoa autorizada organiza, navega, vê e versiona ficheiros.
+///
+/// # A viagem
+///
+/// ```text
+/// entrar → Ficheiros na sidebar → escolher o ambiente → ver o ficheiro
+///        → criar uma pasta → entrar nela → trilho → voltar
+///        → abrir o ficheiro → detalhes, classificação e histórico
+/// ```
+///
+/// # O que a viagem tem de provar, e não só mostrar
+///
+/// Que o ecrã existe na navegação, que as pastas se criam e se percorrem, que
+/// o ficheiro tem uma página com o seu histórico, e que a classificação que
+/// aparece é a do ficheiro — não a da pasta onde ele está.
+#[tokio::test]
+async fn uma_pessoa_organiza_e_percorre_os_ficheiros_no_browser() {
+    let harness = harness!();
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+    let nome = unique_title("ensaio");
+    let file_id = semear_ficheiro(&harness, workspace_id, &nome, "INTERNAL").await;
+
+    // A entrada existe na navegação, sob CONHECIMENTO.
+    let page = harness.open("/").await;
+    esperar_por(&page, "Ficheiros").await;
+
+    // O ambiente escolhe-se: não há um por omissão.
+    let page = harness.open("/files").await;
+    esperar_por(&page, "Escolha o ambiente").await;
+
+    let lista = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&lista, &nome).await;
+    let html = lista.content().await.expect("conteúdo");
+    assert!(
+        html.contains("Largue ficheiros aqui"),
+        "a zona de carregamento não chegou ao browser"
+    );
+
+    // Criar uma pasta, pelo formulário, como uma pessoa faz.
+    let pasta = unique_title("Ensaios");
+    set_field(&lista, "#oc-files-folder", &pasta).await;
+    submit(&lista, "form[action='/files/folder']").await;
+    esperar_por(&lista, &pasta).await;
+
+    // A pasta existe na base, e não só no ecrã.
+    let quantas: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM folders WHERE workspace_id = $1 AND name = $2")
+            .bind(workspace_id)
+            .bind(&pasta)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("contagem de pastas");
+    assert_eq!(quantas, 1, "a pasta criada no ecrã não existe na base");
+
+    // Entrar na pasta: está vazia, e o trilho leva de volta.
+    let folder_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM folders WHERE workspace_id = $1 AND name = $2")
+            .bind(workspace_id)
+            .bind(&pasta)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("pasta");
+
+    let dentro = harness
+        .open(&format!(
+            "/files?workspace={workspace_id}&folder={folder_id}"
+        ))
+        .await;
+    esperar_por(&dentro, "Ainda não há nada aqui").await;
+    let html = dentro.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&pasta),
+        "o trilho não mostra a pasta onde a pessoa está"
+    );
+    assert!(
+        !html.contains(&nome),
+        "o ficheiro da raiz apareceu dentro de uma pasta onde não está"
+    );
+
+    // A página do ficheiro: detalhes, classificação e histórico.
+    let detalhe = harness.open(&format!("/files/{file_id}")).await;
+    esperar_por(&detalhe, "Histórico de versões").await;
+    let html = detalhe.content().await.expect("conteúdo");
+    assert!(html.contains(&nome), "a página não é a do ficheiro pedido");
+    assert!(
+        html.contains("Carregar nova versão"),
+        "não há como carregar uma versão nova"
+    );
+    assert!(
+        html.contains("Soma SHA-256"),
+        "os detalhes não mostram a soma que identifica os bytes"
+    );
+    assert!(
+        html.contains("v1"),
+        "o histórico não mostra a primeira versão"
+    );
+}
+
+/// Conhecer o identificador não é ter acesso, e o browser não é excepção.
+///
+/// A recusa é indistinguível de o ficheiro não existir: quem não o alcança não
+/// deve aprender que ele existe por ver uma mensagem diferente.
+#[tokio::test]
+async fn um_estranho_com_o_identificador_nao_alcanca_o_ficheiro_no_browser() {
+    let harness = harness!();
+
+    let (dono, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(dono).await;
+    let nome = unique_title("restrito");
+    let file_id = semear_ficheiro(&harness, workspace_id, &nome, "RESTRICTED").await;
+
+    // Outra pessoa, da mesma organização, sem pertencer ao ambiente.
+    let (_, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    let pagina = harness.open(&format!("/files/{file_id}")).await;
+    let html = pagina.content().await.expect("conteúdo");
+    assert!(
+        !html.contains(&nome),
+        "o nome do ficheiro chegou a quem não o alcança"
+    );
+    assert!(
+        !html.contains("Histórico de versões"),
+        "a página do ficheiro abriu para quem não tem acesso"
+    );
+}
+
+/// Uma pessoa larga um ficheiro na zona de largada, e ele fica.
+///
+/// # A viagem
+///
+/// ```text
+/// entrar → Ficheiros → largar bytes na zona
+///        → app.js → POST multipart → Core → autorização → MinIO
+///        → PostgreSQL → recarregar → o ficheiro está na lista
+/// ```
+///
+/// # O que esta viagem prova e a outra não
+///
+/// Que os bytes atravessam mesmo. As outras viagens semeiam linhas e provam
+/// navegação; esta usa o armazenamento a sério, e por isso diz em voz alta
+/// quando não pode correr — um teste que se salta em silêncio é verde a
+/// afirmar nada.
+///
+/// E prova a segunda metade da mesma frase: **carregar um ficheiro não é
+/// afirmar conhecimento institucional.** Depois de o ficheiro existir, não há
+/// um documento, um dataset nem uma fonte que ninguém tenha pedido.
+#[tokio::test]
+async fn uma_pessoa_larga_um_ficheiro_e_ele_fica() {
+    let harness = harness!();
+
+    if store_de_teste().is_none() {
+        eprintln!(
+            "SALTADO: uma_pessoa_larga_um_ficheiro_e_ele_fica — \
+             OCINYE_TEST_STORAGE_ENDPOINT não está definida, e sem armazenamento \
+             esta viagem não prova que os bytes atravessam."
+        );
+        return;
+    }
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+
+    let antes: i64 = sqlx::query_scalar("SELECT count(*) FROM documents WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("documentos antes");
+
+    let pagina = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&pagina, "Largue ficheiros aqui").await;
+
+    // Largar, como uma pessoa larga: um `File` a sério, num `DataTransfer`, num
+    // evento `drop` sobre a zona. Não se chama a função interna — chama-se o
+    // browser, que é quem a pessoa usa.
+    let nome = format!("{}.txt", unique_title("largado").replace(' ', "-"));
+    let script = format!(
+        "(() => {{ \
+           const forma = document.querySelector('form[data-drop=\"1\"]'); \
+           if (!forma) return 'sem forma'; \
+           const ficheiro = new File(['prova institucional'], '{nome}', \
+             {{ type: 'text/plain' }}); \
+           const dt = new DataTransfer(); \
+           dt.items.add(ficheiro); \
+           forma.dispatchEvent(new DragEvent('drop', \
+             {{ bubbles: true, cancelable: true, dataTransfer: dt }})); \
+           return 'largado'; }})()"
+    );
+    let resultado: Option<String> = pagina
+        .evaluate(script)
+        .await
+        .expect("largar")
+        .into_value()
+        .ok();
+    assert_eq!(
+        resultado.as_deref(),
+        Some("largado"),
+        "a zona de largada não recebeu o ficheiro"
+    );
+
+    // O ficheiro chega à base, com a sua primeira versão e os bytes contados.
+    let limite = std::time::Instant::now();
+    let file_id = loop {
+        let encontrado: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND name = $2")
+                .bind(workspace_id)
+                .bind(&nome)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("procura do ficheiro");
+
+        if let Some(id) = encontrado {
+            break id;
+        }
+        assert!(
+            limite.elapsed() < DEADLINE,
+            "o ficheiro largado não chegou ao PostgreSQL em {DEADLINE:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    };
+
+    let (sequencia, bytes): (i32, i64) = sqlx::query_as(
+        "SELECT v.sequence, o.size_bytes
+           FROM file_versions v
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE v.file_id = $1",
+    )
+    .bind(file_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("versão do ficheiro largado");
+
+    assert_eq!(sequencia, 1, "a primeira versão não é a número 1");
+    assert_eq!(
+        bytes,
+        "prova institucional".len() as i64,
+        "os bytes que chegaram não são os que foram largados"
+    );
+
+    // E não nasceu conhecimento que ninguém afirmou.
+    let depois: i64 = sqlx::query_scalar("SELECT count(*) FROM documents WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("documentos depois");
+    assert_eq!(
+        depois, antes,
+        "largar um ficheiro criou um documento de conhecimento"
+    );
+
+    // A lista, recarregada pelo próprio `app.js`, mostra-o.
+    esperar_por(&pagina, &nome).await;
 }
