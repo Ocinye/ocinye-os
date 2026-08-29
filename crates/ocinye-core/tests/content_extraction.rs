@@ -392,10 +392,15 @@ async fn processar(
     versao: Uuid,
 ) -> Estado {
     let mut tx = pool.begin().await.expect("tx");
-    let estado = extraction::process(&mut tx, store, versao)
-        .await
-        .expect("processamento")
-        .expect("havia trabalho por fazer");
+    let estado = extraction::process(
+        &mut tx,
+        store,
+        versao,
+        &ocinye_observability::CorrelationIds::generate(),
+    )
+    .await
+    .expect("processamento")
+    .expect("havia trabalho por fazer");
     tx.commit().await.expect("commit");
     estado
 }
@@ -626,9 +631,14 @@ async fn reprocessar_a_mesma_versao_nao_duplica_pedacos() {
 
     // O evento chega outra vez. `claim` devolve `None` porque já está lida.
     let mut tx = pool.begin().await.expect("tx");
-    let repetido = extraction::process(&mut tx, &store, versao.version_id)
-        .await
-        .expect("reprocessamento");
+    let repetido = extraction::process(
+        &mut tx,
+        &store,
+        versao.version_id,
+        &ocinye_observability::CorrelationIds::generate(),
+    )
+    .await
+    .expect("reprocessamento");
     tx.commit().await.expect("commit");
 
     assert!(

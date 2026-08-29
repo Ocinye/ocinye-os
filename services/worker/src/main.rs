@@ -138,7 +138,7 @@ async fn main() -> anyhow::Result<()> {
                     Err(error) => tracing::error!(error = %error, "mail ingestion pass failed"),
                 }
             }
-            drained = outbox::drain(&pool, BATCH_SIZE, store.as_ref()) => {
+            drained = outbox::drain(&pool, BATCH_SIZE, store.as_ref(), None) => {
                 match drained {
                     // An empty pass means idle: back off rather than spin.
                     Ok(0) => tokio::time::sleep(IDLE_POLL_INTERVAL).await,

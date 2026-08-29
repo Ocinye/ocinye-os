@@ -17,5 +17,6 @@ mod service;
 
 pub use model::{BodyHit, SearchHit, SemanticAvailability};
 pub use service::{
-    index_entity, remove_entity, search, search_bodies, semantic_availability, IndexRequest,
+    index_entity, remove_entity, search, search_bodies, search_hybrid, semantic_availability,
+    semantic_candidates, IndexRequest,
 };

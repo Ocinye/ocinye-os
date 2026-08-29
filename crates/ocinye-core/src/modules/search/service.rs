@@ -170,6 +170,187 @@ pub async fn search_bodies(
     Ok((hits, total))
 }
 
+/// Pesquisa híbrida: lexical e semântica, como geradores independentes.
+///
+/// # Porque são dois geradores e não um
+///
+/// Porque encontram coisas diferentes. O lexical encontra a frase exacta; o
+/// semântico encontra a paráfrase. Um sistema que só tivesse o primeiro perde a
+/// pergunta feita por outras palavras; um que só tivesse o segundo perde o
+/// termo técnico raro que o modelo nunca viu.
+///
+/// A fusão é por posição recíproca (RRF): cada lista contribui `1/(k+posição)`,
+/// e um documento que aparece em ambas sobe. Não precisa de calibrar scores
+/// entre espaços que não são comparáveis — que é exactamente o problema de
+/// somar uma distância de cosseno com um `ts_rank`.
+///
+/// # O que a fusão não pode fazer
+///
+/// > **Authorization precedes observability.**
+///
+/// Nenhuma das duas listas contém o que a autoridade recusa: as duas consultas
+/// já aplicam o mesmo predicado. A fusão junta candidatos autorizados, e não
+/// tem por onde introduzir um que não esteja.
+///
+/// Sem provider de embeddings, `semantic` é `None` e isto devolve exactamente o
+/// que a pesquisa lexical devolveria. **Não é degradação**: é a capacidade
+/// determinística inteira, que continua a ser toda a pesquisa que esta
+/// instalação sempre teve.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta é curta de mais ou quando a base falha.
+pub async fn search_hybrid(
+    pool: &PgPool,
+    principal: &Principal,
+    query: &str,
+    workspace_id: Option<Uuid>,
+    page: PageRequest,
+    semantic: Option<&dyn crate::modules::intelligence::embeddings::EmbeddingProvider>,
+) -> CoreResult<(Vec<crate::modules::search::model::BodyHit>, i64)> {
+    let (lexicais, total) = search_bodies(pool, principal, query, workspace_id, page).await?;
+
+    let Some(provider) = semantic else {
+        return Ok((lexicais, total));
+    };
+
+    let filtro = VisibilityFilter::for_principal(principal);
+    if filtro.is_never_satisfiable() {
+        return Ok((Vec::new(), 0));
+    }
+
+    // A consulta é embebida pelo **mesmo** perfil que os candidatos, porque é
+    // esse perfil que a consulta seguinte exige. Um provider diferente aqui
+    // produziria uma consulta que não encontra nada — ou, pior, que encontra
+    // coisas por acidente.
+    let vectores = crate::modules::intelligence::embeddings::embed_checked(
+        provider,
+        &[query.trim().to_owned()],
+    )
+    .await;
+
+    let Ok(vectores) = vectores else {
+        // O provider falhou. A pesquisa lexical não cai com ele.
+        return Ok((lexicais, total));
+    };
+    let Some(vector) = vectores.first() else {
+        return Ok((lexicais, total));
+    };
+
+    let semanticos = repo::search_semantic(
+        pool,
+        principal.organisation_id,
+        &filtro,
+        workspace_id,
+        &crate::modules::files::embedding::vector_literal(vector),
+        &provider.identity(),
+        page.limit(),
+    )
+    .await?;
+
+    Ok((fundir(lexicais, semanticos, page.limit()), total))
+}
+
+/// Só os candidatos semânticos, para quem precise de os observar isolados.
+///
+/// A pesquisa normal é a híbrida; isto existe para se poder afirmar coisas
+/// sobre o gerador semântico sozinho — que um conjunto de outra revisão não é
+/// comparado, que um conjunto incompleto não responde — sem que a lista lexical
+/// as esconda.
+///
+/// # Errors
+///
+/// Devolve erro quando o provider ou a base falham.
+pub async fn semantic_candidates(
+    pool: &PgPool,
+    principal: &Principal,
+    query: &str,
+    workspace_id: Option<Uuid>,
+    limit: i64,
+    provider: &dyn crate::modules::intelligence::embeddings::EmbeddingProvider,
+) -> CoreResult<Vec<crate::modules::search::model::BodyHit>> {
+    let filtro = VisibilityFilter::for_principal(principal);
+    if filtro.is_never_satisfiable() {
+        return Ok(Vec::new());
+    }
+
+    let vectores = crate::modules::intelligence::embeddings::embed_checked(
+        provider,
+        &[query.trim().to_owned()],
+    )
+    .await
+    .map_err(|erro| CoreError::CapabilityUnavailable(format!("embeddings: {erro}")))?;
+
+    let Some(vector) = vectores.first() else {
+        return Ok(Vec::new());
+    };
+
+    repo::search_semantic(
+        pool,
+        principal.organisation_id,
+        &filtro,
+        workspace_id,
+        &crate::modules::files::embedding::vector_literal(vector),
+        &provider.identity(),
+        limit,
+    )
+    .await
+}
+
+/// Fusão por posição recíproca.
+///
+/// A constante amortece o peso das primeiras posições: sem ela, o primeiro
+/// resultado de uma lista dominaria a outra inteira.
+const RRF_K: f32 = 60.0;
+
+fn fundir(
+    lexicais: Vec<crate::modules::search::model::BodyHit>,
+    semanticos: Vec<crate::modules::search::model::BodyHit>,
+    limite: i64,
+) -> Vec<crate::modules::search::model::BodyHit> {
+    use std::collections::HashMap;
+
+    let mut pontos: HashMap<(Uuid, i32), f32> = HashMap::new();
+    let mut por_chave: HashMap<(Uuid, i32), crate::modules::search::model::BodyHit> =
+        HashMap::new();
+
+    for (posicao, hit) in lexicais.into_iter().enumerate() {
+        #[allow(clippy::cast_precision_loss)]
+        let contributo = 1.0 / (RRF_K + posicao as f32 + 1.0);
+        let chave = (hit.file_id, hit.sequence);
+        *pontos.entry(chave).or_insert(0.0) += contributo;
+        por_chave.entry(chave).or_insert(hit);
+    }
+
+    for (posicao, hit) in semanticos.into_iter().enumerate() {
+        #[allow(clippy::cast_precision_loss)]
+        let contributo = 1.0 / (RRF_K + posicao as f32 + 1.0);
+        let chave = (hit.file_id, hit.sequence);
+        *pontos.entry(chave).or_insert(0.0) += contributo;
+        // O excerto lexical vem com os termos realçados e é melhor de ler;
+        // só se usa o semântico quando não há outro.
+        por_chave.entry(chave).or_insert(hit);
+    }
+
+    let mut ordenados: Vec<_> = por_chave.into_iter().collect();
+    ordenados.sort_by(|(a, hit_a), (b, hit_b)| {
+        let pa = pontos.get(a).copied().unwrap_or(0.0);
+        let pb = pontos.get(b).copied().unwrap_or(0.0);
+        pb.partial_cmp(&pa)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| hit_a.name.cmp(&hit_b.name))
+    });
+
+    ordenados
+        .into_iter()
+        .take(usize::try_from(limite).unwrap_or(usize::MAX))
+        .map(|(chave, mut hit)| {
+            hit.rank = pontos.get(&chave).copied().unwrap_or(0.0);
+            hit
+        })
+        .collect()
+}
+
 /// Report whether semantic search can be offered.
 ///
 /// # Errors

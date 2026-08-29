@@ -6,8 +6,9 @@
 //! crash between the handler succeeding and the row being marked published, so
 //! "ran twice" is a normal case, not an exception (briefing §74).
 
-use ocinye_core::modules::files::extraction;
+use ocinye_core::modules::files::{embedding, extraction};
 use ocinye_core::modules::intelligence;
+use ocinye_core::modules::intelligence::embeddings::EmbeddingProvider;
 use ocinye_core::storage::ObjectStore;
 use sqlx::{PgPool, Postgres, Transaction};
 
@@ -22,6 +23,7 @@ pub async fn handle(
     tx: &mut Transaction<'_, Postgres>,
     event: &OutboxEvent,
     store: Option<&ObjectStore>,
+    embeddings: Option<&dyn EmbeddingProvider>,
 ) -> anyhow::Result<()> {
     // Events are logged with their identifiers only. Payloads never carry
     // content, so this line is safe to keep at info level.
@@ -48,7 +50,49 @@ pub async fn handle(
         return extrair_conteudo(tx, event, store).await;
     }
 
+    if event.name == embedding::EVENT_EMBED {
+        return embeber_conteudo(tx, event, embeddings).await;
+    }
+
     Ok(())
+}
+
+/// Produz o conjunto de embeddings de uma versão.
+///
+/// # Sem provider, o evento espera
+///
+/// Uma instalação sem embeddings não é uma instalação partida: é a instalação
+/// que a Ocinye tem hoje. O evento fica por entregar e o outbox volta a tentar,
+/// pelo que o dia em que houver um provider o trabalho está lá — em vez de se
+/// ter perdido em silêncio meses antes.
+///
+/// A pesquisa lexical não depende disto e não cai com isto.
+async fn embeber_conteudo(
+    tx: &mut Transaction<'_, Postgres>,
+    event: &OutboxEvent,
+    embeddings: Option<&dyn EmbeddingProvider>,
+) -> anyhow::Result<()> {
+    let Some(provider) = embeddings else {
+        anyhow::bail!("no embedding provider is configured; semantic indexing is deferred");
+    };
+
+    match embedding::process(tx, provider, event.aggregate_id).await {
+        Ok(Some(estado)) => {
+            tracing::info!(
+                file_version_id = %event.aggregate_id,
+                estado = estado.as_str(),
+                // A identidade do modelo entra no registo. O vector nunca.
+                provider = %provider.identity().provider,
+                model = %provider.identity().model,
+                "embedding set settled"
+            );
+            Ok(())
+        }
+        // Nada a fazer: já estava feito, a extracção ainda não está pronta, ou
+        // a política não deixa este conteúdo sair para este provider.
+        Ok(None) => Ok(()),
+        Err(erro) => Err(anyhow::anyhow!(erro)),
+    }
 }
 
 /// Lê o corpo de uma versão e torna-o pesquisável.
@@ -80,7 +124,13 @@ async fn extrair_conteudo(
         anyhow::bail!("no object store is configured; content cannot be extracted");
     };
 
-    match extraction::process(tx, store, event.aggregate_id).await {
+    // Os identificadores de correlação vêm do evento que pediu esta leitura, e
+    // não de um novo: o trabalho que ela gera a seguir tem de continuar a
+    // apontar para o pedido que o começou.
+    let ids =
+        ocinye_observability::CorrelationIds::from_headers(None, event.correlation_id.as_deref());
+
+    match extraction::process(tx, store, event.aggregate_id, &ids).await {
         Ok(Some(estado)) => {
             tracing::info!(
                 file_version_id = %event.aggregate_id,

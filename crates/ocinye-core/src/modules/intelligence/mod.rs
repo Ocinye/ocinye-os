@@ -29,6 +29,7 @@
 pub mod agents;
 #[cfg(feature = "test-fixtures")]
 pub mod conformance;
+pub mod embeddings;
 #[cfg(feature = "test-fixtures")]
 pub mod fixture;
 mod model;

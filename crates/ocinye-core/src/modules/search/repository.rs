@@ -356,3 +356,80 @@ pub async fn count_bodies<'e>(
     .await?;
     Ok(total)
 }
+
+// ── Recuperação semântica ───────────────────────────────────────────────
+//
+// > **Authorization precedes observability.**
+//
+// O que se segue gera candidatos por proximidade de vectores. A visibilidade
+// continua a decidir-se contra `files` e `research_workspaces` como estão
+// **agora**, exactamente como na pesquisa lexical: um vector não é autoridade.
+
+/// Pesquisa o corpo por proximidade semântica.
+///
+/// # A identidade tem de coincidir
+///
+/// A consulta é embebida por um modelo; os candidatos foram embebidos por
+/// outro, talvez. Comparar espaços diferentes dá números que parecem distâncias
+/// e não são — e a resposta errada não se distingue da certa a olho.
+///
+/// Por isso o filtro é a identidade **inteira**, e não a dimensão: mesmo
+/// provider, mesmo modelo, mesma revisão, mesmo perfil. E só conjuntos
+/// `AVAILABLE`: um conjunto a meio responde mal sem dizer que está a meio.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+#[allow(clippy::too_many_arguments)]
+pub async fn search_semantic<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    visibility: &VisibilityFilter,
+    workspace_id: Option<Uuid>,
+    vector: &str,
+    identidade: &crate::modules::intelligence::embeddings::EmbeddingIdentity,
+    limit: i64,
+) -> CoreResult<Vec<super::model::BodyHit>> {
+    let predicate = to_sql(visibility, colunas_do_corpo());
+
+    let hits = sqlx::query_as::<_, super::model::BodyHit>(&format!(
+        "SELECT f.id AS file_id,
+                v.id AS file_version_id,
+                v.sequence,
+                f.name,
+                left(c.text, 400) AS excerpt,
+                c.locator,
+                {CLASSIFICACAO_DO_FICHEIRO} AS classification,
+                f.workspace_id,
+                (1.0 - (ce.vector <=> $2::text::vector))::real AS rank
+           FROM chunk_embeddings ce
+           JOIN embedding_sets es ON es.id = ce.embedding_set_id
+           JOIN file_chunks c ON c.id = ce.chunk_id
+           JOIN file_versions v ON v.id = es.file_version_id
+           JOIN files f ON f.id = v.file_id
+           JOIN research_workspaces w ON w.id = f.workspace_id
+          WHERE f.organisation_id = $1
+            AND es.status = 'AVAILABLE'
+            AND es.provider = $3 AND es.model = $4
+            AND es.revision = $5 AND es.dimensions = $6 AND es.profile = $7
+            AND v.sequence = (
+                SELECT max(sequence) FROM file_versions WHERE file_id = f.id
+            )
+            AND ($8::uuid IS NULL OR f.workspace_id = $8)
+            AND {predicate}
+          ORDER BY ce.vector <=> $2::text::vector
+          LIMIT $9"
+    ))
+    .bind(organisation_id)
+    .bind(vector)
+    .bind(&identidade.provider)
+    .bind(&identidade.model)
+    .bind(&identidade.revision)
+    .bind(identidade.dimensions)
+    .bind(crate::modules::files::embedding::PROFILE)
+    .bind(workspace_id)
+    .bind(limit)
+    .fetch_all(executor)
+    .await?;
+    Ok(hits)
+}

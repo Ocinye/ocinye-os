@@ -7900,9 +7900,14 @@ async fn correr_o_worker(harness: &Harness, file_id: Uuid) {
     .expect("versão corrente");
 
     let mut tx = harness.pool.begin().await.expect("tx");
-    ocinye_core::modules::files::extraction::process(&mut tx, &store, versao)
-        .await
-        .expect("extracção");
+    ocinye_core::modules::files::extraction::process(
+        &mut tx,
+        &store,
+        versao,
+        &ocinye_observability::CorrelationIds::generate(),
+    )
+    .await
+    .expect("extracção");
     tx.commit().await.expect("commit");
 }
 

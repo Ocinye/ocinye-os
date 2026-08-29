@@ -492,6 +492,7 @@ pub async fn process(
     tx: &mut Tx<'_>,
     store: &ObjectStore,
     file_version_id: Uuid,
+    ids: &CorrelationIds,
 ) -> CoreResult<Option<Estado>> {
     let Some(trabalho) = claim(tx, file_version_id).await? else {
         return Ok(None);
@@ -522,6 +523,13 @@ pub async fn process(
 
     let leitura = extrair(&trabalho.content_type, &bytes);
     let estado = record(tx, &trabalho, leitura).await?;
+
+    // O conjunto de embeddings nasce **depois** de haver texto, e pelo mesmo
+    // outbox. Pedir antes seria pôr na fila um trabalho que só pode falhar.
+    if estado == Estado::Available {
+        super::embedding::queue(tx, file_version_id, ids).await?;
+    }
+
     Ok(Some(estado))
 }
 

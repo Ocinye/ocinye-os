@@ -47,6 +47,7 @@ pub async fn drain(
     pool: &PgPool,
     batch_size: i64,
     store: Option<&ocinye_core::storage::ObjectStore>,
+    embeddings: Option<&dyn ocinye_core::modules::intelligence::embeddings::EmbeddingProvider>,
 ) -> anyhow::Result<usize> {
     let mut tx = pool.begin().await?;
 
@@ -74,7 +75,7 @@ pub async fn drain(
     let mut processed = 0_usize;
 
     for event in &events {
-        match handlers::handle(&mut tx, event, store).await {
+        match handlers::handle(&mut tx, event, store, embeddings).await {
             Ok(()) => {
                 sqlx::query("UPDATE outbox_events SET published_at = now() WHERE id = $1")
                     .bind(event.id)

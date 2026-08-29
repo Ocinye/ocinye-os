@@ -263,6 +263,33 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
              autoridade de coisa nenhuma e não guarda classificação",
         ),
     ),
+    // Os conjuntos de embeddings são derivados reconstruíveis, e a resposta
+    // não foi escrita por conveniência: reconstroem-se a partir de
+    // `FileVersion` + a extracção + a identidade do modelo, e as três estão
+    // guardadas. `semantic_retrieval.rs` apaga os conjuntos, confirma que a
+    // pesquisa semântica deixa de os encontrar, reprocessa, e exige a mesma
+    // fonte no mesmo sítio.
+    //
+    // A condição é a **reacquiribilidade do modelo**. Se um dia a Ocinye
+    // treinar o seu — ou depender de um que deixe de existir —, a extracção
+    // continua reconstruível mas o **espaço** deixa de ser, e esta decisão
+    // muda. É a fronteira que a ADR-0203 já descreve, e é lá que ela se
+    // resolve.
+    (
+        "embedding_sets",
+        Comparacao::Fora(
+            "conjunto derivado, reconstruível a partir da extracção e de uma \
+             identidade de modelo guardada. Um reprocessamento legítimo não é \
+             perda — enquanto o modelo for readquirível",
+        ),
+    ),
+    (
+        "chunk_embeddings",
+        Comparacao::Fora(
+            "projecção vectorial dos pedaços, reconstruível com o conjunto. Não \
+             é autoridade e não guarda classificação",
+        ),
+    ),
     (
         "search_documents",
         Comparacao::Fora(
