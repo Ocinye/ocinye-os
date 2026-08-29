@@ -21,8 +21,9 @@ colecção de aplicações internas.
 Investigadores saem. Projectos terminam. Equipamentos mudam. Financiamentos
 acabam. Software é substituído, e modelos de IA são trocados por outros melhores.
 
-> **People may leave. Projects may end. Software may be replaced. AI models may
-> change. Institutional knowledge must remain.**
+> **As pessoas podem sair. Os projectos podem terminar. O software pode ser
+> substituído. Os modelos de IA podem mudar. O conhecimento institucional deve
+> permanecer.**
 
 A resposta por omissão a cada necessidade é construir mais uma aplicação: um
 sítio com área privada, um gestor documental, um painel administrativo, uma
@@ -32,16 +33,77 @@ se conhecem, sete modelos de identidade e nenhuma memória.
 O Ocinye OS existe para recusar esse caminho. A finalidade não é preservar
 software:
 
-> **The purpose of Ocinye OS is not to preserve software. It is to preserve and
-> amplify the institution's capacity to know, investigate, engineer and build.**
+> **A finalidade do Ocinye OS não é preservar software. É preservar e ampliar a
+> capacidade da instituição para produzir conhecimento, investigar, desenvolver
+> soluções de engenharia e construir.**
 
 ### Memória institucional
 
 A memória institucional não é um módulo, e não tem tabela nem ecrã próprio. É uma
-propriedade que emerge da composição governada do que o sistema já guarda:
-conhecimento, dados e as suas versões, projectos, metodologias, resultados,
-documentos e auditoria, com a **proveniência** que preserva as relações entre os
-recursos e a **linhagem científica** que permite navegá-las ao longo do tempo.
+propriedade que emerge da composição governada de três formas de capacidade
+acumulada.
+
+```text
+                         MEMÓRIA INSTITUCIONAL
+                                  │
+             ┌────────────────────┼────────────────────┐
+             │                    │                    │
+     Conhecimento          Evidência            Capacidade
+        e dados            científica            do modelo *
+             │                    │                    │
+      Documentos e        Resultados e          Modelos
+        datasets          proveniência          treinados *
+             │                    │                    │
+          Versões        Linhagem científica    Linhagem de
+             │                    │              treino *
+             └────────────────────┼────────────────────┘
+                                  │
+                            Ocinye Core
+                                  │
+                     Continuidade institucional
+                                  │
+                    ┌─────────────┴─────────────┐
+                    │                           │
+                PostgreSQL              Object Storage
+                                              │
+                              datasets · documentos
+                              artefactos científicos
+                              artefactos de modelo *
+```
+
+`*` **Arquitecturalmente especificado; ainda não operacional.** A continuidade
+de artefactos de modelo começa com o primeiro modelo treinado pela Ocinye
+([ADR-0203](docs/adrs/0203-institutional-model-artifacts.md)). Até lá, nada
+desta coluna existe — nem `Model`, nem `ModelVersion`, nem `TrainingRun`, nem
+pesos guardados.
+
+**Conhecimento explícito** — documentos, datasets, bibliografia, notas e as
+suas versões. Lê-se, cita-se e recupera-se directamente.
+
+**Evidência científica** — hipótese, versão de metodologia, estudo, execução,
+resultado e validação, com a **proveniência** que preserva as relações e a
+**linhagem** que permite percorrê-las. Explica *o que se aprendeu e de onde
+veio*.
+
+**Capacidade adquirida por modelos** — quando a Ocinye treinar ou afinar um
+modelo, parte da capacidade passará a existir **nos pesos**, e não se
+reconstruirá a olhar para o PostgreSQL. Explicará *o que a instituição ensinou
+às suas máquinas*, e viajará sempre acompanhada da linhagem de treino que a
+torna interpretável.
+
+> **Nenhuma destas formas substitui as restantes.**
+
+Não é uma frase de estilo. É o que impede cada um dos atalhos que apagam
+memória: a recuperação não substitui a proveniência, o treino não substitui os
+datasets, os pesos não substituem a evidência, o PostgreSQL não substitui os
+bytes — e o servidor não substitui a instituição.
+
+> **Um modelo treinado pode encarnar capacidade institucional, mas não
+> substitui a evidência e a proveniência de que essa capacidade nasceu.**
+
+Depois de ensinar alguma coisa a um modelo, o dataset, a metodologia, os
+resultados e a proveniência **continuam a ser preservados**. «Já está nos
+pesos» não é uma razão para apagar a fonte.
 
 ---
 
@@ -99,7 +161,7 @@ Cada relação guarda de onde veio: `operation`, quando o Core a **observou** ao
 produzir o efeito; `declared`, quando alguém a **afirmou** através de uma
 operação autorizada.
 
-> **Model inference is not institutional provenance.**
+> **A inferência de um modelo não é proveniência institucional.**
 
 Um agente pode sugerir uma relação. A sugestão só se torna facto institucional
 atravessando a mesma operação autorizada que uma pessoa atravessaria — e fica
