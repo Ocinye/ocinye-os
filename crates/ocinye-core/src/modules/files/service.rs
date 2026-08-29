@@ -505,3 +505,169 @@ pub async fn download_url(
 
     Ok(url)
 }
+
+// ── Pastas ──────────────────────────────────────────────────────────────
+//
+// > **Uma pasta é uma estrutura de navegação dentro de um contentor de
+// > autoridade; mover um ficheiro entre contentores de autoridade não é uma
+// > operação de pasta.**
+
+/// Cria uma pasta dentro de um ambiente.
+///
+/// # Errors
+///
+/// Devolve erro quando o ambiente não é alcançável, quando a autorização
+/// recusa, quando o nome é vazio, ou quando a pasta-mãe é de outro ambiente.
+pub async fn create_folder(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    workspace_id: Uuid,
+    parent_id: Option<Uuid>,
+    name: &str,
+) -> CoreResult<Uuid> {
+    let workspace =
+        crate::modules::research::get_workspace(&mut **tx, principal, workspace_id).await?;
+    authorize(
+        principal,
+        Action::Create,
+        &file_context(&workspace, workspace.classification()),
+    )
+    .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(CoreError::Validation("A pasta precisa de nome.".to_owned()));
+    }
+
+    // A pasta-mãe tem de ser deste ambiente. Sem esta verificação, indicar a
+    // identidade de uma pasta de outro ambiente construiria uma árvore que
+    // atravessa fronteiras de autorização.
+    if let Some(mae) = parent_id {
+        let existente = repo::find_folder(&mut **tx, mae, principal.organisation_id)
+            .await?
+            .ok_or_else(|| CoreError::NotFound("Pasta não encontrada.".to_owned()))?;
+        if existente.workspace_id != workspace_id {
+            return Err(CoreError::Validation(
+                "A pasta-mãe pertence a outro ambiente.".to_owned(),
+            ));
+        }
+    }
+
+    repo::insert_folder(
+        &mut **tx,
+        principal.organisation_id,
+        workspace_id,
+        parent_id,
+        name,
+        principal.person_id,
+    )
+    .await
+}
+
+/// O que uma pasta contém: pastas e ficheiros que quem pergunta alcança.
+pub struct FolderContents {
+    /// O caminho até à raiz, para migalhas.
+    pub path: Vec<repo::FolderRecord>,
+    /// As pastas imediatamente dentro.
+    pub folders: Vec<repo::FolderRecord>,
+    /// Os ficheiros, já filtrados pela visibilidade actual.
+    pub files: Vec<repo::FileListing>,
+}
+
+/// Lista uma pasta, ou a raiz do ambiente.
+///
+/// # Errors
+///
+/// Devolve erro quando o ambiente não é alcançável ou a pasta não existe.
+pub async fn browse(
+    pool: &sqlx::PgPool,
+    principal: &Principal,
+    workspace_id: Uuid,
+    folder_id: Option<Uuid>,
+) -> CoreResult<FolderContents> {
+    let workspace = crate::modules::research::get_workspace(pool, principal, workspace_id).await?;
+    let _ = &workspace;
+
+    let path = match folder_id {
+        None => Vec::new(),
+        Some(id) => {
+            let pasta = repo::find_folder(pool, id, principal.organisation_id)
+                .await?
+                .ok_or_else(|| CoreError::NotFound("Pasta não encontrada.".to_owned()))?;
+            if pasta.workspace_id != workspace_id {
+                return Err(CoreError::NotFound("Pasta não encontrada.".to_owned()));
+            }
+            repo::folder_path(pool, id).await?
+        }
+    };
+
+    let folders = repo::list_folders(pool, workspace_id, folder_id).await?;
+    let filtro = ocinye_domain::policy::VisibilityFilter::for_principal(principal);
+    let files = repo::list_files(pool, workspace_id, folder_id, &filtro).await?;
+
+    Ok(FolderContents {
+        path,
+        folders,
+        files,
+    })
+}
+
+/// Move um ficheiro para outra pasta do **mesmo** ambiente.
+///
+/// # Porque mover não muda nada além do sítio
+///
+/// A pasta não tem classificação. Arrastar um artefacto `RESTRICTED` para uma
+/// pasta chamada «Público» muda a navegação e mais nada — a protecção continua
+/// onde estava, porque vive no ficheiro.
+///
+/// # Errors
+///
+/// Devolve erro quando o ficheiro não é alcançável, quando a autorização
+/// recusa, ou quando a pasta de destino é de outro ambiente.
+pub async fn move_to_folder(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    file_id: Uuid,
+    folder_id: Option<Uuid>,
+) -> CoreResult<()> {
+    let (ficheiro, workspace) = get(tx, principal, file_id).await?;
+    authorize(
+        principal,
+        Action::Update,
+        &file_context(&workspace, ficheiro.classification()),
+    )
+    .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+
+    if let Some(destino) = folder_id {
+        let pasta = repo::find_folder(&mut **tx, destino, principal.organisation_id)
+            .await?
+            .ok_or_else(|| CoreError::NotFound("Pasta não encontrada.".to_owned()))?;
+        // Atravessar ambientes não é organizar: é transferir, e transferir é
+        // outra operação, com a sua própria decisão institucional.
+        if pasta.workspace_id != ficheiro.workspace_id {
+            return Err(CoreError::Validation(
+                "Mover um ficheiro para outro ambiente não é uma operação de pasta.".to_owned(),
+            ));
+        }
+    }
+
+    repo::move_file(&mut **tx, file_id, folder_id).await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::UPDATE, "file")
+            .resource(file_id)
+            .context(&file_context(&workspace, ficheiro.classification()))
+            .classified(ficheiro.classification())
+            .detail(
+                "moved_to_folder",
+                folder_id.map_or("raiz".to_owned(), |f| f.to_string()),
+            ),
+    )
+    .await?;
+
+    Ok(())
+}

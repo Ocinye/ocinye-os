@@ -243,3 +243,214 @@ pub(super) async fn object_location<'e>(
     .await?;
     Ok(linha)
 }
+
+/// Uma pasta, como a navegação a vê.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct FolderRecord {
+    /// A identidade.
+    pub id: Uuid,
+    /// O ambiente que a contém. Uma pasta não o atravessa.
+    pub workspace_id: Uuid,
+    /// A pasta acima, ou `None` na raiz.
+    pub parent_id: Option<Uuid>,
+    /// O nome visível.
+    pub name: String,
+}
+
+/// Cria uma pasta.
+///
+/// # Errors
+///
+/// Devolve erro quando a inserção falha — incluindo quando já existe uma irmã
+/// com o mesmo nome.
+pub async fn insert_folder<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    workspace_id: Uuid,
+    parent_id: Option<Uuid>,
+    name: &str,
+    created_by: Uuid,
+) -> CoreResult<Uuid> {
+    let id = sqlx::query_scalar::<_, Uuid>(
+        "INSERT INTO folders (organisation_id, workspace_id, parent_id, name, created_by_id)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id",
+    )
+    .bind(organisation_id)
+    .bind(workspace_id)
+    .bind(parent_id)
+    .bind(name)
+    .bind(created_by)
+    .fetch_one(executor)
+    .await?;
+    Ok(id)
+}
+
+/// Lê uma pasta.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn find_folder<'e>(
+    executor: impl PgExecutor<'e>,
+    folder_id: Uuid,
+    organisation_id: Uuid,
+) -> CoreResult<Option<FolderRecord>> {
+    let linha = sqlx::query_as::<_, FolderRecord>(
+        "SELECT id, workspace_id, parent_id, name
+           FROM folders WHERE id = $1 AND organisation_id = $2",
+    )
+    .bind(folder_id)
+    .bind(organisation_id)
+    .fetch_optional(executor)
+    .await?;
+    Ok(linha)
+}
+
+/// As pastas directamente dentro de outra, ou da raiz.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_folders<'e>(
+    executor: impl PgExecutor<'e>,
+    workspace_id: Uuid,
+    parent_id: Option<Uuid>,
+) -> CoreResult<Vec<FolderRecord>> {
+    let linhas = sqlx::query_as::<_, FolderRecord>(
+        "SELECT id, workspace_id, parent_id, name
+           FROM folders
+          WHERE workspace_id = $1
+            AND parent_id IS NOT DISTINCT FROM $2
+          ORDER BY lower(name)",
+    )
+    .bind(workspace_id)
+    .bind(parent_id)
+    .fetch_all(executor)
+    .await?;
+    Ok(linhas)
+}
+
+/// Um ficheiro tal como a navegação o mostra.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct FileListing {
+    /// A identidade.
+    pub id: Uuid,
+    /// O nome.
+    pub name: String,
+    /// A classificação guardada.
+    pub classification: String,
+    /// O tipo do conteúdo da versão corrente.
+    pub content_type: String,
+    /// O tamanho da versão corrente.
+    pub size_bytes: i64,
+    /// Quantas versões existem.
+    pub versions: i64,
+    /// Quando mudou pela última vez.
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Os ficheiros de uma pasta, filtrados pela visibilidade de quem pergunta.
+///
+/// A classificação usada no filtro é a **do ficheiro composta com a do
+/// ambiente**, lida agora. A pasta não entra na decisão: não tem classificação
+/// e não pode ter.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_files<'e>(
+    executor: impl PgExecutor<'e>,
+    workspace_id: Uuid,
+    folder_id: Option<Uuid>,
+    filter: &ocinye_domain::policy::VisibilityFilter,
+) -> CoreResult<Vec<FileListing>> {
+    let predicado = crate::visibility::to_sql(
+        filter,
+        crate::visibility::VisibilityColumns::aliased(
+            "f.unit_id",
+            "f.workspace_id",
+            EFECTIVA_DO_FICHEIRO,
+        ),
+    );
+    let linhas = sqlx::query_as::<_, FileListing>(&format!(
+        "SELECT f.id, f.name, {EFECTIVA_DO_FICHEIRO} AS classification,
+                o.content_type, o.size_bytes,
+                (SELECT count(*) FROM file_versions x WHERE x.file_id = f.id) AS versions,
+                f.updated_at
+           FROM files f
+           JOIN research_workspaces w ON w.id = f.workspace_id
+           JOIN LATERAL (
+               SELECT fv.storage_object_id
+                 FROM file_versions fv
+                WHERE fv.file_id = f.id
+                ORDER BY fv.sequence DESC
+                LIMIT 1
+           ) v ON TRUE
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE f.workspace_id = $1
+            AND f.folder_id IS NOT DISTINCT FROM $2
+            AND {predicado}
+          ORDER BY lower(f.name)"
+    ))
+    .bind(workspace_id)
+    .bind(folder_id)
+    .fetch_all(executor)
+    .await?;
+    Ok(linhas)
+}
+
+/// A classificação efectiva de um ficheiro: a sua, composta com a do ambiente.
+///
+/// A mesma composição que a autorização faz, escrita em SQL para que a
+/// listagem não possa discordar da leitura.
+const EFECTIVA_DO_FICHEIRO: &str = "CASE
+    WHEN f.classification = 'RESTRICTED' OR w.classification = 'RESTRICTED' THEN 'RESTRICTED'
+    WHEN f.classification = 'CONFIDENTIAL' OR w.classification = 'CONFIDENTIAL' THEN 'CONFIDENTIAL'
+    WHEN f.classification = 'INTERNAL' OR w.classification = 'INTERNAL' THEN 'INTERNAL'
+    ELSE 'PUBLIC'
+END";
+
+/// Move um ficheiro para outra pasta **do mesmo ambiente**.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha — incluindo quando a pasta é de outro
+/// ambiente, que a chave estrangeira composta recusa.
+pub async fn move_file<'e>(
+    executor: impl PgExecutor<'e>,
+    file_id: Uuid,
+    folder_id: Option<Uuid>,
+) -> CoreResult<()> {
+    sqlx::query("UPDATE files SET folder_id = $1, updated_at = now() WHERE id = $2")
+        .bind(folder_id)
+        .bind(file_id)
+        .execute(executor)
+        .await?;
+    Ok(())
+}
+
+/// O caminho de uma pasta até à raiz, para migalhas de navegação.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn folder_path<'e>(
+    executor: impl PgExecutor<'e>,
+    folder_id: Uuid,
+) -> CoreResult<Vec<FolderRecord>> {
+    let linhas = sqlx::query_as::<_, FolderRecord>(
+        "WITH RECURSIVE subida AS (
+             SELECT id, workspace_id, parent_id, name, 0 AS profundidade
+               FROM folders WHERE id = $1
+             UNION ALL
+             SELECT p.id, p.workspace_id, p.parent_id, p.name, s.profundidade + 1
+               FROM folders p JOIN subida s ON p.id = s.parent_id
+              WHERE s.profundidade < 64
+         )
+         SELECT id, workspace_id, parent_id, name FROM subida ORDER BY profundidade DESC",
+    )
+    .bind(folder_id)
+    .fetch_all(executor)
+    .await?;
+    Ok(linhas)
+}

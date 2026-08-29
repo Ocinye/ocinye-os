@@ -93,6 +93,27 @@ async fn contexto(pool: &PgPool) -> Contexto {
 }
 
 /// Bytes guardados, com uma soma que os distingue.
+/// Um segundo ambiente na mesma organização e unidade.
+async fn outro_ambiente(pool: &PgPool, ctx: &Contexto) -> Contexto {
+    let sufixo = Uuid::new_v4().simple().to_string();
+    let workspace_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO research_workspaces (organisation_id, unit_id, code, title)
+         VALUES ($1, $2, $3, 'Outro ambiente') RETURNING id",
+    )
+    .bind(ctx.organisation_id)
+    .bind(ctx.unit_id)
+    .bind(format!("W{}", &sufixo[..12]))
+    .fetch_one(pool)
+    .await
+    .expect("outro ambiente");
+    Contexto {
+        organisation_id: ctx.organisation_id,
+        unit_id: ctx.unit_id,
+        workspace_id,
+        backend_id: ctx.backend_id,
+    }
+}
+
 async fn objecto(pool: &PgPool, ctx: &Contexto, marca: char) -> Uuid {
     sqlx::query_scalar(
         "INSERT INTO storage_objects
@@ -1342,4 +1363,261 @@ async fn reclassificar_o_ambiente_esconde_o_recurso_da_pesquisa() {
         1,
         "quem lidera o ambiente deixou de encontrar o próprio recurso"
     );
+}
+
+// ── Pastas ──────────────────────────────────────────────────────────────
+
+/// Uma pasta chamada «Público» não torna nada público.
+///
+/// # Porque isto tem de ser um teste e não uma promessa
+///
+/// Porque é a tentação óbvia. Uma pasta é onde as pessoas arrumam, e a seguir
+/// alguém pensa que arrumar é classificar. Se a pasta tivesse classificação —
+/// ou herança, ou grants —, arrastar um artefacto seria reclassificá-lo com um
+/// gesto, e sem ninguém decidir nada.
+///
+/// > **A pasta organiza. O ficheiro é governado.**
+#[tokio::test]
+async fn mover_para_uma_pasta_chamada_publico_nao_muda_o_acesso() {
+    use ocinye_contracts::Classification::Restricted;
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else { return };
+    let ctx = contexto(&pool).await;
+    backend_por_omissao(&pool).await;
+    let dono = membro(&pool, &ctx, "lead").await;
+    let fora = estranho(&pool, &ctx).await;
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    let mut tx = pool.begin().await.expect("tx");
+    let criado = ocinye_core::modules::files::create(
+        &mut tx,
+        &dono,
+        &ids,
+        &store,
+        "prova",
+        ctx.workspace_id,
+        ocinye_core::modules::files::NewFile {
+            filename: "restrito.png".to_owned(),
+            content_type: "image/png".to_owned(),
+            data: b"PNG restrito".to_vec(),
+            classification: Some(Restricted),
+        },
+    )
+    .await
+    .expect("criar");
+    let publico = ocinye_core::modules::files::create_folder(
+        &mut tx,
+        &dono,
+        ctx.workspace_id,
+        None,
+        "Público",
+    )
+    .await
+    .expect("criar pasta");
+    tx.commit().await.expect("commit");
+
+    let mut tx = pool.begin().await.expect("tx");
+    ocinye_core::modules::files::move_to_folder(
+        &mut tx,
+        &dono,
+        &ids,
+        criado.file_id,
+        Some(publico),
+    )
+    .await
+    .expect("mover");
+    tx.commit().await.expect("commit");
+
+    let guardada: String = sqlx::query_scalar("SELECT classification FROM files WHERE id = $1")
+        .bind(criado.file_id)
+        .fetch_one(&pool)
+        .await
+        .expect("classificação");
+    assert_eq!(
+        guardada,
+        Restricted.as_str(),
+        "arrastar para uma pasta chamada «Público» reclassificou o artefacto"
+    );
+
+    let mut conn = pool.acquire().await.expect("ligação");
+    assert!(
+        ocinye_core::modules::files::get(&mut conn, &fora, criado.file_id)
+            .await
+            .is_err(),
+        "a pasta abriu o acesso a um artefacto RESTRITO"
+    );
+
+    // E a listagem da pasta também não o revela.
+    let visto = ocinye_core::modules::files::browse(&pool, &fora, ctx.workspace_id, Some(publico))
+        .await
+        .expect("navegar");
+    assert!(
+        visto.files.is_empty(),
+        "a listagem da pasta revelou um artefacto que a leitura recusa"
+    );
+}
+
+/// Mover um ficheiro para a pasta de outro ambiente não é uma operação de pasta.
+#[tokio::test]
+async fn mover_para_outro_ambiente_e_recusado() {
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else { return };
+    let ctx = contexto(&pool).await;
+    // Outro ambiente da **mesma** organização: é aí que a fronteira que
+    // interessa está. Noutra organização a resposta certa é «não existe», que
+    // não revela sequer que a pasta há.
+    let outro = outro_ambiente(&pool, &ctx).await;
+    backend_por_omissao(&pool).await;
+    let dono = membro(&pool, &ctx, "lead").await;
+    let dono_do_outro = membro(&pool, &outro, "lead").await;
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    let mut tx = pool.begin().await.expect("tx");
+    let criado = ocinye_core::modules::files::create(
+        &mut tx,
+        &dono,
+        &ids,
+        &store,
+        "prova",
+        ctx.workspace_id,
+        ocinye_core::modules::files::NewFile {
+            filename: "aqui.png".to_owned(),
+            content_type: "image/png".to_owned(),
+            data: b"PNG aqui".to_vec(),
+            classification: None,
+        },
+    )
+    .await
+    .expect("criar");
+    tx.commit().await.expect("commit");
+
+    let mut tx = pool.begin().await.expect("tx");
+    let alheia = ocinye_core::modules::files::create_folder(
+        &mut tx,
+        &dono_do_outro,
+        outro.workspace_id,
+        None,
+        "Arquivo",
+    )
+    .await
+    .expect("criar pasta no outro ambiente");
+    tx.commit().await.expect("commit");
+
+    let mut tx = pool.begin().await.expect("tx");
+    let erro = ocinye_core::modules::files::move_to_folder(
+        &mut tx,
+        &dono,
+        &ids,
+        criado.file_id,
+        Some(alheia),
+    )
+    .await
+    .expect_err("um ficheiro atravessou a fronteira de autoridade por um arrasto");
+    tx.rollback().await.expect("desfazer");
+    assert!(
+        matches!(erro, ocinye_core::error::CoreError::Validation(_)),
+        "recusado por outra razão: {erro:?}"
+    );
+}
+
+/// Navegar mostra pastas e ficheiros, e as migalhas sobem até à raiz.
+#[tokio::test]
+async fn navegar_mostra_a_arvore_e_o_caminho() {
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else { return };
+    let ctx = contexto(&pool).await;
+    backend_por_omissao(&pool).await;
+    let dono = membro(&pool, &ctx, "lead").await;
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    let mut tx = pool.begin().await.expect("tx");
+    let engenharia = ocinye_core::modules::files::create_folder(
+        &mut tx,
+        &dono,
+        ctx.workspace_id,
+        None,
+        "Engenharia",
+    )
+    .await
+    .expect("pasta");
+    let ensaios = ocinye_core::modules::files::create_folder(
+        &mut tx,
+        &dono,
+        ctx.workspace_id,
+        Some(engenharia),
+        "Ensaios",
+    )
+    .await
+    .expect("subpasta");
+    let criado = ocinye_core::modules::files::create(
+        &mut tx,
+        &dono,
+        &ids,
+        &store,
+        "prova",
+        ctx.workspace_id,
+        ocinye_core::modules::files::NewFile {
+            filename: "ensaio-03.png".to_owned(),
+            content_type: "image/png".to_owned(),
+            data: b"PNG ensaio".to_vec(),
+            classification: None,
+        },
+    )
+    .await
+    .expect("criar");
+    ocinye_core::modules::files::move_to_folder(
+        &mut tx,
+        &dono,
+        &ids,
+        criado.file_id,
+        Some(ensaios),
+    )
+    .await
+    .expect("mover");
+    tx.commit().await.expect("commit");
+
+    let raiz = ocinye_core::modules::files::browse(&pool, &dono, ctx.workspace_id, None)
+        .await
+        .expect("raiz");
+    assert!(
+        raiz.folders.iter().any(|f| f.name == "Engenharia"),
+        "a raiz não mostra a pasta criada"
+    );
+
+    let dentro = ocinye_core::modules::files::browse(&pool, &dono, ctx.workspace_id, Some(ensaios))
+        .await
+        .expect("dentro");
+    assert_eq!(dentro.files.len(), 1, "o ficheiro movido não está na pasta");
+    assert_eq!(dentro.files[0].name, "ensaio-03.png");
+    assert_eq!(dentro.files[0].versions, 1);
+    let migalhas: Vec<&str> = dentro.path.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(
+        migalhas,
+        vec!["Engenharia", "Ensaios"],
+        "as migalhas não sobem até à raiz pela ordem certa"
+    );
+}
+
+/// Duas pastas irmãs com o mesmo nome tornam um caminho ambíguo.
+#[tokio::test]
+async fn duas_pastas_irmas_nao_partilham_o_nome() {
+    let Some(pool) = pool().await else { return };
+    let ctx = contexto(&pool).await;
+    let dono = membro(&pool, &ctx, "lead").await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    ocinye_core::modules::files::create_folder(&mut tx, &dono, ctx.workspace_id, None, "Ensaios")
+        .await
+        .expect("primeira");
+    let erro = ocinye_core::modules::files::create_folder(
+        &mut tx,
+        &dono,
+        ctx.workspace_id,
+        None,
+        "ensaios",
+    )
+    .await
+    .expect_err("duas irmãs ficaram com o mesmo nome");
+    tx.rollback().await.expect("desfazer");
+    let _ = erro;
 }

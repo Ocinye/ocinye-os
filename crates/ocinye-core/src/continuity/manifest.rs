@@ -171,6 +171,11 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     // sete, e um identificador refeito no destino apagaria essa frase.
     ("files", Comparacao::Identidades),
     ("file_versions", Comparacao::Identidades),
+    // A árvore de navegação. Viaja por identidade porque os ficheiros apontam
+    // para ela: um restauro que a recriasse com identificadores novos deixaria
+    // todos os ficheiros na raiz, e a organização que alguém construiu ao longo
+    // de anos desapareceria sem que nada falhasse.
+    ("folders", Comparacao::Identidades),
     ("datasets", Comparacao::Identidades),
     ("dataset_versions", Comparacao::Identidades),
     ("dataset_files", Comparacao::Identidades),
