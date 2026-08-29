@@ -5697,6 +5697,12 @@ async fn uma_pessoa_cria_um_grupo_com_duas_pessoas() {
         destino.contains("/messages/"),
         "o grupo não abriu: {destino}"
     );
+    // A URL mudou; o documento pode ainda estar a chegar. `wait_until_left`
+    // observa o endereço, e um endereço novo não é uma página desenhada — o
+    // `content()` mais abaixo lia o documento antigo e não encontrava o nome
+    // do grupo. Aqui esperamos por texto que só a conversa tem, como o teste
+    // irmão já fazia.
+    esperar_por(&page, "Escrever mensagem").await;
 
     // Três pessoas: as duas escolhidas e quem o criou.
     let quantos: i64 = sqlx::query_scalar(
