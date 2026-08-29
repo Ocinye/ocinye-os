@@ -8096,3 +8096,89 @@ async fn um_formato_sem_leitor_diz_que_o_ficheiro_esta_guardado() {
         "um ficheiro sem conteúdo pesquisável perdeu a descarga"
     );
 }
+
+/// O que se vê é o que se pesquisa.
+///
+/// A pré-visualização e a pesquisa liam o mesmo ficheiro por caminhos
+/// diferentes — uma pelo extractor, a outra descarregando os bytes e
+/// descodificando-os outra vez. Dois caminhos para o mesmo texto divergem, e o
+/// dia em que divergissem era o dia em que alguém via no ecrã uma coisa
+/// diferente daquela que a pesquisa tinha encontrado.
+///
+/// Agora há um caminho só, e isso torna um PDF pré-visualizável de graça.
+#[tokio::test]
+async fn a_previsualizacao_mostra_o_mesmo_texto_que_a_pesquisa_encontra() {
+    let harness = harness!();
+
+    if store_de_teste().is_none() {
+        exigir_armazenamento("a_previsualizacao_mostra_o_mesmo_texto_que_a_pesquisa_encontra");
+        return;
+    }
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+
+    let frase = format!("delta{}", Uuid::new_v4().simple());
+    let pdf = pdf_com_paginas(&[&format!("medicao registada {frase}")]);
+    let b64 = {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD.encode(&pdf)
+    };
+
+    let pagina = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&pagina, "Largue ficheiros aqui").await;
+
+    let nome = format!("{}.pdf", unique_title("previsto").replace(' ', "-"));
+    let script = format!(
+        "(() => {{ \
+           const forma = document.querySelector('form[data-drop=\"1\"]'); \
+           const cru = atob('{b64}'); \
+           const bytes = new Uint8Array(cru.length); \
+           for (let i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i); \
+           const f = new File([bytes], '{nome}', {{ type: 'application/pdf' }}); \
+           const dt = new DataTransfer(); dt.items.add(f); \
+           forma.dispatchEvent(new DragEvent('drop', \
+             {{ bubbles: true, cancelable: true, dataTransfer: dt }})); \
+           return 'largado'; }})()"
+    );
+    let _ = pagina.evaluate(script).await.expect("largar");
+
+    let limite = std::time::Instant::now();
+    let file_id = loop {
+        let encontrado: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND name = $2")
+                .bind(workspace_id)
+                .bind(&nome)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("procura");
+        if let Some(id) = encontrado {
+            break id;
+        }
+        assert!(
+            limite.elapsed() < DEADLINE,
+            "o PDF não chegou ao PostgreSQL"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    };
+
+    // Antes de o corpo ser lido, não há texto para mostrar — e a página não
+    // inventa nenhum.
+    let antes = harness.open(&format!("/files/{file_id}")).await;
+    let html = antes.content().await.expect("conteúdo");
+    assert!(
+        !html.contains(&frase),
+        "a página mostrou texto de um ficheiro que ainda não tinha sido lido"
+    );
+
+    correr_o_worker(&harness, file_id).await;
+
+    // Depois, a mesma frase que a pesquisa encontra está no ecrã.
+    let depois = harness.open(&format!("/files/{file_id}")).await;
+    esperar_por(&depois, &frase).await;
+
+    let resultados = harness.open(&format!("/search?q={frase}")).await;
+    esperar_por(&resultados, "No conteúdo dos ficheiros").await;
+}

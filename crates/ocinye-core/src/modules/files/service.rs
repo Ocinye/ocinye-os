@@ -927,3 +927,31 @@ pub async fn preview(
         checksum_sha256: soma,
     })
 }
+
+/// O conteúdo textual de um ficheiro, para quem o pode ler.
+///
+/// # Porque isto existe em vez de um segundo parser
+///
+/// Porque a pré-visualização e a pesquisa liam o mesmo ficheiro por caminhos
+/// diferentes: a pesquisa pela extracção, a pré-visualização descarregando os
+/// bytes e descodificando-os outra vez. Dois caminhos para o mesmo texto
+/// divergem — e o dia em que divergissem seria o dia em que alguém veria no
+/// ecrã uma coisa diferente daquela que a pesquisa encontrou.
+///
+/// Devolve `None` quando não há extracção disponível: um ficheiro por processar
+/// e um ficheiro sem leitor não têm texto, e isso diz-se em vez de se inventar.
+///
+/// # Errors
+///
+/// Devolve erro quando o ficheiro não é alcançável ou quando a autorização
+/// recusa.
+pub async fn content(
+    executor: &mut sqlx::PgConnection,
+    principal: &Principal,
+    file_id: Uuid,
+    max_chars: usize,
+) -> CoreResult<Option<String>> {
+    // A mesma autoridade de tudo o resto. O conteúdo não tem porta própria.
+    let (_, _) = get(&mut *executor, principal, file_id).await?;
+    super::extraction::text_of_current(&mut *executor, file_id, max_chars).await
+}

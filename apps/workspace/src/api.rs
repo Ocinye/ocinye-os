@@ -435,43 +435,6 @@ pub async fn upload_with_fields(
     interpret(response).await
 }
 
-/// Lê bytes de uma ligação assinada, até um limite.
-///
-/// Serve a pré-visualização: o Workspace lê o conteúdo com a mesma sessão com
-/// que já lê tudo o resto, e devolve-o à página. Não guarda nada, e o limite
-/// existe para que um ficheiro grande não passe a ser um problema de memória
-/// desta aplicação.
-///
-/// # Errors
-///
-/// Devolve erro quando a ligação não responde ou responde com falha.
-pub async fn fetch_bounded(
-    state: &WorkspaceState,
-    url: &str,
-    limite: usize,
-) -> Result<Vec<u8>, ApiFailure> {
-    let response = state
-        .http
-        .get(url)
-        .send()
-        .await
-        .map_err(|error| ApiFailure::Failed(format!("the object is unreachable: {error}")))?;
-
-    if !response.status().is_success() {
-        return Err(ApiFailure::Failed(format!(
-            "the object store answered {}",
-            response.status()
-        )));
-    }
-
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|error| ApiFailure::Failed(format!("the object could not be read: {error}")))?;
-
-    Ok(bytes.into_iter().take(limite).collect())
-}
-
 /// Uma representação inline vinda do Core, com o tipo que o Core declarou.
 ///
 /// Devolve os bytes e o `Content-Type` **tal como o Core os deu**. O Workspace

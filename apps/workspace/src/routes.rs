@@ -7549,54 +7549,52 @@ async fn previsualizar(
         };
     }
 
+    // O texto vem da **extracção**, e não de uma segunda leitura dos bytes.
+    //
+    // Antes, a pesquisa lia pelo extractor e a pré-visualização descarregava o
+    // ficheiro e descodificava-o outra vez. Dois caminhos para o mesmo texto
+    // divergem, e o dia em que divergissem era o dia em que alguém via no ecrã
+    // uma coisa diferente da que a pesquisa tinha encontrado.
+    //
+    // Isto também torna um PDF pré-visualizável: o que se mostra é exactamente
+    // o que se pesquisa.
+    match api::get::<Value>(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/files/{file_id}/content"),
+    )
+    .await
+    {
+        Ok(resposta) => {
+            if let Some(texto) = resposta.get("text").and_then(Value::as_str) {
+                if tamanho > PREVIEW_LIMIT_BYTES as i64 {
+                    return Preview::TooLarge(tamanho);
+                }
+                return Preview::Text(texto.to_owned());
+            }
+        }
+        Err(_) => {
+            return Preview::Unavailable(
+                "O Core não autorizou a leitura do conteúdo agora.".to_owned(),
+            )
+        }
+    }
+
+    // Sem extracção não há texto para mostrar. Distinguir «ainda não foi lido»
+    // de «não tem leitor» é trabalho do painel de estado ao lado, que já o faz.
     let e_texto = tipo.starts_with("text/")
         || matches!(
             tipo.as_str(),
             "application/json" | "application/xml" | "application/x-yaml" | "application/yaml"
         );
 
-    if !e_texto {
-        return Preview::UnsupportedType(tipo);
-    }
-    if tamanho > PREVIEW_LIMIT_BYTES as i64 {
-        return Preview::TooLarge(tamanho);
-    }
-
-    // A ligação assinada é pedida com a sessão deste membro: se o Core recusa,
-    // não há pré-visualização — e é a mesma recusa que o botão de descarga daria.
-    let assinada = match api::get::<Value>(
-        state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/files/{file_id}/download"),
-    )
-    .await
-    {
-        Ok(resposta) => resposta
-            .get("url")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned(),
-        Err(_) => {
-            return Preview::Unavailable(
-                "O Core não autorizou a leitura do conteúdo agora.".to_owned(),
-            )
-        }
-    };
-
-    if assinada.is_empty() {
-        return Preview::Unavailable("O armazenamento não devolveu uma ligação.".to_owned());
-    }
-
-    match api::fetch_bounded(state, &assinada, PREVIEW_LIMIT_BYTES).await {
-        Ok(bytes) => match String::from_utf8(bytes) {
-            Ok(texto) => Preview::Text(texto),
-            Err(_) => Preview::UnsupportedType(format!("{tipo} (não é texto legível)")),
-        },
-        Err(_) => Preview::Unavailable(
-            "O armazenamento institucional não respondeu ao pedido do conteúdo.".to_owned(),
-        ),
-    }
+    // Sem extracção não há texto, e não se vai buscar os bytes para tentar
+    // outra vez: era esse o segundo caminho, e é ele que desaparece aqui.
+    // Porque não há texto — ainda não foi lido, ou não tem leitor — di-lo o
+    // painel de estado ao lado, que sabe distinguir as duas coisas.
+    let _ = (e_texto, tamanho);
+    Preview::UnsupportedType(tipo)
 }
 
 /// Carrega uma versão nova de um ficheiro que já existe.

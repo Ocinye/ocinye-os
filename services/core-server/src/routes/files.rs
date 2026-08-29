@@ -43,6 +43,8 @@ pub fn routes() -> Router<AppState> {
         // A representação inline. Não é a descarga, e não emite ligação
         // assinada nenhuma: os bytes saem por aqui, na origem do Core.
         .route("/files/{file_id}/preview", get(preview_file))
+        // O texto extraído. Uma porta, e a mesma autoridade do ficheiro.
+        .route("/files/{file_id}/content", get(file_content))
         // A versão exacta tem caminho próprio porque é um recurso próprio: «o
         // ficheiro» aponta para bytes que mudam, «a versão 3» não.
         .route(
@@ -411,6 +413,24 @@ async fn preview_file(
         vista.bytes,
     )
         .into_response())
+}
+
+/// O maior conteúdo que se devolve de uma vez.
+const CONTENT_MAX_CHARS: usize = 200_000;
+
+/// O texto extraído da versão corrente.
+///
+/// Devolve `null` quando não há extracção: um ficheiro por processar e um
+/// ficheiro sem leitor não têm texto, e a resposta diz isso em vez de fingir
+/// uma cadeia vazia.
+async fn file_content(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(file_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut conn = state.pool.acquire().await.map_err(CoreError::from)?;
+    let texto = files::content(&mut conn, &principal, file_id, CONTENT_MAX_CHARS).await?;
+    Ok(Json(serde_json::json!({ "text": texto })))
 }
 
 async fn download_version(

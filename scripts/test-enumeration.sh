@@ -85,13 +85,13 @@ falhas=0
 # pergunta de porquê.
 suites() {
     cat <<'TABELA'
-# 64 viagens e 63 marcas, e os números **não** têm de coincidir.
+# 65 viagens e 64 marcas, e os números **não** têm de coincidir.
 #
-# A marca conta levantamentos de harness, não viagens. Duas das 64 são análise
+# A marca conta levantamentos de harness, não viagens. Duas das 65 são análise
 # estática sobre a árvore e não abrem browser nenhum; e
 # `a_consolidacao_nao_mudou_o_que_a_pessoa_ve` levanta **dois** harnesses — um
 # com os estáticos actuais, outro com o estado anterior — porque a propriedade
-# que mede é a comparação entre os dois. 62 viagens × 1 + 1 extra = 63.
+# que mede é a comparação entre os dois. 63 viagens × 1 + 1 extra = 64.
 #
 # 61 desde 2026-08-29: entraram três viagens de Ficheiros — navegar e organizar,
 # a recusa a quem tem o identificador e não o acesso, e o largar de bytes a
@@ -104,13 +104,17 @@ suites() {
 # carrega com `img-src 'self'` — mede `naturalWidth` no Chrome, porque um `<img>`
 # recusado pela CSP continua a existir no HTML.
 #
+# 65 desde 2026-08-29: entrou também a viagem que exige que a pré-visualização
+# mostre exactamente o texto que a pesquisa encontra — um caminho só, e não dois
+# que podem divergir.
+#
 # 64 desde 2026-08-29: entraram as duas viagens de extracção de conteúdo — a
 # frase que só existe no corpo de um PDF, e o formato que se guarda mas não se
 # lê. Ambas exigem armazenamento; sem ele, falham na CI em vez de se saltarem.
 #
 # Auditado em 2026-08-29, em série, marca a marca. O número continua fixo: uma
 # viagem que deixe de levantar faz a contagem cair e o portão fecha.
-viagens-de-browser|64|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|63
+viagens-de-browser|65|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|64
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
