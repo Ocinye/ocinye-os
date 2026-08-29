@@ -4152,6 +4152,11 @@ async fn sem_armazenamento_registado_um_anexo_nao_deixa_ficheiro() {
     let store = match test_store() {
         Some(store) => store,
         None => {
+            assert!(
+                std::env::var("CI").is_err(),
+                "não há armazenamento, e isto é a CI: estas provas exigem um \
+                 object store. Defina OCINYE_TEST_STORAGE_ENDPOINT."
+            );
             eprintln!("skipping: OCINYE_TEST_STORAGE_ENDPOINT is not set");
             return;
         }

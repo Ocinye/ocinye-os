@@ -664,6 +664,25 @@ async fn a_classificacao_do_ficheiro_tem_vocabulario_fechado() {
 // ── O ficheiro institucional que não é documento ────────────────────────
 
 /// O `ObjectStore` de teste, quando existe um serviço S3-compatível.
+/// O armazenamento ausente é uma conveniência local e um defeito na CI.
+///
+/// Um teste que se salta reporta `ok`, e `cargo test` engole o `eprintln!` de
+/// um teste que passa — pelo que a guarda da CI que procura «skipping» na saída
+/// nunca chegou a ver estes saltos. A CI ficava verde a afirmar que o
+/// armazenamento tinha sido exercido quando não havia armazenamento nenhum.
+///
+/// Aqui, como no `harness!` para o Chrome: sem armazenamento em máquina de
+/// alguém, salta-se; sem armazenamento na CI, falha.
+fn exigir_armazenamento() {
+    assert!(
+        std::env::var("CI").is_err(),
+        "não há armazenamento, e isto é a CI: o job que afirma provar \
+         integração com object storage não pode saltar essa prova. \
+         Defina OCINYE_TEST_STORAGE_ENDPOINT."
+    );
+    eprintln!("saltado: OCINYE_TEST_STORAGE_ENDPOINT não está definida");
+}
+
 fn test_store() -> Option<ocinye_core::storage::ObjectStore> {
     ocinye_core::storage::ObjectStore::new(ocinye_core::config::StorageConfig {
         endpoint_url: std::env::var("OCINYE_TEST_STORAGE_ENDPOINT").ok()?,
@@ -740,7 +759,7 @@ async fn principal_do_teste(
 async fn um_png_e_um_ficheiro_institucional_sem_ser_documento() {
     let Some(pool) = pool().await else { return };
     let Some(store) = test_store() else {
-        eprintln!("saltado: OCINYE_TEST_STORAGE_ENDPOINT não está definida");
+        exigir_armazenamento();
         return;
     };
     let ctx = contexto(&pool).await;
@@ -1713,7 +1732,7 @@ async fn o_historico_de_versoes_segue_a_autoridade_do_ficheiro() {
 async fn descarregar_uma_versao_exacta_passa_pela_autoridade_do_ficheiro() {
     let Some(pool) = pool().await else { return };
     let Some(store) = test_store() else {
-        eprintln!("saltado: OCINYE_TEST_STORAGE_ENDPOINT não está definida");
+        exigir_armazenamento();
         return;
     };
     let ctx = contexto(&pool).await;
@@ -1798,7 +1817,7 @@ async fn descarregar_uma_versao_exacta_passa_pela_autoridade_do_ficheiro() {
 async fn a_previsualizacao_passa_pela_autoridade_do_ficheiro() {
     let Some(pool) = pool().await else { return };
     let Some(store) = test_store() else {
-        eprintln!("saltado: OCINYE_TEST_STORAGE_ENDPOINT não está definida");
+        exigir_armazenamento();
         return;
     };
     let ctx = contexto(&pool).await;
@@ -1854,7 +1873,7 @@ async fn a_previsualizacao_passa_pela_autoridade_do_ficheiro() {
 async fn um_svg_nao_se_mostra_inline_so_por_ser_imagem() {
     let Some(pool) = pool().await else { return };
     let Some(store) = test_store() else {
-        eprintln!("saltado: OCINYE_TEST_STORAGE_ENDPOINT não está definida");
+        exigir_armazenamento();
         return;
     };
     let ctx = contexto(&pool).await;

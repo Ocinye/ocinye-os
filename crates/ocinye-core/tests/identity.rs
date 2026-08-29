@@ -1426,6 +1426,15 @@ macro_rules! skip_without_storage {
         match test_store() {
             Some(store) => store,
             None => {
+                // Sem armazenamento em máquina de alguém, salta-se. Sem
+                // armazenamento na CI, falha: `cargo test` engole este
+                // `eprintln!` num teste que passa, pelo que a guarda que
+                // procura «skipping» na saída nunca o viu.
+                assert!(
+                    std::env::var("CI").is_err(),
+                    "não há armazenamento, e isto é a CI: estas provas exigem \
+                     um object store. Defina OCINYE_TEST_STORAGE_ENDPOINT."
+                );
                 eprintln!("skipping: OCINYE_TEST_STORAGE_ENDPOINT is not set");
                 return;
             }

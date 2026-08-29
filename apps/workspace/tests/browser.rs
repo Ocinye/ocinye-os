@@ -1198,6 +1198,21 @@ fn chave_do_correio() -> &'static ocinye_core::password::sealed::SealingKey {
 ///
 /// `None` quando as variáveis não estão postas. Quem chama tem de o dizer — um
 /// teste que se salta em silêncio é verde a afirmar nada.
+/// Sem armazenamento salta-se; na CI, falha.
+///
+/// A viagem que afirma «Chrome → multipart → Core → object store → PostgreSQL»
+/// só é evidência quando todos esses componentes participaram. Na CI, a ausência
+/// de um deles é um defeito do job, não uma condição do ambiente.
+fn exigir_armazenamento(viagem: &str) {
+    assert!(
+        std::env::var("CI").is_err(),
+        "não há armazenamento, e isto é a CI: «{viagem}» não pode contar como \
+         prova de integração com object storage sem um object store. \
+         Defina OCINYE_TEST_STORAGE_ENDPOINT."
+    );
+    eprintln!("SALTADO: {viagem} — OCINYE_TEST_STORAGE_ENDPOINT não está definida.");
+}
+
 fn store_de_teste() -> Option<ocinye_core::storage::ObjectStore> {
     ocinye_core::storage::ObjectStore::new(ocinye_core::config::StorageConfig {
         endpoint_url: std::env::var("OCINYE_TEST_STORAGE_ENDPOINT").ok()?,
@@ -7601,11 +7616,7 @@ async fn uma_pessoa_larga_um_ficheiro_e_ele_fica() {
     let harness = harness!();
 
     if store_de_teste().is_none() {
-        eprintln!(
-            "SALTADO: uma_pessoa_larga_um_ficheiro_e_ele_fica — \
-             OCINYE_TEST_STORAGE_ENDPOINT não está definida, e sem armazenamento \
-             esta viagem não prova que os bytes atravessam."
-        );
+        exigir_armazenamento("uma_pessoa_larga_um_ficheiro_e_ele_fica");
         return;
     }
 
@@ -7721,10 +7732,7 @@ async fn uma_imagem_institucional_carrega_na_origem_do_workspace() {
     let harness = harness!();
 
     if store_de_teste().is_none() {
-        eprintln!(
-            "SALTADO: uma_imagem_institucional_carrega_na_origem_do_workspace — \
-             sem OCINYE_TEST_STORAGE_ENDPOINT não há bytes para servir."
-        );
+        exigir_armazenamento("uma_imagem_institucional_carrega_na_origem_do_workspace");
         return;
     }
 
