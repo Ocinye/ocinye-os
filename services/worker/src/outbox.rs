@@ -43,7 +43,11 @@ pub struct OutboxEvent {
 /// # Errors
 ///
 /// Returns an error when the database cannot be reached.
-pub async fn drain(pool: &PgPool, batch_size: i64) -> anyhow::Result<usize> {
+pub async fn drain(
+    pool: &PgPool,
+    batch_size: i64,
+    store: Option<&ocinye_core::storage::ObjectStore>,
+) -> anyhow::Result<usize> {
     let mut tx = pool.begin().await?;
 
     let events = sqlx::query_as::<_, OutboxEvent>(
@@ -70,7 +74,7 @@ pub async fn drain(pool: &PgPool, batch_size: i64) -> anyhow::Result<usize> {
     let mut processed = 0_usize;
 
     for event in &events {
-        match handlers::handle(&mut tx, event).await {
+        match handlers::handle(&mut tx, event, store).await {
             Ok(()) => {
                 sqlx::query("UPDATE outbox_events SET published_at = now() WHERE id = $1")
                     .bind(event.id)

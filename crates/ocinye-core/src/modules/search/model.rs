@@ -37,3 +37,37 @@ pub struct SemanticAvailability {
     /// Explanation for the interface.
     pub message: String,
 }
+
+/// Um resultado que veio do **corpo** de um ficheiro, e não do seu título.
+///
+/// # Porque é um tipo próprio
+///
+/// Porque transporta uma coisa que os outros resultados não têm: **onde** no
+/// documento a frase está. Um `SearchHit` com a página escondida dentro do
+/// excerto seria uma citação que ninguém pode verificar.
+///
+/// E porque a identidade é a versão. Um resultado do corpo aponta para os bytes
+/// que foram lidos — se alguém carregar outra versão amanhã, esta continua a
+/// dizer o que dizia.
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+pub struct BodyHit {
+    /// O ficheiro.
+    pub file_id: Uuid,
+    /// A versão exacta de onde a frase saiu.
+    pub file_version_id: Uuid,
+    /// O número da versão, para se poder dizer «v2» a uma pessoa.
+    pub sequence: i32,
+    /// O nome do ficheiro.
+    pub name: String,
+    /// O trecho, com os termos realçados pelo PostgreSQL.
+    pub excerpt: String,
+    /// Onde está: `{"page": 4}` para PDF, `{}` quando o formato não tem
+    /// coordenadas.
+    pub locator: serde_json::Value,
+    /// A classificação **efectiva**, composta no momento da consulta.
+    pub classification: String,
+    /// O ambiente que o governa.
+    pub workspace_id: Uuid,
+    /// Relevância lexical.
+    pub rank: f32,
+}

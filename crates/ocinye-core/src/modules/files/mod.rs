@@ -22,6 +22,7 @@
 //!
 //! > **Versionamento acrescentado sem alterar a semântica de autorização.**
 
+pub mod extraction;
 pub mod repository;
 pub mod service;
 

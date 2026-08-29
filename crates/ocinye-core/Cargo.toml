@@ -44,6 +44,7 @@ reqwest = { workspace = true }
 aws-sdk-s3 = { workspace = true }
 aws-credential-types = { workspace = true }
 async-trait = { workspace = true }
+pdf-extract = "0.12"
 
 [features]
 # O fornecedor de inferência determinístico. Activado pelo harness de testes e

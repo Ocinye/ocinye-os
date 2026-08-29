@@ -6,7 +6,9 @@
 //! crash between the handler succeeding and the row being marked published, so
 //! "ran twice" is a normal case, not an exception (briefing §74).
 
+use ocinye_core::modules::files::extraction;
 use ocinye_core::modules::intelligence;
+use ocinye_core::storage::ObjectStore;
 use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::outbox::OutboxEvent;
@@ -17,8 +19,9 @@ use crate::outbox::OutboxEvent;
 ///
 /// Returns an error when handling fails; the event is retried with backoff.
 pub async fn handle(
-    _tx: &mut Transaction<'_, Postgres>,
+    tx: &mut Transaction<'_, Postgres>,
     event: &OutboxEvent,
+    store: Option<&ObjectStore>,
 ) -> anyhow::Result<()> {
     // Events are logged with their identifiers only. Payloads never carry
     // content, so this line is safe to keep at info level.
@@ -37,12 +40,62 @@ pub async fn handle(
         "event"
     );
 
-    // Search indexing happens inside the originating transaction rather than
-    // here, so the index can never describe an artefact that was rolled back.
-    // This handler is therefore deliberately thin today: it exists so that
-    // deferred work — checksums, previews, embeddings, notifications — has a
-    // place to go that is already durable and idempotent.
+    // Search indexing of *titles* happens inside the originating transaction
+    // rather than here, so the index can never describe an artefact that was
+    // rolled back. Reading a body is different work: it needs the bytes, it can
+    // take seconds, and it must not hold a request open.
+    if event.name == extraction::EVENT_EXTRACT {
+        return extrair_conteudo(tx, event, store).await;
+    }
+
     Ok(())
+}
+
+/// Lê o corpo de uma versão e torna-o pesquisável.
+///
+/// # O que é erro e o que é estado
+///
+/// Um formato sem extractor, ou um PDF que o leitor não consegue interpretar,
+/// **não** são erros deste handler: são estados da extracção, ficam registados,
+/// e o evento dá-se por entregue. Voltar a tentar não mudaria nada, e deixar o
+/// evento a repetir dez vezes só encheria a fila.
+///
+/// O armazenamento não responder **é** erro: o outbox volta a tentar com
+/// backoff. Marcar `FAILED` aqui afirmaria que o conteúdo não se consegue ler,
+/// quando o que aconteceu foi o disco não atender.
+///
+/// # Idempotência
+///
+/// `process` reclama a linha com `FOR UPDATE` e devolve `None` quando já não há
+/// nada a fazer. Um evento reentregue passa por aqui e sai sem duplicar chunks.
+async fn extrair_conteudo(
+    tx: &mut Transaction<'_, Postgres>,
+    event: &OutboxEvent,
+    store: Option<&ObjectStore>,
+) -> anyhow::Result<()> {
+    let Some(store) = store else {
+        // Sem armazenamento configurado não há bytes para ler. Isto é um erro
+        // e não um estado: a instalação pode ganhar armazenamento amanhã, e o
+        // evento tem de continuar a existir para então ser processado.
+        anyhow::bail!("no object store is configured; content cannot be extracted");
+    };
+
+    match extraction::process(tx, store, event.aggregate_id).await {
+        Ok(Some(estado)) => {
+            tracing::info!(
+                file_version_id = %event.aggregate_id,
+                estado = estado.as_str(),
+                "content extraction settled"
+            );
+            Ok(())
+        }
+        Ok(None) => {
+            // Já estava lida, ou a versão desapareceu. As duas coisas são
+            // razões legítimas para não fazer nada.
+            Ok(())
+        }
+        Err(erro) => Err(anyhow::anyhow!(erro)),
+    }
 }
 
 /// Refresh state that is derived rather than authoritative.

@@ -55,6 +55,7 @@ pub struct FileContext {
 /// Devolve erro quando a inserção falha.
 pub async fn create_with_first_version(
     tx: &mut Tx<'_>,
+    ids: &CorrelationIds,
     contexto: FileContext,
     name: &str,
     storage_object_id: Uuid,
@@ -72,6 +73,15 @@ pub async fn create_with_first_version(
     .await?;
     let version_id =
         repo::insert_version(&mut **tx, file_id, 1, storage_object_id, None, created_by).await?;
+
+    // A fila de extracção nasce **aqui**, e não em quem chama.
+    //
+    // Estava a ser posta por quem carregava, e isso torna a invariante uma
+    // coisa de que alguém se tem de lembrar: um caminho novo que criasse uma
+    // versão sem pedir extracção produziria um ficheiro silenciosamente não
+    // pesquisável, e nada acusaria. Dentro da mesma transacção, ou nascem as
+    // duas ou não nasce nenhuma.
+    super::extraction::queue(tx, version_id, ids).await?;
 
     Ok(FileVersionRecord {
         file_id,
@@ -97,6 +107,7 @@ pub async fn create_with_first_version(
 /// Devolve erro quando o ficheiro não existe ou quando a inserção falha.
 pub async fn add_version(
     tx: &mut Tx<'_>,
+    ids: &CorrelationIds,
     file_id: Uuid,
     storage_object_id: Uuid,
     note: Option<&str>,
@@ -115,6 +126,10 @@ pub async fn add_version(
         created_by,
     )
     .await?;
+
+    // Pela mesma razão da primeira versão: a versão nova é outro corpo, e tem
+    // de ser lida. A da v1 fica exactamente como estava.
+    super::extraction::queue(tx, version_id, ids).await?;
 
     Ok(FileVersionRecord {
         file_id,
@@ -220,6 +235,7 @@ pub async fn create(
 
     let ficheiro = create_with_first_version(
         tx,
+        ids,
         FileContext {
             organisation_id: principal.organisation_id,
             unit_id: workspace.unit_id,
@@ -289,7 +305,15 @@ pub async fn upload_version(
     )
     .await?;
 
-    let versao = add_version(tx, file_id, objecto.object_id, None, principal.person_id).await?;
+    let versao = add_version(
+        tx,
+        ids,
+        file_id,
+        objecto.object_id,
+        None,
+        principal.person_id,
+    )
+    .await?;
 
     audit::record(
         tx,

@@ -345,9 +345,16 @@ async fn duas_escritas_ao_mesmo_tempo_nao_disputam_o_mesmo_numero() {
 
     // A primeira versão, para haver máximo a disputar.
     let mut tx = pool.begin().await.expect("tx");
-    ocinye_core::modules::files::add_version(&mut tx, f, o1, None, quem)
-        .await
-        .expect("v1");
+    ocinye_core::modules::files::add_version(
+        &mut tx,
+        &ocinye_observability::CorrelationIds::generate(),
+        f,
+        o1,
+        None,
+        quem,
+    )
+    .await
+    .expect("v1");
     tx.commit().await.expect("commit");
 
     let o2 = objecto(&pool, &ctx, '2').await;
@@ -358,7 +365,15 @@ async fn duas_escritas_ao_mesmo_tempo_nao_disputam_o_mesmo_numero() {
     let b = pool.clone();
     let primeira = tokio::spawn(async move {
         let mut tx = a.begin().await.expect("tx");
-        let v = ocinye_core::modules::files::add_version(&mut tx, f, o2, None, quem).await;
+        let v = ocinye_core::modules::files::add_version(
+            &mut tx,
+            &ocinye_observability::CorrelationIds::generate(),
+            f,
+            o2,
+            None,
+            quem,
+        )
+        .await;
         tokio::time::sleep(std::time::Duration::from_millis(120)).await;
         let feito = v.map(|r| r.sequence);
         tx.commit().await.expect("commit");
@@ -367,7 +382,15 @@ async fn duas_escritas_ao_mesmo_tempo_nao_disputam_o_mesmo_numero() {
     let segunda = tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         let mut tx = b.begin().await.expect("tx");
-        let v = ocinye_core::modules::files::add_version(&mut tx, f, o3, None, quem).await;
+        let v = ocinye_core::modules::files::add_version(
+            &mut tx,
+            &ocinye_observability::CorrelationIds::generate(),
+            f,
+            o3,
+            None,
+            quem,
+        )
+        .await;
         let feito = v.map(|r| r.sequence);
         tx.commit().await.expect("commit");
         feito
@@ -405,9 +428,16 @@ async fn acrescentar_versoes_preserva_os_bytes_de_todas() {
         let o = objecto(&pool, &ctx, marca).await;
         objectos.push(o);
         let mut tx = pool.begin().await.expect("tx");
-        ocinye_core::modules::files::add_version(&mut tx, f, o, Some("nota"), quem)
-            .await
-            .expect("versão");
+        ocinye_core::modules::files::add_version(
+            &mut tx,
+            &ocinye_observability::CorrelationIds::generate(),
+            f,
+            o,
+            Some("nota"),
+            quem,
+        )
+        .await
+        .expect("versão");
         tx.commit().await.expect("commit");
     }
 
@@ -451,10 +481,16 @@ async fn uma_versao_para_um_ficheiro_inexistente_e_recusada() {
     let o = objecto(&pool, &ctx, 'z').await;
 
     let mut tx = pool.begin().await.expect("tx");
-    let erro =
-        ocinye_core::modules::files::add_version(&mut tx, Uuid::new_v4(), o, None, Uuid::new_v4())
-            .await
-            .expect_err("aceitou uma versão para um ficheiro que não existe");
+    let erro = ocinye_core::modules::files::add_version(
+        &mut tx,
+        &ocinye_observability::CorrelationIds::generate(),
+        Uuid::new_v4(),
+        o,
+        None,
+        Uuid::new_v4(),
+    )
+    .await
+    .expect_err("aceitou uma versão para um ficheiro que não existe");
     assert!(
         matches!(erro, ocinye_core::error::CoreError::NotFound(_)),
         "recusado por outra razão: {erro:?}"
@@ -530,9 +566,16 @@ async fn uma_versao_nova_muda_o_que_o_documento_devolve() {
     let o2 = objecto(&pool, &ctx, 'q').await;
     let quem = pessoa(&pool, &ctx).await;
     let mut tx = pool.begin().await.expect("tx");
-    ocinye_core::modules::files::add_version(&mut tx, f, o2, Some("gráfico corrigido"), quem)
-        .await
-        .expect("v2");
+    ocinye_core::modules::files::add_version(
+        &mut tx,
+        &ocinye_observability::CorrelationIds::generate(),
+        f,
+        o2,
+        Some("gráfico corrigido"),
+        quem,
+    )
+    .await
+    .expect("v2");
     tx.commit().await.expect("commit");
 
     assert_eq!(

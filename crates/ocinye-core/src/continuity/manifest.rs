@@ -238,6 +238,31 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
         ),
     ),
     // ── Deliberadamente fora ────────────────────────────────────────────
+    //
+    // A extracção e os seus pedaços são **derivados reconstruíveis**: saem de
+    // `FileVersion` + os bytes + a definição do extractor, e as três coisas são
+    // duráveis. Exigir que coincidissem faria uma reprocessamento legítimo —
+    // um parser corrigido, um formato novo suportado — passar por perda de
+    // memória institucional.
+    //
+    // A reconstrução é provada, e não afirmada: `content_extraction.rs` apaga
+    // a extracção e o índice, reprocessa, e exige que a mesma frase volte a ser
+    // encontrável. Os identificadores não têm de ser os mesmos; o significado
+    // observável tem.
+    (
+        "file_extractions",
+        Comparacao::Fora(
+            "leitura derivada de uma versão, reconstruível a partir dos bytes e \
+             do extractor. Um reprocessamento legítimo não é perda",
+        ),
+    ),
+    (
+        "file_chunks",
+        Comparacao::Fora(
+            "projecção lexical do corpo, reconstruível com a extracção. Não é \
+             autoridade de coisa nenhuma e não guarda classificação",
+        ),
+    ),
     (
         "search_documents",
         Comparacao::Fora(

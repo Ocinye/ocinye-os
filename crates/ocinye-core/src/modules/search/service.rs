@@ -115,6 +115,61 @@ pub async fn search(
     Ok((hits, total))
 }
 
+/// Pesquisa o **corpo** dos ficheiros institucionais.
+///
+/// Separada de [`search`] e não misturada com ela, por duas razões.
+///
+/// A primeira é honestidade: um resultado de corpo diz «esta frase está na
+/// página 4 da versão 2 deste ficheiro», e um resultado de título diz «este
+/// artefacto chama-se assim». Fundi-los num ranking só faria a interface
+/// escolher qual das duas afirmações mostrar.
+///
+/// A segunda é que isto não precisa de nenhum modelo. A pesquisa do corpo é
+/// lexical, funciona sem IA, e continuará a funcionar quando houver embeddings
+/// — que serão outra coisa, ao lado desta, e não em vez dela.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta é curta de mais ou quando a base falha.
+pub async fn search_bodies(
+    pool: &PgPool,
+    principal: &Principal,
+    query: &str,
+    workspace_id: Option<Uuid>,
+    page: PageRequest,
+) -> CoreResult<(Vec<crate::modules::search::model::BodyHit>, i64)> {
+    let query = query.trim();
+    if query.chars().count() < MIN_QUERY_LENGTH {
+        return Err(CoreError::Validation(
+            "A search needs at least two characters.".to_owned(),
+        ));
+    }
+
+    let filter = VisibilityFilter::for_principal(principal);
+    if filter.is_never_satisfiable() {
+        return Ok((Vec::new(), 0));
+    }
+
+    let terms = repo::SearchTerms {
+        query,
+        entity_types: None,
+        workspace_id,
+    };
+
+    let hits = repo::search_bodies(
+        pool,
+        principal.organisation_id,
+        &filter,
+        terms,
+        page.limit(),
+        page.offset(),
+    )
+    .await?;
+    let total = repo::count_bodies(pool, principal.organisation_id, &filter, terms).await?;
+
+    Ok((hits, total))
+}
+
 /// Report whether semantic search can be offered.
 ///
 /// # Errors

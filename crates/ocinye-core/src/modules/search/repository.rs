@@ -233,3 +233,126 @@ pub async fn embedded_count<'e>(
     .await?;
     Ok(total)
 }
+
+// ── Pesquisa do corpo ───────────────────────────────────────────────────
+//
+// > **A pesquisa pode usar um índice para descobrir candidatos, mas a
+// > visibilidade decide-se contra o estado autoritativo corrente. Um índice
+// > nunca é autoridade de autorização.**
+//
+// Aqui isso é literal: `file_chunks` não guarda classificação nenhuma. A
+// composição é feita na consulta, contra `files` e `research_workspaces` como
+// estão **agora** — pelo que restringir um ambiente esconde imediatamente o
+// corpo dos seus ficheiros, sem reindexar coisa nenhuma.
+
+/// A classificação efectiva de um ficheiro, composta na consulta.
+const CLASSIFICACAO_DO_FICHEIRO: &str = "CASE
+    WHEN f.classification = 'RESTRICTED' OR w.classification = 'RESTRICTED' THEN 'RESTRICTED'
+    WHEN f.classification = 'CONFIDENTIAL' OR w.classification = 'CONFIDENTIAL' THEN 'CONFIDENTIAL'
+    WHEN f.classification = 'INTERNAL' OR w.classification = 'INTERNAL' THEN 'INTERNAL'
+    ELSE 'PUBLIC'
+END";
+
+fn colunas_do_corpo() -> VisibilityColumns {
+    VisibilityColumns::aliased("f.unit_id", "f.workspace_id", CLASSIFICACAO_DO_FICHEIRO)
+}
+
+/// Pesquisa o corpo dos ficheiros.
+///
+/// # A versão corrente, e não todas
+///
+/// Se a v1 e a v2 contêm a mesma frase, dois resultados aparentemente iguais não
+/// ajudam ninguém. A pesquisa institucional normal olha para a versão corrente.
+/// A v1 continua a existir, continua indexada, e alcança-se pelo caminho exacto
+/// — o que se recusa é apresentá-la como se fosse duas coisas.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn search_bodies<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    visibility: &VisibilityFilter,
+    terms: SearchTerms<'_>,
+    limit: i64,
+    offset: i64,
+) -> CoreResult<Vec<super::model::BodyHit>> {
+    let predicate = to_sql(visibility, colunas_do_corpo());
+
+    let hits = sqlx::query_as::<_, super::model::BodyHit>(&format!(
+        "SELECT f.id AS file_id,
+                v.id AS file_version_id,
+                v.sequence,
+                f.name,
+                ts_headline($2::regconfig, c.text,
+                            websearch_to_tsquery($2::regconfig, $3),
+                            'MaxWords=40, MinWords=15, MaxFragments=1') AS excerpt,
+                c.locator,
+                {CLASSIFICACAO_DO_FICHEIRO} AS classification,
+                f.workspace_id,
+                ts_rank(c.search_vector, websearch_to_tsquery($2::regconfig, $3)) AS rank
+           FROM file_chunks c
+           JOIN file_extractions e ON e.id = c.extraction_id
+           JOIN file_versions v ON v.id = e.file_version_id
+           JOIN files f ON f.id = v.file_id
+           JOIN research_workspaces w ON w.id = f.workspace_id
+          WHERE f.organisation_id = $1
+            AND c.search_vector @@ websearch_to_tsquery($2::regconfig, $3)
+            AND v.sequence = (
+                SELECT max(sequence) FROM file_versions WHERE file_id = f.id
+            )
+            AND ($4::uuid IS NULL OR f.workspace_id = $4)
+            AND {predicate}
+          ORDER BY rank DESC, f.name, c.ordinal
+          LIMIT $5 OFFSET $6"
+    ))
+    .bind(organisation_id)
+    .bind(TS_CONFIG)
+    .bind(terms.query)
+    .bind(terms.workspace_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(executor)
+    .await?;
+    Ok(hits)
+}
+
+/// Quantos ficheiros o corpo alcança, dentro do conjunto autorizado.
+///
+/// Usa exactamente o mesmo predicado que [`search_bodies`], pelo que um total
+/// nunca pode revelar o que a lista esconde.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn count_bodies<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    visibility: &VisibilityFilter,
+    terms: SearchTerms<'_>,
+) -> CoreResult<i64> {
+    let predicate = to_sql(visibility, colunas_do_corpo());
+
+    let total: i64 = sqlx::query_scalar(&format!(
+        "SELECT count(DISTINCT f.id)
+           FROM file_chunks c
+           JOIN file_extractions e ON e.id = c.extraction_id
+           JOIN file_versions v ON v.id = e.file_version_id
+           JOIN files f ON f.id = v.file_id
+           JOIN research_workspaces w ON w.id = f.workspace_id
+          WHERE f.organisation_id = $1
+            AND c.search_vector @@ websearch_to_tsquery($2::regconfig, $3)
+            AND v.sequence = (
+                SELECT max(sequence) FROM file_versions WHERE file_id = f.id
+            )
+            AND ($4::uuid IS NULL OR f.workspace_id = $4)
+            AND {predicate}"
+    ))
+    .bind(organisation_id)
+    .bind(TS_CONFIG)
+    .bind(terms.query)
+    .bind(terms.workspace_id)
+    .fetch_one(executor)
+    .await?;
+    Ok(total)
+}

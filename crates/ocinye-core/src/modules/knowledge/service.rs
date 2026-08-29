@@ -629,6 +629,7 @@ pub async fn create_document(
     // continua a chamar-se o que se carregou.
     let ficheiro = crate::modules::files::create_with_first_version(
         tx,
+        ids,
         crate::modules::files::FileContext {
             organisation_id: principal.organisation_id,
             unit_id: workspace.unit_id,

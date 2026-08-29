@@ -15,5 +15,7 @@ mod model;
 mod repository;
 mod service;
 
-pub use model::{SearchHit, SemanticAvailability};
-pub use service::{index_entity, remove_entity, search, semantic_availability, IndexRequest};
+pub use model::{BodyHit, SearchHit, SemanticAvailability};
+pub use service::{
+    index_entity, remove_entity, search, search_bodies, semantic_availability, IndexRequest,
+};
