@@ -112,6 +112,15 @@ Apache-2.0 e todas Rust puro. O leitor corre dentro de `catch_unwind`: é Rust
 seguro em memória, mas entra em pânico com documentos estranhos, e um pânico no
 worker levaria consigo o lote inteiro de eventos.
 
+Uma dessas transitivas — `ttf-parser`, via `lopdf` — está marcada como **não
+mantida** (RUSTSEC-2024-0355). É o único aviso desta árvore que é alcançado por
+entrada não confiável: lê as fontes embutidas num PDF que alguém carregou. O
+risco fica escrito em `.cargo/audit.toml` com o que existe em vez de uma
+correcção a montante — segurança de memória, `catch_unwind`, execução no worker
+e fora do caminho de um pedido, e uma falha que não invalida o ficheiro. Sai
+dessa lista quando `lopdf` deixar de o arrastar, ou quando a extracção de PDF
+passar a correr dentro do Capability Runtime.
+
 ### O que fica por fazer
 
 OCR não entra aqui: um PDF digitalizado fica `UNSUPPORTED` e diz porquê.
