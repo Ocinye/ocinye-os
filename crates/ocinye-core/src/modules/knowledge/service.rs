@@ -617,12 +617,34 @@ pub async fn create_document(
         .put(&object_key, &content_type, &checksum, request.data)
         .await?;
 
+    // ── A identidade do ficheiro, e a sua primeira versão ───────────────
+    //
+    // Na mesma transacção do documento. Ou nascem os quatro — objecto,
+    // ficheiro, versão e documento — ou não nasce nenhum: um documento
+    // parcialmente versionado seria pior do que um sem versões, porque
+    // pareceria completo.
+    //
+    // O nome do ficheiro é o do carregamento, e não o título do documento. São
+    // coisas diferentes: o título muda quando alguém o corrige, e o ficheiro
+    // continua a chamar-se o que se carregou.
+    let ficheiro = crate::modules::files::create_with_first_version(
+        tx,
+        principal.organisation_id,
+        workspace.unit_id,
+        workspace.id,
+        &filename,
+        object_id,
+        principal.person_id,
+    )
+    .await?;
+
     let document_id = repo::insert_document(
         &mut **tx,
         principal.organisation_id,
         workspace.unit_id,
         workspace.id,
         object_id,
+        ficheiro.file_id,
         request.kind.as_str(),
         title,
         request.description.as_deref(),

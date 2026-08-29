@@ -112,6 +112,20 @@ async fn objecto(pool: &PgPool, ctx: &Contexto, marca: char) -> Uuid {
     .expect("objecto")
 }
 
+/// Quem carrega. A chave estrangeira exige que exista mesmo — e faz bem: um
+/// autor inventado tornaria a autoria de uma versão uma decoração.
+async fn pessoa(pool: &PgPool, ctx: &Contexto) -> Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO people (organisation_id, full_name, email)
+         VALUES ($1, 'Quem carrega', $2) RETURNING id",
+    )
+    .bind(ctx.organisation_id)
+    .bind(format!("p{}@ocinye.com", Uuid::new_v4().simple()))
+    .fetch_one(pool)
+    .await
+    .expect("pessoa")
+}
+
 async fn ficheiro(pool: &PgPool, ctx: &Contexto) -> Uuid {
     sqlx::query_scalar(
         "INSERT INTO files (organisation_id, unit_id, workspace_id, name)
@@ -317,5 +331,148 @@ async fn as_duas_fontes_do_objecto_de_um_documento_concordam() {
         "{divergentes} documento(s) apontam para um objecto e a sua versão \
          corrente para outro. Enquanto a coluna antiga existir, as duas têm de \
          dizer o mesmo"
+    );
+}
+
+// ── Os escritores ───────────────────────────────────────────────────────
+//
+// Os testes acima provam as invariantes da base. Estes provam o comportamento
+// de produção: que a operação canónica escreve as duas representações, e que
+// acrescentar uma versão nunca substitui.
+
+/// A sequência seguinte é do Core, e sobrevive a duas escritas ao mesmo tempo.
+///
+/// # O defeito que isto guarda
+///
+/// «Ler o máximo e somar um» sem tranca é uma corrida. Duas escritas
+/// simultâneas lêem o mesmo máximo, decidem ambas que são a versão seguinte, e
+/// a restrição única recusa a segunda — com uma mensagem de SQL, numa
+/// transacção que não tinha por onde saber que devia voltar a tentar.
+///
+/// Com a tranca sobre o ficheiro, a segunda espera e recebe o número certo. As
+/// duas versões entram, por ordem, e nenhuma se perde.
+#[tokio::test]
+async fn duas_escritas_ao_mesmo_tempo_nao_disputam_o_mesmo_numero() {
+    let Some(pool) = pool().await else { return };
+    let ctx = contexto(&pool).await;
+    let f = ficheiro(&pool, &ctx).await;
+    let o1 = objecto(&pool, &ctx, '1').await;
+    let quem = pessoa(&pool, &ctx).await;
+
+    // A primeira versão, para haver máximo a disputar.
+    let mut tx = pool.begin().await.expect("tx");
+    ocinye_core::modules::files::add_version(&mut tx, f, o1, None, quem)
+        .await
+        .expect("v1");
+    tx.commit().await.expect("commit");
+
+    let o2 = objecto(&pool, &ctx, '2').await;
+    let o3 = objecto(&pool, &ctx, '3').await;
+
+    // Duas transacções abertas ao mesmo tempo, ambas a pedir a versão seguinte.
+    let a = pool.clone();
+    let b = pool.clone();
+    let primeira = tokio::spawn(async move {
+        let mut tx = a.begin().await.expect("tx");
+        let v = ocinye_core::modules::files::add_version(&mut tx, f, o2, None, quem).await;
+        tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+        let feito = v.map(|r| r.sequence);
+        tx.commit().await.expect("commit");
+        feito
+    });
+    let segunda = tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        let mut tx = b.begin().await.expect("tx");
+        let v = ocinye_core::modules::files::add_version(&mut tx, f, o3, None, quem).await;
+        let feito = v.map(|r| r.sequence);
+        tx.commit().await.expect("commit");
+        feito
+    });
+
+    let uma = primeira.await.expect("junta").expect("primeira versão");
+    let outra = segunda.await.expect("junta").expect("segunda versão");
+
+    let mut numeros = [uma, outra];
+    numeros.sort_unstable();
+    assert_eq!(
+        numeros,
+        [2, 3],
+        "duas escritas concorrentes não produziram as versões 2 e 3: {numeros:?}"
+    );
+
+    let quantas: i64 = sqlx::query_scalar("SELECT count(*) FROM file_versions WHERE file_id=$1")
+        .bind(f)
+        .fetch_one(&pool)
+        .await
+        .expect("contagem");
+    assert_eq!(quantas, 3, "uma das versões concorrentes desapareceu");
+}
+
+/// Acrescentar uma versão preserva todas as anteriores, com os mesmos bytes.
+#[tokio::test]
+async fn acrescentar_versoes_preserva_os_bytes_de_todas() {
+    let Some(pool) = pool().await else { return };
+    let ctx = contexto(&pool).await;
+    let f = ficheiro(&pool, &ctx).await;
+    let quem = pessoa(&pool, &ctx).await;
+
+    let mut objectos = Vec::new();
+    for marca in ['a', 'b', 'c'] {
+        let o = objecto(&pool, &ctx, marca).await;
+        objectos.push(o);
+        let mut tx = pool.begin().await.expect("tx");
+        ocinye_core::modules::files::add_version(&mut tx, f, o, Some("nota"), quem)
+            .await
+            .expect("versão");
+        tx.commit().await.expect("commit");
+    }
+
+    for (indice, esperado) in objectos.iter().enumerate() {
+        let sequencia = i32::try_from(indice + 1).expect("sequência");
+        let guardado: Uuid = sqlx::query_scalar(
+            "SELECT storage_object_id FROM file_versions WHERE file_id=$1 AND sequence=$2",
+        )
+        .bind(f)
+        .bind(sequencia)
+        .fetch_one(&pool)
+        .await
+        .unwrap_or_else(|_| panic!("a versão {sequencia} desapareceu"));
+        assert_eq!(
+            guardado, *esperado,
+            "a versão {sequencia} passou a apontar para outros bytes"
+        );
+    }
+
+    let mut tx = pool.begin().await.expect("tx");
+    let corrente = ocinye_core::modules::files::current_version(&mut tx, f)
+        .await
+        .expect("corrente")
+        .expect("há versões");
+    tx.commit().await.expect("commit");
+    assert_eq!(corrente.1, 3, "a corrente não é a de maior sequência");
+    assert_eq!(
+        corrente.0, objectos[2],
+        "a corrente aponta para outros bytes"
+    );
+}
+
+/// Acrescentar uma versão a um ficheiro que não existe é recusado pelo domínio.
+///
+/// A chave estrangeira apanharia isto de qualquer forma, mas com uma mensagem
+/// de SQL. Quem chama merece saber que o recurso não existe.
+#[tokio::test]
+async fn uma_versao_para_um_ficheiro_inexistente_e_recusada() {
+    let Some(pool) = pool().await else { return };
+    let ctx = contexto(&pool).await;
+    let o = objecto(&pool, &ctx, 'z').await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    let erro =
+        ocinye_core::modules::files::add_version(&mut tx, Uuid::new_v4(), o, None, Uuid::new_v4())
+            .await
+            .expect_err("aceitou uma versão para um ficheiro que não existe");
+    assert!(
+        matches!(erro, ocinye_core::error::CoreError::NotFound(_)),
+        "recusado por outra razão: {erro:?}"
     );
 }

@@ -19,6 +19,7 @@ pub mod calendar;
 pub mod collaboration;
 pub mod compute;
 pub mod data;
+pub mod files;
 pub mod governance;
 pub mod identity;
 pub mod intelligence;

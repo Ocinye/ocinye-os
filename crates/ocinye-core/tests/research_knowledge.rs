@@ -2756,10 +2756,19 @@ async fn a_vista_institucional_de_documentos_respeita_artefacto_e_ambiente() {
         .expect("objecto de armazenamento");
 
         sqlx::query(
-            "INSERT INTO documents
+            // O ficheiro nasce com o documento (migration 0020).
+            "WITH f AS (
+                 INSERT INTO files (organisation_id, unit_id, workspace_id, name)
+                 VALUES ($1, $2, $3, 'anexo.pdf') RETURNING id
+             ),
+             v AS (
+                 INSERT INTO file_versions (file_id, sequence, storage_object_id)
+                 SELECT f.id, 1, $6 FROM f
+             )
+             INSERT INTO documents
                  (organisation_id, unit_id, workspace_id, title, classification,
-                  storage_object_id)
-             VALUES ($1, $2, $3, $4, $5, $6)",
+                  storage_object_id, file_id)
+             SELECT $1, $2, $3, $4, $5, $6, f.id FROM f",
         )
         .bind(world.organisation_id)
         .bind(unit)

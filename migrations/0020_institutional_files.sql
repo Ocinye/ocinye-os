@@ -199,3 +199,14 @@ BEGIN
         RAISE EXCEPTION 'a migração deixou % documento(s) sem ficheiro', orfaos;
     END IF;
 END $$;
+
+-- ── E passa a ser obrigatória ───────────────────────────────────────────
+--
+-- É a guarda mais forte que existe contra a bifurcação silenciosa. Um escritor
+-- que crie um documento sem ficheiro falha na primeira linha, e não daqui a
+-- três meses quando alguém reparar que metade dos documentos não tem versões.
+--
+-- Obriga também os testes que inserem directamente na tabela a criar o
+-- ficheiro — o que é a intenção: um documento sem ficheiro deixou de ser um
+-- estado representável.
+ALTER TABLE documents ALTER COLUMN file_id SET NOT NULL;

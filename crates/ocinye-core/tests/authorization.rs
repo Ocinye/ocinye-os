@@ -523,9 +523,22 @@ async fn seed_stricter_than_workspace(pool: &PgPool, fixture: &Fixture) -> Stric
     .expect("storage object");
 
     let document: Uuid = sqlx::query_scalar(
-        "INSERT INTO documents
-             (organisation_id, unit_id, workspace_id, storage_object_id, title, classification)
-         VALUES ($1, $2, $3, $4, 'Documento restrito', 'RESTRICTED') RETURNING id",
+        // O ficheiro nasce com o documento: `file_id` é obrigatório desde a
+        // migration 0020, e um documento sem ficheiro deixou de ser um estado
+        // representável.
+        "WITH f AS (
+             INSERT INTO files (organisation_id, unit_id, workspace_id, name)
+             VALUES ($1, $2, $3, 'restrito.pdf') RETURNING id
+         ),
+         v AS (
+             INSERT INTO file_versions (file_id, sequence, storage_object_id)
+             SELECT f.id, 1, $4 FROM f
+         )
+         INSERT INTO documents
+             (organisation_id, unit_id, workspace_id, storage_object_id, file_id,
+              title, classification)
+         SELECT $1, $2, $3, $4, f.id, 'Documento restrito', 'RESTRICTED'
+           FROM f RETURNING id",
     )
     .bind(fixture.organisation_id)
     .bind(fixture.unit_a)

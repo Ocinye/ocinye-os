@@ -376,23 +376,30 @@ pub async fn insert_document<'e>(
     unit_id: Uuid,
     workspace_id: Uuid,
     storage_object_id: Uuid,
+    file_id: Uuid,
     kind: &str,
     title: &str,
     description: Option<&str>,
     classification: Classification,
     created_by: Uuid,
 ) -> CoreResult<Uuid> {
+    // `storage_object_id` **e** `file_id`. A coluna antiga fica enquanto os
+    // leitores migram, e escrever as duas é o que mantém a equivalência que um
+    // verificador confronta. Escrever só uma delas abriria a bifurcação
+    // silenciosa que a coexistência existe para evitar: o leitor antigo a ver
+    // um objecto e o novo a ver outro, ambos a funcionar.
     let id = sqlx::query_scalar::<_, Uuid>(
         "INSERT INTO documents
-             (organisation_id, unit_id, workspace_id, storage_object_id, kind,
+             (organisation_id, unit_id, workspace_id, storage_object_id, file_id, kind,
               title, description, classification, created_by_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING id",
     )
     .bind(organisation_id)
     .bind(unit_id)
     .bind(workspace_id)
     .bind(storage_object_id)
+    .bind(file_id)
     .bind(kind)
     .bind(title)
     .bind(description)
