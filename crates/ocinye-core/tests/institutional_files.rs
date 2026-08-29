@@ -297,43 +297,6 @@ async fn a_sequencia_comeca_em_um() {
     );
 }
 
-/// Enquanto as duas fontes existirem, têm de concordar.
-///
-/// # Porque este teste existe, e por quanto tempo
-///
-/// `documents` guarda hoje o objecto de duas maneiras: directamente, em
-/// `storage_object_id`, e através do ficheiro, na versão de maior sequência. É
-/// uma redundância deliberada e temporária — a coluna antiga fica enquanto os
-/// leitores migram.
-///
-/// Duas fontes da mesma verdade só são aceitáveis enquanto alguém as confronta.
-/// Este teste é esse alguém, e desaparece com a coluna.
-#[tokio::test]
-async fn as_duas_fontes_do_objecto_de_um_documento_concordam() {
-    let Some(pool) = pool().await else { return };
-
-    let divergentes: i64 = sqlx::query_scalar(
-        "SELECT count(*)
-           FROM documents d
-           JOIN file_versions v ON v.file_id = d.file_id
-                               AND v.sequence = (SELECT max(sequence)
-                                                   FROM file_versions x
-                                                  WHERE x.file_id = d.file_id)
-          WHERE d.file_id IS NOT NULL
-            AND v.storage_object_id <> d.storage_object_id",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("comparação");
-
-    assert_eq!(
-        divergentes, 0,
-        "{divergentes} documento(s) apontam para um objecto e a sua versão \
-         corrente para outro. Enquanto a coluna antiga existir, as duas têm de \
-         dizer o mesmo"
-    );
-}
-
 // ── Os escritores ───────────────────────────────────────────────────────
 //
 // Os testes acima provam as invariantes da base. Estes provam o comportamento
@@ -474,5 +437,99 @@ async fn uma_versao_para_um_ficheiro_inexistente_e_recusada() {
     assert!(
         matches!(erro, ocinye_core::error::CoreError::NotFound(_)),
         "recusado por outra razão: {erro:?}"
+    );
+}
+
+// ── O corte dos leitores ────────────────────────────────────────────────
+//
+// O objecto de um documento passou a resolver-se pela identidade estável do
+// ficheiro e pela sua versão corrente. Estes testes provam que a mudança tem
+// efeito — e que não destrói a história.
+
+/// Um documento com o seu ficheiro e uma versão, prontos a crescer.
+async fn documento_com_ficheiro(pool: &PgPool, ctx: &Contexto, marca: char) -> (Uuid, Uuid, Uuid) {
+    let o = objecto(pool, ctx, marca).await;
+    let f = ficheiro(pool, ctx).await;
+    versao(pool, f, 1, o).await.expect("v1");
+    let d: Uuid = sqlx::query_scalar(
+        "INSERT INTO documents
+             (organisation_id, unit_id, workspace_id, file_id, title, classification)
+         VALUES ($1, $2, $3, $4, 'Relatório', 'INTERNAL') RETURNING id",
+    )
+    .bind(ctx.organisation_id)
+    .bind(ctx.unit_id)
+    .bind(ctx.workspace_id)
+    .bind(f)
+    .fetch_one(pool)
+    .await
+    .expect("documento");
+    (d, f, o)
+}
+
+/// O que o leitor devolve para um documento, pela mesma consulta da produção.
+async fn objecto_visto_pelo_leitor(pool: &PgPool, documento: Uuid) -> Uuid {
+    sqlx::query_scalar(
+        "SELECT v.storage_object_id
+           FROM documents d
+           JOIN LATERAL (
+               SELECT fv.storage_object_id
+                 FROM file_versions fv
+                WHERE fv.file_id = d.file_id
+                ORDER BY fv.sequence DESC
+                LIMIT 1
+           ) v ON TRUE
+          WHERE d.id = $1",
+    )
+    .bind(documento)
+    .fetch_one(pool)
+    .await
+    .expect("o leitor não encontrou o documento")
+}
+
+/// Carregar uma versão nova muda o que o documento devolve.
+///
+/// # Porque isto é a prova que faltava
+///
+/// O versionamento existia na base e não tinha efeito nenhum para quem usa o
+/// sistema: o documento continuava a devolver o objecto da coluna antiga, e
+/// carregar uma segunda versão não mudava nada. É esta a primeira vez que a
+/// história das versões governa o que a pessoa recebe.
+#[tokio::test]
+async fn uma_versao_nova_muda_o_que_o_documento_devolve() {
+    let Some(pool) = pool().await else { return };
+    let ctx = contexto(&pool).await;
+    let (documento, f, o1) = documento_com_ficheiro(&pool, &ctx, 'p').await;
+
+    assert_eq!(
+        objecto_visto_pelo_leitor(&pool, documento).await,
+        o1,
+        "antes de haver segunda versão, o documento já não devolvia a primeira"
+    );
+
+    let o2 = objecto(&pool, &ctx, 'q').await;
+    let quem = pessoa(&pool, &ctx).await;
+    let mut tx = pool.begin().await.expect("tx");
+    ocinye_core::modules::files::add_version(&mut tx, f, o2, Some("gráfico corrigido"), quem)
+        .await
+        .expect("v2");
+    tx.commit().await.expect("commit");
+
+    assert_eq!(
+        objecto_visto_pelo_leitor(&pool, documento).await,
+        o2,
+        "carregar uma versão nova não mudou o que o documento devolve"
+    );
+
+    // E a anterior continua exactamente onde estava.
+    let historica: Uuid = sqlx::query_scalar(
+        "SELECT storage_object_id FROM file_versions WHERE file_id=$1 AND sequence=1",
+    )
+    .bind(f)
+    .fetch_one(&pool)
+    .await
+    .expect("v1 desapareceu");
+    assert_eq!(
+        historica, o1,
+        "a versão 1 deixou de apontar para os bytes que sempre apontou"
     );
 }

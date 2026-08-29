@@ -92,6 +92,24 @@ def main() -> int:
     # Uma decisão sobre uma tabela não é um consumidor dela.
     NAO_E_LEITOR = ("continuity/manifest.rs", "continuity/classification.rs")
 
+    # ── E um teste também não ───────────────────────────────────────────
+    #
+    # A afirmação deste guarda é «esta tabela tem quem a use». Um ficheiro de
+    # teste usa-a para provar que ela funciona, e isso é outra coisa: uma
+    # tabela lida apenas por testes está integrada com a sua própria prova e
+    # com mais nada.
+    #
+    # Foi assim que `files` e `file_versions` passaram o portão no dia em que
+    # nasceram, sem um único leitor em `crates/…/src`. O guarda dizia que
+    # estavam integradas porque um teste as mencionava — um falso verde
+    # estrutural, e da mesma família dos outros que já custaram caro aqui.
+    #
+    # Distingue-se pelo caminho, e não por heurística sobre o conteúdo: neste
+    # repositório o código de produção vive em `src/` e as provas em `tests/`.
+    def e_producao(caminho: str) -> bool:
+        partes = caminho.replace(os.sep, "/").split("/")
+        return "src" in partes and "tests" not in partes
+
     codigo = []
     for area in ("crates", "services", "apps"):
         for onde, _, ficheiros in os.walk(os.path.join(base, area)):
@@ -101,8 +119,20 @@ def main() -> int:
                 os.path.join(onde, f) for f in ficheiros if f.endswith(".rs")
             ]
     codigo = [
-        f for f in codigo if not any(x in f.replace(os.sep, "/") for x in NAO_E_LEITOR)
+        f
+        for f in codigo
+        if e_producao(f) and not any(x in f.replace(os.sep, "/") for x in NAO_E_LEITOR)
     ]
+    # Um varrimento que não encontre código de produção nenhum aprovaria tudo
+    # por não ter olhado. O número é generoso de propósito: serve para apanhar
+    # um caminho partido, não para medir o repositório.
+    if len(codigo) < 50:
+        print("Consumidores do esquema:")
+        print()
+        print(f"  ZERO OBSERVAÇÕES: só {len(codigo)} ficheiros de produção.")
+        print("  O varrimento partiu-se, e um verde aqui não significaria nada.")
+        return 1
+
     texto = "\n".join(
         open(f, encoding="utf-8", errors="replace").read() for f in codigo
     )

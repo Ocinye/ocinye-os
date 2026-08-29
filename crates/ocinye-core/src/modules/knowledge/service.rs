@@ -643,7 +643,6 @@ pub async fn create_document(
         principal.organisation_id,
         workspace.unit_id,
         workspace.id,
-        object_id,
         ficheiro.file_id,
         request.kind.as_str(),
         title,

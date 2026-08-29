@@ -535,9 +535,8 @@ async fn seed_stricter_than_workspace(pool: &PgPool, fixture: &Fixture) -> Stric
              SELECT f.id, 1, $4 FROM f
          )
          INSERT INTO documents
-             (organisation_id, unit_id, workspace_id, storage_object_id, file_id,
-              title, classification)
-         SELECT $1, $2, $3, $4, f.id, 'Documento restrito', 'RESTRICTED'
+             (organisation_id, unit_id, workspace_id, file_id, title, classification)
+         SELECT $1, $2, $3, f.id, 'Documento restrito', 'RESTRICTED'
            FROM f RETURNING id",
     )
     .bind(fixture.organisation_id)

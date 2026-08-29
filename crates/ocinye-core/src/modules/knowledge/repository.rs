@@ -20,12 +20,36 @@ const NOTE_COLUMNS: &str = "id, unit_id, workspace_id, title, body, tags, classi
 
 /// Document columns joined with their stored object, so a caller sees size and
 /// checksum without a second query.
-const DOCUMENT_SELECT: &str = "SELECT d.id, d.unit_id, d.workspace_id, d.storage_object_id,
+///
+/// # Porque a junção passa pelo ficheiro
+///
+/// O objecto de um documento resolve-se agora pela identidade estável do
+/// ficheiro e pela sua versão corrente, e não pela coluna que o documento ainda
+/// guarda. As duas dizem o mesmo — há um teste que o exige enquanto ambas
+/// existirem —, mas só esta continua a dizer a verdade depois de alguém
+/// carregar uma versão nova.
+///
+/// **Corrente é a de maior `sequence`**, e nunca a mais recente por relógio: as
+/// datas empatam, e as do preenchimento histórico foram herdadas de outra
+/// coisa.
+///
+/// A escolha é uma junção lateral e não um `DISTINCT ON` porque este texto é
+/// prefixo de consultas que trazem a sua própria ordenação — por título, por
+/// data —, e o `DISTINCT ON` obrigá-las-ia todas a começar por `d.id`. A
+/// lateral escolhe uma linha por documento sem tocar na ordem de quem chama.
+const DOCUMENT_SELECT: &str = "SELECT d.id, d.unit_id, d.workspace_id, v.storage_object_id,
                                       d.kind, d.title, d.description, d.document_date,
                                       d.classification, o.original_filename, o.content_type,
                                       o.size_bytes, o.checksum_sha256, d.created_at
                                  FROM documents d
-                                 JOIN storage_objects o ON o.id = d.storage_object_id";
+                                 JOIN LATERAL (
+                                     SELECT fv.storage_object_id
+                                       FROM file_versions fv
+                                      WHERE fv.file_id = d.file_id
+                                      ORDER BY fv.sequence DESC
+                                      LIMIT 1
+                                 ) v ON TRUE
+                                 JOIN storage_objects o ON o.id = v.storage_object_id";
 
 // --- Sources ---------------------------------------------------------------
 
@@ -375,7 +399,6 @@ pub async fn insert_document<'e>(
     organisation_id: Uuid,
     unit_id: Uuid,
     workspace_id: Uuid,
-    storage_object_id: Uuid,
     file_id: Uuid,
     kind: &str,
     title: &str,
@@ -383,22 +406,19 @@ pub async fn insert_document<'e>(
     classification: Classification,
     created_by: Uuid,
 ) -> CoreResult<Uuid> {
-    // `storage_object_id` **e** `file_id`. A coluna antiga fica enquanto os
-    // leitores migram, e escrever as duas é o que mantém a equivalência que um
-    // verificador confronta. Escrever só uma delas abriria a bifurcação
-    // silenciosa que a coexistência existe para evitar: o leitor antigo a ver
-    // um objecto e o novo a ver outro, ambos a funcionar.
+    // Só `file_id`. O objecto chega-se pela versão corrente do ficheiro, e a
+    // coluna que o guardava directamente desapareceu na migration 0021: já não
+    // há duas fontes para poderem discordar.
     let id = sqlx::query_scalar::<_, Uuid>(
         "INSERT INTO documents
-             (organisation_id, unit_id, workspace_id, storage_object_id, file_id, kind,
+             (organisation_id, unit_id, workspace_id, file_id, kind,
               title, description, classification, created_by_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING id",
     )
     .bind(organisation_id)
     .bind(unit_id)
     .bind(workspace_id)
-    .bind(storage_object_id)
     .bind(file_id)
     .bind(kind)
     .bind(title)

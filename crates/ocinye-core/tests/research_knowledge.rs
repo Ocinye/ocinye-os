@@ -2766,9 +2766,8 @@ async fn a_vista_institucional_de_documentos_respeita_artefacto_e_ambiente() {
                  SELECT f.id, 1, $6 FROM f
              )
              INSERT INTO documents
-                 (organisation_id, unit_id, workspace_id, title, classification,
-                  storage_object_id, file_id)
-             SELECT $1, $2, $3, $4, $5, $6, f.id FROM f",
+                 (organisation_id, unit_id, workspace_id, title, classification, file_id)
+             SELECT $1, $2, $3, $4, $5, f.id FROM f",
         )
         .bind(world.organisation_id)
         .bind(unit)
