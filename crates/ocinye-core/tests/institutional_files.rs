@@ -1239,3 +1239,107 @@ async fn o_ambiente_restringe_o_artefacto_na_leitura() {
         .await
         .expect("quem lidera o ambiente deixou de alcançar o próprio artefacto");
 }
+
+// ── A pesquisa responde à autoridade actual ─────────────────────────────
+
+/// Reclassificar o ambiente esconde o recurso da pesquisa, sem reindexar.
+///
+/// # A fuga que isto fecha
+///
+/// ```text
+/// t0   ambiente INTERNO · ficheiro INTERNO · índice INTERNO   → encontra
+/// t1   ambiente → RESTRITO
+///      leitura   → recusa
+///      descarga  → recusa
+///      pesquisa  → continuaria a revelar
+/// ```
+///
+/// O índice guarda a classificação do momento em que indexou. A autoridade
+/// muda por reclassificação, por filiação, por papel — e nenhuma dessas
+/// mudanças toca no artefacto indexado. Sincronizar duas verdades por
+/// reindexação seria frágil por natureza.
+///
+/// > **A pesquisa usa o índice para descobrir candidatos; a visibilidade
+/// > decide-se contra o estado autoritativo actual.**
+#[tokio::test]
+async fn reclassificar_o_ambiente_esconde_o_recurso_da_pesquisa() {
+    let Some(pool) = pool().await else { return };
+    let ctx = contexto(&pool).await;
+    let dentro = membro(&pool, &ctx, "lead").await;
+    let fora = estranho(&pool, &ctx).await;
+
+    // Um recurso indexado como INTERNO, num ambiente INTERNO.
+    let termo = format!("piranometro{}", &Uuid::new_v4().simple().to_string()[..8]);
+    sqlx::query(
+        "INSERT INTO search_documents
+             (organisation_id, unit_id, workspace_id, entity_type, entity_id,
+              title, excerpt, classification, search_vector)
+         VALUES ($1, $2, $3, 'document', gen_random_uuid(), $4, $4, 'INTERNAL',
+                 to_tsvector('simple', $4))",
+    )
+    .bind(ctx.organisation_id)
+    .bind(ctx.unit_id)
+    .bind(ctx.workspace_id)
+    .bind(&termo)
+    .execute(&pool)
+    .await
+    .expect("indexar");
+
+    let procurar = |quem: ocinye_domain::Principal, termo: String| {
+        let pool = pool.clone();
+        async move {
+            ocinye_core::modules::search::search(
+                &pool,
+                &quem,
+                &termo,
+                None,
+                None,
+                ocinye_contracts::PageRequest::default(),
+            )
+            .await
+            .expect("pesquisar")
+        }
+    };
+
+    // Antes: qualquer membro da organização encontra material INTERNO.
+    let (achados, total) = procurar(fora.clone(), termo.clone()).await;
+    assert_eq!(achados.len(), 1, "o recurso INTERNO não foi encontrado");
+    assert_eq!(total, 1, "a contagem não corresponde às linhas");
+
+    // O ambiente é restringido. **Nada é reindexado.**
+    sqlx::query("UPDATE research_workspaces SET classification = 'RESTRICTED' WHERE id = $1")
+        .bind(ctx.workspace_id)
+        .execute(&pool)
+        .await
+        .expect("restringir");
+
+    let indexada: String =
+        sqlx::query_scalar("SELECT classification FROM search_documents WHERE title = $1")
+            .bind(&termo)
+            .fetch_one(&pool)
+            .await
+            .expect("classificação indexada");
+    assert_eq!(
+        indexada, "INTERNAL",
+        "o índice foi reescrito, e o teste deixaria de provar que não precisa de o ser"
+    );
+
+    let (achados, total) = procurar(fora, termo.clone()).await;
+    assert!(
+        achados.is_empty(),
+        "a pesquisa revelou um recurso dentro de um ambiente restrito, \
+         confiando na classificação copiada no índice"
+    );
+    assert_eq!(
+        total, 0,
+        "a contagem revelou a existência do recurso que as linhas escondem"
+    );
+
+    // E quem tem filiação continua a encontrá-lo.
+    let (achados, _) = procurar(dentro, termo).await;
+    assert_eq!(
+        achados.len(),
+        1,
+        "quem lidera o ambiente deixou de encontrar o próprio recurso"
+    );
+}

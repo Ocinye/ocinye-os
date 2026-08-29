@@ -107,6 +107,39 @@ pub struct SearchTerms<'a> {
 /// # Errors
 ///
 /// Returns an error when the query fails.
+/// A classificação **actual**, e não a que ficou no índice.
+///
+/// # Porque o índice não pode ser autoridade
+///
+/// `search_documents.classification` é uma cópia do momento em que o recurso
+/// foi indexado. Se o ambiente for reclassificado a seguir — de `INTERNAL`
+/// para `RESTRICTED` —, a leitura e a descarga passam a recusar de imediato,
+/// porque compõem contra o estado actual. A pesquisa continuaria a revelar o
+/// recurso até alguém reindexar.
+///
+/// Sincronizar duas verdades por reindexação seria frágil por natureza: a
+/// autoridade muda por reclassificação, por filiação, por papel, por unidade,
+/// e nenhuma dessas mudanças toca no artefacto indexado.
+///
+/// > **A pesquisa usa o índice para descobrir candidatos; a visibilidade
+/// > decide-se contra o estado autoritativo actual. Um índice nunca é uma
+/// > autoridade de autorização.**
+///
+/// A expressão compõe a do índice com a **do ambiente lido agora**, pela mais
+/// restritiva das duas — a mesma composição que a leitura faz. Um recurso sem
+/// ambiente mantém a sua.
+const CLASSIFICACAO_EFECTIVA: &str = "CASE
+    WHEN sd.classification = 'RESTRICTED' OR w.classification = 'RESTRICTED' THEN 'RESTRICTED'
+    WHEN sd.classification = 'CONFIDENTIAL' OR w.classification = 'CONFIDENTIAL' THEN 'CONFIDENTIAL'
+    WHEN sd.classification = 'INTERNAL' OR w.classification = 'INTERNAL' THEN 'INTERNAL'
+    ELSE 'PUBLIC'
+END";
+
+/// As colunas de visibilidade da pesquisa: âmbito do índice, classificação viva.
+fn colunas_de_visibilidade() -> VisibilityColumns {
+    VisibilityColumns::aliased("sd.unit_id", "sd.workspace_id", CLASSIFICACAO_EFECTIVA)
+}
+
 pub async fn search<'e>(
     executor: impl PgExecutor<'e>,
     organisation_id: Uuid,
@@ -115,18 +148,20 @@ pub async fn search<'e>(
     limit: i64,
     offset: i64,
 ) -> CoreResult<Vec<SearchHit>> {
-    let predicate = to_sql(visibility, VisibilityColumns::default());
+    let predicate = to_sql(visibility, colunas_de_visibilidade());
 
     let hits = sqlx::query_as::<_, SearchHit>(&format!(
-        "SELECT entity_type, entity_id, title, excerpt, classification, workspace_id,
-                ts_rank(search_vector, websearch_to_tsquery($2::regconfig, $3)) AS rank
-           FROM search_documents
-          WHERE organisation_id = $1
-            AND search_vector @@ websearch_to_tsquery($2::regconfig, $3)
-            AND ($4::text[] IS NULL OR entity_type = ANY($4))
-            AND ($5::uuid IS NULL OR workspace_id = $5)
+        "SELECT sd.entity_type, sd.entity_id, sd.title, sd.excerpt,
+                {CLASSIFICACAO_EFECTIVA} AS classification, sd.workspace_id,
+                ts_rank(sd.search_vector, websearch_to_tsquery($2::regconfig, $3)) AS rank
+           FROM search_documents sd
+           LEFT JOIN research_workspaces w ON w.id = sd.workspace_id
+          WHERE sd.organisation_id = $1
+            AND sd.search_vector @@ websearch_to_tsquery($2::regconfig, $3)
+            AND ($4::text[] IS NULL OR sd.entity_type = ANY($4))
+            AND ($5::uuid IS NULL OR sd.workspace_id = $5)
             AND {predicate}
-          ORDER BY rank DESC, title
+          ORDER BY rank DESC, sd.title
           LIMIT $6 OFFSET $7"
     ))
     .bind(organisation_id)
@@ -155,14 +190,19 @@ pub async fn count<'e>(
     visibility: &VisibilityFilter,
     terms: SearchTerms<'_>,
 ) -> CoreResult<i64> {
-    let predicate = to_sql(visibility, VisibilityColumns::default());
+    // A contagem partilha o predicado com a listagem, e por isso partilha
+    // também a junção que o torna verdadeiro. Um número que conte recursos que
+    // as linhas não mostram é, por si só, uma fuga: diz que existe mais do que
+    // se vê.
+    let predicate = to_sql(visibility, colunas_de_visibilidade());
 
     let total = sqlx::query_scalar::<_, i64>(&format!(
-        "SELECT COUNT(*) FROM search_documents
-          WHERE organisation_id = $1
-            AND search_vector @@ websearch_to_tsquery($2::regconfig, $3)
-            AND ($4::text[] IS NULL OR entity_type = ANY($4))
-            AND ($5::uuid IS NULL OR workspace_id = $5)
+        "SELECT COUNT(*) FROM search_documents sd
+           LEFT JOIN research_workspaces w ON w.id = sd.workspace_id
+          WHERE sd.organisation_id = $1
+            AND sd.search_vector @@ websearch_to_tsquery($2::regconfig, $3)
+            AND ($4::text[] IS NULL OR sd.entity_type = ANY($4))
+            AND ($5::uuid IS NULL OR sd.workspace_id = $5)
             AND {predicate}"
     ))
     .bind(organisation_id)
