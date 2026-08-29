@@ -982,7 +982,7 @@ async fn a_descarga_recusa_a_quem_a_leitura_recusa() {
     let ctx = contexto(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let forasteiro = estranho(&pool, &ctx).await;
-    let _ids = ocinye_observability::CorrelationIds::generate();
+    let ids = ocinye_observability::CorrelationIds::generate();
 
     let criado = criar_ficheiro(
         &pool,
@@ -1142,7 +1142,7 @@ async fn a_matriz_de_acesso_e_a_mesma_depois_do_ficheiro_governar() {
     let ctx = contexto(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let e = elenco(&pool, &ctx).await;
-    let _ids = ocinye_observability::CorrelationIds::generate();
+    let ids = ocinye_observability::CorrelationIds::generate();
 
     for (nivel, esperado) in [
         // (organização, ambiente, unidade, gestor, administrador)
@@ -1427,7 +1427,7 @@ async fn mover_para_uma_pasta_chamada_publico_nao_muda_o_acesso() {
     let ctx = contexto(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let fora = estranho(&pool, &ctx).await;
-    let _ids = ocinye_observability::CorrelationIds::generate();
+    let ids = ocinye_observability::CorrelationIds::generate();
 
     let criado = criar_ficheiro(
         &pool,
@@ -1508,7 +1508,7 @@ async fn mover_para_outro_ambiente_e_recusado() {
     let outro = outro_ambiente(&pool, &ctx).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let dono_do_outro = membro(&pool, &outro, "lead").await;
-    let _ids = ocinye_observability::CorrelationIds::generate();
+    let ids = ocinye_observability::CorrelationIds::generate();
 
     let criado = criar_ficheiro(
         &pool,
@@ -1560,7 +1560,7 @@ async fn navegar_mostra_a_arvore_e_o_caminho() {
     let Some(store) = test_store() else { return };
     let ctx = contexto(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
-    let _ids = ocinye_observability::CorrelationIds::generate();
+    let ids = ocinye_observability::CorrelationIds::generate();
 
     let mut tx = pool.begin().await.expect("tx");
     let engenharia = ocinye_core::modules::files::create_folder(
