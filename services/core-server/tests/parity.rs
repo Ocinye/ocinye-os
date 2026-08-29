@@ -123,6 +123,7 @@ fn state(pool: PgPool, organisation_id: Uuid) -> AppState {
         // mede não precisa de armazenamento, e levantá-lo por ritual só tornava
         // o teste dependente de infraestrutura que não exercita.
         store: None,
+        embeddings: None,
         inference: Arc::new(ocinye_core::modules::intelligence::NoProvider),
         mail_registry,
         // Estes testes medem HTTP, e não tempo real. Um plano ausente aceita

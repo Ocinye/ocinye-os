@@ -387,6 +387,103 @@ pub async fn upload(
     interpret(response).await
 }
 
+/// Um upload com campos ao lado do ficheiro.
+///
+/// O `upload` acima serve o caso de um ficheiro sozinho — a fotografia. Os
+/// ficheiros institucionais trazem escolhas da pessoa que os carrega: a pasta
+/// onde ficam e a classificação que declaram. Vão como campos do mesmo
+/// multipart porque é o Core que os lê, e vão sem interpretação nenhuma daqui:
+/// esta função não decide o que é uma classificação válida.
+///
+/// # Errors
+///
+/// Devolve erro quando o multipart não se forma, quando o Core não responde, ou
+/// quando o Core recusa.
+#[allow(clippy::too_many_arguments)]
+pub async fn upload_with_fields(
+    state: &WorkspaceState,
+    token: &str,
+    correlation_id: &str,
+    path: &str,
+    filename: String,
+    content_type: String,
+    data: Vec<u8>,
+    fields: Vec<(&str, String)>,
+) -> Result<Value, ApiFailure> {
+    let part = reqwest::multipart::Part::bytes(data)
+        .file_name(filename)
+        .mime_str(&content_type)
+        .map_err(|_| ApiFailure::Failed("the upload is malformed".to_owned()))?;
+
+    let mut form = reqwest::multipart::Form::new().part("file", part);
+    for (nome, valor) in fields {
+        if !valor.is_empty() {
+            form = form.text(nome.to_owned(), valor);
+        }
+    }
+
+    let response = state
+        .http
+        .post(format!("{}{path}", state.config.core_url))
+        .bearer_auth(token)
+        .header(ocinye_observability::CORRELATION_ID_HEADER, correlation_id)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|error| ApiFailure::Failed(format!("the Core is unreachable: {error}")))?;
+
+    interpret(response).await
+}
+
+/// Uma representação inline vinda do Core, com o tipo que o Core declarou.
+///
+/// Devolve os bytes e o `Content-Type` **tal como o Core os deu**. O Workspace
+/// não reinterpreta nem adivinha o tipo: quem o validou foi o Core, contra uma
+/// lista fechada, e adivinhar aqui reabriria exactamente a porta que essa lista
+/// fecha.
+///
+/// # Errors
+///
+/// Devolve [`ApiFailure`] a descrever porque não se conseguiu.
+pub async fn get_inline(
+    state: &WorkspaceState,
+    token: &str,
+    correlation_id: &str,
+    path: &str,
+) -> Result<(String, Vec<u8>), ApiFailure> {
+    let response = state
+        .http
+        .get(format!("{}{path}", state.config.core_url))
+        .bearer_auth(token)
+        .header(ocinye_observability::CORRELATION_ID_HEADER, correlation_id)
+        .send()
+        .await
+        .map_err(|error| ApiFailure::Failed(format!("the Core is unreachable: {error}")))?;
+
+    match response.status().as_u16() {
+        200..=299 => {
+            let tipo = response
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|valor| valor.to_str().ok())
+                .unwrap_or("application/octet-stream")
+                .to_owned();
+            let bytes = response
+                .bytes()
+                .await
+                .map_err(|error| ApiFailure::Failed(format!("unexpected response: {error}")))?;
+            Ok((tipo, bytes.to_vec()))
+        }
+        401 => Err(ApiFailure::Unauthorised),
+        403 => Err(ApiFailure::Forbidden),
+        404 => Err(ApiFailure::Denied),
+        503 => Err(ApiFailure::Unavailable(None)),
+        status => Err(ApiFailure::Failed(format!(
+            "the Core returned status {status}"
+        ))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

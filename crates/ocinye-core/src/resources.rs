@@ -246,6 +246,41 @@ async fn locate(
                 workspace_id: Some(source.workspace_id),
             })
         }
+        // Um ficheiro institucional. A classificação é a **efectiva**: a do
+        // ficheiro composta com a do ambiente, e não a que está guardada na
+        // linha — restringir um ambiente tem de fechar imediatamente o que está
+        // lá dentro, também para quem chega pelo plano agentic.
+        AgenticKind::File => {
+            let mut conn = pool.acquire().await?;
+            let (ficheiro, workspace) =
+                crate::modules::files::get(&mut conn, principal, reference.id).await?;
+            Ok(Located {
+                kind: ResourceKind::File,
+                title: ficheiro.name.clone(),
+                classification: stricter(ficheiro.classification(), workspace.classification()),
+                unit_id: ficheiro.unit_id,
+                workspace_id: Some(ficheiro.workspace_id),
+            })
+        }
+
+        // Uma versão. Resolve-se **através do ficheiro**, e o que autoriza é o
+        // ficheiro: conhecer o identificador de uma versão não é um caminho
+        // paralelo para o conteúdo dela.
+        AgenticKind::FileVersion => {
+            let mut conn = pool.acquire().await?;
+            let (versao, ficheiro) =
+                crate::modules::files::get_version(&mut conn, principal, reference.id).await?;
+            let (_, workspace) =
+                crate::modules::files::get(&mut conn, principal, versao.file_id).await?;
+            Ok(Located {
+                kind: ResourceKind::FileVersion,
+                title: format!("{} · v{}", ficheiro.name, versao.sequence),
+                classification: stricter(ficheiro.classification(), workspace.classification()),
+                unit_id: ficheiro.unit_id,
+                workspace_id: Some(ficheiro.workspace_id),
+            })
+        }
+
         AgenticKind::Note => {
             let (note, workspace) = knowledge::get_note(pool, principal, reference.id).await?;
             Ok(Located {

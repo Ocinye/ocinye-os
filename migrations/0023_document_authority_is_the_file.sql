@@ -1,0 +1,33 @@
+-- A classificação do documento desaparece: quem governa é o ficheiro.
+--
+-- # O que esta migration fecha
+--
+-- A auditoria mediu quem decide: `documents.classification` combinada com a do
+-- ambiente. A 0022 pôs a mesma classificação no ficheiro e tornou-o o recurso
+-- governado; os leitores mudaram; a matriz de acesso — quatro classificações
+-- por cinco actores, em leitura e descarga — decide exactamente o mesmo.
+--
+-- Resta apagar a coluna que já ninguém lê. Enquanto ela existir, é possível
+-- ficar assim:
+--
+--     Document = INTERNAL
+--     File     = RESTRICTED
+--
+-- Duas afirmações sobre a protecção do mesmo artefacto, e nada a obrigá-las a
+-- concordar. Depois desta migration, esse estado deixa de ser representável —
+-- não por disciplina, mas por a primeira metade não existir.
+--
+-- > **O ficheiro governa o artefacto. O documento acrescenta o significado
+-- > documental, e mais nada.**
+--
+-- # O que fica em `documents`
+--
+-- Título, espécie, descrição e data documental. O que só ele sabe.
+--
+-- # Porque a ordem importou, outra vez
+--
+-- Classificação no ficheiro; escritores nas duas; leitores no ficheiro;
+-- listagem e visibilidade no ficheiro; paridade provada; só então isto. Se
+-- alguma coisa tivesse partido, saber-se-ia em qual dos passos.
+
+ALTER TABLE documents DROP COLUMN classification;

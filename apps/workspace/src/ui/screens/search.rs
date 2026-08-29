@@ -63,7 +63,7 @@ fn destination(hit: &Value) -> Option<String> {
 /// `semantic` traz o estado real da pesquisa semântica, apurado pelo Core. Sem
 /// capacidade de embeddings o modo semântico é declarado indisponível com a
 /// razão — nunca um interruptor que finge funcionar (briefing §32).
-pub fn search(query: &str, results: &Value, semantic: &Value) -> impl IntoView {
+pub fn search(query: &str, results: &Value, bodies: &Value, semantic: &Value) -> impl IntoView {
     let query = query.to_owned();
     let has_query = !query.trim().is_empty();
 
@@ -90,6 +90,12 @@ pub fn search(query: &str, results: &Value, semantic: &Value) -> impl IntoView {
              actualmente disponível.",
         )
         .to_owned();
+
+    let corpos: Vec<Value> = bodies
+        .get("items")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
 
     let count_label = match total {
         0 => "Nenhum resultado".to_owned(),
@@ -230,7 +236,77 @@ pub fn search(query: &str, results: &Value, semantic: &Value) -> impl IntoView {
                 }
                 .into_any()
             }}
+
+            {(has_query && !corpos.is_empty()).then(|| resultados_do_corpo(&corpos))}
         </div>
+    }
+}
+
+/// Os resultados que vieram do **corpo** dos ficheiros.
+///
+/// Numa secção própria, e não misturados com os de título. Um resultado de
+/// corpo diz «esta frase está na página 4 da versão 2 deste ficheiro», e um de
+/// título diz «este artefacto chama-se assim». São afirmações diferentes, e
+/// fundi-las num ranking obrigava a interface a escolher qual mostrar.
+fn resultados_do_corpo(corpos: &[Value]) -> impl IntoView {
+    let linhas = corpos
+        .iter()
+        .map(|hit| {
+            let file_id = text(hit, "file_id").to_owned();
+            let version_id = text(hit, "file_version_id").to_owned();
+            let nome = text(hit, "name").to_owned();
+            let classification = text(hit, "classification").to_owned();
+            let excerto = hit
+                .get("excerpt")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned();
+            let sequencia = hit.get("sequence").and_then(Value::as_i64).unwrap_or(1);
+            let pagina = hit
+                .get("locator")
+                .and_then(|l| l.get("page"))
+                .and_then(Value::as_i64);
+
+            // A citação: versão e, quando o formato a tem, página. Sem isto o
+            // excerto seria uma frase sem sítio, e uma frase sem sítio não se
+            // verifica.
+            let citacao = pagina.map_or_else(
+                || format!("v{sequencia}"),
+                |p| format!("v{sequencia} · p. {p}"),
+            );
+
+            // A ligação leva à **versão citada**, e não ao ficheiro.
+            //
+            // `/files/{id}` abre o que o ficheiro diz hoje. Um resultado que
+            // diga «v2 · p. 4» e abra a v4 mente — e mente exactamente onde
+            // alguém foi verificar. O destino carrega a versão e o sítio.
+            let destino = pagina.map_or_else(
+                || format!("/files/{file_id}?version={version_id}"),
+                |p| format!("/files/{file_id}?version={version_id}&page={p}"),
+            );
+
+            view! {
+                <a class="oc-result" href=destino>
+                    <div class="oc-row oc-gap-5 oc-mb-2">
+                        <span class="oc-pill">"FICHEIRO"</span>
+                        {classification_badge(&classification)}
+                        <span class="oc-t-caption--muted">{citacao}</span>
+                    </div>
+                    <div class="oc-t-item">{nome}</div>
+                    // O excerto vem com os termos realçados pelo PostgreSQL, e
+                    // é escapado como texto: o realce é uma marca do motor de
+                    // pesquisa, não HTML que esta página deva executar.
+                    <p class="oc-muted">{excerto}</p>
+                </a>
+            }
+        })
+        .collect_view();
+
+    view! {
+        <section class="oc-mt-6">
+            <h2 class="oc-t-strong oc-mb-5">"No conteúdo dos ficheiros"</h2>
+            <div class="oc-results">{linhas}</div>
+        </section>
     }
 }
 
@@ -249,7 +325,13 @@ mod tests {
 
     #[test]
     fn sem_termo_o_ecra_convida_em_vez_de_dizer_que_nada_existe() {
-        let html = search("", &json!({"items": [], "total": 0}), &semantic_off()).to_html();
+        let html = search(
+            "",
+            &json!({"items": [], "total": 0}),
+            &Value::Null,
+            &semantic_off(),
+        )
+        .to_html();
         assert!(html.contains("Escreva um termo"));
         assert!(
             !html.contains("Nenhum resultado"),
@@ -262,6 +344,7 @@ mod tests {
         let html = search(
             "hidrogénio",
             &json!({"items": [], "total": 0}),
+            &Value::Null,
             &semantic_off(),
         )
         .to_html();
@@ -271,7 +354,7 @@ mod tests {
 
     #[test]
     fn a_pesquisa_semantica_indisponivel_e_declarada_com_a_razao() {
-        let html = search("x", &json!({"items": []}), &semantic_off()).to_html();
+        let html = search("x", &json!({"items": []}), &Value::Null, &semantic_off()).to_html();
         assert!(html.contains("ainda não disponível"));
         assert!(html.contains("Nenhuma capacidade de embeddings está disponível."));
         assert!(
@@ -285,6 +368,7 @@ mod tests {
         let html = search(
             "x",
             &json!({"items": []}),
+            &Value::Null,
             &json!({"available": true, "embedded_documents": 12, "message": "ok"}),
         )
         .to_html();
@@ -304,6 +388,7 @@ mod tests {
                 "excerpt": "Estudo preliminar",
                 "classification": "RESTRICTED"
             }], "total": 1}),
+            &Value::Null,
             &semantic_off(),
         )
         .to_html();
@@ -324,6 +409,7 @@ mod tests {
                 "title": "Nota solta",
                 "classification": "INTERNAL"
             }], "total": 1}),
+            &Value::Null,
             &semantic_off(),
         )
         .to_html();
@@ -337,9 +423,21 @@ mod tests {
 
     #[test]
     fn a_contagem_concorda_em_singular_e_plural() {
-        let one = search("x", &json!({"items": [], "total": 1}), &semantic_off()).to_html();
+        let one = search(
+            "x",
+            &json!({"items": [], "total": 1}),
+            &Value::Null,
+            &semantic_off(),
+        )
+        .to_html();
         assert!(one.contains("1 resultado") && !one.contains("1 resultados"));
-        let many = search("x", &json!({"items": [], "total": 7}), &semantic_off()).to_html();
+        let many = search(
+            "x",
+            &json!({"items": [], "total": 7}),
+            &Value::Null,
+            &semantic_off(),
+        )
+        .to_html();
         assert!(many.contains("7 resultados"));
     }
 
@@ -348,6 +446,7 @@ mod tests {
         let html = search(
             "<script>alert(1)</script>",
             &json!({"items": []}),
+            &Value::Null,
             &semantic_off(),
         )
         .to_html();

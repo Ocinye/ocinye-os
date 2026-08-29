@@ -1426,6 +1426,15 @@ macro_rules! skip_without_storage {
         match test_store() {
             Some(store) => store,
             None => {
+                // Sem armazenamento em máquina de alguém, salta-se. Sem
+                // armazenamento na CI, falha: `cargo test` engole este
+                // `eprintln!` num teste que passa, pelo que a guarda que
+                // procura «skipping» na saída nunca o viu.
+                assert!(
+                    std::env::var("CI").is_err(),
+                    "não há armazenamento, e isto é a CI: estas provas exigem \
+                     um object store. Defina OCINYE_TEST_STORAGE_ENDPOINT."
+                );
                 eprintln!("skipping: OCINYE_TEST_STORAGE_ENDPOINT is not set");
                 return;
             }
@@ -1457,103 +1466,106 @@ fn fotografia(largura: u32, altura: u32) -> Vec<u8> {
 async fn uma_fotografia_atravessa_a_cadeia_toda() {
     let pool = skip_without_database!();
     let store = skip_without_storage!();
-    registar_backend(&pool, store.bucket()).await;
-    let organisation_id = organisation(&pool).await;
-    let admin = admin(&pool, organisation_id).await;
-    let (person, _, _) = member(&pool, &admin, TechnicalRole::ResearchMember).await;
-    let principal = identity::principal_for_person(&pool, &person)
-        .await
-        .expect("principal");
-
-    let entrada = fotografia(900, 500);
-    let escolha = identity::set_photograph(&pool, &principal, &store, "ocinye-test", &entrada)
-        .await
-        .expect("carregar fotografia");
-
-    let ocinye_contracts::AvatarChoice::Custom { version } = escolha.clone() else {
-        panic!("carregar uma fotografia devia dar um avatar personalizado: {escolha:?}");
-    };
-
-    // `/me` anuncia a mesma versão.
-    assert_eq!(
-        identity::own_avatar(&pool, &principal).await.expect("ler"),
-        escolha
-    );
-
-    // A leitura autoriza e devolve os bytes normalizados.
-    let key = identity::own_photograph_key(&pool, &principal, &version)
-        .await
-        .expect("a versão actual devia abrir");
-    let guardado = store.get(&key).await.expect("ler do storage");
-
-    let imagem = image::load_from_memory(&guardado).expect("o que está guardado é uma imagem");
-    assert_eq!(imagem.width(), ocinye_core::avatar::AVATAR_SIDE);
-    assert_eq!(imagem.height(), ocinye_core::avatar::AVATAR_SIDE);
-    assert_eq!(
-        image::guess_format(&guardado).expect("formato"),
-        image::ImageFormat::WebP,
-        "o objecto guardado não está no formato canónico"
-    );
-    assert_ne!(guardado, entrada, "guardou-se o ficheiro de origem");
-    assert_eq!(
-        ocinye_core::storage::sha256_hex(&guardado),
-        version,
-        "a versão anunciada não é o checksum do que está guardado"
-    );
-
-    // Substituir cria uma versão nova e larga a anterior.
-    let nova = identity::set_photograph(
-        &pool,
-        &principal,
-        &store,
-        "ocinye-test",
-        &fotografia(400, 400),
-    )
-    .await
-    .expect("substituir");
-    let ocinye_contracts::AvatarChoice::Custom {
-        version: nova_versao,
-    } = nova
-    else {
-        panic!("substituir devia dar outra fotografia");
-    };
-    assert_ne!(nova_versao, version, "substituir não mudou a versão");
-
-    // A versão antiga deixa de abrir: o endereço muda com o conteúdo.
-    assert!(
-        identity::own_photograph_key(&pool, &principal, &version)
+    com_registo_exclusivo(&pool, |pool| async move {
+        registar_backend(&pool, store.bucket()).await;
+        let organisation_id = organisation(&pool).await;
+        let admin = admin(&pool, organisation_id).await;
+        let (person, _, _) = member(&pool, &admin, TechnicalRole::ResearchMember).await;
+        let principal = identity::principal_for_person(&pool, &person)
             .await
-            .is_err(),
-        "a versão anterior continua a abrir"
-    );
-    // E o objecto antigo saiu do storage e da base de dados.
-    assert!(
-        store.get(&key).await.is_err(),
-        "a fotografia anterior ficou no armazenamento"
-    );
-    let orfaos: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM storage_objects WHERE object_key = $1")
-            .bind(&key)
-            .fetch_one(&pool)
-            .await
-            .expect("contagem");
-    assert_eq!(orfaos, 0, "ficou uma linha órfã em storage_objects");
+            .expect("principal");
 
-    // Remover volta às iniciais e não deixa nada para trás.
-    let nova_key = identity::own_photograph_key(&pool, &principal, &nova_versao)
+        let entrada = fotografia(900, 500);
+        let escolha = identity::set_photograph(&pool, &principal, &store, "ocinye-test", &entrada)
+            .await
+            .expect("carregar fotografia");
+
+        let ocinye_contracts::AvatarChoice::Custom { version } = escolha.clone() else {
+            panic!("carregar uma fotografia devia dar um avatar personalizado: {escolha:?}");
+        };
+
+        // `/me` anuncia a mesma versão.
+        assert_eq!(
+            identity::own_avatar(&pool, &principal).await.expect("ler"),
+            escolha
+        );
+
+        // A leitura autoriza e devolve os bytes normalizados.
+        let key = identity::own_photograph_key(&pool, &principal, &version)
+            .await
+            .expect("a versão actual devia abrir");
+        let guardado = store.get(&key).await.expect("ler do storage");
+
+        let imagem = image::load_from_memory(&guardado).expect("o que está guardado é uma imagem");
+        assert_eq!(imagem.width(), ocinye_core::avatar::AVATAR_SIDE);
+        assert_eq!(imagem.height(), ocinye_core::avatar::AVATAR_SIDE);
+        assert_eq!(
+            image::guess_format(&guardado).expect("formato"),
+            image::ImageFormat::WebP,
+            "o objecto guardado não está no formato canónico"
+        );
+        assert_ne!(guardado, entrada, "guardou-se o ficheiro de origem");
+        assert_eq!(
+            ocinye_core::storage::sha256_hex(&guardado),
+            version,
+            "a versão anunciada não é o checksum do que está guardado"
+        );
+
+        // Substituir cria uma versão nova e larga a anterior.
+        let nova = identity::set_photograph(
+            &pool,
+            &principal,
+            &store,
+            "ocinye-test",
+            &fotografia(400, 400),
+        )
         .await
-        .expect("a versão actual devia abrir");
-    identity::use_initials(&pool, &principal, Some(&store))
-        .await
-        .expect("iniciais");
-    assert_eq!(
-        identity::own_avatar(&pool, &principal).await.expect("ler"),
-        ocinye_contracts::AvatarChoice::Initials
-    );
-    assert!(
-        store.get(&nova_key).await.is_err(),
-        "remover a fotografia deixou o objecto no armazenamento"
-    );
+        .expect("substituir");
+        let ocinye_contracts::AvatarChoice::Custom {
+            version: nova_versao,
+        } = nova
+        else {
+            panic!("substituir devia dar outra fotografia");
+        };
+        assert_ne!(nova_versao, version, "substituir não mudou a versão");
+
+        // A versão antiga deixa de abrir: o endereço muda com o conteúdo.
+        assert!(
+            identity::own_photograph_key(&pool, &principal, &version)
+                .await
+                .is_err(),
+            "a versão anterior continua a abrir"
+        );
+        // E o objecto antigo saiu do storage e da base de dados.
+        assert!(
+            store.get(&key).await.is_err(),
+            "a fotografia anterior ficou no armazenamento"
+        );
+        let orfaos: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM storage_objects WHERE object_key = $1")
+                .bind(&key)
+                .fetch_one(&pool)
+                .await
+                .expect("contagem");
+        assert_eq!(orfaos, 0, "ficou uma linha órfã em storage_objects");
+
+        // Remover volta às iniciais e não deixa nada para trás.
+        let nova_key = identity::own_photograph_key(&pool, &principal, &nova_versao)
+            .await
+            .expect("a versão actual devia abrir");
+        identity::use_initials(&pool, &principal, Some(&store))
+            .await
+            .expect("iniciais");
+        assert_eq!(
+            identity::own_avatar(&pool, &principal).await.expect("ler"),
+            ocinye_contracts::AvatarChoice::Initials
+        );
+        assert!(
+            store.get(&nova_key).await.is_err(),
+            "remover a fotografia deixou o objecto no armazenamento"
+        );
+    })
+    .await;
 }
 
 /// Um upload recusado não deixa objectos no armazenamento.
@@ -1565,54 +1577,57 @@ async fn uma_fotografia_atravessa_a_cadeia_toda() {
 async fn um_upload_recusado_nao_deixa_objectos() {
     let pool = skip_without_database!();
     let store = skip_without_storage!();
-    registar_backend(&pool, store.bucket()).await;
-    let organisation_id = organisation(&pool).await;
-    let admin = admin(&pool, organisation_id).await;
-    let (person, _, _) = member(&pool, &admin, TechnicalRole::ResearchMember).await;
-    let principal = identity::principal_for_person(&pool, &person)
-        .await
-        .expect("principal");
+    com_registo_exclusivo(&pool, |pool| async move {
+        registar_backend(&pool, store.bucket()).await;
+        let organisation_id = organisation(&pool).await;
+        let admin = admin(&pool, organisation_id).await;
+        let (person, _, _) = member(&pool, &admin, TechnicalRole::ResearchMember).await;
+        let principal = identity::principal_for_person(&pool, &person)
+            .await
+            .expect("principal");
 
-    let antes: i64 = sqlx::query_scalar("SELECT count(*) FROM storage_objects")
-        .fetch_one(&pool)
-        .await
-        .expect("contagem");
+        let antes: i64 = sqlx::query_scalar("SELECT count(*) FROM storage_objects")
+            .fetch_one(&pool)
+            .await
+            .expect("contagem");
 
-    let recusados: Vec<(&str, Vec<u8>)> = vec![
-        (
-            "svg",
-            br#"<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>"#.to_vec(),
-        ),
-        ("executável", b"\x7fELF\x02\x01\x01\x00".to_vec()),
-        ("texto", b"nao sou uma imagem".to_vec()),
-        ("vazio", Vec::new()),
-        (
-            "grande de mais",
-            vec![0u8; ocinye_core::avatar::MAX_AVATAR_BYTES + 1],
-        ),
-        ("truncado", fotografia(300, 300)[..40].to_vec()),
-    ];
+        let recusados: Vec<(&str, Vec<u8>)> = vec![
+            (
+                "svg",
+                br#"<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>"#.to_vec(),
+            ),
+            ("executável", b"\x7fELF\x02\x01\x01\x00".to_vec()),
+            ("texto", b"nao sou uma imagem".to_vec()),
+            ("vazio", Vec::new()),
+            (
+                "grande de mais",
+                vec![0u8; ocinye_core::avatar::MAX_AVATAR_BYTES + 1],
+            ),
+            ("truncado", fotografia(300, 300)[..40].to_vec()),
+        ];
 
-    for (nome, bytes) in recusados {
-        let resultado =
-            identity::set_photograph(&pool, &principal, &store, "ocinye-test", &bytes).await;
-        assert!(
-            resultado.is_err(),
-            "«{nome}» foi aceite como fotografia de perfil"
+        for (nome, bytes) in recusados {
+            let resultado =
+                identity::set_photograph(&pool, &principal, &store, "ocinye-test", &bytes).await;
+            assert!(
+                resultado.is_err(),
+                "«{nome}» foi aceite como fotografia de perfil"
+            );
+        }
+
+        let depois: i64 = sqlx::query_scalar("SELECT count(*) FROM storage_objects")
+            .fetch_one(&pool)
+            .await
+            .expect("contagem");
+        assert_eq!(antes, depois, "um upload recusado deixou objectos");
+
+        assert_eq!(
+            identity::own_avatar(&pool, &principal).await.expect("ler"),
+            ocinye_contracts::AvatarChoice::Initials,
+            "um upload recusado alterou a representação do membro"
         );
-    }
-
-    let depois: i64 = sqlx::query_scalar("SELECT count(*) FROM storage_objects")
-        .fetch_one(&pool)
-        .await
-        .expect("contagem");
-    assert_eq!(antes, depois, "um upload recusado deixou objectos");
-
-    assert_eq!(
-        identity::own_avatar(&pool, &principal).await.expect("ler"),
-        ocinye_contracts::AvatarChoice::Initials,
-        "um upload recusado alterou a representação do membro"
-    );
+    })
+    .await;
 }
 
 /// A fotografia de um membro não abre para outro.
@@ -1623,67 +1638,70 @@ async fn um_upload_recusado_nao_deixa_objectos() {
 async fn a_versao_de_um_membro_nao_abre_para_outro() {
     let pool = skip_without_database!();
     let store = skip_without_storage!();
-    registar_backend(&pool, store.bucket()).await;
-    let organisation_id = organisation(&pool).await;
-    let admin = admin(&pool, organisation_id).await;
+    com_registo_exclusivo(&pool, |pool| async move {
+        registar_backend(&pool, store.bucket()).await;
+        let organisation_id = organisation(&pool).await;
+        let admin = admin(&pool, organisation_id).await;
 
-    let (dona, _, _) = member(&pool, &admin, TechnicalRole::ResearchMember).await;
-    let (outra, _, _) = member(&pool, &admin, TechnicalRole::ResearchMember).await;
-    let principal_dona = identity::principal_for_person(&pool, &dona)
-        .await
-        .expect("principal");
-    let principal_outra = identity::principal_for_person(&pool, &outra)
-        .await
-        .expect("principal");
+        let (dona, _, _) = member(&pool, &admin, TechnicalRole::ResearchMember).await;
+        let (outra, _, _) = member(&pool, &admin, TechnicalRole::ResearchMember).await;
+        let principal_dona = identity::principal_for_person(&pool, &dona)
+            .await
+            .expect("principal");
+        let principal_outra = identity::principal_for_person(&pool, &outra)
+            .await
+            .expect("principal");
 
-    let escolha = identity::set_photograph(
-        &pool,
-        &principal_dona,
-        &store,
-        "ocinye-test",
-        &fotografia(300, 300),
-    )
-    .await
-    .expect("carregar");
-    let ocinye_contracts::AvatarChoice::Custom { version } = escolha else {
-        panic!("devia ser uma fotografia");
-    };
-
-    // A dona abre.
-    let key = identity::own_photograph_key(&pool, &principal_dona, &version)
+        let escolha = identity::set_photograph(
+            &pool,
+            &principal_dona,
+            &store,
+            "ocinye-test",
+            &fotografia(300, 300),
+        )
         .await
-        .expect("a dona devia abrir a sua fotografia");
+        .expect("carregar");
+        let ocinye_contracts::AvatarChoice::Custom { version } = escolha else {
+            panic!("devia ser uma fotografia");
+        };
 
-    // Outro membro, com a versão exacta na mão, não abre — e recebe a mesma
-    // resposta que receberia se a versão nunca tivesse existido.
-    let alheia = identity::own_photograph_key(&pool, &principal_outra, &version).await;
-    assert!(
-        matches!(alheia, Err(CoreError::NotFound(_))),
-        "conhecer a versão de outra pessoa deu acesso: {alheia:?}"
-    );
+        // A dona abre.
+        let key = identity::own_photograph_key(&pool, &principal_dona, &version)
+            .await
+            .expect("a dona devia abrir a sua fotografia");
 
-    // E carregar a sua própria fotografia não lhe dá a da outra.
-    identity::set_photograph(
-        &pool,
-        &principal_outra,
-        &store,
-        "ocinye-test",
-        &fotografia(200, 200),
-    )
-    .await
-    .expect("carregar");
-    let ainda = identity::own_photograph_key(&pool, &principal_dona, &version)
-        .await
-        .expect("a dona continua a abrir a sua");
-    assert_eq!(ainda, key);
+        // Outro membro, com a versão exacta na mão, não abre — e recebe a mesma
+        // resposta que receberia se a versão nunca tivesse existido.
+        let alheia = identity::own_photograph_key(&pool, &principal_outra, &version).await;
+        assert!(
+            matches!(alheia, Err(CoreError::NotFound(_))),
+            "conhecer a versão de outra pessoa deu acesso: {alheia:?}"
+        );
 
-    // Limpeza determinística: nada fica no bucket depois do teste.
-    identity::use_initials(&pool, &principal_dona, Some(&store))
+        // E carregar a sua própria fotografia não lhe dá a da outra.
+        identity::set_photograph(
+            &pool,
+            &principal_outra,
+            &store,
+            "ocinye-test",
+            &fotografia(200, 200),
+        )
         .await
-        .expect("limpar");
-    identity::use_initials(&pool, &principal_outra, Some(&store))
-        .await
-        .expect("limpar");
+        .expect("carregar");
+        let ainda = identity::own_photograph_key(&pool, &principal_dona, &version)
+            .await
+            .expect("a dona continua a abrir a sua");
+        assert_eq!(ainda, key);
+
+        // Limpeza determinística: nada fica no bucket depois do teste.
+        identity::use_initials(&pool, &principal_dona, Some(&store))
+            .await
+            .expect("limpar");
+        identity::use_initials(&pool, &principal_outra, Some(&store))
+            .await
+            .expect("limpar");
+    })
+    .await;
 }
 
 /// Trocar de fotografia para preset não deixa a fotografia no armazenamento.
@@ -1696,55 +1714,58 @@ async fn a_versao_de_um_membro_nao_abre_para_outro() {
 async fn trocar_de_fotografia_para_preset_limpa_o_armazenamento() {
     let pool = skip_without_database!();
     let store = skip_without_storage!();
-    registar_backend(&pool, store.bucket()).await;
-    let organisation_id = organisation(&pool).await;
-    let admin = admin(&pool, organisation_id).await;
-    let (person, _, _) = member(&pool, &admin, TechnicalRole::ResearchMember).await;
-    let principal = identity::principal_for_person(&pool, &person)
-        .await
-        .expect("principal");
-
-    let escolha = identity::set_photograph(
-        &pool,
-        &principal,
-        &store,
-        "ocinye-test",
-        &fotografia(250, 250),
-    )
-    .await
-    .expect("carregar");
-    let ocinye_contracts::AvatarChoice::Custom { version } = escolha else {
-        panic!("devia ser uma fotografia");
-    };
-    let key = identity::own_photograph_key(&pool, &principal, &version)
-        .await
-        .expect("a fotografia devia abrir");
-    assert!(
-        store.get(&key).await.is_ok(),
-        "a fotografia não foi guardada"
-    );
-
-    identity::choose_preset(&pool, &principal, Some(&store), "engineering-02")
-        .await
-        .expect("preset");
-
-    assert_eq!(
-        identity::own_avatar(&pool, &principal).await.expect("ler"),
-        ocinye_contracts::AvatarChoice::Preset {
-            preset: "engineering-02".to_owned()
-        }
-    );
-    assert!(
-        store.get(&key).await.is_err(),
-        "trocar para um preset deixou a fotografia no armazenamento"
-    );
-    let linhas: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM storage_objects WHERE object_key = $1")
-            .bind(&key)
-            .fetch_one(&pool)
+    com_registo_exclusivo(&pool, |pool| async move {
+        registar_backend(&pool, store.bucket()).await;
+        let organisation_id = organisation(&pool).await;
+        let admin = admin(&pool, organisation_id).await;
+        let (person, _, _) = member(&pool, &admin, TechnicalRole::ResearchMember).await;
+        let principal = identity::principal_for_person(&pool, &person)
             .await
-            .expect("contagem");
-    assert_eq!(linhas, 0, "ficou uma linha órfã em storage_objects");
+            .expect("principal");
+
+        let escolha = identity::set_photograph(
+            &pool,
+            &principal,
+            &store,
+            "ocinye-test",
+            &fotografia(250, 250),
+        )
+        .await
+        .expect("carregar");
+        let ocinye_contracts::AvatarChoice::Custom { version } = escolha else {
+            panic!("devia ser uma fotografia");
+        };
+        let key = identity::own_photograph_key(&pool, &principal, &version)
+            .await
+            .expect("a fotografia devia abrir");
+        assert!(
+            store.get(&key).await.is_ok(),
+            "a fotografia não foi guardada"
+        );
+
+        identity::choose_preset(&pool, &principal, Some(&store), "engineering-02")
+            .await
+            .expect("preset");
+
+        assert_eq!(
+            identity::own_avatar(&pool, &principal).await.expect("ler"),
+            ocinye_contracts::AvatarChoice::Preset {
+                preset: "engineering-02".to_owned()
+            }
+        );
+        assert!(
+            store.get(&key).await.is_err(),
+            "trocar para um preset deixou a fotografia no armazenamento"
+        );
+        let linhas: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM storage_objects WHERE object_key = $1")
+                .bind(&key)
+                .fetch_one(&pool)
+                .await
+                .expect("contagem");
+        assert_eq!(linhas, 0, "ficou uma linha órfã em storage_objects");
+    })
+    .await;
 }
 
 /// Sem armazenamento registado, carregar uma fotografia diz porquê.

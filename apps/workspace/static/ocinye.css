@@ -5442,3 +5442,157 @@ select.oc-entrada {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+
+/* ══ Ficheiros institucionais ══════════════════════════════════════════════
+ *
+ * O ecrã onde se arruma, carrega, navega e versiona. O desenho tem de dizer
+ * uma coisa e não dizer outra: as pastas parecem navegação, e a classificação
+ * parece o que é — uma etiqueta do ficheiro, não da pasta onde ele está.
+ *
+ * Nada aqui posiciona por atributo `style`: a `Content-Security-Policy` desta
+ * aplicação declara `style-src 'self'`, e o browser descartaria em silêncio. */
+
+.oc-head__aside {
+  display: flex; align-items: center; gap: var(--oc-space-3); flex-shrink: 0;
+}
+
+/* ── O trilho de pastas ─────────────────────────────────────────────────── */
+
+.oc-crumbs {
+  display: flex; align-items: center; gap: var(--oc-space-2);
+  flex-wrap: wrap; min-width: 0;
+}
+.oc-crumbs__step {
+  display: inline-flex; align-items: center; gap: var(--oc-space-2);
+  padding: var(--oc-space-1) var(--oc-space-3);
+  border-radius: var(--oc-r-sm);
+  font: 500 12.5px var(--oc-font-sans);
+  color: var(--oc-text-secondary); text-decoration: none;
+  max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.oc-crumbs__step:hover { background: var(--oc-surface-hover); color: var(--oc-text); }
+.oc-crumbs__sep { color: var(--oc-text-ghost); font-size: 12px; }
+
+/* ── Carregar e criar pasta ─────────────────────────────────────────────── */
+
+.oc-files__bar { display: grid; grid-template-columns: 1.7fr 1fr; gap: var(--oc-space-5); }
+
+.oc-drop {
+  display: flex; flex-direction: column; gap: var(--oc-space-4);
+  padding: var(--oc-space-7);
+  background: var(--oc-surface);
+  border: 1px dashed var(--oc-border-strong);
+  border-radius: var(--oc-r-lg);
+  transition: border-color var(--oc-dur-normal, 160ms) ease,
+              background var(--oc-dur-normal, 160ms) ease;
+}
+/* O estado de largada é posto pelo `app.js` e retirado por ele. Sem
+ * JavaScript a classe nunca aparece, e o formulário continua a funcionar. */
+.oc-drop[data-over="1"] { border-color: var(--oc-navy); background: var(--oc-surface-tint); }
+
+.oc-drop__face { display: flex; align-items: center; gap: var(--oc-space-5); }
+.oc-drop__face svg { color: var(--oc-text-muted); flex-shrink: 0; }
+.oc-drop__controls {
+  display: flex; align-items: center; gap: var(--oc-space-3); flex-wrap: wrap;
+}
+.oc-drop__controls .oc-input[type="file"] { flex: 1; min-width: 200px; }
+
+/* O tabuleiro só existe quando há alguma coisa nele: `hidden` é retirado pelo
+ * `app.js` no momento em que a primeira linha entra. */
+.oc-drop__tray { display: flex; flex-direction: column; gap: var(--oc-space-2); }
+.oc-drop__tray[hidden] { display: none; }
+.oc-drop__line {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--oc-space-4);
+  padding: var(--oc-space-3) var(--oc-space-4);
+  background: var(--oc-surface-muted);
+  border-radius: var(--oc-r-sm);
+  font: 400 12px var(--oc-font-sans); color: var(--oc-text-body);
+}
+.oc-drop__line b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oc-drop__state { color: var(--oc-text-muted); flex-shrink: 0; }
+.oc-drop__state--bad { color: var(--oc-error-text); }
+
+.oc-files__folder .oc-card__body {
+  display: flex; flex-direction: column; gap: var(--oc-space-3);
+}
+
+.oc-label {
+  font: 500 11.5px var(--oc-font-sans);
+  letter-spacing: .02em; text-transform: uppercase;
+  color: var(--oc-text-meta);
+}
+
+/* ── A página de um ficheiro ────────────────────────────────────────────── */
+
+.oc-split { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--oc-space-5); }
+
+.oc-kv {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--oc-space-5);
+  padding: var(--oc-space-4) 0;
+  border-bottom: 1px solid var(--oc-border-faint);
+}
+.oc-kv:last-child { border-bottom: 0; }
+.oc-kv__k { font: 400 12px var(--oc-font-sans); color: var(--oc-text-muted); flex-shrink: 0; }
+.oc-kv__v {
+  font: 500 12.5px var(--oc-font-sans); color: var(--oc-text);
+  text-align: right; overflow-wrap: anywhere;
+}
+
+.oc-pre {
+  margin: 0; max-height: 460px; overflow: auto;
+  padding: var(--oc-space-5);
+  background: var(--oc-surface-muted);
+  border-radius: var(--oc-r-sm);
+  font: 400 12px/1.6 var(--oc-font-mono, ui-monospace, monospace);
+  color: var(--oc-text-body);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+.oc-note {
+  padding: var(--oc-space-5);
+  background: var(--oc-surface-muted);
+  border-radius: var(--oc-r-sm);
+  margin-bottom: var(--oc-space-5);
+}
+.oc-note--ok {
+  background: var(--oc-success-bg);
+  border: 1px solid var(--oc-success-border);
+  color: var(--oc-success-text);
+}
+.oc-note--bad {
+  background: var(--oc-error-bg);
+  border: 1px solid var(--oc-error-border);
+  color: var(--oc-error-text);
+}
+
+.oc-grid--3 { grid-template-columns: repeat(3, 1fr); }
+
+/* As larguras das duas tabelas deste ecrã. Uma classe por forma, como as
+ * outras: as colunas são desenho, e desenho pertence a esta folha. */
+.oc-table--files .oc-table__head,
+.oc-table--files .oc-table__row {
+  grid-template-columns: minmax(280px,2.6fr) 180px 130px 100px 90px;
+  min-width: 860px;
+}
+.oc-table--versions .oc-table__head,
+.oc-table--versions .oc-table__row {
+  grid-template-columns: 90px minmax(200px,1.6fr) 130px 100px 130px;
+  min-width: 700px;
+}
+
+@media (max-width: 1100px) {
+  .oc-files__bar, .oc-split { grid-template-columns: 1fr; }
+  .oc-grid--3 { grid-template-columns: 1fr 1fr; }
+}
+
+/* A pré-visualização de imagem. Vem de `/files/{id}/preview`, na origem desta
+ * aplicação: a CSP continua `img-src 'self' data:` e a página nunca aprende
+ * onde os bytes estão fisicamente guardados. */
+.oc-preview {
+  display: block; max-width: 100%; max-height: 460px;
+  margin: 0 auto;
+  border-radius: var(--oc-r-sm);
+  background: var(--oc-surface-muted);
+}

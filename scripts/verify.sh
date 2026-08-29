@@ -37,6 +37,37 @@ FIM
 arvore_antes=$(impressao_da_arvore)
 cabeca_antes=$(git -C "$raiz_do_repositorio" rev-parse HEAD)
 
+# ── Capacidade, antes de tudo ───────────────────────────────────────────
+#
+# Uma sweep completa recompila a árvore de raiz e leva o `target/` a dezenas de
+# GB. Duas vezes, durante a milestone de ficheiros institucionais, o disco
+# encheu **a meio** — e o vermelho que apareceu não falava de disco: o MinIO
+# deixou de conseguir escrever e quatro provas de armazenamento falharam com
+# `StorageUnavailable`, a apontar para o sítio errado.
+#
+# Ficar sem espaço não é um defeito do candidato. É evidência que não pôde ser
+# produzida, e o verificador tem de o dizer assim — antes de começar, e não
+# vinte minutos depois dentro do compilador.
+#
+# O limiar sai da medição desta árvore: uma sweep a partir de um `target` vazio
+# consumiu cerca de 35 GB, e as escritas começaram a falhar abaixo de 1 GB
+# livre. Vinte é a folga com que uma sweep sobre um `target` já povoado
+# termina sem chegar perto do fim do disco. `OCINYE_VERIFY_MIN_DISK_GB`
+# permite ajustá-lo a uma máquina diferente — deliberadamente, e por escrito.
+#
+# O que este passo **não** faz é libertar espaço. Mudar o ambiente enquanto se
+# produz evidência estraga a evidência; a limpeza é um comando à parte, pedido
+# por alguém: `./scripts/ci-disk.sh caches`.
+step "Capacidade para produzir evidência"
+if ! ./scripts/ci-disk.sh exigir "${OCINYE_VERIFY_MIN_DISK_GB:-20}"; then
+    echo >&2
+    echo "INVALID — insufficient workspace disk for trustworthy full verification." >&2
+    echo >&2
+    echo "Nenhum portão correu. Isto não é PASS nem FAIL: é NOT_RUN, e o" >&2
+    echo "candidato continua por verificar." >&2
+    exit 1
+fi
+
 step "Integridade do sistema de verificação"
 # Primeiro de todos, e de propósito.
 #

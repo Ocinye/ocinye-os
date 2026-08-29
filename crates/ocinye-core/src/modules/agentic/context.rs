@@ -78,6 +78,27 @@ pub struct ContextSource {
     pub classification: String,
     /// The excerpt that matched.
     pub excerpt: String,
+    /// Onde no artefacto, quando o artefacto tem coordenadas.
+    ///
+    /// # Porque a citação viaja com o excerto
+    ///
+    /// Porque uma frase sem sítio não se verifica. Um resultado que diga «isto
+    /// está neste relatório» obriga quem lê a procurar; um que diga «v3, p. 14»
+    /// pode ser confirmado em segundos — e é essa diferença que separa uma
+    /// resposta útil de uma resposta científica.
+    ///
+    /// `None` para artefactos que não têm coordenadas: uma ideia não tem página.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub locator: Option<serde_json::Value>,
+    /// A versão exacta de onde o excerto saiu, quando o artefacto é versionado.
+    ///
+    /// Uma citação que aponte para «o ficheiro» aponta, no dia seguinte, para
+    /// bytes diferentes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version_id: Option<Uuid>,
+    /// O número dessa versão, para se poder dizer «v3» a uma pessoa.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sequence: Option<i32>,
 }
 
 /// Everything an agent is given about the situation.
@@ -208,6 +229,58 @@ pub async fn assemble(
             title: hit.title,
             classification: hit.classification,
             excerpt: hit.excerpt.unwrap_or_default(),
+            locator: None,
+            version_id: None,
+            sequence: None,
+        });
+    }
+
+    // O corpo dos ficheiros, pelo mesmo caminho e com os mesmos dois tectos.
+    //
+    // Vem a seguir e não misturado no mesmo ranking: um resultado de corpo diz
+    // «esta frase está na página 4 da versão 2», e um de título diz «este
+    // artefacto chama-se assim». São afirmações diferentes.
+    //
+    // A classificação que decide é a **efectiva**, composta na consulta contra o
+    // estado corrente do ficheiro e do ambiente — e o tecto de processamento por
+    // IA aplica-se exactamente como se aplica a tudo o resto.
+    let (corpos, _) = search::search_bodies(
+        pool,
+        principal,
+        query,
+        scoped_workspace,
+        ocinye_contracts::PageRequest {
+            page: 1,
+            page_size: MAX_SOURCES,
+        },
+    )
+    .await?;
+
+    for corpo in corpos {
+        let classification =
+            Classification::parse(&corpo.classification).unwrap_or(Classification::Restricted);
+
+        if !may_process_with_ai(classification, local_inference) {
+            withheld += 1;
+            continue;
+        }
+        if sources.len() >= MAX_SOURCES as usize {
+            continue;
+        }
+        if classification.level() > peak.level() {
+            peak = classification;
+        }
+
+        sources.push(ContextSource {
+            provenance: Provenance::Retrieved,
+            entity_type: "file".to_owned(),
+            entity_id: corpo.file_id,
+            title: corpo.name,
+            classification: corpo.classification,
+            excerpt: corpo.excerpt,
+            locator: Some(corpo.locator),
+            version_id: Some(corpo.file_version_id),
+            sequence: Some(corpo.sequence),
         });
     }
 
@@ -268,6 +341,11 @@ pub async fn with_selection(
             title: resource.title.clone(),
             classification: resource.classification.as_str().to_owned(),
             excerpt: excerpt_of(pool, principal, resource).await?,
+            // O que o membro apontou entra pelo caminho da selecção, e a
+            // selecção nomeia um recurso — não um sítio dentro dele.
+            locator: None,
+            version_id: None,
+            sequence: None,
         });
     }
 

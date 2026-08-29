@@ -2552,3 +2552,126 @@ document.addEventListener('keydown', (event) => {
     if (celula) abrirNoDia(celula.dataset.ocDia);
   });
 })();
+
+/* ── Ficheiros: largar, e ver o que está a acontecer ──────────────────────
+ *
+ * O formulário de carregamento já funciona sem isto: escolher no
+ * `input[type=file]` e submeter carrega um ficheiro. O que se acrescenta aqui
+ * é largar, e um tabuleiro que diz o que aconteceu a cada um.
+ *
+ * O que este bloco NÃO faz, pela mesma razão do resto do ficheiro: não decide
+ * autorização, não classifica nada e não inventa estado. Cada ficheiro largado
+ * é um POST ao mesmo `action` do formulário, com os mesmos campos ocultos, e o
+ * que aparece no tabuleiro é a resposta do servidor — não um optimismo local.
+ *
+ * Um ficheiro largado herda a classificação escolhida no selector, tal como
+ * herdaria se tivesse sido escolhido pelo botão. Largar não é uma via mais
+ * permissiva para o mesmo acto.
+ */
+(() => {
+  'use strict';
+
+  const forma = document.querySelector('form[data-drop="1"]');
+  if (!forma || !window.FormData || !window.fetch) return;
+
+  const entrada = forma.querySelector('[data-drop-input="1"]');
+  const tabuleiro = forma.querySelector('[data-drop-tray="1"]');
+  if (!tabuleiro) return;
+
+  let porResolver = 0;
+
+  const linha = (nome) => {
+    tabuleiro.hidden = false;
+    const el = document.createElement('div');
+    el.className = 'oc-drop__line';
+    const titulo = document.createElement('b');
+    titulo.textContent = nome;
+    const estado = document.createElement('span');
+    estado.className = 'oc-drop__state';
+    estado.textContent = 'A carregar…';
+    el.appendChild(titulo);
+    el.appendChild(estado);
+    tabuleiro.appendChild(el);
+    return estado;
+  };
+
+  /* O servidor responde com um redireccionamento para a mesma página. Não o
+     seguimos por ficheiro: seguir-se-ia N vezes e perder-se-iam as respostas
+     dos outros. Recarrega-se uma vez, no fim, quando tudo assentou. */
+  const enviar = (ficheiro) => {
+    const estado = linha(ficheiro.name);
+    const dados = new FormData();
+    dados.append('file', ficheiro);
+    forma.querySelectorAll('input[type="hidden"], select').forEach((campo) => {
+      if (campo.name) dados.append(campo.name, campo.value);
+    });
+
+    porResolver += 1;
+    return fetch(forma.action, { method: 'POST', body: dados, redirect: 'follow' })
+      .then((resposta) => {
+        /* O redireccionamento leva a `?erro=…` quando o Core recusou. A página
+           final é a que sabe porquê, e é para lá que se vai a seguir. */
+        const recusado = resposta.redirected && resposta.url.indexOf('erro=') !== -1;
+        if (!resposta.ok || recusado) {
+          estado.textContent = 'Recusado';
+          estado.className = 'oc-drop__state oc-drop__state--bad';
+        } else {
+          estado.textContent = 'Carregado';
+        }
+      })
+      .catch(() => {
+        estado.textContent = 'Falhou';
+        estado.className = 'oc-drop__state oc-drop__state--bad';
+      })
+      .then(() => {
+        porResolver -= 1;
+        /* Recarregar mostra a lista tal como o servidor a vê agora — que é a
+           única lista verdadeira. */
+        if (porResolver === 0) setTimeout(() => window.location.reload(), 700);
+      });
+  };
+
+  ['dragenter', 'dragover'].forEach((evento) => {
+    forma.addEventListener(evento, (e) => {
+      e.preventDefault();
+      forma.dataset.over = '1';
+    });
+  });
+
+  ['dragleave', 'dragend'].forEach((evento) => {
+    forma.addEventListener(evento, (e) => {
+      /* Sair para um filho não é sair da zona. */
+      if (e.relatedTarget && forma.contains(e.relatedTarget)) return;
+      delete forma.dataset.over;
+    });
+  });
+
+  forma.addEventListener('drop', (e) => {
+    e.preventDefault();
+    delete forma.dataset.over;
+    const ficheiros = e.dataTransfer && e.dataTransfer.files;
+    if (!ficheiros || !ficheiros.length) return;
+    Array.prototype.forEach.call(ficheiros, enviar);
+  });
+
+  /* Escolher pelo botão também mostra o tabuleiro, para que os dois caminhos
+     se comportem da mesma maneira. */
+  if (entrada) {
+    entrada.addEventListener('change', () => {
+      if (!entrada.files || !entrada.files.length) return;
+      Array.prototype.forEach.call(entrada.files, enviar);
+      entrada.value = '';
+    });
+  }
+})();
+
+/* O selector de ambiente submete ao mudar. Sem JavaScript há um botão "Ver"
+   dentro de um `<noscript>`, e o formulário é o mesmo. */
+(() => {
+  'use strict';
+  document.querySelectorAll('select[data-autosubmit="1"]').forEach((campo) => {
+    campo.addEventListener('change', () => {
+      if (campo.form) campo.form.submit();
+    });
+  });
+})();

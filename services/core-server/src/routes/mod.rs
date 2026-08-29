@@ -9,6 +9,7 @@ mod auth;
 mod calendar;
 mod collaboration;
 mod compute;
+mod files;
 mod governance;
 mod health;
 mod identity;
@@ -65,6 +66,7 @@ pub fn router(state: AppState) -> Router {
         .merge(identity::routes())
         .merge(organisation::routes())
         .merge(research::routes())
+        .merge(files::routes())
         .merge(knowledge::routes())
         .merge(science::routes())
         .merge(collaboration::routes())

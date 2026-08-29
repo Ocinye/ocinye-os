@@ -291,6 +291,17 @@ jobs:
 
     env:
       OCINYE_TEST_DATABASE_URL: postgres://ocinye:ocinye_ci_only@localhost:5432/ocinye_test
+      # O fixture S3-compatible dos testes de integração.
+      #
+      # > **MinIO is the CI implementation of the S3-compatible test fixture; it
+      # > is not the storage architecture of Ocinye OS.**
+      #
+      # Os testes falam com o contrato `ObjectStore` e não com o MinIO: trocar o
+      # fixture não deve exigir tocar num teste.
+      OCINYE_TEST_STORAGE_ENDPOINT: http://127.0.0.1:9000
+      OCINYE_TEST_STORAGE_ACCESS_KEY: ocinye_ci_only
+      OCINYE_TEST_STORAGE_SECRET_KEY: ocinye_ci_only_secret
+      OCINYE_TEST_STORAGE_BUCKET: ocinye-ci-artifacts
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.3.0
@@ -377,6 +388,47 @@ jobs:
       - name: Ligações da documentação
         run: python3 ./scripts/documentation_links.py
 
+      # Levantado como passo e não como `services:`, de propósito: a imagem do
+      # MinIO precisa do comando `server /data`, e `services:` não o permite
+      # declarar. Usar uma imagem-invólucro de terceiros para contornar isso
+      # seria acrescentar um fornecedor à cadeia por uma limitação de sintaxe.
+      - name: Levantar o fixture S3-compatible
+        run: |
+          set -euo pipefail
+          docker run -d --name ocinye-ci-minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER="$OCINYE_TEST_STORAGE_ACCESS_KEY" \
+            -e MINIO_ROOT_PASSWORD="$OCINYE_TEST_STORAGE_SECRET_KEY" \
+            minio/minio:RELEASE.2025-04-22T22-12-26Z \
+            server /data
+
+          # Esperar que responda, e falhar se não responder. Um teste contra um
+          # armazenamento que ainda não subiu falha por uma razão que não é a sua.
+          for tentativa in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1; then
+              echo "MinIO respondeu à tentativa $tentativa"
+              break
+            fi
+            if [ "$tentativa" -eq 40 ]; then
+              echo "ERRO: o fixture S3-compatible não respondeu." >&2
+              docker logs ocinye-ci-minio >&2 || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Criar o bucket de teste
+        run: |
+          set -euo pipefail
+          docker run --rm --network host \
+            --entrypoint sh \
+            minio/mc:RELEASE.2025-04-16T18-13-26Z -c "
+              mc alias set ci http://127.0.0.1:9000 \
+                '$OCINYE_TEST_STORAGE_ACCESS_KEY' '$OCINYE_TEST_STORAGE_SECRET_KEY' &&
+              mc mb --ignore-existing ci/$OCINYE_TEST_STORAGE_BUCKET &&
+              mc ls ci/
+            "
+
       - name: Disco antes de capacidades WASM
         run: ./scripts/ci-disk.sh medir "capacidades WASM"
 
@@ -407,9 +459,17 @@ jobs:
       - name: Confirmar que as suites contra PostgreSQL correram
         run: |
           set -euo pipefail
-          if grep -qi "SKIPPED\|skipping" test-output.txt; then
-            echo "ERRO: uma suite saltou-se. A base de dados devia estar disponível." >&2
-            grep -i "SKIPPED\|skipping" test-output.txt >&2
+          # Esta guarda vê apenas o que `cargo test` imprime, e `cargo test`
+          # engole a saída de um teste que passa. Um salto **dentro** de um teste
+          # que depois reporta `ok` nunca chega aqui — foi assim que dezoito
+          # provas de armazenamento estiveram verdes na CI sem armazenamento
+          # nenhum. Quem apanha esses é o `assert!` sobre `CI` dentro de cada
+          # suite; esta guarda continua a valer para os saltos ao nível do
+          # harness, que imprimem sempre.
+          if grep -qi "SKIPPED\|skipping\|SALTADO\|saltado" test-output.txt; then
+            echo "ERRO: uma suite saltou-se. A base de dados e o armazenamento" >&2
+            echo "      deviam estar ambos disponíveis neste job." >&2
+            grep -i "SKIPPED\|skipping\|SALTADO\|saltado" test-output.txt >&2
             exit 1
           fi
           total=$(grep -oE '^test result: ok\. [0-9]+ passed' test-output.txt \

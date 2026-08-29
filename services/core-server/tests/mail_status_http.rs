@@ -129,6 +129,7 @@ fn estado_com(
         verifier,
         authenticator,
         store: None,
+        embeddings: None,
         inference: Arc::new(ocinye_core::modules::intelligence::NoProvider),
         mail_registry,
         realtime: Arc::new(ocinye_core::realtime::Realtime::ausente()),

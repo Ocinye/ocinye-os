@@ -1194,6 +1194,41 @@ fn chave_do_correio() -> &'static ocinye_core::password::sealed::SealingKey {
     })
 }
 
+/// O armazenamento de objectos das viagens que carregam bytes.
+///
+/// `None` quando as variáveis não estão postas. Quem chama tem de o dizer — um
+/// teste que se salta em silêncio é verde a afirmar nada.
+/// Sem armazenamento salta-se; na CI, falha.
+///
+/// A viagem que afirma «Chrome → multipart → Core → object store → PostgreSQL»
+/// só é evidência quando todos esses componentes participaram. Na CI, a ausência
+/// de um deles é um defeito do job, não uma condição do ambiente.
+fn exigir_armazenamento(viagem: &str) {
+    assert!(
+        std::env::var("CI").is_err(),
+        "não há armazenamento, e isto é a CI: «{viagem}» não pode contar como \
+         prova de integração com object storage sem um object store. \
+         Defina OCINYE_TEST_STORAGE_ENDPOINT."
+    );
+    eprintln!("SALTADO: {viagem} — OCINYE_TEST_STORAGE_ENDPOINT não está definida.");
+}
+
+fn store_de_teste() -> Option<ocinye_core::storage::ObjectStore> {
+    ocinye_core::storage::ObjectStore::new(ocinye_core::config::StorageConfig {
+        endpoint_url: std::env::var("OCINYE_TEST_STORAGE_ENDPOINT").ok()?,
+        region: std::env::var("OCINYE_TEST_STORAGE_REGION")
+            .unwrap_or_else(|_| "us-east-1".to_owned()),
+        access_key: std::env::var("OCINYE_TEST_STORAGE_ACCESS_KEY").ok()?,
+        secret_key: std::env::var("OCINYE_TEST_STORAGE_SECRET_KEY").ok()?,
+        bucket: std::env::var("OCINYE_TEST_STORAGE_BUCKET")
+            .unwrap_or_else(|_| "ocinye-test-artifacts".to_owned()),
+        backend_code: "ocinye-test-default".to_owned(),
+        location_label: "test".to_owned(),
+        residency: ocinye_contracts::storage::Residency::Undeclared,
+        max_upload_bytes: 32 * 1024 * 1024,
+    })
+}
+
 fn core_state(pool: PgPool, organisation_id: Uuid, database_url: &str) -> AppState {
     use std::sync::Once;
     static ONCE: Once = Once::new();
@@ -1285,7 +1320,18 @@ fn core_state(pool: PgPool, organisation_id: Uuid, database_url: &str) -> AppSta
         config: Arc::new(config),
         verifier,
         authenticator,
-        store: None,
+        // O armazenamento entra quando está configurado, e só então.
+        //
+        // Com `None` o Core recusa carregamentos com «storage unavailable», que
+        // é a resposta certa numa instalação sem armazenamento — mas faria a
+        // viagem de Ficheiros provar o contrário do que se quer provar. A
+        // jornada que carrega bytes diz em voz alta quando não pode correr.
+        store: store_de_teste().map(std::sync::Arc::new),
+        // O provider determinístico, para as viagens que provam recuperação
+        // semântica. Não é um modelo, e a identidade que grava di-lo.
+        embeddings: Some(std::sync::Arc::new(
+            ocinye_core::modules::intelligence::embeddings::DeterministicEmbeddings::default(),
+        )),
         inference: Arc::new(ocinye_core::modules::intelligence::NoProvider),
         mail_registry,
         // Estes testes medem HTTP, e não tempo real. Um plano ausente aceita
@@ -7341,4 +7387,1160 @@ async fn capturas_da_ciencia() {
         .await;
     esperar_por(&pagina, "Resultados").await;
     capturar_visivel(&pagina, "ciencia-cadeia").await;
+}
+
+// ── Ficheiros institucionais, pelo browser ───────────────────────────────
+
+/// Semeia um ficheiro com uma versão, sem passar pelo armazenamento.
+///
+/// A navegação, o histórico e a autorização não dependem de os bytes estarem
+/// num bucket: dependem das linhas. Semear assim deixa a viagem humana ser
+/// verificada mesmo numa máquina sem MinIO — e a viagem que **precisa** de
+/// bytes diz em voz alta quando não pode correr.
+async fn semear_ficheiro(
+    harness: &Harness,
+    workspace_id: Uuid,
+    nome: &str,
+    classificacao: &str,
+) -> Uuid {
+    let (organisation_id, unit_id): (Uuid, Uuid) =
+        sqlx::query_as("SELECT organisation_id, unit_id FROM research_workspaces WHERE id = $1")
+            .bind(workspace_id)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("ambiente");
+
+    let backend_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO storage_backends (code, display_name, location_label, bucket)
+         VALUES ($1, 'Harness', 'test', 'prova') RETURNING id",
+    )
+    .bind(format!("b{}", &Uuid::new_v4().simple().to_string()[..12]))
+    .fetch_one(&harness.pool)
+    .await
+    .expect("backend");
+
+    let object_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO storage_objects
+             (organisation_id, backend_id, object_key, original_filename,
+              content_type, size_bytes, checksum_sha256, status, classification)
+         VALUES ($1, $2, $3, $4, 'text/plain', 42, $5, 'stored', $6) RETURNING id",
+    )
+    .bind(organisation_id)
+    .bind(backend_id)
+    .bind(format!("prova/{}", Uuid::new_v4()))
+    .bind(nome)
+    .bind(format!("{:064x}", rand_like()))
+    .bind(classificacao)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("objecto");
+
+    let file_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO files (organisation_id, unit_id, workspace_id, name, classification)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id",
+    )
+    .bind(organisation_id)
+    .bind(unit_id)
+    .bind(workspace_id)
+    .bind(nome)
+    .bind(classificacao)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("ficheiro");
+
+    sqlx::query(
+        "INSERT INTO file_versions (file_id, sequence, storage_object_id)
+         VALUES ($1, 1, $2)",
+    )
+    .bind(file_id)
+    .bind(object_id)
+    .execute(&harness.pool)
+    .await
+    .expect("versão");
+
+    file_id
+}
+
+/// Uma soma distinta por chamada, sem depender de um gerador aleatório.
+fn rand_like() -> u128 {
+    Uuid::new_v4().as_u128()
+}
+
+/// Uma pessoa autorizada organiza, navega, vê e versiona ficheiros.
+///
+/// # A viagem
+///
+/// ```text
+/// entrar → Ficheiros na sidebar → escolher o ambiente → ver o ficheiro
+///        → criar uma pasta → entrar nela → trilho → voltar
+///        → abrir o ficheiro → detalhes, classificação e histórico
+/// ```
+///
+/// # O que a viagem tem de provar, e não só mostrar
+///
+/// Que o ecrã existe na navegação, que as pastas se criam e se percorrem, que
+/// o ficheiro tem uma página com o seu histórico, e que a classificação que
+/// aparece é a do ficheiro — não a da pasta onde ele está.
+#[tokio::test]
+async fn uma_pessoa_organiza_e_percorre_os_ficheiros_no_browser() {
+    let harness = harness!();
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+    let nome = unique_title("ensaio");
+    let file_id = semear_ficheiro(&harness, workspace_id, &nome, "INTERNAL").await;
+
+    // A entrada existe na navegação, sob CONHECIMENTO.
+    let page = harness.open("/").await;
+    esperar_por(&page, "Ficheiros").await;
+
+    // O ambiente escolhe-se: não há um por omissão.
+    let page = harness.open("/files").await;
+    esperar_por(&page, "Escolha o ambiente").await;
+
+    let lista = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&lista, &nome).await;
+    let html = lista.content().await.expect("conteúdo");
+    assert!(
+        html.contains("Largue ficheiros aqui"),
+        "a zona de carregamento não chegou ao browser"
+    );
+
+    // Criar uma pasta, pelo formulário, como uma pessoa faz.
+    let pasta = unique_title("Ensaios");
+    set_field(&lista, "#oc-files-folder", &pasta).await;
+    submit(&lista, "form[action='/files/folder']").await;
+    esperar_por(&lista, &pasta).await;
+
+    // A pasta existe na base, e não só no ecrã.
+    let quantas: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM folders WHERE workspace_id = $1 AND name = $2")
+            .bind(workspace_id)
+            .bind(&pasta)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("contagem de pastas");
+    assert_eq!(quantas, 1, "a pasta criada no ecrã não existe na base");
+
+    // Entrar na pasta: está vazia, e o trilho leva de volta.
+    let folder_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM folders WHERE workspace_id = $1 AND name = $2")
+            .bind(workspace_id)
+            .bind(&pasta)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("pasta");
+
+    let dentro = harness
+        .open(&format!(
+            "/files?workspace={workspace_id}&folder={folder_id}"
+        ))
+        .await;
+    esperar_por(&dentro, "Ainda não há nada aqui").await;
+    let html = dentro.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&pasta),
+        "o trilho não mostra a pasta onde a pessoa está"
+    );
+    assert!(
+        !html.contains(&nome),
+        "o ficheiro da raiz apareceu dentro de uma pasta onde não está"
+    );
+
+    // A página do ficheiro: detalhes, classificação e histórico.
+    let detalhe = harness.open(&format!("/files/{file_id}")).await;
+    esperar_por(&detalhe, "Histórico de versões").await;
+    let html = detalhe.content().await.expect("conteúdo");
+    assert!(html.contains(&nome), "a página não é a do ficheiro pedido");
+    assert!(
+        html.contains("Carregar nova versão"),
+        "não há como carregar uma versão nova"
+    );
+    assert!(
+        html.contains("Soma SHA-256"),
+        "os detalhes não mostram a soma que identifica os bytes"
+    );
+    assert!(
+        html.contains("v1"),
+        "o histórico não mostra a primeira versão"
+    );
+}
+
+/// Conhecer o identificador não é ter acesso, e o browser não é excepção.
+///
+/// A recusa é indistinguível de o ficheiro não existir: quem não o alcança não
+/// deve aprender que ele existe por ver uma mensagem diferente.
+#[tokio::test]
+async fn um_estranho_com_o_identificador_nao_alcanca_o_ficheiro_no_browser() {
+    let harness = harness!();
+
+    let (dono, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(dono).await;
+    let nome = unique_title("restrito");
+    let file_id = semear_ficheiro(&harness, workspace_id, &nome, "RESTRICTED").await;
+
+    // Outra pessoa, da mesma organização, sem pertencer ao ambiente.
+    let (_, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    let pagina = harness.open(&format!("/files/{file_id}")).await;
+    let html = pagina.content().await.expect("conteúdo");
+    assert!(
+        !html.contains(&nome),
+        "o nome do ficheiro chegou a quem não o alcança"
+    );
+    assert!(
+        !html.contains("Histórico de versões"),
+        "a página do ficheiro abriu para quem não tem acesso"
+    );
+}
+
+/// Uma pessoa larga um ficheiro na zona de largada, e ele fica.
+///
+/// # A viagem
+///
+/// ```text
+/// entrar → Ficheiros → largar bytes na zona
+///        → app.js → POST multipart → Core → autorização → MinIO
+///        → PostgreSQL → recarregar → o ficheiro está na lista
+/// ```
+///
+/// # O que esta viagem prova e a outra não
+///
+/// Que os bytes atravessam mesmo. As outras viagens semeiam linhas e provam
+/// navegação; esta usa o armazenamento a sério, e por isso diz em voz alta
+/// quando não pode correr — um teste que se salta em silêncio é verde a
+/// afirmar nada.
+///
+/// E prova a segunda metade da mesma frase: **carregar um ficheiro não é
+/// afirmar conhecimento institucional.** Depois de o ficheiro existir, não há
+/// um documento, um dataset nem uma fonte que ninguém tenha pedido.
+#[tokio::test]
+async fn uma_pessoa_larga_um_ficheiro_e_ele_fica() {
+    let harness = harness!();
+
+    if store_de_teste().is_none() {
+        exigir_armazenamento("uma_pessoa_larga_um_ficheiro_e_ele_fica");
+        return;
+    }
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+
+    let antes: i64 = sqlx::query_scalar("SELECT count(*) FROM documents WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("documentos antes");
+
+    let pagina = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&pagina, "Largue ficheiros aqui").await;
+
+    // Largar, como uma pessoa larga: um `File` a sério, num `DataTransfer`, num
+    // evento `drop` sobre a zona. Não se chama a função interna — chama-se o
+    // browser, que é quem a pessoa usa.
+    let nome = format!("{}.txt", unique_title("largado").replace(' ', "-"));
+    let script = format!(
+        "(() => {{ \
+           const forma = document.querySelector('form[data-drop=\"1\"]'); \
+           if (!forma) return 'sem forma'; \
+           const ficheiro = new File(['prova institucional'], '{nome}', \
+             {{ type: 'text/plain' }}); \
+           const dt = new DataTransfer(); \
+           dt.items.add(ficheiro); \
+           forma.dispatchEvent(new DragEvent('drop', \
+             {{ bubbles: true, cancelable: true, dataTransfer: dt }})); \
+           return 'largado'; }})()"
+    );
+    let resultado: Option<String> = pagina
+        .evaluate(script)
+        .await
+        .expect("largar")
+        .into_value()
+        .ok();
+    assert_eq!(
+        resultado.as_deref(),
+        Some("largado"),
+        "a zona de largada não recebeu o ficheiro"
+    );
+
+    // O ficheiro chega à base, com a sua primeira versão e os bytes contados.
+    let limite = std::time::Instant::now();
+    let file_id = loop {
+        let encontrado: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND name = $2")
+                .bind(workspace_id)
+                .bind(&nome)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("procura do ficheiro");
+
+        if let Some(id) = encontrado {
+            break id;
+        }
+        assert!(
+            limite.elapsed() < DEADLINE,
+            "o ficheiro largado não chegou ao PostgreSQL em {DEADLINE:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    };
+
+    let (sequencia, bytes): (i32, i64) = sqlx::query_as(
+        "SELECT v.sequence, o.size_bytes
+           FROM file_versions v
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE v.file_id = $1",
+    )
+    .bind(file_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("versão do ficheiro largado");
+
+    assert_eq!(sequencia, 1, "a primeira versão não é a número 1");
+    assert_eq!(
+        bytes,
+        "prova institucional".len() as i64,
+        "os bytes que chegaram não são os que foram largados"
+    );
+
+    // E não nasceu conhecimento que ninguém afirmou.
+    let depois: i64 = sqlx::query_scalar("SELECT count(*) FROM documents WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("documentos depois");
+    assert_eq!(
+        depois, antes,
+        "largar um ficheiro criou um documento de conhecimento"
+    );
+
+    // A lista, recarregada pelo próprio `app.js`, mostra-o.
+    esperar_por(&pagina, &nome).await;
+}
+
+/// Uma imagem institucional aparece na página sem a página saber onde ela está.
+///
+/// # A propriedade
+///
+/// > **A Experience não precisa de conhecer nem confiar no endpoint físico onde
+/// > os bytes institucionais estão guardados.**
+///
+/// A `Content-Security-Policy` do Workspace continua `img-src 'self' data:`. Se
+/// a imagem viesse do object storage o browser recusava-a, e o teste via um
+/// elemento com largura zero. Vindo de `/files/{id}/preview`, o browser
+/// carrega-a — e é o Chrome, não uma asserção sobre HTML, que o confirma.
+#[tokio::test]
+async fn uma_imagem_institucional_carrega_na_origem_do_workspace() {
+    let harness = harness!();
+
+    if store_de_teste().is_none() {
+        exigir_armazenamento("uma_imagem_institucional_carrega_na_origem_do_workspace");
+        return;
+    }
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+
+    // Um PNG 1×1 verdadeiro, largado como uma pessoa larga.
+    let pagina = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&pagina, "Largue ficheiros aqui").await;
+
+    let nome = format!("{}.png", unique_title("imagem").replace(' ', "-"));
+    let script = format!(
+        "(async () => {{ \
+           const forma = document.querySelector('form[data-drop=\"1\"]'); \
+           const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='; \
+           const cru = atob(b64); \
+           const bytes = new Uint8Array(cru.length); \
+           for (let i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i); \
+           const ficheiro = new File([bytes], '{nome}', {{ type: 'image/png' }}); \
+           const dt = new DataTransfer(); \
+           dt.items.add(ficheiro); \
+           forma.dispatchEvent(new DragEvent('drop', \
+             {{ bubbles: true, cancelable: true, dataTransfer: dt }})); \
+           return 'largado'; }})()"
+    );
+    let _ = pagina.evaluate(script).await.expect("largar a imagem");
+
+    let limite = std::time::Instant::now();
+    let file_id = loop {
+        let encontrado: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND name = $2")
+                .bind(workspace_id)
+                .bind(&nome)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("procura da imagem");
+        if let Some(id) = encontrado {
+            break id;
+        }
+        assert!(
+            limite.elapsed() < DEADLINE,
+            "a imagem largada não chegou ao PostgreSQL em {DEADLINE:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    };
+
+    // A página do ficheiro mostra-a, e o `src` é local.
+    let detalhe = harness.open(&format!("/files/{file_id}")).await;
+    esperar_por(&detalhe, "oc-preview").await;
+    let html = detalhe.content().await.expect("conteúdo");
+    // A ligação é local **e por versão**: a imagem que se mostra é a da versão
+    // que se está a ver, e não «a que o ficheiro tem agora».
+    let versao: Uuid = sqlx::query_scalar(
+        "SELECT id FROM file_versions WHERE file_id = $1 ORDER BY sequence DESC LIMIT 1",
+    )
+    .bind(file_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("versão corrente");
+    assert!(
+        html.contains(&format!("/file-versions/{versao}/preview")),
+        "a pré-visualização não veio da origem do Workspace, ou não é da versão vista"
+    );
+    assert!(
+        !html.contains("127.0.0.1:9000"),
+        "o endereço do armazenamento apareceu na página"
+    );
+
+    // E o browser carregou-a mesmo: com a CSP a recusar, `naturalWidth` seria 0.
+    let largura: Option<f64> = detalhe
+        .evaluate(
+            "(() => { const img = document.querySelector('.oc-preview'); \
+              return img ? img.naturalWidth : -1; })()",
+        )
+        .await
+        .expect("medir a imagem")
+        .into_value()
+        .ok();
+    assert_eq!(
+        largura,
+        Some(1.0),
+        "a imagem não foi carregada pelo browser — a CSP recusou-a, ou não chegou"
+    );
+}
+
+// ── Extracção de conteúdo, pelo browser ──────────────────────────────────
+
+/// Um PDF de uma ou mais páginas, cada uma com o seu texto.
+#[must_use]
+fn pdf_com_paginas(paginas: &[&str]) -> Vec<u8> {
+    let mut objectos: Vec<String> = Vec::new();
+
+    // 1: catálogo. 2: árvore de páginas. Depois, por página, o objecto da
+    // página e o seu fluxo de conteúdo. Por fim, a fonte.
+    let primeira_pagina = 3;
+    let ids_pagina: Vec<usize> = (0..paginas.len())
+        .map(|i| primeira_pagina + i * 2)
+        .collect();
+    let id_fonte = primeira_pagina + paginas.len() * 2;
+
+    objectos.push("<< /Type /Catalog /Pages 2 0 R >>".to_owned());
+
+    let kids = ids_pagina
+        .iter()
+        .map(|id| format!("{id} 0 R"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    objectos.push(format!(
+        "<< /Type /Pages /Kids [{kids}] /Count {} >>",
+        paginas.len()
+    ));
+
+    for (indice, texto) in paginas.iter().enumerate() {
+        let id_conteudo = ids_pagina[indice] + 1;
+        objectos.push(format!(
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] \
+             /Contents {id_conteudo} 0 R \
+             /Resources << /Font << /F1 {id_fonte} 0 R >> >> >>"
+        ));
+
+        let escapado = texto
+            .replace('\\', "\\\\")
+            .replace('(', "\\(")
+            .replace(')', "\\)");
+        let fluxo = format!("BT /F1 12 Tf 72 700 Td ({escapado}) Tj ET");
+        objectos.push(format!(
+            "<< /Length {} >>\nstream\n{fluxo}\nendstream",
+            fluxo.len()
+        ));
+    }
+
+    objectos.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned());
+
+    let mut saida = String::from("%PDF-1.4\n");
+    let mut posicoes = Vec::with_capacity(objectos.len());
+    for (indice, corpo) in objectos.iter().enumerate() {
+        posicoes.push(saida.len());
+        saida.push_str(&format!("{} 0 obj\n{corpo}\nendobj\n", indice + 1));
+    }
+
+    let inicio_xref = saida.len();
+    saida.push_str(&format!("xref\n0 {}\n", objectos.len() + 1));
+    saida.push_str("0000000000 65535 f \n");
+    for posicao in &posicoes {
+        saida.push_str(&format!("{posicao:010} 00000 n \n"));
+    }
+    saida.push_str(&format!(
+        "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{inicio_xref}\n%%EOF\n",
+        objectos.len() + 1
+    ));
+
+    saida.into_bytes()
+}
+
+/// Corre a extracção como o worker a corre.
+///
+/// A viagem carrega pelo browser e depois faz o trabalho do worker a partir do
+/// teste: o worker é um processo à parte, e levantá-lo aqui provaria o
+/// `tokio::select!` dele em vez de provar a cadeia. O que se quer verificar é
+/// que o carregamento pelo ecrã produz um trabalho, que o trabalho produz
+/// conteúdo pesquisável, e que o ecrã mostra os dois estados pelo caminho.
+async fn correr_o_worker(harness: &Harness, file_id: Uuid) {
+    let Some(store) = store_de_teste() else {
+        return;
+    };
+    let versao: Uuid = sqlx::query_scalar(
+        "SELECT id FROM file_versions WHERE file_id = $1 ORDER BY sequence DESC LIMIT 1",
+    )
+    .bind(file_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("versão corrente");
+
+    let mut tx = harness.pool.begin().await.expect("tx");
+    ocinye_core::modules::files::extraction::process(
+        &mut tx,
+        &store,
+        versao,
+        &ocinye_observability::CorrelationIds::generate(),
+    )
+    .await
+    .expect("extracção");
+    tx.commit().await.expect("commit");
+}
+
+/// Uma pessoa carrega um PDF, e passa a encontrar uma frase que só existe lá
+/// dentro.
+///
+/// # A viagem
+///
+/// ```text
+/// Ficheiros → largar um PDF → «A processar»
+///           → worker lê o corpo → «Pesquisável»
+///           → Pesquisar a frase → resultado com excerto e p. N
+///           → abrir → o ficheiro certo
+/// ```
+///
+/// A frase não está no nome do ficheiro. Se estivesse, a viagem passava pela
+/// pesquisa de títulos e não provava nada sobre o corpo.
+#[tokio::test]
+async fn uma_frase_do_corpo_de_um_pdf_encontra_se_pelo_workspace() {
+    let harness = harness!();
+
+    if store_de_teste().is_none() {
+        exigir_armazenamento("uma_frase_do_corpo_de_um_pdf_encontra_se_pelo_workspace");
+        return;
+    }
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+
+    let frase = format!("delta{}", Uuid::new_v4().simple());
+    let pdf = pdf_com_paginas(&[
+        "pagina de abertura sem nada de especial",
+        &format!("coeficiente termoeletrico experimental {frase}"),
+    ]);
+    let b64 = {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD.encode(&pdf)
+    };
+
+    let pagina = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&pagina, "Largue ficheiros aqui").await;
+
+    let nome = format!("{}.pdf", unique_title("ensaio").replace(' ', "-"));
+    let script = format!(
+        "(() => {{ \
+           const forma = document.querySelector('form[data-drop=\"1\"]'); \
+           const cru = atob('{b64}'); \
+           const bytes = new Uint8Array(cru.length); \
+           for (let i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i); \
+           const ficheiro = new File([bytes], '{nome}', {{ type: 'application/pdf' }}); \
+           const dt = new DataTransfer(); \
+           dt.items.add(ficheiro); \
+           forma.dispatchEvent(new DragEvent('drop', \
+             {{ bubbles: true, cancelable: true, dataTransfer: dt }})); \
+           return 'largado'; }})()"
+    );
+    let _ = pagina.evaluate(script).await.expect("largar o PDF");
+
+    let limite = std::time::Instant::now();
+    let file_id = loop {
+        let encontrado: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND name = $2")
+                .bind(workspace_id)
+                .bind(&nome)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("procura do PDF");
+        if let Some(id) = encontrado {
+            break id;
+        }
+        assert!(
+            limite.elapsed() < DEADLINE,
+            "o PDF largado não chegou ao PostgreSQL em {DEADLINE:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    };
+
+    // Antes do worker: guardado, e a dizer que está a processar.
+    let detalhe = harness.open(&format!("/files/{file_id}")).await;
+    esperar_por(&detalhe, "A processar").await;
+
+    // Antes do worker, a frase não se encontra. É isto que distingue pesquisar
+    // o corpo de pesquisar metadata com outro nome.
+    let antes = harness.open(&format!("/search?q={frase}")).await;
+    let html = antes.content().await.expect("conteúdo");
+    assert!(
+        !html.contains("No conteúdo dos ficheiros"),
+        "a frase já era encontrável antes de o corpo ter sido lido"
+    );
+
+    correr_o_worker(&harness, file_id).await;
+
+    // Depois: pesquisável, e o ecrã di-lo.
+    let depois = harness.open(&format!("/files/{file_id}")).await;
+    esperar_por(&depois, "Pesquisável").await;
+
+    // E a pesquisa encontra-a, com excerto e página.
+    let resultados = harness.open(&format!("/search?q={frase}")).await;
+    esperar_por(&resultados, "No conteúdo dos ficheiros").await;
+    let html = resultados.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&nome),
+        "o resultado não nomeia o ficheiro certo"
+    );
+    assert!(
+        html.contains("p. 2"),
+        "o resultado não cita a página onde a frase está"
+    );
+    assert!(
+        html.contains(&format!("/files/{file_id}")),
+        "o resultado não leva ao ficheiro"
+    );
+}
+
+/// Um formato que se guarda mas não se lê diz isso, e não «o carregamento
+/// falhou».
+///
+/// > **Ficheiro guardado. Não foi possível tornar o conteúdo pesquisável.**
+#[tokio::test]
+async fn um_formato_sem_leitor_diz_que_o_ficheiro_esta_guardado() {
+    let harness = harness!();
+
+    if store_de_teste().is_none() {
+        exigir_armazenamento("um_formato_sem_leitor_diz_que_o_ficheiro_esta_guardado");
+        return;
+    }
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+
+    let pagina = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&pagina, "Largue ficheiros aqui").await;
+
+    let nome = format!("{}.png", unique_title("montagem").replace(' ', "-"));
+    let script = format!(
+        "(() => {{ \
+           const forma = document.querySelector('form[data-drop=\"1\"]'); \
+           const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='; \
+           const cru = atob(b64); \
+           const bytes = new Uint8Array(cru.length); \
+           for (let i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i); \
+           const ficheiro = new File([bytes], '{nome}', {{ type: 'image/png' }}); \
+           const dt = new DataTransfer(); \
+           dt.items.add(ficheiro); \
+           forma.dispatchEvent(new DragEvent('drop', \
+             {{ bubbles: true, cancelable: true, dataTransfer: dt }})); \
+           return 'largado'; }})()"
+    );
+    let _ = pagina.evaluate(script).await.expect("largar o PNG");
+
+    let limite = std::time::Instant::now();
+    let file_id = loop {
+        let encontrado: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND name = $2")
+                .bind(workspace_id)
+                .bind(&nome)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("procura do PNG");
+        if let Some(id) = encontrado {
+            break id;
+        }
+        assert!(
+            limite.elapsed() < DEADLINE,
+            "o PNG não chegou ao PostgreSQL"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    };
+
+    correr_o_worker(&harness, file_id).await;
+
+    let detalhe = harness.open(&format!("/files/{file_id}")).await;
+    esperar_por(&detalhe, "Conteúdo não pesquisável").await;
+    let html = detalhe.content().await.expect("conteúdo");
+
+    assert!(
+        html.contains("Ficheiro guardado"),
+        "a página não diz que o ficheiro está guardado"
+    );
+    assert!(
+        !html.to_lowercase().contains("carregamento falhou"),
+        "a página trata uma extracção sem leitor como um carregamento falhado"
+    );
+    // E continua a poder descarregar-se.
+    assert!(
+        html.contains(&format!("/files/{file_id}/download")),
+        "um ficheiro sem conteúdo pesquisável perdeu a descarga"
+    );
+}
+
+/// O que se vê é o que se pesquisa.
+///
+/// A pré-visualização e a pesquisa liam o mesmo ficheiro por caminhos
+/// diferentes — uma pelo extractor, a outra descarregando os bytes e
+/// descodificando-os outra vez. Dois caminhos para o mesmo texto divergem, e o
+/// dia em que divergissem era o dia em que alguém via no ecrã uma coisa
+/// diferente daquela que a pesquisa tinha encontrado.
+///
+/// Agora há um caminho só, e isso torna um PDF pré-visualizável de graça.
+#[tokio::test]
+async fn a_previsualizacao_mostra_o_mesmo_texto_que_a_pesquisa_encontra() {
+    let harness = harness!();
+
+    if store_de_teste().is_none() {
+        exigir_armazenamento("a_previsualizacao_mostra_o_mesmo_texto_que_a_pesquisa_encontra");
+        return;
+    }
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+
+    let frase = format!("delta{}", Uuid::new_v4().simple());
+    let pdf = pdf_com_paginas(&[&format!("medicao registada {frase}")]);
+    let b64 = {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD.encode(&pdf)
+    };
+
+    let pagina = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&pagina, "Largue ficheiros aqui").await;
+
+    let nome = format!("{}.pdf", unique_title("previsto").replace(' ', "-"));
+    let script = format!(
+        "(() => {{ \
+           const forma = document.querySelector('form[data-drop=\"1\"]'); \
+           const cru = atob('{b64}'); \
+           const bytes = new Uint8Array(cru.length); \
+           for (let i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i); \
+           const f = new File([bytes], '{nome}', {{ type: 'application/pdf' }}); \
+           const dt = new DataTransfer(); dt.items.add(f); \
+           forma.dispatchEvent(new DragEvent('drop', \
+             {{ bubbles: true, cancelable: true, dataTransfer: dt }})); \
+           return 'largado'; }})()"
+    );
+    let _ = pagina.evaluate(script).await.expect("largar");
+
+    let limite = std::time::Instant::now();
+    let file_id = loop {
+        let encontrado: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND name = $2")
+                .bind(workspace_id)
+                .bind(&nome)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("procura");
+        if let Some(id) = encontrado {
+            break id;
+        }
+        assert!(
+            limite.elapsed() < DEADLINE,
+            "o PDF não chegou ao PostgreSQL"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    };
+
+    // Antes de o corpo ser lido, não há texto para mostrar — e a página não
+    // inventa nenhum.
+    let antes = harness.open(&format!("/files/{file_id}")).await;
+    let html = antes.content().await.expect("conteúdo");
+    assert!(
+        !html.contains(&frase),
+        "a página mostrou texto de um ficheiro que ainda não tinha sido lido"
+    );
+
+    correr_o_worker(&harness, file_id).await;
+
+    // Depois, a mesma frase que a pesquisa encontra está no ecrã.
+    let depois = harness.open(&format!("/files/{file_id}")).await;
+    esperar_por(&depois, &frase).await;
+
+    let resultados = harness.open(&format!("/search?q={frase}")).await;
+    esperar_por(&resultados, "No conteúdo dos ficheiros").await;
+}
+
+/// Corre o indexador semântico, como o worker o corre.
+async fn indexar_semanticamente(harness: &Harness, file_id: Uuid) {
+    let versao: Uuid = sqlx::query_scalar(
+        "SELECT id FROM file_versions WHERE file_id = $1 ORDER BY sequence DESC LIMIT 1",
+    )
+    .bind(file_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("versão corrente");
+
+    let provider =
+        ocinye_core::modules::intelligence::embeddings::DeterministicEmbeddings::default();
+    let mut tx = harness.pool.begin().await.expect("tx");
+    ocinye_core::modules::files::embedding::process(&mut tx, &provider, versao)
+        .await
+        .expect("indexação semântica");
+    tx.commit().await.expect("commit");
+}
+
+/// Uma paráfrase encontra o documento, e a pesquisa textual sozinha não a
+/// encontrava.
+///
+/// # O controlo que torna isto uma prova
+///
+/// A pergunta não contém a frase do documento. Antes da indexação semântica, a
+/// pesquisa não devolve nada — e é isso que separa «o semântico funciona» de
+/// «os dois encontraram e eu não sei qual trabalhou».
+#[tokio::test]
+async fn uma_parafrase_encontra_o_documento_pelo_workspace() {
+    let harness = harness!();
+
+    if store_de_teste().is_none() {
+        exigir_armazenamento("uma_parafrase_encontra_o_documento_pelo_workspace");
+        return;
+    }
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+
+    let alfa = format!("alfa{}", Uuid::new_v4().simple());
+    let beta = format!("beta{}", Uuid::new_v4().simple());
+    let pdf = pdf_com_paginas(&[&format!("{alfa} {beta} medicao registada no ensaio")]);
+    let b64 = {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD.encode(&pdf)
+    };
+
+    let pagina = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&pagina, "Largue ficheiros aqui").await;
+
+    let nome = format!("{}.pdf", unique_title("semantico").replace(' ', "-"));
+    let script = format!(
+        "(() => {{ \
+           const forma = document.querySelector('form[data-drop=\"1\"]'); \
+           const cru = atob('{b64}'); \
+           const bytes = new Uint8Array(cru.length); \
+           for (let i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i); \
+           const f = new File([bytes], '{nome}', {{ type: 'application/pdf' }}); \
+           const dt = new DataTransfer(); dt.items.add(f); \
+           forma.dispatchEvent(new DragEvent('drop', \
+             {{ bubbles: true, cancelable: true, dataTransfer: dt }})); \
+           return 'largado'; }})()"
+    );
+    let _ = pagina.evaluate(script).await.expect("largar");
+
+    let limite = std::time::Instant::now();
+    let file_id = loop {
+        let encontrado: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND name = $2")
+                .bind(workspace_id)
+                .bind(&nome)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("procura");
+        if let Some(id) = encontrado {
+            break id;
+        }
+        assert!(
+            limite.elapsed() < DEADLINE,
+            "o PDF não chegou ao PostgreSQL"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    };
+
+    correr_o_worker(&harness, file_id).await;
+
+    // A pergunta: uma das marcas mais uma palavra que o documento não tem.
+    // `websearch_to_tsquery` exige todos os termos, pelo que o lexical falha.
+    let pergunta = format!("{alfa} inexistentepalavra");
+
+    let antes = harness.open(&format!("/search?q={pergunta}")).await;
+    let html = antes.content().await.expect("conteúdo");
+    assert!(
+        !html.contains(&nome),
+        "o controlo falhou: a pesquisa textual já encontrava isto sozinha"
+    );
+
+    indexar_semanticamente(&harness, file_id).await;
+
+    let depois = harness.open(&format!("/search?q={pergunta}")).await;
+    esperar_por(&depois, "No conteúdo dos ficheiros").await;
+    let html = depois.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&nome),
+        "a paráfrase não encontrou o documento"
+    );
+    assert!(
+        html.contains(&format!("/files/{file_id}")),
+        "o resultado não leva ao ficheiro certo"
+    );
+    assert!(
+        html.contains("v1"),
+        "o resultado não cita a versão de onde saiu"
+    );
+}
+
+/// Sem pesquisa semântica, a interface di-lo — e não diz que está partida.
+#[tokio::test]
+async fn a_pesquisa_semantica_indisponivel_nao_e_um_erro() {
+    let harness = harness!();
+
+    let (_, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let pagina = harness.open("/search?q=hidrogenio").await;
+    let html = pagina.content().await.expect("conteúdo");
+
+    // O harness **tem** provider, por isso o que se afirma aqui é o outro lado:
+    // o modo semântico é declarado, com o seu estado, e nunca como avaria.
+    assert!(
+        html.contains("Semântica"),
+        "o modo semântico não está declarado na interface"
+    );
+    for palavra in ["degradad", "avaria", "Erro na pesquisa"] {
+        assert!(
+            !html.contains(palavra),
+            "a interface descreve a pesquisa como partida: «{palavra}»"
+        );
+    }
+    // E a textual continua a funcionar, que é o que não pode cair.
+    assert!(
+        html.contains("Pesquisar no Ocinye"),
+        "a página de pesquisa não abriu"
+    );
+}
+
+/// Uma citação continua a abrir os bytes que foram citados.
+///
+/// # A viagem
+///
+/// ```text
+/// carregar PDF → extrair → pesquisar uma frase do corpo
+///   → o resultado cita v1 · p. 1
+///   → clicar → abre a v1, e diz que é a v1
+///   → carregar v2
+///   → voltar à mesma citação → continua a abrir a v1
+/// ```
+///
+/// # O que isto fecha
+///
+/// Que a recuperação não quebrou a natureza versionada da memória
+/// institucional. Uma citação que apontasse para «o ficheiro» descreveria, no
+/// dia seguinte, um texto que ninguém leu.
+#[tokio::test]
+async fn uma_citacao_continua_a_abrir_a_versao_que_citou() {
+    let harness = harness!();
+
+    if store_de_teste().is_none() {
+        exigir_armazenamento("uma_citacao_continua_a_abrir_a_versao_que_citou");
+        return;
+    }
+
+    let (person_id, credenciais) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let _ = &credenciais;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+
+    let so_na_v1 = format!("delta{}", Uuid::new_v4().simple());
+    let so_na_v2 = format!("delta{}", Uuid::new_v4().simple());
+
+    let largar = |pagina: &Page, nome: String, bytes: Vec<u8>| {
+        let b64 = {
+            use base64::Engine as _;
+            base64::engine::general_purpose::STANDARD.encode(&bytes)
+        };
+        let script = format!(
+            "(() => {{ \
+               const forma = document.querySelector('form[data-drop=\"1\"]'); \
+               const cru = atob('{b64}'); \
+               const b = new Uint8Array(cru.length); \
+               for (let i = 0; i < cru.length; i++) b[i] = cru.charCodeAt(i); \
+               const f = new File([b], '{nome}', {{ type: 'application/pdf' }}); \
+               const dt = new DataTransfer(); dt.items.add(f); \
+               forma.dispatchEvent(new DragEvent('drop', \
+                 {{ bubbles: true, cancelable: true, dataTransfer: dt }})); \
+               return 'largado'; }})()"
+        );
+        let pagina = pagina.clone();
+        async move { pagina.evaluate(script).await.expect("largar") }
+    };
+
+    let lista = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&lista, "Largue ficheiros aqui").await;
+
+    let nome = format!("{}.pdf", unique_title("relatorio").replace(' ', "-"));
+    let _ = largar(
+        &lista,
+        nome.clone(),
+        pdf_com_paginas(&[&format!("conclusao do ensaio {so_na_v1}")]),
+    )
+    .await;
+
+    let limite = std::time::Instant::now();
+    let file_id = loop {
+        let encontrado: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND name = $2")
+                .bind(workspace_id)
+                .bind(&nome)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("procura");
+        if let Some(id) = encontrado {
+            break id;
+        }
+        assert!(
+            limite.elapsed() < DEADLINE,
+            "o PDF não chegou ao PostgreSQL"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    };
+    correr_o_worker(&harness, file_id).await;
+
+    let v1: Uuid = sqlx::query_scalar(
+        "SELECT id FROM file_versions WHERE file_id = $1 ORDER BY sequence LIMIT 1",
+    )
+    .bind(file_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("v1");
+
+    // A pesquisa cita a versão exacta e a página.
+    let resultados = harness.open(&format!("/search?q={so_na_v1}")).await;
+    esperar_por(&resultados, "No conteúdo dos ficheiros").await;
+    let html = resultados.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&format!("/files/{file_id}?version={v1}")),
+        "o resultado não cita a versão exacta: a ligação leva ao ficheiro e não à versão"
+    );
+    assert!(
+        html.contains("v1"),
+        "o resultado não mostra que versão citou"
+    );
+
+    // Clicar abre a v1, e a página diz que v1 é o que se está a ver.
+    let citada = harness
+        .open(&format!("/files/{file_id}?version={v1}&page=1"))
+        .await;
+    esperar_por(&citada, "A ver a versão 1").await;
+    let html = citada.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&so_na_v1),
+        "abrir a citação não mostrou o texto citado"
+    );
+
+    // Uma versão nova, pelo formulário do próprio ficheiro.
+    //
+    // Largar outra vez na zona de carregamento criaria **outro ficheiro** com o
+    // mesmo nome, que é o comportamento certo — o nome não é identidade. Quem
+    // quer versionar diz-lo, e diz onde.
+    let pagina_do_ficheiro = harness.open(&format!("/files/{file_id}")).await;
+    esperar_por(&pagina_do_ficheiro, "Carregar nova versão").await;
+
+    let b64 = {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD
+            .encode(pdf_com_paginas(&[&format!("conclusao revista {so_na_v2}")]))
+    };
+    let script = format!(
+        "(() => {{ \
+           const campo = document.querySelector('#oc-version-file'); \
+           if (!campo) return 'sem campo'; \
+           const cru = atob('{b64}'); \
+           const b = new Uint8Array(cru.length); \
+           for (let i = 0; i < cru.length; i++) b[i] = cru.charCodeAt(i); \
+           const f = new File([b], '{nome}', {{ type: 'application/pdf' }}); \
+           const dt = new DataTransfer(); dt.items.add(f); \
+           campo.files = dt.files; \
+           campo.form.submit(); \
+           return 'submetido'; }})()"
+    );
+    let submetido: Option<String> = pagina_do_ficheiro
+        .evaluate(script)
+        .await
+        .expect("submeter a versão nova")
+        .into_value()
+        .ok();
+    assert_eq!(
+        submetido.as_deref(),
+        Some("submetido"),
+        "o formulário de nova versão não aceitou o ficheiro"
+    );
+
+    let limite = std::time::Instant::now();
+    loop {
+        let quantas: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM file_versions WHERE file_id = $1")
+                .bind(file_id)
+                .fetch_one(&harness.pool)
+                .await
+                .expect("contagem");
+        if quantas >= 2 {
+            break;
+        }
+        assert!(limite.elapsed() < DEADLINE, "a segunda versão não chegou");
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+    correr_o_worker(&harness, file_id).await;
+
+    // O ficheiro, aberto sem citação, mostra a versão corrente.
+    let corrente = harness.open(&format!("/files/{file_id}")).await;
+    esperar_por(&corrente, &so_na_v2).await;
+
+    // E a mesma citação continua a abrir a v1.
+    let outra_vez = harness
+        .open(&format!("/files/{file_id}?version={v1}&page=1"))
+        .await;
+    esperar_por(&outra_vez, "A ver a versão 1").await;
+    let html = outra_vez.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&so_na_v1),
+        "a citação deixou de abrir os bytes que citou"
+    );
+    assert!(
+        !html.contains(&so_na_v2),
+        "a citação derivou para a versão corrente"
+    );
+    assert!(
+        html.contains("Esta não é a versão corrente"),
+        "a página mostra uma versão antiga sem o dizer"
+    );
 }

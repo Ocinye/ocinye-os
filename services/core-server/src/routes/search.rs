@@ -15,6 +15,13 @@ use crate::state::AppState;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/search", get(run_search))
+        // O corpo dos ficheiros, num caminho próprio.
+        //
+        // Não é `/search` com um parâmetro: um resultado de corpo transporta
+        // uma coisa que os outros não têm — onde no documento a frase está — e
+        // fundi-los num único ranking obrigaria a interface a escolher qual das
+        // duas afirmações mostrar.
+        .route("/search/bodies", get(run_body_search))
         .route("/search/semantic-availability", get(semantic_availability))
 }
 
@@ -93,6 +100,68 @@ async fn run_search(
     )))
 }
 
+#[derive(Serialize)]
+struct BodyHitView {
+    file_id: Uuid,
+    file_version_id: Uuid,
+    /// O número da versão, para se poder dizer «v2» a uma pessoa.
+    sequence: i32,
+    name: String,
+    /// O trecho, com os termos realçados.
+    excerpt: String,
+    /// Onde está: `{"page": 4}` para PDF.
+    locator: serde_json::Value,
+    classification: String,
+    workspace_id: Uuid,
+}
+
+/// Pesquisa o corpo dos ficheiros institucionais.
+///
+/// Lexical, e sem modelo nenhum. A visibilidade decide-se contra o estado
+/// corrente do ficheiro e do ambiente — o índice descobre candidatos e não
+/// autoriza coisa nenhuma.
+async fn run_body_search(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Query(query): Query<SearchQuery>,
+) -> Result<Json<Page<BodyHitView>>, ApiError> {
+    let page = PageRequest {
+        page: query.page.unwrap_or(1),
+        page_size: query
+            .page_size
+            .unwrap_or(ocinye_contracts::page::DEFAULT_PAGE_SIZE),
+    };
+
+    // Híbrida quando há provider, lexical quando não há. É a mesma pesquisa:
+    // sem embeddings devolve exactamente o que sempre devolveu.
+    let (hits, total) = search::search_hybrid(
+        &state.pool,
+        &principal,
+        &query.q,
+        query.workspace_id,
+        page,
+        state.embeddings.as_deref(),
+    )
+    .await?;
+
+    Ok(Json(Page::new(
+        hits.into_iter()
+            .map(|hit| BodyHitView {
+                file_id: hit.file_id,
+                file_version_id: hit.file_version_id,
+                sequence: hit.sequence,
+                name: hit.name,
+                excerpt: hit.excerpt,
+                locator: hit.locator,
+                classification: hit.classification,
+                workspace_id: hit.workspace_id,
+            })
+            .collect(),
+        page,
+        total,
+    )))
+}
+
 /// Report whether semantic search can be offered.
 ///
 /// With no Ocinye AI node there are no embeddings, and this says so rather than
@@ -102,6 +171,6 @@ async fn semantic_availability(
     CurrentPrincipal(principal): CurrentPrincipal,
 ) -> Result<Json<search::SemanticAvailability>, ApiError> {
     Ok(Json(
-        search::semantic_availability(&state.pool, &principal).await?,
+        search::semantic_availability(&state.pool, &principal, state.embeddings.as_deref()).await?,
     ))
 }

@@ -35,6 +35,7 @@ Cada operação aparece na sua linha. Duas operações distintas nunca são agru
 | `knowledge::update_note` | knowledge | Addressable | `knowledge.note.revise` | — | — |
 | `knowledge::get_note` | knowledge | Addressable | `knowledge.note.read` | — | — |
 | `knowledge::get_document` | knowledge | Addressable | `knowledge.document.read` | — | — |
+| `files::read_content` | files | Addressable | `files.content.read` | — | — |
 | `knowledge::link_objects` | knowledge | Addressable | `knowledge.link.create` | — | — |
 | `knowledge::list_links` | knowledge | Addressable | `knowledge.links.list` | — | — |
 | `search::search` | knowledge | Addressable | `knowledge.search` | — | — |
@@ -82,12 +83,12 @@ Cada operação aparece na sua linha. Duas operações distintas nunca são agru
 
 | | |
 |---|---|
-| Operações institucionais significativas | **65** |
-| `Addressable` | **49** |
+| Operações institucionais significativas | **66** |
+| `Addressable` | **50** |
 | `NonDelegable` | **15** |
 | `NotImplemented` | **1** |
 | Sem classificação | **0** |
-| Capabilities no registry | **49** |
+| Capabilities no registry | **50** |
 
 ## Fronteiras de confiança
 

@@ -44,6 +44,17 @@ async fn main() -> anyhow::Result<()> {
     let pool = db::connect(&config).await.context("database connection")?;
     tracing::info!("Ocinye Worker started");
 
+    // O armazenamento, quando a instalação o tem. `None` é um estado legítimo
+    // — uma instalação sem object storage corre —, e o handler que precisa de
+    // bytes falha o evento em vez de o dar por feito: o evento sobrevive, e é
+    // processado no dia em que houver armazenamento.
+    let store = ocinye_core::storage::ObjectStore::new(config.storage.clone());
+    if store.is_none() {
+        tracing::warn!(
+            "no object store configured; content extraction will retry until one exists"
+        );
+    }
+
     let offline_after = i64::try_from(config.compute.node_offline_after.as_secs()).unwrap_or(120);
 
     let mut maintenance = tokio::time::interval(MAINTENANCE_INTERVAL);
@@ -127,7 +138,7 @@ async fn main() -> anyhow::Result<()> {
                     Err(error) => tracing::error!(error = %error, "mail ingestion pass failed"),
                 }
             }
-            drained = outbox::drain(&pool, BATCH_SIZE) => {
+            drained = outbox::drain(&pool, BATCH_SIZE, store.as_ref(), None) => {
                 match drained {
                     // An empty pass means idle: back off rather than spin.
                     Ok(0) => tokio::time::sleep(IDLE_POLL_INTERVAL).await,

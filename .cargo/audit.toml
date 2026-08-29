@@ -29,9 +29,33 @@ ignore = [
 #   RUSTSEC-2024-0436  paste               não mantido, via wasmtime
 #   RUSTSEC-2026-0173  proc-macro-error2   não mantido, via leptos
 #   RUSTSEC-2026-0253  lru                 unsound em `pop()`, via aws-sdk-s3
+#   RUSTSEC-2024-0355  ttf-parser          não mantido, via pdf-extract → lopdf
 #
 # O `fxhash` (RUSTSEC-2025-0057) saiu desta lista em 2026-08-25: a `wasmtime`
 # 48 deixou de o arrastar. Não foi silenciado — deixou de existir na árvore.
 #
-# Nenhum tem correcção disponível na versão que a árvore resolve, e nenhum é
-# alcançado por entrada não confiável através de código do Ocinye.
+# Nenhum tem correcção disponível na versão que a árvore resolve.
+#
+# O `ttf-parser` **é** diferente dos outros, e a diferença fica escrita em vez
+# de ser diluída na frase que cobria os anteriores: ele é alcançado por entrada
+# não confiável. Entrou em 2026-08-29 com a extracção de conteúdo, e lê as
+# fontes embutidas num PDF que um membro carregou — que é exactamente o tipo de
+# bytes que ninguém controla.
+#
+# O que existe em vez de uma correcção a montante:
+#
+#   - é Rust seguro em memória, pelo que um documento hostil não corrompe
+#     memória nem executa código;
+#   - a leitura inteira do PDF corre dentro de `catch_unwind`
+#     (`modules::files::extraction`), porque o que estes parsers fazem com
+#     documentos estranhos é entrar em pânico — e um pânico no worker levaria
+#     consigo o lote de eventos;
+#   - a extracção corre no worker e não no caminho de um pedido, pelo que uma
+#     falha não atinge quem carregou nem ninguém a ler;
+#   - falhar a leitura não invalida o ficheiro: fica `FAILED`, guardado e
+#     descarregável.
+#
+# «Não mantido» aqui significa que um defeito futuro não terá correcção a
+# montante. Sai desta lista quando `lopdf` deixar de o arrastar, ou quando a
+# extracção de PDF passar a correr dentro do Capability Runtime — que é o sítio
+# onde este repositório já isola parsing de formatos que vêm de fora.

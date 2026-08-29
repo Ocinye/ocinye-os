@@ -164,6 +164,15 @@ async fn main() -> anyhow::Result<()> {
     // (ADR-0012 §9).
     let realtime = Arc::new(ocinye_core::realtime::Realtime::connect(&config.redis_url).await);
 
+    // O provider de embeddings, quando configurado. Sem ele a pesquisa
+    // semântica declara-se indisponível e a lexical continua inteira.
+    let embeddings: Option<
+        Arc<dyn ocinye_core::modules::intelligence::embeddings::EmbeddingProvider>,
+    > = ocinye_core::modules::intelligence::embeddings::from_config(&config.ai).map(Arc::from);
+    if embeddings.is_none() {
+        tracing::info!("no embedding provider configured; semantic search is unavailable");
+    }
+
     let state = AppState {
         pool,
         config: Arc::new(config),
@@ -174,6 +183,7 @@ async fn main() -> anyhow::Result<()> {
         // an adapter replaces this and **nothing above it changes**
         // (ADR-0002, ADR-0301).
         inference: Arc::new(ocinye_core::modules::intelligence::NoProvider),
+        embeddings,
         mail_probe: Arc::clone(&mail_registry)
             as Arc<dyn ocinye_core::modules::mail::provider::CredentialProbe>,
         mail_registry,

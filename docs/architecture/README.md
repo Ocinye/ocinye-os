@@ -397,6 +397,35 @@ servidor não substitui a instituição.
 Detalhe: [ciclo de vida científico, proveniência e linhagem](scientific-lifecycle.md)
 e [artefactos de modelo](../adrs/0203-institutional-model-artifacts.md).
 
+### Guardar não é afirmar
+
+A mesma regra, uma camada abaixo. Um ficheiro carregado é um ficheiro: tem
+identidade, versões imutáveis, classificação e governação pelo Core. **Não** é
+um documento, um dataset nem uma fonte — essas são afirmações, e alguém tem de
+as fazer.
+
+> **Carregar um ficheiro não é o mesmo que afirmar conhecimento
+> institucional.**
+
+Abaixo da versão, tudo é representação derivada e nada é autoridade:
+
+```text
+File                    identidade e governação
+ └── FileVersion        os bytes exactos, imutáveis
+      ├── Extraction    uma leitura, por um extractor identificado
+      │    └── Chunks   o corpo, pesquisável
+      └── EmbeddingSet  um espaço, por uma identidade de modelo
+           └── ChunkEmbeddings
+```
+
+Uma pasta é navegação dentro de um contentor de autoridade. Um índice descobre
+candidatos e nunca autoriza. Um vector não é conhecimento. Um excerto entregue a
+um modelo é `data`, nunca instrução.
+
+> **O ficheiro é governado. A versão identifica os bytes exactos. O
+> armazenamento conserva-os. Os índices ajudam a encontrá-los. A IA ajuda a
+> utilizá-los. Nenhuma dessas camadas substitui a autoridade do Core.**
+
 ### Comunicação não é conhecimento
 
 Um email, uma mensagem ou uma reunião não se tornam automaticamente evidência

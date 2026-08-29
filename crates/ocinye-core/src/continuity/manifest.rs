@@ -165,6 +165,17 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     ("notes", Comparacao::Identidades),
     ("note_revisions", Comparacao::Identidades),
     ("documents", Comparacao::Identidades),
+    // Um ficheiro institucional e as suas versões. As identidades viajam
+    // porque são o que a proveniência aponta: um resultado sustentado pela
+    // versão 2 de um relatório continua a dizer «versão 2» depois de existirem
+    // sete, e um identificador refeito no destino apagaria essa frase.
+    ("files", Comparacao::Identidades),
+    ("file_versions", Comparacao::Identidades),
+    // A árvore de navegação. Viaja por identidade porque os ficheiros apontam
+    // para ela: um restauro que a recriasse com identificadores novos deixaria
+    // todos os ficheiros na raiz, e a organização que alguém construiu ao longo
+    // de anos desapareceria sem que nada falhasse.
+    ("folders", Comparacao::Identidades),
     ("datasets", Comparacao::Identidades),
     ("dataset_versions", Comparacao::Identidades),
     ("dataset_files", Comparacao::Identidades),
@@ -227,6 +238,58 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
         ),
     ),
     // ── Deliberadamente fora ────────────────────────────────────────────
+    //
+    // A extracção e os seus pedaços são **derivados reconstruíveis**: saem de
+    // `FileVersion` + os bytes + a definição do extractor, e as três coisas são
+    // duráveis. Exigir que coincidissem faria uma reprocessamento legítimo —
+    // um parser corrigido, um formato novo suportado — passar por perda de
+    // memória institucional.
+    //
+    // A reconstrução é provada, e não afirmada: `content_extraction.rs` apaga
+    // a extracção e o índice, reprocessa, e exige que a mesma frase volte a ser
+    // encontrável. Os identificadores não têm de ser os mesmos; o significado
+    // observável tem.
+    (
+        "file_extractions",
+        Comparacao::Fora(
+            "leitura derivada de uma versão, reconstruível a partir dos bytes e \
+             do extractor. Um reprocessamento legítimo não é perda",
+        ),
+    ),
+    (
+        "file_chunks",
+        Comparacao::Fora(
+            "projecção lexical do corpo, reconstruível com a extracção. Não é \
+             autoridade de coisa nenhuma e não guarda classificação",
+        ),
+    ),
+    // Os conjuntos de embeddings são derivados reconstruíveis, e a resposta
+    // não foi escrita por conveniência: reconstroem-se a partir de
+    // `FileVersion` + a extracção + a identidade do modelo, e as três estão
+    // guardadas. `semantic_retrieval.rs` apaga os conjuntos, confirma que a
+    // pesquisa semântica deixa de os encontrar, reprocessa, e exige a mesma
+    // fonte no mesmo sítio.
+    //
+    // A condição é a **reacquiribilidade do modelo**. Se um dia a Ocinye
+    // treinar o seu — ou depender de um que deixe de existir —, a extracção
+    // continua reconstruível mas o **espaço** deixa de ser, e esta decisão
+    // muda. É a fronteira que a ADR-0203 já descreve, e é lá que ela se
+    // resolve.
+    (
+        "embedding_sets",
+        Comparacao::Fora(
+            "conjunto derivado, reconstruível a partir da extracção e de uma \
+             identidade de modelo guardada. Um reprocessamento legítimo não é \
+             perda — enquanto o modelo for readquirível",
+        ),
+    ),
+    (
+        "chunk_embeddings",
+        Comparacao::Fora(
+            "projecção vectorial dos pedaços, reconstruível com o conjunto. Não \
+             é autoridade e não guarda classificação",
+        ),
+    ),
     (
         "search_documents",
         Comparacao::Fora(

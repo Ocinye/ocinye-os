@@ -48,13 +48,22 @@ Os quatro primeiros são apurados em tempo real pelo Core e servidos em
 | **Protótipos, publicações, propriedade intelectual** | — | — | n/a | `PLANNED` |
 | **Bibliografia** | implementado | lista | n/a | `AVAILABLE` |
 | **Notas, documentos, datasets** | implementado | leitura | MinIO local; nenhum armazenamento institucional | `AVAILABLE` em desenvolvimento |
+| **Ficheiros institucionais** — `File`, versões, pastas | implementado | ecrã Ficheiros: navegação, pastas, largar, carregar, detalhes, histórico, descarga | MinIO local; nenhum armazenamento institucional | `AVAILABLE` em desenvolvimento |
+| **Pré-visualização de conteúdo** | n/a | texto; os outros tipos declaram-se não pré-visualizáveis | decisão de CSP por tomar para imagens | `AVAILABLE` (parcial, por desenho) |
+| **Extracção de conteúdo** — PDF e texto | worker, via outbox; estados separados do armazenamento | estado no ecrã do ficheiro | MinIO local | `AVAILABLE` em desenvolvimento |
+| **Pesquisa lexical do corpo** | implementado, sem modelo de IA | secção própria, com excerto e página | PostgreSQL FTS | `AVAILABLE` |
+| **OCR de documentos digitalizados** | — | um PDF sem texto declara-se não pesquisável | n/a | `PLANNED` |
 | **Pesquisa textual** | implementado | implementado | PostgreSQL FTS | `AVAILABLE` |
-| **Pesquisa semântica** | preparado | declarada indisponível | sem embeddings | `NO_RESOURCE` |
+| **Pesquisa semântica do corpo** | implementado, com identidade de modelo fechada | declarada com a razão, nunca como avaria | sem provider configurado | `NOT_CONFIGURED` |
+| **Recuperação híbrida** | lexical + semântica, fusão por posição recíproca | integrada no Search universal | — | `AVAILABLE` (lexical inteira sem provider) |
+| **Conteúdo de ficheiros para agentes** | `files.content.read`, com tectos de exposição | — | n/a | `AVAILABLE` |
+| **Citações com versão e localizador** | envelope e resultados transportam `File` + `FileVersion` + locator | resultado abre a versão exacta, reavaliando autoridade | n/a | `AVAILABLE` |
+| **Resposta do Prompt com citações** | execução de inferência não activada | — | sem nó de IA | `PLANNED` |
 | **Agentes de IA** | implementado | lista, criação | não requer nó | `AVAILABLE` |
 | **Execução de agentes** | — | estado derivado | sem nó de IA | `NO_RESOURCE` |
 | **Prompt Ocinye** | endpoint implementado | implementado | sem nó de IA | `NO_RESOURCE` |
 | **Inferência (IA geral/coding/reasoning)** | Gateway preparado | integrado | sem nó de IA | `NO_RESOURCE` |
-| **Embeddings** | preparado | — | sem nó de IA | `NO_RESOURCE` |
+| **Embeddings** | contrato próprio, exercido por provider determinístico | — | sem provider real | `NOT_CONFIGURED` |
 | **Correio — modelo, permissões, política** | implementado | n/a | n/a | `AVAILABLE` |
 | **Correio — leitura e envio** | implementado | 7 ecrãs | serviço ausente | `NOT_CONFIGURED` |
 | **Correio — transporte IMAP** | implementado | n/a | serviço ausente | `NOT_CONFIGURED` |

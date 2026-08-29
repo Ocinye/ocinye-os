@@ -270,6 +270,16 @@ fn knowledge() -> Vec<OperationEntry> {
             "knowledge.document.read",
             "Ler os metadados de um documento.",
         ),
+        // Ler o **conteúdo** de um ficheiro. Separada da leitura de metadata de
+        // um documento, e não uma opção dela: são duas exposições diferentes, e
+        // fundi-las faria «ver que existe» e «obter o que diz» partilhar uma
+        // decisão de autorização.
+        addressable(
+            "files",
+            "files::read_content",
+            "files.content.read",
+            "Ler o conteúdo extraído de um ficheiro institucional.",
+        ),
         addressable(
             "knowledge",
             "knowledge::link_objects",

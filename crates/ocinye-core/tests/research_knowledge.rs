@@ -2756,10 +2756,18 @@ async fn a_vista_institucional_de_documentos_respeita_artefacto_e_ambiente() {
         .expect("objecto de armazenamento");
 
         sqlx::query(
-            "INSERT INTO documents
-                 (organisation_id, unit_id, workspace_id, title, classification,
-                  storage_object_id)
-             VALUES ($1, $2, $3, $4, $5, $6)",
+            // O ficheiro nasce com o documento (migration 0020).
+            "WITH f AS (
+                 INSERT INTO files (organisation_id, unit_id, workspace_id, name, classification)
+                 SELECT $1, $2, $3, 'anexo.pdf', $5 RETURNING id
+             ),
+             v AS (
+                 INSERT INTO file_versions (file_id, sequence, storage_object_id)
+                 SELECT f.id, 1, $6 FROM f
+             )
+             INSERT INTO documents
+                 (organisation_id, unit_id, workspace_id, title, file_id)
+             SELECT $1, $2, $3, $4, f.id FROM f",
         )
         .bind(world.organisation_id)
         .bind(unit)
@@ -4144,6 +4152,11 @@ async fn sem_armazenamento_registado_um_anexo_nao_deixa_ficheiro() {
     let store = match test_store() {
         Some(store) => store,
         None => {
+            assert!(
+                std::env::var("CI").is_err(),
+                "não há armazenamento, e isto é a CI: estas provas exigem um \
+                 object store. Defina OCINYE_TEST_STORAGE_ENDPOINT."
+            );
             eprintln!("skipping: OCINYE_TEST_STORAGE_ENDPOINT is not set");
             return;
         }

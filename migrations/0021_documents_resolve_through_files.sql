@@ -1,0 +1,36 @@
+-- O documento resolve o seu conteúdo exclusivamente pelo ficheiro.
+--
+-- # O que esta migration fecha
+--
+-- A migration 0020 acrescentou `documents.file_id` e deixou
+-- `documents.storage_object_id` no sítio, de propósito: os leitores ainda
+-- dependiam dela, e mudar a estrutura e a leitura no mesmo movimento tiraria a
+-- forma de saber qual das duas partiu alguma coisa.
+--
+-- Os leitores mudaram. O objecto de um documento resolve-se pela identidade
+-- estável do ficheiro e pela sua versão corrente — a de maior `sequence` — e
+-- nenhum código de produção lê a coluna antiga.
+--
+-- Enquanto as duas existiram, um teste exigiu que dissessem o mesmo. É esse
+-- teste que esta migration torna desnecessário, porque deixa de haver duas
+-- coisas para comparar.
+--
+-- > **O conteúdo de um documento resolve-se exclusivamente pela identidade
+-- > estável do ficheiro e pela sua história imutável de versões.**
+--
+-- # Porque a ordem importou
+--
+-- Primeiro a estrutura. Depois a escrita nas duas. Depois a leitura pela nova.
+-- Depois a prova de que ninguém lê a antiga. Só então isto.
+--
+-- Cada passo foi observável sozinho. Se algum tivesse partido alguma coisa,
+-- saber-se-ia qual — que é a diferença entre uma migração e um salto.
+--
+-- # O que fica protegido depois disto
+--
+-- A restrição que impede apagar bytes por baixo de uma versão citada passa a
+-- vir só de `file_versions`, e não da coluna que desaparece aqui. Isso foi
+-- provado antes desta migration existir, num ficheiro sem documento nenhum —
+-- porque feito sobre um documento teria passado pela razão errada.
+
+ALTER TABLE documents DROP COLUMN storage_object_id;

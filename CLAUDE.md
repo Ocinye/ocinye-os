@@ -49,7 +49,7 @@ sem que nada falhe.
   3 serviços (`core-server`, `worker`, `node-agent`) e 1 aplicação
   (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED`, não deployado.** 131 caminhos e 155 operações
+- **Ocinye Core: `IMPLEMENTED`, não deployado.** 143 caminhos e 169 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`.
@@ -64,7 +64,7 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED`, não deployado.** 65 ecrãs em Leptos SSR,
+- **Ocinye Workspace: `IMPLEMENTED`, não deployado.** 71 ecrãs em Leptos SSR,
   sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
   pelas permissões que o Core calcula.
 - **Ocinye Mail: `IMPLEMENTED`, `NOT CONFIGURED`.** Módulo do Core com
@@ -77,7 +77,60 @@ sem que nada falhe.
   A interface distingue as ausências em vez de mostrar uma caixa vazia. **A
   ingestão é periódica**: o worker percorre as caixas ligadas, e uma que recuse
   não interrompe as outras — a razão fica guardada na caixa que falhou.
-- **19 migrations**, aplicáveis de base vazia; 63 tabelas.
+- **26 migrations**, aplicáveis de base vazia; 70 tabelas.
+- **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
+  Um documento deixou de apontar para **um** objecto guardado: aponta para um
+  **ficheiro**, que tem identidade estável e uma história imutável de versões
+  ([`files`, `file_versions`](migrations/0020_institutional_files.sql)). A
+  versão é material e não semântica, e por isso pertence ao ficheiro — assim
+  uma fotografia sem documento não precisa de `ImageVersion`, nem um anexo de
+  `AttachmentVersion`. `dataset_versions` **não** foi generalizada: partilha a
+  primitiva de bytes e mais nada. O conteúdo de um documento resolve-se
+  **exclusivamente** pela versão corrente — a de maior sequência —, e a coluna
+  que o guardava directamente foi retirada depois de se provar que nenhum
+  código de produção a lia.
+  O ficheiro **governa-se a si próprio**: tem classificação, e a efectiva é
+  `most_restrictive(workspace, file)` calculada contra o estado corrente do
+  ambiente. As [pastas](migrations/0024_folders.sql) arrumam e não decidem —
+  mover um ficheiro RESTRICTED para uma pasta chamada «Público» muda onde ele
+  aparece e mais nada ([ADR-0204](docs/adrs/0204-institutional-files-and-folders.md)).
+  Existe **ecrã de Ficheiros** sob CONHECIMENTO, com navegação, pastas,
+  largar, carregamento, detalhes, histórico e descarga de versões exactas.
+  A pré-visualização de imagens é **same-origin, pelo Core**: os bytes saem por
+  `/files/{id}/preview` e a CSP do Workspace continua `img-src 'self' data:`,
+  pelo que a Experience nunca aprende onde o armazenamento está. Inline serve-se
+  uma lista fechada — PNG, JPEG, WebP —, e **não** `image/*`: um SVG é um
+  documento com script.
+  O **corpo** de um ficheiro é lido pelo worker, através do outbox que já
+  existia, e passa a ser pesquisável sem nenhum modelo de IA
+  ([ADR-0205](docs/adrs/0205-content-extraction-and-lexical-body-search.md)). A
+  identidade do trabalho é a **versão**, e o estado da extracção é separado do
+  do armazenamento: um ficheiro cuja leitura falhou continua guardado, legível e
+  descarregável, e o ecrã diz «Ficheiro guardado. Não foi possível tornar o
+  conteúdo pesquisável» em vez de «o carregamento falhou». `file_chunks` **não
+  guarda classificação**: restringir um ambiente esconde o corpo sem reindexar
+  nada.
+  A recuperação é **híbrida**: lexical e semântica como geradores independentes,
+  fundidos por posição recíproca
+  ([ADR-0206](docs/adrs/0206-embeddings-and-hybrid-retrieval.md)). Um
+  `EmbeddingSet` guarda `(provider, model, revision, dimensions, profile)` e é
+  esse tuplo que decide o que se compara — **compatibilidade semântica não é «o
+  mesmo tamanho de vector»** —, e só responde quando está completo. Um provider
+  externo fecha em `PUBLIC` por omissão, e a pergunta é feita antes de o texto
+  sair. Sem provider, a híbrida devolve exactamente o que a lexical devolve:
+  **não é degradação**, é a capacidade determinística inteira.
+  Os agentes lêem conteúdo por `files.content.read`, uma exposição separada de
+  `knowledge.document.read` — que continua com `content_included: false`. A
+  capacidade não concede autoridade, e o que chega ao modelo não tem caminho
+  nenhum para os bytes.
+  Um resultado de recuperação **cita a versão exacta**: abrir a citação abre os
+  bytes que foram lidos, e não o que o ficheiro diz hoje — mesmo depois de
+  existir uma versão nova. A abertura reavalia a autoridade corrente, pelo que
+  uma citação não é um passe permanente, e a página diz em voz alta quando o que
+  se está a ver não é a versão corrente.
+  **Não existe ainda** OCR, um provider de embeddings real integrado, nem a
+  superfície de resposta do Prompt — a execução de inferência é `PLANNED` e
+  precede esta milestone.
 - **Agentes de IA: `IMPLEMENTED`.** Definíveis e persistidos **sem nó de IA**;
   o estado de execução é derivado da disponibilidade real.
 - **Agentic Control Plane: `IMPLEMENTED`, sem inferência.** Capability Registry
@@ -136,7 +189,7 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **51 ADRs** em `docs/adrs/`, **10 runbooks** em `docs/runbooks/`,
+- **54 ADRs** em `docs/adrs/`, **10 runbooks** em `docs/runbooks/`,
   **41 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -156,14 +209,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1246 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1314 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **369 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **437 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

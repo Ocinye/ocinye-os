@@ -20,12 +20,45 @@ const NOTE_COLUMNS: &str = "id, unit_id, workspace_id, title, body, tags, classi
 
 /// Document columns joined with their stored object, so a caller sees size and
 /// checksum without a second query.
-const DOCUMENT_SELECT: &str = "SELECT d.id, d.unit_id, d.workspace_id, d.storage_object_id,
+///
+/// # Porque a junção passa pelo ficheiro
+///
+/// O objecto de um documento resolve-se agora pela identidade estável do
+/// ficheiro e pela sua versão corrente, e não pela coluna que o documento ainda
+/// guarda. As duas dizem o mesmo — há um teste que o exige enquanto ambas
+/// existirem —, mas só esta continua a dizer a verdade depois de alguém
+/// carregar uma versão nova.
+///
+/// **Corrente é a de maior `sequence`**, e nunca a mais recente por relógio: as
+/// datas empatam, e as do preenchimento histórico foram herdadas de outra
+/// coisa.
+///
+/// # Porque a classificação vem do ficheiro
+///
+/// Porque é o ficheiro que governa o artefacto. `documents.classification`
+/// existe ainda ao lado, e as duas dizem o mesmo — o escritor põe o mesmo valor
+/// nas duas —, mas só uma delas é a autoridade. Enquanto ambas existirem, um
+/// teste exige que coincidam; depois disso, resta uma.
+///
+/// A escolha é uma junção lateral e não um `DISTINCT ON` porque este texto é
+/// prefixo de consultas que trazem a sua própria ordenação — por título, por
+/// data —, e o `DISTINCT ON` obrigá-las-ia todas a começar por `d.id`. A
+/// lateral escolhe uma linha por documento sem tocar na ordem de quem chama.
+const DOCUMENT_SELECT: &str = "SELECT d.id, d.unit_id, d.workspace_id,
+                                      v.storage_object_id AS current_storage_object_id,
                                       d.kind, d.title, d.description, d.document_date,
-                                      d.classification, o.original_filename, o.content_type,
+                                      f.classification, o.original_filename, o.content_type,
                                       o.size_bytes, o.checksum_sha256, d.created_at
                                  FROM documents d
-                                 JOIN storage_objects o ON o.id = d.storage_object_id";
+                                 JOIN files f ON f.id = d.file_id
+                                 JOIN LATERAL (
+                                     SELECT fv.storage_object_id
+                                       FROM file_versions fv
+                                      WHERE fv.file_id = d.file_id
+                                      ORDER BY fv.sequence DESC
+                                      LIMIT 1
+                                 ) v ON TRUE
+                                 JOIN storage_objects o ON o.id = v.storage_object_id";
 
 // --- Sources ---------------------------------------------------------------
 
@@ -375,28 +408,33 @@ pub async fn insert_document<'e>(
     organisation_id: Uuid,
     unit_id: Uuid,
     workspace_id: Uuid,
-    storage_object_id: Uuid,
+    file_id: Uuid,
     kind: &str,
     title: &str,
     description: Option<&str>,
-    classification: Classification,
     created_by: Uuid,
 ) -> CoreResult<Uuid> {
+    // Nem o objecto nem a classificação. O primeiro chega-se pela versão
+    // corrente do ficheiro; a segunda **é** do ficheiro, que governa o
+    // artefacto. As duas colunas homónimas de `documents` desapareceram, e com
+    // elas a possibilidade de duas fontes discordarem.
+    //
+    // O que resta em `documents` é o que só ele sabe: título, espécie,
+    // descrição e data documental.
     let id = sqlx::query_scalar::<_, Uuid>(
         "INSERT INTO documents
-             (organisation_id, unit_id, workspace_id, storage_object_id, kind,
-              title, description, classification, created_by_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             (organisation_id, unit_id, workspace_id, file_id, kind,
+              title, description, created_by_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id",
     )
     .bind(organisation_id)
     .bind(unit_id)
     .bind(workspace_id)
-    .bind(storage_object_id)
+    .bind(file_id)
     .bind(kind)
     .bind(title)
     .bind(description)
-    .bind(classification.as_str())
     .bind(created_by)
     .fetch_one(executor)
     .await?;
@@ -436,10 +474,7 @@ pub async fn list_documents<'e>(
     limit: i64,
     offset: i64,
 ) -> CoreResult<Vec<Document>> {
-    let predicate = to_sql(
-        filter,
-        VisibilityColumns::aliased("d.unit_id", "d.workspace_id", "d.classification"),
-    );
+    let predicate = to_sql(filter, DOCUMENT_VISIBILITY);
     let documents = sqlx::query_as::<_, Document>(&format!(
         "{DOCUMENT_SELECT}
           WHERE d.organisation_id = $1 AND d.workspace_id = $2 AND {predicate}
@@ -657,8 +692,16 @@ pub async fn count_accessible_sources<'e>(
 }
 
 /// Colunas de visibilidade do documento, com alias.
+///
+/// A classificação vem de `f`, o ficheiro que governa o artefacto, e não da
+/// coluna homónima do documento. É a mesma autoridade que a leitura usa: se a
+/// listagem filtrasse por outra, um documento poderia aparecer numa lista e
+/// recusar-se a abrir — ou pior, o contrário.
+///
+/// O `DOCUMENT_SELECT` traz `JOIN files f`, por isso o alias existe em todas as
+/// consultas que usam estas colunas.
 const DOCUMENT_VISIBILITY: VisibilityColumns =
-    VisibilityColumns::aliased("d.unit_id", "d.workspace_id", "d.classification");
+    VisibilityColumns::aliased("d.unit_id", "d.workspace_id", "f.classification");
 
 /// A condição partilhada pela listagem agregada de documentos e pela contagem.
 fn accessible_documents_predicate(filter: &VisibilityFilter) -> String {
@@ -706,7 +749,11 @@ pub async fn count_accessible_documents<'e>(
 ) -> CoreResult<i64> {
     let predicate = accessible_documents_predicate(filter);
     let total = sqlx::query_scalar::<_, i64>(&format!(
-        "SELECT COUNT(*) FROM documents d
+        // O `JOIN files` existe aqui pela mesma razão que existe na listagem:
+        // as duas partilham o predicado, e o predicado filtra pela
+        // classificação do ficheiro. Uma contagem sem a junção responderia a
+        // uma pergunta diferente das linhas por baixo dela.
+        "SELECT COUNT(*) FROM documents d JOIN files f ON f.id = d.file_id
           WHERE d.organisation_id = $1 AND {predicate}"
     ))
     .bind(organisation_id)

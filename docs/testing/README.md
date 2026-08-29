@@ -143,9 +143,70 @@ A regra passou a ser:
 |---|---|
 | **Sandbox WASM** | **Falha**, com o comando a executar. Custa um comando numa clonagem limpa; saltar custava cobertura sem ninguém dar por isso. |
 | **Autorização** | Salta se `OCINYE_TEST_DATABASE_URL` **não estiver definida**. **Falha** se estiver definida e a base for inalcançável. |
+| **Object storage** | Salta na máquina de alguém que não configurou armazenamento. **Falha quando `CI` está definida.** |
 
 A segunda distinção é o que importa: a CI define sempre a variável, pelo que a CI
 não pode perder esta cobertura em silêncio.
+
+### O mesmo defeito, outra vez, com armazenamento
+
+A regra do armazenamento entrou em 2026-08-29, e entrou porque o mesmo mecanismo
+descrito acima já estava a esconder dezoito provas.
+
+A CI tinha uma guarda que procurava `skipping` na saída de `cargo test`. Ela
+nunca as viu: **o cargo esconde o output de um teste que passa**, e um teste que
+se salta a si próprio passa. As provas de fotografia, de anexos, de ficheiros
+institucionais e a viagem de browser que carrega bytes estiveram verdes sem
+armazenamento nenhum por trás.
+
+Duas coisas mudaram, e são precisas as duas:
+
+- a CI levanta um **fixture S3-compatible** e define
+  `OCINYE_TEST_STORAGE_ENDPOINT`, pelo que as provas correm;
+- cada suite que precisa de armazenamento faz `assert!` sobre `CI` antes de
+  saltar, pelo que a ausência do fixture é um defeito do job e não uma condição
+  do ambiente.
+
+> **MinIO is the CI implementation of the S3-compatible test fixture; it is not
+> the storage architecture of Ocinye OS.**
+
+Os testes falam com o contrato `ObjectStore`. Trocar o fixture não deve exigir
+tocar num teste.
+
+## Espaço em disco é uma condição da evidência
+
+Uma sweep completa recompila a árvore de raiz e leva o `target/` a dezenas de
+GB. Duas vezes, durante a milestone de ficheiros institucionais, o disco encheu
+**a meio** — e o vermelho que apareceu não falava de disco: o MinIO deixou de
+conseguir escrever e quatro provas de armazenamento falharam com
+`StorageUnavailable`, a apontar para o sítio errado.
+
+> **Ficar sem espaço não é um defeito do candidato. É evidência que não pôde
+> ser produzida.**
+
+Três decisões, e nenhuma delas é automática:
+
+**A compilação incremental está desligada** nos perfis `dev` e `test`, no
+`Cargo.toml` e não numa variável de ambiente que alguém tem de se lembrar de
+exportar. A cache desta árvore cresce 11–18 GB e é reconstruída a cada sweep.
+
+**O `verify.sh` tem um preflight de capacidade**, antes de qualquer compilação.
+Sem espaço, sai com `INVALID — insufficient workspace disk for trustworthy full
+verification`, e nenhum portão corre. Não é `PASS` nem `FAIL`: é `NOT_RUN`.
+O limiar por omissão é 20 GB, derivado da medição desta árvore — uma sweep a
+partir de um `target` vazio consumiu ~35 GB, e as escritas começaram a falhar
+abaixo de 1 GB livre. `OCINYE_VERIFY_MIN_DISK_GB` ajusta-o, por escrito.
+
+**A limpeza é deliberada e nunca corre durante uma verificação.** Mudar o
+ambiente enquanto se produz evidência estraga a evidência.
+
+| Comando | O que remove | Preço |
+|---|---|---|
+| `./scripts/ci-disk.sh caches` | `target/*/incremental`, `target/release` | a próxima compilação de debug reaproveita quase tudo |
+| `./scripts/ci-disk.sh caches profundas` | também o `target/debug` inteiro | recompilação completa da árvore |
+
+Nenhum dos dois toca na base de dados, no object storage, em fixtures
+institucionais ou na árvore versionada. Não há daemon nem cron a limpar.
 
 ## Invariantes verificados na base de dados
 

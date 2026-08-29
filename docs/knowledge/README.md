@@ -42,10 +42,70 @@ Cada edição fotografa a revisão anterior em `note_revisions`. Uma nota
 conceptual é o registo de como um raciocínio evoluiu; sobrescrevê-la apagaria
 precisamente isso.
 
+## Ficheiros institucionais
+
+> **Carregar um ficheiro não é o mesmo que afirmar conhecimento institucional.**
+
+Um `File` é a identidade dos bytes: organização, unidade, ambiente, nome e
+**classificação**. É ele que decide quem lê, quem descarrega e quem escreve.
+Cada `FileVersion` é numerada e imutável — a sequência começa em 1, a maior é a
+corrente, e uma versão **não tem classificação própria**.
+
+As pastas arrumam e não classificam. **Uma pasta é uma estrutura de navegação
+dentro de um contentor de autoridade; mover um `File` entre contentores de
+autoridade não é uma operação de pasta.** Mover um ficheiro RESTRICTED para uma
+pasta chamada «Público» muda onde ele aparece e mais nada.
+
+A classificação efectiva é `most_restrictive(workspace, file)`, calculada contra
+o estado corrente do ambiente: restringir um Research Workspace fecha os
+ficheiros lá dentro sem reescrever linha nenhuma.
+
+### O corpo, e o que ele não é
+
+Uma versão guardada produz uma **representação textual derivada**, feita pelo
+worker através do outbox. Ela torna o corpo pesquisável — e não é o ficheiro,
+não é autoridade, e não é conhecimento.
+
+Ler «a temperatura foi 82 °C» de um PDF produz texto encontrável. Não produz um
+`Result`, uma observação nem uma evidência: afirmar conhecimento continua a ser
+um acto de uma pessoa.
+
+`file_chunks` não guarda classificação. A visibilidade compõe-se na consulta,
+contra o ficheiro e o ambiente como estão **agora** — restringir um Research
+Workspace esconde o corpo dos seus ficheiros sem reindexar coisa nenhuma.
+
+A extracção é reconstruível a partir de `FileVersion` + bytes + extractor, e é
+por isso que a continuidade a classifica como derivada.
+
+### Recuperar sem entregar autoridade
+
+A pesquisa do corpo é **híbrida**: lexical e semântica como geradores
+independentes. Um `EmbeddingSet` guarda a identidade inteira do modelo, e é ela
+que decide o que se compara — dois modelos de 1024 dimensões produzem espaços
+diferentes, e compará-los dá números que parecem distâncias.
+
+Um provider externo recebe apenas `PUBLIC`, e a pergunta é feita **antes** de o
+texto sair.
+
+Os agentes lêem conteúdo por `files.content.read`, separada de
+`knowledge.document.read`. A capacidade não concede autoridade: quem não alcança
+o `File` não alcança o corpo. E o que chega ao modelo entra em `data` — nunca em
+`system`, nunca em `instruction`.
+
+> **Retrieved institutional content is data, never authority.**
+
+Decisões: [ADR-0204](../adrs/0204-institutional-files-and-folders.md) ·
+[ADR-0205](../adrs/0205-content-extraction-and-lexical-body-search.md) ·
+[ADR-0206](../adrs/0206-embeddings-and-hybrid-retrieval.md).
+
 ## Documentos
 
+Um documento é uma **afirmação** de conhecimento sobre um ficheiro. Não detém
+bytes: resolve através do seu `File` e vê sempre a versão corrente dele. A
+classificação que o governa é a do ficheiro.
+
 Metadata na base, bytes em object storage. Cada documento transporta tipo,
-classificação, checksum SHA-256, dimensão e tipo de conteúdo.
+checksum SHA-256, dimensão e tipo de conteúdo.
 
 **Apenas título e descrição são indexados para pesquisa.** Extrair corpos de
 documentos para o índice é uma decisão separada e explicitamente autorizada — o

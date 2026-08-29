@@ -170,6 +170,16 @@ pub enum ResourceKind {
     StudyExecution,
     /// Um resultado científico.
     Result,
+    /// Um ficheiro institucional.
+    File,
+    /// Uma **versão** de ficheiro.
+    ///
+    /// Um recurso próprio, e não um campo, pela mesma razão de
+    /// [`Self::MethodologyVersion`]: uma citação feita hoje tem de continuar a
+    /// apontar para os bytes de hoje depois de existir a versão 5. Pedir «o
+    /// ficheiro» e pedir «a versão 2 do ficheiro» são intenções diferentes, e
+    /// misturá-las faria uma prova científica derivar em silêncio.
+    FileVersion,
 }
 
 impl ResourceKind {
@@ -204,6 +214,8 @@ impl ResourceKind {
             Self::Study => "study",
             Self::StudyExecution => "study_execution",
             Self::Result => "result",
+            Self::File => "file",
+            Self::FileVersion => "file_version",
         }
     }
 
@@ -215,7 +227,7 @@ impl ResourceKind {
 
     /// Every kind.
     #[must_use]
-    pub const fn all() -> [Self; 25] {
+    pub const fn all() -> [Self; 27] {
         [
             Self::Idea,
             Self::Project,
@@ -242,6 +254,8 @@ impl ResourceKind {
             Self::Study,
             Self::StudyExecution,
             Self::Result,
+            Self::File,
+            Self::FileVersion,
         ]
     }
 
@@ -276,6 +290,8 @@ impl ResourceKind {
             Self::Study => "Estudo",
             Self::StudyExecution => "Execução",
             Self::Result => "Resultado",
+            Self::File => "Ficheiro",
+            Self::FileVersion => "Versão de ficheiro",
         }
     }
 }

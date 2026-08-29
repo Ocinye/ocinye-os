@@ -114,6 +114,7 @@ fn state(pool: PgPool, organisation_id: Uuid) -> AppState {
         verifier,
         authenticator,
         store: None,
+        embeddings: None,
         inference: Arc::new(ocinye_core::modules::intelligence::NoProvider),
         mail_registry,
         // Estes testes medem HTTP, e não tempo real. Um plano ausente aceita

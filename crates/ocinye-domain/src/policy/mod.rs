@@ -89,6 +89,20 @@ pub enum ResourceKind {
     Note,
     /// A document backed by a stored object.
     Document,
+    /// An institutional file: the governed identity of stored unstructured
+    /// content, independent of any documentary reading of it.
+    ///
+    /// A photograph of an experimental rig is one of these and is not a
+    /// [`Self::Document`]. The distinction matters because the file is what
+    /// governs access; the document only says what the file means in
+    /// Knowledge.
+    File,
+    /// An exact, immutable material state of a [`Self::File`].
+    ///
+    /// Carries **no authority of its own**: resolving one means resolving the
+    /// file that owns it and authorising against that. Knowing a version
+    /// identifier is not a way around the file that governs it.
+    FileVersion,
     /// A dataset.
     Dataset,
     /// A task.
