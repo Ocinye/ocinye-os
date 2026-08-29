@@ -170,10 +170,28 @@ wasmtime-wasi = "48"
 [profile.dev]
 debug = "line-tables-only"
 
+# Compilação incremental desligada, por decisão e não por esquecimento.
+#
+# A cache incremental desta árvore cresce 11–18 GB e é reconstruída a cada
+# sweep completo. Encheu o disco duas vezes durante a milestone de ficheiros, e
+# o sintoma não foi um erro de compilação: foi o MinIO a deixar de conseguir
+# escrever, e quatro provas de armazenamento a falharem com
+# `StorageUnavailable`. Uma falha de infraestrutura disfarçada de defeito do
+# código é a pior espécie de vermelho, porque manda procurar no sítio errado.
+#
+# Custa recompilações mais lentas em edições pequenas. Vale a pena: `verify.sh`
+# recompila de raiz de qualquer maneira, e a evidência que ele produz não pode
+# depender de haver espaço para uma cache que ninguém pediu.
+#
+# Escrito aqui e não deixado a `CARGO_INCREMENTAL=0` no ambiente de quem corre:
+# uma disciplina que depende de alguém se lembrar não é uma disciplina.
+incremental = false
+
 # Os testes correm a mesma configuração: o objectivo é diagnosticar uma falha,
 # não inspeccionar variáveis num debugger.
 [profile.test]
 debug = "line-tables-only"
+incremental = false
 
 [profile.release]
 opt-level = 3

@@ -28,7 +28,13 @@ livre_gb() {
         echo "${OCINYE_CI_DISK_FREE_GB}"
         return
     fi
-    df -k / | awk 'NR==2 { printf "%.1f", $4 / 1048576 }'
+    # O volume que segura o `target/`, e não `/`: num runner com montagens
+    # separadas são coisas diferentes, e o que interessa é onde a compilação
+    # escreve. Hoje, num Mac, dão o mesmo — e é por isso que se escreve agora,
+    # enquanto a diferença não custa nada.
+    local raiz
+    raiz="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    df -k "$raiz" | awk 'NR==2 { printf "%.1f", $4 / 1048576 }'
 }
 
 medir() {
@@ -72,18 +78,76 @@ exigir() {
         echo "  necessário: ${minimo} GB" >&2
         echo >&2
         echo "Falha agora, e não daqui a vinte minutos dentro do compilador." >&2
+        echo >&2
+        echo "Isto não é um defeito do código: é evidência que não pode ser" >&2
+        echo "produzida. Uma sweep que fica sem espaço a meio falha em sítios que" >&2
+        echo "nada têm a ver com a causa — na milestone de ficheiros, o sintoma" >&2
+        echo "foi o armazenamento a recusar escritas e quatro provas a darem" >&2
+        echo "StorageUnavailable." >&2
+        echo >&2
+        echo "Para libertar caches de compilação, deliberadamente:" >&2
+        echo "  ./scripts/ci-disk.sh caches" >&2
         exit 1
     fi
 
     printf '%-28s %s GB livres, mínimo %s GB\n' "capacidade suficiente" "$livre" "$minimo"
 }
 
+# Caches de compilação reconstruíveis, e nada mais.
+#
+# Explícito e a pedido de alguém: nunca corre sozinho, e **nunca** durante uma
+# verificação — mudar o ambiente enquanto se produz evidência estraga a
+# evidência. Diz o que remove antes de remover.
+#
+# Não toca em: base de dados, object storage, fixtures institucionais, árvore
+# Git, nem em nada que não se reconstrua com um `cargo build`.
+# Dois níveis, porque têm preços diferentes e quem decide tem de os ver.
+#
+#   caches            incremental e release. Barato: a próxima compilação de
+#                     debug reaproveita quase tudo.
+#   caches profundas  também o `target/debug` inteiro. Liberta dezenas de GB e
+#                     custa uma recompilação completa da árvore.
+#
+# Nenhum dos dois corre sozinho, e nenhum corre durante uma verificação.
+caches() {
+    local raiz alvo profundo="${1:-}"
+    raiz="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+    echo "Caches de compilação reconstruíveis em $raiz/target"
+    medir "  antes"
+    echo
+
+    local alvos="target/debug/incremental target/release/incremental target/release"
+    if [ "$profundo" = "profundas" ]; then
+        alvos="$alvos target/debug"
+        echo "  (profundas: a próxima compilação reconstrói a árvore inteira)"
+        echo
+    fi
+
+    for alvo in $alvos; do
+        if [ -e "$raiz/$alvo" ]; then
+            printf '  %-34s %s\n' "$alvo" "$(du -sh "$raiz/$alvo" 2>/dev/null | cut -f1)"
+        fi
+    done
+    echo
+
+    for alvo in $alvos; do
+        [ -e "$raiz/$alvo" ] && rm -rf "${raiz:?}/$alvo"
+    done
+
+    medir "  depois"
+    echo
+    echo "Nada mais foi tocado: nem base de dados, nem object storage, nem"
+    echo "fixtures, nem a árvore versionada."
+}
+
 case "${1:-}" in
     medir)    medir "${2:-disco}" ;;
     libertar) libertar ;;
+    caches)   caches "${2:-}" ;;
     exigir)   exigir "${2:?indique o mínimo em GB}" ;;
     *)
-        echo "uso: $0 {medir [etiqueta]|libertar|exigir <GB>}" >&2
+        echo "uso: $0 {medir [etiqueta]|libertar|caches [profundas]|exigir <GB>}" >&2
         exit 64
         ;;
 esac

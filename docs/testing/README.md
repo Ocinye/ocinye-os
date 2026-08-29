@@ -173,6 +173,41 @@ Duas coisas mudaram, e são precisas as duas:
 Os testes falam com o contrato `ObjectStore`. Trocar o fixture não deve exigir
 tocar num teste.
 
+## Espaço em disco é uma condição da evidência
+
+Uma sweep completa recompila a árvore de raiz e leva o `target/` a dezenas de
+GB. Duas vezes, durante a milestone de ficheiros institucionais, o disco encheu
+**a meio** — e o vermelho que apareceu não falava de disco: o MinIO deixou de
+conseguir escrever e quatro provas de armazenamento falharam com
+`StorageUnavailable`, a apontar para o sítio errado.
+
+> **Ficar sem espaço não é um defeito do candidato. É evidência que não pôde
+> ser produzida.**
+
+Três decisões, e nenhuma delas é automática:
+
+**A compilação incremental está desligada** nos perfis `dev` e `test`, no
+`Cargo.toml` e não numa variável de ambiente que alguém tem de se lembrar de
+exportar. A cache desta árvore cresce 11–18 GB e é reconstruída a cada sweep.
+
+**O `verify.sh` tem um preflight de capacidade**, antes de qualquer compilação.
+Sem espaço, sai com `INVALID — insufficient workspace disk for trustworthy full
+verification`, e nenhum portão corre. Não é `PASS` nem `FAIL`: é `NOT_RUN`.
+O limiar por omissão é 20 GB, derivado da medição desta árvore — uma sweep a
+partir de um `target` vazio consumiu ~35 GB, e as escritas começaram a falhar
+abaixo de 1 GB livre. `OCINYE_VERIFY_MIN_DISK_GB` ajusta-o, por escrito.
+
+**A limpeza é deliberada e nunca corre durante uma verificação.** Mudar o
+ambiente enquanto se produz evidência estraga a evidência.
+
+| Comando | O que remove | Preço |
+|---|---|---|
+| `./scripts/ci-disk.sh caches` | `target/*/incremental`, `target/release` | a próxima compilação de debug reaproveita quase tudo |
+| `./scripts/ci-disk.sh caches profundas` | também o `target/debug` inteiro | recompilação completa da árvore |
+
+Nenhum dos dois toca na base de dados, no object storage, em fixtures
+institucionais ou na árvore versionada. Não há daemon nem cron a limpar.
+
 ## Invariantes verificados na base de dados
 
 Verificados directamente contra PostgreSQL 17, além dos testes Rust:
