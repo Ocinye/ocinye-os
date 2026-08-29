@@ -21,8 +21,9 @@ colecção de aplicações internas.
 Investigadores saem. Projectos terminam. Equipamentos mudam. Financiamentos
 acabam. Software é substituído, e modelos de IA são trocados por outros melhores.
 
-> **People may leave. Projects may end. Software may be replaced. AI models may
-> change. Institutional knowledge must remain.**
+> **As pessoas podem sair. Os projectos podem terminar. O software pode ser
+> substituído. Os modelos de IA podem mudar. O conhecimento institucional deve
+> permanecer.**
 
 A resposta por omissão a cada necessidade é construir mais uma aplicação: um
 sítio com área privada, um gestor documental, um painel administrativo, uma
@@ -32,8 +33,9 @@ se conhecem, sete modelos de identidade e nenhuma memória.
 O Ocinye OS existe para recusar esse caminho. A finalidade não é preservar
 software:
 
-> **The purpose of Ocinye OS is not to preserve software. It is to preserve and
-> amplify the institution's capacity to know, investigate, engineer and build.**
+> **A finalidade do Ocinye OS não é preservar software. É preservar e ampliar a
+> capacidade da instituição para produzir conhecimento, investigar, desenvolver
+> soluções de engenharia e construir.**
 
 ### Memória institucional
 
@@ -96,9 +98,8 @@ memória: a recuperação não substitui a proveniência, o treino não substitu
 datasets, os pesos não substituem a evidência, o PostgreSQL não substitui os
 bytes — e o servidor não substitui a instituição.
 
-> **A trained model may embody institutional capability, but it does not
-> replace the institutional evidence and provenance from which that capability
-> was derived.**
+> **Um modelo treinado pode encarnar capacidade institucional, mas não
+> substitui a evidência e a proveniência de que essa capacidade nasceu.**
 
 Depois de ensinar alguma coisa a um modelo, o dataset, a metodologia, os
 resultados e a proveniência **continuam a ser preservados**. «Já está nos
@@ -160,7 +161,7 @@ Cada relação guarda de onde veio: `operation`, quando o Core a **observou** ao
 produzir o efeito; `declared`, quando alguém a **afirmou** através de uma
 operação autorizada.
 
-> **Model inference is not institutional provenance.**
+> **A inferência de um modelo não é proveniência institucional.**
 
 Um agente pode sugerir uma relação. A sugestão só se torna facto institucional
 atravessando a mesma operação autorizada que uma pessoa atravessaria — e fica
