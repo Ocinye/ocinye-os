@@ -650,7 +650,6 @@ pub async fn create_document(
         request.kind.as_str(),
         title,
         request.description.as_deref(),
-        classification,
         principal.person_id,
     )
     .await?;

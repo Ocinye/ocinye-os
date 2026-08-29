@@ -453,8 +453,8 @@ async fn documento_com_ficheiro(pool: &PgPool, ctx: &Contexto, marca: char) -> (
     versao(pool, f, 1, o).await.expect("v1");
     let d: Uuid = sqlx::query_scalar(
         "INSERT INTO documents
-             (organisation_id, unit_id, workspace_id, file_id, title, classification)
-         VALUES ($1, $2, $3, $4, 'Relatório', 'INTERNAL') RETURNING id",
+             (organisation_id, unit_id, workspace_id, file_id, title)
+         VALUES ($1, $2, $3, $4, 'Relatório') RETURNING id",
     )
     .bind(ctx.organisation_id)
     .bind(ctx.unit_id)
@@ -948,4 +948,294 @@ async fn a_descarga_recusa_a_quem_a_leitura_recusa() {
         "quem tem filiação no ambiente não conseguiu descarregar: {:?}",
         permitida.err()
     );
+}
+
+// ── A matriz de paridade ────────────────────────────────────────────────
+//
+// A autoridade do artefacto mudou de representante: era `Document`, é `File`.
+// A política não mudou, e é isso que estes testes medem — não que o novo
+// caminho funcione, mas que **decide exactamente o mesmo**.
+
+/// Uma classificação ilegível cai no mais restritivo.
+///
+/// # Porque isto tem teste próprio
+///
+/// Porque `unwrap_or(Restricted)` e `unwrap_or(Internal)` são uma letra de
+/// diferença e a segunda é uma porta aberta. Uma refactorização que troque um
+/// pelo outro compila, passa em tudo o resto, e transforma um valor corrompido
+/// numa permissão.
+///
+/// A base recusa valores fora do vocabulário — há teste disso —, o que torna
+/// este caso improvável e não impossível: uma migração futura, uma restauração
+/// parcial, uma coluna alargada. Fail-closed é uma decisão, e as decisões
+/// medem-se.
+#[test]
+fn uma_classificacao_ilegivel_cai_no_mais_restritivo() {
+    use ocinye_contracts::Classification;
+    assert_eq!(
+        Classification::parse("LIXO").unwrap_or(Classification::Restricted),
+        Classification::Restricted,
+        "um valor que a instituição não reconhece passou a ser legível por mais gente"
+    );
+    assert_eq!(
+        Classification::parse("").unwrap_or(Classification::Restricted),
+        Classification::Restricted
+    );
+}
+
+/// Os seis actores que a política distingue.
+struct Elenco {
+    membro_da_organizacao: ocinye_domain::Principal,
+    membro_do_ambiente: ocinye_domain::Principal,
+    membro_da_unidade: ocinye_domain::Principal,
+    gestor_da_unidade: ocinye_domain::Principal,
+    administrador: ocinye_domain::Principal,
+}
+
+async fn elenco(pool: &PgPool, ctx: &Contexto) -> Elenco {
+    async fn com(
+        pool: &PgPool,
+        ctx: &Contexto,
+        papeis: &[&str],
+        no_ambiente: Option<&str>,
+        na_unidade: Option<&str>,
+    ) -> ocinye_domain::Principal {
+        let id = pessoa(pool, ctx).await;
+        for papel in papeis {
+            sqlx::query("INSERT INTO person_roles (person_id, role) VALUES ($1, $2)")
+                .bind(id)
+                .bind(*papel)
+                .execute(pool)
+                .await
+                .expect("papel");
+        }
+        if let Some(papel) = no_ambiente {
+            sqlx::query(
+                "INSERT INTO workspace_memberships (workspace_id, person_id, role)
+                 VALUES ($1, $2, $3)",
+            )
+            .bind(ctx.workspace_id)
+            .bind(id)
+            .bind(papel)
+            .execute(pool)
+            .await
+            .expect("filiação no ambiente");
+        }
+        if let Some(papel) = na_unidade {
+            sqlx::query(
+                "INSERT INTO unit_memberships (unit_id, person_id, role) VALUES ($1, $2, $3)",
+            )
+            .bind(ctx.unit_id)
+            .bind(id)
+            .bind(papel)
+            .execute(pool)
+            .await
+            .expect("filiação na unidade");
+        }
+        principal_do_teste(pool, ctx, id).await
+    }
+
+    Elenco {
+        membro_da_organizacao: com(pool, ctx, &["research_member"], None, None).await,
+        membro_do_ambiente: com(pool, ctx, &["research_member"], Some("member"), None).await,
+        membro_da_unidade: com(pool, ctx, &["research_member"], None, Some("member")).await,
+        gestor_da_unidade: com(pool, ctx, &["research_member"], None, Some("manager")).await,
+        administrador: com(pool, ctx, &["platform_admin"], None, None).await,
+    }
+}
+
+/// A matriz: quatro classificações × cinco actores × leitura e descarga.
+///
+/// # O que se espera, e de onde vem
+///
+/// Da política existente, medida no B1 e **não alterada**:
+///
+/// ```text
+/// PUBLIC / INTERNAL   qualquer membro activo da organização
+/// CONFIDENTIAL        ambiente, unidade, ou administrador
+/// RESTRICTED          ambiente, ou gestor da unidade — administrador não basta
+/// ```
+///
+/// A última linha é a que mais importa: um privilégio administrativo não abre
+/// material RESTRITO, e essa é uma decisão institucional que sobrevive a esta
+/// migração intacta.
+#[tokio::test]
+async fn a_matriz_de_acesso_e_a_mesma_depois_do_ficheiro_governar() {
+    use ocinye_contracts::Classification::{Confidential, Internal, Public, Restricted};
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else { return };
+    let ctx = contexto(&pool).await;
+    backend_por_omissao(&pool).await;
+    let dono = membro(&pool, &ctx, "lead").await;
+    let e = elenco(&pool, &ctx).await;
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    for (nivel, esperado) in [
+        // (organização, ambiente, unidade, gestor, administrador)
+        (Public, [true, true, true, true, true]),
+        (Internal, [true, true, true, true, true]),
+        (Confidential, [false, true, true, true, true]),
+        (Restricted, [false, true, false, true, false]),
+    ] {
+        let mut tx = pool.begin().await.expect("tx");
+        let criado = ocinye_core::modules::files::create(
+            &mut tx,
+            &dono,
+            &ids,
+            &store,
+            "prova",
+            ctx.workspace_id,
+            ocinye_core::modules::files::NewFile {
+                filename: "matriz.png".to_owned(),
+                content_type: "image/png".to_owned(),
+                data: format!("PNG {nivel:?}").into_bytes(),
+                classification: Some(nivel),
+            },
+        )
+        .await
+        .expect("criar");
+        tx.commit().await.expect("commit");
+
+        let actores = [
+            ("membro da organização", &e.membro_da_organizacao),
+            ("membro do ambiente", &e.membro_do_ambiente),
+            ("membro da unidade", &e.membro_da_unidade),
+            ("gestor da unidade", &e.gestor_da_unidade),
+            ("administrador", &e.administrador),
+        ];
+
+        for ((nome, quem), permitido) in actores.iter().zip(esperado) {
+            let mut conn = pool.acquire().await.expect("ligação");
+            let leu = ocinye_core::modules::files::get(&mut conn, quem, criado.file_id)
+                .await
+                .is_ok();
+            assert_eq!(
+                leu, permitido,
+                "leitura de {nivel:?} por «{nome}»: esperava {permitido}, deu {leu}"
+            );
+
+            let mut tx = pool.begin().await.expect("tx");
+            let descarregou = ocinye_core::modules::files::download_url(
+                &mut tx,
+                quem,
+                &ids,
+                &store,
+                criado.file_id,
+            )
+            .await
+            .is_ok();
+            tx.rollback().await.expect("desfazer");
+            assert_eq!(
+                descarregou, permitido,
+                "descarga de {nivel:?} por «{nome}»: esperava {permitido}, deu {descarregou}"
+            );
+
+            // E as duas nunca discordam entre si. É a fragilidade do caminho
+            // documental, fechada aqui por construção.
+            assert_eq!(
+                leu, descarregou,
+                "leitura e descarga divergiram para {nivel:?} por «{nome}»"
+            );
+        }
+    }
+}
+
+/// O ambiente restringe o artefacto **na leitura**, e não só na escrita.
+///
+/// # Porque a ordem dos acontecimentos importa
+///
+/// A criação já normaliza: pedir INTERNO dentro de um ambiente RESTRITO guarda
+/// RESTRITO. Isso é correcto e **esconde** a composição na leitura — um teste
+/// que crie o ficheiro num ambiente já restrito passa mesmo que a leitura
+/// ignore o ambiente por completo, porque os dois valores coincidem.
+///
+/// O caso que separa os dois é este: um ficheiro nasce INTERNO num ambiente
+/// INTERNO, e o ambiente **é restringido depois**. A classificação guardada
+/// continua INTERNA, e só a composição na leitura impede que o artefacto
+/// continue visível a toda a organização.
+///
+/// Foi assim que se descobriu que a versão anterior deste teste passava pela
+/// razão errada: a reversão que retirava o `most_restrictive` da leitura não o
+/// fazia falhar.
+#[tokio::test]
+async fn o_ambiente_restringe_o_artefacto_na_leitura() {
+    use ocinye_contracts::Classification::Internal;
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else { return };
+    let ctx = contexto(&pool).await;
+    backend_por_omissao(&pool).await;
+    let dono = membro(&pool, &ctx, "lead").await;
+    let forasteiro = estranho(&pool, &ctx).await;
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    // O ambiente ainda é INTERNO: o ficheiro nasce INTERNO de facto.
+    let mut tx = pool.begin().await.expect("tx");
+    let criado = ocinye_core::modules::files::create(
+        &mut tx,
+        &dono,
+        &ids,
+        &store,
+        "prova",
+        ctx.workspace_id,
+        ocinye_core::modules::files::NewFile {
+            filename: "interno.png".to_owned(),
+            content_type: "image/png".to_owned(),
+            data: b"PNG interno".to_vec(),
+            classification: Some(Internal),
+        },
+    )
+    .await
+    .expect("criar");
+    tx.commit().await.expect("commit");
+
+    let guardada: String = sqlx::query_scalar("SELECT classification FROM files WHERE id = $1")
+        .bind(criado.file_id)
+        .fetch_one(&pool)
+        .await
+        .expect("classificação");
+    assert_eq!(
+        guardada,
+        Internal.as_str(),
+        "o ficheiro não ficou INTERNO, e o teste deixaria de exercer a composição"
+    );
+
+    // Um membro da organização alcança-o — é INTERNO e o ambiente também.
+    let mut conn = pool.acquire().await.expect("ligação");
+    ocinye_core::modules::files::get(&mut conn, &forasteiro, criado.file_id)
+        .await
+        .expect("um artefacto INTERNO num ambiente INTERNO devia ser legível");
+
+    // O ambiente é restringido depois. A classificação guardada não muda.
+    sqlx::query("UPDATE research_workspaces SET classification = 'RESTRICTED' WHERE id = $1")
+        .bind(ctx.workspace_id)
+        .execute(&pool)
+        .await
+        .expect("restringir o ambiente");
+
+    let ainda: String = sqlx::query_scalar("SELECT classification FROM files WHERE id = $1")
+        .bind(criado.file_id)
+        .fetch_one(&pool)
+        .await
+        .expect("classificação");
+    assert_eq!(
+        ainda,
+        Internal.as_str(),
+        "restringir o ambiente reescreveu o ficheiro"
+    );
+
+    // E agora só a composição na leitura o pode esconder.
+    let mut conn = pool.acquire().await.expect("ligação");
+    assert!(
+        ocinye_core::modules::files::get(&mut conn, &forasteiro, criado.file_id)
+            .await
+            .is_err(),
+        "o ambiente foi restringido e o artefacto continuou legível a toda a \
+         organização: a leitura não compõe as duas classificações"
+    );
+
+    // E quem tem filiação continua a alcançá-lo.
+    let mut conn = pool.acquire().await.expect("ligação");
+    ocinye_core::modules::files::get(&mut conn, &dono, criado.file_id)
+        .await
+        .expect("quem lidera o ambiente deixou de alcançar o próprio artefacto");
 }
