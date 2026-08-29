@@ -85,17 +85,24 @@ falhas=0
 # pergunta de porquê.
 suites() {
     cat <<'TABELA'
-# 56 viagens e 55 marcas, e os números **não** têm de coincidir.
+# 61 viagens e 60 marcas, e os números **não** têm de coincidir.
 #
-# A marca conta levantamentos de harness, não viagens. Duas das 56 são análise
+# A marca conta levantamentos de harness, não viagens. Duas das 61 são análise
 # estática sobre a árvore e não abrem browser nenhum; e
 # `a_consolidacao_nao_mudou_o_que_a_pessoa_ve` levanta **dois** harnesses — um
 # com os estáticos actuais, outro com o estado anterior — porque a propriedade
-# que mede é a comparação entre os dois. 54 viagens × 1 + 1 extra = 55.
+# que mede é a comparação entre os dois. 59 viagens × 1 + 1 extra = 60.
 #
-# Auditado em 2026-08-28, em série, marca a marca. O número continua fixo: uma
+# 61 desde 2026-08-29: entraram três viagens de Ficheiros — navegar e organizar,
+# a recusa a quem tem o identificador e não o acesso, e o largar de bytes a
+# sério até ao PostgreSQL. A terceira **só prova alguma coisa com
+# `OCINYE_TEST_STORAGE_ENDPOINT` definida**; sem ela levanta o harness, diz em
+# voz alta que se saltou, e a marca continua a contar — pelo que este portão
+# mede que ela correu, não que os bytes atravessaram.
+#
+# Auditado em 2026-08-29, em série, marca a marca. O número continua fixo: uma
 # viagem que deixe de levantar faz a contagem cair e o portão fecha.
-viagens-de-browser|58|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|57
+viagens-de-browser|61|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|60
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
