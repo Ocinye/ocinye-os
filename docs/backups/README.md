@@ -8,21 +8,73 @@ procedimento está em
 [migrate-to-another-server](../runbooks/migrate-to-another-server.md). Esta
 página diz o **estado**.
 
-## Estado actual
+## Estado
+
+> **IMPLEMENTATION COMPLETE — OPERATIONAL ACTIVATION PENDING FIRST SERVER**
+
+O software está feito e provado. O que falta não se resolve aqui: falta um
+servidor onde o agendador dispare.
+
+**Não instalar um agendador numa máquina de desenvolvimento para poder escrever
+que existe backup periódico.** Seria fabricar exactamente a evidência que este
+trabalho existe para recusar.
+
+## O portão de activação
+
+Quando existir o primeiro servidor da Ocinye, isto fecha-se com uma execução
+real. É pequeno e é factual:
+
+1. instalar a unidade correspondente de [`infra/scheduling/`](../../infra/scheduling/);
+2. confirmar que está `enabled`/`loaded`;
+3. **esperar por uma execução iniciada pelo agendador**;
+4. confirmar que produziu o conjunto cifrado;
+5. confirmar a cópia **por leitura de volta no destino externo**;
+6. confirmar a retenção, local e remota;
+7. executar um restore drill **a partir desse conjunto**;
+8. medir, e só então fixar RPO e RTO.
+
+E a distinção que dá sentido ao passo 3:
+
+| | |
+|---|---|
+| cópia corrida à mão | **não satisfaz** |
+| comando corrido à mão a imitar o agendador | **não satisfaz** |
+| o agendador disparou o trabalho | **satisfaz** |
+
+A terceira linha é a única que prova a propriedade que interessa: que a
+instituição é copiada **quando ninguém se lembra de a copiar**.
+
+## Estado dos mecanismos
 
 Os três estados obrigatórios de `CLAUDE.md` §63, e um quarto que faltava:
 
 | Estado | Situação |
 |---|---|
 | **Classificado** — sabe-se o que tem de viajar | **Sim**, em código, com teste que cobre o esquema |
-| **Configurado** — existe procedimento e destino configurável | **Sim**, `scripts/institutional-backup.sh`. **Sem agendamento.** |
-| **Executado** — correu e produziu artefacto verificável | **Sim**, cifrado, com somas reconferidas |
-| **Restore validado** — foi restaurado e verificado | **Sim, para a base e para os bytes**, a 2026-08-29 |
+| **Configurado** — existe procedimento e destino configurável | **Sim**, `scripts/institutional-backup.sh`, com cifra, destino externo e retenção nas duas pontas |
+| **Executado** — correu e produziu artefacto verificável | **Sim**, sem terminal, cifrado, confirmado por leitura de volta |
+| **Restore validado** — foi restaurado e verificado | **Sim**, com as três verificações a observar e a passar |
 
-**Continua a não existir backup operacional.** Um ensaio executado uma vez à
-mão, numa máquina de desenvolvimento, prova que o procedimento funciona. Não
-prova que existe uma cópia da instituição em qualquer momento dado — porque não
-existe.
+E o quinto, que é o que falta:
+
+| | |
+|---|---|
+| **Em operação** — corre sem que alguém se lembre | **Não.** Não há servidor onde instalar o agendador. |
+
+**Portabilidade não é política de backup.** Os ensaios provam que a instituição
+sabe mudar de sítio, e que o processo que a copia existe e funciona. Não provam
+que existe uma cópia da instituição em qualquer momento dado — porque, sem
+agendador a correr num servidor, não existe.
+
+> **Portability is not yet an operational backup policy. A recoverable
+> institution requires scheduled, protected, off-host copies and rehearsed
+> restoration.**
+
+E a lição que o incidente da cópia externa deixou:
+
+> **Successful local execution is not evidence of successful off-host
+> preservation. A remote copy is confirmed only by an observation made against
+> the destination.**
 
 ## O trio
 
@@ -426,8 +478,17 @@ imaginação.
 - **Nenhum procedimento de rotação da chave de selagem.** A `OCINYE_MAIL_KEY`
   viaja como está. Trocá-la exige reselar `mailbox_credentials`, e isso não
   está escrito nem implementado.
-- **Nenhum ensaio periódico.** O de 2026-08-29 foi executado uma vez. Um
+- **Nenhum ensaio periódico.** Os de 2026-08-29 correram uma vez cada. Um
   procedimento que se prova uma vez e nunca mais é um procedimento que se
   descobre partido no dia em que é preciso.
+- **Dívida conhecida na interface do transporte.** `OCINYE_BACKUP_REMOTE_CMD` é
+  uma linha de shell inteira dentro de uma variável, e foi por aí que a cópia
+  externa se perdeu: uma linha sem aspas num ficheiro de ambiente não define
+  variável nenhuma, e o valor por omissão escreveu para o sítio errado em
+  silêncio. A confirmação por leitura de volta fecha a consequência grave — já
+  não é possível declarar uma cópia que não chegou —, mas a interface continua
+  frágil. Separar executável e argumentos, ou escolher um *driver* nomeado,
+  fica registado como dívida e **não se faz agora**: mudaria a configuração de
+  um processo que ainda não corre em lado nenhum.
 - **3-2-1 não existe.** Três cópias, dois meios, uma fora do local.
   **Não declarar antes de existir.**

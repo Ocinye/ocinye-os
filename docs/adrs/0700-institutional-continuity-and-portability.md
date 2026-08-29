@@ -163,10 +163,23 @@ servidor já ardeu.
 decisão de continuidade, ou o portão fecha. É deliberado: é a única forma de a
 cobertura não envelhecer sozinha.
 
-**O que continua a não existir.** Nenhuma cópia fora do servidor. Nenhum
-agendamento. Nenhuma política de retenção. O 3-2-1 **não existe** e não deve ser
-declarado (`CLAUDE.md` §63). O que existe é a verificação, e um ensaio de
-restore executado.
+**O que continua a não existir.** Nenhum agendamento, porque não há servidor
+onde o agendador corra. O 3-2-1 **não existe** e não deve ser declarado
+(`CLAUDE.md` §63).
+
+O mecanismo, esse, está completo e exercitado: cifra, destino fora do servidor
+**confirmado por leitura de volta**, retenção nas duas pontas, e restauro
+verificado nas três dimensões — linhas, bytes e legibilidade. O estado é
+`IMPLEMENTATION COMPLETE — OPERATIONAL ACTIVATION PENDING FIRST SERVER`, e o
+portão que o fecha está em [`docs/backups/`](../backups/README.md).
+
+**Uma lição que ficou norma.** A primeira versão da cópia externa declarava-a
+feita porque o comando de transporte saiu zero — e o comando tinha escrito para
+uma pasta local com o nome do destino.
+
+> **Successful local execution is not evidence of successful off-host
+> preservation. A remote copy is confirmed only by an observation made against
+> the destination.**
 
 **O custo assumido.** `verify-objects` lê todos os bytes do Object Storage. Não
 há amostragem, e isso torna-o caro à escala. É o preço de a resposta significar

@@ -113,26 +113,29 @@ sem que nada falhe.
   imediatamente antes de o correr. **Aprovação é consentimento, não
   autorização:** revogar um acesso depois de confirmar impede a execução, e
   existe teste que o demonstra.
-- **Continuidade institucional: `IMPLEMENTED`. Backup operacional:
-  `NOT CONFIGURED`. Continuidade de artefactos de modelo: `SPECIFIED`, com
-  portão de entrada.** O Core classifica todo o estado em sete classes e diz o
+- **Continuidade institucional: `IMPLEMENTATION COMPLETE — OPERATIONAL
+  ACTIVATION PENDING FIRST SERVER`. Continuidade de artefactos de modelo:
+  `SPECIFIED`, com portão de entrada.** O Core classifica todo o estado e diz o
   que tem de viajar — PostgreSQL, Object Storage e a chave de selagem, as três
   ([ADR-0700](docs/adrs/0700-institutional-continuity-and-portability.md)).
   Quatro comandos respondem a três perguntas diferentes: `verify-snapshot`
   prova que as **linhas** chegaram, identidade a identidade; `verify-objects`
-  lê cada objecto do bucket e **recalcula a soma**, e distingue um bucket
+  lê cada objecto do bucket e **recalcula a soma**, distinguindo um bucket
   inacessível de um objecto ausente; `verify-keys` prova que o que chegou se
   consegue **ler**. Dois portões impedem a cobertura de envelhecer: uma tabela
-  nova numa migration sem decisão de continuidade fecha o portão, e uma coluna
-  nova de criptograma sem chave declarada também. **Ensaio A → B → C executado
-  a 2026-08-29** contra uma instituição construída pela API, com dois endpoints
-  S3-compatible, credenciais de armazenamento rodadas no destino e Redis
-  vazio: oito controlos sobre os bytes — destino vazio, endpoint inacessível,
-  objecto corrompido, objecto apagado, objecto a mais — e a prova pelo
-  Workspace de que o resultado mantém o identificador, a proveniência se
-  percorre, o `RESTRICTED` continua a recusar e a auditoria não é recriada. O
-  ensaio terminou em **saída 2**, e correctamente: a legibilidade não chegou a
-  ser observada porque não havia estado selado.
+  nova sem decisão de continuidade fecha o portão, e uma coluna nova de
+  criptograma sem chave declarada também. O trio operacional —
+  `institutional-backup`, `-restore`, `-verify` — cifra com `age`, recusa
+  enviar em claro para fora do servidor, **confirma a cópia externa por leitura
+  de volta**, e aplica retenção nas duas pontas. **Dois ensaios executados a
+  2026-08-29**: A → B → C provou a portabilidade; A → cofre → B provou o
+  processo e terminou com as três verificações a observar e a passar —
+  165 641 recursos, 2 objectos e 83 credenciais seladas que abriram no servidor
+  novo —, com o controlo negativo a recusar o mesmo restauro sem a chave.
+  **O que falta não está no repositório: falta um servidor onde o agendador
+  dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
+  e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
+  periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
 - **51 ADRs** em `docs/adrs/`, **10 runbooks** em `docs/runbooks/`,
   **41 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
@@ -208,11 +211,15 @@ sem que nada falhe.
   `UnconfiguredProvider` e todas as capacidades de correio reportam
   `not_configured`. `ocinye-core-server mail-check` prova uma configuração sem
   arrancar o Core, e sem imprimir credenciais ou conteúdo.
-- **Nenhum backup operacional existe.** O procedimento existe, é cifrável, tem
-  retenção e recusa enviar em claro para fora do servidor — e **não está
-  agendado em lado nenhum**, porque nenhuma instalação existe fora de
-  desenvolvimento. O RPO real é *desde o último conjunto que alguém produziu à
-  mão*, **3-2-1 não existe**, e a rotação da chave de selagem não está escrita.
+- **Nenhum backup periódico existe.** O mecanismo está completo e provado —
+  cifra, destino externo confirmado por leitura de volta, retenção nas duas
+  pontas, restauro verificado nas três dimensões. O que não existe é um
+  **servidor** onde o agendador corra, e por isso não existe cópia da
+  instituição em qualquer momento dado. O RPO é *desde o último conjunto que
+  alguém produziu à mão*, **3-2-1 não existe**, e a rotação da chave de selagem
+  não está escrita. O portão de activação está em
+  [`docs/backups/`](docs/backups/README.md), e exige uma execução **disparada
+  pelo agendador** — nem manual, nem uma imitação manual.
 
 Ferramentas disponíveis na máquina de desenvolvimento actual — contexto
 ambiental, **não** compromisso arquitectural: Git 2.50.1, Node.js 25.8.0,
@@ -1566,6 +1573,16 @@ E, do mesmo lado da mesma linha:
 > **Restaurar não é criar o domínio outra vez.** Uma instalação nova com as
 > mesmas migrations tem as mesmas tabelas e nada em comum com a instituição.
 > Um verificador de continuidade que não distinga as duas não verifica nada.
+
+E uma terceira, que custou uma cópia externa declarada sem nunca ter
+acontecido:
+
+> **A execução local bem-sucedida não é evidência de preservação fora do
+> servidor. Uma cópia remota só está confirmada por uma observação feita
+> contra o destino.**
+
+Um comando de transporte que sai zero pode ter escrito para uma pasta local com
+o nome do destino. Perguntar ao destino é a única resposta.
 
 Objectivo futuro: **3-2-1**. **Não declares 3-2-1 antes de existir.**
 
