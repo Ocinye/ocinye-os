@@ -420,6 +420,12 @@ pub struct FileDetailView {
 pub enum Preview {
     /// Texto, tal como está guardado.
     Text(String),
+    /// Uma imagem, servida na origem desta aplicação.
+    ///
+    /// O caminho é local — `/files/{id}/preview` — e não a URL do
+    /// armazenamento: a `Content-Security-Policy` continua `img-src 'self'`, e
+    /// esta página nunca aprende onde os bytes estão fisicamente.
+    Image { src: String, alt: String },
     /// O tipo não se pré-visualiza nesta superfície.
     UnsupportedType(String),
     /// Cabe no formato, mas não no ecrã.
@@ -579,6 +585,10 @@ fn previsualizacao(preview: Preview) -> impl IntoView {
     match preview {
         Preview::Text(conteudo) => view! {
             <pre class="oc-pre" tabindex="0">{conteudo}</pre>
+        }
+        .into_any(),
+        Preview::Image { src, alt } => view! {
+            <img class="oc-preview" src=src alt=alt />
         }
         .into_any(),
         Preview::UnsupportedType(tipo) => view! {

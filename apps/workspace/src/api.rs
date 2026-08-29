@@ -472,6 +472,55 @@ pub async fn fetch_bounded(
     Ok(bytes.into_iter().take(limite).collect())
 }
 
+/// Uma representação inline vinda do Core, com o tipo que o Core declarou.
+///
+/// Devolve os bytes e o `Content-Type` **tal como o Core os deu**. O Workspace
+/// não reinterpreta nem adivinha o tipo: quem o validou foi o Core, contra uma
+/// lista fechada, e adivinhar aqui reabriria exactamente a porta que essa lista
+/// fecha.
+///
+/// # Errors
+///
+/// Devolve [`ApiFailure`] a descrever porque não se conseguiu.
+pub async fn get_inline(
+    state: &WorkspaceState,
+    token: &str,
+    correlation_id: &str,
+    path: &str,
+) -> Result<(String, Vec<u8>), ApiFailure> {
+    let response = state
+        .http
+        .get(format!("{}{path}", state.config.core_url))
+        .bearer_auth(token)
+        .header(ocinye_observability::CORRELATION_ID_HEADER, correlation_id)
+        .send()
+        .await
+        .map_err(|error| ApiFailure::Failed(format!("the Core is unreachable: {error}")))?;
+
+    match response.status().as_u16() {
+        200..=299 => {
+            let tipo = response
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|valor| valor.to_str().ok())
+                .unwrap_or("application/octet-stream")
+                .to_owned();
+            let bytes = response
+                .bytes()
+                .await
+                .map_err(|error| ApiFailure::Failed(format!("unexpected response: {error}")))?;
+            Ok((tipo, bytes.to_vec()))
+        }
+        401 => Err(ApiFailure::Unauthorised),
+        403 => Err(ApiFailure::Forbidden),
+        404 => Err(ApiFailure::Denied),
+        503 => Err(ApiFailure::Unavailable(None)),
+        status => Err(ApiFailure::Failed(format!(
+            "the Core returned status {status}"
+        ))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

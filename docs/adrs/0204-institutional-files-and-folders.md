@@ -83,11 +83,37 @@ tem de o saber.
 vida próprio nesta decisão: continua a ser onde os bytes estão, e `ON DELETE
 RESTRICT` impede que desapareçam por baixo de uma versão que alguém cita.
 
+### A pré-visualização é same-origin, pelo Core
+
+A `Content-Security-Policy` do Workspace continua `img-src 'self' data:`, e
+continua assim por decisão. Uma imagem institucional aparece através de
+`GET /files/{id}/preview`: o Core resolve o `File`, autoriza o actor corrente,
+resolve a `FileVersion` corrente, lê os bytes e serve-os inline.
+
+> **A Experience não precisa de conhecer nem confiar no endpoint físico onde os
+> bytes institucionais estão guardados.**
+
+A alternativa — acrescentar hosts de object storage a `img-src` — faria a camada
+de experiência conhecer topologia de armazenamento, tornaria a CSP dependente do
+deployment e acrescentaria uma origem externa à página.
+
+Inline serve-se apenas uma **lista fechada** de formatos raster: `image/png`,
+`image/jpeg`, `image/webp`. Não é `image/*`, porque um SVG é um documento com
+script e servi-lo inline na origem do Workspace seria executá-lo lá. A resposta
+leva o tipo validado, `Content-Disposition: inline`, `nosniff`, `private` e um
+`ETag` derivado da soma dos bytes guardados.
+
+Isto **não é a descarga**. Pré-visualizar é uma representação inline autorizada;
+descarregar continua a sair por ligação assinada, e as duas coisas aparecem
+separadas na auditoria — `preview` e `download` — para que quem pergunta «quem
+tirou isto da instituição» não tenha de filtrar toda a gente que apenas olhou
+para o ecrã.
+
+O custo é o Core transportar os bytes. É a troca certa nesta fase; se um dia o
+débito justificar outra arquitectura, introduz-se um mecanismo dedicado e
+prova-se a fronteira outra vez.
+
 ### O que fica por decidir
 
-A pré-visualização de imagens. A `Content-Security-Policy` do Workspace é
-`img-src 'self' data:`, e mostrar uma imagem do armazenamento exigiria ou
-alargá-la a um host configurável — possivelmente externo — ou fazer o Workspace
-transportar os bytes. É uma decisão de segurança, e não uma consequência de
-alguém querer ver uma miniatura. Hoje pré-visualiza-se texto, e diz-se
-claramente o que não se mostra.
+A pré-visualização de PDF e de outros formatos paginados. OCR não entra nesta
+decisão.

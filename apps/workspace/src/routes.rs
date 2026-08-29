@@ -108,6 +108,7 @@ pub const ROUTES: &[&str] = &[
     "/files/{file_id}",
     "/files/{file_id}/version",
     "/files/{file_id}/download",
+    "/files/{file_id}/preview",
     "/file-versions/{version_id}/download",
     "/bibliography",
     "/bibliography/tools",
@@ -290,6 +291,7 @@ pub fn router(state: WorkspaceState) -> Router {
             post(file_new_version).layer(DefaultBodyLimit::max(FILE_BODY_LIMIT_BYTES)),
         )
         .route("/files/{file_id}/download", get(file_download))
+        .route("/files/{file_id}/preview", get(file_preview))
         .route(
             "/file-versions/{version_id}/download",
             get(version_download),
@@ -7505,6 +7507,23 @@ async fn previsualizar(
         .and_then(Value::as_i64)
         .unwrap_or(0);
 
+    // As imagens vêm por `/files/{id}/preview`, na origem desta aplicação. O
+    // navegador pede-as sozinho, com a sessão que já tem, e o Core volta a
+    // decidir — pelo que não há aqui nenhuma leitura antecipada de bytes.
+    // A lista de tipos que se mostram inline é do Core, e chega como um campo.
+    // O Workspace não a recalcula: seria uma segunda opinião sobre uma decisão
+    // de segurança, e as duas divergiriam no dia em que uma mudasse.
+    if corrente
+        .get("previewable")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Preview::Image {
+            src: format!("/files/{file_id}/preview"),
+            alt: "Pré-visualização do ficheiro".to_owned(),
+        };
+    }
+
     let e_texto = tipo.starts_with("text/")
         || matches!(
             tipo.as_str(),
@@ -7592,6 +7611,63 @@ async fn file_new_version(
             Redirect::to(&format!("{destino}?erro=armazenamento")).into_response()
         }
         Err(_) => Redirect::to(&format!("{destino}?erro=recusado")).into_response(),
+    }
+}
+
+/// Serve a pré-visualização na origem do Workspace.
+///
+/// # Porque os bytes passam por aqui
+///
+/// Porque a alternativa era pôr a URL do armazenamento num `<img>` e alargar a
+/// `Content-Security-Policy` desta aplicação — hoje `img-src 'self' data:` — ao
+/// host do object storage, que é configurável e pode ser externo.
+///
+/// > **A Experience não precisa de conhecer nem confiar no endpoint físico onde
+/// > os bytes institucionais estão guardados.**
+///
+/// O tipo é o que o Core declarou, contra a lista fechada dele. Este handler
+/// não o adivinha nem o corrige: repeti-lo aqui seria uma segunda opinião sobre
+/// uma decisão que já foi tomada no sítio certo.
+async fn file_preview(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(file_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    match api::get_inline(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/files/{file_id}/preview"),
+    )
+    .await
+    {
+        Ok((tipo, bytes)) => {
+            let Ok(tipo) = HeaderValue::from_str(&tipo) else {
+                return StatusCode::BAD_GATEWAY.into_response();
+            };
+            (
+                [
+                    (header::CONTENT_TYPE, tipo),
+                    (
+                        header::CONTENT_DISPOSITION,
+                        HeaderValue::from_static("inline"),
+                    ),
+                    (
+                        header::X_CONTENT_TYPE_OPTIONS,
+                        HeaderValue::from_static("nosniff"),
+                    ),
+                    (
+                        header::CACHE_CONTROL,
+                        HeaderValue::from_static("private, max-age=0, must-revalidate"),
+                    ),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
+        Err(failure) => failure_response(&failure),
     }
 }
 

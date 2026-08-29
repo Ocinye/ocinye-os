@@ -40,6 +40,12 @@ pub mod action {
     pub const DOWNLOAD: &str = "download";
     /// Content was exported out of the institution.
     pub const EXPORT: &str = "export";
+    /// Stored bytes were served inline as a representation.
+    ///
+    /// Separate from `DOWNLOAD` on purpose: a reviewer asking «who took this
+    /// out of the institution» should not have to sift through everyone who
+    /// merely looked at it on a screen.
+    pub const PREVIEW: &str = "preview";
     /// Something was approved.
     pub const APPROVE: &str = "approve";
     /// Something was published.

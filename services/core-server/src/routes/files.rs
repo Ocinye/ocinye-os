@@ -40,6 +40,9 @@ pub fn routes() -> Router<AppState> {
                 .post(upload_version.layer(DefaultBodyLimit::max(super::UPLOAD_BODY_LIMIT_BYTES))),
         )
         .route("/files/{file_id}/download", get(download_file))
+        // A representação inline. Não é a descarga, e não emite ligação
+        // assinada nenhuma: os bytes saem por aqui, na origem do Core.
+        .route("/files/{file_id}/preview", get(preview_file))
         // A versão exacta tem caminho próprio porque é um recurso próprio: «o
         // ficheiro» aponta para bytes que mudam, «a versão 3» não.
         .route(
@@ -107,6 +110,12 @@ struct FolderContentsView {
 struct VersionView {
     id: Uuid,
     sequence: i32,
+    /// Se estes bytes se mostram inline.
+    ///
+    /// Vem daqui e não da Experience: a lista de tipos é uma decisão de
+    /// segurança do Core, e um cliente que a recalculasse teria uma segunda
+    /// opinião sobre onde um SVG pode ser servido.
+    previewable: bool,
     original_filename: String,
     content_type: String,
     size_bytes: i64,
@@ -121,6 +130,7 @@ impl From<files::VersionListing> for VersionView {
         Self {
             id: v.id,
             sequence: v.sequence,
+            previewable: files::PREVIEWABLE_TYPES.contains(&v.content_type.as_str()),
             original_filename: v.original_filename,
             content_type: v.content_type,
             size_bytes: v.size_bytes,
@@ -354,6 +364,46 @@ async fn download_file(
         "url": url,
         "expires_in_seconds": ocinye_core::storage::DOWNLOAD_URL_TTL.as_secs(),
     })))
+}
+
+/// Serve os bytes da versão corrente inline.
+///
+/// Os cabeçalhos são tão importantes como os bytes. `nosniff` impede o browser
+/// de decidir por si que aquilo é outra coisa; `inline` com o tipo validado diz
+/// o que é; `private` mantém a resposta fora de qualquer cache partilhada, que
+/// numa resposta por membro é o mínimo.
+async fn preview_file(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(file_id): Path<Uuid>,
+) -> Result<axum::response::Response, ApiError> {
+    use axum::http::header;
+    use axum::response::IntoResponse;
+
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let vista = files::preview(&mut tx, &principal, &ids, store, file_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+
+    // O `ETag` deriva da soma dos bytes guardados: uma versão nova tem outros
+    // bytes e outra soma, pelo que a validação nunca serve conteúdo velho.
+    let etag = format!("\"{}\"", vista.checksum_sha256);
+
+    Ok((
+        [
+            (header::CONTENT_TYPE, vista.content_type),
+            (header::CONTENT_DISPOSITION, "inline".to_owned()),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned()),
+            (
+                header::CACHE_CONTROL,
+                "private, max-age=0, must-revalidate".to_owned(),
+            ),
+            (header::ETAG, etag),
+        ],
+        vista.bytes,
+    )
+        .into_response())
 }
 
 async fn download_version(

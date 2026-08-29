@@ -5586,3 +5586,13 @@ select.oc-entrada {
   .oc-files__bar, .oc-split { grid-template-columns: 1fr; }
   .oc-grid--3 { grid-template-columns: 1fr 1fr; }
 }
+
+/* A pré-visualização de imagem. Vem de `/files/{id}/preview`, na origem desta
+ * aplicação: a CSP continua `img-src 'self' data:` e a página nunca aprende
+ * onde os bytes estão fisicamente guardados. */
+.oc-preview {
+  display: block; max-width: 100%; max-height: 460px;
+  margin: 0 auto;
+  border-radius: var(--oc-r-sm);
+  background: var(--oc-surface-muted);
+}

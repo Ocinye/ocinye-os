@@ -142,6 +142,29 @@ pub async fn current_storage_object<'e>(
     Ok(linha)
 }
 
+/// Os bytes da versão corrente, com o que é preciso para os servir.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub(super) async fn current_object_details<'e>(
+    executor: impl PgExecutor<'e>,
+    file_id: Uuid,
+) -> CoreResult<Option<(String, String, i64, String)>> {
+    let linha = sqlx::query_as::<_, (String, String, i64, String)>(
+        "SELECT o.object_key, o.content_type, o.size_bytes, o.checksum_sha256
+           FROM file_versions v
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE v.file_id = $1
+          ORDER BY v.sequence DESC
+          LIMIT 1",
+    )
+    .bind(file_id)
+    .fetch_optional(executor)
+    .await?;
+    Ok(linha)
+}
+
 /// Um ficheiro institucional, tal como a base o guarda.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct FileRecord {

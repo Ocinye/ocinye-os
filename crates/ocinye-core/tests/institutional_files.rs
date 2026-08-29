@@ -1787,3 +1787,112 @@ async fn descarregar_uma_versao_exacta_passa_pela_autoridade_do_ficheiro() {
         "conhecer o identificador da versão bastou para descarregar"
     );
 }
+
+/// A pré-visualização é uma representação autorizada, e não uma porta lateral.
+///
+/// Existe porque a alternativa — pôr a URL do armazenamento num `<img>` — faria
+/// a camada de experiência conhecer a topologia do armazenamento e obrigaria a
+/// `Content-Security-Policy` a depender do deployment. Os bytes passam pelo
+/// Core, e por isso o Core tem de voltar a decidir quem os vê.
+#[tokio::test]
+async fn a_previsualizacao_passa_pela_autoridade_do_ficheiro() {
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else {
+        eprintln!("saltado: OCINYE_TEST_STORAGE_ENDPOINT não está definida");
+        return;
+    };
+    let ctx = contexto(&pool).await;
+    let dono = membro(&pool, &ctx, "lead").await;
+    let de_fora = estranho(&pool, &ctx).await;
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    // Um PNG minúsculo mas verdadeiro.
+    let png: Vec<u8> = vec![
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F,
+        0x15, 0xC4, 0x89,
+    ];
+    let criado = criar_ficheiro(
+        &pool,
+        &dono,
+        &store,
+        ctx.workspace_id,
+        ocinye_core::modules::files::NewFile {
+            filename: "montagem.png".to_owned(),
+            content_type: "image/png".to_owned(),
+            data: png.clone(),
+            classification: Some(ocinye_contracts::Classification::Restricted),
+        },
+    )
+    .await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    let vista = ocinye_core::modules::files::preview(&mut tx, &dono, &ids, &store, criado.file_id)
+        .await
+        .expect("quem alcança o ficheiro não conseguiu vê-lo");
+    tx.commit().await.expect("commit");
+
+    assert_eq!(vista.content_type, "image/png", "o tipo servido mudou");
+    assert_eq!(vista.bytes, png, "os bytes servidos não são os guardados");
+
+    // E quem não alcança o ficheiro não o vê, mesmo com o identificador exacto.
+    let mut tx = pool.begin().await.expect("tx");
+    let recusa =
+        ocinye_core::modules::files::preview(&mut tx, &de_fora, &ids, &store, criado.file_id).await;
+    assert!(
+        recusa.is_err(),
+        "conhecer o identificador bastou para ver o conteúdo do ficheiro"
+    );
+}
+
+/// Nem tudo o que é imagem se serve inline.
+///
+/// Um SVG é um documento com script. Servi-lo inline na origem do Workspace
+/// seria executá-lo lá — e é por isso que a lista é de formatos raster e cresce
+/// por decisão, não porque alguém carregou um ficheiro novo.
+#[tokio::test]
+async fn um_svg_nao_se_mostra_inline_so_por_ser_imagem() {
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else {
+        eprintln!("saltado: OCINYE_TEST_STORAGE_ENDPOINT não está definida");
+        return;
+    };
+    let ctx = contexto(&pool).await;
+    let dono = membro(&pool, &ctx, "lead").await;
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    assert!(
+        !ocinye_core::modules::files::PREVIEWABLE_TYPES.contains(&"image/svg+xml"),
+        "o SVG entrou na lista dos que se mostram inline"
+    );
+
+    let criado = criar_ficheiro(
+        &pool,
+        &dono,
+        &store,
+        ctx.workspace_id,
+        ocinye_core::modules::files::NewFile {
+            filename: "diagrama.svg".to_owned(),
+            content_type: "image/svg+xml".to_owned(),
+            data: b"<svg xmlns='http://www.w3.org/2000/svg'><script>1</script></svg>".to_vec(),
+            classification: None,
+        },
+    )
+    .await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    let recusa =
+        ocinye_core::modules::files::preview(&mut tx, &dono, &ids, &store, criado.file_id).await;
+    assert!(
+        recusa.is_err(),
+        "um SVG foi servido inline na origem da aplicação"
+    );
+
+    // Mas continua a ser um ficheiro institucional legítimo: guarda-se,
+    // lê-se e descarrega-se. Recusar a pré-visualização não é recusar o ficheiro.
+    let mut tx = pool.begin().await.expect("tx");
+    ocinye_core::modules::files::download_url(&mut tx, &dono, &ids, &store, criado.file_id)
+        .await
+        .expect("um ficheiro que não se pré-visualiza deixou de se poder descarregar");
+    tx.commit().await.expect("commit");
+}

@@ -7704,3 +7704,101 @@ async fn uma_pessoa_larga_um_ficheiro_e_ele_fica() {
     // A lista, recarregada pelo próprio `app.js`, mostra-o.
     esperar_por(&pagina, &nome).await;
 }
+
+/// Uma imagem institucional aparece na página sem a página saber onde ela está.
+///
+/// # A propriedade
+///
+/// > **A Experience não precisa de conhecer nem confiar no endpoint físico onde
+/// > os bytes institucionais estão guardados.**
+///
+/// A `Content-Security-Policy` do Workspace continua `img-src 'self' data:`. Se
+/// a imagem viesse do object storage o browser recusava-a, e o teste via um
+/// elemento com largura zero. Vindo de `/files/{id}/preview`, o browser
+/// carrega-a — e é o Chrome, não uma asserção sobre HTML, que o confirma.
+#[tokio::test]
+async fn uma_imagem_institucional_carrega_na_origem_do_workspace() {
+    let harness = harness!();
+
+    if store_de_teste().is_none() {
+        eprintln!(
+            "SALTADO: uma_imagem_institucional_carrega_na_origem_do_workspace — \
+             sem OCINYE_TEST_STORAGE_ENDPOINT não há bytes para servir."
+        );
+        return;
+    }
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+
+    // Um PNG 1×1 verdadeiro, largado como uma pessoa larga.
+    let pagina = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&pagina, "Largue ficheiros aqui").await;
+
+    let nome = format!("{}.png", unique_title("imagem").replace(' ', "-"));
+    let script = format!(
+        "(async () => {{ \
+           const forma = document.querySelector('form[data-drop=\"1\"]'); \
+           const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='; \
+           const cru = atob(b64); \
+           const bytes = new Uint8Array(cru.length); \
+           for (let i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i); \
+           const ficheiro = new File([bytes], '{nome}', {{ type: 'image/png' }}); \
+           const dt = new DataTransfer(); \
+           dt.items.add(ficheiro); \
+           forma.dispatchEvent(new DragEvent('drop', \
+             {{ bubbles: true, cancelable: true, dataTransfer: dt }})); \
+           return 'largado'; }})()"
+    );
+    let _ = pagina.evaluate(script).await.expect("largar a imagem");
+
+    let limite = std::time::Instant::now();
+    let file_id = loop {
+        let encontrado: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND name = $2")
+                .bind(workspace_id)
+                .bind(&nome)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("procura da imagem");
+        if let Some(id) = encontrado {
+            break id;
+        }
+        assert!(
+            limite.elapsed() < DEADLINE,
+            "a imagem largada não chegou ao PostgreSQL em {DEADLINE:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    };
+
+    // A página do ficheiro mostra-a, e o `src` é local.
+    let detalhe = harness.open(&format!("/files/{file_id}")).await;
+    esperar_por(&detalhe, "oc-preview").await;
+    let html = detalhe.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&format!("/files/{file_id}/preview")),
+        "a pré-visualização não veio da origem do Workspace"
+    );
+    assert!(
+        !html.contains("127.0.0.1:9000"),
+        "o endereço do armazenamento apareceu na página"
+    );
+
+    // E o browser carregou-a mesmo: com a CSP a recusar, `naturalWidth` seria 0.
+    let largura: Option<f64> = detalhe
+        .evaluate(
+            "(() => { const img = document.querySelector('.oc-preview'); \
+              return img ? img.naturalWidth : -1; })()",
+        )
+        .await
+        .expect("medir a imagem")
+        .into_value()
+        .ok();
+    assert_eq!(
+        largura,
+        Some(1.0),
+        "a imagem não foi carregada pelo browser — a CSP recusou-a, ou não chegou"
+    );
+}

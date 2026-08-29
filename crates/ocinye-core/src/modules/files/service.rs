@@ -799,3 +799,107 @@ pub async fn version_download_url(
 
     Ok(url)
 }
+
+// ── Pré-visualização ────────────────────────────────────────────────────
+//
+// > **A Experience não precisa de conhecer nem confiar no endpoint físico onde
+// > os bytes institucionais estão guardados.**
+//
+// A alternativa era pôr a URL do armazenamento dentro de um `<img>` e alargar a
+// `Content-Security-Policy` do Workspace ao host de object storage. Isso faria a
+// camada de experiência conhecer topologia de armazenamento, tornaria a CSP
+// dependente do deployment, e acrescentaria uma origem externa à página.
+//
+// O Core transporta os bytes. É um custo real de largura de banda, e é a troca
+// certa nesta fase: se um dia o débito justificar outra arquitectura,
+// introduz-se um mecanismo dedicado e prova-se a fronteira outra vez.
+
+/// Os tipos que se mostram inline.
+///
+/// # Porque não é `image/*`
+///
+/// Porque um SVG é um documento com script, e servi-lo inline na origem do
+/// Workspace seria executá-lo lá. A lista é de formatos raster, e cresce por
+/// decisão — não por alguém ter carregado um ficheiro novo.
+pub const PREVIEWABLE_TYPES: [&str; 3] = ["image/png", "image/jpeg", "image/webp"];
+
+/// O maior objecto que se transporta para mostrar inline.
+///
+/// Não é o limite do ficheiro: é o limite do que faz sentido atravessar o Core
+/// para caber num ecrã.
+pub const PREVIEW_MAX_BYTES: i64 = 16 * 1024 * 1024;
+
+/// Uma representação inline autorizada de um ficheiro.
+pub struct InlinePreview {
+    /// O tipo, validado contra [`PREVIEWABLE_TYPES`] — nunca o que o cliente disse.
+    pub content_type: String,
+    /// Os bytes.
+    pub bytes: Vec<u8>,
+    /// A soma dos bytes guardados, para quem quiser derivar um `ETag`.
+    pub checksum_sha256: String,
+}
+
+/// Os bytes da versão corrente, para mostrar inline.
+///
+/// Não é uma descarga: é uma representação. A descarga continua a sair por
+/// ligação assinada, e esta função não emite nenhuma — quem chama recebe bytes,
+/// e não uma URL que sobreviva ao pedido.
+///
+/// # Errors
+///
+/// Devolve erro quando o ficheiro não é alcançável, quando a autorização
+/// recusa, quando o tipo não se mostra inline, quando é grande de mais, ou
+/// quando o objecto não está disponível.
+pub async fn preview(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    store: &ObjectStore,
+    file_id: Uuid,
+) -> CoreResult<InlinePreview> {
+    let (ficheiro, workspace) = get(tx, principal, file_id).await?;
+
+    authorize(
+        principal,
+        Action::Read,
+        &file_context(&workspace, ficheiro.classification()),
+    )
+    .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+
+    let (chave, tipo, tamanho, soma) = repo::current_object_details(&mut **tx, file_id)
+        .await?
+        .ok_or_else(|| CoreError::StorageUnavailable("O ficheiro não tem versões.".to_owned()))?;
+
+    // O tipo que decide é o que está guardado, e tem de estar na lista. Um
+    // `content_type` que o Core não reconheça não se serve inline — servir-se-ia
+    // na origem do Workspace, e é aí que um SVG passaria a ser script.
+    if !PREVIEWABLE_TYPES.contains(&tipo.as_str()) {
+        return Err(CoreError::Validation(
+            "Este tipo não se mostra inline.".to_owned(),
+        ));
+    }
+    if tamanho > PREVIEW_MAX_BYTES {
+        return Err(CoreError::Validation(
+            "Este ficheiro é grande de mais para mostrar inline.".to_owned(),
+        ));
+    }
+
+    let bytes = store.get(&chave).await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::PREVIEW, "file")
+            .resource(file_id)
+            .context(&file_context(&workspace, ficheiro.classification()))
+            .classified(ficheiro.classification()),
+    )
+    .await?;
+
+    Ok(InlinePreview {
+        content_type: tipo,
+        bytes,
+        checksum_sha256: soma,
+    })
+}
