@@ -42,10 +42,34 @@ Cada edição fotografa a revisão anterior em `note_revisions`. Uma nota
 conceptual é o registo de como um raciocínio evoluiu; sobrescrevê-la apagaria
 precisamente isso.
 
+## Ficheiros institucionais
+
+> **Carregar um ficheiro não é o mesmo que afirmar conhecimento institucional.**
+
+Um `File` é a identidade dos bytes: organização, unidade, ambiente, nome e
+**classificação**. É ele que decide quem lê, quem descarrega e quem escreve.
+Cada `FileVersion` é numerada e imutável — a sequência começa em 1, a maior é a
+corrente, e uma versão **não tem classificação própria**.
+
+As pastas arrumam e não classificam. **Uma pasta é uma estrutura de navegação
+dentro de um contentor de autoridade; mover um `File` entre contentores de
+autoridade não é uma operação de pasta.** Mover um ficheiro RESTRICTED para uma
+pasta chamada «Público» muda onde ele aparece e mais nada.
+
+A classificação efectiva é `most_restrictive(workspace, file)`, calculada contra
+o estado corrente do ambiente: restringir um Research Workspace fecha os
+ficheiros lá dentro sem reescrever linha nenhuma.
+
+Decisão: [ADR-0204](../adrs/0204-institutional-files-and-folders.md).
+
 ## Documentos
 
+Um documento é uma **afirmação** de conhecimento sobre um ficheiro. Não detém
+bytes: resolve através do seu `File` e vê sempre a versão corrente dele. A
+classificação que o governa é a do ficheiro.
+
 Metadata na base, bytes em object storage. Cada documento transporta tipo,
-classificação, checksum SHA-256, dimensão e tipo de conteúdo.
+checksum SHA-256, dimensão e tipo de conteúdo.
 
 **Apenas título e descrição são indexados para pesquisa.** Extrair corpos de
 documentos para o índice é uma decisão separada e explicitamente autorizada — o
