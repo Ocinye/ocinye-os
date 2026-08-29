@@ -744,18 +744,14 @@ async fn um_png_e_um_ficheiro_institucional_sem_ser_documento() {
         return;
     };
     let ctx = contexto(&pool).await;
-    backend_por_omissao(&pool).await;
     let quem = membro(&pool, &ctx, "lead").await;
 
     let antes = contagens(&pool).await;
 
-    let mut tx = pool.begin().await.expect("tx");
-    let criado = ocinye_core::modules::files::create(
-        &mut tx,
+    let criado = criar_ficheiro(
+        &pool,
         &quem,
-        &ocinye_observability::CorrelationIds::generate(),
         &store,
-        "prova",
         ctx.workspace_id,
         ocinye_core::modules::files::NewFile {
             filename: "montagem-experimental.png".to_owned(),
@@ -764,9 +760,7 @@ async fn um_png_e_um_ficheiro_institucional_sem_ser_documento() {
             classification: None,
         },
     )
-    .await
-    .expect("o PNG não foi aceite como ficheiro institucional");
-    tx.commit().await.expect("commit");
+    .await;
 
     assert_eq!(criado.sequence, 1, "a primeira versão não é a número 1");
 
@@ -814,16 +808,83 @@ async fn contagens(pool: &PgPool) -> Contagens {
     }
 }
 
+/// A mesma tranca que `identity.rs` usa para o registo de armazenamento.
+///
+/// # Porque é preciso
+///
+/// `is_default` é estado **global**: o caminho de carregamento escolhe
+/// `WHERE is_default AND is_active`, e há um teste noutra suite que o limpa
+/// para provar que a recusa explica a causa. Sem tranca, esse teste e estes
+/// disputam a mesma linha — e os dois passam ou falham conforme a ordem.
+///
+/// A chave é a mesma de propósito: duas trancas diferentes sobre o mesmo estado
+/// não protegem nada.
+const TRANCA_DO_REGISTO: i64 = 0x0000_C109_E570_9A6E;
+
+/// Cria um ficheiro com o registo de armazenamento trancado.
+///
+/// A janela é curta de propósito: tranca, garante que há armazenamento
+/// registado, cria, destranca.
+async fn criar_ficheiro(
+    pool: &PgPool,
+    quem: &ocinye_domain::Principal,
+    store: &ocinye_core::storage::ObjectStore,
+    workspace_id: Uuid,
+    pedido: ocinye_core::modules::files::NewFile,
+) -> ocinye_core::modules::files::FileVersionRecord {
+    let mut tranca = pool.acquire().await.expect("ligação");
+    sqlx::query("SELECT pg_advisory_lock($1)")
+        .bind(TRANCA_DO_REGISTO)
+        .execute(&mut *tranca)
+        .await
+        .expect("tranca");
+
+    backend_por_omissao(pool).await;
+    let mut tx = pool.begin().await.expect("tx");
+    let feito = ocinye_core::modules::files::create(
+        &mut tx,
+        quem,
+        &ocinye_observability::CorrelationIds::generate(),
+        store,
+        "prova",
+        workspace_id,
+        pedido,
+    )
+    .await;
+    if feito.is_ok() {
+        tx.commit().await.expect("commit");
+    } else {
+        tx.rollback().await.expect("desfazer");
+    }
+
+    sqlx::query("SELECT pg_advisory_unlock($1)")
+        .bind(TRANCA_DO_REGISTO)
+        .execute(&mut *tranca)
+        .await
+        .expect("destranca");
+
+    feito.expect("criar")
+}
+
+/// Garante que existe armazenamento registado, na **mesma linha** que as
+/// outras suites usam.
+///
+/// O código é fixo de propósito. Uma linha nova por teste acumularia
+/// armazenamentos, e a suite de identidade — que limpa os `is_default` para
+/// provar que a recusa explica a causa — repõe apenas o que conhece. Duas
+/// suites a inventar linhas diferentes sobre o mesmo estado global é a receita
+/// para se anularem uma à outra conforme a ordem em que correm.
 async fn backend_por_omissao(pool: &PgPool) {
     sqlx::query(
-        "INSERT INTO storage_backends (code, display_name, location_label, bucket, is_default, is_active)
-         SELECT $1, 'omissão', 'local', 'prova', TRUE, TRUE
-          WHERE NOT EXISTS (SELECT 1 FROM storage_backends WHERE is_default AND is_active)",
+        "INSERT INTO storage_backends
+             (code, kind, display_name, location_label, bucket, is_default, is_active)
+         VALUES ('ocinye-test-default', 's3_compatible', 'Test', 'test', 'prova', TRUE, TRUE)
+         ON CONFLICT (code) DO UPDATE
+             SET is_default = TRUE, is_active = TRUE, updated_at = now()",
     )
-    .bind(format!("d{}", Uuid::new_v4().simple()))
     .execute(pool)
     .await
-    .expect("backend por omissão");
+    .expect("registar armazenamento de teste");
 }
 
 /// Conhecer o identificador não é uma forma de entrar.
@@ -848,18 +909,14 @@ async fn conhecer_o_identificador_nao_contorna_a_autorizacao() {
     let Some(pool) = pool().await else { return };
     let Some(store) = test_store() else { return };
     let ctx = contexto(&pool).await;
-    backend_por_omissao(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let forasteiro = estranho(&pool, &ctx).await;
 
     // Um ficheiro CONFIDENCIAL: acima de INTERNAL, logo exige filiação.
-    let mut tx = pool.begin().await.expect("tx");
-    let criado = ocinye_core::modules::files::create(
-        &mut tx,
+    let criado = criar_ficheiro(
+        &pool,
         &dono,
-        &ocinye_observability::CorrelationIds::generate(),
         &store,
-        "prova",
         ctx.workspace_id,
         ocinye_core::modules::files::NewFile {
             filename: "reservado.png".to_owned(),
@@ -868,9 +925,7 @@ async fn conhecer_o_identificador_nao_contorna_a_autorizacao() {
             classification: Some(ocinye_contracts::Classification::Confidential),
         },
     )
-    .await
-    .expect("criar");
-    tx.commit().await.expect("commit");
+    .await;
 
     let mut conn = pool.acquire().await.expect("ligação");
 
@@ -920,18 +975,14 @@ async fn a_descarga_recusa_a_quem_a_leitura_recusa() {
     let Some(pool) = pool().await else { return };
     let Some(store) = test_store() else { return };
     let ctx = contexto(&pool).await;
-    backend_por_omissao(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let forasteiro = estranho(&pool, &ctx).await;
     let ids = ocinye_observability::CorrelationIds::generate();
 
-    let mut tx = pool.begin().await.expect("tx");
-    let criado = ocinye_core::modules::files::create(
-        &mut tx,
+    let criado = criar_ficheiro(
+        &pool,
         &dono,
-        &ids,
         &store,
-        "prova",
         ctx.workspace_id,
         ocinye_core::modules::files::NewFile {
             filename: "restrito.png".to_owned(),
@@ -940,9 +991,7 @@ async fn a_descarga_recusa_a_quem_a_leitura_recusa() {
             classification: Some(ocinye_contracts::Classification::Restricted),
         },
     )
-    .await
-    .expect("criar");
-    tx.commit().await.expect("commit");
+    .await;
 
     let mut tx = pool.begin().await.expect("tx");
     let negada = ocinye_core::modules::files::download_url(
@@ -1086,7 +1135,6 @@ async fn a_matriz_de_acesso_e_a_mesma_depois_do_ficheiro_governar() {
     let Some(pool) = pool().await else { return };
     let Some(store) = test_store() else { return };
     let ctx = contexto(&pool).await;
-    backend_por_omissao(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let e = elenco(&pool, &ctx).await;
     let ids = ocinye_observability::CorrelationIds::generate();
@@ -1098,13 +1146,10 @@ async fn a_matriz_de_acesso_e_a_mesma_depois_do_ficheiro_governar() {
         (Confidential, [false, true, true, true, true]),
         (Restricted, [false, true, false, true, false]),
     ] {
-        let mut tx = pool.begin().await.expect("tx");
-        let criado = ocinye_core::modules::files::create(
-            &mut tx,
+        let criado = criar_ficheiro(
+            &pool,
             &dono,
-            &ids,
             &store,
-            "prova",
             ctx.workspace_id,
             ocinye_core::modules::files::NewFile {
                 filename: "matriz.png".to_owned(),
@@ -1113,9 +1158,7 @@ async fn a_matriz_de_acesso_e_a_mesma_depois_do_ficheiro_governar() {
                 classification: Some(nivel),
             },
         )
-        .await
-        .expect("criar");
-        tx.commit().await.expect("commit");
+        .await;
 
         let actores = [
             ("membro da organização", &e.membro_da_organizacao),
@@ -1184,19 +1227,15 @@ async fn o_ambiente_restringe_o_artefacto_na_leitura() {
     let Some(pool) = pool().await else { return };
     let Some(store) = test_store() else { return };
     let ctx = contexto(&pool).await;
-    backend_por_omissao(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let forasteiro = estranho(&pool, &ctx).await;
     let ids = ocinye_observability::CorrelationIds::generate();
 
     // O ambiente ainda é INTERNO: o ficheiro nasce INTERNO de facto.
-    let mut tx = pool.begin().await.expect("tx");
-    let criado = ocinye_core::modules::files::create(
-        &mut tx,
+    let criado = criar_ficheiro(
+        &pool,
         &dono,
-        &ids,
         &store,
-        "prova",
         ctx.workspace_id,
         ocinye_core::modules::files::NewFile {
             filename: "interno.png".to_owned(),
@@ -1205,9 +1244,7 @@ async fn o_ambiente_restringe_o_artefacto_na_leitura() {
             classification: Some(Internal),
         },
     )
-    .await
-    .expect("criar");
-    tx.commit().await.expect("commit");
+    .await;
 
     let guardada: String = sqlx::query_scalar("SELECT classification FROM files WHERE id = $1")
         .bind(criado.file_id)
@@ -1383,18 +1420,14 @@ async fn mover_para_uma_pasta_chamada_publico_nao_muda_o_acesso() {
     let Some(pool) = pool().await else { return };
     let Some(store) = test_store() else { return };
     let ctx = contexto(&pool).await;
-    backend_por_omissao(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let fora = estranho(&pool, &ctx).await;
     let ids = ocinye_observability::CorrelationIds::generate();
 
-    let mut tx = pool.begin().await.expect("tx");
-    let criado = ocinye_core::modules::files::create(
-        &mut tx,
+    let criado = criar_ficheiro(
+        &pool,
         &dono,
-        &ids,
         &store,
-        "prova",
         ctx.workspace_id,
         ocinye_core::modules::files::NewFile {
             filename: "restrito.png".to_owned(),
@@ -1403,8 +1436,9 @@ async fn mover_para_uma_pasta_chamada_publico_nao_muda_o_acesso() {
             classification: Some(Restricted),
         },
     )
-    .await
-    .expect("criar");
+    .await;
+
+    let mut tx = pool.begin().await.expect("tx");
     let publico = ocinye_core::modules::files::create_folder(
         &mut tx,
         &dono,
@@ -1467,18 +1501,14 @@ async fn mover_para_outro_ambiente_e_recusado() {
     // interessa está. Noutra organização a resposta certa é «não existe», que
     // não revela sequer que a pasta há.
     let outro = outro_ambiente(&pool, &ctx).await;
-    backend_por_omissao(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let dono_do_outro = membro(&pool, &outro, "lead").await;
     let ids = ocinye_observability::CorrelationIds::generate();
 
-    let mut tx = pool.begin().await.expect("tx");
-    let criado = ocinye_core::modules::files::create(
-        &mut tx,
+    let criado = criar_ficheiro(
+        &pool,
         &dono,
-        &ids,
         &store,
-        "prova",
         ctx.workspace_id,
         ocinye_core::modules::files::NewFile {
             filename: "aqui.png".to_owned(),
@@ -1487,9 +1517,7 @@ async fn mover_para_outro_ambiente_e_recusado() {
             classification: None,
         },
     )
-    .await
-    .expect("criar");
-    tx.commit().await.expect("commit");
+    .await;
 
     let mut tx = pool.begin().await.expect("tx");
     let alheia = ocinye_core::modules::files::create_folder(
@@ -1526,7 +1554,6 @@ async fn navegar_mostra_a_arvore_e_o_caminho() {
     let Some(pool) = pool().await else { return };
     let Some(store) = test_store() else { return };
     let ctx = contexto(&pool).await;
-    backend_por_omissao(&pool).await;
     let dono = membro(&pool, &ctx, "lead").await;
     let ids = ocinye_observability::CorrelationIds::generate();
 
