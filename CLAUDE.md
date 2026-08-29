@@ -49,7 +49,7 @@ sem que nada falhe.
   3 serviços (`core-server`, `worker`, `node-agent`) e 1 aplicação
   (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED`, não deployado.** 131 caminhos e 155 operações
+- **Ocinye Core: `IMPLEMENTED`, não deployado.** 138 caminhos e 164 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`.
@@ -64,7 +64,7 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED`, não deployado.** 65 ecrãs em Leptos SSR,
+- **Ocinye Workspace: `IMPLEMENTED`, não deployado.** 69 ecrãs em Leptos SSR,
   sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
   pelas permissões que o Core calcula.
 - **Ocinye Mail: `IMPLEMENTED`, `NOT CONFIGURED`.** Módulo do Core com
@@ -77,8 +77,8 @@ sem que nada falhe.
   A interface distingue as ausências em vez de mostrar uma caixa vazia. **A
   ingestão é periódica**: o worker percorre as caixas ligadas, e uma que recuse
   não interrompe as outras — a razão fica guardada na caixa que falhou.
-- **21 migrations**, aplicáveis de base vazia; 65 tabelas.
-- **Ficheiros institucionais: `IMPLEMENTED` no domínio, sem superfície humana.**
+- **24 migrations**, aplicáveis de base vazia; 66 tabelas.
+- **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
   ([`files`, `file_versions`](migrations/0020_institutional_files.sql)). A
@@ -88,9 +88,17 @@ sem que nada falhe.
   primitiva de bytes e mais nada. O conteúdo de um documento resolve-se
   **exclusivamente** pela versão corrente — a de maior sequência —, e a coluna
   que o guardava directamente foi retirada depois de se provar que nenhum
-  código de produção a lia. **Não existe ainda ecrã de Ficheiros**, nem
-  governação de um ficheiro sem documento, nem extracção de conteúdo, nem
-  pastas.
+  código de produção a lia.
+  O ficheiro **governa-se a si próprio**: tem classificação, e a efectiva é
+  `most_restrictive(workspace, file)` calculada contra o estado corrente do
+  ambiente. As [pastas](migrations/0024_folders.sql) arrumam e não decidem —
+  mover um ficheiro RESTRICTED para uma pasta chamada «Público» muda onde ele
+  aparece e mais nada ([ADR-0204](docs/adrs/0204-institutional-files-and-folders.md)).
+  Existe **ecrã de Ficheiros** sob CONHECIMENTO, com navegação, pastas,
+  largar, carregamento, detalhes, histórico e descarga de versões exactas.
+  **Não existe ainda** extracção de conteúdo, pesquisa de corpo, nem
+  pré-visualização de imagens — esta última por uma decisão de CSP que está
+  registada e por tomar.
 - **Agentes de IA: `IMPLEMENTED`.** Definíveis e persistidos **sem nó de IA**;
   o estado de execução é derivado da disponibilidade real.
 - **Agentic Control Plane: `IMPLEMENTED`, sem inferência.** Capability Registry
@@ -149,7 +157,7 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **51 ADRs** em `docs/adrs/`, **10 runbooks** em `docs/runbooks/`,
+- **52 ADRs** em `docs/adrs/`, **10 runbooks** em `docs/runbooks/`,
   **41 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -169,14 +177,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1256 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1275 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **379 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **398 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se
