@@ -13,6 +13,7 @@ mod governance;
 mod health;
 mod identity;
 mod intelligence;
+mod files;
 mod knowledge;
 mod mail;
 mod messaging;
@@ -65,6 +66,7 @@ pub fn router(state: AppState) -> Router {
         .merge(identity::routes())
         .merge(organisation::routes())
         .merge(research::routes())
+        .merge(files::routes())
         .merge(knowledge::routes())
         .merge(science::routes())
         .merge(collaboration::routes())
