@@ -863,6 +863,76 @@ pub struct InlinePreview {
     pub checksum_sha256: String,
 }
 
+/// Os bytes de **uma versão determinada**, para mostrar inline.
+///
+/// A autoridade é a do ficheiro, reavaliada aqui: `get_version` resolve através
+/// dele. Uma citação que aponte para a v2 mostra a imagem da v2.
+///
+/// # Errors
+///
+/// Devolve erro quando a versão não é alcançável, quando a autorização recusa,
+/// quando o tipo não se mostra inline, ou quando o objecto não está disponível.
+pub async fn preview_version(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    store: &ObjectStore,
+    version_id: Uuid,
+) -> CoreResult<InlinePreview> {
+    let (versao, ficheiro) = get_version(tx, principal, version_id).await?;
+    let (_, workspace) = get(tx, principal, versao.file_id).await?;
+
+    authorize(
+        principal,
+        Action::Read,
+        &file_context(&workspace, ficheiro.classification()),
+    )
+    .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+
+    let linha: Option<(String, String, i64, String)> = sqlx::query_as(
+        "SELECT o.object_key, o.content_type, o.size_bytes, o.checksum_sha256
+           FROM file_versions v
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE v.id = $1",
+    )
+    .bind(versao.version_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    let (chave, tipo, tamanho, soma) = linha
+        .ok_or_else(|| CoreError::StorageUnavailable("Esta versão não tem objecto.".to_owned()))?;
+
+    if !PREVIEWABLE_TYPES.contains(&tipo.as_str()) {
+        return Err(CoreError::Validation(
+            "Este tipo não se mostra inline.".to_owned(),
+        ));
+    }
+    if tamanho > PREVIEW_MAX_BYTES {
+        return Err(CoreError::Validation(
+            "Este ficheiro é grande de mais para mostrar inline.".to_owned(),
+        ));
+    }
+
+    let bytes = store.get(&chave).await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::PREVIEW, "file_version")
+            .resource(version_id)
+            .context(&file_context(&workspace, ficheiro.classification()))
+            .classified(ficheiro.classification()),
+    )
+    .await?;
+
+    Ok(InlinePreview {
+        content_type: tipo,
+        bytes,
+        checksum_sha256: soma,
+    })
+}
+
 /// Os bytes da versão corrente, para mostrar inline.
 ///
 /// Não é uma descarga: é uma representação. A descarga continua a sair por
@@ -984,4 +1054,29 @@ pub async fn excerpts(
         max_chars,
     )
     .await
+}
+
+/// O conteúdo textual de **uma versão determinada**, para quem a pode ler.
+///
+/// # Porque isto existe ao lado de [`content`]
+///
+/// Porque uma citação aponta para a versão 2, e abrir a versão 2 tem de mostrar
+/// a versão 2. `content` responde «o que este ficheiro diz agora»; isto responde
+/// «o que este ficheiro dizia quando alguém o citou», e são perguntas
+/// diferentes.
+///
+/// A autoridade é a mesma: `get_version` resolve através do ficheiro.
+///
+/// # Errors
+///
+/// Devolve erro quando a versão não é alcançável ou quando a autorização
+/// recusa.
+pub async fn content_of_version(
+    executor: &mut sqlx::PgConnection,
+    principal: &Principal,
+    file_version_id: Uuid,
+    max_chars: usize,
+) -> CoreResult<Option<String>> {
+    let (versao, _) = get_version(&mut *executor, principal, file_version_id).await?;
+    super::extraction::text_of_version(&mut *executor, versao.version_id, max_chars).await
 }

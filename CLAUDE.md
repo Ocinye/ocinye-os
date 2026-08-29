@@ -49,7 +49,7 @@ sem que nada falhe.
   3 serviços (`core-server`, `worker`, `node-agent`) e 1 aplicação
   (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED`, não deployado.** 141 caminhos e 167 operações
+- **Ocinye Core: `IMPLEMENTED`, não deployado.** 143 caminhos e 169 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`.
@@ -64,7 +64,7 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED`, não deployado.** 70 ecrãs em Leptos SSR,
+- **Ocinye Workspace: `IMPLEMENTED`, não deployado.** 71 ecrãs em Leptos SSR,
   sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
   pelas permissões que o Core calcula.
 - **Ocinye Mail: `IMPLEMENTED`, `NOT CONFIGURED`.** Módulo do Core com
@@ -122,8 +122,15 @@ sem que nada falhe.
   Os agentes lêem conteúdo por `files.content.read`, uma exposição separada de
   `knowledge.document.read` — que continua com `content_included: false`. A
   capacidade não concede autoridade, e o que chega ao modelo não tem caminho
-  nenhum para os bytes. **Não existe ainda** OCR, citações estruturadas nas
-  respostas do Prompt, nem um provider de embeddings real integrado.
+  nenhum para os bytes.
+  Um resultado de recuperação **cita a versão exacta**: abrir a citação abre os
+  bytes que foram lidos, e não o que o ficheiro diz hoje — mesmo depois de
+  existir uma versão nova. A abertura reavalia a autoridade corrente, pelo que
+  uma citação não é um passe permanente, e a página diz em voz alta quando o que
+  se está a ver não é a versão corrente.
+  **Não existe ainda** OCR, um provider de embeddings real integrado, nem a
+  superfície de resposta do Prompt — a execução de inferência é `PLANNED` e
+  precede esta milestone.
 - **Agentes de IA: `IMPLEMENTED`.** Definíveis e persistidos **sem nó de IA**;
   o estado de execução é derivado da disponibilidade real.
 - **Agentic Control Plane: `IMPLEMENTED`, sem inferência.** Capability Registry
@@ -202,14 +209,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1311 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1314 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **434 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **437 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

@@ -7790,9 +7790,18 @@ async fn uma_imagem_institucional_carrega_na_origem_do_workspace() {
     let detalhe = harness.open(&format!("/files/{file_id}")).await;
     esperar_por(&detalhe, "oc-preview").await;
     let html = detalhe.content().await.expect("conteúdo");
+    // A ligação é local **e por versão**: a imagem que se mostra é a da versão
+    // que se está a ver, e não «a que o ficheiro tem agora».
+    let versao: Uuid = sqlx::query_scalar(
+        "SELECT id FROM file_versions WHERE file_id = $1 ORDER BY sequence DESC LIMIT 1",
+    )
+    .bind(file_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("versão corrente");
     assert!(
-        html.contains(&format!("/files/{file_id}/preview")),
-        "a pré-visualização não veio da origem do Workspace"
+        html.contains(&format!("/file-versions/{versao}/preview")),
+        "a pré-visualização não veio da origem do Workspace, ou não é da versão vista"
     );
     assert!(
         !html.contains("127.0.0.1:9000"),
@@ -8336,5 +8345,202 @@ async fn a_pesquisa_semantica_indisponivel_nao_e_um_erro() {
     assert!(
         html.contains("Pesquisar no Ocinye"),
         "a página de pesquisa não abriu"
+    );
+}
+
+/// Uma citação continua a abrir os bytes que foram citados.
+///
+/// # A viagem
+///
+/// ```text
+/// carregar PDF → extrair → pesquisar uma frase do corpo
+///   → o resultado cita v1 · p. 1
+///   → clicar → abre a v1, e diz que é a v1
+///   → carregar v2
+///   → voltar à mesma citação → continua a abrir a v1
+/// ```
+///
+/// # O que isto fecha
+///
+/// Que a recuperação não quebrou a natureza versionada da memória
+/// institucional. Uma citação que apontasse para «o ficheiro» descreveria, no
+/// dia seguinte, um texto que ninguém leu.
+#[tokio::test]
+async fn uma_citacao_continua_a_abrir_a_versao_que_citou() {
+    let harness = harness!();
+
+    if store_de_teste().is_none() {
+        exigir_armazenamento("uma_citacao_continua_a_abrir_a_versao_que_citou");
+        return;
+    }
+
+    let (person_id, credenciais) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let _ = &credenciais;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+
+    let so_na_v1 = format!("delta{}", Uuid::new_v4().simple());
+    let so_na_v2 = format!("delta{}", Uuid::new_v4().simple());
+
+    let largar = |pagina: &Page, nome: String, bytes: Vec<u8>| {
+        let b64 = {
+            use base64::Engine as _;
+            base64::engine::general_purpose::STANDARD.encode(&bytes)
+        };
+        let script = format!(
+            "(() => {{ \
+               const forma = document.querySelector('form[data-drop=\"1\"]'); \
+               const cru = atob('{b64}'); \
+               const b = new Uint8Array(cru.length); \
+               for (let i = 0; i < cru.length; i++) b[i] = cru.charCodeAt(i); \
+               const f = new File([b], '{nome}', {{ type: 'application/pdf' }}); \
+               const dt = new DataTransfer(); dt.items.add(f); \
+               forma.dispatchEvent(new DragEvent('drop', \
+                 {{ bubbles: true, cancelable: true, dataTransfer: dt }})); \
+               return 'largado'; }})()"
+        );
+        let pagina = pagina.clone();
+        async move { pagina.evaluate(script).await.expect("largar") }
+    };
+
+    let lista = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&lista, "Largue ficheiros aqui").await;
+
+    let nome = format!("{}.pdf", unique_title("relatorio").replace(' ', "-"));
+    let _ = largar(
+        &lista,
+        nome.clone(),
+        pdf_com_paginas(&[&format!("conclusao do ensaio {so_na_v1}")]),
+    )
+    .await;
+
+    let limite = std::time::Instant::now();
+    let file_id = loop {
+        let encontrado: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND name = $2")
+                .bind(workspace_id)
+                .bind(&nome)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("procura");
+        if let Some(id) = encontrado {
+            break id;
+        }
+        assert!(
+            limite.elapsed() < DEADLINE,
+            "o PDF não chegou ao PostgreSQL"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    };
+    correr_o_worker(&harness, file_id).await;
+
+    let v1: Uuid = sqlx::query_scalar(
+        "SELECT id FROM file_versions WHERE file_id = $1 ORDER BY sequence LIMIT 1",
+    )
+    .bind(file_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("v1");
+
+    // A pesquisa cita a versão exacta e a página.
+    let resultados = harness.open(&format!("/search?q={so_na_v1}")).await;
+    esperar_por(&resultados, "No conteúdo dos ficheiros").await;
+    let html = resultados.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&format!("/files/{file_id}?version={v1}")),
+        "o resultado não cita a versão exacta: a ligação leva ao ficheiro e não à versão"
+    );
+    assert!(
+        html.contains("v1"),
+        "o resultado não mostra que versão citou"
+    );
+
+    // Clicar abre a v1, e a página diz que v1 é o que se está a ver.
+    let citada = harness
+        .open(&format!("/files/{file_id}?version={v1}&page=1"))
+        .await;
+    esperar_por(&citada, "A ver a versão 1").await;
+    let html = citada.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&so_na_v1),
+        "abrir a citação não mostrou o texto citado"
+    );
+
+    // Uma versão nova, pelo formulário do próprio ficheiro.
+    //
+    // Largar outra vez na zona de carregamento criaria **outro ficheiro** com o
+    // mesmo nome, que é o comportamento certo — o nome não é identidade. Quem
+    // quer versionar diz-lo, e diz onde.
+    let pagina_do_ficheiro = harness.open(&format!("/files/{file_id}")).await;
+    esperar_por(&pagina_do_ficheiro, "Carregar nova versão").await;
+
+    let b64 = {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD
+            .encode(pdf_com_paginas(&[&format!("conclusao revista {so_na_v2}")]))
+    };
+    let script = format!(
+        "(() => {{ \
+           const campo = document.querySelector('#oc-version-file'); \
+           if (!campo) return 'sem campo'; \
+           const cru = atob('{b64}'); \
+           const b = new Uint8Array(cru.length); \
+           for (let i = 0; i < cru.length; i++) b[i] = cru.charCodeAt(i); \
+           const f = new File([b], '{nome}', {{ type: 'application/pdf' }}); \
+           const dt = new DataTransfer(); dt.items.add(f); \
+           campo.files = dt.files; \
+           campo.form.submit(); \
+           return 'submetido'; }})()"
+    );
+    let submetido: Option<String> = pagina_do_ficheiro
+        .evaluate(script)
+        .await
+        .expect("submeter a versão nova")
+        .into_value()
+        .ok();
+    assert_eq!(
+        submetido.as_deref(),
+        Some("submetido"),
+        "o formulário de nova versão não aceitou o ficheiro"
+    );
+
+    let limite = std::time::Instant::now();
+    loop {
+        let quantas: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM file_versions WHERE file_id = $1")
+                .bind(file_id)
+                .fetch_one(&harness.pool)
+                .await
+                .expect("contagem");
+        if quantas >= 2 {
+            break;
+        }
+        assert!(limite.elapsed() < DEADLINE, "a segunda versão não chegou");
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+    correr_o_worker(&harness, file_id).await;
+
+    // O ficheiro, aberto sem citação, mostra a versão corrente.
+    let corrente = harness.open(&format!("/files/{file_id}")).await;
+    esperar_por(&corrente, &so_na_v2).await;
+
+    // E a mesma citação continua a abrir a v1.
+    let outra_vez = harness
+        .open(&format!("/files/{file_id}?version={v1}&page=1"))
+        .await;
+    esperar_por(&outra_vez, "A ver a versão 1").await;
+    let html = outra_vez.content().await.expect("conteúdo");
+    assert!(
+        html.contains(&so_na_v1),
+        "a citação deixou de abrir os bytes que citou"
+    );
+    assert!(
+        !html.contains(&so_na_v2),
+        "a citação derivou para a versão corrente"
+    );
+    assert!(
+        html.contains("Esta não é a versão corrente"),
+        "a página mostra uma versão antiga sem o dizer"
     );
 }

@@ -137,9 +137,41 @@ fronteira que [ADR-0203](0203-institutional-model-artifacts.md) já descreve.
 real, e a identidade que grava chama-se `not-a-model`: se aparecer num registo
 de proveniência, quem o lê percebe imediatamente que não é institucional.
 
+### A citação aponta para bytes, não para um nome
+
+Um resultado de recuperação transporta `File` + `FileVersion` + `locator`, e a
+ligação leva **à versão citada**.
+
+> **Se a resposta citou v2 e já existe v4, abrir a citação continua a levar a
+> v2.**
+
+`/files/{id}` abre o que o ficheiro diz hoje; `/files/{id}?version={vid}` abre os
+bytes que foram lidos. A pré-visualização e o texto seguem a versão que se está a
+ver, e a página diz claramente quando essa não é a corrente — porque alguém que
+chega por uma citação, vê a v1 e não é avisado conclui que aquilo é o estado
+actual.
+
+A abertura **reavalia a autoridade**: a versão resolve-se através do ficheiro, e
+quem perdeu acesso entretanto não o recupera por ter guardado a ligação. A
+identidade da fonte é institucional — `File` + `FileVersion` + `locator` — e
+nunca uma URL assinada.
+
+As citações vêm do resultado do retrieval, e não do texto do modelo.
+
+> **The model may use retrieved evidence; it may not manufacture institutional
+> citations.**
+
+Hoje isso é verdade por construção: não existe nenhum caminho que interprete
+texto de um modelo como referência institucional. As citações são construídas a
+partir de `ContextSource`, que só se preenche com o que a autoridade devolveu.
+
 ### O que fica por fazer
 
-Citações estruturadas nas respostas do Prompt Ocinye — o envelope já transporta
-`locator`, `version_id` e `sequence`, e falta a superfície que as apresenta. OCR
-continua fora. Um provider de embeddings real continua por integrar: o contrato
-existe e está exercido, a implementação é uma decisão de deployment.
+**A superfície de resposta do Prompt Ocinye.** O `POST /ai/prompt` devolve
+`CapabilityUnavailable` por desenho: a execução de inferência é `PLANNED` e
+precede esta milestone. Quando existir, as citações que a resposta há-de mostrar
+já estão construídas e já sabem abrir a versão exacta — o que falta é a resposta,
+não a citação.
+
+OCR continua fora. Um provider de embeddings real continua por integrar: o
+contrato existe e está exercido, a implementação é uma decisão de deployment.

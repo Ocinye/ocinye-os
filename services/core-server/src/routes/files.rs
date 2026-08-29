@@ -45,6 +45,16 @@ pub fn routes() -> Router<AppState> {
         .route("/files/{file_id}/preview", get(preview_file))
         // O texto extraído. Uma porta, e a mesma autoridade do ficheiro.
         .route("/files/{file_id}/content", get(file_content))
+        // O conteúdo de uma versão exacta. Uma citação aponta para a v2, e
+        // abrir a v2 tem de mostrar a v2 — não «o que o ficheiro diz agora».
+        .route(
+            "/file-versions/{version_id}/content",
+            get(file_version_content),
+        )
+        .route(
+            "/file-versions/{version_id}/preview",
+            get(preview_file_version),
+        )
         // A versão exacta tem caminho próprio porque é um recurso próprio: «o
         // ficheiro» aponta para bytes que mudam, «a versão 3» não.
         .route(
@@ -431,6 +441,51 @@ async fn file_content(
     let mut conn = state.pool.acquire().await.map_err(CoreError::from)?;
     let texto = files::content(&mut conn, &principal, file_id, CONTENT_MAX_CHARS).await?;
     Ok(Json(serde_json::json!({ "text": texto })))
+}
+
+/// O texto extraído de uma versão determinada.
+async fn file_version_content(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(version_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut conn = state.pool.acquire().await.map_err(CoreError::from)?;
+    let texto =
+        files::content_of_version(&mut conn, &principal, version_id, CONTENT_MAX_CHARS).await?;
+    Ok(Json(serde_json::json!({ "text": texto })))
+}
+
+/// Serve inline os bytes de uma versão exacta.
+async fn preview_file_version(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(version_id): Path<Uuid>,
+) -> Result<axum::response::Response, ApiError> {
+    use axum::http::header;
+    use axum::response::IntoResponse;
+
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let vista = files::preview_version(&mut tx, &principal, &ids, store, version_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+
+    let etag = format!("\"{}\"", vista.checksum_sha256);
+
+    Ok((
+        [
+            (header::CONTENT_TYPE, vista.content_type),
+            (header::CONTENT_DISPOSITION, "inline".to_owned()),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned()),
+            (
+                header::CACHE_CONTROL,
+                "private, max-age=0, must-revalidate".to_owned(),
+            ),
+            (header::ETAG, etag),
+        ],
+        vista.bytes,
+    )
+        .into_response())
 }
 
 async fn download_version(

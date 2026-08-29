@@ -109,6 +109,7 @@ pub const ROUTES: &[&str] = &[
     "/files/{file_id}/version",
     "/files/{file_id}/download",
     "/files/{file_id}/preview",
+    "/file-versions/{version_id}/preview",
     "/file-versions/{version_id}/download",
     "/bibliography",
     "/bibliography/tools",
@@ -292,6 +293,10 @@ pub fn router(state: WorkspaceState) -> Router {
         )
         .route("/files/{file_id}/download", get(file_download))
         .route("/files/{file_id}/preview", get(file_preview))
+        .route(
+            "/file-versions/{version_id}/preview",
+            get(file_version_preview),
+        )
         .route(
             "/file-versions/{version_id}/download",
             get(version_download),
@@ -7132,6 +7137,18 @@ const PREVIEW_LIMIT_BYTES: usize = 256 * 1024;
 struct FilesQuery {
     #[serde(default)]
     workspace: Option<Uuid>,
+    /// A versão exacta a abrir, quando se chega por uma citação.
+    ///
+    /// # Porque não basta abrir o ficheiro
+    ///
+    /// Porque uma citação que diga «v2, p. 14» e abra a v4 mente. A resposta
+    /// foi construída sobre bytes que já não são os correntes, e clicar tem de
+    /// levar aos bytes que foram lidos — senão a citação é decoração.
+    #[serde(default)]
+    version: Option<Uuid>,
+    /// O sítio dentro da versão, quando o formato tem coordenadas.
+    #[serde(default)]
+    page: Option<i64>,
     #[serde(default)]
     folder: Option<Uuid>,
     #[serde(default)]
@@ -7464,7 +7481,34 @@ async fn file_detail(
     .cloned()
     .unwrap_or_default();
 
-    let preview = previsualizar(&state, &member, file_id, versions.first()).await;
+    // Se a chegada foi por citação, a versão citada é a que se mostra.
+    //
+    // Resolve-se contra a lista que o Core acabou de autorizar: um identificador
+    // que não esteja aqui não é uma versão deste ficheiro, e é tratado como se
+    // não tivesse sido indicado — nunca como um atalho para outro recurso.
+    let citada = query.version.and_then(|pedida| {
+        versions
+            .iter()
+            .find(|v| {
+                v.get("id")
+                    .and_then(Value::as_str)
+                    .and_then(|id| Uuid::parse_str(id).ok())
+                    == Some(pedida)
+            })
+            .cloned()
+    });
+
+    let mostrada = citada.clone().or_else(|| versions.first().cloned());
+    let preview = previsualizar(&state, &member, mostrada.as_ref()).await;
+
+    let citada_view = citada.as_ref().map(|v| ui::screens::files::VersaoCitada {
+        sequence: v.get("sequence").and_then(Value::as_i64).unwrap_or(1),
+        page: query.page,
+        corrente: versions
+            .first()
+            .and_then(|c| c.get("id").and_then(Value::as_str))
+            == v.get("id").and_then(Value::as_str),
+    });
 
     let may_upload = file
         .get("may_write")
@@ -7487,6 +7531,10 @@ async fn file_detail(
         file,
         versions,
         preview,
+        // O que se está a ver, quando não é a versão corrente. A página tem de
+        // o dizer: alguém que chegou por uma citação e vê a v2 sem aviso
+        // conclui que é o estado actual do ficheiro.
+        citada: citada_view,
         extraction,
         // Do Core, pela mesma razão do ecrã de navegação: o direito de
         // acrescentar uma versão é deste ficheiro, não da instituição.
@@ -7513,14 +7561,22 @@ async fn file_detail(
 async fn previsualizar(
     state: &WorkspaceState,
     member: &Member,
-    file_id: Uuid,
-    corrente: Option<&Value>,
+    versao: Option<&Value>,
 ) -> ui::screens::files::Preview {
     use ui::screens::files::Preview;
 
-    let Some(corrente) = corrente else {
+    let Some(corrente) = versao else {
         return Preview::Unavailable("Este ficheiro ainda não tem versões.".to_owned());
     };
+
+    // A pré-visualização é **da versão que se está a ver**, e não da corrente.
+    // Uma citação que abra a v2 e mostre o texto da v4 é a mesma mentira, só
+    // que mais difícil de notar.
+    let version_id = corrente
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
 
     let tipo = corrente
         .get("content_type")
@@ -7544,7 +7600,7 @@ async fn previsualizar(
         .unwrap_or(false)
     {
         return Preview::Image {
-            src: format!("/files/{file_id}/preview"),
+            src: format!("/file-versions/{version_id}/preview"),
             alt: "Pré-visualização do ficheiro".to_owned(),
         };
     }
@@ -7562,7 +7618,7 @@ async fn previsualizar(
         state,
         &member.session.access_token,
         &member.correlation_id,
-        &format!("/api/v1/files/{file_id}/content"),
+        &format!("/api/v1/file-versions/{version_id}/content"),
     )
     .await
     {
@@ -7663,6 +7719,53 @@ async fn file_preview(
         &member.session.access_token,
         &member.correlation_id,
         &format!("/api/v1/files/{file_id}/preview"),
+    )
+    .await
+    {
+        Ok((tipo, bytes)) => {
+            let Ok(tipo) = HeaderValue::from_str(&tipo) else {
+                return StatusCode::BAD_GATEWAY.into_response();
+            };
+            (
+                [
+                    (header::CONTENT_TYPE, tipo),
+                    (
+                        header::CONTENT_DISPOSITION,
+                        HeaderValue::from_static("inline"),
+                    ),
+                    (
+                        header::X_CONTENT_TYPE_OPTIONS,
+                        HeaderValue::from_static("nosniff"),
+                    ),
+                    (
+                        header::CACHE_CONTROL,
+                        HeaderValue::from_static("private, max-age=0, must-revalidate"),
+                    ),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+/// Serve inline a pré-visualização de uma versão exacta.
+///
+/// Pela mesma razão da outra: a CSP continua `img-src 'self'`, e a página nunca
+/// aprende onde os bytes estão.
+async fn file_version_preview(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(version_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    match api::get_inline(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/file-versions/{version_id}/preview"),
     )
     .await
     {

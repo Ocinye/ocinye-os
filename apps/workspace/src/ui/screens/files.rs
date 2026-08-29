@@ -403,6 +403,8 @@ pub struct FileDetailView {
     pub versions: Vec<Value>,
     /// O conteúdo, quando é texto e cabe. `None` quando não se pode mostrar.
     pub preview: Preview,
+    /// A versão que se está a ver, quando se chegou por uma citação.
+    pub citada: Option<VersaoCitada>,
     /// O que aconteceu à leitura do corpo, se alguma coisa aconteceu.
     pub extraction: Extraccao,
     /// Se este membro pode carregar uma versão nova.
@@ -434,6 +436,52 @@ pub enum Preview {
     TooLarge(i64),
     /// Não se conseguiu ler o conteúdo agora.
     Unavailable(String),
+}
+
+/// A versão exacta a que uma citação apontou.
+///
+/// # Porque a página tem de dizer que não é a corrente
+///
+/// Porque alguém que chega por uma citação, vê a v2 e não é avisado conclui que
+/// aquilo é o estado actual do ficheiro. A citação diz a verdade e a página
+/// mente logo a seguir.
+pub struct VersaoCitada {
+    /// O número da versão.
+    pub sequence: i64,
+    /// A página, quando o formato tem coordenadas.
+    pub page: Option<i64>,
+    /// Se por acaso ela é a corrente.
+    pub corrente: bool,
+}
+
+fn aviso_de_versao(citada: &VersaoCitada) -> impl IntoView {
+    let onde = citada.page.map_or_else(
+        || format!("versão {}", citada.sequence),
+        |p| format!("versão {} · página {p}", citada.sequence),
+    );
+
+    if citada.corrente {
+        return view! {
+            <div class="oc-note">
+                <p class="oc-t-strong">{format!("A ver a {onde}")}</p>
+                <p class="oc-t-caption--muted">
+                    "É também a versão corrente deste ficheiro."
+                </p>
+            </div>
+        }
+        .into_any();
+    }
+
+    view! {
+        <div class="oc-note oc-note--ok">
+            <p class="oc-t-strong">{format!("A ver a {onde}")}</p>
+            <p class="oc-t-caption--muted">
+                "Esta não é a versão corrente. Está a ver os bytes exactos que \
+                 foram citados — e não o que o ficheiro diz hoje."
+            </p>
+        </div>
+    }
+    .into_any()
 }
 
 /// O que a leitura do corpo produziu, do ponto de vista de quem olha.
@@ -510,6 +558,7 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
         file,
         versions,
         preview,
+        citada,
         extraction,
         may_upload,
         notice,
@@ -560,6 +609,7 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
             </div>
 
             {notice.map(|(ok, mensagem)| aviso(ok, &mensagem))}
+            {citada.as_ref().map(aviso_de_versao)}
 
             <div class="oc-split">
                 <section class="oc-card">

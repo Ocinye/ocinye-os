@@ -57,7 +57,8 @@ Os quatro primeiros são apurados em tempo real pelo Core e servidos em
 | **Pesquisa semântica do corpo** | implementado, com identidade de modelo fechada | declarada com a razão, nunca como avaria | sem provider configurado | `NOT_CONFIGURED` |
 | **Recuperação híbrida** | lexical + semântica, fusão por posição recíproca | integrada no Search universal | — | `AVAILABLE` (lexical inteira sem provider) |
 | **Conteúdo de ficheiros para agentes** | `files.content.read`, com tectos de exposição | — | n/a | `AVAILABLE` |
-| **Citações estruturadas nas respostas** | envelope transporta versão e localizador | ecrã por construir | n/a | `PLANNED` |
+| **Citações com versão e localizador** | envelope e resultados transportam `File` + `FileVersion` + locator | resultado abre a versão exacta, reavaliando autoridade | n/a | `AVAILABLE` |
+| **Resposta do Prompt com citações** | execução de inferência não activada | — | sem nó de IA | `PLANNED` |
 | **Agentes de IA** | implementado | lista, criação | não requer nó | `AVAILABLE` |
 | **Execução de agentes** | — | estado derivado | sem nó de IA | `NO_RESOURCE` |
 | **Prompt Ocinye** | endpoint implementado | implementado | sem nó de IA | `NO_RESOURCE` |

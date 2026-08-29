@@ -1040,3 +1040,166 @@ async fn os_pedacos_nao_sao_enderecaveis_por_identificador() {
         "quem não devia alcançar o ficheiro alcança-o, e o teste do corpo passou por acidente"
     );
 }
+
+/// Uma citação aponta para bytes, não para um nome.
+///
+/// # A propriedade
+///
+/// > **Se a resposta citou v2 e já existe v4, abrir a citação continua a levar
+/// > a v2.**
+///
+/// O conteúdo de uma versão exacta resolve-se pela versão, através do ficheiro,
+/// e não pelo ficheiro sozinho. Sem isto, uma citação feita hoje descreveria
+/// amanhã um texto que ninguém leu.
+#[tokio::test]
+async fn o_conteudo_de_uma_versao_citada_nao_deriva_para_a_corrente() {
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else {
+        eprintln!("saltado: OCINYE_TEST_STORAGE_ENDPOINT não está definida");
+        return;
+    };
+    let ctx = contexto(&pool).await;
+    let quem = membro(&pool, &ctx, "lead").await;
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    let so_na_v1 = format!("delta{}", Uuid::new_v4().simple());
+    let so_na_v2 = format!("delta{}", Uuid::new_v4().simple());
+
+    let v1 = carregar_pdf(
+        &pool,
+        &quem,
+        &store,
+        &ctx,
+        "ensaio.pdf",
+        &[&format!("conclusao {so_na_v1}")],
+    )
+    .await;
+    processar(&pool, &store, v1.version_id).await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    let v2 = ocinye_core::modules::files::upload_version(
+        &mut tx,
+        &quem,
+        &ids,
+        &store,
+        "prova",
+        v1.file_id,
+        ocinye_core::modules::files::NewFile {
+            filename: "ensaio.pdf".to_owned(),
+            content_type: "application/pdf".to_owned(),
+            data: pdf_com_paginas(&[&format!("conclusao revista {so_na_v2}")]),
+            classification: None,
+        },
+    )
+    .await
+    .expect("segunda versão");
+    tx.commit().await.expect("commit");
+    processar(&pool, &store, v2.version_id).await;
+
+    let mut conn = pool.acquire().await.expect("ligação");
+
+    // O ficheiro diz o que diz hoje.
+    let corrente = ocinye_core::modules::files::content(&mut conn, &quem, v1.file_id, 10_000)
+        .await
+        .expect("conteúdo corrente")
+        .expect("há texto");
+    assert!(
+        corrente.contains(&so_na_v2) && !corrente.contains(&so_na_v1),
+        "«o ficheiro» não devolveu a versão corrente"
+    );
+
+    // A citação continua a dizer o que dizia.
+    let citado =
+        ocinye_core::modules::files::content_of_version(&mut conn, &quem, v1.version_id, 10_000)
+            .await
+            .expect("conteúdo da versão citada")
+            .expect("há texto");
+    assert!(
+        citado.contains(&so_na_v1),
+        "abrir a versão 1 não devolveu o texto da versão 1"
+    );
+    assert!(
+        !citado.contains(&so_na_v2),
+        "abrir a versão 1 derivou para a corrente"
+    );
+}
+
+/// Abrir uma citação reavalia a autoridade no momento em que se abre.
+///
+/// Uma referência numa resposta não é um passe permanente: quem perdeu acesso
+/// entretanto não o recupera por ter guardado a ligação.
+#[tokio::test]
+async fn uma_citacao_nao_e_um_passe_permanente() {
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else {
+        eprintln!("saltado: OCINYE_TEST_STORAGE_ENDPOINT não está definida");
+        return;
+    };
+    let ctx = contexto(&pool).await;
+    let dono = membro(&pool, &ctx, "lead").await;
+    let visitante = membro(&pool, &ctx, "member").await;
+
+    let frase = format!("delta{}", Uuid::new_v4().simple());
+    let versao = carregar_pdf(
+        &pool,
+        &dono,
+        &store,
+        &ctx,
+        "relatorio.pdf",
+        &[&format!("conclusao {frase}")],
+    )
+    .await;
+    processar(&pool, &store, versao.version_id).await;
+
+    let mut conn = pool.acquire().await.expect("ligação");
+
+    // Enquanto pertence, abre.
+    let visto = ocinye_core::modules::files::content_of_version(
+        &mut conn,
+        &visitante,
+        versao.version_id,
+        10_000,
+    )
+    .await
+    .expect("quem pertence devia abrir a citação")
+    .expect("há texto");
+    assert!(visto.contains(&frase));
+
+    // O ambiente passa a RESTRICTED, e o visitante deixa de o alcançar.
+    sqlx::query("UPDATE research_workspaces SET classification = 'RESTRICTED' WHERE id = $1")
+        .bind(ctx.workspace_id)
+        .execute(&pool)
+        .await
+        .expect("restringir");
+    sqlx::query("DELETE FROM workspace_memberships WHERE workspace_id = $1 AND person_id = $2")
+        .bind(ctx.workspace_id)
+        .bind(visitante.person_id)
+        .execute(&pool)
+        .await
+        .expect("revogar a pertença");
+
+    // O principal relê-se, como o faria numa sessão seguinte.
+    let pessoa = ocinye_core::modules::identity::person_by_id(&pool, visitante.person_id)
+        .await
+        .expect("consulta")
+        .expect("pessoa");
+    let visitante = ocinye_core::modules::identity::principal_for_person(&pool, &pessoa)
+        .await
+        .expect("principal");
+
+    let depois = ocinye_core::modules::files::content_of_version(
+        &mut conn,
+        &visitante,
+        versao.version_id,
+        10_000,
+    )
+    .await;
+    assert!(
+        depois.is_err(),
+        "a citação continuou a abrir depois de a autoridade ser revogada"
+    );
+    assert!(
+        !format!("{depois:?}").contains(&frase),
+        "a recusa vazou o conteúdo"
+    );
+}

@@ -253,6 +253,7 @@ fn resultados_do_corpo(corpos: &[Value]) -> impl IntoView {
         .iter()
         .map(|hit| {
             let file_id = text(hit, "file_id").to_owned();
+            let version_id = text(hit, "file_version_id").to_owned();
             let nome = text(hit, "name").to_owned();
             let classification = text(hit, "classification").to_owned();
             let excerto = hit
@@ -274,8 +275,18 @@ fn resultados_do_corpo(corpos: &[Value]) -> impl IntoView {
                 |p| format!("v{sequencia} · p. {p}"),
             );
 
+            // A ligação leva à **versão citada**, e não ao ficheiro.
+            //
+            // `/files/{id}` abre o que o ficheiro diz hoje. Um resultado que
+            // diga «v2 · p. 4» e abra a v4 mente — e mente exactamente onde
+            // alguém foi verificar. O destino carrega a versão e o sítio.
+            let destino = pagina.map_or_else(
+                || format!("/files/{file_id}?version={version_id}"),
+                |p| format!("/files/{file_id}?version={version_id}&page={p}"),
+            );
+
             view! {
-                <a class="oc-result" href=format!("/files/{file_id}")>
+                <a class="oc-result" href=destino>
                     <div class="oc-row oc-gap-5 oc-mb-2">
                         <span class="oc-pill">"FICHEIRO"</span>
                         {classification_badge(&classification)}

@@ -678,3 +678,43 @@ pub async fn excerpts_of_version<'e>(
         })
         .collect())
 }
+
+/// O texto extraído de uma versão determinada, em ordem.
+///
+/// Quem chama tem de ter autorizado o ficheiro primeiro.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn text_of_version<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+    file_version_id: Uuid,
+    max_chars: usize,
+) -> CoreResult<Option<String>> {
+    let pedacos: Vec<String> = sqlx::query_scalar(
+        "SELECT c.text
+           FROM file_chunks c
+           JOIN file_extractions e ON e.id = c.extraction_id
+          WHERE e.file_version_id = $1
+          ORDER BY c.ordinal",
+    )
+    .bind(file_version_id)
+    .fetch_all(executor)
+    .await?;
+
+    if pedacos.is_empty() {
+        return Ok(None);
+    }
+
+    let mut texto = String::new();
+    for pedaco in pedacos {
+        if texto.chars().count() >= max_chars {
+            break;
+        }
+        if !texto.is_empty() {
+            texto.push_str("\n\n");
+        }
+        texto.push_str(&pedaco);
+    }
+    Ok(Some(texto.chars().take(max_chars).collect()))
+}

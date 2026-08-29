@@ -29,8 +29,9 @@ pub mod service;
 
 pub use repository::{FileListing, FileRecord, FolderRecord, VersionListing};
 pub use service::{
-    add_version, browse, content, create, create_folder, create_with_first_version,
-    current_version, download_url, excerpts, file_context, get, get_version, may_write,
-    move_to_folder, preview, upload_version, version_download_url, versions, FileContext,
-    FileVersionRecord, FolderContents, InlinePreview, NewFile, PREVIEWABLE_TYPES,
+    add_version, browse, content, content_of_version, create, create_folder,
+    create_with_first_version, current_version, download_url, excerpts, file_context, get,
+    get_version, may_write, move_to_folder, preview, preview_version, upload_version,
+    version_download_url, versions, FileContext, FileVersionRecord, FolderContents, InlinePreview,
+    NewFile, PREVIEWABLE_TYPES,
 };
