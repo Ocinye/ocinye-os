@@ -77,7 +77,20 @@ sem que nada falhe.
   A interface distingue as ausências em vez de mostrar uma caixa vazia. **A
   ingestão é periódica**: o worker percorre as caixas ligadas, e uma que recuse
   não interrompe as outras — a razão fica guardada na caixa que falhou.
-- **19 migrations**, aplicáveis de base vazia; 63 tabelas.
+- **21 migrations**, aplicáveis de base vazia; 65 tabelas.
+- **Ficheiros institucionais: `IMPLEMENTED` no domínio, sem superfície humana.**
+  Um documento deixou de apontar para **um** objecto guardado: aponta para um
+  **ficheiro**, que tem identidade estável e uma história imutável de versões
+  ([`files`, `file_versions`](migrations/0020_institutional_files.sql)). A
+  versão é material e não semântica, e por isso pertence ao ficheiro — assim
+  uma fotografia sem documento não precisa de `ImageVersion`, nem um anexo de
+  `AttachmentVersion`. `dataset_versions` **não** foi generalizada: partilha a
+  primitiva de bytes e mais nada. O conteúdo de um documento resolve-se
+  **exclusivamente** pela versão corrente — a de maior sequência —, e a coluna
+  que o guardava directamente foi retirada depois de se provar que nenhum
+  código de produção a lia. **Não existe ainda ecrã de Ficheiros**, nem
+  governação de um ficheiro sem documento, nem extracção de conteúdo, nem
+  pastas.
 - **Agentes de IA: `IMPLEMENTED`.** Definíveis e persistidos **sem nó de IA**;
   o estado de execução é derivado da disponibilidade real.
 - **Agentic Control Plane: `IMPLEMENTED`, sem inferência.** Capability Registry
@@ -156,14 +169,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1246 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1256 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **369 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **379 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se
