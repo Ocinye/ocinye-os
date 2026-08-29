@@ -8544,3 +8544,105 @@ async fn uma_citacao_continua_a_abrir_a_versao_que_citou() {
         "a página mostra uma versão antiga sem o dizer"
     );
 }
+
+/// Quem pertence a um ambiente vê CONHECIMENTO como navegação, não como recusa.
+///
+/// # O defeito que este teste guarda
+///
+/// A sidebar decidia sobre `DocumentsView`, `BibliographyView` e
+/// `DatasetsView` com a lista de capacidades do `/me`, que é de **âmbito
+/// institucional**. Essas três permissões só existem como concessão
+/// contextual — pertença a unidade ou a ambiente — e no contexto institucional
+/// `workspace_id` e `unit_id` são `None`, pelo que nenhuma concessão contextual
+/// se aplica.
+///
+/// Consequência: as quatro entradas de CONHECIMENTO ficavam esbatidas **para
+/// toda a gente**, incluindo quem pertencia a um ambiente cheio de ficheiros. A
+/// navegação dizia «não tem autorização» a quem tinha.
+///
+/// É o mesmo defeito que o botão de carregar teve dentro do ecrã: uma lista
+/// institucional a decidir sobre um direito de ambiente.
+#[tokio::test]
+async fn quem_pertence_a_um_ambiente_alcanca_conhecimento_pela_navegacao() {
+    let harness = harness!();
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    // Dá-lhe uma unidade e um ambiente: passa a alcançar ficheiros a sério.
+    let _workspace = harness.owns_a_workspace(person_id).await;
+
+    let pagina = harness.open("/").await;
+    esperar_por(&pagina, "CONHECIMENTO").await;
+    let html = pagina.content().await.expect("conteúdo");
+
+    for entrada in ["Ficheiros", "Conhecimento", "Bibliografia", "Dados"] {
+        let indice = html
+            .find(&format!(">{entrada}<"))
+            .unwrap_or_else(|| panic!("«{entrada}» não aparece na navegação"));
+
+        // O bloco que contém a entrada: se for o estado indisponível, a classe
+        // e o `aria-disabled` estão logo antes dela.
+        let inicio = indice.saturating_sub(420);
+        let contexto = &html[inicio..indice];
+        assert!(
+            !contexto.contains("oc-nav--unavailable"),
+            "«{entrada}» aparece como indisponível a quem pertence a um ambiente"
+        );
+        assert!(
+            !contexto.contains("aria-disabled"),
+            "«{entrada}» está marcada como desactivada a quem pertence a um ambiente"
+        );
+    }
+}
+
+/// Abrir a entrada não é alcançar coisa nenhuma.
+///
+/// A contrapartida do teste anterior, e a razão pela qual abrir a navegação não
+/// abre acesso: quem não pertence a nada entra e encontra um ecrã vazio e
+/// honesto. É o mesmo desenho da Pesquisa — zero resultados, e não uma recusa.
+#[tokio::test]
+async fn ver_a_entrada_de_ficheiros_nao_da_acesso_a_ficheiro_nenhum() {
+    let harness = harness!();
+
+    // Alguém com um ambiente e um ficheiro lá dentro.
+    let (dono, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(dono).await;
+    let nome = unique_title("restrito");
+    let file_id = semear_ficheiro(&harness, workspace_id, &nome, "RESTRICTED").await;
+
+    // E alguém que não pertence a nada.
+    let (_, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // Vê a entrada — a navegação já não lhe mente.
+    let inicio = harness.open("/").await;
+    esperar_por(&inicio, "Ficheiros").await;
+
+    // Entra, e o ecrã abre em vez de recusar.
+    //
+    // O ambiente do harness é INTERNAL, e INTERNAL quer dizer que qualquer
+    // membro activo o alcança — por isso ele aparece na escolha, e deve
+    // aparecer. O que **não** aparece é o ficheiro RESTRICTED lá dentro.
+    let ficheiros = harness.open("/files").await;
+    esperar_por(&ficheiros, "Escolha o ambiente").await;
+
+    let dentro = harness
+        .open(&format!("/files?workspace={workspace_id}"))
+        .await;
+    esperar_por(&dentro, "Ficheiros").await;
+    let html = dentro.content().await.expect("conteúdo");
+    assert!(
+        !html.contains(&nome),
+        "um ficheiro RESTRICTED apareceu a quem não pertence ao ambiente"
+    );
+
+    // E o identificador directo continua a não valer nada.
+    let directo = harness.open(&format!("/files/{file_id}")).await;
+    let html = directo.content().await.expect("conteúdo");
+    assert!(
+        !html.contains(&nome),
+        "abrir o ficheiro pelo identificador revelou-o a quem não o alcança"
+    );
+    assert!(
+        !html.contains("Histórico de versões"),
+        "a página do ficheiro abriu para quem não tem acesso"
+    );
+}
