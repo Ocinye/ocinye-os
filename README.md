@@ -38,10 +38,71 @@ software:
 ### Memória institucional
 
 A memória institucional não é um módulo, e não tem tabela nem ecrã próprio. É uma
-propriedade que emerge da composição governada do que o sistema já guarda:
-conhecimento, dados e as suas versões, projectos, metodologias, resultados,
-documentos e auditoria, com a **proveniência** que preserva as relações entre os
-recursos e a **linhagem científica** que permite navegá-las ao longo do tempo.
+propriedade que emerge da composição governada de três formas de capacidade
+acumulada.
+
+```text
+                         MEMÓRIA INSTITUCIONAL
+                                  │
+             ┌────────────────────┼────────────────────┐
+             │                    │                    │
+     Conhecimento          Evidência            Capacidade
+        e dados            científica            do modelo *
+             │                    │                    │
+      Documentos e        Resultados e          Modelos
+        datasets          proveniência          treinados *
+             │                    │                    │
+          Versões        Linhagem científica    Linhagem de
+             │                    │              treino *
+             └────────────────────┼────────────────────┘
+                                  │
+                            Ocinye Core
+                                  │
+                     Continuidade institucional
+                                  │
+                    ┌─────────────┴─────────────┐
+                    │                           │
+                PostgreSQL              Object Storage
+                                              │
+                              datasets · documentos
+                              artefactos científicos
+                              artefactos de modelo *
+```
+
+`*` **Arquitecturalmente especificado; ainda não operacional.** A continuidade
+de artefactos de modelo começa com o primeiro modelo treinado pela Ocinye
+([ADR-0203](docs/adrs/0203-institutional-model-artifacts.md)). Até lá, nada
+desta coluna existe — nem `Model`, nem `ModelVersion`, nem `TrainingRun`, nem
+pesos guardados.
+
+**Conhecimento explícito** — documentos, datasets, bibliografia, notas e as
+suas versões. Lê-se, cita-se e recupera-se directamente.
+
+**Evidência científica** — hipótese, versão de metodologia, estudo, execução,
+resultado e validação, com a **proveniência** que preserva as relações e a
+**linhagem** que permite percorrê-las. Explica *o que se aprendeu e de onde
+veio*.
+
+**Capacidade adquirida por modelos** — quando a Ocinye treinar ou afinar um
+modelo, parte da capacidade passará a existir **nos pesos**, e não se
+reconstruirá a olhar para o PostgreSQL. Explicará *o que a instituição ensinou
+às suas máquinas*, e viajará sempre acompanhada da linhagem de treino que a
+torna interpretável.
+
+> **Nenhuma destas formas substitui as restantes.**
+
+Não é uma frase de estilo. É o que impede cada um dos atalhos que apagam
+memória: a recuperação não substitui a proveniência, o treino não substitui os
+datasets, os pesos não substituem a evidência, o PostgreSQL não substitui os
+bytes — e o servidor não substitui a instituição.
+
+> **A trained model may embody institutional capability, but it does not
+> replace the institutional evidence and provenance from which that capability
+> was derived.**
+
+Depois de ensinar alguma coisa a um modelo, o dataset, a metodologia, os
+resultados e a proveniência **continuam a ser preservados**. «Já está nos
+pesos» não é uma razão para apagar a fonte.
 
 ---
 

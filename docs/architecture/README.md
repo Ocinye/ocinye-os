@@ -375,10 +375,27 @@ guarda se foi observada pela operação ou declarada por alguém. A linhagem é 
 projecção navegável dessas relações — não uma segunda base de dados.
 
 **A memória institucional emerge**, e não é um módulo: nasce da composição
-governada do conhecimento, dos dados, dos projectos, dos resultados, dos
-documentos, da auditoria e da proveniência.
+governada de três formas de capacidade acumulada.
 
-Detalhe: [ciclo de vida científico, proveniência e linhagem](scientific-lifecycle.md).
+| | O que preserva | Estado |
+|---|---|---|
+| **Conhecimento explícito** | documentos, datasets, bibliografia, notas e as suas versões — lê-se, cita-se e recupera-se | `CURRENT` |
+| **Evidência científica** | resultados, proveniência e linhagem: *o que se aprendeu e de onde veio* | `CURRENT` |
+| **Capacidade do modelo** | o que a instituição ensinou às suas máquinas, e a linhagem de treino que o torna interpretável | **`SPECIFIED`** ([ADR-0203](../adrs/0203-institutional-model-artifacts.md)) |
+
+A terceira linha ainda não existe: não há `Model`, `ModelVersion`,
+`TrainingRun` nem pesos guardados, e o portão de entrada exige que a
+continuidade esteja respondida antes de o primeiro modelo institucional poder
+ser promovido.
+
+> **Nenhuma destas formas substitui as restantes.**
+
+A recuperação não substitui a proveniência, o treino não substitui os datasets,
+os pesos não substituem a evidência, o PostgreSQL não substitui os bytes — e o
+servidor não substitui a instituição.
+
+Detalhe: [ciclo de vida científico, proveniência e linhagem](scientific-lifecycle.md)
+e [artefactos de modelo](../adrs/0203-institutional-model-artifacts.md).
 
 ### Comunicação não é conhecimento
 
