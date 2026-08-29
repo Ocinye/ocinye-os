@@ -97,22 +97,13 @@ struct Membership {
 /// `identity::get_own_person`.
 async fn me(
     State(state): State<AppState>,
+    Ids(ids): Ids,
     CurrentPrincipal(principal): CurrentPrincipal,
 ) -> Result<Json<Me>, ApiError> {
     let mut roles: Vec<&'static str> = principal.roles.iter().map(|r| r.as_str()).collect();
     roles.sort_unstable();
 
-    let institution = ocinye_domain::ResourceContext::organisation(
-        ocinye_domain::ResourceKind::Organisation,
-        principal.organisation_id,
-    );
-    let capabilities = ocinye_contracts::Permission::all()
-        .into_iter()
-        .filter(|permission| {
-            ocinye_domain::can(&principal, *permission, &institution, None).allowed
-        })
-        .map(ocinye_contracts::Permission::as_str)
-        .collect();
+    let capabilities = capabilities_held_anywhere(&state.pool, &principal, &ids).await?;
 
     let person = identity::get_own_person(&state.pool, &principal).await?;
     let avatar = identity::own_avatar(&state.pool, &principal).await?;
@@ -415,4 +406,92 @@ async fn read_own_avatar(
         bytes,
     )
         .into_response())
+}
+
+/// Every permission the caller holds **somewhere**.
+///
+/// # Porque não só no contexto institucional
+///
+/// Porque havia direitos que nunca podiam aparecer aqui. `DocumentsView`,
+/// `BibliographyView` e `DatasetsView` só existem como concessão contextual —
+/// pertença a unidade ou a ambiente —, e a lista era calculada contra o
+/// contexto da organização, onde `unit_id` e `workspace_id` são `None`. Nenhuma
+/// concessão contextual se aplica lá, pelo que nenhuma das três entrava na
+/// lista, para ninguém.
+///
+/// O efeito era visível: as quatro entradas de CONHECIMENTO apareciam esbatidas
+/// na navegação **para toda a gente**, incluindo para quem pertencia a um
+/// ambiente cheio de ficheiros. A navegação dizia «não tem autorização» a quem
+/// tinha, e o mesmo mecanismo escondia o botão de carregar dentro do ecrã.
+///
+/// Isto avalia a mesma política contra os contextos que a pessoa **tem**: a
+/// organização, cada unidade e cada ambiente de que é membro. Não é uma segunda
+/// fonte de verdade — é a mesma função `can`, perguntada nos sítios certos.
+///
+/// Continua a ser um **indício de renderização, nunca uma autorização**: cada
+/// operação volta a decidir por si, no recurso concreto. «Tem este direito
+/// nalgum sítio» não é «tem este direito aqui», e esconder um controlo que o
+/// Core recusaria é cortesia — mostrar um que ele aceitaria é o mínimo.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta das unidades dos ambientes falha.
+async fn capabilities_held_anywhere(
+    pool: &sqlx::PgPool,
+    principal: &ocinye_domain::Principal,
+    ids: &ocinye_observability::CorrelationIds,
+) -> Result<Vec<&'static str>, ApiError> {
+    use ocinye_domain::{ResourceContext, ResourceKind};
+
+    let mut contexts = vec![ResourceContext::organisation(
+        ResourceKind::Organisation,
+        principal.organisation_id,
+    )];
+
+    for unit_id in principal.unit_ids() {
+        contexts.push(ResourceContext::unit(
+            ResourceKind::Unit,
+            principal.organisation_id,
+            unit_id,
+        ));
+    }
+
+    // A unidade de cada ambiente vem da base e não de um palpite: um `unit_id`
+    // inventado aqui concederia direitos de unidade a quem só é membro do
+    // ambiente, que é precisamente o erro que esta função existe para não
+    // cometer noutra direcção.
+    let workspace_ids: Vec<uuid::Uuid> = principal.workspace_roles.keys().copied().collect();
+    if !workspace_ids.is_empty() {
+        let pares: Vec<(uuid::Uuid, uuid::Uuid)> = sqlx::query_as(
+            "SELECT id, unit_id FROM research_workspaces
+              WHERE id = ANY($1) AND organisation_id = $2",
+        )
+        .bind(&workspace_ids)
+        .bind(principal.organisation_id)
+        .fetch_all(pool)
+        .await
+        .map_err(|error| ApiError::new(CoreError::from(error), ids))?;
+
+        for (workspace_id, unit_id) in pares {
+            contexts.push(ResourceContext::workspace(
+                ResourceKind::ResearchWorkspace,
+                principal.organisation_id,
+                unit_id,
+                workspace_id,
+                // A classificação não participa na posse de uma permissão: ela
+                // governa as acções sobre um recurso, e é reavaliada lá.
+                ocinye_contracts::Classification::Internal,
+            ));
+        }
+    }
+
+    Ok(ocinye_contracts::Permission::all()
+        .into_iter()
+        .filter(|permission| {
+            contexts
+                .iter()
+                .any(|ctx| ocinye_domain::can(principal, *permission, ctx, None).allowed)
+        })
+        .map(ocinye_contracts::Permission::as_str)
+        .collect())
 }
