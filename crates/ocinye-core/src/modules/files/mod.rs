@@ -25,4 +25,6 @@
 pub mod repository;
 pub mod service;
 
-pub use service::{add_version, create_with_first_version, current_version, FileVersionRecord};
+pub use service::{
+    add_version, create_with_first_version, current_version, FileContext, FileVersionRecord,
+};

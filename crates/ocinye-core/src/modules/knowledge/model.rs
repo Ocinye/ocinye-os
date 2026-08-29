@@ -306,8 +306,17 @@ pub struct Document {
     pub unit_id: Uuid,
     /// Owning workspace.
     pub workspace_id: Uuid,
-    /// Stored object holding the bytes.
-    pub storage_object_id: Uuid,
+    /// O objecto que guarda os bytes **da versão corrente**.
+    ///
+    /// Chamava-se `storage_object_id`, como a coluna homónima de `documents` —
+    /// que já não existe. O nome sobreviveu à coluna e passou a documentar
+    /// mal: quem o lesse à procura dela não a encontraria, e quem o lesse sem
+    /// procurar assumiria que um documento tem um objecto, quando tem uma
+    /// história de versões e esta é a última.
+    ///
+    /// Tipos e nomes são documentação que compila. Um nome errado é uma
+    /// afirmação errada mantida pelo compilador.
+    pub current_storage_object_id: Uuid,
     /// Kind of document.
     pub kind: String,
     /// Title.

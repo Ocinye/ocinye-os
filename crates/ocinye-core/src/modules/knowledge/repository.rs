@@ -37,7 +37,8 @@ const NOTE_COLUMNS: &str = "id, unit_id, workspace_id, title, body, tags, classi
 /// prefixo de consultas que trazem a sua própria ordenação — por título, por
 /// data —, e o `DISTINCT ON` obrigá-las-ia todas a começar por `d.id`. A
 /// lateral escolhe uma linha por documento sem tocar na ordem de quem chama.
-const DOCUMENT_SELECT: &str = "SELECT d.id, d.unit_id, d.workspace_id, v.storage_object_id,
+const DOCUMENT_SELECT: &str = "SELECT d.id, d.unit_id, d.workspace_id,
+                                      v.storage_object_id AS current_storage_object_id,
                                       d.kind, d.title, d.description, d.document_date,
                                       d.classification, o.original_filename, o.content_type,
                                       o.size_bytes, o.checksum_sha256, d.created_at

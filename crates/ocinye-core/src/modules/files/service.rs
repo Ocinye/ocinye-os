@@ -1,5 +1,6 @@
 //! As duas operações que criam e fazem crescer um ficheiro institucional.
 
+use ocinye_contracts::Classification;
 use uuid::Uuid;
 
 use super::repository as repo;
@@ -19,6 +20,24 @@ pub struct FileVersionRecord {
     pub storage_object_id: Uuid,
 }
 
+/// Onde o ficheiro vive, e sob que classificação.
+///
+/// Agrupado porque estas quatro coisas viajam sempre juntas e sozinhas não
+/// significam nada: a autorização precisa das três primeiras para resolver
+/// papéis, e da quarta para saber contra que nível decidir.
+#[derive(Debug, Clone, Copy)]
+pub struct FileContext {
+    /// A organização.
+    pub organisation_id: Uuid,
+    /// A unidade. Não pode discordar da do ambiente — a base impede-o.
+    pub unit_id: Uuid,
+    /// O ambiente de investigação que o contém.
+    pub workspace_id: Uuid,
+    /// A classificação do artefacto. Combina-se com a do ambiente pela mais
+    /// restritiva das duas, e nunca a substitui.
+    pub classification: Classification,
+}
+
 /// Cria um ficheiro e a sua primeira versão.
 ///
 /// Chamado dentro da transacção de quem cria o recurso que interpreta o
@@ -31,19 +50,18 @@ pub struct FileVersionRecord {
 /// Devolve erro quando a inserção falha.
 pub async fn create_with_first_version(
     tx: &mut Tx<'_>,
-    organisation_id: Uuid,
-    unit_id: Uuid,
-    workspace_id: Uuid,
+    contexto: FileContext,
     name: &str,
     storage_object_id: Uuid,
     created_by: Uuid,
 ) -> CoreResult<FileVersionRecord> {
     let file_id = repo::insert_file(
         &mut **tx,
-        organisation_id,
-        unit_id,
-        workspace_id,
+        contexto.organisation_id,
+        contexto.unit_id,
+        contexto.workspace_id,
         name,
+        contexto.classification,
         created_by,
     )
     .await?;

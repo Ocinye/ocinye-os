@@ -527,8 +527,8 @@ async fn seed_stricter_than_workspace(pool: &PgPool, fixture: &Fixture) -> Stric
         // migration 0020, e um documento sem ficheiro deixou de ser um estado
         // representável.
         "WITH f AS (
-             INSERT INTO files (organisation_id, unit_id, workspace_id, name)
-             VALUES ($1, $2, $3, 'restrito.pdf') RETURNING id
+             INSERT INTO files (organisation_id, unit_id, workspace_id, name, classification)
+             VALUES ($1, $2, $3, 'restrito.pdf', 'RESTRICTED') RETURNING id
          ),
          v AS (
              INSERT INTO file_versions (file_id, sequence, storage_object_id)

@@ -629,9 +629,12 @@ pub async fn create_document(
     // continua a chamar-se o que se carregou.
     let ficheiro = crate::modules::files::create_with_first_version(
         tx,
-        principal.organisation_id,
-        workspace.unit_id,
-        workspace.id,
+        crate::modules::files::FileContext {
+            organisation_id: principal.organisation_id,
+            unit_id: workspace.unit_id,
+            workspace_id: workspace.id,
+            classification,
+        },
         &filename,
         object_id,
         principal.person_id,
@@ -831,11 +834,14 @@ pub async fn issue_download(
     authorize(principal, Action::Download, &ctx)
         .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
 
-    let (object_key, filename) = repo::object_location(&mut **tx, document.storage_object_id)
-        .await?
-        .ok_or_else(|| {
-            CoreError::StorageUnavailable("This object is not available for download.".to_owned())
-        })?;
+    let (object_key, filename) =
+        repo::object_location(&mut **tx, document.current_storage_object_id)
+            .await?
+            .ok_or_else(|| {
+                CoreError::StorageUnavailable(
+                    "This object is not available for download.".to_owned(),
+                )
+            })?;
 
     let url = store.presigned_download(&object_key, &filename).await?;
 

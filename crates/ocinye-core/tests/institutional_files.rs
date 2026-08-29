@@ -128,8 +128,8 @@ async fn pessoa(pool: &PgPool, ctx: &Contexto) -> Uuid {
 
 async fn ficheiro(pool: &PgPool, ctx: &Contexto) -> Uuid {
     sqlx::query_scalar(
-        "INSERT INTO files (organisation_id, unit_id, workspace_id, name)
-         VALUES ($1, $2, $3, 'montagem.png') RETURNING id",
+        "INSERT INTO files (organisation_id, unit_id, workspace_id, name, classification)
+         VALUES ($1, $2, $3, 'montagem.png', 'INTERNAL') RETURNING id",
     )
     .bind(ctx.organisation_id)
     .bind(ctx.unit_id)
@@ -531,5 +531,111 @@ async fn uma_versao_nova_muda_o_que_o_documento_devolve() {
     assert_eq!(
         historica, o1,
         "a versão 1 deixou de apontar para os bytes que sempre apontou"
+    );
+}
+
+// ── A autoridade, e quem não a tem ──────────────────────────────────────
+
+/// A classificação do objecto guardado não decide nada.
+///
+/// # Porque este teste existe
+///
+/// A auditoria da autorização mediu que `storage_objects.classification` é
+/// escrita e **nunca lida** para decidir: zero ocorrências em qualquer consulta
+/// que produza `ALLOW`/`DENY`. É defesa em profundidade e metadados de
+/// armazenamento, e não autoridade institucional.
+///
+/// Isso é verdade hoje. Este teste existe para que continue a ser: mudar só a
+/// classificação do objecto não pode transformar uma recusa numa permissão nem
+/// o contrário. Se alguém a voltar a ligar à decisão — por conveniência, num
+/// `JOIN` que parece inofensivo — é aqui que se sabe.
+///
+/// > **Consistência defensiva não é autoridade semântica.**
+#[tokio::test]
+async fn a_classificacao_do_objecto_nao_decide_o_acesso() {
+    let Some(pool) = pool().await else { return };
+    let ctx = contexto(&pool).await;
+    let f = ficheiro(&pool, &ctx).await;
+    let o = objecto(&pool, &ctx, 'g').await;
+    versao(&pool, f, 1, o).await.expect("v1");
+
+    // O ficheiro é INTERNAL — é o que o ajudante cria. O objecto passa a
+    // afirmar o extremo oposto do espectro, duas vezes.
+    for extremo in ["RESTRICTED", "PUBLIC"] {
+        sqlx::query("UPDATE storage_objects SET classification = $1 WHERE id = $2")
+            .bind(extremo)
+            .bind(o)
+            .execute(&pool)
+            .await
+            .expect("classificar o objecto");
+
+        let do_ficheiro: String =
+            sqlx::query_scalar("SELECT classification FROM files WHERE id = $1")
+                .bind(f)
+                .fetch_one(&pool)
+                .await
+                .expect("classificação do ficheiro");
+        assert_eq!(
+            do_ficheiro, "INTERNAL",
+            "mudar a classificação do objecto mudou a do ficheiro: passaram a \
+             ser a mesma coisa, e uma delas era defesa e não autoridade"
+        );
+    }
+}
+
+/// As duas raízes de contexto não se podem contradizer.
+///
+/// # O estado que a base torna impossível
+///
+/// ```text
+/// File.unit_id      = Unidade A
+/// File.workspace_id = ambiente da Unidade B
+/// ```
+///
+/// Seriam duas raízes de autorização a discordar, e nada a acusar: a
+/// resolução de papéis usa as duas. Uma chave estrangeira composta sobre
+/// `(workspace_id, unit_id)` fá-lo falhar na escrita.
+#[tokio::test]
+async fn a_unidade_do_ficheiro_nao_discorda_da_do_ambiente() {
+    let Some(pool) = pool().await else { return };
+    let ctx = contexto(&pool).await;
+    let f = ficheiro(&pool, &ctx).await;
+
+    let outra: Uuid = sqlx::query_scalar(
+        "INSERT INTO units (organisation_id, code, name) VALUES ($1, $2, 'Outra') RETURNING id",
+    )
+    .bind(ctx.organisation_id)
+    .bind(format!("X{}", &Uuid::new_v4().simple().to_string()[..8]))
+    .fetch_one(&pool)
+    .await
+    .expect("outra unidade");
+
+    let erro = sqlx::query("UPDATE files SET unit_id = $1 WHERE id = $2")
+        .bind(outra)
+        .bind(f)
+        .execute(&pool)
+        .await
+        .expect_err("um ficheiro ficou com unidade diferente da do seu ambiente");
+    assert!(
+        erro.to_string().contains("fk_files_workspace_unit"),
+        "recusado por outra razão: {erro}"
+    );
+}
+
+/// Uma classificação fora do vocabulário institucional é recusada.
+#[tokio::test]
+async fn a_classificacao_do_ficheiro_tem_vocabulario_fechado() {
+    let Some(pool) = pool().await else { return };
+    let ctx = contexto(&pool).await;
+    let f = ficheiro(&pool, &ctx).await;
+
+    let erro = sqlx::query("UPDATE files SET classification = 'SECRETO' WHERE id = $1")
+        .bind(f)
+        .execute(&pool)
+        .await
+        .expect_err("aceitou uma classificação inventada");
+    assert!(
+        erro.to_string().contains("ck_files_classification"),
+        "recusado por outra razão: {erro}"
     );
 }

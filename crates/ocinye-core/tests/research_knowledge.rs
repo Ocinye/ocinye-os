@@ -2758,8 +2758,8 @@ async fn a_vista_institucional_de_documentos_respeita_artefacto_e_ambiente() {
         sqlx::query(
             // O ficheiro nasce com o documento (migration 0020).
             "WITH f AS (
-                 INSERT INTO files (organisation_id, unit_id, workspace_id, name)
-                 VALUES ($1, $2, $3, 'anexo.pdf') RETURNING id
+                 INSERT INTO files (organisation_id, unit_id, workspace_id, name, classification)
+                 SELECT $1, $2, $3, 'anexo.pdf', $5 RETURNING id
              ),
              v AS (
                  INSERT INTO file_versions (file_id, sequence, storage_object_id)

@@ -1,5 +1,6 @@
 //! Leituras e escritas de ficheiros e versões.
 
+use ocinye_contracts::Classification;
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
@@ -16,16 +17,19 @@ pub async fn insert_file<'e>(
     unit_id: Uuid,
     workspace_id: Uuid,
     name: &str,
+    classification: Classification,
     created_by: Uuid,
 ) -> CoreResult<Uuid> {
     let id = sqlx::query_scalar::<_, Uuid>(
-        "INSERT INTO files (organisation_id, unit_id, workspace_id, name, created_by_id)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id",
+        "INSERT INTO files
+             (organisation_id, unit_id, workspace_id, name, classification, created_by_id)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
     )
     .bind(organisation_id)
     .bind(unit_id)
     .bind(workspace_id)
     .bind(name)
+    .bind(classification.as_str())
     .bind(created_by)
     .fetch_one(executor)
     .await?;
