@@ -80,6 +80,25 @@ pesos guardados.
 **Conhecimento explícito** — documentos, datasets, bibliografia, notas e as
 suas versões. Lê-se, cita-se e recupera-se directamente.
 
+Por baixo dele estão os **ficheiros institucionais**. Um `File` é a identidade
+dos bytes e é ele que decide quem lê; cada `FileVersion` é imutável e numerada;
+as pastas arrumam e não classificam. Um documento deixou de deter bytes: é uma
+**afirmação** sobre um ficheiro.
+
+> **Carregar um ficheiro não é o mesmo que afirmar conhecimento institucional.**
+
+O corpo desses ficheiros é lido por um extractor identificado e passa a ser
+pesquisável — lexicalmente sempre, e semanticamente quando existe um provider de
+embeddings. Um resultado cita a **versão exacta** e o sítio dentro dela, e abrir
+essa citação abre os bytes que foram lidos, não o que o ficheiro diz hoje
+([ADR-0204](docs/adrs/0204-institutional-files-and-folders.md),
+[ADR-0205](docs/adrs/0205-content-extraction-and-lexical-body-search.md),
+[ADR-0206](docs/adrs/0206-embeddings-and-hybrid-retrieval.md)).
+
+> **O ficheiro é governado. A versão identifica os bytes exactos. O
+> armazenamento conserva-os. Os índices ajudam a encontrá-los. A IA ajuda a
+> utilizá-los. Nenhuma dessas camadas substitui a autoridade do Core.**
+
 **Evidência científica** — hipótese, versão de metodologia, estudo, execução,
 resultado e validação, com a **proveniência** que preserva as relações e a
 **linhagem** que permite percorrê-las. Explica *o que se aprendeu e de onde
@@ -339,6 +358,18 @@ Matriz completa: [docs/feature-status/](docs/feature-status/README.md).
   computacionais.** As funções determinísticas — incluindo toda a cadeia
   científica e a pesquisa — permanecem disponíveis; as capacidades que dependem
   desses recursos só ficam disponíveis quando a instalação os regista.
+- **A pesquisa semântica exige um provider de embeddings configurado.** Está
+  implementada — persistência, isolamento por identidade de modelo, política de
+  soberania, reconstrução e recuperação —, e sem provider a instalação declara-a
+  indisponível. A pesquisa lexical do corpo continua inteira, e não é uma versão
+  degradada de nada.
+- **PDFs digitalizados sem texto extraível são guardados e descarregáveis, mas
+  não são pesquisáveis por conteúdo.** Ficam `UNSUPPORTED` e a interface diz
+  porquê. Não existe OCR.
+- **A resposta do Prompt Ocinye ainda não é produzida.** A execução de inferência
+  é anterior a este trabalho e continua `PLANNED`. As citações que essa resposta
+  há-de mostrar já existem, já transportam versão e localização, e já sabem abrir
+  a versão exacta — o que falta é a resposta.
 - **A linhagem científica tem tecto de cinco saltos.** A partir daí continua-se
   abrindo um dos recursos mostrados.
 - **A proveniência de computação e de software é parcial.** Uma execução regista
