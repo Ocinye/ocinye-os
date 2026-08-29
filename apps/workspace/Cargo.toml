@@ -45,7 +45,10 @@ async-trait = { workspace = true }
 # atravessar para o browser como texto dentro de um literal de JavaScript.
 base64 = { workspace = true }
 futures = { workspace = true }
-ocinye-core = { workspace = true }
+# `test-fixtures` traz a guarda que recusa escrever fixtures numa base que
+# contém a organização canónica. Só em dev-dependencies: um binário de
+# release não contém este código.
+ocinye-core = { workspace = true, features = ["test-fixtures"] }
 ocinye-core-server = { workspace = true }
 sqlx = { workspace = true }
 ocinye-observability = { workspace = true }

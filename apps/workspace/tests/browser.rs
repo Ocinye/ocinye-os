@@ -261,6 +261,10 @@ impl Harness {
             .await
             .expect("migrations must apply");
 
+        // Antes da primeira escrita, e não depois: falhar depois de escrever
+        // não é uma guarda, é um relatório de estragos.
+        ocinye_core::fixtures::refuse_canonical_organisation(&pool).await;
+
         // ── O Core, no seu próprio porto ────────────────────────────────
         let core_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -386,11 +390,16 @@ impl Harness {
     /// Core. Injectar um cookie provaria que a página abre com um cookie, e não
     /// que uma pessoa consegue entrar.
     async fn sign_in(&self, roles: &[TechnicalRole]) -> (Uuid, Credenciais) {
-        let organisation_id: Uuid =
-            sqlx::query_scalar("SELECT id FROM organisations ORDER BY created_at DESC LIMIT 1")
-                .fetch_one(&self.pool)
-                .await
-                .expect("organização");
+        // A organização **deste** harness, e não «a mais recente».
+        //
+        // Adoptar a organização mais recente não tem semântica de teste
+        // nenhuma: numa base partilhada é a de outro teste a correr em
+        // paralelo, e numa base errada é a instituição a sério — foi assim
+        // que a base de desenvolvimento ganhou milhares de pessoas de
+        // fixtures dentro da organização canónica.
+        //
+        // O harness já criava a sua em `start`. Faltava usá-la.
+        let organisation_id = self.organisation_id;
 
         let handle = format!("e{}", Uuid::new_v4().simple());
         let email = format!("{handle}@ocinye.com");

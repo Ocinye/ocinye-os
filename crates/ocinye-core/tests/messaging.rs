@@ -24,6 +24,9 @@ async fn pool() -> Option<PgPool> {
         .await
         .expect("OCINYE_TEST_DATABASE_URL está definida mas a base não responde");
     ocinye_core::db::migrate(&pool).await.expect("migrations");
+    // Antes da primeira escrita, e não depois: falhar depois de escrever
+    // não é uma guarda, é um relatório de estragos.
+    ocinye_core::fixtures::refuse_canonical_organisation(&pool).await;
     Some(pool)
 }
 

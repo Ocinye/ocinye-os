@@ -30,6 +30,10 @@ async fn pool() -> Option<PgPool> {
         .run(&pool)
         .await
         .expect("migrations");
+
+    // Antes da primeira escrita, e não depois: falhar depois de escrever
+    // não é uma guarda, é um relatório de estragos.
+    ocinye_core::fixtures::refuse_canonical_organisation(&pool).await;
     Some(pool)
 }
 
