@@ -7,6 +7,52 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### O processo, e não só a portabilidade — 2026-08-29
+
+Os ensaios anteriores provaram que a instituição **pode** mudar de servidor.
+Este prova que existe um **processo** que o faz sozinho: cópia automática, sem
+terminal e sem `stdin`, cifrada com `age`, enviada para um endpoint S3 fora do
+servidor com confirmação por leitura de volta, restaurada num servidor
+inteiramente limpo — base vazia, bucket vazio, Redis vazio, credenciais novas —
+e verificada com as **três** perguntas a observar.
+
+```
+  as linhas          PASS     165 641 recursos, 2 objectos, 91 arestas
+  os bytes           PASS
+  a legibilidade     PASS     83 credenciais seladas abriram
+  EXIT=0
+```
+
+É a primeira verificação institucional inteiramente verde. E o par que lhe dá
+sentido: as mesmas linhas, os mesmos bytes, **sem a chave durável** — `FAIL`,
+com a razão. Bytes correctos e indecifráveis também são conhecimento perdido.
+
+**Três defeitos meus, encontrados a correr aquilo que escrevi.**
+
+A cópia «fora do servidor» ficou **dentro do repositório**. O ficheiro de
+ambiente tinha `OCINYE_BACKUP_REMOTE_CMD=mc cp --quiet` sem aspas; em `sh`,
+`VAR=valor comando` corre o comando com a variável só no ambiente dele, a
+variável nunca ficou definida, o script caiu no `rsync -a` por omissão, e o
+`rsync` copiou para uma pasta local com o nome do alias — dentro da árvore de
+trabalho. E saiu zero. A cópia externa foi declarada feita sem nunca ter
+acontecido.
+
+> **«O comando de transporte saiu zero» não é «a cópia chegou».**
+
+A correcção é ler de volta: um comando configurável devolve a soma do que está
+no destino, e o script compara. Sem ele, a cópia é **«ENVIADA, NÃO
+CONFIRMADA»** — nunca «ok».
+
+A recusa saía **muda**: o `set -e` matava o script na substituição antes de a
+mensagem existir, e o `trap` calava-se porque depois da cifra já não há pasta
+para marcar.
+
+E o cofre **crescia sem limite** — a retenção governava só a máquina de origem.
+
+**Além disso:** unidades de agendamento para `launchd` e `systemd` em
+`infra/scheduling/`, instaladas em lado nenhum, porque agendar é configuração
+de um servidor que ainda não existe.
+
 ### Um modelo que a Ocinye treine é memória, não runtime — 2026-08-29
 
 A continuidade tratava a memória institucional como **explícita**: documentos,
