@@ -50,7 +50,9 @@ Os quatro primeiros são apurados em tempo real pelo Core e servidos em
 | **Notas, documentos, datasets** | implementado | leitura | MinIO local; nenhum armazenamento institucional | `AVAILABLE` em desenvolvimento |
 | **Ficheiros institucionais** — `File`, versões, pastas | implementado | ecrã Ficheiros: navegação, pastas, largar, carregar, detalhes, histórico, descarga | MinIO local; nenhum armazenamento institucional | `AVAILABLE` em desenvolvimento |
 | **Pré-visualização de conteúdo** | n/a | texto; os outros tipos declaram-se não pré-visualizáveis | decisão de CSP por tomar para imagens | `AVAILABLE` (parcial, por desenho) |
-| **Extracção de texto e pesquisa de corpo** | — | — | n/a | `PLANNED` |
+| **Extracção de conteúdo** — PDF e texto | worker, via outbox; estados separados do armazenamento | estado no ecrã do ficheiro | MinIO local | `AVAILABLE` em desenvolvimento |
+| **Pesquisa lexical do corpo** | implementado, sem modelo de IA | secção própria, com excerto e página | PostgreSQL FTS | `AVAILABLE` |
+| **OCR de documentos digitalizados** | — | um PDF sem texto declara-se não pesquisável | n/a | `PLANNED` |
 | **Pesquisa textual** | implementado | implementado | PostgreSQL FTS | `AVAILABLE` |
 | **Pesquisa semântica** | preparado | declarada indisponível | sem embeddings | `NO_RESOURCE` |
 | **Agentes de IA** | implementado | lista, criação | não requer nó | `AVAILABLE` |

@@ -137,6 +137,7 @@ Onde o material da instituição vive, e o que o acompanha.
 - [ADR-0202](0202-search-fts-pgvector.md) — Pesquisa: PostgreSQL FTS agora, pgvector preparado
 - [ADR-0203](0203-institutional-model-artifacts.md) — Artefactos de modelo como memória institucional
 - [ADR-0204](0204-institutional-files-and-folders.md) — O ficheiro institucional é a autoridade sobre os bytes
+- [ADR-0205](0205-content-extraction-and-lexical-body-search.md) — Extracção de conteúdo e pesquisa lexical do corpo
 
 ### 0300–0399 · IA, Controlo Agentic e Inferência
 
@@ -223,6 +224,7 @@ preencher.
 | [0202](0202-search-fts-pgvector.md) | Pesquisa: PostgreSQL FTS agora, pgvector preparado | Knowledge | `MEDIUM` | Accepted |
 | [0203](0203-institutional-model-artifacts.md) | Artefactos de modelo como memória institucional | Data | `FOUNDATIONAL` | Accepted |
 | [0204](0204-institutional-files-and-folders.md) | O ficheiro institucional é a autoridade sobre os bytes | Data | `FOUNDATIONAL` | Accepted |
+| [0205](0205-content-extraction-and-lexical-body-search.md) | Extracção de conteúdo e pesquisa lexical do corpo | Knowledge | `FOUNDATIONAL` | Accepted |
 | [0300](0300-ai-gateway.md) | AI Gateway orientado a capacidades | AI | `HIGH` | Accepted |
 | [0301](0301-agentic-control-plane.md) | O Agentic Control Plane: Main Agent, Runtime, Registry | Agentic | `HIGH` | Accepted |
 | [0302](0302-agent-access-intersection.md) | Effective Agent Access é uma intersecção | Agentic | `HIGH` | Accepted |

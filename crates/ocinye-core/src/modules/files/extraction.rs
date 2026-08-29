@@ -551,3 +551,28 @@ pub async fn status<'e>(
 pub const fn e_indisponibilidade(erro: &CoreError) -> bool {
     matches!(erro, CoreError::StorageUnavailable(_))
 }
+
+/// O estado da extracção da versão **corrente** de um ficheiro.
+///
+/// Quem chama tem de ter autorizado o ficheiro primeiro: isto não decide nada.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn status_of_current<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+    file_id: Uuid,
+) -> CoreResult<Option<(Estado, i64)>> {
+    let linha: Option<(String, i32)> = sqlx::query_as(
+        "SELECT e.status, e.chunk_count
+           FROM file_versions v
+           JOIN file_extractions e ON e.file_version_id = v.id
+          WHERE v.file_id = $1
+          ORDER BY v.sequence DESC
+          LIMIT 1",
+    )
+    .bind(file_id)
+    .fetch_optional(executor)
+    .await?;
+    Ok(linha.map(|(estado, chunks)| (Estado::parse(&estado), i64::from(chunks))))
+}

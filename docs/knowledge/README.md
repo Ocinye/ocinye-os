@@ -60,7 +60,25 @@ A classificação efectiva é `most_restrictive(workspace, file)`, calculada con
 o estado corrente do ambiente: restringir um Research Workspace fecha os
 ficheiros lá dentro sem reescrever linha nenhuma.
 
-Decisão: [ADR-0204](../adrs/0204-institutional-files-and-folders.md).
+### O corpo, e o que ele não é
+
+Uma versão guardada produz uma **representação textual derivada**, feita pelo
+worker através do outbox. Ela torna o corpo pesquisável — e não é o ficheiro,
+não é autoridade, e não é conhecimento.
+
+Ler «a temperatura foi 82 °C» de um PDF produz texto encontrável. Não produz um
+`Result`, uma observação nem uma evidência: afirmar conhecimento continua a ser
+um acto de uma pessoa.
+
+`file_chunks` não guarda classificação. A visibilidade compõe-se na consulta,
+contra o ficheiro e o ambiente como estão **agora** — restringir um Research
+Workspace esconde o corpo dos seus ficheiros sem reindexar coisa nenhuma.
+
+A extracção é reconstruível a partir de `FileVersion` + bytes + extractor, e é
+por isso que a continuidade a classifica como derivada.
+
+Decisões: [ADR-0204](../adrs/0204-institutional-files-and-folders.md) ·
+[ADR-0205](../adrs/0205-content-extraction-and-lexical-body-search.md).
 
 ## Documentos
 

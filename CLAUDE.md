@@ -49,7 +49,7 @@ sem que nada falhe.
   3 serviços (`core-server`, `worker`, `node-agent`) e 1 aplicação
   (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED`, não deployado.** 139 caminhos e 165 operações
+- **Ocinye Core: `IMPLEMENTED`, não deployado.** 140 caminhos e 166 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`.
@@ -77,7 +77,7 @@ sem que nada falhe.
   A interface distingue as ausências em vez de mostrar uma caixa vazia. **A
   ingestão é periódica**: o worker percorre as caixas ligadas, e uma que recuse
   não interrompe as outras — a razão fica guardada na caixa que falhou.
-- **24 migrations**, aplicáveis de base vazia; 66 tabelas.
+- **25 migrations**, aplicáveis de base vazia; 68 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -100,8 +100,16 @@ sem que nada falhe.
   `/files/{id}/preview` e a CSP do Workspace continua `img-src 'self' data:`,
   pelo que a Experience nunca aprende onde o armazenamento está. Inline serve-se
   uma lista fechada — PNG, JPEG, WebP —, e **não** `image/*`: um SVG é um
-  documento com script. **Não existe ainda** extracção de conteúdo nem pesquisa
-  de corpo.
+  documento com script.
+  O **corpo** de um ficheiro é lido pelo worker, através do outbox que já
+  existia, e passa a ser pesquisável sem nenhum modelo de IA
+  ([ADR-0205](docs/adrs/0205-content-extraction-and-lexical-body-search.md)). A
+  identidade do trabalho é a **versão**, e o estado da extracção é separado do
+  do armazenamento: um ficheiro cuja leitura falhou continua guardado, legível e
+  descarregável, e o ecrã diz «Ficheiro guardado. Não foi possível tornar o
+  conteúdo pesquisável» em vez de «o carregamento falhou». `file_chunks` **não
+  guarda classificação**: restringir um ambiente esconde o corpo sem reindexar
+  nada. **Não existe ainda** OCR, embeddings, nem recuperação híbrida.
 - **Agentes de IA: `IMPLEMENTED`.** Definíveis e persistidos **sem nó de IA**;
   o estado de execução é derivado da disponibilidade real.
 - **Agentic Control Plane: `IMPLEMENTED`, sem inferência.** Capability Registry
@@ -160,7 +168,7 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **52 ADRs** em `docs/adrs/`, **10 runbooks** em `docs/runbooks/`,
+- **53 ADRs** em `docs/adrs/`, **10 runbooks** em `docs/runbooks/`,
   **41 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -180,14 +188,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1278 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1292 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **401 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **415 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

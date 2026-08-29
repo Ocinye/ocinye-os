@@ -403,6 +403,8 @@ pub struct FileDetailView {
     pub versions: Vec<Value>,
     /// O conteúdo, quando é texto e cabe. `None` quando não se pode mostrar.
     pub preview: Preview,
+    /// O que aconteceu à leitura do corpo, se alguma coisa aconteceu.
+    pub extraction: Extraccao,
     /// Se este membro pode carregar uma versão nova.
     pub may_upload: bool,
     /// Uma mensagem a mostrar, vinda da operação anterior.
@@ -434,6 +436,73 @@ pub enum Preview {
     Unavailable(String),
 }
 
+/// O que a leitura do corpo produziu, do ponto de vista de quem olha.
+///
+/// # Porque isto não é o estado do carregamento
+///
+/// Porque um ficheiro guardado cuja extracção falhou **está guardado**. Dizer
+/// «o carregamento falhou» seria mentir a alguém que tem o ficheiro lá, e
+/// mandá-lo carregar outra vez um ficheiro que já existe.
+pub enum Extraccao {
+    /// Ainda não foi pedida — o ficheiro é anterior a esta capacidade.
+    Nenhuma,
+    /// Na fila, ou a ser lida agora.
+    AProcessar,
+    /// O corpo está pesquisável.
+    Pesquisavel(i64),
+    /// O formato não tem leitor. Estado normal.
+    SemLeitor,
+    /// Havia leitor, e não conseguiu.
+    Falhou,
+}
+
+fn estado_do_conteudo(extraccao: &Extraccao) -> impl IntoView {
+    let (classe, titulo, explicacao) = match extraccao {
+        Extraccao::Nenhuma => (
+            "oc-note",
+            "Conteúdo não analisado",
+            "Este ficheiro é anterior à leitura de conteúdo. Carregar uma versão \
+             nova torna-o pesquisável.",
+        ),
+        Extraccao::AProcessar => (
+            "oc-note",
+            "A processar",
+            "O ficheiro está guardado. O conteúdo está a ser lido para ficar \
+             pesquisável.",
+        ),
+        Extraccao::Pesquisavel(_) => (
+            "oc-note oc-note--ok",
+            "Pesquisável",
+            "O conteúdo deste ficheiro pode ser encontrado por pesquisa.",
+        ),
+        Extraccao::SemLeitor => (
+            "oc-note",
+            "Conteúdo não pesquisável",
+            "Ficheiro guardado. Este formato não tem leitor de conteúdo, por isso \
+             o corpo não entra na pesquisa.",
+        ),
+        Extraccao::Falhou => (
+            "oc-note oc-note--bad",
+            "Conteúdo não pesquisável",
+            "Ficheiro guardado. Não foi possível ler o conteúdo, por isso o corpo \
+             não entra na pesquisa. O ficheiro continua íntegro e descarregável.",
+        ),
+    };
+
+    let contagem = match extraccao {
+        Extraccao::Pesquisavel(n) => Some(format!("{n} trechos indexados")),
+        _ => None,
+    };
+
+    view! {
+        <div class=classe>
+            <p class="oc-t-strong">{titulo}</p>
+            <p class="oc-t-caption--muted">{explicacao}</p>
+            {contagem.map(|texto| view! { <p class="oc-t-caption--muted">{texto}</p> })}
+        </div>
+    }
+}
+
 /// A página de um ficheiro.
 #[allow(clippy::too_many_lines)]
 pub fn file_detail(view: FileDetailView) -> impl IntoView {
@@ -441,6 +510,7 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
         file,
         versions,
         preview,
+        extraction,
         may_upload,
         notice,
     } = view;
@@ -500,6 +570,7 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
                 <section class="oc-card">
                     <div class="oc-card__head"><h2>"Detalhes"</h2></div>
                     <div class="oc-card__body">
+                        {estado_do_conteudo(&extraction)}
                         {detalhe("Tipo", &text(&corrente, "content_type"))}
                         {detalhe("Tamanho", &tamanho(number(&corrente, "size_bytes")))}
                         {detalhe("Versões", &contagem.to_string())}

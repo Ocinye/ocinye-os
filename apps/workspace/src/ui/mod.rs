@@ -1413,6 +1413,18 @@ pub(crate) mod link_tests {
                          "excerpt":"Série horária de sete estações.",
                          "classification":"RESTRICTED"}
                     ], "total": 2}),
+                    // Um resultado do corpo, para a passagem visual mostrar a
+                    // citação com versão e página.
+                    &json!({"items": [
+                        {"file_id":"33333333-3333-3333-3333-333333333333",
+                         "file_version_id":"44444444-4444-4444-4444-444444444444",
+                         "sequence": 2,
+                         "name":"Ensaio de irradiância — Março.pdf",
+                         "excerpt":"…o coeficiente termoeléctrico medido foi de 719 µV/K…",
+                         "locator": {"page": 4},
+                         "classification":"INTERNAL",
+                         "workspace_id":"11111111-1111-1111-1111-111111111111"}
+                    ], "total": 1}),
                     &json!({"available": false, "embedded_documents": 0,
                             "message": "A pesquisa semântica depende de uma capacidade de embeddings, que não está actualmente disponível."})
                 )

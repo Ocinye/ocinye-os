@@ -180,8 +180,15 @@ async fn show_file(
     // contrário também é verdade.
     let may_write = files::may_write(&principal, &workspace, ficheiro.classification());
 
+    // O estado da leitura do corpo, para o ecrã poder distinguir «guardado e a
+    // processar» de «guardado e não pesquisável» — que não são a mesma coisa, e
+    // nenhuma delas é «o carregamento falhou».
+    let extraccao = files::extraction::status_of_current(&mut *conn, file_id).await?;
+
     Ok(Json(serde_json::json!({
         "may_write": may_write,
+        "extraction_status": extraccao.map(|(estado, _)| estado.as_str()),
+        "extraction_chunks": extraccao.map(|(_, chunks)| chunks),
         "id": ficheiro.id,
         "name": ficheiro.name,
         "classification": ficheiro.classification().as_str(),

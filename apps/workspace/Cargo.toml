@@ -41,6 +41,9 @@ url = { workspace = true }
 # caminho que estes testes percorrem (ADR-0409 §8). Em `[dev-dependencies]`
 # porque nada em produção a precisa.
 async-trait = { workspace = true }
+# Só para a viagem que larga um PDF: o fixture é construído em Rust e tem de
+# atravessar para o browser como texto dentro de um literal de JavaScript.
+base64 = { workspace = true }
 futures = { workspace = true }
 ocinye-core = { workspace = true }
 ocinye-core-server = { workspace = true }

@@ -4599,6 +4599,18 @@ async fn search(
         optional(&state, &member, &path).await
     };
 
+    // O corpo dos ficheiros, ao lado dos títulos. Duas consultas porque são
+    // duas afirmações diferentes, e não uma que se possa ordenar com a outra.
+    let corpos = if query.q.trim().is_empty() {
+        Value::Null
+    } else {
+        let path = format!(
+            "/api/v1/search/bodies?q={}&page_size=10",
+            urlencoding_minimal(query.q.trim())
+        );
+        optional(&state, &member, &path).await
+    };
+
     let semantic = optional(&state, &member, "/api/v1/search/semantic-availability").await;
 
     shell_page(
@@ -4606,7 +4618,7 @@ async fn search(
         &viewer,
         Screen::Search,
         Vec::new(),
-        ui::screens::search::search(&query.q, &results, &semantic),
+        ui::screens::search::search(&query.q, &results, &corpos, &semantic),
     )
 }
 
@@ -7459,10 +7471,23 @@ async fn file_detail(
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
+    let extraction = match file.get("extraction_status").and_then(Value::as_str) {
+        Some("AVAILABLE") => ui::screens::files::Extraccao::Pesquisavel(
+            file.get("extraction_chunks")
+                .and_then(Value::as_i64)
+                .unwrap_or(0),
+        ),
+        Some("QUEUED" | "PROCESSING") => ui::screens::files::Extraccao::AProcessar,
+        Some("UNSUPPORTED") => ui::screens::files::Extraccao::SemLeitor,
+        Some("FAILED") => ui::screens::files::Extraccao::Falhou,
+        _ => ui::screens::files::Extraccao::Nenhuma,
+    };
+
     let content = ui::screens::files::file_detail(ui::screens::files::FileDetailView {
         file,
         versions,
         preview,
+        extraction,
         // Do Core, pela mesma razão do ecrã de navegação: o direito de
         // acrescentar uma versão é deste ficheiro, não da instituição.
         may_upload,
