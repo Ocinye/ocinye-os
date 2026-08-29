@@ -135,6 +135,7 @@ Onde o material da instituição vive, e o que o acompanha.
 - [ADR-0200](0200-object-storage.md) — Object Storage S3-compatible
 - [ADR-0201](0201-data-residency.md) — Residência de dados explícita
 - [ADR-0202](0202-search-fts-pgvector.md) — Pesquisa: PostgreSQL FTS agora, pgvector preparado
+- [ADR-0203](0203-institutional-model-artifacts.md) — Artefactos de modelo como memória institucional
 
 ### 0300–0399 · IA, Controlo Agentic e Inferência
 
@@ -183,9 +184,15 @@ A interface humana.
 - [ADR-0602](0602-workspace-ssr-progressive-enhancement.md) — Workspace em SSR com progressive enhancement, hidratação adiada
 - [ADR-0603](0603-boot-and-institutional-readiness.md) — Arranque do Ocinye OS e prontidão institucional
 
-Famílias sem ADRs não aparecem. `0700–0799` (deployment e operação),
-`0800–0899` (integrações externas) e `0900–0999` (reservado) estão vazias, e
-nenhuma ADR será criada apenas para as preencher.
+### 0700–0799 · Deployment, rede, operação e resiliência
+
+Como o sistema sobrevive ao sítio onde corre.
+
+- [ADR-0700](0700-institutional-continuity-and-portability.md) — Continuidade institucional e portabilidade entre servidores
+
+Famílias sem ADRs não aparecem. `0800–0899` (integrações externas) e
+`0900–0999` (reservado) estão vazias, e nenhuma ADR será criada apenas para as
+preencher.
 
 ---
 
@@ -213,6 +220,7 @@ nenhuma ADR será criada apenas para as preencher.
 | [0200](0200-object-storage.md) | Object Storage S3-compatible | Data | `HIGH` | Accepted |
 | [0201](0201-data-residency.md) | Residência de dados explícita | Data | `MEDIUM` | Accepted |
 | [0202](0202-search-fts-pgvector.md) | Pesquisa: PostgreSQL FTS agora, pgvector preparado | Knowledge | `MEDIUM` | Accepted |
+| [0203](0203-institutional-model-artifacts.md) | Artefactos de modelo como memória institucional | Data | `FOUNDATIONAL` | Accepted |
 | [0300](0300-ai-gateway.md) | AI Gateway orientado a capacidades | AI | `HIGH` | Accepted |
 | [0301](0301-agentic-control-plane.md) | O Agentic Control Plane: Main Agent, Runtime, Registry | Agentic | `HIGH` | Accepted |
 | [0302](0302-agent-access-intersection.md) | Effective Agent Access é uma intersecção | Agentic | `HIGH` | Accepted |
@@ -239,6 +247,7 @@ nenhuma ADR será criada apenas para as preencher.
 | [0600](0600-leptos-workspace-runtime.md) | Leptos para o Workspace Runtime | Workspace | `MEDIUM` | Accepted |
 | [0601](0601-workspace-bff-session.md) | O Workspace como Backend-for-Frontend | Workspace | `HIGH` | Accepted |
 | [0602](0602-workspace-ssr-progressive-enhancement.md) | Workspace em SSR com progressive enhancement, hidratação adiada | Workspace | `MEDIUM` | Accepted |
+| [0700](0700-institutional-continuity-and-portability.md) | Continuidade institucional e portabilidade entre servidores | Operations | `FOUNDATIONAL` | Accepted |
 
 ---
 

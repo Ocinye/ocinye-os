@@ -292,7 +292,7 @@ Declarado, não escondido:
 | Ingestão IMAP | **Não implementada.** `mail.sync` reporta `planned`. |
 | Verificação de assinatura de capacidades WASM | **Não implementado.** O campo existe no manifesto. |
 | Rede para capacidades WASM | **Não implementado — e pedi-la é recusado**, não silenciosamente concedido. |
-| Backups | **Não configurados.** Nenhum restore testado. |
+| Backups | **Não configurados.** O restore **foi** exercitado uma vez, a 2026-08-28; não há agendamento, cópia fora do servidor, retenção nem cifra dos artefactos. Um `pg_dump` não cifrado é uma cópia de tudo o que a instituição classificou. |
 | WebAuthn/passkeys | `PLANNED` no IdP. |
 | Sessões do Workspace em Redis | `PLANNED`. Hoje em memória do processo. |
 | Scanning de dependências | **Corre, em duas bases distintas.** Ver [Dependências](#dependências) abaixo e [ADR-0105](../adrs/0105-dependency-advisory-coverage.md). |

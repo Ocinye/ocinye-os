@@ -40,7 +40,7 @@ E daí a finalidade, que não é a de preservar software:
 > **The purpose of Ocinye OS is not to preserve software. It is to preserve and
 > amplify the institution's capacity to know, investigate, engineer and build.**
 
-### As três propriedades que decorrem disto
+### As quatro propriedades que decorrem disto
 
 **A inteligência artificial é uma capacidade transversal do sistema.** Aumenta a
 capacidade de compreender, investigar, simular, criar e operar — e não substitui
@@ -57,10 +57,24 @@ ferramentas, execuções e evidências que os produziram
 que a secção [Core, Experience e Design System](#core-experience-e-design-system)
 descreve.
 
+**A instituição sobrevive ao servidor onde corre.** Um servidor é uma instância
+de execução, e não a fonte de verdade da instituição só porque contém
+fisicamente o disco onde o PostgreSQL está instalado.
+
+> **Infrastructure may be replaced. Institutional state must survive.**
+
+Isto é arquitectura, e não administração de sistemas: a resposta a «o que é
+preciso levar?» não se descobre a olhar para o servidor, mas a olhar para o que
+o domínio considera estado autoritativo — e essa é uma decisão do Core
+([ADR-0700](../adrs/0700-institutional-continuity-and-portability.md)). Um
+`pg_dump` salva a base; não salva os bytes a que ela aponta, nem a chave sem a
+qual parte das linhas é ilegível.
+
 Estas distinções não são retóricas. Determinam o modelo de dados (proveniência
 desde o início, não acrescentada anos depois), a autorização (contextual, não
-`admin`/`user`), a pesquisa (permission-aware em SQL, não filtrada no cliente) e a
-evolução (zero ou N nós, sem reconstrução).
+`admin`/`user`), a pesquisa (permission-aware em SQL, não filtrada no cliente), a
+evolução (zero ou N nós, sem reconstrução) e a continuidade (identidades que
+sobrevivem à mudança de máquina, e verificação de que sobreviveram).
 
 ## Duas dimensões, dois diagramas
 

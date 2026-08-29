@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Cópia de continuidade do Ocinye OS, em macOS.
+
+  NÃO está instalado. É o formato, para quando houver um servidor.
+
+  Instalar:
+      cp com.ocinye.backup.plist ~/Library/LaunchAgents/
+      launchctl load ~/Library/LaunchAgents/com.ocinye.backup.plist
+
+  O `EnvironmentVariables` aqui está incompleto de propósito: os segredos —
+  `OCINYE_DATABASE_URL`, as credenciais de armazenamento, a chave pública de
+  cifra — vêm do ficheiro que `--env-file` carrega, e não deste plist, que é
+  legível por qualquer processo do utilizador.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>            <string>com.ocinye.backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>set -a; . /etc/ocinye/backup.env; set +a; exec /opt/ocinye/scripts/institutional-backup.sh</string>
+  </array>
+  <!-- Diário. A periodicidade é o RPO: mudá-la muda o que se pode perder. -->
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>0</integer></dict>
+  <key>RunAtLoad</key>        <false/>
+  <key>StandardOutPath</key>  <string>/var/log/ocinye/backup.log</string>
+  <key>StandardErrorPath</key><string>/var/log/ocinye/backup.log</string>
+</dict>
+</plist>

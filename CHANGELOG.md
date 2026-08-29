@@ -7,6 +7,203 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### O processo, e não só a portabilidade — 2026-08-29
+
+Os ensaios anteriores provaram que a instituição **pode** mudar de servidor.
+Este prova que existe um **processo** que o faz sozinho: cópia automática, sem
+terminal e sem `stdin`, cifrada com `age`, enviada para um endpoint S3 fora do
+servidor com confirmação por leitura de volta, restaurada num servidor
+inteiramente limpo — base vazia, bucket vazio, Redis vazio, credenciais novas —
+e verificada com as **três** perguntas a observar.
+
+```
+  as linhas          PASS     165 641 recursos, 2 objectos, 91 arestas
+  os bytes           PASS
+  a legibilidade     PASS     83 credenciais seladas abriram
+  EXIT=0
+```
+
+É a primeira verificação institucional inteiramente verde. E o par que lhe dá
+sentido: as mesmas linhas, os mesmos bytes, **sem a chave durável** — `FAIL`,
+com a razão. Bytes correctos e indecifráveis também são conhecimento perdido.
+
+**Três defeitos meus, encontrados a correr aquilo que escrevi.**
+
+A cópia «fora do servidor» ficou **dentro do repositório**. O ficheiro de
+ambiente tinha `OCINYE_BACKUP_REMOTE_CMD=mc cp --quiet` sem aspas; em `sh`,
+`VAR=valor comando` corre o comando com a variável só no ambiente dele, a
+variável nunca ficou definida, o script caiu no `rsync -a` por omissão, e o
+`rsync` copiou para uma pasta local com o nome do alias — dentro da árvore de
+trabalho. E saiu zero. A cópia externa foi declarada feita sem nunca ter
+acontecido.
+
+> **«O comando de transporte saiu zero» não é «a cópia chegou».**
+
+A correcção é ler de volta: um comando configurável devolve a soma do que está
+no destino, e o script compara. Sem ele, a cópia é **«ENVIADA, NÃO
+CONFIRMADA»** — nunca «ok».
+
+A recusa saía **muda**: o `set -e` matava o script na substituição antes de a
+mensagem existir, e o `trap` calava-se porque depois da cifra já não há pasta
+para marcar.
+
+E o cofre **crescia sem limite** — a retenção governava só a máquina de origem.
+
+**Além disso:** unidades de agendamento para `launchd` e `systemd` em
+`infra/scheduling/`, instaladas em lado nenhum, porque agendar é configuração
+de um servidor que ainda não existe.
+
+### Um modelo que a Ocinye treine é memória, não runtime — 2026-08-29
+
+A continuidade tratava a memória institucional como **explícita**: documentos,
+datasets, resultados, proveniência. Com RAG isso é completo — o modelo é
+intercambiável e o conhecimento fica nos dados. Com *fine-tuning* deixa de ser:
+parte da capacidade passa a existir nos pesos, e não se reconstrói a olhar para
+o PostgreSQL. Perder o servidor GPU passaria a ser voltar ao ponto zero.
+
+[ADR-0203](docs/adrs/0203-institutional-model-artifacts.md) decide as classes.
+`DURABLE_MODEL_ARTIFACT` viaja — ninguém fora da Ocinye tem esses pesos.
+`EXTERNAL_REACQUIRABLE` não viaja, **e só é essa classe** se a versão exacta
+estiver identificada, houver soma e a licença permitir: um adaptador LoRA sem o
+modelo base exacto é ruído com a forma certa.
+
+**A auditoria encontrou dois problemas.**
+
+`ai_models` não é um registo de artefactos. É um inventário reportado:
+`replace_reported_models` apaga as linhas do nó e volta a inseri-las a cada
+relatório — identificadores novos de cada vez — e `ON DELETE CASCADE` fá-las
+desaparecer com o nó. **Hoje é a computação que detém o modelo**, que é o
+inverso do que se decidiu. E isso expôs um defeito no manifesto desta mesma
+milestone: `ai_models` estava a ser comparada por identidade. Passa hoje porque
+há zero nós, e partia-se no dia em que o primeiro ligasse. Corrigido, com um
+teste que lê o código que justifica a decisão — para que ela não sobreviva à
+sua própria causa.
+
+Um artefacto de modelo também não tem por onde entrar: a lista de tipos aceites
+recusa `application/octet-stream`. Está certa a recusar, e alargá-la seria
+transformar a fronteira de uploads documentais num canal para binários
+arbitrários. Um modelo precisa do seu próprio caminho tipado.
+
+**O que não foi construído.** Não existe `Model`, `ModelVersion`,
+`ModelArtifact`, `TrainingRun` nem `EvaluationRun`; não existe promoção,
+retenção aplicada nem registo de licença. Não há nó, não há treino, não há um
+único artefacto para preservar, e a forma correcta destas tabelas depende do
+que só se sabe ao afinar o primeiro modelo. A `Definition of Done` está
+escrita, por responder, em `docs/backups/README.md`.
+
+> **Trained models may embody institutional capability, but they do not replace
+> the institutional evidence and provenance from which that capability was
+> derived.**
+
+### Os bytes atravessaram, e a chave também — 2026-08-29
+
+A entrada de ontem provava que o **estado estruturado** sobrevive a uma
+reinstalação. Provava-o bem, e não provava a outra metade: que os artefactos
+que a instituição cita chegam intactos e continuam interpretáveis.
+
+**O ensaio A → B → C.** Uma instituição construída de propósito, pela API —
+unidade, ideia, dois documentos com bytes reais, hipótese, metodologia, versão
+publicada, estudo, execução, resultado `RESTRICTED`, validação, dois membros —
+migrada para um servidor B e depois para um servidor C inteiramente limpo:
+base vazia, bucket vazio, Redis vazio, sem IA, sem nó de computação, e
+**credenciais de armazenamento novas**.
+
+Oito controlos sobre os bytes, e os dois que interessam mais são os que
+distinguem não-observar de observar-mal: **um endpoint inacessível dá
+`INVALID`**, e um bucket não configurado também. Um objecto corrompido falha
+por soma; um apagado falha por ausência; um objecto a mais é nomeado e **não**
+falha, porque uma escrita falhada deixa um destes — mas num servidor acabado
+de restaurar quer dizer que o destino não estava vazio.
+
+**Pelo produto.** No Workspace do servidor novo: o membro entra, o ambiente
+abre com os documentos, a cadeia científica está no ecrã, o resultado mantém o
+identificador, a linhagem percorre-se com `origem: operation`, o documento
+descarrega com a soma certa, um membro sem acesso recebe `not_found` sobre o
+`RESTRICTED` — nem a existência —, e a auditoria mantém o primeiro evento com
+a actividade nova por cima. A IA reporta `no_resource` e o conhecimento abre à
+mesma.
+
+**A chave.** `verify-keys` responde à pergunta que as outras duas deixam
+passar: `mailbox_credentials` viaja íntegra no dump e, sem a chave de selagem,
+chega ilegível — com os dois verificadores anteriores a passar. Sobre 318
+credenciais seladas reais, o veredicto é **idêntico antes e depois** do
+restauro; sem a chave, o comando diz que o estado chegou íntegro e ilegível.
+
+**O trio operacional.** `institutional-backup`, `-restore`, `-verify`. O
+primeiro recusa enviar em claro para fora do servidor; o segundo recusa
+escrever por cima de uma base com estado; o terceiro sai **2** quando nada
+falhou e alguma coisa não chegou a ser observada. O ensaio no servidor C
+terminou exactamente assim, e está certo.
+
+**Três defeitos encontrados a correr isto.** O `LEIA-ME.txt` que descreve o que
+falta no conjunto ficava fora das somas — o único ficheiro que explica o
+conjunto era o único que nada cobria. Uma corrida falhada deixava um conjunto
+parcial indistinguível de um bom, que é o que alguém escolhe no dia do
+desastre. E a marca que passou a existir para o evitar viajava dentro do
+conjunto cifrado, fazendo o restauro recusar uma cópia boa — apanhado porque o
+guarda recusou.
+
+**O que continua a não existir.** Agendamento. Sem ele o RPO é *desde o último
+conjunto que alguém produziu à mão*. Nenhum destino externo configurado,
+nenhum ensaio periódico, nenhuma rotação da chave de selagem. **3-2-1 não
+existe.**
+
+### Continuidade institucional: um servidor pode desaparecer — 2026-08-28
+
+A pergunta parecia de administração de sistemas — «temos backups?» — e não era.
+A pergunta é **o que constitui a instituição, e o que é apenas o sítio onde ela
+estava a correr**, e essa distinção é uma decisão do Core.
+
+**O que passou a existir.**
+
+- `ocinye_core::continuity` classifica todo o estado em sete classes, cada
+  entrada a dizer porquê. A classe `INTERPRETIVE` existe porque
+  `AUTHORITATIVE` não chegava: a `OCINYE_MAIL_KEY` não guarda conhecimento
+  nenhum, e sem ela metade do estado institucional é ruído.
+- Quatro subcomandos: `continuity-inventory`, `snapshot`, `verify-snapshot` e
+  `verify-objects`.
+- [ADR-0700](docs/adrs/0700-institutional-continuity-and-portability.md), o
+  runbook [Mudar a Ocinye para outro servidor](docs/runbooks/migrate-to-another-server.md),
+  e `docs/backups/README.md` reescrito.
+
+**O ensaio.** Executado contra 166 232 recursos. `pg_dump` 1,4 s → 19 MB;
+`pg_restore` numa base limpa 1,9 s; `verify-snapshot` saída zero. E o controlo
+negativo, que é a parte que importa: uma base **criada de novo** com as mesmas
+19 migrations foi recusada com saída 1, e as ausências enumeradas por família.
+
+> **Restaurar não é criar o domínio outra vez.**
+
+**Dois defeitos encontrados a construir isto.**
+
+O manifesto comparava 24 das 62 tabelas e nada dizia sobre as outras 38, entre
+elas `person_roles`, `unit_memberships`, `workspace_memberships` e
+`credentials`. Um restore que perdesse todas as filiações e todos os
+verificadores de palavra-passe teria chegado com a investigação intacta,
+verificado como completo, e sem ninguém capaz de entrar. A lista era escrita à
+mão, e por isso não podia saber que tinha envelhecido; passou a ser derivada de
+uma decisão por tabela, com portão que fecha quando uma migration traz uma
+tabela nova.
+
+A primeira versão de `verify-objects` escreveu o relatório mais alarmante que
+sabe escrever — 303 objectos em falta — contra um MinIO que estava
+simplesmente desligado. `get` devolve o mesmo erro para «não existe» e para
+«ninguém atendeu». Agora sonda o armazenamento antes de concluir seja o que
+for: **`INVALID` não é `FAIL`.**
+
+**O que continua a não existir.** Agendamento, cópia fora do servidor,
+retenção, cifra dos artefactos, rotação da chave de selagem. O RPO real é
+*desde o último dump que alguém correu à mão*, e o transporte do Object Storage
+não foi exercitado. **3-2-1 não existe.**
+
+### Corrigida uma contradição na matriz de estado — 2026-08-28
+
+`docs/feature-status/` listava **Notificações** duas vezes, com estados
+opostos: `AVAILABLE` numa linha, `PLANNED` e «não existe» noutra. Existem — há
+rota, worker que entrega e sino que conta o que está por ler — e a segunda
+linha era resto de uma auditoria em que tinham sido removidas. Removida, e
+corrigida a mesma afirmação obsoleta nos comentários de `shell.rs`, que se
+contradiziam a três linhas de distância.
+
 ### `main` passou a estar protegida pelo servidor — 2026-08-27
 
 A lacuna declarada em 2026-08-23 fechou-se, e não da maneira que a entrada

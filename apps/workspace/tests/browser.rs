@@ -5697,6 +5697,12 @@ async fn uma_pessoa_cria_um_grupo_com_duas_pessoas() {
         destino.contains("/messages/"),
         "o grupo não abriu: {destino}"
     );
+    // A URL mudou; o documento pode ainda estar a chegar. `wait_until_left`
+    // observa o endereço, e um endereço novo não é uma página desenhada — o
+    // `content()` mais abaixo lia o documento antigo e não encontrava o nome
+    // do grupo. Aqui esperamos por texto que só a conversa tem, como o teste
+    // irmão já fazia.
+    esperar_por(&page, "Escrever mensagem").await;
 
     // Três pessoas: as duas escolhidas e quem o criou.
     let quantos: i64 = sqlx::query_scalar(
@@ -7083,7 +7089,15 @@ async fn uma_pessoa_constroi_a_cadeia_cientifica_pelo_workspace() {
         &format!(r#"a[href="/results/{resultado_id}/validate"]"#),
     )
     .await;
-    esperar_por(&pagina, "Validar resultado").await;
+    // «O que está a registar» e não «Validar resultado»: o segundo é também o
+    // texto do **botão na página de onde se veio**, e o `esperar_por`
+    // satisfaz-se nele antes de a navegação acontecer. O `content()` seguinte
+    // apanha então um contexto a ser desmontado — `Cannot find context with
+    // specified id` —, e a corrida perde-se conforme a máquina. Passou sessenta
+    // vezes aqui e falhou à primeira no runner.
+    //
+    // A regra: **esperar por texto que só o destino tem.**
+    esperar_por(&pagina, "O que está a registar").await;
 
     let html = pagina.content().await.expect("conteúdo");
     assert!(

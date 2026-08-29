@@ -72,6 +72,7 @@ instituição, sem autenticação**. Ver
 | `outbox` | Outbox transaccional. |
 | `visibility` | Tradução do filtro de leitura para SQL. |
 | `storage` | Acesso a object storage S3-compatible. |
+| `continuity` | O que constitui a instituição e o que é só o sítio onde ela corre ([ADR-0700](../../docs/adrs/0700-institutional-continuity-and-portability.md)). Classifica todo o estado, descreve esta instalação, e compara duas descrições. **Não guarda estado próprio**: lê, descreve, compara. |
 | `error` | Erros e o seu mapeamento para o envelope da API. |
 
 ## Limites

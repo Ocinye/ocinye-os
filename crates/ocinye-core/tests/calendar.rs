@@ -1307,7 +1307,14 @@ async fn a_base_recusa_uma_segunda_entrega_do_mesmo_canal() {
             event_id: None,
             task_id: None,
             note: Some("duas vezes".to_owned()),
-            trigger_at: Utc::now() - Duration::minutes(1),
+            // No futuro, e é deliberado: este teste chama `deliver_in_app`
+            // directamente e nunca varre. Um lembrete **vencido** fica ao
+            // alcance do `claim_due` de qualquer outro teste — que não tem
+            // âmbito de organização nem de dono e varre a base inteira — e os
+            // testes deste ficheiro correm em concorrência sobre a mesma base.
+            // Foi assim que a contagem de tentativas chegou a 2 onde se
+            // esperava 1.
+            trigger_at: Utc::now() + Duration::hours(6),
         },
     )
     .await
@@ -1343,7 +1350,14 @@ async fn uma_entrega_falhada_nao_marca_o_lembrete_como_entregue() {
             event_id: None,
             task_id: None,
             note: Some("vai falhar".to_owned()),
-            trigger_at: Utc::now() - Duration::minutes(1),
+            // No futuro, e é deliberado: este teste chama `deliver_in_app`
+            // directamente e nunca varre. Um lembrete **vencido** fica ao
+            // alcance do `claim_due` de qualquer outro teste — que não tem
+            // âmbito de organização nem de dono e varre a base inteira — e os
+            // testes deste ficheiro correm em concorrência sobre a mesma base.
+            // Foi assim que a contagem de tentativas chegou a 2 onde se
+            // esperava 1.
+            trigger_at: Utc::now() + Duration::hours(6),
         },
     )
     .await
@@ -1425,7 +1439,14 @@ async fn a_notificacao_nao_carrega_o_conteudo_do_recurso() {
             event_id: Some(evento),
             task_id: None,
             note: None,
-            trigger_at: Utc::now() - Duration::minutes(1),
+            // No futuro, e é deliberado: este teste chama `deliver_in_app`
+            // directamente e nunca varre. Um lembrete **vencido** fica ao
+            // alcance do `claim_due` de qualquer outro teste — que não tem
+            // âmbito de organização nem de dono e varre a base inteira — e os
+            // testes deste ficheiro correm em concorrência sobre a mesma base.
+            // Foi assim que a contagem de tentativas chegou a 2 onde se
+            // esperava 1.
+            trigger_at: Utc::now() + Duration::hours(6),
         },
     )
     .await
@@ -1714,6 +1735,30 @@ async fn um_prazo_de_uma_tarefa_inalcancavel_nao_aparece() {
 ///
 /// O limite existe para que um lembrete que **nunca** seja entregue continue a
 /// falhar o teste em vez de o prender para sempre.
+/// # Porque um lembrete vencido é partilhado, e não deste teste
+///
+/// `claim_due` não tem âmbito nenhum: nem organização, nem dono. Varre a base
+/// inteira, e está certo — é o que um worker faz. Mas os testes correm em
+/// concorrência **entre binários**: `apps/workspace/tests/browser.rs` também
+/// chama `deliver_due`, e o `cargo test --workspace` corre-o ao mesmo tempo
+/// que este ficheiro, contra a mesma base.
+///
+/// Logo, **qualquer lembrete com `trigger_at` no passado está ao alcance de
+/// qualquer varrimento**. Um varrimento cuja entrega falhe chama
+/// `record_failure`, que incrementa `attempts` e deixa o estado em
+/// `scheduled` — indistinguível, para quem lê o teste, de uma tentativa
+/// própria. Foi assim que `uma_entrega_falhada_nao_marca_o_lembrete_como_entregue`
+/// contou 2 tentativas onde esperava 1, numa corrida completa de `verify.sh` em
+/// 2026-08-29.
+///
+/// A regra que daí resulta: **um teste que não varre não cria lembretes
+/// vencidos.** Os três que chamavam `deliver_in_app` directamente passaram a
+/// usar uma hora futura, e ficaram fora do alcance de qualquer varrimento.
+///
+/// Continua exposto, deliberadamente, o `dois_workers_em_corrida_entregam_uma_so_vez`:
+/// precisa de um lembrete vencido para exercer o `SKIP LOCKED`, e defende-se
+/// com um `trigger_at` de dez anos atrás, que o faz ordenar primeiro. Se
+/// aparecer uma intermitência ali, é aqui que está o mapa.
 async fn entregar_ate_chegar(pool: &sqlx::PgPool, lembrete: uuid::Uuid) -> bool {
     for _ in 0..20 {
         calendar::delivery::deliver_due(pool)

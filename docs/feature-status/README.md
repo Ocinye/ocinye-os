@@ -99,9 +99,21 @@ Os quatro primeiros são apurados em tempo real pelo Core e servidos em
 | **Ferramentas bibliográficas** | `knowledge::review_bibliography`, executada no isolamento WASM/WASI | ecrã em Bibliografia; capability agentic `knowledge.bibliography.review` | n/a | `AVAILABLE` |
 | **Object Storage** | implementado | leitura | não configurado | `NOT_CONFIGURED` |
 | **Auditoria** | implementado | implementado | n/a | `AVAILABLE` |
+| **Continuidade institucional** — classificação, manifesto, verificação | implementado, com teste que cobre o esquema | n/a — é operação, não ecrã | n/a | `AVAILABLE` |
+| **Restore verificado** | `verify-snapshot` distingue restaurar de recriar | n/a | exercitado uma vez à mão a 2026-08-28 | `AVAILABLE` (o procedimento) |
+| **Verificação dos bytes guardados** | `verify-objects`: lê cada objecto e recalcula a soma; distingue bucket inacessível de objecto ausente; nomeia órfãos sem falhar | n/a | exercitado a 2026-08-29 contra dois endpoints S3, com oito controlos | `AVAILABLE` |
+| **Continuidade criptográfica** | `verify-keys`; inventário fechado com portão sobre o esquema e sobre o código | n/a | veredicto idêntico antes e depois do restauro | `AVAILABLE` |
+| **Cópia, restauro e verificação operacionais** | `institutional-backup` · `-restore` · `-verify`; cifra `age`, somas reconferidas, **cópia externa confirmada por leitura de volta**, retenção nas duas pontas, conjunto incompleto marcado | n/a | exercitado de ponta a ponta contra um endpoint S3 externo | `AVAILABLE` |
+| **Execução agendável** | não-interactiva, sem `stdin`, com estado de saída inequívoco; unidades de `launchd` e `systemd` em `infra/scheduling/` | n/a | **instaladas em lado nenhum** | `AVAILABLE` (a capacidade); `NOT_CONFIGURED` (a operação) |
+| **Backup periódico em funcionamento** | — | — | **não há servidor onde o agendador corra.** O RPO é «desde o último conjunto que alguém produziu» | `PLANNED` |
+| **Rotação da chave de selagem** | — | — | `OCINYE_MAIL_KEY` viaja como está | `PLANNED` |
+| **Classificação de artefactos de modelo** | duas classes de continuidade decididas ([ADR-0203](../adrs/0203-institutional-model-artifacts.md)) | n/a | n/a | `AVAILABLE` (a decisão) |
+| **Registo de artefactos de modelo** — `Model`, `ModelVersion`, `ModelArtifact`, `TrainingRun` | **não existe.** `ai_models` é inventário reportado pelo nó, não registo de artefacto | — | 0 nós, 0 treinos, 0 artefactos | `NOT IMPLEMENTED` |
+| **Caminho para carregar pesos** | **não existe.** A lista de tipos aceites recusa binários arbitrários, e alargá-la seria a correcção errada | — | — | `NOT IMPLEMENTED` |
+| **Linhagem de treino** | os quinze verbos chegam; faltam os tipos de recurso e as tabelas | — | — | `PLANNED` |
+| **Promoção, avaliação e retenção de modelos** | — | — | — | `NOT IMPLEMENTED` |
 | **Actividade** | implementado | implementado | n/a | `AVAILABLE` |
 | **Administração de membros** | implementado | criar, detalhe, acesso, segurança | n/a | `AVAILABLE` |
-| **Notificações** | **não existe** | removido | n/a | `PLANNED` |
 | **Definições / tema / idioma** | não existe | declarado indisponível | n/a | `PLANNED` |
 
 ## Ocinye AI — estado detalhado

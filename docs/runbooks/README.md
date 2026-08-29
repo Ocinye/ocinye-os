@@ -32,6 +32,18 @@ ecrã é `PLANNED` — o modelo existe, a interface que o gere não.
 Nenhum deles permite a um administrador ler correspondência alheia
 ([ADR-0404](../adrs/0404-mail-privacy-boundary.md)).
 
+## Continuidade institucional
+
+| Runbook | Quando |
+|---|---|
+| [Mudar a Ocinye para outro servidor](migrate-to-another-server.md) | Migração planeada, ou recuperação depois de perder a máquina |
+
+Os passos da base de dados foram **executados** a 2026-08-28, incluindo o
+controlo negativo que distingue restaurar de recriar
+([ADR-0700](../adrs/0700-institutional-continuity-and-portability.md)). Os do
+Object Storage **não**: essa metade continua por exercitar, e o runbook di-lo
+no sítio onde está.
+
 ## Runbooks necessários antes de qualquer deployment
 
 **Estes não existem**, porque nada está deployado. Escrevê-los agora produziria
@@ -39,8 +51,9 @@ documentação que descreve uma realidade inexistente (`CLAUDE.md` §69).
 
 | Runbook | Porquê |
 |---|---|
-| **Restore de PostgreSQL** | Um backup sem restore testado não é um backup. |
-| **Restore de Object Storage** | Incluindo verificação de checksum contra a base. |
+| **Restore de Object Storage** | O comando existe — `verify-objects` — e nunca correu contra um bucket acessível. |
+| **Backup agendado e cópia fora do servidor** | O procedimento de migração existe; a cópia periódica não. Sem ela o RPO é «desde o último que alguém correu à mão». |
+| **Rotação da chave de selagem** | `OCINYE_MAIL_KEY` viaja como está; trocá-la exige reselar `mailbox_credentials`. |
 | **Resposta a credencial comprometida** | Revogar papéis, revogar credenciais de nó, rever a auditoria. |
 | **Rotação de credencial de nó** | Sem interromper o nó. |
 | **Migration falhada em produção** | O serviço recusa arrancar por desenho; é preciso um caminho para a frente. |
@@ -58,3 +71,4 @@ Estes estão documentados e exercitados:
 | Compilar capacidades WASM | `scripts/build-capabilities.sh` |
 | Registar e enrolar um nó | [docs/node-protocol/](../node-protocol/README.md) |
 | Criar o primeiro administrador | [docs/development/](../development/README.md) |
+| Descrever e verificar o estado institucional | [docs/backups/](../backups/README.md) |

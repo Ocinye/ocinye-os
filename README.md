@@ -248,6 +248,7 @@ tem depois de aplicar as migrations:
 | Plano agentic: capabilities tipadas, planos, aprovações | implementado |
 | Capability Runtime WASM/WASI, com um consumidor: validação e normalização BibTeX | implementado |
 | Armazenamento de objectos S3-compatible | implementado |
+| **Continuidade institucional**: classificação de todo o estado, manifesto de identidades, verificação de linhas, bytes e legibilidade, cópia cifrada fora do servidor com confirmação | implementado |
 
 **Configuração de instalação** — o que depende de cada ambiente, e não do
 repositório:
@@ -293,6 +294,15 @@ Matriz completa: [docs/feature-status/](docs/feature-status/README.md).
   existe um sistema genérico de extensões instaláveis; cada componente é
   escolhido pelo Core em código
   ([ADR-0501](docs/adrs/0501-capability-runtime-wasm.md)).
+- **Não existe backup periódico.** O mecanismo está completo e provado de ponta
+  a ponta — cópia sem terminal, cifrada, enviada para um endpoint fora do
+  servidor e **confirmada por leitura de volta**, restaurada numa instalação
+  limpa e verificada nas três dimensões: as linhas chegaram, os bytes chegaram,
+  e o que chegou lê-se
+  ([ADR-0700](docs/adrs/0700-institutional-continuity-and-portability.md)). O
+  que não existe é um **servidor** onde o agendador corra, e por isso não existe
+  cópia da instituição em qualquer momento dado: o RPO é *desde o último
+  conjunto que alguém produziu à mão*.
 - **O envio de correio ainda não é durável.** É síncrono contra o fornecedor. A
   tabela `mail_outbox` permanece no esquema por história de migrações e não
   participa no fluxo actual.

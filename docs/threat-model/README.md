@@ -202,7 +202,7 @@ consegue causar nada**, e é essa que os testes verificam.
 | **Lateral movement** | Nó não aceita tráfego de aplicação; futura ligação por WireGuard. | Arquitectura definida; sem nó. |
 | **Capability maliciosa** | WASM sem rede, sem filesystem, sem ambiente; fuel, memória e tempo limitados, e o limite de tempo de uma invocação é o seu — não o da que corre ao lado. Pedir rede é **recusado**. | Implementado, testado contra componente real. Isolamento temporal corrigido pela Baseline v1 (F-08). |
 | **Supply chain** | Toolchain fixado; `cargo audit` na CI **e** no sweep local, com excepções escritas; features de dependências limitadas ao necessário, para que código não usado não seja sequer ligado; capacidade de exemplo deliberadamente sem dependências pesadas. | Parcial — **sem verificação de assinatura de capacidades**. Stack TLS legada removida pela Baseline v1 (F-06). |
-| **Backup compromise** | — | **Sem backups.** Nada a comprometer, e nada a restaurar. |
+| **Backup compromise** | Nenhuma. O procedimento de migração produz um `pg_dump` **não cifrado** e um manifesto que enumera todas as identidades institucionais. Quem obtiver o dump obtém tudo o que a instituição classificou; quem obtiver **também** a `OCINYE_MAIL_KEY` obtém as credenciais de caixa dos membros. | **Não mitigado.** A chave viaja por canal próprio, o que separa os dois compromissos e não impede nenhum. Cifrar os artefactos e definir retenção é trabalho por fazer ([ADR-0700](../adrs/0700-institutional-continuity-and-portability.md)). |
 
 ## Suposições
 
@@ -220,7 +220,11 @@ Nenhuma destas está escondida; todas estão listadas no
 1. Sem rate limiting fora do início de sessão, que **tem** throttling.
 2. Sem análise antimalware de uploads.
 3. Sem verificação de assinatura de componentes WASM.
-4. Sem backups configurados, logo sem restore testado.
+4. Sem backups configurados. O **procedimento** de restore existe e foi
+   exercitado uma vez à mão a 2026-08-28, incluindo o controlo negativo que
+   distingue restaurar de recriar; o que não existe é agendamento, cópia fora
+   do servidor, retenção ou cifra dos artefactos. O RPO real é *desde o último
+   dump que alguém correu à mão*.
 5. Sessões do Workspace em memória: um reinício termina-as.
 6. **O fluxo OIDC não foi verificado ponta a ponta** contra um IdP a correr.
 7. ~~Planos agentic não são persistidos.~~ **Fechado em 2026-08-23** pela

@@ -1,0 +1,24 @@
+# Cópia de continuidade do Ocinye OS, em systemd.
+#
+# NÃO está instalado. É o formato, para quando houver um servidor.
+#
+#     cp ocinye-backup.* /etc/systemd/system/
+#     systemctl enable --now ocinye-backup.timer
+#
+# O estado de saída é o do script, e é inequívoco: zero só quando o dump e o
+# manifesto saíram, as somas foram reconferidas e — havendo destino — a cópia
+# chegou com a sua soma ao lado. Qualquer outra coisa é não-zero, e o conjunto
+# por terminar fica marcado INCOMPLETO.
+[Unit]
+Description=Cópia de continuidade institucional do Ocinye OS
+Documentation=file:/opt/ocinye/docs/runbooks/migrate-to-another-server.md
+
+[Service]
+Type=oneshot
+User=ocinye
+# Os segredos vêm daqui, e não da linha de comandos, que é visível no `ps`.
+EnvironmentFile=/etc/ocinye/backup.env
+WorkingDirectory=/opt/ocinye
+ExecStart=/opt/ocinye/scripts/institutional-backup.sh
+# Sem repetição automática: uma cópia que falha duas vezes seguidas é um
+# problema para ler, e não para esconder com uma terceira tentativa.

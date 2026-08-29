@@ -1909,7 +1909,21 @@ mod grelha_do_mes {
     #[test]
     fn o_dia_escolhido_nao_se_confunde_com_hoje() {
         let hoje = crate::ui::tempo::hoje_civil(Utc::now(), zona_de_teste());
-        let outro = hoje + Duration::days(3);
+        // Outro dia **do mesmo mês**, e é por isso que a direcção depende do
+        // dia. `hoje + 3` parece inofensivo e não é: nos últimos dias do mês
+        // cai no mês seguinte, a grelha passa a ser a desse mês, e hoje deixa
+        // de aparecer nela. O teste falhava três dias por mês, todos os meses,
+        // e foi assim que apanhou o `verify.sh` a 29 de Agosto.
+        let outro = if hoje.day() > 15 {
+            hoje - Duration::days(3)
+        } else {
+            hoje + Duration::days(3)
+        };
+        assert_eq!(
+            outro.month(),
+            hoje.month(),
+            "o dia escolhido saiu do mês de hoje, e a grelha deixaria de o conter"
+        );
         let html = pagina(&[], outro);
 
         assert!(

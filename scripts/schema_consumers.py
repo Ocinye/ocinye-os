@@ -82,6 +82,16 @@ def main() -> int:
         print("  nada para reprovar. É o caminho que está errado.")
         return 1
 
+    # ── O que não conta como leitor ─────────────────────────────────────
+    #
+    # `continuity/manifest.rs` nomeia **todas** as tabelas do esquema, por
+    # construção: tem de haver uma decisão de continuidade para cada uma. Se
+    # contasse como leitor, nenhuma tabela poderia voltar a ficar sem leitor, e
+    # este guarda passaria a aprovar tudo sem nunca reprovar nada.
+    #
+    # Uma decisão sobre uma tabela não é um consumidor dela.
+    NAO_E_LEITOR = ("continuity/manifest.rs", "continuity/classification.rs")
+
     codigo = []
     for area in ("crates", "services", "apps"):
         for onde, _, ficheiros in os.walk(os.path.join(base, area)):
@@ -90,6 +100,9 @@ def main() -> int:
             codigo += [
                 os.path.join(onde, f) for f in ficheiros if f.endswith(".rs")
             ]
+    codigo = [
+        f for f in codigo if not any(x in f.replace(os.sep, "/") for x in NAO_E_LEITOR)
+    ]
     texto = "\n".join(
         open(f, encoding="utf-8", errors="replace").read() for f in codigo
     )
