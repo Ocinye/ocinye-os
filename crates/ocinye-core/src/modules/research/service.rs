@@ -1099,3 +1099,83 @@ pub async fn get_workspace_overview(
         workspace,
     })
 }
+
+/// Retira uma pessoa de um ambiente de investigação.
+///
+/// # Porque isto tinha de existir
+///
+/// O Core sabia acrescentar membros a um ambiente e não sabia retirá-los. Uma
+/// autoridade que só se concede não é governação: quem entrou uma vez ficava lá
+/// para sempre, e a única saída era escrever na base por fora — que é
+/// exactamente o que a gestão de pertenças existe para tornar desnecessário.
+///
+/// # A invariante
+///
+/// Um ambiente não pode ficar sem quem o lidere. Gerir membros exige
+/// `ManageMembers` no contexto do ambiente, e esse direito vem de o liderar;
+/// remover o último `Lead` produziria um ambiente que ninguém pode voltar a
+/// gerir. A recusa diz o que fazer, porque quem sai pode ter razão para sair.
+///
+/// # Errors
+///
+/// Devolve erro quando o ambiente não é alcançável, quando a autorização
+/// recusa, quando a pertença não existe, ou quando esta é a última liderança.
+pub async fn remove_workspace_member(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    workspace_id: Uuid,
+    person_id: Uuid,
+) -> CoreResult<()> {
+    let workspace = get_workspace(&mut **tx, principal, workspace_id).await?;
+    let ctx = workspace_context(&workspace, ResourceKind::ResearchWorkspace);
+    authorize(principal, Action::ManageMembers, &ctx)
+        .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+
+    let ultimo_lead: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1 FROM workspace_memberships
+              WHERE workspace_id = $1 AND person_id = $2 AND role = 'lead'
+         ) AND (
+             SELECT count(*) FROM workspace_memberships
+              WHERE workspace_id = $1 AND role = 'lead'
+         ) = 1",
+    )
+    .bind(workspace.id)
+    .bind(person_id)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    if ultimo_lead {
+        return Err(CoreError::Conflict(
+            "Esta é a última pessoa que lidera o ambiente. Nomeie outra \
+             liderança antes de a remover."
+                .to_owned(),
+        ));
+    }
+
+    let removidas =
+        sqlx::query("DELETE FROM workspace_memberships WHERE workspace_id = $1 AND person_id = $2")
+            .bind(workspace.id)
+            .bind(person_id)
+            .execute(&mut **tx)
+            .await?
+            .rows_affected();
+
+    if removidas == 0 {
+        return Err(CoreError::NotFound("Esta pertença não existe.".to_owned()));
+    }
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::MEMBERSHIP_CHANGE, "workspace_membership")
+            .scope(Some(workspace.unit_id), Some(workspace.id))
+            .detail("person_id", person_id.to_string())
+            .detail("event", "revoked"),
+    )
+    .await?;
+
+    Ok(())
+}

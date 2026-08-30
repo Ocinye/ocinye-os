@@ -282,6 +282,21 @@ pub struct Viewer {
     pub temporal_failure: Option<String>,
     /// Quantas notificações estão por ler.
     pub unread: usize,
+    /// Os módulos que o Core diz pertencerem ao espaço de trabalho desta pessoa.
+    ///
+    /// # Porque isto não é uma permissão
+    ///
+    /// Porque responde a outra pergunta. Uma permissão diz «pode fazer isto
+    /// aqui»; a relevância diz «isto pertence ao trabalho desta pessoa». Quatro
+    /// módulos — Conhecimento, Ficheiros, Bibliografia e Dados — governam-se
+    /// dentro de um contentor de autoridade, e por isso a navegação **não pode**
+    /// responder por eles: perguntá-lo em âmbito institucional dava sempre não,
+    /// e era isso que os deixava esbatidos para toda a gente.
+    ///
+    /// Apresentar não é autorizar. Quem entra sem alcançar nada vê zero
+    /// recursos, que é um estado honesto — e cada operação lá dentro volta a
+    /// decidir contra o ambiente concreto.
+    pub modules: Vec<String>,
     /// Permissões de âmbito institucional, tal como o Core as calculou.
     ///
     /// Vêm de `GET /api/v1/me`. A shell usa-as para não mostrar o que o membro
@@ -307,6 +322,22 @@ impl Viewer {
 ///
 /// `None` para os ecrãs que qualquer membro autenticado vê — a Home e O Meu
 /// Trabalho mostram o que é do próprio, e filtram-se sozinhos.
+/// O módulo cuja relevância governa a presença deste ecrã na navegação.
+///
+/// `None` para os ecrãs cuja presença não é uma questão de relevância — os que
+/// são de toda a gente, e os que um direito institucional já resolve.
+const fn screen_module(screen: Screen) -> Option<&'static str> {
+    match screen {
+        // Os quatro que se governam dentro de um contentor. A navegação
+        // apresenta-os por relevância; a autorização acontece lá dentro.
+        Screen::Knowledge => Some("knowledge"),
+        Screen::Files => Some("files"),
+        Screen::Bibliography => Some("bibliography"),
+        Screen::Datasets => Some("datasets"),
+        _ => None,
+    }
+}
+
 const fn screen_permission(screen: Screen) -> Option<Permission> {
     match screen {
         // Definições são do próprio membro: não exigem permissão
@@ -470,10 +501,23 @@ fn sidebar(viewer: &Viewer, avatar: &str, active: Screen) -> impl IntoView {
                         let itens: Vec<(Screen, bool)> = screens
                             .iter()
                             .copied()
-                            .filter_map(|screen| match screen_permission(screen) {
-                                None => Some((screen, true)),
-                                Some(_) if !core_status.operational() => None,
-                                Some(p) => Some((screen, viewer.can(p))),
+                            .filter_map(|screen| match screen_module(screen) {
+                                // Módulo governado dentro de um contentor: a
+                                // presença é relevância, e a autorização
+                                // acontece no ecrã. Continua a encolher quando o
+                                // Core não confirmou nada — não saber o que
+                                // alguém pode não é razão para lhe mostrar tudo.
+                                Some(m) if core_status.operational() => viewer
+                                    .modules
+                                    .iter()
+                                    .any(|relevante| relevante == m)
+                                    .then_some((screen, true)),
+                                Some(_) => None,
+                                None => match screen_permission(screen) {
+                                    None => Some((screen, true)),
+                                    Some(_) if !core_status.operational() => None,
+                                    Some(p) => Some((screen, viewer.can(p))),
+                                },
                             })
                             .collect();
 
@@ -1278,7 +1322,38 @@ fn palette(viewer: &Viewer) -> impl IntoView {
 mod tests {
     use super::*;
 
-    /// Um membro com exactamente as permissões indicadas.
+    /// Todos os módulos de investigação, para quem os deva ver.
+    ///
+    /// A relevância é um eixo **separado** das permissões: um actor pode ter
+    /// todos os direitos institucionais e nenhum módulo de investigação
+    /// relevante — é o caso de um administrador de plataforma —, e pode ter
+    /// poucos direitos e os módulos todos, que é o caso de um membro de
+    /// investigação sem pertenças. Os testes têm de os poder pedir em separado.
+    fn todos_os_modulos() -> Vec<String> {
+        [
+            "units",
+            "ideas",
+            "projects",
+            "knowledge",
+            "files",
+            "bibliography",
+            "datasets",
+        ]
+        .into_iter()
+        .map(ToOwned::to_owned)
+        .collect()
+    }
+
+    /// Um membro com as permissões indicadas e os módulos de investigação.
+    fn viewer_de_investigacao(permissions: &[Permission]) -> Viewer {
+        Viewer {
+            modules: todos_os_modulos(),
+            ..viewer_with(permissions)
+        }
+    }
+
+    /// Um membro com exactamente as permissões indicadas, e nenhum módulo de
+    /// investigação relevante.
     fn viewer_with(permissions: &[Permission]) -> Viewer {
         Viewer {
             zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
@@ -1292,6 +1367,7 @@ mod tests {
             temporal_failure: None,
             unread: 0,
             capabilities: permissions.iter().map(|p| p.as_str().to_owned()).collect(),
+            modules: Vec::new(),
         }
     }
 
@@ -1385,7 +1461,7 @@ mod tests {
         // A barra deixou de encolher consoante quem olha: mostra os ecrãs que a
         // instituição tem, e marca os que esta pessoa não pode abrir. Quem não
         // via um ecrã não ficava a saber que ele existe.
-        let member = viewer_with(&[Permission::IdeasView]);
+        let member = viewer_de_investigacao(&[Permission::IdeasView]);
         let html = render(&member);
 
         for grupo in ["PESSOAL", "INVESTIGAÇÃO", "CONHECIMENTO", "INSTITUCIONAL"] {
@@ -1827,7 +1903,7 @@ mod tests {
     /// e o CSS pinta a partir dele: uma só fonte para as duas coisas.
     #[test]
     fn cada_ecra_marca_um_e_um_so_item_activo() {
-        let viewer = viewer_with(&ocinye_contracts::Permission::all());
+        let viewer = viewer_de_investigacao(&ocinye_contracts::Permission::all());
 
         for screen in PALETTE_NAV {
             let html = shell(
@@ -1864,7 +1940,7 @@ mod tests {
     /// cobrir: `/units/{id}` não é `/units`, mas é ali que se está.
     #[test]
     fn um_ecra_filho_marca_o_pai_na_navegacao() {
-        let viewer = viewer_with(&ocinye_contracts::Permission::all());
+        let viewer = viewer_de_investigacao(&ocinye_contracts::Permission::all());
 
         for caminho in [
             "/units/33333333-3333-3333-3333-333333333333",
@@ -1906,7 +1982,7 @@ mod tests {
     /// mobiliário.
     #[test]
     fn o_trilho_leva_a_ecras_reais_e_nunca_a_si_proprio() {
-        let viewer = viewer_with(&ocinye_contracts::Permission::all());
+        let viewer = viewer_de_investigacao(&ocinye_contracts::Permission::all());
 
         for (filho, pai) in [
             (Screen::Units, Screen::Units),

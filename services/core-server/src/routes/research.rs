@@ -20,6 +20,14 @@ pub fn routes() -> Router<AppState> {
         .route("/workspaces", get(list_workspaces))
         .route("/workspaces/{workspace_id}", get(workspace_overview))
         .route("/workspaces/{workspace_id}/members", post(add_member))
+        // Retirar uma pessoa do ambiente. `POST` e não `DELETE` pela mesma
+        // razão que a unidade: o formulário do Workspace fala HTTP de
+        // formulário, e uma operação que só existisse para `fetch` seria uma
+        // operação que a Experience sem JavaScript não alcança.
+        .route(
+            "/workspaces/{workspace_id}/members/{person_id}",
+            post(remove_member),
+        )
         .route(
             "/workspaces/{workspace_id}/classification",
             post(reclassify),
@@ -66,6 +74,14 @@ struct WorkspaceView {
     /// Se esse teste falhar, a correcção **não** é ajustá-lo: é servir uma
     /// resposta por operação em vez deste booleano.
     may_create: bool,
+    /// Se este membro pode alterar quem participa neste ambiente.
+    ///
+    /// É a mesma pergunta que `add_workspace_member` e `remove_workspace_member`
+    /// fazem, e não um palpite sobre o papel de quem está a ver: se o controlo
+    /// aparecer no ecrã, a operação é autorizável pela mesma política que a vai
+    /// executar. Continua a ser cortesia de renderização — as duas operações
+    /// decidem outra vez, e há uma viagem que exige que decidam.
+    may_manage_members: bool,
 }
 
 impl From<&research::ResearchWorkspace> for WorkspaceView {
@@ -80,6 +96,7 @@ impl From<&research::ResearchWorkspace> for WorkspaceView {
             // Sem principal não se pode afirmar nada sobre o que ele pode: a
             // resposta conservadora é a única honesta.
             may_create: false,
+            may_manage_members: false,
         }
     }
 }
@@ -100,6 +117,15 @@ impl WorkspaceView {
                 principal,
                 ocinye_domain::Action::Create,
                 &ctx,
+            )
+            .is_ok(),
+            may_manage_members: ocinye_domain::policy::authorize(
+                principal,
+                ocinye_domain::Action::ManageMembers,
+                &research::workspace_context(
+                    workspace,
+                    ocinye_domain::ResourceKind::ResearchWorkspace,
+                ),
             )
             .is_ok(),
             ..Self::from(workspace)
@@ -464,6 +490,20 @@ async fn transition_project(
 struct AddWorkspaceMemberRequest {
     person_id: Uuid,
     role: String,
+}
+
+/// Retira uma pessoa do ambiente.
+async fn remove_member(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path((workspace_id, person_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    research::remove_workspace_member(&mut tx, &principal, &ids, workspace_id, person_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+
+    Ok(Json(serde_json::json!({ "removed": true })))
 }
 
 async fn add_member(

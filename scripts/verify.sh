@@ -152,7 +152,19 @@ step "Isolamento do fornecedor de teste"
 #
 # O padrão procura a linha do *pacote* — `ocinye-core v0.1.0 (…) [features]` —
 # e não as linhas `ocinye-core feature "…"`, que descrevem arestas do grafo.
-resolved="$(cargo tree -p ocinye-core-server -e features --format '{p} [{f}]' 2>/dev/null \
+# `-e normal`, e não `-e features`.
+#
+# A afirmação deste portão é sobre o **binário**, e `-e features` inclui também
+# as dev-dependencies. Enquanto o servidor não tinha uma dev-dependency em
+# `ocinye-core` os dois davam o mesmo; a partir do momento em que os harnesses
+# dele precisaram da guarda de isolamento, deixaram de dar — e o portão passou a
+# recusar um uso legítimo, que é exactamente como uma guarda perde a confiança
+# de quem a lê.
+#
+# `-e normal` mede o que a mensagem sempre disse medir, e continua a apanhar o
+# risco real: uma feature de teste promovida a dependência de produção. Provado
+# por reversão — pondo `test-fixtures` em `[dependencies]`, isto fica vermelho.
+resolved="$(cargo tree -p ocinye-core-server -e normal --format '{p} [{f}]' 2>/dev/null \
     | grep -E 'ocinye-core v[0-9]' || true)"
 
 if [[ -z "$resolved" ]]; then

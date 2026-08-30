@@ -193,11 +193,160 @@ pub fn files(view: FilesView) -> impl IntoView {
     .into_any()
 }
 
+/// A vista agregada: tudo o que esta pessoa alcança, em todos os ambientes.
+///
+/// # Porque isto substituiu o selector de ambiente
+///
+/// Porque `Ficheiros` é um módulo, não a vista de um ambiente. Obrigar a
+/// escolher antes de ver seja o que for fazia a aplicação parecer vazia a quem
+/// tem trabalho espalhado por vários — e a alternativa, escolher um por
+/// omissão, é uma escolha silenciosa que num ecrã onde a classificação depende
+/// do ambiente é sempre a errada.
+///
+/// Continua a haver ambientes: cada linha diz de onde vem, e entrar num deles
+/// mostra as pastas.
+pub struct AllFilesView {
+    /// Os ficheiros alcançáveis, do mais recente para trás.
+    pub files: Vec<Value>,
+    /// Quantos existem, pelo mesmo predicado da lista.
+    pub total: i64,
+    /// Os ambientes onde esta pessoa pode carregar.
+    pub destinos: Vec<(String, String)>,
+    /// Uma mensagem da operação anterior.
+    pub notice: Option<(bool, String)>,
+}
+
+/// O ecrã de Ficheiros sem ambiente escolhido.
+#[allow(clippy::too_many_lines)]
+pub fn all_files(view: AllFilesView) -> impl IntoView {
+    let AllFilesView {
+        files,
+        total,
+        destinos,
+        notice,
+    } = view;
+
+    let vazio = files.is_empty();
+    let mostrados = files.len();
+
+    let linhas: Vec<(Option<String>, Vec<Cell>)> = files
+        .iter()
+        .map(|f| {
+            let id = text(f, "id");
+            (
+                Some(format!("/files/{id}")),
+                vec![
+                    Cell::Primary(text(f, "name")),
+                    Cell::Text(text(f, "workspace_code")),
+                    Cell::Classification(text(f, "classification")),
+                    Cell::Mono(tamanho(number(f, "size_bytes"))),
+                    Cell::Mono(format!("v{}", number(f, "versions"))),
+                ],
+            )
+        })
+        .collect();
+
+    view! {
+        <div class="oc-page">
+            <div class="oc-head">
+                <div class="oc-head__text">
+                    <h1>"Ficheiros"</h1>
+                    <p>
+                        "Os ficheiros institucionais que alcança, em todos os \
+                         ambientes a que pertence."
+                    </p>
+                </div>
+            </div>
+
+            {notice.map(|(ok, mensagem)| aviso(ok, &mensagem))}
+            {destino_de_carregamento(&destinos)}
+
+            {if vazio {
+                empty_state(EmptyState {
+                    icon: Icon::Files,
+                    title: "Ainda não tem ficheiros acessíveis".to_owned(),
+                    body: if destinos.is_empty() {
+                        "Os ficheiros são governados pelos ambientes de \
+                         investigação a que pertence. Um gestor da sua unidade \
+                         ou a liderança de um projecto pode acrescentá-lo a um."
+                            .to_owned()
+                    } else {
+                        "Ainda não há ficheiros nos ambientes a que pertence. \
+                         Carregue o primeiro."
+                            .to_owned()
+                    },
+                    actions: Vec::new(),
+                    small: false,
+                })
+                .into_any()
+            } else {
+                data_table(Table {
+                    tabs: vec![],
+                    search: "Filtrar ficheiros",
+                    truncated: i64::try_from(mostrados).unwrap_or(0) < total,
+                    shape: "oc-table--files-all",
+                    columns: vec![
+                        Column::new("Nome"),
+                        Column::new("Ambiente"),
+                        Column::new("Classificação"),
+                        Column::right("Tamanho"),
+                        Column::right("Versões"),
+                    ],
+                    rows: linhas,
+                    // O total vem do mesmo predicado da lista: não há aqui um
+                    // número maior a contar o que a lista esconde.
+                    footer: format!("{mostrados} de {total}"),
+                    previous: None,
+                    next: None,
+                    empty: "Nenhum ficheiro acessível.",
+                })
+                .into_any()
+            }}
+        </div>
+    }
+}
+
+/// Onde se pode carregar, e o que dizer quando não há onde.
+fn destino_de_carregamento(destinos: &[(String, String)]) -> impl IntoView {
+    if destinos.is_empty() {
+        return view! {
+            <div class="oc-note oc-mb-5">
+                <p class="oc-t-strong">"Não tem onde carregar ficheiros"</p>
+                <p class="oc-t-caption--muted">
+                    "Carregar um ficheiro exige um ambiente de investigação onde \
+                     tenha autoridade para o fazer."
+                </p>
+            </div>
+        }
+        .into_any();
+    }
+
+    let opcoes = destinos
+        .iter()
+        .map(|(id, etiqueta)| view! { <option value=id.clone()>{etiqueta.clone()}</option> })
+        .collect_view();
+
+    // Um destino ou vários: a escolha é sempre explícita. Pré-seleccionar o
+    // único é conveniência; escolher por alguém entre vários seria decidir onde
+    // o trabalho dela fica guardado.
+    view! {
+        <form class="oc-files__destino oc-mb-5" method="get" action="/files">
+            <label class="oc-label" for="oc-files-destino">"Carregar em"</label>
+            <select class="oc-select" id="oc-files-destino" name="workspace" required>
+                {opcoes}
+            </select>
+            <button class="oc-btn oc-btn--primary" type="submit">"Abrir ambiente"</button>
+        </form>
+    }
+    .into_any()
+}
+
 /// Sem ambiente escolhido não há ficheiros para mostrar.
 ///
 /// Não se escolhe um por omissão: «o primeiro da lista» é uma escolha que a
 /// interface faz por alguém, e num ecrã onde a classificação depende do
 /// ambiente essa escolha silenciosa é a errada.
+#[allow(dead_code)]
 fn escolher_ambiente(workspaces: Vec<(String, String)>) -> impl IntoView {
     view! {
         <div class="oc-page">

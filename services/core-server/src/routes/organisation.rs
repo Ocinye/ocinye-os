@@ -94,9 +94,34 @@ async fn get_unit(
     State(state): State<AppState>,
     CurrentPrincipal(principal): CurrentPrincipal,
     Path(unit_id): Path<Uuid>,
-) -> Result<Json<UnitView>, ApiError> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     let unit = organisation::get_unit(&state.pool, &principal, unit_id).await?;
-    Ok(Json(UnitView::from(unit)))
+
+    // A mesma pergunta que `add_unit_member` e `revoke_unit_member` fazem.
+    //
+    // Vem daqui e não de um palpite sobre o papel: se o controlo de gestão
+    // aparecer no ecrã, a operação é autorizável pela mesma política que a vai
+    // executar. Continua a ser cortesia de renderização — as duas operações
+    // decidem outra vez.
+    let may_manage_members = ocinye_domain::policy::authorize(
+        &principal,
+        ocinye_domain::policy::Action::ManageMembers,
+        &ocinye_domain::policy::ResourceContext::unit(
+            ocinye_domain::policy::ResourceKind::Unit,
+            principal.organisation_id,
+            unit.id,
+        ),
+    )
+    .is_ok();
+
+    let mut vista = serde_json::to_value(UnitView::from(unit)).unwrap_or_default();
+    if let Some(objecto) = vista.as_object_mut() {
+        objecto.insert(
+            "may_manage_members".to_owned(),
+            serde_json::Value::Bool(may_manage_members),
+        );
+    }
+    Ok(Json(vista))
 }
 
 #[derive(Deserialize)]

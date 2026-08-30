@@ -33,6 +33,10 @@ pub fn routes() -> Router<AppState> {
                 .post(upload_file.layer(DefaultBodyLimit::max(super::UPLOAD_BODY_LIMIT_BYTES))),
         )
         .route("/workspaces/{workspace_id}/folders", post(create_folder))
+        // A vista agregada: `Ficheiros` é um módulo, não a vista de um
+        // ambiente. Obrigar a escolher um antes de ver seja o que for faz a
+        // aplicação parecer vazia a quem tem trabalho espalhado por vários.
+        .route("/files", get(all_files))
         .route("/files/{file_id}", get(show_file))
         .route(
             "/files/{file_id}/versions",
@@ -176,6 +180,45 @@ async fn browse(
         folders: contents.folders.into_iter().map(FolderView::from).collect(),
         files: contents.files.into_iter().map(FileView::from).collect(),
     }))
+}
+
+/// Quantos ficheiros a vista agregada devolve de uma vez.
+const ALL_FILES_LIMIT: i64 = 200;
+
+/// Todos os ficheiros que quem pergunta alcança, em todos os ambientes.
+async fn all_files(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let tudo = files::all(&state.pool, &principal, ALL_FILES_LIMIT).await?;
+
+    Ok(Json(serde_json::json!({
+        "items": tudo
+            .files
+            .into_iter()
+            .map(|f| serde_json::json!({
+                "id": f.id,
+                "name": f.name,
+                "classification": f.classification,
+                "content_type": f.content_type,
+                "size_bytes": f.size_bytes,
+                "versions": f.versions,
+                "workspace_id": f.workspace_id,
+                "workspace_code": f.workspace_code,
+                "workspace_title": f.workspace_title,
+                "updated_at": f.updated_at,
+            }))
+            .collect::<Vec<_>>(),
+        // O total sai do **mesmo** predicado da lista: um número maior do que
+        // as linhas revelaria a existência do que a lista esconde.
+        "total": tudo.total,
+        // Onde esta pessoa pode criar. Zero é um estado honesto.
+        "destinations": tudo
+            .destinos
+            .into_iter()
+            .map(|(id, etiqueta)| serde_json::json!({ "id": id, "label": etiqueta }))
+            .collect::<Vec<_>>(),
+    })))
 }
 
 async fn show_file(

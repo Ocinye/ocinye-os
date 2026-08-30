@@ -186,6 +186,7 @@ A interface humana.
 - [ADR-0601](0601-workspace-bff-session.md) — O Workspace como Backend-for-Frontend
 - [ADR-0602](0602-workspace-ssr-progressive-enhancement.md) — Workspace em SSR com progressive enhancement, hidratação adiada
 - [ADR-0603](0603-boot-and-institutional-readiness.md) — Arranque do Ocinye OS e prontidão institucional
+- [ADR-0604](0604-workspace-access-presentation.md) — Apresentação de acesso e autorização contextual no Workspace
 
 ### 0700–0799 · Deployment, rede, operação e resiliência
 
@@ -253,6 +254,8 @@ preencher.
 | [0600](0600-leptos-workspace-runtime.md) | Leptos para o Workspace Runtime | Workspace | `MEDIUM` | Accepted |
 | [0601](0601-workspace-bff-session.md) | O Workspace como Backend-for-Frontend | Workspace | `HIGH` | Accepted |
 | [0602](0602-workspace-ssr-progressive-enhancement.md) | Workspace em SSR com progressive enhancement, hidratação adiada | Workspace | `MEDIUM` | Accepted |
+| [0603](0603-boot-and-institutional-readiness.md) | Arranque do Ocinye OS e prontidão institucional | Workspace | `HIGH` | Accepted |
+| [0604](0604-workspace-access-presentation.md) | Apresentação de acesso e autorização contextual no Workspace | Workspace | `FOUNDATIONAL` | Accepted |
 | [0700](0700-institutional-continuity-and-portability.md) | Continuidade institucional e portabilidade entre servidores | Operations | `FOUNDATIONAL` | Accepted |
 
 ---

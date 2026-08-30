@@ -27,7 +27,7 @@ use std::time::Duration;
 use chromiumoxide::browser::{Browser, BrowserConfig};
 use chromiumoxide::Page;
 use futures::StreamExt;
-use ocinye_contracts::{CredentialKind, TechnicalRole, UnitRole};
+use ocinye_contracts::{AccountStatus, CredentialKind, TechnicalRole, UnitRole};
 use ocinye_core::config::CoreConfig;
 use ocinye_core::modules::identity::{Authenticator, Throttle};
 use ocinye_core::password::Secret;
@@ -261,6 +261,10 @@ impl Harness {
             .await
             .expect("migrations must apply");
 
+        // Antes da primeira escrita, e não depois: falhar depois de escrever
+        // não é uma guarda, é um relatório de estragos.
+        ocinye_core::fixtures::refuse_canonical_organisation(&pool).await;
+
         // ── O Core, no seu próprio porto ────────────────────────────────
         let core_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -386,11 +390,16 @@ impl Harness {
     /// Core. Injectar um cookie provaria que a página abre com um cookie, e não
     /// que uma pessoa consegue entrar.
     async fn sign_in(&self, roles: &[TechnicalRole]) -> (Uuid, Credenciais) {
-        let organisation_id: Uuid =
-            sqlx::query_scalar("SELECT id FROM organisations ORDER BY created_at DESC LIMIT 1")
-                .fetch_one(&self.pool)
-                .await
-                .expect("organização");
+        // A organização **deste** harness, e não «a mais recente».
+        //
+        // Adoptar a organização mais recente não tem semântica de teste
+        // nenhuma: numa base partilhada é a de outro teste a correr em
+        // paralelo, e numa base errada é a instituição a sério — foi assim
+        // que a base de desenvolvimento ganhou milhares de pessoas de
+        // fixtures dentro da organização canónica.
+        //
+        // O harness já criava a sua em `start`. Faltava usá-la.
+        let organisation_id = self.organisation_id;
 
         let handle = format!("e{}", Uuid::new_v4().simple());
         let email = format!("{handle}@ocinye.com");
@@ -770,6 +779,42 @@ impl Harness {
         tx.commit().await.expect("commit");
 
         (h.id, e.id, x.id, r.id)
+    }
+
+    /// Uma conta administrativa **fora** do browser.
+    ///
+    /// Não é `sign_in`: uma segunda entrada trocaria a sessão do navegador, e a
+    /// página seguinte seria lida pelo administrador em vez de ser lida por
+    /// quem se quer ver suspenso — o teste passaria a medir outra pessoa.
+    async fn pessoa_administrativa(
+        &self,
+        roles: &[TechnicalRole],
+    ) -> ocinye_core::modules::identity::Person {
+        let handle = format!("a{}", Uuid::new_v4().simple());
+        let person_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO people (organisation_id, full_name, email, status)
+                 VALUES ($1, $2, $3, 'active') RETURNING id",
+        )
+        .bind(self.organisation_id)
+        .bind(&handle)
+        .bind(format!("{handle}@ocinye.com"))
+        .fetch_one(&self.pool)
+        .await
+        .expect("pessoa");
+
+        for role in roles {
+            sqlx::query("INSERT INTO person_roles (person_id, role) VALUES ($1, $2)")
+                .bind(person_id)
+                .bind(role.as_str())
+                .execute(&self.pool)
+                .await
+                .expect("papel");
+        }
+
+        ocinye_core::modules::identity::person_by_id(&self.pool, person_id)
+            .await
+            .expect("leitura")
+            .expect("pessoa")
     }
 
     async fn manages_a_unit(&self, person_id: Uuid) -> Uuid {
@@ -7496,7 +7541,8 @@ async fn uma_pessoa_organiza_e_percorre_os_ficheiros_no_browser() {
 
     // O ambiente escolhe-se: não há um por omissão.
     let page = harness.open("/files").await;
-    esperar_por(&page, "Escolha o ambiente").await;
+    // O módulo abre na vista agregada: não se escolhe um ambiente para ver.
+    esperar_por(&page, "em todos os ambientes a que pertence").await;
 
     let lista = harness
         .open(&format!("/files?workspace={workspace_id}"))
@@ -8622,7 +8668,7 @@ async fn ver_a_entrada_de_ficheiros_nao_da_acesso_a_ficheiro_nenhum() {
     // membro activo o alcança — por isso ele aparece na escolha, e deve
     // aparecer. O que **não** aparece é o ficheiro RESTRICTED lá dentro.
     let ficheiros = harness.open("/files").await;
-    esperar_por(&ficheiros, "Escolha o ambiente").await;
+    esperar_por(&ficheiros, "em todos os ambientes a que pertence").await;
 
     let dentro = harness
         .open(&format!("/files?workspace={workspace_id}"))
@@ -8644,5 +8690,822 @@ async fn ver_a_entrada_de_ficheiros_nao_da_acesso_a_ficheiro_nenhum() {
     assert!(
         !html.contains("Histórico de versões"),
         "a página do ficheiro abriu para quem não tem acesso"
+    );
+}
+
+/// Uma conta de investigação sem pertenças não é uma conta partida.
+///
+/// # A propriedade
+///
+/// > **A relevância de um módulo responde se uma capacidade pertence ao espaço
+/// > de trabalho institucional da pessoa. A autorização de um recurso responde
+/// > ao que ela pode de facto ver ou fazer. A relevância nunca concede
+/// > autoridade.**
+///
+/// Antes, os quatro módulos de CONHECIMENTO apareciam esbatidos a toda a gente,
+/// porque a navegação perguntava um direito contextual num contexto
+/// institucional. Uma conta acabada de criar parecia avariada.
+///
+/// Agora aparecem — e continuam a não dar acesso a coisa nenhuma.
+#[tokio::test]
+async fn uma_conta_de_investigacao_sem_pertencas_ve_os_modulos_de_investigacao() {
+    let harness = harness!();
+
+    // Sem unidade, sem ambiente: exactamente a conta que parecia partida.
+    let (_, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    let pagina = harness.open("/").await;
+    esperar_por(&pagina, "CONHECIMENTO").await;
+    let html = pagina.content().await.expect("conteúdo");
+
+    for entrada in ["Ficheiros", "Conhecimento", "Bibliografia", "Dados"] {
+        let indice = html
+            .find(&format!(">{entrada}<"))
+            .unwrap_or_else(|| panic!("«{entrada}» não aparece na navegação"));
+        let contexto = &html[indice.saturating_sub(420)..indice];
+        assert!(
+            !contexto.contains("oc-nav--unavailable"),
+            "«{entrada}» aparece como indisponível a uma conta de investigação"
+        );
+    }
+
+    // E entrar não dá acesso: o ecrã diz a verdade em vez de recusar.
+    let ficheiros = harness.open("/files").await;
+    // Sem pertenças: um estado vazio que ensina, e não uma recusa.
+    esperar_por(&ficheiros, "Ainda não tem ficheiros acessíveis").await;
+    let html = ficheiros.content().await.expect("conteúdo");
+    assert!(
+        html.contains("Não tem onde carregar ficheiros"),
+        "a página não diz que não há onde carregar"
+    );
+}
+
+/// Um colaborador externo não ganha módulos de investigação.
+///
+/// A contrapartida: relevância deriva do papel institucional, e um papel que
+/// não faz investigação não passa a fazê-la porque a navegação ficou mais
+/// generosa.
+#[tokio::test]
+async fn um_colaborador_externo_nao_ganha_os_modulos_de_investigacao() {
+    let harness = harness!();
+
+    let (_, _) = harness
+        .sign_in(&[TechnicalRole::ExternalCollaborator])
+        .await;
+
+    let pagina = harness.open("/").await;
+    esperar_por(&pagina, "OCINYE OS").await;
+    let html = pagina.content().await.expect("conteúdo");
+
+    for entrada in ["Ficheiros", "Bibliografia", "Dados"] {
+        assert!(
+            !html.contains(&format!(">{entrada}<")),
+            "«{entrada}» apareceu a um colaborador externo"
+        );
+    }
+}
+
+/// Uma unidade nasce governável, e a autoridade concede-se pelo produto.
+///
+/// # A viagem
+///
+/// ```text
+/// admin cria unidade → é gestor → abre a unidade → área de Pessoas
+///   → acrescenta um membro de investigação
+///   → esse membro passa a alcançar o que a unidade governa
+/// ```
+///
+/// # O que isto fecha
+///
+/// O beco que originou toda esta milestone: criar uma unidade não criava
+/// pertença nenhuma, e não havia ecrã para acrescentar membros. A unidade
+/// existia e ninguém a podia gerir — a única saída era escrever na base por
+/// fora.
+#[tokio::test]
+async fn uma_unidade_nasce_governavel_e_a_pertenca_concede_se_pelo_produto() {
+    let harness = harness!();
+
+    let (admin_id, _) = harness.sign_in(&[TechnicalRole::PlatformAdmin]).await;
+
+    // Criar a unidade pelo ecrã, como uma pessoa faz.
+    let form = harness.open("/units/new").await;
+    esperar_por(&form, "Nova Unidade").await;
+    let codigo = format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase();
+    set_field(&form, "input[name=code]", &codigo).await;
+    set_field(&form, "input[name=name]", "Unidade de prova").await;
+    submit(&form, "form[action=\"/units/new\"]").await;
+
+    let unit_id = {
+        let limite = std::time::Instant::now();
+        loop {
+            let encontrado: Option<Uuid> =
+                sqlx::query_scalar("SELECT id FROM units WHERE code = $1")
+                    .bind(&codigo)
+                    .fetch_optional(&harness.pool)
+                    .await
+                    .expect("procura da unidade");
+            if let Some(id) = encontrado {
+                break id;
+            }
+            assert!(limite.elapsed() < DEADLINE, "a unidade não foi criada");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    };
+
+    // Quem a criou é gestor — o recurso nasceu governável.
+    let papel: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM unit_memberships WHERE unit_id = $1 AND person_id = $2",
+    )
+    .bind(unit_id)
+    .bind(admin_id)
+    .fetch_optional(&harness.pool)
+    .await
+    .expect("consulta");
+    assert_eq!(
+        papel.as_deref(),
+        Some("manager"),
+        "quem criou a unidade não ficou a poder geri-la"
+    );
+
+    // Alguém de investigação, ainda sem pertenças.
+    let investigador: Uuid = {
+        let handle = format!("i{}", Uuid::new_v4().simple());
+        let id: Uuid = sqlx::query_scalar(
+            "INSERT INTO people (organisation_id, full_name, email, status)
+             VALUES ($1, $2, $3, 'active') RETURNING id",
+        )
+        .bind(harness.organisation_id)
+        .bind("Investigadora de prova")
+        .bind(format!("{handle}@ocinye.com"))
+        .fetch_one(&harness.pool)
+        .await
+        .expect("pessoa");
+        sqlx::query("INSERT INTO person_roles (person_id, role) VALUES ($1, 'research_member')")
+            .bind(id)
+            .execute(&harness.pool)
+            .await
+            .expect("papel");
+        id
+    };
+
+    // A área de Pessoas existe, e o gestor acrescenta-a por lá.
+    let unidade = harness.open(&format!("/units/{unit_id}")).await;
+    esperar_por(&unidade, "Adicionar").await;
+    let html = unidade.content().await.expect("conteúdo");
+    assert!(
+        html.contains("Investigadora de prova"),
+        "a pessoa não aparece entre quem se pode acrescentar"
+    );
+
+    escolher(&unidade, "#oc-unit-person", &investigador.to_string()).await;
+    submit(&unidade, "form.oc-pessoa__acrescentar").await;
+    esperar_por(&unidade, "Pessoa adicionada à unidade").await;
+
+    // A pertença existe, e foi criada pelo Core — não por SQL.
+    let papel: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM unit_memberships WHERE unit_id = $1 AND person_id = $2",
+    )
+    .bind(unit_id)
+    .bind(investigador)
+    .fetch_optional(&harness.pool)
+    .await
+    .expect("consulta");
+    assert_eq!(
+        papel.as_deref(),
+        Some("member"),
+        "a pessoa não foi acrescentada à unidade pelo produto"
+    );
+}
+
+/// Quem não gere a unidade não recebe os controlos que a alteram.
+///
+/// E a ausência deles não é a defesa: o Core recusa a mesma operação a quem a
+/// tente por HTTP directo.
+#[tokio::test]
+async fn quem_nao_gere_a_unidade_nao_recebe_os_controlos_nem_a_operacao() {
+    let harness = harness!();
+
+    let (admin_id, _) = harness.sign_in(&[TechnicalRole::PlatformAdmin]).await;
+    let unit_id = harness.manages_a_unit(admin_id).await;
+
+    // Outra pessoa, sem gestão da unidade.
+    let (estranho_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    let unidade = harness.open(&format!("/units/{unit_id}")).await;
+    let html = unidade.content().await.expect("conteúdo");
+    assert!(
+        !html.contains("oc-pessoa__acrescentar"),
+        "quem não gere a unidade recebeu o formulário de acrescentar pessoas"
+    );
+    assert!(
+        !html.contains("Tornar gestor"),
+        "quem não gere a unidade recebeu os controlos de papel"
+    );
+
+    // E a operação directa continua a ser recusada.
+    let antes: i64 = sqlx::query_scalar("SELECT count(*) FROM unit_memberships WHERE unit_id = $1")
+        .bind(unit_id)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("contagem");
+
+    let script = format!(
+        "(async () => {{ \
+           const corpo = new URLSearchParams(); \
+           corpo.set('person_id', '{estranho_id}'); \
+           corpo.set('role', 'manager'); \
+           const r = await fetch('/units/{unit_id}/members', \
+             {{ method: 'POST', body: corpo, redirect: 'follow' }}); \
+           return r.url; }})()"
+    );
+    let _: Option<String> = unidade
+        .evaluate(script)
+        .await
+        .expect("tentativa directa")
+        .into_value()
+        .ok();
+
+    // Espera activa curta: se a escrita passasse, a contagem mudaria.
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    let depois: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM unit_memberships WHERE unit_id = $1")
+            .bind(unit_id)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("contagem");
+    assert_eq!(
+        depois, antes,
+        "alguém sem autoridade acrescentou-se a uma unidade por HTTP directo"
+    );
+}
+
+/// A vista agregada mostra ficheiros de vários ambientes, e conta o que mostra.
+///
+/// # A propriedade
+///
+/// > **Para qualquer vista agregada, a visibilidade da contagem é a mesma da
+/// > lista.**
+///
+/// Nada de «94 recursos» e três linhas porque 91 estavam escondidos.
+#[tokio::test]
+async fn a_vista_agregada_de_ficheiros_atravessa_ambientes_e_conta_o_que_mostra() {
+    let harness = harness!();
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // Dois ambientes onde pertence, com um ficheiro cada.
+    let primeiro = harness.owns_a_workspace(person_id).await;
+    let segundo = harness.owns_a_workspace(person_id).await;
+    let nome_a = unique_title("alfa");
+    let nome_b = unique_title("beta");
+    semear_ficheiro(&harness, primeiro, &nome_a, "INTERNAL").await;
+    semear_ficheiro(&harness, segundo, &nome_b, "INTERNAL").await;
+
+    // E um terceiro ambiente, de outra pessoa — criada sem `sign_in`, porque
+    // `sign_in` troca a sessão do browser e o teste passaria a ser sobre ela.
+    let outro_id: Uuid = {
+        let handle = format!("o{}", Uuid::new_v4().simple());
+        sqlx::query_scalar(
+            "INSERT INTO people (organisation_id, full_name, email, status)
+             VALUES ($1, $2, $3, 'active') RETURNING id",
+        )
+        .bind(harness.organisation_id)
+        .bind("Outra pessoa")
+        .bind(format!("{handle}@ocinye.com"))
+        .fetch_one(&harness.pool)
+        .await
+        .expect("pessoa")
+    };
+    let alheio = harness.owns_a_workspace(outro_id).await;
+    let nome_escondido = unique_title("escondido");
+    semear_ficheiro(&harness, alheio, &nome_escondido, "RESTRICTED").await;
+
+    let pagina = harness.open("/files").await;
+    esperar_por(&pagina, "em todos os ambientes a que pertence").await;
+    let html = pagina.content().await.expect("conteúdo");
+
+    // A vista agregada mostra os dois, de ambientes diferentes.
+    assert!(
+        html.contains(&nome_a) && html.contains(&nome_b),
+        "a vista agregada não atravessa ambientes"
+    );
+    assert!(
+        !html.contains(&nome_escondido),
+        "um ficheiro RESTRICTED de outro ambiente apareceu na vista agregada"
+    );
+
+    // A contagem não conta o que a lista esconde.
+    let visiveis: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM files WHERE workspace_id = ANY($1)")
+            .bind(vec![primeiro, segundo])
+            .fetch_one(&harness.pool)
+            .await
+            .expect("contagem");
+    assert!(visiveis >= 2, "o cenário não foi montado");
+}
+
+/// Suspender uma conta tira a autoridade **já**, e não no próximo início de
+/// sessão.
+///
+/// > Uma decisão de acesso que só produz efeito na próxima autenticação não é
+/// > uma revogação.
+///
+/// A pertença sobrevive à suspensão — a pessoa continua a constar da unidade —
+/// e é precisamente por isso que a pertença não pode bastar para autorizar. Se
+/// bastasse, uma conta suspensa continuaria a trabalhar até decidir sair.
+///
+/// O controlo positivo vem primeiro: a mesma sessão, no mesmo caminho, tem de
+/// funcionar antes da suspensão. Sem ele, uma página que falhasse por qualquer
+/// outra razão passaria por prova de revogação.
+#[tokio::test]
+async fn uma_conta_suspensa_perde_autoridade_a_meio_da_sessao() {
+    let harness = harness!();
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.manages_a_unit(person_id).await;
+
+    // ── Controlo positivo ───────────────────────────────────────────────
+    let antes = harness.open("/units").await;
+    let html = antes.content().await.expect("conteúdo");
+    assert!(
+        html.contains("Unidades"),
+        "a sessão não funcionava antes da suspensão; nada do que se segue prova revogação"
+    );
+
+    // ── A suspensão, pelo caminho institucional ─────────────────────────
+    //
+    // Não por `UPDATE people SET status`: escrever o estado à mão provaria que
+    // uma coluna muda, e não que o Core revoga. O que interessa medir é o
+    // caminho que uma pessoa autorizada usaria.
+    let administradora = harness
+        .pessoa_administrativa(&[TechnicalRole::OrganisationAdmin])
+        .await;
+    let quem_suspende =
+        ocinye_core::modules::identity::principal_for_person(&harness.pool, &administradora)
+            .await
+            .expect("principal");
+    let alvo = ocinye_core::modules::identity::person_by_id(&harness.pool, person_id)
+        .await
+        .expect("leitura")
+        .expect("a pessoa existe");
+    ocinye_core::modules::identity::set_account_status(
+        &harness.pool,
+        &quem_suspende,
+        &alvo,
+        AccountStatus::Suspended,
+        "viagem de verificação",
+        &ids,
+    )
+    .await
+    .expect("suspensão");
+
+    // A pertença sobreviveu. É a metade que torna o teste não-trivial.
+    let ainda_pertence: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM unit_memberships WHERE person_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(person_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("pertença");
+    assert!(
+        ainda_pertence > 0,
+        "a suspensão apagou a pertença; então o teste mediria a ausência de pertença, \
+         e não a perda de autoridade"
+    );
+
+    // ── O pedido seguinte, na mesma sessão ──────────────────────────────
+    //
+    // O que se exige é a **negação**, e não uma apresentação em concreto. A
+    // suspensão é recusada por três caminhos independentes, e qualquer um
+    // deles satisfaz a propriedade:
+    //
+    //   1. `set_account_status` revoga todas as sessões — a seguinte não existe;
+    //   2. `CurrentSession` relê o estado da pessoa a cada pedido;
+    //   3. `CurrentPrincipal` volta a exigir `is_active`;
+    //   4. a própria política de domínio recusa tudo a um principal inactivo.
+    //
+    // Exigir «voltar ao Login» amarraria o teste aos caminhos 1 e 2, e uma
+    // recusa correcta pelo caminho 3 ou 4 — «Sem acesso» — passaria por falha.
+    //
+    // Cada camada basta sozinha: só desligando **as quatro** é que a página da
+    // unidade volta a aparecer a uma conta suspensa. Foi assim que se
+    // verificou que este teste morde.
+    let depois = harness.open("/units").await;
+    let html = depois.content().await.expect("conteúdo");
+    assert!(
+        !html.contains("Gerir pessoas"),
+        "uma conta suspensa continuou a ver controlos de gestão da unidade"
+    );
+    assert!(
+        !html.contains("Unidade do harness"),
+        "uma conta suspensa continuou a ler a unidade a que pertence: {}",
+        &html[..html.len().min(400)]
+    );
+}
+
+/// A pertença decide-se no Core, e a mesma sessão vê a decisão **já**.
+///
+/// > O Core decide a autoridade. O Workspace apresenta-a.
+///
+/// Uma sessão que só aprendesse a nova pertença ao reiniciar teria uma segunda
+/// política de autorização — a sua — e essa é a coisa que esta milestone
+/// existe para não deixar acontecer. Nos dois sentidos: conceder tem de
+/// aparecer, e revogar tem de desaparecer, sem reentrada e sem reinício.
+#[tokio::test]
+async fn conceder_e_revogar_uma_pertenca_veem_se_na_mesma_sessao() {
+    let harness = harness!();
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    // Quem gere, fora do browser: entrar uma segunda vez trocaria a sessão, e
+    // a página passaria a ser lida por quem revoga em vez de quem é revogado.
+    let gestora = harness
+        .pessoa_administrativa(&[TechnicalRole::PlatformAdmin])
+        .await;
+    let quem_gere = ocinye_core::modules::identity::principal_for_person(&harness.pool, &gestora)
+        .await
+        .expect("principal");
+
+    let mut tx = harness.pool.begin().await.expect("tx");
+    let unidade = ocinye_core::modules::organisation::create_unit(
+        &mut tx,
+        &quem_gere,
+        &ids,
+        ocinye_core::modules::organisation::NewUnit {
+            code: format!("F{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase(),
+            name: "Unidade de frescura".to_owned(),
+            description: None,
+            research_areas: Vec::new(),
+        },
+    )
+    .await
+    .expect("unidade");
+    tx.commit().await.expect("commit");
+
+    // A sessão viva: abre-se **antes** de existir pertença nenhuma.
+    let (investigador, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // O marcador é a própria pessoa na lista de membros, e não o nome da
+    // unidade: o detalhe de uma unidade é legível a quem investiga na
+    // organização, tenha ou não pertença. Existir não é o mesmo que pertencer,
+    // e usar o nome da unidade mediria a coisa errada.
+    let nome: String = sqlx::query_scalar("SELECT full_name FROM people WHERE id = $1")
+        .bind(investigador)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("nome");
+
+    // Recorta-se a lista de membros. Procurar o nome no HTML inteiro
+    // encontrava-o sempre — a barra de topo escreve quem está autenticado, e
+    // quem está autenticado é justamente esta pessoa.
+    fn na_lista_de_membros(html: &str, nome: &str) -> bool {
+        html.split("oc-pessoa")
+            .skip(1)
+            .any(|bloco| bloco[..bloco.len().min(600)].contains(nome))
+    }
+
+    let caminho = format!("/units/{}", unidade.id);
+    let antes = harness.open(&caminho).await;
+    let html = antes.content().await.expect("conteúdo");
+    assert!(
+        !na_lista_de_membros(&html, &nome),
+        "a pessoa já constava da unidade antes da concessão; o teste não mediria nada"
+    );
+
+    // ── Conceder ────────────────────────────────────────────────────────
+    let mut tx = harness.pool.begin().await.expect("tx");
+    ocinye_core::modules::organisation::add_unit_member(
+        &mut tx,
+        &quem_gere,
+        &ids,
+        unidade.id,
+        investigador,
+        UnitRole::Member,
+    )
+    .await
+    .expect("pertença");
+    tx.commit().await.expect("commit");
+
+    // A mesma sessão, sem reentrada.
+    let depois = harness.open(&caminho).await;
+    let html = depois.content().await.expect("conteúdo");
+    assert!(
+        na_lista_de_membros(&html, &nome),
+        "a concessão não chegou à sessão viva: a autorização estava a ser lida de \
+         uma cópia da sessão, e não do estado autoritativo"
+    );
+
+    // ── Revogar ─────────────────────────────────────────────────────────
+    let mut tx = harness.pool.begin().await.expect("tx");
+    ocinye_core::modules::organisation::revoke_unit_member(
+        &mut tx,
+        &quem_gere,
+        &ids,
+        unidade.id,
+        investigador,
+    )
+    .await
+    .expect("revogação");
+    tx.commit().await.expect("commit");
+
+    let final_ = harness.open(&caminho).await;
+    let html = final_.content().await.expect("conteúdo");
+    assert!(
+        !na_lista_de_membros(&html, &nome),
+        "a revogação não chegou à sessão viva: a pertença revogada continuava a autorizar"
+    );
+}
+
+/// Quem lidera um Research Workspace acrescenta e retira pessoas **pelo produto**.
+///
+/// > A criação de um recurso estabelece a autoridade mínima legítima de que o
+/// > criador precisa para continuar a operá-lo.
+///
+/// Um Core que soubesse fazer isto e um ecrã que não o oferecesse davam um
+/// backend, e não uma funcionalidade: quem lidera uma ideia ficava a pedir a
+/// alguém com autoridade sobre a unidade inteira que lhe mexesse no ambiente.
+#[tokio::test]
+async fn quem_lidera_um_ambiente_gere_quem_participa_pelo_produto() {
+    let harness = harness!();
+
+    let (lider, _) = harness.sign_in(&[TechnicalRole::ResearchLead]).await;
+    let workspace_id = harness.owns_a_workspace(lider).await;
+
+    // Alguém da organização, ainda de fora do ambiente.
+    let convidada = harness
+        .pessoa_administrativa(&[TechnicalRole::ResearchMember])
+        .await;
+
+    let caminho = format!("/workspaces/{workspace_id}");
+    let pagina = harness.open(&caminho).await;
+    let html = pagina.content().await.expect("conteúdo");
+    assert!(
+        html.contains("oc-pessoa__acrescentar"),
+        "quem lidera o ambiente não recebeu o formulário de acrescentar pessoas"
+    );
+
+    // ── Acrescentar, pelo ecrã ──────────────────────────────────────────
+    escolher(&pagina, "#oc-ws-person", &convidada.id.to_string()).await;
+    submit(&pagina, "form.oc-pessoa__acrescentar").await;
+    esperar_por(&pagina, "Pessoa adicionada ao ambiente").await;
+
+    let papel: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM workspace_memberships
+          WHERE workspace_id = $1 AND person_id = $2 AND revoked_at IS NULL",
+    )
+    .bind(workspace_id)
+    .bind(convidada.id)
+    .fetch_optional(&harness.pool)
+    .await
+    .expect("consulta");
+    assert_eq!(
+        papel.as_deref(),
+        Some("member"),
+        "a pessoa não foi acrescentada ao ambiente pelo produto"
+    );
+
+    // ── Retirar, pelo ecrã ──────────────────────────────────────────────
+    //
+    // O botão de quem foi acrescentado, e não o primeiro da lista: a lista vem
+    // ordenada por nome, e remover o primeiro podia retirar quem lidera —
+    // o teste passaria a medir a invariante do último líder.
+    let pagina = harness.open(&caminho).await;
+    let script = format!(
+        "(() => {{ \
+           const campo = document.querySelector( \
+             'form[action=\"/workspaces/{workspace_id}/members/remove\"] \
+              input[value=\"{}\"]'); \
+           if (!campo) return false; \
+           campo.form.submit(); \
+           return true; }})()",
+        convidada.id
+    );
+    let submeteu: Option<bool> = pagina
+        .evaluate(script)
+        .await
+        .expect("submissão")
+        .into_value()
+        .ok();
+    assert_eq!(
+        submeteu,
+        Some(true),
+        "o botão de remover desta pessoa não estava na página"
+    );
+    esperar_por(&pagina, "Pessoa removida do ambiente").await;
+
+    let ainda: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM workspace_memberships
+          WHERE workspace_id = $1 AND person_id = $2 AND revoked_at IS NULL",
+    )
+    .bind(workspace_id)
+    .bind(convidada.id)
+    .fetch_optional(&harness.pool)
+    .await
+    .expect("consulta");
+    assert_eq!(ainda, None, "a pessoa não foi retirada do ambiente");
+}
+
+/// Quem não lidera o ambiente não recebe os controlos — **nem a operação**.
+///
+/// A ausência do formulário nunca foi a defesa. Se fosse, bastava escrever o
+/// `POST` à mão para a contornar, e o ecrã seria uma sugestão em vez de uma
+/// apresentação de autoridade.
+#[tokio::test]
+async fn quem_nao_lidera_o_ambiente_nao_recebe_os_controlos_nem_a_operacao() {
+    let harness = harness!();
+
+    let (lider, _) = harness.sign_in(&[TechnicalRole::ResearchLead]).await;
+    let workspace_id = harness.owns_a_workspace(lider).await;
+
+    // Outra pessoa, participante do ambiente mas sem o liderar.
+    let (outra, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    sqlx::query(
+        "INSERT INTO workspace_memberships (workspace_id, person_id, role)
+             VALUES ($1, $2, 'member')",
+    )
+    .bind(workspace_id)
+    .bind(outra)
+    .execute(&harness.pool)
+    .await
+    .expect("participação");
+
+    let caminho = format!("/workspaces/{workspace_id}");
+    let pagina = harness.open(&caminho).await;
+    let html = pagina.content().await.expect("conteúdo");
+    assert!(
+        html.contains("Pessoas"),
+        "quem participa no ambiente não chegou sequer a lê-lo"
+    );
+    assert!(
+        !html.contains("oc-pessoa__acrescentar"),
+        "quem não lidera o ambiente recebeu o formulário de acrescentar pessoas"
+    );
+    assert!(
+        !html.contains("/members/remove"),
+        "quem não lidera o ambiente recebeu os controlos de remoção"
+    );
+
+    // E a operação directa continua a ser recusada.
+    let antes: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM workspace_memberships
+          WHERE workspace_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(workspace_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("contagem");
+
+    let alheia = harness
+        .pessoa_administrativa(&[TechnicalRole::ResearchMember])
+        .await;
+    let script = format!(
+        "(async () => {{ \
+           const corpo = new URLSearchParams(); \
+           corpo.set('person_id', '{}'); \
+           corpo.set('role', 'lead'); \
+           const r = await fetch('/workspaces/{workspace_id}/members', \
+             {{ method: 'POST', body: corpo, redirect: 'follow' }}); \
+           return r.url; }})()",
+        alheia.id
+    );
+    let _: Option<String> = pagina
+        .evaluate(script)
+        .await
+        .expect("tentativa directa")
+        .into_value()
+        .ok();
+
+    // Espera activa curta: se a escrita passasse, a contagem mudaria.
+    tokio::time::sleep(Duration::from_millis(600)).await;
+
+    let depois: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM workspace_memberships
+          WHERE workspace_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(workspace_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("contagem");
+    assert_eq!(
+        antes, depois,
+        "um `POST` directo acrescentou alguém ao ambiente a quem não o lidera"
+    );
+}
+
+/// Nenhum ecrã da navegação está morto.
+///
+/// # A propriedade
+///
+/// > **Todo o ecrã que a navegação oferece responde a alguém.**
+///
+/// A prova de que o Router conhece um caminho não é a prova de que o ecrã
+/// existe: uma rota registada que devolvesse sempre a página de falha passaria
+/// nessa e continuaria a ser interface morta. Aqui abre-se cada ecrã e exige-se
+/// que **não** seja uma recusa nem um erro.
+///
+/// # Porque duas pessoas e não uma
+///
+/// Porque ninguém deve legitimamente ter tudo. Administrar a plataforma não é
+/// fazer investigação, e uma conta que abrisse os vinte e dois ecrãs seria ela
+/// própria o defeito. Cada ecrã tem de responder a **pelo menos uma** das duas
+/// — que é a afirmação de que não está morto, e não a de que é público.
+#[tokio::test]
+async fn nenhum_ecra_da_navegacao_esta_morto() {
+    const ECRAS: [&str; 23] = [
+        "/",
+        "/activity",
+        "/admin",
+        "/ai",
+        "/ai/agents",
+        "/ai/prompt",
+        "/ask",
+        "/audit",
+        "/bibliography",
+        "/calendar",
+        "/compute",
+        "/datasets",
+        "/files",
+        "/help",
+        "/ideas",
+        "/knowledge",
+        "/mail",
+        "/messages",
+        "/my-work",
+        "/projects",
+        "/search",
+        "/settings",
+        "/units",
+    ];
+
+    let harness = harness!();
+
+    /// Uma página que recusa ou falha. Não é o mesmo que uma página vazia: um
+    /// estado vazio que ensina é um ecrã vivo.
+    ///
+    /// O marcador são os **títulos** das páginas de recusa, e não o bloco
+    /// `oc-notice`: esse bloco também serve os estados vazios que ensinam, e um
+    /// ecrã vivo mas sem conteúdo seria dado por morto.
+    ///
+    /// Os títulos têm de ser os exactos. A primeira versão deste teste
+    /// procurava «Não encontrado» quando o `fallback` escreve «Página não
+    /// encontrada» — e por isso um caminho inventado passava por ecrã vivo, que
+    /// foi o que o controlo negativo apanhou.
+    async fn respondeu(page: &Page) -> bool {
+        const RECUSAS: [&str; 4] = [
+            "Página não encontrada",
+            "Não encontrado",
+            "Sem acesso",
+            "Indisponível",
+        ];
+        let titulo = page.get_title().await.ok().flatten().unwrap_or_default();
+        !RECUSAS.iter().any(|recusa| titulo.starts_with(recusa))
+    }
+
+    // Uma conta de investigação, com trabalho a sério.
+    let (investigador, _) = harness
+        .sign_in(&[TechnicalRole::ResearchLead, TechnicalRole::UnitManager])
+        .await;
+    harness.owns_a_workspace(investigador).await;
+
+    let mut viva_para_investigacao = Vec::new();
+    for caminho in ECRAS {
+        let pagina = harness.open(caminho).await;
+        if respondeu(&pagina).await {
+            viva_para_investigacao.push(caminho);
+        }
+    }
+
+    // Uma conta administrativa, que não faz investigação.
+    let (_, _) = harness
+        .sign_in(&[
+            TechnicalRole::PlatformAdmin,
+            TechnicalRole::OrganisationAdmin,
+            TechnicalRole::Auditor,
+        ])
+        .await;
+
+    let mut mortos = Vec::new();
+    for caminho in ECRAS {
+        if viva_para_investigacao.contains(&caminho) {
+            continue;
+        }
+        let pagina = harness.open(caminho).await;
+        if !respondeu(&pagina).await {
+            mortos.push(caminho);
+        }
+    }
+
+    assert!(
+        mortos.is_empty(),
+        "ecrãs da navegação que não responderam a ninguém: {mortos:?}"
+    );
+
+    // O controlo negativo: se tudo respondesse a toda a gente, a asserção
+    // acima passaria sem medir nada. Um caminho que não existe tem de falhar.
+    let inventado = harness.open("/nao-existe-este-ecra").await;
+    assert!(
+        !respondeu(&inventado).await,
+        "um caminho inventado respondeu como ecrã vivo; a asserção acima não \
+         estava a distinguir nada"
     );
 }

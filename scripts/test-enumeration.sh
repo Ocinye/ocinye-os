@@ -85,13 +85,13 @@ falhas=0
 # pergunta de porquê.
 suites() {
     cat <<'TABELA'
-# 70 viagens e 69 marcas, e os números **não** têm de coincidir.
+# 75 viagens e 74 marcas, e os números **não** têm de coincidir.
 #
-# A marca conta levantamentos de harness, não viagens. Duas das 70 são análise
+# A marca conta levantamentos de harness, não viagens. Duas das 75 são análise
 # estática sobre a árvore e não abrem browser nenhum; e
 # `a_consolidacao_nao_mudou_o_que_a_pessoa_ve` levanta **dois** harnesses — um
 # com os estáticos actuais, outro com o estado anterior — porque a propriedade
-# que mede é a comparação entre os dois. 68 viagens × 1 + 1 extra = 69.
+# que mede é a comparação entre os dois. 73 viagens × 1 + 1 extra = 74.
 #
 # 61 desde 2026-08-29: entraram três viagens de Ficheiros — navegar e organizar,
 # a recusa a quem tem o identificador e não o acesso, e o largar de bytes a
@@ -103,6 +103,15 @@ suites() {
 # 62 desde 2026-08-29: entrou a viagem que confirma que uma imagem institucional
 # carrega com `img-src 'self'` — mede `naturalWidth` no Chrome, porque um `<img>`
 # recusado pela CSP continua a existir no HTML.
+#
+# 75 desde 2026-08-30: entraram o bootstrap de unidade com gestão de pertenças
+# pelo produto, a recusa dos mesmos controlos a quem não gere (incluindo por HTTP
+# directo), e a vista agregada de ficheiros a atravessar ambientes sem vazar o
+# alheio.
+#
+# 72 desde 2026-08-30: entraram as duas viagens da relevância de módulo — uma
+# conta de investigação sem pertenças vê os quatro módulos de CONHECIMENTO, e um
+# colaborador externo não os ganha.
 #
 # 70 desde 2026-08-30: entraram as duas viagens da navegação de CONHECIMENTO —
 # quem pertence a um ambiente vê as entradas como navegação, e ver a entrada não
@@ -125,9 +134,28 @@ suites() {
 # frase que só existe no corpo de um PDF, e o formato que se guarda mas não se
 # lê. Ambas exigem armazenamento; sem ele, falham na CI em vez de se saltarem.
 #
+# 80 desde 2026-08-30: entrou a varredura que exige que nenhum dos vinte e três
+# caminhos da navegação esteja morto. Duas pessoas e não uma, porque ninguém
+# deve legitimamente ter tudo — administrar a plataforma não é fazer
+# investigação, e uma conta que abrisse tudo seria ela própria o defeito.
+#
+# 79 desde 2026-08-30: entraram as duas viagens da gestão de participantes de um
+# Research Workspace — a que exige que quem lidera o faça pelo produto, e a que
+# exige que quem não lidera não receba os controlos **nem a operação**.
+#
+# 77 desde 2026-08-30: entrou a frescura da pertença nos dois sentidos, na mesma
+# sessão viva. O marcador é a própria pessoa na lista de membros: o nome da
+# unidade estaria sempre lá — o detalhe é legível a quem investiga, tenha ou não
+# pertença — e a barra de topo escreve o nome de quem está autenticado.
+#
+# 76 desde 2026-08-30: entrou a viagem da conta suspensa a meio da sessão. A
+# pertença sobrevive à suspensão e a autoridade não — e verificou-se por
+# reversão que só desligando **quatro** camadas independentes é que a unidade
+# volta a ser legível a quem foi suspenso.
+#
 # Auditado em 2026-08-29, em série, marca a marca. O número continua fixo: uma
 # viagem que deixe de levantar faz a contagem cair e o portão fecha.
-viagens-de-browser|70|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|69
+viagens-de-browser|80|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|79
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
@@ -172,7 +200,14 @@ verifica() {
 
     passados=$(grep -cE '^test .+ \.\.\. ok$' "$saida" || true)
     ignorados=$(grep -cE '^test .+ \.\.\. ignored' "$saida" || true)
-    saltados=$(grep -c '^skipping:' "$saida" || true)
+    # Dois marcadores, porque há duas línguas a dizer a mesma coisa.
+    #
+    # O portão procurava só `skipping:` — o marcador em inglês do arranque do
+    # browser. As viagens que dependem de object storage escrevem `SALTADO:`,
+    # e por isso sete delas passavam por verdes sem que o portão as visse.
+    # Um teste saltado reporta ok; se o portão não conhece o marcador, o
+    # portão também reporta ok.
+    saltados=$(grep -cE '^(skipping:|SALTADO:)' "$saida" || true)
     marcas=0
     [ -n "$marca" ] && marcas=$(grep -cF "$marca" "$saida" || true)
     rm -f "$saida"

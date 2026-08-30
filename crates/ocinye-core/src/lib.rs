@@ -34,6 +34,8 @@ pub mod config;
 pub mod continuity;
 pub mod db;
 pub mod error;
+#[cfg(feature = "test-fixtures")]
+pub mod fixtures;
 pub mod modules;
 pub mod operations;
 pub mod outbox;

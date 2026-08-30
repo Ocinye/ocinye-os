@@ -27,6 +27,6 @@ pub use repository::WorkspaceQuery;
 pub use service::{
     add_workspace_member, artefact_context, create_idea, get_idea, get_project, get_workspace,
     get_workspace_overview, list_workspaces, promote_idea, readable_artefact_workspace,
-    reclassify_workspace, transition_idea, transition_project, update_idea, workspace_context,
-    IdeaRevision, NewIdea, Promotion, WorkspaceOverview,
+    reclassify_workspace, remove_workspace_member, transition_idea, transition_project,
+    update_idea, workspace_context, IdeaRevision, NewIdea, Promotion, WorkspaceOverview,
 };

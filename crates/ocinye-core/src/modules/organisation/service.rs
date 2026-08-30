@@ -170,6 +170,35 @@ pub async fn create_unit(
     )
     .await?;
 
+    // Quem cria a unidade fica a poder geri-la, na mesma transacção.
+    //
+    // # Porque isto não é auto-elevação
+    //
+    // Porque é a autoridade **mínima** de que o domínio precisa para o recurso
+    // não nascer ingovernável. Sem ela, criar uma unidade produzia uma unidade
+    // que ninguém podia gerir: acrescentar membros exige `ManageMembers` no
+    // contexto da unidade, e esse direito vem de ser Manager dela. Quem a criava
+    // ficava de fora do que acabara de criar, e a única saída era escrever na
+    // base por fora.
+    //
+    // Quem não pode criar unidades continua sem poder criar nenhuma: a
+    // autorização acima não mudou. Isto não abre uma porta — fecha um beco.
+    //
+    // Na mesma transacção porque o estado intermédio «a unidade existe e não
+    // tem quem a governe» não pode ser observável: se o commit falhar a seguir,
+    // não fica uma unidade órfã.
+    //
+    // O ambiente de investigação já fazia isto — `research::create_idea` torna o
+    // criador `Lead`. A unidade era a única que não fazia.
+    repo::upsert_member(
+        &mut **tx,
+        unit.id,
+        principal.person_id,
+        UnitRole::Manager,
+        principal.person_id,
+    )
+    .await?;
+
     audit::record(
         tx,
         Some(principal),
@@ -300,6 +329,37 @@ pub async fn revoke_unit_member(
 
     authorize(principal, Action::ManageMembers, &unit_context(&unit))
         .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+
+    // Uma unidade não pode ficar sem quem a governe.
+    //
+    // Gerir membros exige `ManageMembers` no contexto da unidade, e esse
+    // direito vem de ser gestor dela. Remover o último gestor produziria uma
+    // unidade que ninguém pode voltar a gerir — o mesmo beco que o bootstrap na
+    // criação fechou, aberto pelo outro lado.
+    //
+    // A recusa é explícita e diz o que fazer, porque quem está a remover pode
+    // legitimamente querer sair: nomeia-se outro gestor primeiro.
+    let ultimo_gestor: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1 FROM unit_memberships
+              WHERE unit_id = $1 AND person_id = $2 AND role = 'manager'
+         ) AND (
+             SELECT count(*) FROM unit_memberships
+              WHERE unit_id = $1 AND role = 'manager'
+         ) = 1",
+    )
+    .bind(unit.id)
+    .bind(person_id)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    if ultimo_gestor {
+        return Err(CoreError::Conflict(
+            "Esta é a última pessoa que gere a unidade. Nomeie outro gestor \
+             antes de a remover."
+                .to_owned(),
+        ));
+    }
 
     if !repo::revoke_member(&mut **tx, unit.id, person_id, principal.person_id).await? {
         return Err(CoreError::NotFound(

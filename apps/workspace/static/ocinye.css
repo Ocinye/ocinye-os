@@ -5596,3 +5596,53 @@ select.oc-entrada {
   border-radius: var(--oc-r-sm);
   background: var(--oc-surface-muted);
 }
+
+/* ══ Pessoas de um contentor de autoridade ═════════════════════════════════
+ *
+ * Uma pertença é autoridade, e a lista que a mostra não é um CRUD secundário.
+ * Densidade profissional: quem, o papel, e o que se pode alterar — na mesma
+ * linha, sem cartões gigantes. */
+
+.oc-pessoa {
+  display: flex; align-items: center; gap: var(--oc-space-5);
+  padding: var(--oc-space-4) 0;
+  border-bottom: 1px solid var(--oc-border-faint);
+}
+.oc-pessoa:last-of-type { border-bottom: 0; }
+.oc-pessoa__quem {
+  display: flex; flex-direction: column; gap: 2px;
+  flex: 1; min-width: 0;
+}
+.oc-pessoa__quem > span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* As acções só existem para quem pode alterar a autoridade. Ficam discretas
+ * até o cursor lá chegar: são operações raras, não o assunto da linha. */
+.oc-pessoa__accoes {
+  display: flex; align-items: center; gap: var(--oc-space-2);
+  flex-shrink: 0; opacity: .55;
+  transition: opacity var(--oc-dur-normal, 160ms) ease;
+}
+.oc-pessoa:hover .oc-pessoa__accoes,
+.oc-pessoa__accoes:focus-within { opacity: 1; }
+.oc-pessoa__accoes form { display: inline; }
+
+.oc-pessoa__acrescentar {
+  display: flex; align-items: center; gap: var(--oc-space-3); flex-wrap: wrap;
+  padding-top: var(--oc-space-5);
+  border-top: 1px solid var(--oc-border-soft);
+}
+.oc-pessoa__acrescentar .oc-select { flex: 1; min-width: 180px; }
+
+/* O destino de carregamento, e a vista agregada de ficheiros. */
+.oc-files__destino {
+  display: flex; align-items: center; gap: var(--oc-space-3); flex-wrap: wrap;
+}
+.oc-files__destino .oc-select { flex: 1; min-width: 220px; }
+
+.oc-table--files-all .oc-table__head,
+.oc-table--files-all .oc-table__row {
+  grid-template-columns: minmax(260px,2.4fr) 140px 130px 100px 90px;
+  min-width: 880px;
+}

@@ -159,6 +159,21 @@ mod render_tests {
                 .into_iter()
                 .map(|p| p.as_str().to_owned())
                 .collect(),
+            // Todos os módulos relevantes: estas pré-visualizações existem para
+            // ver os ecrãs, e um catálogo que escondesse metade deles não
+            // mostraria o que há para rever.
+            modules: [
+                "units",
+                "ideas",
+                "projects",
+                "knowledge",
+                "files",
+                "bibliography",
+                "datasets",
+            ]
+            .into_iter()
+            .map(ToOwned::to_owned)
+            .collect(),
         }
     }
 
@@ -549,6 +564,21 @@ pub(crate) mod link_tests {
                 .into_iter()
                 .map(|p| p.as_str().to_owned())
                 .collect(),
+            // Todos os módulos relevantes: estas pré-visualizações existem para
+            // ver os ecrãs, e um catálogo que escondesse metade deles não
+            // mostraria o que há para rever.
+            modules: [
+                "units",
+                "ideas",
+                "projects",
+                "knowledge",
+                "files",
+                "bibliography",
+                "datasets",
+            ]
+            .into_iter()
+            .map(ToOwned::to_owned)
+            .collect(),
         }
     }
 
@@ -891,6 +921,7 @@ pub(crate) mod link_tests {
                     activity: json!([]),
                     inference_available: false,
                     may_use_assistance: true,
+                    gestao: screens::workspaces::tests::gestao_de_prova(),
                 })
             ),
             // A cadeia científica, com trabalho lá dentro. Uma fixture vazia
@@ -1193,6 +1224,7 @@ pub(crate) mod link_tests {
                     activity: json!([]),
                     inference_available: false,
                     may_use_assistance: false,
+                    gestao: screens::workspaces::tests::gestao_de_prova(),
                 })
             ),
             // E com inferência disponível, para que o caminho em que a
@@ -1210,6 +1242,7 @@ pub(crate) mod link_tests {
                     activity: json!([]),
                     inference_available: true,
                     may_use_assistance: true,
+                    gestao: screens::workspaces::tests::gestao_de_prova(),
                 })
             ),
             // Correio: quatro estados que não podem regredir — serviço ausente,
@@ -1481,8 +1514,26 @@ pub(crate) mod link_tests {
                 Screen::Units,
                 screens::workspaces::unit_detail(
                     &json!({"id": "33333333-3333-3333-3333-333333333333", "name": "Unidade", "code": "AI", "status": "active"}),
+                    &json!({"items": [
+                        {"person_id": "44444444-4444-4444-4444-444444444444",
+                         "full_name": "Ana Ferreira", "email": "ana@ocinye.com",
+                         "role": "manager"},
+                        {"person_id": "55555555-5555-5555-5555-555555555555",
+                         "full_name": "Bruno Cardoso", "email": "bruno@ocinye.com",
+                         "role": "member"}
+                    ]}),
                     &empty,
-                    &empty,
+                    // Com gestão: a passagem visual existe para rever os
+                    // controlos que alteram autoridade, e escondê-los aqui
+                    // deixaria a área mais sensível do ecrã por rever.
+                    &screens::workspaces::GestaoDePessoas {
+                        pode_gerir: true,
+                        candidatos: vec![(
+                            "66666666-6666-6666-6666-666666666666".to_owned(),
+                            "Carla Nunes · carla@ocinye.com".to_owned(),
+                        )],
+                        aviso: None,
+                    },
                 )
             ),
             // Os ecrãs de criação e os do próprio membro entraram no catálogo

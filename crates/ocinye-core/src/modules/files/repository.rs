@@ -535,3 +535,120 @@ pub async fn list_versions<'e>(
     .await?;
     Ok(linhas)
 }
+
+/// Um ficheiro numa vista agregada, com o contexto que o situa.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct FileAcrossWorkspaces {
+    /// A identidade.
+    pub id: Uuid,
+    /// O nome.
+    pub name: String,
+    /// A classificação efectiva.
+    pub classification: String,
+    /// O tipo declarado.
+    pub content_type: String,
+    /// O tamanho.
+    pub size_bytes: i64,
+    /// Quantas versões tem.
+    pub versions: i64,
+    /// O ambiente que o governa.
+    pub workspace_id: Uuid,
+    /// O código do ambiente, para se saber onde está sem abrir.
+    pub workspace_code: String,
+    /// O título do ambiente.
+    pub workspace_title: String,
+    /// Quando mudou.
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Todos os ficheiros que este principal alcança, em todos os ambientes.
+///
+/// # Porque isto existe ao lado de [`list_files`]
+///
+/// Porque `Ficheiros` é um módulo, não a vista de um ambiente. Obrigar a
+/// escolher um ambiente antes de ver seja o que for faz a aplicação parecer
+/// vazia a quem tem trabalho espalhado por quatro — e faz a interface escolher
+/// um por alguém, que numa aplicação onde a classificação depende do ambiente é
+/// a escolha errada.
+///
+/// O mesmo predicado de visibilidade, aplicado sem prender a um ambiente.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_files_across_workspaces<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    filter: &ocinye_domain::policy::VisibilityFilter,
+    limit: i64,
+) -> CoreResult<Vec<FileAcrossWorkspaces>> {
+    let predicado = crate::visibility::to_sql(
+        filter,
+        crate::visibility::VisibilityColumns::aliased(
+            "f.unit_id",
+            "f.workspace_id",
+            EFECTIVA_DO_FICHEIRO,
+        ),
+    );
+    let linhas = sqlx::query_as::<_, FileAcrossWorkspaces>(&format!(
+        "SELECT f.id, f.name, {EFECTIVA_DO_FICHEIRO} AS classification,
+                o.content_type, o.size_bytes,
+                (SELECT count(*) FROM file_versions x WHERE x.file_id = f.id) AS versions,
+                f.workspace_id, w.code AS workspace_code, w.title AS workspace_title,
+                f.updated_at
+           FROM files f
+           JOIN research_workspaces w ON w.id = f.workspace_id
+           JOIN LATERAL (
+               SELECT fv.storage_object_id
+                 FROM file_versions fv
+                WHERE fv.file_id = f.id
+                ORDER BY fv.sequence DESC
+                LIMIT 1
+           ) v ON TRUE
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE f.organisation_id = $1
+            AND {predicado}
+          ORDER BY f.updated_at DESC, lower(f.name)
+          LIMIT $2"
+    ))
+    .bind(organisation_id)
+    .bind(limit)
+    .fetch_all(executor)
+    .await?;
+    Ok(linhas)
+}
+
+/// Quantos ficheiros este principal alcança, em todos os ambientes.
+///
+/// Usa **exactamente** o mesmo predicado que
+/// [`list_files_across_workspaces`], porque um total que contasse mais do que a
+/// lista mostra revelaria a existência do que a lista esconde.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn count_files_across_workspaces<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    filter: &ocinye_domain::policy::VisibilityFilter,
+) -> CoreResult<i64> {
+    let predicado = crate::visibility::to_sql(
+        filter,
+        crate::visibility::VisibilityColumns::aliased(
+            "f.unit_id",
+            "f.workspace_id",
+            EFECTIVA_DO_FICHEIRO,
+        ),
+    );
+    let total: i64 = sqlx::query_scalar(&format!(
+        "SELECT count(*)
+           FROM files f
+           JOIN research_workspaces w ON w.id = f.workspace_id
+          WHERE f.organisation_id = $1
+            AND {predicado}"
+    ))
+    .bind(organisation_id)
+    .fetch_one(executor)
+    .await?;
+    Ok(total)
+}

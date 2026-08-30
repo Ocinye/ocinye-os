@@ -33,6 +33,14 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 
 [dev-dependencies]
+# `ocinye-core` outra vez, e só aqui com `test-fixtures`.
+#
+# O crate já está em `[dependencies]` sem a feature. Repeti-lo em
+# `[dev-dependencies]` com ela dá a guarda de isolamento aos harnesses **sem** a
+# pôr no binário: com o resolver 2, as features de uma dev-dependency não
+# atravessam para os alvos de produção. O portão «Isolamento do fornecedor de
+# teste» confirma-o com `cargo tree`, e é ele que decide — não este comentário.
+ocinye-core = { workspace = true, features = ["test-fixtures"] }
 # `async-trait`, só para as sondas de credencial dos harnesses.
 #
 # `CredentialProbe` é um trait assíncrono, e um harness sem servidor de correio

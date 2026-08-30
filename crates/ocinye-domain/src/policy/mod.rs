@@ -15,6 +15,7 @@
 
 pub mod agentic;
 pub mod permissions;
+pub mod relevance;
 pub mod visibility;
 
 use ocinye_contracts::{Classification, TechnicalRole, UnitRole, WorkspaceRole};

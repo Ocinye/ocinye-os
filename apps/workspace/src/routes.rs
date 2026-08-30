@@ -62,6 +62,11 @@ pub const ROUTES: &[&str] = &[
     "/mail/{mailbox_id}/disconnect",
     "/units",
     "/units/{unit_id}",
+    "/units/{unit_id}/members",
+    "/workspaces/{workspace_id}/members",
+    "/workspaces/{workspace_id}/members/remove",
+    "/units/{unit_id}/members/role",
+    "/units/{unit_id}/members/remove",
     "/ideas",
     "/units/new",
     "/projects/new",
@@ -180,6 +185,19 @@ pub fn router(state: WorkspaceState) -> Router {
         // Investigação
         .route("/units", get(units))
         .route("/units/{unit_id}", get(unit_detail))
+        // Gerir quem pertence a uma unidade. Três operações, três caminhos: uma
+        // pertença é autoridade, e cada alteração dela é um acto próprio.
+        .route(
+            "/workspaces/{workspace_id}/members",
+            post(workspace_member_add),
+        )
+        .route(
+            "/workspaces/{workspace_id}/members/remove",
+            post(workspace_member_remove),
+        )
+        .route("/units/{unit_id}/members", post(unit_member_add))
+        .route("/units/{unit_id}/members/role", post(unit_member_role))
+        .route("/units/{unit_id}/members/remove", post(unit_member_remove))
         .route("/ideas", get(ideas))
         .route("/calendar", get(calendar_page))
         .route(
@@ -755,6 +773,21 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
         })
         .unwrap_or_default();
 
+    // Os módulos relevantes, como o Core os projectou. Sem resposta dele a
+    // lista fica vazia e a navegação encolhe — a mesma regra das capacidades.
+    let modules: Vec<String> = me
+        .get("modules")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter(|m| m.get("relevant").and_then(Value::as_bool) == Some(true))
+                .filter_map(|m| m.get("module").and_then(Value::as_str))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+
     Viewer {
         zona: member.zona,
         name: member.session.display_name.clone(),
@@ -790,6 +823,7 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
         temporal_failure,
         unread,
         capabilities,
+        modules,
     }
 }
 
@@ -2889,6 +2923,7 @@ async fn unit_detail(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
     Path(unit_id): Path<Uuid>,
+    Query(query): Query<FilesQuery>,
 ) -> Response {
     let member = member_or_login!(state, headers);
 
@@ -2913,8 +2948,50 @@ async fn unit_detail(
         optional(&state, &member, &workspaces_path),
     );
 
+    // Quem já pertence, para não o oferecer outra vez na lista de escolha.
+    let ja_pertencem: std::collections::HashSet<String> = members
+        .as_array()
+        .map(|linhas| {
+            linhas
+                .iter()
+                .filter_map(|m| m.get("person_id").and_then(Value::as_str))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let pessoas = optional(&state, &member, "/api/v1/people?page_size=200").await;
+    let candidatos: Vec<(String, String)> = pessoas
+        .get("items")
+        .and_then(Value::as_array)
+        .map(|linhas| {
+            linhas
+                .iter()
+                .filter_map(|p| {
+                    let id = p.get("id").and_then(Value::as_str)?;
+                    if ja_pertencem.contains(id) {
+                        return None;
+                    }
+                    let nome = p.get("full_name").and_then(Value::as_str).unwrap_or("—");
+                    let email = p.get("email").and_then(Value::as_str).unwrap_or("");
+                    Some((id.to_owned(), format!("{nome} · {email}")))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let gestao = ui::screens::workspaces::GestaoDePessoas {
+        // Do Core, e não de um palpite sobre o papel de quem está a ver.
+        pode_gerir: unit
+            .get("may_manage_members")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        candidatos,
+        aviso: aviso_de_pertenca(query.ok.as_deref(), query.erro.as_deref()),
+    };
+
     let trail = vec![Crumb::to(Screen::Units)];
-    let content = ui::screens::workspaces::unit_detail(&unit, &members, &workspaces);
+    let content = ui::screens::workspaces::unit_detail(&unit, &members, &workspaces, &gestao);
 
     shell_page("Detalhe da Unidade", &viewer, Screen::Units, trail, content)
 }
@@ -2981,6 +3058,7 @@ async fn research_workspace(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
     Path(workspace_id): Path<Uuid>,
+    Query(aviso): Query<AvisoQuery>,
 ) -> Response {
     let member = member_or_login!(state, headers);
 
@@ -3027,6 +3105,58 @@ async fn research_workspace(
         Screen::Ideas
     };
 
+    // Quem já participa, para não voltar a ser oferecido.
+    let ja_participam: std::collections::HashSet<String> = overview
+        .get("members")
+        .and_then(Value::as_array)
+        .map(|linhas| {
+            linhas
+                .iter()
+                .filter_map(|m| m.get("person_id").and_then(Value::as_str))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let pode_gerir = overview
+        .get("workspace")
+        .and_then(|w| w.get("may_manage_members"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    // A lista de candidatos só se pede a quem pode usá-la. Pedi-la sempre seria
+    // ler a organização inteira para a deitar fora em todos os ecrãs.
+    let candidatos: Vec<(String, String)> = if pode_gerir {
+        let pessoas = optional(&state, &member, "/api/v1/people?page_size=200").await;
+        pessoas
+            .get("items")
+            .and_then(Value::as_array)
+            .map(|linhas| {
+                linhas
+                    .iter()
+                    .filter_map(|p| {
+                        let pid = p.get("id").and_then(Value::as_str)?;
+                        if ja_participam.contains(pid) {
+                            return None;
+                        }
+                        let nome = p.get("full_name").and_then(Value::as_str).unwrap_or("—");
+                        let email = p.get("email").and_then(Value::as_str).unwrap_or("");
+                        Some((pid.to_owned(), format!("{nome} · {email}")))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    let gestao = ui::screens::workspaces::GestaoDePessoas {
+        // Do Core, e não de um palpite sobre o papel de quem está a ver.
+        pode_gerir,
+        candidatos,
+        aviso: aviso_de_participacao(aviso.ok.as_deref(), aviso.erro.as_deref()),
+    };
+
     let trail = vec![Crumb::to(screen)];
 
     let content =
@@ -3040,6 +3170,7 @@ async fn research_workspace(
             activity,
             inference_available: inference_available(&ai),
             may_use_assistance: viewer.can(ocinye_contracts::Permission::AiUse),
+            gestao,
         });
 
     shell_page("Research Workspace", &viewer, screen, trail, content)
@@ -7191,17 +7322,32 @@ async fn files_browse(
     let lista = optional(&state, &member, "/api/v1/workspaces?page_size=100").await;
     let workspaces = ambientes(&lista);
 
+    // Sem ambiente indicado: a vista agregada, que é o que o módulo é.
     let Some(workspace_id) = query.workspace else {
-        let content = ui::screens::files::files(ui::screens::files::FilesView {
-            workspaces,
-            workspace_id: None,
-            workspace_name: String::new(),
-            folder_id: None,
-            path: vec![],
-            folders: vec![],
-            files: vec![],
-            may_upload: false,
-            notice: None,
+        let tudo = optional(&state, &member, "/api/v1/files").await;
+        let content = ui::screens::files::all_files(ui::screens::files::AllFilesView {
+            files: tudo
+                .get("items")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default(),
+            total: tudo.get("total").and_then(Value::as_i64).unwrap_or(0),
+            destinos: tudo
+                .get("destinations")
+                .and_then(Value::as_array)
+                .map(|linhas| {
+                    linhas
+                        .iter()
+                        .filter_map(|d| {
+                            Some((
+                                d.get("id").and_then(Value::as_str)?.to_owned(),
+                                d.get("label").and_then(Value::as_str)?.to_owned(),
+                            ))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            notice: aviso_de(query.ok.as_deref(), query.erro.as_deref()),
         });
         return shell_page(
             "Ficheiros",
@@ -7847,5 +7993,245 @@ async fn ligacao_assinada(state: &WorkspaceState, member: &Member, caminho: &str
             |url| Redirect::to(url).into_response(),
         ),
         Err(failure) => failure_response(&failure),
+    }
+}
+
+// ── Gestão de pertenças ─────────────────────────────────────────────────
+//
+// Uma pertença **é** autoridade. Acrescentar alguém a uma unidade concede-lhe
+// direitos sobre o que lá está; retirá-lo tira-lhos. Nada aqui decide: cada
+// operação leva o membro ao Core, que volta a autorizar contra o contentor
+// concreto — e recusa a quem tente por HTTP directo o que a interface não lhe
+// ofereceu.
+
+#[derive(Deserialize)]
+struct MembroDaUnidade {
+    person_id: Uuid,
+    #[serde(default)]
+    role: String,
+}
+
+/// O resultado da última operação, de volta pelo endereço.
+///
+/// Uma struct própria e não `FilesQuery`: o ecrã da unidade reaproveita-a, mas
+/// os seus campos são de ficheiros — versão, página, pasta — e nada disso tem
+/// significado numa alteração de pertença.
+#[derive(Deserialize)]
+struct AvisoQuery {
+    #[serde(default)]
+    ok: Option<String>,
+    #[serde(default)]
+    erro: Option<String>,
+}
+
+/// Traduz o resultado de uma alteração de participação num ambiente.
+fn aviso_de_participacao(ok: Option<&str>, erro: Option<&str>) -> Option<(bool, String)> {
+    match (ok, erro) {
+        (Some("adicionado"), _) => Some((true, "Pessoa adicionada ao ambiente.".to_owned())),
+        (Some("removido"), _) => Some((true, "Pessoa removida do ambiente.".to_owned())),
+        (_, Some("autoridade")) => Some((
+            false,
+            "Não tem autoridade para gerir quem participa neste ambiente.".to_owned(),
+        )),
+        // Um ambiente sem ninguém que o lidere fica ingovernável, e a recusa
+        // que o impede merece a sua própria mensagem: quem a lê tem de
+        // perceber o que fazer a seguir.
+        (_, Some("ultimo")) => Some((
+            false,
+            "Esta é a última pessoa que lidera o ambiente. Nomeie outro líder \
+             antes de a remover."
+                .to_owned(),
+        )),
+        (_, Some(_)) => Some((
+            false,
+            "A alteração não foi aceite pelo Ocinye Core.".to_owned(),
+        )),
+        _ => None,
+    }
+}
+
+/// Traduz o resultado de uma alteração de pertença numa mensagem.
+fn aviso_de_pertenca(ok: Option<&str>, erro: Option<&str>) -> Option<(bool, String)> {
+    match (ok, erro) {
+        (Some("adicionado"), _) => Some((true, "Pessoa adicionada à unidade.".to_owned())),
+        (Some("papel"), _) => Some((true, "Papel alterado.".to_owned())),
+        (Some("removido"), _) => Some((true, "Pessoa removida da unidade.".to_owned())),
+        (_, Some("autoridade")) => Some((
+            false,
+            "Não tem autoridade para gerir quem pertence a esta unidade.".to_owned(),
+        )),
+        // A recusa que protege a unidade de ficar ingovernável merece a sua
+        // própria mensagem: quem a lê tem de perceber o que fazer a seguir.
+        (_, Some("ultimo")) => Some((
+            false,
+            "Esta é a última pessoa que gere a unidade. Nomeie outro gestor \
+             antes de a remover."
+                .to_owned(),
+        )),
+        (_, Some(_)) => Some((
+            false,
+            "A alteração não foi aceite pelo Ocinye Core.".to_owned(),
+        )),
+        _ => None,
+    }
+}
+
+fn de_volta_ao_ambiente(workspace_id: Uuid, sufixo: &str) -> Response {
+    Redirect::to(&format!("/workspaces/{workspace_id}?{sufixo}")).into_response()
+}
+
+fn de_volta_a_unidade(unit_id: Uuid, sufixo: &str) -> Response {
+    Redirect::to(&format!("/units/{unit_id}?{sufixo}")).into_response()
+}
+
+/// Traduz a recusa do Core no motivo que a interface mostra.
+fn motivo_da_recusa(failure: &ApiFailure) -> &'static str {
+    match failure {
+        ApiFailure::Forbidden | ApiFailure::Denied => "autoridade",
+        // O Core devolve conflito quando a operação deixaria a unidade sem
+        // ninguém que a governe.
+        ApiFailure::Failed(mensagem) if mensagem.contains("409") => "ultimo",
+        _ => "recusado",
+    }
+}
+
+/// Acrescentar alguém ao Research Workspace.
+///
+/// A operação vai ao Core pelo mesmo caminho que o ecrã usou para decidir se
+/// mostrava o formulário — e o Core decide outra vez. A ausência do controlo
+/// nunca foi a defesa.
+async fn workspace_member_add(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(workspace_id): Path<Uuid>,
+    Form(form): Form<MembroDaUnidade>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let resultado = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/workspaces/{workspace_id}/members"),
+        &serde_json::json!({
+            "person_id": form.person_id,
+            "role": if form.role.is_empty() { "member" } else { &form.role },
+        }),
+    )
+    .await;
+
+    match resultado {
+        Ok(_) => de_volta_ao_ambiente(workspace_id, "ok=adicionado"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(falha) => {
+            de_volta_ao_ambiente(workspace_id, &format!("erro={}", motivo_da_recusa(&falha)))
+        }
+    }
+}
+
+async fn workspace_member_remove(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(workspace_id): Path<Uuid>,
+    Form(form): Form<MembroDaUnidade>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let person_id = form.person_id;
+
+    let resultado = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/workspaces/{workspace_id}/members/{person_id}"),
+        &serde_json::json!({}),
+    )
+    .await;
+
+    match resultado {
+        Ok(_) => de_volta_ao_ambiente(workspace_id, "ok=removido"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(falha) => {
+            de_volta_ao_ambiente(workspace_id, &format!("erro={}", motivo_da_recusa(&falha)))
+        }
+    }
+}
+
+async fn unit_member_add(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(unit_id): Path<Uuid>,
+    Form(form): Form<MembroDaUnidade>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let resultado = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/units/{unit_id}/members"),
+        &serde_json::json!({
+            "person_id": form.person_id,
+            "role": if form.role.is_empty() { "member" } else { &form.role },
+        }),
+    )
+    .await;
+
+    match resultado {
+        Ok(_) => de_volta_a_unidade(unit_id, "ok=adicionado"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(falha) => de_volta_a_unidade(unit_id, &format!("erro={}", motivo_da_recusa(&falha))),
+    }
+}
+
+/// Alterar o papel é a mesma operação que acrescentar: o Core faz upsert.
+///
+/// Não há aqui um caminho de escrita paralelo — seria uma segunda autoridade
+/// com outro nome.
+async fn unit_member_role(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(unit_id): Path<Uuid>,
+    Form(form): Form<MembroDaUnidade>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let resultado = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/units/{unit_id}/members"),
+        &serde_json::json!({ "person_id": form.person_id, "role": form.role }),
+    )
+    .await;
+
+    match resultado {
+        Ok(_) => de_volta_a_unidade(unit_id, "ok=papel"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(falha) => de_volta_a_unidade(unit_id, &format!("erro={}", motivo_da_recusa(&falha))),
+    }
+}
+
+async fn unit_member_remove(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(unit_id): Path<Uuid>,
+    Form(form): Form<MembroDaUnidade>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let person_id = form.person_id;
+
+    let resultado = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/units/{unit_id}/members/{person_id}"),
+        &serde_json::json!({}),
+    )
+    .await;
+
+    match resultado {
+        Ok(_) => de_volta_a_unidade(unit_id, "ok=removido"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(falha) => de_volta_a_unidade(unit_id, &format!("erro={}", motivo_da_recusa(&falha))),
     }
 }
