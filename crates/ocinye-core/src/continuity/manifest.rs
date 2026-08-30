@@ -249,6 +249,34 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     // a extracção e o índice, reprocessa, e exige que a mesma frase volte a ser
     // encontrável. Os identificadores não têm de ser os mesmos; o significado
     // observável tem.
+    // ── O carregamento a meio ───────────────────────────────────────────
+    //
+    // Uma sessão de carregamento é uma **intenção autorizada e bytes por
+    // montar**, e não um ficheiro. Enquanto ela existe não há `File` nem
+    // `FileVersion`: se o servidor desaparecer a meio de um carregamento, o que
+    // se perde é um envio que não chegou a produzir nada — e quem carregava
+    // volta a carregar.
+    //
+    // Levá-las num conjunto de continuidade seria pior do que inútil. As partes
+    // vivem no armazenamento como um multipart aberto, e um restore que
+    // trouxesse as linhas sem as partes deixaria sessões a apontar para
+    // carregamentos que já não existem em lado nenhum. Uma sessão restaurada é
+    // uma sessão que mente.
+    (
+        "upload_sessions",
+        Comparacao::Fora(
+            "intenção de carregamento por concluir; não produz File nem \
+             FileVersion, e um restore com sessões sem as suas partes seria \
+             estado a apontar para bytes que não existem",
+        ),
+    ),
+    (
+        "upload_parts",
+        Comparacao::Fora(
+            "as partes já recebidas de um carregamento em curso, que só têm \
+             significado enquanto a sessão está aberta",
+        ),
+    ),
     (
         "file_extractions",
         Comparacao::Fora(
