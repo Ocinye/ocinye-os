@@ -9532,24 +9532,37 @@ async fn nenhum_ecra_da_navegacao_esta_morto() {
 /// abre outra, e exige que a segunda saiba o que a primeira fez — sem reenviar
 /// o que já lá está.
 ///
-/// O ficheiro tem mais de 100 MB de propósito. É o tamanho que não atravessa a
-/// Cloudflare num pedido só, e por isso é o tamanho que a segmentação existe
-/// para servir.
+/// # Porque o ficheiro **não** tem aqui 100 MB
+///
+/// Porque o que esta viagem prova é a **retoma**, e para isso bastam duas
+/// partes. A primeira versão usava 100 MiB, e o custo não estava no hash — está
+/// em construir cem milhões de bytes num ciclo de JavaScript. A suite ficou
+/// pesada ao ponto de uma viagem vizinha esgotar os quarenta e cinco segundos à
+/// espera do Core, na CI, por saturação da máquina.
+///
+/// Um teste que torna os do lado instáveis não está a provar mais: está a
+/// pagar-se com a evidência dos outros.
+///
+/// A montagem de muitas partes está provada no Core, em `segmented_upload.rs`.
+/// A travessia de um ficheiro acima do limite da Cloudflare prova-se **através
+/// do edge**, na aceitação de produção — que é o único sítio onde esse limite
+/// existe de facto.
 #[tokio::test]
-async fn um_carregamento_grande_retoma_se_noutro_contexto() {
+async fn um_carregamento_em_partes_retoma_se_noutro_contexto() {
     let harness = harness!();
 
     if store_de_teste().is_none() {
-        exigir_armazenamento("um_carregamento_grande_retoma_se_noutro_contexto");
+        exigir_armazenamento("um_carregamento_em_partes_retoma_se_noutro_contexto");
         return;
     }
 
     let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
     let workspace_id = harness.owns_a_workspace(person_id).await;
 
-    // Três partes cheias e uma curta: 100 MiB + 1 KiB. Um múltiplo exacto do
-    // pedaço nunca exercitaria a última parte, que é o caso especial.
-    const TAMANHO: usize = 100 * 1024 * 1024 + 1024;
+    // Uma parte cheia e uma curta: 32 MiB + 1 KiB. Duas chegam para provar a
+    // retoma — uma vai de um contexto, a outra do seguinte —, e um múltiplo
+    // exacto do pedaço nunca exercitaria a última parte, que é o caso especial.
+    const TAMANHO: usize = 32 * 1024 * 1024 + 1024;
 
     let primeira = harness.open("/files").await;
 
@@ -9580,8 +9593,8 @@ async fn um_carregamento_grande_retoma_se_noutro_contexto() {
                 return a;
             }};
 
-            // Só duas. As outras ficam para o contexto seguinte.
-            for (let p = 1; p <= 2; p++) {{
+            // Só a primeira. A outra fica para o contexto seguinte.
+            for (let p = 1; p <= 1; p++) {{
                 const inicio = (p - 1) * s.chunk_size_bytes;
                 const n = Math.min(s.chunk_size_bytes, {TAMANHO} - inicio);
                 const bytes = troco(inicio, n);
@@ -9611,7 +9624,7 @@ async fn um_carregamento_grande_retoma_se_noutro_contexto() {
     );
     let sessao = aberta["sessao"].as_str().expect("sessão").to_owned();
     let total = aberta["partes"].as_i64().expect("partes");
-    assert_eq!(total, 4, "100 MiB + 1 KiB deviam dar quatro partes");
+    assert_eq!(total, 2, "32 MiB + 1 KiB deviam dar duas partes");
 
     // Ainda não há ficheiro: o carregamento está a meio.
     let ficheiros: i64 = sqlx::query_scalar("SELECT count(*) FROM files WHERE workspace_id = $1")
@@ -9690,13 +9703,13 @@ async fn um_carregamento_grande_retoma_se_noutro_contexto() {
     // mandou apenas as duas que faltavam.
     assert_eq!(
         fechada["recebidas_antes"].as_i64(),
-        Some(2),
-        "o servidor não reportou as partes que o contexto A já tinha mandado"
+        Some(1),
+        "o servidor não reportou a parte que o contexto A já tinha mandado"
     );
     assert_eq!(
         fechada["enviadas_agora"].as_i64(),
-        Some(2),
-        "o contexto B reenviou partes que já lá estavam: isto é repetir, não retomar"
+        Some(1),
+        "o contexto B reenviou uma parte que já lá estava: isto é repetir, não retomar"
     );
 
     // E o ficheiro existe, com o tamanho certo.
