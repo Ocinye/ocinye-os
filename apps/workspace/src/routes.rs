@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use axum::extract::{DefaultBodyLimit, Form, Multipart, Path, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Redirect, Response};
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::Router;
 use serde::Deserialize;
 use serde_json::Value;
@@ -109,6 +109,10 @@ pub const ROUTES: &[&str] = &[
     "/knowledge",
     "/files",
     "/files/upload",
+    "/files/uploads",
+    "/files/uploads/{session_id}",
+    "/files/uploads/{session_id}/parts/{part_number}",
+    "/files/uploads/{session_id}/complete",
     "/files/folder",
     "/files/{file_id}",
     "/files/{file_id}/version",
@@ -299,6 +303,19 @@ pub fn router(state: WorkspaceState) -> Router {
         )
         .route("/datasets", get(datasets))
         .route("/files", get(files_browse))
+        .route("/files/uploads", post(upload_begin))
+        .route(
+            "/files/uploads/{session_id}",
+            get(upload_status).delete(upload_cancel),
+        )
+        .route(
+            "/files/uploads/{session_id}/parts/{part_number}",
+            put(upload_send_part).layer(DefaultBodyLimit::max(PARTE_MAXIMA_BYTES)),
+        )
+        .route(
+            "/files/uploads/{session_id}/complete",
+            post(upload_complete),
+        )
         .route(
             "/files/upload",
             post(files_upload).layer(DefaultBodyLimit::max(FILE_BODY_LIMIT_BYTES)),
@@ -7499,6 +7516,208 @@ fn regresso(campos: &std::collections::HashMap<String, String>, sufixo: &str) ->
 }
 
 /// Carrega um ficheiro institucional.
+/// A sessão de quem pede, ou uma recusa que o JavaScript entende.
+///
+/// # Porque não a macro `member_or_login!`
+///
+/// Porque essa devolve um redireccionamento para `/login`, e um `fetch` segue
+/// redireccionamentos: o JavaScript receberia `200` com a página de entrada e
+/// tentaria lê-la como JSON. `401` diz a verdade — e é a única resposta com que
+/// o carregamento pode fazer alguma coisa sensata.
+async fn membro_ou_recusa(state: &WorkspaceState, headers: &HeaderMap) -> Result<Member, Response> {
+    match current_member(state, headers) {
+        Some(member) if !member.session.must_change_password => Ok(member),
+        _ => Err((StatusCode::UNAUTHORIZED, axum::Json(serde_json::json!({}))).into_response()),
+    }
+}
+
+/// O maior corpo que uma parte pode ter, deste lado.
+///
+/// O mesmo limite do Core, pela mesma razão: um pedido acima disto não
+/// atravessa o edge, e aceitá-lo aqui só adiaria a recusa para o salto
+/// seguinte — depois de a rede já ter sido gasta.
+const PARTE_MAXIMA_BYTES: usize = 40 * 1024 * 1024;
+
+#[derive(Deserialize)]
+struct AberturaDeCarregamento {
+    workspace_id: Uuid,
+    filename: String,
+    content_type: String,
+    size_bytes: i64,
+    #[serde(default)]
+    folder_id: Option<Uuid>,
+    #[serde(default)]
+    classification: Option<String>,
+}
+
+/// Abre a sessão. O browser fala com o Workspace; o Workspace fala com o Core.
+///
+/// # Porque isto passa por aqui e não vai directo ao Core
+///
+/// Porque o browser conhece um hostname — o da Experience — e a sessão dele é
+/// um cookie deste lado. Mandá-lo falar com `api.ocinye.com` obrigaria a abrir
+/// CORS com credenciais e a explicar-lhe uma segunda origem para a mesma
+/// instituição. A fronteira mantém-se: quem fala com o Core é o servidor.
+async fn upload_begin(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    axum::Json(pedido): axum::Json<AberturaDeCarregamento>,
+) -> Response {
+    let member = match membro_ou_recusa(&state, &headers).await {
+        Ok(m) => m,
+        Err(resposta) => return resposta,
+    };
+
+    let mut corpo = serde_json::json!({
+        "filename": pedido.filename,
+        "content_type": pedido.content_type,
+        "size_bytes": pedido.size_bytes,
+    });
+    if let Some(folder_id) = pedido.folder_id {
+        corpo["folder_id"] = serde_json::json!(folder_id);
+    }
+    if let Some(classification) = pedido.classification.filter(|c| !c.is_empty()) {
+        corpo["classification"] = serde_json::json!(classification);
+    }
+
+    encaminhar(
+        api::post(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            &format!("/api/v1/workspaces/{}/uploads", pedido.workspace_id),
+            &corpo,
+        )
+        .await,
+    )
+}
+
+/// O que o servidor já recebeu.
+///
+/// É esta rota que torna a retoma real: quem volta pergunta ao servidor o que
+/// falta, em vez de confiar numa lista que só existia na página que fechou.
+async fn upload_status(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+) -> Response {
+    let member = match membro_ou_recusa(&state, &headers).await {
+        Ok(m) => m,
+        Err(resposta) => return resposta,
+    };
+    encaminhar(
+        api::get::<Value>(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            &format!("/api/v1/uploads/{session_id}"),
+        )
+        .await,
+    )
+}
+
+#[derive(Deserialize)]
+struct SomaDaParte {
+    sha256: String,
+}
+
+async fn upload_send_part(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path((session_id, part_number)): Path<(Uuid, i32)>,
+    Query(query): Query<SomaDaParte>,
+    body: axum::body::Bytes,
+) -> Response {
+    let member = match membro_ou_recusa(&state, &headers).await {
+        Ok(m) => m,
+        Err(resposta) => return resposta,
+    };
+    encaminhar(
+        api::put_bytes(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            &format!(
+                "/api/v1/uploads/{session_id}/parts/{part_number}?sha256={}",
+                query.sha256
+            ),
+            body.to_vec(),
+        )
+        .await,
+    )
+}
+
+#[derive(Deserialize)]
+struct SomaFinal {
+    sha256: String,
+}
+
+async fn upload_complete(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+    axum::Json(pedido): axum::Json<SomaFinal>,
+) -> Response {
+    let member = match membro_ou_recusa(&state, &headers).await {
+        Ok(m) => m,
+        Err(resposta) => return resposta,
+    };
+    encaminhar(
+        api::post(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            &format!("/api/v1/uploads/{session_id}/complete"),
+            &serde_json::json!({ "sha256": pedido.sha256 }),
+        )
+        .await,
+    )
+}
+
+async fn upload_cancel(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(session_id): Path<Uuid>,
+) -> Response {
+    let member = match membro_ou_recusa(&state, &headers).await {
+        Ok(m) => m,
+        Err(resposta) => return resposta,
+    };
+    encaminhar(
+        api::delete(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            &format!("/api/v1/uploads/{session_id}"),
+        )
+        .await,
+    )
+}
+
+/// Traduz a resposta do Core em JSON para o browser.
+///
+/// O código de estado vem do Core. Achatar tudo em `200` com um campo `erro`
+/// obrigaria o JavaScript a inventar a sua própria noção de falha, e a recusa
+/// institucional deixaria de ser legível pelas ferramentas do browser.
+fn encaminhar(resultado: Result<Value, ApiFailure>) -> Response {
+    match resultado {
+        Ok(valor) => (StatusCode::OK, axum::Json(valor)).into_response(),
+        Err(ApiFailure::Unauthorised) => {
+            (StatusCode::UNAUTHORIZED, axum::Json(serde_json::json!({}))).into_response()
+        }
+        Err(ApiFailure::Forbidden) | Err(ApiFailure::Denied) => (
+            StatusCode::FORBIDDEN,
+            axum::Json(serde_json::json!({ "recusado": true })),
+        )
+            .into_response(),
+        Err(falha) => (
+            StatusCode::BAD_GATEWAY,
+            axum::Json(serde_json::json!({ "erro": format!("{falha:?}") })),
+        )
+            .into_response(),
+    }
+}
+
 async fn files_upload(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,

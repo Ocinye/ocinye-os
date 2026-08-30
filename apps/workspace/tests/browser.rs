@@ -1270,7 +1270,17 @@ fn store_de_teste() -> Option<ocinye_core::storage::ObjectStore> {
         backend_code: "ocinye-test-default".to_owned(),
         location_label: "test".to_owned(),
         residency: ocinye_contracts::storage::Residency::Undeclared,
-        max_upload_bytes: 32 * 1024 * 1024,
+        // O tamanho do **ficheiro lógico**, e não o do pedido.
+        //
+        // Eram a mesma coisa enquanto um carregamento era um `POST` só, e este
+        // limite estava em 32 MiB — que passou a ser, por coincidência, o
+        // tamanho de um pedaço. Com segmentação são duas grandezas diferentes:
+        // o pedido é limitado pelo `DefaultBodyLimit` das rotas de parte, e este
+        // número passa a ser o que a instituição decidiu guardar.
+        //
+        // 512 MiB, como em produção. Deixá-lo em 32 MiB fazia o harness recusar
+        // exactamente o caso que a segmentação existe para servir.
+        max_upload_bytes: 512 * 1024 * 1024,
     })
 }
 
@@ -9507,5 +9517,202 @@ async fn nenhum_ecra_da_navegacao_esta_morto() {
         !respondeu(&inventado).await,
         "um caminho inventado respondeu como ecrã vivo; a asserção acima não \
          estava a distinguir nada"
+    );
+}
+
+/// Um carregamento retoma-se **noutro contexto**, e não só dentro da página.
+///
+/// # A diferença entre retomar e repetir
+///
+/// > Se a lista das partes recebidas vive no JavaScript da página, «resumível»
+/// > significa «repete enquanto a página estiver aberta». Isso é *retry*.
+///
+/// Retomar é perguntar ao **servidor** o que falta. Esta viagem prova-o pela
+/// única forma que não se pode fingir: manda partes de uma página, **fecha-a**,
+/// abre outra, e exige que a segunda saiba o que a primeira fez — sem reenviar
+/// o que já lá está.
+///
+/// O ficheiro tem mais de 100 MB de propósito. É o tamanho que não atravessa a
+/// Cloudflare num pedido só, e por isso é o tamanho que a segmentação existe
+/// para servir.
+#[tokio::test]
+async fn um_carregamento_grande_retoma_se_noutro_contexto() {
+    let harness = harness!();
+
+    if store_de_teste().is_none() {
+        exigir_armazenamento("um_carregamento_grande_retoma_se_noutro_contexto");
+        return;
+    }
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(person_id).await;
+
+    // Três partes cheias e uma curta: 100 MiB + 1 KiB. Um múltiplo exacto do
+    // pedaço nunca exercitaria a última parte, que é o caso especial.
+    const TAMANHO: usize = 100 * 1024 * 1024 + 1024;
+
+    let primeira = harness.open("/files").await;
+
+    // ── Contexto A: abre a sessão e manda duas das quatro partes ────────
+    let guiao = format!(
+        r#"(async () => {{
+            const ws = '{workspace_id}';
+            const r = await fetch('/files/uploads', {{
+                method: 'POST',
+                headers: {{ 'Content-Type': 'application/json' }},
+                body: JSON.stringify({{
+                    workspace_id: ws,
+                    filename: 'modelo-grande.zip',
+                    content_type: 'application/zip',
+                    size_bytes: {TAMANHO}
+                }})
+            }});
+            if (!r.ok) return {{ erro: r.status, porque: await r.text() }};
+            const s = await r.json();
+
+            // Bytes reprodutíveis: a mesma fórmula produz o mesmo ficheiro nos
+            // dois contextos, e por isso a soma final pode ser comparada.
+            const hex = (b) => Array.prototype.map.call(new Uint8Array(b),
+                (x) => ('00' + x.toString(16)).slice(-2)).join('');
+            const troco = (i, n) => {{
+                const a = new Uint8Array(n);
+                for (let k = 0; k < n; k++) a[k] = ((i + k) * 31 + 7) & 255;
+                return a;
+            }};
+
+            // Só duas. As outras ficam para o contexto seguinte.
+            for (let p = 1; p <= 2; p++) {{
+                const inicio = (p - 1) * s.chunk_size_bytes;
+                const n = Math.min(s.chunk_size_bytes, {TAMANHO} - inicio);
+                const bytes = troco(inicio, n);
+                const soma = hex(await crypto.subtle.digest('SHA-256', bytes));
+                const pr = await fetch('/files/uploads/' + s.session_id
+                    + '/parts/' + p + '?sha256=' + soma, {{
+                    method: 'PUT',
+                    headers: {{ 'Content-Type': 'application/octet-stream' }},
+                    body: bytes
+                }});
+                if (!pr.ok) return {{ erro: 'parte ' + p + ': ' + pr.status }};
+            }}
+            return {{ sessao: s.session_id, partes: s.total_parts,
+                      pedaco: s.chunk_size_bytes }};
+        }})()"#
+    );
+
+    let aberta: serde_json::Value = primeira
+        .evaluate(guiao)
+        .await
+        .expect("abrir e mandar")
+        .into_value()
+        .expect("resposta");
+    assert!(
+        aberta.get("erro").is_none(),
+        "o contexto A falhou: {aberta:?}"
+    );
+    let sessao = aberta["sessao"].as_str().expect("sessão").to_owned();
+    let total = aberta["partes"].as_i64().expect("partes");
+    assert_eq!(total, 4, "100 MiB + 1 KiB deviam dar quatro partes");
+
+    // Ainda não há ficheiro: o carregamento está a meio.
+    let ficheiros: i64 = sqlx::query_scalar("SELECT count(*) FROM files WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("contagem");
+    assert_eq!(ficheiros, 0, "existia um File com o carregamento a meio");
+
+    // ── O contexto A desaparece ─────────────────────────────────────────
+    primeira.close().await.ok();
+
+    // ── Contexto B: pergunta ao servidor e continua ─────────────────────
+    let segunda = harness.open("/files").await;
+    let guiao = format!(
+        r#"(async () => {{
+            const s = await (await fetch('/files/uploads/{sessao}',
+                {{ headers: {{ Accept: 'application/json' }} }})).json();
+
+            // O que o servidor diz ter, sem o browser lhe ter contado nada.
+            const jaLa = {{}};
+            (s.received_parts || []).forEach((n) => jaLa[n] = true);
+
+            const hex = (b) => Array.prototype.map.call(new Uint8Array(b),
+                (x) => ('00' + x.toString(16)).slice(-2)).join('');
+            const troco = (i, n) => {{
+                const a = new Uint8Array(n);
+                for (let k = 0; k < n; k++) a[k] = ((i + k) * 31 + 7) & 255;
+                return a;
+            }};
+
+            let reenviadas = 0;
+            for (let p = 1; p <= s.total_parts; p++) {{
+                if (jaLa[p]) continue;
+                const inicio = (p - 1) * s.chunk_size_bytes;
+                const n = Math.min(s.chunk_size_bytes, {TAMANHO} - inicio);
+                const bytes = troco(inicio, n);
+                const soma = hex(await crypto.subtle.digest('SHA-256', bytes));
+                const pr = await fetch('/files/uploads/{sessao}/parts/' + p
+                    + '?sha256=' + soma, {{
+                    method: 'PUT',
+                    headers: {{ 'Content-Type': 'application/octet-stream' }},
+                    body: bytes
+                }});
+                if (!pr.ok) return {{ erro: 'parte ' + p + ': ' + pr.status }};
+                reenviadas += 1;
+            }}
+
+            // A soma do ficheiro inteiro, montado aqui pela mesma fórmula.
+            const inteiro = troco(0, {TAMANHO});
+            const somaFinal = hex(await crypto.subtle.digest('SHA-256', inteiro));
+            const fr = await fetch('/files/uploads/{sessao}/complete', {{
+                method: 'POST',
+                headers: {{ 'Content-Type': 'application/json' }},
+                body: JSON.stringify({{ sha256: somaFinal }})
+            }});
+            if (!fr.ok) return {{ erro: 'fechar: ' + fr.status }};
+            const v = await fr.json();
+            return {{ recebidas_antes: (s.received_parts || []).length,
+                      enviadas_agora: reenviadas, file_id: v.file_id }};
+        }})()"#
+    );
+
+    let fechada: serde_json::Value = segunda
+        .evaluate(guiao)
+        .await
+        .expect("retomar")
+        .into_value()
+        .expect("resposta");
+    assert!(
+        fechada.get("erro").is_none(),
+        "o contexto B falhou: {fechada:?}"
+    );
+
+    // A prova da retoma: o servidor sabia das duas primeiras, e o contexto B
+    // mandou apenas as duas que faltavam.
+    assert_eq!(
+        fechada["recebidas_antes"].as_i64(),
+        Some(2),
+        "o servidor não reportou as partes que o contexto A já tinha mandado"
+    );
+    assert_eq!(
+        fechada["enviadas_agora"].as_i64(),
+        Some(2),
+        "o contexto B reenviou partes que já lá estavam: isto é repetir, não retomar"
+    );
+
+    // E o ficheiro existe, com o tamanho certo.
+    let tamanho: Option<i64> = sqlx::query_scalar(
+        "SELECT so.size_bytes FROM files f
+           JOIN file_versions fv ON fv.file_id = f.id
+           JOIN storage_objects so ON so.id = fv.storage_object_id
+          WHERE f.workspace_id = $1 AND f.name = 'modelo-grande.zip'",
+    )
+    .bind(workspace_id)
+    .fetch_optional(&harness.pool)
+    .await
+    .expect("consulta");
+    assert_eq!(
+        tamanho,
+        Some(TAMANHO as i64),
+        "o ficheiro montado não tem o tamanho que atravessou em partes"
     );
 }

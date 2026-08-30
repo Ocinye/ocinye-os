@@ -2572,63 +2572,280 @@ document.addEventListener('keydown', (event) => {
   'use strict';
 
   const forma = document.querySelector('form[data-drop="1"]');
-  if (!forma || !window.FormData || !window.fetch) return;
+  if (!forma || !window.fetch || !window.crypto || !window.crypto.subtle) return;
 
   const entrada = forma.querySelector('[data-drop-input="1"]');
   const tabuleiro = forma.querySelector('[data-drop-tray="1"]');
   if (!tabuleiro) return;
 
-  let porResolver = 0;
+  const CHAVE_RETOMA = 'oc.uploads';
 
+  const campo = (nome) => {
+    const el = forma.querySelector('[name="' + nome + '"]');
+    return el ? el.value : '';
+  };
+
+  const hex = (buffer) =>
+    Array.prototype.map
+      .call(new Uint8Array(buffer), (b) => ('00' + b.toString(16)).slice(-2))
+      .join('');
+
+  const soma = (bytes) =>
+    window.crypto.subtle.digest('SHA-256', bytes).then(hex);
+
+  /* O que o browser lembra entre visitas: só o identificador da sessão.
+     Nunca as partes — essas o servidor sabe, e é ele que decide o que falta.
+     Uma lista local de partes «enviadas» seria uma segunda verdade, e a
+     primeira vez que divergisse produzia um ficheiro com um buraco. */
+  const lembradas = () => {
+    try {
+      return JSON.parse(window.localStorage.getItem(CHAVE_RETOMA) || '{}');
+    } catch (e) {
+      return {};
+    }
+  };
+  const lembrar = (chave, id) => {
+    try {
+      const mapa = lembradas();
+      if (id) mapa[chave] = id;
+      else delete mapa[chave];
+      window.localStorage.setItem(CHAVE_RETOMA, JSON.stringify(mapa));
+    } catch (e) {
+      /* Sem armazenamento local o carregamento continua a funcionar; o que se
+         perde é poder retomá-lo depois de fechar o separador. */
+    }
+  };
+
+  const chaveDe = (ficheiro) =>
+    [campo('workspace_id'), campo('folder_id'), ficheiro.name, ficheiro.size, ficheiro.lastModified].join('|');
+
+  /* Uma linha do tabuleiro. O que se mostra é o estado do trabalho, e nunca o
+     vocabulário do armazenamento: quem carrega não tem de saber o que é uma
+     parte, um `upload id` ou um bucket. */
   const linha = (nome) => {
     tabuleiro.hidden = false;
     const el = document.createElement('div');
     el.className = 'oc-drop__line';
+
     const titulo = document.createElement('b');
     titulo.textContent = nome;
+
+    /* O padrão de progresso que a aplicação já tem, e não um novo. A largura
+       entra por variável CSS: a CSP é `style-src 'self'`, e um atributo `style`
+       escrito à mão seria descartado. */
+    const barra = document.createElement('span');
+    barra.className = 'oc-progress';
+    const carril = document.createElement('span');
+    carril.className = 'oc-progress__track';
+    const cheio = document.createElement('span');
+    cheio.className = 'oc-progress__fill oc-progress__fill--var';
+    carril.appendChild(cheio);
+    barra.appendChild(carril);
+
     const estado = document.createElement('span');
     estado.className = 'oc-drop__state';
-    estado.textContent = 'A carregar…';
+    estado.textContent = 'A preparar…';
+
+    const accoes = document.createElement('span');
+    accoes.className = 'oc-drop__accoes';
+
     el.appendChild(titulo);
+    el.appendChild(barra);
     el.appendChild(estado);
+    el.appendChild(accoes);
     tabuleiro.appendChild(el);
-    return estado;
+
+    return {
+      diz: (texto, mau) => {
+        estado.textContent = texto;
+        estado.className = 'oc-drop__state' + (mau ? ' oc-drop__state--bad' : '');
+      },
+      progresso: (feitas, total) => {
+        const pct = Math.round((feitas / total) * 100);
+        cheio.style.setProperty('--oc-progresso', pct + '%');
+      },
+      accao: (rotulo, aoClicar) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'oc-btn oc-btn--ghost oc-btn--sm';
+        b.textContent = rotulo;
+        b.addEventListener('click', aoClicar);
+        accoes.appendChild(b);
+        return b;
+      },
+      limparAccoes: () => {
+        accoes.textContent = '';
+      },
+    };
   };
 
-  /* O servidor responde com um redireccionamento para a mesma página. Não o
-     seguimos por ficheiro: seguir-se-ia N vezes e perder-se-iam as respostas
-     dos outros. Recarrega-se uma vez, no fim, quando tudo assentou. */
-  const enviar = (ficheiro) => {
-    const estado = linha(ficheiro.name);
-    const dados = new FormData();
-    dados.append('file', ficheiro);
-    forma.querySelectorAll('input[type="hidden"], select').forEach((campo) => {
-      if (campo.name) dados.append(campo.name, campo.value);
-    });
+  let porResolver = 0;
+  const recarregarQuandoAssentar = () => {
+    porResolver -= 1;
+    if (porResolver === 0) setTimeout(() => window.location.reload(), 700);
+  };
 
+  const json = (resposta) =>
+    resposta.ok ? resposta.json() : Promise.reject(resposta.status);
+
+  /* Envia um ficheiro em partes.
+   *
+   * O mesmo caminho para todos os tamanhos. Um limiar que mandasse os pequenos
+   * por outra rota criaria dois comportamentos para o mesmo acto, e o segundo
+   * só se exercitaria quando alguém carregasse algo grande — que é o dia em que
+   * não se quer descobrir um defeito. */
+  const enviar = (ficheiro) => {
+    const ui = linha(ficheiro.name);
     porResolver += 1;
-    return fetch(forma.action, { method: 'POST', body: dados, redirect: 'follow' })
-      .then((resposta) => {
-        /* O redireccionamento leva a `?erro=…` quando o Core recusou. A página
-           final é a que sabe porquê, e é para lá que se vai a seguir. */
-        const recusado = resposta.redirected && resposta.url.indexOf('erro=') !== -1;
-        if (!resposta.ok || recusado) {
-          estado.textContent = 'Recusado';
-          estado.className = 'oc-drop__state oc-drop__state--bad';
-        } else {
-          estado.textContent = 'Carregado';
+    let cancelado = false;
+    let sessao = null;
+
+    const abrir = () => {
+      const chave = chaveDe(ficheiro);
+      const anterior = lembradas()[chave];
+
+      /* Retomar é perguntar ao servidor, e não confiar na memória do browser. */
+      const retoma = anterior
+        ? fetch('/files/uploads/' + anterior, { headers: { Accept: 'application/json' } })
+            .then(json)
+            .catch(() => null)
+        : Promise.resolve(null);
+
+      return retoma.then((estado) => {
+        if (estado && estado.session_id) {
+          ui.diz('A retomar…');
+          return estado;
         }
-      })
-      .catch(() => {
-        estado.textContent = 'Falhou';
-        estado.className = 'oc-drop__state oc-drop__state--bad';
-      })
-      .then(() => {
-        porResolver -= 1;
-        /* Recarregar mostra a lista tal como o servidor a vê agora — que é a
-           única lista verdadeira. */
-        if (porResolver === 0) setTimeout(() => window.location.reload(), 700);
+        return fetch('/files/uploads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspace_id: campo('workspace_id'),
+            folder_id: campo('folder_id') || null,
+            classification: campo('classification') || null,
+            filename: ficheiro.name,
+            content_type: ficheiro.type || 'application/octet-stream',
+            size_bytes: ficheiro.size,
+          }),
+        })
+          .then(json)
+          .then((aberta) => {
+            lembrar(chave, aberta.session_id);
+            return aberta;
+          });
       });
+    };
+
+    const mandarPartes = (aberta) => {
+      sessao = aberta;
+      const pedaco = aberta.chunk_size_bytes;
+      const total = aberta.total_parts;
+      const jaLa = {};
+      (aberta.received_parts || []).forEach((n) => {
+        jaLa[n] = true;
+      });
+
+      ui.limparAccoes();
+      ui.accao('Cancelar', () => {
+        cancelado = true;
+        ui.diz('A cancelar…');
+      });
+
+      let feitas = Object.keys(jaLa).length;
+      ui.progresso(feitas, total);
+
+      const seguinte = (n) => {
+        if (n > total) return Promise.resolve();
+        if (cancelado) return Promise.reject('cancelado');
+        if (jaLa[n]) {
+          /* Já lá está. Não se reenvia: é isto que faz a retoma poupar rede em
+             vez de repetir tudo. */
+          return seguinte(n + 1);
+        }
+
+        const inicio = (n - 1) * pedaco;
+        const troco = ficheiro.slice(inicio, Math.min(inicio + pedaco, ficheiro.size));
+        ui.diz('A carregar… ' + Math.round((feitas / total) * 100) + '%');
+
+        return troco
+          .arrayBuffer()
+          .then((bytes) =>
+            soma(bytes).then((s) =>
+              fetch('/files/uploads/' + aberta.session_id + '/parts/' + n + '?sha256=' + s, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/octet-stream' },
+                body: bytes,
+              }).then(json)
+            )
+          )
+          .then(() => {
+            feitas += 1;
+            ui.progresso(feitas, total);
+            return seguinte(n + 1);
+          });
+      };
+
+      return seguinte(1);
+    };
+
+    const fechar = () => {
+      /* A soma do ficheiro inteiro, calculada aqui. O servidor lê de volta o
+         que montou e compara: são duas medições independentes da mesma coisa,
+         e é a discordância entre elas que apanha um ficheiro corrompido. */
+      ui.diz('A verificar…');
+      ui.limparAccoes();
+      return ficheiro
+        .arrayBuffer()
+        .then(soma)
+        .then((s) =>
+          fetch('/files/uploads/' + sessao.session_id + '/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sha256: s }),
+          }).then(json)
+        )
+        .then(() => {
+          lembrar(chaveDe(ficheiro), null);
+          /* «Concluído» só aqui. Enquanto o último pedaço chegou mas o Core não
+             fechou a versão, não há ficheiro nenhum na instituição — dizer
+             «concluído» antes disso seria mentir sobre o que existe. */
+          ui.diz('Concluído');
+        });
+    };
+
+    return abrir()
+      .then(mandarPartes)
+      .then(fechar)
+      .catch((erro) => {
+        if (erro === 'cancelado' && sessao) {
+          return fetch('/files/uploads/' + sessao.session_id, { method: 'DELETE' })
+            .then(() => {
+              lembrar(chaveDe(ficheiro), null);
+              ui.diz('Cancelado');
+            })
+            .catch(() => ui.diz('Cancelado por confirmar', true));
+        }
+        if (erro === 401) {
+          ui.diz('A sessão terminou', true);
+          return;
+        }
+        if (erro === 403) {
+          ui.diz('Sem autoridade para carregar aqui', true);
+          return;
+        }
+        /* Interrompido, e não falhado: a sessão fica no servidor e o ficheiro
+           pode continuar de onde parou. Um «falhou» mandaria recomeçar meio
+           gigabyte que já lá está. */
+        ui.diz('Interrompido', true);
+        ui.limparAccoes();
+        ui.accao('Retomar', () => {
+          ui.limparAccoes();
+          porResolver += 1;
+          abrir().then(mandarPartes).then(fechar).catch(() => ui.diz('Interrompido', true))
+            .then(recarregarQuandoAssentar);
+        });
+      })
+      .then(recarregarQuandoAssentar);
   };
 
   ['dragenter', 'dragover'].forEach((evento) => {
@@ -2640,7 +2857,6 @@ document.addEventListener('keydown', (event) => {
 
   ['dragleave', 'dragend'].forEach((evento) => {
     forma.addEventListener(evento, (e) => {
-      /* Sair para um filho não é sair da zona. */
       if (e.relatedTarget && forma.contains(e.relatedTarget)) return;
       delete forma.dataset.over;
     });
@@ -2654,8 +2870,6 @@ document.addEventListener('keydown', (event) => {
     Array.prototype.forEach.call(ficheiros, enviar);
   });
 
-  /* Escolher pelo botão também mostra o tabuleiro, para que os dois caminhos
-     se comportem da mesma maneira. */
   if (entrada) {
     entrada.addEventListener('change', () => {
       if (!entrada.files || !entrada.files.length) return;
