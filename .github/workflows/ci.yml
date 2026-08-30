@@ -551,7 +551,7 @@ jobs:
       - name: Isolamento do fornecedor de teste
         run: |
           set -euo pipefail
-          resolved="$(cargo tree -p ocinye-core-server -e features --format '{p} [{f}]' \
+          resolved="$(cargo tree -p ocinye-core-server -e normal --format '{p} [{f}]' \
               | grep -E 'ocinye-core v[0-9]' || true)"
           if [ -z "$resolved" ]; then
             echo "ERRO: não foi possível resolver as features de ocinye-core" >&2
