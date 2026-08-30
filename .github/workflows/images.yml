@@ -1,0 +1,60 @@
+# As imagens de produção do Ocinye OS.
+#
+# # Porque não `git pull && cargo build` no servidor
+#
+# Porque o que corre em produção passaria a depender do estado da árvore de
+# trabalho de uma máquina, do cache do `cargo` dessa máquina, e de a construção
+# ter corrido até ao fim naquele dia. Nada disso é observável de fora, e nada
+# disso se repete.
+#
+# Aqui a imagem é construída uma vez, etiquetada com o **SHA exacto** que a
+# produziu, e o servidor instala essa etiqueta. Duas instalações do mesmo SHA
+# são o mesmo software, e isso é verificável.
+name: Imagens
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publicar:
+    name: Publicar ${{ matrix.binario }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        binario: [ocinye-core-server, ocinye-workspace, ocinye-worker]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Entrar no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construir e publicar
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile
+          build-args: BIN=${{ matrix.binario }}
+          push: true
+          # O SHA é a etiqueta que produção instala. `main` existe para quem
+          # quer a última, e não para quem quer saber o que está a correr.
+          tags: |
+            ghcr.io/ocinye/${{ matrix.binario }}:${{ github.sha }}
+            ghcr.io/ocinye/${{ matrix.binario }}:main
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/Ocinye/ocinye-os
+          cache-from: type=gha,scope=${{ matrix.binario }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.binario }}
