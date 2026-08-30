@@ -6265,6 +6265,7 @@ mod router_tests {
     fn state() -> WorkspaceState {
         WorkspaceState {
             config: std::sync::Arc::new(crate::config::WorkspaceConfig {
+                core_transport: crate::config::CoreTransport::Roteavel,
                 bind_address: "127.0.0.1:0".to_owned(),
                 public_url: PUBLIC.to_owned(),
                 core_url: "http://127.0.0.1:1".to_owned(),

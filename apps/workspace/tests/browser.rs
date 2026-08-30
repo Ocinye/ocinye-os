@@ -1422,6 +1422,7 @@ fn core_state(pool: PgPool, organisation_id: Uuid, database_url: &str) -> AppSta
 /// nenhuma para explicar porquê.
 fn workspace_state(core_url: &str, public_url: &str, estaticos: &str) -> WorkspaceState {
     let config = WorkspaceConfig {
+        core_transport: ocinye_workspace::config::CoreTransport::Roteavel,
         bind_address: "127.0.0.1:0".to_owned(),
         public_url: public_url.to_owned(),
         core_url: core_url.to_owned(),

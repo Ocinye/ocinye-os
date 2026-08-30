@@ -97,6 +97,15 @@ services:
       # para voltar a entrar seria mais lenta, mais frágil, e passaria a
       # depender do DNS externo para a instituição funcionar consigo mesma.
       OCINYE_CORE_URL: http://core:8080
+      # A topologia, declarada — e não uma permissão.
+      #
+      # O Core corre neste anfitrião, nesta rede de serviço, sem `ports:`. É
+      # essa propriedade que autoriza plaintext neste troço, e é ela que a
+      # guarda confronta com o endereço (ADR-0103, precisão de 2026-08-30).
+      #
+      # No dia em que o Core sair deste servidor, isto deixa de ser verdade e o
+      # arranque recusa — sem ninguém se ter de lembrar.
+      OCINYE_CORE_TRANSPORT: local-container
     depends_on:
       core:
         condition: service_healthy
