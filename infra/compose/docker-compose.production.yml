@@ -65,7 +65,21 @@ services:
       core:
         condition: service_started
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/nginx-health"]
+      # Com o `Host`, e não sem ele.
+      #
+      # Um pedido sem `Host` conhecido cai no `default_server`, que devolve
+      # `444` — fecha sem responder. É esse o desenho: quem sonda o IP não
+      # descobre que há aqui um nginx. Mas isso apanhou também o healthcheck do
+      # próprio proxy, que ficava `unhealthy` com o nginx a servir bem.
+      #
+      # A alternativa era abrir `/nginx-health` no `default_server`, e isso
+      # devolveria a qualquer sonda a confirmação que o `444` existe para negar.
+      test:
+        - CMD
+        - wget
+        - -qO-
+        - --header=Host: ocinye.com
+        - http://127.0.0.1/nginx-health
       interval: 15s
       timeout: 5s
       retries: 5
