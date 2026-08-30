@@ -137,6 +137,40 @@ pub async fn post(
     interpret(response).await
 }
 
+/// Envia bytes crus ao Core, por `PUT`.
+///
+/// # Porque bytes e não `multipart`
+///
+/// Porque o corpo é **uma parte** de um ficheiro, e não um formulário. Envolvê-la
+/// em `multipart` acrescentaria dezenas de bytes de envelope a cada pedaço e uma
+/// camada de parsing dos dois lados, para transportar exactamente uma coisa. O
+/// que a parte precisa de dizer — qual é, e qual a sua soma — cabe no caminho e
+/// na query.
+///
+/// # Errors
+///
+/// Returns [`ApiFailure`] when the Core is unreachable or refuses.
+pub async fn put_bytes(
+    state: &WorkspaceState,
+    token: &str,
+    correlation_id: &str,
+    path: &str,
+    body: Vec<u8>,
+) -> Result<Value, ApiFailure> {
+    let response = state
+        .http
+        .put(format!("{}{path}", state.config.core_url))
+        .bearer_auth(token)
+        .header(ocinye_observability::CORRELATION_ID_HEADER, correlation_id)
+        .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+        .body(body)
+        .send()
+        .await
+        .map_err(|error| ApiFailure::Failed(format!("the Core is unreachable: {error}")))?;
+
+    interpret(response).await
+}
+
 /// Send a `DELETE` to the Core.
 ///
 /// Existe porque retirar alguém de um grupo é uma remoção, e escrevê-la como um

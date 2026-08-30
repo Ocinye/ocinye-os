@@ -1,0 +1,16 @@
+# O que nunca entra numa imagem.
+#
+# `target/` é o maior: vinte e sete gigabytes de artefactos da máquina de quem
+# desenvolve, que a construção dentro do contentor não pode usar e que só
+# tornariam o contexto impossível de enviar.
+target/
+.git/
+.env
+*.log
+
+# Segredos, por nome e por padrão. Nenhum destes devia existir na árvore, e o
+# `.dockerignore` é a última rede antes de um deles entrar numa imagem que vai
+# para um registry.
+*.key
+*.pem
+secrets/

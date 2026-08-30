@@ -36,33 +36,23 @@
 #     OCINYE_BACKUP_RECIPIENT   chave pública `age` do destinatário; sem ela o
 #                               conjunto fica em claro e a cópia externa é
 #                               recusada
-#     OCINYE_BACKUP_REMOTE      destino fora deste servidor, no formato do
-#                               `OCINYE_BACKUP_REMOTE_CMD`
-#     OCINYE_BACKUP_REMOTE_CMD  comando que copia; recebe origem e destino.
-#                               Por omissão `rsync -a`. É assim que não há
-#                               dependência de fornecedor: quem opera escolhe
-#                               `rsync`, `rclone`, `aws s3 cp` ou outro
-#     OCINYE_BACKUP_VERIFY_CMD  comando que **lê de volta** a soma do que
-#                               chegou ao destino, e escreve-a no `stdout`. O
-#                               nome do ficheiro chega em `$OCINYE_BACKUP_ARTEFACTO`
-#                               — variável e não posicional, porque dentro de
-#                               um `eval` o `$1` é o do script e expande vazio.
-#                               Exemplo:
-#                                 mc cat cofre/conjuntos/"$OCINYE_BACKUP_ARTEFACTO".sha256
-#                               Sem ele a cópia é declarada **enviada e não
-#                               confirmada** — nunca «ok»
+#     OCINYE_BACKUP_BACKEND     `s3` ou `none`. Com `s3`, o transporte lê a
+#                               configuração estruturada de `backup-remote.sh`:
+#                               endpoint, região, bucket, prefixo e credenciais.
 #
-# # Cuidado com o ficheiro de ambiente
+#                               Substituiu `OCINYE_BACKUP_REMOTE_CMD`, que era
+#                               um **comando de shell numa variável de
+#                               ambiente**. Três razões, e nenhuma é estética:
+#                               `$CMD "$a" "$b"` sem aspas divide por espaços e
+#                               um valor mal escrito caía no `rsync -a` por
+#                               omissão — que copia para uma pasta local com o
+#                               nome do destino e sai zero; a confirmação corria
+#                               por `eval`, pelo que qualquer coisa que chegasse
+#                               àquela variável corria com os privilégios de
+#                               quem faz o backup; e «um comando que copia» não
+#                               é um contrato que se possa sondar antes de
+#                               tentar.
 #
-# Um valor com espaços **tem de vir entre aspas**. Em `sh`, a linha
-#
-#     OCINYE_BACKUP_REMOTE_CMD=mc cp --quiet
-#
-# não define variável nenhuma: corre `cp --quiet` com a variável apenas no
-# ambiente desse comando. O script cai então no `rsync -a` por omissão, e
-# `rsync` copia alegremente para uma pasta local com o nome do destino. Foi
-# assim que uma cópia «fora do servidor» acabou dentro da árvore de trabalho, e
-# foi declarada feita.
 #     OCINYE_BACKUP_KEEP        quantos conjuntos manter **aqui** (por omissão 7)
 #     OCINYE_BACKUP_REMOTE_PRUNE_CMD
 #                               comando que aplica retenção no destino. Recebe
@@ -155,19 +145,21 @@ feito "$(wc -c < "$DESTINO/postgres.dump" | tr -d ' ') bytes"
 
 # ── 3. Os bytes ─────────────────────────────────────────────────────────
 #
-# Por comando configurável, e não por um cliente escolhido aqui: o Object
-# Storage é S3-compatible por decisão (ADR-0200), e prender a cópia a um
-# fornecedor desfaria isso na única operação em que ele importa.
-if [ -n "${OCINYE_OBJECT_SYNC_CMD:-}" ]; then
+# Pela **mesma configuração** que o Core usa, e não por um comando escrito
+# noutro sítio: duas descrições do mesmo armazenamento é um sítio onde
+# discordar, e no dia em que discordassem o backup copiaria um bucket que já não
+# é o da instituição.
+#
+# A arquitectura continua S3-compatible (ADR-0200); o que deixa de existir é o
+# comando de shell numa variável, corrido por `eval`.
+if [ -n "${OCINYE_STORAGE_BUCKET:-}" ]; then
   passo "objectos"
-  mkdir -p "$DESTINO/objects"
-  OCINYE_OBJECT_DIR="$DESTINO/objects" \
-    eval "$OCINYE_OBJECT_SYNC_CMD" >/dev/null \
+  "$(dirname "$0")/backup-objects.sh" mirror "$DESTINO/objects" \
     || fatal "a cópia dos objectos falhou."
   feito "$(find "$DESTINO/objects" -type f | wc -l | tr -d ' ') ficheiro(s)"
 else
   echo "  objectos                               NÃO COPIADOS"
-  echo "      OCINYE_OBJECT_SYNC_CMD não está definida. Metade do estado"
+  echo "      OCINYE_STORAGE_BUCKET não está definida. Metade do estado"
   echo "      autoritativo não está neste conjunto."
 fi
 
@@ -247,51 +239,52 @@ fi
 # ── 7. A cópia fora deste servidor ──────────────────────────────────────
 #
 # Um conjunto que só existe na máquina que ardeu não é um backup.
-if [ -n "${OCINYE_BACKUP_REMOTE:-}" ]; then
+if [ "${OCINYE_BACKUP_BACKEND:-none}" != none ]; then
   if [ "$CIFRADO" = nao ]; then
     fatal "recuso copiar um conjunto em claro para fora deste servidor.
-  Defina OCINYE_BACKUP_RECIPIENT, ou remova OCINYE_BACKUP_REMOTE e assuma
+  Defina OCINYE_BACKUP_RECIPIENT, ou desligue OCINYE_BACKUP_BACKEND e assuma
   que não há cópia externa. Enviar isto em claro é publicar a instituição."
   fi
+
+  DRIVER="$(dirname "$0")/backup-remote.sh"
+  [ -x "$DRIVER" ] || fatal "o transporte remoto não está instalado: $DRIVER"
+
+  # ── Sondar antes de enviar ──────────────────────────────────────────
+  #
+  # Descobrir que as credenciais não abrem o cofre **depois** de cifrar meio
+  # gigabyte é descobri-lo tarde de mais para servir de alguma coisa.
+  passo "destino externo"
+  "$DRIVER" probe || fatal "o destino externo não está utilizável.
+  A cópia local ficou feita; a externa não saiu."
+  feito "sondado"
+
   passo "cópia externa"
-  CMD="${OCINYE_BACKUP_REMOTE_CMD:-rsync -a}"
-  $CMD "$DESTINO" "$OCINYE_BACKUP_REMOTE" || fatal "a cópia externa falhou."
-  $CMD "$DESTINO.sha256" "$OCINYE_BACKUP_REMOTE" \
+  NOME="$(basename "$DESTINO")"
+  "$DRIVER" put "$DESTINO" "$NOME" || fatal "a cópia externa falhou."
+  "$DRIVER" put "$DESTINO.sha256" "$NOME.sha256" \
     || fatal "a soma não chegou ao destino. Sem ela, quem lá está não tem
   como saber se o pacote que recebeu é o que saiu."
 
   # ── «O comando saiu zero» não é «a cópia chegou» ────────────────────
   #
-  # Um `rsync` mal configurado copia para uma pasta local com o nome do
-  # destino e sai zero. Um `cp` para um caminho que não existe cria-o. Nos dois
-  # casos o transporte declara sucesso e o cofre fica vazio — e a instituição
-  # descobre-o no dia em que precisa dele.
+  # A confirmação lê **de volta** o que está no destino. Um cliente mal
+  # configurado escreve numa pasta local e sai zero na mesma; foi assim que uma
+  # cópia «fora do servidor» acabou dentro da árvore de trabalho.
   #
-  # Por isso a confirmação lê **de volta** o que chegou. Sem comando que a
-  # faça, a cópia não é declarada feita: é declarada enviada.
-  if [ -n "${OCINYE_BACKUP_VERIFY_CMD:-}" ]; then
-      # O `|| true` é deliberado. Sem ele, um comando de confirmação que
-      # falhe — porque o objecto não está lá, que é justamente o caso a
-      # apanhar — mataria o script pelo `set -e` **antes** de haver mensagem,
-      # e a recusa sairia muda. Uma recusa sem razão obriga quem a lê a
-      # adivinhar, e quem adivinha às três da manhã adivinha mal.
-      LA=$(OCINYE_BACKUP_ARTEFACTO="$(basename "$DESTINO")" \
-           eval "$OCINYE_BACKUP_VERIFY_CMD" 2>/dev/null | tr -d "[:space:]" || true)
-      AQUI=$(cat "$DESTINO.sha256" | tr -d "[:space:]")
-      [ -n "$LA" ] || fatal "a confirmação não devolveu soma nenhuma.
-  O comando correu e não disse o que está lá. Isso não é uma confirmação."
-      [ "$LA" = "$AQUI" ] || fatal "o que chegou ao destino não é o que saiu.
+  # Não há aqui `eval` nem comando vindo do ambiente: a leitura é uma operação
+  # do transporte, com o nome do artefacto como argumento.
+  LA=$("$DRIVER" read-back "$NOME.sha256" 2>/dev/null | tr -d "[:space:]" || true)
+  AQUI=$(cat "$DESTINO.sha256" | tr -d "[:space:]")
+  [ -n "$LA" ] || fatal "a confirmação não devolveu soma nenhuma.
+  O transporte correu e o destino não disse o que tem. Isso não é uma
+  confirmação."
+  [ "$LA" = "$AQUI" ] || fatal "o que chegou ao destino não é o que saiu.
   aqui:    $AQUI
   destino: $LA"
-      feito "confirmada por leitura de volta"
-  else
-      printf 'ENVIADA, NÃO CONFIRMADA\n'
-      echo "      OCINYE_BACKUP_VERIFY_CMD não está definida. O comando de"
-      echo "      transporte saiu zero, e ninguém foi ver se o pacote está lá."
-  fi
+  feito "confirmada por leitura de volta"
 else
-  echo "  cópia externa                          NÃO EXISTE"
-  echo "      OCINYE_BACKUP_REMOTE não está definida. Este conjunto vive"
+  echo "  cópia externa                          NÃO CONFIGURADA"
+  echo "      OCINYE_BACKUP_BACKEND não está definida. Este conjunto vive"
   echo "      apenas nesta máquina, que é a que pode desaparecer."
 fi
 
@@ -316,17 +309,14 @@ fi
 # O `KEEP` acima governa esta máquina. O cofre é de quem o opera, e apagar lá
 # dentro por iniciativa própria seria decidir por ele. Mas deixá-lo crescer em
 # silêncio também não serve.
-if [ -n "${OCINYE_BACKUP_REMOTE:-}" ]; then
-  if [ -n "${OCINYE_BACKUP_REMOTE_PRUNE_CMD:-}" ]; then
-    passo "retenção no destino"
-    eval "$OCINYE_BACKUP_REMOTE_PRUNE_CMD" >/dev/null \
-      || fatal "a retenção no destino falhou."
-    feito
-  else
-    echo "  retenção no destino                    NÃO APLICADA"
-    echo "      OCINYE_BACKUP_REMOTE_PRUNE_CMD não está definida. O cofre"
-    echo "      acumula, e um cofre cheio recusa a cópia seguinte."
-  fi
+if [ "${OCINYE_BACKUP_BACKEND:-none}" != none ]; then
+  passo "retenção no destino"
+  # O mesmo `KEEP` desta máquina, aplicado lá. O transporte recusa deixar o
+  # cofre vazio: uma retenção que apaga o único conjunto válido é uma perda, e
+  # não uma limpeza.
+  "$(dirname "$0")/backup-remote.sh" prune "$KEEP" >/dev/null \
+    || fatal "a retenção no destino falhou."
+  feito "$KEEP conjunto(s) mantido(s) no destino"
 fi
 
 # ── Os incompletos também têm retenção, e é mais curta ──────────────────

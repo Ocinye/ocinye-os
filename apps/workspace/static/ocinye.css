@@ -1264,6 +1264,14 @@ svg { display: block; flex-shrink: 0; }
 .oc-progress__fill { height: 100%; border-radius: 3px; background: var(--oc-navy); }
 .oc-progress__pct { font: 500 11px var(--oc-font-mono); color: var(--oc-text-muted); }
 
+/* A largura que o JavaScript escreve, por variável e não por atributo `style`:
+   a CSP é `style-src 'self'` e descartaria o atributo. */
+.oc-progress__fill--var { width: var(--oc-progresso, 0%); transition: width var(--oc-duration-slow) ease; }
+
+/* A linha do tabuleiro de carregamento, com barra. */
+.oc-drop__accoes { display: inline-flex; gap: 6px; }
+.oc-drop__line .oc-progress { max-width: 180px; }
+
 .oc-donut {
   width: 88px; height: 88px; border-radius: 50%;
   display: grid; place-items: center; flex-shrink: 0;

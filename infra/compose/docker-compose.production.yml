@@ -1,0 +1,204 @@
+# A stack de produção do Ocinye OS.
+#
+# # O que está aqui e o que não está
+#
+# Aqui está a **topologia**: que serviços existem, como se alcançam, o que é
+# público e o que não é. Os segredos vêm de `/etc/ocinye/*.env`, fora do Git e
+# fora desta árvore.
+#
+# # Porque as imagens se constroem aqui e não vêm de um registry
+#
+# Porque um registry resolve um problema que a instituição ainda não tem —
+# distribuir a mesma imagem por vários servidores — e cria dependências que ela
+# passaria a ter: autenticação no GitHub, disponibilidade do GHCR, um token de
+# registry guardado no VPS. Com um servidor, o que interessa é que produção
+# corra um **commit exacto**, e isso consegue-se sem registry nenhum.
+#
+# O que chega ao servidor é um pacote fechado da `main` canónica, identificado
+# pelo seu SHA. As imagens são construídas aqui a partir desse conteúdo e
+# etiquetadas com o mesmo SHA, e por isso `docker images` responde exactamente à
+# pergunta «o que está em produção?».
+#
+# O compilador de Rust vive apenas dentro da etapa de construção do contentor: o
+# host não precisa de Rust, de Cargo, nem de Git.
+#
+# # A regra que governa este ficheiro
+#
+# > PostgreSQL, Redis e o object storage **não são públicos**.
+#
+# Nenhum deles declara `ports:`. Falam-se pela rede interna do Compose, pelo
+# nome do serviço, e o único processo com um porto no host é o proxy. Publicar
+# `5432` «só para o pgAdmin» é como se perde uma base de dados institucional.
+
+name: ocinye
+
+x-comum: &comum
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      # Registos limitados por construção. Um `json-file` sem limite enche o
+      # disco, e um disco cheio manifesta-se como `StorageUnavailable` — um
+      # sintoma que não tem nada a ver com a causa.
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  # ── A única porta para a Internet ─────────────────────────────────────
+  proxy:
+    <<: *comum
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/ocinye/nginx:/etc/nginx/conf.d:ro
+      - /etc/ocinye/tls:/etc/nginx/tls:ro
+      # O site vem do **release**, e não de um volume que alguém enche à mão:
+      # um volume nomeado sobrevive aos deploys e passaria a conter o que lá
+      # ficou da última vez que alguém lá mexeu. Assim, o que está publicado é o
+      # que está no commit.
+      - ./../site:/srv/site:ro
+    depends_on:
+      workspace:
+        condition: service_started
+      core:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/nginx-health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── A Experience humana ───────────────────────────────────────────────
+  workspace:
+    <<: *comum
+    image: ocinye/ocinye-workspace:${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        BIN: ocinye-workspace
+    env_file:
+      - /etc/ocinye/comum.env
+      - /etc/ocinye/workspace.env
+    environment:
+      OCINYE_WORKSPACE_BIND_ADDRESS: 0.0.0.0:8090
+      OCINYE_WORKSPACE_STATIC_DIR: /srv/ocinye/static
+      # O Workspace fala com o Core pela rede interna. Nunca pelo hostname
+      # público: uma chamada servidor-a-servidor que saísse até à Cloudflare
+      # para voltar a entrar seria mais lenta, mais frágil, e passaria a
+      # depender do DNS externo para a instituição funcionar consigo mesma.
+      OCINYE_CORE_URL: http://core:8080
+    depends_on:
+      core:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── A autoridade institucional ────────────────────────────────────────
+  core:
+    <<: *comum
+    image: ocinye/ocinye-core-server:${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        BIN: ocinye-core-server
+    env_file:
+      - /etc/ocinye/comum.env
+      - /etc/ocinye/core.env
+    environment:
+      OCINYE_BIND_ADDRESS: 0.0.0.0:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      object-store:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── O que acontece fora do pedido ─────────────────────────────────────
+  worker:
+    <<: *comum
+    image: ocinye/ocinye-worker:${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        BIN: ocinye-worker
+    env_file:
+      - /etc/ocinye/comum.env
+      - /etc/ocinye/core.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Estado institucional ──────────────────────────────────────────────
+  #
+  # Sem `ports:`. Deliberadamente.
+  postgres:
+    <<: *comum
+    image: postgres:16-alpine
+    env_file:
+      - /etc/ocinye/postgres.env
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ocinye -d ocinye"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    <<: *comum
+    image: redis:7-alpine
+    # `--save` mantém uma imagem periódica para o arranque não começar frio.
+    # Não é memória institucional: o que o Redis perder reconstrói-se do
+    # PostgreSQL, e é por isso que ele não entra no conjunto de continuidade.
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+  # ── Os bytes institucionais ───────────────────────────────────────────
+  #
+  # MinIO é a **implementação** do contrato de armazenamento compatível com S3.
+  # Não é a arquitectura do Ocinye OS: o Core fala S3, e o dia em que estes
+  # bytes viverem noutro fornecedor nada no Core muda.
+  #
+  # Nem a API nem a consola têm porto no host. O browser nunca fala com isto.
+  object-store:
+    <<: *comum
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    env_file:
+      - /etc/ocinye/object-store.env
+    volumes:
+      - object-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres-data:
+  redis-data:
+  object-data:

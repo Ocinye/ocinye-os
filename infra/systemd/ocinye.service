@@ -1,0 +1,38 @@
+# A stack de produção do Ocinye OS, em systemd.
+#
+# # Porque isto existe
+#
+# Porque `docker compose up -d` numa sessão SSH sobrevive à sessão, mas não
+# sobrevive a um reboot — e a instituição não pode depender de alguém se lembrar
+# de voltar a entrar no servidor depois de a máquina reiniciar.
+#
+# # Porque `Type=oneshot` com `RemainAfterExit`
+#
+# Porque o Compose devolve o controlo assim que os contentores arrancam; não há
+# processo de longa duração para o systemd vigiar. O que o systemd governa aqui
+# é o **arranque** e a **paragem** ordenados, e são os contentores que se
+# reiniciam sozinhos por `restart: unless-stopped`.
+[Unit]
+Description=Ocinye OS — stack de produção
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/srv/ocinye/current
+
+# O SHA do release corrente. Escrito pelo deploy, e não adivinhado aqui: é o que
+# torna `systemctl restart` reproduzir exactamente o que estava a correr.
+EnvironmentFile=/etc/ocinye/release.env
+
+ExecStart=/usr/bin/docker compose -f infra/compose/docker-compose.production.yml up -d --remove-orphans
+ExecStop=/usr/bin/docker compose -f infra/compose/docker-compose.production.yml down
+
+# Dar tempo às imagens grandes e às bases a arrancar frias. Um timeout curto
+# marcaria como falhado um arranque que só estava a demorar.
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
