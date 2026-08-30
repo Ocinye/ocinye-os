@@ -8721,3 +8721,177 @@ async fn um_colaborador_externo_nao_ganha_os_modulos_de_investigacao() {
         );
     }
 }
+
+/// Uma unidade nasce governável, e a autoridade concede-se pelo produto.
+///
+/// # A viagem
+///
+/// ```text
+/// admin cria unidade → é gestor → abre a unidade → área de Pessoas
+///   → acrescenta um membro de investigação
+///   → esse membro passa a alcançar o que a unidade governa
+/// ```
+///
+/// # O que isto fecha
+///
+/// O beco que originou toda esta milestone: criar uma unidade não criava
+/// pertença nenhuma, e não havia ecrã para acrescentar membros. A unidade
+/// existia e ninguém a podia gerir — a única saída era escrever na base por
+/// fora.
+#[tokio::test]
+async fn uma_unidade_nasce_governavel_e_a_pertenca_concede_se_pelo_produto() {
+    let harness = harness!();
+
+    let (admin_id, _) = harness.sign_in(&[TechnicalRole::PlatformAdmin]).await;
+
+    // Criar a unidade pelo ecrã, como uma pessoa faz.
+    let form = harness.open("/units/new").await;
+    esperar_por(&form, "Nova Unidade").await;
+    let codigo = format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase();
+    set_field(&form, "input[name=code]", &codigo).await;
+    set_field(&form, "input[name=name]", "Unidade de prova").await;
+    submit(&form, "form[action=\"/units/new\"]").await;
+
+    let unit_id = {
+        let limite = std::time::Instant::now();
+        loop {
+            let encontrado: Option<Uuid> =
+                sqlx::query_scalar("SELECT id FROM units WHERE code = $1")
+                    .bind(&codigo)
+                    .fetch_optional(&harness.pool)
+                    .await
+                    .expect("procura da unidade");
+            if let Some(id) = encontrado {
+                break id;
+            }
+            assert!(limite.elapsed() < DEADLINE, "a unidade não foi criada");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    };
+
+    // Quem a criou é gestor — o recurso nasceu governável.
+    let papel: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM unit_memberships WHERE unit_id = $1 AND person_id = $2",
+    )
+    .bind(unit_id)
+    .bind(admin_id)
+    .fetch_optional(&harness.pool)
+    .await
+    .expect("consulta");
+    assert_eq!(
+        papel.as_deref(),
+        Some("manager"),
+        "quem criou a unidade não ficou a poder geri-la"
+    );
+
+    // Alguém de investigação, ainda sem pertenças.
+    let investigador: Uuid = {
+        let handle = format!("i{}", Uuid::new_v4().simple());
+        let id: Uuid = sqlx::query_scalar(
+            "INSERT INTO people (organisation_id, full_name, email, status)
+             VALUES ($1, $2, $3, 'active') RETURNING id",
+        )
+        .bind(harness.organisation_id)
+        .bind("Investigadora de prova")
+        .bind(format!("{handle}@ocinye.com"))
+        .fetch_one(&harness.pool)
+        .await
+        .expect("pessoa");
+        sqlx::query("INSERT INTO person_roles (person_id, role) VALUES ($1, 'research_member')")
+            .bind(id)
+            .execute(&harness.pool)
+            .await
+            .expect("papel");
+        id
+    };
+
+    // A área de Pessoas existe, e o gestor acrescenta-a por lá.
+    let unidade = harness.open(&format!("/units/{unit_id}")).await;
+    esperar_por(&unidade, "Adicionar").await;
+    let html = unidade.content().await.expect("conteúdo");
+    assert!(
+        html.contains("Investigadora de prova"),
+        "a pessoa não aparece entre quem se pode acrescentar"
+    );
+
+    escolher(&unidade, "#oc-unit-person", &investigador.to_string()).await;
+    submit(&unidade, "form.oc-pessoa__acrescentar").await;
+    esperar_por(&unidade, "Pessoa adicionada à unidade").await;
+
+    // A pertença existe, e foi criada pelo Core — não por SQL.
+    let papel: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM unit_memberships WHERE unit_id = $1 AND person_id = $2",
+    )
+    .bind(unit_id)
+    .bind(investigador)
+    .fetch_optional(&harness.pool)
+    .await
+    .expect("consulta");
+    assert_eq!(
+        papel.as_deref(),
+        Some("member"),
+        "a pessoa não foi acrescentada à unidade pelo produto"
+    );
+}
+
+/// Quem não gere a unidade não recebe os controlos que a alteram.
+///
+/// E a ausência deles não é a defesa: o Core recusa a mesma operação a quem a
+/// tente por HTTP directo.
+#[tokio::test]
+async fn quem_nao_gere_a_unidade_nao_recebe_os_controlos_nem_a_operacao() {
+    let harness = harness!();
+
+    let (admin_id, _) = harness.sign_in(&[TechnicalRole::PlatformAdmin]).await;
+    let unit_id = harness.manages_a_unit(admin_id).await;
+
+    // Outra pessoa, sem gestão da unidade.
+    let (estranho_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    let unidade = harness.open(&format!("/units/{unit_id}")).await;
+    let html = unidade.content().await.expect("conteúdo");
+    assert!(
+        !html.contains("oc-pessoa__acrescentar"),
+        "quem não gere a unidade recebeu o formulário de acrescentar pessoas"
+    );
+    assert!(
+        !html.contains("Tornar gestor"),
+        "quem não gere a unidade recebeu os controlos de papel"
+    );
+
+    // E a operação directa continua a ser recusada.
+    let antes: i64 = sqlx::query_scalar("SELECT count(*) FROM unit_memberships WHERE unit_id = $1")
+        .bind(unit_id)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("contagem");
+
+    let script = format!(
+        "(async () => {{ \
+           const corpo = new URLSearchParams(); \
+           corpo.set('person_id', '{estranho_id}'); \
+           corpo.set('role', 'manager'); \
+           const r = await fetch('/units/{unit_id}/members', \
+             {{ method: 'POST', body: corpo, redirect: 'follow' }}); \
+           return r.url; }})()"
+    );
+    let _: Option<String> = unidade
+        .evaluate(script)
+        .await
+        .expect("tentativa directa")
+        .into_value()
+        .ok();
+
+    // Espera activa curta: se a escrita passasse, a contagem mudaria.
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    let depois: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM unit_memberships WHERE unit_id = $1")
+            .bind(unit_id)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("contagem");
+    assert_eq!(
+        depois, antes,
+        "alguém sem autoridade acrescentou-se a uma unidade por HTTP directo"
+    );
+}

@@ -20,6 +20,14 @@ pub fn routes() -> Router<AppState> {
         .route("/workspaces", get(list_workspaces))
         .route("/workspaces/{workspace_id}", get(workspace_overview))
         .route("/workspaces/{workspace_id}/members", post(add_member))
+        // Retirar uma pessoa do ambiente. `POST` e não `DELETE` pela mesma
+        // razão que a unidade: o formulário do Workspace fala HTTP de
+        // formulário, e uma operação que só existisse para `fetch` seria uma
+        // operação que a Experience sem JavaScript não alcança.
+        .route(
+            "/workspaces/{workspace_id}/members/{person_id}",
+            post(remove_member),
+        )
         .route(
             "/workspaces/{workspace_id}/classification",
             post(reclassify),
@@ -464,6 +472,20 @@ async fn transition_project(
 struct AddWorkspaceMemberRequest {
     person_id: Uuid,
     role: String,
+}
+
+/// Retira uma pessoa do ambiente.
+async fn remove_member(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path((workspace_id, person_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    research::remove_workspace_member(&mut tx, &principal, &ids, workspace_id, person_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+
+    Ok(Json(serde_json::json!({ "removed": true })))
 }
 
 async fn add_member(

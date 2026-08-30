@@ -520,7 +520,31 @@ const UNIT_TABS: [&str; 9] = [
 ];
 
 /// Detalhe de uma unidade.
-pub fn unit_detail(unit: &Value, members: &Value, workspaces: &Value) -> impl IntoView {
+/// A gestão de pessoas de um contentor de autoridade.
+///
+/// # Porque isto é uma funcionalidade de segurança
+///
+/// Porque uma pertença **é** autoridade. Acrescentar alguém a uma unidade
+/// concede-lhe direitos sobre o que lá está; retirá-lo tira-lhos. Não é um CRUD
+/// secundário, e a interface que o faz não é um formulário improvisado.
+///
+/// `pode_gerir` vem do Core e não de um palpite sobre o papel: se o controlo
+/// aparece, a operação é autorizável pela mesma política que a vai executar.
+pub struct GestaoDePessoas {
+    /// Se quem está a ver pode alterar quem pertence.
+    pub pode_gerir: bool,
+    /// Pessoas da organização que ainda não pertencem, para escolher.
+    pub candidatos: Vec<(String, String)>,
+    /// Uma mensagem da operação anterior.
+    pub aviso: Option<(bool, String)>,
+}
+
+pub fn unit_detail(
+    unit: &Value,
+    members: &Value,
+    workspaces: &Value,
+    gestao: &GestaoDePessoas,
+) -> impl IntoView {
     let id = text(unit, "id");
     let status = text(unit, "status");
     let member_rows = items(members);
@@ -599,15 +623,26 @@ pub fn unit_detail(unit: &Value, members: &Value, workspaces: &Value) -> impl In
                                         .map(|member| {
                                             let name = text(member, "full_name");
                                             let role = text(member, "role");
+                                            let email = text(member, "email");
+                                            let person_id = text(member, "person_id");
+                                            let unidade = id.clone();
+                                            let pode = gestao.pode_gerir;
                                             view! {
-                                                <div class="oc-row oc-gap-6" >
+                                                <div class="oc-pessoa" >
                                                     <span class="oc-avatar oc-avatar--sm" >
                                                         {crate::ui::initials(&name)}
                                                     </span>
-                                                    <span class="oc-fill oc-t-cell-2" >
-                                                        {name}
+                                                    <span class="oc-pessoa__quem" >
+                                                        <span class="oc-t-cell-2" >{name}</span>
+                                                        <span class="oc-t-caption--muted" >
+                                                            {email}
+                                                        </span>
                                                     </span>
                                                     {badge(role.clone(), Tone::of(&role))}
+                                                    {pode
+                                                        .then(|| gerir_pessoa(
+                                                            &unidade, &person_id, &role,
+                                                        ))}
                                                 </div>
                                             }
                                         })
@@ -616,11 +651,94 @@ pub fn unit_detail(unit: &Value, members: &Value, workspaces: &Value) -> impl In
                             }
                                 .into_any()
                         }}
+                        {gestao.aviso.as_ref().map(|(ok, m)| aviso_de_gestao(*ok, m))}
+                        {gestao
+                            .pode_gerir
+                            .then(|| acrescentar_pessoa(&id, &gestao.candidatos))}
                     </div>
                 </section>
             </div>
         </div>
     }
+}
+
+/// Os controlos que alteram a autoridade de uma pessoa numa unidade.
+///
+/// Só aparecem a quem pode geri-la — e a ausência deles não é a defesa: o Core
+/// recusa a mesma operação a quem a tente por HTTP directo.
+fn gerir_pessoa(unit_id: &str, person_id: &str, role: &str) -> impl IntoView {
+    let promover = role != "manager";
+    let novo = if promover { "manager" } else { "member" };
+    let rotulo = if promover {
+        "Tornar gestor"
+    } else {
+        "Tornar membro"
+    };
+
+    view! {
+        <span class="oc-pessoa__accoes">
+            <form method="post" action=format!("/units/{unit_id}/members/role")>
+                <input type="hidden" name="person_id" value=person_id.to_owned() />
+                <input type="hidden" name="role" value=novo />
+                <button class="oc-btn oc-btn--ghost" type="submit">{rotulo}</button>
+            </form>
+            <form method="post" action=format!("/units/{unit_id}/members/remove")>
+                <input type="hidden" name="person_id" value=person_id.to_owned() />
+                <button class="oc-btn oc-btn--ghost" type="submit">"Remover"</button>
+            </form>
+        </span>
+    }
+}
+
+/// Acrescentar alguém da organização à unidade.
+///
+/// A lista é de pessoas reais que ainda não pertencem, e os papéis são os dois
+/// que a unidade tem — não uma lista maior que o Core depois recusaria.
+fn acrescentar_pessoa(unit_id: &str, candidatos: &[(String, String)]) -> impl IntoView {
+    if candidatos.is_empty() {
+        return view! {
+            <p class="oc-t-caption--muted oc-mt-5">
+                "Todas as pessoas da organização já pertencem a esta unidade."
+            </p>
+        }
+        .into_any();
+    }
+
+    let opcoes = candidatos
+        .iter()
+        .map(|(pid, etiqueta)| {
+            view! { <option value=pid.clone()>{etiqueta.clone()}</option> }
+        })
+        .collect_view();
+
+    view! {
+        <form
+            class="oc-pessoa__acrescentar oc-mt-5"
+            method="post"
+            action=format!("/units/{unit_id}/members")
+        >
+            <label class="oc-sr" for="oc-unit-person">"Pessoa"</label>
+            <select class="oc-select" id="oc-unit-person" name="person_id" required>
+                {opcoes}
+            </select>
+            <label class="oc-sr" for="oc-unit-role">"Papel"</label>
+            <select class="oc-select" id="oc-unit-role" name="role">
+                <option value="member">"Membro"</option>
+                <option value="manager">"Gestor"</option>
+            </select>
+            <button class="oc-btn oc-btn--primary" type="submit">"Adicionar"</button>
+        </form>
+    }
+    .into_any()
+}
+
+fn aviso_de_gestao(ok: bool, mensagem: &str) -> impl IntoView {
+    let classe = if ok {
+        "oc-note oc-note--ok oc-mt-5"
+    } else {
+        "oc-note oc-note--bad oc-mt-5"
+    };
+    view! { <p class=classe role="status">{mensagem.to_owned()}</p> }
 }
 
 #[cfg(test)]

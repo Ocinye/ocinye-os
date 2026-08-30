@@ -1511,8 +1511,26 @@ pub(crate) mod link_tests {
                 Screen::Units,
                 screens::workspaces::unit_detail(
                     &json!({"id": "33333333-3333-3333-3333-333333333333", "name": "Unidade", "code": "AI", "status": "active"}),
+                    &json!({"items": [
+                        {"person_id": "44444444-4444-4444-4444-444444444444",
+                         "full_name": "Ana Ferreira", "email": "ana@ocinye.com",
+                         "role": "manager"},
+                        {"person_id": "55555555-5555-5555-5555-555555555555",
+                         "full_name": "Bruno Cardoso", "email": "bruno@ocinye.com",
+                         "role": "member"}
+                    ]}),
                     &empty,
-                    &empty,
+                    // Com gestão: a passagem visual existe para rever os
+                    // controlos que alteram autoridade, e escondê-los aqui
+                    // deixaria a área mais sensível do ecrã por rever.
+                    &screens::workspaces::GestaoDePessoas {
+                        pode_gerir: true,
+                        candidatos: vec![(
+                            "66666666-6666-6666-6666-666666666666".to_owned(),
+                            "Carla Nunes · carla@ocinye.com".to_owned(),
+                        )],
+                        aviso: None,
+                    },
                 )
             ),
             // Os ecrãs de criação e os do próprio membro entraram no catálogo
