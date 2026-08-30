@@ -1795,6 +1795,10 @@ async fn as_vistas_partilham_o_universo_autorizado() {
     let distante = unique_title("Distante");
 
     harness.create_event_via_ui(&visivel, hoje, hora).await;
+    // O relógio na criação. Este teste já falhou duas vezes com a hora do dia
+    // como entrada escondida, e das duas o diagnóstico veio depois — a partir
+    // do horário da corrida, e não do que o teste disse. Agora diz.
+    let relogio_na_criacao = lisboa;
     // Fora de qualquer intervalo natural: nem hoje, nem esta semana, nem este
     // mês, nem os próximos noventa dias.
     harness
@@ -1843,7 +1847,17 @@ async fn as_vistas_partilham_o_universo_autorizado() {
         );
         assert!(
             html.contains(&visivel),
-            "«{nome}» não mostra um evento de hoje que o actor pode ver"
+            "«{nome}» não mostra um evento de hoje que o actor pode ver.\n\
+             \x20   criado:     {relogio_na_criacao} (Lisboa), para {hoje} às {hora}:00\n\
+             \x20   observado:  {} (Lisboa)\n\
+             \x20   navegado:   /calendar?view={nome}&on={hoje}\n\
+             \x20   a página mostra: {}\n\
+             \x20   procurava:  {visivel}",
+            ocinye_contracts::temporal::in_zone(
+                chrono::Utc::now(),
+                "Europe/Lisbon".to_owned().try_into().expect("fuso")
+            ),
+            titulos_visiveis(html)
         );
         assert!(
             !html.contains(&alheio),
@@ -3278,7 +3292,8 @@ async fn sem_sessao_o_arranque_entrega_ao_login() {
         }
         assert!(
             inicio.elapsed() < std::time::Duration::from_secs(45),
-            "o arranque não entregou ao Login em quinze segundos; ficou em «{url}»"
+            "o arranque não entregou ao Login em quarenta e cinco segundos; \
+             ficou em «{url}»"
         );
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
     }
@@ -3286,7 +3301,27 @@ async fn sem_sessao_o_arranque_entrega_ao_login() {
     let html = conteudo_estavel(&page).await;
     assert!(
         html.contains("oc-login__submit"),
-        "chegou ao Login e não há formulário de entrada"
+        // A prova, e não só a ausência.
+        //
+        // «Não há formulário» tem pelo menos três causas — a navegação ainda ia
+        // a meio, o Login rendeu degradado porque o Core não respondeu, ou o
+        // markup mudou — e a mensagem sozinha não distingue nenhuma. O que a
+        // página **tem** distingue as três.
+        "chegou ao Login e não há formulário de entrada.\n\
+         \x20   url:     {}\n\
+         \x20   título:  {}\n\
+         \x20   texto:   {}",
+        page.url().await.ok().flatten().unwrap_or_default(),
+        page.get_title().await.ok().flatten().unwrap_or_default(),
+        {
+            let texto: String = html
+                .split('>')
+                .filter_map(|p| p.split('<').next())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let limpo = texto.split_whitespace().collect::<Vec<_>>().join(" ");
+            limpo[..limpo.len().min(300)].to_owned()
+        }
     );
 
     // E chegou lá **pelo arranque**: o marcador prova-o.
@@ -9729,4 +9764,41 @@ async fn um_carregamento_em_partes_retoma_se_noutro_contexto() {
         Some(TAMANHO as i64),
         "o ficheiro montado não tem o tamanho que atravessou em partes"
     );
+}
+
+/// Os títulos que uma página de calendário está a mostrar.
+///
+/// # Porque a asserção precisa disto
+///
+/// Porque «não mostra o evento» tem pelo menos quatro causas — o evento não foi
+/// criado, foi criado noutro dia, a vista filtrou-o, ou a autorização recusou-o
+/// — e a mensagem sozinha não distingue nenhuma. Sem saber o que a página
+/// **mostra**, o diagnóstico é feito a partir do horário da corrida, que é
+/// adivinhar com passos extra.
+fn titulos_visiveis(html: &str) -> String {
+    // As quatro classes que as quatro vistas usam. Escrevi primeiro uma classe
+    // inventada, e a prova teria saído sempre vazia — o que é pior do que não
+    // haver prova: seria uma prova a mentir.
+    const ONDE: [&str; 4] = [
+        "oc-cal-bloco__titulo",
+        "oc-cal-linha__titulo",
+        "oc-cal-month__titulo",
+        "oc-cal-agenda",
+    ];
+    let mut vistos: Vec<&str> = ONDE
+        .iter()
+        .flat_map(|classe| html.split(classe).skip(1))
+        .filter_map(|bloco| {
+            let depois = bloco.split('>').nth(1)?;
+            depois.split('<').next()
+        })
+        .filter(|t| !t.trim().is_empty())
+        .collect();
+    vistos.sort_unstable();
+    vistos.dedup();
+    if vistos.is_empty() {
+        "(nenhum evento na página)".to_owned()
+    } else {
+        vistos.join(", ")
+    }
 }
