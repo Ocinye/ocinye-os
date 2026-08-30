@@ -101,6 +101,19 @@ NORMAIS = {
 # assim que se prova que ele funciona.
 DEV = {
     "ocinye-core": {"ocinye-core"},
+    # `ocinye-core-server` → `ocinye-core` nos testes, desde 2026-08-30.
+    #
+    # Os harnesses do servidor passaram a chamar a guarda que recusa escrever
+    # fixtures numa base que contém a organização canónica. A guarda vive em
+    # `ocinye-core` atrás de `test-fixtures`, e é a mesma que os outros 23
+    # harnesses usam — duplicá-la aqui seria ter seis cópias de uma guarda de
+    # segurança e esperar que envelhecessem juntas.
+    #
+    # Esta aresta **não move autoridade**: `ocinye-core-server` já depende de
+    # `ocinye-core` em produção, e isto é estritamente mais estreito — só os
+    # alvos de teste, e só para uma função que o binário não contém. O portão
+    # «Isolamento do fornecedor de teste» confirma-o em cada corrida.
+    "ocinye-core-server": {"ocinye-core"},
     "ocinye-workspace": {
         "ocinye-core",
         "ocinye-core-server",
