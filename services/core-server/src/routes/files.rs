@@ -11,7 +11,7 @@
 
 use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
 use axum::handler::Handler;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use ocinye_contracts::Classification;
 use ocinye_core::modules::files;
@@ -33,6 +33,22 @@ pub fn routes() -> Router<AppState> {
                 .post(upload_file.layer(DefaultBodyLimit::max(super::UPLOAD_BODY_LIMIT_BYTES))),
         )
         .route("/workspaces/{workspace_id}/folders", post(create_folder))
+        // ── Carregamento em partes ──────────────────────────────────────
+        //
+        // O caminho para ficheiros que não cabem num pedido. O limite de corpo
+        // destas rotas é o de **um pedaço**, e não o do ficheiro: aceitar aqui
+        // seiscentos megabytes permitiria contornar a segmentação e voltar a
+        // bater no limite do edge — que é o problema que isto resolve.
+        .route("/workspaces/{workspace_id}/uploads", post(begin_upload))
+        .route(
+            "/uploads/{session_id}",
+            get(upload_state).delete(cancel_upload),
+        )
+        .route(
+            "/uploads/{session_id}/parts/{part_number}",
+            put(upload_part.layer(DefaultBodyLimit::max(CHUNK_BODY_LIMIT_BYTES))),
+        )
+        .route("/uploads/{session_id}/complete", post(complete_upload))
         // A vista agregada: `Ficheiros` é um módulo, não a vista de um
         // ambiente. Obrigar a escolher um antes de ver seja o que for faz a
         // aplicação parecer vazia a quem tem trabalho espalhado por vários.
@@ -300,6 +316,170 @@ async fn move_file(
     files::move_to_folder(&mut tx, &principal, &ids, file_id, request.folder_id).await?;
     tx.commit().await.map_err(CoreError::from)?;
     Ok(Json(serde_json::json!({ "moved": true })))
+}
+
+// --- Carregamento em partes -------------------------------------------------
+
+/// O maior corpo que uma parte pode ter.
+///
+/// O pedaço mais a margem do envelope. Deliberadamente perto do pedaço e longe
+/// do ficheiro: um limite generoso aqui deixaria alguém mandar o ficheiro
+/// inteiro numa parte, e o carregamento voltaria a bater no limite do edge.
+const CHUNK_BODY_LIMIT_BYTES: usize = 40 * 1024 * 1024;
+
+#[derive(Deserialize)]
+struct BeginUploadRequest {
+    filename: String,
+    content_type: String,
+    size_bytes: i64,
+    #[serde(default)]
+    classification: Option<String>,
+    #[serde(default)]
+    folder_id: Option<Uuid>,
+    /// Presente quando isto é uma nova versão de um ficheiro que já existe.
+    #[serde(default)]
+    file_id: Option<Uuid>,
+}
+
+async fn begin_upload(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(workspace_id): Path<Uuid>,
+    Json(request): Json<BeginUploadRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let sessao = files::upload::begin(
+        &mut tx,
+        &principal,
+        &ids,
+        store,
+        &state.config.organisation_slug,
+        workspace_id,
+        files::upload::NewUpload {
+            filename: request.filename,
+            content_type: request.content_type,
+            size_bytes: request.size_bytes,
+            classification: parse_classification(request.classification.as_deref())?,
+            folder_id: request.folder_id,
+            file_id: request.file_id,
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(CoreError::from)?;
+
+    Ok(Json(serde_json::json!({
+        "session_id": sessao.id,
+        "chunk_size_bytes": sessao.chunk_size_bytes,
+        "total_parts": sessao.total_parts,
+        "expires_at": sessao.expires_at,
+        "received_parts": sessao.received_parts,
+    })))
+}
+
+/// O que o servidor já recebeu.
+///
+/// É isto que torna a retoma real e não uma repetição: quem volta — noutro
+/// separador, noutro dia — pergunta o que falta em vez de recomeçar. Sem este
+/// caminho, «resumível» significaria apenas «repete enquanto a página estiver
+/// aberta», que é outra coisa.
+async fn upload_state(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(session_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let estado = files::upload::state_of(&mut tx, &principal, session_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+
+    Ok(Json(serde_json::json!({
+        "session_id": session_id,
+        "chunk_size_bytes": estado.chunk_size_bytes,
+        "total_parts": estado.total_parts,
+        "expires_at": estado.expires_at,
+        "received_parts": estado.received_parts,
+    })))
+}
+
+#[derive(Deserialize)]
+struct PartQuery {
+    /// A soma do pedaço, verificada contra os bytes que chegaram.
+    sha256: String,
+}
+
+async fn upload_part(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path((session_id, part_number)): Path<(Uuid, i32)>,
+    Query(query): Query<PartQuery>,
+    body: axum::body::Bytes,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let aceite = files::upload::accept_part(
+        &mut tx,
+        &principal,
+        store,
+        session_id,
+        part_number,
+        &query.sha256,
+        body.to_vec(),
+    )
+    .await?;
+    tx.commit().await.map_err(CoreError::from)?;
+
+    Ok(Json(serde_json::json!({
+        "part_number": aceite.part_number,
+        "already_present": aceite.already_present,
+        "received_parts": aceite.received_parts,
+        "total_parts": aceite.total_parts,
+    })))
+}
+
+#[derive(Deserialize)]
+struct CompleteUploadRequest {
+    /// A soma do ficheiro inteiro, verificada contra o objecto montado.
+    sha256: String,
+}
+
+async fn complete_upload(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(session_id): Path<Uuid>,
+    Json(request): Json<CompleteUploadRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let versao = files::upload::finalise(
+        &mut tx,
+        &principal,
+        &ids,
+        store,
+        session_id,
+        &request.sha256,
+    )
+    .await?;
+    tx.commit().await.map_err(CoreError::from)?;
+
+    Ok(Json(serde_json::json!({
+        "file_id": versao.file_id,
+        "version_id": versao.version_id,
+        "sequence": versao.sequence,
+    })))
+}
+
+async fn cancel_upload(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(session_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    files::upload::abandon(&mut tx, &principal, store, session_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(serde_json::json!({ "cancelled": true })))
 }
 
 // --- Upload ----------------------------------------------------------------

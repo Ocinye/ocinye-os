@@ -164,6 +164,10 @@ estado-do-correio|3|-p ocinye-core-server --test mail_status_http
 isolamento-de-caixas|10|-p ocinye-core --test mailbox_isolation
 validacao-cientifica|6|-p ocinye-core --test scientific_validation
 linhagem-cientifica|3|-p ocinye-core --test scientific_lineage
+# O carregamento em partes exige armazenamento: é o caminho que atravessa o
+# edge, e sem object store não há nada para atravessar. Em CI a ausência falha,
+# como nas outras suites que dependem de bytes.
+carregamento-em-partes|8|-p ocinye-core --test segmented_upload
 TABELA
 }
 

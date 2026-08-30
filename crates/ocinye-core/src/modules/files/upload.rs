@@ -32,9 +32,9 @@ use ocinye_contracts::Classification;
 use ocinye_observability::CorrelationIds;
 
 use crate::audit::{self, action, AuditEntry};
-use crate::Tx;
 use crate::error::{CoreError, CoreResult};
 use crate::storage::ObjectStore;
+use crate::Tx;
 use ocinye_domain::policy::{authorize, Action};
 use ocinye_domain::Principal;
 
@@ -132,7 +132,8 @@ pub async fn begin(
     workspace_id: Uuid,
     request: NewUpload,
 ) -> CoreResult<UploadSession> {
-    let workspace = crate::modules::research::get_workspace(&mut **tx, principal, workspace_id).await?;
+    let workspace =
+        crate::modules::research::get_workspace(&mut **tx, principal, workspace_id).await?;
     let classification = workspace
         .classification()
         .most_restrictive(request.classification.unwrap_or(Classification::DEFAULT));
@@ -265,7 +266,44 @@ async fn sessao_de(
     Ok(sessao)
 }
 
+/// O estado de uma sessão, para quem volta a ela.
+///
+/// # Porque isto é uma rota e não um campo de memória do browser
+///
+/// Porque a retoma tem de sobreviver ao separador que fechou. Se a lista das
+/// partes recebidas vivesse só no JavaScript da página, «resumível» significaria
+/// «repete enquanto a página estiver aberta» — que é *retry*, e não retoma.
+///
+/// A verdade sobre o que chegou está no servidor, porque é lá que os bytes
+/// estão.
+///
+/// # Errors
+///
+/// Recusa quando a sessão não é de quem pergunta, expirou, ou já fechou.
+pub async fn state_of(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    session_id: Uuid,
+) -> CoreResult<UploadSession> {
+    let sessao = sessao_de(tx, principal, session_id).await?;
+    let recebidas: Vec<i32> = sqlx::query_scalar(
+        "SELECT part_number FROM upload_parts WHERE session_id = $1 ORDER BY part_number",
+    )
+    .bind(session_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    Ok(UploadSession {
+        id: session_id,
+        chunk_size_bytes: sessao.chunk_size_bytes,
+        total_parts: sessao.total_parts,
+        expires_at: sessao.expires_at,
+        received_parts: recebidas,
+    })
+}
+
 /// O que a aceitação de uma parte devolve.
+#[derive(Debug)]
 pub struct PartAccepted {
     /// A parte que acabou de ser aceite.
     pub part_number: i32,
@@ -311,7 +349,9 @@ pub async fn accept_part(
         )));
     }
     if data.is_empty() {
-        return Err(CoreError::Validation("Uma parte vazia não é uma parte.".to_owned()));
+        return Err(CoreError::Validation(
+            "Uma parte vazia não é uma parte.".to_owned(),
+        ));
     }
 
     // A última parte é mais pequena; as outras são exactamente o pedaço
@@ -356,7 +396,12 @@ pub async fn accept_part(
         true
     } else {
         let etag = store
-            .put_part(&sessao.storage_key, &sessao.storage_upload_id, part_number, data)
+            .put_part(
+                &sessao.storage_key,
+                &sessao.storage_upload_id,
+                part_number,
+                data,
+            )
             .await?;
         sqlx::query(
             "INSERT INTO upload_parts (session_id, part_number, size_bytes, sha256, etag)
@@ -401,6 +446,27 @@ pub async fn accept_part(
 ///
 /// Não há `File` nem `FileVersion` enquanto esta função não devolve. Um
 /// carregamento interrompido não deixa meio ficheiro na instituição.
+///
+/// # A fronteira que não é atómica, e a direcção em que ela falha
+///
+/// Montar o objecto acontece no armazenamento; criar o `FileVersion` acontece
+/// no PostgreSQL. Não há transacção que abranja os dois, e não se vai inventar
+/// uma: transacções distribuídas trocam este problema por outro maior.
+///
+/// O que existe é uma **ordem deliberada**. Os bytes são montados e verificados
+/// **antes** de qualquer linha autoritativa ser escrita, e todas as linhas
+/// entram na mesma transacção. Daí resulta a única política que interessa:
+///
+/// > **Uma falha pode deixar bytes sem estado institucional autoritativo; nunca
+/// > pode deixar estado autoritativo a apontar para bytes ausentes.**
+///
+/// Um `FileVersion` que aponte para nada é uma mentira institucional: a
+/// instituição afirma ter um documento que não consegue abrir, e descobre-o no
+/// dia em que precisa dele. Bytes órfãos são resíduo de armazenamento — custam
+/// espaço, são reconciliáveis contra `storage_objects`, e não afirmam nada.
+///
+/// A direcção segura é esta, e é por isso que o `complete_multipart` vem antes
+/// do `INSERT`, e não depois.
 ///
 /// # Errors
 ///
@@ -453,9 +519,7 @@ pub async fn finalise(
     for (indice, (numero, _, _)) in partes.iter().enumerate() {
         let esperado = i32::try_from(indice + 1).unwrap_or(i32::MAX);
         if *numero != esperado {
-            return Err(CoreError::Validation(format!(
-                "Falta a parte {esperado}."
-            )));
+            return Err(CoreError::Validation(format!("Falta a parte {esperado}.")));
         }
     }
 
@@ -482,14 +546,34 @@ pub async fn finalise(
     // inteiro; não provam que o objecto montado é o ficheiro. Só a leitura do
     // que o armazenamento tem prova isso — e é ela que faz «hash final errado»
     // ser uma recusa em vez de uma versão silenciosamente errada.
-    let bytes = store.get(&sessao.storage_key).await?;
-    let soma = crate::storage::sha256_hex(&bytes);
+    //
+    // Por fluxo, e não `get`: com `Vec<u8>` o limite de 512 MiB do produto
+    // tornava-se um requisito de 512 MiB de memória do Core, e vários
+    // carregamentos a fechar ao mesmo tempo passavam a competir pela RAM do
+    // servidor. O pico aqui é o de um bloco.
+    let (soma, lidos) = store.checksum_of(&sessao.storage_key).await?;
+    if lidos != montado as u64 {
+        return Err(CoreError::Validation(format!(
+            "O armazenamento tem {lidos} bytes e as partes somam {montado}."
+        )));
+    }
     if !soma.eq_ignore_ascii_case(sha256) {
-        store
+        // O objecto já foi montado, e não é o ficheiro. Apaga-se, e o estado
+        // diz se o armazenamento confirmou.
+        let abortado = store
             .abort_multipart(&sessao.storage_key, &sessao.storage_upload_id)
             .await;
         store.delete(&sessao.storage_key).await;
-        marcar(tx, session_id, "abandoned").await?;
+        marcar(
+            tx,
+            session_id,
+            if abortado {
+                "abandoned"
+            } else {
+                "cleanup_pending"
+            },
+        )
+        .await?;
         return Err(CoreError::Validation(
             "A soma do ficheiro montado não corresponde à declarada.".to_owned(),
         ));
@@ -606,10 +690,19 @@ pub async fn abandon(
     session_id: Uuid,
 ) -> CoreResult<()> {
     let sessao = sessao_de(tx, principal, session_id).await?;
-    store
+    let abortado = store
         .abort_multipart(&sessao.storage_key, &sessao.storage_upload_id)
         .await;
-    marcar(tx, session_id, "abandoned").await
+    marcar(
+        tx,
+        session_id,
+        if abortado {
+            "abandoned"
+        } else {
+            "cleanup_pending"
+        },
+    )
+    .await
 }
 
 /// Fecha as sessões que expiraram e liberta o que elas seguravam.
@@ -623,23 +716,59 @@ pub async fn abandon(
 /// # Errors
 ///
 /// Returns a database error.
-pub async fn sweep_expired(pool: &sqlx::PgPool, store: Option<&ObjectStore>) -> CoreResult<usize> {
-    let expiradas: Vec<(Uuid, String, String)> = sqlx::query_as(
+pub async fn sweep_expired(
+    pool: &sqlx::PgPool,
+    store: Option<&ObjectStore>,
+) -> CoreResult<Varrimento> {
+    // As que expiraram, e as cuja limpeza ficou por confirmar. Uma sessão em
+    // `cleanup_pending` volta a esta fila: marcar a linha e assumir que o
+    // armazenamento largou as partes é exactamente o defeito que este estado
+    // existe para impedir.
+    let pendentes: Vec<(Uuid, String, String)> = sqlx::query_as(
         "SELECT id, storage_key, storage_upload_id
            FROM upload_sessions
-          WHERE state = 'open' AND expires_at < now()",
+          WHERE (state = 'open' AND expires_at < now())
+             OR state = 'cleanup_pending'
+          ORDER BY expires_at",
     )
     .fetch_all(pool)
     .await?;
 
-    for (id, key, upload_id) in &expiradas {
-        if let Some(store) = store {
-            store.abort_multipart(key, upload_id).await;
+    let mut varrimento = Varrimento::default();
+    for (id, key, upload_id) in &pendentes {
+        // Sem armazenamento não se pode confirmar nada. Marcar `abandoned`
+        // aqui afirmaria uma limpeza que ninguém fez.
+        let abortado = match store {
+            Some(store) => store.abort_multipart(key, upload_id).await,
+            None => false,
+        };
+        if abortado {
+            varrimento.abandonadas += 1;
+        } else {
+            varrimento.por_limpar += 1;
         }
-        sqlx::query("UPDATE upload_sessions SET state = 'abandoned' WHERE id = $1")
-            .bind(id)
-            .execute(pool)
-            .await?;
+        sqlx::query(
+            "UPDATE upload_sessions
+                SET state = $2, cleanup_attempts = cleanup_attempts + 1
+              WHERE id = $1",
+        )
+        .bind(id)
+        .bind(if abortado {
+            "abandoned"
+        } else {
+            "cleanup_pending"
+        })
+        .execute(pool)
+        .await?;
     }
-    Ok(expiradas.len())
+    Ok(varrimento)
+}
+
+/// O que um varrimento fez, e o que ficou por fazer.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Varrimento {
+    /// Sessões cujas partes o armazenamento confirmou ter largado.
+    pub abandonadas: usize,
+    /// Sessões cujo aborto falhou e que voltam à fila.
+    pub por_limpar: usize,
 }

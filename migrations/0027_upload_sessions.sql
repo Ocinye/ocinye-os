@@ -46,11 +46,28 @@ CREATE TABLE upload_sessions (
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at          TIMESTAMPTZ NOT NULL,
 
+    -- Quatro estados, e não três.
+    --
+    -- `abandoned` significa que as partes foram **realmente** abortadas no
+    -- armazenamento. `cleanup_pending` significa que a sessão acabou mas o
+    -- armazenamento não confirmou o aborto — e essa diferença importa: marcar
+    -- a linha e assumir que o S3 largou as partes deixa-as lá a ocupar espaço
+    -- que nada refere e que nenhuma listagem explica.
+    --
+    --     open             a receber partes; sem File nem FileVersion
+    --     finalised        File/FileVersion existe; o objecto deixou de ser temporário
+    --     abandoned        sem File/FileVersion; multipart abortado e confirmado
+    --     cleanup_pending  sem File/FileVersion; o aborto falhou e repete-se
     state               TEXT NOT NULL DEFAULT 'open',
     finalised_at        TIMESTAMPTZ,
 
+    -- Quantas vezes a limpeza já foi tentada. Sem isto, uma sessão cujo aborto
+    -- falha para sempre é tentada para sempre, e o registo enche-se do mesmo
+    -- erro em vez de o tornar visível.
+    cleanup_attempts    INTEGER NOT NULL DEFAULT 0,
+
     CONSTRAINT ck_upload_sessions_state
-        CHECK (state IN ('open', 'finalised', 'abandoned')),
+        CHECK (state IN ('open', 'finalised', 'abandoned', 'cleanup_pending')),
 
     -- Uma sessão finalizada tem de dizer quando. Uma aberta não pode dizer.
     CONSTRAINT ck_upload_sessions_finalised
@@ -58,6 +75,10 @@ CREATE TABLE upload_sessions (
 );
 
 CREATE INDEX ix_upload_sessions_expiry ON upload_sessions (state, expires_at);
+
+-- A fila da limpeza por repetir.
+CREATE INDEX ix_upload_sessions_cleanup ON upload_sessions (state, cleanup_attempts)
+    WHERE state = 'cleanup_pending';
 CREATE INDEX ix_upload_sessions_actor ON upload_sessions (created_by_id, state);
 
 -- As partes que já chegaram.

@@ -236,6 +236,54 @@ impl ObjectStore {
         Ok(())
     }
 
+    /// A soma de um objecto, calculada **sem o segurar inteiro**.
+    ///
+    /// # Porque isto não é `sha256_hex(get(key))`
+    ///
+    /// Porque `get` devolve `Vec<u8>`: para verificar um ficheiro de meio
+    /// gigabyte, o Core teria de o ter todo em memória de uma vez. Com vários
+    /// carregamentos a fechar ao mesmo tempo, a memória do servidor passaria a
+    /// decidir quantas pessoas podem trabalhar — e o limite de 512 MiB do
+    /// produto tornar-se-ia, em silêncio, um requisito de 512 MiB de RAM.
+    ///
+    /// > **O tamanho máximo de um ficheiro lógico não determina o pico de
+    /// > memória do Core.**
+    ///
+    /// Aqui os blocos entram no digest e são largados. O pico é o de um bloco,
+    /// e não o do ficheiro.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::StorageUnavailable`] when the object cannot be read.
+    pub async fn checksum_of(&self, key: &str) -> CoreResult<(String, u64)> {
+        let object = self
+            .client
+            .get_object()
+            .bucket(&self.config.bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|error| {
+                tracing::error!(error = ?error, "object storage get failed");
+                CoreError::StorageUnavailable("The object could not be read.".to_owned())
+            })?;
+
+        let mut digest = Sha256::new();
+        let mut lidos: u64 = 0;
+        let mut corpo = object.body;
+
+        while let Some(bloco) = corpo.next().await {
+            let bloco = bloco.map_err(|error| {
+                tracing::error!(error = ?error, "object storage stream failed");
+                CoreError::StorageUnavailable("The object could not be read.".to_owned())
+            })?;
+            lidos += bloco.len() as u64;
+            digest.update(&bloco);
+        }
+
+        Ok((hex::encode(digest.finalize()), lidos))
+    }
+
     /// Abre um carregamento em partes e devolve o seu identificador.
     ///
     /// # Porque o objecto se monta no armazenamento e não no Core
@@ -359,10 +407,15 @@ impl ObjectStore {
     /// nada refere e que nenhuma listagem mostra: o armazenamento cresce e
     /// ninguém consegue dizer porquê.
     ///
-    /// Não devolve erro. Chega de sítios onde a limpeza pode falhar depois da
-    /// decisão já estar tomada — o que ficar por apagar fica registado.
-    pub async fn abort_multipart(&self, key: &str, upload_id: &str) {
-        if let Err(error) = self
+    /// Devolve se o armazenamento **confirmou** o aborto.
+    ///
+    /// Não devolve `CoreError` porque a decisão de desistir já foi tomada e não
+    /// se reverte por a limpeza ter falhado. Mas devolve a verdade: assumir que
+    /// o aborto funcionou porque foi pedido deixaria as partes lá, a ocupar
+    /// espaço que nada refere — e quem chama precisa de saber para voltar a
+    /// tentar.
+    pub async fn abort_multipart(&self, key: &str, upload_id: &str) -> bool {
+        match self
             .client
             .abort_multipart_upload()
             .bucket(&self.config.bucket)
@@ -371,7 +424,11 @@ impl ObjectStore {
             .send()
             .await
         {
-            tracing::warn!(error = ?error, key, "multipart upload could not be aborted");
+            Ok(_) => true,
+            Err(error) => {
+                tracing::warn!(error = ?error, key, "multipart upload could not be aborted");
+                false
+            }
         }
     }
 
