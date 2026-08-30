@@ -75,7 +75,14 @@ services:
     <<: *comum
     image: ocinye/ocinye-workspace:${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
     build:
-      context: .
+      # A raiz do repositório, e não `.`.
+      #
+      # O `context` resolve-se relativamente à pasta **deste ficheiro**, e não a
+      # de onde o comando corre. Com `.`, o Docker procurava
+      # `infra/compose/infra/docker/Dockerfile` — e a construção só falhou no
+      # servidor, porque em máquina de desenvolvimento ninguém tinha chegado a
+      # construir por aqui.
+      context: ../..
       dockerfile: infra/docker/Dockerfile
       args:
         BIN: ocinye-workspace
@@ -105,7 +112,14 @@ services:
     <<: *comum
     image: ocinye/ocinye-core-server:${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
     build:
-      context: .
+      # A raiz do repositório, e não `.`.
+      #
+      # O `context` resolve-se relativamente à pasta **deste ficheiro**, e não a
+      # de onde o comando corre. Com `.`, o Docker procurava
+      # `infra/compose/infra/docker/Dockerfile` — e a construção só falhou no
+      # servidor, porque em máquina de desenvolvimento ninguém tinha chegado a
+      # construir por aqui.
+      context: ../..
       dockerfile: infra/docker/Dockerfile
       args:
         BIN: ocinye-core-server
@@ -133,7 +147,14 @@ services:
     <<: *comum
     image: ocinye/ocinye-worker:${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
     build:
-      context: .
+      # A raiz do repositório, e não `.`.
+      #
+      # O `context` resolve-se relativamente à pasta **deste ficheiro**, e não a
+      # de onde o comando corre. Com `.`, o Docker procurava
+      # `infra/compose/infra/docker/Dockerfile` — e a construção só falhou no
+      # servidor, porque em máquina de desenvolvimento ninguém tinha chegado a
+      # construir por aqui.
+      context: ../..
       dockerfile: infra/docker/Dockerfile
       args:
         BIN: ocinye-worker
