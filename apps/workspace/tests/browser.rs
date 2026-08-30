@@ -7505,7 +7505,8 @@ async fn uma_pessoa_organiza_e_percorre_os_ficheiros_no_browser() {
 
     // O ambiente escolhe-se: não há um por omissão.
     let page = harness.open("/files").await;
-    esperar_por(&page, "Escolha o ambiente").await;
+    // O módulo abre na vista agregada: não se escolhe um ambiente para ver.
+    esperar_por(&page, "em todos os ambientes a que pertence").await;
 
     let lista = harness
         .open(&format!("/files?workspace={workspace_id}"))
@@ -8631,7 +8632,7 @@ async fn ver_a_entrada_de_ficheiros_nao_da_acesso_a_ficheiro_nenhum() {
     // membro activo o alcança — por isso ele aparece na escolha, e deve
     // aparecer. O que **não** aparece é o ficheiro RESTRICTED lá dentro.
     let ficheiros = harness.open("/files").await;
-    esperar_por(&ficheiros, "Escolha o ambiente").await;
+    esperar_por(&ficheiros, "em todos os ambientes a que pertence").await;
 
     let dentro = harness
         .open(&format!("/files?workspace={workspace_id}"))
@@ -8694,7 +8695,13 @@ async fn uma_conta_de_investigacao_sem_pertencas_ve_os_modulos_de_investigacao()
 
     // E entrar não dá acesso: o ecrã diz a verdade em vez de recusar.
     let ficheiros = harness.open("/files").await;
-    esperar_por(&ficheiros, "Não alcança nenhum ambiente").await;
+    // Sem pertenças: um estado vazio que ensina, e não uma recusa.
+    esperar_por(&ficheiros, "Ainda não tem ficheiros acessíveis").await;
+    let html = ficheiros.content().await.expect("conteúdo");
+    assert!(
+        html.contains("Não tem onde carregar ficheiros"),
+        "a página não diz que não há onde carregar"
+    );
 }
 
 /// Um colaborador externo não ganha módulos de investigação.
@@ -8894,4 +8901,69 @@ async fn quem_nao_gere_a_unidade_nao_recebe_os_controlos_nem_a_operacao() {
         depois, antes,
         "alguém sem autoridade acrescentou-se a uma unidade por HTTP directo"
     );
+}
+
+/// A vista agregada mostra ficheiros de vários ambientes, e conta o que mostra.
+///
+/// # A propriedade
+///
+/// > **Para qualquer vista agregada, a visibilidade da contagem é a mesma da
+/// > lista.**
+///
+/// Nada de «94 recursos» e três linhas porque 91 estavam escondidos.
+#[tokio::test]
+async fn a_vista_agregada_de_ficheiros_atravessa_ambientes_e_conta_o_que_mostra() {
+    let harness = harness!();
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // Dois ambientes onde pertence, com um ficheiro cada.
+    let primeiro = harness.owns_a_workspace(person_id).await;
+    let segundo = harness.owns_a_workspace(person_id).await;
+    let nome_a = unique_title("alfa");
+    let nome_b = unique_title("beta");
+    semear_ficheiro(&harness, primeiro, &nome_a, "INTERNAL").await;
+    semear_ficheiro(&harness, segundo, &nome_b, "INTERNAL").await;
+
+    // E um terceiro ambiente, de outra pessoa — criada sem `sign_in`, porque
+    // `sign_in` troca a sessão do browser e o teste passaria a ser sobre ela.
+    let outro_id: Uuid = {
+        let handle = format!("o{}", Uuid::new_v4().simple());
+        sqlx::query_scalar(
+            "INSERT INTO people (organisation_id, full_name, email, status)
+             VALUES ($1, $2, $3, 'active') RETURNING id",
+        )
+        .bind(harness.organisation_id)
+        .bind("Outra pessoa")
+        .bind(format!("{handle}@ocinye.com"))
+        .fetch_one(&harness.pool)
+        .await
+        .expect("pessoa")
+    };
+    let alheio = harness.owns_a_workspace(outro_id).await;
+    let nome_escondido = unique_title("escondido");
+    semear_ficheiro(&harness, alheio, &nome_escondido, "RESTRICTED").await;
+
+    let pagina = harness.open("/files").await;
+    esperar_por(&pagina, "em todos os ambientes a que pertence").await;
+    let html = pagina.content().await.expect("conteúdo");
+
+    // A vista agregada mostra os dois, de ambientes diferentes.
+    assert!(
+        html.contains(&nome_a) && html.contains(&nome_b),
+        "a vista agregada não atravessa ambientes"
+    );
+    assert!(
+        !html.contains(&nome_escondido),
+        "um ficheiro RESTRICTED de outro ambiente apareceu na vista agregada"
+    );
+
+    // A contagem não conta o que a lista esconde.
+    let visiveis: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM files WHERE workspace_id = ANY($1)")
+            .bind(vec![primeiro, segundo])
+            .fetch_one(&harness.pool)
+            .await
+            .expect("contagem");
+    assert!(visiveis >= 2, "o cenário não foi montado");
 }

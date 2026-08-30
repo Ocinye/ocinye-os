@@ -5634,3 +5634,15 @@ select.oc-entrada {
   border-top: 1px solid var(--oc-border-soft);
 }
 .oc-pessoa__acrescentar .oc-select { flex: 1; min-width: 180px; }
+
+/* O destino de carregamento, e a vista agregada de ficheiros. */
+.oc-files__destino {
+  display: flex; align-items: center; gap: var(--oc-space-3); flex-wrap: wrap;
+}
+.oc-files__destino .oc-select { flex: 1; min-width: 220px; }
+
+.oc-table--files-all .oc-table__head,
+.oc-table--files-all .oc-table__row {
+  grid-template-columns: minmax(260px,2.4fr) 140px 130px 100px 90px;
+  min-width: 880px;
+}

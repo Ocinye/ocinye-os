@@ -1080,3 +1080,73 @@ pub async fn content_of_version(
     let (versao, _) = get_version(&mut *executor, principal, file_version_id).await?;
     super::extraction::text_of_version(&mut *executor, versao.version_id, max_chars).await
 }
+
+/// A vista agregada dos ficheiros: tudo o que este principal alcança.
+pub struct AllFiles {
+    /// Os ficheiros, do mais recentemente alterado para trás.
+    pub files: Vec<repo::FileAcrossWorkspaces>,
+    /// Quantos existem ao todo, pelo **mesmo** predicado da lista.
+    pub total: i64,
+    /// Os ambientes onde este principal pode criar ficheiros.
+    ///
+    /// Carregar exige destino. Zero destinos é um estado honesto e diz-se;
+    /// um pode pré-seleccionar-se; vários obrigam a escolher — e nunca se
+    /// escolhe um por alguém.
+    pub destinos: Vec<(Uuid, String)>,
+}
+
+/// Todos os ficheiros que este principal alcança, em todos os ambientes.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn all(pool: &sqlx::PgPool, principal: &Principal, limit: i64) -> CoreResult<AllFiles> {
+    let filtro = ocinye_domain::policy::VisibilityFilter::for_principal(principal);
+    if filtro.is_never_satisfiable() {
+        return Ok(AllFiles {
+            files: Vec::new(),
+            total: 0,
+            destinos: Vec::new(),
+        });
+    }
+
+    let files =
+        repo::list_files_across_workspaces(pool, principal.organisation_id, &filtro, limit).await?;
+    let total =
+        repo::count_files_across_workspaces(pool, principal.organisation_id, &filtro).await?;
+
+    // Os destinos não se derivam da lista: quem não tem ficheiro nenhum pode ter
+    // onde os pôr, e quem vê muitos pode não poder escrever em nenhum. São
+    // perguntas diferentes, e esta faz-se ao `authorize` que `create` faz.
+    let (ambientes, _) = crate::modules::research::list_workspaces(
+        pool,
+        principal,
+        Default::default(),
+        ocinye_contracts::PageRequest {
+            page: 1,
+            page_size: 100,
+        },
+    )
+    .await?;
+    let mut destinos = Vec::new();
+    for ambiente in ambientes {
+        let pode = ocinye_domain::policy::authorize(
+            principal,
+            Action::Create,
+            &file_context(&ambiente, ambiente.classification()),
+        )
+        .is_ok();
+        if pode {
+            destinos.push((
+                ambiente.id,
+                format!("{} · {}", ambiente.code, ambiente.title),
+            ));
+        }
+    }
+
+    Ok(AllFiles {
+        files,
+        total,
+        destinos,
+    })
+}

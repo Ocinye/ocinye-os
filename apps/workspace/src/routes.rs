@@ -7258,17 +7258,32 @@ async fn files_browse(
     let lista = optional(&state, &member, "/api/v1/workspaces?page_size=100").await;
     let workspaces = ambientes(&lista);
 
+    // Sem ambiente indicado: a vista agregada, que é o que o módulo é.
     let Some(workspace_id) = query.workspace else {
-        let content = ui::screens::files::files(ui::screens::files::FilesView {
-            workspaces,
-            workspace_id: None,
-            workspace_name: String::new(),
-            folder_id: None,
-            path: vec![],
-            folders: vec![],
-            files: vec![],
-            may_upload: false,
-            notice: None,
+        let tudo = optional(&state, &member, "/api/v1/files").await;
+        let content = ui::screens::files::all_files(ui::screens::files::AllFilesView {
+            files: tudo
+                .get("items")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default(),
+            total: tudo.get("total").and_then(Value::as_i64).unwrap_or(0),
+            destinos: tudo
+                .get("destinations")
+                .and_then(Value::as_array)
+                .map(|linhas| {
+                    linhas
+                        .iter()
+                        .filter_map(|d| {
+                            Some((
+                                d.get("id").and_then(Value::as_str)?.to_owned(),
+                                d.get("label").and_then(Value::as_str)?.to_owned(),
+                            ))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            notice: aviso_de(query.ok.as_deref(), query.erro.as_deref()),
         });
         return shell_page(
             "Ficheiros",
