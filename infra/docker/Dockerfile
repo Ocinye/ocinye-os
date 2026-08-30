@@ -30,8 +30,23 @@ RUN apt-get update \
 COPY . .
 
 ARG BIN
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/build/target \
+# `sharing=locked`, e não o `shared` por omissão.
+#
+# As três imagens constroem em paralelo e partilhavam este cache. Duas
+# desempacotavam o mesmo crate ao mesmo tempo e a segunda encontrava o
+# `.cargo-ok` da primeira meio escrito:
+#
+#     failed to unpack package `async-channel`
+#     File exists (os error 17)
+#
+# Um cache partilhado sem tranca não é um cache: é uma corrida que só se
+# manifesta quando há paralelismo — e por isso nunca aparece em máquina de
+# quem constrói uma imagem de cada vez.
+#
+# O `target` leva `id` por binário: são três compilações diferentes, e
+# partilhá-lo faria uma invalidar os artefactos da outra a cada construção.
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/build/target,id=ocinye-target-${BIN},sharing=locked \
     cargo build --release --locked --bin "${BIN}" \
  && cp "target/release/${BIN}" /usr/local/bin/ocinye-binario
 
