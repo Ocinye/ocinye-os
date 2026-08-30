@@ -134,9 +134,14 @@ suites() {
 # frase que só existe no corpo de um PDF, e o formato que se guarda mas não se
 # lê. Ambas exigem armazenamento; sem ele, falham na CI em vez de se saltarem.
 #
+# 76 desde 2026-08-30: entrou a viagem da conta suspensa a meio da sessão. A
+# pertença sobrevive à suspensão e a autoridade não — e verificou-se por
+# reversão que só desligando **quatro** camadas independentes é que a unidade
+# volta a ser legível a quem foi suspenso.
+#
 # Auditado em 2026-08-29, em série, marca a marca. O número continua fixo: uma
 # viagem que deixe de levantar faz a contagem cair e o portão fecha.
-viagens-de-browser|75|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|74
+viagens-de-browser|76|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|75
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
@@ -181,7 +186,14 @@ verifica() {
 
     passados=$(grep -cE '^test .+ \.\.\. ok$' "$saida" || true)
     ignorados=$(grep -cE '^test .+ \.\.\. ignored' "$saida" || true)
-    saltados=$(grep -c '^skipping:' "$saida" || true)
+    # Dois marcadores, porque há duas línguas a dizer a mesma coisa.
+    #
+    # O portão procurava só `skipping:` — o marcador em inglês do arranque do
+    # browser. As viagens que dependem de object storage escrevem `SALTADO:`,
+    # e por isso sete delas passavam por verdes sem que o portão as visse.
+    # Um teste saltado reporta ok; se o portão não conhece o marcador, o
+    # portão também reporta ok.
+    saltados=$(grep -cE '^(skipping:|SALTADO:)' "$saida" || true)
     marcas=0
     [ -n "$marca" ] && marcas=$(grep -cF "$marca" "$saida" || true)
     rm -f "$saida"

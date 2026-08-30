@@ -27,7 +27,7 @@ use std::time::Duration;
 use chromiumoxide::browser::{Browser, BrowserConfig};
 use chromiumoxide::Page;
 use futures::StreamExt;
-use ocinye_contracts::{CredentialKind, TechnicalRole, UnitRole};
+use ocinye_contracts::{AccountStatus, CredentialKind, TechnicalRole, UnitRole};
 use ocinye_core::config::CoreConfig;
 use ocinye_core::modules::identity::{Authenticator, Throttle};
 use ocinye_core::password::Secret;
@@ -779,6 +779,42 @@ impl Harness {
         tx.commit().await.expect("commit");
 
         (h.id, e.id, x.id, r.id)
+    }
+
+    /// Uma conta administrativa **fora** do browser.
+    ///
+    /// Não é `sign_in`: uma segunda entrada trocaria a sessão do navegador, e a
+    /// página seguinte seria lida pelo administrador em vez de ser lida por
+    /// quem se quer ver suspenso — o teste passaria a medir outra pessoa.
+    async fn pessoa_administrativa(
+        &self,
+        roles: &[TechnicalRole],
+    ) -> ocinye_core::modules::identity::Person {
+        let handle = format!("a{}", Uuid::new_v4().simple());
+        let person_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO people (organisation_id, full_name, email, status)
+                 VALUES ($1, $2, $3, 'active') RETURNING id",
+        )
+        .bind(self.organisation_id)
+        .bind(&handle)
+        .bind(format!("{handle}@ocinye.com"))
+        .fetch_one(&self.pool)
+        .await
+        .expect("pessoa");
+
+        for role in roles {
+            sqlx::query("INSERT INTO person_roles (person_id, role) VALUES ($1, $2)")
+                .bind(person_id)
+                .bind(role.as_str())
+                .execute(&self.pool)
+                .await
+                .expect("papel");
+        }
+
+        ocinye_core::modules::identity::person_by_id(&self.pool, person_id)
+            .await
+            .expect("leitura")
+            .expect("pessoa")
     }
 
     async fn manages_a_unit(&self, person_id: Uuid) -> Uuid {
@@ -8966,4 +9002,104 @@ async fn a_vista_agregada_de_ficheiros_atravessa_ambientes_e_conta_o_que_mostra(
             .await
             .expect("contagem");
     assert!(visiveis >= 2, "o cenário não foi montado");
+}
+
+/// Suspender uma conta tira a autoridade **já**, e não no próximo início de
+/// sessão.
+///
+/// > Uma decisão de acesso que só produz efeito na próxima autenticação não é
+/// > uma revogação.
+///
+/// A pertença sobrevive à suspensão — a pessoa continua a constar da unidade —
+/// e é precisamente por isso que a pertença não pode bastar para autorizar. Se
+/// bastasse, uma conta suspensa continuaria a trabalhar até decidir sair.
+///
+/// O controlo positivo vem primeiro: a mesma sessão, no mesmo caminho, tem de
+/// funcionar antes da suspensão. Sem ele, uma página que falhasse por qualquer
+/// outra razão passaria por prova de revogação.
+#[tokio::test]
+async fn uma_conta_suspensa_perde_autoridade_a_meio_da_sessao() {
+    let harness = harness!();
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.manages_a_unit(person_id).await;
+
+    // ── Controlo positivo ───────────────────────────────────────────────
+    let antes = harness.open("/units").await;
+    let html = antes.content().await.expect("conteúdo");
+    assert!(
+        html.contains("Unidades"),
+        "a sessão não funcionava antes da suspensão; nada do que se segue prova revogação"
+    );
+
+    // ── A suspensão, pelo caminho institucional ─────────────────────────
+    //
+    // Não por `UPDATE people SET status`: escrever o estado à mão provaria que
+    // uma coluna muda, e não que o Core revoga. O que interessa medir é o
+    // caminho que uma pessoa autorizada usaria.
+    let administradora = harness
+        .pessoa_administrativa(&[TechnicalRole::OrganisationAdmin])
+        .await;
+    let quem_suspende =
+        ocinye_core::modules::identity::principal_for_person(&harness.pool, &administradora)
+            .await
+            .expect("principal");
+    let alvo = ocinye_core::modules::identity::person_by_id(&harness.pool, person_id)
+        .await
+        .expect("leitura")
+        .expect("a pessoa existe");
+    ocinye_core::modules::identity::set_account_status(
+        &harness.pool,
+        &quem_suspende,
+        &alvo,
+        AccountStatus::Suspended,
+        "viagem de verificação",
+        &ids,
+    )
+    .await
+    .expect("suspensão");
+
+    // A pertença sobreviveu. É a metade que torna o teste não-trivial.
+    let ainda_pertence: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM unit_memberships WHERE person_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(person_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("pertença");
+    assert!(
+        ainda_pertence > 0,
+        "a suspensão apagou a pertença; então o teste mediria a ausência de pertença, \
+         e não a perda de autoridade"
+    );
+
+    // ── O pedido seguinte, na mesma sessão ──────────────────────────────
+    //
+    // O que se exige é a **negação**, e não uma apresentação em concreto. A
+    // suspensão é recusada por três caminhos independentes, e qualquer um
+    // deles satisfaz a propriedade:
+    //
+    //   1. `set_account_status` revoga todas as sessões — a seguinte não existe;
+    //   2. `CurrentSession` relê o estado da pessoa a cada pedido;
+    //   3. `CurrentPrincipal` volta a exigir `is_active`;
+    //   4. a própria política de domínio recusa tudo a um principal inactivo.
+    //
+    // Exigir «voltar ao Login» amarraria o teste aos caminhos 1 e 2, e uma
+    // recusa correcta pelo caminho 3 ou 4 — «Sem acesso» — passaria por falha.
+    //
+    // Cada camada basta sozinha: só desligando **as quatro** é que a página da
+    // unidade volta a aparecer a uma conta suspensa. Foi assim que se
+    // verificou que este teste morde.
+    let depois = harness.open("/units").await;
+    let html = depois.content().await.expect("conteúdo");
+    assert!(
+        !html.contains("Gerir pessoas"),
+        "uma conta suspensa continuou a ver controlos de gestão da unidade"
+    );
+    assert!(
+        !html.contains("Unidade do harness"),
+        "uma conta suspensa continuou a ler a unidade a que pertence: {}",
+        &html[..html.len().min(400)]
+    );
 }

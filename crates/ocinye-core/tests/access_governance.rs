@@ -13,7 +13,17 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 async fn pool() -> Option<PgPool> {
-    let url = std::env::var("OCINYE_TEST_DATABASE_URL").ok()?;
+    let Ok(url) = std::env::var("OCINYE_TEST_DATABASE_URL") else {
+        // Em CI, a ausência da dependência não pode converter o teste em verde
+        // por skip. Um teste que se ignora a si próprio passa, e `cargo test`
+        // esconde a saída de quem passa: o skip seria invisível.
+        assert!(
+            std::env::var("CI").is_err(),
+            "OCINYE_TEST_DATABASE_URL em falta em CI: a governação de acesso \
+             ficaria por verificar e a suite reportaria verde"
+        );
+        return None;
+    };
     let pool = PgPool::connect(&url)
         .await
         .expect("OCINYE_TEST_DATABASE_URL está definida mas a base não responde");
@@ -301,4 +311,195 @@ async fn quem_cria_uma_ideia_pode_continuar_a_usar_o_ambiente() {
     ocinye_core::modules::research::get_workspace(&pool, &admin, ambiente.id)
         .await
         .expect("quem criou a ideia não alcança o ambiente dela");
+}
+
+// ── A matriz de personas ────────────────────────────────────────────────
+//
+// Dois eixos, e nunca uma tabela só.
+//
+//   relevância    «este módulo pertence ao trabalho desta pessoa?»
+//   autorização   «esta pessoa pode ver ou fazer isto, aqui?»
+//
+// Uma tabela única onde «Ficheiros = true» seria lida como ACL daqui a seis
+// meses, e é exactamente esse o erro que esta milestone existe para corrigir.
+
+use ocinye_domain::policy::relevance::{is_relevant, Module};
+
+/// Quem faz investigação conhece o espaço onde ela acontece — tenha ou não
+/// trabalho atribuído hoje.
+///
+/// O principal é construído pelo caminho real (`relido`), e não à mão: um
+/// principal sintético provaria a tabela deste ficheiro, não o sistema.
+#[tokio::test]
+async fn a_relevancia_deriva_do_papel_e_nao_da_pertenca() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+
+    let casos: &[(TechnicalRole, bool)] = &[
+        (TechnicalRole::ResearchMember, true),
+        (TechnicalRole::ResearchLead, true),
+        (TechnicalRole::UnitManager, true),
+        (TechnicalRole::OrganisationAdmin, true),
+        // Administrar a plataforma não é fazer investigação. É o mesmo
+        // princípio que impede um papel administrativo de ler RESTRICTED.
+        (TechnicalRole::PlatformAdmin, false),
+        (TechnicalRole::Collaborator, false),
+        (TechnicalRole::ExternalCollaborator, false),
+        (TechnicalRole::Auditor, false),
+    ];
+
+    for (papel, esperado) in casos {
+        let principal = person(&pool, org, &[*papel]).await;
+
+        for modulo in [
+            Module::Files,
+            Module::Knowledge,
+            Module::Bibliography,
+            Module::Datasets,
+        ] {
+            assert_eq!(
+                is_relevant(&principal, modulo),
+                *esperado,
+                "{}: {} devia ser {}",
+                papel.as_str(),
+                modulo.as_str(),
+                if *esperado { "relevante" } else { "irrelevante" }
+            );
+        }
+    }
+}
+
+/// A relevância não muda quando a pertença muda.
+///
+/// É a metade que impede o eixo de colapsar no outro: se acrescentar uma
+/// pertença mudasse a relevância, os dois eixos seriam o mesmo com nomes
+/// diferentes — e a navegação voltaria a ser uma ACL.
+#[tokio::test]
+async fn a_relevancia_nao_muda_quando_a_pertenca_muda() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+
+    let admin = person(&pool, org, &[TechnicalRole::PlatformAdmin]).await;
+    // A persona tem de ser alguém para quem a relevância é `false`. Com um
+    // membro de investigação — relevante desde o início — o colapso dos dois
+    // eixos passaria despercebido: `true` continuaria `true`.
+    let membro = person(&pool, org, &[TechnicalRole::Collaborator]).await;
+    assert!(
+        !is_relevant(&membro, Module::Files),
+        "a persona escolhida já era relevante; o teste não conseguiria ver o colapso"
+    );
+
+    let antes: Vec<_> = Module::all()
+        .into_iter()
+        .map(|m| (m, is_relevant(&membro, m)))
+        .collect();
+
+    // Uma unidade, e a pessoa lá dentro.
+    let mut tx = pool.begin().await.expect("tx");
+    let unidade = ocinye_core::modules::organisation::create_unit(
+        &mut tx,
+        &admin,
+        &ids,
+        ocinye_core::modules::organisation::NewUnit {
+            code: format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase(),
+            name: "Unidade".to_owned(),
+            description: None,
+            research_areas: Vec::new(),
+        },
+    )
+    .await
+    .expect("unidade");
+    tx.commit().await.expect("commit");
+
+    let admin = relido(&pool, admin.person_id).await;
+    let mut tx = pool.begin().await.expect("tx");
+    ocinye_core::modules::organisation::add_unit_member(
+        &mut tx,
+        &admin,
+        &ids,
+        unidade.id,
+        membro.person_id,
+        UnitRole::Member,
+    )
+    .await
+    .expect("pertença");
+    tx.commit().await.expect("commit");
+
+    // A autorização mudou: agora tem `DocumentsView` no contexto da unidade.
+    let membro = relido(&pool, membro.person_id).await;
+    assert!(
+        !membro.unit_roles.is_empty(),
+        "a pertença não chegou ao principal"
+    );
+
+    // A relevância não mudou. Era relevante antes, e continua a ser.
+    let depois: Vec<_> = Module::all()
+        .into_iter()
+        .map(|m| (m, is_relevant(&membro, m)))
+        .collect();
+    assert_eq!(
+        antes, depois,
+        "a relevância mudou com a pertença; os dois eixos colapsaram num só"
+    );
+}
+
+/// Administrar a plataforma não concede leitura de material RESTRICTED.
+///
+/// Esta é a política existente, e este teste está aqui para que continue a
+/// existir depois de toda esta milestone lhe ter mexido à volta.
+#[tokio::test]
+async fn administrar_a_plataforma_nao_da_acesso_a_investigacao_restrita() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+
+    let dono = person(&pool, org, &[TechnicalRole::PlatformAdmin]).await;
+    let mut tx = pool.begin().await.expect("tx");
+    let unidade = ocinye_core::modules::organisation::create_unit(
+        &mut tx,
+        &dono,
+        &ids,
+        ocinye_core::modules::organisation::NewUnit {
+            code: format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase(),
+            name: "Unidade".to_owned(),
+            description: None,
+            research_areas: Vec::new(),
+        },
+    )
+    .await
+    .expect("unidade");
+    tx.commit().await.expect("commit");
+
+    let mut dono = relido(&pool, dono.person_id).await;
+    let mut tx = pool.begin().await.expect("tx");
+    let (_, ambiente) = ocinye_core::modules::research::create_idea(
+        &mut tx,
+        &mut dono,
+        &ids,
+        ocinye_core::modules::research::NewIdea {
+            unit_id: unidade.id,
+            title: "Trabalho restrito".to_owned(),
+            summary: None,
+            research_question: None,
+            hypothesis: None,
+            motivation: None,
+            keywords: Vec::new(),
+            classification: Some(ocinye_contracts::Classification::Restricted),
+        },
+    )
+    .await
+    .expect("ideia");
+    tx.commit().await.expect("commit");
+
+    // Outro administrador de plataforma, sem pertença nenhuma.
+    let outro_admin = person(&pool, org, &[TechnicalRole::PlatformAdmin]).await;
+
+    let alcanca = ocinye_core::modules::research::get_workspace(&pool, &outro_admin, ambiente.id)
+        .await
+        .is_ok();
+    assert!(
+        !alcanca,
+        "um administrador de plataforma alcançou um ambiente RESTRICTED sem pertença"
+    );
 }
