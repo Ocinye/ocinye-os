@@ -55,6 +55,32 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
+    // O fornecedor de embeddings, quando a instalação o tem.
+    //
+    // O worker passava `None` literal aqui. `from_config` existia e nunca era
+    // chamado, pelo que **nenhuma instalação** — configurada ou não — produzia
+    // embeddings: a recuperação semântica ficava vazia sem que nada o dissesse.
+    // Um `None` derivado da configuração é um estado honesto; um `None` escrito
+    // à mão é uma capacidade desligada em silêncio.
+    let embeddings = ocinye_core::modules::intelligence::embeddings::from_config(&config.ai);
+    match embeddings.as_ref() {
+        Some(provider) => {
+            let identidade = provider.identity();
+            tracing::info!(
+                provider = %identidade.provider,
+                model = %identidade.model,
+                revision = %identidade.revision,
+                dimensions = identidade.dimensions,
+                "embedding provider configured"
+            );
+        }
+        None => tracing::warn!(
+            configured = %config.ai.embedding_provider,
+            "no embedding provider configured; semantic retrieval stays NOT_CONFIGURED \
+             while lexical retrieval continues to work"
+        ),
+    }
+
     let offline_after = i64::try_from(config.compute.node_offline_after.as_secs()).unwrap_or(120);
 
     let mut maintenance = tokio::time::interval(MAINTENANCE_INTERVAL);
@@ -138,7 +164,7 @@ async fn main() -> anyhow::Result<()> {
                     Err(error) => tracing::error!(error = %error, "mail ingestion pass failed"),
                 }
             }
-            drained = outbox::drain(&pool, BATCH_SIZE, store.as_ref(), None) => {
+            drained = outbox::drain(&pool, BATCH_SIZE, store.as_ref(), embeddings.as_deref()) => {
                 match drained {
                     // An empty pass means idle: back off rather than spin.
                     Ok(0) => tokio::time::sleep(IDLE_POLL_INTERVAL).await,
