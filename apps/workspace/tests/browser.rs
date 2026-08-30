@@ -9412,10 +9412,29 @@ async fn quem_nao_lidera_o_ambiente_nao_recebe_os_controlos_nem_a_operacao() {
 #[tokio::test]
 async fn nenhum_ecra_da_navegacao_esta_morto() {
     const ECRAS: [&str; 23] = [
-        "/", "/activity", "/admin", "/ai", "/ai/agents", "/ai/prompt", "/ask",
-        "/audit", "/bibliography", "/calendar", "/compute", "/datasets",
-        "/files", "/help", "/ideas", "/knowledge", "/mail", "/messages",
-        "/my-work", "/projects", "/search", "/settings", "/units",
+        "/",
+        "/activity",
+        "/admin",
+        "/ai",
+        "/ai/agents",
+        "/ai/prompt",
+        "/ask",
+        "/audit",
+        "/bibliography",
+        "/calendar",
+        "/compute",
+        "/datasets",
+        "/files",
+        "/help",
+        "/ideas",
+        "/knowledge",
+        "/mail",
+        "/messages",
+        "/my-work",
+        "/projects",
+        "/search",
+        "/settings",
+        "/units",
     ];
 
     let harness = harness!();
@@ -9443,11 +9462,9 @@ async fn nenhum_ecra_da_navegacao_esta_morto() {
     }
 
     // Uma conta de investigação, com trabalho a sério.
-    let (investigador, _) = harness.sign_in(&[
-        TechnicalRole::ResearchLead,
-        TechnicalRole::UnitManager,
-    ])
-    .await;
+    let (investigador, _) = harness
+        .sign_in(&[TechnicalRole::ResearchLead, TechnicalRole::UnitManager])
+        .await;
     harness.owns_a_workspace(investigador).await;
 
     let mut viva_para_investigacao = Vec::new();

@@ -363,7 +363,11 @@ async fn a_relevancia_deriva_do_papel_e_nao_da_pertenca() {
                 "{}: {} devia ser {}",
                 papel.as_str(),
                 modulo.as_str(),
-                if *esperado { "relevante" } else { "irrelevante" }
+                if *esperado {
+                    "relevante"
+                } else {
+                    "irrelevante"
+                }
             );
         }
     }

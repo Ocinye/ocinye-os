@@ -826,10 +826,7 @@ fn remover_do_ambiente(workspace_id: &str, person_id: &str) -> impl IntoView {
 /// Os papéis são os três que um Research Workspace tem — não uma lista maior
 /// que o Core depois recusaria, nem uma menor que escondesse autoridade que
 /// existe.
-fn acrescentar_ao_ambiente(
-    workspace_id: &str,
-    candidatos: &[(String, String)],
-) -> impl IntoView {
+fn acrescentar_ao_ambiente(workspace_id: &str, candidatos: &[(String, String)]) -> impl IntoView {
     if candidatos.is_empty() {
         return view! {
             <p class="oc-t-caption--muted oc-mt-5">
@@ -890,8 +887,10 @@ pub(crate) mod tests {
     pub(crate) fn gestao_de_prova() -> GestaoDePessoas {
         GestaoDePessoas {
             pode_gerir: true,
-            candidatos: vec![("11111111-1111-4111-8111-111111111111".to_owned(),
-                              "Alguém · alguem@ocinye.com".to_owned())],
+            candidatos: vec![(
+                "11111111-1111-4111-8111-111111111111".to_owned(),
+                "Alguém · alguem@ocinye.com".to_owned(),
+            )],
             aviso: None,
         }
     }

@@ -187,7 +187,10 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/units/{unit_id}", get(unit_detail))
         // Gerir quem pertence a uma unidade. Três operações, três caminhos: uma
         // pertença é autoridade, e cada alteração dela é um acto próprio.
-        .route("/workspaces/{workspace_id}/members", post(workspace_member_add))
+        .route(
+            "/workspaces/{workspace_id}/members",
+            post(workspace_member_add),
+        )
         .route(
             "/workspaces/{workspace_id}/members/remove",
             post(workspace_member_remove),
@@ -8120,7 +8123,9 @@ async fn workspace_member_add(
     match resultado {
         Ok(_) => de_volta_ao_ambiente(workspace_id, "ok=adicionado"),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(falha) => de_volta_ao_ambiente(workspace_id, &format!("erro={}", motivo_da_recusa(&falha))),
+        Err(falha) => {
+            de_volta_ao_ambiente(workspace_id, &format!("erro={}", motivo_da_recusa(&falha)))
+        }
     }
 }
 
@@ -8145,7 +8150,9 @@ async fn workspace_member_remove(
     match resultado {
         Ok(_) => de_volta_ao_ambiente(workspace_id, "ok=removido"),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(falha) => de_volta_ao_ambiente(workspace_id, &format!("erro={}", motivo_da_recusa(&falha))),
+        Err(falha) => {
+            de_volta_ao_ambiente(workspace_id, &format!("erro={}", motivo_da_recusa(&falha)))
+        }
     }
 }
 
