@@ -66,6 +66,14 @@ fn store() -> Option<ocinye_core::storage::ObjectStore> {
 }
 
 struct Cenario {
+    /// A ligação que segura a tranca do registo de armazenamento.
+    ///
+    /// Fica aqui viva de propósito: uma tranca ao nível da sessão larga-se
+    /// quando a ligação cai, e por isso o fim do teste liberta-a sozinho. Sem
+    /// ela, a suite de identidade — que limpa os `is_default` para provar que a
+    /// recusa explica a causa — corre ao mesmo tempo e este carregamento falha
+    /// por não haver armazenamento registado.
+    _tranca: sqlx::pool::PoolConnection<sqlx::Postgres>,
     pool: PgPool,
     store: ocinye_core::storage::ObjectStore,
     workspace_id: Uuid,
@@ -107,11 +115,18 @@ async fn cenario() -> Option<Cenario> {
     .await
     .expect("ambiente");
 
+    let mut tranca = pool.acquire().await.expect("ligação");
+    sqlx::query("SELECT pg_advisory_lock($1)")
+        .bind(TRANCA_DO_REGISTO)
+        .execute(&mut *tranca)
+        .await
+        .expect("tranca");
     backend_por_omissao(&pool).await;
 
     let quem_carrega = pessoa_do_ambiente(&pool, organisation_id, workspace_id, "lead").await;
 
     Some(Cenario {
+        _tranca: tranca,
         pool,
         store,
         workspace_id,
@@ -138,27 +153,6 @@ async fn backend_por_omissao(pool: &PgPool) {
     .execute(pool)
     .await
     .expect("registar armazenamento de teste");
-}
-
-/// Corre o corpo com o registo de armazenamento trancado.
-async fn com_registo_exclusivo<T, F>(pool: &PgPool, corpo: F) -> T
-where
-    F: std::future::Future<Output = T>,
-{
-    let mut tranca = pool.acquire().await.expect("ligação");
-    sqlx::query("SELECT pg_advisory_lock($1)")
-        .bind(TRANCA_DO_REGISTO)
-        .execute(&mut *tranca)
-        .await
-        .expect("tranca");
-    backend_por_omissao(pool).await;
-    let resultado = corpo.await;
-    sqlx::query("SELECT pg_advisory_unlock($1)")
-        .bind(TRANCA_DO_REGISTO)
-        .execute(&mut *tranca)
-        .await
-        .expect("destranca");
-    resultado
 }
 
 async fn pessoa_do_ambiente(
