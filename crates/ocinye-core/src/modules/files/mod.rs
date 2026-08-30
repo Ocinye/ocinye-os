@@ -25,6 +25,7 @@
 pub mod embedding;
 pub mod extraction;
 pub mod repository;
+pub mod upload;
 pub mod service;
 
 pub use repository::{FileListing, FileRecord, FolderRecord, VersionListing};

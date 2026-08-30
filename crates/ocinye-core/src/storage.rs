@@ -236,6 +236,145 @@ impl ObjectStore {
         Ok(())
     }
 
+    /// Abre um carregamento em partes e devolve o seu identificador.
+    ///
+    /// # Porque o objecto se monta no armazenamento e não no Core
+    ///
+    /// Porque a alternativa é o Core segurar o ficheiro inteiro em memória para
+    /// o escrever de uma vez. Com meio gigabyte por carregamento e vários em
+    /// paralelo, isso é a memória do servidor a decidir quantas pessoas podem
+    /// trabalhar ao mesmo tempo.
+    ///
+    /// Com partes, cada pedaço é escrito e esquecido; o objecto final é montado
+    /// pelo armazenamento, do lado de lá, e o Core nunca segura mais do que um
+    /// pedaço de cada vez.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::StorageUnavailable`] when the upload cannot start.
+    pub async fn begin_multipart(&self, key: &str, content_type: &str) -> CoreResult<String> {
+        let resposta = self
+            .client
+            .create_multipart_upload()
+            .bucket(&self.config.bucket)
+            .key(key)
+            .content_type(content_type)
+            .send()
+            .await
+            .map_err(|error| {
+                tracing::error!(error = ?error, "multipart upload could not be opened");
+                CoreError::StorageUnavailable("The upload could not be started.".to_owned())
+            })?;
+
+        resposta.upload_id().map(str::to_owned).ok_or_else(|| {
+            CoreError::StorageUnavailable("The upload was opened without an id.".to_owned())
+        })
+    }
+
+    /// Escreve uma parte e devolve a etiqueta com que o armazenamento a conhece.
+    ///
+    /// As partes numeram-se a partir de 1, e o armazenamento monta-as por essa
+    /// ordem — não pela ordem de chegada. É isso que torna o carregamento
+    /// resumível: um pedaço que falhou repete-se sozinho, e os outros já lá
+    /// estão.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::StorageUnavailable`] when the part cannot be stored.
+    pub async fn put_part(
+        &self,
+        key: &str,
+        upload_id: &str,
+        part_number: i32,
+        data: Vec<u8>,
+    ) -> CoreResult<String> {
+        let resposta = self
+            .client
+            .upload_part()
+            .bucket(&self.config.bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .part_number(part_number)
+            .body(ByteStream::from(data))
+            .send()
+            .await
+            .map_err(|error| {
+                tracing::error!(error = ?error, part_number, "upload part failed");
+                CoreError::StorageUnavailable("The part could not be stored.".to_owned())
+            })?;
+
+        resposta.e_tag().map(str::to_owned).ok_or_else(|| {
+            CoreError::StorageUnavailable("The part was stored without an etag.".to_owned())
+        })
+    }
+
+    /// Fecha o carregamento e manda montar o objecto.
+    ///
+    /// As partes vão pela ordem em que compõem o ficheiro, e cada uma leva a
+    /// etiqueta que o armazenamento devolveu quando a recebeu. Uma etiqueta
+    /// errada é recusada por ele — o que é uma segunda verificação de
+    /// integridade, feita por quem guarda os bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::StorageUnavailable`] when the object cannot be assembled.
+    pub async fn complete_multipart(
+        &self,
+        key: &str,
+        upload_id: &str,
+        parts: &[(i32, String)],
+    ) -> CoreResult<()> {
+        let partes: Vec<_> = parts
+            .iter()
+            .map(|(numero, etag)| {
+                aws_sdk_s3::types::CompletedPart::builder()
+                    .part_number(*numero)
+                    .e_tag(etag)
+                    .build()
+            })
+            .collect();
+
+        self.client
+            .complete_multipart_upload()
+            .bucket(&self.config.bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .multipart_upload(
+                aws_sdk_s3::types::CompletedMultipartUpload::builder()
+                    .set_parts(Some(partes))
+                    .build(),
+            )
+            .send()
+            .await
+            .map_err(|error| {
+                tracing::error!(error = ?error, "multipart upload could not be completed");
+                CoreError::StorageUnavailable("The upload could not be completed.".to_owned())
+            })?;
+        Ok(())
+    }
+
+    /// Desiste de um carregamento e manda apagar as partes já escritas.
+    ///
+    /// Sem isto, uma sessão abandonada deixa as suas partes a ocupar espaço que
+    /// nada refere e que nenhuma listagem mostra: o armazenamento cresce e
+    /// ninguém consegue dizer porquê.
+    ///
+    /// Não devolve erro. Chega de sítios onde a limpeza pode falhar depois da
+    /// decisão já estar tomada — o que ficar por apagar fica registado.
+    pub async fn abort_multipart(&self, key: &str, upload_id: &str) {
+        if let Err(error) = self
+            .client
+            .abort_multipart_upload()
+            .bucket(&self.config.bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .send()
+            .await
+        {
+            tracing::warn!(error = ?error, key, "multipart upload could not be aborted");
+        }
+    }
+
     /// Fetch an object's bytes.
     ///
     /// The Core does not proxy bulk transfer — that is what the signed URL is

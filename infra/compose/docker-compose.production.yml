@@ -4,7 +4,23 @@
 #
 # Aqui está a **topologia**: que serviços existem, como se alcançam, o que é
 # público e o que não é. Os segredos vêm de `/etc/ocinye/*.env`, fora do Git e
-# fora desta árvore, e a imagem vem de uma etiqueta que é um SHA exacto.
+# fora desta árvore.
+#
+# # Porque as imagens se constroem aqui e não vêm de um registry
+#
+# Porque um registry resolve um problema que a instituição ainda não tem —
+# distribuir a mesma imagem por vários servidores — e cria dependências que ela
+# passaria a ter: autenticação no GitHub, disponibilidade do GHCR, um token de
+# registry guardado no VPS. Com um servidor, o que interessa é que produção
+# corra um **commit exacto**, e isso consegue-se sem registry nenhum.
+#
+# O que chega ao servidor é um pacote fechado da `main` canónica, identificado
+# pelo seu SHA. As imagens são construídas aqui a partir desse conteúdo e
+# etiquetadas com o mesmo SHA, e por isso `docker images` responde exactamente à
+# pergunta «o que está em produção?».
+#
+# O compilador de Rust vive apenas dentro da etapa de construção do contentor: o
+# host não precisa de Rust, de Cargo, nem de Git.
 #
 # # A regra que governa este ficheiro
 #
@@ -53,7 +69,12 @@ services:
   # ── A Experience humana ───────────────────────────────────────────────
   workspace:
     <<: *comum
-    image: ${OCINYE_IMAGE_WORKSPACE}
+    image: ocinye/ocinye-workspace:${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        BIN: ocinye-workspace
     env_file:
       - /etc/ocinye/comum.env
       - /etc/ocinye/workspace.env
@@ -78,7 +99,12 @@ services:
   # ── A autoridade institucional ────────────────────────────────────────
   core:
     <<: *comum
-    image: ${OCINYE_IMAGE_CORE}
+    image: ocinye/ocinye-core-server:${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        BIN: ocinye-core-server
     env_file:
       - /etc/ocinye/comum.env
       - /etc/ocinye/core.env
@@ -101,7 +127,12 @@ services:
   # ── O que acontece fora do pedido ─────────────────────────────────────
   worker:
     <<: *comum
-    image: ${OCINYE_IMAGE_WORKER}
+    image: ocinye/ocinye-worker:${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      args:
+        BIN: ocinye-worker
     env_file:
       - /etc/ocinye/comum.env
       - /etc/ocinye/core.env
