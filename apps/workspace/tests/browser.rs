@@ -8655,3 +8655,69 @@ async fn ver_a_entrada_de_ficheiros_nao_da_acesso_a_ficheiro_nenhum() {
         "a página do ficheiro abriu para quem não tem acesso"
     );
 }
+
+/// Uma conta de investigação sem pertenças não é uma conta partida.
+///
+/// # A propriedade
+///
+/// > **A relevância de um módulo responde se uma capacidade pertence ao espaço
+/// > de trabalho institucional da pessoa. A autorização de um recurso responde
+/// > ao que ela pode de facto ver ou fazer. A relevância nunca concede
+/// > autoridade.**
+///
+/// Antes, os quatro módulos de CONHECIMENTO apareciam esbatidos a toda a gente,
+/// porque a navegação perguntava um direito contextual num contexto
+/// institucional. Uma conta acabada de criar parecia avariada.
+///
+/// Agora aparecem — e continuam a não dar acesso a coisa nenhuma.
+#[tokio::test]
+async fn uma_conta_de_investigacao_sem_pertencas_ve_os_modulos_de_investigacao() {
+    let harness = harness!();
+
+    // Sem unidade, sem ambiente: exactamente a conta que parecia partida.
+    let (_, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    let pagina = harness.open("/").await;
+    esperar_por(&pagina, "CONHECIMENTO").await;
+    let html = pagina.content().await.expect("conteúdo");
+
+    for entrada in ["Ficheiros", "Conhecimento", "Bibliografia", "Dados"] {
+        let indice = html
+            .find(&format!(">{entrada}<"))
+            .unwrap_or_else(|| panic!("«{entrada}» não aparece na navegação"));
+        let contexto = &html[indice.saturating_sub(420)..indice];
+        assert!(
+            !contexto.contains("oc-nav--unavailable"),
+            "«{entrada}» aparece como indisponível a uma conta de investigação"
+        );
+    }
+
+    // E entrar não dá acesso: o ecrã diz a verdade em vez de recusar.
+    let ficheiros = harness.open("/files").await;
+    esperar_por(&ficheiros, "Não alcança nenhum ambiente").await;
+}
+
+/// Um colaborador externo não ganha módulos de investigação.
+///
+/// A contrapartida: relevância deriva do papel institucional, e um papel que
+/// não faz investigação não passa a fazê-la porque a navegação ficou mais
+/// generosa.
+#[tokio::test]
+async fn um_colaborador_externo_nao_ganha_os_modulos_de_investigacao() {
+    let harness = harness!();
+
+    let (_, _) = harness
+        .sign_in(&[TechnicalRole::ExternalCollaborator])
+        .await;
+
+    let pagina = harness.open("/").await;
+    esperar_por(&pagina, "OCINYE OS").await;
+    let html = pagina.content().await.expect("conteúdo");
+
+    for entrada in ["Ficheiros", "Bibliografia", "Dados"] {
+        assert!(
+            !html.contains(&format!(">{entrada}<")),
+            "«{entrada}» apareceu a um colaborador externo"
+        );
+    }
+}

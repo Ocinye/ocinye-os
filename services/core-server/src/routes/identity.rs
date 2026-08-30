@@ -75,6 +75,28 @@ struct Me {
     /// re-decides for itself; hiding a control the Core would refuse anyway is
     /// courtesy, not security (`CLAUDE.md` §4).
     capabilities: Vec<&'static str>,
+    /// Os módulos que pertencem ao espaço de trabalho desta pessoa.
+    ///
+    /// # Porque não diz `allowed`
+    ///
+    /// Porque `allowed: true` sem um `workspace_id` seria exactamente a mentira
+    /// que este campo existe para corrigir. Um módulo é **relevante** — pertence
+    /// ao trabalho desta pessoa — e o seu `authorization_scope` diz onde a
+    /// pergunta de autorização se decide. Quando é `contextual`, a navegação
+    /// apresenta e não autoriza: quem entra sem alcançar nada vê zero recursos,
+    /// que é um estado honesto e não uma recusa.
+    modules: Vec<ModuleRelevance>,
+}
+
+/// Um módulo, do ponto de vista da apresentação.
+#[derive(Serialize)]
+struct ModuleRelevance {
+    /// Identidade estável do módulo.
+    module: &'static str,
+    /// Se pertence ao espaço de trabalho desta pessoa.
+    relevant: bool,
+    /// Onde a autorização se decide: `institutional` ou `contextual`.
+    authorization_scope: &'static str,
 }
 
 #[derive(Serialize)]
@@ -105,6 +127,20 @@ async fn me(
 
     let capabilities = capabilities_held_anywhere(&state.pool, &principal, &ids).await?;
 
+    let modules = ocinye_domain::policy::relevance::Module::all()
+        .into_iter()
+        .map(|module| ModuleRelevance {
+            module: module.as_str(),
+            relevant: ocinye_domain::policy::relevance::is_relevant(&principal, module),
+            authorization_scope: match module.scope() {
+                ocinye_domain::policy::relevance::AuthorizationScope::Institutional => {
+                    "institutional"
+                }
+                ocinye_domain::policy::relevance::AuthorizationScope::Contextual => "contextual",
+            },
+        })
+        .collect();
+
     let person = identity::get_own_person(&state.pool, &principal).await?;
     let avatar = identity::own_avatar(&state.pool, &principal).await?;
 
@@ -117,6 +153,7 @@ async fn me(
         organisation_id: principal.organisation_id,
         roles,
         capabilities,
+        modules,
         units: principal
             .unit_roles
             .iter()

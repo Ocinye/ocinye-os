@@ -755,6 +755,21 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
         })
         .unwrap_or_default();
 
+    // Os módulos relevantes, como o Core os projectou. Sem resposta dele a
+    // lista fica vazia e a navegação encolhe — a mesma regra das capacidades.
+    let modules: Vec<String> = me
+        .get("modules")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter(|m| m.get("relevant").and_then(Value::as_bool) == Some(true))
+                .filter_map(|m| m.get("module").and_then(Value::as_str))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+
     Viewer {
         zona: member.zona,
         name: member.session.display_name.clone(),
@@ -790,6 +805,7 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
         temporal_failure,
         unread,
         capabilities,
+        modules,
     }
 }
 

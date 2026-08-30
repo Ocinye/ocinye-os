@@ -1905,6 +1905,7 @@ mod integridade {
             temporal: Vec::new(),
             temporal_failure: None,
             unread: 0,
+            modules: Vec::new(),
             capabilities: ocinye_contracts::Permission::all()
                 .into_iter()
                 .map(|p| p.as_str().to_owned())

@@ -159,6 +159,21 @@ mod render_tests {
                 .into_iter()
                 .map(|p| p.as_str().to_owned())
                 .collect(),
+            // Todos os módulos relevantes: estas pré-visualizações existem para
+            // ver os ecrãs, e um catálogo que escondesse metade deles não
+            // mostraria o que há para rever.
+            modules: [
+                "units",
+                "ideas",
+                "projects",
+                "knowledge",
+                "files",
+                "bibliography",
+                "datasets",
+            ]
+            .into_iter()
+            .map(ToOwned::to_owned)
+            .collect(),
         }
     }
 
@@ -549,6 +564,21 @@ pub(crate) mod link_tests {
                 .into_iter()
                 .map(|p| p.as_str().to_owned())
                 .collect(),
+            // Todos os módulos relevantes: estas pré-visualizações existem para
+            // ver os ecrãs, e um catálogo que escondesse metade deles não
+            // mostraria o que há para rever.
+            modules: [
+                "units",
+                "ideas",
+                "projects",
+                "knowledge",
+                "files",
+                "bibliography",
+                "datasets",
+            ]
+            .into_iter()
+            .map(ToOwned::to_owned)
+            .collect(),
         }
     }
 
