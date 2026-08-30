@@ -87,6 +87,50 @@ O §33 do `CLAUDE.md` foi actualizado na mesma alteração, com referência a es
 ADR, para que a constituição e o repositório não se contradigam
 (`CLAUDE.md` §69, §83).
 
+### Precisão de 2026-08-30 — a fronteira do transporte
+
+A regra dizia «em produção, a ligação ao Core tem de ser TLS», e a primeira
+instalação real mostrou que ela confundia **rede** com **socket**. Na topologia
+de um servidor, o Workspace e o Core são dois contentores no mesmo anfitrião,
+numa rede de serviço sem porta publicada: o troço por onde a palavra-passe passa
+nunca sai da máquina.
+
+A regra passa a dizer o que sempre quis dizer:
+
+> **TLS atravessa fronteiras de confiança; transporte local dentro do mesmo
+> anfitrião de confiança pode continuar em claro.**
+
+Isto **não relaxa** o objectivo — nenhuma credencial em claro numa rede que
+alguém possa observar. Precisa-o.
+
+A excepção depende da **topologia declarada**, confrontada com o endereço, e
+nunca de uma delas sozinha:
+
+| declaração | endereço | resultado |
+|---|---|---|
+| qualquer | `https://…` | aceite |
+| `local-container` | `http://core:8080` | aceite |
+| `loopback` | `http://127.0.0.1:8080` | aceite |
+| ausente | `http://core:8080` | **recusado** |
+| `local-container` | `http://api.ocinye.com` | **recusado** |
+| `local-container` | `http://10.0.50.20:8080` | **recusado** |
+| `local-container` | `http://core.internal.empresa` | **recusado** |
+
+O que se declara é topologia, e não permissão. Um `OCINYE_ALLOW_INSECURE_CORE`
+transformaria a política num interruptor — e uma política que se desliga não é
+uma política.
+
+Um endereço privado não prova que a máquina é esta: `10.0.50.20` pode ser este
+servidor ou outro do outro lado de um túnel, e a diferença entre os dois é toda
+a diferença. Um nome com pontos pode ser resolvido a partir de outro sítio. Só
+loopback e a etiqueta única que o DNS do runtime resolve descrevem um transporte
+que não sai do anfitrião.
+
+**Quando o Core sair deste servidor, a excepção deixa de se aplicar sozinha.**
+Um Core noutra máquina não é alcançável por loopback nem pela rede de serviço
+local, e a configuração que hoje é válida passa a ser recusada no arranque. Não
+é preciso lembrar-se de apertar nada: aperta-se por deixar de ser verdade.
+
 ## Alternatives
 
 | Alternativa | Porque foi rejeitada |

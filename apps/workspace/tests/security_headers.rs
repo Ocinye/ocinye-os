@@ -29,6 +29,7 @@ fn estado(producao: bool) -> WorkspaceState {
     };
     WorkspaceState {
         config: std::sync::Arc::new(WorkspaceConfig {
+            core_transport: ocinye_workspace::config::CoreTransport::Roteavel,
             bind_address: "127.0.0.1:0".to_owned(),
             core_url: "http://127.0.0.1:1".to_owned(),
             public_url: publica.to_owned(),
