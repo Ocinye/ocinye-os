@@ -921,6 +921,7 @@ pub(crate) mod link_tests {
                     activity: json!([]),
                     inference_available: false,
                     may_use_assistance: true,
+                    gestao: screens::workspaces::tests::gestao_de_prova(),
                 })
             ),
             // A cadeia científica, com trabalho lá dentro. Uma fixture vazia
@@ -1223,6 +1224,7 @@ pub(crate) mod link_tests {
                     activity: json!([]),
                     inference_available: false,
                     may_use_assistance: false,
+                    gestao: screens::workspaces::tests::gestao_de_prova(),
                 })
             ),
             // E com inferência disponível, para que o caminho em que a
@@ -1240,6 +1242,7 @@ pub(crate) mod link_tests {
                     activity: json!([]),
                     inference_available: true,
                     may_use_assistance: true,
+                    gestao: screens::workspaces::tests::gestao_de_prova(),
                 })
             ),
             // Correio: quatro estados que não podem regredir — serviço ausente,

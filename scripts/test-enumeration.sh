@@ -134,6 +134,10 @@ suites() {
 # frase que só existe no corpo de um PDF, e o formato que se guarda mas não se
 # lê. Ambas exigem armazenamento; sem ele, falham na CI em vez de se saltarem.
 #
+# 79 desde 2026-08-30: entraram as duas viagens da gestão de participantes de um
+# Research Workspace — a que exige que quem lidera o faça pelo produto, e a que
+# exige que quem não lidera não receba os controlos **nem a operação**.
+#
 # 77 desde 2026-08-30: entrou a frescura da pertença nos dois sentidos, na mesma
 # sessão viva. O marcador é a própria pessoa na lista de membros: o nome da
 # unidade estaria sempre lá — o detalhe é legível a quem investiga, tenha ou não
@@ -146,7 +150,7 @@ suites() {
 #
 # Auditado em 2026-08-29, em série, marca a marca. O número continua fixo: uma
 # viagem que deixe de levantar faz a contagem cair e o portão fecha.
-viagens-de-browser|77|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|76
+viagens-de-browser|79|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|78
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

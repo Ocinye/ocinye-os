@@ -74,6 +74,14 @@ struct WorkspaceView {
     /// Se esse teste falhar, a correcção **não** é ajustá-lo: é servir uma
     /// resposta por operação em vez deste booleano.
     may_create: bool,
+    /// Se este membro pode alterar quem participa neste ambiente.
+    ///
+    /// É a mesma pergunta que `add_workspace_member` e `remove_workspace_member`
+    /// fazem, e não um palpite sobre o papel de quem está a ver: se o controlo
+    /// aparecer no ecrã, a operação é autorizável pela mesma política que a vai
+    /// executar. Continua a ser cortesia de renderização — as duas operações
+    /// decidem outra vez, e há uma viagem que exige que decidam.
+    may_manage_members: bool,
 }
 
 impl From<&research::ResearchWorkspace> for WorkspaceView {
@@ -88,6 +96,7 @@ impl From<&research::ResearchWorkspace> for WorkspaceView {
             // Sem principal não se pode afirmar nada sobre o que ele pode: a
             // resposta conservadora é a única honesta.
             may_create: false,
+            may_manage_members: false,
         }
     }
 }
@@ -108,6 +117,15 @@ impl WorkspaceView {
                 principal,
                 ocinye_domain::Action::Create,
                 &ctx,
+            )
+            .is_ok(),
+            may_manage_members: ocinye_domain::policy::authorize(
+                principal,
+                ocinye_domain::Action::ManageMembers,
+                &research::workspace_context(
+                    workspace,
+                    ocinye_domain::ResourceKind::ResearchWorkspace,
+                ),
             )
             .is_ok(),
             ..Self::from(workspace)

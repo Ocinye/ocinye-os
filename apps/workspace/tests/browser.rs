@@ -9215,3 +9215,179 @@ async fn conceder_e_revogar_uma_pertenca_veem_se_na_mesma_sessao() {
         "a revogação não chegou à sessão viva: a pertença revogada continuava a autorizar"
     );
 }
+
+/// Quem lidera um Research Workspace acrescenta e retira pessoas **pelo produto**.
+///
+/// > A criação de um recurso estabelece a autoridade mínima legítima de que o
+/// > criador precisa para continuar a operá-lo.
+///
+/// Um Core que soubesse fazer isto e um ecrã que não o oferecesse davam um
+/// backend, e não uma funcionalidade: quem lidera uma ideia ficava a pedir a
+/// alguém com autoridade sobre a unidade inteira que lhe mexesse no ambiente.
+#[tokio::test]
+async fn quem_lidera_um_ambiente_gere_quem_participa_pelo_produto() {
+    let harness = harness!();
+
+    let (lider, _) = harness.sign_in(&[TechnicalRole::ResearchLead]).await;
+    let workspace_id = harness.owns_a_workspace(lider).await;
+
+    // Alguém da organização, ainda de fora do ambiente.
+    let convidada = harness
+        .pessoa_administrativa(&[TechnicalRole::ResearchMember])
+        .await;
+
+    let caminho = format!("/workspaces/{workspace_id}");
+    let pagina = harness.open(&caminho).await;
+    let html = pagina.content().await.expect("conteúdo");
+    assert!(
+        html.contains("oc-pessoa__acrescentar"),
+        "quem lidera o ambiente não recebeu o formulário de acrescentar pessoas"
+    );
+
+    // ── Acrescentar, pelo ecrã ──────────────────────────────────────────
+    escolher(&pagina, "#oc-ws-person", &convidada.id.to_string()).await;
+    submit(&pagina, "form.oc-pessoa__acrescentar").await;
+    esperar_por(&pagina, "Pessoa adicionada ao ambiente").await;
+
+    let papel: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM workspace_memberships
+          WHERE workspace_id = $1 AND person_id = $2 AND revoked_at IS NULL",
+    )
+    .bind(workspace_id)
+    .bind(convidada.id)
+    .fetch_optional(&harness.pool)
+    .await
+    .expect("consulta");
+    assert_eq!(
+        papel.as_deref(),
+        Some("member"),
+        "a pessoa não foi acrescentada ao ambiente pelo produto"
+    );
+
+    // ── Retirar, pelo ecrã ──────────────────────────────────────────────
+    //
+    // O botão de quem foi acrescentado, e não o primeiro da lista: a lista vem
+    // ordenada por nome, e remover o primeiro podia retirar quem lidera —
+    // o teste passaria a medir a invariante do último líder.
+    let pagina = harness.open(&caminho).await;
+    let script = format!(
+        "(() => {{ \
+           const campo = document.querySelector( \
+             'form[action=\"/workspaces/{workspace_id}/members/remove\"] \
+              input[value=\"{}\"]'); \
+           if (!campo) return false; \
+           campo.form.submit(); \
+           return true; }})()",
+        convidada.id
+    );
+    let submeteu: Option<bool> = pagina
+        .evaluate(script)
+        .await
+        .expect("submissão")
+        .into_value()
+        .ok();
+    assert_eq!(
+        submeteu,
+        Some(true),
+        "o botão de remover desta pessoa não estava na página"
+    );
+    esperar_por(&pagina, "Pessoa removida do ambiente").await;
+
+    let ainda: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM workspace_memberships
+          WHERE workspace_id = $1 AND person_id = $2 AND revoked_at IS NULL",
+    )
+    .bind(workspace_id)
+    .bind(convidada.id)
+    .fetch_optional(&harness.pool)
+    .await
+    .expect("consulta");
+    assert_eq!(ainda, None, "a pessoa não foi retirada do ambiente");
+}
+
+/// Quem não lidera o ambiente não recebe os controlos — **nem a operação**.
+///
+/// A ausência do formulário nunca foi a defesa. Se fosse, bastava escrever o
+/// `POST` à mão para a contornar, e o ecrã seria uma sugestão em vez de uma
+/// apresentação de autoridade.
+#[tokio::test]
+async fn quem_nao_lidera_o_ambiente_nao_recebe_os_controlos_nem_a_operacao() {
+    let harness = harness!();
+
+    let (lider, _) = harness.sign_in(&[TechnicalRole::ResearchLead]).await;
+    let workspace_id = harness.owns_a_workspace(lider).await;
+
+    // Outra pessoa, participante do ambiente mas sem o liderar.
+    let (outra, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    sqlx::query(
+        "INSERT INTO workspace_memberships (workspace_id, person_id, role)
+             VALUES ($1, $2, 'member')",
+    )
+    .bind(workspace_id)
+    .bind(outra)
+    .execute(&harness.pool)
+    .await
+    .expect("participação");
+
+    let caminho = format!("/workspaces/{workspace_id}");
+    let pagina = harness.open(&caminho).await;
+    let html = pagina.content().await.expect("conteúdo");
+    assert!(
+        html.contains("Pessoas"),
+        "quem participa no ambiente não chegou sequer a lê-lo"
+    );
+    assert!(
+        !html.contains("oc-pessoa__acrescentar"),
+        "quem não lidera o ambiente recebeu o formulário de acrescentar pessoas"
+    );
+    assert!(
+        !html.contains("/members/remove"),
+        "quem não lidera o ambiente recebeu os controlos de remoção"
+    );
+
+    // E a operação directa continua a ser recusada.
+    let antes: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM workspace_memberships
+          WHERE workspace_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(workspace_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("contagem");
+
+    let alheia = harness
+        .pessoa_administrativa(&[TechnicalRole::ResearchMember])
+        .await;
+    let script = format!(
+        "(async () => {{ \
+           const corpo = new URLSearchParams(); \
+           corpo.set('person_id', '{}'); \
+           corpo.set('role', 'lead'); \
+           const r = await fetch('/workspaces/{workspace_id}/members', \
+             {{ method: 'POST', body: corpo, redirect: 'follow' }}); \
+           return r.url; }})()",
+        alheia.id
+    );
+    let _: Option<String> = pagina
+        .evaluate(script)
+        .await
+        .expect("tentativa directa")
+        .into_value()
+        .ok();
+
+    // Espera activa curta: se a escrita passasse, a contagem mudaria.
+    tokio::time::sleep(Duration::from_millis(600)).await;
+
+    let depois: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM workspace_memberships
+          WHERE workspace_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(workspace_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("contagem");
+    assert_eq!(
+        antes, depois,
+        "um `POST` directo acrescentou alguém ao ambiente a quem não o lidera"
+    );
+}

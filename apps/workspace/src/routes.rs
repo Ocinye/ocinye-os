@@ -63,6 +63,8 @@ pub const ROUTES: &[&str] = &[
     "/units",
     "/units/{unit_id}",
     "/units/{unit_id}/members",
+    "/workspaces/{workspace_id}/members",
+    "/workspaces/{workspace_id}/members/remove",
     "/units/{unit_id}/members/role",
     "/units/{unit_id}/members/remove",
     "/ideas",
@@ -185,6 +187,11 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/units/{unit_id}", get(unit_detail))
         // Gerir quem pertence a uma unidade. Três operações, três caminhos: uma
         // pertença é autoridade, e cada alteração dela é um acto próprio.
+        .route("/workspaces/{workspace_id}/members", post(workspace_member_add))
+        .route(
+            "/workspaces/{workspace_id}/members/remove",
+            post(workspace_member_remove),
+        )
         .route("/units/{unit_id}/members", post(unit_member_add))
         .route("/units/{unit_id}/members/role", post(unit_member_role))
         .route("/units/{unit_id}/members/remove", post(unit_member_remove))
@@ -3048,6 +3055,7 @@ async fn research_workspace(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
     Path(workspace_id): Path<Uuid>,
+    Query(aviso): Query<AvisoQuery>,
 ) -> Response {
     let member = member_or_login!(state, headers);
 
@@ -3094,6 +3102,58 @@ async fn research_workspace(
         Screen::Ideas
     };
 
+    // Quem já participa, para não voltar a ser oferecido.
+    let ja_participam: std::collections::HashSet<String> = overview
+        .get("members")
+        .and_then(Value::as_array)
+        .map(|linhas| {
+            linhas
+                .iter()
+                .filter_map(|m| m.get("person_id").and_then(Value::as_str))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let pode_gerir = overview
+        .get("workspace")
+        .and_then(|w| w.get("may_manage_members"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    // A lista de candidatos só se pede a quem pode usá-la. Pedi-la sempre seria
+    // ler a organização inteira para a deitar fora em todos os ecrãs.
+    let candidatos: Vec<(String, String)> = if pode_gerir {
+        let pessoas = optional(&state, &member, "/api/v1/people?page_size=200").await;
+        pessoas
+            .get("items")
+            .and_then(Value::as_array)
+            .map(|linhas| {
+                linhas
+                    .iter()
+                    .filter_map(|p| {
+                        let pid = p.get("id").and_then(Value::as_str)?;
+                        if ja_participam.contains(pid) {
+                            return None;
+                        }
+                        let nome = p.get("full_name").and_then(Value::as_str).unwrap_or("—");
+                        let email = p.get("email").and_then(Value::as_str).unwrap_or("");
+                        Some((pid.to_owned(), format!("{nome} · {email}")))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    let gestao = ui::screens::workspaces::GestaoDePessoas {
+        // Do Core, e não de um palpite sobre o papel de quem está a ver.
+        pode_gerir,
+        candidatos,
+        aviso: aviso_de_participacao(aviso.ok.as_deref(), aviso.erro.as_deref()),
+    };
+
     let trail = vec![Crumb::to(screen)];
 
     let content =
@@ -3107,6 +3167,7 @@ async fn research_workspace(
             activity,
             inference_available: inference_available(&ai),
             may_use_assistance: viewer.can(ocinye_contracts::Permission::AiUse),
+            gestao,
         });
 
     shell_page("Research Workspace", &viewer, screen, trail, content)
@@ -7947,6 +8008,45 @@ struct MembroDaUnidade {
     role: String,
 }
 
+/// O resultado da última operação, de volta pelo endereço.
+///
+/// Uma struct própria e não `FilesQuery`: o ecrã da unidade reaproveita-a, mas
+/// os seus campos são de ficheiros — versão, página, pasta — e nada disso tem
+/// significado numa alteração de pertença.
+#[derive(Deserialize)]
+struct AvisoQuery {
+    #[serde(default)]
+    ok: Option<String>,
+    #[serde(default)]
+    erro: Option<String>,
+}
+
+/// Traduz o resultado de uma alteração de participação num ambiente.
+fn aviso_de_participacao(ok: Option<&str>, erro: Option<&str>) -> Option<(bool, String)> {
+    match (ok, erro) {
+        (Some("adicionado"), _) => Some((true, "Pessoa adicionada ao ambiente.".to_owned())),
+        (Some("removido"), _) => Some((true, "Pessoa removida do ambiente.".to_owned())),
+        (_, Some("autoridade")) => Some((
+            false,
+            "Não tem autoridade para gerir quem participa neste ambiente.".to_owned(),
+        )),
+        // Um ambiente sem ninguém que o lidere fica ingovernável, e a recusa
+        // que o impede merece a sua própria mensagem: quem a lê tem de
+        // perceber o que fazer a seguir.
+        (_, Some("ultimo")) => Some((
+            false,
+            "Esta é a última pessoa que lidera o ambiente. Nomeie outro líder \
+             antes de a remover."
+                .to_owned(),
+        )),
+        (_, Some(_)) => Some((
+            false,
+            "A alteração não foi aceite pelo Ocinye Core.".to_owned(),
+        )),
+        _ => None,
+    }
+}
+
 /// Traduz o resultado de uma alteração de pertença numa mensagem.
 fn aviso_de_pertenca(ok: Option<&str>, erro: Option<&str>) -> Option<(bool, String)> {
     match (ok, erro) {
@@ -7973,6 +8073,10 @@ fn aviso_de_pertenca(ok: Option<&str>, erro: Option<&str>) -> Option<(bool, Stri
     }
 }
 
+fn de_volta_ao_ambiente(workspace_id: Uuid, sufixo: &str) -> Response {
+    Redirect::to(&format!("/workspaces/{workspace_id}?{sufixo}")).into_response()
+}
+
 fn de_volta_a_unidade(unit_id: Uuid, sufixo: &str) -> Response {
     Redirect::to(&format!("/units/{unit_id}?{sufixo}")).into_response()
 }
@@ -7985,6 +8089,63 @@ fn motivo_da_recusa(failure: &ApiFailure) -> &'static str {
         // ninguém que a governe.
         ApiFailure::Failed(mensagem) if mensagem.contains("409") => "ultimo",
         _ => "recusado",
+    }
+}
+
+/// Acrescentar alguém ao Research Workspace.
+///
+/// A operação vai ao Core pelo mesmo caminho que o ecrã usou para decidir se
+/// mostrava o formulário — e o Core decide outra vez. A ausência do controlo
+/// nunca foi a defesa.
+async fn workspace_member_add(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(workspace_id): Path<Uuid>,
+    Form(form): Form<MembroDaUnidade>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let resultado = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/workspaces/{workspace_id}/members"),
+        &serde_json::json!({
+            "person_id": form.person_id,
+            "role": if form.role.is_empty() { "member" } else { &form.role },
+        }),
+    )
+    .await;
+
+    match resultado {
+        Ok(_) => de_volta_ao_ambiente(workspace_id, "ok=adicionado"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(falha) => de_volta_ao_ambiente(workspace_id, &format!("erro={}", motivo_da_recusa(&falha))),
+    }
+}
+
+async fn workspace_member_remove(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(workspace_id): Path<Uuid>,
+    Form(form): Form<MembroDaUnidade>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let person_id = form.person_id;
+
+    let resultado = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/workspaces/{workspace_id}/members/{person_id}"),
+        &serde_json::json!({}),
+    )
+    .await;
+
+    match resultado {
+        Ok(_) => de_volta_ao_ambiente(workspace_id, "ok=removido"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(falha) => de_volta_ao_ambiente(workspace_id, &format!("erro={}", motivo_da_recusa(&falha))),
     }
 }
 

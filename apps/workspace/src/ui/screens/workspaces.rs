@@ -88,6 +88,8 @@ pub struct WorkspaceView {
     pub inference_available: bool,
     /// Se este membro pode usar assistência.
     pub may_use_assistance: bool,
+    /// Quem pertence ao ambiente, e se quem vê pode alterá-lo.
+    pub gestao: GestaoDePessoas,
 }
 
 /// Constrói as tabs: só as que têm ecrã navegam.
@@ -127,6 +129,7 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
         activity,
         inference_available,
         may_use_assistance,
+        gestao,
     } = view;
 
     let workspace = overview.get("workspace").cloned().unwrap_or(Value::Null);
@@ -207,6 +210,8 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                 } else {
                     idea_overview(&idea, &sources, &datasets).into_any()
                 }}
+
+                {pessoas_do_ambiente(&id, &members, &gestao)}
 
                 {assist(Assist {
                     here: if is_project { "este Projecto" } else { "esta Ideia" },
@@ -732,6 +737,137 @@ fn acrescentar_pessoa(unit_id: &str, candidatos: &[(String, String)]) -> impl In
     .into_any()
 }
 
+/// Quem pertence ao Research Workspace, e os controlos de quem o lidera.
+///
+/// # Porque isto é uma secção do ambiente e não da unidade
+///
+/// A pertença a uma unidade e a pertença a um ambiente são duas autoridades
+/// diferentes. Gerir o ambiente a partir do ecrã da unidade obrigaria quem
+/// lidera uma ideia a ter também autoridade sobre a unidade inteira — que é
+/// mais do que liderar uma ideia exige, e mais do que o Core concede.
+///
+/// Os controlos só aparecem a quem pode alterar. A ausência deles **não é a
+/// defesa**: o Core recusa a mesma operação a quem a tente por HTTP directo, e
+/// há uma viagem que o exige.
+fn pessoas_do_ambiente(
+    workspace_id: &str,
+    membros: &[Value],
+    gestao: &GestaoDePessoas,
+) -> impl IntoView {
+    let id = workspace_id.to_owned();
+    let linhas = membros.to_vec();
+
+    view! {
+        <section class="oc-card">
+            <div class="oc-card__head">
+                <h2>"Pessoas"</h2>
+                <span class="oc-card__meta">{linhas.len().to_string()}</span>
+            </div>
+            <div class="oc-card__body">
+                {if linhas.is_empty() {
+                    view! { <p class="oc-muted">"Sem pessoas."</p> }.into_any()
+                } else {
+                    view! {
+                        <div class="oc-col oc-gap-6">
+                            {linhas
+                                .iter()
+                                .map(|membro| {
+                                    let nome = text(membro, "full_name");
+                                    let papel = text(membro, "role");
+                                    let person_id = text(membro, "person_id");
+                                    let ambiente = id.clone();
+                                    let pode = gestao.pode_gerir;
+                                    view! {
+                                        <div class="oc-pessoa">
+                                            <span class="oc-avatar oc-avatar--sm">
+                                                {crate::ui::initials(&nome)}
+                                            </span>
+                                            <span class="oc-pessoa__quem">
+                                                <span class="oc-t-cell-2">{nome}</span>
+                                            </span>
+                                            {badge(papel.clone(), Tone::of(&papel))}
+                                            {pode
+                                                .then(|| remover_do_ambiente(&ambiente, &person_id))}
+                                        </div>
+                                    }
+                                })
+                                .collect_view()}
+                        </div>
+                    }
+                        .into_any()
+                }}
+                {gestao.aviso.as_ref().map(|(ok, m)| aviso_de_gestao(*ok, m))}
+                {gestao
+                    .pode_gerir
+                    .then(|| acrescentar_ao_ambiente(&id, &gestao.candidatos))}
+            </div>
+        </section>
+    }
+}
+
+/// Retirar alguém do ambiente.
+///
+/// Não há aqui promoção nem despromoção: acrescentar com outro papel é a mesma
+/// operação, e o Core faz upsert. Um segundo caminho de escrita seria uma
+/// segunda autoridade com outro nome.
+fn remover_do_ambiente(workspace_id: &str, person_id: &str) -> impl IntoView {
+    view! {
+        <span class="oc-pessoa__accoes">
+            <form method="post" action=format!("/workspaces/{workspace_id}/members/remove")>
+                <input type="hidden" name="person_id" value=person_id.to_owned() />
+                <button class="oc-btn oc-btn--ghost" type="submit">"Remover"</button>
+            </form>
+        </span>
+    }
+}
+
+/// Acrescentar alguém ao ambiente.
+///
+/// Os papéis são os três que um Research Workspace tem — não uma lista maior
+/// que o Core depois recusaria, nem uma menor que escondesse autoridade que
+/// existe.
+fn acrescentar_ao_ambiente(
+    workspace_id: &str,
+    candidatos: &[(String, String)],
+) -> impl IntoView {
+    if candidatos.is_empty() {
+        return view! {
+            <p class="oc-t-caption--muted oc-mt-5">
+                "Todas as pessoas da organização já participam neste ambiente."
+            </p>
+        }
+        .into_any();
+    }
+
+    let opcoes = candidatos
+        .iter()
+        .map(|(pid, etiqueta)| {
+            view! { <option value=pid.clone()>{etiqueta.clone()}</option> }
+        })
+        .collect_view();
+
+    view! {
+        <form
+            class="oc-pessoa__acrescentar oc-mt-5"
+            method="post"
+            action=format!("/workspaces/{workspace_id}/members")
+        >
+            <label class="oc-sr" for="oc-ws-person">"Pessoa"</label>
+            <select class="oc-select" id="oc-ws-person" name="person_id" required>
+                {opcoes}
+            </select>
+            <label class="oc-sr" for="oc-ws-role">"Papel"</label>
+            <select class="oc-select" id="oc-ws-role" name="role">
+                <option value="member">"Membro"</option>
+                <option value="lead">"Líder"</option>
+                <option value="viewer">"Observador"</option>
+            </select>
+            <button class="oc-btn oc-btn--primary" type="submit">"Adicionar"</button>
+        </form>
+    }
+    .into_any()
+}
+
 fn aviso_de_gestao(ok: bool, mensagem: &str) -> impl IntoView {
     let classe = if ok {
         "oc-note oc-note--ok oc-mt-5"
@@ -742,9 +878,23 @@ fn aviso_de_gestao(ok: bool, mensagem: &str) -> impl IntoView {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use serde_json::json;
+
+    /// Uma gestão de prova **com** controlos.
+    ///
+    /// A varredura de ligações mortas percorre o HTML que estes ecrãs produzem.
+    /// Com `pode_gerir: false` os formulários novos não seriam renderizados, e
+    /// a varredura passaria a afirmar que caminhos que nunca viu estão bons.
+    pub(crate) fn gestao_de_prova() -> GestaoDePessoas {
+        GestaoDePessoas {
+            pode_gerir: true,
+            candidatos: vec![("11111111-1111-4111-8111-111111111111".to_owned(),
+                              "Alguém · alguem@ocinye.com".to_owned())],
+            aviso: None,
+        }
+    }
 
     #[test]
     fn uma_ideia_e_um_projecto_tem_treze_tabs_cada() {
@@ -779,6 +929,7 @@ mod tests {
             activity: json!([]),
             inference_available: false,
             may_use_assistance: true,
+            gestao: gestao_de_prova(),
         })
         .to_html();
 
@@ -803,6 +954,7 @@ mod tests {
             activity: json!([]),
             inference_available: false,
             may_use_assistance: true,
+            gestao: gestao_de_prova(),
         })
         .to_html();
 
