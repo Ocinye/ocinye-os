@@ -54,7 +54,11 @@ services:
     volumes:
       - /etc/ocinye/nginx:/etc/nginx/conf.d:ro
       - /etc/ocinye/tls:/etc/nginx/tls:ro
-      - site-publico:/srv/site:ro
+      # O site vem do **release**, e não de um volume que alguém enche à mão:
+      # um volume nomeado sobrevive aos deploys e passaria a conter o que lá
+      # ficou da última vez que alguém lá mexeu. Assim, o que está publicado é o
+      # que está no commit.
+      - ./../site:/srv/site:ro
     depends_on:
       workspace:
         condition: service_started
@@ -198,4 +202,3 @@ volumes:
   postgres-data:
   redis-data:
   object-data:
-  site-publico:

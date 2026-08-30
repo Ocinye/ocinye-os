@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ocinye</title>
+<meta name="description" content="Ocinye — Investigação, Engenharia e Infraestruturas Digitais.">
+<style>
+  :root {
+    --tinta: #0f1720;
+    --papel: #fbfaf8;
+    --linha: #e4e0d9;
+    --suave: #6b7480;
+    --azul: #1c3f5f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --tinta: #eef1f4; --papel: #0d1218; --linha: #232c36; --suave: #8b95a1; --azul: #7fb3d9; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--papel);
+    color: var(--tinta);
+    font: 400 17px/1.6 ui-serif, Georgia, "Times New Roman", serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+  }
+  .bloco { max-width: 34rem; width: 100%; }
+  h1 {
+    font: 500 clamp(2.4rem, 7vw, 3.6rem)/1.05 ui-serif, Georgia, serif;
+    letter-spacing: -0.02em;
+    margin: 0 0 1.2rem;
+  }
+  .areas {
+    font: 400 1.05rem/1.7 ui-sans-serif, system-ui, -apple-system, sans-serif;
+    color: var(--suave);
+    margin: 0 0 2.4rem;
+  }
+  .regua { height: 1px; background: var(--linha); border: 0; margin: 0 0 2.4rem; }
+  .nota {
+    font: 400 0.95rem/1.7 ui-sans-serif, system-ui, sans-serif;
+    color: var(--suave);
+    margin: 0 0 2rem;
+  }
+  a.entrar {
+    font: 500 0.95rem/1 ui-sans-serif, system-ui, sans-serif;
+    color: var(--azul);
+    text-decoration: none;
+    border-bottom: 1px solid currentColor;
+    padding-bottom: 2px;
+  }
+  a.entrar:hover, a.entrar:focus-visible { opacity: 0.75; }
+  footer {
+    border-top: 1px solid var(--linha);
+    padding: 20px 24px;
+    font: 400 0.85rem/1.5 ui-sans-serif, system-ui, sans-serif;
+    color: var(--suave);
+  }
+</style>
+</head>
+<body>
+  <main>
+    <div class="bloco">
+      <h1>Ocinye</h1>
+      <p class="areas">Investigação · Engenharia · Infraestruturas&nbsp;Digitais</p>
+      <hr class="regua">
+      <p class="nota">O site institucional está em preparação.</p>
+      <p><a class="entrar" href="https://os.ocinye.com">Abrir o Ocinye&nbsp;OS</a></p>
+    </div>
+  </main>
+  <footer>Ocinye</footer>
+</body>
+</html>
