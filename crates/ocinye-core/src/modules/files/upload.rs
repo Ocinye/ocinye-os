@@ -93,7 +93,6 @@ pub struct UploadSession {
 /// A linha da sessão, como vive na base.
 #[derive(sqlx::FromRow)]
 struct SessionRow {
-    id: Uuid,
     workspace_id: Uuid,
     file_id: Option<Uuid>,
     folder_id: Option<Uuid>,
@@ -236,7 +235,7 @@ async fn sessao_de(
     session_id: Uuid,
 ) -> CoreResult<SessionRow> {
     let sessao: Option<SessionRow> = sqlx::query_as(
-        "SELECT id, workspace_id, file_id, folder_id, filename, content_type, classification,
+        "SELECT workspace_id, file_id, folder_id, filename, content_type, classification,
                 declared_size_bytes, chunk_size_bytes, total_parts, storage_object_id,
                 storage_key, storage_upload_id, created_by_id, expires_at, state
            FROM upload_sessions
