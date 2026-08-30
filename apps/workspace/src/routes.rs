@@ -7524,11 +7524,17 @@ fn regresso(campos: &std::collections::HashMap<String, String>, sufixo: &str) ->
 /// redireccionamentos: o JavaScript receberia `200` com a página de entrada e
 /// tentaria lê-la como JSON. `401` diz a verdade — e é a única resposta com que
 /// o carregamento pode fazer alguma coisa sensata.
-async fn membro_ou_recusa(state: &WorkspaceState, headers: &HeaderMap) -> Result<Member, Response> {
-    match current_member(state, headers) {
-        Some(member) if !member.session.must_change_password => Ok(member),
-        _ => Err((StatusCode::UNAUTHORIZED, axum::Json(serde_json::json!({}))).into_response()),
-    }
+fn membro_ou_recusa(state: &WorkspaceState, headers: &HeaderMap) -> Option<Member> {
+    current_member(state, headers).filter(|member| !member.session.must_change_password)
+}
+
+/// A recusa que o JavaScript entende.
+///
+/// Uma `Response` inteira no `Err` de um `Result` são mais de cem bytes
+/// carregados por cada chamada que corre **bem**. O caminho feliz não deve pagar
+/// o tamanho do infeliz.
+fn nao_autenticado() -> Response {
+    (StatusCode::UNAUTHORIZED, axum::Json(serde_json::json!({}))).into_response()
 }
 
 /// O maior corpo que uma parte pode ter, deste lado.
@@ -7563,9 +7569,8 @@ async fn upload_begin(
     headers: HeaderMap,
     axum::Json(pedido): axum::Json<AberturaDeCarregamento>,
 ) -> Response {
-    let member = match membro_ou_recusa(&state, &headers).await {
-        Ok(m) => m,
-        Err(resposta) => return resposta,
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return nao_autenticado();
     };
 
     let mut corpo = serde_json::json!({
@@ -7601,9 +7606,8 @@ async fn upload_status(
     headers: HeaderMap,
     Path(session_id): Path<Uuid>,
 ) -> Response {
-    let member = match membro_ou_recusa(&state, &headers).await {
-        Ok(m) => m,
-        Err(resposta) => return resposta,
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return nao_autenticado();
     };
     encaminhar(
         api::get::<Value>(
@@ -7628,9 +7632,8 @@ async fn upload_send_part(
     Query(query): Query<SomaDaParte>,
     body: axum::body::Bytes,
 ) -> Response {
-    let member = match membro_ou_recusa(&state, &headers).await {
-        Ok(m) => m,
-        Err(resposta) => return resposta,
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return nao_autenticado();
     };
     encaminhar(
         api::put_bytes(
@@ -7658,9 +7661,8 @@ async fn upload_complete(
     Path(session_id): Path<Uuid>,
     axum::Json(pedido): axum::Json<SomaFinal>,
 ) -> Response {
-    let member = match membro_ou_recusa(&state, &headers).await {
-        Ok(m) => m,
-        Err(resposta) => return resposta,
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return nao_autenticado();
     };
     encaminhar(
         api::post(
@@ -7679,9 +7681,8 @@ async fn upload_cancel(
     headers: HeaderMap,
     Path(session_id): Path<Uuid>,
 ) -> Response {
-    let member = match membro_ou_recusa(&state, &headers).await {
-        Ok(m) => m,
-        Err(resposta) => return resposta,
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return nao_autenticado();
     };
     encaminhar(
         api::delete(
