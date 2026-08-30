@@ -172,7 +172,18 @@ services:
   # Sem `ports:`. Deliberadamente.
   postgres:
     <<: *comum
-    image: postgres:16-alpine
+    # A imagem com pgvector, e **a mesma versão maior** que o compose de
+    # desenvolvimento.
+    #
+    # Escrevi aqui `postgres:16-alpine` sem auditar o que já existia. A migração
+    # 0006 faz `CREATE EXTENSION "vector"`, a imagem base não o traz, e produção
+    # parou na quinta migração de vinte e sete — com o Core em ciclo de
+    # reinício e a dizer apenas «internal error».
+    #
+    # Duas versões de PostgreSQL entre desenvolvimento e produção seriam, por si
+    # só, um sítio onde a instituição se pode comportar de maneira diferente sem
+    # que nada o diga.
+    image: pgvector/pgvector:pg17
     env_file:
       - /etc/ocinye/postgres.env
     volumes:
