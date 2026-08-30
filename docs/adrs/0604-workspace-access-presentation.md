@@ -5,7 +5,7 @@
 - **Impacto:** FOUNDATIONAL
 - **Data:** 2026-08-30
 - **Relaciona-se com:** [ADR-0602](0602-workspace-ssr-progressive-enhancement.md) ·
-  [ADR-0100](0100-authorization-from-institutional-state.md) ·
+  [ADR-0100](0100-authorization-model.md) ·
   [ADR-0204](0204-institutional-files-and-folders.md)
 
 ## Context

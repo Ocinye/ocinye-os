@@ -9391,3 +9391,104 @@ async fn quem_nao_lidera_o_ambiente_nao_recebe_os_controlos_nem_a_operacao() {
         "um `POST` directo acrescentou alguém ao ambiente a quem não o lidera"
     );
 }
+
+/// Nenhum ecrã da navegação está morto.
+///
+/// # A propriedade
+///
+/// > **Todo o ecrã que a navegação oferece responde a alguém.**
+///
+/// A prova de que o Router conhece um caminho não é a prova de que o ecrã
+/// existe: uma rota registada que devolvesse sempre a página de falha passaria
+/// nessa e continuaria a ser interface morta. Aqui abre-se cada ecrã e exige-se
+/// que **não** seja uma recusa nem um erro.
+///
+/// # Porque duas pessoas e não uma
+///
+/// Porque ninguém deve legitimamente ter tudo. Administrar a plataforma não é
+/// fazer investigação, e uma conta que abrisse os vinte e dois ecrãs seria ela
+/// própria o defeito. Cada ecrã tem de responder a **pelo menos uma** das duas
+/// — que é a afirmação de que não está morto, e não a de que é público.
+#[tokio::test]
+async fn nenhum_ecra_da_navegacao_esta_morto() {
+    const ECRAS: [&str; 23] = [
+        "/", "/activity", "/admin", "/ai", "/ai/agents", "/ai/prompt", "/ask",
+        "/audit", "/bibliography", "/calendar", "/compute", "/datasets",
+        "/files", "/help", "/ideas", "/knowledge", "/mail", "/messages",
+        "/my-work", "/projects", "/search", "/settings", "/units",
+    ];
+
+    let harness = harness!();
+
+    /// Uma página que recusa ou falha. Não é o mesmo que uma página vazia: um
+    /// estado vazio que ensina é um ecrã vivo.
+    ///
+    /// O marcador são os **títulos** das páginas de recusa, e não o bloco
+    /// `oc-notice`: esse bloco também serve os estados vazios que ensinam, e um
+    /// ecrã vivo mas sem conteúdo seria dado por morto.
+    ///
+    /// Os títulos têm de ser os exactos. A primeira versão deste teste
+    /// procurava «Não encontrado» quando o `fallback` escreve «Página não
+    /// encontrada» — e por isso um caminho inventado passava por ecrã vivo, que
+    /// foi o que o controlo negativo apanhou.
+    async fn respondeu(page: &Page) -> bool {
+        const RECUSAS: [&str; 4] = [
+            "Página não encontrada",
+            "Não encontrado",
+            "Sem acesso",
+            "Indisponível",
+        ];
+        let titulo = page.get_title().await.ok().flatten().unwrap_or_default();
+        !RECUSAS.iter().any(|recusa| titulo.starts_with(recusa))
+    }
+
+    // Uma conta de investigação, com trabalho a sério.
+    let (investigador, _) = harness.sign_in(&[
+        TechnicalRole::ResearchLead,
+        TechnicalRole::UnitManager,
+    ])
+    .await;
+    harness.owns_a_workspace(investigador).await;
+
+    let mut viva_para_investigacao = Vec::new();
+    for caminho in ECRAS {
+        let pagina = harness.open(caminho).await;
+        if respondeu(&pagina).await {
+            viva_para_investigacao.push(caminho);
+        }
+    }
+
+    // Uma conta administrativa, que não faz investigação.
+    let (_, _) = harness
+        .sign_in(&[
+            TechnicalRole::PlatformAdmin,
+            TechnicalRole::OrganisationAdmin,
+            TechnicalRole::Auditor,
+        ])
+        .await;
+
+    let mut mortos = Vec::new();
+    for caminho in ECRAS {
+        if viva_para_investigacao.contains(&caminho) {
+            continue;
+        }
+        let pagina = harness.open(caminho).await;
+        if !respondeu(&pagina).await {
+            mortos.push(caminho);
+        }
+    }
+
+    assert!(
+        mortos.is_empty(),
+        "ecrãs da navegação que não responderam a ninguém: {mortos:?}"
+    );
+
+    // O controlo negativo: se tudo respondesse a toda a gente, a asserção
+    // acima passaria sem medir nada. Um caminho que não existe tem de falhar.
+    let inventado = harness.open("/nao-existe-este-ecra").await;
+    assert!(
+        !respondeu(&inventado).await,
+        "um caminho inventado respondeu como ecrã vivo; a asserção acima não \
+         estava a distinguir nada"
+    );
+}
