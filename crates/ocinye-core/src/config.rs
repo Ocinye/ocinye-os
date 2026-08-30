@@ -490,7 +490,7 @@ impl CoreConfig {
             organisation_slug: or_default("OCINYE_ORGANISATION_SLUG", "ocinye"),
             database_url: required("OCINYE_DATABASE_URL")?,
             database_max_connections: parse_number("OCINYE_DATABASE_MAX_CONNECTIONS", 10),
-            redis_url: or_default("OCINYE_REDIS_URL", "redis://localhost:6379"),
+            redis_url: or_default("OCINYE_REDIS_URL", "redis://localhost:6380"),
             oidc: OidcConfig {
                 issuer: or_default("OCINYE_OIDC_ISSUER", ""),
                 audience: or_default("OCINYE_OIDC_AUDIENCE", "ocinye-core"),

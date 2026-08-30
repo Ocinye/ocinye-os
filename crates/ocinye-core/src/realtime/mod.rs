@@ -108,7 +108,7 @@ impl Realtime {
             }) {
                 Ok(gestor) => {
                     saudavel.store(true, Ordering::Relaxed);
-                    tracing::info!("plano realtime ligado");
+                    tracing::info!(endpoint = %sem_credenciais(url), "plano realtime ligado");
                     Self {
                         ligacao: Some(gestor),
                         url: Some(url.to_owned()),
@@ -116,9 +116,18 @@ impl Realtime {
                     }
                 }
                 Err(erro) => {
-                    // O endereço, e nunca as credenciais que possam vir nele.
+                    // O anfitrião e o porto, e nunca as credenciais que possam
+                    // vir no endereço.
+                    //
+                    // O comentário dizia «o endereço» e nada era registado. Sem
+                    // ele, uma instalação configurada para `6380` com o Redis a
+                    // responder em `6379` diz apenas «não respondeu» — e quem
+                    // administra vai procurar um serviço em baixo quando o que
+                    // há é um número trocado. Foi assim que esta instalação
+                    // passou dias com o tempo real degradado.
                     tracing::warn!(
                         cause = %erro,
+                        endpoint = %sem_credenciais(url),
                         "o plano realtime não respondeu; o tempo real fica degradado"
                     );
                     // O endereço fica guardado.
@@ -482,5 +491,39 @@ mod tests {
         let ausente = Realtime::connect("").await;
         assert!(!ausente.configurado());
         assert!(!ausente.saudavel());
+    }
+}
+
+/// O anfitrião e o porto de um endereço, sem o que estiver antes do `@`.
+///
+/// Um `redis://` pode levar utilizador e palavra-passe. Registar o endereço
+/// inteiro poria credenciais no diário; não registar nada deixa quem administra
+/// sem saber a que porto a instalação estava a bater. O que interessa ao
+/// diagnóstico é exactamente o que é seguro dizer.
+fn sem_credenciais(url: &str) -> String {
+    let sem_esquema = url.split("://").nth(1).unwrap_or(url);
+    let autoridade = sem_esquema.split('/').next().unwrap_or(sem_esquema);
+    autoridade
+        .rsplit('@')
+        .next()
+        .unwrap_or(autoridade)
+        .to_owned()
+}
+
+#[cfg(test)]
+mod endereco {
+    use super::sem_credenciais;
+
+    /// O que se regista diz o porto e não diz a palavra-passe.
+    #[test]
+    fn o_endereco_registado_nao_leva_credenciais() {
+        assert_eq!(sem_credenciais("redis://localhost:6380"), "localhost:6380");
+        assert_eq!(sem_credenciais("redis://redis:6379/0"), "redis:6379");
+        assert_eq!(
+            sem_credenciais("redis://ocinye:supersegredo@cache.interno:6379"),
+            "cache.interno:6379"
+        );
+        // Sem esquema continua a ser legível, e continua a não dizer o segredo.
+        assert_eq!(sem_credenciais("user:pw@host:6379"), "host:6379");
     }
 }
