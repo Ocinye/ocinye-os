@@ -9103,3 +9103,115 @@ async fn uma_conta_suspensa_perde_autoridade_a_meio_da_sessao() {
         &html[..html.len().min(400)]
     );
 }
+
+/// A pertença decide-se no Core, e a mesma sessão vê a decisão **já**.
+///
+/// > O Core decide a autoridade. O Workspace apresenta-a.
+///
+/// Uma sessão que só aprendesse a nova pertença ao reiniciar teria uma segunda
+/// política de autorização — a sua — e essa é a coisa que esta milestone
+/// existe para não deixar acontecer. Nos dois sentidos: conceder tem de
+/// aparecer, e revogar tem de desaparecer, sem reentrada e sem reinício.
+#[tokio::test]
+async fn conceder_e_revogar_uma_pertenca_veem_se_na_mesma_sessao() {
+    let harness = harness!();
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    // Quem gere, fora do browser: entrar uma segunda vez trocaria a sessão, e
+    // a página passaria a ser lida por quem revoga em vez de quem é revogado.
+    let gestora = harness
+        .pessoa_administrativa(&[TechnicalRole::PlatformAdmin])
+        .await;
+    let quem_gere = ocinye_core::modules::identity::principal_for_person(&harness.pool, &gestora)
+        .await
+        .expect("principal");
+
+    let mut tx = harness.pool.begin().await.expect("tx");
+    let unidade = ocinye_core::modules::organisation::create_unit(
+        &mut tx,
+        &quem_gere,
+        &ids,
+        ocinye_core::modules::organisation::NewUnit {
+            code: format!("F{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase(),
+            name: "Unidade de frescura".to_owned(),
+            description: None,
+            research_areas: Vec::new(),
+        },
+    )
+    .await
+    .expect("unidade");
+    tx.commit().await.expect("commit");
+
+    // A sessão viva: abre-se **antes** de existir pertença nenhuma.
+    let (investigador, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // O marcador é a própria pessoa na lista de membros, e não o nome da
+    // unidade: o detalhe de uma unidade é legível a quem investiga na
+    // organização, tenha ou não pertença. Existir não é o mesmo que pertencer,
+    // e usar o nome da unidade mediria a coisa errada.
+    let nome: String = sqlx::query_scalar("SELECT full_name FROM people WHERE id = $1")
+        .bind(investigador)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("nome");
+
+    // Recorta-se a lista de membros. Procurar o nome no HTML inteiro
+    // encontrava-o sempre — a barra de topo escreve quem está autenticado, e
+    // quem está autenticado é justamente esta pessoa.
+    fn na_lista_de_membros(html: &str, nome: &str) -> bool {
+        html.split("oc-pessoa")
+            .skip(1)
+            .any(|bloco| bloco[..bloco.len().min(600)].contains(nome))
+    }
+
+    let caminho = format!("/units/{}", unidade.id);
+    let antes = harness.open(&caminho).await;
+    let html = antes.content().await.expect("conteúdo");
+    assert!(
+        !na_lista_de_membros(&html, &nome),
+        "a pessoa já constava da unidade antes da concessão; o teste não mediria nada"
+    );
+
+    // ── Conceder ────────────────────────────────────────────────────────
+    let mut tx = harness.pool.begin().await.expect("tx");
+    ocinye_core::modules::organisation::add_unit_member(
+        &mut tx,
+        &quem_gere,
+        &ids,
+        unidade.id,
+        investigador,
+        UnitRole::Member,
+    )
+    .await
+    .expect("pertença");
+    tx.commit().await.expect("commit");
+
+    // A mesma sessão, sem reentrada.
+    let depois = harness.open(&caminho).await;
+    let html = depois.content().await.expect("conteúdo");
+    assert!(
+        na_lista_de_membros(&html, &nome),
+        "a concessão não chegou à sessão viva: a autorização estava a ser lida de \
+         uma cópia da sessão, e não do estado autoritativo"
+    );
+
+    // ── Revogar ─────────────────────────────────────────────────────────
+    let mut tx = harness.pool.begin().await.expect("tx");
+    ocinye_core::modules::organisation::revoke_unit_member(
+        &mut tx,
+        &quem_gere,
+        &ids,
+        unidade.id,
+        investigador,
+    )
+    .await
+    .expect("revogação");
+    tx.commit().await.expect("commit");
+
+    let final_ = harness.open(&caminho).await;
+    let html = final_.content().await.expect("conteúdo");
+    assert!(
+        !na_lista_de_membros(&html, &nome),
+        "a revogação não chegou à sessão viva: a pertença revogada continuava a autorizar"
+    );
+}

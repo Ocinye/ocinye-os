@@ -134,6 +134,11 @@ suites() {
 # frase que só existe no corpo de um PDF, e o formato que se guarda mas não se
 # lê. Ambas exigem armazenamento; sem ele, falham na CI em vez de se saltarem.
 #
+# 77 desde 2026-08-30: entrou a frescura da pertença nos dois sentidos, na mesma
+# sessão viva. O marcador é a própria pessoa na lista de membros: o nome da
+# unidade estaria sempre lá — o detalhe é legível a quem investiga, tenha ou não
+# pertença — e a barra de topo escreve o nome de quem está autenticado.
+#
 # 76 desde 2026-08-30: entrou a viagem da conta suspensa a meio da sessão. A
 # pertença sobrevive à suspensão e a autoridade não — e verificou-se por
 # reversão que só desligando **quatro** camadas independentes é que a unidade
@@ -141,7 +146,7 @@ suites() {
 #
 # Auditado em 2026-08-29, em série, marca a marca. O número continua fixo: uma
 # viagem que deixe de levantar faz a contagem cair e o portão fecha.
-viagens-de-browser|76|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|75
+viagens-de-browser|77|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|76
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
