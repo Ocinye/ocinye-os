@@ -7,6 +7,51 @@ use ocinye_contracts::{TechnicalRole, UnitRole, WorkspaceRole};
 use crate::policy::ExplicitGrant;
 use uuid::Uuid;
 
+/// O tipo de identidade operacional por trás de uma sessão.
+///
+/// > **Uma identidade privilegiada ligada estabelece responsabilidade, e não
+/// > herança de autoridade.**
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum IdentityKind {
+    /// Uma pessoa. A identidade normal com que se trabalha.
+    #[default]
+    Human,
+    /// A identidade por onde alguém exerce autoridade administrativa.
+    ///
+    /// Nunca é uma pessoa: pertence sempre a uma, e é essa que responde pelo
+    /// que ela faz.
+    Privileged,
+}
+
+impl IdentityKind {
+    /// Lê o que a base guarda. Um valor desconhecido lê-se como `Human`.
+    ///
+    /// Conservador de propósito: um tipo que ninguém reconhece não deve ganhar
+    /// a apresentação privilegiada por acidente.
+    #[must_use]
+    pub fn parse(raw: &str) -> Self {
+        match raw {
+            "privileged" => Self::Privileged,
+            _ => Self::Human,
+        }
+    }
+
+    /// A forma que a base guarda.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Human => "human",
+            Self::Privileged => "privileged",
+        }
+    }
+
+    /// Se esta sessão tem de ser inequivocamente distinguível de uma normal.
+    #[must_use]
+    pub const fn is_privileged(self) -> bool {
+        matches!(self, Self::Privileged)
+    }
+}
+
 /// Who is acting, and in what institutional context.
 ///
 /// A `Principal` is assembled server-side from the verified OIDC subject plus
@@ -28,6 +73,25 @@ pub struct Principal {
     pub display_name: String,
     /// Whether membership is currently active.
     pub is_active: bool,
+    /// Que **tipo** de identidade iniciou esta sessão.
+    ///
+    /// # Porque isto não é a mesma coisa que ter `PlatformAdmin`
+    ///
+    /// Porque respondem a perguntas diferentes:
+    ///
+    /// - `identity_kind` responde «que tipo de identidade iniciou esta sessão?»
+    /// - os papéis respondem «que autoridade é que ela tem **agora**?»
+    ///
+    /// Uma identidade privilegiada a quem revoguem o `PlatformAdmin` continua a
+    /// ser uma identidade privilegiada — a sessão não deixa de ser o que é — mas
+    /// deixa de ter autoridade administrativa. Colapsar as duas faria a
+    /// Experience afirmar «Super Admin» a quem já não pode administrar, ou tratar
+    /// como sessão normal uma sessão que não o é.
+    ///
+    /// E na direcção inversa: uma pessoa a quem alguém desse `PlatformAdmin` não
+    /// passa a ser uma identidade privilegiada. Continua a ser uma pessoa, com
+    /// autoridade a mais.
+    pub identity_kind: IdentityKind,
     /// Technical roles currently granted.
     pub roles: HashSet<TechnicalRole>,
     /// Role held in each unit.

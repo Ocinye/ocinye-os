@@ -38,7 +38,7 @@ descrevem o mesmo sistema: quando divergirem, é defeito, e corrige-se nas duas.
 Os **números** desta secção não são escritos à mão: saem de
 `./scripts/repository-facts.sh`, que os deriva da árvore e só lê. Já houve aqui
 quatro contagens em circulação ao mesmo tempo — 62 caminhos contra 131, 12
-migrations contra 19, 45 tabelas contra 63, 64 permissões contra 72 — porque
+migrations contra 19, 72 tabelas contra 63, 64 permissões contra 72 — porque
 cada uma era mantida por quem se lembrasse. Um número escrito à mão envelhece
 sem que nada falhe.
 
@@ -77,7 +77,7 @@ sem que nada falhe.
   A interface distingue as ausências em vez de mostrar uma caixa vazia. **A
   ingestão é periódica**: o worker percorre as caixas ligadas, e uma que recuse
   não interrompe as outras — a razão fica guardada na caixa que falhou.
-- **27 migrations**, aplicáveis de base vazia; 72 tabelas.
+- **28 migrations**, aplicáveis de base vazia; 72 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -209,14 +209,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1345 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1362 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **467 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **476 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

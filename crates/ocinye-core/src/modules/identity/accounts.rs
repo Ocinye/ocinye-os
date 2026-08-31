@@ -521,6 +521,42 @@ pub async fn bootstrap_platform_admin(
     email: &str,
     ids: &CorrelationIds,
 ) -> CoreResult<(Person, TemporaryCredential)> {
+    // A forma de uma identidade só: uma pessoa que também administra.
+    //
+    // Continua a existir porque é o que instalações sem separação precisam, e
+    // porque seis provas a exercitam. **Não é** a forma da produção da Ocinye:
+    // essa é `bootstrap_privileged_identity`, onde administrar deixa de ser a
+    // identidade normal de alguém.
+    bootstrap_uma_identidade(pool, authenticator, organisation_id, full_name, email, ids).await
+}
+
+/// A pessoa a quem a identidade privilegiada vai pertencer.
+pub struct HumanOwner {
+    /// O nome institucional da pessoa. Nunca o nome da identidade privilegiada.
+    pub full_name: String,
+    /// O endereço da pessoa, distinto do da identidade privilegiada.
+    pub email: String,
+}
+
+/// A forma de uma identidade: uma pessoa que também administra.
+///
+/// Existe para instalações que não separam as duas coisas. A produção da Ocinye
+/// usa `bootstrap_privileged_identity`, e a diferença não é de conveniência: com
+/// uma identidade só, a conta de trabalho de alguém carrega `PlatformAdmin` em
+/// todas as sessões — e uma sessão privilegiada indistinguível de uma sessão
+/// normal é um estado que este sistema classifica como proibido.
+///
+/// # Errors
+///
+/// Devolve [`CoreError::Conflict`] quando já há administrador.
+async fn bootstrap_uma_identidade(
+    pool: &PgPool,
+    authenticator: &Authenticator,
+    organisation_id: Uuid,
+    full_name: &str,
+    email: &str,
+    ids: &CorrelationIds,
+) -> CoreResult<(Person, TemporaryCredential)> {
     if repo::has_usable_platform_admin(pool, organisation_id).await? {
         return Err(CoreError::Conflict(
             "A plataforma já tem um administrador. O bootstrap corre uma única vez.".to_owned(),
@@ -576,6 +612,156 @@ pub async fn bootstrap_platform_admin(
         CredentialKind::Temporary,
         &verifier,
         Some(expires_at),
+        None,
+        "bootstrap",
+    )
+    .await?;
+
+    repo::grant_role(
+        &mut *tx,
+        person.id,
+        TechnicalRole::PlatformAdmin,
+        "bootstrap: first platform administrator",
+        None,
+    )
+    .await?;
+
+    audit::record(
+        &mut tx,
+        None,
+        ids,
+        AuditEntry::new(action::BOOTSTRAP_ADMIN, "person")
+            .resource(person.id)
+            .actor(person.id, organisation_id)
+            .detail("email", email.clone())
+            .detail("expires_at", expires_at.to_rfc3339()),
+    )
+    .await?;
+
+    tx.commit().await?;
+
+    Ok((
+        person,
+        TemporaryCredential {
+            secret,
+            email: email.clone(),
+            expires_at,
+        },
+    ))
+}
+
+/// Estabelece a pessoa e a identidade privilegiada por onde ela administra.
+///
+/// # Porque as duas nascem juntas
+///
+/// > **Uma identidade privilegiada ligada estabelece responsabilidade, e não
+/// > herança de autoridade.**
+///
+/// Uma identidade privilegiada com credencial utilizável e sem dono válido é
+/// uma conta com autoridade por quem ninguém responde. Nascerem na mesma
+/// transacção é o que torna esse estado **impossível**, e não apenas
+/// improvável: se qualquer metade falhar, nenhuma é escrita.
+///
+/// # O que atravessa a ligação
+///
+/// Nada. A pessoa não recebe credencial, não recebe papel, e não fica activa.
+/// A identidade privilegiada não herda pertenças nem acesso científico. A seta
+/// serve para a auditoria dizer quem está por trás de uma operação — e para
+/// mais nada.
+///
+/// # Errors
+///
+/// Devolve [`CoreError::Conflict`] quando já há administrador, e
+/// [`CoreError::Validation`] para um endereço inaceitável ou quando os dois
+/// endereços são o mesmo.
+pub async fn bootstrap_privileged_identity(
+    pool: &PgPool,
+    authenticator: &Authenticator,
+    organisation_id: Uuid,
+    dono: HumanOwner,
+    full_name: &str,
+    email: &str,
+    ids: &CorrelationIds,
+) -> CoreResult<(Person, TemporaryCredential)> {
+    if repo::has_usable_platform_admin(pool, organisation_id).await? {
+        return Err(CoreError::Conflict(
+            "A plataforma já tem um administrador. O bootstrap corre uma única vez.".to_owned(),
+        ));
+    }
+
+    let email = validate_email(email)?;
+
+    let secret = generate::temporary_credential();
+    let verifier = authenticator.hasher.hash(&secret)?;
+    let expires_at = Utc::now() + Duration::hours(authenticator.temporary_credential_hours);
+
+    let mut tx = pool.begin().await?;
+
+    // Serialise bootstrap attempts **in the database**.
+    //
+    // The re-check below is necessary and was not sufficient: a plain `SELECT`
+    // under `READ COMMITTED` blocks nobody, so two concurrent runs both saw no
+    // administrator, both inserted a person with a different address, and both
+    // committed. Nothing in the schema forbids a second `platform_admin`, so
+    // the installation ended up with two.
+    //
+    // An advisory transaction lock is the right instrument: it is held for
+    // exactly this transaction, released on commit or rollback, needs no table
+    // and no row to exist yet, and costs nothing on the path that runs once.
+    // The second attempt now waits, then reads a committed administrator and
+    // refuses (`CLAUDE.md` §31, briefing §64).
+    sqlx::query("SELECT pg_advisory_xact_lock($1, hashtext($2))")
+        .bind(BOOTSTRAP_LOCK_CLASS)
+        .bind(organisation_id.to_string())
+        .execute(&mut *tx)
+        .await?;
+
+    // Re-check inside the transaction, now that the lock makes it meaningful.
+    if repo::has_usable_platform_admin(&mut *tx, organisation_id).await? {
+        return Err(CoreError::Conflict(
+            "A plataforma já tem um administrador. O bootstrap corre uma única vez.".to_owned(),
+        ));
+    }
+
+    // ── A pessoa ────────────────────────────────────────────────────────
+    //
+    // Sem credencial, sem papel e sem estado activo. Existe porque a identidade
+    // privilegiada precisa de um dono válido, e não para ser uma conta: dar-lhe
+    // login aqui faria o servidor provisionar a instituição, que é exactamente
+    // a fronteira que este bootstrap existe para não atravessar.
+    let dono_email = validate_email(&dono.email)?;
+    if dono_email == email {
+        return Err(CoreError::Validation(
+            "A pessoa e a identidade privilegiada não podem partilhar o mesmo \
+             endereço: seriam a mesma credencial."
+                .to_owned(),
+        ));
+    }
+    let humano = repo::insert_person(
+        &mut *tx,
+        organisation_id,
+        &dono_email,
+        dono.full_name.trim(),
+        Some(InstitutionalPosition::Founder.as_str()),
+    )
+    .await?;
+
+    // ── A identidade privilegiada, ligada a ela ─────────────────────────
+    let person = repo::insert_privileged_identity(
+        &mut *tx,
+        organisation_id,
+        &email,
+        full_name.trim(),
+        humano.id,
+    )
+    .await?;
+
+    creds::insert(
+        &mut *tx,
+        person.id,
+        CredentialKind::Temporary,
+        &verifier,
+        Some(expires_at),
         // Nobody issued it: there was nobody above to issue it.
         None,
         "bootstrap",
@@ -599,6 +785,10 @@ pub async fn bootstrap_platform_admin(
             .resource(person.id)
             .actor(person.id, organisation_id)
             .detail("email", email.clone())
+            // A pessoa por trás da identidade fica no registo desde o primeiro
+            // acto: uma auditoria que só diga «Fidel Admin» perde quem responde.
+            .detail("belongs_to_person_id", humano.id.to_string())
+            .detail("belongs_to_email", dono_email.clone())
             .detail("expires_at", expires_at.to_rfc3339()),
     )
     .await?;

@@ -25,6 +25,7 @@ fn principal() -> Principal {
         organisation_id: ORG,
         display_name: "Test Person".into(),
         is_active: true,
+        identity_kind: crate::IdentityKind::Human,
         roles: HashSet::new(),
         unit_roles: HashMap::new(),
         workspace_roles: HashMap::new(),

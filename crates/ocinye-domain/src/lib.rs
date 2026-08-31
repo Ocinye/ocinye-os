@@ -32,4 +32,4 @@ pub use policy::{
     may_invoke, may_process_with_ai, AccessSource, Action, AgentBoundary, AgenticRefusal, Decision,
     ExplicitGrant, ResourceContext, ResourceKind, VisibilityFilter,
 };
-pub use principal::Principal;
+pub use principal::{IdentityKind, Principal};
