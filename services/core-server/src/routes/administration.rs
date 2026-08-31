@@ -201,10 +201,15 @@ async fn provision_member(
     Authorised { principal, .. }: Authorised<NeedsMembersCreate>,
     Path(person_id): Path<Uuid>,
 ) -> Result<Json<CreatedMember>, ApiError> {
-    let (person, credential) =
-        identity::provision_existing_person(&state.pool, &state.authenticator, &principal, person_id, &ids)
-            .await
-            .map_err(|error| ApiError::new(error, &ids))?;
+    let (person, credential) = identity::provision_existing_person(
+        &state.pool,
+        &state.authenticator,
+        &principal,
+        person_id,
+        &ids,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
 
     Ok(Json(CreatedMember {
         person_id: person.id,

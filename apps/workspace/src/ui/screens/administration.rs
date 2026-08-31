@@ -305,11 +305,7 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
 /// Separador «Segurança» do detalhe de um membro.
 ///
 /// Só metadados. Nunca um hash, nunca uma palavra-passe (briefing §73).
-pub fn security_tab(
-    person_id: &str,
-    overview: &Value,
-    recusa: Option<&str>,
-) -> impl IntoView {
+pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> impl IntoView {
     let status = text(overview, "account_status").to_owned();
     // Quem decide é o Core. Ausente a resposta — porque a consulta falhou — o
     // ecrã não oferece a operação: oferecê-la por omissão mostraria um botão que
@@ -685,7 +681,10 @@ mod tests {
             None,
         )
         .to_html();
-        assert!(html.contains("Dar acesso"), "a operação não chega a quem administra");
+        assert!(
+            html.contains("Dar acesso"),
+            "a operação não chega a quem administra"
+        );
         assert!(
             html.contains(
                 r#"action="/admin/members/11111111-1111-1111-1111-111111111111/provision""#
@@ -814,15 +813,19 @@ mod tests {
 
     #[test]
     fn o_separador_de_seguranca_nunca_mostra_material_de_credencial() {
-        let html = security_tab("abc", &json!({
-            "account_status": "active",
-            "has_permanent_password": true,
-            "password_changed_at": "2026-08-22T10:00:00Z",
-            "recent_failed_attempts": 3,
-            "live_sessions": [
-                {"state": "active", "user_agent": "Firefox", "ip_prefix": "10.0.0.0/24"}
-            ]
-        }), None)
+        let html = security_tab(
+            "abc",
+            &json!({
+                "account_status": "active",
+                "has_permanent_password": true,
+                "password_changed_at": "2026-08-22T10:00:00Z",
+                "recent_failed_attempts": 3,
+                "live_sessions": [
+                    {"state": "active", "user_agent": "Firefox", "ip_prefix": "10.0.0.0/24"}
+                ]
+            }),
+            None,
+        )
         .to_html();
 
         assert!(html.contains("Definida pelo próprio"));
@@ -837,12 +840,16 @@ mod tests {
 
     #[test]
     fn o_separador_de_seguranca_declara_quando_nao_ha_palavra_passe_definitiva() {
-        let html = security_tab("abc", &json!({
-            "account_status": "invited",
-            "has_permanent_password": false,
-            "temporary_credential_expires_at": "2026-08-23T10:00:00Z",
-            "live_sessions": []
-        }), None)
+        let html = security_tab(
+            "abc",
+            &json!({
+                "account_status": "invited",
+                "has_permanent_password": false,
+                "temporary_credential_expires_at": "2026-08-23T10:00:00Z",
+                "live_sessions": []
+            }),
+            None,
+        )
         .to_html();
         assert!(html.contains("Ainda não definida"));
         assert!(html.contains("Sem sessões activas."));

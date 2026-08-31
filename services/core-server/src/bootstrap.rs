@@ -141,12 +141,9 @@ fn slug_utilizavel(configurado: &str) -> anyhow::Result<String> {
 pub async fn run(argv: &[String]) -> anyhow::Result<()> {
     let args = parse_args(argv)?;
 
-    let (Some(name), Some(email), Some(admin_name), Some(admin_email)) = (
-        &args.name,
-        &args.email,
-        &args.admin_name,
-        &args.admin_email,
-    ) else {
+    let (Some(name), Some(email), Some(admin_name), Some(admin_email)) =
+        (&args.name, &args.email, &args.admin_name, &args.admin_email)
+    else {
         print_usage();
         bail!("--name, --email, --admin-name e --admin-email são obrigatórios");
     };
@@ -293,8 +290,14 @@ mod tests {
         let fonte = include_str!("bootstrap.rs");
         let uso = &fonte[fonte.find("fn print_usage").expect("uso")..];
         let uso = &uso[..uso.find("\n}").expect("fim")];
-        assert!(uso.contains("Nasce"), "o uso não diz que a pessoa nasce sem credencial");
-        assert!(uso.contains("--admin-email"), "o uso não anuncia a identidade privilegiada");
+        assert!(
+            uso.contains("Nasce"),
+            "o uso não diz que a pessoa nasce sem credencial"
+        );
+        assert!(
+            uso.contains("--admin-email"),
+            "o uso não anuncia a identidade privilegiada"
+        );
     }
 
     /// Slugs de configuração por pôr são recusados, e não corrigidos.

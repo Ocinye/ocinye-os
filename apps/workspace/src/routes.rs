@@ -2862,7 +2862,10 @@ async fn provision_member(
                 Screen::Admin,
                 vec![Crumb::to(Screen::Admin)],
                 ui::screens::administration::issued_credential(
-                    credential.get("email").and_then(Value::as_str).unwrap_or(""),
+                    credential
+                        .get("email")
+                        .and_then(Value::as_str)
+                        .unwrap_or(""),
                     credential
                         .get("temporary_password")
                         .and_then(Value::as_str)
@@ -2879,8 +2882,7 @@ async fn provision_member(
             // Volta ao detalhe com a razão. Um redirecto limpo perderia-a, e o
             // botão continuaria lá como se nada tivesse acontecido.
             let person_path = format!("/api/v1/people/{person_id}");
-            let security_path =
-                format!("/api/v1/administration/members/{person_id}/security");
+            let security_path = format!("/api/v1/administration/members/{person_id}/security");
             let access_path = format!("/api/v1/administration/members/{person_id}/access");
             let (person, security, access) = tokio::join!(
                 optional(&state, &member, &person_path),

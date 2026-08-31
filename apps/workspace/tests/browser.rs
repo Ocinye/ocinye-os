@@ -10193,7 +10193,10 @@ async fn dar_acesso_a_quem_ja_existe_nao_cria_uma_segunda_pessoa() {
         .fetch_one(&harness.pool)
         .await
         .expect("contagem");
-    assert_eq!(depois, 1, "dar acesso criou uma segunda pessoa com o mesmo nome");
+    assert_eq!(
+        depois, 1,
+        "dar acesso criou uma segunda pessoa com o mesmo nome"
+    );
 
     let credenciais: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM credentials WHERE person_id = $1 AND state = 'active'",
@@ -10202,7 +10205,10 @@ async fn dar_acesso_a_quem_ja_existe_nao_cria_uma_segunda_pessoa() {
     .fetch_one(&harness.pool)
     .await
     .expect("contagem");
-    assert_eq!(credenciais, 1, "a pessoa não ficou com exactamente uma credencial viva");
+    assert_eq!(
+        credenciais, 1,
+        "a pessoa não ficou com exactamente uma credencial viva"
+    );
 
     // E dar entrada não deu poder.
     let papeis: i64 = sqlx::query_scalar("SELECT count(*) FROM person_roles WHERE person_id = $1")
@@ -10210,7 +10216,10 @@ async fn dar_acesso_a_quem_ja_existe_nao_cria_uma_segunda_pessoa() {
         .fetch_one(&harness.pool)
         .await
         .expect("contagem");
-    assert_eq!(papeis, 0, "dar acesso concedeu papéis a quem só precisava de entrar");
+    assert_eq!(
+        papeis, 0,
+        "dar acesso concedeu papéis a quem só precisava de entrar"
+    );
 
     // Voltar ao detalhe: a operação já não se oferece.
     let page = harness.open(&format!("/admin/members/{dono}")).await;

@@ -17,6 +17,12 @@ pub struct AuditRecord {
     pub actor_person_id: Option<Uuid>,
     /// Their name, joined for display.
     pub actor_name: Option<String>,
+    /// `human` ou `privileged` — que camada executou.
+    pub actor_identity_kind: Option<String>,
+    /// Quem responde por uma identidade privilegiada.
+    ///
+    /// `None` para uma pessoa comum: não há ninguém por trás dela senão ela.
+    pub actor_on_behalf_of: Option<String>,
     /// What happened.
     pub action: String,
     /// Kind of resource.
