@@ -117,6 +117,18 @@ struct Credenciais {
 }
 
 struct Harness {
+    /// O fuso que **esta viagem declara**, quando declara um.
+    ///
+    /// # Porque o fuso não pode vir da máquina
+    ///
+    /// Porque `app.js` escreve o cookie `oc_tz` com o fuso do browser, e o
+    /// Calendário calcula os seus intervalos com ele. Uma viagem que criasse um
+    /// evento numa referência e o observasse noutra estaria a medir a diferença
+    /// entre as duas — e o resultado passaria a depender do fuso da máquina onde
+    /// a suite corre.
+    ///
+    /// Declarado aqui, todas as páginas desta viagem herdam o mesmo relógio.
+    fuso_declarado: std::sync::Mutex<Option<String>>,
     /// O lugar ocupado no limite de browsers simultâneos.
     ///
     /// Guardado aqui porque é o `Drop` do harness que o tem de libertar: é
@@ -367,6 +379,7 @@ impl Harness {
         println!("VIAGEM LEVANTADA");
 
         Some(Self {
+            fuso_declarado: std::sync::Mutex::new(None),
             _lugar: lugar,
             pool,
             organisation_id,
@@ -1053,7 +1066,15 @@ impl Harness {
     ///
     /// O que aqui se espera é o estado observável: já não estar no arranque.
     async fn open(&self, path: &str) -> Page {
-        self.open_em(path, None).await
+        let declarado = self.fuso_declarado.lock().expect("fuso declarado").clone();
+        self.open_em(path, declarado.as_deref()).await
+    }
+
+    /// Declara o fuso desta viagem. Todas as páginas seguintes o herdam.
+    ///
+    /// Uma entrada escondida deixa de ser escondida quando alguém a escreve.
+    fn declarar_fuso(&self, fuso: &str) {
+        *self.fuso_declarado.lock().expect("fuso declarado") = Some(fuso.to_owned());
     }
 
     /// Abre uma página com o browser noutro fuso.
@@ -1788,30 +1809,39 @@ async fn as_vistas_partilham_o_universo_autorizado() {
             .expect("fuso conhecido"),
     );
     let hoje = lisboa.date();
-    // ── Meio-dia, e não a hora corrente ─────────────────────────────────
+    // ── Um relógio só, declarado ────────────────────────────────────────
     //
     // Esta é a **terceira** vez que este teste falha com a hora do dia como
     // entrada escondida, e desta vez a causa foi isolada por reprodução: com
     // `hora = 0` a suite falha numa máquina em UTC e passa numa máquina em
     // Lisboa, com tudo o resto igual.
     //
-    // O motivo é que aqui há **dois relógios**. O formulário escreve o evento em
-    // `Europe/Lisbon`; a vista calcula o seu intervalo na zona **do membro**,
-    // que vem de um cookie do browser e cai em UTC quando não há. Um evento à
-    // meia-noite de Lisboa é 23:00 do dia anterior em UTC, e cai fora do dia que
-    // o teste pediu.
+    // O motivo é que aqui havia **dois relógios**. O formulário escreve o evento
+    // em `Europe/Lisbon`; a vista calcula o seu intervalo na zona **do membro**,
+    // que vem do cookie `oc_tz` e cai em UTC quando o browser não o declarou. Um
+    // evento à meia-noite de Lisboa é 23:00 do dia anterior em UTC, e cai fora
+    // do dia que o teste pediu.
     //
     // Não é defeito do produto: o Calendário mostra o dia no fuso de quem olha,
-    // que é o correcto. É o fixture que tinha dois relógios.
+    // que é o correcto. Era o fixture que tinha dois relógios.
     //
-    // A correcção não é escolher melhor entre eles — é afastar o instante da
-    // fronteira do dia o suficiente para que **nenhum** fuso real a atravesse.
-    // Meio-dia em Lisboa é 11:00 em UTC, 13:00 em Berlim e 04:00 em Los
-    // Angeles: a mesma data civil em toda a parte.
+    // # Porque não basta escolher uma hora longe da meia-noite
     //
-    // E continua dentro das janelas que as vistas usam — a agenda olha noventa
-    // dias, e o dia inteiro cabe na vista do dia.
-    let hora = 12;
+    // Porque não elimina a variável, só a torna improvável. Meio-dia em Lisboa é
+    // 01:00 do dia seguinte em UTC+14 e 23:00 do dia anterior em UTC−12: a data
+    // civil **muda** na mesma, e o teste voltaria a falhar numa máquina desses
+    // fusos. Reduzir a probabilidade de uma entrada escondida não é remover a
+    // entrada escondida.
+    //
+    // O que se faz é declarar o relógio: o membro observa em `Europe/Lisbon`
+    // porque o teste o diz, e não porque a máquina calhou estar nesse fuso. A
+    // criação e a observação passam a ter a mesma referência, seja onde for que
+    // a suite corra.
+    harness.declarar_fuso("Europe/Lisbon");
+
+    // Com um relógio só, a hora corrente serve — e é a que mantém o evento a
+    // decorrer quando se observa, que é o que o Centro Temporal precisa.
+    let hora = lisboa.hour().min(22);
 
     let visivel = unique_title("Visivel");
     let distante = unique_title("Distante");
@@ -9854,5 +9884,76 @@ fn titulos_visiveis(html: &str) -> String {
         "(nenhum evento na página)".to_owned()
     } else {
         vistos.join(", ")
+    }
+}
+
+/// O conteúdo estável é o do destino, e nunca o da página de onde se veio.
+///
+/// # A corrida que isto guarda
+///
+/// `conteudo_estavel` devolvia o primeiro DOM não-vazio. Durante uma navegação o
+/// DOM **da página anterior** ainda é não-vazio, e por isso quem lesse logo a
+/// seguir a ver a URL mudar recebia o arranque com a URL do Login — o sintoma
+/// aparentemente impossível de «chegou ao Login e não há formulário».
+///
+/// Dezoito viagens dependem deste helper. Uma passagem verde delas não prova a
+/// propriedade dele: prova que a corrida não aconteceu daquela vez.
+///
+/// # Porque a rede é estrangulada
+///
+/// Porque sem isso a corrida não se reproduz nesta máquina: o destino carrega
+/// depressa de mais para a janela caber uma leitura, e vinte repetições passaram
+/// todas — com o helper defeituoso. Um teste que não consegue falhar com o
+/// defeito no sítio não guarda propriedade nenhuma.
+///
+/// Com a latência imposta, a janela entre «a URL mudou» e «o DOM novo assentou»
+/// passa a ser larga e igual em qualquer máquina. É a mesma ideia de escrever um
+/// controlo positivo: primeiro provar que o instrumento detecta, e só depois
+/// confiar no que ele diz.
+///
+/// Exigem-se as duas metades: o destino **está**, e a origem **não está**. Sem a
+/// segunda, um helper que devolvesse o arranque passaria se o arranque contivesse
+/// por acaso a agulha procurada.
+#[tokio::test]
+async fn o_conteudo_estavel_nunca_devolve_a_pagina_anterior() {
+    let harness = harness!();
+
+    for volta in 1..=6 {
+        let page = abrir_a_frio(&harness, "/").await;
+
+        // Latência imposta: alarga a janela da navegação até ela ser observável.
+        use chromiumoxide::cdp::browser_protocol::network::EmulateNetworkConditionsParams;
+        page.execute(EmulateNetworkConditionsParams::new(
+            false, 1200.0, 200_000.0, 200_000.0,
+        ))
+        .await
+        .expect("estrangular a rede");
+
+        let inicio = std::time::Instant::now();
+        loop {
+            let url = page.url().await.expect("url").unwrap_or_default();
+            if url.contains("/login") {
+                break;
+            }
+            assert!(
+                inicio.elapsed() < std::time::Duration::from_secs(45),
+                "volta {volta}: o arranque não entregou ao Login; ficou em «{url}»"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+
+        // Deliberadamente sem pausa: lê-se no instante mais apertado possível,
+        // que é onde a corrida vivia.
+        let html = conteudo_estavel(&page).await;
+
+        assert!(
+            html.contains("oc-login__submit"),
+            "volta {volta}: o conteúdo estável não é o do Login"
+        );
+        assert!(
+            !html.contains("NÃO FOI POSSÍVEL CONTACTAR") && !html.contains("oc-boot__lede"),
+            "volta {volta}: o conteúdo estável ainda era o do arranque, com a URL do Login"
+        );
+        page.close().await.ok();
     }
 }

@@ -134,6 +134,12 @@ suites() {
 # frase que só existe no corpo de um PDF, e o formato que se guarda mas não se
 # lê. Ambas exigem armazenamento; sem ele, falham na CI em vez de se saltarem.
 #
+# 82 desde 2026-08-31: entrou a prova do próprio `conteudo_estavel`. Dezoito
+# viagens dependiam dele, e uma passagem verde delas provava que a corrida não
+# tinha acontecido daquela vez — não que ela não existisse. Com a rede
+# estrangulada a janela é observável em qualquer máquina, e o helper defeituoso
+# falha à terceira volta.
+#
 # 81 desde 2026-08-30: entrou a retoma de um carregamento **noutro contexto**. Se a lista das partes recebidas vivesse no JavaScript da página,
 # «resumível» significaria «repete enquanto a página estiver aberta» — que é
 # retry. A viagem fecha a primeira página e exige que a segunda saiba o que a
@@ -160,7 +166,7 @@ suites() {
 #
 # Auditado em 2026-08-29, em série, marca a marca. O número continua fixo: uma
 # viagem que deixe de levantar faz a contagem cair e o portão fecha.
-viagens-de-browser|81|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|80
+viagens-de-browser|82|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|81
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
