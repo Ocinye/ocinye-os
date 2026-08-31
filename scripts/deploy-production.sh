@@ -74,12 +74,31 @@ echo "  soma confirmada no destino"
 ssh_ "tar -xzf '$RAIZ/releases/$CURTO.tar.gz' -C '$RAIZ/releases/$CURTO' \
       && rm -f '$RAIZ/releases/$CURTO.tar.gz'"
 
-# ── 4. Construir ────────────────────────────────────────────────────────
+# ── 4. A configuração do proxy ──────────────────────────────────────────
+#
+# Vem do **release**, e não da última vez que alguém lá mexeu à mão.
+#
+# Não vinha. As configs do nginx foram instaladas uma vez manualmente, e a
+# partir daí o servidor e o repositório podiam discordar sem que nada o dissesse
+# — e discordaram: quando o certificado Origin CA entrou, as configs do servidor
+# passaram a apontar para ele e as do repositório continuaram a apontar para o
+# auto-assinado. Um `git clone` desta árvore descreveria um origin que não
+# existe.
+#
+# Os ranges da Cloudflare **não** são reescritos: são gerados no momento da
+# instalação a partir da fonte oficial, e uma lista velha do repositório seria
+# pior do que nenhuma.
+passo "Configuração do proxy"
+ssh_ "sudo install -m 640 -o root -g ocinye \
+        '$RAIZ/releases/$CURTO'/infra/nginx/*.conf /etc/ocinye/nginx/"
+echo "  $(ls infra/nginx/*.conf | wc -l | tr -d ' ') ficheiro(s) instalado(s)"
+
+# ── 5. Construir ────────────────────────────────────────────────────────
 passo "Construir as imagens"
 ssh_ "cd '$RAIZ/releases/$CURTO' \
       && OCINYE_RELEASE_SHA='$CURTO' docker compose -f '$COMPOSE' build"
 
-# ── 5. O apontador ──────────────────────────────────────────────────────
+# ── 6. O apontador ──────────────────────────────────────────────────────
 #
 # `current` só muda depois de as imagens existirem. Apontar primeiro e construir
 # depois deixaria uma janela em que `current` promete uma coisa que ainda não
@@ -93,7 +112,7 @@ ssh_ "ln -sfn '$RAIZ/releases/$CURTO' '$RAIZ/current' \
 [ -n "$ANTERIOR" ] && echo "  anterior  $ANTERIOR"
 echo "  corrente  $RAIZ/releases/$CURTO"
 
-# ── 6. Levantar ─────────────────────────────────────────────────────────
+# ── 7. Levantar ─────────────────────────────────────────────────────────
 passo "Levantar"
 ssh_ "cd '$RAIZ/current' \
       && OCINYE_RELEASE_SHA='$CURTO' docker compose -f '$COMPOSE' up -d --remove-orphans"
