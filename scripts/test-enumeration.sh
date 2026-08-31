@@ -186,6 +186,10 @@ linhagem-cientifica|3|-p ocinye-core --test scientific_lineage
 # edge, e sem object store não há nada para atravessar. Em CI a ausência falha,
 # como nas outras suites que dependem de bytes.
 carregamento-em-partes|8|-p ocinye-core --test segmented_upload
+# A identidade privilegiada ligada. As duas verdades — que tipo de identidade
+# iniciou a sessão, e que autoridade ela tem agora — são independentes, e é isso
+# que estas provas fixam.
+identidade-privilegiada|7|-p ocinye-core --test privileged_identity
 TABELA
 }
 

@@ -180,6 +180,7 @@ fn principal(fixture: &Fixture, person_id: Uuid) -> Principal {
         organisation_id: fixture.organisation_id,
         display_name: "Test".to_owned(),
         is_active: true,
+        identity_kind: ocinye_domain::IdentityKind::Human,
         roles: HashSet::new(),
         unit_roles: HashMap::new(),
         workspace_roles: HashMap::new(),

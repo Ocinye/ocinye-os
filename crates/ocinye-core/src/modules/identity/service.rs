@@ -89,6 +89,10 @@ pub async fn load_principal(
             person.preferred_name().to_owned()
         },
         is_active: person.can_act(),
+        // Do que a base diz que esta identidade **é**, e não de ter ou não
+        // `PlatformAdmin`: as duas verdades são independentes, e uma delas pode
+        // mudar sem a outra.
+        identity_kind: ocinye_domain::IdentityKind::parse(&person.identity_kind),
         roles: roles.into_iter().collect(),
         unit_roles: unit_roles.into_iter().collect(),
         workspace_roles: workspace_roles.into_iter().collect(),
@@ -427,6 +431,10 @@ pub async fn principal_for_person(pool: &PgPool, person: &Person) -> CoreResult<
         organisation_id: person.organisation_id,
         display_name: person.preferred_name().to_owned(),
         is_active: person.can_act(),
+        // Do que a base diz que esta identidade **é**, e não de ter ou não
+        // `PlatformAdmin`: as duas verdades são independentes, e uma delas pode
+        // mudar sem a outra.
+        identity_kind: ocinye_domain::IdentityKind::parse(&person.identity_kind),
         roles: roles.into_iter().collect(),
         unit_roles: unit_roles.into_iter().collect(),
         workspace_roles: workspace_roles.into_iter().collect(),
@@ -474,6 +482,7 @@ pub async fn principal_within(tx: &mut Tx<'_>, person_id: Uuid) -> CoreResult<Op
         organisation_id: person.organisation_id,
         display_name: person.preferred_name().to_owned(),
         is_active: person.can_act(),
+        identity_kind: ocinye_domain::IdentityKind::parse(&person.identity_kind),
         roles: roles.into_iter().collect(),
         unit_roles: unit_roles.into_iter().collect(),
         workspace_roles: workspace_roles.into_iter().collect(),

@@ -174,6 +174,7 @@ mod tests {
             organisation_id: Uuid::from_u128(2),
             display_name: "Test".into(),
             is_active: true,
+            identity_kind: ocinye_domain::IdentityKind::Human,
             roles: roles.iter().copied().collect::<HashSet<_>>(),
             unit_roles: HashMap::new(),
             workspace_roles: HashMap::new(),

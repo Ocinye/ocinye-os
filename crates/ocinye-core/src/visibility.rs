@@ -191,6 +191,7 @@ mod tests {
             organisation_id: Uuid::from_u128(2),
             display_name: "P".into(),
             is_active: true,
+            identity_kind: ocinye_domain::IdentityKind::Human,
             roles: HashSet::new(),
             unit_roles: HashMap::new(),
             workspace_roles: HashMap::new(),

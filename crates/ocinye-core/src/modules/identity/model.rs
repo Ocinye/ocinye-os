@@ -29,6 +29,23 @@ pub struct Person {
     pub biography: Option<String>,
     /// Account status.
     pub status: String,
+    /// O que esta identidade operacional **é**.
+    ///
+    /// `human` para uma pessoa; `privileged` para a identidade por onde alguém
+    /// exerce autoridade administrativa. Não é um booleano `is_admin`: a
+    /// propriedade não é sobre autorização — uma identidade privilegiada passa
+    /// pela mesma política que todas as outras.
+    pub identity_kind: String,
+    /// A pessoa a quem esta identidade privilegiada pertence.
+    ///
+    /// > **Uma identidade privilegiada ligada estabelece responsabilidade, e não
+    /// > herança de autoridade.**
+    ///
+    /// A ligação existe para a auditoria poder dizer quem está por trás de uma
+    /// operação administrativa. Nada atravessa esta seta: nem papéis, nem
+    /// pertenças, nem credenciais, nem sessões.
+    pub belongs_to_person_id: Option<Uuid>,
+
     /// Last activity.
     pub last_seen_at: Option<DateTime<Utc>>,
     /// When membership ended.

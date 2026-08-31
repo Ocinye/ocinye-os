@@ -20,6 +20,7 @@ pub async fn find_by_subject<'e>(
     let person = sqlx::query_as::<_, Person>(
         "SELECT id, organisation_id, oidc_subject, email, full_name, display_name,
                 institutional_position, orcid, biography, status,
+                identity_kind, belongs_to_person_id,
                 last_seen_at, deactivated_at, created_at
            FROM people
           WHERE oidc_subject = $1",
@@ -42,6 +43,7 @@ pub async fn find_unbound_by_email<'e>(
     let person = sqlx::query_as::<_, Person>(
         "SELECT id, organisation_id, oidc_subject, email, full_name, display_name,
                 institutional_position, orcid, biography, status,
+                identity_kind, belongs_to_person_id,
                 last_seen_at, deactivated_at, created_at
            FROM people
           WHERE lower(email) = lower($1) AND oidc_subject IS NULL",
@@ -65,6 +67,7 @@ pub async fn find_by_id<'e>(
     let person = sqlx::query_as::<_, Person>(
         "SELECT id, organisation_id, oidc_subject, email, full_name, display_name,
                 institutional_position, orcid, biography, status,
+                identity_kind, belongs_to_person_id,
                 last_seen_at, deactivated_at, created_at
            FROM people
           WHERE id = $1 AND organisation_id = $2",
@@ -90,6 +93,7 @@ pub async fn list<'e>(
     let people = sqlx::query_as::<_, Person>(
         "SELECT id, organisation_id, oidc_subject, email, full_name, display_name,
                 institutional_position, orcid, biography, status,
+                identity_kind, belongs_to_person_id,
                 last_seen_at, deactivated_at, created_at
            FROM people
           WHERE organisation_id = $1
@@ -375,6 +379,7 @@ pub async fn insert_person_from_invitation<'e>(
          VALUES ($1, $2, $3, $4, 'invited')
          RETURNING id, organisation_id, oidc_subject, email, full_name, display_name,
                    institutional_position, orcid, biography, status,
+                   identity_kind, belongs_to_person_id,
                    last_seen_at, deactivated_at, created_at",
     )
     .bind(invitation.organisation_id)
@@ -441,6 +446,7 @@ pub async fn find_by_email<'e>(
     let person = sqlx::query_as::<_, Person>(
         "SELECT id, organisation_id, oidc_subject, email, full_name, display_name,
                 institutional_position, orcid, biography, status,
+                identity_kind, belongs_to_person_id,
                 last_seen_at, deactivated_at, created_at
            FROM people
           WHERE lower(email) = lower($1)",
@@ -486,6 +492,42 @@ pub async fn email_taken_in<'e>(
 /// # Errors
 ///
 /// Returns an error when the insert fails, including on a duplicate address.
+/// Cria a identidade privilegiada por onde uma pessoa administra.
+///
+/// A ligação é escrita **na mesma instrução** que a linha: uma identidade
+/// privilegiada nunca chega a existir sem dono, nem por um instante. As
+/// invariantes da base recusam o contrário, e isto é o caminho que nunca lhes
+/// bate.
+///
+/// # Errors
+///
+/// Devolve erro da base — incluindo quando o dono não é uma pessoa.
+pub async fn insert_privileged_identity<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    email: &str,
+    full_name: &str,
+    belongs_to_person_id: Uuid,
+) -> CoreResult<Person> {
+    let person = sqlx::query_as::<_, Person>(
+        "INSERT INTO people
+             (organisation_id, email, full_name, status,
+              identity_kind, belongs_to_person_id)
+         VALUES ($1, $2, $3, 'invited', 'privileged', $4)
+         RETURNING id, organisation_id, oidc_subject, email, full_name, display_name,
+                   institutional_position, orcid, biography, status,
+                   identity_kind, belongs_to_person_id,
+                   last_seen_at, deactivated_at, created_at",
+    )
+    .bind(organisation_id)
+    .bind(email)
+    .bind(full_name)
+    .bind(belongs_to_person_id)
+    .fetch_one(executor)
+    .await?;
+    Ok(person)
+}
+
 pub async fn insert_person<'e>(
     executor: impl PgExecutor<'e>,
     organisation_id: Uuid,
@@ -499,6 +541,7 @@ pub async fn insert_person<'e>(
          VALUES ($1, $2, $3, $4, 'invited')
          RETURNING id, organisation_id, oidc_subject, email, full_name, display_name,
                    institutional_position, orcid, biography, status,
+                   identity_kind, belongs_to_person_id,
                    last_seen_at, deactivated_at, created_at",
     )
     .bind(organisation_id)
@@ -621,6 +664,7 @@ pub async fn find_by_id_unscoped<'e>(
     let person = sqlx::query_as::<_, Person>(
         "SELECT id, organisation_id, oidc_subject, email, full_name, display_name,
                 institutional_position, orcid, biography, status,
+                identity_kind, belongs_to_person_id,
                 last_seen_at, deactivated_at, created_at
            FROM people
           WHERE id = $1",
