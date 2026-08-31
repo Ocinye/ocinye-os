@@ -74,11 +74,15 @@ services:
       #
       # A alternativa era abrir `/nginx-health` no `default_server`, e isso
       # devolveria a qualquer sonda a confirmação que o `444` existe para negar.
+      #
+      # As aspas não são estilo: sem elas o YAML lê `--header=Host: ocinye.com`
+      # como um mapeamento, por causa dos dois pontos seguidos de espaço, e o
+      # Compose recusa o ficheiro.
       test:
         - CMD
         - wget
         - -qO-
-        - --header=Host: ocinye.com
+        - "--header=Host: ocinye.com"
         - http://127.0.0.1/nginx-health
       interval: 15s
       timeout: 5s

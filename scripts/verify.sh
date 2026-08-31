@@ -307,7 +307,34 @@ fi
 
 step "Docker Compose"
 docker compose -f infra/compose/docker-compose.yml config --quiet
-echo "compose válido"
+
+# O de produção também.
+#
+# Não era validado por ninguém. Um erro de YAML nele passava por todos os
+# portões e só aparecia no servidor, a meio de um deploy — que foi exactamente o
+# que aconteceu com um `--header=Host: ocinye.com` sem aspas, lido como
+# mapeamento por causa dos dois pontos seguidos de espaço.
+#
+# Os `env_file` vivem em `/etc/ocinye` e não existem em máquina de quem
+# desenvolve. Criam-se vazios num sítio temporário, apenas para o Compose ter o
+# que abrir: o que se valida é a **estrutura** do ficheiro, e não a
+# configuração de uma instalação.
+etc_falso="$(mktemp -d)"
+for nome in comum core workspace postgres object-store; do
+  : > "$etc_falso/$nome.env"
+done
+producao_temporaria="$(mktemp)"
+sed "s#/etc/ocinye/#$etc_falso/#g" infra/compose/docker-compose.production.yml \
+    > "$producao_temporaria"
+if ! OCINYE_RELEASE_SHA=verificacao \
+     docker compose -f "$producao_temporaria" config --quiet 2>/tmp/compose-producao.err; then
+  echo "compose de produção inválido:" >&2
+  sed 's/^/    /' /tmp/compose-producao.err >&2
+  rm -rf "$etc_falso" "$producao_temporaria"
+  exit 1
+fi
+rm -rf "$etc_falso" "$producao_temporaria" /tmp/compose-producao.err
+echo "compose válido (desenvolvimento e produção)"
 
 step "Pureza da árvore"
 arvore_depois=$(impressao_da_arvore)

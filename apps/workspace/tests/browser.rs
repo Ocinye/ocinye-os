@@ -117,6 +117,18 @@ struct Credenciais {
 }
 
 struct Harness {
+    /// O fuso que **esta viagem declara**, quando declara um.
+    ///
+    /// # Porque o fuso não pode vir da máquina
+    ///
+    /// Porque `app.js` escreve o cookie `oc_tz` com o fuso do browser, e o
+    /// Calendário calcula os seus intervalos com ele. Uma viagem que criasse um
+    /// evento numa referência e o observasse noutra estaria a medir a diferença
+    /// entre as duas — e o resultado passaria a depender do fuso da máquina onde
+    /// a suite corre.
+    ///
+    /// Declarado aqui, todas as páginas desta viagem herdam o mesmo relógio.
+    fuso_declarado: std::sync::Mutex<Option<String>>,
     /// O lugar ocupado no limite de browsers simultâneos.
     ///
     /// Guardado aqui porque é o `Drop` do harness que o tem de libertar: é
@@ -367,6 +379,7 @@ impl Harness {
         println!("VIAGEM LEVANTADA");
 
         Some(Self {
+            fuso_declarado: std::sync::Mutex::new(None),
             _lugar: lugar,
             pool,
             organisation_id,
@@ -1053,7 +1066,15 @@ impl Harness {
     ///
     /// O que aqui se espera é o estado observável: já não estar no arranque.
     async fn open(&self, path: &str) -> Page {
-        self.open_em(path, None).await
+        let declarado = self.fuso_declarado.lock().expect("fuso declarado").clone();
+        self.open_em(path, declarado.as_deref()).await
+    }
+
+    /// Declara o fuso desta viagem. Todas as páginas seguintes o herdam.
+    ///
+    /// Uma entrada escondida deixa de ser escondida quando alguém a escreve.
+    fn declarar_fuso(&self, fuso: &str) {
+        *self.fuso_declarado.lock().expect("fuso declarado") = Some(fuso.to_owned());
     }
 
     /// Abre uma página com o browser noutro fuso.
@@ -1788,13 +1809,48 @@ async fn as_vistas_partilham_o_universo_autorizado() {
             .expect("fuso conhecido"),
     );
     let hoje = lisboa.date();
-    // O fim é uma hora depois, e não existe hora 24.
+    // ── Um relógio só, declarado ────────────────────────────────────────
+    //
+    // Esta é a **terceira** vez que este teste falha com a hora do dia como
+    // entrada escondida, e desta vez a causa foi isolada por reprodução: com
+    // `hora = 0` a suite falha numa máquina em UTC e passa numa máquina em
+    // Lisboa, com tudo o resto igual.
+    //
+    // O motivo é que aqui havia **dois relógios**. O formulário escreve o evento
+    // em `Europe/Lisbon`; a vista calcula o seu intervalo na zona **do membro**,
+    // que vem do cookie `oc_tz` e cai em UTC quando o browser não o declarou. Um
+    // evento à meia-noite de Lisboa é 23:00 do dia anterior em UTC, e cai fora
+    // do dia que o teste pediu.
+    //
+    // Não é defeito do produto: o Calendário mostra o dia no fuso de quem olha,
+    // que é o correcto. Era o fixture que tinha dois relógios.
+    //
+    // # Porque não basta escolher uma hora longe da meia-noite
+    //
+    // Porque não elimina a variável, só a torna improvável. Meio-dia em Lisboa é
+    // 01:00 do dia seguinte em UTC+14 e 23:00 do dia anterior em UTC−12: a data
+    // civil **muda** na mesma, e o teste voltaria a falhar numa máquina desses
+    // fusos. Reduzir a probabilidade de uma entrada escondida não é remover a
+    // entrada escondida.
+    //
+    // O que se faz é declarar o relógio: o membro observa em `Europe/Lisbon`
+    // porque o teste o diz, e não porque a máquina calhou estar nesse fuso. A
+    // criação e a observação passam a ter a mesma referência, seja onde for que
+    // a suite corra.
+    harness.declarar_fuso("Europe/Lisbon");
+
+    // Com um relógio só, a hora corrente serve — e é a que mantém o evento a
+    // decorrer quando se observa, que é o que o Centro Temporal precisa.
     let hora = lisboa.hour().min(22);
 
     let visivel = unique_title("Visivel");
     let distante = unique_title("Distante");
 
     harness.create_event_via_ui(&visivel, hoje, hora).await;
+    // O relógio na criação. Este teste já falhou duas vezes com a hora do dia
+    // como entrada escondida, e das duas o diagnóstico veio depois — a partir
+    // do horário da corrida, e não do que o teste disse. Agora diz.
+    let relogio_na_criacao = lisboa;
     // Fora de qualquer intervalo natural: nem hoje, nem esta semana, nem este
     // mês, nem os próximos noventa dias.
     harness
@@ -1843,7 +1899,17 @@ async fn as_vistas_partilham_o_universo_autorizado() {
         );
         assert!(
             html.contains(&visivel),
-            "«{nome}» não mostra um evento de hoje que o actor pode ver"
+            "«{nome}» não mostra um evento de hoje que o actor pode ver.\n\
+             \x20   criado:     {relogio_na_criacao} (Lisboa), para {hoje} às {hora}:00\n\
+             \x20   observado:  {} (Lisboa)\n\
+             \x20   navegado:   /calendar?view={nome}&on={hoje}\n\
+             \x20   a página mostra: {}\n\
+             \x20   procurava:  {visivel}",
+            ocinye_contracts::temporal::in_zone(
+                chrono::Utc::now(),
+                "Europe/Lisbon".to_owned().try_into().expect("fuso")
+            ),
+            titulos_visiveis(html)
         );
         assert!(
             !html.contains(&alheio),
@@ -3196,15 +3262,47 @@ async fn abrir_a_frio(harness: &Harness, caminho: &str) -> Page {
 /// caia exactamente nesse instante encontra o contexto a ser substituído. Isso
 /// não é uma falha do produto; é uma corrida de quem observa.
 async fn conteudo_estavel(page: &Page) -> String {
-    for _ in 0..40 {
-        if let Ok(html) = page.content().await {
-            if !html.is_empty() {
-                return html;
+    // ── «Não vazio» não é «estável» ─────────────────────────────────────
+    //
+    // Esta função devolvia o primeiro conteúdo não-vazio, e o nome prometia
+    // outra coisa. Durante uma navegação o DOM **da página anterior** ainda é
+    // não-vazio: quem chamasse isto logo a seguir a ver a URL mudar recebia a
+    // página de onde vinha, com a URL do destino.
+    //
+    // Foi assim que uma viagem falhou na CI com «chegou ao Login e não há
+    // formulário»: a URL já era `/login` e o HTML ainda era o do arranque. Em
+    // máquina de quem desenvolve a janela é estreita de mais para se ver — vinte
+    // repetições passaram todas —, e sob carga alarga-se até caber uma leitura.
+    //
+    // Estável é: o documento acabou de carregar, **e** duas leituras seguidas
+    // dizem o mesmo. A segunda condição apanha o que a primeira não vê — um
+    // documento `complete` que ainda está a ser substituído.
+    let mut anterior: Option<String> = None;
+    for _ in 0..60 {
+        let pronto = page
+            .evaluate("document.readyState")
+            .await
+            .ok()
+            .and_then(|v| v.into_value::<String>().ok())
+            .unwrap_or_default();
+
+        if pronto == "complete" {
+            if let Ok(html) = page.content().await {
+                if !html.is_empty() {
+                    if anterior.as_deref() == Some(html.as_str()) {
+                        return html;
+                    }
+                    anterior = Some(html);
+                }
             }
         }
         tokio::time::sleep(std::time::Duration::from_millis(80)).await;
     }
-    panic!("a página nunca deu conteúdo legível");
+    // Cinco segundos sem duas leituras iguais é uma página que não assenta, e
+    // isso é uma informação — não um motivo para devolver o que calhar.
+    page.content()
+        .await
+        .expect("a página nunca deu conteúdo legível")
 }
 
 /// Uma abertura a frio encontra o arranque, e não o Login.
@@ -3278,7 +3376,8 @@ async fn sem_sessao_o_arranque_entrega_ao_login() {
         }
         assert!(
             inicio.elapsed() < std::time::Duration::from_secs(45),
-            "o arranque não entregou ao Login em quinze segundos; ficou em «{url}»"
+            "o arranque não entregou ao Login em quarenta e cinco segundos; \
+             ficou em «{url}»"
         );
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
     }
@@ -3286,7 +3385,27 @@ async fn sem_sessao_o_arranque_entrega_ao_login() {
     let html = conteudo_estavel(&page).await;
     assert!(
         html.contains("oc-login__submit"),
-        "chegou ao Login e não há formulário de entrada"
+        // A prova, e não só a ausência.
+        //
+        // «Não há formulário» tem pelo menos três causas — a navegação ainda ia
+        // a meio, o Login rendeu degradado porque o Core não respondeu, ou o
+        // markup mudou — e a mensagem sozinha não distingue nenhuma. O que a
+        // página **tem** distingue as três.
+        "chegou ao Login e não há formulário de entrada.\n\
+         \x20   url:     {}\n\
+         \x20   título:  {}\n\
+         \x20   texto:   {}",
+        page.url().await.ok().flatten().unwrap_or_default(),
+        page.get_title().await.ok().flatten().unwrap_or_default(),
+        {
+            let texto: String = html
+                .split('>')
+                .filter_map(|p| p.split('<').next())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let limpo = texto.split_whitespace().collect::<Vec<_>>().join(" ");
+            limpo[..limpo.len().min(300)].to_owned()
+        }
     );
 
     // E chegou lá **pelo arranque**: o marcador prova-o.
@@ -9729,4 +9848,186 @@ async fn um_carregamento_em_partes_retoma_se_noutro_contexto() {
         Some(TAMANHO as i64),
         "o ficheiro montado não tem o tamanho que atravessou em partes"
     );
+}
+
+/// Os títulos que uma página de calendário está a mostrar.
+///
+/// # Porque a asserção precisa disto
+///
+/// Porque «não mostra o evento» tem pelo menos quatro causas — o evento não foi
+/// criado, foi criado noutro dia, a vista filtrou-o, ou a autorização recusou-o
+/// — e a mensagem sozinha não distingue nenhuma. Sem saber o que a página
+/// **mostra**, o diagnóstico é feito a partir do horário da corrida, que é
+/// adivinhar com passos extra.
+fn titulos_visiveis(html: &str) -> String {
+    // As quatro classes que as quatro vistas usam. Escrevi primeiro uma classe
+    // inventada, e a prova teria saído sempre vazia — o que é pior do que não
+    // haver prova: seria uma prova a mentir.
+    const ONDE: [&str; 4] = [
+        "oc-cal-bloco__titulo",
+        "oc-cal-linha__titulo",
+        "oc-cal-month__titulo",
+        "oc-cal-agenda",
+    ];
+    let mut vistos: Vec<&str> = ONDE
+        .iter()
+        .flat_map(|classe| html.split(classe).skip(1))
+        .filter_map(|bloco| {
+            let depois = bloco.split('>').nth(1)?;
+            depois.split('<').next()
+        })
+        .filter(|t| !t.trim().is_empty())
+        .collect();
+    vistos.sort_unstable();
+    vistos.dedup();
+    if vistos.is_empty() {
+        "(nenhum evento na página)".to_owned()
+    } else {
+        vistos.join(", ")
+    }
+}
+
+/// O conteúdo estável é o do destino, e nunca o da página de onde se veio.
+///
+/// # A corrida que isto guarda
+///
+/// `conteudo_estavel` devolvia o primeiro DOM não-vazio. Durante uma navegação o
+/// DOM **da página anterior** ainda é não-vazio, e por isso quem lesse logo a
+/// seguir a ver a URL mudar recebia o arranque com a URL do Login — o sintoma
+/// aparentemente impossível de «chegou ao Login e não há formulário».
+///
+/// Dezoito viagens dependem deste helper. Uma passagem verde delas não prova a
+/// propriedade dele: prova que a corrida não aconteceu daquela vez.
+///
+/// # Porque a rede é estrangulada
+///
+/// Porque sem isso a corrida não se reproduz nesta máquina: o destino carrega
+/// depressa de mais para a janela caber uma leitura, e vinte repetições passaram
+/// todas — com o helper defeituoso. Um teste que não consegue falhar com o
+/// defeito no sítio não guarda propriedade nenhuma.
+///
+/// Com a latência imposta, a janela entre «a URL mudou» e «o DOM novo assentou»
+/// passa a ser larga e igual em qualquer máquina. É a mesma ideia de escrever um
+/// controlo positivo: primeiro provar que o instrumento detecta, e só depois
+/// confiar no que ele diz.
+///
+/// Exigem-se as duas metades: o destino **está**, e a origem **não está**. Sem a
+/// segunda, um helper que devolvesse o arranque passaria se o arranque contivesse
+/// por acaso a agulha procurada.
+#[tokio::test]
+async fn o_conteudo_estavel_nunca_devolve_a_pagina_anterior() {
+    let harness = harness!();
+
+    for volta in 1..=6 {
+        let page = abrir_a_frio(&harness, "/").await;
+
+        // Latência imposta: alarga a janela da navegação até ela ser observável.
+        //
+        // O tipo está marcado obsoleto no próprio protocolo, e o `chromiumoxide`
+        // continua a usá-lo internamente por não haver substituto nesta versão.
+        // Silencia-se aqui, e não na crate inteira: um `allow` largo esconderia
+        // o dia em que houver alternativa.
+        #[allow(deprecated)]
+        {
+            use chromiumoxide::cdp::browser_protocol::network::EmulateNetworkConditionsParams;
+            page.execute(EmulateNetworkConditionsParams::new(
+                false, 1200.0, 200_000.0, 200_000.0,
+            ))
+            .await
+            .expect("estrangular a rede");
+        }
+
+        let inicio = std::time::Instant::now();
+        loop {
+            let url = page.url().await.expect("url").unwrap_or_default();
+            if url.contains("/login") {
+                break;
+            }
+            assert!(
+                inicio.elapsed() < std::time::Duration::from_secs(45),
+                "volta {volta}: o arranque não entregou ao Login; ficou em «{url}»"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+
+        // Deliberadamente sem pausa: lê-se no instante mais apertado possível,
+        // que é onde a corrida vivia.
+        let html = conteudo_estavel(&page).await;
+
+        assert!(
+            html.contains("oc-login__submit"),
+            "volta {volta}: o conteúdo estável não é o do Login"
+        );
+        assert!(
+            !html.contains("NÃO FOI POSSÍVEL CONTACTAR") && !html.contains("oc-boot__lede"),
+            "volta {volta}: o conteúdo estável ainda era o do arranque, com a URL do Login"
+        );
+        page.close().await.ok();
+    }
+}
+
+/// O fuso declarado vale para a viagem, e não escapa dela.
+///
+/// # Duas propriedades, e a segunda é a que se esquece
+///
+/// A primeira é que declarar funciona: a página passa mesmo a viver no fuso
+/// pedido, e não no da máquina. Sem isto, `declarar_fuso` seria uma variável que
+/// ninguém lê.
+///
+/// A segunda é que **não contamina**. Um fuso declarado que sobrevivesse à
+/// viagem faria a seguinte correr num relógio que não escolheu — e o defeito
+/// apareceria noutro teste, com outra causa aparente. É a mesma classe de
+/// problema que o `is_default` do armazenamento: estado global que uma suite
+/// deixa para a outra.
+///
+/// Aqui a propriedade é estrutural — o fuso vive no `Harness`, e cada viagem tem
+/// o seu — mas estrutural não é observado. Isto observa-a.
+#[tokio::test]
+async fn o_fuso_declarado_vale_para_a_viagem_e_nao_escapa_dela() {
+    let harness = harness!();
+
+    async fn fuso_de(page: &Page) -> String {
+        page.evaluate("Intl.DateTimeFormat().resolvedOptions().timeZone")
+            .await
+            .expect("ler o fuso")
+            .into_value::<String>()
+            .expect("fuso")
+    }
+
+    // Sem declaração: o fuso é o da máquina, seja ele qual for.
+    let antes = harness.open("/login").await;
+    let da_maquina = fuso_de(&antes).await;
+
+    // Declarado: um fuso deliberadamente improvável, para que coincidir por
+    // acaso com o da máquina seja impossível de confundir com funcionar.
+    harness.declarar_fuso("Pacific/Kiritimati");
+    let depois = harness.open("/login").await;
+    assert_eq!(
+        fuso_de(&depois).await,
+        "Pacific/Kiritimati",
+        "a declaração não chegou à página; o fuso continuou a ser o da máquina"
+    );
+    assert_ne!(
+        da_maquina, "Pacific/Kiritimati",
+        "a máquina desta corrida já estava em Kiritimati: o teste não distingue \
+         declarar de não declarar"
+    );
+
+    // E uma página aberta por **outro** harness não o herda.
+    //
+    // Não se levanta um segundo browser para isto: o que se verifica é que o
+    // estado vive no harness, e não no browser partilhado nem no processo.
+    let outro = Harness::start(
+        &std::env::var("OCINYE_TEST_DATABASE_URL").expect("base"),
+        &chrome_path().expect("chrome"),
+    )
+    .await;
+    if let Some(outro) = outro {
+        let alheia = outro.open("/login").await;
+        assert_eq!(
+            fuso_de(&alheia).await,
+            da_maquina,
+            "outra viagem herdou o fuso que esta declarou"
+        );
+    }
 }

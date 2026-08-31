@@ -571,7 +571,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.3.0
 
       - name: Validar o Docker Compose
-        run: docker compose -f infra/compose/docker-compose.yml config --quiet
+        run: |
+          docker compose -f infra/compose/docker-compose.yml config --quiet
+          # O de produção também. Não era validado por ninguém, e um erro de
+          # YAML nele só aparecia no servidor, a meio de um deploy.
+          #
+          # Os `env_file` vivem em `/etc/ocinye` e não existem aqui: criam-se
+          # vazios para o Compose ter o que abrir. O que se valida é a
+          # estrutura, e não a configuração de uma instalação.
+          etc_falso="$(mktemp -d)"
+          for nome in comum core workspace postgres object-store; do
+            : > "$etc_falso/$nome.env"
+          done
+          sed "s#/etc/ocinye/#$etc_falso/#g" \
+            infra/compose/docker-compose.production.yml > /tmp/producao.yml
+          OCINYE_RELEASE_SHA=verificacao \
+            docker compose -f /tmp/producao.yml config --quiet
 
       - name: Levantar os serviços de dados
         run: |
