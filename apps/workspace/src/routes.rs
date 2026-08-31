@@ -132,6 +132,7 @@ pub const ROUTES: &[&str] = &[
     "/admin",
     "/admin/members/new",
     "/admin/members/{person_id}",
+    "/admin/members/{person_id}/provision",
     "/audit",
     "/search",
     "/ask",
@@ -347,6 +348,10 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/admin", get(admin))
         .route("/admin/members/new", get(new_member).post(create_member))
         .route("/admin/members/{person_id}", get(member_detail))
+        .route(
+            "/admin/members/{person_id}/provision",
+            post(provision_member),
+        )
         .route("/audit", get(audit))
         .route("/search", get(search))
         // A Universal Command Surface.
@@ -2813,8 +2818,89 @@ async fn member_detail(
         &viewer,
         Screen::Admin,
         vec![Crumb::to(Screen::Admin)],
-        ui::screens::administration::member_detail(&person, &security, &access),
+        ui::screens::administration::member_detail(&person, &security, &access, None),
     )
+}
+
+/// `POST /admin/members/{id}/provision` — dá acesso a quem já existe.
+///
+/// # Porque não é «criar um utilizador»
+///
+/// Porque a pessoa já está na instituição. É o caso de quem nasceu do bootstrap
+/// do servidor: existe porque a identidade privilegiada precisa de dono, e não
+/// tem como entrar porque o servidor não provisiona a instituição. Criá-la
+/// outra vez daria dois registos com o mesmo nome, e a autoria, as pertenças e
+/// o histórico ficariam repartidos por dois sítios que ninguém volta a juntar.
+///
+/// A recusa do Core é mostrada no mesmo ecrã, e não engolida: se a pessoa já
+/// tem acesso, quem administra precisa de saber que o caminho é a reposição de
+/// palavra-passe — que fica registada como reposição.
+async fn provision_member(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+
+    let caminho = format!("/api/v1/administration/members/{person_id}/provision");
+    let outcome = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &caminho,
+        &serde_json::json!({}),
+    )
+    .await;
+
+    match outcome {
+        Ok(created) => {
+            let credential = created.get("credential").cloned().unwrap_or(Value::Null);
+            shell_page(
+                "Acesso concedido",
+                &viewer,
+                Screen::Admin,
+                vec![Crumb::to(Screen::Admin)],
+                ui::screens::administration::issued_credential(
+                    credential.get("email").and_then(Value::as_str).unwrap_or(""),
+                    credential
+                        .get("temporary_password")
+                        .and_then(Value::as_str)
+                        .unwrap_or(""),
+                    credential
+                        .get("expires_at")
+                        .and_then(Value::as_str)
+                        .unwrap_or(""),
+                ),
+            )
+        }
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(failure) => {
+            // Volta ao detalhe com a razão. Um redirecto limpo perderia-a, e o
+            // botão continuaria lá como se nada tivesse acontecido.
+            let person_path = format!("/api/v1/people/{person_id}");
+            let security_path =
+                format!("/api/v1/administration/members/{person_id}/security");
+            let access_path = format!("/api/v1/administration/members/{person_id}/access");
+            let (person, security, access) = tokio::join!(
+                optional(&state, &member, &person_path),
+                optional(&state, &member, &security_path),
+                optional(&state, &member, &access_path),
+            );
+            shell_page(
+                "Membro",
+                &viewer,
+                Screen::Admin,
+                vec![Crumb::to(Screen::Admin)],
+                ui::screens::administration::member_detail(
+                    &person,
+                    &security,
+                    &access,
+                    Some(&failure.to_string()),
+                ),
+            )
+        }
+    }
 }
 
 /// Bibliografia.

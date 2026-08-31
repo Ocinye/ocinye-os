@@ -27,6 +27,13 @@ use crate::state::AppState;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/administration/members", post(create_member))
+        // Dar acesso a quem já existe é outra operação, e não a mesma com um
+        // ramo dentro. `create_member` cria; isto provisiona — e o registo tem
+        // de dizer qual das duas aconteceu.
+        .route(
+            "/administration/members/{person_id}/provision",
+            post(provision_member),
+        )
         .route(
             "/administration/members/{person_id}/password-reset",
             post(reset_password),
@@ -183,6 +190,28 @@ async fn create_member(
     }))
 }
 
+/// `POST /administration/members/{person_id}/provision`
+/// Dá acesso a uma pessoa que já existe.
+///
+/// A mesma autoridade que criar: quem pode trazer alguém para a instituição
+/// pode dar-lhe entrada. O que muda é o que fica registado.
+async fn provision_member(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    Authorised { principal, .. }: Authorised<NeedsMembersCreate>,
+    Path(person_id): Path<Uuid>,
+) -> Result<Json<CreatedMember>, ApiError> {
+    let (person, credential) =
+        identity::provision_existing_person(&state.pool, &state.authenticator, &principal, person_id, &ids)
+            .await
+            .map_err(|error| ApiError::new(error, &ids))?;
+
+    Ok(Json(CreatedMember {
+        person_id: person.id,
+        credential: IssuedCredential::new(credential),
+    }))
+}
+
 // ── Password reset ──────────────────────────────────────────────────────
 
 /// `POST /administration/members/{person_id}/password-reset`
@@ -263,6 +292,13 @@ struct SecurityOverview {
     last_successful_sign_in: Option<DateTime<Utc>>,
     recent_failed_attempts: i64,
     live_sessions: Vec<SessionSummary>,
+    /// Se esta pessoa pode receber acesso pela administração.
+    ///
+    /// É o Core que responde, e não a Experience: o ecrã não tem como saber que
+    /// uma identidade privilegiada não se provisiona por aqui, nem o que conta
+    /// como credencial utilizável. Um botão desenhado a partir de
+    /// `has_permanent_password` mostraria a operação a quem ela vai recusar.
+    may_be_provisioned: bool,
 }
 
 #[derive(Serialize)]
@@ -310,6 +346,12 @@ async fn security_overview(
         .await
         .map_err(|error| ApiError::new(error, &ids))?;
 
+    // A mesma função que a operação consulta. Duas definições de «tem acesso»
+    // divergiriam em silêncio, e o ecrã prometeria o que o Core recusa.
+    let ja_tem_acesso = identity::has_usable_credential(&state.pool, person.id)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+
     Ok(Json(SecurityOverview {
         account_status: person.account_status().as_str(),
         has_permanent_password: permanent.is_some(),
@@ -317,6 +359,7 @@ async fn security_overview(
         temporary_credential_expires_at: temporary.and_then(|c| c.expires_at),
         last_successful_sign_in: last_sign_in,
         recent_failed_attempts: failures,
+        may_be_provisioned: person.identity_kind == "human" && !ja_tem_acesso,
         live_sessions: sessions
             .into_iter()
             .map(|s| SessionSummary {

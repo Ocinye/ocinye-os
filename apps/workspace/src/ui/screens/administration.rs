@@ -305,8 +305,21 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
 /// Separador «Segurança» do detalhe de um membro.
 ///
 /// Só metadados. Nunca um hash, nunca uma palavra-passe (briefing §73).
-pub fn security_tab(overview: &Value) -> impl IntoView {
+pub fn security_tab(
+    person_id: &str,
+    overview: &Value,
+    recusa: Option<&str>,
+) -> impl IntoView {
     let status = text(overview, "account_status").to_owned();
+    // Quem decide é o Core. Ausente a resposta — porque a consulta falhou — o
+    // ecrã não oferece a operação: oferecê-la por omissão mostraria um botão que
+    // o Core vai recusar, e faria quem administra julgar-se sem autoridade.
+    let pode_provisionar = overview
+        .get("may_be_provisioned")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let accao = format!("/admin/members/{person_id}/provision");
+    let recusa = recusa.map(str::to_owned);
     let has_permanent = overview
         .get("has_permanent_password")
         .and_then(Value::as_bool)
@@ -393,6 +406,44 @@ pub fn security_tab(overview: &Value) -> impl IntoView {
                 },
             )}
         </div>
+
+        {(pode_provisionar || recusa.is_some())
+            .then(|| {
+                view! {
+                    <div class="oc-mt-6">
+                        {card(
+                            section_head("Dar acesso", None, None),
+                            view! {
+                                <div>
+                                    <p class="oc-muted">
+                                        "Esta pessoa existe na instituição e ainda não tem como entrar. Dar-lhe acesso emite uma credencial temporária e não lhe altera papéis, unidades nem autoridade."
+                                    </p>
+                                    {recusa
+                                        .clone()
+                                        .map(|texto| view! {
+                                                <div
+                                                    class="oc-callout oc-callout--error oc-mt-3"
+                                                    role="alert"
+                                                >
+                                                    {texto}
+                                                </div>
+                                            })}
+                                    {pode_provisionar
+                                        .then(|| {
+                                            view! {
+                                                <form method="post" action=accao.clone() class="oc-mt-3">
+                                                    <button class="oc-btn oc-btn--primary" type="submit">
+                                                        "Dar acesso"
+                                                    </button>
+                                                </form>
+                                            }
+                                        })}
+                                </div>
+                            },
+                        )}
+                    </div>
+                }
+            })}
     }
 }
 
@@ -549,7 +600,14 @@ fn source_label(source: &str) -> &'static str {
 /// «Audit» do dossier ficam declarados como indisponíveis em vez de levarem a
 /// um ecrã vazio: dois deles existem, e dizê-lo é mais honesto do que sugerir
 /// sete que não existem.
-pub fn member_detail(person: &Value, security: &Value, access: &Value) -> impl IntoView {
+pub fn member_detail(
+    person: &Value,
+    security: &Value,
+    access: &Value,
+    recusa: Option<&str>,
+) -> impl IntoView {
+    let person_id = text(person, "id").to_owned();
+    let recusa = recusa.map(str::to_owned);
     let name = text(person, "full_name").to_owned();
     // O endereço, uma vez. Havia aqui um `username` ao lado dele, e a linha
     // mostrava a mesma pessoa duas vezes: `afernandes · afernandes@ocinye.com`.
@@ -608,7 +666,7 @@ pub fn member_detail(person: &Value, security: &Value, access: &Value) -> impl I
             {access_tab(&access)}
             <div class="oc-vspace"></div>
             {section_head("Segurança", None, None)}
-            {security_tab(&security)}
+            {security_tab(&person_id, &security, recusa.as_deref())}
         </div>
     }
 }
@@ -617,6 +675,78 @@ pub fn member_detail(person: &Value, security: &Value, access: &Value) -> impl I
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// A oferta vem do Core, e o ecrã não a reinventa.
+    #[test]
+    fn dar_acesso_aparece_quando_o_core_diz_que_pode() {
+        let html = security_tab(
+            "11111111-1111-1111-1111-111111111111",
+            &json!({"account_status": "active", "may_be_provisioned": true}),
+            None,
+        )
+        .to_html();
+        assert!(html.contains("Dar acesso"), "a operação não chega a quem administra");
+        assert!(
+            html.contains(
+                r#"action="/admin/members/11111111-1111-1111-1111-111111111111/provision""#
+            ),
+            "o formulário não aponta para a pessoa que está a ser vista"
+        );
+    }
+
+    /// Com a resposta do Core em falta, o ecrã cala-se.
+    ///
+    /// Um `unwrap_or(true)` mostraria o botão sempre que a consulta falhasse, e
+    /// quem administra carregaria nele para receber uma recusa que parece falta
+    /// de autoridade sua.
+    #[test]
+    fn sem_resposta_do_core_a_operacao_nao_e_oferecida() {
+        for resposta in [json!({"account_status": "active"}), json!(null)] {
+            let html = security_tab("abc", &resposta, None).to_html();
+            assert!(
+                !html.contains("Dar acesso"),
+                "ofereceu a operação sem o Core a ter autorizado: {resposta}"
+            );
+        }
+    }
+
+    /// Quem já tem acesso não vê o botão — vê a razão, se tentou.
+    #[test]
+    fn a_recusa_do_core_e_mostrada_e_o_botao_desaparece() {
+        let html = security_tab(
+            "abc",
+            &json!({"account_status": "active", "may_be_provisioned": false}),
+            Some("Esta pessoa já tem acesso. Use a reposição de palavra-passe."),
+        )
+        .to_html();
+        assert!(
+            html.contains("reposição de palavra-passe"),
+            "a razão do Core foi engolida pelo caminho"
+        );
+        assert!(
+            html.contains("oc-callout--error"),
+            "a razão não está marcada como recusa"
+        );
+        assert!(
+            !html.contains(r#"type="submit""#),
+            "voltou a oferecer a operação que o Core acabou de recusar"
+        );
+    }
+
+    /// O texto diz o que a operação faz e o que **não** faz.
+    #[test]
+    fn dar_acesso_nao_se_confunde_com_dar_autoridade() {
+        let html = security_tab(
+            "abc",
+            &json!({"account_status": "active", "may_be_provisioned": true}),
+            None,
+        )
+        .to_html();
+        assert!(
+            html.contains("não lhe altera papéis, unidades nem autoridade"),
+            "nada distingue dar entrada de dar poder"
+        );
+    }
 
     #[test]
     fn o_formulario_separa_posicao_institucional_de_papel_tecnico() {
@@ -684,7 +814,7 @@ mod tests {
 
     #[test]
     fn o_separador_de_seguranca_nunca_mostra_material_de_credencial() {
-        let html = security_tab(&json!({
+        let html = security_tab("abc", &json!({
             "account_status": "active",
             "has_permanent_password": true,
             "password_changed_at": "2026-08-22T10:00:00Z",
@@ -692,7 +822,7 @@ mod tests {
             "live_sessions": [
                 {"state": "active", "user_agent": "Firefox", "ip_prefix": "10.0.0.0/24"}
             ]
-        }))
+        }), None)
         .to_html();
 
         assert!(html.contains("Definida pelo próprio"));
@@ -707,12 +837,12 @@ mod tests {
 
     #[test]
     fn o_separador_de_seguranca_declara_quando_nao_ha_palavra_passe_definitiva() {
-        let html = security_tab(&json!({
+        let html = security_tab("abc", &json!({
             "account_status": "invited",
             "has_permanent_password": false,
             "temporary_credential_expires_at": "2026-08-23T10:00:00Z",
             "live_sessions": []
-        }))
+        }), None)
         .to_html();
         assert!(html.contains("Ainda não definida"));
         assert!(html.contains("Sem sessões activas."));
@@ -759,6 +889,7 @@ mod tests {
             }),
             &json!({"account_status": "active", "has_permanent_password": true, "live_sessions": []}),
             &json!({"roles": ["research_member"], "grants": [], "institution_permissions": []}),
+            None,
         )
         .to_html();
 
@@ -776,6 +907,7 @@ mod tests {
             &json!({"full_name": "A", "email": "a@b.c", "status": "active"}),
             &json!({"account_status": "active", "has_permanent_password": true, "live_sessions": []}),
             &json!({"roles": [], "grants": [], "institution_permissions": []}),
+            None,
         )
         .to_html()
         .to_lowercase();

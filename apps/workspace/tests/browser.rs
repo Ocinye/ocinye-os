@@ -1070,6 +1070,46 @@ impl Harness {
         self.open_em(path, declarado.as_deref()).await
     }
 
+    /// Torna uma pessoa já autenticada numa **identidade privilegiada ligada**,
+    /// e devolve o dono humano que passa a existir por trás dela.
+    ///
+    /// # Porque isto é uma fixture e não uma operação do produto
+    ///
+    /// Porque no produto esta situação nasce do bootstrap do servidor, que corre
+    /// uma vez e antes de haver browser. A fixture reproduz o **estado** que ele
+    /// deixa — uma pessoa institucional sem credencial, e uma identidade
+    /// privilegiada ligada a ela — para que a viagem possa começar onde quem
+    /// administra começa: já lá dentro.
+    ///
+    /// O dono nasce sem credencial de propósito. É exactamente o `Fidel
+    /// Monteiro` do primeiro arranque: existe porque a identidade privilegiada
+    /// precisa de dono, e não tem como entrar porque o servidor não provisiona
+    /// a instituição.
+    async fn ligar_a_um_dono(&self, identidade: Uuid, nome_do_dono: &str) -> Uuid {
+        let dono: Uuid = sqlx::query_scalar(
+            "INSERT INTO people (organisation_id, full_name, email, status)
+                 VALUES ($1, $2, $3, 'active') RETURNING id",
+        )
+        .bind(self.organisation_id)
+        .bind(nome_do_dono)
+        .bind(format!("d{}@ocinye.com", Uuid::new_v4().simple()))
+        .fetch_one(&self.pool)
+        .await
+        .expect("dono");
+
+        sqlx::query(
+            "UPDATE people SET identity_kind = 'privileged', belongs_to_person_id = $2
+              WHERE id = $1",
+        )
+        .bind(identidade)
+        .bind(dono)
+        .execute(&self.pool)
+        .await
+        .expect("ligar");
+
+        dono
+    }
+
     /// Declara o fuso desta viagem. Todas as páginas seguintes o herdam.
     ///
     /// Uma entrada escondida deixa de ser escondida quando alguém a escreve.
@@ -10030,4 +10070,153 @@ async fn o_fuso_declarado_vale_para_a_viagem_e_nao_escapa_dela() {
             "outra viagem herdou o fuso que esta declarou"
         );
     }
+}
+
+/// A faixa privilegiada acompanha a sessão, e não a página.
+///
+/// # A viagem
+///
+/// ```text
+/// entrar como identidade privilegiada → a faixa está lá
+///   → navegar para outro ecrã → continua lá
+///   → recarregar                → continua lá
+///   → uma pessoa normal          → não está lá
+/// ```
+///
+/// # Porque não chega verificar uma página
+///
+/// Porque uma faixa que só aparece no primeiro ecrã é pior do que não haver
+/// faixa: quem administra deixa de a ver ao terceiro clique e continua a
+/// executar com a autoridade toda, a julgar que a sessão mudou. A faixa
+/// representa a sessão, e uma sessão não termina ao mudar de página.
+///
+/// A última asserção é a reversão embutida: sem ela, uma faixa desenhada em
+/// todas as sessões passaria neste teste com louvor.
+#[tokio::test]
+async fn a_faixa_privilegiada_atravessa_a_navegacao_e_o_recarregar() {
+    let harness = harness!();
+
+    let (identidade, _) = harness.sign_in(&[TechnicalRole::PlatformAdmin]).await;
+    harness.ligar_a_um_dono(identidade, "Fidel Monteiro").await;
+
+    // Voltar a entrar: a sessão anterior foi criada antes de a pessoa ser
+    // privilegiada, e o que se está a testar é o que a sessão mostra.
+    let page = harness.open("/").await;
+    let inicio = page.content().await.expect("conteúdo");
+    assert!(
+        inicio.contains("SESSÃO PRIVILEGIADA"),
+        "a faixa não apareceu no primeiro ecrã"
+    );
+    assert!(
+        inicio.contains("SUPER ADMIN"),
+        "a faixa não diz que esta sessão administra a plataforma"
+    );
+
+    // Rotas reais e servidas pelo shell. Um caminho inventado devolve o ecrã de
+    // erro, que não tem faixa nenhuma — e o teste falharia por não existir a
+    // rota, a dizer que o defeito estava na faixa.
+    for destino in ["/admin", "/calendar", "/files", "/settings", "/"] {
+        let page = harness.open(destino).await;
+        let html = page.content().await.expect("conteúdo");
+        assert!(
+            html.contains("SESSÃO PRIVILEGIADA"),
+            "a faixa desapareceu em {destino}: quem administra deixa de saber com que autoridade está a agir"
+        );
+    }
+
+    // Recarregar: o servidor volta a decidir do zero.
+    let page = harness.open("/admin").await;
+    page.reload().await.expect("recarregar");
+    esperar_por(&page, "SESSÃO PRIVILEGIADA").await;
+
+    // A reversão, no mesmo browser: outra pessoa entra, e a faixa vai-se.
+    //
+    // Feita aqui e não noutro teste de propósito. Um teste separado provaria
+    // apenas que uma página nova não tem faixa; isto prova que a faixa
+    // **acompanha a sessão** — a mesma janela, o mesmo servidor, e a faixa
+    // desaparece porque quem está lá dentro mudou.
+    harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let html = harness.open("/").await.content().await.expect("conteúdo");
+    assert!(
+        !html.contains("SESSÃO PRIVILEGIADA"),
+        "a faixa aparece a quem não tem sessão privilegiada: deixa de significar alguma coisa"
+    );
+}
+
+/// Quem administra dá acesso a uma pessoa que já existe — sem a duplicar.
+///
+/// # A viagem
+///
+/// ```text
+/// entrar como identidade privilegiada
+///   → /admin/members/{dono} → «Dar acesso» → credencial temporária
+///   → PostgreSQL: continua a haver **uma** pessoa com aquele nome
+///   → voltar ao detalhe: o botão já não está lá
+/// ```
+///
+/// # O que esta viagem impede
+///
+/// Que o primeiro administrador tenha de criar um segundo `Fidel Monteiro`
+/// para poder entrar como pessoa. Dois registos com o mesmo nome repartem
+/// autoria, pertenças e histórico por dois sítios que ninguém volta a juntar —
+/// e o produto nunca mais sabe qual dos dois é a pessoa.
+#[tokio::test]
+async fn dar_acesso_a_quem_ja_existe_nao_cria_uma_segunda_pessoa() {
+    let harness = harness!();
+
+    let (identidade, _) = harness.sign_in(&[TechnicalRole::PlatformAdmin]).await;
+    let nome = format!("Fidel Monteiro {}", Uuid::new_v4().simple());
+    let dono = harness.ligar_a_um_dono(identidade, &nome).await;
+
+    let antes: i64 = sqlx::query_scalar("SELECT count(*) FROM people WHERE full_name = $1")
+        .bind(&nome)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("contagem");
+    assert_eq!(antes, 1, "a fixture já começou com duas pessoas");
+
+    let page = harness.open(&format!("/admin/members/{dono}")).await;
+    esperar_por(&page, "Dar acesso").await;
+
+    submit(&page, "form[action$=\"/provision\"]").await;
+    esperar_por(&page, "Acesso concedido").await;
+
+    let html = page.content().await.expect("conteúdo");
+    assert!(
+        !html.to_lowercase().contains("argon2"),
+        "o ecrã da credencial mostra material do verificador"
+    );
+
+    // A prova que a interface não pode dar: a base.
+    let depois: i64 = sqlx::query_scalar("SELECT count(*) FROM people WHERE full_name = $1")
+        .bind(&nome)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("contagem");
+    assert_eq!(depois, 1, "dar acesso criou uma segunda pessoa com o mesmo nome");
+
+    let credenciais: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM credentials WHERE person_id = $1 AND state = 'active'",
+    )
+    .bind(dono)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("contagem");
+    assert_eq!(credenciais, 1, "a pessoa não ficou com exactamente uma credencial viva");
+
+    // E dar entrada não deu poder.
+    let papeis: i64 = sqlx::query_scalar("SELECT count(*) FROM person_roles WHERE person_id = $1")
+        .bind(dono)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("contagem");
+    assert_eq!(papeis, 0, "dar acesso concedeu papéis a quem só precisava de entrar");
+
+    // Voltar ao detalhe: a operação já não se oferece.
+    let page = harness.open(&format!("/admin/members/{dono}")).await;
+    let html = page.content().await.expect("conteúdo");
+    assert!(
+        !html.contains("Dar acesso"),
+        "o botão continua a oferecer uma operação que o Core já recusa"
+    );
 }

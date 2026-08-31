@@ -106,6 +106,107 @@ pub fn validate_email(email: &str) -> CoreResult<String> {
     Ok(trimmed)
 }
 
+/// Dá login a uma pessoa que já existe.
+///
+/// # Porque isto não é `create_member`
+///
+/// Porque `create_member` cria. Esta pessoa já está lá — foi escrita pelo
+/// bootstrap para ser a dona da identidade privilegiada, e não tem credencial
+/// porque o servidor não deve provisionar a instituição.
+///
+/// Se a administração usasse `create_member` para lhe dar acesso, o Core
+/// recusaria por endereço em uso — ou, pior, alguém contornaria a recusa com
+/// outro endereço e a instituição passaria a ter **dois** Fidel Monteiro. A
+/// autoria científica, as pertenças e o histórico ficariam repartidos por dois
+/// registos que ninguém volta a juntar.
+///
+/// > **O servidor arranca o primeiro administrador. O administrador arranca a
+/// > instituição pelo Ocinye OS.**
+///
+/// # O que esta operação recusa
+///
+/// Uma pessoa que já tem credencial — dar-lhe outra seria repor a palavra-passe
+/// pelas costas de quem a usa. Isso é `reset_password`, que existe, é auditado
+/// como reposição, e não se confunde com isto.
+///
+/// E uma identidade privilegiada: essas nascem do bootstrap e não se
+/// provisionam por aqui.
+///
+/// # Errors
+///
+/// Devolve [`CoreError::NotFound`] quando a pessoa não existe na organização de
+/// quem administra, e [`CoreError::Conflict`] quando ela já tem credencial ou
+/// não é uma pessoa.
+pub async fn provision_existing_person(
+    pool: &PgPool,
+    authenticator: &Authenticator,
+    actor: &Principal,
+    person_id: Uuid,
+    ids: &CorrelationIds,
+) -> CoreResult<(Person, TemporaryCredential)> {
+    let pessoa = super::service::person_by_id(pool, person_id)
+        .await?
+        .filter(|p| p.organisation_id == actor.organisation_id)
+        // A mesma resposta para «não existe» e «é de outra organização»:
+        // distingui-las diria a quem tenta que a pessoa existe.
+        .ok_or_else(|| CoreError::NotFound("Pessoa não encontrada.".to_owned()))?;
+
+    if pessoa.identity_kind != "human" {
+        return Err(CoreError::Conflict(
+            "Uma identidade privilegiada não se provisiona por aqui: nasce do \
+             bootstrap institucional."
+                .to_owned(),
+        ));
+    }
+
+    if creds::has_usable_credential(pool, pessoa.id).await? {
+        return Err(CoreError::Conflict(
+            "Esta pessoa já tem acesso. Para lhe dar uma credencial nova, use a \
+             reposição de palavra-passe — que fica registada como tal."
+                .to_owned(),
+        ));
+    }
+
+    let secret = generate::temporary_credential();
+    let verifier = authenticator.hasher.hash(&secret)?;
+    let expires_at = Utc::now() + Duration::hours(authenticator.temporary_credential_hours);
+
+    let mut tx = pool.begin().await?;
+
+    creds::insert(
+        &mut *tx,
+        pessoa.id,
+        CredentialKind::Temporary,
+        &verifier,
+        Some(expires_at),
+        Some(actor.person_id),
+        "provisionamento de uma pessoa existente",
+    )
+    .await?;
+
+    audit::record(
+        &mut tx,
+        Some(actor),
+        ids,
+        AuditEntry::new(action::ACCOUNT_PROVISIONED, "person")
+            .resource(pessoa.id)
+            .detail("email", pessoa.email.clone())
+            .detail("expires_at", expires_at.to_rfc3339()),
+    )
+    .await?;
+
+    tx.commit().await?;
+
+    Ok((
+        pessoa.clone(),
+        TemporaryCredential {
+            secret,
+            email: pessoa.email,
+            expires_at,
+        },
+    ))
+}
+
 /// Create a member account and issue its temporary credential.
 ///
 /// The account is created `invited` with a temporary credential and no

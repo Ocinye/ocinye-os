@@ -1511,6 +1511,7 @@ pub(crate) mod link_tests {
                             {"permission": "ai.use", "source": "technical_role"}
                         ]
                     }),
+                    None,
                 )
             ),
             page!(

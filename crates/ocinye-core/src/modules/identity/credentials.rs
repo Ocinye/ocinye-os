@@ -84,6 +84,33 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Credential {
 /// # Errors
 ///
 /// Returns an error when the query fails.
+/// Se esta pessoa consegue entrar hoje.
+///
+/// «Utilizável» e não «existe»: uma credencial revogada ou expirada é uma linha
+/// na tabela e não é acesso. Contá-la faria o provisionamento recusar quem
+/// precisa dele.
+///
+/// # Errors
+///
+/// Returns a database error.
+pub async fn has_usable_credential<'e>(
+    executor: impl PgExecutor<'e>,
+    person_id: Uuid,
+) -> CoreResult<bool> {
+    let existe: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1 FROM credentials
+              WHERE person_id = $1
+                AND state = 'active'
+                AND (expires_at IS NULL OR expires_at > now())
+         )",
+    )
+    .bind(person_id)
+    .fetch_one(executor)
+    .await?;
+    Ok(existe)
+}
+
 pub async fn live_credentials<'e>(
     executor: impl PgExecutor<'e>,
     person_id: Uuid,

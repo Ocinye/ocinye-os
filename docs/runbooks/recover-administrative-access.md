@@ -55,7 +55,8 @@ psql "$OCINYE_DATABASE_URL" -c "
 
 # 2. Crie um novo administrador pelo caminho normal.
 ocinye-core-server bootstrap-admin \
-  --name "Nome Completo" --endereço novo.admin --email pessoa@ocinye.com
+  --name       "Nome Completo"  --email       pessoa@ocinye.com \
+  --admin-name "Nome Completo (Admin)" --admin-email pessoa.admin@ocinye.com
 ```
 
 Segue-se o [bootstrap normal](bootstrap-first-administrator.md): credencial
