@@ -134,6 +134,11 @@ suites() {
 # frase que só existe no corpo de um PDF, e o formato que se guarda mas não se
 # lê. Ambas exigem armazenamento; sem ele, falham na CI em vez de se saltarem.
 #
+# 83 desde 2026-08-31: entrou a prova de que o fuso declarado vale para a viagem
+# e **não escapa dela**. Estrutural não é observado: o fuso vive no `Harness`,
+# mas um estado que uma viagem deixasse para a seguinte faria o defeito aparecer
+# noutro teste, com outra causa aparente.
+#
 # 82 desde 2026-08-31: entrou a prova do próprio `conteudo_estavel`. Dezoito
 # viagens dependiam dele, e uma passagem verde delas provava que a corrida não
 # tinha acontecido daquela vez — não que ela não existisse. Com a rede
@@ -166,7 +171,7 @@ suites() {
 #
 # Auditado em 2026-08-29, em série, marca a marca. O número continua fixo: uma
 # viagem que deixe de levantar faz a contagem cair e o portão fecha.
-viagens-de-browser|82|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|81
+viagens-de-browser|83|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|82
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

@@ -9922,12 +9922,20 @@ async fn o_conteudo_estavel_nunca_devolve_a_pagina_anterior() {
         let page = abrir_a_frio(&harness, "/").await;
 
         // Latência imposta: alarga a janela da navegação até ela ser observável.
-        use chromiumoxide::cdp::browser_protocol::network::EmulateNetworkConditionsParams;
-        page.execute(EmulateNetworkConditionsParams::new(
-            false, 1200.0, 200_000.0, 200_000.0,
-        ))
-        .await
-        .expect("estrangular a rede");
+        //
+        // O tipo está marcado obsoleto no próprio protocolo, e o `chromiumoxide`
+        // continua a usá-lo internamente por não haver substituto nesta versão.
+        // Silencia-se aqui, e não na crate inteira: um `allow` largo esconderia
+        // o dia em que houver alternativa.
+        #[allow(deprecated)]
+        {
+            use chromiumoxide::cdp::browser_protocol::network::EmulateNetworkConditionsParams;
+            page.execute(EmulateNetworkConditionsParams::new(
+                false, 1200.0, 200_000.0, 200_000.0,
+            ))
+            .await
+            .expect("estrangular a rede");
+        }
 
         let inicio = std::time::Instant::now();
         loop {
@@ -9955,5 +9963,71 @@ async fn o_conteudo_estavel_nunca_devolve_a_pagina_anterior() {
             "volta {volta}: o conteúdo estável ainda era o do arranque, com a URL do Login"
         );
         page.close().await.ok();
+    }
+}
+
+/// O fuso declarado vale para a viagem, e não escapa dela.
+///
+/// # Duas propriedades, e a segunda é a que se esquece
+///
+/// A primeira é que declarar funciona: a página passa mesmo a viver no fuso
+/// pedido, e não no da máquina. Sem isto, `declarar_fuso` seria uma variável que
+/// ninguém lê.
+///
+/// A segunda é que **não contamina**. Um fuso declarado que sobrevivesse à
+/// viagem faria a seguinte correr num relógio que não escolheu — e o defeito
+/// apareceria noutro teste, com outra causa aparente. É a mesma classe de
+/// problema que o `is_default` do armazenamento: estado global que uma suite
+/// deixa para a outra.
+///
+/// Aqui a propriedade é estrutural — o fuso vive no `Harness`, e cada viagem tem
+/// o seu — mas estrutural não é observado. Isto observa-a.
+#[tokio::test]
+async fn o_fuso_declarado_vale_para_a_viagem_e_nao_escapa_dela() {
+    let harness = harness!();
+
+    async fn fuso_de(page: &Page) -> String {
+        page.evaluate("Intl.DateTimeFormat().resolvedOptions().timeZone")
+            .await
+            .expect("ler o fuso")
+            .into_value::<String>()
+            .expect("fuso")
+    }
+
+    // Sem declaração: o fuso é o da máquina, seja ele qual for.
+    let antes = harness.open("/login").await;
+    let da_maquina = fuso_de(&antes).await;
+
+    // Declarado: um fuso deliberadamente improvável, para que coincidir por
+    // acaso com o da máquina seja impossível de confundir com funcionar.
+    harness.declarar_fuso("Pacific/Kiritimati");
+    let depois = harness.open("/login").await;
+    assert_eq!(
+        fuso_de(&depois).await,
+        "Pacific/Kiritimati",
+        "a declaração não chegou à página; o fuso continuou a ser o da máquina"
+    );
+    assert_ne!(
+        da_maquina, "Pacific/Kiritimati",
+        "a máquina desta corrida já estava em Kiritimati: o teste não distingue \
+         declarar de não declarar"
+    );
+
+    // E uma página aberta por **outro** harness não o herda.
+    //
+    // Não se levanta um segundo browser para isto: o que se verifica é que o
+    // estado vive no harness, e não no browser partilhado nem no processo.
+    let outro = Harness::start(
+        &std::env::var("OCINYE_TEST_DATABASE_URL").expect("base"),
+        &chrome_path().expect("chrome"),
+    )
+    .await;
+    if let Some(outro) = outro {
+        let alheia = outro.open("/login").await;
+        assert_eq!(
+            fuso_de(&alheia).await,
+            da_maquina,
+            "outra viagem herdou o fuso que esta declarou"
+        );
     }
 }
