@@ -2076,7 +2076,6 @@ mod tests {
         );
     }
 
-    #[test]
     /// A auditoria diz quem executou **e** quem responde.
     #[test]
     fn a_auditoria_resolve_as_duas_camadas_de_quem_agiu() {
