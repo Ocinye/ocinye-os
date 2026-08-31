@@ -173,7 +173,7 @@ suites() {
 #
 # Auditado em 2026-08-29, em série, marca a marca. O número continua fixo: uma
 # viagem que deixe de levantar faz a contagem cair e o portão fecha.
-viagens-de-browser|83|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|83
+viagens-de-browser|85|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|85
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
@@ -189,7 +189,7 @@ carregamento-em-partes|8|-p ocinye-core --test segmented_upload
 # A identidade privilegiada ligada. As duas verdades — que tipo de identidade
 # iniciou a sessão, e que autoridade ela tem agora — são independentes, e é isso
 # que estas provas fixam.
-identidade-privilegiada|7|-p ocinye-core --test privileged_identity
+identidade-privilegiada|12|-p ocinye-core --test privileged_identity
 TABELA
 }
 
