@@ -119,6 +119,30 @@ fn text(row: &Value, key: &str) -> String {
         .to_owned()
 }
 
+/// Quem agiu, com quem responde quando são identidades diferentes.
+///
+/// # Porque não chega o nome de quem executou
+///
+/// Porque uma operação administrativa é executada por uma identidade
+/// privilegiada, e uma linha que dissesse apenas «Fidel Admin» perde a pessoa
+/// que responde por ela. Uma auditoria que não sabe dizer quem responde não é
+/// uma auditoria.
+///
+/// E não é o contrário: mostrar só «Fidel Monteiro» apagaria o facto de aquilo
+/// ter sido feito com autoridade de plataforma, que é precisamente o que uma
+/// revisão precisa de ver.
+///
+/// Para uma pessoa comum não há segunda camada, e a linha fica como sempre
+/// esteve — acrescentar «(em nome de si próprio)» a toda a gente seria ruído a
+/// esconder os casos que importam.
+fn actor_da_auditoria(row: &Value) -> String {
+    let quem_executou = text(row, "actor_name");
+    match row.get("actor_on_behalf_of").and_then(Value::as_str) {
+        Some(dono) if !dono.is_empty() => format!("{quem_executou} · por {dono}"),
+        _ => quem_executou,
+    }
+}
+
 /// Lê um inteiro como texto.
 fn number(row: &Value, key: &str) -> String {
     row.get(key)
@@ -1100,7 +1124,7 @@ pub fn audit(viewer: &Viewer, payload: &Value) -> impl IntoView {
                                 .take(19)
                                 .collect::<String>(),
                         ),
-                        Cell::Text(text(row, "actor_name")),
+                        Cell::Text(actor_da_auditoria(row)),
                         Cell::Mono(action),
                         Cell::Mono(text(row, "resource_id")),
                         Cell::Classification(text(row, "classification")),
@@ -1936,6 +1960,8 @@ mod tests {
     /// filtragem por permissão.
     fn viewer() -> Viewer {
         Viewer {
+            sessao_privilegiada: false,
+            administra: false,
             zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
             avatar: ocinye_contracts::AvatarChoice::Initials,
             email: Some("jmanuel@ocinye.com".to_owned()),
@@ -1957,6 +1983,8 @@ mod tests {
     /// Um membro sem permissão nenhuma.
     fn viewer_sem_permissoes() -> Viewer {
         Viewer {
+            sessao_privilegiada: false,
+            administra: false,
             zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
             avatar: ocinye_contracts::AvatarChoice::Initials,
             email: Some("jmanuel@ocinye.com".to_owned()),
@@ -2046,6 +2074,44 @@ mod tests {
             footer(&json!({"total": 0}), 0, "ideia", "ideias"),
             "0 ideias"
         );
+    }
+
+    /// A auditoria diz quem executou **e** quem responde.
+    #[test]
+    fn a_auditoria_resolve_as_duas_camadas_de_quem_agiu() {
+        let linha = json!({
+            "actor_name": "Fidel Admin",
+            "actor_identity_kind": "privileged",
+            "actor_on_behalf_of": "Fidel Monteiro"
+        });
+        let lido = actor_da_auditoria(&linha);
+        assert!(
+            lido.contains("Fidel Admin"),
+            "perdeu-se qual identidade executou: {lido}"
+        );
+        assert!(
+            lido.contains("Fidel Monteiro"),
+            "perdeu-se quem responde pela identidade privilegiada: {lido}"
+        );
+    }
+
+    /// Uma pessoa comum não ganha uma segunda camada inventada.
+    ///
+    /// Acrescentar «em nome de si próprio» a toda a gente seria ruído a esconder
+    /// exactamente os casos que a coluna existe para destacar.
+    #[test]
+    fn uma_pessoa_comum_aparece_como_sempre_apareceu() {
+        for linha in [
+            json!({"actor_name": "Ana Fernandes", "actor_identity_kind": "human"}),
+            json!({"actor_name": "Ana Fernandes", "actor_on_behalf_of": null}),
+            json!({"actor_name": "Ana Fernandes", "actor_on_behalf_of": ""}),
+        ] {
+            assert_eq!(
+                actor_da_auditoria(&linha),
+                "Ana Fernandes",
+                "uma pessoa comum ganhou uma camada que não existe: {linha}"
+            );
+        }
     }
 
     #[test]

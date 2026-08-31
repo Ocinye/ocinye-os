@@ -60,8 +60,8 @@ exclusivamente para o seu titular definir a sua própria palavra-passe.
 
 ```bash
 ocinye-core-server bootstrap-admin \
-  --name "Nome Completo" \
-    --email pessoa@ocinye.com
+  --name        "Fidel Monteiro"        --email       fidel@ocinye.com \
+  --admin-name  "Fidel Admin"           --admin-email fidel.admin@ocinye.com
 ```
 
 Corre **uma única vez**: recusa se já existir um `platform_admin` utilizável na

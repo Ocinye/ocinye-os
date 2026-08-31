@@ -48,6 +48,17 @@
   --oc-warning: #C87A22; --oc-warning-text: #8A4B10;
   --oc-warning-bg: #FDF2E7; --oc-warning-border: #F2DBBE;
   --oc-error: #B3261E; --oc-error-text: #8C2019;
+
+  /* ─── Sessão privilegiada ──────────────────────────────────────────────
+     Um vermelho próprio, e não `--oc-error`.
+
+     Vermelho aqui não quer dizer avaria: quer dizer autoridade elevada.
+     Partilhar o token do erro faria a faixa parecer um alarme permanente — e
+     uma interface que grita erro o tempo todo ensina a ignorar o vermelho,
+     que é exactamente o oposto do que esta faixa precisa. */
+  --oc-privilegio:      #8E1B2B;
+  --oc-privilegio-alto: #A82234;
+  --oc-privilegio-tinta: #FFF4F5;
   --oc-error-bg: #FCF0EF; --oc-error-border: #F1D6D3;
   --oc-gold-text: #8A6110; --oc-gold-bg: #FDF6E7; --oc-gold-border: #F2E3BE;
 
@@ -5653,4 +5664,38 @@ select.oc-entrada {
 .oc-table--files-all .oc-table__row {
   grid-template-columns: minmax(260px,2.4fr) 140px 130px 100px 90px;
   min-width: 880px;
+}
+
+
+/* ─── Sessão privilegiada ────────────────────────────────────────────────
+   Duas janelas abertas têm de ser distinguíveis sem abrir menus. Por isso a
+   faixa é a primeira coisa da página, ocupa a largura toda, e não desaparece
+   com a navegação: pertence à casca, e não a um ecrã.
+
+   Cor, ícone e texto — os três. Quem não distingue cores tem de perceber isto
+   na mesma, e precisamente na janela onde enganar-se custa mais. */
+.oc-privilegiada {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 8px 20px;
+  background: var(--oc-privilegio); color: var(--oc-privilegio-tinta);
+  border-bottom: 2px solid var(--oc-privilegio-alto);
+  font: 500 12px/1.4 var(--oc-font-sans);
+  letter-spacing: 0.04em;
+  position: sticky; top: 0; z-index: var(--oc-z-topbar);
+}
+.oc-privilegiada__marca { display: inline-flex; align-items: center; gap: 8px; }
+.oc-privilegiada__marca svg { flex-shrink: 0; }
+.oc-privilegiada__rotulo { font-weight: 700; letter-spacing: 0.08em; }
+.oc-privilegiada__quem {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-weight: 400; opacity: 0.92; white-space: nowrap;
+}
+.oc-privilegiada__email { font: 400 11px/1 var(--oc-font-mono); opacity: 0.8; }
+
+/* Em ecrã estreito o rótulo encolhe, e não desaparece: uma faixa que some
+   quando a janela aperta deixa de proteger justamente quem trabalha apertado. */
+@media (max-width: 720px) {
+  .oc-privilegiada { padding: 6px 12px; gap: 8px; }
+  .oc-privilegiada__quem, .oc-privilegiada__email { display: none; }
+  .oc-privilegiada__rotulo { font-size: 11px; }
 }

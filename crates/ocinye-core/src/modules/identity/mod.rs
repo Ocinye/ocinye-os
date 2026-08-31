@@ -28,8 +28,8 @@ mod service;
 
 pub use accounts::{
     bootstrap_platform_admin, bootstrap_privileged_identity, change_own_password, create_member,
-    reset_password, set_account_status, set_permanent_password, validate_email, HumanOwner,
-    NewMember, TemporaryCredential, DEFAULT_TEMPORARY_CREDENTIAL_HOURS,
+    provision_existing_person, reset_password, set_account_status, set_permanent_password,
+    validate_email, HumanOwner, NewMember, TemporaryCredential, DEFAULT_TEMPORARY_CREDENTIAL_HOURS,
 };
 pub use authentication::{
     AttemptContext, Authenticator, IssuedSession, Throttle, PASSWORD_CHANGE_SESSION_MINUTES,
@@ -37,9 +37,9 @@ pub use authentication::{
 };
 pub use avatar::{choose_preset, own_avatar, own_photograph_key, set_photograph, use_initials};
 pub use credentials::{
-    find_session, list_own_sessions, list_sessions, live_grants, revoke_all_sessions,
-    revoke_own_session, revoke_session, session_digest, sweep_expired, touch_session, Credential,
-    StoredSession,
+    find_session, has_usable_credential, list_own_sessions, list_sessions, live_grants,
+    revoke_all_sessions, revoke_own_session, revoke_session, session_digest, sweep_expired,
+    touch_session, Credential, StoredSession,
 };
 pub use model::{Invitation, InvitationStatus, Person};
 pub use service::{

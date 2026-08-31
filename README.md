@@ -457,8 +457,15 @@ apresentada apenas nessa execução:
 
 ```bash
 cargo run --bin ocinye-core-server -- bootstrap-admin \
-  --name "Nome Completo" --email pessoa@ocinye.com
+  --name       "Fidel Monteiro" --email       fidel@ocinye.com \
+  --admin-name "Fidel Admin"    --admin-email fidel.admin@ocinye.com
 ```
+
+Cria **duas** identidades ligadas: a pessoa institucional, que responde, e a
+identidade privilegiada, que executa. A pessoa nasce **sem acesso** — quem lho
+dá é o administrador, pelo Ocinye OS, em Administração › Membro › Dar acesso.
+O servidor arranca o primeiro administrador; o administrador arranca a
+instituição.
 
 No primeiro acesso, o administrador deve substituir a palavra-passe temporária.
 Não existe palavra-passe de bootstrap permanente

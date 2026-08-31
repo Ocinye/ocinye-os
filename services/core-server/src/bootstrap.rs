@@ -33,6 +33,8 @@ use ocinye_observability::CorrelationIds;
 struct Args {
     name: Option<String>,
     email: Option<String>,
+    admin_name: Option<String>,
+    admin_email: Option<String>,
 }
 
 fn parse_args(argv: &[String]) -> anyhow::Result<Args> {
@@ -55,6 +57,14 @@ fn parse_args(argv: &[String]) -> anyhow::Result<Args> {
                 args.email = Some(value()?);
                 iter.next();
             }
+            "--admin-name" => {
+                args.admin_name = Some(value()?);
+                iter.next();
+            }
+            "--admin-email" => {
+                args.admin_email = Some(value()?);
+                iter.next();
+            }
             "--help" | "-h" => {
                 print_usage();
                 std::process::exit(0);
@@ -68,15 +78,58 @@ fn parse_args(argv: &[String]) -> anyhow::Result<Args> {
 fn print_usage() {
     eprintln!(
         "Uso: ocinye-core-server bootstrap-admin \\
-  --name \"Nome Completo\" \\
-  --email pessoa@ocinye.com
+  --name        \"Nome Completo\" \\
+  --email       pessoa@ocinye.com \\
+  --admin-name  \"Nome Completo (Admin)\" \\
+  --admin-email pessoa.admin@ocinye.com
 
-Cria o primeiro PlatformAdmin da instalação e imprime uma palavra-passe
-temporária, uma única vez. O administrador terá de a substituir no primeiro
-acesso: não existe palavra-passe de bootstrap permanente.
+Cria duas coisas ligadas entre si:
+
+  · a **pessoa institucional** (--name/--email), que é quem responde. Nasce
+    sem credencial: quem provisiona a instituição é o administrador, pelo
+    Ocinye OS, e não o servidor.
+
+  · a **identidade privilegiada** (--admin-name/--admin-email), que é o que
+    executa, com autoridade de plataforma, ligada àquela pessoa.
+
+Imprime uma palavra-passe temporária da identidade privilegiada, uma única
+vez. Terá de a substituir no primeiro acesso: não existe palavra-passe de
+bootstrap permanente.
 
 Corre uma única vez. Se já existir um administrador utilizável, recusa."
     );
+}
+
+/// Slugs que não podem nomear uma instituição a sério.
+///
+/// # Porque isto recusa em vez de corrigir
+///
+/// Porque um valor destes não é um engano de escrita: é a configuração a não
+/// ter sido posta. Substituí-lo em silêncio por `ocinye` daria uma instalação
+/// que arranca bem e cuja variável de ambiente continua errada — e o erro só
+/// aparece na segunda instalação, quando as duas escrevem para a mesma
+/// organização.
+const SLUGS_RECUSADOS: [&str; 6] = ["default", "demo", "test", "example", "sample", "changeme"];
+
+/// Normaliza o slug configurado, ou explica porque não serve.
+///
+/// Separada de [`run`] para poder ser exercida sem base de dados. A versão
+/// anterior tinha a decisão dentro da função assíncrona, e o teste ao lado
+/// verificava apenas que a constante continha o que continha — uma tautologia
+/// que ficava verde com a guarda inteiramente removida.
+///
+/// # Errors
+///
+/// Quando o slug está vazio ou é um valor de exemplo.
+fn slug_utilizavel(configurado: &str) -> anyhow::Result<String> {
+    let slug = configurado.trim().to_lowercase();
+    if slug.is_empty() || SLUGS_RECUSADOS.contains(&slug.as_str()) {
+        bail!(
+            "OCINYE_ORGANISATION_SLUG está a «{configurado}»: isso não nomeia \
+             uma instituição. Defina-o antes de arrancar."
+        );
+    }
+    Ok(slug)
 }
 
 /// Run the bootstrap subcommand.
@@ -88,26 +141,46 @@ Corre uma única vez. Se já existir um administrador utilizável, recusa."
 pub async fn run(argv: &[String]) -> anyhow::Result<()> {
     let args = parse_args(argv)?;
 
-    let (Some(name), Some(email)) = (&args.name, &args.email) else {
+    let (Some(name), Some(email), Some(admin_name), Some(admin_email)) =
+        (&args.name, &args.email, &args.admin_name, &args.admin_email)
+    else {
         print_usage();
-        bail!("--name e --email são obrigatórios");
+        bail!("--name, --email, --admin-name e --admin-email são obrigatórios");
     };
 
+    // Dois endereços distintos, ou não são duas identidades.
+    //
+    // O mesmo endereço nos dois lados daria uma pessoa e uma identidade
+    // privilegiada com a mesma caixa de correio: a reposição de uma chegaria à
+    // outra, e a separação que justifica todo este modelo deixaria de existir
+    // onde ela mais conta.
+    if name.trim().eq_ignore_ascii_case(admin_name.trim())
+        || email.trim().eq_ignore_ascii_case(admin_email.trim())
+    {
+        bail!(
+            "a pessoa institucional e a identidade privilegiada têm de ser \
+             distinguíveis: use nomes e endereços diferentes"
+        );
+    }
+
     let config = CoreConfig::from_env().context("configuração")?;
+
+    // Fail-closed antes de escrever seja o que for.
+    let slug = slug_utilizavel(&config.organisation_slug)?;
+
     let pool = db::connect(&config)
         .await
         .context("ligação à base de dados")?;
     db::migrate(&pool).await.context("migrations")?;
 
     let ids = CorrelationIds::generate();
-    let organisation = organisation::bootstrap_organisation(
-        &pool,
-        &config.organisation_slug,
-        &config.organisation_slug,
-        &ids,
-    )
-    .await
-    .context("organização")?;
+    // Idempotente: a organização é adoptada se já existir, e criada se não.
+    // Correr o bootstrap outra vez não pode dar uma segunda instituição com o
+    // mesmo nome — seria a mesma repartição de autoria, pertenças e histórico
+    // que a duplicação de uma pessoa provoca, só que ao nível de tudo.
+    let organisation = organisation::bootstrap_organisation(&pool, &slug, &slug, &ids)
+        .await
+        .context("organização")?;
 
     let authenticator = Arc::new(Authenticator::new(
         Hasher::new(HashingParams {
@@ -123,12 +196,16 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
         config.auth.temporary_credential_hours,
     ));
 
-    let (person, credential) = match identity::bootstrap_platform_admin(
+    let (person, credential) = match identity::bootstrap_privileged_identity(
         &pool,
         &authenticator,
         organisation.id,
-        name,
-        email,
+        identity::HumanOwner {
+            full_name: name.clone(),
+            email: email.clone(),
+        },
+        admin_name,
+        admin_email,
         &ids,
     )
     .await
@@ -148,8 +225,13 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
     // Printed to stdout, once. Nothing else on this path writes it anywhere:
     // not the log, not the database, not the audit trail.
     println!();
-    println!("  Administrador principal criado.");
+    println!("  Instituição e administrador criados.");
     println!();
+    println!("  Organização          {slug}");
+    println!("  Pessoa institucional {name} · {email}");
+    println!("    (sem acesso — dê-lho pelo Ocinye OS, em Administração)");
+    println!();
+    println!("  Identidade privilegiada");
     println!("  Nome                 {}", person.full_name);
     println!("  Utilizador           {}", credential.email);
     println!("  Palavra-passe        {}", credential.secret.expose());
@@ -175,17 +257,64 @@ mod tests {
     }
 
     #[test]
-    fn the_three_required_arguments_are_parsed() {
+    fn as_duas_identidades_sao_lidas_separadamente() {
         let args = parse_args(&argv(&[
             "--name",
-            "Filipe Monteiro",
+            "Fidel Monteiro",
             "--email",
-            "filipe@ocinye.com",
+            "fidel@ocinye.com",
+            "--admin-name",
+            "Fidel Admin",
+            "--admin-email",
+            "fidel.admin@ocinye.com",
         ]))
         .unwrap();
 
-        assert_eq!(args.name.as_deref(), Some("Filipe Monteiro"));
-        assert_eq!(args.email.as_deref(), Some("filipe@ocinye.com"));
+        assert_eq!(args.name.as_deref(), Some("Fidel Monteiro"));
+        assert_eq!(args.email.as_deref(), Some("fidel@ocinye.com"));
+        assert_eq!(args.admin_name.as_deref(), Some("Fidel Admin"));
+        assert_eq!(args.admin_email.as_deref(), Some("fidel.admin@ocinye.com"));
+    }
+
+    /// O uso diz que a pessoa institucional nasce sem acesso.
+    ///
+    /// Um operador que não leia isto arranca o servidor, tenta entrar com o
+    /// endereço da pessoa, falha, e conclui que o bootstrap correu mal. Correu
+    /// bem: o servidor arranca o administrador, e é o administrador que arranca
+    /// a instituição.
+    #[test]
+    fn o_uso_explica_que_a_pessoa_nasce_sem_credencial() {
+        // `print_usage` escreve para stderr; o texto vive aqui para poder ser
+        // exercido. Uma cópia escrita ao lado ficaria verde enquanto o original
+        // mudava — foi o que já aconteceu noutro sítio deste repositório.
+        let fonte = include_str!("bootstrap.rs");
+        let uso = &fonte[fonte.find("fn print_usage").expect("uso")..];
+        let uso = &uso[..uso.find("\n}").expect("fim")];
+        assert!(
+            uso.contains("Nasce"),
+            "o uso não diz que a pessoa nasce sem credencial"
+        );
+        assert!(
+            uso.contains("--admin-email"),
+            "o uso não anuncia a identidade privilegiada"
+        );
+    }
+
+    /// Slugs de configuração por pôr são recusados, e não corrigidos.
+    #[test]
+    fn um_slug_de_exemplo_nao_nomeia_uma_instituicao() {
+        for recusado in ["default", "DEMO", " test ", "", "   ", "changeme"] {
+            assert!(
+                slug_utilizavel(recusado).is_err(),
+                "«{recusado}» arrancou uma instituição"
+            );
+        }
+    }
+
+    #[test]
+    fn um_slug_a_serio_passa_e_e_normalizado() {
+        assert_eq!(slug_utilizavel(" Ocinye ").unwrap(), "ocinye");
+        assert_eq!(slug_utilizavel("banza").unwrap(), "banza");
     }
 
     #[test]

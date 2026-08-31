@@ -82,6 +82,12 @@ pub mod action {
     pub const ACCOUNT_DISABLED: &str = "account_disabled";
     /// An account was reinstated.
     pub const ACCOUNT_REINSTATED: &str = "account_reinstated";
+    /// Uma pessoa que já existia ganhou acesso.
+    ///
+    /// Distinto de criar e distinto de repor: o registo tem de dizer qual das
+    /// três aconteceu. «Criada» a quem já existia esconderia a duplicação que
+    /// não houve; «reposta» esconderia que antes não havia acesso nenhum.
+    pub const ACCOUNT_PROVISIONED: &str = "account_provisioned";
     /// An explicit access grant was created.
     pub const GRANT_CREATED: &str = "grant_created";
     /// An explicit access grant was revoked.
