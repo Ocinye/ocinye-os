@@ -808,6 +808,27 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
     Viewer {
         zona: member.zona,
         name: member.session.display_name.clone(),
+        // As duas verdades, ambas do Core.
+        //
+        // Sem resposta dele, `false` nos dois: a apresentação privilegiada é
+        // uma afirmação sobre a sessão, e não se afirma o que não se sabe. O
+        // caminho seguro aqui é o silêncio — uma sessão normal a mais é um
+        // incómodo; uma sessão privilegiada apresentada como normal é o estado
+        // que isto existe para impedir, e por isso o Core em silêncio leva a
+        // pessoa ao arranque antes de chegar aqui.
+        sessao_privilegiada: me
+            .get("identity_kind")
+            .and_then(Value::as_str)
+            .is_some_and(|kind| kind == "privileged"),
+        administra: me
+            .get("roles")
+            .and_then(Value::as_array)
+            .is_some_and(|roles| {
+                roles
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .any(|r| r == "platform_admin")
+            }),
         // O endereço vem do Core, que é onde o registo vive. A sessão local
         // serve de recurso: é aquele com que a pessoa entrou, e é o mesmo.
         email: me

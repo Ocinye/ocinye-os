@@ -238,6 +238,23 @@ pub struct Viewer {
     pub zona: ocinye_contracts::temporal::TimeZoneName,
     /// Nome do membro.
     pub name: String,
+    /// Se esta sessão foi iniciada por uma identidade privilegiada.
+    ///
+    /// # Porque isto vem do Core e não daqui
+    ///
+    /// Porque a Experience não sabe — nem deve saber — o que faz uma identidade
+    /// ser privilegiada. Inferi-lo de um sufixo no endereço, do nome, ou da
+    /// presença de `PlatformAdmin` seria a interface a inventar uma segunda
+    /// definição, e a primeira vez que divergisse da do Core teríamos uma sessão
+    /// tratada como normal quando não o é.
+    ///
+    /// > **A faixa representa a sessão. A faixa não autoriza a sessão.**
+    pub sessao_privilegiada: bool,
+    /// Se essa identidade tem **agora** autoridade de administração.
+    ///
+    /// Separado do anterior de propósito. Revogado o `PlatformAdmin`, a sessão
+    /// continua privilegiada — e deixa de poder chamar-se «Super Admin».
+    pub administra: bool,
     /// Instituição, para o wordmark.
     pub organisation: String,
     /// O endereço institucional do membro.
@@ -432,6 +449,8 @@ pub fn shell(
     view! {
         <a class="oc-skip" href="#conteudo">"Saltar para o conteúdo"</a>
 
+        {faixa_privilegiada(viewer)}
+
         <div class="oc-shell" data-side="expanded">
             {sidebar(viewer, &avatar, active)}
 
@@ -445,6 +464,65 @@ pub fn shell(
 
         {palette(viewer)}
     }
+}
+
+/// A faixa que torna uma sessão privilegiada inconfundível.
+///
+/// # Porque isto é segurança e não decoração
+///
+/// > **Uma sessão privilegiada nunca pode parecer igual a uma sessão normal.**
+///
+/// Com duas janelas abertas — uma de trabalho, outra de administração — a
+/// pessoa tem de saber qual carrega autoridade elevada **sem abrir menus**. Uma
+/// operação administrativa executada por engano na janela errada é o acidente
+/// que isto existe para impedir.
+///
+/// # Duas verdades, dois papéis
+///
+/// O **tipo** de identidade governa o tratamento: privilegiada, faixa vermelha.
+/// A **autoridade corrente** governa o rótulo: com `PlatformAdmin`, «Super
+/// Admin». Revogada a autoridade, a faixa fica — a sessão continua a ser a de
+/// quem administrava — e o rótulo muda para dizer a verdade.
+///
+/// Colapsar as duas faria a interface afirmar «Super Admin» a quem já não pode
+/// administrar.
+///
+/// # Não só cor
+///
+/// Vermelho, ícone e texto. Quem não distingue cores tem de perceber isto na
+/// mesma, e uma faixa que dependesse só do vermelho seria invisível a essa
+/// pessoa — precisamente na janela onde enganar-se custa mais.
+///
+/// E vermelho aqui não quer dizer avaria: quer dizer autoridade elevada. É por
+/// isso que leva um cadeado e não um triângulo, e que a composição é a de um
+/// estado e não a de um erro.
+fn faixa_privilegiada(viewer: &Viewer) -> impl IntoView {
+    if !viewer.sessao_privilegiada {
+        return ().into_any();
+    }
+
+    // O rótulo diz o que a autoridade é **agora**.
+    let rotulo = if viewer.administra {
+        "SUPER ADMIN · SESSÃO PRIVILEGIADA"
+    } else {
+        "SESSÃO PRIVILEGIADA · SEM AUTORIDADE ADMINISTRATIVA"
+    };
+    let nome = viewer.name.clone();
+    let email = viewer.email.clone();
+
+    view! {
+        <div class="oc-privilegiada" role="status" data-privilegiada="1">
+            <span class="oc-privilegiada__marca">
+                {icon(Icon::Shield, 16)}
+                <b class="oc-privilegiada__rotulo">{rotulo}</b>
+            </span>
+            <span class="oc-privilegiada__quem">
+                {nome}
+                {email.map(|e| view! { <span class="oc-privilegiada__email">{e}</span> })}
+            </span>
+        </div>
+    }
+    .into_any()
 }
 
 fn sidebar(viewer: &Viewer, avatar: &str, active: Screen) -> impl IntoView {
@@ -1361,6 +1439,8 @@ mod tests {
             email: Some("jmanuel@ocinye.com".to_owned()),
             session_expires_in: Some(std::time::Duration::from_secs(8 * 3600)),
             name: "João Manuel".to_owned(),
+            sessao_privilegiada: false,
+            administra: false,
             organisation: "Ocinye".to_owned(),
             core_status: crate::ui::shell::CoreStatus::Ok,
             temporal: Vec::new(),
@@ -2195,6 +2275,115 @@ mod tests {
         assert!(CoreStatus::Ok.operational());
         assert!(!CoreStatus::Unavailable.operational());
         assert!(!CoreStatus::Silent.operational());
+    }
+    /// Uma sessão privilegiada com autoridade: faixa e rótulo.
+    fn privilegiada_com_autoridade() -> Viewer {
+        Viewer {
+            sessao_privilegiada: true,
+            administra: true,
+            name: "Fidel Admin".to_owned(),
+            email: Some("fidel.admin@ocinye.com".to_owned()),
+            ..viewer_with(&[])
+        }
+    }
+
+    /// A faixa diz as três coisas, e não só a cor.
+    #[test]
+    fn a_faixa_identifica_a_sessao_e_quem_a_conduz() {
+        let html = render(&privilegiada_com_autoridade());
+        assert!(html.contains("SUPER ADMIN"), "falta o rótulo da autoridade");
+        assert!(
+            html.contains("SESSÃO PRIVILEGIADA"),
+            "falta o texto que diz que tipo de sessão é"
+        );
+        assert!(
+            html.contains("Fidel Admin"),
+            "a faixa não diz quem conduz a sessão"
+        );
+        assert!(
+            html.contains("fidel.admin@ocinye.com"),
+            "a faixa não diz por que credencial"
+        );
+        assert!(
+            html.contains("oc-privilegiada"),
+            "o tratamento visual não foi aplicado"
+        );
+    }
+
+    /// **A negativa**: uma sessão normal não carrega nada disto.
+    ///
+    /// Sem esta metade, uma faixa sempre presente passaria a primeira prova e
+    /// não distinguiria coisa nenhuma.
+    #[test]
+    fn uma_sessao_normal_nao_tem_faixa() {
+        let html = render(&viewer_with(&[]));
+        assert!(
+            !html.contains("oc-privilegiada"),
+            "uma sessão normal recebeu a faixa"
+        );
+        assert!(
+            !html.contains("SUPER ADMIN"),
+            "uma sessão normal foi rotulada Super Admin"
+        );
+        assert!(
+            !html.contains("SESSÃO PRIVILEGIADA"),
+            "uma sessão normal foi apresentada como privilegiada"
+        );
+    }
+
+    /// **As duas verdades, na apresentação.**
+    ///
+    /// Revogada a autoridade, a faixa fica — a sessão continua a ser a de quem
+    /// administrava — e o rótulo deixa de dizer «Super Admin», porque já não é
+    /// verdade.
+    #[test]
+    fn sem_autoridade_a_faixa_fica_e_o_rotulo_muda() {
+        let sem = Viewer {
+            administra: false,
+            ..privilegiada_com_autoridade()
+        };
+        let html = render(&sem);
+        assert!(
+            html.contains("oc-privilegiada"),
+            "a faixa desapareceu por lhe terem tirado a autoridade: a sessão continua \
+             a ser privilegiada"
+        );
+        assert!(
+            html.contains("SEM AUTORIDADE ADMINISTRATIVA"),
+            "o rótulo não diz que a autoridade acabou"
+        );
+        assert!(
+            !html.contains("SUPER ADMIN"),
+            "a interface afirma «Super Admin» a quem já não pode administrar"
+        );
+    }
+
+    /// **A faixa representa a sessão; não a autoriza.**
+    ///
+    /// Uma sessão normal com a faixa forçada continua sem permissões. O que
+    /// decide o que aparece e o que é permitido são coisas diferentes, e esta
+    /// prova mantém-nas diferentes.
+    #[test]
+    fn a_faixa_nao_concede_autoridade() {
+        let mentira = Viewer {
+            sessao_privilegiada: true,
+            administra: true,
+            ..viewer_with(&[])
+        };
+        let html = render(&mentira);
+        assert!(
+            html.contains("oc-privilegiada"),
+            "o controlo não montou a mentira"
+        );
+        // E mesmo assim não pode nada: as permissões são vazias.
+        assert!(
+            !mentira.can(Permission::MembersManage),
+            "a faixa concedeu autoridade que a sessão não tem"
+        );
+        assert!(
+            !html.contains("/admin\""),
+            "a faixa fez aparecer administração a quem não a pode ver"
+        );
     }
 }
 

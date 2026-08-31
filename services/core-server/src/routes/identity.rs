@@ -61,6 +61,16 @@ struct Me {
     organisation_id: Uuid,
     /// Technical roles. What the caller *may do*.
     roles: Vec<&'static str>,
+    /// Que **tipo** de identidade iniciou esta sessão.
+    ///
+    /// Distinto de `roles`, e deliberadamente. `roles` responde «que autoridade
+    /// tem agora?»; isto responde «que tipo de identidade é?». Revogar o
+    /// `PlatformAdmin` esvazia o primeiro e não muda o segundo — a sessão
+    /// continua a ser a de quem administrava há um minuto.
+    ///
+    /// A Experience precisa dos dois: o tipo governa o tratamento privilegiado,
+    /// a autoridade governa o rótulo.
+    identity_kind: &'static str,
     /// Units the caller belongs to, with their role.
     units: Vec<Membership>,
     /// Research workspaces the caller belongs to, with their role.
@@ -152,6 +162,7 @@ async fn me(
         avatar,
         organisation_id: principal.organisation_id,
         roles,
+        identity_kind: principal.identity_kind.as_str(),
         capabilities,
         modules,
         units: principal

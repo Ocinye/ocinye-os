@@ -1895,6 +1895,8 @@ mod integridade {
 
     pub(super) fn viewer() -> Viewer {
         Viewer {
+            sessao_privilegiada: false,
+            administra: false,
             zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
             avatar: ocinye_contracts::AvatarChoice::Initials,
             email: Some("jmanuel@ocinye.com".to_owned()),

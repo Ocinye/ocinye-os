@@ -1936,6 +1936,8 @@ mod tests {
     /// filtragem por permissão.
     fn viewer() -> Viewer {
         Viewer {
+            sessao_privilegiada: false,
+            administra: false,
             zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
             avatar: ocinye_contracts::AvatarChoice::Initials,
             email: Some("jmanuel@ocinye.com".to_owned()),
@@ -1957,6 +1959,8 @@ mod tests {
     /// Um membro sem permissão nenhuma.
     fn viewer_sem_permissoes() -> Viewer {
         Viewer {
+            sessao_privilegiada: false,
+            administra: false,
             zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
             avatar: ocinye_contracts::AvatarChoice::Initials,
             email: Some("jmanuel@ocinye.com".to_owned()),
