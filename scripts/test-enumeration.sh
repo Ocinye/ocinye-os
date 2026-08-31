@@ -135,7 +135,9 @@ suites() {
 # lê. Ambas exigem armazenamento; sem ele, falham na CI em vez de se saltarem.
 #
 # 83 desde 2026-08-31: entrou a prova de que o fuso declarado vale para a viagem
-# e **não escapa dela**. Estrutural não é observado: o fuso vive no `Harness`,
+# e **não escapa dela**. As marcas passam de 82 para 83 porque esta viagem
+# levanta dois harnesses — é assim que prova que o estado de um não chega ao
+# outro. Estrutural não é observado: o fuso vive no `Harness`,
 # mas um estado que uma viagem deixasse para a seguinte faria o defeito aparecer
 # noutro teste, com outra causa aparente.
 #
@@ -171,7 +173,7 @@ suites() {
 #
 # Auditado em 2026-08-29, em série, marca a marca. O número continua fixo: uma
 # viagem que deixe de levantar faz a contagem cair e o portão fecha.
-viagens-de-browser|83|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|82
+viagens-de-browser|83|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|83
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
