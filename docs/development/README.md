@@ -224,5 +224,35 @@ recusa `#RRGGBB` não prova nada se o código escrever `rgb(...)` — e uma reve
 que bloqueia é uma observação `INVALID`, não uma propriedade que falhou. Toda a
 verificação sujeita a bloqueio precisa de um limite de tempo.
 
+**Um sinal parecido com prontidão não é prontidão.** Três confusões desta
+família custaram caro, e as três parecem inofensivas até se medir:
+
+```text
+timeout maior          ≠  correcção de uma corrida
+teste «ok» com salto   ≠  cobertura
+ExitCode == 0          ≠  contentor terminado
+```
+
+A primeira apareceu na suite de browser: o limite do arranque subiu de vinte e
+cinco para quarenta e cinco segundos e a intermitência ficou. Não era lentidão —
+o ecrã de arranque já estava no seu estado terminal, «não foi possível contactar
+o Core», de onde não sai sem alguém carregar num botão. Esperar mais nunca cura
+uma corrida; o que a cura é esperar pela coisa certa. Hoje a viagem espera que o
+Core **responda**, e não que o relógio passe.
+
+A segunda é a razão de ser do contrato de enumeração, e reapareceu num sítio
+inesperado: o portão falhava primeiro na contagem e saía antes de verificar
+saltos. Corrigir a contagem destapou dezasseis testes que se saltavam por falta
+de object storage e reportavam `ok`. Um portão pode esconder outro portão.
+
+A terceira é a mais traiçoeira porque a correcção parece óbvia. Ao verificar que
+o bucket ficou privado, exigir `ExitCode == 0` ao contentor de inicialização
+parece bastar — mas um contentor **ainda a correr** já reporta `0`. Esse guarda
+ficaria verde com o bucket por fechar, que é pior do que ficar vermelho por
+acaso. Espera-se pelo estado `exited`, e só então se lê o código.
+
+O que as três têm em comum: um sinal disponível cedo, correlacionado com o que se
+quer saber, e que não o significa.
+
 **A verificação é de leitura.** Se `verify.sh` alterar um ficheiro versionado,
 falha — mesmo que o restaure a seguir.

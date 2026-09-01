@@ -27,3 +27,16 @@ secrets/
 
 # Local data
 /data
+
+# Working area for things that must never be versioned.
+#
+# Despejos da base, chaves de teste, ficheiros intermédios de investigação. Um
+# `pg_dump` de desenvolvimento tem endereços, nomes e histórico de auditoria de
+# pessoas reais; o dia em que um deles entra num commit não se desfaz por
+# `git rm`, porque uma referência de Pull Request guarda o conteúdo para sempre.
+#
+# Ignorado por antecipação: a directoria pode ainda não existir, e é
+# precisamente antes de existir que esta linha vale alguma coisa.
+/scratchpad
+*.dump
+*.dump.gz
