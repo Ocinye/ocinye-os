@@ -608,5 +608,44 @@ jobs:
 
       - name: Verificar que o bucket é privado
         run: |
+          # O `minio-init` corre uma vez e sai, e a espera anterior só verifica
+          # o postgres. Ler-lhe os logs sem esperar que ele termine é perguntar
+          # pela propriedade a quem ainda não a estabeleceu: o veredicto passava
+          # a depender de qual dos dois serviços arrancou primeiro, e foi assim
+          # que este portão ficou vermelho em `main` tendo passado no seu PR.
+          #
+          # `docker wait` bloqueia até o contentor sair e devolve o código real.
+          # Perguntar o `ExitCode` sem esperar não serve: um contentor ainda a
+          # correr reporta `0`, e o portão ficaria verde com o bucket por
+          # fechar — que é pior do que ficar vermelho por acaso.
+          cid=$(docker compose -f infra/compose/docker-compose.yml ps -aq minio-init)
+          if [ -z "$cid" ]; then
+            echo "o minio-init não chegou a existir"
+            docker compose -f infra/compose/docker-compose.yml ps -a
+            exit 1
+          fi
+
+          # Espera limitada em vez de `timeout docker wait`: o `timeout` é do
+          # coreutils e não existe em todo o lado, e um portão que depende de
+          # uma ferramenta ausente falha por não a ter — não pelo que mede.
+          estado=""
+          for _ in $(seq 1 60); do
+            estado=$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null || echo desconhecido)
+            [ "$estado" = "exited" ] && break
+            sleep 2
+          done
+          if [ "$estado" != "exited" ]; then
+            echo "o minio-init não terminou em 120s (estado=$estado)"
+            docker compose -f infra/compose/docker-compose.yml logs minio-init
+            exit 1
+          fi
+          codigo=$(docker inspect -f '{{.State.ExitCode}}' "$cid")
+
+          if [ "$codigo" != "0" ]; then
+            echo "o minio-init saiu com $codigo: o bucket não ficou como se pediu"
+            docker compose -f infra/compose/docker-compose.yml logs minio-init
+            exit 1
+          fi
+
           docker compose -f infra/compose/docker-compose.yml logs minio-init \
             | grep -q "bucket ready and private"
