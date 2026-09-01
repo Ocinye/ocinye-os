@@ -66,6 +66,36 @@ fn chrome_path() -> Option<String> {
 /// O portão encaminha qualquer abertura a frio para `/boot`, e o arranque
 /// entrega a seguir. Esperar por estado observável — a página ter o formulário —
 /// e nunca por tempo adivinhado.
+/// Espera que um servidor recém-levantado responda de facto.
+///
+/// # O que se espera, e o que não
+///
+/// Espera-se por **uma resposta**, qualquer que ela seja — inclusive um erro.
+/// O que se está a excluir não é um servidor ocupado nem um Core que ainda não
+/// está pronto: é um socket ligado cuja tarefa ainda não foi escalonada, em que
+/// a ligação fica na fila do sistema e quem pergunta não obtém nada.
+///
+/// Um `TcpListener::bind` sem `axum::serve` a correr aceita a ligação e não
+/// responde. Provar prontidão com uma ligação TCP seria, por isso, provar
+/// exactamente nada.
+async fn esperar_a_responder(url: &str, quem: &str) {
+    let cliente = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .expect("cliente");
+
+    let inicio = std::time::Instant::now();
+    let mut ultimo = String::from("nunca chegou a tentar");
+    while inicio.elapsed() < std::time::Duration::from_secs(30) {
+        match cliente.get(url).send().await {
+            Ok(_) => return,
+            Err(erro) => ultimo = erro.to_string(),
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    panic!("{quem} não respondeu em «{url}» ao fim de trinta segundos: {ultimo}");
+}
 async fn esperar_pelo_login(page: &Page) {
     let inicio = std::time::Instant::now();
     loop {
@@ -312,6 +342,30 @@ impl Harness {
             let _ = axum::serve(ws_listener, app).await;
         });
 
+        // ── Esperar que ambos respondam de facto ────────────────────────
+        //
+        // `TcpListener::bind` acontece **antes** de `axum::serve`, por isso uma
+        // ligação nunca é recusada: fica na fila de espera do sistema. Sob
+        // contenção — e cada viagem conduz um Chrome inteiro mais dois
+        // servidores — a tarefa que serve pode não ser escalonada antes de o
+        // arranque do Workspace desistir de contactar o Core.
+        //
+        // O sintoma não é lentidão. É o ecrã de arranque no seu estado
+        // **terminal**: «NÃO FOI POSSÍVEL CONTACTAR O OCINYE CORE», que já não
+        // sai de `/boot` sem alguém carregar em «Tentar novamente». Por isso
+        // esperar mais no laço da viagem nunca o resolveria — e foi essa a
+        // resposta anterior, quando o limite subiu de vinte e cinco para
+        // quarenta e cinco segundos sem que a intermitência desaparecesse.
+        //
+        // Espera-se por **uma resposta**, e não por uma resposta pronta: o Core
+        // a dizer que não está pronto é outra coisa, que o produto distingue e
+        // mostra com outras palavras. O que aqui se exclui é «não chegámos a
+        // saber».
+        //
+        // > **Uma viagem não pode depender implicitamente nem do relógio da
+        // > máquina nem de um estado transitório do runtime.**
+        esperar_a_responder(&format!("{core_url}/ready"), "o Core").await;
+        esperar_a_responder(&format!("{workspace_url}/boot"), "o Workspace").await;
         // ── O browser ───────────────────────────────────────────────────
         //
         // Um Chrome que não arranca é uma **falha**, nunca um salto.
