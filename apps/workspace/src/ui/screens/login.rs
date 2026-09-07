@@ -128,18 +128,14 @@ pub fn login(core_ready: bool, message: Option<String>) -> impl IntoView {
                             />
                             // Gestores de palavras-passe e colar funcionam:
                             // nada aqui os bloqueia (briefing §9).
-                            // Texto e não ícone: o dossier fixa 37 ícones, e um
-                            // rótulo escrito diz o que faz sem precisar de
-                            // convenção visual.
-                            <button
-                                type="button"
-                                class="oc-reveal"
-                                data-oc="reveal"
-                                data-oc-target="login-pass"
-                                aria-pressed="false"
-                            >
-                                "Mostrar"
-                            </button>
+                            //
+                            // Sem «Mostrar» aqui, por opção de segurança: no
+                            // acto de entrar a pessoa só digita uma palavra-passe
+                            // que já conhece, e revelá-la em claro num ecrã de
+                            // login só a expõe a quem esteja por perto. O revelar
+                            // pertence ao ecrã de *definição* de palavra-passe
+                            // (`first_access`), onde ajuda a não errar a que se
+                            // está a criar.
                         </div>
 
                         <button type="submit" class="oc-login__submit" disabled=!core_ready>
@@ -214,7 +210,16 @@ mod tests {
         assert!(html.contains(r#"autocomplete="username""#));
         assert!(!html.contains("onpaste"));
         assert!(!html.contains("maxlength"));
-        assert!(html.contains("Mostrar"));
+    }
+
+    #[test]
+    fn o_login_nao_revela_a_palavra_passe() {
+        // Segurança: o «Mostrar» pertence ao ecrã de definição de
+        // palavra-passe, não ao de entrada. Aqui a pessoa só digita uma
+        // palavra-passe que já sabe, e revelá-la em claro só a expõe.
+        let html = login(true, None).to_html();
+        assert!(!html.contains("Mostrar"));
+        assert!(!html.contains(r#"data-oc="reveal""#));
     }
 
     #[test]
