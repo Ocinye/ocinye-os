@@ -276,9 +276,13 @@ nunca ruído silenciado — e nunca é a resposta a um advisory que tem correcç
 disponível.
 
 **Actualizações.** As de segurança são conduzidas pelos alertas do GitHub e
-estão activas. As de versão são semanais e agrupadas
-([`.github/dependabot.yml`](../../.github/dependabot.yml)). Nenhuma entra sem
-passar a CI inteira e por revisão humana.
+estão activas — a linha «Alertas do repositório» acima continua a valer. As de
+versão deixaram de ser propostas automaticamente: um proponente automático abre
+sempre o pull request com autoria de bot, e o contrato de autoria
+([CLAUDE.md §72](../../CLAUDE.md)) recusa qualquer autor que não seja a
+identidade humana do repositório — pelo que essa branch bloqueava a CI inteira
+em vez de a passar. Passam a ser lidas dos alertas e reaplicadas como alteração
+humana `fm65`, e nenhuma entra sem passar a CI inteira.
 
 ## O que ainda não existe
 
