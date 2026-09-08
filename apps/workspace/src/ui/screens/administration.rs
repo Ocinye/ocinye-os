@@ -61,9 +61,12 @@ const POSITIONS: [(&str, &str); 9] = [
 /// e dividi-los esconderia que a posição institucional e o papel técnico são
 /// decisões independentes que se tomam ao mesmo tempo.
 pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
+    // `/api/v1/units` responde com um array; aceita-se também `{ "items": [...] }`.
+    // Sem isto, o picker de unidade nascia sempre vazio e desactivado — uma
+    // unidade recém-criada não aparecia aqui.
     let unit_rows: Vec<(String, String)> = units
-        .get("items")
-        .and_then(Value::as_array)
+        .as_array()
+        .or_else(|| units.get("items").and_then(Value::as_array))
         .map(|items| {
             items
                 .iter()
@@ -600,9 +603,11 @@ pub fn member_detail(
     person: &Value,
     security: &Value,
     access: &Value,
+    units_catalog: &Value,
     recusa: Option<&str>,
 ) -> impl IntoView {
     let person_id = text(person, "id").to_owned();
+    let units_catalog = units_catalog.clone();
     let recusa = recusa.map(str::to_owned);
     let name = text(person, "full_name").to_owned();
     // O endereço, uma vez. Havia aqui um `username` ao lado dele, e a linha
@@ -640,7 +645,8 @@ pub fn member_detail(
             <div class="oc-tabs oc-tabs--ctx" role="tablist" aria-label="Separadores do membro">
                 <span class="oc-tab" aria-selected="true">"Acesso"</span>
                 <span class="oc-tab" aria-selected="false">"Segurança"</span>
-                {["Overview", "Unidades", "Research Workspaces", "Actividade", "Audit"]
+                <span class="oc-tab" aria-selected="false">"Unidades"</span>
+                {["Overview", "Research Workspaces", "Actividade", "Audit"]
                     .iter()
                     .map(|label| {
                         view! {
@@ -663,6 +669,197 @@ pub fn member_detail(
             <div class="oc-vspace"></div>
             {section_head("Segurança", None, None)}
             {security_tab(&person_id, &security, recusa.as_deref())}
+            <div class="oc-vspace"></div>
+            {section_head("Unidades", None, None)}
+            {units_admin(&person_id, &access, &units_catalog)}
+        </div>
+    }
+}
+
+/// Separador «Unidades» do membro: as unidades a que pertence, e a
+/// administração das suas pertenças.
+///
+/// # Autoridade
+///
+/// O que este ecrã oferece nunca é o que decide. As mutações batem no Core
+/// (`/api/v1/units/{id}/members`), que reautoriza o **actor** — não o membro
+/// aqui aberto — a cada operação. A pertença do membro não governa o que o
+/// administrador pode fazer: um membro sem unidade nenhuma continua
+/// administrável por quem tem autoridade.
+///
+/// # Fronteira
+///
+/// Administrar a pertença a uma unidade não concede leitura do conteúdo
+/// científico dessa unidade. Aqui trata-se de estrutura, não de conteúdo.
+pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl IntoView {
+    // Catálogo de unidades da instituição: id → nome.
+    //
+    // `/api/v1/units` responde com um **array** de unidades. Aceita-se também a
+    // forma `{ "items": [...] }` para não depender de qual delas o chamador traz.
+    let catalogo: Vec<(String, String)> = catalog
+        .as_array()
+        .or_else(|| catalog.get("items").and_then(Value::as_array))
+        .map(|itens| {
+            itens
+                .iter()
+                .filter_map(|u| {
+                    let id = u.get("id").and_then(Value::as_str)?;
+                    let nome = u
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .or_else(|| u.get("code").and_then(Value::as_str))
+                        .unwrap_or(id);
+                    Some((id.to_owned(), nome.to_owned()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Pertenças actuais do membro: (id, papel).
+    let pertencas: Vec<(String, String)> = access
+        .get("units")
+        .and_then(Value::as_array)
+        .map(|itens| {
+            itens
+                .iter()
+                .filter_map(|u| {
+                    let id = u.get("id").and_then(Value::as_str)?;
+                    let papel = u.get("role").and_then(Value::as_str).unwrap_or("member");
+                    Some((id.to_owned(), papel.to_owned()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let nome_de = |id: &str| -> String {
+        catalogo
+            .iter()
+            .find(|(uid, _)| uid == id)
+            .map(|(_, n)| n.clone())
+            .unwrap_or_else(|| id.to_owned())
+    };
+
+    let ja_membro: std::collections::HashSet<String> =
+        pertencas.iter().map(|(id, _)| id.clone()).collect();
+
+    // Unidades que ainda pode receber (não repetir as que já tem).
+    let elegiveis: Vec<(String, String)> = catalogo
+        .iter()
+        .filter(|(id, _)| !ja_membro.contains(id))
+        .cloned()
+        .collect();
+
+    let sem_unidades_na_org = catalogo.is_empty();
+    let sem_pertencas = pertencas.is_empty();
+
+    // Linhas das pertenças actuais, cada uma com alterar-papel e remover.
+    let linhas: Vec<_> = pertencas
+        .iter()
+        .map(|(id, papel)| {
+            let nome = nome_de(id);
+            let papel_actual = papel.clone();
+            let accao_papel = format!("/admin/members/{person_id}/units/{id}/role");
+            let accao_remover = format!("/admin/members/{person_id}/units/{id}/remove");
+            let is_manager = papel_actual == "manager";
+            view! {
+                <tr>
+                    <td>{nome}</td>
+                    <td>
+                        <form method="post" action=accao_papel class="oc-row oc-gap-3">
+                            <select class="oc-select oc-select--sm" name="role">
+                                <option value="member" selected=!is_manager>"Membro"</option>
+                                <option value="manager" selected=is_manager>"Gestor"</option>
+                            </select>
+                            <button class="oc-btn oc-btn--sm" type="submit">"Guardar"</button>
+                        </form>
+                    </td>
+                    <td class="oc-td--actions">
+                        <form method="post" action=accao_remover>
+                            <button
+                                class="oc-btn oc-btn--sm oc-btn--danger"
+                                type="submit"
+                            >
+                                "Remover"
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        })
+        .collect();
+
+    let accao_atribuir = format!("/admin/members/{person_id}/units");
+
+    view! {
+        {card(
+            section_head("Pertenças a unidades", None, None),
+            view! {
+                {if sem_pertencas {
+                    view! {
+                        <p class="oc-muted">"Nenhuma unidade atribuída."</p>
+                    }
+                    .into_any()
+                } else {
+                    view! {
+                        <table class="oc-table oc-table--dense">
+                            <thead>
+                                <tr>
+                                    <th>"Unidade"</th>
+                                    <th>"Papel"</th>
+                                    <th class="oc-td--actions">"Acções"</th>
+                                </tr>
+                            </thead>
+                            <tbody>{linhas}</tbody>
+                        </table>
+                    }
+                    .into_any()
+                }}
+            },
+        )}
+
+        <div class="oc-mt-6">
+            {card(
+                section_head("Atribuir unidade", None, None),
+                if sem_unidades_na_org {
+                    view! {
+                        <p class="oc-muted">
+                            "Ainda não existem unidades. Crie uma em "
+                            <a class="oc-link" href="/units/new">"Unidades"</a>
+                            " antes de atribuir."
+                        </p>
+                    }
+                    .into_any()
+                } else if elegiveis.is_empty() {
+                    view! {
+                        <p class="oc-muted">
+                            "Este membro já pertence a todas as unidades existentes."
+                        </p>
+                    }
+                    .into_any()
+                } else {
+                    view! {
+                        <form method="post" action=accao_atribuir class="oc-row oc-row--wrap oc-gap-3">
+                            <select class="oc-select" name="unit_id" required>
+                                <option value="">"Escolher unidade…"</option>
+                                {elegiveis
+                                    .into_iter()
+                                    .map(|(id, nome)| view! {
+                                        <option value=id>{nome}</option>
+                                    })
+                                    .collect_view()}
+                            </select>
+                            <select class="oc-select" name="role">
+                                <option value="member">"Membro"</option>
+                                <option value="manager">"Gestor"</option>
+                            </select>
+                            <button class="oc-btn oc-btn--primary" type="submit">
+                                "Atribuir"
+                            </button>
+                        </form>
+                    }
+                    .into_any()
+                },
+            )}
         </div>
     }
 }
@@ -671,6 +868,56 @@ pub fn member_detail(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    const PID: &str = "11111111-1111-1111-1111-111111111111";
+    const UID: &str = "33333333-3333-3333-3333-333333333333";
+
+    /// Sem unidades na instituição, não se oferece atribuir: encaminha-se para
+    /// as criar. Zero Dead UI — o controlo diz porque não está disponível.
+    #[test]
+    fn sem_unidades_na_org_encaminha_para_criar() {
+        let html = units_admin(PID, &json!({ "units": [] }), &json!([])).to_html();
+        assert!(html.contains("Ainda não existem unidades"));
+        assert!(html.contains("href=\"/units/new\""));
+        assert!(html.contains("Nenhuma unidade atribuída"));
+    }
+
+    /// Com unidades e o membro sem nenhuma: estado vazio + formulário de
+    /// atribuição com as unidades elegíveis e a acção correcta.
+    #[test]
+    fn oferece_atribuir_quando_o_membro_nao_tem_unidades() {
+        let html = units_admin(
+            PID,
+            &json!({ "units": [] }),
+            &json!([{ "id": UID, "name": "Inteligência Artificial", "code": "AI" }]),
+        )
+        .to_html();
+        assert!(html.contains("Nenhuma unidade atribuída"));
+        assert!(html.contains(&format!("action=\"/admin/members/{PID}/units\"")));
+        assert!(html.contains("Inteligência Artificial"));
+        assert!(html.contains(">Atribuir<"));
+    }
+
+    /// Uma pertença actual mostra-se com nome, papel, e as acções de alterar
+    /// papel e remover — apontando às rotas certas.
+    #[test]
+    fn mostra_a_pertenca_e_as_accoes() {
+        let html = units_admin(
+            PID,
+            &json!({ "units": [{ "id": UID, "role": "manager" }] }),
+            &json!([{ "id": UID, "name": "Inteligência Artificial", "code": "AI" }]),
+        )
+        .to_html();
+        assert!(html.contains("Inteligência Artificial"));
+        assert!(html.contains(&format!("action=\"/admin/members/{PID}/units/{UID}/role\"")));
+        assert!(html.contains(&format!(
+            "action=\"/admin/members/{PID}/units/{UID}/remove\""
+        )));
+        // O papel actual vem seleccionado.
+        assert!(html.contains("value=\"manager\" selected"));
+        // Já membro dessa unidade: não reaparece na lista de atribuir.
+        assert!(html.contains("já pertence a todas as unidades"));
+    }
 
     /// A oferta vem do Core, e o ecrã não a reinventa.
     #[test]
@@ -896,6 +1143,7 @@ mod tests {
             }),
             &json!({"account_status": "active", "has_permanent_password": true, "live_sessions": []}),
             &json!({"roles": ["research_member"], "grants": [], "institution_permissions": []}),
+            &json!({"items": []}),
             None,
         )
         .to_html();
@@ -914,6 +1162,7 @@ mod tests {
             &json!({"full_name": "A", "email": "a@b.c", "status": "active"}),
             &json!({"account_status": "active", "has_permanent_password": true, "live_sessions": []}),
             &json!({"roles": [], "grants": [], "institution_permissions": []}),
+            &json!({"items": []}),
             None,
         )
         .to_html()

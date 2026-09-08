@@ -1513,6 +1513,10 @@ pub(crate) mod link_tests {
                             {"permission": "ai.use", "source": "technical_role"}
                         ]
                     }),
+                    &json!({"items": [
+                        {"id": "33333333-3333-3333-3333-333333333333", "name": "Inteligência Artificial", "code": "AI"},
+                        {"id": "66666666-6666-6666-6666-666666666666", "name": "Infraestruturas", "code": "INFRA"}
+                    ]}),
                     None,
                 )
             ),
