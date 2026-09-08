@@ -204,9 +204,17 @@ async fn sessao(pool: &PgPool, person_id: Uuid) -> Secret {
             .collect::<String>(),
     );
 
+    // `mfa_satisfied = true`: these fixtures act as a fully authenticated
+    // administrator, and a privileged identity exercises authority only from a
+    // session that proved its second factor (ADR-0107). Without it, the central
+    // authorisation boundary strips `PlatformAdmin` from the resolved principal —
+    // exactly as it would for a real pre-MFA session — and every create is
+    // refused. The session a real sign-in leaves here, after the challenge, is
+    // assured, so the fixture mints an assured one.
     sqlx::query(
-        "INSERT INTO sessions (person_id, token_digest, state, expires_at, user_agent)
-             VALUES ($1, $2, $3, now() + interval '1 hour', 'parity-test')",
+        "INSERT INTO sessions
+             (person_id, token_digest, state, mfa_satisfied, expires_at, user_agent)
+             VALUES ($1, $2, $3, true, now() + interval '1 hour', 'parity-test')",
     )
     .bind(person_id)
     .bind(identity::session_digest(&token))
