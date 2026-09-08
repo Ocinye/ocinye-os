@@ -145,6 +145,7 @@ pub const ROUTES: &[&str] = &[
     "/admin/members/{person_id}/roles/{role}/revoke",
     "/admin/members/{person_id}/grants",
     "/admin/members/{person_id}/grants/{grant_id}/revoke",
+    "/admin/members/{person_id}/sessions/{session_id}/revoke",
     "/audit",
     "/search",
     "/ask",
@@ -407,6 +408,10 @@ pub fn router(state: WorkspaceState) -> Router {
         .route(
             "/admin/members/{person_id}/grants/{grant_id}/revoke",
             post(member_grant_revoke),
+        )
+        .route(
+            "/admin/members/{person_id}/sessions/{session_id}/revoke",
+            post(member_session_revoke),
         )
         .route("/audit", get(audit))
         .route("/search", get(search))
@@ -3374,6 +3379,31 @@ async fn member_grant_revoke(
         &member.correlation_id,
         &path,
         &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&destino).into_response(),
+        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+    }
+}
+
+/// `POST /admin/members/{person_id}/sessions/{session_id}/revoke` — revoga **uma**
+/// sessão de um membro. O Core reautoriza o actor e valida que a sessão pertence
+/// ao membro (anti-IDOR); a recusa volta ao detalhe.
+async fn member_session_revoke(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path((person_id, session_id)): Path<(String, String)>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = format!("/admin/members/{person_id}");
+    let path = format!("/api/v1/administration/members/{person_id}/sessions/{session_id}/revoke");
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &path,
+        &serde_json::json!({}),
     )
     .await
     {

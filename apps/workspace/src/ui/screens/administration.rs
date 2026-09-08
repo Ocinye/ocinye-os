@@ -337,6 +337,13 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
         .cloned()
         .unwrap_or_default();
     let session_count = sessions.len();
+    // A autoridade para revogar uma sessão é a mesma que gere a conta, resolvida
+    // no actor pelo Core. Sem o sinal, não se oferece o botão.
+    let pode_gerir = overview
+        .get("may_manage_account")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let pid_sessao = person_id.to_owned();
 
     view! {
         <div class="oc-split oc-split--2">
@@ -386,6 +393,11 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                                 .iter()
                                 .map(|session| {
                                     let state = text(session, "state").to_owned();
+                                    let id = text(session, "id").to_owned();
+                                    let accao_revogar = format!(
+                                        "/admin/members/{pid_sessao}/sessions/{id}/revoke"
+                                    );
+                                    let revogavel = pode_gerir && id != "—";
                                     view! {
                                         <div class="oc-list__row">
                                             <span class="oc-fill oc-truncate">
@@ -395,6 +407,16 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                                             <span class="oc-mono oc-list__meta">
                                                 {text(session, "ip_prefix").to_owned()}
                                             </span>
+                                            {revogavel.then(|| view! {
+                                                <form method="post" action=accao_revogar>
+                                                    <button
+                                                        class="oc-btn oc-btn--sm oc-btn--danger"
+                                                        type="submit"
+                                                    >
+                                                        "Revogar"
+                                                    </button>
+                                                </form>
+                                            })}
                                         </div>
                                     }
                                 })
@@ -1594,6 +1616,35 @@ mod tests {
                 r#"action="/admin/members/11111111-1111-1111-1111-111111111111/provision""#
             ),
             "o formulário não aponta para a pessoa que está a ser vista"
+        );
+    }
+
+    /// Revogar uma sessão individual: o botão só aparece com autoridade do
+    /// actor, e aponta para a sessão certa daquele membro.
+    #[test]
+    fn revogar_sessao_so_com_autoridade_do_actor() {
+        const PID: &str = "11111111-1111-1111-1111-111111111111";
+        const SID: &str = "aaaaaaaa-1111-2222-3333-444444444444";
+        let sessao = json!({
+            "account_status": "active",
+            "may_manage_account": true,
+            "live_sessions": [{"id": SID, "state": "active", "user_agent": "Firefox", "ip_prefix": "10.0.0.0/24"}]
+        });
+        let com = security_tab(PID, &sessao, None).to_html();
+        assert!(com.contains(&format!(
+            "action=\"/admin/members/{PID}/sessions/{SID}/revoke\""
+        )));
+
+        // Sem o sinal do actor, nenhuma sessão ganha botão.
+        let sem = json!({
+            "account_status": "active",
+            "may_manage_account": false,
+            "live_sessions": [{"id": SID, "state": "active", "user_agent": "Firefox", "ip_prefix": "10.0.0.0/24"}]
+        });
+        let html = security_tab(PID, &sem, None).to_html();
+        assert!(
+            !html.contains("/sessions/"),
+            "revogar apareceu sem autoridade"
         );
     }
 
