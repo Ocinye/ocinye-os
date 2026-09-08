@@ -413,6 +413,17 @@ pub async fn set_permanent_password(
 
     let verifier = authenticator.hasher.hash(&accepted)?;
 
+    // Resolve the second-factor requirement **before** opening the transaction.
+    // `principal_for_person` reaches the pool for its own connection (and records
+    // last activity with an `UPDATE people`), and doing that inside the
+    // transaction below — which has already written to this same person's row —
+    // makes that connection wait on a lock the still-open transaction holds,
+    // while the transaction waits (idle) for the connection to return: a deadlock
+    // the database cannot detect, because one side is idle in transaction, not
+    // blocked in the database. Resolved here, no transaction is open yet.
+    let requires_mfa =
+        super::mfa::mfa_required(&super::service::principal_for_person(pool, person).await?);
+
     let mut tx = pool.begin().await?;
 
     // Order matters: revoke before inserting, or the unique live-credential
@@ -445,8 +456,7 @@ pub async fn set_permanent_password(
     // password-change flow with is an MFA gate, not an ordinary session — so a
     // privileged identity setting its first password lands straight in
     // enrolment, and never holds an `active` session that skipped MFA.
-    let requires_mfa =
-        super::mfa::mfa_required(&super::service::principal_for_person(pool, person).await?);
+    // `requires_mfa` was resolved above, before this transaction opened.
     let novo_estado = if requires_mfa {
         SessionState::MfaRequired
     } else {
