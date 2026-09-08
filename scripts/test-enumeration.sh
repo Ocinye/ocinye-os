@@ -190,6 +190,10 @@ carregamento-em-partes|8|-p ocinye-core --test segmented_upload
 # iniciou a sessão, e que autoridade ela tem agora — são independentes, e é isso
 # que estas provas fixam.
 identidade-privilegiada|14|-p ocinye-core --test privileged_identity
+# O segundo factor obrigatório. Enrolar, confirmar, desafiar, recusar replay,
+# gastar um código de recuperação uma só vez, e revogar a sessão de um membro
+# sem tocar na de outro (ADR-0107).
+mfa-obrigatorio|3|-p ocinye-core --test mfa
 TABELA
 }
 

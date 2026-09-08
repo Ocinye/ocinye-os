@@ -31,6 +31,19 @@ ALTER TABLE sessions DROP CONSTRAINT ck_sessions_state;
 ALTER TABLE sessions ADD CONSTRAINT ck_sessions_state
     CHECK (state IN ('password_change_required', 'mfa_required', 'active', 'revoked'));
 
+-- A garantia de MFA da sessão, explícita e persistida (ADR-0107).
+--
+-- Uma sessão `active` não é, por si, prova de que o segundo factor foi
+-- satisfeito: uma sessão de um membro comum é `active` e nunca viu MFA. O que
+-- decide se a autoridade privilegiada pode ser exercida é **isto**, resolvido no
+-- momento da autorização — não o estado, e não o papel actual. É o que fecha o
+-- buraco de uma sessão criada `active` **antes** de a pessoa receber
+-- `PlatformAdmin`: a autoridade nova não se arma sem um segundo factor.
+--
+-- `false` por omissão, e por omissão é o seguro: uma sessão que não provou MFA
+-- não exerce autoridade que o exija.
+ALTER TABLE sessions ADD COLUMN mfa_satisfied BOOLEAN NOT NULL DEFAULT false;
+
 -- ---------------------------------------------------------------------------
 -- 2. O seed TOTP, selado, um por pessoa
 -- ---------------------------------------------------------------------------
@@ -49,6 +62,12 @@ CREATE TABLE mfa_totp_secrets (
     -- confirmar existe, mas não autentica: enrolar é provar que o autenticador
     -- do membro já gera o código certo antes de a porta fechar atrás dele.
     confirmed_at  TIMESTAMPTZ,
+
+    -- O último passo de tempo TOTP aceite, para impedir replay (ADR-0107). Um
+    -- código só serve se o seu passo for **estritamente maior** que este: dentro
+    -- da janela de tolerância (±1), um passo já gasto — 999, 1000 — não volta a
+    -- valer depois de 1000 ter sido aceite. Nulo enquanto nenhum foi aceite.
+    last_accepted_step  BIGINT,
 
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),

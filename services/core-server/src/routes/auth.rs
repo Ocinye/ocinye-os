@@ -10,11 +10,12 @@
 //! Every endpoint here is `POST` with a JSON body. A password in a query string
 //! ends up in access logs, browser history and referrer headers (briefing §99).
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use ocinye_contracts::SessionState;
 use ocinye_core::modules::identity::{self, IssuedSession};
 use ocinye_core::password::{policy, Secret};
 use ocinye_core::CoreError;
@@ -39,6 +40,16 @@ pub fn routes() -> Router<AppState> {
             post(revoke_own_session),
         )
         .route("/auth/password/assess", post(assess_password))
+        // ── O segundo factor (ADR-0107) ─────────────────────────────────────
+        // Todos operam sobre uma sessão restrita — a `mfa_required` que o login
+        // deixou —, e o sucesso de um desafio fecha o portão emitindo uma sessão
+        // nova, `active` e com a garantia de MFA, no mesmo `Set-Cookie`.
+        .route("/auth/mfa", get(mfa_status))
+        .route("/auth/mfa/enroll", post(mfa_enroll))
+        .route("/auth/mfa/enroll/confirm", post(mfa_confirm))
+        .route("/auth/mfa/acknowledge", post(mfa_acknowledge))
+        .route("/auth/mfa/challenge", post(mfa_challenge))
+        .route("/auth/mfa/recovery", post(mfa_recovery))
 }
 
 /// Credentials presented at sign-in.
@@ -444,6 +455,257 @@ async fn assess_password(
         strength: policy::assess(&request.password),
         minimum_password_length: policy::MIN_LENGTH,
     })
+}
+
+// ── O segundo factor (ADR-0107) ─────────────────────────────────────────────
+
+/// O emissor mostrado no autenticador. Sem espaços, para não precisar de
+/// codificação na etiqueta `otpauth`.
+const MFA_ISSUER: &str = "Ocinye";
+
+/// Em que ponto do MFA esta sessão está — para a Experience mostrar o ecrã certo
+/// sem adivinhar (ADR-0107).
+#[derive(Serialize)]
+struct MfaStatus {
+    /// `enrollment` (falta enrolar), `challenge` (enrolado, falta o código) ou
+    /// `not_required` (esta identidade não exige MFA).
+    mfa_mode: &'static str,
+}
+
+/// `GET /auth/mfa`
+async fn mfa_status(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    RestrictedSession { person, .. }: RestrictedSession,
+) -> Result<Json<MfaStatus>, ApiError> {
+    let principal = identity::principal_for_person(&state.pool, &person)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    let mode = if !identity::mfa_required(&principal) {
+        "not_required"
+    } else if identity::has_confirmed_totp(&state.pool, person.id)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?
+    {
+        "challenge"
+    } else {
+        "enrollment"
+    };
+    Ok(Json(MfaStatus { mfa_mode: mode }))
+}
+
+#[derive(Deserialize)]
+struct EnrollQuery {
+    /// Só com `reveal=1` é que a chave manual em base32 volta no corpo. Por
+    /// omissão vai só a URI `otpauth` — o QR —, e o segredo em texto fica de fora
+    /// até a pessoa o pedir por acção explícita (ADR-0107).
+    #[serde(default)]
+    reveal: bool,
+}
+
+#[derive(Serialize)]
+struct EnrollResponse {
+    otpauth_uri: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    secret_base32: Option<String>,
+}
+
+/// `POST /auth/mfa/enroll`
+///
+/// Idempotente: devolve sempre o **mesmo** seed por confirmar enquanto o
+/// enrolamento não fecha, para que o QR e a chave manual nunca divirjam.
+async fn mfa_enroll(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    RestrictedSession { person, .. }: RestrictedSession,
+    Query(query): Query<EnrollQuery>,
+) -> Result<Json<EnrollResponse>, ApiError> {
+    let enrollment = identity::begin_enrollment(
+        &state.pool,
+        state.config.sealing_key.as_ref(),
+        &person,
+        MFA_ISSUER,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+
+    Ok(Json(EnrollResponse {
+        otpauth_uri: enrollment.otpauth_uri,
+        secret_base32: query.reveal.then_some(enrollment.secret_base32),
+    }))
+}
+
+#[derive(Deserialize)]
+struct CodeRequest {
+    code: String,
+}
+
+#[derive(Serialize)]
+struct RecoveryCodesResponse {
+    recovery_codes: Vec<String>,
+}
+
+/// `POST /auth/mfa/enroll/confirm`
+///
+/// Confirma o enrolamento com um código e devolve os códigos de recuperação
+/// **uma única vez**. Não fecha o portão: a sessão continua `mfa_required` até o
+/// acknowledgement. TOTP válido ≠ enrolamento concluído (ADR-0107).
+async fn mfa_confirm(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    RestrictedSession { person, .. }: RestrictedSession,
+    Json(request): Json<CodeRequest>,
+) -> Result<Json<RecoveryCodesResponse>, ApiError> {
+    let principal = identity::principal_for_person(&state.pool, &person)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    let recovery_codes = identity::confirm_enrollment(
+        &state.pool,
+        state.config.sealing_key.as_ref(),
+        &state.authenticator.hasher,
+        &principal,
+        &person,
+        &request.code,
+        &ids,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+
+    Ok(Json(RecoveryCodesResponse { recovery_codes }))
+}
+
+/// `POST /auth/mfa/acknowledge`
+///
+/// A pessoa confirmou que guardou os códigos de recuperação. Só aqui o
+/// enrolamento se conclui e o portão se fecha: revoga a sessão-portão e emite
+/// uma sessão nova, `active` e assegurada, no mesmo `Set-Cookie` do login.
+async fn mfa_acknowledge(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    headers: HeaderMap,
+    RestrictedSession { session, person }: RestrictedSession,
+) -> Result<Response, ApiError> {
+    if session.state != SessionState::MfaRequired {
+        return Err(ApiError::new(
+            CoreError::PermissionDenied("Não há enrolamento de MFA por concluir.".to_owned()),
+            &ids,
+        ));
+    }
+    if !identity::has_confirmed_totp(&state.pool, person.id)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?
+    {
+        return Err(ApiError::new(
+            CoreError::Validation("Confirme o autenticador antes de concluir.".to_owned()),
+            &ids,
+        ));
+    }
+    let context = context_from(headers);
+    let issued = identity::issue_assured_session(&state.pool, &person, session.id, &context, &ids)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(with_session_cookie(
+        &state,
+        &issued,
+        SessionResponse::from_issued(&issued),
+    ))
+}
+
+/// `POST /auth/mfa/challenge`
+async fn mfa_challenge(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    headers: HeaderMap,
+    RestrictedSession { session, person }: RestrictedSession,
+    Json(request): Json<CodeRequest>,
+) -> Result<Response, ApiError> {
+    if session.state != SessionState::MfaRequired {
+        return Err(ApiError::new(
+            CoreError::PermissionDenied("Não há desafio de MFA pendente nesta sessão.".to_owned()),
+            &ids,
+        ));
+    }
+    let ok = identity::verify_challenge(
+        &state.pool,
+        state.config.sealing_key.as_ref(),
+        person.id,
+        &request.code,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+    if !ok {
+        return Err(ApiError::new(
+            CoreError::Validation(
+                "O código não confere. Verifique a hora do dispositivo e tente o código actual."
+                    .to_owned(),
+            ),
+            &ids,
+        ));
+    }
+    let context = context_from(headers);
+    let issued = identity::issue_assured_session(&state.pool, &person, session.id, &context, &ids)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(with_session_cookie(
+        &state,
+        &issued,
+        SessionResponse::from_issued(&issued),
+    ))
+}
+
+/// `POST /auth/mfa/recovery`
+///
+/// Um código de recuperação satisfaz o desafio quando o autenticador não está à
+/// mão. Uso único: consumi-lo é atómico, e vale exactamente uma vez.
+async fn mfa_recovery(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    headers: HeaderMap,
+    RestrictedSession { session, person }: RestrictedSession,
+    Json(request): Json<CodeRequest>,
+) -> Result<Response, ApiError> {
+    if session.state != SessionState::MfaRequired {
+        return Err(ApiError::new(
+            CoreError::PermissionDenied("Não há desafio de MFA pendente nesta sessão.".to_owned()),
+            &ids,
+        ));
+    }
+    let principal = identity::principal_for_person(&state.pool, &person)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    let ok = identity::consume_recovery_code(
+        &state.pool,
+        &state.authenticator.hasher,
+        &principal,
+        person.id,
+        &request.code,
+        &ids,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+    if !ok {
+        return Err(ApiError::new(
+            CoreError::Validation("Código de recuperação inválido ou já usado.".to_owned()),
+            &ids,
+        ));
+    }
+    let context = context_from(headers);
+    let issued = identity::issue_assured_session(&state.pool, &person, session.id, &context, &ids)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(with_session_cookie(
+        &state,
+        &issued,
+        SessionResponse::from_issued(&issued),
+    ))
+}
+
+/// Build the attempt context from a request's headers.
+fn context_from(headers: HeaderMap) -> identity::AttemptContext {
+    let mut parts = axum::http::Request::new(());
+    *parts.headers_mut() = headers;
+    let (parts, ()) = parts.into_parts();
+    attempt_context(&parts)
 }
 
 #[cfg(test)]

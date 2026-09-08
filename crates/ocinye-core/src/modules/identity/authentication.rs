@@ -298,6 +298,11 @@ impl Authenticator {
             &mut *tx,
             person.id,
             session_state,
+            // A session is never MFA-assured at creation. A privileged identity
+            // gets `MfaRequired` here and proves the factor on the challenge that
+            // follows; that challenge revokes this session and issues a fresh,
+            // assured one (ADR-0107).
+            false,
             lifetime,
             context.user_agent.as_deref(),
             context.ip_prefix.as_deref(),

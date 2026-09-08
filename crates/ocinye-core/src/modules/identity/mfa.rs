@@ -21,10 +21,10 @@
 //! O seed, depois de selado. Os códigos de recuperação, depois de mostrados uma
 //! vez. Nem um nem outro chega a log, a auditoria ou a mensagem de erro.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use data_encoding::BASE32_NOPAD;
 use hmac::{Hmac, Mac};
-use ocinye_contracts::TechnicalRole;
+use ocinye_contracts::{SessionState, TechnicalRole};
 use ocinye_observability::CorrelationIds;
 use rand::rand_core::UnwrapErr;
 use rand::rngs::SysRng;
@@ -33,6 +33,8 @@ use sha1::Sha1;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use super::authentication::{AttemptContext, IssuedSession, SESSION_LIFETIME_HOURS};
+use super::credentials as creds;
 use super::model::Person;
 use crate::audit::{self, action, AuditEntry};
 use crate::error::{CoreError, CoreResult};
@@ -90,33 +92,43 @@ fn hotp(seed: &[u8], counter: u64) -> u32 {
     binario % 10_u32.pow(DIGITS)
 }
 
-/// Verifica um código TOTP contra um seed em base32, num dado instante.
+/// O passo de tempo TOTP que um código satisfaz, se algum, num dado instante.
 ///
-/// Aceita a deriva de relógio de [`SKEW`] passos de cada lado. Um seed ilegível
-/// ou um código não numérico é `false`, e não erro: a resposta a «este código
-/// serve?» é sempre sim ou não.
+/// Aceita a deriva de relógio de [`SKEW`] passos de cada lado, e devolve o passo
+/// que correspondeu — é essa identidade que a protecção de replay persiste, para
+/// que um passo já gasto não volte a valer. Um seed ilegível ou um código não
+/// numérico é `None`. Procura do passo mais recente para o mais antigo, para que
+/// o maior passo válido seja o escolhido quando mais de um serve.
 #[must_use]
-pub fn verify_totp(seed_base32: &str, codigo: &str, agora: DateTime<Utc>) -> bool {
-    let Ok(seed) = BASE32_NOPAD.decode(seed_base32.trim().to_ascii_uppercase().as_bytes()) else {
-        return false;
-    };
+fn matched_step(seed_base32: &str, codigo: &str, agora: DateTime<Utc>) -> Option<u64> {
+    let seed = BASE32_NOPAD
+        .decode(seed_base32.trim().to_ascii_uppercase().as_bytes())
+        .ok()?;
     // Normaliza o que a pessoa escreveu: espaços e traços que um autenticador
     // por vezes mostra não fazem parte do código.
     let limpo: String = codigo.chars().filter(char::is_ascii_digit).collect();
-    let Ok(valor) = limpo.parse::<u32>() else {
-        return false;
-    };
+    let valor = limpo.parse::<u32>().ok()?;
 
     let passo = (agora.timestamp().max(0) as u64) / PERIOD;
-    for delta in -SKEW..=SKEW {
+    for delta in (-SKEW..=SKEW).rev() {
         let Some(contador) = passo.checked_add_signed(delta) else {
             continue;
         };
         if hotp(&seed, contador) == valor {
-            return true;
+            return Some(contador);
         }
     }
-    false
+    None
+}
+
+/// Verifica um código TOTP contra um seed em base32, num dado instante, **sem**
+/// protecção de replay — para testes e para o ponto único onde o replay é
+/// aplicado ([`verify_challenge`], [`confirm_enrollment`]).
+///
+/// A resposta a «este código serve?» é sempre sim ou não.
+#[must_use]
+pub fn verify_totp(seed_base32: &str, codigo: &str, agora: DateTime<Utc>) -> bool {
+    matched_step(seed_base32, codigo, agora).is_some()
 }
 
 /// Um seed novo, em base32.
@@ -232,24 +244,32 @@ pub async fn begin_enrollment(
         ));
     }
 
-    let seed = generate_seed();
-    let selado = sealed::seal(raiz, SealingDomain::MfaTotp, &seed)?;
-
-    // Substitui um enrolamento por confirmar: um QR novo invalida o anterior.
-    sqlx::query(
-        "INSERT INTO mfa_totp_secrets (person_id, nonce, ciphertext, confirmed_at)
-         VALUES ($1, $2, $3, NULL)
-         ON CONFLICT (person_id) DO UPDATE
-             SET nonce = EXCLUDED.nonce,
-                 ciphertext = EXCLUDED.ciphertext,
-                 confirmed_at = NULL,
-                 updated_at = now()",
-    )
-    .bind(person.id)
-    .bind(&selado.nonce)
-    .bind(&selado.ciphertext)
-    .execute(pool)
-    .await?;
+    // Idempotente: se já há um seed por confirmar, reaproveita-se — não se gera
+    // outro. O QR e a chave manual têm de mostrar **o mesmo** seed, e voltar a
+    // esta página, ou pedir a chave manual, não pode trocá-lo por baixo dos pés
+    // (ADR-0107). Um seed novo só nasce quando não existe nenhum a confirmar.
+    let seed = match open_seed(pool, raiz, person.id).await? {
+        Some(existente) => existente,
+        None => {
+            let novo = generate_seed();
+            let selado = sealed::seal(raiz, SealingDomain::MfaTotp, &novo)?;
+            sqlx::query(
+                "INSERT INTO mfa_totp_secrets (person_id, nonce, ciphertext, confirmed_at)
+                 VALUES ($1, $2, $3, NULL)
+                 ON CONFLICT (person_id) DO UPDATE
+                     SET nonce = EXCLUDED.nonce,
+                         ciphertext = EXCLUDED.ciphertext,
+                         confirmed_at = NULL,
+                         updated_at = now()",
+            )
+            .bind(person.id)
+            .bind(&selado.nonce)
+            .bind(&selado.ciphertext)
+            .execute(pool)
+            .await?;
+            novo
+        }
+    };
 
     Ok(Enrollment {
         otpauth_uri: otpauth_uri(issuer, &person.email, &seed),
@@ -282,26 +302,32 @@ pub async fn confirm_enrollment(
         )
     })?;
 
-    let seed = open_seed(pool, raiz, person.id, Confirmacao::PorConfirmar)
+    let seed = open_seed(pool, raiz, person.id)
         .await?
         .ok_or_else(|| {
             CoreError::NotFound("Não há um enrolamento de MFA a confirmar.".to_owned())
         })?;
 
-    if !verify_totp(&seed, codigo, Utc::now()) {
+    let Some(passo) = matched_step(&seed, codigo, Utc::now()) else {
         return Err(CoreError::Validation(
             "O código não confere. Verifique a hora do dispositivo e tente o código actual."
                 .to_owned(),
         ));
-    }
+    };
+    // O passo que confirmou fica registado como aceite, para não poder ser
+    // reusado como o primeiro desafio logo a seguir (ADR-0107).
+    let step = i64::try_from(passo).unwrap_or(i64::MAX);
 
     let codigos = generate_recovery_codes();
 
     let mut tx = pool.begin().await?;
     sqlx::query(
-        "UPDATE mfa_totp_secrets SET confirmed_at = now(), updated_at = now() WHERE person_id = $1",
+        "UPDATE mfa_totp_secrets
+            SET confirmed_at = now(), last_accepted_step = $2, updated_at = now()
+          WHERE person_id = $1",
     )
     .bind(person.id)
+    .bind(step)
     .execute(&mut *tx)
     .await?;
     substituir_recuperacao(&mut tx, hasher, person.id, &codigos).await?;
@@ -335,10 +361,49 @@ pub async fn verify_challenge(
         // recusa-se, nunca se assume satisfeito (fail closed, ADR-0107).
         return Ok(false);
     };
-    let Some(seed) = open_seed(pool, raiz, person_id, Confirmacao::Confirmado).await? else {
+
+    let linha: Option<(Vec<u8>, Vec<u8>, Option<i64>)> = sqlx::query_as(
+        "SELECT nonce, ciphertext, last_accepted_step
+           FROM mfa_totp_secrets
+          WHERE person_id = $1 AND confirmed_at IS NOT NULL",
+    )
+    .bind(person_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some((nonce, ciphertext, last_step)) = linha else {
         return Ok(false);
     };
-    Ok(verify_totp(&seed, codigo, Utc::now()))
+
+    let seed = sealed::open(
+        raiz,
+        SealingDomain::MfaTotp,
+        &sealed::Sealed { nonce, ciphertext },
+    )?;
+    let Some(passo) = matched_step(&seed, codigo, Utc::now()) else {
+        return Ok(false);
+    };
+
+    // Replay: um passo já aceite — ou anterior ao último aceite — não vale outra
+    // vez, mesmo dentro da janela de tolerância (ADR-0107). A condição vai no
+    // próprio UPDATE, para que dois desafios concorrentes com o mesmo código não
+    // passem os dois: só a escrita que avança o passo é que conta.
+    let step = i64::try_from(passo).unwrap_or(i64::MAX);
+    if last_step.is_some_and(|ultimo| step <= ultimo) {
+        return Ok(false);
+    }
+    let avancou = sqlx::query(
+        "UPDATE mfa_totp_secrets
+            SET last_accepted_step = $2, updated_at = now()
+          WHERE person_id = $1
+            AND (last_accepted_step IS NULL OR last_accepted_step < $2)",
+    )
+    .bind(person_id)
+    .bind(step)
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    Ok(avancou == 1)
 }
 
 /// Consome um código de recuperação, atomicamente.
@@ -406,27 +471,71 @@ pub async fn consume_recovery_code(
     Ok(false)
 }
 
-/// Qual seed abrir: o que está por confirmar, ou o já confirmado.
-#[derive(Clone, Copy)]
-enum Confirmacao {
-    PorConfirmar,
-    Confirmado,
+/// Fecha o portão de MFA: revoga a sessão que o atravessava e emite uma
+/// **nova**, `active` e com a garantia de MFA satisfeita.
+///
+/// Revoga e recria em vez de promover no lugar, pelo mesmo motivo que a mudança
+/// de palavra-passe (ADR-0107, briefing §30): o token que a sessão-portão levava
+/// deixa de valer, e a sessão que fica é fronteira limpa de autenticação. O
+/// token antigo é negado depois disto.
+///
+/// # Errors
+///
+/// Erro de base de dados.
+pub async fn issue_assured_session(
+    pool: &PgPool,
+    person: &Person,
+    gate_session_id: Uuid,
+    context: &AttemptContext,
+    ids: &CorrelationIds,
+) -> CoreResult<IssuedSession> {
+    let mut tx = pool.begin().await?;
+    creds::revoke_session(&mut *tx, gate_session_id, "mfa_satisfied").await?;
+    let (session_id, token) = creds::create_session(
+        &mut *tx,
+        person.id,
+        SessionState::Active,
+        true,
+        Duration::hours(SESSION_LIFETIME_HOURS),
+        context.user_agent.as_deref(),
+        context.ip_prefix.as_deref(),
+    )
+    .await?;
+    audit::record(
+        &mut tx,
+        None,
+        ids,
+        AuditEntry::new(action::SIGN_IN, "person")
+            .resource(person.id)
+            .actor(person.id, person.organisation_id)
+            .detail("mfa", "satisfied")
+            .detail("session_id", session_id.to_string()),
+    )
+    .await?;
+    tx.commit().await?;
+
+    Ok(IssuedSession {
+        token,
+        state: SessionState::Active,
+        person_id: person.id,
+        display_name: person.preferred_name().to_owned(),
+    })
 }
 
-/// Lê e abre o seed selado de uma pessoa, no estado de confirmação pedido.
+/// Lê e abre o seed selado **por confirmar** de uma pessoa, se existir.
+///
+/// O seed já confirmado abre-se em [`verify_challenge`], que precisa de ler o
+/// passo aceite na mesma linha — por isso essa leitura vive lá, e esta serve só
+/// o enrolamento.
 async fn open_seed(
     pool: &PgPool,
     raiz: &SealingKey,
     person_id: Uuid,
-    qual: Confirmacao,
 ) -> CoreResult<Option<String>> {
-    let filtro = match qual {
-        Confirmacao::PorConfirmar => "confirmed_at IS NULL",
-        Confirmacao::Confirmado => "confirmed_at IS NOT NULL",
-    };
-    let linha: Option<(Vec<u8>, Vec<u8>)> = sqlx::query_as(&format!(
-        "SELECT nonce, ciphertext FROM mfa_totp_secrets WHERE person_id = $1 AND {filtro}"
-    ))
+    let linha: Option<(Vec<u8>, Vec<u8>)> = sqlx::query_as(
+        "SELECT nonce, ciphertext FROM mfa_totp_secrets
+          WHERE person_id = $1 AND confirmed_at IS NULL",
+    )
     .bind(person_id)
     .fetch_optional(pool)
     .await?;

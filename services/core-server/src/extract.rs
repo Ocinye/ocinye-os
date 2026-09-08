@@ -221,9 +221,26 @@ impl FromRequestParts<AppState> for CurrentPrincipal {
             ));
         }
 
-        let principal = identity::principal_for_person(&state.pool, &person)
+        let mut principal = identity::principal_for_person(&state.pool, &person)
             .await
             .map_err(|error| ApiError::new(error, &ids))?;
+
+        // MFA assurance, resolved at authorization time (ADR-0107). A session
+        // that did not satisfy a second factor does not wield privileged
+        // authority — even if `PlatformAdmin` was granted *after* this session
+        // became active. The role stays a fact of the person; it simply does not
+        // arm here until MFA is proven. This is what closes the loophole of a
+        // role granted mid-session: without it, an ordinary session would
+        // silently gain administrative power the moment the role landed.
+        if !session.mfa_satisfied && identity::mfa_required(&principal) {
+            principal
+                .roles
+                .remove(&ocinye_contracts::TechnicalRole::PlatformAdmin);
+            tracing::debug!(
+                person_id = %principal.person_id,
+                "privileged authority suppressed: session has not satisfied MFA"
+            );
+        }
 
         if !principal.is_active {
             return Err(ApiError::new(

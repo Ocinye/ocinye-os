@@ -29,8 +29,9 @@ mod service;
 
 pub use accounts::{
     bootstrap_platform_admin, bootstrap_privileged_identity, change_own_password, create_member,
-    provision_existing_person, reset_password, set_account_status, set_permanent_password,
-    validate_email, HumanOwner, NewMember, TemporaryCredential, DEFAULT_TEMPORARY_CREDENTIAL_HOURS,
+    provision_existing_person, reset_password, revoke_member_session, set_account_status,
+    set_permanent_password, validate_email, HumanOwner, NewMember, TemporaryCredential,
+    DEFAULT_TEMPORARY_CREDENTIAL_HOURS,
 };
 pub use authentication::{
     AttemptContext, Authenticator, IssuedSession, Throttle, PASSWORD_CHANGE_SESSION_MINUTES,
@@ -43,8 +44,8 @@ pub use credentials::{
     touch_session, Credential, StoredSession,
 };
 pub use mfa::{
-    begin_enrollment, confirm_enrollment, consume_recovery_code, has_confirmed_totp, mfa_required,
-    verify_challenge, verify_totp, Enrollment,
+    begin_enrollment, confirm_enrollment, consume_recovery_code, has_confirmed_totp,
+    issue_assured_session, mfa_required, verify_challenge, verify_totp, Enrollment,
 };
 pub use model::{Invitation, InvitationStatus, Person};
 pub use service::{

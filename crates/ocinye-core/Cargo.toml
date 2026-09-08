@@ -72,3 +72,9 @@ ocinye-core = { path = ".", features = ["test-fixtures"] }
 axum = { workspace = true }
 base64 = { workspace = true }
 serde_json = { workspace = true }
+# A suite de MFA gera códigos TOTP para os submeter, como um autenticador faria.
+# A correcção do algoritmo do lado do Core é fixada à parte pelos vectores da
+# RFC 6238; aqui só se precisa de produzir um código válido para o seed.
+hmac = { workspace = true }
+sha1 = { workspace = true }
+data-encoding = { workspace = true }
