@@ -604,10 +604,12 @@ pub fn member_detail(
     security: &Value,
     access: &Value,
     units_catalog: &Value,
+    workspaces_catalog: &Value,
     recusa: Option<&str>,
 ) -> impl IntoView {
     let person_id = text(person, "id").to_owned();
     let units_catalog = units_catalog.clone();
+    let workspaces_catalog = workspaces_catalog.clone();
     let recusa = recusa.map(str::to_owned);
     let name = text(person, "full_name").to_owned();
     // O endereço, uma vez. Havia aqui um `username` ao lado dele, e a linha
@@ -646,7 +648,8 @@ pub fn member_detail(
                 <span class="oc-tab" aria-selected="true">"Acesso"</span>
                 <span class="oc-tab" aria-selected="false">"Segurança"</span>
                 <span class="oc-tab" aria-selected="false">"Unidades"</span>
-                {["Overview", "Research Workspaces", "Actividade", "Audit"]
+                <span class="oc-tab" aria-selected="false">"Research Workspaces"</span>
+                {["Overview", "Actividade", "Audit"]
                     .iter()
                     .map(|label| {
                         view! {
@@ -672,6 +675,9 @@ pub fn member_detail(
             <div class="oc-vspace"></div>
             {section_head("Unidades", None, None)}
             {units_admin(&person_id, &access, &units_catalog)}
+            <div class="oc-vspace"></div>
+            {section_head("Research Workspaces", None, None)}
+            {workspaces_admin(&person_id, &access, &workspaces_catalog)}
         </div>
     }
 }
@@ -864,6 +870,184 @@ pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl Int
     }
 }
 
+/// Separador «Research Workspaces» do membro: os ambientes de investigação a
+/// que pertence, e a administração dessas pertenças.
+///
+/// # Autoridade e fronteira
+///
+/// Como nas unidades, as mutações batem no Core
+/// (`/api/v1/workspaces/{id}/members`), que reautoriza o **actor** a cada
+/// operação — a pertença do membro aberto nunca governa o que o administrador
+/// pode fazer. E administrar a pertença a um workspace **não** concede leitura
+/// do seu conteúdo científico, mesmo `RESTRICTED`: é estrutura, não conteúdo.
+pub fn workspaces_admin(person_id: &str, access: &Value, catalog: &Value) -> impl IntoView {
+    // Catálogo de workspaces: id → título. `/api/v1/workspaces` pagina em
+    // `{ "items": [...] }`; aceita-se também um array directo.
+    let catalogo: Vec<(String, String)> = catalog
+        .get("items")
+        .and_then(Value::as_array)
+        .or_else(|| catalog.as_array())
+        .map(|itens| {
+            itens
+                .iter()
+                .filter_map(|w| {
+                    let id = w.get("id").and_then(Value::as_str)?;
+                    let nome = w
+                        .get("title")
+                        .and_then(Value::as_str)
+                        .or_else(|| w.get("code").and_then(Value::as_str))
+                        .unwrap_or(id);
+                    Some((id.to_owned(), nome.to_owned()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let pertencas: Vec<(String, String)> = access
+        .get("workspaces")
+        .and_then(Value::as_array)
+        .map(|itens| {
+            itens
+                .iter()
+                .filter_map(|w| {
+                    let id = w.get("id").and_then(Value::as_str)?;
+                    let papel = w.get("role").and_then(Value::as_str).unwrap_or("viewer");
+                    Some((id.to_owned(), papel.to_owned()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let nome_de = |id: &str| -> String {
+        catalogo
+            .iter()
+            .find(|(wid, _)| wid == id)
+            .map(|(_, n)| n.clone())
+            .unwrap_or_else(|| id.to_owned())
+    };
+
+    let ja_membro: std::collections::HashSet<String> =
+        pertencas.iter().map(|(id, _)| id.clone()).collect();
+
+    let elegiveis: Vec<(String, String)> = catalogo
+        .iter()
+        .filter(|(id, _)| !ja_membro.contains(id))
+        .cloned()
+        .collect();
+
+    let sem_workspaces = catalogo.is_empty();
+    let sem_pertencas = pertencas.is_empty();
+
+    // Um seletor de papel reutilizado, com o papel actual pré-seleccionado.
+    let papel_options = |actual: &str| {
+        let is_viewer = actual == "viewer";
+        let is_member = actual == "member";
+        let is_lead = actual == "lead";
+        view! {
+            <option value="viewer" selected=is_viewer>"Leitor"</option>
+            <option value="member" selected=is_member>"Membro"</option>
+            <option value="lead" selected=is_lead>"Lead"</option>
+        }
+    };
+
+    let linhas: Vec<_> = pertencas
+        .iter()
+        .map(|(id, papel)| {
+            let nome = nome_de(id);
+            let accao_papel = format!("/admin/members/{person_id}/workspaces/{id}/role");
+            let accao_remover = format!("/admin/members/{person_id}/workspaces/{id}/remove");
+            let opts = papel_options(papel);
+            view! {
+                <tr>
+                    <td>{nome}</td>
+                    <td>
+                        <form method="post" action=accao_papel class="oc-row oc-gap-3">
+                            <select class="oc-select oc-select--sm" name="role">{opts}</select>
+                            <button class="oc-btn oc-btn--sm" type="submit">"Guardar"</button>
+                        </form>
+                    </td>
+                    <td class="oc-td--actions">
+                        <form method="post" action=accao_remover>
+                            <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">
+                                "Remover"
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        })
+        .collect();
+
+    let accao_atribuir = format!("/admin/members/{person_id}/workspaces");
+
+    view! {
+        {card(
+            section_head("Pertenças a research workspaces", None, None),
+            view! {
+                {if sem_pertencas {
+                    view! { <p class="oc-muted">"Nenhum research workspace atribuído."</p> }
+                        .into_any()
+                } else {
+                    view! {
+                        <table class="oc-table oc-table--dense">
+                            <thead>
+                                <tr>
+                                    <th>"Workspace"</th>
+                                    <th>"Papel"</th>
+                                    <th class="oc-td--actions">"Acções"</th>
+                                </tr>
+                            </thead>
+                            <tbody>{linhas}</tbody>
+                        </table>
+                    }
+                    .into_any()
+                }}
+            },
+        )}
+
+        <div class="oc-mt-6">
+            {card(
+                section_head("Atribuir research workspace", None, None),
+                if sem_workspaces {
+                    view! {
+                        <p class="oc-muted">
+                            "Ainda não existem research workspaces. Criam-se dentro de uma ideia \
+                             ou projecto, não aqui."
+                        </p>
+                    }
+                    .into_any()
+                } else if elegiveis.is_empty() {
+                    view! {
+                        <p class="oc-muted">
+                            "Este membro já pertence a todos os research workspaces visíveis."
+                        </p>
+                    }
+                    .into_any()
+                } else {
+                    view! {
+                        <form
+                            method="post"
+                            action=accao_atribuir
+                            class="oc-row oc-row--wrap oc-gap-3"
+                        >
+                            <select class="oc-select" name="workspace_id" required>
+                                <option value="">"Escolher workspace…"</option>
+                                {elegiveis
+                                    .into_iter()
+                                    .map(|(id, nome)| view! { <option value=id>{nome}</option> })
+                                    .collect_view()}
+                            </select>
+                            <select class="oc-select" name="role">{papel_options("member")}</select>
+                            <button class="oc-btn oc-btn--primary" type="submit">"Atribuir"</button>
+                        </form>
+                    }
+                    .into_any()
+                },
+            )}
+        </div>
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -917,6 +1101,52 @@ mod tests {
         assert!(html.contains("value=\"manager\" selected"));
         // Já membro dessa unidade: não reaparece na lista de atribuir.
         assert!(html.contains("já pertence a todas as unidades"));
+    }
+
+    const WID: &str = "77777777-7777-7777-7777-777777777777";
+
+    /// Research workspaces: sem nenhum visível, não se inventa um picker.
+    #[test]
+    fn workspaces_sem_catalogo_diz_o() {
+        let html =
+            workspaces_admin(PID, &json!({ "workspaces": [] }), &json!({ "items": [] })).to_html();
+        assert!(html.contains("Nenhum research workspace atribuído"));
+        assert!(html.contains("Ainda não existem research workspaces"));
+    }
+
+    /// Com workspaces e o membro sem nenhum: oferece atribuir, com o título
+    /// (não o código) e a acção certa.
+    #[test]
+    fn workspaces_oferece_atribuir() {
+        let html = workspaces_admin(
+            PID,
+            &json!({ "workspaces": [] }),
+            &json!({ "items": [{ "id": WID, "title": "Modelos de linguagem", "code": "LLM", "kind": "project" }] }),
+        )
+        .to_html();
+        assert!(html.contains("Nenhum research workspace atribuído"));
+        assert!(html.contains(&format!("action=\"/admin/members/{PID}/workspaces\"")));
+        assert!(html.contains("Modelos de linguagem"));
+    }
+
+    /// Uma pertença mostra o papel (Lead/Membro/Leitor) e as acções às rotas
+    /// certas; o papel actual vem seleccionado.
+    #[test]
+    fn workspaces_mostra_pertenca_e_papel() {
+        let html = workspaces_admin(
+            PID,
+            &json!({ "workspaces": [{ "id": WID, "role": "lead" }] }),
+            &json!({ "items": [{ "id": WID, "title": "Modelos de linguagem", "code": "LLM" }] }),
+        )
+        .to_html();
+        assert!(html.contains("Modelos de linguagem"));
+        assert!(html.contains(&format!(
+            "action=\"/admin/members/{PID}/workspaces/{WID}/role\""
+        )));
+        assert!(html.contains(&format!(
+            "action=\"/admin/members/{PID}/workspaces/{WID}/remove\""
+        )));
+        assert!(html.contains("value=\"lead\" selected"));
     }
 
     /// A oferta vem do Core, e o ecrã não a reinventa.
@@ -1144,6 +1374,7 @@ mod tests {
             &json!({"account_status": "active", "has_permanent_password": true, "live_sessions": []}),
             &json!({"roles": ["research_member"], "grants": [], "institution_permissions": []}),
             &json!({"items": []}),
+            &json!({"items": []}),
             None,
         )
         .to_html();
@@ -1162,6 +1393,7 @@ mod tests {
             &json!({"full_name": "A", "email": "a@b.c", "status": "active"}),
             &json!({"account_status": "active", "has_permanent_password": true, "live_sessions": []}),
             &json!({"roles": [], "grants": [], "institution_permissions": []}),
+            &json!({"items": []}),
             &json!({"items": []}),
             None,
         )
