@@ -39,6 +39,19 @@ governada (`member_session_revoked`): autoridade do actor reautorizada, posse da
 sessão validada (uma sessão que não é do membro é `NotFound`, não um IDOR), e
 registo próprio, sem token nem cookie.
 
+### Rótulos de papel técnico normalizados no Workspace — 2026-09-08
+
+Os papéis técnicos passam a ler-se por um rótulo canónico em português, a partir
+de **uma só lista** (`ui::roles`) que o seletor de criação, o de atribuição e os
+crachás de acesso partilham — antes cada superfície tinha a sua, e foi assim que
+«Research Lead» sobreviveu num sítio depois de se decidir «Líder de
+investigação». `ResearchLead` lê-se agora «Líder de investigação», e o crachá de
+acesso, que mostrava o código cru, passa a mostrar o rótulo — com o tom ainda
+resolvido pelo código estável. É só texto humano: o código (`research_lead`), a
+API, as permissões, a serialização e a auditoria não mudam. Um papel técnico não
+é um título académico e não exige doutoramento; a posição institucional (onde
+vive «Fundador») continua separada do papel, e nenhuma delas se infere da outra.
+
 ### Governação de membros: administrar o acesso, e não só lê-lo — 2026-09-08
 
 O detalhe de um membro mostrava o acesso e não deixava mexer-lhe. Passa a

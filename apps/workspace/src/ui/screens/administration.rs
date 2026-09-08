@@ -12,6 +12,7 @@ use serde_json::Value;
 
 use crate::ui::components::{badge, button, card, section_head, Button, Tone, Variant};
 use crate::ui::icon::{icon, Icon};
+use crate::ui::roles;
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or("—")
@@ -24,23 +25,9 @@ fn day(value: &Value, key: &str) -> String {
     )
 }
 
-/// Os papéis técnicos oferecidos ao criar um membro.
-///
-/// Ordenados do mais estreito para o mais amplo, de propósito: a primeira opção
-/// deve ser a que se escolhe por omissão, e a última a que exige pensar.
-const ROLES: [(&str, &str); 8] = [
-    ("research_member", "Investigador — acesso científico comum"),
-    ("research_lead", "Research Lead — lidera ideias e projectos"),
-    ("collaborator", "Colaborador — âmbito estreito"),
-    (
-        "external_collaborator",
-        "Colaborador externo — só o que for atribuído",
-    ),
-    ("unit_manager", "Gestor de unidade"),
-    ("auditor", "Auditor — evidência, sem conteúdo"),
-    ("organisation_admin", "Administrador da organização"),
-    ("platform_admin", "Administrador da plataforma"),
-];
+// Os papéis técnicos e os seus rótulos vivem em [`crate::ui::roles`] — uma só
+// lista, que o seletor de criação, o de atribuição e os crachás de acesso
+// partilham. Aqui usam-se `roles::OFERECIDOS` e `roles::label_do_codigo`.
 
 /// Posições institucionais. **Não concedem acesso** (ADR-0100).
 const POSITIONS: [(&str, &str); 9] = [
@@ -188,10 +175,14 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                             <div class="oc-field">
                                 <label class="oc-field__label" for="m-role">"Papel técnico"</label>
                                 <select class="oc-select" id="m-role" name="role" required>
-                                    {ROLES
-                                        .iter()
-                                        .map(|(value, label)| {
-                                            view! { <option value=*value>{*label}</option> }
+                                    {roles::OFERECIDOS
+                                        .into_iter()
+                                        .map(|role| {
+                                            view! {
+                                                <option value=role.as_str()>
+                                                    {roles::label_com_descricao(role)}
+                                                </option>
+                                            }
                                         })
                                         .collect_view()}
                                 </select>
@@ -518,7 +509,13 @@ pub fn access_tab(access: &Value) -> impl IntoView {
                         <div class="oc-row oc-gap-5 oc-wrap">
                             {roles
                                 .into_iter()
-                                .map(|role| badge(role.clone(), Tone::of(&role)))
+                                .map(|role| {
+                                    // O crachá mostra o rótulo canónico; o tom continua
+                                    // a resolver-se pelo código estável, que não muda.
+                                    // Caminho completo: a variável local `roles` acima
+                                    // sombreia o módulo dentro deste fecho.
+                                    badge(crate::ui::roles::label_do_codigo(&role), Tone::of(&role))
+                                })
                                 .collect_view()}
                         </div>
                     }
@@ -1075,18 +1072,6 @@ pub fn workspaces_admin(person_id: &str, access: &Value, catalog: &Value) -> imp
     }
 }
 
-/// Rótulo legível de um papel técnico, a partir do catálogo local [`ROLES`].
-///
-/// O mesmo catálogo que o formulário de criação usa — não uma segunda lista a
-/// envelhecer ao lado. Um papel que este build não conhece mostra-se pelo seu
-/// identificador, que é honesto: inventar uma tradução seria pior.
-fn role_label(role: &str) -> &str {
-    ROLES
-        .iter()
-        .find(|(id, _)| *id == role)
-        .map_or(role, |(_, label)| label)
-}
-
 /// Administração dos **papéis técnicos** de um membro: conceder e revogar.
 ///
 /// # Autoridade
@@ -1116,10 +1101,10 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
         .unwrap_or_default();
 
     let ja_tem: std::collections::HashSet<String> = actuais.iter().cloned().collect();
-    let elegiveis: Vec<(&str, &str)> = ROLES
-        .iter()
-        .filter(|(id, _)| !ja_tem.contains(*id))
-        .map(|(id, label)| (*id, *label))
+    let elegiveis: Vec<(&str, String)> = roles::OFERECIDOS
+        .into_iter()
+        .filter(|role| !ja_tem.contains(role.as_str()))
+        .map(|role| (role.as_str(), roles::label_com_descricao(role)))
         .collect();
 
     // A revogação de um papel batido no Core reautoriza o actor e pode ser
@@ -1128,7 +1113,7 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
     let linhas: Vec<_> = actuais
         .iter()
         .map(|role| {
-            let etiqueta = role_label(role).to_owned();
+            let etiqueta = roles::label_do_codigo(role);
             let accao = format!("/admin/members/{person_id}/roles/{role}/revoke");
             view! {
                 <tr>

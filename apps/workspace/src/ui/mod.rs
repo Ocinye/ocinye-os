@@ -12,6 +12,7 @@
 
 pub mod components;
 pub mod icon;
+pub mod roles;
 pub mod screens;
 pub mod shell;
 pub mod tempo;
