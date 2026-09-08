@@ -21,7 +21,7 @@ use uuid::Uuid;
 use crate::api::{self, ApiFailure};
 use crate::session::{self, Session};
 use crate::ui;
-use crate::ui::shell::{Crumb, Screen, Viewer};
+use crate::ui::shell::{Crumb, ResolucaoSessao, Screen, Viewer};
 use crate::WorkspaceState;
 
 /// Todos os caminhos que o Workspace serve.
@@ -726,14 +726,78 @@ fn inference_available(status: &Value) -> bool {
         .unwrap_or(false)
 }
 
+/// Como classificar o resultado do `/me` que estabelece a identidade da sessão.
+///
+/// Separada de [`viewer`] por ser a decisão de segurança do fail-closed, e a
+/// única aqui que merece prova isolada: um erro técnico **não** é uma sessão
+/// normal. `Ok` resolve; `401` é o caminho de autenticação; tudo o resto —
+/// 5xx, `503`, tempo esgotado, rede, erro de base de dados — deixa a identidade
+/// por estabelecer, e a shell falha fechado.
+fn resolucao_de(me: &Result<Value, crate::api::ApiFailure>) -> ResolucaoSessao {
+    match me {
+        Ok(_) => ResolucaoSessao::Resolvida,
+        Err(crate::api::ApiFailure::Unauthorised) => ResolucaoSessao::NaoAutenticada,
+        Err(_) => ResolucaoSessao::Indeterminada,
+    }
+}
+
+#[cfg(test)]
+mod resolucao_de_sessao {
+    use super::resolucao_de;
+    use crate::api::ApiFailure;
+    use crate::ui::shell::ResolucaoSessao;
+    use serde_json::json;
+
+    #[test]
+    fn uma_resposta_com_corpo_resolve_a_identidade() {
+        let me = Ok(json!({ "identity_kind": "privileged", "roles": ["platform_admin"] }));
+        assert_eq!(resolucao_de(&me), ResolucaoSessao::Resolvida);
+    }
+
+    #[test]
+    fn quatrocentos_e_um_e_o_caminho_de_autenticacao() {
+        let me = Err(ApiFailure::Unauthorised);
+        assert_eq!(resolucao_de(&me), ResolucaoSessao::NaoAutenticada);
+    }
+
+    /// O defeito que isto fecha: um erro técnico ao ler a identidade não pode
+    /// virar uma sessão normal. Todos falham fechado como indeterminados.
+    #[test]
+    fn uma_falha_tecnica_nunca_e_uma_sessao_normal() {
+        for falha in [
+            ApiFailure::Failed("a base de dados recusou".to_owned()),
+            ApiFailure::Unavailable(None),
+            ApiFailure::Forbidden,
+            ApiFailure::Denied,
+            ApiFailure::Rejected("x".to_owned()),
+        ] {
+            let me: Result<serde_json::Value, _> = Err(falha);
+            assert_eq!(
+                resolucao_de(&me),
+                ResolucaoSessao::Indeterminada,
+                "uma falha técnica foi tratada como sessão resolvida"
+            );
+        }
+    }
+}
+
 async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
     // A agenda e as notificações vão em paralelo com o resto: a barra superior
     // desenha-se em cada página, e uma consulta em série acrescentaria latência
     // a todas elas.
     let agora = chrono::Utc::now();
-    let (organisation, me, temporal, notificacoes) = tokio::join!(
+    // O `/me` estabelece a identidade da sessão, e o seu erro **não se engole**.
+    // As outras consultas alimentam a barra e degradam-se para vazio sem
+    // consequência; a identidade não: uma falha técnica ao resolvê-la não é
+    // prova de que a sessão é normal, e por isso é classificada, não perdida.
+    let (me_result, organisation, temporal, notificacoes) = tokio::join!(
+        api::get::<Value>(
+            state,
+            &member.session.access_token,
+            &member.correlation_id,
+            "/api/v1/me",
+        ),
         optional(state, member, "/api/v1/organisation"),
-        optional(state, member, "/api/v1/me"),
         calendar_agenda(
             state,
             member,
@@ -742,6 +806,20 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
         ),
         optional(state, member, "/api/v1/notifications"),
     );
+    let resolucao = resolucao_de(&me_result);
+    // Uma identidade indeterminada é o estado que o fail-closed existe para
+    // apanhar. Regista-se com o id de correlação para que uma recorrência do
+    // erro técnico do `/me` seja rastreável até ao pedido, sem engolir nada.
+    if resolucao == ResolucaoSessao::Indeterminada {
+        if let Err(erro) = &me_result {
+            tracing::warn!(
+                correlation_id = %member.correlation_id,
+                error = %erro,
+                "identidade da sessão indeterminada: /me falhou tecnicamente; a apresentar superfície fail-closed"
+            );
+        }
+    }
+    let me = me_result.unwrap_or(Value::Null);
     // O estado do Core vem do `/ready`, e nunca de um pedido de domínio.
     //
     // Isto era `!organisation.is_null()`: se a consulta de organização
@@ -811,6 +889,7 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
         .unwrap_or_default();
 
     Viewer {
+        resolucao,
         zona: member.zona,
         name: member.session.display_name.clone(),
         // As duas verdades, ambas do Core.
@@ -883,10 +962,21 @@ fn shell_page(
     trail: Vec<Crumb>,
     content: impl leptos::IntoView + 'static,
 ) -> Response {
-    page(
-        title,
-        ui::shell::shell(viewer, active, trail, title, content),
-    )
+    // Falha fechado sobre a identidade da sessão. A shell normal só se desenha
+    // quando o Core disse o que a sessão é. Se a identidade ficou por resolver,
+    // não se apresenta a shell autenticada — a ausência de resposta não é prova
+    // de sessão normal.
+    match viewer.resolucao {
+        ResolucaoSessao::Resolvida => page(
+            title,
+            ui::shell::shell(viewer, active, trail, title, content),
+        ),
+        // A sessão não está autenticada: caminho normal de início de sessão.
+        ResolucaoSessao::NaoAutenticada => Redirect::to("/login").into_response(),
+        // A identidade não pôde ser estabelecida por falha técnica: superfície
+        // neutra, nunca a shell normal.
+        ResolucaoSessao::Indeterminada => page(title, ui::shell::identidade_indeterminada()),
+    }
 }
 
 /// Traduz uma recusa do Core em algo sobre que o membro possa agir.

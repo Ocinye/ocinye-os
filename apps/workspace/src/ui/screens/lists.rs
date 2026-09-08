@@ -1960,6 +1960,7 @@ mod tests {
     /// filtragem por permissão.
     fn viewer() -> Viewer {
         Viewer {
+            resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,
             zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
@@ -1983,6 +1984,7 @@ mod tests {
     /// Um membro sem permissão nenhuma.
     fn viewer_sem_permissoes() -> Viewer {
         Viewer {
+            resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,
             zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
