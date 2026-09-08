@@ -139,6 +139,12 @@ pub const ROUTES: &[&str] = &[
     "/admin/members/{person_id}/workspaces",
     "/admin/members/{person_id}/workspaces/{workspace_id}/role",
     "/admin/members/{person_id}/workspaces/{workspace_id}/remove",
+    "/admin/members/{person_id}/reset-password",
+    "/admin/members/{person_id}/status",
+    "/admin/members/{person_id}/roles",
+    "/admin/members/{person_id}/roles/{role}/revoke",
+    "/admin/members/{person_id}/grants",
+    "/admin/members/{person_id}/grants/{grant_id}/revoke",
     "/audit",
     "/search",
     "/ask",
@@ -378,6 +384,24 @@ pub fn router(state: WorkspaceState) -> Router {
         .route(
             "/admin/members/{person_id}/workspaces/{workspace_id}/remove",
             post(member_workspace_remove),
+        )
+        .route(
+            "/admin/members/{person_id}/reset-password",
+            post(member_reset_password),
+        )
+        .route("/admin/members/{person_id}/status", post(member_set_status))
+        .route("/admin/members/{person_id}/roles", post(member_role_grant))
+        .route(
+            "/admin/members/{person_id}/roles/{role}/revoke",
+            post(member_role_revoke),
+        )
+        .route(
+            "/admin/members/{person_id}/grants",
+            post(member_grant_create),
+        )
+        .route(
+            "/admin/members/{person_id}/grants/{grant_id}/revoke",
+            post(member_grant_revoke),
         )
         .route("/audit", get(audit))
         .route("/search", get(search))
@@ -2920,12 +2944,13 @@ async fn member_detail(
     let security_path = format!("/api/v1/administration/members/{person_id}/security");
     let access_path = format!("/api/v1/administration/members/{person_id}/access");
 
-    let (person, security, access, units_catalog, workspaces_catalog) = tokio::join!(
+    let (person, security, access, units_catalog, workspaces_catalog, permissions_catalog) = tokio::join!(
         optional(&state, &member, &person_path),
         optional(&state, &member, &security_path),
         optional(&state, &member, &access_path),
         optional(&state, &member, "/api/v1/units"),
         optional(&state, &member, "/api/v1/workspaces?page_size=100"),
+        optional(&state, &member, "/api/v1/administration/permissions"),
     );
 
     if person.is_null() {
@@ -2943,6 +2968,7 @@ async fn member_detail(
             &access,
             &units_catalog,
             &workspaces_catalog,
+            &permissions_catalog,
             None,
         ),
     )
@@ -3124,6 +3150,222 @@ async fn member_workspace_remove(
     }
 }
 
+/// Corpo do formulário de alteração de estado da conta.
+#[derive(serde::Deserialize)]
+struct EstadoContaForm {
+    status: String,
+    reason: String,
+}
+
+/// `POST /admin/members/{person_id}/status` — suspende, desactiva ou reactiva.
+///
+/// A autoridade é reautorizada no Core, que também recusa auto-bloqueio e
+/// deixar a instituição sem administrador capaz de entrar. A recusa volta ao
+/// detalhe, com a razão à vista.
+async fn member_set_status(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+    axum::extract::Form(form): axum::extract::Form<EstadoContaForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = format!("/admin/members/{person_id}");
+    let path = format!("/api/v1/administration/members/{person_id}/status");
+    let body = serde_json::json!({ "status": form.status, "reason": form.reason });
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &path,
+        &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&destino).into_response(),
+        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+    }
+}
+
+/// `POST /admin/members/{person_id}/reset-password` — emite uma credencial
+/// temporária nova e mostra-a **uma única vez**.
+///
+/// Como o provisionamento, o sucesso não é um redirecto: a palavra-passe nova
+/// vive só neste ecrã, e um redirecto perdê-la-ia. A palavra-passe nunca é
+/// registada nem recuperável (briefing §19, §73).
+async fn member_reset_password(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+
+    let path = format!("/api/v1/administration/members/{person_id}/password-reset");
+    let outcome = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &path,
+        &serde_json::json!({}),
+    )
+    .await;
+
+    match outcome {
+        // A reposição devolve o `IssuedCredential` no topo do corpo — sem o
+        // envelope `credential` que `create`/`provision` usam.
+        Ok(credential) => shell_page(
+            "Palavra-passe reposta",
+            &viewer,
+            Screen::Admin,
+            vec![Crumb::to(Screen::Admin)],
+            ui::screens::administration::issued_credential(
+                credential
+                    .get("email")
+                    .and_then(Value::as_str)
+                    .unwrap_or(""),
+                credential
+                    .get("temporary_password")
+                    .and_then(Value::as_str)
+                    .unwrap_or(""),
+                credential
+                    .get("expires_at")
+                    .and_then(Value::as_str)
+                    .unwrap_or(""),
+            ),
+        ),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+    }
+}
+
+/// Corpo do formulário de concessão de papel técnico.
+#[derive(serde::Deserialize)]
+struct PapelTecnicoForm {
+    role: String,
+    reason: String,
+}
+
+/// `POST /admin/members/{person_id}/roles` — concede um papel técnico.
+async fn member_role_grant(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+    axum::extract::Form(form): axum::extract::Form<PapelTecnicoForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = format!("/admin/members/{person_id}");
+    let path = format!("/api/v1/people/{person_id}/roles");
+    let body = serde_json::json!({ "role": form.role, "reason": form.reason });
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &path,
+        &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&destino).into_response(),
+        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+    }
+}
+
+/// `POST /admin/members/{person_id}/roles/{role}/revoke` — revoga um papel.
+///
+/// Um formulário HTML não fala `DELETE`; o Core, sim. O verbo certo viaja daqui
+/// para o Core, com o papel no corpo — retirar o último Platform Admin é
+/// recusado lá, e a razão volta ao detalhe.
+async fn member_role_revoke(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path((person_id, role)): Path<(String, String)>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = format!("/admin/members/{person_id}");
+    let path = format!("/api/v1/people/{person_id}/roles");
+    let body = serde_json::json!({ "role": role });
+    match api::delete_with_body(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &path,
+        &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&destino).into_response(),
+        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+    }
+}
+
+/// Corpo do formulário de concessão de grant explícito.
+#[derive(serde::Deserialize)]
+struct GrantForm {
+    permission: String,
+    scope: String,
+    reason: String,
+}
+
+/// `POST /admin/members/{person_id}/grants` — concede um grant explícito.
+async fn member_grant_create(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+    axum::extract::Form(form): axum::extract::Form<GrantForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = format!("/admin/members/{person_id}");
+    let body = serde_json::json!({
+        "subject_id": person_id,
+        "permission": form.permission,
+        "scope": form.scope,
+        "reason": form.reason,
+    });
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/administration/grants",
+        &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&destino).into_response(),
+        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+    }
+}
+
+/// Corpo do formulário de revogação de grant.
+#[derive(serde::Deserialize)]
+struct RevogarGrantForm {
+    reason: String,
+}
+
+/// `POST /admin/members/{person_id}/grants/{grant_id}/revoke` — revoga um grant.
+async fn member_grant_revoke(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path((person_id, grant_id)): Path<(String, String)>,
+    axum::extract::Form(form): axum::extract::Form<RevogarGrantForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = format!("/admin/members/{person_id}");
+    let path = format!("/api/v1/administration/grants/{grant_id}");
+    let body = serde_json::json!({ "reason": form.reason });
+    match api::delete_with_body(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &path,
+        &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&destino).into_response(),
+        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+    }
+}
+
 /// Re-renderiza o detalhe do membro com a recusa do Core à vista, em vez de a
 /// engolir: uma operação administrativa que falha diz porquê, no mesmo sítio.
 async fn member_detail_with_error(
@@ -3140,12 +3382,13 @@ async fn member_detail_with_error(
     let person_path = format!("/api/v1/people/{person_id}");
     let security_path = format!("/api/v1/administration/members/{person_id}/security");
     let access_path = format!("/api/v1/administration/members/{person_id}/access");
-    let (person, security, access, units_catalog, workspaces_catalog) = tokio::join!(
+    let (person, security, access, units_catalog, workspaces_catalog, permissions_catalog) = tokio::join!(
         optional(state, member, &person_path),
         optional(state, member, &security_path),
         optional(state, member, &access_path),
         optional(state, member, "/api/v1/units"),
         optional(state, member, "/api/v1/workspaces?page_size=100"),
+        optional(state, member, "/api/v1/administration/permissions"),
     );
     shell_page(
         "Membro",
@@ -3158,6 +3401,7 @@ async fn member_detail_with_error(
             &access,
             &units_catalog,
             &workspaces_catalog,
+            &permissions_catalog,
             Some(&failure.to_string()),
         ),
     )
@@ -3225,12 +3469,13 @@ async fn provision_member(
             let person_path = format!("/api/v1/people/{person_id}");
             let security_path = format!("/api/v1/administration/members/{person_id}/security");
             let access_path = format!("/api/v1/administration/members/{person_id}/access");
-            let (person, security, access, units_catalog, workspaces_catalog) = tokio::join!(
+            let (person, security, access, units_catalog, workspaces_catalog, permissions_catalog) = tokio::join!(
                 optional(&state, &member, &person_path),
                 optional(&state, &member, &security_path),
                 optional(&state, &member, &access_path),
                 optional(&state, &member, "/api/v1/units"),
                 optional(&state, &member, "/api/v1/workspaces?page_size=100"),
+                optional(&state, &member, "/api/v1/administration/permissions"),
             );
             shell_page(
                 "Membro",
@@ -3243,6 +3488,7 @@ async fn provision_member(
                     &access,
                     &units_catalog,
                     &workspaces_catalog,
+                    &permissions_catalog,
                     Some(&failure.to_string()),
                 ),
             )

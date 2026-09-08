@@ -28,8 +28,8 @@ pub mod workflow;
 
 pub use error::DomainError;
 pub use policy::{
-    ai_processing_ceiling, approval_needed, can, effective_risk, explain, is_delegable_to_agents,
-    may_invoke, may_process_with_ai, AccessSource, Action, AgentBoundary, AgenticRefusal, Decision,
-    ExplicitGrant, ResourceContext, ResourceKind, VisibilityFilter,
+    ai_processing_ceiling, approval_needed, can, effective_risk, evaluate, explain,
+    is_delegable_to_agents, may_invoke, may_process_with_ai, AccessSource, Action, AgentBoundary,
+    AgenticRefusal, Decision, ExplicitGrant, ResourceContext, ResourceKind, VisibilityFilter,
 };
 pub use principal::{IdentityKind, Principal};

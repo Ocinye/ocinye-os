@@ -70,6 +70,23 @@ de execução é um conjunto que nenhum teste consegue fixar, e esta é a camada
 onde um teste exaustivo vale mais. **Papéis personalizados são `PLANNED`**
 (ADR-0101).
 
+### O último administrador não se remove
+
+Nenhuma operação pode deixar a instituição sem um administrador da plataforma
+**capaz de entrar**. A proibição de auto-bloqueio já impedia alguém de suspender
+a própria conta; faltava a mesma garantia quando o alvo é outra pessoa, ou
+quando o que se retira é o papel e não o acesso — o mesmo fim, a instituição
+fechada fora da sua própria administração, por três portas.
+
+Um guarda único — `identity::accounts::ensure_not_sole_platform_admin` — fecha as
+duas que faltavam: recusa suspender ou desactivar o último `platform_admin`
+activo, e recusa revogar-lhe o papel. «Capaz de entrar» é
+`AccountStatus::may_authenticate` lido na base: um administrador já suspenso não
+conta, porque uma instituição trancada atrás de uma conta suspensa está tão
+trancada como uma sem administrador nenhum. A contagem exclui a pessoa cuja
+saída se pondera, e a pergunta é directa — «se tiro esta, sobra alguém?».
+Provado em `crates/ocinye-core/tests/privileged_identity.rs`.
+
 ### Memberships contextuais
 
 - **Unidade:** `manager` ou `member`.

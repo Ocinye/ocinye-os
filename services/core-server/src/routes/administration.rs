@@ -304,6 +304,16 @@ struct SecurityOverview {
     /// como credencial utilizável. Um botão desenhado a partir de
     /// `has_permanent_password` mostraria a operação a quem ela vai recusar.
     may_be_provisioned: bool,
+    /// Se o **actor** — quem consulta, não a pessoa consultada — pode gerir a
+    /// credencial e o estado desta conta (repor palavra-passe, suspender,
+    /// desactivar, reactivar).
+    ///
+    /// Resolvido a partir da autoridade do actor, e com a mesma permissão que a
+    /// operação exige (`MembersManage`). Sem isto, a Experience teria de
+    /// adivinhar a autoridade a partir do que vê da conta-alvo, e mostraria
+    /// controlos que o Core recusaria — fazendo o administrador julgar-se sem
+    /// autoridade que na verdade tem, ou o contrário.
+    may_manage_account: bool,
 }
 
 #[derive(Serialize)]
@@ -357,6 +367,14 @@ async fn security_overview(
         .await
         .map_err(|error| ApiError::new(error, &ids))?;
 
+    // A autoridade é do actor, resolvida com a mesma permissão que
+    // `reset_password` e `set_status` exigem. Um administrador a ver-se a si
+    // próprio recebe o mesmo cálculo — a proibição de se auto-bloquear vive no
+    // Core, no momento da operação, e não neste sinal.
+    let actor_ctx =
+        ResourceContext::organisation(ResourceKind::Organisation, principal.organisation_id);
+    let may_manage_account = can(&principal, Permission::MembersManage, &actor_ctx, None).allowed;
+
     Ok(Json(SecurityOverview {
         account_status: person.account_status().as_str(),
         has_permanent_password: permanent.is_some(),
@@ -365,6 +383,7 @@ async fn security_overview(
         last_successful_sign_in: last_sign_in,
         recent_failed_attempts: failures,
         may_be_provisioned: person.identity_kind == "human" && !ja_tem_acesso,
+        may_manage_account,
         live_sessions: sessions
             .into_iter()
             .map(|s| SessionSummary {
@@ -391,6 +410,13 @@ struct AccessOverview {
     grants: Vec<grants::GrantView>,
     /// Institution-scope permissions, each with the source that confers it.
     institution_permissions: Vec<PermissionSource>,
+    /// Se o **actor** pode conceder e revogar papéis técnicos aqui. Resolvido
+    /// pela mesma autoridade que `grant_role`/`revoke_role` exigem —
+    /// administração da plataforma.
+    may_manage_roles: bool,
+    /// Se o **actor** pode criar e revogar grants explícitos aqui. Mesma
+    /// permissão que `create_grant`/`revoke_grant` — `PermissionsManage`.
+    may_manage_grants: bool,
 }
 
 #[derive(Serialize)]
@@ -462,6 +488,15 @@ async fn access_overview(
             .collect(),
         grants: held,
         institution_permissions,
+        // Autoridade do actor, com os mesmos portões das operações: administrar
+        // a plataforma para papéis, `PermissionsManage` para grants.
+        may_manage_roles: ocinye_domain::evaluate(
+            &principal,
+            ocinye_domain::Action::Administer,
+            &ResourceContext::organisation(ResourceKind::Platform, principal.organisation_id),
+        )
+        .allowed,
+        may_manage_grants: can(&principal, Permission::PermissionsManage, &ctx, None).allowed,
     }))
 }
 

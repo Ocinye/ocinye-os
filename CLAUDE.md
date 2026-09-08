@@ -60,7 +60,10 @@ sem que nada falhe.
   **`MFA = NOT IMPLEMENTED`** e não exigido nesta fase (§33).
 - **Autorização por permissões nomeadas: `IMPLEMENTED`.** 72 permissões, quatro
   âmbitos, grants explícitos atribuíveis e revogáveis, e acesso explicável
-  ([ADR-0101](docs/adrs/0101-permissions-scopes-and-grants.md)).
+  ([ADR-0101](docs/adrs/0101-permissions-scopes-and-grants.md)). Nenhuma operação
+  de administração pode deixar a instituição sem um administrador da plataforma
+  capaz de entrar: suspender, desactivar ou revogar o papel do último é recusado
+  ([docs/authorization](docs/authorization/README.md)).
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**

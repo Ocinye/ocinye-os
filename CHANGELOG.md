@@ -7,6 +7,33 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Governação de membros: administrar o acesso, e não só lê-lo — 2026-09-08
+
+O detalhe de um membro mostrava o acesso e não deixava mexer-lhe. Passa a
+administrá-lo, sob a autoridade de **quem consulta** e nunca do que a conta-alvo
+tem: papéis técnicos (conceder e revogar), estado da conta (suspender,
+desactivar, reactivar, com razão registada), reposição de palavra-passe — que
+emite uma credencial temporária e a mostra uma única vez, sem nunca a registar —
+e grants explícitos de âmbito institucional (conceder e revogar).
+
+Cada controlo aparece **só** quando o Core diz que o actor o pode usar. Três
+sinais novos nas leituras de overview — `may_manage_account`, `may_manage_roles`,
+`may_manage_grants` — resolvidos com as mesmas permissões que as operações
+exigem. Um botão que o Core recusaria não se desenha: fá-lo-ia parecer que o
+administrador não tem autoridade que tem, ou o contrário. A autoridade é sempre
+reautorizada no Core no momento da operação; uma recusa volta ao ecrã com a
+razão, não é engolida.
+
+E uma garantia que faltava: **o último administrador da plataforma não se
+remove.** Nem suspenso, nem desactivado, nem despojado do papel enquanto for o
+único capaz de entrar. Um guarda único no Core fecha as duas portas que a
+proibição de auto-bloqueio não via, com prova de regressão nas duas direcções.
+
+As sessões continuam a revogar-se **como consequência** — suspender ou repor a
+palavra-passe termina-as todas —, e não uma a uma: o registo de auditoria segue
+a causa, que é o que um revisor precisa de ler, e não haveria acção própria para
+a consequência sem a separar dela.
+
 ### O processo, e não só a portabilidade — 2026-08-29
 
 Os ensaios anteriores provaram que a instituição **pode** mudar de servidor.
