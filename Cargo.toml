@@ -111,6 +111,14 @@ sha2 = "0.10"
 # secret class (mail, mfa-totp). RustCrypto, same family as sha2 — never a
 # hand-rolled KDF (§38).
 hkdf = "0.12"
+# TOTP (RFC 6238) for mandatory MFA (ADR-0107). The primitives are RustCrypto —
+# HMAC and SHA-1, the RFC 6238 default an authenticator app expects — plus
+# base32 for the shared-secret encoding. The RFC 6238 construction on top of
+# HMAC is a few lines with published test vectors; the cryptography itself is
+# never hand-rolled (§38).
+hmac = "0.12"
+sha1 = "0.10"
+data-encoding = "2"
 # Argon2id for password verifiers (ADR-0602). `password-hash` gives the PHC
 # string format, which carries the parameters with the hash and is what makes
 # transparent rehashing possible.

@@ -242,7 +242,7 @@ impl Authenticator {
                     .map(|c| (c, SessionState::PasswordChangeRequired))
             });
 
-        let Some((credential, session_state)) = matched else {
+        let Some((credential, mut session_state)) = matched else {
             // Distinguish *in the evidence trail only* between a wrong password
             // and a credential that has run out, so an operator can tell a
             // support call from an attack. The caller still sees one message.
@@ -258,6 +258,19 @@ impl Authenticator {
             record_attempt(pool, email, context, outcome).await;
             return Err(CoreError::Unauthenticated(SIGN_IN_REFUSED.to_owned()));
         };
+
+        // A password alone must not establish privileged authority (ADR-0107).
+        // A permanent-password holder whose identity requires MFA gets a session
+        // that cannot work until the second factor is met — enrol on the first
+        // such login, challenge on the next. The change-password flow runs first
+        // (a temporary credential yields `PasswordChangeRequired`, not `Active`),
+        // so MFA gates only what would otherwise be an ordinary session.
+        if session_state == SessionState::Active {
+            let principal = super::service::principal_for_person(pool, &person).await?;
+            if super::mfa::mfa_required(&principal) {
+                session_state = SessionState::MfaRequired;
+            }
+        }
 
         // The password was right. If it is stored under weaker parameters than
         // are now configured, upgrade it while the plaintext is at hand.

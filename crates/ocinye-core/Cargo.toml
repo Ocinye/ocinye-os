@@ -24,6 +24,9 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 sha2 = { workspace = true }
 hkdf = { workspace = true }
+hmac = { workspace = true }
+sha1 = { workspace = true }
+data-encoding = { workspace = true }
 image = { workspace = true }
 rand = { workspace = true }
 argon2 = { workspace = true }

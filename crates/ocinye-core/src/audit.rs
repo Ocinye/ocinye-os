@@ -92,6 +92,23 @@ pub mod action {
     pub const GRANT_CREATED: &str = "grant_created";
     /// An explicit access grant was revoked.
     pub const GRANT_REVOKED: &str = "grant_revoked";
+    /// A second factor was enrolled: a confirmed TOTP seed now exists, and a
+    /// fresh set of recovery codes was issued (ADR-0107).
+    pub const MFA_ENROLLED: &str = "mfa_enrolled";
+    /// A second factor was reset: the seed and recovery codes were cleared.
+    pub const MFA_RESET: &str = "mfa_reset";
+    /// A recovery code was used to satisfy the second factor. Single-use.
+    pub const RECOVERY_CODE_USED: &str = "recovery_code_used";
+    /// Recovery codes were regenerated, invalidating the previous set.
+    pub const RECOVERY_CODES_REGENERATED: &str = "recovery_codes_regenerated";
+    /// An administrator revoked **one** session of a member.
+    ///
+    /// The exception to the note above, and a deliberate one: that note is about
+    /// revocation as a *consequence*, where the cause carries a count. This is a
+    /// cause of its own — an administrator ending one session of another person,
+    /// with an actor, a target and a session — and nothing else records it
+    /// (ADR-0107).
+    pub const MEMBER_SESSION_REVOKED: &str = "member_session_revoked";
     /// A platform administration operation.
     pub const ADMIN_OPERATION: &str = "admin_operation";
     /// An authorization denial worth recording.

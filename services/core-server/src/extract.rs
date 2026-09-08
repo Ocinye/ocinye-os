@@ -190,11 +190,19 @@ impl FromRequestParts<AppState> for CurrentPrincipal {
             RestrictedSession::from_request_parts(parts, state).await?;
 
         // The rule of briefing §22 and §24, in one place, for every endpoint.
+        // Each restricted state says its own reason: a password-change session
+        // and an MFA-gate session are both "not ordinary work", but sending an
+        // MFA-gated holder to set a password they already have would be a dead
+        // end (ADR-0107). The Experience routes on these to the right screen.
         if !session.state.permits_ordinary_work() {
+            let motivo = match session.state {
+                SessionState::MfaRequired => {
+                    "Confirme o segundo factor de autenticação antes de continuar."
+                }
+                _ => "Defina a sua palavra-passe definitiva antes de continuar.",
+            };
             return Err(ApiError::new(
-                CoreError::PermissionDenied(
-                    "Defina a sua palavra-passe definitiva antes de continuar.".to_owned(),
-                ),
+                CoreError::PermissionDenied(motivo.to_owned()),
                 &ids,
             ));
         }

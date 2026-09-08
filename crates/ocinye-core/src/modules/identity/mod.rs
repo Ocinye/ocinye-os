@@ -22,6 +22,7 @@ mod accounts;
 mod authentication;
 mod avatar;
 mod credentials;
+mod mfa;
 mod model;
 mod repository;
 mod service;
@@ -40,6 +41,10 @@ pub use credentials::{
     find_session, has_usable_credential, list_own_sessions, list_sessions, live_grants,
     revoke_all_sessions, revoke_own_session, revoke_session, session_digest, sweep_expired,
     touch_session, Credential, StoredSession,
+};
+pub use mfa::{
+    begin_enrollment, confirm_enrollment, consume_recovery_code, has_confirmed_totp, mfa_required,
+    verify_challenge, verify_totp, Enrollment,
 };
 pub use model::{Invitation, InvitationStatus, Person};
 pub use service::{
