@@ -605,11 +605,13 @@ pub fn member_detail(
     access: &Value,
     units_catalog: &Value,
     workspaces_catalog: &Value,
+    permissions_catalog: &Value,
     recusa: Option<&str>,
 ) -> impl IntoView {
     let person_id = text(person, "id").to_owned();
     let units_catalog = units_catalog.clone();
     let workspaces_catalog = workspaces_catalog.clone();
+    let permissions_catalog = permissions_catalog.clone();
     let recusa = recusa.map(str::to_owned);
     let name = text(person, "full_name").to_owned();
     // O endereço, uma vez. Havia aqui um `username` ao lado dele, e a linha
@@ -669,9 +671,12 @@ pub fn member_detail(
         <div class="oc-page">
             {section_head("Acesso", None, None)}
             {access_tab(&access)}
+            {roles_admin(&person_id, &access)}
+            {grants_admin(&person_id, &access, &permissions_catalog)}
             <div class="oc-vspace"></div>
             {section_head("Segurança", None, None)}
             {security_tab(&person_id, &security, recusa.as_deref())}
+            {account_admin(&person_id, &security)}
             <div class="oc-vspace"></div>
             {section_head("Unidades", None, None)}
             {units_admin(&person_id, &access, &units_catalog)}
@@ -1048,6 +1053,428 @@ pub fn workspaces_admin(person_id: &str, access: &Value, catalog: &Value) -> imp
     }
 }
 
+/// Rótulo legível de um papel técnico, a partir do catálogo local [`ROLES`].
+///
+/// O mesmo catálogo que o formulário de criação usa — não uma segunda lista a
+/// envelhecer ao lado. Um papel que este build não conhece mostra-se pelo seu
+/// identificador, que é honesto: inventar uma tradução seria pior.
+fn role_label(role: &str) -> &str {
+    ROLES
+        .iter()
+        .find(|(id, _)| *id == role)
+        .map_or(role, |(_, label)| label)
+}
+
+/// Administração dos **papéis técnicos** de um membro: conceder e revogar.
+///
+/// # Autoridade
+///
+/// Renderiza-se apenas quando o Core diz que o **actor** pode administrar papéis
+/// (`access.may_manage_roles`) — resolvido a partir da autoridade de quem
+/// consulta, nunca do que a conta-alvo tem. Sem esse sinal, a secção não
+/// aparece: um botão que o Core recusaria faria o administrador julgar-se sem
+/// autoridade que tem, ou o contrário. Cada operação é, ainda assim,
+/// reautorizada no Core no momento em que corre.
+pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
+    let pode_gerir = access
+        .get("may_manage_roles")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let actuais: Vec<String> = access
+        .get("roles")
+        .and_then(Value::as_array)
+        .map(|itens| {
+            itens
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let ja_tem: std::collections::HashSet<String> = actuais.iter().cloned().collect();
+    let elegiveis: Vec<(&str, &str)> = ROLES
+        .iter()
+        .filter(|(id, _)| !ja_tem.contains(*id))
+        .map(|(id, label)| (*id, *label))
+        .collect();
+
+    // A revogação de um papel batido no Core reautoriza o actor e pode ser
+    // recusada — retirar o último Platform Admin, por exemplo. A recusa volta ao
+    // ecrã em vez de ser engolida.
+    let linhas: Vec<_> = actuais
+        .iter()
+        .map(|role| {
+            let etiqueta = role_label(role).to_owned();
+            let accao = format!("/admin/members/{person_id}/roles/{role}/revoke");
+            view! {
+                <tr>
+                    <td>{etiqueta}</td>
+                    <td class="oc-td--actions">
+                        <form method="post" action=accao>
+                            <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">
+                                "Revogar"
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        })
+        .collect();
+
+    let sem_papeis = actuais.is_empty();
+    let accao_conceder = format!("/admin/members/{person_id}/roles");
+
+    view! {
+        {pode_gerir.then(|| view! {
+            <div class="oc-mt-6">
+                {card(
+                    section_head("Gerir papéis técnicos", None, None),
+                    view! {
+                        {if sem_papeis {
+                            view! { <p class="oc-muted">"Sem papéis técnicos atribuídos."</p> }
+                                .into_any()
+                        } else {
+                            view! {
+                                <table class="oc-table oc-table--dense">
+                                    <thead>
+                                        <tr>
+                                            <th>"Papel"</th>
+                                            <th class="oc-td--actions">"Acções"</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>{linhas}</tbody>
+                                </table>
+                            }
+                                .into_any()
+                        }}
+
+                        {if elegiveis.is_empty() {
+                            view! {
+                                <p class="oc-muted oc-mt-3">
+                                    "Este membro já tem todos os papéis do catálogo."
+                                </p>
+                            }
+                                .into_any()
+                        } else {
+                            view! {
+                                <form
+                                    method="post"
+                                    action=accao_conceder.clone()
+                                    class="oc-row oc-row--wrap oc-gap-3 oc-mt-3"
+                                >
+                                    <select class="oc-select" name="role" required>
+                                        <option value="">"Escolher papel…"</option>
+                                        {elegiveis
+                                            .clone()
+                                            .into_iter()
+                                            .map(|(id, label)| view! {
+                                                <option value=id>{label}</option>
+                                            })
+                                            .collect_view()}
+                                    </select>
+                                    <input
+                                        class="oc-input oc-fill"
+                                        type="text"
+                                        name="reason"
+                                        required
+                                        minlength="4"
+                                        placeholder="Razão (fica no registo de auditoria)"
+                                    />
+                                    <button class="oc-btn oc-btn--primary" type="submit">
+                                        "Conceder"
+                                    </button>
+                                </form>
+                            }
+                                .into_any()
+                        }}
+                    },
+                )}
+            </div>
+        })}
+    }
+}
+
+/// Administração dos **grants explícitos** de âmbito institucional de um membro.
+///
+/// # Fronteira do que se administra aqui
+///
+/// Só grants de âmbito **instituição**. O acesso dentro de unidades e de
+/// research workspaces administra-se nos separadores próprios (Unidades,
+/// Research Workspaces), onde o âmbito tem um alvo concreto. Um grant
+/// institucional é o que amplia o acesso de alguém para além do que os papéis
+/// lhe dão, e é essa a decisão que esta secção torna explícita e revogável.
+///
+/// # Autoridade
+///
+/// Renderiza-se apenas quando o Core diz que o actor pode gerir grants
+/// (`access.may_manage_grants`). O Core recusa conceder o que o próprio actor
+/// não possui — esta secção não repete essa regra, confia nela.
+pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value) -> impl IntoView {
+    let pode_gerir = access
+        .get("may_manage_grants")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let catalogo: Vec<String> = permissions_catalog
+        .as_array()
+        .or_else(|| permissions_catalog.get("items").and_then(Value::as_array))
+        .map(|itens| {
+            itens
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Só os grants vivos podem ser revogados; um já revogado mostra-se no
+    // separador Acesso, mas aqui não oferece botão.
+    let vivos: Vec<Value> = access
+        .get("grants")
+        .and_then(Value::as_array)
+        .map(|itens| {
+            itens
+                .iter()
+                .filter(|g| g.get("revoked_at").is_none_or(Value::is_null))
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let linhas: Vec<_> = vivos
+        .iter()
+        .filter_map(|grant| {
+            let id = grant.get("id").and_then(Value::as_str)?.to_owned();
+            let permissao = text(grant, "permission").to_owned();
+            let ambito = text(grant, "scope").to_owned();
+            let accao = format!("/admin/members/{person_id}/grants/{id}/revoke");
+            Some(view! {
+                <tr>
+                    <td class="oc-mono">{permissao}</td>
+                    <td class="oc-mono oc-muted">{ambito}</td>
+                    <td class="oc-td--actions">
+                        <form method="post" action=accao class="oc-row oc-gap-3">
+                            <input
+                                class="oc-input"
+                                type="text"
+                                name="reason"
+                                required
+                                minlength="4"
+                                placeholder="Razão"
+                            />
+                            <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">
+                                "Revogar"
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            })
+        })
+        .collect();
+
+    let sem_grants = linhas.is_empty();
+    let sem_catalogo = catalogo.is_empty();
+    let accao_conceder = format!("/admin/members/{person_id}/grants");
+
+    view! {
+        {pode_gerir.then(|| view! {
+            <div class="oc-mt-6">
+                {card(
+                    section_head("Gerir grants institucionais", None, None),
+                    view! {
+                        {if sem_grants {
+                            view! {
+                                <p class="oc-muted">
+                                    "Sem grants institucionais activos. O acesso deste membro vem
+                                     apenas de papéis e memberships."
+                                </p>
+                            }
+                                .into_any()
+                        } else {
+                            view! {
+                                <table class="oc-table oc-table--dense">
+                                    <thead>
+                                        <tr>
+                                            <th>"Permissão"</th>
+                                            <th>"Âmbito"</th>
+                                            <th class="oc-td--actions">"Acções"</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>{linhas}</tbody>
+                                </table>
+                            }
+                                .into_any()
+                        }}
+
+                        {if sem_catalogo {
+                            view! {
+                                <p class="oc-muted oc-mt-3">
+                                    "Catálogo de permissões indisponível."
+                                </p>
+                            }
+                                .into_any()
+                        } else {
+                            view! {
+                                <form
+                                    method="post"
+                                    action=accao_conceder.clone()
+                                    class="oc-row oc-row--wrap oc-gap-3 oc-mt-3"
+                                >
+                                    // Âmbito instituição: o acesso dentro de unidades e
+                                    // workspaces vive nos separadores próprios.
+                                    <input type="hidden" name="scope" value="institution" />
+                                    <select class="oc-select" name="permission" required>
+                                        <option value="">"Escolher permissão…"</option>
+                                        {catalogo
+                                            .clone()
+                                            .into_iter()
+                                            .map(|p| {
+                                                let rotulo = p.clone();
+                                                view! { <option value=p>{rotulo}</option> }
+                                            })
+                                            .collect_view()}
+                                    </select>
+                                    <input
+                                        class="oc-input oc-fill"
+                                        type="text"
+                                        name="reason"
+                                        required
+                                        minlength="4"
+                                        placeholder="Razão (fica no registo de auditoria)"
+                                    />
+                                    <button class="oc-btn oc-btn--primary" type="submit">
+                                        "Conceder grant"
+                                    </button>
+                                </form>
+                            }
+                                .into_any()
+                        }}
+                    },
+                )}
+            </div>
+        })}
+    }
+}
+
+/// Estados de conta para os quais faz sentido transitar, dado o estado actual.
+///
+/// Nunca se oferece o estado corrente, nem `invited` como destino — para esse
+/// volta-se pela emissão de credencial, não por uma mudança de estado.
+fn account_transitions(current: &str) -> Vec<(&'static str, &'static str)> {
+    match current {
+        "active" | "invited" => vec![
+            (
+                "suspended",
+                "Suspender — barra o acesso, preserva a autoria",
+            ),
+            (
+                "disabled",
+                "Desactivar — barra permanentemente, mantém o histórico",
+            ),
+        ],
+        "suspended" => vec![
+            ("active", "Reactivar — devolve o acesso"),
+            ("disabled", "Desactivar — barra permanentemente"),
+        ],
+        "disabled" => vec![("active", "Reactivar — devolve o acesso")],
+        _ => Vec::new(),
+    }
+}
+
+/// Administração da **credencial e do estado** de uma conta: repor
+/// palavra-passe e transitar o estado.
+///
+/// # Autoridade
+///
+/// Renderiza-se apenas quando o Core diz que o actor pode gerir a conta
+/// (`overview.may_manage_account`). A proibição de o administrador se
+/// auto-bloquear, e a de deixar a instituição sem um administrador capaz de
+/// entrar, vivem no Core, no momento da operação — não neste ecrã. Se o Core
+/// recusar, a razão volta ao detalhe.
+pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
+    let pode_gerir = overview
+        .get("may_manage_account")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let status = text(overview, "account_status").to_owned();
+    let transicoes = account_transitions(&status);
+    let sem_transicoes = transicoes.is_empty();
+    let accao_estado = format!("/admin/members/{person_id}/status");
+    let accao_reset = format!("/admin/members/{person_id}/reset-password");
+
+    view! {
+        {pode_gerir.then(|| view! {
+            <div class="oc-mt-6">
+                {card(
+                    section_head("Gerir credencial e estado", None, None),
+                    view! {
+                        <div>
+                            <div>
+                                <p class="oc-muted">
+                                    "Repor a palavra-passe emite uma credencial temporária nova,
+                                     invalida a definitiva e termina todas as sessões abertas. A
+                                     palavra-passe nova é mostrada uma única vez, no ecrã seguinte."
+                                </p>
+                                <form method="post" action=accao_reset.clone() class="oc-mt-3">
+                                    <button class="oc-btn oc-btn--danger" type="submit">
+                                        "Repor palavra-passe"
+                                    </button>
+                                </form>
+                            </div>
+
+                            <div class="oc-mt-6">
+                            {if sem_transicoes {
+                                view! {
+                                    <p class="oc-muted">
+                                        "Não há transições de estado disponíveis a partir do estado
+                                         actual."
+                                    </p>
+                                }
+                                    .into_any()
+                            } else {
+                                view! {
+                                    <form
+                                        method="post"
+                                        action=accao_estado.clone()
+                                        class="oc-row oc-row--wrap oc-gap-3"
+                                    >
+                                        <select class="oc-select" name="status" required>
+                                            <option value="">"Alterar estado para…"</option>
+                                            {transicoes
+                                                .clone()
+                                                .into_iter()
+                                                .map(|(value, label)| view! {
+                                                    <option value=value>{label}</option>
+                                                })
+                                                .collect_view()}
+                                        </select>
+                                        <input
+                                            class="oc-input oc-fill"
+                                            type="text"
+                                            name="reason"
+                                            required
+                                            minlength="4"
+                                            placeholder="Razão (fica no registo de auditoria)"
+                                        />
+                                        <button class="oc-btn oc-btn--primary" type="submit">
+                                            "Aplicar"
+                                        </button>
+                                    </form>
+                                }
+                                    .into_any()
+                            }}
+                            </div>
+                        </div>
+                    },
+                )}
+            </div>
+        })}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1375,6 +1802,7 @@ mod tests {
             &json!({"roles": ["research_member"], "grants": [], "institution_permissions": []}),
             &json!({"items": []}),
             &json!({"items": []}),
+            &json!([]),
             None,
         )
         .to_html();
@@ -1395,6 +1823,7 @@ mod tests {
             &json!({"roles": [], "grants": [], "institution_permissions": []}),
             &json!({"items": []}),
             &json!({"items": []}),
+            &json!([]),
             None,
         )
         .to_html()
@@ -1408,5 +1837,112 @@ mod tests {
     #[test]
     fn uma_origem_desconhecida_e_declarada_e_nao_inventada() {
         assert_eq!(source_label("something_new"), "origem desconhecida");
+    }
+
+    // ── Fatia 3: Acesso / Segurança ──────────────────────────────────────
+
+    /// A autoridade é do actor. Sem o sinal do Core, a gestão de papéis não
+    /// aparece — nem revogar, nem conceder.
+    #[test]
+    fn gerir_papeis_so_aparece_quando_o_actor_pode() {
+        let sem = roles_admin(
+            PID,
+            &json!({ "roles": ["research_member"], "may_manage_roles": false }),
+        )
+        .to_html();
+        assert!(!sem.contains("Gerir papéis técnicos"));
+        assert!(!sem.contains("/roles/research_member/revoke"));
+
+        let com = roles_admin(
+            PID,
+            &json!({ "roles": ["research_member"], "may_manage_roles": true }),
+        )
+        .to_html();
+        assert!(com.contains("Gerir papéis técnicos"));
+        // Revoga o papel que tem…
+        assert!(com.contains(&format!(
+            "action=\"/admin/members/{PID}/roles/research_member/revoke\""
+        )));
+        // …e oferece conceder um que não tem, pela acção certa.
+        assert!(com.contains(&format!("action=\"/admin/members/{PID}/roles\"")));
+        assert!(com.contains("value=\"platform_admin\""));
+        // Não reoferece o que já tem.
+        assert!(!com.contains("value=\"research_member\""));
+    }
+
+    /// Só grants vivos podem ser revogados; um já revogado não ganha botão.
+    #[test]
+    fn gerir_grants_revoga_so_os_vivos_e_gated_pelo_actor() {
+        let access = json!({
+            "may_manage_grants": true,
+            "grants": [
+                { "id": "aaaaaaaa-0000-0000-0000-000000000001", "permission": "datasets.manage", "scope": "institution", "revoked_at": null },
+                { "id": "aaaaaaaa-0000-0000-0000-000000000002", "permission": "ai.use", "scope": "institution", "revoked_at": "2026-09-01T00:00:00Z" }
+            ]
+        });
+        let html = grants_admin(PID, &access, &json!(["datasets.manage", "ai.use"])).to_html();
+        assert!(html.contains("Gerir grants institucionais"));
+        // O vivo tem botão de revogar…
+        assert!(html.contains("action=\"/admin/members/11111111-1111-1111-1111-111111111111/grants/aaaaaaaa-0000-0000-0000-000000000001/revoke\""));
+        // …o já revogado, não.
+        assert!(!html.contains("grants/aaaaaaaa-0000-0000-0000-000000000002/revoke"));
+        // O formulário de conceder fixa o âmbito instituição.
+        assert!(html.contains("name=\"scope\" value=\"institution\""));
+
+        let sem = grants_admin(
+            PID,
+            &json!({ "may_manage_grants": false, "grants": [] }),
+            &json!([]),
+        )
+        .to_html();
+        assert!(!sem.contains("Gerir grants institucionais"));
+    }
+
+    /// As transições oferecidas dependem do estado actual, e nunca oferecem o
+    /// estado corrente nem `invited`.
+    #[test]
+    fn transicoes_de_conta_dependem_do_estado() {
+        assert_eq!(
+            account_transitions("active"),
+            vec![
+                (
+                    "suspended",
+                    "Suspender — barra o acesso, preserva a autoria"
+                ),
+                (
+                    "disabled",
+                    "Desactivar — barra permanentemente, mantém o histórico"
+                ),
+            ]
+        );
+        assert_eq!(
+            account_transitions("disabled"),
+            vec![("active", "Reactivar — devolve o acesso")]
+        );
+        // Estado desconhecido não inventa transições.
+        assert!(account_transitions("qualquer").is_empty());
+    }
+
+    /// A gestão de credencial e estado é gated pelo sinal do actor, e oferece
+    /// repor palavra-passe e as transições certas.
+    #[test]
+    fn gerir_conta_gated_pelo_actor_e_com_as_accoes_certas() {
+        let com = account_admin(
+            PID,
+            &json!({ "account_status": "active", "may_manage_account": true }),
+        )
+        .to_html();
+        assert!(com.contains("Gerir credencial e estado"));
+        assert!(com.contains(&format!("action=\"/admin/members/{PID}/reset-password\"")));
+        assert!(com.contains(&format!("action=\"/admin/members/{PID}/status\"")));
+        assert!(com.contains("value=\"suspended\""));
+
+        let sem = account_admin(
+            PID,
+            &json!({ "account_status": "active", "may_manage_account": false }),
+        )
+        .to_html();
+        assert!(!sem.contains("Gerir credencial e estado"));
+        assert!(!sem.contains("reset-password"));
     }
 }

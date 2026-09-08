@@ -189,7 +189,7 @@ carregamento-em-partes|8|-p ocinye-core --test segmented_upload
 # A identidade privilegiada ligada. As duas verdades — que tipo de identidade
 # iniciou a sessão, e que autoridade ela tem agora — são independentes, e é isso
 # que estas provas fixam.
-identidade-privilegiada|12|-p ocinye-core --test privileged_identity
+identidade-privilegiada|14|-p ocinye-core --test privileged_identity
 TABELA
 }
 

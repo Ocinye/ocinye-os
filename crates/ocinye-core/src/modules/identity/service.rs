@@ -388,6 +388,12 @@ pub async fn revoke_role(
         .await?
         .ok_or_else(|| CoreError::NotFound("Person not found.".to_owned()))?;
 
+    // Removing the last platform administrator's role locks the institution out
+    // of its own administration just as surely as suspending them would.
+    if role == TechnicalRole::PlatformAdmin {
+        super::accounts::ensure_not_sole_platform_admin(tx, &person).await?;
+    }
+
     if !repo::revoke_role(&mut **tx, person.id, role).await? {
         return Err(CoreError::NotFound("This role is not granted.".to_owned()));
     }

@@ -1498,6 +1498,7 @@ pub(crate) mod link_tests {
                         "password_changed_at": "2026-08-22T09:14:00Z",
                         "last_successful_sign_in": "2026-08-22T10:31:00Z",
                         "recent_failed_attempts": 0,
+                        "may_manage_account": true,
                         "live_sessions": [{
                             "state": "active",
                             "user_agent": "Firefox 142 · macOS",
@@ -1507,6 +1508,8 @@ pub(crate) mod link_tests {
                     &json!({
                         "roles": ["research_member"],
                         "grants": [],
+                        "may_manage_roles": true,
+                        "may_manage_grants": true,
                         "institution_permissions": [
                             {"permission": "ideas.view", "source": "technical_role"},
                             {"permission": "projects.view", "source": "technical_role"},
@@ -1520,6 +1523,12 @@ pub(crate) mod link_tests {
                     &json!({"items": [
                         {"id": "77777777-7777-7777-7777-777777777777", "title": "Modelos de linguagem", "code": "LLM", "kind": "project"}
                     ]}),
+                    &json!([
+                        "ideas.view",
+                        "ideas.manage",
+                        "projects.view",
+                        "datasets.manage"
+                    ]),
                     None,
                 )
             ),

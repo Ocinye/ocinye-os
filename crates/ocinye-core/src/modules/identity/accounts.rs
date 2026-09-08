@@ -531,6 +531,51 @@ pub async fn reset_password(
     })
 }
 
+/// Refuse an operation that would leave the institution without a single
+/// administrator able to enter it.
+///
+/// It is the counterpart, for *other people*, of the self-lockout guard inside
+/// [`set_account_status`]: that one stops you locking yourself out; this one
+/// stops you locking out the last person who could let anyone back in — by
+/// stripping their `PlatformAdmin` role, or by suspending or disabling them.
+///
+/// A no-op unless `person` is, at this moment, an *authenticating*
+/// `PlatformAdmin`: a suspended administrator already counts for nothing, so
+/// removing their role changes nothing this guard protects. "Authenticating"
+/// and "another exists" are both read against the live database inside the
+/// caller's transaction, so the decision cannot race a concurrent demotion.
+///
+/// # Errors
+///
+/// Returns [`CoreError::Validation`] when `person` is the last authenticating
+/// platform administrator, or a database error.
+pub(super) async fn ensure_not_sole_platform_admin(
+    tx: &mut crate::Tx<'_>,
+    person: &Person,
+) -> CoreResult<()> {
+    let holds_admin = repo::live_roles(&mut **tx, person.id)
+        .await?
+        .contains(&TechnicalRole::PlatformAdmin);
+
+    if holds_admin
+        && person.account_status().may_authenticate()
+        && !repo::other_authenticating_platform_admin_exists(
+            &mut **tx,
+            person.organisation_id,
+            person.id,
+        )
+        .await?
+    {
+        return Err(CoreError::Validation(
+            "Não pode remover o último administrador da plataforma capaz de entrar. \
+             Promova ou reactive outro Platform Admin primeiro."
+                .to_owned(),
+        ));
+    }
+
+    Ok(())
+}
+
 /// Change an account's status.
 ///
 /// Suspension and disabling both revoke every session immediately: an access
@@ -557,6 +602,13 @@ pub async fn set_account_status(
     }
 
     let mut tx = pool.begin().await?;
+
+    // Barring someone else is exactly how you can still empty the institution
+    // of administrators — the self-lockout guard above does not see it.
+    if !status.may_authenticate() {
+        ensure_not_sole_platform_admin(&mut tx, person).await?;
+    }
+
     repo::set_status(&mut *tx, person.id, status).await?;
 
     let revoked = if status.may_authenticate() {

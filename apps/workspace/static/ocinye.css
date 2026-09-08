@@ -923,6 +923,17 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
   color: var(--oc-on-navy);
 }
 
+/* Acção destrutiva. A cor não é o único sinal — o rótulo di-lo por extenso
+   («Revogar», «Suspender», «Repor palavra-passe») (briefing §51). */
+.oc-btn--danger {
+  background: var(--oc-surface); color: var(--oc-error-text);
+  border: 1px solid var(--oc-error-border);
+}
+.oc-btn--danger:hover { background: var(--oc-error-bg); border-color: var(--oc-error); }
+
+/* Botão compacto, para acções em linha dentro de tabelas densas. */
+.oc-btn--sm { height: 26px; padding: 0 9px; font-size: 11px; }
+
 .oc-btn__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--oc-gold); }
 
 /* ─── Menu + Criar ───────────────────────────────────────────────────── */
@@ -1134,6 +1145,21 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 
 .oc-table { overflow: hidden; }
 .oc-table__scroll { overflow-x: auto; }
+
+/* Tabela densa nativa (`<table>`/`<thead>`/`<tbody>`), usada nas superfícies de
+   administração para pertenças, papéis e grants. Distinta da tabela em grelha
+   (`.oc-table__head`/`.oc-table__row`), que serve listagens maiores. */
+.oc-table--dense { width: 100%; border-collapse: collapse; }
+.oc-table--dense th, .oc-table--dense td {
+  padding: 7px 10px; text-align: left; vertical-align: middle;
+  border-bottom: 1px solid var(--oc-border-soft); font-size: 12px;
+}
+.oc-table--dense th {
+  font: 500 10px var(--oc-font-mono); letter-spacing: .08em;
+  color: var(--oc-text-meta); white-space: nowrap;
+}
+.oc-table--dense tr:last-child td { border-bottom: 0; }
+.oc-td--actions { text-align: right; white-space: nowrap; }
 
 .oc-table__bar {
   height: 44px; padding: 0 12px; gap: 10px;

@@ -11,7 +11,7 @@
 //! > **Uma identidade privilegiada com credencial utilizável e sem dono válido
 //! > é impossível — não improvável.**
 
-use ocinye_contracts::TechnicalRole;
+use ocinye_contracts::{AccountStatus, TechnicalRole};
 use ocinye_core::error::CoreError;
 use ocinye_core::modules::identity::{self, HumanOwner};
 use ocinye_core::password::{Hasher, HashingParams};
@@ -754,4 +754,140 @@ async fn nao_se_provisiona_alguem_de_outra_organizacao() {
         credenciais, 0,
         "ficou-lhe uma credencial emitida de fora da instituição"
     );
+}
+
+// ── O último administrador da plataforma não se remove ────────────────────
+//
+// > **Nenhuma operação pode deixar a instituição sem um administrador da
+// > plataforma capaz de entrar.**
+//
+// A proibição de auto-bloqueio já impedia alguém de se suspender a si próprio;
+// não via barrar *outra* pessoa, nem revogar o papel. É o mesmo fim — a
+// instituição fechada fora da sua própria administração — por três portas.
+
+/// Insere uma pessoa activa e devolve o seu id.
+async fn pessoa_activa(pool: &PgPool, org: Uuid) -> Uuid {
+    let email = format!("u{}@ocinye.com", Uuid::new_v4().simple());
+    sqlx::query_scalar(
+        "INSERT INTO people (organisation_id, email, full_name, status)
+         VALUES ($1, $2, 'Alguém', 'active') RETURNING id",
+    )
+    .bind(org)
+    .bind(email)
+    .fetch_one(pool)
+    .await
+    .expect("pessoa")
+}
+
+async fn da_papel(pool: &PgPool, person_id: Uuid, role: &str) {
+    sqlx::query("INSERT INTO person_roles (person_id, role) VALUES ($1, $2)")
+        .bind(person_id)
+        .bind(role)
+        .execute(pool)
+        .await
+        .expect("papel");
+}
+
+/// Suspender o único administrador da plataforma é recusado; com um segundo, a
+/// mesma operação passa. O actor não é o alvo — não é o auto-bloqueio que se
+/// testa aqui, é a continuidade da administração.
+#[tokio::test]
+async fn nao_se_suspende_o_ultimo_administrador() {
+    let Some(pool) = pool().await else {
+        return;
+    };
+    let org = organizacao(&pool).await;
+
+    let alvo = pessoa_activa(&pool, org).await;
+    da_papel(&pool, alvo, "platform_admin").await;
+
+    // Um actor distinto do alvo, para que o guarda de auto-bloqueio não dispare
+    // e o que se exerça seja o de continuidade.
+    let actor_id = pessoa_activa(&pool, org).await;
+    da_papel(&pool, actor_id, "organisation_admin").await;
+    let actor_pessoa = identity::person_by_id(&pool, actor_id)
+        .await
+        .expect("leitura")
+        .expect("existe");
+    let actor = identity::principal_for_person(&pool, &actor_pessoa)
+        .await
+        .expect("principal");
+    let alvo_pessoa = identity::person_by_id(&pool, alvo)
+        .await
+        .expect("leitura")
+        .expect("existe");
+    let ids = CorrelationIds::generate();
+
+    let erro = identity::set_account_status(
+        &pool,
+        &actor,
+        &alvo_pessoa,
+        AccountStatus::Suspended,
+        "reorganização",
+        &ids,
+    )
+    .await
+    .expect_err("suspendeu o último administrador da plataforma");
+    assert!(
+        matches!(erro, CoreError::Validation(_)),
+        "esperava recusa de validação, veio {erro:?}"
+    );
+
+    // Um segundo administrador activo, e a mesma suspensão passa.
+    let segundo = pessoa_activa(&pool, org).await;
+    da_papel(&pool, segundo, "platform_admin").await;
+
+    identity::set_account_status(
+        &pool,
+        &actor,
+        &alvo_pessoa,
+        AccountStatus::Suspended,
+        "reorganização",
+        &ids,
+    )
+    .await
+    .expect("com um segundo administrador, a suspensão é permitida");
+}
+
+/// Revogar o `PlatformAdmin` do último administrador é recusado; com um segundo
+/// administrador, a revogação passa. O actor é ele próprio administrador — sem
+/// isso, a autorização recusaria antes de o guarda sequer correr.
+#[tokio::test]
+async fn nao_se_revoga_o_papel_do_ultimo_administrador() {
+    let Some(pool) = pool().await else {
+        return;
+    };
+    let org = organizacao(&pool).await;
+
+    // Único administrador, e também o actor: revoga o seu próprio papel.
+    let admin = pessoa_activa(&pool, org).await;
+    da_papel(&pool, admin, "platform_admin").await;
+    let admin_pessoa = identity::person_by_id(&pool, admin)
+        .await
+        .expect("leitura")
+        .expect("existe");
+    let actor = identity::principal_for_person(&pool, &admin_pessoa)
+        .await
+        .expect("principal");
+    let ids = CorrelationIds::generate();
+
+    let mut tx = pool.begin().await.expect("tx");
+    let erro = identity::revoke_role(&mut tx, &actor, &ids, admin, TechnicalRole::PlatformAdmin)
+        .await
+        .expect_err("revogou o papel do último administrador");
+    assert!(
+        matches!(erro, CoreError::Validation(_)),
+        "esperava recusa de validação, veio {erro:?}"
+    );
+    drop(tx);
+
+    // Um segundo administrador activo, e a revogação do primeiro passa.
+    let segundo = pessoa_activa(&pool, org).await;
+    da_papel(&pool, segundo, "platform_admin").await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    identity::revoke_role(&mut tx, &actor, &ids, admin, TechnicalRole::PlatformAdmin)
+        .await
+        .expect("com um segundo administrador, a revogação é permitida");
+    tx.commit().await.expect("commit");
 }

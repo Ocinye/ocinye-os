@@ -197,6 +197,37 @@ pub async fn delete(
     interpret(response).await
 }
 
+/// Send a `DELETE` carrying a JSON body to the Core.
+///
+/// A revocation is a `DELETE`, but the Core still needs to hear *why* — the
+/// reason for revoking a grant, or *which* role to strip. That belongs in the
+/// body, not the path: a reason in the URL would end up in logs and history
+/// (briefing §41). [`delete`] sends nothing, so this exists alongside it rather
+/// than growing an `Option` onto it.
+///
+/// # Errors
+///
+/// Returns [`ApiFailure`] when the Core is unreachable or refuses.
+pub async fn delete_with_body(
+    state: &WorkspaceState,
+    token: &str,
+    correlation_id: &str,
+    path: &str,
+    body: &Value,
+) -> Result<Value, ApiFailure> {
+    let response = state
+        .http
+        .delete(format!("{}{path}", state.config.core_url))
+        .bearer_auth(token)
+        .header(ocinye_observability::CORRELATION_ID_HEADER, correlation_id)
+        .json(body)
+        .send()
+        .await
+        .map_err(|error| ApiFailure::Failed(format!("the Core is unreachable: {error}")))?;
+
+    interpret(response).await
+}
+
 /// Read the Core's answer to a state-changing call.
 ///
 /// The Core's error envelope is flat — `{"code", "message", "request_id"}`, not

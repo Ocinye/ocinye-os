@@ -286,6 +286,43 @@ pub async fn revoke_role<'e>(
     Ok(result.rows_affected() > 0)
 }
 
+/// Whether the organisation has another person who both holds a live
+/// `PlatformAdmin` role and can still authenticate, other than `exclude`.
+///
+/// This is the whole of the last-administrator safeguard. "Can authenticate"
+/// is [`AccountStatus::may_authenticate`] read back in SQL — a suspended admin
+/// does not count, because an institution locked behind a suspended account is
+/// as locked as one with no admin at all. The count deliberately excludes the
+/// person whose demotion or suspension is being considered, so the caller asks
+/// "if I remove this one, does anyone remain?" without arithmetic.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn other_authenticating_platform_admin_exists<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    exclude_person_id: Uuid,
+) -> CoreResult<bool> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1
+               FROM person_roles pr
+               JOIN people p ON p.id = pr.person_id
+              WHERE pr.role = 'platform_admin'
+                AND pr.revoked_at IS NULL
+                AND p.organisation_id = $1
+                AND p.id <> $2
+                AND p.status IN ('invited', 'active')
+         )",
+    )
+    .bind(organisation_id)
+    .bind(exclude_person_id)
+    .fetch_one(executor)
+    .await?;
+    Ok(exists)
+}
+
 /// Whether a person with this email already exists.
 ///
 /// # Errors
