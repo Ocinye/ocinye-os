@@ -490,6 +490,14 @@ impl Harness {
                 .expect("papel");
         }
 
+        // Uma conta privilegiada exige MFA (ADR-0107). Para o desafio poder
+        // correr pelo fluxo real, a conta chega a este ponto **já enrolada** — o
+        // enrolamento prova-se numa viagem própria, não a cada entrada.
+        let exige_mfa = roles.contains(&TechnicalRole::PlatformAdmin);
+        if exige_mfa {
+            self.seed_confirmed_totp(person_id).await;
+        }
+
         // A palavra-passe é criada com o mesmo `Hasher` que o Core usa para a
         // verificar. Um verificador escrito de outra maneira faria o teste
         // provar a sua própria aritmética.
@@ -590,6 +598,15 @@ impl Harness {
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
+
+        // Uma identidade privilegiada aterra no desafio de MFA, não no Workspace.
+        // Satisfaz-se aqui, pelo fluxo real, para a viagem continuar numa sessão
+        // já assegurada.
+        if exige_mfa && destino.contains("/mfa") {
+            self.completar_desafio_mfa(&page).await;
+            destino = page.url().await.expect("endereço").unwrap_or_default();
+        }
+
         if destino.ends_with("/login") {
             let diagnostico = self
                 .open("/login")
@@ -619,6 +636,56 @@ impl Harness {
         }
 
         (person_id, Credenciais { email, password })
+    }
+
+    /// Prepara uma conta privilegiada como **já enrolada** no MFA: sela o seed
+    /// de teste com a chave do Core e marca-o confirmado.
+    ///
+    /// É fixture — o enrolamento em si prova-se numa viagem dedicada. O que estas
+    /// contas exercem é o **desafio**, e o desafio corre pelo fluxo real.
+    /// `last_accepted_step` fica nulo, para que o primeiro desafio não bata em
+    /// protecção de replay.
+    async fn seed_confirmed_totp(&self, person_id: Uuid) {
+        let selado = ocinye_core::password::sealed::seal(
+            chave_do_correio(),
+            ocinye_core::password::sealed::SealingDomain::MfaTotp,
+            SEMENTE_MFA,
+        )
+        .expect("selar o seed de teste");
+        sqlx::query(
+            "INSERT INTO mfa_totp_secrets (person_id, nonce, ciphertext, confirmed_at)
+                 VALUES ($1, $2, $3, now())
+             ON CONFLICT (person_id) DO UPDATE
+                 SET nonce = EXCLUDED.nonce,
+                     ciphertext = EXCLUDED.ciphertext,
+                     confirmed_at = now(),
+                     last_accepted_step = NULL",
+        )
+        .bind(person_id)
+        .bind(&selado.nonce)
+        .bind(&selado.ciphertext)
+        .execute(&self.pool)
+        .await
+        .expect("seed TOTP de teste");
+    }
+
+    /// No ecrã de desafio, escreve um código válido e submete — pelo fluxo real,
+    /// como um autenticador faria. Espera sair de `/mfa`.
+    async fn completar_desafio_mfa(&self, page: &Page) {
+        set_field(page, "#mfa-code", &codigo_mfa()).await;
+        submit(page, "form[action=\"/mfa/challenge\"]").await;
+        for _ in 0..60 {
+            let url = page.url().await.expect("endereço").unwrap_or_default();
+            if !url.contains("/mfa") {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let visivel = page.content().await.unwrap_or_default();
+        panic!(
+            "o desafio de MFA não passou; a página continua em /mfa:\n{}",
+            visivel.chars().take(600).collect::<String>()
+        );
     }
 
     /// Entra com uma credencial temporária, como quem recebe um primeiro acesso.
@@ -690,6 +757,12 @@ impl Harness {
             "não foi possível voltar a entrar como «{}»",
             credenciais.email
         );
+        // Uma identidade privilegiada volta a passar pelo desafio a cada entrada.
+        // A conta já está enrolada (do `sign_in` que a criou), por isso o desafio
+        // basta — e corre pelo fluxo real.
+        if destino.contains("/mfa") {
+            self.completar_desafio_mfa(&page).await;
+        }
     }
 
     /// Uma unidade que esta pessoa gere, para poder marcar fora do pessoal.
@@ -1352,6 +1425,46 @@ fn chave_do_correio() -> &'static ocinye_core::password::sealed::SealingKey {
         )
         .expect("uma chave acabada de gerar tem de abrir")
     })
+}
+
+/// O seed TOTP de teste, partilhado por todas as contas privilegiadas do
+/// harness.
+///
+/// Partilhá-lo é seguro: cada viagem tem a sua conta isolada, e o seed não é um
+/// segredo de produção — nunca é o de `Fidel Admin` nem sai daqui. Vinte bytes
+/// em base32, para o autenticador de teste calcular o mesmo código que o Core
+/// espera (RFC 4226).
+const SEMENTE_MFA: &str = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+
+/// O código TOTP de [`SEMENTE_MFA`] **agora**.
+///
+/// # Porque isto não depende do relógio da máquina de forma frágil
+///
+/// O harness e o Core partilham o mesmo relógio (o Core corre neste processo), e
+/// a janela canónica de ±1 passo do Core absorve o micro-desvio entre calcular
+/// aqui e verificar lá: um código para o passo N é aceite quer o Core esteja no
+/// passo N quer no N+1, porque ambas as janelas contêm N. Não há `sleep`, não há
+/// janela alargada, não há sorte de temporização — e não se depende de **qual**
+/// é a hora, só de que os dois lados a leem igual, o que é garantido por serem o
+/// mesmo processo (ADR-0107).
+fn codigo_mfa() -> String {
+    use data_encoding::BASE32_NOPAD;
+    use hmac::{Hmac, Mac};
+    use sha1::Sha1;
+
+    let seed = BASE32_NOPAD
+        .decode(SEMENTE_MFA.as_bytes())
+        .expect("o seed de teste é base32 válido");
+    let counter = (chrono::Utc::now().timestamp().max(0) as u64) / 30;
+    let mut mac = <Hmac<Sha1> as Mac>::new_from_slice(&seed).expect("hmac");
+    mac.update(&counter.to_be_bytes());
+    let d = mac.finalize().into_bytes();
+    let off = (d[d.len() - 1] & 0x0f) as usize;
+    let bin = (u32::from(d[off] & 0x7f) << 24)
+        | (u32::from(d[off + 1]) << 16)
+        | (u32::from(d[off + 2]) << 8)
+        | u32::from(d[off + 3]);
+    format!("{:06}", bin % 1_000_000)
 }
 
 /// O armazenamento de objectos das viagens que carregam bytes.

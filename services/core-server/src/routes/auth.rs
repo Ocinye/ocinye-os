@@ -85,7 +85,10 @@ impl SessionResponse {
             session_token: issued.token.expose().to_owned(),
             state: issued.state.as_str(),
             display_name: issued.display_name.clone(),
-            must_change_password: !issued.state.permits_ordinary_work(),
+            // Precisely the password-change state, not merely "not ordinary
+            // work": an `mfa_required` session also cannot do ordinary work, but
+            // it does not owe a password (ADR-0107). Clients route on `state`.
+            must_change_password: issued.state == SessionState::PasswordChangeRequired,
         }
     }
 }
@@ -228,7 +231,9 @@ async fn session(
     Json(RestrictedIdentity {
         display_name: person.preferred_name().to_owned(),
         state: session.state.as_str(),
-        must_change_password: !session.state.permits_ordinary_work(),
+        // The password-change state precisely, not any restricted state: an
+        // `mfa_required` session owes a second factor, not a password.
+        must_change_password: session.state == SessionState::PasswordChangeRequired,
         minimum_password_length: policy::MIN_LENGTH,
     })
 }

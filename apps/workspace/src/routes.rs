@@ -6850,11 +6850,13 @@ impl CoreSession {
                 .and_then(Value::as_str)
                 .unwrap_or("Membro")
                 .to_owned(),
-            must_change_password: payload
-                .get("must_change_password")
-                .and_then(Value::as_bool)
-                // Sem o campo, assume-se que falta mudar: falhar fechado.
-                .unwrap_or(true),
+            // Derivado do **estado**, e não do booleano `must_change_password`
+            // do Core: esse é `!permits_ordinary_work()`, verdadeiro também para
+            // `mfa_required` — e encaminhar uma sessão de MFA para o primeiro
+            // acesso mandá-la-ia definir uma palavra-passe que já tem. Cada
+            // estado restrito diz o seu, e o encaminhamento distingue-os.
+            must_change_password: payload.get("state").and_then(Value::as_str)
+                == Some("password_change_required"),
             mfa_required: payload.get("state").and_then(Value::as_str) == Some("mfa_required"),
         })
     }
