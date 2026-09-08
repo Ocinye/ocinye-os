@@ -3171,6 +3171,15 @@ async fn uma_agenda_que_falha_nao_diz_que_esta_vazia() {
     );
 
     // O núcleo cai.
+    //
+    // Com o Core inteiramente em baixo, o `/me` que estabelece a identidade da
+    // sessão também falha. A sessão falha então **fechado**: não se afirma uma
+    // sessão que não se conseguiu ler, e a superfície neutra substitui a shell
+    // (ver `shell::identidade_indeterminada`). O que este teste guarda mantém-se
+    // — nunca se diz «vazio» quando a leitura falhou —, e é agora a superfície
+    // de sessão, e não a mensagem por painel, que o diz. A distinção entre agenda
+    // vazia e agenda que falhou continua provada para falhas **parciais** (o
+    // Core de pé, a leitura da agenda a recusar) noutros testes.
     harness.stop_core();
     tokio::time::sleep(Duration::from_millis(200)).await;
 
@@ -3187,8 +3196,8 @@ async fn uma_agenda_que_falha_nao_diz_que_esta_vazia() {
             "«{vista}» disse que não há nada quando a verdade é que não conseguiu ler"
         );
         assert!(
-            html.contains("Não foi possível ler a agenda"),
-            "«{vista}» não diz que a leitura falhou"
+            html.contains("Não foi possível estabelecer a sua sessão"),
+            "«{vista}» não falhou fechado quando o Core estava em baixo"
         );
     }
 }
