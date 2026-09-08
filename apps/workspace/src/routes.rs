@@ -6982,10 +6982,27 @@ async fn first_access_submit(
 // ── Segundo factor (ADR-0107) ───────────────────────────────────────────────
 
 /// Query do ecrã de MFA: `?show_key=1` revela a chave manual.
+///
+/// A ligação que o ecrã emite é `?show_key=1` — um valor de bandeira, à maneira
+/// de um formulário HTML, e não o literal `true` que o `bool` de serde exige. Um
+/// `bool` directo recusava o próprio link que a Experience mostra, com um erro de
+/// desserialização. Aceita-se a bandeira: presente e igual a `1` ou `true` revela;
+/// tudo o resto, incluindo a ausência, não revela.
 #[derive(Deserialize)]
 struct MfaQuery {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "flag_presente")]
     show_key: bool,
+}
+
+/// Lê uma bandeira de query no estilo de formulário: `1`/`true` é verdadeiro, o
+/// resto é falso. Nunca falha a desserialização por um valor inesperado — uma
+/// bandeira ou está ligada ou não está.
+fn flag_presente<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let bruto = String::deserialize(deserializer)?;
+    Ok(matches!(bruto.as_str(), "1" | "true"))
 }
 
 /// Um código submetido — de autenticador ou de recuperação.
@@ -7023,8 +7040,11 @@ async fn mfa_page(
         _ => {
             // Enrolamento: o QR (e, se pedida, a chave manual) vêm do Core, que
             // devolve sempre o mesmo seed por confirmar.
+            // `reveal=true`, e não `reveal=1`: a query do Core desserializa um
+            // `bool` canónico, e a bandeira de estilo de formulário (`show_key=1`)
+            // pertence à ligação que o ecrã emite, não à chamada interna à API.
             let caminho = if query.show_key {
-                "/api/v1/auth/mfa/enroll?reveal=1"
+                "/api/v1/auth/mfa/enroll?reveal=true"
             } else {
                 "/api/v1/auth/mfa/enroll"
             };

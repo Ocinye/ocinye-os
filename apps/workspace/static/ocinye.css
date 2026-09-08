@@ -23,6 +23,10 @@
   --oc-surface-muted:   #F3F6F9;
   --oc-surface-tint:    #F1F4F8;
   --oc-surface-hover:   #F8FAFC;
+  /* O papel do QR do MFA: branco puro, e não uma superfície temável. Um leitor
+     precisa de módulos escuros sobre um campo claro; se um tema futuro escurecer
+     `--oc-surface`, o QR deixaria de ler. Fica à parte de propósito. */
+  --oc-mfa-qr-paper:    #FFFFFF;
 
   /* Linhas */
   --oc-border:          #E4E9F0;
@@ -5747,7 +5751,7 @@ select.oc-entrada {
 .oc-mfa__lead { margin: 0 0 14px; font-size: 13px; color: var(--oc-text-muted); line-height: 1.5; }
 .oc-mfa__qr { margin: 0 auto 14px; width: max-content; }
 .oc-mfa__qr-img {
-  width: 220px; height: 220px; padding: 10px; background: #fff;
+  width: 220px; height: 220px; padding: 10px; background: var(--oc-mfa-qr-paper);
   border: 1px solid var(--oc-border); border-radius: var(--oc-r-md);
 }
 .oc-mfa__qr-img svg { display: block; width: 100%; height: 100%; }

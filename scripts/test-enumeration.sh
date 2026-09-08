@@ -171,9 +171,14 @@ suites() {
 # reversão que só desligando **quatro** camadas independentes é que a unidade
 # volta a ser legível a quem foi suspenso.
 #
+# 89 desde 2026-09-08: entraram as quatro viagens do segundo factor (ADR-0107) —
+# enrolar o factor do primeiro acesso à sessão privilegiada, o desafio a preceder
+# a autoridade, um código de recuperação que entra uma vez e não a segunda, e a
+# revogação de uma sessão de membro pelo produto.
+#
 # Auditado em 2026-08-29, em série, marca a marca. O número continua fixo: uma
 # viagem que deixe de levantar faz a contagem cair e o portão fecha.
-viagens-de-browser|85|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|85
+viagens-de-browser|89|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|89
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
