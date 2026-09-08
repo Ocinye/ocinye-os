@@ -488,33 +488,52 @@ pub async fn verify_keys() -> anyhow::Result<()> {
     }
     println!();
 
-    let seladas: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mailbox_credentials")
+    // Todo o estado selado, e não só uma classe. Perder de vista os seeds TOTP
+    // seria declarar «legível» sobre metade do que a raiz interpreta (ADR-0107).
+    let seladas_mail: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mailbox_credentials")
         .fetch_one(&pool)
         .await
-        .context("contar as credenciais seladas")?;
+        .context("contar as credenciais de caixa seladas")?;
+    let seladas_totp: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM mfa_totp_secrets")
+        .fetch_one(&pool)
+        .await
+        .context("contar os seeds TOTP selados")?;
+    let seladas = seladas_mail + seladas_totp;
 
     // A leitura das linhas só acontece quando há chave; sem ela não há nada a
     // tentar, e a decisão é a mesma.
     let mut recusadas: Vec<Uuid> = Vec::new();
     if let Some(chave) = config.sealing_key.as_ref() {
-        let linhas: Vec<(Uuid, Vec<u8>, Vec<u8>)> =
+        // Cada classe abre-se com a subchave do seu domínio: uma credencial de
+        // caixa com `mail`, um seed TOTP com `mfa-totp`. Trocar o domínio faria
+        // a leitura falhar, e é por isso que são dois laços e não um.
+        let caixas: Vec<(Uuid, Vec<u8>, Vec<u8>)> =
             sqlx::query_as("SELECT mailbox_id, nonce, ciphertext FROM mailbox_credentials")
                 .fetch_all(&pool)
                 .await
-                .context("ler as credenciais seladas")?;
+                .context("ler as credenciais de caixa seladas")?;
+        let seeds: Vec<(Uuid, Vec<u8>, Vec<u8>)> =
+            sqlx::query_as("SELECT person_id, nonce, ciphertext FROM mfa_totp_secrets")
+                .fetch_all(&pool)
+                .await
+                .context("ler os seeds TOTP selados")?;
 
         // Todas, e não uma amostra. Uma amostra que abrisse diria «legível»
         // sobre o que não se leu, e a linha que não se leu é a que costuma ter
-        // sido selada com a chave anterior.
-        for (caixa, nonce, ciphertext) in &linhas {
-            let fechado = Sealed {
-                nonce: nonce.clone(),
-                ciphertext: ciphertext.clone(),
-            };
-            // O texto em claro é descartado imediatamente. O que se guarda é o
-            // veredicto: nenhuma senha, nem parte de nenhuma, chega ao ecrã.
-            if sealed::open(chave, sealed::SealingDomain::Mail, &fechado).is_err() {
-                recusadas.push(*caixa);
+        // sido selada com a chave anterior. O texto em claro é descartado
+        // imediatamente: nenhum segredo, nem parte de nenhum, chega ao ecrã.
+        for (dominio, linhas) in [
+            (sealed::SealingDomain::Mail, &caixas),
+            (sealed::SealingDomain::MfaTotp, &seeds),
+        ] {
+            for (dono, nonce, ciphertext) in linhas {
+                let fechado = Sealed {
+                    nonce: nonce.clone(),
+                    ciphertext: ciphertext.clone(),
+                };
+                if sealed::open(chave, dominio, &fechado).is_err() {
+                    recusadas.push(*dono);
+                }
             }
         }
     }

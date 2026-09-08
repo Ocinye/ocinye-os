@@ -128,7 +128,10 @@ pub const MATERIAL: &[Material] = &[
 /// Escritas aqui para que o teste de cobertura tenha contra o que confrontar o
 /// esquema. Cada uma tem de nomear a variável que a interpreta.
 #[cfg(test)]
-const CRIPTOGRAMA_NO_ESQUEMA: &[(&str, &str)] = &[("mailbox_credentials", "OCINYE_SEALING_KEY")];
+const CRIPTOGRAMA_NO_ESQUEMA: &[(&str, &str)] = &[
+    ("mailbox_credentials", "OCINYE_SEALING_KEY"),
+    ("mfa_totp_secrets", "OCINYE_SEALING_KEY"),
+];
 
 /// O que uma instalação consegue **ler** do estado durável selado que tem.
 ///
