@@ -7,6 +7,38 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Segundo factor obrigatório para identidades privilegiadas — 2026-09-08
+
+Uma palavra-passe deixa de bastar para exercer autoridade privilegiada. Uma
+identidade privilegiada, ou uma com `PlatformAdmin` efectivo, tem de satisfazer
+um segundo factor — TOTP (RFC 6238), com códigos de recuperação de uso único —
+antes de a sessão trabalhar (ADR-0107).
+
+A garantia de MFA é resolvida **no momento da autorização**, não só no login: uma
+sessão que não provou o segundo factor não exerce autoridade `PlatformAdmin`,
+mesmo que a role lhe tenha sido atribuída **depois** de a sessão nascer. Fecha o
+buraco de uma sessão comum que ganhava poder administrativo assim que a role
+aterrava. Satisfazer o factor **revoga** a sessão-portão e emite uma nova,
+assegurada — o token pré-MFA morre.
+
+O seed TOTP é selado, não resumido, com uma subchave derivada por HKDF da raiz
+institucional de selagem, que passa a chamar-se `OCINYE_SEALING_KEY`
+(antes `OCINYE_MAIL_KEY`, mesmo valor): uma raiz, uma subchave por classe de
+segredo, correio e MFA nunca a partilham. Os códigos de recuperação guardam só
+verificadores Argon2id, gastam-se uma vez, e o consumo é atómico. O replay de um
+passo TOTP já aceite é recusado, mesmo dentro da janela de tolerância.
+
+No Workspace: enrolamento com QR (SVG inline, a CSP intacta), a chave manual
+escondida até ser pedida e sempre o mesmo seed do QR, desafio nos logins
+seguintes, e recuperação como alternativa explícita. Antes de o MFA estar
+satisfeito não se mostra Workspace, Administração nem a faixa privilegiada — a
+pessoa está a autenticar-se, não numa sessão.
+
+E a revogação individual de uma sessão de um membro passa a existir como operação
+governada (`member_session_revoked`): autoridade do actor reautorizada, posse da
+sessão validada (uma sessão que não é do membro é `NotFound`, não um IDOR), e
+registo próprio, sem token nem cookie.
+
 ### Governação de membros: administrar o acesso, e não só lê-lo — 2026-09-08
 
 O detalhe de um membro mostrava o acesso e não deixava mexer-lhe. Passa a
