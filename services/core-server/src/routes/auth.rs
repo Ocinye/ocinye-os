@@ -50,6 +50,7 @@ pub fn routes() -> Router<AppState> {
         .route("/auth/mfa/acknowledge", post(mfa_acknowledge))
         .route("/auth/mfa/challenge", post(mfa_challenge))
         .route("/auth/mfa/recovery", post(mfa_recovery))
+        .route("/auth/mfa/recovery/regenerate", post(mfa_regenerate))
 }
 
 /// Credentials presented at sign-in.
@@ -698,6 +699,80 @@ async fn mfa_recovery(
         &issued,
         SessionResponse::from_issued(&issued),
     ))
+}
+
+/// O que a regeneração de códigos de recuperação exige: a reautenticação.
+#[derive(Deserialize)]
+struct RegenerateRequest {
+    /// A palavra-passe actual — step-up para uma acção sensível.
+    password: Secret,
+    /// Um código do autenticador — prova de que o factor está na mão de quem
+    /// pede, e não só que a sessão está aberta.
+    code: String,
+}
+
+/// `POST /auth/mfa/recovery/regenerate`
+///
+/// Emite dez códigos novos e invalida os anteriores, para uma sessão já
+/// assegurada, depois de reautenticar com a palavra-passe **e** o factor actual
+/// (ADR-0107). Os antigos não se recuperam.
+async fn mfa_regenerate(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Json(request): Json<RegenerateRequest>,
+) -> Result<Json<RecoveryCodesResponse>, ApiError> {
+    let person = identity::get_own_person(&state.pool, &principal)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+
+    // Reautenticação, os dois factores. A ausência de credencial e a
+    // palavra-passe errada dão a mesma resposta.
+    let credenciais = identity::live_credentials_for(&state.pool, person.id)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    let now = chrono::Utc::now();
+    let senha_confere = credenciais.iter().any(|c| {
+        c.kind == ocinye_contracts::CredentialKind::Permanent
+            && c.is_usable(now)
+            && state
+                .authenticator
+                .hasher
+                .verify(&request.password, &c.verifier)
+    });
+    if !senha_confere {
+        return Err(ApiError::new(
+            CoreError::PermissionDenied("A palavra-passe actual não confere.".to_owned()),
+            &ids,
+        ));
+    }
+
+    let factor_confere = identity::verify_challenge(
+        &state.pool,
+        state.config.sealing_key.as_ref(),
+        person.id,
+        &request.code,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+    if !factor_confere {
+        return Err(ApiError::new(
+            CoreError::Validation("O código do autenticador não confere.".to_owned()),
+            &ids,
+        ));
+    }
+
+    let recovery_codes = identity::regenerate_recovery_codes(
+        &state.pool,
+        &state.authenticator.hasher,
+        &principal,
+        &person,
+        &ids,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+
+    Ok(Json(RecoveryCodesResponse { recovery_codes }))
 }
 
 /// Build the attempt context from a request's headers.

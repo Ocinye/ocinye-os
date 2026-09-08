@@ -83,6 +83,8 @@ pub const ROUTES: &[&str] = &[
     "/help",
     "/settings",
     "/settings/security",
+    "/settings/mfa",
+    "/settings/mfa/regenerate",
     "/settings/password",
     "/settings/avatar/preset",
     "/settings/avatar/photo",
@@ -252,6 +254,8 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/help", get(help))
         .route("/settings", get(settings_account))
         .route("/settings/security", get(settings_security))
+        .route("/settings/mfa", get(settings_mfa))
+        .route("/settings/mfa/regenerate", post(settings_mfa_regenerate))
         .route("/settings/password", post(change_password))
         .route("/settings/avatar/preset", post(choose_avatar_preset))
         .route(
@@ -6189,6 +6193,80 @@ async fn settings_security(State(state): State<WorkspaceState>, headers: HeaderM
         Vec::new(),
         ui::screens::settings::security(Some(&sessions), None, None),
     )
+}
+
+/// `GET /settings/mfa` — regenerar códigos de recuperação.
+///
+/// O modo vem do Core: `challenge` numa sessão activa significa que o segundo
+/// factor está enrolado. Nada aqui infere por heurística.
+async fn settings_mfa(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    let estado = optional(&state, &member, "/api/v1/auth/mfa").await;
+    let activo = estado.get("mfa_mode").and_then(Value::as_str) == Some("challenge");
+    shell_page(
+        "Definições",
+        &viewer,
+        Screen::Settings,
+        Vec::new(),
+        ui::screens::settings::mfa_recovery(activo, None, None),
+    )
+}
+
+/// Corpo do formulário de regeneração.
+#[derive(Deserialize)]
+struct RegenerarForm {
+    password: String,
+    code: String,
+}
+
+/// `POST /settings/mfa/regenerate` — reautentica e emite dez códigos novos.
+async fn settings_mfa_regenerate(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<RegenerarForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    let body = serde_json::json!({ "password": form.password, "code": form.code });
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/auth/mfa/recovery/regenerate",
+        &body,
+    )
+    .await
+    {
+        Ok(payload) => {
+            let codigos: Vec<String> = payload
+                .get("recovery_codes")
+                .and_then(Value::as_array)
+                .map(|itens| {
+                    itens
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default();
+            shell_page(
+                "Definições",
+                &viewer,
+                Screen::Settings,
+                Vec::new(),
+                ui::screens::settings::mfa_recovery(true, Some(&codigos), None),
+            )
+        }
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(failure) => shell_page(
+            "Definições",
+            &viewer,
+            Screen::Settings,
+            Vec::new(),
+            ui::screens::settings::mfa_recovery(true, None, Some(failure.to_string())),
+        ),
+    }
 }
 
 #[derive(Deserialize)]

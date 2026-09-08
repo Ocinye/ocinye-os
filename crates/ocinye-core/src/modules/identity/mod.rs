@@ -45,7 +45,8 @@ pub use credentials::{
 };
 pub use mfa::{
     begin_enrollment, confirm_enrollment, consume_recovery_code, has_confirmed_totp,
-    issue_assured_session, mfa_required, verify_challenge, verify_totp, Enrollment,
+    issue_assured_session, mfa_required, regenerate_recovery_codes, verify_challenge, verify_totp,
+    Enrollment,
 };
 pub use model::{Invitation, InvitationStatus, Person};
 pub use service::{

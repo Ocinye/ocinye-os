@@ -343,6 +343,46 @@ pub async fn confirm_enrollment(
     Ok(codigos)
 }
 
+/// Regenera os códigos de recuperação, invalidando os anteriores.
+///
+/// Só para uma identidade já enrolada. Devolve os dez novos **uma única vez**; o
+/// que fica guardado são os verificadores, e os antigos deixam de valer. A
+/// reautenticação (palavra-passe + factor actual) é feita por quem chama, antes
+/// desta função (ADR-0107).
+///
+/// # Errors
+///
+/// [`CoreError::Validation`] se a identidade não tem MFA activo; erro de base.
+pub async fn regenerate_recovery_codes(
+    pool: &PgPool,
+    hasher: &Hasher,
+    actor: &Principal,
+    person: &Person,
+    ids: &CorrelationIds,
+) -> CoreResult<Vec<String>> {
+    if !has_confirmed_totp(pool, person.id).await? {
+        return Err(CoreError::Validation(
+            "Esta identidade não tem MFA activo; não há códigos para regenerar.".to_owned(),
+        ));
+    }
+
+    let codigos = generate_recovery_codes();
+    let mut tx = pool.begin().await?;
+    substituir_recuperacao(&mut tx, hasher, person.id, &codigos).await?;
+    audit::record(
+        &mut tx,
+        Some(actor),
+        ids,
+        AuditEntry::new(action::RECOVERY_CODES_REGENERATED, "person")
+            .resource(person.id)
+            .detail("recovery_codes_issued", codigos.len() as i64),
+    )
+    .await?;
+    tx.commit().await?;
+
+    Ok(codigos)
+}
+
 /// Verifica um código TOTP contra o seed **confirmado** desta pessoa.
 ///
 /// # Errors
