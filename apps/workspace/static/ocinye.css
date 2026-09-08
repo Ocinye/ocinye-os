@@ -172,12 +172,23 @@
    */
   --oc-z-base: 1;
   --oc-z-sticky: 20;
+  /* A faixa de sessão privilegiada. Chrome de topo, acima da shell e do seu
+   * conteúdo, abaixo de dropdowns e overlays. A `.oc-privilegiada` referia esta
+   * variável desde que nasceu, mas a escala nunca a definia — o `z-index` caía
+   * em `auto` e a shell `position: fixed` pintava-lhe por cima. A faixa existia
+   * no HTML e nunca se via. */
+  --oc-z-topbar: 30;
   --oc-z-dropdown: 40;
   --oc-z-popover: 60;
   --oc-z-skip: 100;
   --oc-z-modal: 200;
   --oc-z-toast: 300;
   --oc-z-critical: 400;
+
+  /* Altura da faixa de sessão privilegiada, quando presente. A shell é
+   * `position: fixed; inset: 0` e ignora o fluxo, pelo que não é empurrada por
+   * um irmão sticky — tem de descer explicitamente por baixo da faixa. */
+  --oc-faixa-altura: 2.5rem;
 
   /* ── Foco ──────────────────────────────────────────────────────────────
    *
@@ -319,6 +330,10 @@ svg { display: block; flex-shrink: 0; }
 /* ─── Shell ──────────────────────────────────────────────────────────── */
 
 .oc-shell { position: fixed; inset: 0; display: flex; background: var(--oc-canvas); }
+/* Com a faixa de sessão privilegiada presente, a shell fixa começa abaixo dela,
+ * em vez de a cobrir. Só nessa condição: uma sessão normal não tem faixa e a
+ * shell continua a ocupar o ecrã inteiro. */
+body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 
 /* Sidebar ─────────────────────────────────────────────────────────────── */
 

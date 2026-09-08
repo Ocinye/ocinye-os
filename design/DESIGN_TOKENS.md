@@ -95,6 +95,7 @@
   --oc-sidebar-w: 224px;
   --oc-sidebar-w-collapsed: 58px;
   --oc-topbar-h: 52px;
+  --oc-faixa-altura: 2.5rem;
   --oc-row-h: 38px;
   --oc-row-h-dense: 30px;
   --oc-page-pad: 22px 24px 40px;
@@ -184,6 +185,7 @@ Semânticas, e nunca numéricas. Um módulo não precisa de saber que `modal` va
 | --- | --- | --- |
 | `--oc-z-base` | 1 | contexto de empilhamento do ecrã de entrada |
 | `--oc-z-sticky` | 20 | reservado |
+| `--oc-z-topbar` | 30 | faixa de sessão privilegiada |
 | `--oc-z-dropdown` | 40 | menu de conta |
 | `--oc-z-popover` | 60 | menu de criação |
 | `--oc-z-skip` | 100 | ligação de salto, que tem de aparecer ao receber foco |
