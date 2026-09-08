@@ -227,9 +227,36 @@ impl CoreStatus {
     }
 }
 
+/// Como correu o estabelecimento da identidade da sessão contra o Core.
+///
+/// # Porque isto existe, e porque falha fechado
+///
+/// A shell privilegiada é uma afirmação sobre a sessão. Se o Core respondeu
+/// `200` e disse o que a sessão é, a afirmação é fiável — normal ou privilegiada.
+/// Se o Core **não** respondeu — 5xx, tempo esgotado, rede, erro de base de
+/// dados — não sabemos o que a sessão é, e a resposta segura é não afirmar nada:
+/// não desenhar a shell autenticada normal, porque uma falha em estabelecer a
+/// identidade **não é prova de que a sessão é normal**. Era esse o defeito: o
+/// erro do `/me` era engolido para `Null`, e `Null` desenhava uma sessão normal.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum ResolucaoSessao {
+    /// O `/me` respondeu e a identidade foi estabelecida (normal ou privilegiada).
+    #[default]
+    Resolvida,
+    /// O Core respondeu `401`: a sessão não está autenticada. Caminho de login.
+    NaoAutenticada,
+    /// O Core não deu uma resposta autoritária (5xx, tempo esgotado, rede, erro
+    /// técnico). A identidade não pôde ser estabelecida. Falha fechado.
+    Indeterminada,
+}
+
 /// O que a shell precisa de saber sobre quem está a usá-la.
 #[derive(Debug, Clone)]
 pub struct Viewer {
+    /// Como correu o estabelecimento da identidade contra o Core.
+    ///
+    /// Falha fechado: uma falha técnica do `/me` **não** desenha a shell normal.
+    pub resolucao: ResolucaoSessao,
     /// A zona em que este membro está a olhar para o sistema.
     ///
     /// Vem do browser. Decide em que dia civil as coisas caem — e é por isso
@@ -463,6 +490,34 @@ pub fn shell(
         </div>
 
         {palette(viewer)}
+    }
+}
+
+/// A superfície neutra de falha-fechada.
+///
+/// Desenha-se quando a identidade da sessão **não pôde ser estabelecida** — o
+/// `/me` respondeu com um erro técnico (5xx, tempo esgotado, rede, base de
+/// dados), e não com `200`. Deliberadamente **não** é a shell normal: uma falha
+/// em ler o que a sessão é não é prova de que a sessão é normal, e desenhar a
+/// shell normal aqui foi precisamente o defeito. Não afirma identidade, não
+/// mostra navegação, e não deixa uma sessão privilegiada passar por normal.
+pub fn identidade_indeterminada() -> impl IntoView {
+    view! {
+        <div class="oc-login">
+            <div class="oc-login__layer oc-login__glow" aria-hidden="true"></div>
+            <div class="oc-login__center">
+                <div class="oc-login__card">
+                    <div class="oc-login__note" role="alert">
+                        "Não foi possível estabelecer a sua sessão neste momento. \
+                         Isto não é um acesso recusado: o serviço não respondeu a tempo. \
+                         Por segurança, nada é apresentado até a sessão ser confirmada."
+                    </div>
+                    <a class="oc-login__submit" href="/login">
+                        "Voltar ao início de sessão"
+                    </a>
+                </div>
+            </div>
+        </div>
     }
 }
 
@@ -1425,6 +1480,7 @@ mod tests {
     /// Um membro com as permissões indicadas e os módulos de investigação.
     fn viewer_de_investigacao(permissions: &[Permission]) -> Viewer {
         Viewer {
+            resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             modules: todos_os_modulos(),
             ..viewer_with(permissions)
         }
@@ -1434,6 +1490,7 @@ mod tests {
     /// investigação relevante.
     fn viewer_with(permissions: &[Permission]) -> Viewer {
         Viewer {
+            resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
             avatar: ocinye_contracts::AvatarChoice::Initials,
             email: Some("jmanuel@ocinye.com".to_owned()),
@@ -2279,6 +2336,7 @@ mod tests {
     /// Uma sessão privilegiada com autoridade: faixa e rótulo.
     fn privilegiada_com_autoridade() -> Viewer {
         Viewer {
+            resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: true,
             administra: true,
             name: "Fidel Admin".to_owned(),
@@ -2383,6 +2441,32 @@ mod tests {
         assert!(
             !html.contains("/admin\""),
             "a faixa fez aparecer administração a quem não a pode ver"
+        );
+    }
+
+    /// A superfície de falha-fechada não é a shell normal.
+    ///
+    /// Quando a identidade não pôde ser estabelecida, não se afirma nada: não
+    /// há shell, não há navegação, não há faixa. Uma falha técnica ao ler o
+    /// `/me` não pode virar uma sessão normal — era esse o defeito.
+    #[test]
+    fn a_superficie_indeterminada_nao_e_a_shell_normal() {
+        let html = identidade_indeterminada().to_html();
+        assert!(
+            html.contains("Não foi possível estabelecer a sua sessão"),
+            "a superfície neutra não diz o que aconteceu"
+        );
+        assert!(
+            !html.contains("oc-shell"),
+            "a falha-fechada desenhou a shell autenticada normal"
+        );
+        assert!(
+            !html.contains("oc-privilegiada"),
+            "a falha-fechada deixou passar a faixa privilegiada"
+        );
+        assert!(
+            !html.contains("oc-side"),
+            "a falha-fechada mostrou a navegação da shell"
         );
     }
 }

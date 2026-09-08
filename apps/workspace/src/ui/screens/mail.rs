@@ -1895,6 +1895,7 @@ mod integridade {
 
     pub(super) fn viewer() -> Viewer {
         Viewer {
+            resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,
             zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
