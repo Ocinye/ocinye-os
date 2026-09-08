@@ -5740,3 +5740,35 @@ select.oc-entrada {
   .oc-privilegiada__quem, .oc-privilegiada__email { display: none; }
   .oc-privilegiada__rotulo { font-size: 11px; }
 }
+
+/* ─── Segundo factor (MFA) ───────────────────────────────────────────────
+   Os ecrãs de MFA reutilizam a moldura do início de sessão (`.oc-login`); estas
+   classes são só o miolo do cartão. */
+.oc-mfa__lead { margin: 0 0 14px; font-size: 13px; color: var(--oc-text-muted); line-height: 1.5; }
+.oc-mfa__qr { margin: 0 auto 14px; width: max-content; }
+.oc-mfa__qr-img {
+  width: 220px; height: 220px; padding: 10px; background: #fff;
+  border: 1px solid var(--oc-border); border-radius: var(--oc-r-md);
+}
+.oc-mfa__qr-img svg { display: block; width: 100%; height: 100%; }
+.oc-mfa__manual { margin: 0 0 6px; font-size: 12.5px; color: var(--oc-text-muted); text-align: center; }
+.oc-mfa__key {
+  margin: 12px 0; padding: 12px; border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-md); background: var(--oc-surface-subtle);
+}
+.oc-mfa__key-label {
+  display: block; margin-bottom: 6px;
+  font: 500 10px var(--oc-font-mono); letter-spacing: .1em; color: var(--oc-text-meta);
+}
+.oc-mfa__key code { display: block; margin-bottom: 8px; font-size: 15px; letter-spacing: .12em; word-break: break-all; }
+.oc-mfa__codes {
+  margin: 10px 0; padding: 14px; border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-md); background: var(--oc-surface-subtle);
+  font-size: 15px; line-height: 1.9; letter-spacing: .1em; white-space: pre; overflow-x: auto;
+}
+.oc-mfa__fallback > summary { cursor: pointer; font-size: 12.5px; color: var(--oc-text-muted); }
+.oc-mfa__fallback[open] > summary { margin-bottom: 8px; color: var(--oc-text); }
+
+/* Caixa de confirmação (acknowledgement dos códigos de recuperação). */
+.oc-check { display: flex; gap: 9px; align-items: flex-start; font-size: 13px; line-height: 1.45; cursor: pointer; }
+.oc-check input[type="checkbox"] { margin-top: 2px; flex-shrink: 0; }

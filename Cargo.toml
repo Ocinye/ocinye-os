@@ -119,6 +119,11 @@ hkdf = "0.12"
 hmac = "0.12"
 sha1 = "0.10"
 data-encoding = "2"
+# QR do enrolamento MFA (ADR-0107), renderizado server-side como SVG inline para
+# a CSP apertada do Workspace continuar intacta — nada de abrir `img-src`. Crate
+# pura, sem rede; `default-features = false` deixa cair o output de imagem (e o
+# crate `image`), ficando só o renderizador SVG.
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 # Argon2id for password verifiers (ADR-0602). `password-hash` gives the PHC
 # string format, which carries the parameters with the hash and is what makes
 # transparent rehashing possible.

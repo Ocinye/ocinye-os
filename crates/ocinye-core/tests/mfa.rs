@@ -136,7 +136,9 @@ async fn enrolar_confirmar_desafiar_e_recusar_replay() {
     .await
     .expect("confirmar");
     assert_eq!(recuperacao.len(), 10, "esperava dez códigos de recuperação");
-    assert!(identity::has_confirmed_totp(&pool, person.id).await.unwrap());
+    assert!(identity::has_confirmed_totp(&pool, person.id)
+        .await
+        .unwrap());
 
     // Simula que o passo do desafio é posterior ao da confirmação: sem isto o
     // relógio real teria de avançar 30 s. O que se prova é o mecanismo de passo
@@ -214,11 +216,16 @@ async fn codigo_de_recuperacao_e_de_uso_unico() {
         "o segundo uso do mesmo código não pode servir"
     );
     // Um código que nunca existiu também não serve.
-    assert!(
-        !identity::consume_recovery_code(&pool, &hasher(), &actor, person.id, "XXXXX-XXXXX-XXXXX", &ids)
-            .await
-            .unwrap()
-    );
+    assert!(!identity::consume_recovery_code(
+        &pool,
+        &hasher(),
+        &actor,
+        person.id,
+        "XXXXX-XXXXX-XXXXX",
+        &ids
+    )
+    .await
+    .unwrap());
 }
 
 /// Revogar a sessão de um membro exige que a sessão seja dele — senão é como se

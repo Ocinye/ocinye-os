@@ -1321,6 +1321,40 @@ document.addEventListener('click', (event) => {
   }
 });
 
+/* Códigos de recuperação de MFA: copiar e guardar em ficheiro.
+ *
+ * Os códigos vivem no texto desta página e em mais lado nenhum — são mostrados
+ * uma única vez e nenhum endpoint os lê de volta (ADR-0107). Copiar e guardar
+ * acontecem inteiramente no browser: nada volta ao Core, nenhum ficheiro em
+ * claro é escrito do lado do servidor. */
+document.addEventListener('click', (event) => {
+  const gatilho = event.target.closest('[data-oc="recovery-copy"], [data-oc="recovery-download"]');
+  if (!gatilho) return;
+  const bloco = document.querySelector('[data-oc="recovery-codes"]');
+  if (!bloco) return;
+  const texto = (bloco.textContent || '').trim() + '\n';
+
+  if (gatilho.matches('[data-oc="recovery-copy"]') && navigator.clipboard) {
+    navigator.clipboard.writeText(texto).then(() => {
+      gatilho.textContent = 'Copiados';
+      setTimeout(() => { gatilho.textContent = 'Copiar códigos'; }, 2000);
+    });
+    return;
+  }
+
+  if (gatilho.matches('[data-oc="recovery-download"]')) {
+    const blob = new Blob([texto], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'ocinye-codigos-de-recuperacao.txt';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+});
+
 /* Filtro local das linhas de uma tabela.
  *
  * Filtra o que já está renderizado; não fala com o Core. É deliberado: o

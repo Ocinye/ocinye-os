@@ -302,11 +302,9 @@ pub async fn confirm_enrollment(
         )
     })?;
 
-    let seed = open_seed(pool, raiz, person.id)
-        .await?
-        .ok_or_else(|| {
-            CoreError::NotFound("Não há um enrolamento de MFA a confirmar.".to_owned())
-        })?;
+    let seed = open_seed(pool, raiz, person.id).await?.ok_or_else(|| {
+        CoreError::NotFound("Não há um enrolamento de MFA a confirmar.".to_owned())
+    })?;
 
     let Some(passo) = matched_step(&seed, codigo, Utc::now()) else {
         return Err(CoreError::Validation(

@@ -153,6 +153,11 @@ pub const ROUTES: &[&str] = &[
     "/boot",
     "/login",
     "/first-access",
+    "/mfa",
+    "/mfa/confirm",
+    "/mfa/acknowledge",
+    "/mfa/challenge",
+    "/mfa/recovery",
     "/logout",
     "/health",
 ];
@@ -413,6 +418,11 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/boot", get(boot_screen))
         .route("/login", get(login).post(login_submit))
         .route("/first-access", get(first_access).post(first_access_submit))
+        .route("/mfa", get(mfa_page))
+        .route("/mfa/confirm", post(mfa_confirm))
+        .route("/mfa/acknowledge", post(mfa_acknowledge))
+        .route("/mfa/challenge", post(mfa_challenge))
+        .route("/mfa/recovery", post(mfa_recovery))
         .route("/logout", post(logout))
         .route("/health", get(health))
         .nest_service("/static", ServeDir::new(state.config.static_dir.clone()))
@@ -1182,6 +1192,12 @@ macro_rules! member_or_login {
             // ecrã (briefing §22).
             Some(member) if member.session.must_change_password => {
                 return Redirect::to("/first-access").into_response()
+            }
+            // E quem deve um segundo factor está num fluxo de autenticação, não
+            // numa sessão normal: nenhuma superfície do Workspace — nem a faixa
+            // privilegiada — se mostra antes de o MFA estar satisfeito (ADR-0107).
+            Some(member) if member.session.mfa_required => {
+                return Redirect::to("/mfa").into_response()
             }
             Some(member) => member,
             None => return Redirect::to("/login").into_response(),
@@ -6194,12 +6210,21 @@ async fn change_password(
                 display_name: session.display_name,
                 email: member.session.email.clone(),
                 must_change_password: session.must_change_password,
+                mfa_required: session.mfa_required,
                 expires_at: Instant::now() + state.config.session_ttl,
             });
+            // Uma identidade que exige MFA reautentica o segundo factor depois de
+            // mudar a palavra-passe — a sessão nova é um portão, não uma sessão
+            // pronta (ADR-0107).
+            let destino = if session.mfa_required {
+                "/mfa"
+            } else {
+                "/settings/security"
+            };
             (
                 StatusCode::SEE_OTHER,
                 [
-                    (header::LOCATION, "/settings/security".to_owned()),
+                    (header::LOCATION, destino.to_owned()),
                     (
                         header::SET_COOKIE,
                         session::cookie_header(
@@ -6647,8 +6672,9 @@ async fn login_submit(
         }
     };
 
-    let ttl = if session.must_change_password {
-        // Curta, tal como a do Core: existe para completar uma tarefa.
+    let ttl = if session.must_change_password || session.mfa_required {
+        // Curta, tal como a do Core: existe para completar uma tarefa — mudar a
+        // palavra-passe ou satisfazer o segundo factor.
         Duration::from_secs(30 * 60)
     } else {
         state.config.session_ttl
@@ -6659,11 +6685,14 @@ async fn login_submit(
         display_name: session.display_name,
         email: form.email.clone(),
         must_change_password: session.must_change_password,
+        mfa_required: session.mfa_required,
         expires_at: Instant::now() + ttl,
     });
 
     let destination = if session.must_change_password {
         "/first-access"
+    } else if session.mfa_required {
+        "/mfa"
     } else {
         "/"
     };
@@ -6686,6 +6715,10 @@ struct CoreSession {
     token: String,
     display_name: String,
     must_change_password: bool,
+    /// A sessão exige um segundo factor por satisfazer (ADR-0107). O Core
+    /// devolve-o no campo `state`; o Workspace usa-o para encaminhar ao fluxo de
+    /// MFA e não mostrar superfície privilegiada entretanto.
+    mfa_required: bool,
 }
 
 impl CoreSession {
@@ -6714,6 +6747,7 @@ impl CoreSession {
                 .and_then(Value::as_bool)
                 // Sem o campo, assume-se que falta mudar: falhar fechado.
                 .unwrap_or(true),
+            mfa_required: payload.get("state").and_then(Value::as_str) == Some("mfa_required"),
         })
     }
 }
@@ -6811,9 +6845,208 @@ async fn first_access_submit(
         // pedir.
         email: member.session.email.clone(),
         must_change_password: false,
+        mfa_required: session.mfa_required,
         expires_at: Instant::now() + state.config.session_ttl,
     });
 
+    // Uma identidade privilegiada que acaba de definir a palavra-passe cai
+    // directamente no enrolamento do segundo factor, não numa sessão pronta.
+    let destino = if session.mfa_required { "/mfa" } else { "/" };
+    (
+        StatusCode::SEE_OTHER,
+        [
+            (header::LOCATION, destino.to_owned()),
+            (
+                header::SET_COOKIE,
+                session::cookie_header(
+                    &session_id,
+                    state.config.cookie_secure,
+                    state.config.session_ttl,
+                ),
+            ),
+        ],
+    )
+        .into_response()
+}
+
+// ── Segundo factor (ADR-0107) ───────────────────────────────────────────────
+
+/// Query do ecrã de MFA: `?show_key=1` revela a chave manual.
+#[derive(Deserialize)]
+struct MfaQuery {
+    #[serde(default)]
+    show_key: bool,
+}
+
+/// Um código submetido — de autenticador ou de recuperação.
+#[derive(Deserialize)]
+struct MfaCodeForm {
+    code: String,
+}
+
+/// `GET /mfa` — o ecrã certo, decidido pelo Core, nunca por heurística.
+///
+/// O Core diz o modo em `mfa_mode`: enrolar ou desafiar. Uma sessão que já não
+/// precisa de MFA não fica presa aqui.
+async fn mfa_page(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    axum::extract::Query(query): axum::extract::Query<MfaQuery>,
+) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return Redirect::to("/login").into_response();
+    };
+    if !member.session.mfa_required {
+        return Redirect::to("/").into_response();
+    }
+
+    let estado = optional(&state, &member, "/api/v1/auth/mfa").await;
+    let modo = estado
+        .get("mfa_mode")
+        .and_then(Value::as_str)
+        .unwrap_or("challenge");
+    let nome = member.session.display_name.clone();
+
+    match modo {
+        "not_required" => Redirect::to("/").into_response(),
+        "challenge" => page("Segundo factor", ui::screens::mfa::challenge(&nome, None)),
+        _ => {
+            // Enrolamento: o QR (e, se pedida, a chave manual) vêm do Core, que
+            // devolve sempre o mesmo seed por confirmar.
+            let caminho = if query.show_key {
+                "/api/v1/auth/mfa/enroll?reveal=1"
+            } else {
+                "/api/v1/auth/mfa/enroll"
+            };
+            match api::post(
+                &state,
+                &member.session.access_token,
+                &member.correlation_id,
+                caminho,
+                &serde_json::json!({}),
+            )
+            .await
+            {
+                Ok(payload) => {
+                    let otpauth = payload
+                        .get("otpauth_uri")
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
+                    let manual = payload.get("secret_base32").and_then(Value::as_str);
+                    page(
+                        "Configurar MFA",
+                        ui::screens::mfa::enrollment(&nome, otpauth, manual, None),
+                    )
+                }
+                Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+                Err(failure) => page(
+                    "Configurar MFA",
+                    ui::screens::mfa::enrollment(&nome, "", None, Some(failure.to_string())),
+                ),
+            }
+        }
+    }
+}
+
+/// Re-renderiza o ecrã de enrolamento com uma recusa do Core, buscando de novo o
+/// mesmo seed por confirmar.
+async fn reenrolar_com_erro(state: &WorkspaceState, member: &Member, message: String) -> Response {
+    let nome = member.session.display_name.clone();
+    match api::post(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/auth/mfa/enroll",
+        &serde_json::json!({}),
+    )
+    .await
+    {
+        Ok(payload) => {
+            let otpauth = payload
+                .get("otpauth_uri")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            page(
+                "Configurar MFA",
+                ui::screens::mfa::enrollment(&nome, otpauth, None, Some(message)),
+            )
+        }
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(_) => page(
+            "Configurar MFA",
+            ui::screens::mfa::enrollment(&nome, "", None, Some(message)),
+        ),
+    }
+}
+
+/// `POST /mfa/confirm` — confirma o enrolamento e mostra os códigos de
+/// recuperação. Ainda não fecha o portão: a sessão continua a exigir MFA até o
+/// acknowledgement.
+async fn mfa_confirm(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MfaCodeForm>,
+) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return Redirect::to("/login").into_response();
+    };
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/auth/mfa/enroll/confirm",
+        &serde_json::json!({ "code": form.code }),
+    )
+    .await
+    {
+        Ok(payload) => {
+            let codigos: Vec<String> = payload
+                .get("recovery_codes")
+                .and_then(Value::as_array)
+                .map(|itens| {
+                    itens
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default();
+            page(
+                "Códigos de recuperação",
+                ui::screens::mfa::recovery_codes(&codigos),
+            )
+        }
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(failure) => reenrolar_com_erro(&state, &member, failure.to_string()).await,
+    }
+}
+
+/// Troca a sessão-portão pela sessão nova, `active` e assegurada, que o Core
+/// devolveu — e leva o membro para dentro.
+fn trocar_sessao(
+    state: &WorkspaceState,
+    headers: &HeaderMap,
+    email: String,
+    payload: Value,
+) -> Response {
+    let Ok(session) = CoreSession::from_payload(payload) else {
+        return Redirect::to("/login").into_response();
+    };
+    if let Some(id) = session::session_id_from_cookies(
+        headers
+            .get(header::COOKIE)
+            .and_then(|value| value.to_str().ok()),
+    ) {
+        state.sessions.remove(&id);
+    }
+    let session_id = state.sessions.create(Session {
+        access_token: session.token,
+        display_name: session.display_name,
+        email,
+        must_change_password: session.must_change_password,
+        mfa_required: session.mfa_required,
+        expires_at: Instant::now() + state.config.session_ttl,
+    });
     (
         StatusCode::SEE_OTHER,
         [
@@ -6829,6 +7062,81 @@ async fn first_access_submit(
         ],
     )
         .into_response()
+}
+
+/// `POST /mfa/acknowledge` — a pessoa guardou os códigos; conclui o enrolamento.
+async fn mfa_acknowledge(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return Redirect::to("/login").into_response();
+    };
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/auth/mfa/acknowledge",
+        &serde_json::json!({}),
+    )
+    .await
+    {
+        Ok(payload) => trocar_sessao(&state, &headers, member.session.email.clone(), payload),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        // Não deve acontecer no fluxo normal; volta ao início do MFA.
+        Err(_) => Redirect::to("/mfa").into_response(),
+    }
+}
+
+/// `POST /mfa/challenge` — o segundo factor de um login posterior.
+async fn mfa_challenge(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MfaCodeForm>,
+) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return Redirect::to("/login").into_response();
+    };
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/auth/mfa/challenge",
+        &serde_json::json!({ "code": form.code }),
+    )
+    .await
+    {
+        Ok(payload) => trocar_sessao(&state, &headers, member.session.email.clone(), payload),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(failure) => page(
+            "Segundo factor",
+            ui::screens::mfa::challenge(&member.session.display_name, Some(failure.to_string())),
+        ),
+    }
+}
+
+/// `POST /mfa/recovery` — entrar com um código de recuperação de uso único.
+async fn mfa_recovery(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MfaCodeForm>,
+) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return Redirect::to("/login").into_response();
+    };
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/auth/mfa/recovery",
+        &serde_json::json!({ "code": form.code }),
+    )
+    .await
+    {
+        Ok(payload) => trocar_sessao(&state, &headers, member.session.email.clone(), payload),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(failure) => page(
+            "Segundo factor",
+            ui::screens::mfa::challenge(&member.session.display_name, Some(failure.to_string())),
+        ),
+    }
 }
 
 /// Termina a sessão.
