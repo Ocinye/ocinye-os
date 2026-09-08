@@ -65,12 +65,16 @@ async fn main() -> anyhow::Result<()> {
     if argv.first().map(String::as_str) == Some("verify-snapshot") {
         return continuity::verify_snapshot().await;
     }
-    // Uma chave nova para `OCINYE_MAIL_KEY`.
+    // Uma raiz de selagem nova para `OCINYE_SEALING_KEY` (ADR-0107).
     //
     // Escreve-a e mais nada: a saída deste comando destina-se a ir directa para
     // o cofre de segredos da instalação, e uma frase à volta seria uma frase que
-    // alguém colava com ela.
-    if argv.first().map(String::as_str) == Some("mail-key") {
+    // alguém colava com ela. `mail-key` continua a valer como alias obsoleto —
+    // o comando é o mesmo, a raiz é uma só.
+    if matches!(
+        argv.first().map(String::as_str),
+        Some("sealing-key" | "mail-key")
+    ) {
         println!("{}", ocinye_core::password::sealed::SealingKey::generate());
         return Ok(());
     }
@@ -156,7 +160,7 @@ async fn main() -> anyhow::Result<()> {
     let mail_registry = Arc::new(ocinye_core::modules::mail::ProviderRegistry::new(
         mail_provider,
         config.mail.clone(),
-        config.mail.sealing_key.clone(),
+        config.sealing_key.clone(),
     ));
 
     // O plano realtime. Nunca falha o arranque: sem Redis, o Ocinye continua

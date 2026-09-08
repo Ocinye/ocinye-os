@@ -153,12 +153,13 @@ pub fn inventario() -> Vec<Activo> {
                      preserva a referência e perde o conhecimento que ela nomeia.",
         },
         Activo {
-            nome: "OCINYE_MAIL_KEY",
+            nome: "OCINYE_SEALING_KEY",
             onde: "cofre de segredos da instalação",
             classe: Classe::Interpretativo,
-            porque: "Sem ela, `mailbox_credentials` chega intacta e ilegível: as \
-                     senhas estão seladas com ChaCha20-Poly1305 e a chave não \
-                     está na base. Uma cópia perfeita e inútil.",
+            porque: "A raiz de selagem. Sem ela, `mailbox_credentials` e os seeds \
+                     TOTP chegam intactos e ilegíveis: os segredos estão selados \
+                     com subchaves derivadas dela por domínio (HKDF, ADR-0107) e a \
+                     raiz não está na base. Uma cópia perfeita e inútil.",
         },
         Activo {
             nome: "search_documents",
@@ -267,7 +268,7 @@ mod tests {
              conhecimento não"
         );
         assert!(
-            viajam.contains(&"OCINYE_MAIL_KEY"),
+            viajam.contains(&"OCINYE_SEALING_KEY"),
             "a chave tem de viajar, ou o que viajou não se lê"
         );
         assert!(

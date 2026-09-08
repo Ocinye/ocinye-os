@@ -7,8 +7,8 @@
 # Cada entrada tem de trazer a razão. Uma dispensa sem dono é uma dispensa que
 # ninguém volta a questionar.
 
-# `OCINYE_MAIL_KEY` no `.env` local — a chave que cifra as credenciais de caixa
-# (ADR-0409). É onde ela deve estar: o `.env.example` documenta-o, o git ignora
+# `OCINYE_SEALING_KEY` (e o alias obsoleto `OCINYE_MAIL_KEY`) no `.env` local — a
+# raiz de selagem (ADR-0107, ADR-0409). É onde ela deve estar: o `.env.example` documenta-o, o git ignora
 # o `.env`, e a CI trabalha sobre um checkout onde ele não existe.
 #
 # Sem esta linha o portão ficava vermelho em todas as máquinas de trabalho e

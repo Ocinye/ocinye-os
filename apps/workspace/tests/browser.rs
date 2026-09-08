@@ -1440,7 +1440,7 @@ fn core_state(pool: PgPool, organisation_id: Uuid, database_url: &str) -> AppSta
     // a herdarem de um harness partilhado.
     // Uma chave só, e não duas.
     //
-    // A credencial é **selada** com `config.mail.sealing_key` — o caminho de
+    // A credencial é **selada** com `config.sealing_key` — o caminho de
     // ligar a caixa lê-a de lá — e **aberta** com a do registo. O harness dava
     // ao registo a sua chave e deixava a do `config` vir do ambiente: selava
     // com uma e abria com outra.
@@ -1449,13 +1449,12 @@ fn core_state(pool: PgPool, organisation_id: Uuid, database_url: &str) -> AppSta
     // diz «Ligada». Falhava depois, ao abrir uma mensagem — e como nenhuma
     // viagem abria mensagens, nunca ninguém o viu.
     let mut config = config;
-    config.mail.sealing_key = Some(chave_do_correio().clone());
+    config.sealing_key = Some(chave_do_correio().clone());
 
     let mail_registry = Arc::new(
         ocinye_core::modules::mail::ProviderRegistry::new(
             Arc::new(ServicoQueResponde),
             ocinye_core::config::MailConfig {
-                sealing_key: Some(chave_do_correio().clone()),
                 // O transporte é fixado aqui, e não herdado do ambiente.
                 //
                 // Herdá-lo fazia estas viagens descreverem instalações diferentes

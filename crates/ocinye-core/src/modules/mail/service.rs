@@ -837,7 +837,8 @@ pub async fn connect_mailbox(
         .await
         .map_err(from_provider)?;
 
-    let fechado = crate::password::sealed::seal(chave, senha)?;
+    let fechado =
+        crate::password::sealed::seal(chave, crate::password::sealed::SealingDomain::Mail, senha)?;
 
     // Credencial e auditoria numa transacção só.
     //

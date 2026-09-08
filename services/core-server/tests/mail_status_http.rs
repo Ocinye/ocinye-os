@@ -124,7 +124,7 @@ fn estado_com(
     let mail_registry = Arc::new(ocinye_core::modules::mail::ProviderRegistry::new(
         institucional,
         config.mail.clone(),
-        config.mail.sealing_key.clone(),
+        config.sealing_key.clone(),
     ));
 
     AppState {

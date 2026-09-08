@@ -283,7 +283,7 @@ impl ProviderRegistry {
             }
         }
 
-        let senha = sealed::open(chave, &credencial.sealed)?;
+        let senha = sealed::open(chave, sealed::SealingDomain::Mail, &credencial.sealed)?;
         let adaptador = (self.construtor)(ImapSmtpConfig {
             imap_host: self.transporte.imap_host.clone(),
             imap_port: self.transporte.imap_port,
@@ -387,7 +387,6 @@ mod o_construtor_por_omissao {
                 username: String::new(),
                 password: String::new(),
                 max_message_bytes: 1024,
-                sealing_key: None,
             },
             None,
         );

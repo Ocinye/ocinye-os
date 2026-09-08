@@ -255,17 +255,6 @@ pub struct MailConfig {
     pub password: String,
     /// Largest message the composer accepts, attachments included.
     pub max_message_bytes: u64,
-    /// A chave que cifra as credenciais de cada caixa, ausente quando esta
-    /// instalação não a configurou.
-    ///
-    /// # Porque é `Option` e não um valor gerado
-    ///
-    /// Uma chave gerada ao arranque abriria as credenciais desta execução e de
-    /// mais nenhuma: ao reiniciar, todas as caixas ligadas ficariam ilegíveis
-    /// sem que ninguém tivesse pedido nada. Ausente, ligar uma caixa recusa com
-    /// a razão dita — que é o comportamento correcto de uma instalação sem
-    /// chave, e não um sítio por preencher (ADR-0409).
-    pub sealing_key: Option<crate::password::sealed::SealingKey>,
 }
 
 impl std::fmt::Debug for MailConfig {
@@ -283,7 +272,6 @@ impl std::fmt::Debug for MailConfig {
             .field("username", &self.username)
             .field("password", &"<redacted>")
             .field("max_message_bytes", &self.max_message_bytes)
-            .field("sealing_key", &self.sealing_key)
             .finish()
     }
 }
@@ -381,6 +369,22 @@ pub struct CoreConfig {
     pub compute: ComputeConfig,
     /// Ocinye Mail.
     pub mail: MailConfig,
+    /// A **raiz** institucional de selagem (`OCINYE_SEALING_KEY`), ausente
+    /// quando esta instalação não a configurou.
+    ///
+    /// É o único material criptográfico durável do sistema. Nunca cifra
+    /// directamente: cada classe de segredo — credenciais de caixa, seeds TOTP —
+    /// deriva dela uma subchave própria por domínio ([`crate::password::sealed`],
+    /// ADR-0107).
+    ///
+    /// # Porque é `Option` e não um valor gerado
+    ///
+    /// Uma chave gerada ao arranque abriria os segredos desta execução e de mais
+    /// nenhuma: ao reiniciar, tudo o que dependesse dela ficaria ilegível sem que
+    /// ninguém tivesse pedido nada. Ausente, ligar uma caixa ou enrolar MFA
+    /// recusa com a razão dita — o comportamento correcto de uma instalação sem
+    /// chave, e não um sítio por preencher.
+    pub sealing_key: Option<crate::password::sealed::SealingKey>,
     /// Origins permitted to call the API from a browser.
     pub cors_allowed_origins: Vec<String>,
     /// Onde estão os componentes do Capability Runtime.
@@ -553,10 +557,28 @@ impl CoreConfig {
                 username: or_default("OCINYE_MAIL_USERNAME", ""),
                 password: or_default("OCINYE_MAIL_PASSWORD", ""),
                 max_message_bytes: parse_number("OCINYE_MAIL_MAX_MESSAGE_BYTES", 25 * 1024 * 1024),
-                sealing_key: match optional("OCINYE_MAIL_KEY") {
-                    None => None,
-                    Some(valor) => Some(crate::password::sealed::SealingKey::from_base64(&valor)?),
-                },
+            },
+            // A raiz institucional de selagem. `OCINYE_SEALING_KEY` é o nome
+            // canónico; `OCINYE_MAIL_KEY` é aceite **apenas** como fallback de
+            // compatibilidade durante a release que renomeia (ADR-0107). Os dois
+            // presentes com valores diferentes fecham a porta: não há como saber
+            // qual é a boa, e adivinhar seria arriscar tornar segredos ilegíveis.
+            sealing_key: {
+                let canonica = optional("OCINYE_SEALING_KEY");
+                let legado = optional("OCINYE_MAIL_KEY");
+                match (canonica, legado) {
+                    (Some(nova), Some(velha)) if nova.trim() != velha.trim() => {
+                        return Err(CoreError::Validation(
+                            "OCINYE_SEALING_KEY e OCINYE_MAIL_KEY estão ambas definidas com \
+                             valores diferentes. Deixe apenas OCINYE_SEALING_KEY."
+                                .to_owned(),
+                        ));
+                    }
+                    (Some(valor), _) | (None, Some(valor)) => {
+                        Some(crate::password::sealed::SealingKey::from_base64(&valor)?)
+                    }
+                    (None, None) => None,
+                }
             },
             cors_allowed_origins: or_default("OCINYE_CORS_ALLOWED_ORIGINS", "")
                 .split(',')
@@ -726,8 +748,8 @@ mod tests {
                 username: String::new(),
                 password: String::new(),
                 max_message_bytes: 1024,
-                sealing_key: None,
             },
+            sealing_key: None,
             cors_allowed_origins: vec![],
             capability_components_dir: "target/wasm32-wasip1/release".to_owned(),
         }

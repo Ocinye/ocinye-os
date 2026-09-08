@@ -76,13 +76,15 @@ pub struct Material {
 /// que a ausência dela do canal seguro seja uma decisão, e não um esquecimento.
 pub const MATERIAL: &[Material] = &[
     Material {
-        variavel: "OCINYE_MAIL_KEY",
+        variavel: "OCINYE_SEALING_KEY",
         destino: Destino::Duravel,
         interpreta: Some("mailbox_credentials"),
-        porque: "Sela a senha de caixa de cada membro com ChaCha20-Poly1305. A \
-                 chave não está na base: sem ela, as linhas chegam íntegras e \
-                 ilegíveis, e nenhuma chave nova as reconstrói. É a única peça \
-                 desta lista que interpreta história já escrita.",
+        porque: "A raiz institucional de selagem. Dela derivam-se, por HKDF e por \
+                 domínio, as subchaves que selam a senha de caixa de cada membro \
+                 e o seed TOTP de cada identidade com MFA (ADR-0107). A raiz não \
+                 está na base: sem ela, as linhas chegam íntegras e ilegíveis, e \
+                 nenhuma chave nova as reconstrói. É a única peça desta lista que \
+                 interpreta história já escrita, e é uma só.",
     },
     Material {
         variavel: "OCINYE_DATABASE_URL",
@@ -126,7 +128,7 @@ pub const MATERIAL: &[Material] = &[
 /// Escritas aqui para que o teste de cobertura tenha contra o que confrontar o
 /// esquema. Cada uma tem de nomear a variável que a interpreta.
 #[cfg(test)]
-const CRIPTOGRAMA_NO_ESQUEMA: &[(&str, &str)] = &[("mailbox_credentials", "OCINYE_MAIL_KEY")];
+const CRIPTOGRAMA_NO_ESQUEMA: &[(&str, &str)] = &[("mailbox_credentials", "OCINYE_SEALING_KEY")];
 
 /// O que uma instalação consegue **ler** do estado durável selado que tem.
 ///
@@ -529,7 +531,7 @@ mod tests {
             .collect();
         assert_eq!(
             viajam,
-            vec!["OCINYE_MAIL_KEY"],
+            vec!["OCINYE_SEALING_KEY"],
             "o conjunto do material durável mudou. Isto não é um erro por si: é \
              uma alteração ao que uma migração tem de transportar por canal \
              seguro, e tem de ser deliberada"

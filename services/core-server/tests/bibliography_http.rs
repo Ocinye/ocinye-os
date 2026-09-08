@@ -109,7 +109,7 @@ fn state(pool: PgPool, organisation_id: Uuid, com_componente: bool) -> AppState 
     let mail_registry = Arc::new(ocinye_core::modules::mail::ProviderRegistry::new(
         Arc::new(UnconfiguredProvider),
         config.mail.clone(),
-        config.mail.sealing_key.clone(),
+        config.sealing_key.clone(),
     ));
     AppState {
         pool,

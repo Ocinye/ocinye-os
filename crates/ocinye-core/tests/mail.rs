@@ -205,7 +205,6 @@ fn registo_com(
             username: String::new(),
             password: String::new(),
             max_message_bytes: 25 * 1024 * 1024,
-            sealing_key: chave.clone(),
         },
         chave,
     )
@@ -683,7 +682,12 @@ async fn ligar_uma_caixa_guarda_a_senha_cifrada() {
         .expect("ler")
         .expect("existe");
     assert_eq!(
-        ocinye_core::password::sealed::open(&k, &guardada.sealed).expect("abrir"),
+        ocinye_core::password::sealed::open(
+            &k,
+            ocinye_core::password::sealed::SealingDomain::Mail,
+            &guardada.sealed
+        )
+        .expect("abrir"),
         "a-senha-do-imap"
     );
 }

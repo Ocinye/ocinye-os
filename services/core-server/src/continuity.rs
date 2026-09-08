@@ -496,7 +496,7 @@ pub async fn verify_keys() -> anyhow::Result<()> {
     // A leitura das linhas só acontece quando há chave; sem ela não há nada a
     // tentar, e a decisão é a mesma.
     let mut recusadas: Vec<Uuid> = Vec::new();
-    if let Some(chave) = config.mail.sealing_key.as_ref() {
+    if let Some(chave) = config.sealing_key.as_ref() {
         let linhas: Vec<(Uuid, Vec<u8>, Vec<u8>)> =
             sqlx::query_as("SELECT mailbox_id, nonce, ciphertext FROM mailbox_credentials")
                 .fetch_all(&pool)
@@ -513,13 +513,13 @@ pub async fn verify_keys() -> anyhow::Result<()> {
             };
             // O texto em claro é descartado imediatamente. O que se guarda é o
             // veredicto: nenhuma senha, nem parte de nenhuma, chega ao ecrã.
-            if sealed::open(chave, &fechado).is_err() {
+            if sealed::open(chave, sealed::SealingDomain::Mail, &fechado).is_err() {
                 recusadas.push(*caixa);
             }
         }
     }
 
-    match continuity::legibilidade(config.mail.sealing_key.is_some(), seladas, recusadas.len()) {
+    match continuity::legibilidade(config.sealing_key.is_some(), seladas, recusadas.len()) {
         Legibilidade::NadaParaLer => {
             println!("  Não há estado selado, e não há chave. Nada foi verificado,");
             println!("  e é isso que esta linha diz — não que esteja tudo bem.");
@@ -532,7 +532,7 @@ pub async fn verify_keys() -> anyhow::Result<()> {
         }
         Legibilidade::IlegivelSemChave { seladas } => bail!(
             "há {seladas} credencial(is) selada(s) nesta base e nenhuma \
-             `OCINYE_MAIL_KEY` configurada.\n\
+             `OCINYE_SEALING_KEY` configurada.\n\
              O estado chegou íntegro e ilegível: o dump trouxe o nonce e o \
              criptograma,\n\
              e a chave que os interpreta não estava lá dentro — nem devia \
