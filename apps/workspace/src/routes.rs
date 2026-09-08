@@ -136,6 +136,9 @@ pub const ROUTES: &[&str] = &[
     "/admin/members/{person_id}/units",
     "/admin/members/{person_id}/units/{unit_id}/role",
     "/admin/members/{person_id}/units/{unit_id}/remove",
+    "/admin/members/{person_id}/workspaces",
+    "/admin/members/{person_id}/workspaces/{workspace_id}/role",
+    "/admin/members/{person_id}/workspaces/{workspace_id}/remove",
     "/audit",
     "/search",
     "/ask",
@@ -363,6 +366,18 @@ pub fn router(state: WorkspaceState) -> Router {
         .route(
             "/admin/members/{person_id}/units/{unit_id}/remove",
             post(member_unit_remove),
+        )
+        .route(
+            "/admin/members/{person_id}/workspaces",
+            post(member_workspace_assign),
+        )
+        .route(
+            "/admin/members/{person_id}/workspaces/{workspace_id}/role",
+            post(member_workspace_role),
+        )
+        .route(
+            "/admin/members/{person_id}/workspaces/{workspace_id}/remove",
+            post(member_workspace_remove),
         )
         .route("/audit", get(audit))
         .route("/search", get(search))
@@ -2905,11 +2920,12 @@ async fn member_detail(
     let security_path = format!("/api/v1/administration/members/{person_id}/security");
     let access_path = format!("/api/v1/administration/members/{person_id}/access");
 
-    let (person, security, access, units_catalog) = tokio::join!(
+    let (person, security, access, units_catalog, workspaces_catalog) = tokio::join!(
         optional(&state, &member, &person_path),
         optional(&state, &member, &security_path),
         optional(&state, &member, &access_path),
         optional(&state, &member, "/api/v1/units"),
+        optional(&state, &member, "/api/v1/workspaces?page_size=100"),
     );
 
     if person.is_null() {
@@ -2926,6 +2942,7 @@ async fn member_detail(
             &security,
             &access,
             &units_catalog,
+            &workspaces_catalog,
             None,
         ),
     )
@@ -3023,6 +3040,90 @@ async fn member_unit_remove(
     }
 }
 
+/// Corpo do formulário de atribuição de research workspace a um membro.
+#[derive(serde::Deserialize)]
+struct AtribuirWorkspaceForm {
+    workspace_id: String,
+    role: String,
+}
+
+/// `POST /admin/members/{person_id}/workspaces` — atribui um research workspace
+/// ao membro. Reautorizado no Core sobre o **actor**; administrar a pertença
+/// não concede leitura do conteúdo do workspace.
+async fn member_workspace_assign(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+    axum::extract::Form(form): axum::extract::Form<AtribuirWorkspaceForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = format!("/admin/members/{person_id}");
+    let body = serde_json::json!({ "person_id": person_id, "role": form.role });
+    let path = format!("/api/v1/workspaces/{}/members", form.workspace_id);
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &path,
+        &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&destino).into_response(),
+        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+    }
+}
+
+/// `POST /admin/members/{person_id}/workspaces/{workspace_id}/role` — altera o
+/// papel do membro no workspace (upsert).
+async fn member_workspace_role(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path((person_id, workspace_id)): Path<(String, String)>,
+    axum::extract::Form(form): axum::extract::Form<PapelUnidadeForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = format!("/admin/members/{person_id}");
+    let body = serde_json::json!({ "person_id": person_id, "role": form.role });
+    let path = format!("/api/v1/workspaces/{workspace_id}/members");
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &path,
+        &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&destino).into_response(),
+        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+    }
+}
+
+/// `POST /admin/members/{person_id}/workspaces/{workspace_id}/remove` — remove a
+/// pertença do membro ao workspace.
+async fn member_workspace_remove(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path((person_id, workspace_id)): Path<(String, String)>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = format!("/admin/members/{person_id}");
+    let path = format!("/api/v1/workspaces/{workspace_id}/members/{person_id}");
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &path,
+        &serde_json::json!({}),
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&destino).into_response(),
+        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+    }
+}
+
 /// Re-renderiza o detalhe do membro com a recusa do Core à vista, em vez de a
 /// engolir: uma operação administrativa que falha diz porquê, no mesmo sítio.
 async fn member_detail_with_error(
@@ -3039,11 +3140,12 @@ async fn member_detail_with_error(
     let person_path = format!("/api/v1/people/{person_id}");
     let security_path = format!("/api/v1/administration/members/{person_id}/security");
     let access_path = format!("/api/v1/administration/members/{person_id}/access");
-    let (person, security, access, units_catalog) = tokio::join!(
+    let (person, security, access, units_catalog, workspaces_catalog) = tokio::join!(
         optional(state, member, &person_path),
         optional(state, member, &security_path),
         optional(state, member, &access_path),
         optional(state, member, "/api/v1/units"),
+        optional(state, member, "/api/v1/workspaces?page_size=100"),
     );
     shell_page(
         "Membro",
@@ -3055,6 +3157,7 @@ async fn member_detail_with_error(
             &security,
             &access,
             &units_catalog,
+            &workspaces_catalog,
             Some(&failure.to_string()),
         ),
     )
@@ -3122,11 +3225,12 @@ async fn provision_member(
             let person_path = format!("/api/v1/people/{person_id}");
             let security_path = format!("/api/v1/administration/members/{person_id}/security");
             let access_path = format!("/api/v1/administration/members/{person_id}/access");
-            let (person, security, access, units_catalog) = tokio::join!(
+            let (person, security, access, units_catalog, workspaces_catalog) = tokio::join!(
                 optional(&state, &member, &person_path),
                 optional(&state, &member, &security_path),
                 optional(&state, &member, &access_path),
                 optional(&state, &member, "/api/v1/units"),
+                optional(&state, &member, "/api/v1/workspaces?page_size=100"),
             );
             shell_page(
                 "Membro",
@@ -3138,6 +3242,7 @@ async fn provision_member(
                     &security,
                     &access,
                     &units_catalog,
+                    &workspaces_catalog,
                     Some(&failure.to_string()),
                 ),
             )
