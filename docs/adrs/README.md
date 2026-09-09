@@ -178,6 +178,7 @@ Recursos computacionais e execução isolada.
 
 - [ADR-0500](0500-compute-registry-node-agent.md) — Compute Registry e Node Agent
 - [ADR-0501](0501-capability-runtime-wasm.md) — Capability Runtime em WebAssembly/WASI
+- [ADR-0502](0502-compute-intelligence-connection-contract.md) — Contrato de ligação do nó Compute/Intelligence
 
 ### 0600–0699 · Workspace e Experience Plane
 
@@ -255,6 +256,7 @@ preencher.
 | [0412](0412-scientific-lifecycle-and-provenance.md) | Ciclo de vida científico e proveniência de primeira classe | Science | `HIGH` | Accepted |
 | [0500](0500-compute-registry-node-agent.md) | Compute Registry e Node Agent | Compute | `HIGH` | Accepted |
 | [0501](0501-capability-runtime-wasm.md) | Capability Runtime em WebAssembly/WASI | Compute | `HIGH` | Accepted |
+| [0502](0502-compute-intelligence-connection-contract.md) | Contrato de ligação do nó Compute/Intelligence | Compute | `HIGH` | Accepted |
 | [0600](0600-leptos-workspace-runtime.md) | Leptos para o Workspace Runtime | Workspace | `MEDIUM` | Accepted |
 | [0601](0601-workspace-bff-session.md) | O Workspace como Backend-for-Frontend | Workspace | `HIGH` | Accepted |
 | [0602](0602-workspace-ssr-progressive-enhancement.md) | Workspace em SSR com progressive enhancement, hidratação adiada | Workspace | `MEDIUM` | Accepted |

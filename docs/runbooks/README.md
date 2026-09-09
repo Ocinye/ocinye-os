@@ -37,6 +37,7 @@ Nenhum deles permite a um administrador ler correspondência alheia
 | Runbook | Quando |
 |---|---|
 | [Mudar a Ocinye para outro servidor](migrate-to-another-server.md) | Migração planeada, ou recuperação depois de perder a máquina |
+| [Ligar o primeiro nó Compute/Intelligence](connect-compute-node.md) | `PLANNED` — o ponto de partida da milestone de IA, quando houver hardware |
 
 Os passos da base de dados foram **executados** a 2026-08-28, incluindo o
 controlo negativo que distingue restaurar de recriar
