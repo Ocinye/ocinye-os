@@ -1303,4 +1303,24 @@ async fn uma_caixa_que_falha_nao_leva_as_outras() {
         quando.is_some(),
         "a caixa que funcionou não foi sincronizada: a passagem parou na que falhou"
     );
+
+    // A passagem deixou uma batida — e é ela que prova, a quem arranca, que a
+    // ingestão automática correu. Sem esta escrita, `MailSync` não se poderia
+    // declarar disponível sem reportar saudável o que não verificou (§62).
+    //
+    // Este é o único teste da suite que corre `ingest_all`, e a batida é uma
+    // linha única global: por isso as asserções sobre o valor são desta
+    // passagem, sem corrida com outra.
+    let batida = ocinye_core::modules::mail::repository::ingestion_heartbeat(&pool)
+        .await
+        .expect("consulta da batida")
+        .expect("a passagem tinha de deixar uma batida");
+    assert!(
+        batida.mailboxes >= 2,
+        "a batida não contou as caixas que a passagem visitou"
+    );
+    assert!(
+        batida.failed >= 1,
+        "a caixa que recusou não apareceu na contagem de falhas da batida"
+    );
 }

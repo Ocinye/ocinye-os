@@ -70,16 +70,23 @@ correio interno perfeitamente normal.
 
 | `mail` | `mail.send` | `mail.sync` | `mail.ai_assist` | Situação |
 |---|---|---|---|---|
-| `not_configured` | `not_configured` | `not_configured` | `not_configured` | **Estado actual desta instalação** |
-| `available` | `available` | `degraded` | `no_resource` | Configurado, sem nó de IA |
-| `available` | `available` | `degraded` | `available` | Configurado, com nó de IA |
+| `not_configured` | `not_configured` | `not_configured` | `not_configured` | Sem correio configurado |
+| `available` | `available` | `available` | `no_resource` | Configurado, worker a sincronizar, sem nó de IA |
+| `available` | `available` | `available` | `available` | Configurado, worker a sincronizar, com nó de IA |
+| `available` | `available` | `degraded` | — | Configurado, mas o worker parou ou uma caixa falha |
+| `unavailable` | `unavailable` | `unavailable` | — | Configurado, IMAP/SMTP sem responder |
 
-`mail.sync` nunca chega a `available`, e é deliberado: **a sincronização é
-manual**. Cada pasta é actualizada quando alguém carrega em «Actualizar», e não
-existe processo que o faça sozinho. Correio novo não aparece por si.
+`mail.sync` reporta `available` quando a ingestão automática está de facto a
+correr, e `degraded` quando não está — nunca `available` só por o correio estar
+configurado. O worker percorre as caixas ligadas a cada cinco minutos e, no fim
+de cada passagem, deixa uma batida em `mail_ingestion_heartbeat`; a capacidade
+lê essa batida. Sem uma batida recente — worker parado, ou instalação acabada de
+restaurar — degrada; uma passagem que não conseguiu actualizar alguma caixa
+também degrada, com a razão a ficar na caixa (`mailboxes.last_sync_error`).
 
-Reportá-la como disponível porque o botão existe descreveria mal o que o sistema
-faz (`CLAUDE.md` §69). O que falta é um worker de ingestão periódica.
+Verificar a disponibilidade sem verificar a batida seria reportar saudável o que
+não se verificou (`CLAUDE.md` §62). Quem precisa de agora tem na mesma o botão
+«Actualizar».
 
 ## Diagnóstico
 

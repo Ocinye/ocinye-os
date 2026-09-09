@@ -120,10 +120,29 @@ Liga por IMAP e SMTP, lista as pastas que o servidor tem, conta mensagens. Não
 imprime credenciais nem conteúdo, e **não envia nada**. Ver
 [operations.md](operations.md).
 
+## Sincronização automática
+
+O correio recebido deixou de esperar que alguém carregue em sincronizar. O worker
+percorre as caixas ligadas a cada `INGESTION_INTERVAL` (cinco minutos): lista o
+que há de novo, indexa por diferença — `upsert_message` não duplica —, e uma
+caixa que recuse não interrompe as outras, com a razão a ficar na caixa que
+falhou (`mailboxes.last_sync_error`). Quem precisa de agora tem na mesma o botão
+de sincronizar.
+
+`mail.sync` reporta `available` quando a ingestão está de facto a correr, e não
+por o correio estar configurado: cada passagem deixa uma batida em
+`mail_ingestion_heartbeat`, e a capacidade lê-a. Sem uma batida recente — worker
+parado, ou instalação acabada de restaurar — reporta `degraded`, porque um health
+check nunca reporta saudável o que não verificou (`CLAUDE.md` §62). Uma passagem
+que não conseguiu actualizar alguma caixa também degrada, com a razão na caixa.
+
+A garantia de não haver duas sincronizações em simultâneo assenta hoje num único
+worker por instalação, e as passagens são sequenciais dentro dele. Uma implantação
+com vários workers exigiria um bloqueio de coordenação, e é uma limitação
+declarada, não uma propriedade provada.
+
 ## Limitações declaradas
 
-- **A sincronização é manual.** Um membro actualiza uma pasta; nada o faz por
-  ele. `mail.sync` reporta `degraded`, não `available`.
 - **A pesquisa é sobre metadados e excerto**, não sobre o corpo integral —
   consequência de [ADR-0407](../adrs/0407-mail-index-not-archive.md).
 - **Anexos não podem ser descarregados.** Aparecem descritos, com a acção

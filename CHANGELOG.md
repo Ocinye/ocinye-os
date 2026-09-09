@@ -7,6 +7,30 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### A ingestão de correio diz a verdade, e o arranque também — 2026-09-09
+
+`mail.sync` deixou de reportar `degraded` sempre que o correio estava
+configurado. A ingestão automática já existia — o worker percorre as caixas
+ligadas a cada cinco minutos —, mas a capacidade descrevia-a como manual. Agora
+cada passagem deixa uma batida em `mail_ingestion_heartbeat` (migração `0030`), e
+`mail.sync` reporta `available` quando a ingestão está **de facto** a correr, e
+`degraded` quando não está: sem uma batida recente (worker parado, ou instalação
+acabada de restaurar), ou com uma passagem que falhou numa caixa. Verificar a
+disponibilidade sem verificar a batida seria reportar saudável o que não se
+verificou (`CLAUDE.md` §62).
+
+O modelo de prontidão passou a distinguir **avaria** de **ausência deliberada**.
+Um componente opcional só degrada o sistema quando está `Unavailable` ou
+`Degraded` — configurado e a falhar. `NoResource`, `NotConfigured` e `Planned`
+são espera ou escolha, não avaria: a ausência de IA e de computação antes do
+primeiro nó (`CLAUDE.md` §7) já não arrasta o sistema para degradado.
+
+Em consequência, o arranque com tudo pronto e só IA/computação por ligar diz
+**«SISTEMA OPERACIONAL»**, e explica que a IA e a computação aguardam a ligação
+do primeiro nó computacional da Ocinye — em vez de anunciar uma avaria que não
+existe. A degradação real continua a dizer-se, com a capacidade avariada
+assinalada.
+
 ### Produção a correr, e a documentação a dizê-lo — 2026-09-09
 
 A fatia do segundo factor entrou em produção: Core, Workspace e Worker servem de

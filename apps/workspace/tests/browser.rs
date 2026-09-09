@@ -4325,11 +4325,14 @@ async fn um_core_degradado_deixa_seguir_e_diz_o_que_falta() {
     let (core, _t) = core_de_mentira(
         projeccao(
             "degraded",
+            // Uma avaria real: um opcional configurado que devia responder e não
+            // responde. É isto que degrada o sistema no novo modelo — não uma
+            // ausência deliberada como `not_configured`, que é escolha e não falha.
             serde_json::json!([{
                 "component": "mail",
-                "state": "not_configured",
+                "state": "unavailable",
                 "criticality": "optional",
-                "reason": "Não configurado nesta instalação."
+                "reason": "O correio institucional está configurado, mas o serviço não está a responder."
             }]),
         ),
         200,
@@ -4345,12 +4348,12 @@ async fn um_core_degradado_deixa_seguir_e_diz_o_que_falta() {
         .expect("html");
 
     assert!(
-        pagina.contains("PRONTO COM LIMITAÇÕES"),
-        "um Core degradado devia deixar seguir com limitações"
+        pagina.contains("SISTEMA OPERACIONAL COM UMA AVARIA"),
+        "um Core degradado devia deixar seguir, assinalando a avaria"
     );
     assert!(
-        pagina.contains("Não configurado nesta instalação."),
-        "a limitação factual não chegou a quem lê"
+        pagina.contains("não está a responder."),
+        "a avaria factual não chegou a quem lê"
     );
     assert!(
         pagina.contains("http-equiv=\"refresh\""),

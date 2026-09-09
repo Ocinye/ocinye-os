@@ -97,7 +97,7 @@ sem que nada falhe.
   A interface distingue as ausências em vez de mostrar uma caixa vazia. **A
   ingestão é periódica**: o worker percorre as caixas ligadas, e uma que recuse
   não interrompe as outras — a razão fica guardada na caixa que falhou.
-- **28 migrations**, aplicáveis de base vazia; 72 tabelas.
+- **30 migrations**, aplicáveis de base vazia; 75 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
