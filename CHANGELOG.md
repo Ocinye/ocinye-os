@@ -7,6 +7,20 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Produção a correr, e a documentação a dizê-lo — 2026-09-09
+
+A fatia do segundo factor entrou em produção: Core, Workspace e Worker servem de
+um SHA exacto de `origin/main`, atrás da Cloudflare; a migração `0029` aplicou-se
+no arranque do Core; `OCINYE_SEALING_KEY` está no servidor; e `Fidel Admin`
+enrolou o TOTP, com a única sessão privilegiada viva já MFA-assegurada.
+
+A documentação **viva** que ainda afirmava o contrário foi corrigida para a
+verdade — `CLAUDE.md` §1, [`docs/deployment/`](docs/deployment/README.md) e
+[`infra/`](infra/README.md) diziam «nenhum ambiente está deployado» e «MFA não
+existe». Os registos **datados** não foram tocados: a baseline de segurança de
+2026-08-23 e o ADR-0103 eram verdadeiros quando escritos, e a história não se
+reescreve para acomodar a realidade posterior (`CLAUDE.md` §68).
+
 ### Segundo factor obrigatório para identidades privilegiadas — 2026-09-08
 
 Uma palavra-passe deixa de bastar para exercer autoridade privilegiada. Uma
