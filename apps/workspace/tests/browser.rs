@@ -1913,17 +1913,33 @@ async fn set_field(page: &Page, seletor: &str, valor: &str) {
           campo.dispatchEvent(new Event('change', {{ bubbles: true }})); \
           return campo.value; }})()"
     );
-    let escrito: Option<String> = page
-        .evaluate(script)
-        .await
-        .expect("preencher")
-        .into_value()
-        .ok();
-    assert_eq!(
-        escrito.as_deref(),
-        Some(valor),
-        "«{seletor}» não aceitou o valor: o formulário mudou de forma"
-    );
+
+    // Reescreve até o valor pegar, ou até ao prazo. `open` e um submit devolvem
+    // assim que a navegação parte, e a resposta com o formulário chega no instante
+    // seguinte; escrever no campo nesse intervalo encontra-o ausente — o
+    // `querySelector` devolve `null`, e o sintoma é «o formulário mudou de forma».
+    // Não é um campo morto, é um campo que ainda não chegou. Um campo morto de
+    // verdade continua ausente ao fim do prazo, e aí a asserção fala.
+    let inicio = std::time::Instant::now();
+    loop {
+        let escrito: Option<String> = page
+            .evaluate(script.clone())
+            .await
+            .expect("preencher")
+            .into_value()
+            .ok();
+        if escrito.as_deref() == Some(valor) {
+            return;
+        }
+        if inicio.elapsed() >= DEADLINE {
+            assert_eq!(
+                escrito.as_deref(),
+                Some(valor),
+                "«{seletor}» não aceitou o valor: o formulário mudou de forma"
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(120)).await;
+    }
 }
 
 /// Submete o formulário da página.
