@@ -182,7 +182,10 @@ suites() {
 #
 # Auditado em 2026-08-29, em série, marca a marca. O número continua fixo: uma
 # viagem que deixe de levantar faz a contagem cair e o portão fecha.
-viagens-de-browser|90|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|90
+# 90 → 91 em 2026-09-09: entrou a viagem que cria uma ideia pelo produto e vê
+# nascer o Research Workspace — a criação de ideia era exercitada só a partir de
+# um ambiente semeado, nunca pela interface. Levanta um harness: +1 marca.
+viagens-de-browser|91|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|91
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

@@ -10821,3 +10821,44 @@ async fn revogar_uma_sessao_de_membro_pelo_produto() {
         tokio::time::sleep(Duration::from_millis(120)).await;
     }
 }
+
+/// Uma pessoa cria uma ideia pelo produto, e nasce-lhe o Research Workspace.
+///
+/// A criação de uma ideia é a porta de entrada de toda a cadeia científica, e
+/// era exercitada só a partir de um workspace semeado — nunca pela interface
+/// que uma pessoa usa. Aqui percorre-se o caminho real: navegar a Ideias,
+/// escolher a unidade que a pessoa gere, preencher, criar, e chegar ao ambiente
+/// que a ideia abriu. Depois confirma-se que a ideia aparece na lista: a criação
+/// teve efeito, e não só um redirecto.
+#[tokio::test]
+async fn uma_pessoa_cria_uma_ideia_e_nasce_o_workspace() {
+    let harness = harness!();
+    let (pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    // Uma ideia pertence sempre a uma unidade; sem gerir uma, não há onde a pôr.
+    harness.manages_a_unit(pessoa).await;
+
+    let titulo = unique_title("Sensores de baixa potência");
+
+    let pagina = harness.open("/ideas/new").await;
+    esperar_por(&pagina, "Nova Ideia").await;
+
+    // A unidade que a pessoa gere é a única opção do selector — sem placeholder,
+    // é a primeira. Escolhe-se pelo valor, que é o identificador.
+    let unidade_id = valor_de(&pagina, "select[name=unit_id] option:nth-child(1)").await;
+    escolher(&pagina, "select[name=unit_id]", &unidade_id).await;
+    set_field(&pagina, "input[name=title]", &titulo).await;
+    set_field(
+        &pagina,
+        "textarea[name=summary]",
+        "Explorar o consumo em nós remotos.",
+    )
+    .await;
+    submit(&pagina, "form[action$='/ideas/new']").await;
+
+    // Criar uma ideia abre o seu Research Workspace, e o título está lá.
+    esperar_por(&pagina, &titulo).await;
+
+    // E a ideia aparece na lista de Ideias: o efeito é real, não um redirecto.
+    let lista = harness.open("/ideas").await;
+    esperar_por(&lista, &titulo).await;
+}
