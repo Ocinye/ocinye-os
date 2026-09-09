@@ -42,6 +42,23 @@ const POSITIONS: [(&str, &str); 9] = [
     ("external_collaborator", "Colaborador externo"),
 ];
 
+/// O rótulo em português de uma posição institucional, pelo código do domínio.
+///
+/// Uma só tradução, partilhada pelo formulário de criação, pelo detalhe do
+/// membro e pela lista — para que «founder» nunca apareça cru num sítio e
+/// «Fundador» noutro. Um código que este build não conhece devolve-se como está,
+/// em vez de desaparecer: uma posição nova é visível, e não engolida.
+#[must_use]
+pub fn position_label(code: &str) -> String {
+    if code.is_empty() {
+        return "—".to_owned();
+    }
+    POSITIONS
+        .iter()
+        .find(|(c, _)| *c == code)
+        .map_or_else(|| code.to_owned(), |(_, label)| (*label).to_owned())
+}
+
 /// Ecrã «Adicionar utilizador».
 ///
 /// Um formulário e não um assistente de cinco passos: os campos cabem num ecrã,
@@ -646,11 +663,14 @@ pub fn member_detail(
     // mostrava a mesma pessoa duas vezes: `afernandes · afernandes@ocinye.com`.
     let email = text(person, "email").to_owned();
     let status = text(person, "status").to_owned();
-    let position = person
-        .get("institutional_position")
-        .and_then(Value::as_str)
-        .unwrap_or("—")
-        .to_owned();
+    // A posição em português. Vinha crua — «founder» em vez de «Fundador» — por
+    // não passar pela mesma tradução que o formulário de criação usa.
+    let position = position_label(
+        person
+            .get("institutional_position")
+            .and_then(Value::as_str)
+            .unwrap_or(""),
+    );
 
     let security = security.clone();
     let access = access.clone();
@@ -1514,6 +1534,19 @@ mod tests {
 
     const PID: &str = "11111111-1111-1111-1111-111111111111";
     const UID: &str = "33333333-3333-3333-3333-333333333333";
+
+    /// A posição institucional lê-se em português, e um código desconhecido
+    /// aparece como está em vez de desaparecer.
+    #[test]
+    fn a_posicao_institucional_le_se_em_portugues() {
+        assert_eq!(position_label("founder"), "Fundador");
+        assert_eq!(position_label("director"), "Director");
+        assert_eq!(position_label(""), "—");
+        // Um código que este build não conhece é visível, não engolido.
+        assert_eq!(position_label("chair_of_the_board"), "chair_of_the_board");
+        // «founder» cru — o que aparecia na coluna — não sobrevive à tradução.
+        assert_ne!(position_label("founder"), "founder");
+    }
 
     /// A barra do topo do membro não finge separadores.
     ///

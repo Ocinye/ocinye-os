@@ -1001,7 +1001,10 @@ pub fn members(viewer: &Viewer, payload: &Value) -> impl IntoView {
             Column::new("NOME"),
             Column::new("E-MAIL"),
             Column::new("UNIDADE"),
-            Column::new("FUNÇÃO"),
+            // «Posição», e não «Função»: a coluna mostra a posição institucional
+            // (Fundador, Director), que não concede acesso. Chamá-la «Função»
+            // sugeria o papel técnico, que é outra dimensão (ADR-0100).
+            Column::new("POSIÇÃO"),
             Column::new("REGISTO"),
             Column::new("ESTADO"),
             Column::right("ACTIVIDADE"),
@@ -1023,10 +1026,14 @@ pub fn members(viewer: &Viewer, payload: &Value) -> impl IntoView {
                         Cell::Primary(text(row, "full_name")),
                         Cell::Mono(text(row, "email")),
                         Cell::Mono(text(row, "unit_code")),
-                        // A posição institucional é mostrada para atribuição.
-                        // Não concede permissões, e a interface não sugere que
-                        // conceda.
-                        Cell::Text(text(row, "institutional_position")),
+                        // A posição institucional, em português e pela mesma
+                        // tradução do resto da Administração. Não concede
+                        // permissões, e a interface não sugere que conceda.
+                        Cell::Text(super::administration::position_label(
+                            row.get("institutional_position")
+                                .and_then(Value::as_str)
+                                .unwrap_or(""),
+                        )),
                         Cell::Mono(day(row, "created_at")),
                         Cell::Badge(status.clone(), Tone::of(&status)),
                         Cell::Mono(day(row, "last_seen_at")),
