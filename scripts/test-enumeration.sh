@@ -185,7 +185,11 @@ suites() {
 # 90 → 91 em 2026-09-09: entrou a viagem que cria uma ideia pelo produto e vê
 # nascer o Research Workspace — a criação de ideia era exercitada só a partir de
 # um ambiente semeado, nunca pela interface. Levanta um harness: +1 marca.
-viagens-de-browser|91|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|91
+#
+# 91 → 93 em 2026-09-10: entraram a criação de um dataset e a de uma referência
+# bibliográfica pelo produto — ambas eram exercitadas só pelo Core. Duas viagens,
+# duas marcas.
+viagens-de-browser|93|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|93
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

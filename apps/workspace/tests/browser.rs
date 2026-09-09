@@ -10889,3 +10889,61 @@ async fn uma_pessoa_cria_uma_ideia_e_nasce_o_workspace() {
     let lista = harness.open("/ideas").await;
     esperar_por(&lista, &titulo).await;
 }
+
+/// Uma pessoa cria um dataset pelo produto, dentro de um ambiente onde escreve.
+///
+/// A criação de datasets era exercitada só pelo Core; aqui percorre-se o ecrã:
+/// escolher o Research Workspace, dar código e título, criar, e ver o dataset
+/// aparecer na lista institucional.
+#[tokio::test]
+async fn uma_pessoa_cria_um_dataset_no_seu_ambiente() {
+    let harness = harness!();
+    let (pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.owns_a_workspace(pessoa).await;
+
+    let codigo = unique_title("DS");
+    let titulo = unique_title("Leituras de bancada");
+
+    let pagina = harness.open("/datasets/new").await;
+    esperar_por(&pagina, "Novo Dataset").await;
+    let destino = valor_de(&pagina, "select[name=workspace_id] option:nth-child(1)").await;
+    escolher(&pagina, "select[name=workspace_id]", &destino).await;
+    set_field(&pagina, "input[name=code]", &codigo).await;
+    set_field(&pagina, "input[name=title]", &titulo).await;
+    set_field(
+        &pagina,
+        "textarea[name=description]",
+        "Leituras cruas da bancada 2.",
+    )
+    .await;
+    submit(&pagina, "form[action$='/datasets/new']").await;
+
+    // A criação leva à lista de Datasets, e o dataset está lá.
+    esperar_por(&pagina, &titulo).await;
+}
+
+/// Uma pessoa cria uma referência bibliográfica pelo produto.
+///
+/// A bibliografia é conhecimento institucional; criar uma referência era
+/// exercitada só pelo Core. Aqui escolhe-se o ambiente, preenche-se e cria-se,
+/// e a referência aparece na bibliografia.
+#[tokio::test]
+async fn uma_pessoa_cria_uma_referencia_no_seu_ambiente() {
+    let harness = harness!();
+    let (pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.owns_a_workspace(pessoa).await;
+
+    let titulo = unique_title("Redes de sensores sem fios");
+
+    let pagina = harness.open("/bibliography/new").await;
+    esperar_por(&pagina, "Nova Referência").await;
+    let destino = valor_de(&pagina, "select[name=workspace_id] option:nth-child(1)").await;
+    escolher(&pagina, "select[name=workspace_id]", &destino).await;
+    set_field(&pagina, "input[name=title]", &titulo).await;
+    set_field(&pagina, "input[name=authors]", "Ana Fernandes; Bruno Costa").await;
+    set_field(&pagina, "input[name=year]", "2024").await;
+    submit(&pagina, "form[action$='/bibliography/new']").await;
+
+    // A referência aparece na bibliografia — o efeito é real.
+    esperar_por(&pagina, &titulo).await;
+}
