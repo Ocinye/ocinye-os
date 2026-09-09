@@ -123,11 +123,20 @@ pub fn validate_email(email: &str) -> CoreResult<String> {
 /// > **O servidor arranca o primeiro administrador. O administrador arranca a
 /// > instituição pelo Ocinye OS.**
 ///
+/// # Provisionar e reemitir são a mesma operação
+///
+/// A primeira vez dá acesso a quem não tinha; a seguir, se a credencial
+/// temporária anterior expirou, esta mesma operação **reemite** — retira a que
+/// não vale e emite uma nova. Um convite expirado não deixa a pessoa num limbo
+/// à espera de uma operação diferente; o caminho é o mesmo, e o registo é que
+/// distingue (`account_provisioned` contra `account_access_reissued`).
+///
 /// # O que esta operação recusa
 ///
-/// Uma pessoa que já tem credencial — dar-lhe outra seria repor a palavra-passe
-/// pelas costas de quem a usa. Isso é `reset_password`, que existe, é auditado
-/// como reposição, e não se confunde com isto.
+/// Uma pessoa que já tem uma credencial **utilizável** — dar-lhe outra seria
+/// repor a palavra-passe pelas costas de quem a usa. Isso é `reset_password`,
+/// que existe, é auditado como reposição, e não se confunde com isto. Uma
+/// credencial expirada não conta como utilizável: essa reemite-se.
 ///
 /// E uma identidade privilegiada: essas nascem do bootstrap e não se
 /// provisionam por aqui.
@@ -135,8 +144,8 @@ pub fn validate_email(email: &str) -> CoreResult<String> {
 /// # Errors
 ///
 /// Devolve [`CoreError::NotFound`] quando a pessoa não existe na organização de
-/// quem administra, e [`CoreError::Conflict`] quando ela já tem credencial ou
-/// não é uma pessoa.
+/// quem administra, e [`CoreError::Conflict`] quando ela já tem uma credencial
+/// utilizável ou não é uma pessoa.
 pub async fn provision_existing_person(
     pool: &PgPool,
     authenticator: &Authenticator,
@@ -173,6 +182,18 @@ pub async fn provision_existing_person(
 
     let mut tx = pool.begin().await?;
 
+    // Retirar qualquer credencial temporária ainda `active` antes de emitir a
+    // nova. Uma credencial expirada não é utilizável — `has_usable_credential`
+    // já o confirmou acima —, mas continua `state = 'active'` na base até alguém
+    // a retirar: nada a transiciona para `expired` sozinha. O índice único
+    // `uq_credentials_live (person_id, kind) WHERE state = 'active'` conta essa
+    // linha, e inserir uma segunda sem retirar a primeira rebentava com uma
+    // violação de unicidade — o «An unexpected error occurred» que o
+    // administrador via ao reemitir acesso a um convite expirado. Retirá-la
+    // primeiro é a semântica de reemissão: a credencial anterior deixa de valer,
+    // e a nova toma o seu lugar.
+    let reemissao = creds::revoke_live(&mut *tx, pessoa.id, CredentialKind::Temporary).await? > 0;
+
     creds::insert(
         &mut *tx,
         pessoa.id,
@@ -180,15 +201,28 @@ pub async fn provision_existing_person(
         &verifier,
         Some(expires_at),
         Some(actor.person_id),
-        "provisionamento de uma pessoa existente",
+        if reemissao {
+            "reemissão de acesso a uma pessoa existente"
+        } else {
+            "provisionamento de uma pessoa existente"
+        },
     )
     .await?;
 
+    // Provisionar e reemitir são registos diferentes de propósito: um diz que
+    // antes não havia acesso nenhum, o outro que uma credencial anterior foi
+    // retirada e substituída. Confundi-los apagaria do registo a distinção que
+    // quem audita precisa de ver.
+    let accao = if reemissao {
+        action::ACCOUNT_ACCESS_REISSUED
+    } else {
+        action::ACCOUNT_PROVISIONED
+    };
     audit::record(
         &mut tx,
         Some(actor),
         ids,
-        AuditEntry::new(action::ACCOUNT_PROVISIONED, "person")
+        AuditEntry::new(accao, "person")
             .resource(pessoa.id)
             .detail("email", pessoa.email.clone())
             .detail("expires_at", expires_at.to_rfc3339()),

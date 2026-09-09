@@ -319,8 +319,25 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
         .and_then(Value::as_i64)
         .unwrap_or(0);
     let temporary_expiry = day(overview, "temporary_credential_expires_at");
+    let temporary_expired = overview
+        .get("temporary_credential_expired")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let changed = day(overview, "password_changed_at");
     let last_sign_in = day(overview, "last_successful_sign_in");
+
+    // Uma credencial expirada continua a existir na base, mas dizer «expira» de
+    // uma data passada é apresentá-la como se ainda estivesse por vir. Quando já
+    // passou, diz-se «Expirada em», com o seu próprio tom.
+    let tem_temporaria = temporary_expiry != "—";
+    // Reemitir, e não «dar acesso», quando já houve uma credencial que expirou:
+    // a acção é a mesma no Core, mas o nome tem de dizer o que aconteceu.
+    let reemitir = pode_provisionar && temporary_expired;
+    let rotulo_acesso = if reemitir {
+        "Reemitir acesso"
+    } else {
+        "Dar acesso"
+    };
 
     let sessions: Vec<Value> = overview
         .get("live_sessions")
@@ -357,8 +374,22 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                         <dt>"Definida em"</dt>
                         <dd class="oc-mono">{changed}</dd>
 
-                        <dt>"Credencial temporária expira"</dt>
-                        <dd class="oc-mono">{temporary_expiry}</dd>
+                        <dt>"Credencial temporária"</dt>
+                        <dd>
+                            {if !tem_temporaria {
+                                view! { <span class="oc-mono">"—"</span> }.into_any()
+                            } else if temporary_expired {
+                                badge(format!("Expirada em {temporary_expiry}"), Tone::Err)
+                                    .into_any()
+                            } else {
+                                view! {
+                                    <span class="oc-mono">
+                                        "Expira em "{temporary_expiry.clone()}
+                                    </span>
+                                }
+                                    .into_any()
+                            }}
+                        </dd>
 
                         <dt>"Último acesso"</dt>
                         <dd class="oc-mono">{last_sign_in}</dd>
@@ -424,11 +455,15 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                 view! {
                     <div class="oc-mt-6">
                         {card(
-                            section_head("Dar acesso", None, None),
+                            section_head(rotulo_acesso, None, None),
                             view! {
                                 <div>
                                     <p class="oc-muted">
-                                        "Esta pessoa existe na instituição e ainda não tem como entrar. Dar-lhe acesso emite uma credencial temporária e não lhe altera papéis, unidades nem autoridade."
+                                        {if reemitir {
+                                            "A credencial temporária anterior expirou e esta pessoa ficou sem como entrar. Reemitir invalida a credencial expirada e emite uma nova; não lhe altera papéis, unidades nem autoridade, e a palavra-passe definitiva continua a ser definida pelo próprio no primeiro acesso."
+                                        } else {
+                                            "Esta pessoa existe na instituição e ainda não tem como entrar. Dar-lhe acesso emite uma credencial temporária e não lhe altera papéis, unidades nem autoridade. A palavra-passe definitiva é definida pelo próprio no primeiro acesso — nunca por quem administra."
+                                        }}
                                     </p>
                                     {recusa
                                         .clone()
@@ -445,7 +480,7 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                                             view! {
                                                 <form method="post" action=accao.clone() class="oc-mt-3">
                                                     <button class="oc-btn oc-btn--primary" type="submit">
-                                                        "Dar acesso"
+                                                        {rotulo_acesso}
                                                     </button>
                                                 </form>
                                             }
@@ -1793,6 +1828,44 @@ mod tests {
         .to_html();
         assert!(html.contains("Ainda não definida"));
         assert!(html.contains("Sem sessões activas."));
+    }
+
+    /// Um convite com a credencial temporária expirada oferece **reemitir**, e
+    /// apresenta a data passada como expirada — não como uma expiração futura.
+    ///
+    /// É o estado exacto que dava «An unexpected error occurred» ao carregar em
+    /// «Dar acesso»: agora a acção diz o que faz, e a data diz a verdade.
+    #[test]
+    fn convite_expirado_oferece_reemitir_e_diz_expirada() {
+        let html = security_tab(
+            "abc",
+            &json!({
+                "account_status": "invited",
+                "has_permanent_password": false,
+                "temporary_credential_expires_at": "2026-09-08T10:00:00Z",
+                "temporary_credential_expired": true,
+                "may_be_provisioned": true,
+                "live_sessions": []
+            }),
+            None,
+        )
+        .to_html();
+        assert!(
+            html.contains("Reemitir acesso"),
+            "um convite expirado devia oferecer reemitir o acesso"
+        );
+        assert!(
+            !html.contains("Dar acesso"),
+            "não é a primeira entrega: não se diz «dar acesso» a quem já foi provisionado"
+        );
+        assert!(
+            html.contains("Expirada em"),
+            "uma data já passada aparece como «Expirada em», e não como expiração futura"
+        );
+        assert!(
+            !html.contains("Credencial temporária expira"),
+            "a rotulagem antiga apresentava uma data passada como se ainda fosse futura"
+        );
     }
 
     #[test]

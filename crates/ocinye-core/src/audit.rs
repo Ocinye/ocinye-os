@@ -88,6 +88,14 @@ pub mod action {
     /// três aconteceu. «Criada» a quem já existia esconderia a duplicação que
     /// não houve; «reposta» esconderia que antes não havia acesso nenhum.
     pub const ACCOUNT_PROVISIONED: &str = "account_provisioned";
+    /// Uma credencial de acesso foi reemitida a quem já tinha sido provisionado.
+    ///
+    /// Distinto de `account_provisioned`: aqui já existia uma credencial
+    /// temporária — expirada, ou por outra razão inutilizável — e ela é
+    /// invalidada e substituída por uma nova. «Provisionada» a quem já o fora
+    /// esconderia que a anterior foi retirada; «reposta» diria que havia acesso
+    /// utilizável, e não havia.
+    pub const ACCOUNT_ACCESS_REISSUED: &str = "account_access_reissued";
     /// An explicit access grant was created.
     pub const GRANT_CREATED: &str = "grant_created";
     /// An explicit access grant was revoked.
