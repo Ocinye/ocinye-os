@@ -2180,8 +2180,18 @@ async fn as_vistas_partilham_o_universo_autorizado() {
     let relogio_na_criacao = lisboa;
     // Fora de qualquer intervalo natural: nem hoje, nem esta semana, nem este
     // mês, nem os próximos noventa dias.
+    //
+    // A hora deste é fixa às 12:00, e não a corrente. `hoje + 200 dias` cai numa
+    // data qualquer, e uma delas — a partir de um `hoje` a 200 dias da mudança
+    // para a hora de verão — é o dia em que o relógio de Lisboa salta das 01:00
+    // para as 02:00. Um evento com fim às 01:00 nesse dia aponta para uma hora
+    // local que não existe, a conversão de fuso recusa-a, e a criação falha em
+    // silêncio. É uma entrada escondida do calendário — a data, agora, e não só
+    // a hora — da mesma família que este teste já corrigiu. O meio-dia nunca cai
+    // num salto de verão ou de inverno, e a data distante continua a servir o
+    // seu único propósito: estar fora de todas as janelas.
     harness
-        .create_event_via_ui(&distante, hoje + chrono::Duration::days(200), hora)
+        .create_event_via_ui(&distante, hoje + chrono::Duration::days(200), 12)
         .await;
 
     // De outra pessoa, e pessoal: não deve aparecer em superfície nenhuma.
