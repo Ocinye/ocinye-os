@@ -32,8 +32,10 @@ descrevem o mesmo sistema: quando divergirem, é defeito, e corrige-se nas duas.
 
 > Factos verificados, não intenções. Não uses esta secção para roadmap.
 
-**Verificado em 2026-08-28.** Cada afirmação abaixo é verificável correndo
-`./scripts/verify.sh` no repositório.
+**Verificado em 2026-08-28**; o estado de deploy e de MFA re-verificado em
+2026-09-09, contra a produção a correr. Cada afirmação abaixo é verificável
+correndo `./scripts/verify.sh` no repositório — e as de produção, contra o
+servidor.
 
 Os **números** desta secção não são escritos à mão: saem de
 `./scripts/repository-facts.sh`, que os deriva da árvore e só lê. Já houve aqui
@@ -49,26 +51,29 @@ sem que nada falhe.
   3 serviços (`core-server`, `worker`, `node-agent`) e 1 aplicação
   (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED`, não deployado.** 150 caminhos e 177 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 150 caminhos e 177 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
-  `GET /api/v1/system/capabilities`.
+  `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
+  (`api.ocinye.com`), a partir de um SHA exacto de `origin/main`
+  ([deployment](docs/deployment/README.md)).
 - **Autenticação: `IMPLEMENTED`, no Core** — nome de utilizador e palavra-passe,
   verificadores Argon2id, sessões server-side opacas, credenciais temporárias
   que expiram, throttling ([ADR-0103](docs/adrs/0103-core-owned-authentication.md),
   [ADR-0104](docs/adrs/0104-password-policy-and-hashing.md)).
 - **Segundo factor: `IMPLEMENTED`, obrigatório para identidades privilegiadas,
-  activação operacional pendente do enrolamento** — TOTP (RFC 6238) com o seed
-  selado por uma subchave derivada da raiz institucional de selagem, códigos de
-  recuperação de uso único (verificadores Argon2id), protecção de replay por
-  passo monótono, e a garantia de MFA resolvida no momento da autorização — uma
-  sessão sem segundo factor não exerce autoridade `PlatformAdmin`, mesmo que a
-  role tenha sido atribuída depois de a sessão nascer
+  e operacional em produção** — TOTP (RFC 6238) com o seed selado por uma
+  subchave derivada da raiz institucional de selagem, códigos de recuperação de
+  uso único (verificadores Argon2id), protecção de replay por passo monótono, e
+  a garantia de MFA resolvida no momento da autorização — uma sessão sem segundo
+  factor não exerce autoridade `PlatformAdmin`, mesmo que a role tenha sido
+  atribuída depois de a sessão nascer
   ([ADR-0107](docs/adrs/0107-mandatory-mfa-sessions-and-recovery.md)). A revogação
   individual de sessão de um membro é uma operação governada, com posse validada.
-  **O que falta é operacional, não código:** `Fidel Admin` ainda não enrolou o
-  segundo factor pelo browser, e `OCINYE_SEALING_KEY` tem de estar no servidor
-  antes do deploy. `MFA` continua **não exigido** a identidades não privilegiadas.
+  **A activação operacional está feita:** `OCINYE_SEALING_KEY` está no servidor,
+  `Fidel Admin` enrolou o segundo factor pelo browser (TOTP confirmado, dez
+  códigos de recuperação vivos), e a única sessão privilegiada viva é
+  MFA-assegurada. `MFA` continua **não exigido** a identidades não privilegiadas.
 - **Autorização por permissões nomeadas: `IMPLEMENTED`.** 72 permissões, quatro
   âmbitos, grants explícitos atribuíveis e revogáveis, e acesso explicável
   ([ADR-0101](docs/adrs/0101-permissions-scopes-and-grants.md)). Nenhuma operação
@@ -78,7 +83,8 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED`, não deployado.** 72 ecrãs em Leptos SSR,
+- **Ocinye Workspace: `IMPLEMENTED` e em produção** (`os.ocinye.com`, atrás da
+  Cloudflare, do mesmo SHA que o Core). 72 ecrãs em Leptos SSR,
   sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
   pelas permissões que o Core calcula.
 - **Ocinye Mail: `IMPLEMENTED`, `NOT CONFIGURED`.** Módulo do Core com
@@ -245,14 +251,15 @@ sem que nada falhe.
 
 **Continua a não existir:**
 
-- **Segundo factor: exigido a identidades privilegiadas, ainda não enrolado.**
-  O código existe e é fail-closed (ADR-0107); o que falta é `Fidel Admin` enrolar
-  o TOTP pelo browser e a raiz de selagem estar no servidor. A identidades **não**
-  privilegiadas o MFA continua a não ser exigido, e uma palavra-passe comprometida
-  de uma conta comum é acesso comprometido dessa conta.
+- **Segundo factor universal não existe.** É exigido e está enrolado para
+  identidades privilegiadas (acima); a identidades **não** privilegiadas o MFA
+  continua a não ser exigido, e uma palavra-passe comprometida de uma conta comum
+  é acesso comprometido dessa conta.
 - **Nenhuma conta existe** numa instalação nova até alguém correr o bootstrap.
-- **Nenhum ambiente está deployado.** Nem desenvolvimento partilhado, nem
-  staging, nem produção. O sistema só correu localmente.
+- **Não existe ambiente de staging nem de desenvolvimento partilhado.** Só
+  produção está deployada — Core, Workspace e Worker, do mesmo SHA de
+  `origin/main`, atrás da Cloudflare ([deployment](docs/deployment/README.md)).
+  Não há um ambiente intermédio entre a máquina de quem desenvolve e a produção.
 - **Compute nodes = 0.** Nenhum nó de computação existe. O Compute Registry
   está implementado e devolve zero, que é o estado verdadeiro.
 - **IA: indisponível.** O AI Gateway existe como código e reporta
