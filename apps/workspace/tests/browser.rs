@@ -2350,6 +2350,56 @@ fn nenhuma_observacao_procura_um_elemento_sem_tolerar_a_transicao() {
     );
 }
 
+/// Uma hora local que não existe — a que o relógio salta na mudança para o
+/// horário de Verão — é recusada com uma frase à vista, e não em silêncio nem
+/// com uma escolha arbitrária. A hora válida adjacente cria.
+///
+/// O comportamento vive em `ocinye_contracts::temporal::resolve_local` e é
+/// testado à unidade lá; aqui prova-se o caminho inteiro, da criação pela
+/// interface até à validação que o membro lê. Não muda nenhuma política
+/// temporal — só a exercita de ponta a ponta (Stable Pre-AI §18).
+#[tokio::test]
+async fn uma_hora_inexistente_de_dst_e_recusada_com_frase_a_vista() {
+    let harness = harness!();
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.manages_a_unit(person_id).await;
+    // O relógio de quem observa é o de Lisboa, declarado — não o da máquina.
+    harness.declarar_fuso("Europe/Lisbon");
+
+    // 2027-03-28: em Lisboa o relógio salta das 01:00 para as 02:00. As 01:30
+    // desse dia não aconteceram, e marcar um evento a começar nelas é o engano
+    // humano que o Core recusa com uma frase.
+    let formulario = harness.open("/calendar/events/new").await;
+    set_field(&formulario, "input[name=title]", &unique_title("Salto")).await;
+    set_field(&formulario, "input[name=starts_at]", "2027-03-28T01:30").await;
+    set_field(&formulario, "input[name=ends_at]", "2027-03-28T02:30").await;
+    set_field(&formulario, "input[name=timezone]", "Europe/Lisbon").await;
+    submit(&formulario, "form.oc-editor__form").await;
+
+    // Fica no formulário, com o erro tipado à vista — não redirecciona para um
+    // detalhe que não devia existir.
+    esperar_por(&formulario, "não existe nesse dia").await;
+    let url = formulario
+        .url()
+        .await
+        .expect("endereço")
+        .unwrap_or_default();
+    assert!(
+        url.contains("/calendar/events/new"),
+        "uma hora inexistente não devia ter criado nada, mas saiu do formulário: {url}"
+    );
+
+    // Controlo positivo: a hora válida adjacente, já depois do salto, cria e
+    // leva ao detalhe. `create_event_via_ui` afirma o redirect por si.
+    let depois = unique_title("Depois do salto");
+    let dia = chrono::NaiveDate::from_ymd_opt(2027, 3, 28).expect("data");
+    let id = harness.create_event_via_ui(&depois, dia, 3).await;
+    assert!(
+        !id.is_empty(),
+        "a hora válida adjacente devia ter criado o evento"
+    );
+}
+
 #[test]
 fn nenhuma_vista_do_calendario_consulta_por_si() {
     let ecra = include_str!("../src/ui/screens/calendar.rs");
