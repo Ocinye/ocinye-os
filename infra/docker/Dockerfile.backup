@@ -1,26 +1,27 @@
 # syntax=docker/dockerfile:1.7
 #
-# A imagem efémera de continuidade: `pg_dump`, `mc` e `age`, para correr na rede
-# privada do Compose.
+# A imagem efémera de continuidade: para correr na rede privada do Compose.
 #
-# # Porque uma imagem à parte, e não a da aplicação
+# # Porque parte da imagem do Core
 #
-# Porque não corre a aplicação. Existe para, uma vez por disparo do agendador,
-# alcançar `postgres` e `object-store` pelos nomes internos do Compose, produzir
-# o conjunto, cifrá-lo com `age` e enviá-lo para o cofre — e depois desaparecer.
-# A imagem da aplicação traz o compilador de Rust e o binário; esta traz um
-# cliente de PostgreSQL, um de S3 e o cifrador, e mais nada.
+# Porque o conjunto começa por um **manifesto** — o que o Core diz que tem de
+# viajar, identidade a identidade (ADR-0700) —, e quem o emite é o próprio
+# binário do Core (`ocinye … snapshot`). A versão do manifesto tem de ser a da
+# instalação, por isso parte-se da imagem do Core **do mesmo release**, e não de
+# uma cópia do binário que poderia divergir. Por cima vêm só os clientes que o
+# transporte usa.
 #
-# # Porque `postgresql-client-17` e não o do Debian
+# # Porque `postgresql-client-17`
 #
-# Porque o servidor é PostgreSQL 17 (`pgvector/pgvector:pg17` no Compose), e um
-# `pg_dump` de versão menor recusa-se a ler uma base maior. A versão acompanha a
-# do servidor; sai do repositório oficial do PostgreSQL, não do `bookworm`, que
-# traz o 15.
-FROM debian:bookworm-slim
+# Porque o servidor é PostgreSQL 17 (`pgvector/pgvector:pg17`), e um `pg_dump` de
+# versão menor recusa-se a ler uma base maior. Sai do repositório oficial do
+# PostgreSQL, não do `bookworm`, que traz o 15.
+ARG OCINYE_RELEASE_SHA
+FROM ocinye/ocinye-core-server:${OCINYE_RELEASE_SHA}
 
+USER root
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl gnupg age \
+ && apt-get install -y --no-install-recommends gnupg age \
  && install -d /usr/share/postgresql-common/pgdg \
  && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
       -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
@@ -37,5 +38,8 @@ COPY scripts/institutional-backup.sh scripts/backup-remote.sh scripts/backup-obj
      /opt/ocinye/scripts/
 RUN chmod +x /opt/ocinye/scripts/*.sh
 
+# O binário do Core desta imagem — o que emite o manifesto. Sem isto o script
+# procura-o num caminho de desenvolvimento que aqui não existe.
+ENV OCINYE_CORE_SERVER_BIN=/usr/local/bin/ocinye
 WORKDIR /opt/ocinye
 ENTRYPOINT ["/opt/ocinye/scripts/institutional-backup.sh"]

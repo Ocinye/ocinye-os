@@ -274,6 +274,9 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.backup
+      args:
+        # Parte da imagem do Core deste mesmo release para o binário do manifesto.
+        OCINYE_RELEASE_SHA: ${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
     env_file:
       # A base e o object-store internos, a raiz de selagem — de `core.env`; o
       # destino R2 e a chave pública `age` — de `backup.env`.
