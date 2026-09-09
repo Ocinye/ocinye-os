@@ -24,9 +24,13 @@ A última linha não é uma avaria. O correio não depende de IA.
 Confirme primeiro se o adaptador em uso é `unconfigured`. Se for, o correio não
 está configurado — ver [configure-mail-service.md](configure-mail-service.md).
 
-Se estiver configurado e a caixa continuar vazia: **a ingestão IMAP não está
-implementada** (`mail.sync` reporta `planned`). O índice só contém o que lá foi
-posto, e nada o põe automaticamente. É uma limitação declarada, não uma falha.
+Se estiver configurado e a caixa continuar vazia, olhe para `mail.sync`. O worker
+percorre as caixas ligadas a cada cinco minutos e indexa o correio recebido; uma
+caixa acabada de ligar pode ainda não ter sido visitada. Se `mail.sync` estiver
+`available`, a próxima passagem trá-la — ou use «Actualizar» para não esperar. Se
+estiver `degraded`, ou o worker parou (a batida em `mail_ingestion_heartbeat` está
+velha) ou a passagem falhou nesta caixa, e a razão fica em `last_sync_error` na
+própria caixa.
 
 ## «Não consigo enviar»
 

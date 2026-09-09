@@ -152,10 +152,13 @@ pub fn help() -> impl IntoView {
                     {p("Ao abrir o Ocinye OS, a primeira coisa que aparece é o estado do \
                         sistema. Não é um ecrã de espera: é o Ocinye Core a dizer se está em \
                         condições de operar, antes de lhe pedir a palavra-passe.")}
-                    {p("«Sistema pronto» significa que o núcleo está operacional. \
-                        «Pronto com limitações» significa que uma ou mais capacidades \
-                        opcionais estão indisponíveis — o correio, por exemplo — e o \
-                        trabalho institucional segue à mesma; o arranque diz quais.")}
+                    {p("«Sistema operacional» significa que o núcleo está a operar. Pode \
+                        haver capacidades futuras ainda por chegar — a IA e a computação \
+                        aguardam o primeiro nó computacional da Ocinye —, e isso não é \
+                        avaria: são ausências esperadas, e o arranque diz quais. \
+                        «Sistema operacional com uma avaria» é diferente: uma capacidade \
+                        que está configurada e devia responder não está a responder — o \
+                        correio, por exemplo. O trabalho institucional segue nos dois casos.")}
                     {p("«Não foi possível iniciar» significa que uma dependência essencial \
                         não está disponível, e por isso não há como entrar. «Sem resposta» é \
                         outra coisa: não chegámos a saber o que o Core diria. A diferença \
