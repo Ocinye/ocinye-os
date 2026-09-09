@@ -345,6 +345,12 @@ struct SecurityOverview {
     /// controlos que o Core recusaria — fazendo o administrador julgar-se sem
     /// autoridade que na verdade tem, ou o contrário.
     may_manage_account: bool,
+    /// Se o segundo factor é **exigido** a esta pessoa: identidade privilegiada
+    /// ou `PlatformAdmin` efectivo (ADR-0107). É o Core que decide a regra; o
+    /// ecrã não a conhece.
+    mfa_required: bool,
+    /// Se esta pessoa já tem um seed TOTP **confirmado**.
+    mfa_enrolled: bool,
 }
 
 #[derive(Serialize)]
@@ -406,6 +412,18 @@ async fn security_overview(
         ResourceContext::organisation(ResourceKind::Organisation, principal.organisation_id);
     let may_manage_account = can(&principal, Permission::MembersManage, &actor_ctx, None).allowed;
 
+    // O estado do segundo factor do membro-alvo. É o Core que resolve a regra
+    // que torna o MFA obrigatório — o ecrã não a conhece —, e o enrolamento lê-se
+    // do estado real (um seed TOTP confirmado), nunca de um sinal separado que
+    // pudesse discordar dele.
+    let alvo = identity::principal_for_person(&state.pool, &person)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    let mfa_required = identity::mfa_required(&alvo);
+    let mfa_enrolled = identity::has_confirmed_totp(&state.pool, person.id)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+
     Ok(Json(SecurityOverview {
         account_status: person.account_status().as_str(),
         has_permanent_password: permanent.is_some(),
@@ -418,6 +436,8 @@ async fn security_overview(
         recent_failed_attempts: failures,
         may_be_provisioned: person.identity_kind == "human" && !ja_tem_acesso,
         may_manage_account,
+        mfa_required,
+        mfa_enrolled,
         live_sessions: sessions
             .into_iter()
             .map(|s| SessionSummary {
