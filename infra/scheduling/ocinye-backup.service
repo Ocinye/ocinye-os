@@ -1,24 +1,44 @@
 # Cópia de continuidade do Ocinye OS, em systemd.
 #
-# NÃO está instalado. É o formato, para quando houver um servidor.
+# Instalação:
 #
 #     cp ocinye-backup.* /etc/systemd/system/
 #     systemctl enable --now ocinye-backup.timer
 #
-# O estado de saída é o do script, e é inequívoco: zero só quando o dump e o
-# manifesto saíram, as somas foram reconferidas e — havendo destino — a cópia
-# chegou com a sua soma ao lado. Qualquer outra coisa é não-zero, e o conjunto
-# por terminar fica marcado INCOMPLETO.
+# # Porque dispara um container, e não um script no host
+#
+# Porque `postgres` e `object-store` não publicam porta no host — é o desenho de
+# segurança. Um script no host não os alcança pelos nomes internos. Então o
+# agendador dispara um container **efémero** do mesmo Compose, no perfil
+# `backup`, que participa da rede privada e os alcança por nome. Corre uma vez e
+# desaparece (`run --rm`).
+#
+# O `--build` garante que a imagem corresponde ao release corrente; com as
+# camadas em cache é uma verificação, não uma reconstrução.
+#
+# O estado de saída é o do container, e é inequívoco: zero só quando o dump e o
+# manifesto saíram, as somas foram reconferidas e a cópia chegou ao cofre com a
+# sua soma ao lado. Qualquer outra coisa é não-zero.
 [Unit]
 Description=Cópia de continuidade institucional do Ocinye OS
-Documentation=file:/opt/ocinye/docs/runbooks/migrate-to-another-server.md
+Documentation=file:/srv/ocinye/current/docs/runbooks/migrate-to-another-server.md
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
 User=ocinye
-# Os segredos vêm daqui, e não da linha de comandos, que é visível no `ps`.
-EnvironmentFile=/etc/ocinye/backup.env
-WorkingDirectory=/opt/ocinye
-ExecStart=/opt/ocinye/scripts/institutional-backup.sh
+# O SHA do release corrente, para a etiqueta da imagem. Os **segredos** não vêm
+# por aqui: chegam ao container pelos `env_file` do Compose (`core.env`,
+# `backup.env`), e não à linha de comandos, que é visível no `ps`.
+EnvironmentFile=/etc/ocinye/release.env
+WorkingDirectory=/srv/ocinye/current
+ExecStart=/usr/bin/docker compose -f infra/compose/docker-compose.production.yml --profile backup run --rm --build backup
+# Dar tempo à construção fria da imagem e ao envio; um backup não é rápido.
+TimeoutStartSec=1800
 # Sem repetição automática: uma cópia que falha duas vezes seguidas é um
 # problema para ler, e não para esconder com uma terceira tentativa.
+
+[Install]
+WantedBy=multi-user.target

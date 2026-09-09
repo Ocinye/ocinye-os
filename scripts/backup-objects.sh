@@ -1,5 +1,11 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Traz para o conjunto de continuidade os bytes institucionais.
+#
+# **Bash, e não `/bin/sh`.** Como o `backup-remote.sh`, a codificação percent das
+# credenciais para `MC_HOST_*` usa `printf '%b' '\xNN'` — escapes hexadecimais que
+# o `bash` entende e o `dash` (o `/bin/sh` do Ubuntu) não. Sob dash a credencial
+# saía deformada e o `mc` recusava o MinIO de origem. Auditado um a um, não por
+# troca global de shebangs.
 #
 # # Porque não um comando no ambiente
 #
