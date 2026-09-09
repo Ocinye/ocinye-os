@@ -672,6 +672,13 @@ impl Harness {
     /// No ecrã de desafio, escreve um código válido e submete — pelo fluxo real,
     /// como um autenticador faria. Espera sair de `/mfa`.
     async fn completar_desafio_mfa(&self, page: &Page) {
+        // Espera o ecrã de desafio render antes de escrever no campo. O redirect
+        // do login para `/mfa` muda o endereço numa navegação e a resposta noutra;
+        // escrever no `#mfa-code` no instante em que o endereço passa a `/mfa`,
+        // mas antes de o formulário do desafio existir no DOM, encontra o campo
+        // ausente — «o formulário mudou de forma» — sob carga. O marcador do ecrã
+        // garante que o formulário está lá.
+        esperar_por(page, "Confirme o segundo factor").await;
         set_field(page, "#mfa-code", &codigo_mfa()).await;
         submit(page, "form[action=\"/mfa/challenge\"]").await;
         for _ in 0..60 {
