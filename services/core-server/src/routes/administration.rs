@@ -47,6 +47,10 @@ pub fn routes() -> Router<AppState> {
             get(security_overview),
         )
         .route(
+            "/administration/members/{person_id}/sessions/{session_id}/revoke",
+            post(revoke_member_session),
+        )
+        .route(
             "/administration/members/{person_id}/access",
             get(access_overview),
         )
@@ -280,6 +284,26 @@ async fn set_status(
     .map_err(|error| ApiError::new(error, &ids))?;
 
     Ok(Json(serde_json::json!({ "status": status.as_str() })))
+}
+
+// ── Individual session revocation ─────────────────────────────────────────
+
+/// `POST /administration/members/{person_id}/sessions/{session_id}/revoke`
+///
+/// Revoga **uma** sessão de um membro — o caso «perdi um portátil», distinto de
+/// repor a palavra-passe (que as mata todas). A autoridade do actor é
+/// reautorizada aqui; a posse da sessão é validada no domínio (ADR-0107).
+async fn revoke_member_session(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    Authorised { principal, .. }: Authorised<NeedsMembersManage>,
+    Path((person_id, session_id)): Path<(Uuid, Uuid)>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    let person = scoped_person(&state, &principal, person_id, &ids).await?;
+    identity::revoke_member_session(&state.pool, &principal, &person, session_id, &ids)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 // ── Security overview ───────────────────────────────────────────────────

@@ -48,6 +48,14 @@ pub struct Session {
     /// work on such a session regardless of what this says, which is what makes
     /// typing a URL by hand useless (briefing §23).
     pub must_change_password: bool,
+    /// Whether the member still owes the Core a second factor on this session.
+    ///
+    /// Mirrors the Core's `mfa_required` session state so the Workspace sends
+    /// them to the MFA flow and renders no privileged surface meanwhile. Like
+    /// [`Self::must_change_password`], it is **not** the enforcement — the Core
+    /// refuses ordinary work on such a session regardless — only the routing
+    /// (ADR-0107).
+    pub mfa_required: bool,
     /// When the session expires.
     pub expires_at: Instant,
 }
@@ -298,6 +306,7 @@ mod tests {
             display_name: "Member".into(),
             email: "member@ocinye.com".into(),
             must_change_password: false,
+            mfa_required: false,
             expires_at: Instant::now() + Duration::from_secs(60),
         }
     }
@@ -334,6 +343,7 @@ mod tests {
         let store = SessionStore::new();
         let id = store.create(Session {
             must_change_password: true,
+            mfa_required: false,
             ..session()
         });
         assert!(store.get(&id).unwrap().must_change_password);
@@ -419,6 +429,7 @@ mod tests {
             display_name: "Alguém".to_owned(),
             email: "alguem@ocinye.com".to_owned(),
             must_change_password: false,
+            mfa_required: false,
             expires_at: Instant::now() + Duration::from_secs(600),
         }
     }

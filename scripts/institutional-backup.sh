@@ -25,8 +25,8 @@
 #
 # # O que este conjunto nunca contém
 #
-# A `OCINYE_MAIL_KEY`. É material criptográfico durável: sem ela
-# `mailbox_credentials` chega íntegra e ilegível, e por isso tem de viajar —
+# A `OCINYE_SEALING_KEY`. É a raiz de selagem, material criptográfico durável:
+# sem ela `mailbox_credentials` e os seeds TOTP chegam íntegros e ilegíveis, e por isso tem de viajar —
 # mas por um canal próprio, e nunca ao lado do que ela abre. Um conjunto que a
 # contivesse transformaria uma cópia perdida em compromisso total.
 #
@@ -169,7 +169,7 @@ Ocinye OS — conjunto de continuidade de $CARIMBO
 
 O QUE ESTE CONJUNTO NÃO CONTÉM, E TEM DE VIAJAR À PARTE
 
-  OCINYE_MAIL_KEY   Sem ela, mailbox_credentials chega íntegra e ilegível.
+  OCINYE_SEALING_KEY  Sem ela, mailbox_credentials e seeds TOTP chegam ilegíveis.
                     Viaja por um canal próprio. Se estivesse aqui dentro,
                     perder este conjunto seria perder tudo de uma vez.
 

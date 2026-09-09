@@ -275,6 +275,88 @@ pub fn security(
     }
 }
 
+/// `Definições → Segurança → Códigos de recuperação`.
+///
+/// Regenerar invalida os anteriores, e por isso pede a palavra-passe **e** o
+/// código do autenticador — a mesma sessão aberta não chega para uma acção
+/// deste peso (ADR-0107). `codes` só vem preenchido depois de uma regeneração
+/// bem-sucedida, e são mostrados uma única vez.
+pub fn mfa_recovery(
+    mfa_active: bool,
+    codes: Option<&[String]>,
+    error: Option<String>,
+) -> impl IntoView {
+    let corpo = if let Some(codigos) = codes {
+        let linhas = codigos.join("\n");
+        view! {
+            <p class="oc-muted">
+                "Guardou-os? Estes são os códigos novos. Os anteriores deixaram de
+                 valer. Não voltarão a ser mostrados."
+            </p>
+            <pre class="oc-mfa__codes oc-mono" data-oc="recovery-codes">{linhas}</pre>
+            <div class="oc-row oc-gap-3 oc-mt-3">
+                <button type="button" class="oc-btn oc-btn--sm" data-oc="recovery-copy">
+                    "Copiar códigos"
+                </button>
+                <button type="button" class="oc-btn oc-btn--sm" data-oc="recovery-download">
+                    "Guardar ficheiro"
+                </button>
+            </div>
+        }
+        .into_any()
+    } else if mfa_active {
+        view! {
+            <p class="oc-muted">
+                "Regenerar emite dez códigos novos e invalida os que tem. Confirme
+                 com a palavra-passe e um código do autenticador."
+            </p>
+            {error.map(|text| view! {
+                <div class="oc-callout oc-callout--error oc-mt-3" role="alert">{text}</div>
+            })}
+            <form method="post" action="/settings/mfa/regenerate" class="oc-mt-3">
+                <input
+                    class="oc-input oc-mt-3"
+                    type="password"
+                    name="password"
+                    autocomplete="current-password"
+                    required
+                    placeholder="Palavra-passe actual"
+                />
+                <input
+                    class="oc-input oc-mt-3"
+                    type="text"
+                    name="code"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                    required
+                    placeholder="Código do autenticador"
+                />
+                <button class="oc-btn oc-btn--danger oc-mt-3" type="submit">
+                    "Regenerar códigos de recuperação"
+                </button>
+            </form>
+        }
+        .into_any()
+    } else {
+        view! {
+            <p class="oc-muted">
+                "Esta conta não tem um segundo factor activo, por isso não há
+                 códigos de recuperação para regenerar."
+            </p>
+        }
+        .into_any()
+    };
+
+    view! {
+        <div class="oc-page oc-page--narrow">
+            <div class="oc-head">
+                <h1 class="oc-t-screen">"Códigos de recuperação"</h1>
+            </div>
+            {card(section_head("Segundo factor", None, None), corpo)}
+        </div>
+    }
+}
+
 /// A superfície onde o membro escolhe como aparece.
 ///
 /// # Três caminhos, e nenhum obrigatório

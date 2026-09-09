@@ -22,6 +22,7 @@ pub mod lists;
 pub mod login;
 pub mod mail;
 pub mod messaging;
+pub mod mfa;
 pub mod my_work;
 pub mod notice;
 pub mod prompt;

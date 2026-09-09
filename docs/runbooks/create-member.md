@@ -22,16 +22,20 @@ mantenha-a: um nome de utilizador não é alterável pelo titular.
 
 ### Papel técnico
 
-| Papel | Para quem |
-|---|---|
-| `research_member` | Investigador comum. **A escolha por omissão.** |
-| `research_lead` | Quem lidera ideias ou projectos |
-| `unit_manager` | Quem gere uma unidade científica |
-| `organisation_admin` | Quem administra pessoas e estrutura |
-| `platform_admin` | Quem opera a plataforma. **Raro.** |
-| `auditor` | Leitura de evidência, sem acesso a conteúdo |
-| `collaborator` | Colaborador interno com âmbito estreito |
-| `external_collaborator` | Externo. Deny-by-default no seu ponto mais forte |
+A primeira coluna é o **código** estável do papel — o que fica guardado e o que
+a API usa. A segunda é o **rótulo** que o Workspace mostra no seletor; é só isso,
+texto humano, e não muda o que o papel concede.
+
+| Código | Rótulo no Workspace | Para quem |
+|---|---|---|
+| `research_member` | Investigador | Investigador comum. **A escolha por omissão.** |
+| `research_lead` | Líder de investigação | Quem lidera ideias ou projectos |
+| `unit_manager` | Gestor de unidade | Quem gere uma unidade científica |
+| `organisation_admin` | Administrador da organização | Quem administra pessoas e estrutura |
+| `platform_admin` | Administrador da plataforma | Quem opera a plataforma. **Raro.** |
+| `auditor` | Auditor | Leitura de evidência, sem acesso a conteúdo |
+| `collaborator` | Colaborador | Colaborador interno com âmbito estreito |
+| `external_collaborator` | Colaborador externo | Externo. Deny-by-default no seu ponto mais forte |
 
 Na dúvida, escolha o **mais estreito**. Alargar depois é um pedido; estreitar é
 uma conversa.

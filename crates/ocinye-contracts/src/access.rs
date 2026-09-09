@@ -153,6 +153,12 @@ pub enum SessionState {
     /// except set a permanent password, read the minimum needed to do so, and
     /// sign out.
     PasswordChangeRequired,
+    /// The holder's password was accepted, but the identity requires a second
+    /// factor and has not yet satisfied it. Like [`Self::PasswordChangeRequired`]
+    /// it is a different *kind* of session, not a normal one pointed elsewhere:
+    /// the Core refuses ordinary work until the second factor is met, and a
+    /// password alone never establishes privileged authority (ADR-0107).
+    MfaRequired,
     /// An ordinary session.
     Active,
 }
@@ -169,6 +175,7 @@ impl SessionState {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::PasswordChangeRequired => "password_change_required",
+            Self::MfaRequired => "mfa_required",
             Self::Active => "active",
         }
     }
@@ -178,6 +185,7 @@ impl SessionState {
     pub fn parse(value: &str) -> Option<Self> {
         Some(match value {
             "password_change_required" => Self::PasswordChangeRequired,
+            "mfa_required" => Self::MfaRequired,
             "active" => Self::Active,
             _ => return None,
         })

@@ -106,6 +106,24 @@ jsonwebtoken = { version = "11.0", default-features = false, features = [
     "aws_lc_rs",
 ] }
 sha2 = "0.10"
+# HKDF-SHA256 for domain separation of the single institutional sealing root
+# (ADR-0107): one durable root key, one cryptographically distinct subkey per
+# secret class (mail, mfa-totp). RustCrypto, same family as sha2 — never a
+# hand-rolled KDF (§38).
+hkdf = "0.12"
+# TOTP (RFC 6238) for mandatory MFA (ADR-0107). The primitives are RustCrypto —
+# HMAC and SHA-1, the RFC 6238 default an authenticator app expects — plus
+# base32 for the shared-secret encoding. The RFC 6238 construction on top of
+# HMAC is a few lines with published test vectors; the cryptography itself is
+# never hand-rolled (§38).
+hmac = "0.12"
+sha1 = "0.10"
+data-encoding = "2"
+# QR do enrolamento MFA (ADR-0107), renderizado server-side como SVG inline para
+# a CSP apertada do Workspace continuar intacta — nada de abrir `img-src`. Crate
+# pura, sem rede; `default-features = false` deixa cair o output de imagem (e o
+# crate `image`), ficando só o renderizador SVG.
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 # Argon2id for password verifiers (ADR-0602). `password-hash` gives the PHC
 # string format, which carries the parameters with the hash and is what makes
 # transparent rehashing possible.

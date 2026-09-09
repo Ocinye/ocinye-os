@@ -153,7 +153,7 @@ async fn connect(
         &principal,
         mailbox_id,
         &mail::MailboxConnection {
-            chave: state.config.mail.sealing_key.as_ref(),
+            chave: state.config.sealing_key.as_ref(),
             sonda: state.mail_probe.as_ref(),
             senha: &body.password,
         },

@@ -153,6 +153,11 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     ("workspace_memberships", Comparacao::Identidades),
     ("explicit_access_grants", Comparacao::Identidades),
     ("invitations", Comparacao::Identidades),
+    // Verificadores de códigos de recuperação de MFA. Têm `id` próprio e são
+    // estado institucional que sobrevive a uma migração, como as credenciais:
+    // um código por gastar de um membro tem de continuar a valer no servidor
+    // novo (ADR-0107).
+    ("mfa_recovery_codes", Comparacao::Identidades),
     // ── Investigação ────────────────────────────────────────────────────
     ("research_workspaces", Comparacao::Identidades),
     ("ideas", Comparacao::Identidades),
@@ -368,6 +373,15 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
             "não tem `id`: é a credencial selada da caixa a que pertence, e \
              viaja com ela. O que decide se chega legível é a chave de \
              selagem, que não está na base",
+        ),
+    ),
+    (
+        "mfa_totp_secrets",
+        Comparacao::Fora(
+            "chaveada pela pessoa, sem `id` próprio: é o seed TOTP selado dessa \
+             identidade, e viaja com ela. Como as credenciais de caixa, o que \
+             decide se chega legível é a raiz de selagem, que não está na base — \
+             e `verify-keys` prova-o abrindo cada uma (ADR-0107)",
         ),
     ),
     (

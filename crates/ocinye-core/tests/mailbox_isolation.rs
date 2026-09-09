@@ -167,7 +167,6 @@ fn registry() -> Arc<ProviderRegistry> {
             username: String::new(),
             password: String::new(),
             max_message_bytes: 25 * 1024 * 1024,
-            sealing_key: Some(chave()),
         },
         Some(chave()),
     ))
@@ -594,7 +593,6 @@ async fn uma_caixa_ligada_le_se_com_a_credencial_do_proprio() {
                 username: String::new(),
                 password: String::new(),
                 max_message_bytes: 25 * 1024 * 1024,
-                sealing_key: Some(k.clone()),
             },
             Some(k.clone()),
         )

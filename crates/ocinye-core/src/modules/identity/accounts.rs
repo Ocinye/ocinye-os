@@ -413,6 +413,17 @@ pub async fn set_permanent_password(
 
     let verifier = authenticator.hasher.hash(&accepted)?;
 
+    // Resolve the second-factor requirement **before** opening the transaction.
+    // `principal_for_person` reaches the pool for its own connection (and records
+    // last activity with an `UPDATE people`), and doing that inside the
+    // transaction below — which has already written to this same person's row —
+    // makes that connection wait on a lock the still-open transaction holds,
+    // while the transaction waits (idle) for the connection to return: a deadlock
+    // the database cannot detect, because one side is idle in transaction, not
+    // blocked in the database. Resolved here, no transaction is open yet.
+    let requires_mfa =
+        super::mfa::mfa_required(&super::service::principal_for_person(pool, person).await?);
+
     let mut tx = pool.begin().await?;
 
     // Order matters: revoke before inserting, or the unique live-credential
@@ -440,11 +451,31 @@ pub async fn set_permanent_password(
 
     creds::revoke_all_sessions(&mut *tx, person.id, "password_changed").await?;
 
+    // A password alone must not establish privileged authority (ADR-0107). If
+    // this identity requires a second factor, the session it leaves the
+    // password-change flow with is an MFA gate, not an ordinary session — so a
+    // privileged identity setting its first password lands straight in
+    // enrolment, and never holds an `active` session that skipped MFA.
+    // `requires_mfa` was resolved above, before this transaction opened.
+    let novo_estado = if requires_mfa {
+        SessionState::MfaRequired
+    } else {
+        SessionState::Active
+    };
+    let lifetime = if requires_mfa {
+        Duration::minutes(super::authentication::PASSWORD_CHANGE_SESSION_MINUTES)
+    } else {
+        Duration::hours(SESSION_LIFETIME_HOURS)
+    };
+
     let (session_id, token) = creds::create_session(
         &mut *tx,
         person.id,
-        SessionState::Active,
-        Duration::hours(SESSION_LIFETIME_HOURS),
+        novo_estado,
+        // Never satisfied at creation: MFA is proven on the challenge that
+        // follows, which revokes this session and issues a fresh assured one.
+        false,
+        lifetime,
         context.user_agent.as_deref(),
         context.ip_prefix.as_deref(),
     )
@@ -458,6 +489,7 @@ pub async fn set_permanent_password(
             .resource(person.id)
             .actor(person.id, person.organisation_id)
             .detail("replaced_temporary", temporary.is_some())
+            .detail("session_state", novo_estado.as_str())
             .detail("session_id", session_id.to_string()),
     )
     .await?;
@@ -466,7 +498,7 @@ pub async fn set_permanent_password(
 
     Ok(IssuedSession {
         token,
-        state: SessionState::Active,
+        state: novo_estado,
         person_id: person.id,
         display_name: person.preferred_name().to_owned(),
     })
@@ -635,6 +667,53 @@ pub async fn set_account_status(
     )
     .await?;
 
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Revoke **one** session of a member, as an administrator.
+///
+/// A governed operation, not a side effect (ADR-0107): the case «perdi um
+/// portátil, mato uma sessão» is different from «reponho a palavra-passe, invalido
+/// tudo». The authority is re-established at the boundary that calls this; here
+/// the invariant is **ownership** — the session named has to belong to the
+/// member named, or the answer is `NotFound`, indistinguishable from a session
+/// that does not exist. Without it, a guessed session id would be an IDOR.
+///
+/// Registered on its own (`member_session_revoked`), with actor, target and
+/// session — the exception to the rule that a revocation is only ever a
+/// consequence. Never records a token or a cookie, only the session's id.
+///
+/// # Errors
+///
+/// Returns [`CoreError::NotFound`] when the session is not this member's, or a
+/// database error.
+pub async fn revoke_member_session(
+    pool: &PgPool,
+    actor: &Principal,
+    person: &Person,
+    session_id: Uuid,
+    ids: &CorrelationIds,
+) -> CoreResult<()> {
+    let owner: Option<Uuid> = sqlx::query_scalar("SELECT person_id FROM sessions WHERE id = $1")
+        .bind(session_id)
+        .fetch_optional(pool)
+        .await?;
+    if owner != Some(person.id) {
+        return Err(CoreError::NotFound("Sessão não encontrada.".to_owned()));
+    }
+
+    let mut tx = pool.begin().await?;
+    creds::revoke_session(&mut *tx, session_id, "administrative_revocation").await?;
+    audit::record(
+        &mut tx,
+        Some(actor),
+        ids,
+        AuditEntry::new(action::MEMBER_SESSION_REVOKED, "session")
+            .resource(person.id)
+            .detail("session_id", session_id.to_string()),
+    )
+    .await?;
     tx.commit().await?;
     Ok(())
 }

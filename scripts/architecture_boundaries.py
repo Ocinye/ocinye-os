@@ -143,6 +143,9 @@ EXPERIENCE_RUNTIME = {
     "leptos",
     "ocinye-contracts",
     "ocinye-observability",
+    # Renderiza o QR do enrolamento de MFA para SVG. Presentation pura: recebe
+    # o texto do otpauth e devolve marcação; não alcança estado institucional.
+    "qrcode",
     "rand",
     "reqwest",
     "serde",

@@ -12,6 +12,7 @@
 
 pub mod components;
 pub mod icon;
+pub mod roles;
 pub mod screens;
 pub mod shell;
 pub mod tempo;
@@ -1500,6 +1501,7 @@ pub(crate) mod link_tests {
                         "recent_failed_attempts": 0,
                         "may_manage_account": true,
                         "live_sessions": [{
+                            "id": "aaaaaaaa-1111-2222-3333-444444444444",
                             "state": "active",
                             "user_agent": "Firefox 142 · macOS",
                             "ip_prefix": "10.20.30.0/24"

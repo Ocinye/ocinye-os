@@ -350,10 +350,17 @@ fn a_prontidao_nao_e_inferida_de_um_pedido_de_dominio() {
 #[test]
 fn conteudo_do_dominio_nunca_vira_marcacao() {
     /// Onde `inner_html` é legítimo, e porquê.
-    const AUTORIZADOS: [(&str, &str); 1] = [(
-        "mail.rs",
-        "o corpo da mensagem, já sanitizado pelo Core antes de sair de lá",
-    )];
+    const AUTORIZADOS: [(&str, &str); 2] = [
+        (
+            "mail.rs",
+            "o corpo da mensagem, já sanitizado pelo Core antes de sair de lá",
+        ),
+        (
+            "mfa.rs",
+            "o SVG do QR de enrolamento, gerado pelo crate `qrcode` a partir do \
+             otpauth — marcação que a Experience produz, não conteúdo do domínio",
+        ),
+    ];
 
     let ficheiros = ficheiros_de_interface();
     let mut lidos = 0usize;

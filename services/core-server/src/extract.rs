@@ -190,11 +190,19 @@ impl FromRequestParts<AppState> for CurrentPrincipal {
             RestrictedSession::from_request_parts(parts, state).await?;
 
         // The rule of briefing §22 and §24, in one place, for every endpoint.
+        // Each restricted state says its own reason: a password-change session
+        // and an MFA-gate session are both "not ordinary work", but sending an
+        // MFA-gated holder to set a password they already have would be a dead
+        // end (ADR-0107). The Experience routes on these to the right screen.
         if !session.state.permits_ordinary_work() {
+            let motivo = match session.state {
+                SessionState::MfaRequired => {
+                    "Confirme o segundo factor de autenticação antes de continuar."
+                }
+                _ => "Defina a sua palavra-passe definitiva antes de continuar.",
+            };
             return Err(ApiError::new(
-                CoreError::PermissionDenied(
-                    "Defina a sua palavra-passe definitiva antes de continuar.".to_owned(),
-                ),
+                CoreError::PermissionDenied(motivo.to_owned()),
                 &ids,
             ));
         }
@@ -213,9 +221,26 @@ impl FromRequestParts<AppState> for CurrentPrincipal {
             ));
         }
 
-        let principal = identity::principal_for_person(&state.pool, &person)
+        let mut principal = identity::principal_for_person(&state.pool, &person)
             .await
             .map_err(|error| ApiError::new(error, &ids))?;
+
+        // MFA assurance, resolved at authorization time (ADR-0107). A session
+        // that did not satisfy a second factor does not wield privileged
+        // authority — even if `PlatformAdmin` was granted *after* this session
+        // became active. The role stays a fact of the person; it simply does not
+        // arm here until MFA is proven. This is what closes the loophole of a
+        // role granted mid-session: without it, an ordinary session would
+        // silently gain administrative power the moment the role landed.
+        if !session.mfa_satisfied && identity::mfa_required(&principal) {
+            principal
+                .roles
+                .remove(&ocinye_contracts::TechnicalRole::PlatformAdmin);
+            tracing::debug!(
+                person_id = %principal.person_id,
+                "privileged authority suppressed: session has not satisfied MFA"
+            );
+        }
 
         if !principal.is_active {
             return Err(ApiError::new(

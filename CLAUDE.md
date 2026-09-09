@@ -57,7 +57,18 @@ sem que nada falhe.
   verificadores Argon2id, sessões server-side opacas, credenciais temporárias
   que expiram, throttling ([ADR-0103](docs/adrs/0103-core-owned-authentication.md),
   [ADR-0104](docs/adrs/0104-password-policy-and-hashing.md)).
-  **`MFA = NOT IMPLEMENTED`** e não exigido nesta fase (§33).
+- **Segundo factor: `IMPLEMENTED`, obrigatório para identidades privilegiadas,
+  activação operacional pendente do enrolamento** — TOTP (RFC 6238) com o seed
+  selado por uma subchave derivada da raiz institucional de selagem, códigos de
+  recuperação de uso único (verificadores Argon2id), protecção de replay por
+  passo monótono, e a garantia de MFA resolvida no momento da autorização — uma
+  sessão sem segundo factor não exerce autoridade `PlatformAdmin`, mesmo que a
+  role tenha sido atribuída depois de a sessão nascer
+  ([ADR-0107](docs/adrs/0107-mandatory-mfa-sessions-and-recovery.md)). A revogação
+  individual de sessão de um membro é uma operação governada, com posse validada.
+  **O que falta é operacional, não código:** `Fidel Admin` ainda não enrolou o
+  segundo factor pelo browser, e `OCINYE_SEALING_KEY` tem de estar no servidor
+  antes do deploy. `MFA` continua **não exigido** a identidades não privilegiadas.
 - **Autorização por permissões nomeadas: `IMPLEMENTED`.** 72 permissões, quatro
   âmbitos, grants explícitos atribuíveis e revogáveis, e acesso explicável
   ([ADR-0101](docs/adrs/0101-permissions-scopes-and-grants.md)). Nenhuma operação
@@ -234,8 +245,11 @@ sem que nada falhe.
 
 **Continua a não existir:**
 
-- **Nenhum segundo factor de autenticação.** Uma palavra-passe comprometida é
-  acesso comprometido. Limitação assumida, não omissão: ver ADR-0103.
+- **Segundo factor: exigido a identidades privilegiadas, ainda não enrolado.**
+  O código existe e é fail-closed (ADR-0107); o que falta é `Fidel Admin` enrolar
+  o TOTP pelo browser e a raiz de selagem estar no servidor. A identidades **não**
+  privilegiadas o MFA continua a não ser exigido, e uma palavra-passe comprometida
+  de uma conta comum é acesso comprometido dessa conta.
 - **Nenhuma conta existe** numa instalação nova até alguém correr o bootstrap.
 - **Nenhum ambiente está deployado.** Nem desenvolvimento partilhado, nem
   staging, nem produção. O sistema só correu localmente.
@@ -1010,12 +1024,23 @@ lista se tornam relevantes e como são mitigadas.
 > que substitui o [ADR-0102](docs/adrs/0102-identity-provider.md). A versão
 > anterior desta secção proibia autenticação no Core e exigia um Identity
 > Provider dedicado com MFA. O ADR-0103 explica porquê mudou, e o que se perdeu.
+>
+> **Revista de novo em 2026-09-08** por
+> [ADR-0107](docs/adrs/0107-mandatory-mfa-sessions-and-recovery.md), que substitui
+> a parte do ADR-0103 que dizia MFA não exigido: o segundo factor passa a ser
+> **obrigatório para identidades privilegiadas**.
 
 **Estado actual — `CURRENT`:** o **Ocinye Core é a autoridade de autenticação**,
-com **nome de utilizador e palavra-passe** como factor único.
+com **nome de utilizador e palavra-passe**, e um **segundo factor obrigatório
+para identidades privilegiadas** (TOTP, com recuperação por códigos de uso
+único). A palavra-passe é factor único apenas para identidades não privilegiadas.
 
-**`MFA = NOT IMPLEMENTED`. `MFA = NOT REQUIRED` nesta fase.** Não escrevas
-documentação, README ou ADR que afirme o contrário.
+**`MFA = IMPLEMENTED`. `MFA = REQUIRED` para `identity_kind = privileged` ou
+`PlatformAdmin` efectivo** (ADR-0107). A garantia de MFA é resolvida no momento
+da autorização: uma sessão sem segundo factor não exerce autoridade privilegiada,
+mesmo que a role tenha sido atribuída depois de a sessão nascer. **`MFA = NOT
+REQUIRED`** para identidades não privilegiadas. Não escrevas documentação que
+afirme o contrário de qualquer destas.
 
 Regras que continuam a vigorar sem excepção:
 
@@ -1030,10 +1055,11 @@ Regras que continuam a vigorar sem excepção:
 - A superfície de credenciais vive contida em `crates/ocinye-core/src/password/`
   e `modules/identity/`, para poder ser revista como uma peça.
 
-**Futuro (`PLANNED`):** MFA, passkeys/WebAuthn, recuperação por link seguro e SSO
-por IdP federado. A coluna `people.oidc_subject` e o campo `Principal::subject`
-mantêm-se para que federar não exija migração de esquema. Qualquer um destes
-passos exige **ADR próprio**.
+**Futuro (`PLANNED`):** passkeys/WebAuthn (um segundo factor mais forte que o
+TOTP, e que a arquitectura de sessão e de recuperação do ADR-0107 já serve),
+recuperação por link seguro e SSO por IdP federado. A coluna `people.oidc_subject`
+e o campo `Principal::subject` mantêm-se para que federar não exija migração de
+esquema. Qualquer um destes passos exige **ADR próprio**.
 
 ---
 

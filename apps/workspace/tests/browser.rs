@@ -490,6 +490,14 @@ impl Harness {
                 .expect("papel");
         }
 
+        // Uma conta privilegiada exige MFA (ADR-0107). Para o desafio poder
+        // correr pelo fluxo real, a conta chega a este ponto **já enrolada** — o
+        // enrolamento prova-se numa viagem própria, não a cada entrada.
+        let exige_mfa = roles.contains(&TechnicalRole::PlatformAdmin);
+        if exige_mfa {
+            self.seed_confirmed_totp(person_id).await;
+        }
+
         // A palavra-passe é criada com o mesmo `Hasher` que o Core usa para a
         // verificar. Um verificador escrito de outra maneira faria o teste
         // provar a sua própria aritmética.
@@ -590,6 +598,15 @@ impl Harness {
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
+
+        // Uma identidade privilegiada aterra no desafio de MFA, não no Workspace.
+        // Satisfaz-se aqui, pelo fluxo real, para a viagem continuar numa sessão
+        // já assegurada.
+        if exige_mfa && destino.contains("/mfa") {
+            self.completar_desafio_mfa(&page).await;
+            destino = page.url().await.expect("endereço").unwrap_or_default();
+        }
+
         if destino.ends_with("/login") {
             let diagnostico = self
                 .open("/login")
@@ -619,6 +636,168 @@ impl Harness {
         }
 
         (person_id, Credenciais { email, password })
+    }
+
+    /// Prepara uma conta privilegiada como **já enrolada** no MFA: sela o seed
+    /// de teste com a chave do Core e marca-o confirmado.
+    ///
+    /// É fixture — o enrolamento em si prova-se numa viagem dedicada. O que estas
+    /// contas exercem é o **desafio**, e o desafio corre pelo fluxo real.
+    /// `last_accepted_step` fica nulo, para que o primeiro desafio não bata em
+    /// protecção de replay.
+    async fn seed_confirmed_totp(&self, person_id: Uuid) {
+        let selado = ocinye_core::password::sealed::seal(
+            chave_do_correio(),
+            ocinye_core::password::sealed::SealingDomain::MfaTotp,
+            SEMENTE_MFA,
+        )
+        .expect("selar o seed de teste");
+        sqlx::query(
+            "INSERT INTO mfa_totp_secrets (person_id, nonce, ciphertext, confirmed_at)
+                 VALUES ($1, $2, $3, now())
+             ON CONFLICT (person_id) DO UPDATE
+                 SET nonce = EXCLUDED.nonce,
+                     ciphertext = EXCLUDED.ciphertext,
+                     confirmed_at = now(),
+                     last_accepted_step = NULL",
+        )
+        .bind(person_id)
+        .bind(&selado.nonce)
+        .bind(&selado.ciphertext)
+        .execute(&self.pool)
+        .await
+        .expect("seed TOTP de teste");
+    }
+
+    /// No ecrã de desafio, escreve um código válido e submete — pelo fluxo real,
+    /// como um autenticador faria. Espera sair de `/mfa`.
+    async fn completar_desafio_mfa(&self, page: &Page) {
+        // Espera o ecrã de desafio render antes de escrever no campo. O redirect
+        // do login para `/mfa` muda o endereço numa navegação e a resposta noutra;
+        // escrever no `#mfa-code` no instante em que o endereço passa a `/mfa`,
+        // mas antes de o formulário do desafio existir no DOM, encontra o campo
+        // ausente — «o formulário mudou de forma» — sob carga. O marcador do ecrã
+        // garante que o formulário está lá.
+        esperar_por(page, "Confirme o segundo factor").await;
+        set_field(page, "#mfa-code", &codigo_mfa()).await;
+        submit(page, "form[action=\"/mfa/challenge\"]").await;
+        for _ in 0..60 {
+            let url = page.url().await.expect("endereço").unwrap_or_default();
+            if !url.contains("/mfa") {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let visivel = page.content().await.unwrap_or_default();
+        panic!(
+            "o desafio de MFA não passou; a página continua em /mfa:\n{}",
+            visivel.chars().take(600).collect::<String>()
+        );
+    }
+
+    /// Uma conta privilegiada **por enrolar**: papel `PlatformAdmin`, credencial
+    /// **temporária**, sem seed de MFA. Não entra — a viagem de enrolamento
+    /// conduz o login e o primeiro acesso.
+    async fn criar_privilegiada_por_enrolar(&self) -> Credenciais {
+        let handle = format!("pe{}", Uuid::new_v4().simple());
+        let email = format!("{handle}@ocinye.com");
+        let person_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO people (organisation_id, full_name, email, status)
+                 VALUES ($1, $2, $3, 'active') RETURNING id",
+        )
+        .bind(self.organisation_id)
+        .bind(&handle)
+        .bind(&email)
+        .fetch_one(&self.pool)
+        .await
+        .expect("pessoa");
+        sqlx::query("INSERT INTO person_roles (person_id, role) VALUES ($1, 'platform_admin')")
+            .bind(person_id)
+            .execute(&self.pool)
+            .await
+            .expect("papel");
+        let password = format!("Ocinye-{}-2026!", Uuid::new_v4().simple());
+        let verifier = harness_hasher()
+            .hash(&Secret::new(password.clone()))
+            .expect("verificador");
+        sqlx::query(
+            "INSERT INTO credentials (person_id, kind, state, verifier, issued_reason, expires_at)
+                 VALUES ($1, 'temporary', 'active', $2, 'enrolamento de teste', now() + interval '1 hour')",
+        )
+        .bind(person_id)
+        .bind(&verifier)
+        .execute(&self.pool)
+        .await
+        .expect("credencial temporária");
+        // Uma identidade privilegiada ligada, como o `Fidel Admin` do bootstrap:
+        // é isto que faz a sessão ser privilegiada e a faixa aparecer depois do
+        // segundo factor. Sem a ligação, a conta seria um administrador por papel
+        // e não a identidade privilegiada que a viagem existe para provar.
+        self.ligar_a_um_dono(person_id, &format!("Dono {}", Uuid::new_v4().simple()))
+            .await;
+        Credenciais { email, password }
+    }
+
+    /// Uma conta privilegiada **já enrolada**: `PlatformAdmin`, credencial
+    /// permanente e seed TOTP confirmado. Não entra — a viagem conduz o login,
+    /// para poder observar o desafio.
+    async fn criar_privilegiada_enrolada(&self) -> (Uuid, Credenciais) {
+        let handle = format!("pj{}", Uuid::new_v4().simple());
+        let email = format!("{handle}@ocinye.com");
+        let person_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO people (organisation_id, full_name, email, status)
+                 VALUES ($1, $2, $3, 'active') RETURNING id",
+        )
+        .bind(self.organisation_id)
+        .bind(&handle)
+        .bind(&email)
+        .fetch_one(&self.pool)
+        .await
+        .expect("pessoa");
+        sqlx::query("INSERT INTO person_roles (person_id, role) VALUES ($1, 'platform_admin')")
+            .bind(person_id)
+            .execute(&self.pool)
+            .await
+            .expect("papel");
+        let password = format!("Ocinye-{}-2026!", Uuid::new_v4().simple());
+        let verifier = harness_hasher()
+            .hash(&Secret::new(password.clone()))
+            .expect("verificador");
+        sqlx::query(
+            "INSERT INTO credentials (person_id, kind, state, verifier, issued_reason)
+                 VALUES ($1, 'permanent', 'active', $2, 'harness enrolada')",
+        )
+        .bind(person_id)
+        .bind(&verifier)
+        .execute(&self.pool)
+        .await
+        .expect("credencial");
+        self.seed_confirmed_totp(person_id).await;
+        // Identidade privilegiada ligada (o modelo do `Fidel Admin`): é o que a
+        // faixa privilegiada exige, e o que o desafio e a recuperação provam para
+        // uma sessão privilegiada — e não para um administrador por papel.
+        self.ligar_a_um_dono(person_id, &format!("Dono {}", Uuid::new_v4().simple()))
+            .await;
+        (person_id, Credenciais { email, password })
+    }
+
+    /// Semeia um verificador de um código de recuperação conhecido, para a
+    /// viagem de recuperação o poder usar — e provar que reusá-lo é recusado.
+    async fn seed_recovery_code(&self, person_id: Uuid, codigo: &str) {
+        let normal: String = codigo
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .map(|c| c.to_ascii_uppercase())
+            .collect();
+        let verifier = harness_hasher()
+            .hash(&Secret::new(normal))
+            .expect("verificador");
+        sqlx::query("INSERT INTO mfa_recovery_codes (person_id, verifier) VALUES ($1, $2)")
+            .bind(person_id)
+            .bind(verifier)
+            .execute(&self.pool)
+            .await
+            .expect("código de recuperação");
     }
 
     /// Entra com uma credencial temporária, como quem recebe um primeiro acesso.
@@ -690,6 +869,12 @@ impl Harness {
             "não foi possível voltar a entrar como «{}»",
             credenciais.email
         );
+        // Uma identidade privilegiada volta a passar pelo desafio a cada entrada.
+        // A conta já está enrolada (do `sign_in` que a criou), por isso o desafio
+        // basta — e corre pelo fluxo real.
+        if destino.contains("/mfa") {
+            self.completar_desafio_mfa(&page).await;
+        }
     }
 
     /// Uma unidade que esta pessoa gere, para poder marcar fora do pessoal.
@@ -1354,6 +1539,62 @@ fn chave_do_correio() -> &'static ocinye_core::password::sealed::SealingKey {
     })
 }
 
+/// O seed TOTP de teste, partilhado por todas as contas privilegiadas do
+/// harness.
+///
+/// Partilhá-lo é seguro: cada viagem tem a sua conta isolada, e o seed não é um
+/// segredo de produção — nunca é o de `Fidel Admin` nem sai daqui. Vinte bytes
+/// em base32, para o autenticador de teste calcular o mesmo código que o Core
+/// espera (RFC 4226).
+const SEMENTE_MFA: &str = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+
+/// O código TOTP de [`SEMENTE_MFA`] **agora**.
+///
+/// # Porque isto não depende do relógio da máquina de forma frágil
+///
+/// O harness e o Core partilham o mesmo relógio (o Core corre neste processo), e
+/// a janela canónica de ±1 passo do Core absorve o micro-desvio entre calcular
+/// aqui e verificar lá: um código para o passo N é aceite quer o Core esteja no
+/// passo N quer no N+1, porque ambas as janelas contêm N. Não há `sleep`, não há
+/// janela alargada, não há sorte de temporização — e não se depende de **qual**
+/// é a hora, só de que os dois lados a leem igual, o que é garantido por serem o
+/// mesmo processo (ADR-0107).
+fn codigo_mfa() -> String {
+    codigo_totp_de(SEMENTE_MFA)
+}
+
+/// O `Hasher` com os parâmetros do harness — os mesmos com que o Core verifica.
+fn harness_hasher() -> Hasher {
+    Hasher::new(HashingParams {
+        memory_kib: 19 * 1024,
+        iterations: 2,
+        parallelism: 1,
+    })
+}
+
+/// O código TOTP de um seed em base32 **agora** — para o seed que o Core gerou
+/// no enrolamento, revelado pela chave manual. Ver [`codigo_mfa`] para a razão
+/// de isto ser determinístico.
+fn codigo_totp_de(seed_base32: &str) -> String {
+    use data_encoding::BASE32_NOPAD;
+    use hmac::{Hmac, Mac};
+    use sha1::Sha1;
+
+    let seed = BASE32_NOPAD
+        .decode(seed_base32.trim().to_ascii_uppercase().as_bytes())
+        .expect("o seed é base32 válido");
+    let counter = (chrono::Utc::now().timestamp().max(0) as u64) / 30;
+    let mut mac = <Hmac<Sha1> as Mac>::new_from_slice(&seed).expect("hmac");
+    mac.update(&counter.to_be_bytes());
+    let d = mac.finalize().into_bytes();
+    let off = (d[d.len() - 1] & 0x0f) as usize;
+    let bin = (u32::from(d[off] & 0x7f) << 24)
+        | (u32::from(d[off + 1]) << 16)
+        | (u32::from(d[off + 2]) << 8)
+        | u32::from(d[off + 3]);
+    format!("{:06}", bin % 1_000_000)
+}
+
 /// O armazenamento de objectos das viagens que carregam bytes.
 ///
 /// `None` quando as variáveis não estão postas. Quem chama tem de o dizer — um
@@ -1440,7 +1681,7 @@ fn core_state(pool: PgPool, organisation_id: Uuid, database_url: &str) -> AppSta
     // a herdarem de um harness partilhado.
     // Uma chave só, e não duas.
     //
-    // A credencial é **selada** com `config.mail.sealing_key` — o caminho de
+    // A credencial é **selada** com `config.sealing_key` — o caminho de
     // ligar a caixa lê-a de lá — e **aberta** com a do registo. O harness dava
     // ao registo a sua chave e deixava a do `config` vir do ambiente: selava
     // com uma e abria com outra.
@@ -1449,13 +1690,12 @@ fn core_state(pool: PgPool, organisation_id: Uuid, database_url: &str) -> AppSta
     // diz «Ligada». Falhava depois, ao abrir uma mensagem — e como nenhuma
     // viagem abria mensagens, nunca ninguém o viu.
     let mut config = config;
-    config.mail.sealing_key = Some(chave_do_correio().clone());
+    config.sealing_key = Some(chave_do_correio().clone());
 
     let mail_registry = Arc::new(
         ocinye_core::modules::mail::ProviderRegistry::new(
             Arc::new(ServicoQueResponde),
             ocinye_core::config::MailConfig {
-                sealing_key: Some(chave_do_correio().clone()),
                 // O transporte é fixado aqui, e não herdado do ambiente.
                 //
                 // Herdá-lo fazia estas viagens descreverem instalações diferentes
@@ -1673,17 +1913,33 @@ async fn set_field(page: &Page, seletor: &str, valor: &str) {
           campo.dispatchEvent(new Event('change', {{ bubbles: true }})); \
           return campo.value; }})()"
     );
-    let escrito: Option<String> = page
-        .evaluate(script)
-        .await
-        .expect("preencher")
-        .into_value()
-        .ok();
-    assert_eq!(
-        escrito.as_deref(),
-        Some(valor),
-        "«{seletor}» não aceitou o valor: o formulário mudou de forma"
-    );
+
+    // Reescreve até o valor pegar, ou até ao prazo. `open` e um submit devolvem
+    // assim que a navegação parte, e a resposta com o formulário chega no instante
+    // seguinte; escrever no campo nesse intervalo encontra-o ausente — o
+    // `querySelector` devolve `null`, e o sintoma é «o formulário mudou de forma».
+    // Não é um campo morto, é um campo que ainda não chegou. Um campo morto de
+    // verdade continua ausente ao fim do prazo, e aí a asserção fala.
+    let inicio = std::time::Instant::now();
+    loop {
+        let escrito: Option<String> = page
+            .evaluate(script.clone())
+            .await
+            .expect("preencher")
+            .into_value()
+            .ok();
+        if escrito.as_deref() == Some(valor) {
+            return;
+        }
+        if inicio.elapsed() >= DEADLINE {
+            assert_eq!(
+                escrito.as_deref(),
+                Some(valor),
+                "«{seletor}» não aceitou o valor: o formulário mudou de forma"
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(120)).await;
+    }
 }
 
 /// Submete o formulário da página.
@@ -1947,8 +2203,18 @@ async fn as_vistas_partilham_o_universo_autorizado() {
     let relogio_na_criacao = lisboa;
     // Fora de qualquer intervalo natural: nem hoje, nem esta semana, nem este
     // mês, nem os próximos noventa dias.
+    //
+    // A hora deste é fixa às 12:00, e não a corrente. `hoje + 200 dias` cai numa
+    // data qualquer, e uma delas — a partir de um `hoje` a 200 dias da mudança
+    // para a hora de verão — é o dia em que o relógio de Lisboa salta das 01:00
+    // para as 02:00. Um evento com fim às 01:00 nesse dia aponta para uma hora
+    // local que não existe, a conversão de fuso recusa-a, e a criação falha em
+    // silêncio. É uma entrada escondida do calendário — a data, agora, e não só
+    // a hora — da mesma família que este teste já corrigiu. O meio-dia nunca cai
+    // num salto de verão ou de inverno, e a data distante continua a servir o
+    // seu único propósito: estar fora de todas as janelas.
     harness
-        .create_event_via_ui(&distante, hoje + chrono::Duration::days(200), hora)
+        .create_event_via_ui(&distante, hoje + chrono::Duration::days(200), 12)
         .await;
 
     // De outra pessoa, e pessoal: não deve aparecer em superfície nenhuma.
@@ -10291,4 +10557,214 @@ async fn dar_acesso_a_quem_ja_existe_nao_cria_uma_segunda_pessoa() {
         !html.contains("Dar acesso"),
         "o botão continua a oferecer uma operação que o Core já recusa"
     );
+}
+
+// ── O segundo factor, de ponta a ponta (ADR-0107) ───────────────────────────
+
+/// Enrolar o segundo factor, do primeiro acesso à sessão privilegiada.
+///
+/// Prova o fluxo inteiro **e** três invariantes de uma vez: o QR aparece e a
+/// chave manual não, até ser pedida; a chave revelada é o **mesmo** seed do QR
+/// (o código calculado dela é aceite); e a faixa privilegiada só aparece depois
+/// de o factor estar satisfeito.
+#[tokio::test]
+async fn o_enrolamento_do_segundo_factor_prova_se_de_ponta_a_ponta() {
+    let harness = harness!();
+    let cred = harness.criar_privilegiada_por_enrolar().await;
+
+    let page = harness.open("/login").await;
+    set_field(&page, "input[name=email]", &cred.email).await;
+    set_field(&page, "input[name=password]", &cred.password).await;
+    submit(&page, "form").await;
+    esperar_por(&page, "Defina a sua palavra-passe").await;
+
+    // Define a definitiva; uma identidade privilegiada cai no enrolamento.
+    let nova = format!("Ocinye-{}-2026!", Uuid::new_v4().simple());
+    set_field(&page, "#new-pass", &nova).await;
+    set_field(&page, "#confirm-pass", &nova).await;
+    submit(&page, "form[action=\"/first-access\"]").await;
+    esperar_por(&page, "Configurar o segundo factor").await;
+
+    // O QR está; a chave manual, não — até ser pedida.
+    let html = page.content().await.expect("conteúdo");
+    assert!(html.contains("<svg"), "o enrolamento não mostra o QR");
+    assert!(
+        !html.contains("data-oc=\"secret\""),
+        "a chave manual apareceu na página sem acção explícita"
+    );
+
+    // «Mostrar chave manual»: o mesmo seed do QR. Prova-se porque o código
+    // calculado a partir da chave revelada é aceite pela confirmação.
+    let com_chave = harness.open("/mfa?show_key=1").await;
+    esperar_por(&com_chave, "Chave manual").await;
+    let seed = elemento(&com_chave, "[data-oc=\"secret\"]")
+        .await
+        .attribute("data-oc-value")
+        .await
+        .expect("atributo")
+        .expect("seed revelado");
+    set_field(&com_chave, "#mfa-code", &codigo_totp_de(&seed)).await;
+    submit(&com_chave, "form[action=\"/mfa/confirm\"]").await;
+
+    // Códigos de recuperação, uma vez → guardar → concluir.
+    esperar_por(&com_chave, "Guardar códigos de recuperação").await;
+    elemento(&com_chave, "input[name=acknowledged]")
+        .await
+        .click()
+        .await
+        .expect("marcar o reconhecimento");
+    submit(&com_chave, "form[action=\"/mfa/acknowledge\"]").await;
+
+    // Só agora há sessão privilegiada, e a faixa aparece.
+    esperar_por(&com_chave, "SESSÃO PRIVILEGIADA").await;
+}
+
+/// O desafio precede a autoridade: uma palavra-passe certa, sem o segundo
+/// factor, não alcança a Administração.
+#[tokio::test]
+async fn o_desafio_de_mfa_precede_a_autoridade_privilegiada() {
+    let harness = harness!();
+    let (_, cred) = harness.criar_privilegiada_enrolada().await;
+
+    let page = harness.open("/login").await;
+    set_field(&page, "input[name=email]", &cred.email).await;
+    set_field(&page, "input[name=password]", &cred.password).await;
+    submit(&page, "form").await;
+    esperar_por(&page, "Confirme o segundo factor").await;
+
+    // Reversão: só com a palavra-passe, a Administração não se alcança — o
+    // portão manda de volta ao desafio.
+    let tenta = harness.open("/admin").await;
+    let html = tenta.content().await.expect("conteúdo");
+    assert!(
+        !html.contains("SESSÃO PRIVILEGIADA"),
+        "uma sessão sem MFA exerceu autoridade privilegiada"
+    );
+    let url = tenta.url().await.ok().flatten().unwrap_or_default();
+    assert!(
+        url.contains("/mfa"),
+        "uma sessão por-MFA alcançou uma superfície fora do desafio: {url}"
+    );
+
+    // Satisfaz o desafio → sessão privilegiada.
+    //
+    // Abrir `/admin` acima criou um separador novo, que passou a ser o da frente;
+    // o `page` do desafio ficou para trás. Um clique do CDP num separador em
+    // segundo plano não completa — a página não é visível para receber o evento
+    // de rato — e o `submit` esgotava o tempo. Trazer o separador do desafio para
+    // a frente antes de submeter devolve-o ao estado de uma pessoa a usá-lo.
+    page.bring_to_front()
+        .await
+        .expect("trazer o separador do desafio para a frente");
+    set_field(&page, "#mfa-code", &codigo_mfa()).await;
+    submit(&page, "form[action=\"/mfa/challenge\"]").await;
+    esperar_por(&page, "SESSÃO PRIVILEGIADA").await;
+}
+
+/// Um código de recuperação entra uma vez — e reusá-lo é recusado.
+///
+/// A entrada prova-se pelo browser; a recusa de reutilização prova-se pelo
+/// endpoint real, com uma sessão de desafio nova.
+#[tokio::test]
+async fn um_codigo_de_recuperacao_entra_uma_vez_e_nao_a_segunda() {
+    let harness = harness!();
+    let (person_id, cred) = harness.criar_privilegiada_enrolada().await;
+    let codigo_rec = "ABCDE-FGHJK-LMNPQ";
+    harness.seed_recovery_code(person_id, codigo_rec).await;
+
+    let page = harness.open("/login").await;
+    set_field(&page, "input[name=email]", &cred.email).await;
+    set_field(&page, "input[name=password]", &cred.password).await;
+    submit(&page, "form").await;
+    esperar_por(&page, "Confirme o segundo factor").await;
+
+    // Abre a alternativa de recuperação e usa o código, pelo browser.
+    elemento(&page, "details.oc-mfa__fallback summary")
+        .await
+        .click()
+        .await
+        .expect("abrir a alternativa de recuperação");
+    set_field(&page, "#mfa-recovery", codigo_rec).await;
+    submit(&page, "form[action=\"/mfa/recovery\"]").await;
+    esperar_por(&page, "SESSÃO PRIVILEGIADA").await;
+
+    // Reversão: o mesmo código, numa sessão de desafio nova, é recusado pelo
+    // endpoint real.
+    let cliente = reqwest::Client::new();
+    let login: serde_json::Value = cliente
+        .post(format!("{}/api/v1/auth/login", harness.core_url))
+        .json(&serde_json::json!({ "email": cred.email, "password": cred.password }))
+        .send()
+        .await
+        .expect("login")
+        .json()
+        .await
+        .expect("json");
+    assert_eq!(
+        login.get("state").and_then(serde_json::Value::as_str),
+        Some("mfa_required"),
+        "um login privilegiado devia exigir MFA"
+    );
+    let token = login
+        .get("session_token")
+        .and_then(serde_json::Value::as_str)
+        .expect("token");
+    let recusa = cliente
+        .post(format!("{}/api/v1/auth/mfa/recovery", harness.core_url))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "code": codigo_rec }))
+        .send()
+        .await
+        .expect("segunda tentativa");
+    assert_eq!(
+        recusa.status().as_u16(),
+        422,
+        "um código de recuperação já usado foi aceite outra vez"
+    );
+}
+
+/// Um administrador revoga uma sessão de um membro, pelo produto.
+#[tokio::test]
+async fn revogar_uma_sessao_de_membro_pelo_produto() {
+    let harness = harness!();
+    let (admin_id, _) = harness.sign_in(&[TechnicalRole::PlatformAdmin]).await;
+
+    // Um membro-alvo com uma sessão viva.
+    let alvo = harness.outra_pessoa(admin_id, "Alvo da revogação").await;
+    let digest = format!("{:064x}", u128::from_le_bytes(*Uuid::new_v4().as_bytes()));
+    let sessao: Uuid = sqlx::query_scalar(
+        "INSERT INTO sessions (person_id, token_digest, state, expires_at)
+             VALUES ($1, $2, 'active', now() + interval '1 hour') RETURNING id",
+    )
+    .bind(alvo)
+    .bind(digest)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("sessão do alvo");
+
+    let page = harness.open(&format!("/admin/members/{alvo}")).await;
+    esperar_por(&page, "Sessões activas").await;
+    submit(
+        &page,
+        &format!("form[action=\"/admin/members/{alvo}/sessions/{sessao}/revoke\"]"),
+    )
+    .await;
+
+    // A sessão do alvo fica revogada — provado na base, que é onde o efeito vive.
+    let limite = std::time::Instant::now();
+    loop {
+        let estado: String = sqlx::query_scalar("SELECT state FROM sessions WHERE id = $1")
+            .bind(sessao)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("estado da sessão");
+        if estado == "revoked" {
+            break;
+        }
+        assert!(
+            limite.elapsed() < Duration::from_secs(6),
+            "a sessão do alvo não foi revogada: estado {estado}"
+        );
+        tokio::time::sleep(Duration::from_millis(120)).await;
+    }
 }

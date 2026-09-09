@@ -271,6 +271,10 @@ pub struct StoredSession {
     pub user_agent: Option<String>,
     /// Network prefix of the client.
     pub ip_prefix: Option<String>,
+    /// Whether the holder satisfied a second factor on this session (ADR-0107).
+    /// Explicit and persisted: what decides whether privileged authority may be
+    /// exercised, resolved at authorization time — not the state, not the role.
+    pub mfa_satisfied: bool,
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for StoredSession {
@@ -287,6 +291,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for StoredSession {
             last_seen_at: row.try_get("last_seen_at")?,
             user_agent: row.try_get("user_agent")?,
             ip_prefix: row.try_get("ip_prefix")?,
+            mfa_satisfied: row.try_get("mfa_satisfied")?,
         })
     }
 }
@@ -303,6 +308,7 @@ pub async fn create_session<'e>(
     executor: impl PgExecutor<'e>,
     person_id: Uuid,
     state: SessionState,
+    mfa_satisfied: bool,
     lifetime: Duration,
     user_agent: Option<&str>,
     ip_prefix: Option<&str>,
@@ -321,13 +327,14 @@ pub async fn create_session<'e>(
 
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO sessions
-             (person_id, token_digest, state, expires_at, user_agent, ip_prefix)
-         VALUES ($1, $2, $3, now() + $4, $5, $6)
+             (person_id, token_digest, state, mfa_satisfied, expires_at, user_agent, ip_prefix)
+         VALUES ($1, $2, $3, $4, now() + $5, $6, $7)
          RETURNING id",
     )
     .bind(person_id)
     .bind(session_digest(&token))
     .bind(state.as_str())
+    .bind(mfa_satisfied)
     .bind(lifetime)
     .bind(user_agent.map(|value| value.chars().take(255).collect::<String>()))
     .bind(ip_prefix)
@@ -348,7 +355,7 @@ pub async fn find_session<'e>(
 ) -> CoreResult<Option<StoredSession>> {
     let session = sqlx::query_as::<_, StoredSession>(
         "SELECT id, person_id, state, expires_at, issued_at, last_seen_at,
-                user_agent, ip_prefix
+                user_agent, ip_prefix, mfa_satisfied
            FROM sessions
           WHERE token_digest = $1 AND state <> 'revoked' AND expires_at > now()",
     )
@@ -369,7 +376,7 @@ pub async fn list_sessions<'e>(
 ) -> CoreResult<Vec<StoredSession>> {
     let sessions = sqlx::query_as::<_, StoredSession>(
         "SELECT id, person_id, state, expires_at, issued_at, last_seen_at,
-                user_agent, ip_prefix
+                user_agent, ip_prefix, mfa_satisfied
            FROM sessions
           WHERE person_id = $1 AND state <> 'revoked' AND expires_at > now()
           ORDER BY issued_at DESC",
