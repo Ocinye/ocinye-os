@@ -318,6 +318,13 @@ struct SecurityOverview {
     has_permanent_password: bool,
     password_changed_at: Option<DateTime<Utc>>,
     temporary_credential_expires_at: Option<DateTime<Utc>>,
+    /// Se a credencial temporária que existe já passou a validade.
+    ///
+    /// Uma credencial expirada continua `active` na base até ser reemitida, por
+    /// isso a data de expiração sozinha não diz se ainda vale. A Experience
+    /// precisa desta distinção para dizer «Expirada em» em vez de «Expira em», e
+    /// para oferecer «Reemitir acesso» em vez de «Dar acesso».
+    temporary_credential_expired: bool,
     last_successful_sign_in: Option<DateTime<Utc>>,
     recent_failed_attempts: i64,
     live_sessions: Vec<SessionSummary>,
@@ -404,6 +411,9 @@ async fn security_overview(
         has_permanent_password: permanent.is_some(),
         password_changed_at: permanent.map(|c| c.created_at),
         temporary_credential_expires_at: temporary.and_then(|c| c.expires_at),
+        temporary_credential_expired: temporary
+            .and_then(|c| c.expires_at)
+            .is_some_and(|e| e <= Utc::now()),
         last_successful_sign_in: last_sign_in,
         recent_failed_attempts: failures,
         may_be_provisioned: person.identity_kind == "human" && !ja_tem_acesso,
