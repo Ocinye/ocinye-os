@@ -411,17 +411,44 @@ impl Harness {
             .await
             .expect("lugar no harness");
 
-        let perfil = std::env::temp_dir().join(format!("ocinye-e2e-{}", Uuid::new_v4().simple()));
-
-        let config = BrowserConfig::builder()
-            .chrome_executable(chrome)
-            .user_data_dir(&perfil)
-            .no_sandbox()
-            .build()
-            .unwrap_or_else(|erro| panic!("configuração do browser: {erro}"));
-        let (browser, mut handler) = Browser::launch(config)
-            .await
-            .unwrap_or_else(|erro| panic!("o Chrome não arrancou: {erro}"));
+        // O Chrome arranca num processo do sistema, e arrancar um processo pode
+        // falhar por contenção — em CI, com vários browsers a nascer ao mesmo
+        // tempo, acontece, e uma viagem inteira caía por isso, com dois testes a
+        // dizerem «o Chrome não arrancou» na mesma corrida.
+        //
+        // Repetir o arranque **não** é curar uma corrida do produto com um sleep,
+        // que é proibido (`CLAUDE.md` §59): é repetir o arranque de um processo
+        // externo falível, como se repete uma ligação de rede que caiu. O que se
+        // prova continua a ser o produto; o que se repete é o levantar do browser
+        // que o observa. Cada tentativa leva um perfil novo, para não encontrar o
+        // `SingletonLock` da anterior; ao fim de três desiste com a razão, para
+        // que uma máquina genuinamente sem Chrome falhe depressa em vez de repetir
+        // para sempre.
+        let mut perfil =
+            std::env::temp_dir().join(format!("ocinye-e2e-{}", Uuid::new_v4().simple()));
+        let mut tentativa = 1_u32;
+        let (browser, mut handler) = loop {
+            let config = BrowserConfig::builder()
+                .chrome_executable(chrome)
+                .user_data_dir(&perfil)
+                .no_sandbox()
+                .build()
+                .unwrap_or_else(|erro| panic!("configuração do browser: {erro}"));
+            match Browser::launch(config).await {
+                Ok(par) => break par,
+                Err(erro) if tentativa < 3 => {
+                    eprintln!("o Chrome não arrancou (tentativa {tentativa}): {erro}; a repetir");
+                    tentativa += 1;
+                    perfil = std::env::temp_dir()
+                        .join(format!("ocinye-e2e-{}", Uuid::new_v4().simple()));
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        u64::from(tentativa) * 400,
+                    ))
+                    .await;
+                }
+                Err(erro) => panic!("o Chrome não arrancou após {tentativa} tentativas: {erro}"),
+            }
+        };
         let handle = tokio::spawn(async move { while handler.next().await.is_some() {} });
 
         // A marca de que esta viagem chegou mesmo a levantar voo.
