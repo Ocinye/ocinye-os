@@ -227,6 +227,15 @@ pub fn inventario() -> Vec<Activo> {
                      estava autenticado volta a entrar. Identidade persiste; \
                      autoridade restabelece-se (ADR-0411).",
         },
+        Activo {
+            nome: "Batida da ingestão de correio",
+            onde: "PostgreSQL, tabela `mail_ingestion_heartbeat`",
+            classe: Classe::Efemero,
+            porque: "O último estado da passagem periódica do worker. Viaja no dump \
+                     por estar na base, e não faz falta: num servidor restaurado \
+                     chega velho e lê-se como «o worker ainda não correu aqui» até \
+                     correr, que é exactamente o que é verdade.",
+        },
     ]
 }
 
@@ -412,6 +421,7 @@ mod cobertura {
         let excepcoes = [
             ("search_documents", "search_documents"),
             ("sessions", "Sessões vivas"),
+            ("mail_ingestion_heartbeat", "Batida da ingestão de correio"),
         ];
         for (tabela, activo) in excepcoes {
             assert!(

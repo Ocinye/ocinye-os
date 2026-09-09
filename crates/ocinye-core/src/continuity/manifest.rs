@@ -404,6 +404,16 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
         "message_reactions",
         Comparacao::Fora("linha-filha sem identidade própria; viaja com a mensagem"),
     ),
+    (
+        "mail_ingestion_heartbeat",
+        Comparacao::Fora(
+            "estado operacional efémero: a última passagem do worker de \
+             ingestão. Uma única linha, sobreposta a cada passagem. Num \
+             servidor restaurado chega velha e lê-se como «o worker ainda não \
+             correu aqui» até correr — compará-la mediria o worker, não a \
+             instituição",
+        ),
+    ),
 ];
 
 /// As famílias comparadas identidade a identidade.

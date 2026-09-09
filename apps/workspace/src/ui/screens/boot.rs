@@ -43,13 +43,17 @@ pub fn boot(outcome: &BootOutcome, destino: &str) -> impl IntoView {
 
     let (titulo, explicacao) = match estado {
         BootState::Ready => (
-            "SISTEMA PRONTO",
-            "O Ocinye Core respondeu. A sessão vai ser verificada.",
+            "SISTEMA OPERACIONAL",
+            "O Ocinye Core está operacional. As capacidades assinaladas abaixo, \
+             quando as houver, aguardam disponibilidade — a IA e a computação \
+             aguardam a ligação do primeiro nó computacional da Ocinye — e não \
+             são avaria: o trabalho institucional segue por inteiro.",
         ),
         BootState::Degraded => (
-            "SISTEMA PRONTO COM LIMITAÇÕES",
-            "O Ocinye Core respondeu. Há capacidades opcionais indisponíveis; \
-             o trabalho institucional segue.",
+            "SISTEMA OPERACIONAL COM UMA AVARIA",
+            "O Ocinye Core respondeu. Uma capacidade que está configurada e devia \
+             responder não está a responder; o trabalho institucional segue, mas \
+             há uma avaria assinalada abaixo para resolver.",
         ),
         BootState::Blocked => (
             "NÃO FOI POSSÍVEL INICIAR O OCINYE OS",

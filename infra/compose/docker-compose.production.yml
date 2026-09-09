@@ -257,6 +257,35 @@ services:
       timeout: 5s
       retries: 20
 
+  # ── Provisiona o bucket institucional, uma vez ────────────────────────
+  #
+  # Idempotente: cria o bucket **privado** se faltar, e não toca em nada se já
+  # existir. Sem isto, o Core arranca mas o primeiro upload de ficheiro falha —
+  # o bucket não existe — e a cópia de objectos do backup também. Era
+  # conhecimento manual (o bucket teve de ser criado à mão a 2026-09-09); passa a
+  # ser do arranque. Corre a cada `up`, faz o seu trabalho e sai. Sem portas.
+  object-store-init:
+    image: minio/mc:latest
+    env_file:
+      - /etc/ocinye/object-store.env
+      - /etc/ocinye/core.env
+    depends_on:
+      object-store:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://object-store:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" &&
+      mc mb --ignore-existing local/\"$$OCINYE_STORAGE_BUCKET\" &&
+      mc anonymous set none local/\"$$OCINYE_STORAGE_BUCKET\" &&
+      echo 'bucket ready and private'
+      "
+    restart: "no"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
   # ── Continuidade: a cópia cifrada para fora do servidor ────────────────
   #
   # Efémero e por perfil. **Não corre no `up`** — só quando o agendador o dispara

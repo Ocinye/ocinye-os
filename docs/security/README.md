@@ -293,7 +293,6 @@ Declarado, não escondido:
 | Rate limiting geral | **Não implementado.** A autenticação **tem** throttling — por prefixo de rede e por endereço institucional, com janela que expira e sem bloqueio de conta. As restantes rotas não têm. |
 | Antimalware em uploads | **Não implementado.** O hook existe; o scan não. |
 | Antimalware em anexos de correio | **Não implementado.** A descarga de anexos está declarada indisponível, o que hoje remove a via. Reabrir quando os anexos forem ligados. |
-| Ingestão IMAP | **Não implementada.** `mail.sync` reporta `planned`. |
 | Verificação de assinatura de capacidades WASM | **Não implementado.** O campo existe no manifesto. |
 | Rede para capacidades WASM | **Não implementado — e pedi-la é recusado**, não silenciosamente concedido. |
 | Backups | **Não configurados.** O restore **foi** exercitado uma vez, a 2026-08-28; não há agendamento, cópia fora do servidor, retenção nem cifra dos artefactos. Um `pg_dump` não cifrado é uma cópia de tudo o que a instituição classificou. |

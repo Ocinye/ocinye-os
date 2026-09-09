@@ -42,6 +42,23 @@ const POSITIONS: [(&str, &str); 9] = [
     ("external_collaborator", "Colaborador externo"),
 ];
 
+/// O rótulo em português de uma posição institucional, pelo código do domínio.
+///
+/// Uma só tradução, partilhada pelo formulário de criação, pelo detalhe do
+/// membro e pela lista — para que «founder» nunca apareça cru num sítio e
+/// «Fundador» noutro. Um código que este build não conhece devolve-se como está,
+/// em vez de desaparecer: uma posição nova é visível, e não engolida.
+#[must_use]
+pub fn position_label(code: &str) -> String {
+    if code.is_empty() {
+        return "—".to_owned();
+    }
+    POSITIONS
+        .iter()
+        .find(|(c, _)| *c == code)
+        .map_or_else(|| code.to_owned(), |(_, label)| (*label).to_owned())
+}
+
 /// Ecrã «Adicionar utilizador».
 ///
 /// Um formulário e não um assistente de cinco passos: os campos cabem num ecrã,
@@ -319,8 +336,25 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
         .and_then(Value::as_i64)
         .unwrap_or(0);
     let temporary_expiry = day(overview, "temporary_credential_expires_at");
+    let temporary_expired = overview
+        .get("temporary_credential_expired")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let changed = day(overview, "password_changed_at");
     let last_sign_in = day(overview, "last_successful_sign_in");
+
+    // Uma credencial expirada continua a existir na base, mas dizer «expira» de
+    // uma data passada é apresentá-la como se ainda estivesse por vir. Quando já
+    // passou, diz-se «Expirada em», com o seu próprio tom.
+    let tem_temporaria = temporary_expiry != "—";
+    // Reemitir, e não «dar acesso», quando já houve uma credencial que expirou:
+    // a acção é a mesma no Core, mas o nome tem de dizer o que aconteceu.
+    let reemitir = pode_provisionar && temporary_expired;
+    let rotulo_acesso = if reemitir {
+        "Reemitir acesso"
+    } else {
+        "Dar acesso"
+    };
 
     let sessions: Vec<Value> = overview
         .get("live_sessions")
@@ -357,8 +391,22 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                         <dt>"Definida em"</dt>
                         <dd class="oc-mono">{changed}</dd>
 
-                        <dt>"Credencial temporária expira"</dt>
-                        <dd class="oc-mono">{temporary_expiry}</dd>
+                        <dt>"Credencial temporária"</dt>
+                        <dd>
+                            {if !tem_temporaria {
+                                view! { <span class="oc-mono">"—"</span> }.into_any()
+                            } else if temporary_expired {
+                                badge(format!("Expirada em {temporary_expiry}"), Tone::Err)
+                                    .into_any()
+                            } else {
+                                view! {
+                                    <span class="oc-mono">
+                                        "Expira em "{temporary_expiry.clone()}
+                                    </span>
+                                }
+                                    .into_any()
+                            }}
+                        </dd>
 
                         <dt>"Último acesso"</dt>
                         <dd class="oc-mono">{last_sign_in}</dd>
@@ -424,11 +472,15 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                 view! {
                     <div class="oc-mt-6">
                         {card(
-                            section_head("Dar acesso", None, None),
+                            section_head(rotulo_acesso, None, None),
                             view! {
                                 <div>
                                     <p class="oc-muted">
-                                        "Esta pessoa existe na instituição e ainda não tem como entrar. Dar-lhe acesso emite uma credencial temporária e não lhe altera papéis, unidades nem autoridade."
+                                        {if reemitir {
+                                            "A credencial temporária anterior expirou e esta pessoa ficou sem como entrar. Reemitir invalida a credencial expirada e emite uma nova; não lhe altera papéis, unidades nem autoridade, e a palavra-passe definitiva continua a ser definida pelo próprio no primeiro acesso."
+                                        } else {
+                                            "Esta pessoa existe na instituição e ainda não tem como entrar. Dar-lhe acesso emite uma credencial temporária e não lhe altera papéis, unidades nem autoridade. A palavra-passe definitiva é definida pelo próprio no primeiro acesso — nunca por quem administra."
+                                        }}
                                     </p>
                                     {recusa
                                         .clone()
@@ -445,7 +497,7 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                                             view! {
                                                 <form method="post" action=accao.clone() class="oc-mt-3">
                                                     <button class="oc-btn oc-btn--primary" type="submit">
-                                                        "Dar acesso"
+                                                        {rotulo_acesso}
                                                     </button>
                                                 </form>
                                             }
@@ -614,10 +666,19 @@ fn source_label(source: &str) -> &'static str {
 
 /// Detalhe de um membro: quem é, o que pode, e o estado da sua credencial.
 ///
-/// Os separadores «Overview», «Units», «Research Workspaces», «Activity» e
-/// «Audit» do dossier ficam declarados como indisponíveis em vez de levarem a
-/// um ecrã vazio: dois deles existem, e dizê-lo é mais honesto do que sugerir
-/// sete que não existem.
+/// # A barra do topo não finge separadores
+///
+/// As quatro secções que existem — Acesso, Segurança, Unidades, Research
+/// Workspaces — são desenhadas em pilha nesta página, e a barra do topo leva a
+/// cada uma por âncora (`href="#membro-…"`): funciona sem JavaScript, e não
+/// promete uma troca de painel que não acontece. Havia aqui uma `role="tablist"`
+/// de `<span>` sem destino nenhum — tinha o aspecto de separadores e não fazia
+/// nada, que é precisamente a categoria que a auditoria «Zero Dead UI» proíbe.
+///
+/// «Overview», «Actividade» e «Audit» não têm secção neste dossier, e ficam
+/// declarados indisponíveis **com a razão de cada um** — não «ainda não
+/// disponível», que serviria para tudo. Actividade e Audit existem como ecrãs
+/// próprios; o que não existe é o recorte por membro.
 pub fn member_detail(
     person: &Value,
     security: &Value,
@@ -637,11 +698,14 @@ pub fn member_detail(
     // mostrava a mesma pessoa duas vezes: `afernandes · afernandes@ocinye.com`.
     let email = text(person, "email").to_owned();
     let status = text(person, "status").to_owned();
-    let position = person
-        .get("institutional_position")
-        .and_then(Value::as_str)
-        .unwrap_or("—")
-        .to_owned();
+    // A posição em português. Vinha crua — «founder» em vez de «Fundador» — por
+    // não passar pela mesma tradução que o formulário de criação usa.
+    let position = position_label(
+        person
+            .get("institutional_position")
+            .and_then(Value::as_str)
+            .unwrap_or(""),
+    );
 
     let security = security.clone();
     let access = access.clone();
@@ -665,43 +729,59 @@ pub fn member_detail(
                 </div>
             </div>
 
-            <div class="oc-tabs oc-tabs--ctx" role="tablist" aria-label="Separadores do membro">
-                <span class="oc-tab" aria-selected="true">"Acesso"</span>
-                <span class="oc-tab" aria-selected="false">"Segurança"</span>
-                <span class="oc-tab" aria-selected="false">"Unidades"</span>
-                <span class="oc-tab" aria-selected="false">"Research Workspaces"</span>
-                {["Overview", "Actividade", "Audit"]
+            <nav class="oc-tabs oc-tabs--ctx" aria-label="Secções do membro">
+                <a class="oc-tab" href="#membro-acesso">"Acesso"</a>
+                <a class="oc-tab" href="#membro-seguranca">"Segurança"</a>
+                <a class="oc-tab" href="#membro-unidades">"Unidades"</a>
+                <a class="oc-tab" href="#membro-research-workspaces">"Research Workspaces"</a>
+                {[
+                    ("Overview", "O resumo do membro ainda não tem ecrã próprio."),
+                    (
+                        "Actividade",
+                        "A actividade por membro ainda não é uma consulta do Core. \
+                         A actividade institucional está em «Actividade».",
+                    ),
+                    (
+                        "Audit",
+                        "A auditoria por membro ainda não é uma consulta do Core. \
+                         O registo institucional está em «Audit».",
+                    ),
+                ]
                     .iter()
-                    .map(|label| {
+                    .map(|(label, porque)| {
                         view! {
-                            <span
-                                class="oc-tab oc-unavailable"
-                                aria-disabled="true"
-                                title="Ainda não disponível"
-                            >
+                            <span class="oc-tab oc-unavailable" aria-disabled="true" title=*porque>
                                 {*label}
                             </span>
                         }
                     })
                     .collect_view()}
-            </div>
+            </nav>
         </div>
 
         <div class="oc-page">
-            {section_head("Acesso", None, None)}
-            {access_tab(&access)}
-            {roles_admin(&person_id, &access)}
-            {grants_admin(&person_id, &access, &permissions_catalog)}
+            <section id="membro-acesso">
+                {section_head("Acesso", None, None)}
+                {access_tab(&access)}
+                {roles_admin(&person_id, &access)}
+                {grants_admin(&person_id, &access, &permissions_catalog)}
+            </section>
             <div class="oc-vspace"></div>
-            {section_head("Segurança", None, None)}
-            {security_tab(&person_id, &security, recusa.as_deref())}
-            {account_admin(&person_id, &security)}
+            <section id="membro-seguranca">
+                {section_head("Segurança", None, None)}
+                {security_tab(&person_id, &security, recusa.as_deref())}
+                {account_admin(&person_id, &security)}
+            </section>
             <div class="oc-vspace"></div>
-            {section_head("Unidades", None, None)}
-            {units_admin(&person_id, &access, &units_catalog)}
+            <section id="membro-unidades">
+                {section_head("Unidades", None, None)}
+                {units_admin(&person_id, &access, &units_catalog)}
+            </section>
             <div class="oc-vspace"></div>
-            {section_head("Research Workspaces", None, None)}
-            {workspaces_admin(&person_id, &access, &workspaces_catalog)}
+            <section id="membro-research-workspaces">
+                {section_head("Research Workspaces", None, None)}
+                {workspaces_admin(&person_id, &access, &workspaces_catalog)}
+            </section>
         </div>
     }
 }
@@ -1490,6 +1570,86 @@ mod tests {
     const PID: &str = "11111111-1111-1111-1111-111111111111";
     const UID: &str = "33333333-3333-3333-3333-333333333333";
 
+    /// A posição institucional lê-se em português, e um código desconhecido
+    /// aparece como está em vez de desaparecer.
+    #[test]
+    fn a_posicao_institucional_le_se_em_portugues() {
+        assert_eq!(position_label("founder"), "Fundador");
+        assert_eq!(position_label("director"), "Director");
+        assert_eq!(position_label(""), "—");
+        // Um código que este build não conhece é visível, não engolido.
+        assert_eq!(position_label("chair_of_the_board"), "chair_of_the_board");
+        // «founder» cru — o que aparecia na coluna — não sobrevive à tradução.
+        assert_ne!(position_label("founder"), "founder");
+    }
+
+    /// A barra do topo do membro não finge separadores.
+    ///
+    /// As quatro secções que existem levam a conteúdo real por âncora, e o
+    /// conteúdo tem o alvo onde aterrar; as três que não têm secção declaram-se
+    /// indisponíveis com a razão de cada uma. A categoria proibida é o `<span>`
+    /// com aspecto de separador e sem destino nem razão — que era o que estava
+    /// aqui, escondido de `nenhuma_tab_e_decorativa` por usar `role="tablist"` em
+    /// vez de `role="tab"`.
+    #[test]
+    fn os_separadores_do_membro_levam_a_seccoes_ou_dizem_porque_nao() {
+        let person = json!({
+            "id": PID,
+            "full_name": "Ana Fernandes",
+            "email": "ana@ocinye.com",
+            "status": "active",
+            "institutional_position": "Investigadora",
+        });
+        let html = member_detail(
+            &person,
+            &json!({ "account_status": "active" }),
+            &json!({}),
+            &json!([]),
+            &json!({ "items": [] }),
+            &json!([]),
+            None,
+        )
+        .to_html();
+
+        for (href, id) in [
+            ("#membro-acesso", "id=\"membro-acesso\""),
+            ("#membro-seguranca", "id=\"membro-seguranca\""),
+            ("#membro-unidades", "id=\"membro-unidades\""),
+            (
+                "#membro-research-workspaces",
+                "id=\"membro-research-workspaces\"",
+            ),
+        ] {
+            assert!(
+                html.contains(&format!("href=\"{href}\"")),
+                "o separador {href} deixou de ser uma âncora para a sua secção"
+            );
+            assert!(
+                html.contains(id),
+                "a secção {id} não existe para a âncora do separador aterrar"
+            );
+        }
+        assert!(
+            !html.contains("role=\"tablist\""),
+            "voltou o tablist decorativo: spans com aspecto de separador e sem destino"
+        );
+
+        for razao in [
+            "O resumo do membro ainda não tem ecrã próprio.",
+            "A actividade por membro ainda não é uma consulta do Core.",
+            "A auditoria por membro ainda não é uma consulta do Core.",
+        ] {
+            assert!(
+                html.contains(razao),
+                "um separador indisponível perdeu a sua razão: {razao}"
+            );
+        }
+        assert!(
+            !html.contains("title=\"Ainda não disponível\""),
+            "um separador do membro ainda usa a razão genérica em vez de dizer qual"
+        );
+    }
+
     /// Sem unidades na instituição, não se oferece atribuir: encaminha-se para
     /// as criar. Zero Dead UI — o controlo diz porque não está disponível.
     #[test]
@@ -1793,6 +1953,44 @@ mod tests {
         .to_html();
         assert!(html.contains("Ainda não definida"));
         assert!(html.contains("Sem sessões activas."));
+    }
+
+    /// Um convite com a credencial temporária expirada oferece **reemitir**, e
+    /// apresenta a data passada como expirada — não como uma expiração futura.
+    ///
+    /// É o estado exacto que dava «An unexpected error occurred» ao carregar em
+    /// «Dar acesso»: agora a acção diz o que faz, e a data diz a verdade.
+    #[test]
+    fn convite_expirado_oferece_reemitir_e_diz_expirada() {
+        let html = security_tab(
+            "abc",
+            &json!({
+                "account_status": "invited",
+                "has_permanent_password": false,
+                "temporary_credential_expires_at": "2026-09-08T10:00:00Z",
+                "temporary_credential_expired": true,
+                "may_be_provisioned": true,
+                "live_sessions": []
+            }),
+            None,
+        )
+        .to_html();
+        assert!(
+            html.contains("Reemitir acesso"),
+            "um convite expirado devia oferecer reemitir o acesso"
+        );
+        assert!(
+            !html.contains("Dar acesso"),
+            "não é a primeira entrega: não se diz «dar acesso» a quem já foi provisionado"
+        );
+        assert!(
+            html.contains("Expirada em"),
+            "uma data já passada aparece como «Expirada em», e não como expiração futura"
+        );
+        assert!(
+            !html.contains("Credencial temporária expira"),
+            "a rotulagem antiga apresentava uma data passada como se ainda fosse futura"
+        );
     }
 
     #[test]
