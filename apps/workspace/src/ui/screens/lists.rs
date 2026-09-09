@@ -988,9 +988,16 @@ pub fn members(viewer: &Viewer, payload: &Value) -> impl IntoView {
                 "Gerir funções por ecrã próprio ainda não existe.",
             ),
             ListTab::to("Unidades", "/units"),
+            // «Acessos», e não «Convites»: no Ocinye não há convite por email
+            // (ADR-0103). O acesso provisiona-se com uma credencial temporária,
+            // e isso gere-se hoje no separador «Segurança» de cada membro — dar
+            // acesso, reemitir uma credencial expirada. Uma vista de todos os
+            // acessos num só ecrã ainda não existe.
             ListTab::missing(
-                "Convites",
-                "A gestão de convites ainda não tem ecrã próprio.",
+                "Acessos",
+                "O acesso de cada membro gere-se no seu separador «Segurança». \
+                 Não há convite por email; uma vista de todos os acessos num só \
+                 ecrã ainda não existe.",
             ),
             ListTab::missing("Serviços", "A administração de serviços ainda não existe."),
         ],
