@@ -542,6 +542,129 @@ async fn provisionar_quem_ja_tem_acesso_e_recusado() {
     );
 }
 
+/// Reemitir acesso a um convite expirado funciona — e não rebenta com um erro
+/// inesperado.
+///
+/// # O defeito que isto guarda
+///
+/// Uma credencial temporária expira mas continua `state = 'active'` na base até
+/// alguém a retirar: nada a transiciona sozinha. Provisionar de novo inseria uma
+/// segunda credencial `active` e batia no índice único `uq_credentials_live`,
+/// devolvendo um erro de base de dados que a Experience mostrava como «An
+/// unexpected error occurred» — o estado exacto do convite expirado do Fidel
+/// Monteiro. A reemissão retira a expirada antes de emitir a nova.
+#[tokio::test]
+async fn reemitir_acesso_a_um_convite_expirado_funciona() {
+    let Some(pool) = pool().await else { return };
+    let org = organizacao(&pool).await;
+    let (humano, admin) = enderecos();
+
+    let (privilegiada, _) = identity::bootstrap_privileged_identity(
+        &pool,
+        &autenticador(),
+        org,
+        HumanOwner {
+            full_name: "Fidel Monteiro".to_owned(),
+            email: humano,
+        },
+        "Fidel Admin",
+        &admin,
+        &CorrelationIds::generate(),
+    )
+    .await
+    .expect("bootstrap");
+    let dono = privilegiada.belongs_to_person_id.expect("dono");
+    let pessoa_admin = identity::person_by_id(&pool, privilegiada.id)
+        .await
+        .expect("l")
+        .expect("e");
+    let actor = identity::principal_for_person(&pool, &pessoa_admin)
+        .await
+        .expect("principal");
+
+    // Primeira entrega.
+    identity::provision_existing_person(
+        &pool,
+        &autenticador(),
+        &actor,
+        dono,
+        &CorrelationIds::generate(),
+    )
+    .await
+    .expect("a primeira entrega funciona");
+
+    // A credencial expira, mas fica `active` — como fica na base até alguém a
+    // retirar. É exactamente o estado do convite expirado.
+    let expiradas = sqlx::query(
+        "UPDATE credentials SET expires_at = now() - interval '1 hour'
+          WHERE person_id = $1 AND kind = 'temporary' AND state = 'active'",
+    )
+    .bind(dono)
+    .execute(&pool)
+    .await
+    .expect("expirar")
+    .rows_affected();
+    assert_eq!(
+        expiradas, 1,
+        "não havia uma credencial temporária activa para expirar"
+    );
+
+    // Reemitir: tem de funcionar, e não bater no índice único.
+    identity::provision_existing_person(
+        &pool,
+        &autenticador(),
+        &actor,
+        dono,
+        &CorrelationIds::generate(),
+    )
+    .await
+    .expect("reemitir acesso a um convite expirado rebentou");
+
+    // Fica exactamente uma credencial temporária viva — a nova.
+    let vivas: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM credentials
+          WHERE person_id = $1 AND kind = 'temporary' AND state = 'active'",
+    )
+    .bind(dono)
+    .fetch_one(&pool)
+    .await
+    .expect("contar vivas");
+    assert_eq!(
+        vivas, 1,
+        "a reemissão devia deixar exactamente uma credencial temporária viva"
+    );
+
+    // A anterior ficou revogada, não apagada: o histórico preserva-se.
+    let revogadas: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM credentials WHERE person_id = $1 AND state = 'revoked'",
+    )
+    .bind(dono)
+    .fetch_one(&pool)
+    .await
+    .expect("contar revogadas");
+    assert!(revogadas >= 1, "a credencial expirada devia ficar revogada");
+
+    // Não se criou uma segunda pessoa.
+    let pessoas: i64 = sqlx::query_scalar("SELECT count(*) FROM people WHERE id = $1")
+        .bind(dono)
+        .fetch_one(&pool)
+        .await
+        .expect("contar pessoa");
+    assert_eq!(pessoas, 1, "a reemissão não pode duplicar a pessoa");
+
+    // A auditoria distingue reemissão de provisionamento.
+    let accao: String = sqlx::query_scalar(
+        "SELECT action FROM audit_events
+          WHERE organisation_id = $1 AND action = 'account_access_reissued'
+          ORDER BY occurred_at DESC LIMIT 1",
+    )
+    .bind(org)
+    .fetch_one(&pool)
+    .await
+    .expect("registo de reemissão");
+    assert_eq!(accao, "account_access_reissued");
+}
+
 /// Uma identidade privilegiada não se provisiona por aqui.
 #[tokio::test]
 async fn uma_identidade_privilegiada_nao_se_provisiona() {

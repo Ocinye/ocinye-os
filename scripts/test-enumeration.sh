@@ -201,7 +201,9 @@ carregamento-em-partes|8|-p ocinye-core --test segmented_upload
 # A identidade privilegiada ligada. As duas verdades — que tipo de identidade
 # iniciou a sessão, e que autoridade ela tem agora — são independentes, e é isso
 # que estas provas fixam.
-identidade-privilegiada|14|-p ocinye-core --test privileged_identity
+# 14 → 15 em 2026-09-09: `reemitir_acesso_a_um_convite_expirado_funciona` prova
+# que um convite expirado se reemite em vez de rebentar com o índice único.
+identidade-privilegiada|15|-p ocinye-core --test privileged_identity
 # O segundo factor obrigatório. Enrolar, confirmar, desafiar, recusar replay,
 # gastar um código de recuperação uma só vez, e revogar a sessão de um membro
 # sem tocar na de outro (ADR-0107).
