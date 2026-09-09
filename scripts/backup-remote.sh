@@ -1,5 +1,13 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # O transporte da cópia institucional para fora deste servidor.
+#
+# **Bash, e não `/bin/sh`.** A codificação percent das credenciais para o
+# `MC_HOST_*` usa `printf '%b' '\xNN'` — os escapes hexadecimais que o `bash`
+# entende e o `dash` (o `/bin/sh` do Debian/Ubuntu) não. Sob `dash`, `codificar`
+# devolvia o literal `\x41` em vez do byte, a credencial saía deformada, e o
+# `mc` recusava com «Access Denied» — um destino que responde a dizer que as
+# credenciais não abrem o bucket. O shebang era `#!/bin/sh`, e a máquina onde
+# isto se escreveu tinha `sh` a resolver para `bash`; o servidor não.
 #
 # # Porque isto existe
 #
