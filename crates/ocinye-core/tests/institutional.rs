@@ -1501,3 +1501,91 @@ async fn pertencer_a_uma_unidade_expande_o_acesso_efectivo() {
     // mutação da fronteira de autoridade, e `organisation::add_unit_member`
     // classifica-se pela mesma regra que fecha `grant_role` e `create_grant`.
 }
+
+/// Preparar a estrutura de um membro não espera pelo primeiro login.
+///
+/// # A propriedade
+///
+/// A instituição pode atribuir unidade e papel a um membro **convidado**, sem
+/// credencial utilizável — antes de ele definir a palavra-passe. A pertença é a
+/// fronteira de autoridade, não uma consequência de ter entrado: `add_unit_member`
+/// exige apenas que a pessoa exista na organização, e nada sobre o estado da
+/// conta ou a credencial.
+///
+/// # O reverso que isto guarda
+///
+/// Se algum dia a pertença passar a exigir uma conta activa ou uma credencial,
+/// este teste falha — e a instituição deixaria de poder preparar a equipa antes
+/// de cada pessoa entrar, que é exactamente o que se precisa de fazer ao
+/// incorporar os primeiros membros.
+#[tokio::test]
+async fn um_membro_convidado_recebe_unidade_antes_do_primeiro_login() {
+    let pool = skip_without_database!();
+    let organisation_id = organizacao(&pool, "convidado").await;
+    let admin = pessoa(&pool, organisation_id, &[TechnicalRole::PlatformAdmin]).await;
+    let marca = tag();
+
+    let mut tx = pool.begin().await.expect("tx");
+    let unidade = organisation::create_unit(
+        &mut tx,
+        &admin,
+        &ids(),
+        organisation::NewUnit {
+            code: format!("SIS{marca}"),
+            name: "Sistemas Digitais".to_owned(),
+            description: None,
+            research_areas: Vec::new(),
+        },
+    )
+    .await
+    .expect("unidade");
+    tx.commit().await.expect("commit");
+
+    // Um membro **convidado**, sem credencial nenhuma: o estado de quem ainda
+    // não entrou.
+    let convidado: Uuid = sqlx::query_scalar(
+        "INSERT INTO people (organisation_id, full_name, email, status)
+              VALUES ($1, 'Convidada', $2, 'invited') RETURNING id",
+    )
+    .bind(organisation_id)
+    .bind(format!("convidada-{marca}@ocinye.com"))
+    .fetch_one(&pool)
+    .await
+    .expect("convidado");
+
+    // Atribuir a unidade tem de funcionar — a pertença não depende do login.
+    let mut tx = pool.begin().await.expect("tx");
+    let membership = organisation::add_unit_member(
+        &mut tx,
+        &admin,
+        &ids(),
+        unidade.id,
+        convidado,
+        ocinye_contracts::UnitRole::Member,
+    )
+    .await
+    .expect("um membro convidado devia poder receber uma unidade antes de entrar");
+    tx.commit().await.expect("commit");
+
+    // A pertença ficou registada, ligada à mesma pessoa — não a uma segunda.
+    let (person_id, papel): (Uuid, String) =
+        sqlx::query_as("SELECT person_id, role FROM unit_memberships WHERE id = $1")
+            .bind(membership)
+            .fetch_one(&pool)
+            .await
+            .expect("pertença");
+    assert_eq!(person_id, convidado, "a pertença ligou-se a outra pessoa");
+    assert_eq!(papel, "member");
+
+    // A conta continua convidada: preparar a estrutura não a activou nem lhe deu
+    // credencial. Identidade e autoridade preparam-se; o acesso é outro passo.
+    let estado: String = sqlx::query_scalar("SELECT status FROM people WHERE id = $1")
+        .bind(convidado)
+        .fetch_one(&pool)
+        .await
+        .expect("estado");
+    assert_eq!(
+        estado, "invited",
+        "atribuir uma unidade não devia mudar o estado da conta"
+    );
+}
