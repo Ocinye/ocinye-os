@@ -257,6 +257,42 @@ services:
       timeout: 5s
       retries: 20
 
+  # ── Continuidade: a cópia cifrada para fora do servidor ────────────────
+  #
+  # Efémero e por perfil. **Não corre no `up`** — só quando o agendador o dispara
+  # com `docker compose --profile backup run --rm backup`. Participa desta mesma
+  # rede privada, e por isso alcança `postgres` e `object-store` pelos nomes
+  # internos, sem que nenhum deles publique porta no host. Cria o conjunto,
+  # cifra-o com `age` e envia-o para o cofre; depois desaparece.
+  #
+  # A chave **pública** `age` chega em `backup.env` e cifra o conjunto. A
+  # **privada** nunca entra aqui: sem ela o servidor não descifra o que envia,
+  # e comprometer só o servidor não entrega o cofre.
+  backup:
+    profiles: ["backup"]
+    image: ocinye/ocinye-backup:${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.backup
+    env_file:
+      # A base e o object-store internos, a raiz de selagem — de `core.env`; o
+      # destino R2 e a chave pública `age` — de `backup.env`.
+      - /etc/ocinye/comum.env
+      - /etc/ocinye/core.env
+      - /etc/ocinye/backup.env
+    volumes:
+      - /srv/ocinye/backups:/srv/ocinye/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+      object-store:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
 volumes:
   postgres-data:
   redis-data:
