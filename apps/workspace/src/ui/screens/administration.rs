@@ -649,10 +649,19 @@ fn source_label(source: &str) -> &'static str {
 
 /// Detalhe de um membro: quem é, o que pode, e o estado da sua credencial.
 ///
-/// Os separadores «Overview», «Units», «Research Workspaces», «Activity» e
-/// «Audit» do dossier ficam declarados como indisponíveis em vez de levarem a
-/// um ecrã vazio: dois deles existem, e dizê-lo é mais honesto do que sugerir
-/// sete que não existem.
+/// # A barra do topo não finge separadores
+///
+/// As quatro secções que existem — Acesso, Segurança, Unidades, Research
+/// Workspaces — são desenhadas em pilha nesta página, e a barra do topo leva a
+/// cada uma por âncora (`href="#membro-…"`): funciona sem JavaScript, e não
+/// promete uma troca de painel que não acontece. Havia aqui uma `role="tablist"`
+/// de `<span>` sem destino nenhum — tinha o aspecto de separadores e não fazia
+/// nada, que é precisamente a categoria que a auditoria «Zero Dead UI» proíbe.
+///
+/// «Overview», «Actividade» e «Audit» não têm secção neste dossier, e ficam
+/// declarados indisponíveis **com a razão de cada um** — não «ainda não
+/// disponível», que serviria para tudo. Actividade e Audit existem como ecrãs
+/// próprios; o que não existe é o recorte por membro.
 pub fn member_detail(
     person: &Value,
     security: &Value,
@@ -700,43 +709,59 @@ pub fn member_detail(
                 </div>
             </div>
 
-            <div class="oc-tabs oc-tabs--ctx" role="tablist" aria-label="Separadores do membro">
-                <span class="oc-tab" aria-selected="true">"Acesso"</span>
-                <span class="oc-tab" aria-selected="false">"Segurança"</span>
-                <span class="oc-tab" aria-selected="false">"Unidades"</span>
-                <span class="oc-tab" aria-selected="false">"Research Workspaces"</span>
-                {["Overview", "Actividade", "Audit"]
+            <nav class="oc-tabs oc-tabs--ctx" aria-label="Secções do membro">
+                <a class="oc-tab" href="#membro-acesso">"Acesso"</a>
+                <a class="oc-tab" href="#membro-seguranca">"Segurança"</a>
+                <a class="oc-tab" href="#membro-unidades">"Unidades"</a>
+                <a class="oc-tab" href="#membro-research-workspaces">"Research Workspaces"</a>
+                {[
+                    ("Overview", "O resumo do membro ainda não tem ecrã próprio."),
+                    (
+                        "Actividade",
+                        "A actividade por membro ainda não é uma consulta do Core. \
+                         A actividade institucional está em «Actividade».",
+                    ),
+                    (
+                        "Audit",
+                        "A auditoria por membro ainda não é uma consulta do Core. \
+                         O registo institucional está em «Audit».",
+                    ),
+                ]
                     .iter()
-                    .map(|label| {
+                    .map(|(label, porque)| {
                         view! {
-                            <span
-                                class="oc-tab oc-unavailable"
-                                aria-disabled="true"
-                                title="Ainda não disponível"
-                            >
+                            <span class="oc-tab oc-unavailable" aria-disabled="true" title=*porque>
                                 {*label}
                             </span>
                         }
                     })
                     .collect_view()}
-            </div>
+            </nav>
         </div>
 
         <div class="oc-page">
-            {section_head("Acesso", None, None)}
-            {access_tab(&access)}
-            {roles_admin(&person_id, &access)}
-            {grants_admin(&person_id, &access, &permissions_catalog)}
+            <section id="membro-acesso">
+                {section_head("Acesso", None, None)}
+                {access_tab(&access)}
+                {roles_admin(&person_id, &access)}
+                {grants_admin(&person_id, &access, &permissions_catalog)}
+            </section>
             <div class="oc-vspace"></div>
-            {section_head("Segurança", None, None)}
-            {security_tab(&person_id, &security, recusa.as_deref())}
-            {account_admin(&person_id, &security)}
+            <section id="membro-seguranca">
+                {section_head("Segurança", None, None)}
+                {security_tab(&person_id, &security, recusa.as_deref())}
+                {account_admin(&person_id, &security)}
+            </section>
             <div class="oc-vspace"></div>
-            {section_head("Unidades", None, None)}
-            {units_admin(&person_id, &access, &units_catalog)}
+            <section id="membro-unidades">
+                {section_head("Unidades", None, None)}
+                {units_admin(&person_id, &access, &units_catalog)}
+            </section>
             <div class="oc-vspace"></div>
-            {section_head("Research Workspaces", None, None)}
-            {workspaces_admin(&person_id, &access, &workspaces_catalog)}
+            <section id="membro-research-workspaces">
+                {section_head("Research Workspaces", None, None)}
+                {workspaces_admin(&person_id, &access, &workspaces_catalog)}
+            </section>
         </div>
     }
 }
@@ -1524,6 +1549,73 @@ mod tests {
 
     const PID: &str = "11111111-1111-1111-1111-111111111111";
     const UID: &str = "33333333-3333-3333-3333-333333333333";
+
+    /// A barra do topo do membro não finge separadores.
+    ///
+    /// As quatro secções que existem levam a conteúdo real por âncora, e o
+    /// conteúdo tem o alvo onde aterrar; as três que não têm secção declaram-se
+    /// indisponíveis com a razão de cada uma. A categoria proibida é o `<span>`
+    /// com aspecto de separador e sem destino nem razão — que era o que estava
+    /// aqui, escondido de `nenhuma_tab_e_decorativa` por usar `role="tablist"` em
+    /// vez de `role="tab"`.
+    #[test]
+    fn os_separadores_do_membro_levam_a_seccoes_ou_dizem_porque_nao() {
+        let person = json!({
+            "id": PID,
+            "full_name": "Ana Fernandes",
+            "email": "ana@ocinye.com",
+            "status": "active",
+            "institutional_position": "Investigadora",
+        });
+        let html = member_detail(
+            &person,
+            &json!({ "account_status": "active" }),
+            &json!({}),
+            &json!([]),
+            &json!({ "items": [] }),
+            &json!([]),
+            None,
+        )
+        .to_html();
+
+        for (href, id) in [
+            ("#membro-acesso", "id=\"membro-acesso\""),
+            ("#membro-seguranca", "id=\"membro-seguranca\""),
+            ("#membro-unidades", "id=\"membro-unidades\""),
+            (
+                "#membro-research-workspaces",
+                "id=\"membro-research-workspaces\"",
+            ),
+        ] {
+            assert!(
+                html.contains(&format!("href=\"{href}\"")),
+                "o separador {href} deixou de ser uma âncora para a sua secção"
+            );
+            assert!(
+                html.contains(id),
+                "a secção {id} não existe para a âncora do separador aterrar"
+            );
+        }
+        assert!(
+            !html.contains("role=\"tablist\""),
+            "voltou o tablist decorativo: spans com aspecto de separador e sem destino"
+        );
+
+        for razao in [
+            "O resumo do membro ainda não tem ecrã próprio.",
+            "A actividade por membro ainda não é uma consulta do Core.",
+            "A auditoria por membro ainda não é uma consulta do Core.",
+        ] {
+            assert!(
+                html.contains(razao),
+                "um separador indisponível perdeu a sua razão: {razao}"
+            );
+        }
+        assert!(
+            !html.contains("title=\"Ainda não disponível\""),
+            "um separador do membro ainda usa a razão genérica em vez de dizer qual"
+        );
+    }
 
     /// Sem unidades na instituição, não se oferece atribuir: encaminha-se para
     /// as criar. Zero Dead UI — o controlo diz porque não está disponível.
