@@ -664,6 +664,90 @@ fn source_label(source: &str) -> &'static str {
     }
 }
 
+/// O «Overview» do membro: o dossier de relance, sem segredos.
+///
+/// Consolida o que já existe espalhado pelas secções abaixo — posição, estado,
+/// segundo factor, palavra-passe, papéis, sessões —, para que quem administra
+/// veja o essencial sem percorrer a página inteira. O estado do segundo factor
+/// vem do Core (`mfa_required`/`mfa_enrolled`): é lá que vive a regra que o
+/// torna obrigatório, e não no ecrã.
+fn overview_tab(position: &str, status: &str, security: &Value, access: &Value) -> impl IntoView {
+    let mfa_required = security
+        .get("mfa_required")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let mfa_enrolled = security
+        .get("mfa_enrolled")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let (mfa_texto, mfa_tone) = if !mfa_required {
+        ("Não exigido", Tone::Gray)
+    } else if mfa_enrolled {
+        ("Exigido e enrolado", Tone::Ok)
+    } else {
+        ("Exigido, por enrolar", Tone::Warn)
+    };
+
+    let has_permanent = security
+        .get("has_permanent_password")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let sessoes = security
+        .get("live_sessions")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+
+    let papeis: Vec<String> = access
+        .get("roles")
+        .and_then(Value::as_array)
+        .map(|rs| {
+            rs.iter()
+                .filter_map(Value::as_str)
+                .map(|code| roles::label_do_codigo(code).to_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    let papeis_texto = if papeis.is_empty() {
+        "Nenhum".to_owned()
+    } else {
+        papeis.join(", ")
+    };
+
+    let status = status.to_owned();
+    let position = position.to_owned();
+
+    card(
+        section_head("Em resumo", None, None),
+        view! {
+            <dl class="oc-facts">
+                <dt>"Posição institucional"</dt>
+                <dd>{position}" — não concede acesso."</dd>
+
+                <dt>"Estado da conta"</dt>
+                <dd>{badge(status.clone(), Tone::of(&status))}</dd>
+
+                <dt>"Segundo factor"</dt>
+                <dd>{badge(mfa_texto.to_owned(), mfa_tone)}</dd>
+
+                <dt>"Palavra-passe definitiva"</dt>
+                <dd>
+                    {if has_permanent {
+                        "Definida pelo próprio"
+                    } else {
+                        "Ainda não definida"
+                    }}
+                </dd>
+
+                <dt>"Papéis técnicos"</dt>
+                <dd>{papeis_texto}</dd>
+
+                <dt>"Sessões activas"</dt>
+                <dd class="oc-mono">{sessoes.to_string()}</dd>
+            </dl>
+        },
+    )
+}
+
 /// Detalhe de um membro: quem é, o que pode, e o estado da sua credencial.
 ///
 /// # A barra do topo não finge separadores
@@ -675,10 +759,10 @@ fn source_label(source: &str) -> &'static str {
 /// de `<span>` sem destino nenhum — tinha o aspecto de separadores e não fazia
 /// nada, que é precisamente a categoria que a auditoria «Zero Dead UI» proíbe.
 ///
-/// «Overview», «Actividade» e «Audit» não têm secção neste dossier, e ficam
-/// declarados indisponíveis **com a razão de cada um** — não «ainda não
-/// disponível», que serviria para tudo. Actividade e Audit existem como ecrãs
-/// próprios; o que não existe é o recorte por membro.
+/// «Overview» é a primeira secção — o dossier de relance. «Actividade» e «Audit»
+/// não têm secção neste dossier, e ficam declarados indisponíveis **com a razão
+/// de cada um** — não «ainda não disponível», que serviria para tudo. Existem
+/// como ecrãs próprios; o que não existe é o recorte por membro.
 pub fn member_detail(
     person: &Value,
     security: &Value,
@@ -723,19 +807,19 @@ pub fn member_detail(
                     </div>
                     <div class="oc-mono oc-mt-3">{email}</div>
                     <div class="oc-muted oc-mt-3">
-                        "Posição institucional: "{position}
+                        "Posição institucional: "{position.clone()}
                         " — não concede acesso."
                     </div>
                 </div>
             </div>
 
             <nav class="oc-tabs oc-tabs--ctx" aria-label="Secções do membro">
+                <a class="oc-tab" href="#membro-overview">"Overview"</a>
                 <a class="oc-tab" href="#membro-acesso">"Acesso"</a>
                 <a class="oc-tab" href="#membro-seguranca">"Segurança"</a>
                 <a class="oc-tab" href="#membro-unidades">"Unidades"</a>
                 <a class="oc-tab" href="#membro-research-workspaces">"Research Workspaces"</a>
                 {[
-                    ("Overview", "O resumo do membro ainda não tem ecrã próprio."),
                     (
                         "Actividade",
                         "A actividade por membro ainda não é uma consulta do Core. \
@@ -760,6 +844,11 @@ pub fn member_detail(
         </div>
 
         <div class="oc-page">
+            <section id="membro-overview">
+                {section_head("Overview", None, None)}
+                {overview_tab(&position, &status, &security, &access)}
+            </section>
+            <div class="oc-vspace"></div>
             <section id="membro-acesso">
                 {section_head("Acesso", None, None)}
                 {access_tab(&access)}
@@ -1612,6 +1701,7 @@ mod tests {
         .to_html();
 
         for (href, id) in [
+            ("#membro-overview", "id=\"membro-overview\""),
             ("#membro-acesso", "id=\"membro-acesso\""),
             ("#membro-seguranca", "id=\"membro-seguranca\""),
             ("#membro-unidades", "id=\"membro-unidades\""),
@@ -1635,7 +1725,6 @@ mod tests {
         );
 
         for razao in [
-            "O resumo do membro ainda não tem ecrã próprio.",
             "A actividade por membro ainda não é uma consulta do Core.",
             "A auditoria por membro ainda não é uma consulta do Core.",
         ] {
@@ -1648,6 +1737,51 @@ mod tests {
             !html.contains("title=\"Ainda não disponível\""),
             "um separador do membro ainda usa a razão genérica em vez de dizer qual"
         );
+    }
+
+    /// O Overview do membro diz o estado do segundo factor, e lê os papéis em
+    /// português. A regra do MFA vem do Core; o ecrã só a apresenta.
+    #[test]
+    fn o_overview_mostra_o_segundo_factor_e_os_papeis() {
+        let enrolado = overview_tab(
+            "Fundador",
+            "active",
+            &json!({
+                "mfa_required": true,
+                "mfa_enrolled": true,
+                "has_permanent_password": true,
+                "live_sessions": [{}]
+            }),
+            &json!({ "roles": ["research_lead"] }),
+        )
+        .to_html();
+        assert!(enrolado.contains("Exigido e enrolado"));
+        assert!(
+            enrolado.contains("Líder de investigação"),
+            "os papéis técnicos lêem-se em português"
+        );
+
+        let por_enrolar = overview_tab(
+            "Investigador",
+            "invited",
+            &json!({ "mfa_required": true, "mfa_enrolled": false, "live_sessions": [] }),
+            &json!({ "roles": [] }),
+        )
+        .to_html();
+        assert!(por_enrolar.contains("Exigido, por enrolar"));
+        assert!(
+            por_enrolar.contains("Nenhum"),
+            "sem papéis técnicos diz-se «Nenhum», não um espaço vazio"
+        );
+
+        let nao_exigido = overview_tab(
+            "Investigador",
+            "active",
+            &json!({ "mfa_required": false, "mfa_enrolled": false, "live_sessions": [] }),
+            &json!({}),
+        )
+        .to_html();
+        assert!(nao_exigido.contains("Não exigido"));
     }
 
     /// Sem unidades na instituição, não se oferece atribuir: encaminha-se para
