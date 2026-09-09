@@ -10947,3 +10947,63 @@ async fn uma_pessoa_cria_uma_referencia_no_seu_ambiente() {
     // A referência aparece na bibliografia — o efeito é real.
     esperar_por(&pagina, &titulo).await;
 }
+
+/// O primeiro acesso troca a credencial temporária pela palavra-passe do próprio.
+///
+/// Prova o coração do onboarding canónico do lado do membro: entrar com a
+/// temporária leva ao primeiro acesso; definida a definitiva, o membro entra no
+/// produto, a temporária deixa de valer e passa a existir uma credencial
+/// permanente. A palavra-passe definitiva nasce **aqui**, escolhida pelo próprio
+/// — o administrador nunca a escolheu nem a conhece.
+#[tokio::test]
+async fn o_primeiro_acesso_troca_a_temporaria_pela_definitiva() {
+    let harness = harness!();
+    let cred = harness.entrar_com_credencial_temporaria().await;
+
+    let person_id: Uuid = sqlx::query_scalar("SELECT id FROM people WHERE email = $1")
+        .bind(&cred.email)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("pessoa");
+
+    // Entrar com a temporária leva ao primeiro acesso.
+    let page = harness.open("/").await;
+    esperar_por(&page, "Defina a sua palavra-passe").await;
+
+    // O membro define a sua própria palavra-passe definitiva.
+    let nova = format!("Ocinye-{}-2026!", Uuid::new_v4().simple());
+    set_field(&page, "#new-pass", &nova).await;
+    set_field(&page, "#confirm-pass", &nova).await;
+    submit(&page, "form[action=\"/first-access\"]").await;
+
+    // Uma conta não privilegiada sai do primeiro acesso e entra no produto.
+    wait_until_left(&page, "/first-access").await;
+
+    // O efeito na base: a temporária deixou de valer, e existe uma permanente
+    // viva — a que o próprio acabou de definir.
+    let temporarias_vivas: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM credentials
+          WHERE person_id = $1 AND kind = 'temporary' AND state = 'active'",
+    )
+    .bind(person_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("temporárias vivas");
+    assert_eq!(
+        temporarias_vivas, 0,
+        "a credencial temporária devia deixar de valer depois da troca"
+    );
+
+    let permanentes_vivas: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM credentials
+          WHERE person_id = $1 AND kind = 'permanent' AND state = 'active'",
+    )
+    .bind(person_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("permanentes vivas");
+    assert_eq!(
+        permanentes_vivas, 1,
+        "devia existir uma palavra-passe definitiva viva, definida pelo próprio"
+    );
+}
