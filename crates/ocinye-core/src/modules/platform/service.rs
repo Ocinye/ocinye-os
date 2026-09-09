@@ -1,5 +1,6 @@
 //! Assembling the capability report.
 
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use ocinye_contracts::{
     AiCapability, MailReachability, SystemCapabilities, SystemCapability, SystemCapabilityReport,
     SystemCapabilityState,
@@ -8,6 +9,8 @@ use sqlx::PgPool;
 
 use crate::config::CoreConfig;
 use crate::error::CoreResult;
+use crate::modules::mail::repository::{ingestion_heartbeat, IngestionHeartbeat};
+use crate::modules::mail::service::INGESTION_INTERVAL;
 
 /// Report what this installation can currently do.
 ///
@@ -253,33 +256,37 @@ pub async fn system_capabilities(
         }
     });
 
-    // `Degraded` e não `Available` mesmo quando tudo responde: um membro pode
-    // actualizar uma pasta, e nada a actualiza por ele. Dizer disponível
-    // porque o botão existe descreveria mal o que o sistema faz — correio novo
-    // não aparece sozinho (`CLAUDE.md` §69).
-    capabilities.push(match correio {
-        MailReachability::NotConfigured => SystemCapabilityReport::new(
+    // A ingestão automática já existe: o worker percorre as caixas ligadas a
+    // cada poucos minutos (`INGESTION_INTERVAL`), e o correio recebido deixou de
+    // esperar que alguém carregue em sincronizar. O que esta capacidade responde
+    // é se ela está **de facto a correr** — e isso não se assume por o correio
+    // estar configurado, verifica-se pela batida que o worker deixa a cada
+    // passagem (`CLAUDE.md` §62). A leitura é a ponta que importa: sincronizar é
+    // ler, e um transporte que só envia não indexa nada.
+    let leitura_disponivel = matches!(
+        correio,
+        MailReachability::Ready | MailReachability::Partial { leitura: true, .. }
+    );
+    capabilities.push(if matches!(correio, MailReachability::NotConfigured) {
+        SystemCapabilityReport::new(
             SystemCapability::MailSync,
             SystemCapabilityState::NotConfigured,
             "A sincronização depende do correio institucional, que não está \
              configurado.",
         )
-        .depending_on("mail"),
-        MailReachability::Unreachable => SystemCapabilityReport::new(
+        .depending_on("mail")
+    } else if leitura_disponivel {
+        mailsync_report(Utc::now(), ingestion_heartbeat(pool).await?)
+    } else {
+        // `Unreachable`, ou `Partial` sem leitura: o transporte de leitura não
+        // responde, e sem ler não há o que sincronizar.
+        SystemCapabilityReport::new(
             SystemCapability::MailSync,
             SystemCapabilityState::Unavailable,
-            "A sincronização depende do correio institucional, que não está a \
-             responder.",
+            "A sincronização depende da leitura de correio por IMAP, que está \
+             configurada mas não está a responder.",
         )
-        .depending_on("mail"),
-        MailReachability::Ready | MailReachability::Partial { .. } => SystemCapabilityReport::new(
-            SystemCapability::MailSync,
-            SystemCapabilityState::Degraded,
-            "A sincronização é manual: cada pasta é actualizada quando pedida. \
-                 Não existe ainda um processo que actualize o correio recebido \
-                 automaticamente.",
-        )
-        .depending_on("Worker de ingestão periódica"),
+        .depending_on("Serviço IMAP institucional")
     });
 
     let ai_usable = capabilities
@@ -323,6 +330,63 @@ pub async fn system_capabilities(
     capabilities.sort_by_key(|report| report.capability);
 
     Ok(SystemCapabilities { capabilities })
+}
+
+/// Decide o estado de `MailSync` a partir da última batida do worker.
+///
+/// Pura de propósito, e a receber o `now`: a decisão é toda a lógica desta
+/// capacidade, e tê-la separada da base deixa-a testar sem uma. A base só lhe
+/// entrega a batida; o relógio entra por argumento para o teste o poder fixar.
+///
+/// Três estados de degradação, um de disponível:
+///
+/// - **sem batida** — a ingestão está configurada mas o worker ainda não a
+///   correu nesta instalação (ou num servidor acabado de restaurar);
+/// - **batida velha** — o worker devia ter passado e não passou: está parado;
+/// - **batida com falhas** — a última passagem não conseguiu actualizar alguma
+///   caixa, e a razão fica na caixa;
+/// - **batida recente e limpa** — a ingestão automática está a correr.
+fn mailsync_report(
+    now: DateTime<Utc>,
+    heartbeat: Option<IngestionHeartbeat>,
+) -> SystemCapabilityReport {
+    // Três intervalos: uma reinício do worker pode fazer perder uma batida sem
+    // que nada esteja avariado; faltarem três seguidas já não é um soluço, é o
+    // worker parado. O tecto de segurança nunca é atingido — a conversão de um
+    // intervalo de minutos nunca transborda —, mas fixa-se em vez de se assumir.
+    let limite = ChronoDuration::from_std(INGESTION_INTERVAL * 3)
+        .unwrap_or_else(|_| ChronoDuration::seconds(900));
+
+    match heartbeat {
+        None => SystemCapabilityReport::new(
+            SystemCapability::MailSync,
+            SystemCapabilityState::Degraded,
+            "A ingestão automática está configurada, mas o worker ainda não a \
+             executou nesta instalação.",
+        )
+        .depending_on("Worker de ingestão periódica"),
+        Some(hb) if now - hb.last_swept_at > limite => SystemCapabilityReport::new(
+            SystemCapability::MailSync,
+            SystemCapabilityState::Degraded,
+            "A ingestão automática não corre há demasiado tempo; o worker que a \
+             executa pode estar parado.",
+        )
+        .depending_on("Worker de ingestão periódica"),
+        Some(hb) if hb.failed > 0 => SystemCapabilityReport::new(
+            SystemCapability::MailSync,
+            SystemCapabilityState::Degraded,
+            "A última passagem de ingestão não conseguiu actualizar todas as \
+             caixas ligadas. A razão de cada falha fica na caixa que falhou.",
+        )
+        .depending_on("Worker de ingestão periódica"),
+        Some(_) => SystemCapabilityReport::new(
+            SystemCapability::MailSync,
+            SystemCapabilityState::Available,
+            "A ingestão automática está a correr: o worker percorre as caixas \
+             ligadas periodicamente, e o correio recebido aparece sem ninguém \
+             pedir.",
+        ),
+    }
 }
 
 /// State of one inference capability.
@@ -440,5 +504,74 @@ mod tests {
         let report = fresh_installation();
         assert!(!report.is_usable(SystemCapability::ObjectStorage));
         assert!(!report.is_usable(SystemCapability::SemanticSearch));
+    }
+
+    mod mailsync {
+        use super::super::{mailsync_report, IngestionHeartbeat};
+        use chrono::{Duration, Utc};
+        use ocinye_contracts::{SystemCapability, SystemCapabilityState};
+
+        fn batida(idade: Duration, failed: i32) -> (chrono::DateTime<Utc>, IngestionHeartbeat) {
+            let now = Utc::now();
+            (
+                now,
+                IngestionHeartbeat {
+                    last_swept_at: now - idade,
+                    mailboxes: 0,
+                    indexed: 0,
+                    failed,
+                },
+            )
+        }
+
+        /// Sem uma batida, a ingestão está configurada mas não se provou a
+        /// correr: degrada, não fica disponível. É o que impede o ecrã de dizer
+        /// «a sincronizar» sobre um worker que ninguém arrancou.
+        #[test]
+        fn sem_batida_degrada() {
+            let report = mailsync_report(Utc::now(), None);
+            assert_eq!(report.capability, SystemCapability::MailSync);
+            assert_eq!(report.state, SystemCapabilityState::Degraded);
+        }
+
+        /// Uma batida recente e sem falhas é a única coisa que torna `MailSync`
+        /// disponível — e uma passagem vazia (zero caixas) conta: a ingestão
+        /// está a correr, só não tem o que fazer ainda.
+        #[test]
+        fn batida_recente_e_limpa_fica_disponivel() {
+            let (now, hb) = batida(Duration::seconds(10), 0);
+            let report = mailsync_report(now, Some(hb));
+            assert_eq!(report.state, SystemCapabilityState::Available);
+        }
+
+        /// Uma batida velha é o worker parado: três intervalos sem passar já não
+        /// é um soluço de reinício.
+        #[test]
+        fn batida_velha_degrada() {
+            let (now, hb) = batida(Duration::hours(1), 0);
+            let report = mailsync_report(now, Some(hb));
+            assert_eq!(report.state, SystemCapabilityState::Degraded);
+        }
+
+        /// Uma batida recente mas com caixas falhadas degrada: a ingestão corre,
+        /// mas não está a conseguir actualizar tudo.
+        #[test]
+        fn batida_recente_com_falhas_degrada() {
+            let (now, hb) = batida(Duration::seconds(10), 2);
+            let report = mailsync_report(now, Some(hb));
+            assert_eq!(report.state, SystemCapabilityState::Degraded);
+        }
+
+        /// Nenhuma razão de `MailSync` chama a ausência de IA/computação uma
+        /// avaria: a ingestão de correio não depende de nenhum nó.
+        #[test]
+        fn a_razao_nunca_confunde_ausencia_de_no_com_avaria() {
+            let (now, hb) = batida(Duration::seconds(10), 0);
+            let report = mailsync_report(now, Some(hb));
+            let reason = report.reason.to_lowercase();
+            for banned in ["nó", "gpu", "computacional", "inferência"] {
+                assert!(!reason.contains(banned), "MailSync fala em «{banned}»");
+            }
+        }
     }
 }

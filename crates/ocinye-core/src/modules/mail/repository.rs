@@ -498,6 +498,83 @@ pub async fn record_sync<'e>(
     Ok(())
 }
 
+/// A última passagem da ingestão automática, como o worker a deixou.
+///
+/// É o que a capacidade `MailSync` lê para saber se a ingestão está viva: uma
+/// batida recente e sem caixas falhadas é «a correr»; uma batida velha é «o
+/// worker parou»; nenhuma batida é «ainda não correu aqui».
+#[derive(Debug, Clone)]
+pub struct IngestionHeartbeat {
+    /// Quando a última passagem terminou.
+    pub last_swept_at: DateTime<Utc>,
+    /// Quantas caixas ligadas essa passagem visitou.
+    pub mailboxes: i32,
+    /// Quantos cabeçalhos entraram no índice nessa passagem.
+    pub indexed: i32,
+    /// Quantas caixas essa passagem não conseguiu actualizar.
+    pub failed: i32,
+}
+
+/// Regista que a passagem periódica de ingestão terminou.
+///
+/// Escrita no fim de cada passagem de [`super::service::ingest_all`], com
+/// sucesso ou com caixas falhadas: o que se regista é que a passagem **correu**,
+/// e a contagem do que ela fez. Uma única linha, sobreposta a cada passagem —
+/// não há duas ingestões automáticas.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn record_ingestion_heartbeat<'e>(
+    executor: impl PgExecutor<'e>,
+    mailboxes: i32,
+    indexed: i32,
+    failed: i32,
+) -> CoreResult<()> {
+    sqlx::query(
+        "INSERT INTO mail_ingestion_heartbeat (id, last_swept_at, mailboxes, indexed, failed)
+              VALUES (true, now(), $1, $2, $3)
+         ON CONFLICT (id) DO UPDATE
+              SET last_swept_at = excluded.last_swept_at,
+                  mailboxes = excluded.mailboxes,
+                  indexed = excluded.indexed,
+                  failed = excluded.failed",
+    )
+    .bind(mailboxes)
+    .bind(indexed)
+    .bind(failed)
+    .execute(executor)
+    .await?;
+
+    Ok(())
+}
+
+/// A última batida da ingestão automática, ou `None` se nunca correu aqui.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn ingestion_heartbeat<'e>(
+    executor: impl PgExecutor<'e>,
+) -> CoreResult<Option<IngestionHeartbeat>> {
+    let linha: Option<(DateTime<Utc>, i32, i32, i32)> = sqlx::query_as(
+        "SELECT last_swept_at, mailboxes, indexed, failed
+           FROM mail_ingestion_heartbeat
+          WHERE id = true",
+    )
+    .fetch_optional(executor)
+    .await?;
+
+    Ok(linha.map(
+        |(last_swept_at, mailboxes, indexed, failed)| IngestionHeartbeat {
+            last_swept_at,
+            mailboxes,
+            indexed,
+            failed,
+        },
+    ))
+}
+
 /// The domains that count as inside the institution.
 ///
 /// # Why this reads from the mailboxes and not from configuration

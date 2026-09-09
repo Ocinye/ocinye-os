@@ -262,9 +262,22 @@ pub async fn public_snapshot(
 
 /// A decisão, a partir dos componentes.
 ///
-/// Crítico que não esteja disponível bloqueia. Opcional que não esteja
-/// plenamente disponível degrada. Nada mais entra nesta conta — e é o Core que a
-/// faz, uma vez.
+/// Um crítico que não esteja disponível **bloqueia**. Um opcional **avariado** —
+/// configurado e a falhar — **degrada**. Um opcional **deliberadamente ausente**
+/// não degrada, porque não é avaria: a ausência de IA e de computação antes do
+/// primeiro nó é o caso central (ADR-0500, `CLAUDE.md` §7), esperada e não uma
+/// falha. É o Core que faz esta conta, uma vez.
+///
+/// A distinção é entre estados que descrevem uma **avaria** de algo que devia
+/// funcionar, e estados que descrevem uma **escolha ou uma espera**:
+///
+/// | Estado | É avaria? |
+/// |---|---|
+/// | `Unavailable` (configurado, sem resposta) | sim — degrada |
+/// | `Degraded` (responde a menos) | sim — degrada |
+/// | `NoResource` (nada registado; IA/Compute antes do nó) | não |
+/// | `NotConfigured` (esta instalação não o ligou) | não |
+/// | `Planned` (decidido, por construir) | não |
 fn decide(components: &[ReadinessComponent]) -> ReadinessOverall {
     let critico_em_falta = components.iter().any(|c| {
         c.criticality == Criticality::Critical && c.state != SystemCapabilityState::Available
@@ -273,10 +286,14 @@ fn decide(components: &[ReadinessComponent]) -> ReadinessOverall {
         return ReadinessOverall::Blocked;
     }
 
-    let opcional_limitado = components.iter().any(|c| {
-        c.criticality == Criticality::Optional && c.state != SystemCapabilityState::Available
+    let opcional_avariado = components.iter().any(|c| {
+        c.criticality == Criticality::Optional
+            && matches!(
+                c.state,
+                SystemCapabilityState::Unavailable | SystemCapabilityState::Degraded
+            )
     });
-    if opcional_limitado {
+    if opcional_avariado {
         ReadinessOverall::Degraded
     } else {
         ReadinessOverall::Ready
@@ -331,13 +348,10 @@ mod tests {
         assert_eq!(decide(&componentes), ReadinessOverall::Ready);
     }
 
-    /// Um opcional em falta degrada. Não bloqueia.
+    /// Um opcional **avariado** — configurado e a falhar — degrada, sem bloquear.
     #[test]
-    fn um_opcional_em_falta_nao_bloqueia() {
+    fn um_opcional_avariado_degrada() {
         for estado in [
-            SystemCapabilityState::NotConfigured,
-            SystemCapabilityState::NoResource,
-            SystemCapabilityState::Planned,
             SystemCapabilityState::Unavailable,
             SystemCapabilityState::Degraded,
         ] {
@@ -352,10 +366,67 @@ mod tests {
             assert_eq!(
                 decide(&componentes),
                 ReadinessOverall::Degraded,
-                "um correio em «{}» impediu o arranque",
+                "um correio avariado em «{}» não degradou",
                 estado.as_str()
             );
         }
+    }
+
+    /// Um opcional **deliberadamente ausente** não degrada. Nada registado, não
+    /// configurado, ou por construir são escolhas e esperas, não avarias — e o
+    /// sistema fica `Ready`. É o que mantém a ausência de IA/Compute antes do
+    /// primeiro nó (`NoResource`) fora da conta de degradação.
+    #[test]
+    fn um_opcional_ausente_por_desenho_nao_degrada() {
+        for estado in [
+            SystemCapabilityState::NoResource,
+            SystemCapabilityState::NotConfigured,
+            SystemCapabilityState::Planned,
+        ] {
+            let componentes = vec![
+                c(
+                    ReadinessComponentId::Core,
+                    SystemCapabilityState::Available,
+                    Criticality::Critical,
+                ),
+                c(ReadinessComponentId::Compute, estado, Criticality::Optional),
+            ];
+            assert_eq!(
+                decide(&componentes),
+                ReadinessOverall::Ready,
+                "uma ausência deliberada em «{}» degradou o sistema",
+                estado.as_str()
+            );
+        }
+    }
+
+    /// A forma de produção: tudo o determinístico disponível, e só IA e Compute
+    /// ausentes por não haver nó. O sistema está operacional, não degradado.
+    #[test]
+    fn ia_e_compute_pendentes_deixam_o_sistema_operacional() {
+        let componentes = vec![
+            c(
+                ReadinessComponentId::Core,
+                SystemCapabilityState::Available,
+                Criticality::Critical,
+            ),
+            c(
+                ReadinessComponentId::Mail,
+                SystemCapabilityState::Available,
+                Criticality::Optional,
+            ),
+            c(
+                ReadinessComponentId::Intelligence,
+                SystemCapabilityState::NoResource,
+                Criticality::Optional,
+            ),
+            c(
+                ReadinessComponentId::Compute,
+                SystemCapabilityState::NoResource,
+                Criticality::Optional,
+            ),
+        ];
+        assert_eq!(decide(&componentes), ReadinessOverall::Ready);
     }
 
     /// Um crítico em falta bloqueia, mesmo que tudo o resto esteja bem.

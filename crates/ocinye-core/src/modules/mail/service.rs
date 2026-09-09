@@ -1216,5 +1216,19 @@ pub async fn ingest_all(
         }
     }
 
+    // A batida fica no fim, e escreve-se sempre — mesmo numa passagem vazia ou
+    // com caixas falhadas. É isto que prova que a ingestão automática corre:
+    // sem uma batida recente, `MailSync` não se pode declarar disponível sem
+    // reportar saudável o que não verificou (`CLAUDE.md` §62). O `try_into`
+    // nunca satura na prática — não há milhares de milhões de caixas — mas
+    // fixa-se um tecto em vez de assumir.
+    repo::record_ingestion_heartbeat(
+        pool,
+        resultado.mailboxes.try_into().unwrap_or(i32::MAX),
+        resultado.indexed.try_into().unwrap_or(i32::MAX),
+        resultado.failed.try_into().unwrap_or(i32::MAX),
+    )
+    .await?;
+
     Ok(resultado)
 }
