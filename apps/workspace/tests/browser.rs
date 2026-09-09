@@ -2379,7 +2379,11 @@ async fn uma_hora_inexistente_de_dst_e_recusada_com_frase_a_vista() {
     // Fica no formulário, com o erro tipado à vista — não redirecciona para um
     // detalhe que não devia existir.
     esperar_por(&formulario, "não existe nesse dia").await;
-    let url = formulario.url().await.expect("endereço").unwrap_or_default();
+    let url = formulario
+        .url()
+        .await
+        .expect("endereço")
+        .unwrap_or_default();
     assert!(
         url.contains("/calendar/events/new"),
         "uma hora inexistente não devia ter criado nada, mas saiu do formulário: {url}"
@@ -2390,7 +2394,10 @@ async fn uma_hora_inexistente_de_dst_e_recusada_com_frase_a_vista() {
     let depois = unique_title("Depois do salto");
     let dia = chrono::NaiveDate::from_ymd_opt(2027, 3, 28).expect("data");
     let id = harness.create_event_via_ui(&depois, dia, 3).await;
-    assert!(!id.is_empty(), "a hora válida adjacente devia ter criado o evento");
+    assert!(
+        !id.is_empty(),
+        "a hora válida adjacente devia ter criado o evento"
+    );
 }
 
 #[test]
