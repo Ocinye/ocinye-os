@@ -1326,9 +1326,10 @@ impl Screen {
 }
 
 /// Os destinos da command palette.
-const PALETTE_NAV: [Screen; 18] = [
+const PALETTE_NAV: [Screen; 19] = [
     Screen::Home,
     Screen::MyWork,
+    Screen::Notes,
     Screen::Calendar,
     Screen::Messaging,
     Screen::Mail,

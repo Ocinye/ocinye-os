@@ -36,6 +36,9 @@ use crate::WorkspaceState;
 pub const ROUTES: &[&str] = &[
     "/",
     "/my-work",
+    "/notes",
+    "/notes/{note_id}",
+    "/notes/{note_id}/gravar",
     "/messages",
     "/messages/{conversation}",
     "/messages/start",
