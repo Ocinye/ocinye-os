@@ -27,8 +27,14 @@
 name: CI
 
 on:
+  # Só `main` corre por push. Uma branch de trabalho com PR aberta era validada
+  # duas vezes sobre o mesmo SHA — uma pelo `push` (`refs/heads/<branch>`), outra
+  # pelo `pull_request` (`refs/pull/N/merge`) —, e como os `ref` diferem os dois
+  # runs não se cancelavam um ao outro: dobro do runner, e um deles a bloquear o
+  # merge até acabar. O `pull_request` valida a branch; o `push` sobre `main`
+  # continua a correr o portão canónico pós-merge («Postura do branch canónico»).
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
   # Um advisory novo não chega por push. Publica-se contra código que já está
   # no `main` há semanas, e sem um relógio ninguém pergunta outra vez.
@@ -43,11 +49,13 @@ on:
 permissions:
   contents: read
 
-# Um push novo sobre a mesma branch torna o run anterior obsoleto. Cancelá-lo
-# poupa runner e não perde cobertura: o que interessa é o estado da ponta.
+# Um commit novo numa PR torna o run anterior obsoleto. Cancelá-lo poupa runner
+# e não perde cobertura: o que interessa é o estado da ponta. **Nunca** se cancela
+# um run de `main`: esse é a verificação autoritativa pós-merge, e correr por
+# inteiro é o ponto — daí a condição.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   CARGO_TERM_COLOR: always
