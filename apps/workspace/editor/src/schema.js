@@ -13,6 +13,15 @@ import { Schema } from "prosemirror-model";
 // text survives without becoming a live link.
 const SAFE_LINK_SCHEMES = ["http://", "https://", "mailto:", "tel:"];
 
+// The same-origin prefix an image is served from — the Workspace BFF proxies it
+// to the Core, which authorises by ownership. The body stores the FileVersion,
+// never a URL; this is only how it is rendered.
+export const NOTE_FILE_PREFIX = "/me/files/";
+
+export function previewUrl(fileVersionId) {
+  return NOTE_FILE_PREFIX + fileVersionId + "/preview";
+}
+
 export function isSafeHref(href) {
   const low = (href || "").trim().toLowerCase();
   return SAFE_LINK_SCHEMES.some((s) => low.startsWith(s));
@@ -129,6 +138,38 @@ const nodes = {
         { "data-checked": String(node.attrs.checked), class: cls },
         ["span", { class: "oc-check-box", contenteditable: "false" }],
         ["div", { class: "oc-check-body" }, 0],
+      ];
+    },
+  },
+
+  // An image cites an exact FileVersion. It is a leaf block: no editable content
+  // inside it. A pasted external <img> has no data-file-version, so parseDOM does
+  // not match it and it is dropped — the editor never fetches an outside URL, and
+  // never embeds base64 in the body (ADR-0413 §8).
+  image: {
+    group: "block",
+    atom: true,
+    draggable: true,
+    attrs: { file_version_id: {}, alt: { default: "" } },
+    parseDOM: [
+      {
+        tag: "img[data-file-version]",
+        getAttrs(dom) {
+          const fv = dom.getAttribute("data-file-version");
+          if (!fv) return false;
+          return { file_version_id: fv, alt: dom.getAttribute("alt") || "" };
+        },
+      },
+    ],
+    toDOM(node) {
+      return [
+        "img",
+        {
+          "data-file-version": node.attrs.file_version_id,
+          src: previewUrl(node.attrs.file_version_id),
+          alt: node.attrs.alt,
+          class: "oc-note-image",
+        },
       ];
     },
   },

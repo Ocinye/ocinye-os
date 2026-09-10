@@ -360,3 +360,138 @@ async fn um_documento_hostil_e_recusado_na_gravacao() {
         outro => panic!("um documento com javascript: devia ser recusado; veio {outro:?}"),
     }
 }
+
+/// Semeia um ficheiro pessoal (imagem) do `owner`, por SQL, e devolve a versão.
+///
+/// Direto na base, sem armazenamento: a autoridade que estas provas exercem
+/// decide-se **antes** de tocar nos bytes, pelo que não é preciso um MinIO para
+/// as correr. O caminho completo de carregar e mostrar é a viagem de browser.
+async fn seed_personal_image(pool: &PgPool, organisation_id: Uuid, owner_id: Uuid) -> Uuid {
+    let sufixo = Uuid::new_v4().simple().to_string();
+    let backend_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO storage_backends (code, display_name, location_label, bucket)
+         VALUES ($1, $2, $3, $4) RETURNING id",
+    )
+    .bind(format!("b{}", &sufixo[..12]))
+    .bind("Armazenamento de prova")
+    .bind("local")
+    .bind("prova")
+    .fetch_one(pool)
+    .await
+    .expect("backend");
+
+    let object_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO storage_objects
+             (backend_id, organisation_id, owner_id, object_key, original_filename,
+              content_type, size_bytes, checksum_sha256, classification, status)
+         VALUES ($1, $2, $3, $4, 'imagem.png', 'image/png', 10, $5, 'INTERNAL', 'stored')
+         RETURNING id",
+    )
+    .bind(backend_id)
+    .bind(organisation_id)
+    .bind(owner_id)
+    .bind(format!("prova/{}", Uuid::new_v4()))
+    .bind("0".repeat(64))
+    .fetch_one(pool)
+    .await
+    .expect("objecto");
+
+    let file_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO files (organisation_id, owner_id, name, classification, created_by_id)
+         VALUES ($1, $2, 'imagem.png', 'INTERNAL', $2) RETURNING id",
+    )
+    .bind(organisation_id)
+    .bind(owner_id)
+    .fetch_one(pool)
+    .await
+    .expect("ficheiro");
+
+    sqlx::query_scalar(
+        "INSERT INTO file_versions (file_id, sequence, storage_object_id, created_by_id)
+         VALUES ($1, 1, $2, $3) RETURNING id",
+    )
+    .bind(file_id)
+    .bind(object_id)
+    .bind(owner_id)
+    .fetch_one(pool)
+    .await
+    .expect("versão")
+}
+
+/// Um ficheiro pessoal é do dono, e conhecer o identificador da versão não o abre.
+#[tokio::test]
+async fn um_ficheiro_pessoal_e_do_dono_e_so_dele() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ana = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let rui = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let versao = seed_personal_image(&pool, org, ana.person_id).await;
+    let mut conn = pool.acquire().await.expect("conn");
+
+    assert!(
+        ocinye_core::modules::files::owns_personal_file_version(&mut conn, &ana, versao)
+            .await
+            .expect("consulta"),
+        "a dona não foi reconhecida como dona da sua imagem"
+    );
+    assert!(
+        !ocinye_core::modules::files::owns_personal_file_version(&mut conn, &rui, versao)
+            .await
+            .expect("consulta"),
+        "outro membro foi tratado como dono da imagem alheia"
+    );
+    assert!(
+        !ocinye_core::modules::files::owns_personal_file_version(&mut conn, &ana, Uuid::new_v4())
+            .await
+            .expect("consulta"),
+        "uma versão inventada foi dada como do dono"
+    );
+}
+
+/// Uma nota não pode referenciar a imagem de outra pessoa.
+#[tokio::test]
+async fn uma_nota_nao_referencia_a_imagem_de_outra_pessoa() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let ana = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let rui = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let versao_da_ana = seed_personal_image(&pool, org, ana.person_id).await;
+    let doc_com_imagem = json!({
+        "schema_version": 1,
+        "blocks": [{ "type": "image", "file_version_id": versao_da_ana, "alt": "emprestada" }]
+    });
+
+    // O Rui tenta pôr a imagem da Ana na nota dele: recusado à entrada.
+    let nota_do_rui = nova_nota(&pool, &rui, &ids, "Do Rui", "início").await;
+    let mut tx = pool.begin().await.expect("tx");
+    let recusa = knowledge::update_personal_note(
+        &mut tx,
+        &rui,
+        &ids,
+        nota_do_rui.id,
+        edita(nota_do_rui.revision, "Do Rui", doc_com_imagem.clone()),
+    )
+    .await;
+    match recusa {
+        Err(CoreError::Validation(_)) => {}
+        outro => panic!("referenciar a imagem de outra pessoa devia recusar; veio {outro:?}"),
+    }
+    drop(tx);
+
+    // A Ana pode referenciar a sua própria imagem.
+    let nota_da_ana = nova_nota(&pool, &ana, &ids, "Da Ana", "início").await;
+    let mut tx = pool.begin().await.expect("tx");
+    knowledge::update_personal_note(
+        &mut tx,
+        &ana,
+        &ids,
+        nota_da_ana.id,
+        edita(nota_da_ana.revision, "Da Ana", doc_com_imagem),
+    )
+    .await
+    .expect("a dona pode referenciar a sua imagem");
+    tx.commit().await.expect("commit");
+}

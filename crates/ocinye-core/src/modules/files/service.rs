@@ -263,6 +263,80 @@ pub async fn create(
     Ok(ficheiro)
 }
 
+/// Cria um ficheiro **de uma pessoa** — para uma imagem ou anexo de uma nota.
+///
+/// Sem ambiente: o dono é a autoridade, e a classificação é a sua própria
+/// (`INTERNAL`, como a nota), sem composição com um ambiente que não existe. Os
+/// bytes atravessam a mesma validação de sempre — tipo permitido, tamanho, soma,
+/// chave opaca —, e a extracção para pesquisa **não** é enfileirada aqui: a
+/// pesquisa de conteúdo das notas é de uma fatia posterior, e indexar agora
+/// arriscaria uma fuga de visibilidade antes de o filtro existir.
+///
+/// # Errors
+///
+/// Devolve erro quando o conteúdo é inválido ou quando o armazenamento falha.
+pub async fn create_personal(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    store: &ObjectStore,
+    organisation_slug: &str,
+    request: NewFile,
+) -> CoreResult<FileVersionRecord> {
+    // Um ficheiro pessoal nasce INTERNAL. Não se pede menos — não há ambiente
+    // por cima para o restringir, e um ficheiro pessoal PUBLIC por descuido seria
+    // uma porta aberta sem ninguém a decidir abri-la.
+    let classification = Classification::Internal;
+
+    let objecto = guardar_bytes_personal(
+        tx,
+        principal,
+        store,
+        organisation_slug,
+        &request.filename,
+        &request.content_type,
+        request.data,
+    )
+    .await?;
+
+    let file_id = repo::insert_personal_file(
+        &mut **tx,
+        principal.organisation_id,
+        principal.person_id,
+        &objecto.filename,
+        classification,
+    )
+    .await?;
+    let version_id = repo::insert_version(
+        &mut **tx,
+        file_id,
+        1,
+        objecto.object_id,
+        None,
+        principal.person_id,
+    )
+    .await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::CREATE, "file")
+            .resource(file_id)
+            .classified(classification)
+            .detail("owner_id", principal.person_id.to_string())
+            .detail("size_bytes", objecto.size.to_string()),
+    )
+    .await?;
+
+    Ok(FileVersionRecord {
+        file_id,
+        version_id,
+        sequence: 1,
+        storage_object_id: objecto.object_id,
+    })
+}
+
 /// Acrescenta uma versão a um ficheiro que já existe, com bytes novos.
 ///
 /// # Errors
@@ -399,6 +473,86 @@ async fn guardar_bytes(
     .bind(&checksum)
     .bind(classification.as_str())
     .bind(principal.person_id)
+    .execute(&mut **tx)
+    .await?;
+
+    if registo.rows_affected() == 0 {
+        return Err(CoreError::StorageUnavailable(
+            "Esta instalação não tem armazenamento registado.".to_owned(),
+        ));
+    }
+
+    store
+        .put(&object_key, &content_type, &checksum, data)
+        .await?;
+
+    Ok(BytesGuardados {
+        object_id,
+        filename,
+        size,
+    })
+}
+
+/// Guarda bytes de um ficheiro **de uma pessoa** — ambiente nulo, dono presente.
+///
+/// A mesma validação de [`guardar_bytes`], com a chave do objecto keyed no dono
+/// e o `owner_id` guardado na linha, para a governação saber de quem são os
+/// bytes e o caminho não os misturar com os de um ambiente.
+async fn guardar_bytes_personal(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    store: &ObjectStore,
+    organisation_slug: &str,
+    filename: &str,
+    content_type: &str,
+    data: Vec<u8>,
+) -> CoreResult<BytesGuardados> {
+    // Um ficheiro pessoal é sempre INTERNAL — não há ambiente por cima, e a nota
+    // que o contém também o é. Não é um argumento porque não há escolha a fazer.
+    let classification = Classification::Internal;
+
+    if data.is_empty() {
+        return Err(CoreError::Validation(
+            "O ficheiro carregado está vazio.".to_owned(),
+        ));
+    }
+    if data.len() as u64 > store.max_upload_bytes() {
+        return Err(CoreError::Validation(
+            "O ficheiro carregado excede o tamanho máximo permitido.".to_owned(),
+        ));
+    }
+
+    let content_type = crate::storage::validate_content_type(content_type)?;
+    let filename = crate::storage::normalise_filename(filename)?;
+    let checksum = crate::storage::sha256_hex(&data);
+    let size = i64::try_from(data.len())
+        .map_err(|_| CoreError::Validation("O ficheiro é demasiado grande.".to_owned()))?;
+
+    let object_id = Uuid::new_v4();
+    let object_key = crate::storage::build_object_key_personal(
+        organisation_slug,
+        principal.person_id,
+        object_id,
+    );
+
+    let registo = sqlx::query(
+        "INSERT INTO storage_objects
+             (id, backend_id, organisation_id, owner_id, object_key,
+              original_filename, content_type, size_bytes, checksum_sha256,
+              classification, status, created_by_id)
+         SELECT $1, b.id, $2, $3, $4, $5, $6, $7, $8, $9, 'stored', $3
+           FROM storage_backends b
+          WHERE b.is_default AND b.is_active",
+    )
+    .bind(object_id)
+    .bind(principal.organisation_id)
+    .bind(principal.person_id)
+    .bind(&object_key)
+    .bind(&filename)
+    .bind(&content_type)
+    .bind(size)
+    .bind(&checksum)
+    .bind(classification.as_str())
     .execute(&mut **tx)
     .await?;
 
@@ -931,6 +1085,101 @@ pub async fn preview_version(
         bytes,
         checksum_sha256: soma,
     })
+}
+
+/// Os bytes de uma versão de um ficheiro **de uma pessoa**, para mostrar inline.
+///
+/// A autoridade é a posse, reavaliada aqui: só o dono vê os bytes. Uma recusa é
+/// indistinguível de a versão não existir — conhecer o identificador de uma
+/// versão da imagem de outra pessoa não a abre (ADR-0413 §8). É por aqui que a
+/// imagem de uma nota se serve, same-origin, sem nunca expor a chave do objecto.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] quando a versão não é do dono, [`CoreError::Validation`]
+/// quando o tipo não se mostra inline ou é grande de mais, e erro de
+/// armazenamento quando o objecto não está disponível.
+pub async fn preview_personal_version(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    store: &ObjectStore,
+    version_id: Uuid,
+) -> CoreResult<InlinePreview> {
+    let versao = repo::find_version(&mut **tx, version_id)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Versão não encontrada.".to_owned()))?;
+    let owner =
+        repo::personal_file_owner(&mut **tx, versao.file_id, principal.organisation_id).await?;
+    if owner != Some(principal.person_id) {
+        return Err(CoreError::NotFound("Versão não encontrada.".to_owned()));
+    }
+
+    let linha: Option<(String, String, i64, String)> = sqlx::query_as(
+        "SELECT o.object_key, o.content_type, o.size_bytes, o.checksum_sha256
+           FROM file_versions v
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE v.id = $1",
+    )
+    .bind(versao.version_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    let (chave, tipo, tamanho, soma) = linha
+        .ok_or_else(|| CoreError::StorageUnavailable("Esta versão não tem objecto.".to_owned()))?;
+
+    if !PREVIEWABLE_TYPES.contains(&tipo.as_str()) {
+        return Err(CoreError::Validation(
+            "Este tipo não se mostra inline.".to_owned(),
+        ));
+    }
+    if tamanho > PREVIEW_MAX_BYTES {
+        return Err(CoreError::Validation(
+            "Este ficheiro é grande de mais para mostrar inline.".to_owned(),
+        ));
+    }
+
+    let bytes = store.get(&chave).await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::PREVIEW, "file_version")
+            .resource(version_id)
+            .classified(Classification::Internal),
+    )
+    .await?;
+
+    Ok(InlinePreview {
+        content_type: tipo,
+        bytes,
+        checksum_sha256: soma,
+    })
+}
+
+/// Uma versão de ficheiro é de um ficheiro pessoal **deste** principal?
+///
+/// A fronteira que impede uma nota de referenciar a imagem de outra pessoa:
+/// guardar o documento resolve cada `file_version_id` por aqui, e recusa o que
+/// não for do dono. Devolve `false` quando a versão não existe, ou o ficheiro
+/// tem ambiente (não é pessoal), ou é de outra pessoa.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn owns_personal_file_version(
+    executor: &mut sqlx::PgConnection,
+    principal: &Principal,
+    version_id: Uuid,
+) -> CoreResult<bool> {
+    let Some(versao) = repo::find_version(&mut *executor, version_id).await? else {
+        return Ok(false);
+    };
+    let owner =
+        repo::personal_file_owner(&mut *executor, versao.file_id, principal.organisation_id)
+            .await?;
+    Ok(owner == Some(principal.person_id))
 }
 
 /// Os bytes da versão corrente, para mostrar inline.

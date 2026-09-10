@@ -196,7 +196,9 @@ suites() {
 # ponta a ponta com o editor estruturado e vê-la ficar, e uma gravação com a
 # revisão base obsoleta a ser recusada sem perder o texto. Duas viagens, duas
 # marcas.
-viagens-de-browser|96|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|96
+# 96 → 97 em 2026-09-10: a fatia B das Notas — largar uma imagem, que carrega
+# pelo Core e fica servida same-origin pela versão exacta. Uma viagem, uma marca.
+viagens-de-browser|97|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|97
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
@@ -223,7 +225,9 @@ mfa-obrigatorio|3|-p ocinye-core --test mfa
 # ambiente (ADR-0413). Estas provas percorrem a autorização pela porta errada —
 # outro membro, um PlatformAdmin, uma revisão base obsoleta, um documento
 # hostil — e exigem recusa em todas.
-notas-pessoais|7|-p ocinye-core --test personal_notes
+# 7 → 9 em 2026-09-10: a fatia B trouxe ficheiros com dono. Um ficheiro pessoal
+# é do dono e só dele, e uma nota não pode referenciar a imagem de outra pessoa.
+notas-pessoais|9|-p ocinye-core --test personal_notes
 TABELA
 }
 

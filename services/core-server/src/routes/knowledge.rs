@@ -5,7 +5,7 @@ use axum::handler::Handler;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use ocinye_contracts::{Classification, Page, PageRequest};
-use ocinye_core::modules::knowledge;
+use ocinye_core::modules::{files, knowledge};
 use ocinye_core::CoreError;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -67,6 +67,13 @@ pub fn routes() -> Router<AppState> {
             "/me/notes/{note_id}/revisions",
             get(list_personal_note_revisions),
         )
+        // As imagens de uma nota pessoal: carregadas pelo dono, servidas
+        // same-origin pela versão exacta. O ficheiro é do membro (ADR-0413 §8).
+        .route(
+            "/me/files",
+            post(upload_personal_file.layer(DefaultBodyLimit::max(super::UPLOAD_BODY_LIMIT_BYTES))),
+        )
+        .route("/me/files/{version_id}/preview", get(preview_personal_file))
         .route(
             "/workspaces/{workspace_id}/documents",
             get(list_documents)
@@ -691,6 +698,95 @@ async fn list_personal_note_revisions(
 ) -> Result<Json<Vec<knowledge::NoteRevisionMeta>>, ApiError> {
     let revisions = knowledge::personal_note_revisions(&state.pool, &principal, note_id).await?;
     Ok(Json(revisions))
+}
+
+/// Carrega uma imagem para uma nota pessoal e devolve a sua versão de ficheiro.
+///
+/// Só imagens que se mostram inline (PNG, JPEG, WebP): um SVG é um documento com
+/// script e não se serve inline, e um anexo genérico é de uma fatia posterior. O
+/// ficheiro nasce do membro; o documento da nota passa a citar `file_version_id`.
+async fn upload_personal_file(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    multipart: Multipart,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let upload = read_upload_public(multipart).await?;
+
+    // Só formatos raster que se mostram inline. A validação da lista geral corre
+    // à mesma dentro de `create_personal`; esta é a que fecha a nota a SVG/TIFF.
+    let tipo = upload
+        .content_type
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    if !files::PREVIEWABLE_TYPES.contains(&tipo.as_str()) {
+        return Err(CoreError::Validation(
+            "Só se podem inserir imagens PNG, JPEG ou WebP numa nota.".to_owned(),
+        )
+        .into());
+    }
+
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let version = files::create_personal(
+        &mut tx,
+        &principal,
+        &ids,
+        store,
+        &state.config.organisation_slug,
+        files::NewFile {
+            filename: upload.filename,
+            content_type: upload.content_type,
+            data: upload.data,
+            classification: None,
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(CoreError::from)?;
+
+    Ok(Json(serde_json::json!({
+        "file_version_id": version.version_id,
+    })))
+}
+
+/// Serve a imagem de uma nota pessoal, inline, pela versão exacta.
+///
+/// A autoridade é a posse, reavaliada aqui pelo Core: só o dono vê os bytes, e um
+/// identificador de versão de outra pessoa responde «não encontrado».
+async fn preview_personal_file(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(version_id): Path<Uuid>,
+) -> Result<axum::response::Response, ApiError> {
+    use axum::http::header;
+    use axum::response::IntoResponse;
+
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let vista =
+        files::preview_personal_version(&mut tx, &principal, &ids, store, version_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+
+    let etag = format!("\"{}\"", vista.checksum_sha256);
+
+    Ok((
+        [
+            (header::CONTENT_TYPE, vista.content_type),
+            (header::CONTENT_DISPOSITION, "inline".to_owned()),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned()),
+            (
+                header::CACHE_CONTROL,
+                "private, max-age=0, must-revalidate".to_owned(),
+            ),
+            (header::ETAG, etag),
+        ],
+        vista.bytes,
+    )
+        .into_response())
 }
 
 // --- Documents -------------------------------------------------------------

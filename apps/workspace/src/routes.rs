@@ -39,6 +39,8 @@ pub const ROUTES: &[&str] = &[
     "/notes",
     "/notes/{note_id}",
     "/notes/{note_id}/gravar",
+    "/me/files",
+    "/me/files/{version_id}/preview",
     "/messages",
     "/messages/{conversation}",
     "/messages/start",
@@ -254,6 +256,17 @@ pub fn router(state: WorkspaceState) -> Router {
         // O autosave: um POST em JSON, respondido em JSON (não uma página). A
         // fronteira same-origin protege-o como a qualquer outra escrita.
         .route("/notes/{note_id}/gravar", post(save_personal_note))
+        // As imagens de uma nota: carregar (fetch, em JSON) e servir inline, na
+        // origem do Workspace. A CSP continua `img-src 'self'`, e a página nunca
+        // aprende onde os bytes estão guardados.
+        .route(
+            "/me/files",
+            post(upload_personal_note_file).layer(DefaultBodyLimit::max(FILE_BODY_LIMIT_BYTES)),
+        )
+        .route(
+            "/me/files/{version_id}/preview",
+            get(preview_personal_note_file),
+        )
         .route("/units/new", get(new_unit_form).post(create_unit))
         .route("/projects/new", get(new_project_form).post(promote_idea))
         .route(
@@ -6851,6 +6864,106 @@ async fn save_personal_note(
         Err(ApiFailure::Unauthorised) => StatusCode::UNAUTHORIZED.into_response(),
         Err(ApiFailure::Conflict(_)) => StatusCode::CONFLICT.into_response(),
         Err(_) => StatusCode::BAD_GATEWAY.into_response(),
+    }
+}
+
+/// Carrega uma imagem para uma nota — fetch, respondido em JSON.
+///
+/// Falha fechada com `401` em vez de redireccionar, como o autosave: o editor
+/// carrega por `fetch`, e uma redirecção para o login viraria uma página que ele
+/// leria como sucesso. O Core valida o tipo e guarda o ficheiro do membro; aqui
+/// só se faz de canal, e devolve-se a versão de ficheiro que a nota vai citar.
+async fn upload_personal_note_file(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    multipart: Multipart,
+) -> Response {
+    let member = match current_member(&state, &headers) {
+        Some(member) if !member.session.must_change_password && !member.session.mfa_required => {
+            member
+        }
+        _ => return StatusCode::UNAUTHORIZED.into_response(),
+    };
+
+    let (ficheiro, _campos) = ler_carregamento(multipart).await;
+    let Some((nome, tipo, dados)) = ficheiro else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    if dados.is_empty() {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+
+    match api::upload(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/me/files",
+        nome,
+        tipo,
+        dados,
+    )
+    .await
+    {
+        Ok(criado) => {
+            let file_version_id = criado
+                .get("file_version_id")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            axum::Json(serde_json::json!({ "file_version_id": file_version_id })).into_response()
+        }
+        Err(ApiFailure::Unauthorised) => StatusCode::UNAUTHORIZED.into_response(),
+        // A razão do Core — «só imagens PNG, JPEG ou WebP» — chega ao editor para
+        // a mostrar, em vez de um erro genérico.
+        Err(failure) => (StatusCode::UNPROCESSABLE_ENTITY, failure.to_string()).into_response(),
+    }
+}
+
+/// Serve a imagem de uma nota, inline, na origem do Workspace.
+///
+/// Pela mesma razão da pré-visualização de ficheiros: a CSP continua
+/// `img-src 'self'`, e a página nunca aprende onde os bytes estão. A autoridade
+/// é do Core, que só a serve ao dono.
+async fn preview_personal_note_file(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(version_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    match api::get_inline(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/files/{version_id}/preview"),
+    )
+    .await
+    {
+        Ok((tipo, bytes)) => {
+            let Ok(tipo) = HeaderValue::from_str(&tipo) else {
+                return StatusCode::BAD_GATEWAY.into_response();
+            };
+            (
+                [
+                    (header::CONTENT_TYPE, tipo),
+                    (
+                        header::CONTENT_DISPOSITION,
+                        HeaderValue::from_static("inline"),
+                    ),
+                    (
+                        header::X_CONTENT_TYPE_OPTIONS,
+                        HeaderValue::from_static("nosniff"),
+                    ),
+                    (
+                        header::CACHE_CONTROL,
+                        HeaderValue::from_static("private, max-age=0, must-revalidate"),
+                    ),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
+        Err(failure) => failure_response(&failure),
     }
 }
 

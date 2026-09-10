@@ -11172,3 +11172,97 @@ async fn uma_gravacao_obsoleta_nao_sobrepoe_nem_perde_o_texto() {
         "o Core aceitou uma gravação que devia ter recusado por conflito"
     );
 }
+
+/// Uma imagem largada numa nota carrega pelo Core e fica, servida same-origin.
+///
+/// O caminho da fatia B (ADR-0413 §8): largar uma imagem no editor carrega-a
+/// pelo BFF para o Core, que a guarda como ficheiro do membro e devolve a versão;
+/// o editor insere um bloco que a cita, o autosave guarda a referência, e ao
+/// recarregar a imagem serve-se pela rota same-origin, pela versão exacta — nunca
+/// base64 no corpo, nunca uma URL de armazenamento.
+#[tokio::test]
+async fn uma_imagem_largada_numa_nota_carrega_e_fica() {
+    let harness = harness!();
+    // Sem object store não há para onde carregar; em CI está configurado, e aí
+    // esta viagem corre por inteiro.
+    if store_de_teste().is_none() {
+        eprintln!("a saltar: sem object store de teste");
+        return;
+    }
+    let (pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    let page = harness.open("/notes").await;
+    esperar_por(&page, "Notas").await;
+    submit(&page, "form[action=\"/notes\"]").await;
+    let url = wait_until_left(&page, "/notes").await;
+    let note_id = url.rsplit('/').next().unwrap_or_default().to_owned();
+    let uuid = Uuid::parse_str(&note_id).expect("id da nota");
+    let _ = elemento(&page, "[data-oc-notes-surface] .ProseMirror").await;
+
+    // Largar um PNG de um pixel no editor. O editor carrega-o e insere o bloco.
+    // A posição do `drop` tem de cair dentro do editor: o ProseMirror resolve o
+    // ponto pelas coordenadas, e um evento sem elas sai antes de chamar o handler.
+    let script = "(() => { \
+       const alvo = document.querySelector('[data-oc-notes-surface] .ProseMirror'); \
+       const r = alvo.getBoundingClientRect(); \
+       const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='; \
+       const cru = atob(b64); const bytes = new Uint8Array(cru.length); \
+       for (let i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i); \
+       const f = new File([bytes], 'nota.png', { type: 'image/png' }); \
+       const dt = new DataTransfer(); dt.items.add(f); \
+       alvo.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, \
+         dataTransfer: dt, clientX: r.left + 8, clientY: r.top + 8 })); \
+       return 'largado'; })()";
+    let _ = page.evaluate(script).await.expect("largar a imagem");
+
+    // O ficheiro chega ao PostgreSQL, do membro, sem ambiente.
+    let inicio = std::time::Instant::now();
+    let versao = loop {
+        let encontrada: Option<Uuid> = sqlx::query_scalar(
+            "SELECT fv.id FROM file_versions fv JOIN files f ON f.id = fv.file_id
+              WHERE f.owner_id = $1 AND f.workspace_id IS NULL
+              ORDER BY fv.created_at DESC LIMIT 1",
+        )
+        .bind(pessoa)
+        .fetch_optional(&harness.pool)
+        .await
+        .expect("procura da imagem");
+        if let Some(id) = encontrada {
+            break id;
+        }
+        assert!(
+            inicio.elapsed() < DEADLINE,
+            "a imagem largada não chegou ao PostgreSQL"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    };
+
+    // O autosave guarda a nota com o bloco de imagem a citar a versão exacta.
+    esperar_por(&page, "Guardado").await;
+    let inicio = std::time::Instant::now();
+    loop {
+        let doc: Option<String> = sqlx::query_scalar::<_, Option<String>>(
+            "SELECT document::text FROM notes WHERE id = $1",
+        )
+        .bind(uuid)
+        .fetch_optional(&harness.pool)
+        .await
+        .expect("consulta")
+        .flatten();
+        if doc
+            .as_deref()
+            .is_some_and(|d| d.contains("\"image\"") && d.contains(&versao.to_string()))
+        {
+            break;
+        }
+        assert!(
+            inicio.elapsed() < DEADLINE,
+            "o bloco de imagem não foi guardado na nota"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+
+    // Recarregar: a imagem serve-se same-origin, pela versão exacta.
+    let de_volta = harness.open(&format!("/notes/{note_id}")).await;
+    esperar_por(&de_volta, &format!("/me/files/{versao}/preview")).await;
+}

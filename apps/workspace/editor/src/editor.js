@@ -20,6 +20,9 @@ import { docToNote, noteToDoc } from "./serialize.js";
 
 const DEBOUNCE_MS = 1200;
 
+// Same-origin endpoint that uploads a note image through the BFF to the Core.
+const NOTE_FILE_UPLOAD_URL = "/me/files";
+
 const STATUS_TEXT = {
   clean: "",
   editing: "Por guardar…",
@@ -27,6 +30,8 @@ const STATUS_TEXT = {
   saved: "Guardado",
   error: "Não foi possível guardar.",
   conflict: "Esta nota foi alterada noutra sessão. Recarregue para ver a versão actual.",
+  uploading: "A carregar imagem…",
+  image_error: "Não foi possível carregar a imagem.",
 };
 
 // The toolbar, in order. Each entry names the command it runs and how to tell
@@ -321,6 +326,33 @@ export function mount(root) {
     }
   }
 
+  let view;
+
+  // Upload an image through the BFF, then insert a block that cites the exact
+  // FileVersion the Core returned. The bytes never live in the document — only
+  // the reference does — and inserting it is a doc change, so autosave persists
+  // the reference the same way it persists any edit.
+  function uploadImage(file) {
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file, file.name || "imagem");
+    setStatus("uploading");
+    fetch(NOTE_FILE_UPLOAD_URL, { method: "POST", headers: { Accept: "application/json" }, body: form })
+      .then((res) => (res.status === 200 ? res.json() : Promise.reject(res)))
+      .then((data) => {
+        if (!data || !data.file_version_id) {
+          setStatus("image_error");
+          return;
+        }
+        const node = noteSchema.nodes.image.create({
+          file_version_id: data.file_version_id,
+          alt: file.name || "",
+        });
+        view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView());
+      })
+      .catch(() => setStatus("image_error"));
+  }
+
   const state = EditorState.create({
     doc: noteToDoc(initialDoc),
     schema: noteSchema,
@@ -333,7 +365,7 @@ export function mount(root) {
     ],
   });
 
-  const view = new EditorView(surface, {
+  view = new EditorView(surface, {
     state,
     dispatchTransaction(tr) {
       const next = view.state.apply(tr);
@@ -341,10 +373,29 @@ export function mount(root) {
       if (refresh) refresh(next);
       if (tr.docChanged) scheduleSave();
     },
+    // A pasted (or dropped) image is uploaded, not embedded: a data: URL in the
+    // body is refused, and an external image URL is never fetched by us.
+    handlePaste(_v, event) {
+      return handleImageFiles(event.clipboardData);
+    },
+    handleDrop(_v, event) {
+      return handleImageFiles(event.dataTransfer);
+    },
   });
+
+  function handleImageFiles(source) {
+    const files = source && source.files;
+    if (!files || !files.length) return false;
+    const images = Array.from(files).filter((f) => f.type && f.type.startsWith("image/"));
+    if (!images.length) return false;
+    images.forEach(uploadImage);
+    return true;
+  }
 
   const refresh = toolbarEl ? mountToolbar(toolbarEl, view, noteSchema) : null;
   if (refresh) refresh(view.state);
+
+  if (toolbarEl) mountImageButton(toolbarEl, uploadImage);
 
   if (titleInput) {
     titleInput.addEventListener("input", scheduleSave);
@@ -352,4 +403,36 @@ export function mount(root) {
 
   setStatus("clean");
   return view;
+}
+
+// The image button and its hidden file input. Kept out of the command toolbar
+// because inserting an image is not a ProseMirror command — it opens a file
+// dialog and uploads before there is anything to insert.
+function mountImageButton(container, uploadImage) {
+  const sep = document.createElement("span");
+  sep.className = "oc-notes-toolbar-sep";
+  sep.setAttribute("aria-hidden", "true");
+  container.appendChild(sep);
+
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/png,image/jpeg,image/webp";
+  input.hidden = true;
+  input.addEventListener("change", () => {
+    const file = input.files && input.files[0];
+    if (file) uploadImage(file);
+    input.value = "";
+  });
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "oc-notes-tool";
+  button.textContent = "Imagem";
+  button.title = "Inserir imagem";
+  button.setAttribute("aria-label", "Inserir imagem");
+  button.addEventListener("mousedown", (event) => event.preventDefault());
+  button.addEventListener("click", () => input.click());
+
+  container.appendChild(button);
+  container.appendChild(input);
 }

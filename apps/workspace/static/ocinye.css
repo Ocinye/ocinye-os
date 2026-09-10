@@ -5886,3 +5886,11 @@ select.oc-entrada {
 .oc-notes-surface .ProseMirror .oc-check-item.is-checked .oc-check-body { color: var(--oc-text-meta); text-decoration: line-through; }
 .oc-notes-surface .ProseMirror .oc-check-body { flex: 1; }
 .oc-notes-surface .ProseMirror .oc-check-body p { margin: 0; }
+
+/* Imagem de uma nota: serve-se same-origin pela versão exacta (ADR-0413 §8). */
+.oc-notes-surface .ProseMirror .oc-note-image {
+  display: block; max-width: 100%; height: auto; margin: var(--oc-space-5) 0;
+  border-radius: var(--oc-r-sm); border: 1px solid var(--oc-border);
+}
+.oc-notes-status[data-state="uploading"] .oc-notes-status-text { color: var(--oc-info-text); }
+.oc-notes-status[data-state="image_error"] .oc-notes-status-text { color: var(--oc-error-text); }

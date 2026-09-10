@@ -505,18 +505,42 @@ pub async fn list_notes(
 // ganha leitura por ser administrador. A classificação é um tecto que só passa a
 // contar quando houver partilha; a nota do dono é sua.
 
+/// Recusa uma nota que referencie um ficheiro que não é do dono.
+///
+/// Um bloco de imagem aponta para uma `FileVersion` exacta, e essa versão tem de
+/// ser de um ficheiro pessoal **deste** membro (ADR-0413 §8). Sem isto, alguém
+/// podia escrever no documento o identificador da imagem de outra pessoa; a
+/// pré-visualização recusaria na mesma no momento de mostrar, mas guardar uma
+/// referência que não se pode resolver é dívida — recusa-se à entrada.
+async fn authorize_referenced_files(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    doc: &super::document::NoteDocument,
+) -> CoreResult<()> {
+    for file_version_id in doc.referenced_file_versions() {
+        let seu = crate::modules::files::owns_personal_file_version(tx, principal, file_version_id)
+            .await?;
+        if !seu {
+            return Err(CoreError::Validation(
+                "A nota referencia um ficheiro que não é seu.".to_owned(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Cria uma nota pessoal a partir de um documento estruturado.
 ///
 /// O documento é **validado na fronteira** ([`NoteDocument::from_value`]): o que
-/// o esquema não conhece não entra. O texto simples projecta-se dele para o
-/// excerto; a indexação de pesquisa de notas pessoais entra na fatia C, com a
-/// visibilidade por dono — indexá-la agora sob o modelo de workspace mostrá-la-ia
-/// a quem não é o dono.
+/// o esquema não conhece não entra, e uma referência a um ficheiro que não é do
+/// dono é recusada ([`authorize_referenced_files`]). O texto simples projecta-se
+/// dele para o excerto; a indexação de pesquisa de notas pessoais entra na fatia
+/// C, com a visibilidade por dono.
 ///
 /// # Errors
 ///
-/// [`CoreError::Validation`] quando o título está vazio ou o documento não é
-/// válido.
+/// [`CoreError::Validation`] quando o título está vazio, o documento não é
+/// válido, ou referencia um ficheiro que não é do dono.
 pub async fn create_personal_note(
     tx: &mut Tx<'_>,
     principal: &Principal,
@@ -529,6 +553,7 @@ pub async fn create_personal_note(
         return Err(CoreError::Validation("A note needs a title.".to_owned()));
     }
     let doc = super::document::NoteDocument::from_value(document)?;
+    authorize_referenced_files(tx, principal, &doc).await?;
     let plain = doc.plain_text();
     let doc_value = serde_json::to_value(&doc)
         .map_err(|_| CoreError::Internal("could not serialise the note document".to_owned()))?;
@@ -650,6 +675,7 @@ pub async fn update_personal_note(
         return Err(CoreError::Validation("A note needs a title.".to_owned()));
     }
     let doc = super::document::NoteDocument::from_value(edit.document)?;
+    authorize_referenced_files(tx, principal, &doc).await?;
     let plain = doc.plain_text();
     let doc_value = serde_json::to_value(&doc)
         .map_err(|_| CoreError::Internal("could not serialise the note document".to_owned()))?;
