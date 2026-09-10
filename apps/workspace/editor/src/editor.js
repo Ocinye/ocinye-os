@@ -180,6 +180,23 @@ function buildKeymap(schema) {
   });
 }
 
+// Parse the tags field: comma-separated, trimmed, de-duplicated case-insensitively,
+// and capped so the field cannot grow without bound.
+function parseTags(value) {
+  const seen = new Set();
+  const out = [];
+  for (const raw of String(value || "").split(",")) {
+    const tag = raw.trim();
+    if (!tag) continue;
+    const key = tag.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(tag);
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
 function chain(...cmds) {
   return (state, dispatch, view) => {
     for (const cmd of cmds) {
@@ -236,6 +253,7 @@ export function mount(root) {
   const toolbarEl = root.querySelector("[data-oc-notes-toolbar]");
   const statusEl = root.querySelector("[data-oc-notes-status]");
   const titleInput = root.querySelector("[data-oc-notes-title]");
+  const tagsInput = root.querySelector("[data-oc-notes-tags]");
   const saveUrl = root.getAttribute("data-save-url");
   if (!surface || !saveUrl) return;
 
@@ -294,6 +312,7 @@ export function mount(root) {
       title: titleInput ? titleInput.value : "",
       base_revision: baseRevision,
       document: docToNote(view.state.doc),
+      tags: parseTags(tagsInput ? tagsInput.value : ""),
     };
     try {
       const res = await fetch(saveUrl, {
@@ -399,6 +418,9 @@ export function mount(root) {
 
   if (titleInput) {
     titleInput.addEventListener("input", scheduleSave);
+  }
+  if (tagsInput) {
+    tagsInput.addEventListener("input", scheduleSave);
   }
 
   setStatus("clean");

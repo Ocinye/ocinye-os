@@ -17,10 +17,42 @@ fn field<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or("")
 }
 
-/// A lista das notas do membro, com o botão de criar.
-pub fn notes_list(_viewer: &Viewer, payload: &Value) -> impl IntoView {
+fn tags_of(note: &Value) -> Vec<String> {
+    note.get("tags")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Codifica um valor para uma query string.
+///
+/// Pequeno de propósito: uma etiqueta é entrada de utilizador, e vai para um
+/// `href` — percent-encoding chega, e uma dependência seria desproporcionada
+/// (`CLAUDE.md` §54).
+fn encode_query(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 8);
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(byte as char);
+            }
+            b' ' => out.push('+'),
+            other => out.push_str(&format!("%{other:02X}")),
+        }
+    }
+    out
+}
+
+/// A lista das notas do membro, com o botão de criar e o filtro por etiqueta.
+pub fn notes_list(_viewer: &Viewer, payload: &Value, active_tag: Option<&str>) -> impl IntoView {
     let rows = payload.as_array().cloned().unwrap_or_default();
     let has_notes = !rows.is_empty();
+    let active_tag = active_tag.map(ToOwned::to_owned);
 
     view! {
         <div class="oc-page">
@@ -36,6 +68,13 @@ pub fn notes_list(_viewer: &Viewer, payload: &Value) -> impl IntoView {
                 </div>
             </div>
 
+            {active_tag.clone().map(|tag| view! {
+                <div class="oc-notes-filter">
+                    <span>"Etiqueta: " <span class="oc-tag">{tag}</span></span>
+                    <a class="oc-notes-filter__clear" href="/notes">"Ver todas"</a>
+                </div>
+            })}
+
             {if has_notes {
                 view! {
                     <div class="oc-notes-list">
@@ -45,6 +84,17 @@ pub fn notes_list(_viewer: &Viewer, payload: &Value) -> impl IntoView {
                             .collect::<Vec<_>>()}
                     </div>
                 }
+                    .into_any()
+            } else if active_tag.is_some() {
+                empty_state(EmptyState {
+                    icon: Icon::Document,
+                    title: "Nenhuma nota com esta etiqueta".to_owned(),
+                    body: "Nenhuma das suas notas tem esta etiqueta. Veja todas as notas ou \
+                           etiquete uma."
+                        .to_owned(),
+                    actions: Vec::new(),
+                    small: false,
+                })
                     .into_any()
             } else {
                 empty_state(EmptyState {
@@ -75,14 +125,26 @@ fn note_card(note: &Value) -> impl IntoView {
     let excerpt = field(note, "excerpt").to_owned();
     let updated = updated_label(field(note, "updated_at"));
     let href = format!("/notes/{id}");
+    let tags = tags_of(note);
 
+    // O cartão é um `div`, não um `a`: o título é a ligação para a nota, e cada
+    // etiqueta é a sua própria ligação para o filtro — um `a` dentro de um `a`
+    // seria HTML inválido.
     view! {
-        <a class="oc-note-card" href=href>
-            <h2 class="oc-note-card__title">{title}</h2>
+        <div class="oc-note-card">
+            <a class="oc-note-card__title" href=href>{title}</a>
             {(!excerpt.is_empty())
                 .then(|| view! { <p class="oc-note-card__excerpt">{excerpt}</p> })}
+            {(!tags.is_empty()).then(|| view! {
+                <div class="oc-note-card__tags">
+                    {tags.iter().map(|tag| {
+                        let alvo = format!("/notes?tag={}", encode_query(tag));
+                        view! { <a class="oc-tag" href=alvo>{tag.clone()}</a> }
+                    }).collect::<Vec<_>>()}
+                </div>
+            })}
             <div class="oc-note-card__meta">{updated}</div>
-        </a>
+        </div>
     }
 }
 
@@ -105,6 +167,7 @@ pub fn note_editor(_viewer: &Viewer, note: &Value) -> impl IntoView {
     let title = field(note, "title").to_owned();
     let revision = note.get("revision").and_then(Value::as_i64).unwrap_or(0);
     let save_url = format!("/notes/{id}/gravar");
+    let tags = tags_of(note).join(", ");
 
     // O documento estruturado, tal como o Core o devolve. Nulo (nota antiga) ou
     // ausente vira uma string vazia, e o editor abre um documento vazio.
@@ -138,6 +201,15 @@ pub fn note_editor(_viewer: &Viewer, note: &Value) -> impl IntoView {
                     value=title
                     placeholder="Sem título"
                     aria-label="Título da nota"
+                    autocomplete="off"
+                />
+                <input
+                    class="oc-notes-tags-input"
+                    data-oc-notes-tags=""
+                    type="text"
+                    value=tags
+                    placeholder="Etiquetas, separadas por vírgulas"
+                    aria-label="Etiquetas da nota"
                     autocomplete="off"
                 />
                 <div class="oc-notes-toolbar" data-oc-notes-toolbar="" role="toolbar" aria-label="Formatação"></div>

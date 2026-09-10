@@ -11303,3 +11303,42 @@ async fn uma_nota_encontra_se_pela_pesquisa() {
     esperar_por(&pesquisa, "Amostras de campo").await;
     esperar_por(&pesquisa, &format!("/notes/{note_id}")).await;
 }
+
+/// Uma nota ganha etiquetas, e a lista filtra-se por elas.
+///
+/// A parte das etiquetas da fatia C: etiquetar uma nota no editor (as etiquetas
+/// viajam no autosave), vê-las no cartão, e recortar a lista por uma delas.
+#[tokio::test]
+async fn uma_nota_ganha_etiquetas_e_filtra_se_por_elas() {
+    let harness = harness!();
+    let (_pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    let page = harness.open("/notes").await;
+    esperar_por(&page, "Notas").await;
+    submit(&page, "form[action=\"/notes\"]").await;
+    let url = wait_until_left(&page, "/notes").await;
+    let note_id = url.rsplit('/').next().unwrap_or_default().to_owned();
+    let editor = elemento(&page, "[data-oc-notes-surface] .ProseMirror").await;
+
+    set_field(&page, "[data-oc-notes-title]", "Reuniao de equipa").await;
+    editor
+        .click()
+        .await
+        .expect("foco no editor")
+        .type_str("pontos a tratar")
+        .await
+        .expect("escrever no editor");
+    // As etiquetas: separadas por vírgulas, e viajam no autosave.
+    set_field(&page, "[data-oc-notes-tags]", "projeto-x, notas-de-campo").await;
+    esperar_por(&page, "Guardado").await;
+
+    // A lista mostra a etiqueta distintiva no cartão.
+    let lista = harness.open("/notes").await;
+    esperar_por(&lista, "projeto-x").await;
+
+    // Filtrar por essa etiqueta traz a nota e diz que está a recortar.
+    let filtrada = harness.open("/notes?tag=projeto-x").await;
+    esperar_por(&filtrada, "Etiqueta:").await;
+    esperar_por(&filtrada, "Reuniao de equipa").await;
+    esperar_por(&filtrada, &format!("/notes/{note_id}")).await;
+}

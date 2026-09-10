@@ -6748,13 +6748,33 @@ async fn create_idea(
 
 // ── Notas pessoais ───────────────────────────────────────────────────────
 
-/// A lista das notas do membro.
-async fn notes_list(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+/// A consulta da lista de notas: um filtro opcional por etiqueta.
+#[derive(Deserialize)]
+struct NotesListQuery {
+    #[serde(default)]
+    tag: Option<String>,
+}
+
+/// A lista das notas do membro, com o filtro por etiqueta.
+async fn notes_list(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(query): Query<NotesListQuery>,
+) -> Response {
     let member = member_or_login!(state, headers);
     let viewer = viewer(&state, &member).await;
+    let tag = query.tag.as_deref().filter(|t| !t.is_empty());
+
     // `required`, não `optional`: uma falha do Core mostra a razão. Uma lista
     // vazia por engano diria «não há notas», que é uma afirmação, e não um erro.
-    let payload = match required(&state, &member, "/api/v1/me/notes?page_size=100").await {
+    let path = match tag {
+        Some(tag) => format!(
+            "/api/v1/me/notes?page_size=100&tag={}",
+            urlencoding_minimal(tag)
+        ),
+        None => "/api/v1/me/notes?page_size=100".to_owned(),
+    };
+    let payload = match required(&state, &member, &path).await {
         Ok(payload) => payload,
         Err(failure) => return failure_response(&failure),
     };
@@ -6763,7 +6783,7 @@ async fn notes_list(State(state): State<WorkspaceState>, headers: HeaderMap) -> 
         &viewer,
         Screen::Notes,
         Vec::new(),
-        ui::screens::notes::notes_list(&viewer, &payload),
+        ui::screens::notes::notes_list(&viewer, &payload, tag),
     )
 }
 

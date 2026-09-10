@@ -186,7 +186,7 @@ async fn o_dono_so_lista_as_suas_notas() {
         page: 1,
         page_size: 50,
     };
-    let lista = knowledge::list_personal_notes(&pool, &ana, pagina)
+    let lista = knowledge::list_personal_notes(&pool, &ana, None, pagina)
         .await
         .expect("lista");
 
@@ -546,5 +546,57 @@ async fn uma_nota_pessoal_e_pesquisavel_so_pelo_dono() {
     assert!(
         hits_rui.is_empty(),
         "a nota INTERNAL da Ana vazou para a pesquisa do Rui"
+    );
+}
+
+/// A lista de notas recorta-se por etiqueta.
+#[tokio::test]
+async fn a_lista_de_notas_filtra_por_etiqueta() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let ana = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let com_tag = nova_nota(&pool, &ana, &ids, "Com etiqueta", "corpo a").await;
+    let _sem_tag = nova_nota(&pool, &ana, &ids, "Sem etiqueta", "corpo b").await;
+
+    // Etiquetar a primeira — as etiquetas viajam na edição.
+    let mut tx = pool.begin().await.expect("tx");
+    knowledge::update_personal_note(
+        &mut tx,
+        &ana,
+        &ids,
+        com_tag.id,
+        knowledge::PersonalNoteEdit {
+            base_revision: com_tag.revision,
+            title: "Com etiqueta".to_owned(),
+            document: doc("corpo a"),
+            tags: Some(vec!["projeto-x".to_owned()]),
+        },
+    )
+    .await
+    .expect("etiquetar");
+    tx.commit().await.expect("commit");
+
+    let pagina = PageRequest {
+        page: 1,
+        page_size: 50,
+    };
+
+    let filtradas = knowledge::list_personal_notes(&pool, &ana, Some("projeto-x"), pagina)
+        .await
+        .expect("lista filtrada");
+    assert_eq!(filtradas.len(), 1, "o filtro por etiqueta não recortou");
+    assert_eq!(
+        filtradas[0].id, com_tag.id,
+        "a nota filtrada não é a etiquetada"
+    );
+
+    let nenhuma = knowledge::list_personal_notes(&pool, &ana, Some("inexistente"), pagina)
+        .await
+        .expect("lista");
+    assert!(
+        nenhuma.is_empty(),
+        "uma etiqueta que ninguém tem devolveu notas"
     );
 }
