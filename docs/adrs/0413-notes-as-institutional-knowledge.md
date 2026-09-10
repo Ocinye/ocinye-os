@@ -14,6 +14,16 @@
   [ADR-0411](0411-execution-time-principal-freshness.md) ·
   [ADR-0600](0600-leptos-workspace-runtime.md)
 
+> **Emenda 2026-09-10 (§2).** A primeira versão deste ADR fixou o corpo canónico
+> como **HTML higienizado**. Corrigiu-se, no mesmo dia e **antes de qualquer
+> implementação depender disso** (só a migração inicial existia), para um
+> **documento estruturado e versionado** como fonte de verdade, com o HTML e o
+> texto simples derivados dele. A razão é a robustez do que vem a seguir —
+> checklists, tabelas, imagens, referências a `FileVersion`, código com
+> metadados, conflitos e IA futura ganham uma fundação semântica, e uma revisão
+> histórica deixa de depender da interpretação de HTML arbitrário. A decisão
+> antiga fica registada aqui, e não se apaga; a §2 abaixo é a que vale.
+
 ## Context
 
 O Ocinye OS vai ter um módulo nativo de **Notas** — escrita rápida e
@@ -59,34 +69,63 @@ Nunca uma união que alargue: a classificação é sempre um tecto, e uma partil
 não a fura (§4). É a mesma forma da intersecção do plano agentic (`CLAUDE.md`
 §8).
 
-### 2. O corpo canónico é HTML higienizado; o texto simples deriva-se
+### 2. O corpo canónico é um documento estruturado e versionado; o resto deriva-se
 
-O `body` passa a guardar **HTML higienizado** pela lista de permissões da
-Ocinye — um perfil de Notas irmão do do correio (ADR-0402): os mesmos elementos
-seguros (parágrafos, títulos, listas, *checklists*, tabelas, citações, código,
-ligações, imagens), **sem** `script`, `iframe`, `svg`, `style`, `form`, nem
-esquemas `javascript:`/`data:` em ligações. O texto simples para pesquisa e para
-o excerto **deriva-se** do HTML, e é ele que vai ao índice — nunca marcação.
+A fonte de verdade de uma nota é um **documento estruturado** — um modelo de
+blocos em JSON, com um `schema_version` gravado em cada revisão. Um bloco tem
+tipo (parágrafo, título, lista, lista ordenada, *checklist*, bloco de código e,
+reservados para as fatias seguintes sem redesenho, imagem, anexo e tabela), e o
+texto em linha é uma sequência de trechos com marcas (negrito, itálico, código)
+e ligações. As referências a imagens e anexos são **explícitas** — apontam a
+`FileVersion` exacta, e não bytes embutidos.
 
-Preferiu-se HTML higienizado a um modelo estruturado (AST/JSON de editor) porque
-não existe nenhum modelo estruturado no sistema, introduzi-lo traria uma
-dependência e um esquema que a stack SSR não precisa, e o higienizador maduro já
-existe e é a defesa. É a decisão que a §19 do pedido pede que se documente. Se um
-dia um modelo estruturado se justificar (edição concorrente fina, âncoras
-estáveis para IA), é um ADR novo que substitui esta parte — não uma reescrita
-silenciosa.
+Dele **derivam-se**, e nunca o contrário:
+
+- o **HTML** renderizado, higienizado na fronteira de render (com a lista de
+  permissões irmã da do correio, ADR-0402) — para a leitura, incluindo sem
+  JavaScript;
+- o **texto simples**, para o excerto;
+- o **texto de pesquisa** que vai ao índice lexical.
+
+O HTML é higienizado também na **fronteira de colar/importar**: o que entra do
+editor ou de uma colagem é convertido para o modelo estruturado e **validado
+contra o esquema permitido no servidor** — um bloco ou marca que o esquema não
+conhece não sobrevive, e nenhum `script`, `iframe`, `svg`, `style`, `form`, nem
+esquema `javascript:`/`data:` em ligação passa. O cliente nunca é a autoridade
+sobre o que se guarda.
+
+Preferiu-se o documento estruturado ao HTML higienizado como canónico porque os
+blocos ricos têm semântica que o HTML dilui: uma *checklist* continua uma
+*checklist*, uma tabela continua estruturada, um bloco de código mantém os seus
+metadados, e uma referência a uma versão de ficheiro é explícita e não uma tag
+`&lt;img&gt;` a interpretar. As revisões ficam deterministas, o controlo de conflitos
+mais limpo, e — o que importa a prazo — uma **revisão histórica nunca depende da
+interpretação de HTML arbitrário**, e a IA futura endereça uma revisão
+estruturada exacta em vez de texto solto. Uma mudança na forma de renderizar não
+reescreve a memória institucional.
+
+O `schema_version` em cada revisão permite evoluir o esquema de forma
+controlada: um documento antigo lê-se pela versão com que foi escrito, e
+migra-se de forma determinista quando se decidir — nunca reinterpretado em
+silêncio.
+
+Não se constrói um motor de editor de raiz nem se introduz um segundo
+*framework*: escolhe-se uma biblioteca madura, de licença permissiva, cujo modelo
+de documento é estruturado (classe ProseMirror), **vendorizada e servida
+same-origin** sob `script-src 'self'` (sem CDN, sem `eval`). O modelo canónico do
+Ocinye é o que se persiste; o da biblioteca traduz-se para ele na fronteira.
 
 ### 3. O editor é vendorizado, same-origin, e melhora o progressivo
 
 A CSP do Workspace é `script-src 'self'` sem `unsafe-inline` nem `unsafe-eval`
 (ADR-0600, ADR-0019). O editor é uma biblioteca **vendorizada em `static/`** e
 servida same-origin, inicializada a partir do `app.js` — nunca de um CDN, nunca
-de `&lt;script&gt;` embutido, nunca de um segundo *framework* (sem React/Vue). Sobre
-`contenteditable`, produz HTML que o **Core higieniza no save** — o cliente
-nunca é a autoridade sobre o que se guarda. Sem JavaScript, a nota **lê-se**
-(HTML higienizado, renderizado pelo servidor) e edita-se por uma área de texto
-simples que grava texto: degradado, mas funcional, como manda a doutrina de
-melhoria progressiva.
+de `&lt;script&gt;` embutido, nunca de um segundo *framework* (sem React/Vue). Produz
+o **documento estruturado canónico** (§2), que o **Core valida contra o esquema
+permitido no save** — o cliente nunca é a autoridade sobre o que se guarda. Sem
+JavaScript, a nota **lê-se** (o HTML derivado e higienizado, renderizado pelo
+servidor) e edita-se por uma área de texto simples que grava um parágrafo:
+degradado, mas funcional, como manda a doutrina de melhoria progressiva.
 
 Critérios para a biblioteca (escolhida na fatia A, e registada quando o for):
 mantida, licença permissiva, superfície pequena e controlada, sem dependência de
@@ -193,7 +232,7 @@ histórico/actividade, e até lá a Experience não finge tempo real. CRDT não 
 
 ## Fatias (cada uma deixa o produto coerente)
 
-- **A** — domínio (dono, corpo HigienizadoHTML, revisão com autor, GET nota +
+- **A** — domínio (dono, documento estruturado canónico + projecções, revisão com autor, GET nota +
   histórico, save condicionado por revisão) + editor básico + autosave + entrada
   «Notas» na navegação PESSOAL.
 - **B** — conteúdo rico + colar imagens + anexos (via Files/FileVersion).

@@ -11007,3 +11007,168 @@ async fn o_primeiro_acesso_troca_a_temporaria_pela_definitiva() {
         "devia existir uma palavra-passe definitiva viva, definida pelo próprio"
     );
 }
+
+/// Uma pessoa escreve uma nota de ponta a ponta, e ela fica.
+///
+/// O caminho vertical das Notas (ADR-0413): entrar, abrir Notas, criar uma,
+/// dar-lhe título e um conteúdo formatado, ver o autosave confirmar, sair e
+/// voltar, e encontrar tudo tal como ficou — porque o corpo canónico é um
+/// documento estruturado guardado pelo Core, e não estado local do browser.
+#[tokio::test]
+async fn uma_pessoa_escreve_uma_nota_e_ela_fica() {
+    let harness = harness!();
+    let (pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // ── Notas, e criar uma ──────────────────────────────────────────────
+    let page = harness.open("/notes").await;
+    esperar_por(&page, "Notas").await;
+    submit(&page, "form[action=\"/notes\"]").await;
+    let url = wait_until_left(&page, "/notes").await;
+    let note_id = url.rsplit('/').next().unwrap_or_default().to_owned();
+    let uuid = Uuid::parse_str(&note_id)
+        .unwrap_or_else(|_| panic!("criar a nota não levou ao editor de uma nota: {url}"));
+
+    // O editor monta-se sobre a superfície; esperar por ela é esperar por ele.
+    let editor = elemento(&page, "[data-oc-notes-surface] .ProseMirror").await;
+
+    // ── Título e um conteúdo formatado ──────────────────────────────────
+    //
+    // Sem acentos: o CDP escreve por eventos de tecla, e o que se mede aqui é o
+    // caminho vertical, não a codificação de caracteres.
+    let titulo = unique_title("Acta da reuniao");
+    set_field(&page, "[data-oc-notes-title]", &titulo).await;
+
+    editor
+        .click()
+        .await
+        .expect("foco no editor")
+        .type_str("Comprar material para o laboratorio")
+        .await
+        .expect("escrever no editor");
+    // Uma tarefa é uma tarefa no modelo: o botão transforma a linha numa checklist.
+    clicar(
+        &page,
+        "[data-oc-notes-toolbar] .oc-notes-tool[data-command=\"check\"]",
+    )
+    .await;
+
+    // ── O autosave confirma, e só depois do Core ────────────────────────
+    //
+    // «Guardado» só aparece com um 200 do Core (ADR-0413 §7): vê-lo é ver o Core
+    // ter confirmado, e não a interface a adivinhar.
+    esperar_por(&page, "Guardado").await;
+
+    // ── A prova no PostgreSQL ───────────────────────────────────────────
+    //
+    // Espera-se pelo corpo final, e não por uma gravação qualquer: escrever
+    // muitos caracteres pode passar do debounce e produzir uma gravação
+    // intermédia. O que interessa é que o estado final chegou.
+    let inicio = std::time::Instant::now();
+    let (dono, documento) = loop {
+        let linha: Option<(Option<Uuid>, String, Option<String>)> =
+            sqlx::query_as("SELECT owner_id, body, document::text FROM notes WHERE id = $1")
+                .bind(uuid)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("consulta à nota");
+        if let Some((dono, corpo, documento)) = linha {
+            if corpo.contains("Comprar material para o laboratorio") {
+                break (dono, documento);
+            }
+        }
+        assert!(
+            inicio.elapsed() < DEADLINE,
+            "o conteúdo da nota não chegou ao PostgreSQL"
+        );
+        tokio::time::sleep(Duration::from_millis(120)).await;
+    };
+    assert_eq!(
+        dono,
+        Some(pessoa),
+        "a nota não ficou do membro que a escreveu"
+    );
+    assert!(
+        documento.unwrap_or_default().contains("checklist"),
+        "o documento canónico não guardou a checklist como bloco estruturado"
+    );
+
+    // Editar deixou uma revisão imutável para trás.
+    let revisoes: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM note_revisions WHERE note_id = $1")
+            .bind(uuid)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("contagem de revisões");
+    assert!(revisoes >= 1, "editar a nota não deixou nenhuma revisão");
+
+    // ── Sair e voltar: estava no Core, não na memória ───────────────────
+    harness.open("/notes").await;
+    let de_volta = harness.open(&format!("/notes/{note_id}")).await;
+    esperar_por(&de_volta, "Comprar material para o laboratorio").await;
+    esperar_por(&de_volta, "oc-check-item").await;
+    let titulo_de_volta = valor_de(&de_volta, "[data-oc-notes-title]").await;
+    assert_eq!(titulo_de_volta, titulo, "o título não sobreviveu à recarga");
+}
+
+/// Uma gravação com a revisão base obsoleta não sobrepõe, e não perde o texto.
+///
+/// O outro lado do autosave (ADR-0413 §5, §7): se a nota mudou noutra sessão
+/// desde que esta a abriu, a gravação encontra a revisão base obsoleta e o Core
+/// recusa com 409. O editor não escreve «Guardado», não deita fora o que está
+/// escrito, e diz que é preciso recarregar.
+#[tokio::test]
+async fn uma_gravacao_obsoleta_nao_sobrepoe_nem_perde_o_texto() {
+    let harness = harness!();
+    let (_pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    let page = harness.open("/notes").await;
+    esperar_por(&page, "Notas").await;
+    submit(&page, "form[action=\"/notes\"]").await;
+    let url = wait_until_left(&page, "/notes").await;
+    let note_id = url.rsplit('/').next().unwrap_or_default().to_owned();
+    let uuid = Uuid::parse_str(&note_id).expect("id da nota");
+    let editor = elemento(&page, "[data-oc-notes-surface] .ProseMirror").await;
+
+    // Outra sessão avança a nota por baixo desta: a revisão que o editor tem na
+    // mão fica obsoleta. Escrever na base simula-o de forma honesta — o que o
+    // editor guarda é a revisão de quando abriu.
+    sqlx::query("UPDATE notes SET revision = revision + 1 WHERE id = $1")
+        .bind(uuid)
+        .execute(&harness.pool)
+        .await
+        .expect("avançar a revisão por fora");
+
+    // O membro escreve, confiante, e o autosave dispara.
+    editor
+        .click()
+        .await
+        .expect("foco no editor")
+        .type_str("conteudo que nao pode desaparecer")
+        .await
+        .expect("escrever no editor");
+
+    // O Core recusa com 409, e a interface di-lo — sem nunca dizer «Guardado».
+    esperar_por(&page, "alterada noutra sessão").await;
+    let html = conteudo_estavel(&page).await;
+    assert!(
+        html.contains("conteudo que nao pode desaparecer"),
+        "o conflito fez desaparecer o que estava escrito"
+    );
+    assert!(
+        !html.contains("Guardado"),
+        "a interface disse «Guardado» sem o Core ter confirmado a gravação"
+    );
+
+    // E o Core não guardou a sobreposição.
+    let corpo: Option<String> = sqlx::query_scalar("SELECT body FROM notes WHERE id = $1")
+        .bind(uuid)
+        .fetch_optional(&harness.pool)
+        .await
+        .expect("consulta à nota");
+    assert!(
+        !corpo
+            .unwrap_or_default()
+            .contains("conteudo que nao pode desaparecer"),
+        "o Core aceitou uma gravação que devia ter recusado por conflito"
+    );
+}

@@ -55,6 +55,15 @@ pub enum ApiFailure {
     /// frase por uma referência de log, o que manda a pessoa perguntar a
     /// alguém aquilo que o sistema já sabia dizer-lhe.
     Rejected(String),
+    /// O Core recusou porque o estado mudou por baixo do pedido.
+    ///
+    /// `409`. É o que uma gravação com uma revisão base obsoleta recebe: outra
+    /// sessão avançou a nota (ou o workflow) desde que esta a leu, e sobrepor
+    /// seria perder o trabalho da outra em silêncio (ADR-0413 §5). Distinta de
+    /// [`ApiFailure::Failed`] porque não é uma avaria — é uma resposta, e a
+    /// pessoa precisa de recarregar, não de tentar de novo às cegas. A mensagem
+    /// foi escrita para quem a lê.
+    Conflict(String),
     /// Anything else.
     Failed(String),
 }
@@ -67,7 +76,9 @@ impl std::fmt::Display for ApiFailure {
             Self::Forbidden => f.write_str("you do not have access to this operation"),
             Self::Unavailable(Some(razao)) => f.write_str(razao),
             Self::Unavailable(None) => f.write_str("a dependency of this operation is unavailable"),
-            Self::Rejected(message) | Self::Failed(message) => f.write_str(message),
+            Self::Conflict(message) | Self::Rejected(message) | Self::Failed(message) => {
+                f.write_str(message)
+            }
         }
     }
 }
@@ -259,6 +270,13 @@ fn falha_de(status: u16, payload: &Value) -> Option<ApiFailure> {
         403 => Some(ApiFailure::Forbidden),
         404 => Some(ApiFailure::Denied),
         503 => Some(ApiFailure::Unavailable(razao(payload))),
+        409 => Some(ApiFailure::Conflict(
+            payload
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("Isto foi alterado por outra sessão. Recarregue e tente de novo.")
+                .to_owned(),
+        )),
         422 => Some(ApiFailure::Rejected(
             payload
                 .get("message")

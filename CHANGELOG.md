@@ -7,6 +7,37 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Notas pessoais, com um editor estruturado (fatia A) — 2026-09-10
+
+Uma nota deixou de ser só um artefacto de um Research Workspace: passa a poder
+ser um objecto que **um membro** possui (ADR-0413). A tabela `notes` serve os
+dois casos sem os confundir — ganhou um `owner_id`, o ambiente tornou-se
+opcional, e um `CHECK` mantém cada nota de alguém ou de um ambiente, nunca de
+ninguém (migração `0031`). O Core expõe a superfície pessoal em `/me/notes`:
+listar, criar, ler, editar e a história de revisões. O dono resolve-se pela
+sessão, nunca pelo caminho, e a leitura de outra pessoa responde «não
+encontrado» — a existência de uma nota não vaza por adivinhar identificadores.
+Um `PlatformAdmin` não lê a nota privada de ninguém.
+
+O corpo canónico de uma nota rica é um **documento estruturado versionado**
+(JSON com `schema_version`), e não HTML higienizado: o HTML e o texto simples
+derivam-se dele, e nunca o contrário. O Core valida o documento na fronteira —
+tipos conhecidos, limites, níveis de título, esquemas de ligação permitidos — e
+o texto é escapado por construção na saída, pelo que marcação hostil colada
+nunca executa, e uma revisão histórica nunca depende de interpretar HTML
+arbitrário.
+
+O Workspace ganhou o ecrã **Notas** em PESSOAL e um editor de texto rico real,
+compilado a partir do ProseMirror num único ficheiro same-origin
+(`static/notes-editor.js`, fonte em `apps/workspace/editor`) — a CSP é
+`script-src 'self'`, sem `eval`, sem CDN. Parágrafos, títulos, negrito, itálico,
+código, listas, uma checklist a sério, blocos de código, ligações, desfazer e
+uma colagem segura. O autosave só escreve «Guardado» depois de o Core confirmar
+com um 200; uma falha mantém o conteúdo e oferece repetir, e uma revisão base
+obsoleta volta 409 — recusa de sobreposição, nunca última-escrita em silêncio.
+Falta ainda o desta milestone: partilha, imagens, anexos, pastas e etiquetas
+(fatias B a G).
+
 ### A ingestão de correio diz a verdade, e o arranque também — 2026-09-09
 
 `mail.sync` deixou de reportar `degraded` sempre que o correio estava

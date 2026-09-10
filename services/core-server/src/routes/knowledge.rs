@@ -49,6 +49,24 @@ pub fn routes() -> Router<AppState> {
             get(list_notes).post(create_note),
         )
         .route("/notes/{note_id}", post(update_note))
+        // Personal notes: owned by the acting member, not by a workspace.
+        //
+        // `/me/…` is the member's own scope. It never takes a `workspace_id`,
+        // and the Core resolves the owner from the session, never from the
+        // path — a personal note has no identifier a caller could name to
+        // reach someone else's (ADR-0413 §4).
+        .route(
+            "/me/notes",
+            get(list_personal_notes).post(create_personal_note),
+        )
+        .route(
+            "/me/notes/{note_id}",
+            get(get_personal_note).post(update_personal_note),
+        )
+        .route(
+            "/me/notes/{note_id}/revisions",
+            get(list_personal_note_revisions),
+        )
         .route(
             "/workspaces/{workspace_id}/documents",
             get(list_documents)
@@ -507,6 +525,172 @@ async fn update_note(
     .await?;
     tx.commit().await.map_err(CoreError::from)?;
     Ok(Json(NoteView::from(note)))
+}
+
+// --- Personal notes --------------------------------------------------------
+
+/// One personal note in full: the canonical structured document travels, so
+/// the editor can reconstruct the note exactly, and `revision` is the token
+/// the next save must present as its `base_revision`.
+#[derive(Serialize)]
+struct PersonalNoteView {
+    id: Uuid,
+    title: String,
+    tags: Vec<String>,
+    classification: String,
+    revision: i32,
+    /// The canonical structured document. `None` only for a legacy note that
+    /// predates the structured body; the editor treats it as an empty document.
+    document: Option<serde_json::Value>,
+    schema_version: Option<i32>,
+    created_at: String,
+    updated_at: String,
+}
+
+impl From<knowledge::Note> for PersonalNoteView {
+    fn from(note: knowledge::Note) -> Self {
+        Self {
+            id: note.id,
+            title: note.title,
+            tags: note.tags,
+            classification: note.classification,
+            revision: note.revision,
+            document: note.document,
+            schema_version: note.schema_version,
+            created_at: note.created_at.to_rfc3339(),
+            updated_at: note.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+/// A personal note in a list: the document does not travel, only a short
+/// plain-text excerpt derived from it, so the list stays cheap and never
+/// ships the full body of every note to render a sidebar.
+#[derive(Serialize)]
+struct PersonalNoteSummary {
+    id: Uuid,
+    title: String,
+    tags: Vec<String>,
+    classification: String,
+    revision: i32,
+    excerpt: String,
+    updated_at: String,
+}
+
+/// Length of the plain-text excerpt shown in the note list, in characters.
+const NOTE_EXCERPT_CHARS: usize = 140;
+
+impl From<knowledge::Note> for PersonalNoteSummary {
+    fn from(note: knowledge::Note) -> Self {
+        let excerpt: String = note.body.chars().take(NOTE_EXCERPT_CHARS).collect();
+        Self {
+            id: note.id,
+            title: note.title,
+            tags: note.tags,
+            classification: note.classification,
+            revision: note.revision,
+            excerpt,
+            updated_at: note.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct CreatePersonalNoteRequest {
+    title: String,
+    /// The canonical structured document, validated by the Core against the
+    /// allowed schema before anything is written.
+    document: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+struct UpdatePersonalNoteRequest {
+    title: String,
+    /// The revision the editor loaded. The save advances the note only if it is
+    /// still at this revision; otherwise the Core answers Conflict and nothing
+    /// is overwritten (ADR-0413 §5).
+    base_revision: i32,
+    document: serde_json::Value,
+    #[serde(default)]
+    tags: Option<Vec<String>>,
+}
+
+async fn list_personal_notes(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Query(query): Query<PageQuery>,
+) -> Result<Json<Vec<PersonalNoteSummary>>, ApiError> {
+    let notes = knowledge::list_personal_notes(
+        &state.pool,
+        &principal,
+        page_of(query.page, query.page_size),
+    )
+    .await?;
+    Ok(Json(
+        notes.into_iter().map(PersonalNoteSummary::from).collect(),
+    ))
+}
+
+async fn create_personal_note(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Json(request): Json<CreatePersonalNoteRequest>,
+) -> Result<Json<PersonalNoteView>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let note = knowledge::create_personal_note(
+        &mut tx,
+        &principal,
+        &ids,
+        &request.title,
+        request.document,
+    )
+    .await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(PersonalNoteView::from(note)))
+}
+
+async fn get_personal_note(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(note_id): Path<Uuid>,
+) -> Result<Json<PersonalNoteView>, ApiError> {
+    let note = knowledge::get_personal_note(&state.pool, &principal, note_id).await?;
+    Ok(Json(PersonalNoteView::from(note)))
+}
+
+async fn update_personal_note(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(note_id): Path<Uuid>,
+    Json(request): Json<UpdatePersonalNoteRequest>,
+) -> Result<Json<PersonalNoteView>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let note = knowledge::update_personal_note(
+        &mut tx,
+        &principal,
+        &ids,
+        note_id,
+        knowledge::PersonalNoteEdit {
+            base_revision: request.base_revision,
+            title: request.title,
+            document: request.document,
+            tags: request.tags,
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(PersonalNoteView::from(note)))
+}
+
+async fn list_personal_note_revisions(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(note_id): Path<Uuid>,
+) -> Result<Json<Vec<knowledge::NoteRevisionMeta>>, ApiError> {
+    let revisions = knowledge::personal_note_revisions(&state.pool, &principal, note_id).await?;
+    Ok(Json(revisions))
 }
 
 // --- Documents -------------------------------------------------------------

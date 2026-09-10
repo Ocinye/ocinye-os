@@ -5776,3 +5776,113 @@ select.oc-entrada {
 /* Caixa de confirmação (acknowledgement dos códigos de recuperação). */
 .oc-check { display: flex; gap: 9px; align-items: flex-start; font-size: 13px; line-height: 1.45; cursor: pointer; }
 .oc-check input[type="checkbox"] { margin-top: 2px; flex-shrink: 0; }
+
+/* ------------------------------------------------------------------ */
+/* Notas — o editor estruturado (ADR-0413).                            */
+/*                                                                     */
+/* Toda a formatação é por classe: a CSP é style-src 'self', pelo que  */
+/* um atributo style não pinta. As regras base do ProseMirror que o    */
+/* editor precisa vivem aqui, servidas da própria origem, nunca        */
+/* injectadas por script.                                              */
+/* ------------------------------------------------------------------ */
+
+/* Lista de notas. */
+.oc-notes-list { display: grid; gap: var(--oc-space-4); }
+.oc-notes-empty { color: var(--oc-text-muted); font-size: 14px; padding: var(--oc-space-8) 0; }
+.oc-note-card {
+  display: block; padding: var(--oc-space-6) var(--oc-space-7);
+  background: var(--oc-surface); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-lg); box-shadow: var(--oc-shadow-card);
+  text-decoration: none; color: inherit;
+  transition: border-color var(--oc-duration-fast) ease, box-shadow var(--oc-duration-fast) ease;
+}
+.oc-note-card:hover { border-color: var(--oc-border-strong); box-shadow: var(--oc-shadow-input); }
+.oc-note-card__title { font-size: 15px; font-weight: 600; color: var(--oc-text); margin: 0 0 4px; }
+.oc-note-card__excerpt { font-size: 13px; color: var(--oc-text-muted); line-height: 1.5; margin: 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.oc-note-card__meta { font-size: 12px; color: var(--oc-text-meta); margin-top: 6px; }
+
+/* A superfície do editor. */
+.oc-notes-editor { display: flex; flex-direction: column; gap: var(--oc-space-5);
+  max-width: 760px; margin: 0 auto; width: 100%; }
+.oc-notes-title-input {
+  font-family: var(--oc-font-sans); font-size: 26px; font-weight: 700; color: var(--oc-text);
+  border: none; background: transparent; width: 100%; padding: 0;
+  line-height: 1.25;
+}
+.oc-notes-title-input::placeholder { color: var(--oc-text-ghost); }
+
+/* Barra de ferramentas. */
+.oc-notes-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px;
+  padding: var(--oc-space-2); background: var(--oc-surface-muted);
+  border: 1px solid var(--oc-border); border-radius: var(--oc-r-md);
+  position: sticky; top: 0; z-index: var(--oc-z-sticky);
+}
+.oc-notes-toolbar-sep { width: 1px; align-self: stretch; margin: 3px 5px; background: var(--oc-border); }
+.oc-notes-tool {
+  min-width: 30px; height: 30px; padding: 0 8px; border: 1px solid transparent;
+  border-radius: var(--oc-r-sm); background: transparent; cursor: pointer;
+  font-family: var(--oc-font-sans); font-size: 13px; font-weight: 600; color: var(--oc-text-secondary);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.oc-notes-tool:hover { background: var(--oc-surface-hover); border-color: var(--oc-border); color: var(--oc-text); }
+.oc-notes-tool.is-active { background: var(--oc-navy); border-color: var(--oc-navy); color: var(--oc-on-navy); }
+
+/* Estado do autosave. */
+.oc-notes-status { min-height: 20px; display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.oc-notes-status-text { color: var(--oc-text-meta); }
+.oc-notes-status[data-state="saving"] .oc-notes-status-text { color: var(--oc-info-text); }
+.oc-notes-status[data-state="saved"] .oc-notes-status-text { color: var(--oc-success-text); }
+.oc-notes-status[data-state="error"] .oc-notes-status-text,
+.oc-notes-status[data-state="conflict"] .oc-notes-status-text { color: var(--oc-error-text); }
+.oc-notes-retry {
+  border: 1px solid var(--oc-error-border); background: var(--oc-error-bg); color: var(--oc-error-text);
+  border-radius: var(--oc-r-sm); padding: 2px 9px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+
+/* A área editável e as regras base do ProseMirror. */
+.oc-notes-surface {
+  background: var(--oc-surface); border: 1px solid var(--oc-border); border-radius: var(--oc-r-md);
+  padding: var(--oc-space-7) var(--oc-space-8); min-height: 22rem;
+}
+.oc-notes-surface .ProseMirror {
+  position: relative; white-space: pre-wrap; word-wrap: break-word;
+  font-family: var(--oc-font-sans); font-size: 15px; line-height: 1.65; color: var(--oc-text-body);
+}
+.oc-notes-surface .ProseMirror-hideselection *::selection { background: transparent; }
+/* A selecção de um nó usa sombra, não outline: o anel de foco dourado é o único
+   outline do sistema, e vem dos tokens (design_fidelity). */
+.oc-notes-surface .ProseMirror-selectednode { box-shadow: 0 0 0 2px var(--oc-navy-mid); }
+.oc-notes-surface .ProseMirror p { margin: 0 0 var(--oc-space-5); }
+.oc-notes-surface .ProseMirror h1 { font-size: 22px; font-weight: 700; color: var(--oc-text); margin: var(--oc-space-7) 0 var(--oc-space-4); line-height: 1.3; }
+.oc-notes-surface .ProseMirror h2 { font-size: 18px; font-weight: 700; color: var(--oc-text); margin: var(--oc-space-6) 0 var(--oc-space-3); line-height: 1.35; }
+.oc-notes-surface .ProseMirror h3 { font-size: 15px; font-weight: 700; color: var(--oc-text); margin: var(--oc-space-5) 0 var(--oc-space-2); text-transform: uppercase; letter-spacing: .02em; }
+.oc-notes-surface .ProseMirror ul, .oc-notes-surface .ProseMirror ol { padding-left: 1.4em; margin: 0 0 var(--oc-space-5); }
+.oc-notes-surface .ProseMirror li { margin: 2px 0; }
+.oc-notes-surface .ProseMirror li p { margin: 0; }
+.oc-notes-surface .ProseMirror code {
+  font-family: var(--oc-font-mono); font-size: .88em; background: var(--oc-surface-muted);
+  border: 1px solid var(--oc-border-soft); border-radius: var(--oc-r-xs); padding: 1px 4px;
+}
+.oc-notes-surface .ProseMirror pre {
+  font-family: var(--oc-font-mono); font-size: 13px; line-height: 1.55; white-space: pre-wrap;
+  background: var(--oc-navy-deep); color: var(--oc-on-navy); border-radius: var(--oc-r-md);
+  padding: var(--oc-space-5) var(--oc-space-6); margin: 0 0 var(--oc-space-5); overflow-x: auto;
+}
+.oc-notes-surface .ProseMirror pre code { background: transparent; border: none; color: inherit; padding: 0; }
+.oc-notes-surface .ProseMirror a { color: var(--oc-navy-mid); text-decoration: underline; }
+
+/* Checklist: uma tarefa é uma tarefa no modelo, não um prefixo de texto. */
+.oc-notes-surface .ProseMirror ul.oc-checklist { list-style: none; padding-left: 0; }
+.oc-notes-surface .ProseMirror .oc-check-item { display: flex; gap: 8px; align-items: flex-start; }
+.oc-notes-surface .ProseMirror .oc-check-box {
+  flex-shrink: 0; width: 17px; height: 17px; margin-top: 3px; cursor: pointer;
+  border: 1.5px solid var(--oc-border-strong); border-radius: var(--oc-r-xs); background: var(--oc-surface);
+}
+.oc-notes-surface .ProseMirror .oc-check-item.is-checked .oc-check-box {
+  background: var(--oc-success); border-color: var(--oc-success);
+}
+.oc-notes-surface .ProseMirror .oc-check-item.is-checked .oc-check-body { color: var(--oc-text-meta); text-decoration: line-through; }
+.oc-notes-surface .ProseMirror .oc-check-body { flex: 1; }
+.oc-notes-surface .ProseMirror .oc-check-body p { margin: 0; }

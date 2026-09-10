@@ -22,6 +22,8 @@ pub enum Screen {
     Home,
     /// O trabalho atribuído ao membro.
     MyWork,
+    /// Notas pessoais.
+    Notes,
     /// Correio institucional.
     Mail,
     /// Mensagens entre membros.
@@ -73,6 +75,7 @@ impl Screen {
         match self {
             Self::Home => "/",
             Self::MyWork => "/my-work",
+            Self::Notes => "/notes",
             Self::Mail => "/mail",
             Self::Messaging => "/messages",
             Self::Units => "/units",
@@ -105,6 +108,7 @@ impl Screen {
             Self::Settings => "Definições",
             Self::Home => "Home",
             Self::MyWork => "O Meu Trabalho",
+            Self::Notes => "Notas",
             Self::Mail => "Correio",
             Self::Messaging => "Mensagens",
             Self::Units => "Unidades",
@@ -133,6 +137,7 @@ impl Screen {
             Self::Settings => Icon::Settings,
             Self::Home => Icon::Home,
             Self::MyWork => Icon::MyWork,
+            Self::Notes => Icon::Document,
             Self::Calendar => Icon::Calendar,
             Self::Mail => Icon::Mail,
             Self::Messaging => Icon::Messaging,
@@ -166,6 +171,7 @@ const GROUPS: [(&str, &[Screen]); 5] = [
         &[
             Screen::Home,
             Screen::MyWork,
+            Screen::Notes,
             Screen::Calendar,
             Screen::Messaging,
             Screen::Mail,
@@ -387,7 +393,10 @@ const fn screen_permission(screen: Screen) -> Option<Permission> {
         // Definições são do próprio membro: não exigem permissão
         // institucional nenhuma, e cada pessoa vê apenas a sua conta.
         // Ajuda e Definições são do próprio membro: sem permissão institucional.
-        Screen::Home | Screen::MyWork | Screen::Settings | Screen::Help => None,
+        // As notas pessoais são do próprio membro: qualquer pessoa autenticada
+        // tem as suas, e o Core resolve o dono pela sessão. Não há direito
+        // institucional a exigir para ver a entrada.
+        Screen::Home | Screen::MyWork | Screen::Notes | Screen::Settings | Screen::Help => None,
         // O Calendário: a agenda pessoal é do próprio, e `CalendarView` é o que
         // dá acesso aos eventos de unidade, workspace e instituição.
         Screen::Calendar => Some(Permission::CalendarView),
@@ -1317,9 +1326,10 @@ impl Screen {
 }
 
 /// Os destinos da command palette.
-const PALETTE_NAV: [Screen; 18] = [
+const PALETTE_NAV: [Screen; 19] = [
     Screen::Home,
     Screen::MyWork,
+    Screen::Notes,
     Screen::Calendar,
     Screen::Messaging,
     Screen::Mail,

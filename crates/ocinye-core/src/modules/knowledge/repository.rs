@@ -1,5 +1,6 @@
 //! Knowledge persistence.
 
+use chrono::{DateTime, Utc};
 use ocinye_contracts::Classification;
 use ocinye_domain::policy::VisibilityFilter;
 use sqlx::PgExecutor;
@@ -15,8 +16,8 @@ const SOURCE_COLUMNS: &str = "id, unit_id, workspace_id, source_type, title, aut
                               origin, citation_key, classification, full_text_document_id,
                               created_at";
 
-const NOTE_COLUMNS: &str = "id, unit_id, workspace_id, title, body, tags, classification,
-                            revision, created_at, updated_at";
+const NOTE_COLUMNS: &str = "id, owner_id, unit_id, workspace_id, title, body, tags, classification,
+                            revision, document, schema_version, created_at, updated_at";
 
 /// Document columns joined with their stored object, so a caller sees size and
 /// checksum without a second query.
@@ -309,24 +310,180 @@ pub async fn find_note<'e>(
 
 /// Snapshot the current note into its revision history.
 ///
-/// Taken before every edit, so a note's history is preserved.
+/// Taken before every edit, so a note's history is preserved. Copies the row
+/// directly, so the immutable revision carries the same structured `document`
+/// and its `schema_version`, and records **who wrote it** — the last editor, or
+/// the creator for the first revision.
 ///
 /// # Errors
 ///
 /// Returns an error when the insert fails.
-pub async fn snapshot_note<'e>(executor: impl PgExecutor<'e>, note: &Note) -> CoreResult<()> {
+pub async fn snapshot_note<'e>(executor: impl PgExecutor<'e>, note_id: Uuid) -> CoreResult<()> {
     sqlx::query(
-        "INSERT INTO note_revisions (note_id, revision, title, body)
-         VALUES ($1, $2, $3, $4)
+        "INSERT INTO note_revisions
+             (note_id, revision, title, body, document, schema_version, authored_by_id)
+         SELECT id, revision, title, body, document, schema_version,
+                COALESCE(updated_by_id, created_by_id)
+           FROM notes
+          WHERE id = $1
          ON CONFLICT (note_id, revision) DO NOTHING",
     )
-    .bind(note.id)
-    .bind(note.revision)
-    .bind(&note.title)
-    .bind(&note.body)
+    .bind(note_id)
     .execute(executor)
     .await?;
     Ok(())
+}
+
+/// Insert a personal note — owned by a member, with no workspace.
+///
+/// # Errors
+///
+/// Returns an error when the insert fails.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "um parâmetro por coluna: a alternativa é uma struct que só existe para atravessar esta chamada"
+)]
+pub async fn insert_personal_note<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    owner_id: Uuid,
+    title: &str,
+    plain_text: &str,
+    tags: &[String],
+    classification: Classification,
+    document: &serde_json::Value,
+    schema_version: i32,
+    created_by: Uuid,
+) -> CoreResult<Note> {
+    let note = sqlx::query_as::<_, Note>(&format!(
+        "INSERT INTO notes
+             (organisation_id, owner_id, title, body, tags, classification,
+              revision, document, schema_version, created_by_id, updated_by_id)
+         VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9, $9)
+         RETURNING {NOTE_COLUMNS}"
+    ))
+    .bind(organisation_id)
+    .bind(owner_id)
+    .bind(title)
+    .bind(plain_text)
+    .bind(tags)
+    .bind(classification.as_str())
+    .bind(document)
+    .bind(schema_version)
+    .bind(created_by)
+    .fetch_one(executor)
+    .await?;
+    Ok(note)
+}
+
+/// Update a note only if it is still at the expected revision.
+///
+/// The base-revision guard is the optimistic-concurrency check (ADR-0413 §5):
+/// if someone else advanced the note since this editor loaded it, zero rows
+/// match and this returns `None`, and the caller raises a conflict instead of
+/// silently clobbering the newer content.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "um parâmetro por coluna: a alternativa é uma struct que só existe para atravessar esta chamada"
+)]
+pub async fn update_note_at_revision<'e>(
+    executor: impl PgExecutor<'e>,
+    note_id: Uuid,
+    base_revision: i32,
+    title: &str,
+    plain_text: &str,
+    tags: Option<&[String]>,
+    document: &serde_json::Value,
+    schema_version: i32,
+    updated_by: Uuid,
+) -> CoreResult<Option<Note>> {
+    let note = sqlx::query_as::<_, Note>(&format!(
+        "UPDATE notes
+            SET title = $3,
+                body = $4,
+                tags = COALESCE($5, tags),
+                document = $6,
+                schema_version = $7,
+                revision = revision + 1,
+                updated_by_id = $8,
+                updated_at = now()
+          WHERE id = $1 AND revision = $2
+          RETURNING {NOTE_COLUMNS}"
+    ))
+    .bind(note_id)
+    .bind(base_revision)
+    .bind(title)
+    .bind(plain_text)
+    .bind(tags)
+    .bind(document)
+    .bind(schema_version)
+    .bind(updated_by)
+    .fetch_optional(executor)
+    .await?;
+    Ok(note)
+}
+
+/// The personal notes of a member, most recently changed first.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn list_personal_notes<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    limit: i64,
+    offset: i64,
+) -> CoreResult<Vec<Note>> {
+    let notes = sqlx::query_as::<_, Note>(&format!(
+        "SELECT {NOTE_COLUMNS} FROM notes
+          WHERE owner_id = $1
+          ORDER BY updated_at DESC
+          LIMIT $2 OFFSET $3"
+    ))
+    .bind(owner_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(executor)
+    .await?;
+    Ok(notes)
+}
+
+/// One row of a note's revision history: which revision, by whom, and when.
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+pub struct NoteRevisionMeta {
+    /// The revision number.
+    pub revision: i32,
+    /// The title as it was at that revision.
+    pub title: String,
+    /// Who wrote it.
+    pub authored_by_id: Option<Uuid>,
+    /// When.
+    pub created_at: DateTime<Utc>,
+}
+
+/// The revision history of a note, newest first.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn list_note_revisions<'e>(
+    executor: impl PgExecutor<'e>,
+    note_id: Uuid,
+) -> CoreResult<Vec<NoteRevisionMeta>> {
+    let rows = sqlx::query_as::<_, NoteRevisionMeta>(
+        "SELECT revision, title, authored_by_id, created_at
+           FROM note_revisions
+          WHERE note_id = $1
+          ORDER BY revision DESC",
+    )
+    .bind(note_id)
+    .fetch_all(executor)
+    .await?;
+    Ok(rows)
 }
 
 /// Update a note and advance its revision.

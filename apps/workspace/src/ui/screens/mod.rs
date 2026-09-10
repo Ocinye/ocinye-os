@@ -24,6 +24,7 @@ pub mod mail;
 pub mod messaging;
 pub mod mfa;
 pub mod my_work;
+pub mod notes;
 pub mod notice;
 pub mod prompt;
 pub mod science;

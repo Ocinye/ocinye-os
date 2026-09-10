@@ -36,6 +36,9 @@ use crate::WorkspaceState;
 pub const ROUTES: &[&str] = &[
     "/",
     "/my-work",
+    "/notes",
+    "/notes/{note_id}",
+    "/notes/{note_id}/gravar",
     "/messages",
     "/messages/{conversation}",
     "/messages/start",
@@ -244,6 +247,13 @@ pub fn router(state: WorkspaceState) -> Router {
             "/notifications/{notification_id}/read",
             post(mark_notification_read),
         )
+        // Notas pessoais. A criação e a lista partilham o caminho: `GET /notes`
+        // mostra as notas, `POST /notes` cria uma e leva o membro ao editor.
+        .route("/notes", get(notes_list).post(create_personal_note))
+        .route("/notes/{note_id}", get(note_editor))
+        // O autosave: um POST em JSON, respondido em JSON (não uma página). A
+        // fronteira same-origin protege-o como a qualquer outra escrita.
+        .route("/notes/{note_id}/gravar", post(save_personal_note))
         .route("/units/new", get(new_unit_form).post(create_unit))
         .route("/projects/new", get(new_project_form).post(promote_idea))
         .route(
@@ -1094,6 +1104,15 @@ fn failure_response(failure: &ApiFailure) -> Response {
         ApiFailure::Rejected(message) => (
             StatusCode::UNPROCESSABLE_ENTITY,
             page("Pedido recusado", ui::screens::notice::rejected(message)),
+        )
+            .into_response(),
+
+        // Um conflito de concorrência é uma resposta, não uma avaria: o estado
+        // mudou por baixo do pedido, e a pessoa precisa de recarregar, não de
+        // uma referência de log.
+        ApiFailure::Conflict(message) => (
+            StatusCode::CONFLICT,
+            page("Conflito", ui::screens::notice::conflict(message)),
         )
             .into_response(),
 
@@ -6711,6 +6730,127 @@ async fn create_idea(
                 ui::screens::lists::new_idea(&units, Some(failure.to_string())),
             )
         }
+    }
+}
+
+// ── Notas pessoais ───────────────────────────────────────────────────────
+
+/// A lista das notas do membro.
+async fn notes_list(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    // `required`, não `optional`: uma falha do Core mostra a razão. Uma lista
+    // vazia por engano diria «não há notas», que é uma afirmação, e não um erro.
+    let payload = match required(&state, &member, "/api/v1/me/notes?page_size=100").await {
+        Ok(payload) => payload,
+        Err(failure) => return failure_response(&failure),
+    };
+    shell_page(
+        "Notas",
+        &viewer,
+        Screen::Notes,
+        Vec::new(),
+        ui::screens::notes::notes_list(&viewer, &payload),
+    )
+}
+
+/// Cria uma nota vazia e leva o membro ao editor dela.
+///
+/// Uma nota nova nasce com um título neutro e um documento vazio; o membro
+/// dá-lhe o título e o conteúdo no editor, e o autosave grava. Assim o editor
+/// tem sempre uma nota com identidade e revisão, sem um estado «por gravar pela
+/// primeira vez» à parte.
+async fn create_personal_note(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    let body = serde_json::json!({
+        "title": "Nota sem título",
+        "document": { "schema_version": 1, "blocks": [{ "type": "paragraph", "content": [] }] },
+    });
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/me/notes",
+        &body,
+    )
+    .await
+    {
+        Ok(created) => {
+            let id = created
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            Redirect::to(&format!("/notes/{id}")).into_response()
+        }
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+/// O editor de uma nota.
+async fn note_editor(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(note_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    let note = match required(&state, &member, &format!("/api/v1/me/notes/{note_id}")).await {
+        Ok(note) => note,
+        Err(failure) => return failure_response(&failure),
+    };
+    let trail = vec![Crumb::to(Screen::Notes)];
+    shell_page(
+        "Nota",
+        &viewer,
+        Screen::Notes,
+        trail,
+        ui::screens::notes::note_editor(&viewer, &note),
+    )
+}
+
+/// O autosave de uma nota — em JSON, para o editor no browser.
+///
+/// Devolve `{revision}` a 200 quando o Core confirma, e responde `409` ao
+/// conflito de revisão base e `502` a uma avaria — sem redirecção. Isto é
+/// deliberado: um `fetch` segue uma redirecção em silêncio, e um 3xx para o
+/// login virava uma página 200 que o editor leria como «Guardado». Uma sessão
+/// que já não serve falha aqui fechada, com `401`, e o editor mantém o conteúdo
+/// (ADR-0413 §7). O Core valida tudo — dono, documento, revisão —, e o BFF é só
+/// o canal.
+async fn save_personal_note(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(note_id): Path<Uuid>,
+    axum::Json(body): axum::Json<Value>,
+) -> Response {
+    // Resolução manual, sem a macro: uma sessão anómala responde 401, nunca uma
+    // redirecção que o editor confundiria com sucesso.
+    let member = match current_member(&state, &headers) {
+        Some(member) if !member.session.must_change_password && !member.session.mfa_required => {
+            member
+        }
+        _ => return StatusCode::UNAUTHORIZED.into_response(),
+    };
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/notes/{note_id}"),
+        &body,
+    )
+    .await
+    {
+        Ok(updated) => {
+            let revision = updated
+                .get("revision")
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            axum::Json(serde_json::json!({ "revision": revision })).into_response()
+        }
+        Err(ApiFailure::Unauthorised) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(ApiFailure::Conflict(_)) => StatusCode::CONFLICT.into_response(),
+        Err(_) => StatusCode::BAD_GATEWAY.into_response(),
     }
 }
 

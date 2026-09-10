@@ -147,6 +147,26 @@ pub fn rejected(razao: &str) -> impl IntoView {
     }
 }
 
+/// O estado mudou por baixo do pedido (409).
+///
+/// Não é uma avaria nem uma recusa de acesso: outra sessão avançou o mesmo
+/// objecto desde que este ecrã o leu. O trabalho de quem chega aqui não se
+/// perde — recarrega-se para ver a versão actual e decidir sobre ela.
+pub fn conflict(razao: &str) -> impl IntoView {
+    let razao = razao.to_owned();
+    view! {
+        <div class="oc-notice">
+            <span class="oc-notice__tile">{icon(Icon::SystemStatus, 26)}</span>
+            <h1>"Isto foi alterado noutra sessão"</h1>
+            <p>{razao}</p>
+            <p class="oc-notice__aside">
+                "Nada se perdeu. Recarregue para ver a versão actual antes de voltar
+                 a gravar."
+            </p>
+        </div>
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
