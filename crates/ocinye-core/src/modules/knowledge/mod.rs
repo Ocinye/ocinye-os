@@ -14,10 +14,12 @@
 //! authorised link (briefing §30). This module is the enforcement point, backed
 //! by a database constraint so the rule cannot be bypassed by another path.
 
+pub mod document;
 mod model;
 mod repository;
 mod service;
 
+pub use document::{Block, ChecklistItem, Inline, Mark, NoteDocument, SCHEMA_VERSION};
 pub use model::{ContentRight, Document, DocumentKind, Note, Source, SourceType};
 pub use service::{
     attach_full_text, create_document, create_note, create_source, get_document, get_note,
