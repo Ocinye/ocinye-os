@@ -682,6 +682,8 @@ pub struct NoteRevisionMeta {
     pub title: String,
     /// Who wrote it.
     pub authored_by_id: Option<Uuid>,
+    /// That person's name, for a history that reads without identifiers.
+    pub author_name: Option<String>,
     /// When.
     pub created_at: DateTime<Utc>,
 }
@@ -696,15 +698,51 @@ pub async fn list_note_revisions<'e>(
     note_id: Uuid,
 ) -> CoreResult<Vec<NoteRevisionMeta>> {
     let rows = sqlx::query_as::<_, NoteRevisionMeta>(
-        "SELECT revision, title, authored_by_id, created_at
-           FROM note_revisions
-          WHERE note_id = $1
-          ORDER BY revision DESC",
+        "SELECT r.revision, r.title, r.authored_by_id, p.full_name AS author_name, r.created_at
+           FROM note_revisions r
+           LEFT JOIN people p ON p.id = r.authored_by_id
+          WHERE r.note_id = $1
+          ORDER BY r.revision DESC",
     )
     .bind(note_id)
     .fetch_all(executor)
     .await?;
     Ok(rows)
+}
+
+/// The stored content of one revision: the title and the structured document
+/// as they were then. It is what a restore replays, and what a preview renders.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct NoteRevisionContent {
+    /// The title at that revision.
+    pub title: String,
+    /// The structured document at that revision. `None` for a legacy revision
+    /// snapshotted before the structured body existed.
+    pub document: Option<serde_json::Value>,
+    /// The schema version of that document.
+    pub schema_version: i32,
+}
+
+/// The content of one exact revision of a note.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn note_revision_content<'e>(
+    executor: impl PgExecutor<'e>,
+    note_id: Uuid,
+    revision: i32,
+) -> CoreResult<Option<NoteRevisionContent>> {
+    let row = sqlx::query_as::<_, NoteRevisionContent>(
+        "SELECT title, document, schema_version
+           FROM note_revisions
+          WHERE note_id = $1 AND revision = $2",
+    )
+    .bind(note_id)
+    .bind(revision)
+    .fetch_optional(executor)
+    .await?;
+    Ok(row)
 }
 
 /// Update a note and advance its revision.

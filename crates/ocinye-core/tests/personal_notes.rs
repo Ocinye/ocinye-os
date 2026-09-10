@@ -1052,3 +1052,208 @@ async fn a_lista_partilhadas_comigo_segue_a_partilha_viva() {
         "uma nota revogada continuou em «partilhadas comigo»"
     );
 }
+
+// ── Fatia E — histórico e restauro ─────────────────────────────────────────
+//
+// Restaurar uma versão não apaga história: repõe o conteúdo antigo como uma
+// revisão nova (ADR-0413 §6), e a autoridade de escrita reavalia-se na gravação
+// (ADR-0411), como em qualquer edição.
+
+/// Restaurar repõe o conteúdo de uma versão antiga — e a estrutura, não só o
+/// texto. É a razão de a revisão guardar o documento, e não apenas o corpo.
+#[tokio::test]
+async fn restaurar_repoe_a_versao_com_a_sua_estrutura() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    // Uma primeira versão com um título de secção — estrutura, não só texto.
+    let documento_rico = json!({
+        "schema_version": 1,
+        "blocks": [{ "type": "heading", "level": 1, "content": [{ "type": "text", "text": "Plano" }] }]
+    });
+    let mut tx = pool.begin().await.expect("tx");
+    let nota =
+        knowledge::create_personal_note(&mut tx, &dono, &ids, "Com estrutura", documento_rico)
+            .await
+            .expect("cria a nota");
+    tx.commit().await.expect("commit");
+    let rev_inicial = nota.revision;
+
+    // Uma edição que achata para um parágrafo simples.
+    let mut tx = pool.begin().await.expect("tx");
+    let editada = knowledge::update_personal_note(
+        &mut tx,
+        &dono,
+        &ids,
+        nota.id,
+        edita(rev_inicial, "Com estrutura", doc("agora é só um parágrafo")),
+    )
+    .await
+    .expect("edita");
+    tx.commit().await.expect("commit");
+
+    // Restaurar a versão inicial (que ficou no histórico ao ser editada).
+    let mut tx = pool.begin().await.expect("tx");
+    let restaurada = knowledge::restore_personal_note_revision(
+        &mut tx,
+        &dono,
+        &ids,
+        nota.id,
+        rev_inicial,
+        editada.revision,
+    )
+    .await
+    .expect("restaura a versão inicial");
+    tx.commit().await.expect("commit");
+
+    // A revisão avançou — restaurar é escrever, não recuar o contador.
+    assert!(
+        restaurada.revision > editada.revision,
+        "restaurar não avançou a revisão"
+    );
+    // E o documento voltou a ter a estrutura da versão inicial.
+    let doc_restaurado = restaurada.document.expect("documento restaurado");
+    let blocos = doc_restaurado
+        .get("blocks")
+        .and_then(Value::as_array)
+        .expect("blocos");
+    assert_eq!(
+        blocos
+            .first()
+            .and_then(|b| b.get("type"))
+            .and_then(Value::as_str),
+        Some("heading"),
+        "a estrutura da versão inicial não voltou: {doc_restaurado}"
+    );
+}
+
+/// Quem só tem leitura não restaura.
+#[tokio::test]
+async fn um_leitor_nao_restaura() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let leitor = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Histórica", "início").await;
+    let mut tx = pool.begin().await.expect("tx");
+    let editada = knowledge::update_personal_note(
+        &mut tx,
+        &dono,
+        &ids,
+        nota.id,
+        edita(nota.revision, "Histórica", doc("segunda")),
+    )
+    .await
+    .expect("edita");
+    tx.commit().await.expect("commit");
+
+    partilha(
+        &pool,
+        &dono,
+        &ids,
+        nota.id,
+        leitor.person_id,
+        NoteShareRole::Viewer,
+    )
+    .await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    let tentativa = knowledge::restore_personal_note_revision(
+        &mut tx,
+        &leitor,
+        &ids,
+        nota.id,
+        nota.revision,
+        editada.revision,
+    )
+    .await;
+    match tentativa {
+        Err(CoreError::PermissionDenied(_)) => {}
+        outro => panic!("um leitor a restaurar devia dar PermissionDenied; veio {outro:?}"),
+    }
+}
+
+/// Um editor revogado deixa de restaurar — autoridade fresca (ADR-0411).
+#[tokio::test]
+async fn um_editor_revogado_nao_restaura() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let editor = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Histórica", "início").await;
+    let mut tx = pool.begin().await.expect("tx");
+    let editada = knowledge::update_personal_note(
+        &mut tx,
+        &dono,
+        &ids,
+        nota.id,
+        edita(nota.revision, "Histórica", doc("segunda")),
+    )
+    .await
+    .expect("edita");
+    tx.commit().await.expect("commit");
+
+    partilha(
+        &pool,
+        &dono,
+        &ids,
+        nota.id,
+        editor.person_id,
+        NoteShareRole::Editor,
+    )
+    .await;
+    let mut tx = pool.begin().await.expect("tx");
+    knowledge::revoke_personal_note_share(&mut tx, &dono, &ids, nota.id, editor.person_id)
+        .await
+        .expect("revoga");
+    tx.commit().await.expect("commit");
+
+    let mut tx = pool.begin().await.expect("tx");
+    let tentativa = knowledge::restore_personal_note_revision(
+        &mut tx,
+        &editor,
+        &ids,
+        nota.id,
+        nota.revision,
+        editada.revision,
+    )
+    .await;
+    match tentativa {
+        Err(CoreError::NotFound(_)) => {}
+        outro => panic!("um editor revogado a restaurar devia dar NotFound; veio {outro:?}"),
+    }
+}
+
+/// O conteúdo de uma revisão não se lê por quem não alcança a nota.
+#[tokio::test]
+async fn o_conteudo_de_uma_revisao_nao_se_le_por_estranho() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let estranho = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Privada", "início").await;
+    let mut tx = pool.begin().await.expect("tx");
+    knowledge::update_personal_note(
+        &mut tx,
+        &dono,
+        &ids,
+        nota.id,
+        edita(nota.revision, "Privada", doc("segunda")),
+    )
+    .await
+    .expect("edita");
+    tx.commit().await.expect("commit");
+
+    recusa_muda(
+        knowledge::personal_note_revision_content(&pool, &estranho, nota.id, nota.revision).await,
+        "ler o conteúdo de uma revisão de outro",
+    );
+}

@@ -11497,3 +11497,87 @@ async fn uma_nota_partilhada_le_se_e_so_se_le() {
         "a vista de leitura mostrou a barra de formatação"
     );
 }
+
+/// Uma nota guarda a sua história, e uma versão antiga restaura-se.
+///
+/// A fatia E (ADR-0413 §6): cada gravação deixa uma versão imutável; abrir uma
+/// mostra-a em leitura, e restaurá-la repõe-na como uma revisão nova — sem
+/// apagar as posteriores. O restauro é uma escrita, e o Core reavalia a
+/// autoridade; aqui prova-se o caminho do dono, de ponta a ponta.
+#[tokio::test]
+async fn uma_versao_antiga_de_uma_nota_restaura_se() {
+    let harness = harness!();
+    let (_pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // Criar a nota e dar-lhe um título e um corpo — a versão A.
+    let page = harness.open("/notes").await;
+    esperar_por(&page, "Notas").await;
+    submit(&page, "form[action=\"/notes\"]").await;
+    let url = wait_until_left(&page, "/notes").await;
+    let note_id = url.rsplit('/').next().unwrap_or_default().to_owned();
+    let note_uuid = Uuid::parse_str(&note_id).expect("id da nota");
+    let editor = elemento(&page, "[data-oc-notes-surface] .ProseMirror").await;
+    set_field(&page, "[data-oc-notes-title]", "Titulo A").await;
+    editor
+        .click()
+        .await
+        .expect("foco")
+        .type_str("Corpo alfa original")
+        .await
+        .expect("escrever");
+    esperar_por(&page, "Guardado").await;
+
+    // Uma segunda gravação muda o título — a versão A fica no histórico.
+    let editor_b = harness.open(&format!("/notes/{note_id}")).await;
+    let _ = elemento(&editor_b, "[data-oc-notes-surface] .ProseMirror").await;
+    set_field(&editor_b, "[data-oc-notes-title]", "Titulo B").await;
+    esperar_por(&editor_b, "Guardado").await;
+
+    // O editor mostra o histórico; abrir a versão mais recente do histórico.
+    let editor_c = harness.open(&format!("/notes/{note_id}")).await;
+    esperar_por(&editor_c, "Histórico").await;
+    let href: String = editor_c
+        .evaluate(
+            "(() => { const a = document.querySelector('.oc-notes-history__link'); \
+              return a ? a.getAttribute('href') : ''; })()",
+        )
+        .await
+        .expect("avaliar")
+        .into_value()
+        .unwrap_or_default();
+    assert!(
+        href.contains(&format!("/notes/{note_id}/revisoes/")),
+        "o histórico não ofereceu uma ligação para uma revisão: «{href}»"
+    );
+
+    // A pré-visualização mostra a versão A — título e corpo de então.
+    let preview = harness.open(&href).await;
+    esperar_por(&preview, "Titulo A").await;
+    esperar_por(&preview, "Corpo alfa original").await;
+
+    // Restaurar essa versão.
+    submit(&preview, "form[action$=\"/restaurar\"]").await;
+    wait_until_left(&preview, &href).await;
+
+    // A nota voltou ao título da versão A — o restauro escreveu uma revisão nova.
+    let inicio = std::time::Instant::now();
+    loop {
+        let titulo: Option<String> = sqlx::query_scalar("SELECT title FROM notes WHERE id = $1")
+            .bind(note_uuid)
+            .fetch_optional(&harness.pool)
+            .await
+            .expect("consulta");
+        if titulo.as_deref() == Some("Titulo A") {
+            break;
+        }
+        assert!(
+            inicio.elapsed() < DEADLINE,
+            "o restauro não repôs o título da versão A (título actual: {titulo:?})"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+
+    // E as versões anteriores continuam no histórico — restaurar não apaga.
+    let final_page = harness.open(&format!("/notes/{note_id}")).await;
+    esperar_por(&final_page, "Histórico").await;
+}

@@ -6024,3 +6024,30 @@ select.oc-entrada {
   border: 1px solid var(--oc-error-border); background: var(--oc-error-bg); color: var(--oc-error-text);
   border-radius: var(--oc-r-sm); padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
 }
+
+/* Notas — histórico (fatia E). */
+.oc-notes-history {
+  max-width: 760px; margin: var(--oc-space-6) auto 0; width: 100%;
+  background: var(--oc-surface); border: 1px solid var(--oc-border); border-radius: var(--oc-r-md);
+  padding: var(--oc-space-6) var(--oc-space-7);
+}
+.oc-notes-history__title { font-size: 15px; font-weight: 700; color: var(--oc-text); margin: 0 0 var(--oc-space-2); }
+.oc-notes-history__hint { font-size: 13px; color: var(--oc-text-secondary); margin: 0 0 var(--oc-space-5); }
+.oc-notes-history__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.oc-notes-history__item {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--oc-space-4);
+  padding: var(--oc-space-3) var(--oc-space-4);
+  border: 1px solid var(--oc-border-soft); border-radius: var(--oc-r-sm); background: var(--oc-surface-subtle);
+}
+.oc-notes-history__link { display: flex; align-items: baseline; gap: var(--oc-space-4); text-decoration: none; min-width: 0; }
+.oc-notes-history__link:hover .oc-notes-history__note-title { text-decoration: underline; }
+.oc-notes-history__rev { font-size: 12px; font-weight: 600; color: var(--oc-navy-mid); white-space: nowrap; }
+.oc-notes-history__note-title { font-size: 13px; color: var(--oc-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oc-notes-history__meta { font-size: 12px; color: var(--oc-text-meta); white-space: nowrap; }
+
+/* A pré-visualização de uma revisão, e o seu restauro. */
+.oc-notes-history-actions {
+  max-width: 760px; margin: 0 auto var(--oc-space-5); width: 100%;
+  display: flex; align-items: center; gap: var(--oc-space-5); flex-wrap: wrap;
+}
+.oc-notes-history-actions__hint { font-size: 13px; color: var(--oc-text-secondary); }

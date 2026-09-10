@@ -184,6 +184,19 @@ antiga nunca se altera. Restaurar uma versão **cria uma revisão nova** com o
 conteúdo da antiga — não apaga as posteriores. O histórico é a memória de quem
 mudou o quê, e daqui a anos ainda o diz.
 
+**Emenda 2026-09-10 (fatia E — histórico).** O histórico e o restauro estão
+entregues. Cada revisão guarda o **documento estruturado**, e não só o texto —
+por isso restaurar repõe a estrutura (títulos, listas, imagens), e não uma
+sombra achatada. A lista de revisões diz quem escreveu **por nome** (junta
+`people`), não por identificador. Pré-visualizar uma revisão
+(`GET /me/notes/{id}/revisions/{revision}`) devolve o HTML derivado dessa
+revisão exacta, em leitura; restaurar (`POST …/restore`) reescreve-a como
+revisão nova, com a mesma troca condicionada pela revisão base do save normal
+(§5) e a mesma reavaliação de autoridade na transacção (ADR-0411): um *viewer*
+não restaura, um *editor* revogado deixa de restaurar. No Workspace, o editor
+ganha um painel de histórico (quem pode escrever), e cada versão abre numa vista
+de leitura com o botão de restaurar.
+
 ### 7. Organização: pastas do dono, etiquetas, e lixo
 
 `note_folders` (do dono) organiza; `notes.folder_id` é opcional; a pasta **não**

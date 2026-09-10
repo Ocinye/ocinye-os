@@ -296,6 +296,7 @@ pub fn note_editor(
     folders: &Value,
     shares: &Value,
     people: &Value,
+    revisions: &Value,
 ) -> impl IntoView {
     let access = field(note, "access");
     let is_viewer = access == "viewer";
@@ -388,12 +389,111 @@ pub fn note_editor(
 
             {is_owner.then(|| share_panel(&id, shares, people))}
 
+            {history_panel(&id, revisions)}
+
             // O editor vendorizado, same-origin (CSP script-src 'self'). Só esta
             // página o carrega; monta-se sozinho sobre o elemento acima.
             <script src="/static/notes-editor.js" defer></script>
         </div>
     }
     .into_any()
+}
+
+/// O painel de histórico de uma nota — as revisões, da mais recente para a mais
+/// antiga, cada uma com quem a escreveu e quando, e uma ligação para a ver.
+///
+/// Restaurar não apaga nada: repõe uma revisão antiga como revisão nova
+/// (ADR-0413 §6). Só aparece quando há histórico — uma nota acabada de criar não
+/// tem revisões anteriores, e um painel vazio seria ruído.
+fn history_panel(note_id: &str, revisions: &Value) -> impl IntoView {
+    let rows = revisions.as_array().cloned().unwrap_or_default();
+    let has_history = !rows.is_empty();
+    let note_id = note_id.to_owned();
+
+    has_history.then(|| view! {
+        <section class="oc-notes-history">
+            <h2 class="oc-notes-history__title">"Histórico"</h2>
+            <p class="oc-notes-history__hint">
+                "Cada gravação deixa uma versão. Abra uma para a ver, e restaure-a se quiser — sem perder as posteriores."
+            </p>
+            <ul class="oc-notes-history__list">
+                {rows.iter().map(|rev| {
+                    let numero = rev.get("revision").and_then(Value::as_i64).unwrap_or(0);
+                    let autor = {
+                        let a = field(rev, "author_name");
+                        if a.is_empty() { "Autor desconhecido".to_owned() } else { a.to_owned() }
+                    };
+                    let quando = updated_label(field(rev, "created_at"));
+                    let titulo = field(rev, "title").to_owned();
+                    let ver = format!("/notes/{note_id}/revisoes/{numero}");
+                    view! {
+                        <li class="oc-notes-history__item">
+                            <a class="oc-notes-history__link" href=ver>
+                                <span class="oc-notes-history__rev">{format!("Versão {numero}")}</span>
+                                <span class="oc-notes-history__note-title">{titulo}</span>
+                            </a>
+                            <span class="oc-notes-history__meta">{autor} " · " {quando}</span>
+                        </li>
+                    }
+                }).collect::<Vec<_>>()}
+            </ul>
+        </section>
+    })
+}
+
+/// A pré-visualização de uma revisão antiga, em leitura, com o restauro.
+///
+/// O corpo é o HTML que o Core derivou dessa revisão exacta — escapado por
+/// construção, como a vista de leitura de uma nota partilhada. O botão de
+/// restaurar só aparece a quem pode escrever a nota; o Core recusa na mesma quem
+/// não pode.
+pub fn revision_preview(
+    _viewer: &Viewer,
+    note_id: &str,
+    rev: &Value,
+    base_revision: i64,
+    can_write: bool,
+) -> impl IntoView {
+    let numero = rev.get("revision").and_then(Value::as_i64).unwrap_or(0);
+    let title = {
+        let t = field(rev, "title");
+        if t.is_empty() {
+            "Sem título".to_owned()
+        } else {
+            t.to_owned()
+        }
+    };
+    let html = field(rev, "html").to_owned();
+    let voltar = format!("/notes/{note_id}");
+    let restaurar = format!("/notes/{note_id}/revisoes/{numero}/restaurar");
+
+    view! {
+        <div class="oc-page">
+            <div class="oc-head">
+                <div class="oc-head__text">
+                    <h1>{title}</h1>
+                    <p>{format!("Versão {numero} desta nota — uma fotografia do que era então.")}</p>
+                </div>
+                <div class="oc-head__actions">
+                    {button(Button::new("Voltar à nota", Variant::Secondary).href(&voltar))}
+                </div>
+            </div>
+
+            {can_write.then(|| view! {
+                <div class="oc-notes-history-actions">
+                    <form method="post" action=restaurar.clone()>
+                        <input type="hidden" name="base_revision" value=base_revision.to_string() />
+                        {button(Button::new("Restaurar esta versão", Variant::Gold))}
+                    </form>
+                    <span class="oc-notes-history-actions__hint">
+                        "Restaurar repõe esta versão como a mais recente, sem apagar as que vieram depois."
+                    </span>
+                </div>
+            })}
+
+            <div class="oc-notes-reader" inner_html=html></div>
+        </div>
+    }
 }
 
 /// A vista de leitura de uma nota partilhada — sem editor.
