@@ -639,9 +639,62 @@ pub async fn list_personal_notes(
     pool: &PgPool,
     principal: &Principal,
     tag: Option<&str>,
+    folder_id: Option<Uuid>,
     page: PageRequest,
 ) -> CoreResult<Vec<Note>> {
-    repo::list_personal_notes(pool, principal.person_id, tag, page.limit(), page.offset()).await
+    repo::list_personal_notes(
+        pool,
+        principal.person_id,
+        tag,
+        folder_id,
+        page.limit(),
+        page.offset(),
+    )
+    .await
+}
+
+/// Move uma nota pessoal para uma pasta, ou para a raiz (`None`).
+///
+/// Mover não é editar: não cria revisão. Valida que a nota é do membro e que a
+/// pasta, quando dada, também é sua — uma nota não se arruma na pasta de outra
+/// pessoa (ADR-0413).
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] quando a nota não é do membro, [`CoreError::Validation`]
+/// quando a pasta não é sua.
+pub async fn move_personal_note(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    note_id: Uuid,
+    folder_id: Option<Uuid>,
+) -> CoreResult<()> {
+    if let Some(folder_id) = folder_id {
+        if !crate::modules::files::owns_personal_folder(&mut **tx, principal, folder_id).await? {
+            return Err(CoreError::Validation("Essa pasta não é sua.".to_owned()));
+        }
+    }
+
+    let moveu = repo::set_note_folder(&mut **tx, principal.person_id, note_id, folder_id).await?;
+    if !moveu {
+        return Err(CoreError::NotFound("Note not found.".to_owned()));
+    }
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::UPDATE, "note")
+            .resource(note_id)
+            .detail(
+                "folder_id",
+                folder_id.map(|f| f.to_string()).unwrap_or_default(),
+            ),
+    )
+    .await?;
+
+    Ok(())
 }
 
 /// Load one personal note the acting member owns.

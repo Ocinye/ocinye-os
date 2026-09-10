@@ -31,8 +31,10 @@ pub mod upload;
 pub use repository::{FileListing, FileRecord, FolderRecord, VersionListing};
 pub use service::{
     add_version, all, browse, content, content_of_version, create, create_folder, create_personal,
-    create_with_first_version, current_version, download_url, excerpts, file_context, get,
-    get_version, may_write, move_to_folder, owns_personal_file_version, preview,
+    create_personal_folder, create_with_first_version, current_version, delete_personal_folder,
+    download_url, excerpts, file_context, get, get_version, list_personal_folders, may_write,
+    move_to_folder, owns_personal_file_version, owns_personal_folder, preview,
     preview_personal_version, preview_version, upload_version, version_download_url, versions,
-    FileContext, FileVersionRecord, FolderContents, InlinePreview, NewFile, PREVIEWABLE_TYPES,
+    FileContext, FileVersionRecord, FolderContents, InlinePreview, NewFile, PersonalFolder,
+    PREVIEWABLE_TYPES,
 };

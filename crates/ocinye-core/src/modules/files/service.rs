@@ -1182,6 +1182,116 @@ pub async fn owns_personal_file_version(
     Ok(owner == Some(principal.person_id))
 }
 
+// ── Pastas pessoais ─────────────────────────────────────────────────────
+
+pub use repo::PersonalFolder;
+
+/// Cria uma pasta de uma pessoa, para arrumar as suas notas.
+///
+/// # Errors
+///
+/// [`CoreError::Validation`] quando o nome está vazio ou já existe uma pasta do
+/// dono com esse nome; erro quando a inserção falha.
+pub async fn create_personal_folder(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    name: &str,
+) -> CoreResult<PersonalFolder> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(CoreError::Validation(
+            "A pasta precisa de um nome.".to_owned(),
+        ));
+    }
+    // O índice único recusa um nome repetido do dono; traduz-se a recusa numa
+    // mensagem do domínio em vez de um erro de base.
+    if repo::list_personal_folders(&mut **tx, principal.person_id)
+        .await?
+        .iter()
+        .any(|f| f.name.eq_ignore_ascii_case(name))
+    {
+        return Err(CoreError::Validation(
+            "Já tem uma pasta com esse nome.".to_owned(),
+        ));
+    }
+
+    let folder = repo::insert_personal_folder(
+        &mut **tx,
+        principal.organisation_id,
+        principal.person_id,
+        name,
+    )
+    .await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::CREATE, "folder")
+            .resource(folder.id)
+            .detail("owner_id", principal.person_id.to_string()),
+    )
+    .await?;
+
+    Ok(folder)
+}
+
+/// As pastas de uma pessoa.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_personal_folders(
+    pool: &sqlx::PgPool,
+    principal: &Principal,
+) -> CoreResult<Vec<PersonalFolder>> {
+    repo::list_personal_folders(pool, principal.person_id).await
+}
+
+/// Uma pasta é de uma pessoa **deste** principal?
+///
+/// A fronteira que impede uma nota de referenciar a pasta de outra pessoa.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn owns_personal_folder(
+    executor: &mut sqlx::PgConnection,
+    principal: &Principal,
+    folder_id: Uuid,
+) -> CoreResult<bool> {
+    let owner =
+        repo::personal_folder_owner(&mut *executor, folder_id, principal.organisation_id).await?;
+    Ok(owner == Some(principal.person_id))
+}
+
+/// Apaga uma pasta pessoal do dono. As notas que lá estavam ficam sem pasta.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] quando a pasta não é do dono; erro quando a consulta
+/// falha.
+pub async fn delete_personal_folder(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    folder_id: Uuid,
+) -> CoreResult<()> {
+    let apagou = repo::delete_personal_folder(&mut **tx, principal.person_id, folder_id).await?;
+    if !apagou {
+        return Err(CoreError::NotFound("Pasta não encontrada.".to_owned()));
+    }
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::DELETE, "folder").resource(folder_id),
+    )
+    .await?;
+    Ok(())
+}
+
 /// Os bytes da versão corrente, para mostrar inline.
 ///
 /// Não é uma descarga: é uma representação. A descarga continua a sair por

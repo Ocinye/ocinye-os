@@ -16,8 +16,9 @@ const SOURCE_COLUMNS: &str = "id, unit_id, workspace_id, source_type, title, aut
                               origin, citation_key, classification, full_text_document_id,
                               created_at";
 
-const NOTE_COLUMNS: &str = "id, owner_id, unit_id, workspace_id, title, body, tags, classification,
-                            revision, document, schema_version, created_at, updated_at";
+const NOTE_COLUMNS: &str = "id, owner_id, unit_id, workspace_id, folder_id, title, body, tags,
+                            classification, revision, document, schema_version, created_at,
+                            updated_at";
 
 /// Document columns joined with their stored object, so a caller sees size and
 /// checksum without a second query.
@@ -436,26 +437,55 @@ pub async fn list_personal_notes<'e>(
     executor: impl PgExecutor<'e>,
     owner_id: Uuid,
     tag: Option<&str>,
+    folder_id: Option<Uuid>,
     limit: i64,
     offset: i64,
 ) -> CoreResult<Vec<Note>> {
-    // O filtro por etiqueta é opcional: `$2` nulo devolve todas. `= ANY(tags)`
-    // faz a filtragem na base, e não em memória — a paginação continua a contar
-    // a partir do conjunto já recortado.
+    // Os filtros por etiqueta e por pasta são opcionais e independentes; um `$`
+    // nulo não recorta. A filtragem é na base, e por isso a paginação conta a
+    // partir do conjunto já recortado.
     let notes = sqlx::query_as::<_, Note>(&format!(
         "SELECT {NOTE_COLUMNS} FROM notes
           WHERE owner_id = $1
             AND ($2::text IS NULL OR $2 = ANY(tags))
+            AND ($3::uuid IS NULL OR folder_id = $3)
           ORDER BY updated_at DESC
-          LIMIT $3 OFFSET $4"
+          LIMIT $4 OFFSET $5"
     ))
     .bind(owner_id)
     .bind(tag)
+    .bind(folder_id)
     .bind(limit)
     .bind(offset)
     .fetch_all(executor)
     .await?;
     Ok(notes)
+}
+
+/// Move uma nota pessoal para uma pasta (ou para a raiz), pelo dono.
+///
+/// Mover não é editar o conteúdo: não incrementa a revisão nem tira *snapshot*.
+/// Devolve se alterou — `false` quando a nota não é do dono.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn set_note_folder<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    note_id: Uuid,
+    folder_id: Option<Uuid>,
+) -> CoreResult<bool> {
+    let done = sqlx::query(
+        "UPDATE notes SET folder_id = $3, updated_at = now()
+          WHERE id = $1 AND owner_id = $2",
+    )
+    .bind(note_id)
+    .bind(owner_id)
+    .bind(folder_id)
+    .execute(executor)
+    .await?;
+    Ok(done.rows_affected() > 0)
 }
 
 /// One row of a note's revision history: which revision, by whom, and when.

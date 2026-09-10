@@ -186,7 +186,7 @@ async fn o_dono_so_lista_as_suas_notas() {
         page: 1,
         page_size: 50,
     };
-    let lista = knowledge::list_personal_notes(&pool, &ana, None, pagina)
+    let lista = knowledge::list_personal_notes(&pool, &ana, None, None, pagina)
         .await
         .expect("lista");
 
@@ -583,7 +583,7 @@ async fn a_lista_de_notas_filtra_por_etiqueta() {
         page_size: 50,
     };
 
-    let filtradas = knowledge::list_personal_notes(&pool, &ana, Some("projeto-x"), pagina)
+    let filtradas = knowledge::list_personal_notes(&pool, &ana, Some("projeto-x"), None, pagina)
         .await
         .expect("lista filtrada");
     assert_eq!(filtradas.len(), 1, "o filtro por etiqueta não recortou");
@@ -592,11 +592,122 @@ async fn a_lista_de_notas_filtra_por_etiqueta() {
         "a nota filtrada não é a etiquetada"
     );
 
-    let nenhuma = knowledge::list_personal_notes(&pool, &ana, Some("inexistente"), pagina)
+    let nenhuma = knowledge::list_personal_notes(&pool, &ana, Some("inexistente"), None, pagina)
         .await
         .expect("lista");
     assert!(
         nenhuma.is_empty(),
         "uma etiqueta que ninguém tem devolveu notas"
+    );
+}
+
+/// Cria uma pasta pessoal do dono e devolve o seu id.
+async fn nova_pasta(pool: &PgPool, dono: &Principal, ids: &CorrelationIds, nome: &str) -> Uuid {
+    let mut tx = pool.begin().await.expect("tx");
+    let pasta = ocinye_core::modules::files::create_personal_folder(&mut tx, dono, ids, nome)
+        .await
+        .expect("cria a pasta");
+    tx.commit().await.expect("commit");
+    pasta.id
+}
+
+async fn move_para(
+    pool: &PgPool,
+    dono: &Principal,
+    ids: &CorrelationIds,
+    nota: Uuid,
+    pasta: Option<Uuid>,
+) {
+    let mut tx = pool.begin().await.expect("tx");
+    knowledge::move_personal_note(&mut tx, dono, ids, nota, pasta)
+        .await
+        .expect("mover");
+    tx.commit().await.expect("commit");
+}
+
+/// Uma nota arruma-se numa pasta, e a lista recorta-se por ela.
+#[tokio::test]
+async fn uma_nota_arruma_se_numa_pasta_e_a_lista_filtra() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let ana = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let pasta = nova_pasta(&pool, &ana, &ids, "Trabalho").await;
+    let outra = nova_pasta(&pool, &ana, &ids, "Pessoal").await;
+    let nota = nova_nota(&pool, &ana, &ids, "Um plano", "corpo").await;
+    move_para(&pool, &ana, &ids, nota.id, Some(pasta)).await;
+
+    let pagina = PageRequest {
+        page: 1,
+        page_size: 50,
+    };
+    let na_pasta = knowledge::list_personal_notes(&pool, &ana, None, Some(pasta), pagina)
+        .await
+        .expect("lista");
+    assert_eq!(na_pasta.len(), 1, "a pasta não trouxe a nota arrumada");
+    assert_eq!(na_pasta[0].id, nota.id);
+    assert_eq!(
+        na_pasta[0].folder_id,
+        Some(pasta),
+        "a nota não ficou na pasta"
+    );
+
+    let na_outra = knowledge::list_personal_notes(&pool, &ana, None, Some(outra), pagina)
+        .await
+        .expect("lista");
+    assert!(
+        na_outra.is_empty(),
+        "a nota apareceu numa pasta onde não está"
+    );
+}
+
+/// Uma nota não se arruma na pasta de outra pessoa.
+#[tokio::test]
+async fn uma_nota_nao_se_arruma_na_pasta_de_outra_pessoa() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let ana = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let rui = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let pasta_da_ana = nova_pasta(&pool, &ana, &ids, "Da Ana").await;
+    let nota_do_rui = nova_nota(&pool, &rui, &ids, "Do Rui", "corpo").await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    let recusa =
+        knowledge::move_personal_note(&mut tx, &rui, &ids, nota_do_rui.id, Some(pasta_da_ana))
+            .await;
+    match recusa {
+        Err(CoreError::Validation(_)) => {}
+        outro => panic!("arrumar na pasta de outra pessoa devia recusar; veio {outro:?}"),
+    }
+}
+
+/// Apagar uma pasta desarruma as notas, mas não as perde.
+#[tokio::test]
+async fn apagar_uma_pasta_desarruma_as_notas_mas_nao_as_perde() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let ana = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let pasta = nova_pasta(&pool, &ana, &ids, "Temporária").await;
+    let nota = nova_nota(&pool, &ana, &ids, "Sobrevive", "corpo").await;
+    move_para(&pool, &ana, &ids, nota.id, Some(pasta)).await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    ocinye_core::modules::files::delete_personal_folder(&mut tx, &ana, &ids, pasta)
+        .await
+        .expect("apaga a pasta");
+    tx.commit().await.expect("commit");
+
+    // A nota sobrevive, agora sem pasta.
+    let lida = knowledge::get_personal_note(&pool, &ana, nota.id)
+        .await
+        .expect("a nota sobreviveu");
+    assert_eq!(
+        lida.folder_id, None,
+        "a nota ficou presa a uma pasta apagada"
     );
 }

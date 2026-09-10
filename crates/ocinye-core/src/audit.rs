@@ -26,6 +26,8 @@ pub mod action {
     pub const UPDATE: &str = "update";
     /// A resource was archived.
     pub const ARCHIVE: &str = "archive";
+    /// A resource was permanently deleted.
+    pub const DELETE: &str = "delete";
     /// A workflow transition occurred.
     pub const TRANSITION: &str = "transition";
     /// A classification was changed.

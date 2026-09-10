@@ -2,7 +2,7 @@
 
 use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
 use axum::handler::Handler;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use ocinye_contracts::{Classification, Page, PageRequest};
 use ocinye_core::modules::{files, knowledge};
@@ -67,6 +67,14 @@ pub fn routes() -> Router<AppState> {
             "/me/notes/{note_id}/revisions",
             get(list_personal_note_revisions),
         )
+        // Mover uma nota para uma pasta não é editá-la — não cria revisão.
+        .route("/me/notes/{note_id}/folder", post(move_personal_note))
+        // As pastas pessoais, para arrumar as notas.
+        .route(
+            "/me/folders",
+            get(list_personal_folders).post(create_personal_folder),
+        )
+        .route("/me/folders/{folder_id}", delete(delete_personal_folder))
         // As imagens de uma nota pessoal: carregadas pelo dono, servidas
         // same-origin pela versão exacta. O ficheiro é do membro (ADR-0413 §8).
         .route(
@@ -544,6 +552,9 @@ struct PersonalNoteView {
     id: Uuid,
     title: String,
     tags: Vec<String>,
+    /// The folder that files the note, or `None` at the root — so the editor can
+    /// pre-select it.
+    folder_id: Option<Uuid>,
     classification: String,
     revision: i32,
     /// The canonical structured document. `None` only for a legacy note that
@@ -560,6 +571,7 @@ impl From<knowledge::Note> for PersonalNoteView {
             id: note.id,
             title: note.title,
             tags: note.tags,
+            folder_id: note.folder_id,
             classification: note.classification,
             revision: note.revision,
             document: note.document,
@@ -622,7 +634,7 @@ struct UpdatePersonalNoteRequest {
     tags: Option<Vec<String>>,
 }
 
-/// A consulta da lista de notas pessoais: paginação e um filtro por etiqueta.
+/// A consulta da lista de notas: paginação e filtros por etiqueta e por pasta.
 #[derive(Deserialize)]
 struct PersonalNotesQuery {
     #[serde(default)]
@@ -631,6 +643,8 @@ struct PersonalNotesQuery {
     page_size: Option<u32>,
     #[serde(default)]
     tag: Option<String>,
+    #[serde(default)]
+    folder: Option<Uuid>,
 }
 
 async fn list_personal_notes(
@@ -644,12 +658,72 @@ async fn list_personal_notes(
         &state.pool,
         &principal,
         tag,
+        query.folder,
         page_of(query.page, query.page_size),
     )
     .await?;
     Ok(Json(
         notes.into_iter().map(PersonalNoteSummary::from).collect(),
     ))
+}
+
+// --- Personal folders ------------------------------------------------------
+
+#[derive(Deserialize)]
+struct CreateFolderRequest {
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct MoveNoteRequest {
+    /// The target folder, or `null`/absent to move the note back to the root.
+    #[serde(default)]
+    folder_id: Option<Uuid>,
+}
+
+async fn list_personal_folders(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+) -> Result<Json<Vec<files::PersonalFolder>>, ApiError> {
+    let folders = files::list_personal_folders(&state.pool, &principal).await?;
+    Ok(Json(folders))
+}
+
+async fn create_personal_folder(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Json(request): Json<CreateFolderRequest>,
+) -> Result<Json<files::PersonalFolder>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let folder = files::create_personal_folder(&mut tx, &principal, &ids, &request.name).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(folder))
+}
+
+async fn delete_personal_folder(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(folder_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    files::delete_personal_folder(&mut tx, &principal, &ids, folder_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(serde_json::json!({ "deleted": true })))
+}
+
+async fn move_personal_note(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(note_id): Path<Uuid>,
+    Json(request): Json<MoveNoteRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    knowledge::move_personal_note(&mut tx, &principal, &ids, note_id, request.folder_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(serde_json::json!({ "folder_id": request.folder_id })))
 }
 
 async fn create_personal_note(
