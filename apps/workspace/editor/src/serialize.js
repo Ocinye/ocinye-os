@@ -38,6 +38,8 @@ function blockToNote(node) {
       return { type: "checklist", items: checkItemsToNote(node) };
     case n.code_block:
       return { type: "code_block", language: node.attrs.language || null, text: node.textContent };
+    case n.image:
+      return { type: "image", file_version_id: node.attrs.file_version_id, alt: node.attrs.alt || "" };
     default:
       return null;
   }
@@ -130,8 +132,12 @@ function noteBlockToPm(block) {
         text ? noteSchema.text(text) : null,
       );
     }
-    // image and attachment are reserved for Slice B: the editor does not yet
-    // produce them, and it renders nothing for them rather than guessing.
+    case "image": {
+      if (!block.file_version_id) return null;
+      return n.image.create({ file_version_id: block.file_version_id, alt: block.alt || "" });
+    }
+    // attachment is reserved for a later slice: the editor does not yet produce
+    // it, and renders nothing for it rather than guessing.
     default:
       return null;
   }
