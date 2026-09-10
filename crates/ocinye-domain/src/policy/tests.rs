@@ -333,7 +333,7 @@ fn visibility_filter_agrees_with_the_read_policy_exhaustively() {
                     organisation_id: Some(ORG),
                 };
                 let by_policy = evaluate(&p, Action::Read, &context).allowed;
-                let by_filter = filter.permits(unit_id, workspace_id, classification);
+                let by_filter = filter.permits(None, unit_id, workspace_id, classification);
                 assert_eq!(
                     by_policy, by_filter,
                     "policy and visibility filter disagree: roles={:?} units={:?} \
@@ -353,13 +353,34 @@ fn visibility_filter_agrees_with_the_read_policy_exhaustively() {
 }
 
 #[test]
+fn an_owner_scoped_row_is_visible_only_to_its_owner() {
+    let p = principal();
+    let filter = VisibilityFilter::for_principal(&p);
+
+    // A row this person owns is visible, whatever its classification or scope.
+    for classification in Classification::all() {
+        assert!(
+            filter.permits(Some(p.person_id), None, None, classification),
+            "the owner cannot see their own owner-scoped row"
+        );
+    }
+    // A row owned by someone else is not — even though, as an INTERNAL row with
+    // no owner, the classification clause would have admitted it.
+    let outra_pessoa = Uuid::from_u128(9999);
+    assert!(
+        !filter.permits(Some(outra_pessoa), None, None, Classification::Internal),
+        "an owner-scoped row leaked to a non-owner through the INTERNAL clause"
+    );
+}
+
+#[test]
 fn inactive_principal_filter_matches_inactive_policy() {
     let mut p = principal();
     p.is_active = false;
     let filter = VisibilityFilter::for_principal(&p);
     assert!(filter.is_never_satisfiable());
     for classification in Classification::all() {
-        assert!(!filter.permits(Some(UNIT_A), Some(WS_A), classification));
+        assert!(!filter.permits(None, Some(UNIT_A), Some(WS_A), classification));
     }
 }
 

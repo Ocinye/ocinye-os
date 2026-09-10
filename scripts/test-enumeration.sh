@@ -227,7 +227,9 @@ mfa-obrigatorio|3|-p ocinye-core --test mfa
 # hostil — e exigem recusa em todas.
 # 7 → 9 em 2026-09-10: a fatia B trouxe ficheiros com dono. Um ficheiro pessoal
 # é do dono e só dele, e uma nota não pode referenciar a imagem de outra pessoa.
-notas-pessoais|9|-p ocinye-core --test personal_notes
+# 9 → 10 em 2026-09-10: a fatia C indexa as notas pessoais para pesquisa — e uma
+# nota INTERNAL de uma pessoa não aparece na pesquisa de outra.
+notas-pessoais|10|-p ocinye-core --test personal_notes
 TABELA
 }
 

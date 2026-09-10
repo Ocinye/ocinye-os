@@ -279,6 +279,7 @@ pub async fn create_idea(
         tx,
         search::IndexRequest {
             organisation_id: principal.organisation_id,
+            owner_id: None,
             unit_id: Some(unit.id),
             workspace_id: Some(workspace.id),
             entity_type: "idea",
@@ -527,6 +528,7 @@ pub async fn update_idea(
         tx,
         search::IndexRequest {
             organisation_id: principal.organisation_id,
+            owner_id: None,
             unit_id: Some(workspace.unit_id),
             workspace_id: Some(workspace.id),
             entity_type: "idea",
@@ -771,6 +773,7 @@ pub async fn promote_idea(
         tx,
         search::IndexRequest {
             organisation_id: principal.organisation_id,
+            owner_id: None,
             unit_id: Some(workspace.unit_id),
             workspace_id: Some(workspace.id),
             entity_type: "project",

@@ -20,6 +20,12 @@ const MIN_QUERY_LENGTH: usize = 2;
 pub struct IndexRequest {
     /// Organisation.
     pub organisation_id: Uuid,
+    /// Owning **person**, for an owner-scoped artefact (a personal note).
+    ///
+    /// When set, the indexed row is visible in search only to this person — the
+    /// classification and membership clauses never admit it. `None` for an
+    /// institutional artefact, whose visibility is the unit/workspace/class one.
+    pub owner_id: Option<Uuid>,
     /// Owning unit.
     pub unit_id: Option<Uuid>,
     /// Owning workspace.
@@ -48,6 +54,7 @@ pub async fn index_entity(tx: &mut Tx<'_>, request: IndexRequest) -> CoreResult<
     repo::upsert(
         &mut **tx,
         request.organisation_id,
+        request.owner_id,
         request.unit_id,
         request.workspace_id,
         request.entity_type,

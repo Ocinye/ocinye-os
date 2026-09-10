@@ -31,6 +31,7 @@ pub const MAX_EXCERPT: usize = 400;
 pub async fn upsert<'e>(
     executor: impl PgExecutor<'e>,
     organisation_id: Uuid,
+    owner_id: Option<Uuid>,
     unit_id: Option<Uuid>,
     workspace_id: Option<Uuid>,
     entity_type: &str,
@@ -44,11 +45,13 @@ pub async fn upsert<'e>(
 
     sqlx::query(
         "INSERT INTO search_documents
-             (organisation_id, unit_id, workspace_id, entity_type, entity_id,
+             (organisation_id, owner_id, unit_id, workspace_id, entity_type, entity_id,
               title, excerpt, classification, search_vector, indexed_at)
-         VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8, to_tsvector($9::regconfig, $10), now())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9,
+                 to_tsvector($10::regconfig, $11), now())
          ON CONFLICT (entity_type, entity_id) DO UPDATE
             SET organisation_id = EXCLUDED.organisation_id,
+                owner_id = EXCLUDED.owner_id,
                 unit_id = EXCLUDED.unit_id,
                 workspace_id = EXCLUDED.workspace_id,
                 title = EXCLUDED.title,
@@ -59,6 +62,7 @@ pub async fn upsert<'e>(
                 updated_at = now()",
     )
     .bind(organisation_id)
+    .bind(owner_id)
     .bind(unit_id)
     .bind(workspace_id)
     .bind(entity_type)
@@ -135,9 +139,11 @@ const CLASSIFICACAO_EFECTIVA: &str = "CASE
     ELSE 'PUBLIC'
 END";
 
-/// As colunas de visibilidade da pesquisa: âmbito do índice, classificação viva.
+/// As colunas de visibilidade da pesquisa: âmbito do índice, classificação viva,
+/// e o dono — uma linha com dono só aparece ao dono (ADR-0413).
 fn colunas_de_visibilidade() -> VisibilityColumns {
     VisibilityColumns::aliased("sd.unit_id", "sd.workspace_id", CLASSIFICACAO_EFECTIVA)
+        .with_owner("sd.owner_id")
 }
 
 pub async fn search<'e>(

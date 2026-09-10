@@ -495,3 +495,56 @@ async fn uma_nota_nao_referencia_a_imagem_de_outra_pessoa() {
     .expect("a dona pode referenciar a sua imagem");
     tx.commit().await.expect("commit");
 }
+
+/// Uma nota pessoal é pesquisável — mas só pelo dono.
+///
+/// A fatia A não indexava as notas pessoais porque faltava a dimensão do dono no
+/// índice; agora existe (migração `0033`). O termo está no **corpo**, não no
+/// título, por isso a pesquisa prova que o corpo foi indexado. E a nota de uma
+/// pessoa não pode aparecer na pesquisa de outra, mesmo sendo `INTERNAL`.
+#[tokio::test]
+async fn uma_nota_pessoal_e_pesquisavel_so_pelo_dono() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let ana = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let rui = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let termo = format!("xenolito{}", &Uuid::new_v4().simple().to_string()[..8]);
+    nova_nota(
+        &pool,
+        &ana,
+        &ids,
+        "Ideia solta",
+        &format!("uma nota sobre {termo}"),
+    )
+    .await;
+
+    let pagina = PageRequest {
+        page: 1,
+        page_size: 10,
+    };
+
+    let (hits_ana, total_ana) =
+        ocinye_core::modules::search::search(&pool, &ana, &termo, None, None, pagina)
+            .await
+            .expect("pesquisa da Ana");
+    assert_eq!(
+        total_ana, 1,
+        "a Ana não encontrou a sua própria nota pela pesquisa"
+    );
+    assert_eq!(hits_ana.len(), 1, "a Ana não encontrou a sua própria nota");
+
+    let (hits_rui, total_rui) =
+        ocinye_core::modules::search::search(&pool, &rui, &termo, None, None, pagina)
+            .await
+            .expect("pesquisa do Rui");
+    assert_eq!(
+        total_rui, 0,
+        "a contagem da pesquisa do Rui revelou a nota da Ana"
+    );
+    assert!(
+        hits_rui.is_empty(),
+        "a nota INTERNAL da Ana vazou para a pesquisa do Rui"
+    );
+}
