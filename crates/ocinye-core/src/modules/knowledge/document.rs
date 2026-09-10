@@ -31,6 +31,13 @@ const MAX_TEXT_BYTES: usize = 1_000_000;
 const MAX_HEADING_LEVEL: u8 = 3;
 const ALLOWED_LINK_SCHEMES: &[&str] = &["http://", "https://", "mailto:", "tel:"];
 
+/// O prefixo same-origin por onde a imagem de uma nota se serve.
+///
+/// O HTML derivado é consumido no Workspace, na sua própria origem, e é lá que
+/// esta rota existe (proxy para a pré-visualização do Core). Fica como convenção
+/// e não como acoplamento: o corpo canónico guarda a `FileVersion`, não a URL.
+const IMAGE_PREVIEW_PATH: &str = "/me/files/";
+
 /// O documento canónico de uma nota.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -207,6 +214,27 @@ impl NoteDocument {
         Ok(doc)
     }
 
+    /// As versões de ficheiro que o documento referencia (imagens e anexos).
+    ///
+    /// É o que o Core resolve para autorizar antes de guardar: um bloco de imagem
+    /// aponta para uma `FileVersion` exacta, e uma nota não pode referenciar a de
+    /// outra pessoa (ADR-0413 §8). O documento é a fonte; a autoridade é do Core.
+    #[must_use]
+    pub fn referenced_file_versions(&self) -> Vec<Uuid> {
+        self.blocks
+            .iter()
+            .filter_map(|bloco| match bloco {
+                Block::Image {
+                    file_version_id, ..
+                }
+                | Block::Attachment {
+                    file_version_id, ..
+                } => Some(*file_version_id),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// A projecção de texto simples — para o excerto e para o índice de pesquisa.
     #[must_use]
     pub fn plain_text(&self) -> String {
@@ -343,13 +371,22 @@ impl Block {
                 escape_into(text, saida);
                 saida.push_str("</code></pre>");
             }
-            // As imagens e os anexos renderizam-se pelas rotas do Core na fatia B;
-            // até lá, o texto alternativo/nome derivado dá conteúdo legível.
-            Self::Image { alt, .. } => {
-                saida.push_str("<p>");
+            // A imagem serve-se pela rota de pré-visualização, same-origin, pela
+            // versão de ficheiro exacta — nunca uma chave de object-store nem uma
+            // URL pública (ADR-0413 §8). Abrir a imagem reautoriza no Core.
+            Self::Image {
+                file_version_id,
+                alt,
+            } => {
+                saida.push_str("<img src=\"");
+                saida.push_str(IMAGE_PREVIEW_PATH);
+                saida.push_str(&file_version_id.to_string());
+                saida.push_str("/preview\" alt=\"");
                 escape_into(alt, saida);
-                saida.push_str("</p>");
+                saida.push_str("\" />");
             }
+            // O anexo é uma ligação de descarga pela versão exacta. Reservado
+            // para uma fatia posterior; o nome derivado dá conteúdo legível.
             Self::Attachment { name, .. } => {
                 saida.push_str("<p>");
                 escape_into(name, saida);
@@ -562,5 +599,41 @@ mod tests {
         let erro = NoteDocument::from_value(json!({ "schema_version": 999, "blocks": [] }))
             .expect_err("versão desconhecida");
         assert!(matches!(erro, CoreError::Validation(_)), "veio {erro:?}");
+    }
+
+    /// Uma imagem aponta para a versão de ficheiro, e o Core resolve-a.
+    #[test]
+    fn uma_imagem_referencia_a_versao_de_ficheiro() {
+        let fv = "11111111-1111-1111-1111-111111111111";
+        let doc = NoteDocument::from_value(json!({
+            "schema_version": 1,
+            "blocks": [{ "type": "image", "file_version_id": fv, "alt": "diagrama" }]
+        }))
+        .expect("um bloco de imagem é válido");
+
+        let referenciadas = doc.referenced_file_versions();
+        assert_eq!(referenciadas.len(), 1, "a imagem não foi contada como referência");
+        assert_eq!(referenciadas[0].to_string(), fv, "a versão referenciada não bate");
+    }
+
+    /// O HTML derivado de uma imagem serve-a pela rota same-origin, com o alt
+    /// escapado — nunca uma chave de object-store nem marcação vinda do texto.
+    #[test]
+    fn o_html_de_uma_imagem_serve_pela_rota_e_escapa_o_alt() {
+        let fv = "22222222-2222-2222-2222-222222222222";
+        let doc = NoteDocument::from_value(json!({
+            "schema_version": 1,
+            "blocks": [{ "type": "image", "file_version_id": fv, "alt": "\"><script>x" }]
+        }))
+        .expect("válido");
+        let html = doc.to_html();
+        assert!(
+            html.contains(&format!("/me/files/{fv}/preview")),
+            "a imagem não se serve pela rota de pré-visualização: {html}"
+        );
+        assert!(
+            !html.contains("<script>"),
+            "o alt hostil virou marcação: {html}"
+        );
     }
 }

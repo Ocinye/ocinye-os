@@ -39,6 +39,10 @@ pub const ALLOWED_CONTENT_TYPES: &[&str] = &[
     "text/x-bibtex",
     "image/png",
     "image/jpeg",
+    // WebP é um formato raster seguro e é dos três que se mostram inline
+    // ([`crate::modules::files::PREVIEWABLE_TYPES`]); sem ele, uma imagem WebP
+    // colada numa nota era recusada no carregamento, apesar de se poder mostrar.
+    "image/webp",
     "image/svg+xml",
     "image/tiff",
 ];
@@ -114,6 +118,21 @@ pub fn validate_content_type(raw: &str) -> CoreResult<String> {
 pub fn build_object_key(organisation_slug: &str, workspace_id: Uuid, object_id: Uuid) -> String {
     let shard = &object_id.simple().to_string()[..2];
     format!("{organisation_slug}/workspaces/{workspace_id}/{shard}/{object_id}")
+}
+
+/// Build the opaque object key for an owner-scoped artefact.
+///
+/// Same shape as [`build_object_key`], but keyed on the person who owns it: a
+/// personal note's image belongs to a member, not to a research workspace. Still
+/// system-generated and unrelated to the filename.
+#[must_use]
+pub fn build_object_key_personal(
+    organisation_slug: &str,
+    owner_id: Uuid,
+    object_id: Uuid,
+) -> String {
+    let shard = &object_id.simple().to_string()[..2];
+    format!("{organisation_slug}/persons/{owner_id}/{shard}/{object_id}")
 }
 
 /// SHA-256 of the given bytes, as lowercase hexadecimal.

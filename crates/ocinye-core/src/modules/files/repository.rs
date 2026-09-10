@@ -36,6 +36,61 @@ pub async fn insert_file<'e>(
     Ok(id)
 }
 
+/// Insere um ficheiro de uma pessoa — sem ambiente.
+///
+/// O dono é a autoridade; a unidade e o ambiente ficam nulos, e o `CHECK` da
+/// base garante que um ficheiro é de alguém ou de um ambiente, nunca de ninguém.
+///
+/// # Errors
+///
+/// Devolve erro quando a inserção falha.
+pub async fn insert_personal_file<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    owner_id: Uuid,
+    name: &str,
+    classification: Classification,
+) -> CoreResult<Uuid> {
+    let id = sqlx::query_scalar::<_, Uuid>(
+        "INSERT INTO files (organisation_id, owner_id, name, classification, created_by_id)
+         VALUES ($1, $2, $3, $4, $2) RETURNING id",
+    )
+    .bind(organisation_id)
+    .bind(owner_id)
+    .bind(name)
+    .bind(classification.as_str())
+    .fetch_one(executor)
+    .await?;
+    Ok(id)
+}
+
+/// O dono de um ficheiro pessoal, dentro da organização de quem pergunta.
+///
+/// Devolve `None` quando o ficheiro não existe, é de outra organização, ou não é
+/// um ficheiro pessoal (tem ambiente e não dono). A resolução da versão para o
+/// dono passa por aqui, e é por isto que conhecer um identificador de versão não
+/// abre a imagem de outra pessoa.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn personal_file_owner<'e>(
+    executor: impl PgExecutor<'e>,
+    file_id: Uuid,
+    organisation_id: Uuid,
+) -> CoreResult<Option<Uuid>> {
+    let owner: Option<Uuid> = sqlx::query_scalar(
+        "SELECT owner_id FROM files
+          WHERE id = $1 AND organisation_id = $2 AND owner_id IS NOT NULL",
+    )
+    .bind(file_id)
+    .bind(organisation_id)
+    .fetch_optional(executor)
+    .await?
+    .flatten();
+    Ok(owner)
+}
+
 /// Acrescenta uma versão, com o número que o Core determinou.
 ///
 /// # Porque a sequência vem calculada de fora
