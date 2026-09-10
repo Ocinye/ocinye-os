@@ -293,7 +293,6 @@ pub async fn create_personal(
         principal,
         store,
         organisation_slug,
-        classification,
         &request.filename,
         &request.content_type,
         request.data,
@@ -504,11 +503,14 @@ async fn guardar_bytes_personal(
     principal: &Principal,
     store: &ObjectStore,
     organisation_slug: &str,
-    classification: Classification,
     filename: &str,
     content_type: &str,
     data: Vec<u8>,
 ) -> CoreResult<BytesGuardados> {
+    // Um ficheiro pessoal é sempre INTERNAL — não há ambiente por cima, e a nota
+    // que o contém também o é. Não é um argumento porque não há escolha a fazer.
+    let classification = Classification::Internal;
+
     if data.is_empty() {
         return Err(CoreError::Validation(
             "O ficheiro carregado está vazio.".to_owned(),

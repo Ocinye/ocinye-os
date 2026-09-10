@@ -518,12 +518,8 @@ async fn authorize_referenced_files(
     doc: &super::document::NoteDocument,
 ) -> CoreResult<()> {
     for file_version_id in doc.referenced_file_versions() {
-        let seu = crate::modules::files::owns_personal_file_version(
-            &mut **tx,
-            principal,
-            file_version_id,
-        )
-        .await?;
+        let seu = crate::modules::files::owns_personal_file_version(tx, principal, file_version_id)
+            .await?;
         if !seu {
             return Err(CoreError::Validation(
                 "A nota referencia um ficheiro que não é seu.".to_owned(),

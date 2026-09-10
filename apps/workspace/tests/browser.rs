@@ -11241,13 +11241,14 @@ async fn uma_imagem_largada_numa_nota_carrega_e_fica() {
     esperar_por(&page, "Guardado").await;
     let inicio = std::time::Instant::now();
     loop {
-        let doc: Option<String> =
-            sqlx::query_scalar::<_, Option<String>>("SELECT document::text FROM notes WHERE id = $1")
-                .bind(uuid)
-                .fetch_optional(&harness.pool)
-                .await
-                .expect("consulta")
-                .flatten();
+        let doc: Option<String> = sqlx::query_scalar::<_, Option<String>>(
+            "SELECT document::text FROM notes WHERE id = $1",
+        )
+        .bind(uuid)
+        .fetch_optional(&harness.pool)
+        .await
+        .expect("consulta")
+        .flatten();
         if doc
             .as_deref()
             .is_some_and(|d| d.contains("\"image\"") && d.contains(&versao.to_string()))

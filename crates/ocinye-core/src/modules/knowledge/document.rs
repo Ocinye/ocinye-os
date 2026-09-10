@@ -612,8 +612,16 @@ mod tests {
         .expect("um bloco de imagem é válido");
 
         let referenciadas = doc.referenced_file_versions();
-        assert_eq!(referenciadas.len(), 1, "a imagem não foi contada como referência");
-        assert_eq!(referenciadas[0].to_string(), fv, "a versão referenciada não bate");
+        assert_eq!(
+            referenciadas.len(),
+            1,
+            "a imagem não foi contada como referência"
+        );
+        assert_eq!(
+            referenciadas[0].to_string(),
+            fv,
+            "a versão referenciada não bate"
+        );
     }
 
     /// O HTML derivado de uma imagem serve-a pela rota same-origin, com o alt
