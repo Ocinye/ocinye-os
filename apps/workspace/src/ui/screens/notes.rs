@@ -77,6 +77,7 @@ pub fn notes_list(
                     <p>"As suas notas. Cada nota é sua, e guarda a sua própria história."</p>
                 </div>
                 <div class="oc-head__actions">
+                    {button(Button::new("Lixo", Variant::Secondary).href("/notes/lixo"))}
                     {button(Button::new("Partilhadas comigo", Variant::Secondary).href("/notes/partilhadas"))}
                     <form method="post" action="/notes">
                         {button(Button::new("Nova nota", Variant::Gold))}
@@ -271,6 +272,70 @@ pub fn shared_notes_list(_viewer: &Viewer, payload: &Value) -> impl IntoView {
     }
 }
 
+/// O Lixo: as notas apagadas do membro, com restaurar e eliminar de vez.
+///
+/// Apagar é reversível (ADR-0413 §7): daqui uma nota volta à vida ou desaparece
+/// para sempre — e eliminar de vez é um segundo passo deliberado, não o primeiro.
+pub fn notes_trash(_viewer: &Viewer, payload: &Value) -> impl IntoView {
+    let rows = payload.as_array().cloned().unwrap_or_default();
+    let has_notes = !rows.is_empty();
+
+    view! {
+        <div class="oc-page">
+            <div class="oc-head">
+                <div class="oc-head__text">
+                    <h1>"Lixo"</h1>
+                    <p>"Notas apagadas. Restaure uma para a trazer de volta, ou elimine-a definitivamente."</p>
+                </div>
+                <div class="oc-head__actions">
+                    {button(Button::new("As minhas notas", Variant::Secondary).href("/notes"))}
+                </div>
+            </div>
+
+            {if has_notes {
+                view! {
+                    <ul class="oc-notes-trash">
+                        {rows.iter().map(|note| {
+                            let id = field(note, "id").to_owned();
+                            let titulo = {
+                                let t = field(note, "title");
+                                if t.is_empty() { "Sem título".to_owned() } else { t.to_owned() }
+                            };
+                            let restaurar = format!("/notes/{id}/restaurar");
+                            let eliminar = format!("/notes/{id}/eliminar");
+                            view! {
+                                <li class="oc-notes-trash__item">
+                                    <span class="oc-notes-trash__title">{titulo}</span>
+                                    <div class="oc-notes-trash__actions">
+                                        <form method="post" action=restaurar>
+                                            <button type="submit" class="oc-notes-trash__restore">"Restaurar"</button>
+                                        </form>
+                                        <form method="post" action=eliminar>
+                                            <button type="submit" class="oc-notes-trash__purge">"Eliminar definitivamente"</button>
+                                        </form>
+                                    </div>
+                                </li>
+                            }
+                        }).collect::<Vec<_>>()}
+                    </ul>
+                }
+                    .into_any()
+            } else {
+                empty_state(EmptyState {
+                    icon: Icon::Document,
+                    title: "O Lixo está vazio".to_owned(),
+                    body: "Nenhuma nota apagada. Quando apagar uma, ela fica aqui até a restaurar \
+                           ou eliminar definitivamente."
+                        .to_owned(),
+                    actions: Vec::new(),
+                    small: false,
+                })
+                    .into_any()
+            }}
+        </div>
+    }
+}
+
 /// A etiqueta legível de um papel de partilha.
 fn role_label(role: &str) -> &'static str {
     match role {
@@ -330,6 +395,14 @@ pub fn note_editor(
                 </div>
                 <div class="oc-head__actions">
                     {button(Button::new("Voltar às notas", Variant::Secondary).href("/notes"))}
+                    {is_owner.then(|| {
+                        let apagar = format!("/notes/{id}/apagar");
+                        view! {
+                            <form method="post" action=apagar class="oc-notes-delete">
+                                <button type="submit" class="oc-notes-delete__btn">"Apagar"</button>
+                            </form>
+                        }
+                    })}
                 </div>
             </div>
 

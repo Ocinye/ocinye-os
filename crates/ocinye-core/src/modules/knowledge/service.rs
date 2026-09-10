@@ -660,6 +660,132 @@ pub async fn list_personal_notes(
     .await
 }
 
+/// The bin of the acting member: their soft-deleted notes.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn deleted_personal_notes(
+    pool: &PgPool,
+    principal: &Principal,
+    page: PageRequest,
+) -> CoreResult<Vec<Note>> {
+    repo::list_deleted_personal_notes(pool, principal.person_id, page.limit(), page.offset()).await
+}
+
+/// Ensure a note (live or in the bin) is the caller's own, or fail closed.
+///
+/// Deleting, restoring and purging are the **owner's** prerogative — a sharee,
+/// even an editor, never bins someone else's note. Answers `NotFound` for a note
+/// that is not the caller's, so existence is not revealed.
+async fn owned_note_any(tx: &mut Tx<'_>, principal: &Principal, note_id: Uuid) -> CoreResult<Note> {
+    repo::find_note_any(&mut **tx, note_id, principal.organisation_id)
+        .await?
+        .filter(|n| n.owner_id == Some(principal.person_id))
+        .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))
+}
+
+/// Move a personal note to the bin. Owner only; reversible (ADR-0413 §7).
+///
+/// The note leaves the lists, the reads and the search index, but nothing is
+/// destroyed — it waits in the bin to be restored or purged.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] when the note is not the caller's own live note.
+pub async fn delete_personal_note(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    note_id: Uuid,
+) -> CoreResult<()> {
+    let note = owned_note_any(tx, principal, note_id).await?;
+    if !repo::soft_delete_note(&mut **tx, note.id, principal.person_id).await? {
+        // Already in the bin: nothing to do, and not an error to say so twice.
+        return Err(CoreError::NotFound("Note not found.".to_owned()));
+    }
+    // Out of the bin it is out of search: a deleted note is found by no one.
+    search::remove_entity(tx, "note", note.id).await?;
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::DELETE, "note")
+            .resource(note.id)
+            .detail("event", "soft_deleted"),
+    )
+    .await?;
+    Ok(())
+}
+
+/// Restore a personal note from the bin. Owner only.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] when the note is not the caller's, or not in the bin.
+pub async fn restore_personal_note(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    note_id: Uuid,
+) -> CoreResult<Note> {
+    let note = owned_note_any(tx, principal, note_id).await?;
+    if !repo::restore_note(&mut **tx, note.id).await? {
+        return Err(CoreError::NotFound("Note not found.".to_owned()));
+    }
+    // Back into the lists, and back into the owner's search.
+    let restored = repo::find_note(&mut **tx, note.id, principal.organisation_id)
+        .await?
+        .ok_or_else(|| CoreError::Internal("restored note vanished".to_owned()))?;
+    index_personal_note(tx, principal, &restored).await?;
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::UPDATE, "note")
+            .resource(note.id)
+            .detail("event", "restored"),
+    )
+    .await?;
+    Ok(restored)
+}
+
+/// Delete a personal note permanently, from the bin. Owner only.
+///
+/// Only a note already in the bin can be purged — permanent deletion is a second,
+/// deliberate step, never the first. The revisions and shares go with it; the
+/// referenced files do not (a file is its own institutional object, ADR-0413).
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] when the note is not the caller's, or not in the bin.
+pub async fn purge_personal_note(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    note_id: Uuid,
+) -> CoreResult<()> {
+    let note = owned_note_any(tx, principal, note_id).await?;
+    if note.deleted_at.is_none() {
+        // Purge is only ever from the bin: refuse to destroy a live note.
+        return Err(CoreError::Validation(
+            "Só uma nota no Lixo pode ser eliminada definitivamente.".to_owned(),
+        ));
+    }
+    search::remove_entity(tx, "note", note.id).await?;
+    repo::hard_delete_note(&mut **tx, note.id).await?;
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::DELETE, "note")
+            .resource(note.id)
+            .detail("event", "purged"),
+    )
+    .await?;
+    Ok(())
+}
+
 /// Move uma nota pessoal para uma pasta, ou para a raiz (`None`).
 ///
 /// Mover não é editar: não cria revisão. Valida que a nota é do membro e que a

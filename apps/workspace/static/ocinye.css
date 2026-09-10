@@ -6051,3 +6051,29 @@ select.oc-entrada {
   display: flex; align-items: center; gap: var(--oc-space-5); flex-wrap: wrap;
 }
 .oc-notes-history-actions__hint { font-size: 13px; color: var(--oc-text-secondary); }
+
+/* Notas — apagar e Lixo (fatia E). */
+.oc-notes-delete { display: inline-flex; }
+.oc-notes-delete__btn {
+  border: 1px solid var(--oc-error-border); background: var(--oc-error-bg); color: var(--oc-error-text);
+  border-radius: var(--oc-r-md); padding: 0 14px; height: 32px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.oc-notes-delete__btn:hover { background: var(--oc-error); color: var(--oc-on-navy); border-color: var(--oc-error); }
+.oc-notes-trash { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; max-width: 760px; }
+.oc-notes-trash__item {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--oc-space-4);
+  padding: var(--oc-space-4) var(--oc-space-5);
+  border: 1px solid var(--oc-border); border-radius: var(--oc-r-md); background: var(--oc-surface);
+}
+.oc-notes-trash__title { font-size: 14px; color: var(--oc-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oc-notes-trash__actions { display: flex; gap: var(--oc-space-3); flex-shrink: 0; }
+.oc-notes-trash__restore {
+  border: 1px solid var(--oc-border); background: var(--oc-surface-muted); color: var(--oc-text);
+  border-radius: var(--oc-r-sm); padding: 4px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.oc-notes-trash__restore:hover { background: var(--oc-surface-hover); }
+.oc-notes-trash__purge {
+  border: 1px solid var(--oc-error-border); background: var(--oc-error-bg); color: var(--oc-error-text);
+  border-radius: var(--oc-r-sm); padding: 4px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.oc-notes-trash__purge:hover { background: var(--oc-error); color: var(--oc-on-navy); border-color: var(--oc-error); }

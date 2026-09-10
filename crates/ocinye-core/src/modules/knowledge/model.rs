@@ -301,6 +301,8 @@ pub struct Note {
     pub created_at: DateTime<Utc>,
     /// Last change.
     pub updated_at: DateTime<Utc>,
+    /// When the note was moved to the bin, if it is there (ADR-0413 §7).
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 impl Note {

@@ -11581,3 +11581,86 @@ async fn uma_versao_antiga_de_uma_nota_restaura_se() {
     let final_page = harness.open(&format!("/notes/{note_id}")).await;
     esperar_por(&final_page, "Histórico").await;
 }
+
+/// Apagar uma nota leva-a ao Lixo, e de lá restaura-se.
+///
+/// A fatia E (ADR-0413 §7): apagar é reversível. A nota sai da lista, espera no
+/// Lixo, e restaurar traz-na de volta — sem se perder no caminho.
+#[tokio::test]
+async fn uma_nota_apagada_vai_ao_lixo_e_restaura_se() {
+    let harness = harness!();
+    let (_pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // Criar uma nota com um título distinto.
+    let page = harness.open("/notes").await;
+    esperar_por(&page, "Notas").await;
+    submit(&page, "form[action=\"/notes\"]").await;
+    let url = wait_until_left(&page, "/notes").await;
+    let note_id = url.rsplit('/').next().unwrap_or_default().to_owned();
+    let note_uuid = Uuid::parse_str(&note_id).expect("id da nota");
+    let _ = elemento(&page, "[data-oc-notes-surface] .ProseMirror").await;
+    set_field(&page, "[data-oc-notes-title]", "Nota descartavel").await;
+    esperar_por(&page, "Guardado").await;
+
+    // Apagar pelo editor.
+    let editor = harness.open(&format!("/notes/{note_id}")).await;
+    esperar_por(&editor, "Nota descartavel").await;
+    submit(
+        &editor,
+        &format!("form[action=\"/notes/{note_id}/apagar\"]"),
+    )
+    .await;
+    wait_until_left(&editor, &format!("/notes/{note_id}")).await;
+
+    // Foi para o Lixo no PostgreSQL.
+    let inicio = std::time::Instant::now();
+    loop {
+        let no_lixo: Option<bool> =
+            sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM notes WHERE id = $1")
+                .bind(note_uuid)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("consulta");
+        if no_lixo == Some(true) {
+            break;
+        }
+        assert!(inicio.elapsed() < DEADLINE, "a nota não foi para o Lixo");
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+
+    // Já não está na lista de notas vivas; está no Lixo.
+    let lista = harness.open("/notes").await;
+    esperar_por(&lista, "Notas").await;
+    let html_lista = conteudo_estavel(&lista).await;
+    assert!(
+        !html_lista.contains("Nota descartavel"),
+        "uma nota apagada continuou na lista de notas vivas"
+    );
+    let lixo = harness.open("/notes/lixo").await;
+    esperar_por(&lixo, "Nota descartavel").await;
+
+    // Restaurar do Lixo.
+    submit(
+        &lixo,
+        &format!("form[action=\"/notes/{note_id}/restaurar\"]"),
+    )
+    .await;
+
+    // Voltou à vida no PostgreSQL, e reaparece na lista.
+    let inicio = std::time::Instant::now();
+    loop {
+        let no_lixo: Option<bool> =
+            sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM notes WHERE id = $1")
+                .bind(note_uuid)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("consulta");
+        if no_lixo == Some(false) {
+            break;
+        }
+        assert!(inicio.elapsed() < DEADLINE, "a nota não foi restaurada");
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+    let de_volta = harness.open("/notes").await;
+    esperar_por(&de_volta, "Nota descartavel").await;
+}

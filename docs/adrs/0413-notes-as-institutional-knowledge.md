@@ -206,6 +206,17 @@ elimina definitivamente — e a eliminação definitiva respeita política, audi
 e as referências (uma imagem partilhada por outro recurso não desaparece só
 porque a nota desapareceu).
 
+**Emenda 2026-09-10 (fatia E — lixo).** O Lixo está entregue (migração `0037`:
+`notes.deleted_at` + `deleted_by_id`). Apagar é **do dono** e reversível: uma
+nota apagada sai da lista, da leitura (`get` devolve `NotFound`), da pesquisa
+(de-indexada) e de «partilhadas comigo», mas espera no Lixo (`GET
+/me/deleted-notes`). Restaurar (`POST /me/notes/{id}/restore`) limpa
+`deleted_at`, reindexa e **não** mexe na revisão — restaurar do Lixo não é
+editar. Eliminar definitivamente (`DELETE /me/notes/{id}/purge`) só age **a
+partir do Lixo** — é um segundo passo deliberado — e leva com ela as revisões e
+as partilhas (CASCADE), mas **não** os ficheiros referenciados: uma imagem é um
+objecto institucional próprio. Um editor partilhado não apaga a nota do dono.
+
 ### 8. Imagens e anexos são Files; o corpo referencia a versão exacta
 
 Colar uma imagem envia os bytes **pelo Core** → Object Storage → `File`+`FileVersion`,

@@ -38,6 +38,10 @@ pub const ROUTES: &[&str] = &[
     "/my-work",
     "/notes",
     "/notes/partilhadas",
+    "/notes/lixo",
+    "/notes/{note_id}/apagar",
+    "/notes/{note_id}/restaurar",
+    "/notes/{note_id}/eliminar",
     "/notes/{note_id}",
     "/notes/{note_id}/gravar",
     "/notes/{note_id}/mover",
@@ -262,7 +266,13 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/notes", get(notes_list).post(create_personal_note))
         // As notas que outra pessoa partilhou com o membro — a vista de leitura.
         .route("/notes/partilhadas", get(shared_notes_page))
+        // O Lixo: as notas apagadas, de onde se restauram ou se eliminam de vez.
+        .route("/notes/lixo", get(notes_trash_page))
         .route("/notes/{note_id}", get(note_editor))
+        // Apagar (leva ao Lixo), restaurar e eliminar definitivamente — do dono.
+        .route("/notes/{note_id}/apagar", post(delete_note_route))
+        .route("/notes/{note_id}/restaurar", post(restore_note_route))
+        .route("/notes/{note_id}/eliminar", post(purge_note_route))
         // O autosave: um POST em JSON, respondido em JSON (não uma página). A
         // fronteira same-origin protege-o como a qualquer outra escrita.
         .route("/notes/{note_id}/gravar", post(save_personal_note))
@@ -7009,6 +7019,77 @@ async fn shared_notes_page(State(state): State<WorkspaceState>, headers: HeaderM
         trail,
         ui::screens::notes::shared_notes_list(&viewer, &payload),
     )
+}
+
+/// O Lixo: as notas apagadas do membro, com restaurar e eliminar.
+async fn notes_trash_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    let payload = match required(&state, &member, "/api/v1/me/deleted-notes?page_size=100").await {
+        Ok(payload) => payload,
+        Err(failure) => return failure_response(&failure),
+    };
+    let trail = vec![Crumb::to(Screen::Notes)];
+    shell_page(
+        "Lixo",
+        &viewer,
+        Screen::Notes,
+        trail,
+        ui::screens::notes::notes_trash(&viewer, &payload),
+    )
+}
+
+/// Apaga uma nota (leva-a ao Lixo) e volta à lista. Do dono; o Core recusa a
+/// quem não o é.
+async fn delete_note_route(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(note_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let _ = api::delete(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/notes/{note_id}"),
+    )
+    .await;
+    Redirect::to("/notes").into_response()
+}
+
+/// Restaura uma nota do Lixo e volta à lista.
+async fn restore_note_route(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(note_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let _ = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/notes/{note_id}/restore"),
+        &serde_json::json!({}),
+    )
+    .await;
+    Redirect::to("/notes").into_response()
+}
+
+/// Elimina definitivamente uma nota do Lixo e fica no Lixo.
+async fn purge_note_route(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(note_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let _ = api::delete(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/notes/{note_id}/purge"),
+    )
+    .await;
+    Redirect::to("/notes/lixo").into_response()
 }
 
 /// Concede acesso a uma pessoa — formulário do dono.
