@@ -913,6 +913,131 @@ pub async fn personal_note_revisions(
     repo::list_note_revisions(pool, note_id).await
 }
 
+/// The content of one exact revision of a personal note the caller may reach.
+///
+/// Returns the title and the document as they were at that revision, so the
+/// Experience can render a read-only preview of what a restore would replay.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] when the note is not reachable by the caller, or the
+/// revision does not exist.
+pub async fn personal_note_revision_content(
+    pool: &PgPool,
+    principal: &Principal,
+    note_id: Uuid,
+    revision: i32,
+) -> CoreResult<(String, super::document::NoteDocument)> {
+    // Read access first — the same gate as the history listing.
+    get_personal_note(pool, principal, note_id).await?;
+    let content = repo::note_revision_content(pool, note_id, revision)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Revision not found.".to_owned()))?;
+    let document = content
+        .document
+        .ok_or_else(|| CoreError::NotFound("Revision has no structured content.".to_owned()))?;
+    let doc = super::document::NoteDocument::from_value(document)?;
+    Ok((content.title, doc))
+}
+
+/// Restore a personal note to an earlier revision.
+///
+/// A restore is not a rewrite of history: it **replays** the old title and
+/// document as a *new* revision (ADR-0413 §6). The revision that was current is
+/// snapshotted first, so nothing is lost, and the base revision guards against a
+/// concurrent edit exactly as an ordinary save does. Writing is required — a
+/// viewer cannot restore — and the authority is re-established in-transaction
+/// (ADR-0411), so a revoked editor cannot restore either.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] when the note or the revision is not reachable;
+/// [`CoreError::PermissionDenied`] for a read-only sharee; [`CoreError::Conflict`]
+/// on a stale base revision.
+pub async fn restore_personal_note_revision(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    note_id: Uuid,
+    target_revision: i32,
+    base_revision: i32,
+) -> CoreResult<Note> {
+    let existing = repo::find_note(&mut **tx, note_id, principal.organisation_id)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))?;
+
+    match resolve_note_access(&mut **tx, principal, &existing).await? {
+        Some(access) if access.can_write() => {}
+        Some(_) => {
+            return Err(CoreError::PermissionDenied(
+                "Esta nota foi partilhada consigo só para leitura.".to_owned(),
+            ))
+        }
+        None => return Err(CoreError::NotFound("Note not found.".to_owned())),
+    }
+
+    let content = repo::note_revision_content(&mut **tx, note_id, target_revision)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Revision not found.".to_owned()))?;
+    let document = content
+        .document
+        .ok_or_else(|| CoreError::NotFound("Revision has no structured content.".to_owned()))?;
+    let doc = super::document::NoteDocument::from_value(document)?;
+    // The referenced files were the owner's when written; re-authorise anyway,
+    // because a restore is a write and takes the same boundary as any other.
+    authorize_referenced_files(tx, principal, &doc).await?;
+    let plain = doc.plain_text();
+    let doc_value = serde_json::to_value(&doc)
+        .map_err(|_| CoreError::Internal("could not serialise the note document".to_owned()))?;
+
+    repo::snapshot_note(&mut **tx, existing.id).await?;
+
+    let restored = repo::update_note_at_revision(
+        &mut **tx,
+        existing.id,
+        base_revision,
+        content.title.trim(),
+        &plain,
+        None,
+        &doc_value,
+        super::document::SCHEMA_VERSION as i32,
+        principal.person_id,
+    )
+    .await?
+    .ok_or_else(|| {
+        CoreError::Conflict(
+            "Esta nota foi alterada por outra sessão desde que a abriu. \
+             Recarregue para ver a versão mais recente."
+                .to_owned(),
+        )
+    })?;
+
+    index_personal_note(tx, principal, &restored).await?;
+
+    outbox::emit(
+        tx,
+        event::NOTE_UPDATED,
+        "note",
+        restored.id,
+        &ids.correlation_id,
+        json!({ "owner_id": existing.owner_id, "revision": restored.revision }),
+    )
+    .await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::UPDATE, "note")
+            .resource(restored.id)
+            .detail("revision", restored.revision)
+            .detail("restored_from", target_revision.to_string()),
+    )
+    .await?;
+
+    Ok(restored)
+}
+
 /// The notes shared with the acting member — «partilhadas comigo».
 ///
 /// # Errors

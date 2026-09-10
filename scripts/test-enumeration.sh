@@ -200,7 +200,7 @@ suites() {
 # pelo Core e fica servida same-origin pela versão exacta. Uma viagem, uma marca.
 # 97 → 98 em 2026-09-10: a fatia C — escrever uma nota e encontrá-la pela
 # pesquisa, pelo corpo, com a ligação para o seu ecrã. Uma viagem, uma marca.
-viagens-de-browser|101|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|101
+viagens-de-browser|102|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|102
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
@@ -239,7 +239,11 @@ mfa-obrigatorio|3|-p ocinye-core --test mfa
 # não escreve, um editor revogado deixa de escrever, só o dono partilha, a
 # partilha não atravessa a organização, a imagem de uma nota partilhada vê-se só
 # por quem a recebeu, e «partilhadas comigo» segue a partilha viva.
-notas-pessoais|21|-p ocinye-core --test personal_notes
+# 21 → 25 em 2026-09-10: a fatia E restaura versões — repor uma versão antiga
+# repõe a estrutura (não só o texto) como revisão nova, um leitor não restaura,
+# um editor revogado não restaura, e o conteúdo de uma revisão não se lê por
+# quem não alcança a nota.
+notas-pessoais|25|-p ocinye-core --test personal_notes
 TABELA
 }
 

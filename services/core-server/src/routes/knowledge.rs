@@ -67,6 +67,16 @@ pub fn routes() -> Router<AppState> {
             "/me/notes/{note_id}/revisions",
             get(list_personal_note_revisions),
         )
+        // Uma revisão exacta — o seu conteúdo derivado, para pré-visualizar — e o
+        // restauro, que a repõe como uma revisão nova (ADR-0413 §6).
+        .route(
+            "/me/notes/{note_id}/revisions/{revision}",
+            get(get_personal_note_revision),
+        )
+        .route(
+            "/me/notes/{note_id}/revisions/{revision}/restore",
+            post(restore_personal_note_revision),
+        )
         // Mover uma nota para uma pasta não é editá-la — não cria revisão.
         .route("/me/notes/{note_id}/folder", post(move_personal_note))
         // As notas partilhadas comigo, e a gestão das partilhas de uma nota (dono).
@@ -823,6 +833,56 @@ async fn list_personal_note_revisions(
 ) -> Result<Json<Vec<knowledge::NoteRevisionMeta>>, ApiError> {
     let revisions = knowledge::personal_note_revisions(&state.pool, &principal, note_id).await?;
     Ok(Json(revisions))
+}
+
+/// One revision, rendered read-only: the title and the derived HTML of what it
+/// held. It is the preview of what a restore would replay.
+#[derive(Serialize)]
+struct NoteRevisionView {
+    revision: i32,
+    title: String,
+    html: String,
+}
+
+async fn get_personal_note_revision(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path((note_id, revision)): Path<(Uuid, i32)>,
+) -> Result<Json<NoteRevisionView>, ApiError> {
+    let (title, document) =
+        knowledge::personal_note_revision_content(&state.pool, &principal, note_id, revision)
+            .await?;
+    Ok(Json(NoteRevisionView {
+        revision,
+        title,
+        html: document.to_html(),
+    }))
+}
+
+async fn restore_personal_note_revision(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path((note_id, revision)): Path<(Uuid, i32)>,
+    Json(request): Json<RestoreNoteRequest>,
+) -> Result<Json<PersonalNoteView>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let restored = knowledge::restore_personal_note_revision(
+        &mut tx,
+        &principal,
+        &ids,
+        note_id,
+        revision,
+        request.base_revision,
+    )
+    .await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(PersonalNoteView::from(restored)))
+}
+
+#[derive(Deserialize)]
+struct RestoreNoteRequest {
+    base_revision: i32,
 }
 
 // --- Note sharing ----------------------------------------------------------
