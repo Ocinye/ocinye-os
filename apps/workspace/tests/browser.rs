@@ -11402,3 +11402,98 @@ async fn uma_nota_arruma_se_numa_pasta_pelo_editor() {
     esperar_por(&filtrada, "Plano de trabalho").await;
     esperar_por(&filtrada, &format!("/notes/{note_id}")).await;
 }
+
+/// Uma nota partilha-se com outra pessoa, que a lê — e só a lê.
+///
+/// A fatia D (ADR-0413 §9): o dono partilha a nota pelo painel do editor, e quem
+/// a recebe vê-a em «Partilhadas comigo» e abre-a numa vista de leitura — o
+/// corpo derivado pelo Core, sem editor e sem autosave. A autoridade é do Core;
+/// o Workspace só oferece o que o dono pode e mostra o que o Core devolve.
+#[tokio::test]
+async fn uma_nota_partilhada_le_se_e_so_se_le() {
+    let harness = harness!();
+    // Quem vai receber a partilha entra primeiro, para existir e ter credenciais
+    // próprias; o dono entra a seguir e fica com a sessão activa.
+    let (destinatario, cred_destinatario) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let (_dono, _cred_dono) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // O dono escreve uma nota.
+    let page = harness.open("/notes").await;
+    esperar_por(&page, "Notas").await;
+    submit(&page, "form[action=\"/notes\"]").await;
+    let url = wait_until_left(&page, "/notes").await;
+    let note_id = url.rsplit('/').next().unwrap_or_default().to_owned();
+    let note_uuid = Uuid::parse_str(&note_id).expect("id da nota");
+    let editor = elemento(&page, "[data-oc-notes-surface] .ProseMirror").await;
+    set_field(&page, "[data-oc-notes-title]", "Partilhada").await;
+    editor
+        .click()
+        .await
+        .expect("foco no editor")
+        .type_str("Um plano que vale a pena partilhar")
+        .await
+        .expect("escrever no editor");
+    esperar_por(&page, "Guardado").await;
+
+    // O dono partilha a nota, só para leitura, pelo painel do editor.
+    let painel = harness.open(&format!("/notes/{note_id}")).await;
+    esperar_por(&painel, "Partilha").await;
+    escolher(
+        &painel,
+        ".oc-notes-share__person",
+        &destinatario.to_string(),
+    )
+    .await;
+    escolher(&painel, ".oc-notes-share__role", "viewer").await;
+    submit(
+        &painel,
+        &format!("form[action=\"/notes/{note_id}/partilhar\"]"),
+    )
+    .await;
+
+    // A partilha ficou viva no PostgreSQL, no papel de leitura.
+    let inicio = std::time::Instant::now();
+    loop {
+        let papel: Option<String> = sqlx::query_scalar(
+            "SELECT role FROM note_shares
+              WHERE note_id = $1 AND person_id = $2 AND revoked_at IS NULL",
+        )
+        .bind(note_uuid)
+        .bind(destinatario)
+        .fetch_optional(&harness.pool)
+        .await
+        .expect("consulta à partilha");
+        if papel.as_deref() == Some("viewer") {
+            break;
+        }
+        assert!(
+            inicio.elapsed() < DEADLINE,
+            "a partilha não chegou ao PostgreSQL"
+        );
+        tokio::time::sleep(Duration::from_millis(120)).await;
+    }
+
+    // Quem recebeu entra e vê a nota em «Partilhadas comigo».
+    harness.login_as(&cred_destinatario).await;
+    let partilhadas = harness.open("/notes/partilhadas").await;
+    esperar_por(&partilhadas, "Partilhada").await;
+    esperar_por(&partilhadas, &format!("/notes/{note_id}")).await;
+
+    // Abrir a nota dá uma vista de leitura: o corpo derivado, e nenhum editor.
+    let leitura = harness.open(&format!("/notes/{note_id}")).await;
+    esperar_por(&leitura, "só para leitura").await;
+    esperar_por(&leitura, "Um plano que vale a pena partilhar").await;
+    let html = conteudo_estavel(&leitura).await;
+    assert!(
+        html.contains("oc-notes-reader"),
+        "a nota partilhada não abriu na vista de leitura"
+    );
+    assert!(
+        !html.contains("data-oc-notes-surface"),
+        "a vista de leitura montou o editor — quem só lê não deve poder gravar"
+    );
+    assert!(
+        !html.contains("data-oc-notes-toolbar"),
+        "a vista de leitura mostrou a barra de formatação"
+    );
+}

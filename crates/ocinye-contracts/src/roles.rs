@@ -220,6 +220,46 @@ impl WorkspaceRole {
     }
 }
 
+/// The role a note is shared with a member under (ADR-0413).
+///
+/// Two variants, on purpose: a note is either shown to someone or handed to them
+/// to edit. Anything richer — commenting, re-sharing — is not this milestone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NoteShareRole {
+    /// Reads the note; cannot change it.
+    Viewer,
+    /// Reads and edits the note's content.
+    Editor,
+}
+
+impl NoteShareRole {
+    /// Whether this role may edit the note's content.
+    #[must_use]
+    pub const fn can_write(self) -> bool {
+        matches!(self, Self::Editor)
+    }
+
+    /// Stable representation.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Viewer => "viewer",
+            Self::Editor => "editor",
+        }
+    }
+
+    /// Parse from the stable representation.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "viewer" => Self::Viewer,
+            "editor" => Self::Editor,
+            _ => return None,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,6 +269,14 @@ mod tests {
         assert!(!WorkspaceRole::Viewer.can_write());
         assert!(WorkspaceRole::Lead.can_write());
         assert!(WorkspaceRole::Member.can_write());
+    }
+
+    #[test]
+    fn a_note_editor_writes_a_viewer_does_not() {
+        assert!(NoteShareRole::Editor.can_write());
+        assert!(!NoteShareRole::Viewer.can_write());
+        assert_eq!(NoteShareRole::parse("editor"), Some(NoteShareRole::Editor));
+        assert_eq!(NoteShareRole::parse("owner"), None);
     }
 
     #[test]

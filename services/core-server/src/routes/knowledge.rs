@@ -69,6 +69,16 @@ pub fn routes() -> Router<AppState> {
         )
         // Mover uma nota para uma pasta não é editá-la — não cria revisão.
         .route("/me/notes/{note_id}/folder", post(move_personal_note))
+        // As notas partilhadas comigo, e a gestão das partilhas de uma nota (dono).
+        .route("/me/shared-notes", get(list_shared_notes))
+        .route(
+            "/me/notes/{note_id}/shares",
+            get(list_note_shares).post(share_note),
+        )
+        .route(
+            "/me/notes/{note_id}/shares/{person_id}",
+            delete(revoke_note_share),
+        )
         // As pastas pessoais, para arrumar as notas.
         .route(
             "/me/folders",
@@ -557,16 +567,33 @@ struct PersonalNoteView {
     folder_id: Option<Uuid>,
     classification: String,
     revision: i32,
+    /// How the caller reaches the note: `owner`, `editor` or `viewer`. The
+    /// Experience is read-only for a viewer.
+    access: String,
     /// The canonical structured document. `None` only for a legacy note that
     /// predates the structured body; the editor treats it as an empty document.
     document: Option<serde_json::Value>,
     schema_version: Option<i32>,
+    /// The derived, safe HTML — present only for a viewer, who reads it instead
+    /// of editing. Escaped by construction (ADR-0413); the images resolve through
+    /// the same-origin preview route.
+    html: Option<String>,
     created_at: String,
     updated_at: String,
 }
 
-impl From<knowledge::Note> for PersonalNoteView {
-    fn from(note: knowledge::Note) -> Self {
+impl PersonalNoteView {
+    /// Build the view for the caller's access. A viewer also gets the derived
+    /// read-only HTML; an owner or editor gets the document to edit.
+    fn for_access(note: knowledge::Note, access: knowledge::NoteAccess) -> Self {
+        let html = if matches!(access, knowledge::NoteAccess::Viewer) {
+            note.document
+                .as_ref()
+                .and_then(|doc| knowledge::NoteDocument::from_value(doc.clone()).ok())
+                .map(|doc| doc.to_html())
+        } else {
+            None
+        };
         Self {
             id: note.id,
             title: note.title,
@@ -574,11 +601,21 @@ impl From<knowledge::Note> for PersonalNoteView {
             folder_id: note.folder_id,
             classification: note.classification,
             revision: note.revision,
+            access: access.as_str().to_owned(),
             document: note.document,
             schema_version: note.schema_version,
+            html,
             created_at: note.created_at.to_rfc3339(),
             updated_at: note.updated_at.to_rfc3339(),
         }
+    }
+}
+
+impl From<knowledge::Note> for PersonalNoteView {
+    /// A note a writer just created or updated: the actor is the owner or an
+    /// editor, so there is no read-only HTML to derive.
+    fn from(note: knowledge::Note) -> Self {
+        Self::for_access(note, knowledge::NoteAccess::Owner)
     }
 }
 
@@ -750,8 +787,8 @@ async fn get_personal_note(
     CurrentPrincipal(principal): CurrentPrincipal,
     Path(note_id): Path<Uuid>,
 ) -> Result<Json<PersonalNoteView>, ApiError> {
-    let note = knowledge::get_personal_note(&state.pool, &principal, note_id).await?;
-    Ok(Json(PersonalNoteView::from(note)))
+    let (note, access) = knowledge::get_personal_note(&state.pool, &principal, note_id).await?;
+    Ok(Json(PersonalNoteView::for_access(note, access)))
 }
 
 async fn update_personal_note(
@@ -786,6 +823,67 @@ async fn list_personal_note_revisions(
 ) -> Result<Json<Vec<knowledge::NoteRevisionMeta>>, ApiError> {
     let revisions = knowledge::personal_note_revisions(&state.pool, &principal, note_id).await?;
     Ok(Json(revisions))
+}
+
+// --- Note sharing ----------------------------------------------------------
+
+async fn list_shared_notes(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Query(query): Query<PageQuery>,
+) -> Result<Json<Vec<PersonalNoteSummary>>, ApiError> {
+    let notes = knowledge::notes_shared_with_me(
+        &state.pool,
+        &principal,
+        page_of(query.page, query.page_size),
+    )
+    .await?;
+    Ok(Json(
+        notes.into_iter().map(PersonalNoteSummary::from).collect(),
+    ))
+}
+
+async fn list_note_shares(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(note_id): Path<Uuid>,
+) -> Result<Json<Vec<knowledge::NoteShareRow>>, ApiError> {
+    let shares = knowledge::list_personal_note_shares(&state.pool, &principal, note_id).await?;
+    Ok(Json(shares))
+}
+
+#[derive(Deserialize)]
+struct ShareNoteRequest {
+    person_id: Uuid,
+    role: String,
+}
+
+async fn share_note(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(note_id): Path<Uuid>,
+    Json(request): Json<ShareNoteRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let role = ocinye_contracts::NoteShareRole::parse(&request.role)
+        .ok_or_else(|| CoreError::Validation("Papel de partilha desconhecido.".to_owned()))?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    knowledge::share_personal_note(&mut tx, &principal, &ids, note_id, request.person_id, role)
+        .await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(serde_json::json!({ "shared": true })))
+}
+
+async fn revoke_note_share(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path((note_id, person_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    knowledge::revoke_personal_note_share(&mut tx, &principal, &ids, note_id, person_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(serde_json::json!({ "revoked": true })))
 }
 
 /// Carrega uma imagem para uma nota pessoal e devolve a sua versão de ficheiro.
@@ -855,8 +953,20 @@ async fn preview_personal_file(
 
     let store = state.store()?;
     let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
-    let vista =
-        files::preview_personal_version(&mut tx, &principal, &ids, store, version_id).await?;
+
+    // Autoriza: o dono do ficheiro, ou uma nota partilhada viva com quem pede que
+    // referencie esta versão. Como uma nota só referencia ficheiros do próprio
+    // dono, uma nota partilhada expõe exactamente as imagens que contém, e mais
+    // nenhuma (ADR-0413 §8). Recusa como «não encontrado» — não confirma que a
+    // versão existe a quem não a alcança.
+    let owns = files::owns_personal_file_version(&mut tx, &principal, version_id).await?;
+    let allowed =
+        owns || knowledge::member_can_view_note_file(&state.pool, &principal, version_id).await?;
+    if !allowed {
+        return Err(CoreError::NotFound("Versão não encontrada.".to_owned()).into());
+    }
+
+    let vista = files::read_version_preview(&mut tx, &principal, &ids, store, version_id).await?;
     tx.commit().await.map_err(CoreError::from)?;
 
     let etag = format!("\"{}\"", vista.checksum_sha256);
