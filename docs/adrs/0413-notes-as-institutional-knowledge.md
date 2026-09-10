@@ -178,13 +178,31 @@ porque a nota desapareceu).
 
 ### 8. Imagens e anexos são Files; o corpo referencia a versão exacta
 
-Colar uma imagem envia os bytes **pelo Core** (`files::create`) → Object Storage
-→ `File`+`FileVersion`, e o corpo referencia a `FileVersion` exacta, servida de
-volta pela pré-visualização same-origin do Core (`/file-versions/{id}/preview`).
-Nunca `base64` permanente no corpo, nunca uma chave de object-store na Experience,
-nunca uma URL pública. Abrir a imagem reautoriza. Anexos (PDF, documento, …)
-seguem o mesmo subsistema de Files, com o cartão a mostrar nome, tipo, tamanho e
-versão, e a abertura governada pelo Core.
+Colar uma imagem envia os bytes **pelo Core** → Object Storage → `File`+`FileVersion`,
+e o corpo referencia a `FileVersion` exacta, servida de volta pela pré-visualização
+same-origin do Core. Nunca `base64` permanente no corpo, nunca uma chave de
+object-store na Experience, nunca uma URL pública. Abrir a imagem reautoriza.
+
+**Emenda 2026-09-10 (fatia B).** A decisão original dizia `files::create`, que
+exige um `workspace_id` — e uma nota pessoal não tem ambiente. Resolve-se sem
+duplicar a primitiva: os `files` passam a servir dois donos, tal como as `notes`
+já fazem (migração `0032`). Um ficheiro é de um ambiente **ou** de uma pessoa,
+nunca de ninguém, e um `CHECK` impõe-o. Uma imagem de nota é um ficheiro
+`owner_id`-scoped, `INTERNAL` como a nota, invisível aos ecrãs institucionais de
+Ficheiros (que filtram por ambiente). O caminho pessoal é **aditivo** —
+`files::create_personal` e `files::preview_personal_version` ao lado das funções
+por ambiente, sem lhes tocar —, e a autoridade vem do dono: só o dono lê, e uma
+`FileVersion` de outra pessoa responde «não encontrado» antes de tocar nos bytes.
+Guardar uma nota resolve cada `FileVersion` que ela cita e recusa a que não for do
+dono. A imagem serve-se por `/me/files/{version_id}/preview` (o Workspace faz
+proxy same-origin para o Core), e só formatos que se mostram inline — PNG, JPEG,
+WebP — entram; um SVG é um documento com script.
+
+Anexos genéricos (PDF, documento, …) seguem o mesmo subsistema de Files, e ficam
+para uma fatia posterior: o esquema do documento já conhece o bloco de anexo para
+que entre sem redesenho. Esta emenda toca a decisão de ficheiros de
+[ADR-0204](0204-institutional-files-and-folders.md), que passa a admitir um
+ficheiro com dono e sem ambiente.
 
 ### 9. Notificação em tempo real é planeada, não inventada agora
 

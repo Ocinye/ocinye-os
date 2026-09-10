@@ -7,6 +7,27 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Imagens nas notas, servidas same-origin (fatia B) — 2026-09-10
+
+Uma nota passa a poder ter imagens. Colar, largar ou escolher uma imagem
+carrega-a **pelo Core** e o corpo da nota passa a citar a `FileVersion` exacta —
+nunca `base64` no corpo, nunca uma URL de armazenamento na Experience. A imagem
+serve-se por `/me/files/{version_id}/preview`, que o Workspace faz proxy
+same-origin para o Core; a CSP continua `img-src 'self'`, e a página nunca
+aprende onde os bytes estão.
+
+Para isto, um `File` passa a poder ser **de uma pessoa** e não só de um ambiente
+(migração `0032`, emenda à [ADR-0413](docs/adrs/0413-notes-as-institutional-knowledge.md)
+§8 e à [ADR-0204](docs/adrs/0204-institutional-files-and-folders.md)): a tabela
+`files` ganha `owner_id` e o ambiente torna-se opcional, com um `CHECK` a manter
+cada ficheiro de alguém ou de um ambiente, nunca de ninguém. O caminho é aditivo
+— as funções por ambiente ficam intactas — e a autoridade de um ficheiro pessoal
+vem do dono: só o dono o lê, e uma versão de outra pessoa responde «não
+encontrado» antes de tocar nos bytes. Guardar uma nota resolve cada imagem que
+ela cita e recusa a que não for do dono. Só imagens que se mostram inline (PNG,
+JPEG, WebP) entram — um SVG é um documento com script. Anexos genéricos ficam
+para uma fatia posterior; o esquema já os conhece.
+
 ### Notas pessoais, com um editor estruturado (fatia A) — 2026-09-10
 
 Uma nota deixou de ser só um artefacto de um Research Workspace: passa a poder
