@@ -7,6 +7,25 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Histórico e restauro das notas pessoais (fatia E) — 2026-09-10
+
+Uma nota guarda a sua história, e uma versão antiga pode agora **restaurar-se**.
+Cada gravação já deixava uma revisão imutável (fatia A); esta fatia expõe-nas: o
+editor mostra um painel de **histórico** — as versões, da mais recente para a
+mais antiga, cada uma com quem a escreveu (por nome) e quando —, e cada versão
+abre numa **vista de leitura** com a opção de a restaurar.
+
+Restaurar não apaga história: repõe o conteúdo da versão antiga como uma
+**revisão nova** (ADR-0413 §6), preservando as posteriores. Repõe a **estrutura**
+e não só o texto, porque a revisão guarda o documento estruturado. O restauro é
+uma escrita: leva a mesma troca condicionada pela revisão base do autosave (um
+`409` em conflito) e a mesma reavaliação de autoridade na transacção (ADR-0411) —
+um leitor não restaura, e um editor revogado deixa de restaurar. A
+pré-visualização de uma revisão (`GET /me/notes/{id}/revisions/{revision}`)
+devolve o HTML derivado dessa revisão exacta; o conteúdo de uma revisão não se lê
+por quem não alcança a nota. Emenda à
+[ADR-0413](docs/adrs/0413-notes-as-institutional-knowledge.md).
+
 ### Partilha das notas pessoais, por pessoa e por papel (fatia D) — 2026-09-10
 
 Uma nota pessoal pode agora **partilhar-se** com outra pessoa da instituição, só

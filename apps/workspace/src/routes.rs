@@ -43,6 +43,8 @@ pub const ROUTES: &[&str] = &[
     "/notes/{note_id}/mover",
     "/notes/{note_id}/partilhar",
     "/notes/{note_id}/revogar/{person_id}",
+    "/notes/{note_id}/revisoes/{revision}",
+    "/notes/{note_id}/revisoes/{revision}/restaurar",
     "/notes/folders",
     "/notes/folders/{folder_id}/apagar",
     "/me/files",
@@ -272,6 +274,15 @@ pub fn router(state: WorkspaceState) -> Router {
         .route(
             "/notes/{note_id}/revogar/{person_id}",
             post(revoke_note_share_route),
+        )
+        // Histórico: pré-visualizar uma revisão e restaurá-la como revisão nova.
+        .route(
+            "/notes/{note_id}/revisoes/{revision}",
+            get(note_revision_preview),
+        )
+        .route(
+            "/notes/{note_id}/revisoes/{revision}/restaurar",
+            post(restore_note_revision_route),
         )
         // Pastas: criar (formulário) e apagar (formulário).
         .route("/notes/folders", post(create_note_folder))
@@ -6867,19 +6878,36 @@ async fn note_editor(
         Ok(note) => note,
         Err(failure) => return failure_response(&failure),
     };
-    let is_owner = note.get("access").and_then(Value::as_str) == Some("owner");
+    let access = note
+        .get("access")
+        .and_then(Value::as_str)
+        .unwrap_or("owner");
+    let is_owner = access == "owner";
+    let can_write = matches!(access, "owner" | "editor");
     // As pastas, o painel de partilha e a lista de pessoas só interessam ao
     // dono, e só se procuram para ele — secundárias todas: sem elas a nota abre
-    // à mesma. Um editor ou um leitor não recebe nenhuma.
+    // à mesma. O histórico interessa a quem pode escrever (restaura). Um leitor
+    // não recebe nenhuma destas.
     let shares_path = format!("/api/v1/me/notes/{note_id}/shares");
-    let (folders, shares, people) = if is_owner {
-        tokio::join!(
+    let revisions_path = format!("/api/v1/me/notes/{note_id}/revisions");
+    let (folders, shares, people, revisions) = if is_owner {
+        let (folders, shares, people, revisions) = tokio::join!(
             optional(&state, &member, "/api/v1/me/folders"),
             optional(&state, &member, &shares_path),
             optional(&state, &member, "/api/v1/people?page_size=200"),
+            optional(&state, &member, &revisions_path),
+        );
+        (folders, shares, people, revisions)
+    } else if can_write {
+        // Um editor partilhado: sem pastas nem partilha, mas com histórico.
+        (
+            Value::Null,
+            Value::Null,
+            Value::Null,
+            optional(&state, &member, &revisions_path).await,
         )
     } else {
-        (Value::Null, Value::Null, Value::Null)
+        (Value::Null, Value::Null, Value::Null, Value::Null)
     };
     let trail = vec![Crumb::to(Screen::Notes)];
     shell_page(
@@ -6887,8 +6915,82 @@ async fn note_editor(
         &viewer,
         Screen::Notes,
         trail,
-        ui::screens::notes::note_editor(&viewer, &note, &folders, &shares, &people),
+        ui::screens::notes::note_editor(&viewer, &note, &folders, &shares, &people, &revisions),
     )
+}
+
+/// A pré-visualização de uma revisão antiga de uma nota, em leitura, com a opção
+/// de a restaurar. O corpo é o HTML que o Core derivou dessa revisão exacta.
+async fn note_revision_preview(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path((note_id, revision)): Path<(Uuid, i64)>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    // A revisão pedida, e a nota corrente — esta para saber a revisão base que o
+    // restauro apresenta, e se quem vê pode escrever.
+    let rev_path = format!("/api/v1/me/notes/{note_id}/revisions/{revision}");
+    let note_path = format!("/api/v1/me/notes/{note_id}");
+    let (rev, note) = tokio::join!(
+        required(&state, &member, &rev_path),
+        required(&state, &member, &note_path),
+    );
+    let rev = match rev {
+        Ok(rev) => rev,
+        Err(failure) => return failure_response(&failure),
+    };
+    let note = match note {
+        Ok(note) => note,
+        Err(failure) => return failure_response(&failure),
+    };
+    let can_write = matches!(
+        note.get("access").and_then(Value::as_str),
+        Some("owner") | Some("editor")
+    );
+    let base_revision = note.get("revision").and_then(Value::as_i64).unwrap_or(0);
+    let trail = vec![Crumb::to(Screen::Notes)];
+    shell_page(
+        "Revisão",
+        &viewer,
+        Screen::Notes,
+        trail,
+        ui::screens::notes::revision_preview(
+            &viewer,
+            &note_id.to_string(),
+            &rev,
+            base_revision,
+            can_write,
+        ),
+    )
+}
+
+/// O formulário de restauro de uma revisão.
+#[derive(Deserialize)]
+struct RestoreForm {
+    base_revision: i64,
+}
+
+/// Restaura uma revisão e volta ao editor. O Core recusa a quem só tem leitura,
+/// e responde `409` se a nota mudou entretanto — aqui volta-se ao editor, que
+/// mostra a versão corrente.
+async fn restore_note_revision_route(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path((note_id, revision)): Path<(Uuid, i64)>,
+    Form(form): Form<RestoreForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let body = serde_json::json!({ "base_revision": form.base_revision });
+    let _ = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/notes/{note_id}/revisions/{revision}/restore"),
+        &body,
+    )
+    .await;
+    Redirect::to(&format!("/notes/{note_id}")).into_response()
 }
 
 /// A lista das notas que outra pessoa partilhou com o membro.
