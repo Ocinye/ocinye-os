@@ -33,9 +33,10 @@ descrevem o mesmo sistema: quando divergirem, é defeito, e corrige-se nas duas.
 > Factos verificados, não intenções. Não uses esta secção para roadmap.
 
 **Verificado em 2026-08-28**; o estado de deploy e de MFA re-verificado em
-2026-09-09, contra a produção a correr. Cada afirmação abaixo é verificável
-correndo `./scripts/verify.sh` no repositório — e as de produção, contra o
-servidor.
+2026-09-09, contra a produção a correr; o **módulo de Notas** e as contagens
+desta secção re-verificados em **2026-09-10** no repositório (não deployado).
+Cada afirmação abaixo é verificável correndo `./scripts/verify.sh` no
+repositório — e as de produção, contra o servidor.
 
 Os **números** desta secção não são escritos à mão: saem de
 `./scripts/repository-facts.sh`, que os deriva da árvore e só lê. Já houve aqui
@@ -51,7 +52,7 @@ sem que nada falhe.
   3 serviços (`core-server`, `worker`, `node-agent`) e 1 aplicação
   (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 150 caminhos e 177 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 175 caminhos e 207 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -83,8 +84,8 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED` e em produção** (`os.ocinye.com`, atrás da
-  Cloudflare, do mesmo SHA que o Core). 72 ecrãs em Leptos SSR,
+- **Ocinye Workspace: `IMPLEMENTED` e em produção** 80 ecrãs em Leptos SSR,
+  servido de `os.ocinye.com`, atrás da Cloudflare, do mesmo SHA que o Core;
   sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
   pelas permissões que o Core calcula.
 - **Ocinye Mail: `IMPLEMENTED`, `NOT CONFIGURED`.** Módulo do Core com
@@ -97,7 +98,7 @@ sem que nada falhe.
   A interface distingue as ausências em vez de mostrar uma caixa vazia. **A
   ingestão é periódica**: o worker percorre as caixas ligadas, e uma que recuse
   não interrompe as outras — a razão fica guardada na caixa que falhou.
-- **30 migrations**, aplicáveis de base vazia; 75 tabelas.
+- **38 migrations**, aplicáveis de base vazia; 76 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -151,6 +152,23 @@ sem que nada falhe.
   **Não existe ainda** OCR, um provider de embeddings real integrado, nem a
   superfície de resposta do Prompt — a execução de inferência é `PLANNED` e
   precede esta milestone.
+- **Notas: `IMPLEMENTED`, o módulo completo** ([ADR-0413](docs/adrs/0413-notes-as-institutional-knowledge.md)).
+  Uma nota é conhecimento **pessoal** do membro — a `notes` serve dono e ambiente
+  sem os confundir. O corpo canónico é um **documento estruturado versionado**
+  (`NoteDocument`), de que se derivam o HTML e o texto; um editor vendorizado
+  same-origin (ProseMirror sob `script-src 'self'`) monta-se sobre ele, e o
+  autosave só diz «Guardado» quando o Core confirma, recusando o *clobber* com a
+  revisão base. **Imagens** são `FileVersion` servidas same-origin pela versão
+  exacta; **pastas**, **etiquetas** e **pesquisa** são owner-scoped, e uma nota
+  `INTERNAL` de uma pessoa não aparece na pesquisa de outra. **Partilha** por
+  pessoa e papel (*viewer*/*editor*), com a autoridade reestabelecida a cada
+  gravação (ADR-0411): um leitor não escreve, um editor revogado deixa de
+  escrever. **Histórico** de revisões imutáveis com autor, e **restauro** que
+  repõe a estrutura como revisão nova. **Lixo** reversível (soft delete), com
+  eliminação definitiva só a partir dele. **Actividade** owner-scoped do ciclo de
+  vida. **Aviso em tempo real** de que uma nota partilhada mudou, que informa e
+  **nunca sobrepõe**. Toda a fronteira de segurança está provada por reversão —
+  IDOR, `PlatformAdmin`, autoridade obsoleta, XSS no corpo derivado.
 - **Agentes de IA: `IMPLEMENTED`.** Definíveis e persistidos **sem nó de IA**;
   o estado de execução é derivado da disponibilidade real.
 - **Agentic Control Plane: `IMPLEMENTED`, sem inferência.** Capability Registry
@@ -209,8 +227,8 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **57 ADRs** em `docs/adrs/`, **10 runbooks** em `docs/runbooks/`,
-  **41 READMEs**, `docs/` povoado — incluindo
+- **61 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
+  **65 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -229,14 +247,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1382 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1501 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **483 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **543 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

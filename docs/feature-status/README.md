@@ -47,7 +47,8 @@ Os quatro primeiros são apurados em tempo real pelo Core e servidos em
 | **Reprodução entre execuções como aresta** | verbo na matriz, nenhuma operação o escreve | — | n/a | `PLANNED` |
 | **Protótipos, publicações, propriedade intelectual** | — | — | n/a | `PLANNED` |
 | **Bibliografia** | implementado | lista | n/a | `AVAILABLE` |
-| **Notas, documentos, datasets** | implementado | leitura | MinIO local; nenhum armazenamento institucional | `AVAILABLE` em desenvolvimento |
+| **Notas pessoais** — editor estruturado, imagens, pastas, etiquetas, pesquisa, partilha, histórico, lixo, actividade, aviso em tempo real | implementado, o módulo completo ([ADR-0413](../adrs/0413-notes-as-institutional-knowledge.md)) | ecrã Notas em PESSOAL: editor, autosave, partilha, histórico com restauro, Lixo, actividade; vista de leitura para quem recebe | MinIO local (imagens); Redis (aviso em tempo real, degrada em silêncio) | `AVAILABLE` |
+| **Documentos, datasets** | implementado | leitura | MinIO local; nenhum armazenamento institucional | `AVAILABLE` em desenvolvimento |
 | **Ficheiros institucionais** — `File`, versões, pastas | implementado | ecrã Ficheiros: navegação, pastas, largar, carregar, detalhes, histórico, descarga | MinIO local; nenhum armazenamento institucional | `AVAILABLE` em desenvolvimento |
 | **Pré-visualização de conteúdo** | n/a | texto; os outros tipos declaram-se não pré-visualizáveis | decisão de CSP por tomar para imagens | `AVAILABLE` (parcial, por desenho) |
 | **Extracção de conteúdo** — PDF e texto | worker, via outbox; estados separados do armazenamento | estado no ecrã do ficheiro | MinIO local | `AVAILABLE` em desenvolvimento |

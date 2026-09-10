@@ -353,3 +353,23 @@ com revisão base (§5), não pelo tempo real. CRDT continua a não entrar.
 Só se declara `OCINYE_NOTES_READY` quando toda a Definition of Done (#130 do
 pedido) se verifica, e `OCINYE_STABLE_PRE_AI_READY` continua retido até Notas e
 todos os outros módulos estarem certificados.
+
+**Estado 2026-09-10 — `OCINYE_NOTES_READY`, no repositório.** As fatias A–E estão
+entregues e mergeadas (A #55, B #56, C #57/#58/#59, D #60, E #61/#64/#65/#66). A
+fatia **F** não é uma entrega à parte: as viagens de browser E2E e as reversões de
+segurança foram escritas com cada fatia — o corpo derivado que escapa por
+construção, o IDOR, o `PlatformAdmin`, a autoridade obsoleta, a imagem de nota
+partilhada, o *lost update* pela revisão base —, e a postura de segurança está
+registada no [modelo de ameaças](../threat-model/README.md#notas); a
+acessibilidade é imposta pelos guardas de contrato de ecrã e de desenho. A fatia
+**G** verifica-se aqui: a `Secção 1` do `CLAUDE.md` declara o módulo `CURRENT`, a
+matriz de estado di-lo, `./scripts/verify.sh` corre verde, e a continuidade das
+tabelas novas (`note_shares`, `deleted_at`, `activity_entries` owner-scoped) é
+imposta pelo portão de continuidade — que passa — e viaja no snapshot do
+PostgreSQL (ADR-0700), sem chave nova nem decisão de continuidade em falta.
+
+O que **fica fora** do repositório, e por isso não se declara feito: a
+**integração de produção** (deploy do SHA de `origin/main`) e uma **prova de
+backup/restauro disparada em produção** dependem de infraestrutura, e são passos
+operacionais. `OCINYE_STABLE_PRE_AI_READY` **continua retido**: certifica o
+sistema inteiro, não um módulo, e a inferência real ainda não existe.
