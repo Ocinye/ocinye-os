@@ -53,7 +53,7 @@ pub use mail::{
 };
 pub use page::{Page, PageRequest};
 pub use research::{IdeaState, ProjectState, TaskState, WorkspaceKind};
-pub use roles::{InstitutionalPosition, TechnicalRole, UnitRole, WorkspaceRole};
+pub use roles::{InstitutionalPosition, NoteShareRole, TechnicalRole, UnitRole, WorkspaceRole};
 pub use storage::{MigrationState, Residency};
 pub use system_capability::{
     MailReachability, MemberMailboxState, SystemCapabilities, SystemCapability,

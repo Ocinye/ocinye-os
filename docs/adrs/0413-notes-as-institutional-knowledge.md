@@ -148,6 +148,23 @@ Não há partilha pública nem «qualquer pessoa com a ligação» na v1. Só me
 autenticados da Ocinye, e colaboradores externos só dentro das políticas que já
 existem.
 
+**Emenda 2026-09-10 (fatia D).** A partilha está entregue. A tabela é
+`note_shares (note_id, person_id, role, granted_by_id, granted_at, revoked_at,
+revoked_by_id)` — `person_id`, e não o `subject_id` que a decisão original
+escreveu, porque é uma pessoa que recebe, e o nome di-lo (migração 0035, com um
+índice único parcial `WHERE revoked_at IS NULL`, pelo que só há uma partilha viva
+por pessoa e nota). Só o dono partilha e revoga — quem recebeu não re-partilha —,
+e a partilha nunca atravessa a organização. A autoridade de escrita
+reestabelece-se **dentro da transacção da gravação** (`resolve_note_access`,
+ADR-0411): um *viewer* que tente gravar é recusado com «só para leitura», e um
+*editor* revogado deixa de gravar na operação seguinte, mesmo com a nota aberta.
+A imagem de uma nota partilhada — que é um ficheiro do **dono** — vê-se por quem
+a recebeu e por mais ninguém: a pré-visualização autoriza `dono ∨ a versão é
+citada por uma nota partilhada viva com quem pede` (§8). No Workspace, o dono vê
+o painel de partilha no editor; quem recebe leitura vê o corpo derivado, sem
+editor nem autosave; quem recebe edição vê a superfície de edição sem o painel de
+partilha nem o selector de pasta — arrumar e partilhar são do dono.
+
 ### 5. O save é uma troca condicionada pela revisão base (sem clobber silencioso)
 
 `update_note` deixa de ser uma escrita cega. Passa a receber a **revisão base**

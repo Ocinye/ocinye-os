@@ -1099,21 +1099,19 @@ pub async fn preview_version(
 /// [`CoreError::NotFound`] quando a versão não é do dono, [`CoreError::Validation`]
 /// quando o tipo não se mostra inline ou é grande de mais, e erro de
 /// armazenamento quando o objecto não está disponível.
-pub async fn preview_personal_version(
+pub async fn read_version_preview(
     tx: &mut Tx<'_>,
     principal: &Principal,
     ids: &CorrelationIds,
     store: &ObjectStore,
     version_id: Uuid,
 ) -> CoreResult<InlinePreview> {
+    // No ownership check here — the caller authorises (the file's owner, or a
+    // note shared with them referencing it), because a shared note's image is
+    // owned by the note's owner, not by the viewer. See the route.
     let versao = repo::find_version(&mut **tx, version_id)
         .await?
         .ok_or_else(|| CoreError::NotFound("Versão não encontrada.".to_owned()))?;
-    let owner =
-        repo::personal_file_owner(&mut **tx, versao.file_id, principal.organisation_id).await?;
-    if owner != Some(principal.person_id) {
-        return Err(CoreError::NotFound("Versão não encontrada.".to_owned()));
-    }
 
     let linha: Option<(String, String, i64, String)> = sqlx::query_as(
         "SELECT o.object_key, o.content_type, o.size_bytes, o.checksum_sha256

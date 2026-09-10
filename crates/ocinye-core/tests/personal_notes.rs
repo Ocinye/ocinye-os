@@ -146,7 +146,7 @@ async fn o_dono_le_a_sua_nota() {
     let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
 
     let nota = nova_nota(&pool, &dono, &ids, "A minha nota", "Rede de sensores").await;
-    let lida = knowledge::get_personal_note(&pool, &dono, nota.id)
+    let (lida, _acesso) = knowledge::get_personal_note(&pool, &dono, nota.id)
         .await
         .expect("o dono lê a sua nota");
 
@@ -281,7 +281,7 @@ async fn uma_revisao_base_obsoleta_nao_sobrepoe() {
     }
 
     // E a nota ficou com o trabalho da primeira, não com o da segunda.
-    let final_ = knowledge::get_personal_note(&pool, &dono, nota.id)
+    let (final_, _acesso) = knowledge::get_personal_note(&pool, &dono, nota.id)
         .await
         .expect("lê");
     assert_eq!(
@@ -703,11 +703,352 @@ async fn apagar_uma_pasta_desarruma_as_notas_mas_nao_as_perde() {
     tx.commit().await.expect("commit");
 
     // A nota sobrevive, agora sem pasta.
-    let lida = knowledge::get_personal_note(&pool, &ana, nota.id)
+    let (lida, _acesso) = knowledge::get_personal_note(&pool, &ana, nota.id)
         .await
         .expect("a nota sobreviveu");
     assert_eq!(
         lida.folder_id, None,
         "a nota ficou presa a uma pasta apagada"
+    );
+}
+
+// ── Fatia D — partilha ─────────────────────────────────────────────────────
+//
+// Partilhar uma nota é dar a outra pessoa uma janela para um objecto que
+// continua a ser do dono. A autoridade de escrita de quem a recebe é
+// reestabelecida a cada gravação, à fonte viva (ADR-0411): revogar fecha a
+// janela na gravação seguinte, e não só na próxima sessão.
+
+use ocinye_contracts::NoteShareRole;
+
+/// Partilha `note_id` do `dono` com `pessoa`, no papel dado.
+async fn partilha(
+    pool: &PgPool,
+    dono: &Principal,
+    ids: &CorrelationIds,
+    note_id: Uuid,
+    pessoa: Uuid,
+    papel: NoteShareRole,
+) {
+    let mut tx = pool.begin().await.expect("tx");
+    knowledge::share_personal_note(&mut tx, dono, ids, note_id, pessoa, papel)
+        .await
+        .expect("a partilha do dono avança");
+    tx.commit().await.expect("commit");
+}
+
+/// Quem recebe uma nota só para leitura não a grava.
+///
+/// O Core reestabelece o acesso dentro da transacção da gravação; um leitor não
+/// escreve, e a recusa é explícita — «só para leitura» —, não um «não
+/// encontrado», porque a partilha tornou a existência legítima para esta pessoa.
+#[tokio::test]
+async fn um_leitor_nao_edita_uma_nota_partilhada() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let leitor = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Partilhada", "para ler").await;
+    partilha(
+        &pool,
+        &dono,
+        &ids,
+        nota.id,
+        leitor.person_id,
+        NoteShareRole::Viewer,
+    )
+    .await;
+
+    // Lê — e o acesso resolvido diz «viewer».
+    let (_lida, acesso) = knowledge::get_personal_note(&pool, &leitor, nota.id)
+        .await
+        .expect("o leitor lê a nota partilhada");
+    assert_eq!(
+        acesso.as_str(),
+        "viewer",
+        "o acesso não foi resolvido como leitura"
+    );
+
+    // Mas não grava.
+    let mut tx = pool.begin().await.expect("tx");
+    let escrita = knowledge::update_personal_note(
+        &mut tx,
+        &leitor,
+        &ids,
+        nota.id,
+        edita(nota.revision, "Partilhada", doc("o leitor tentou escrever")),
+    )
+    .await;
+    match escrita {
+        Err(CoreError::PermissionDenied(_)) => {}
+        outro => panic!("um leitor a gravar devia dar PermissionDenied; veio {outro:?}"),
+    }
+}
+
+/// Quem recebe uma nota para edição grava-a — e a revisão avança.
+#[tokio::test]
+async fn um_editor_partilhado_grava_a_nota() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let editor = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Colaborada", "início").await;
+    partilha(
+        &pool,
+        &dono,
+        &ids,
+        nota.id,
+        editor.person_id,
+        NoteShareRole::Editor,
+    )
+    .await;
+
+    let (_lida, acesso) = knowledge::get_personal_note(&pool, &editor, nota.id)
+        .await
+        .expect("o editor lê a nota");
+    assert_eq!(
+        acesso.as_str(),
+        "editor",
+        "o acesso não foi resolvido como edição"
+    );
+
+    let mut tx = pool.begin().await.expect("tx");
+    let avancada = knowledge::update_personal_note(
+        &mut tx,
+        &editor,
+        &ids,
+        nota.id,
+        edita(nota.revision, "Colaborada", doc("o editor contribuiu")),
+    )
+    .await
+    .expect("o editor partilhado grava");
+    tx.commit().await.expect("commit");
+    assert_ne!(
+        avancada.revision, nota.revision,
+        "a gravação do editor não avançou a revisão"
+    );
+}
+
+/// Revogar fecha a janela na gravação seguinte — autoridade fresca (ADR-0411).
+///
+/// O editor grava enquanto tem o acesso; o dono revoga; a gravação seguinte do
+/// mesmo editor é recusada, porque a autoridade se reestabelece à fonte viva
+/// dentro da transacção, e não se herda de a sessão ter começado com acesso.
+#[tokio::test]
+async fn um_editor_revogado_deixa_de_gravar() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let editor = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Revogável", "início").await;
+    partilha(
+        &pool,
+        &dono,
+        &ids,
+        nota.id,
+        editor.person_id,
+        NoteShareRole::Editor,
+    )
+    .await;
+
+    // O editor grava uma vez, com acesso vivo.
+    let mut tx = pool.begin().await.expect("tx");
+    let primeira = knowledge::update_personal_note(
+        &mut tx,
+        &editor,
+        &ids,
+        nota.id,
+        edita(nota.revision, "Revogável", doc("enquanto podia")),
+    )
+    .await
+    .expect("o editor grava com acesso vivo");
+    tx.commit().await.expect("commit");
+
+    // O dono revoga.
+    let mut tx = pool.begin().await.expect("tx");
+    knowledge::revoke_personal_note_share(&mut tx, &dono, &ids, nota.id, editor.person_id)
+        .await
+        .expect("o dono revoga a partilha");
+    tx.commit().await.expect("commit");
+
+    // A gravação seguinte do mesmo editor é recusada — a janela fechou.
+    let mut tx = pool.begin().await.expect("tx");
+    let depois = knowledge::update_personal_note(
+        &mut tx,
+        &editor,
+        &ids,
+        nota.id,
+        edita(primeira.revision, "Revogável", doc("já não pode")),
+    )
+    .await;
+    match depois {
+        Err(CoreError::NotFound(_)) => {}
+        outro => panic!("um editor revogado a gravar devia dar NotFound; veio {outro:?}"),
+    }
+}
+
+/// Só o dono partilha: quem recebeu não re-partilha.
+#[tokio::test]
+async fn partilhar_exige_ser_dono() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let editor = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let terceiro = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Não re-partilhável", "corpo").await;
+    partilha(
+        &pool,
+        &dono,
+        &ids,
+        nota.id,
+        editor.person_id,
+        NoteShareRole::Editor,
+    )
+    .await;
+
+    // O editor, que tem escrita, não tem partilha: re-partilhar é recusado, e
+    // com «não encontrado» — a autoridade de partilha é só do dono.
+    let mut tx = pool.begin().await.expect("tx");
+    let tentativa = knowledge::share_personal_note(
+        &mut tx,
+        &editor,
+        &ids,
+        nota.id,
+        terceiro.person_id,
+        NoteShareRole::Viewer,
+    )
+    .await;
+    match tentativa {
+        Err(CoreError::NotFound(_)) => {}
+        outro => panic!("um não-dono a partilhar devia dar NotFound; veio {outro:?}"),
+    }
+}
+
+/// Uma partilha nunca atravessa a organização.
+#[tokio::test]
+async fn partilhar_nao_atravessa_organizacao() {
+    let Some(pool) = pool().await else { return };
+    let org_a = organisation(&pool).await;
+    let org_b = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org_a, &[TechnicalRole::ResearchMember]).await;
+    let estranho = person(&pool, org_b, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Só cá dentro", "corpo").await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    let tentativa = knowledge::share_personal_note(
+        &mut tx,
+        &dono,
+        &ids,
+        nota.id,
+        estranho.person_id,
+        NoteShareRole::Viewer,
+    )
+    .await;
+    match tentativa {
+        Err(CoreError::Validation(_)) => {}
+        outro => panic!("partilhar com outra organização devia dar Validation; veio {outro:?}"),
+    }
+}
+
+/// Uma nota partilhada expõe a sua imagem a quem a recebe, e a mais ninguém.
+///
+/// A imagem de uma nota é um ficheiro do **dono**. Partilhar a nota abre
+/// exactamente as imagens que ela cita — a quem a recebeu — e nenhuma outra: um
+/// membro qualquer, sem partilha, não vê a imagem (ADR-0413 §8).
+#[tokio::test]
+async fn uma_imagem_de_nota_partilhada_ve_se_pelo_destinatario() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let leitor = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let estranho = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    // Uma imagem do dono, e uma nota do dono que a cita.
+    let versao = seed_personal_image(&pool, org, dono.person_id).await;
+    let documento = json!({
+        "schema_version": 1,
+        "blocks": [{ "type": "image", "file_version_id": versao, "alt": "diagrama" }]
+    });
+    let mut tx = pool.begin().await.expect("tx");
+    let nota = knowledge::create_personal_note(&mut tx, &dono, &ids, "Com imagem", documento)
+        .await
+        .expect("cria a nota com imagem");
+    tx.commit().await.expect("commit");
+
+    partilha(
+        &pool,
+        &dono,
+        &ids,
+        nota.id,
+        leitor.person_id,
+        NoteShareRole::Viewer,
+    )
+    .await;
+
+    assert!(
+        knowledge::member_can_view_note_file(&pool, &leitor, versao)
+            .await
+            .expect("consulta"),
+        "quem recebeu a nota não vê a imagem que ela cita"
+    );
+    assert!(
+        !knowledge::member_can_view_note_file(&pool, &estranho, versao)
+            .await
+            .expect("consulta"),
+        "um membro sem partilha vê a imagem de uma nota alheia"
+    );
+}
+
+/// A lista «partilhadas comigo» mostra o que é vivo, e esquece o revogado.
+#[tokio::test]
+async fn a_lista_partilhadas_comigo_segue_a_partilha_viva() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let leitor = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Aparece e some", "corpo").await;
+    partilha(
+        &pool,
+        &dono,
+        &ids,
+        nota.id,
+        leitor.person_id,
+        NoteShareRole::Viewer,
+    )
+    .await;
+
+    let vivas = knowledge::notes_shared_with_me(&pool, &leitor, PageRequest::default())
+        .await
+        .expect("lista");
+    assert!(
+        vivas.iter().any(|n| n.id == nota.id),
+        "a nota partilhada não apareceu em «partilhadas comigo»"
+    );
+
+    let mut tx = pool.begin().await.expect("tx");
+    knowledge::revoke_personal_note_share(&mut tx, &dono, &ids, nota.id, leitor.person_id)
+        .await
+        .expect("revoga");
+    tx.commit().await.expect("commit");
+
+    let depois = knowledge::notes_shared_with_me(&pool, &leitor, PageRequest::default())
+        .await
+        .expect("lista");
+    assert!(
+        !depois.iter().any(|n| n.id == nota.id),
+        "uma nota revogada continuou em «partilhadas comigo»"
     );
 }

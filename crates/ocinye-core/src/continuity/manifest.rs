@@ -169,6 +169,7 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     ("sources", Comparacao::Identidades),
     ("notes", Comparacao::Identidades),
     ("note_revisions", Comparacao::Identidades),
+    ("note_shares", Comparacao::Identidades),
     ("documents", Comparacao::Identidades),
     // Um ficheiro institucional e as suas versões. As identidades viajam
     // porque são o que a proveniência aponta: um resultado sustentado pela

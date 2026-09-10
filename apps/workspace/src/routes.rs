@@ -37,9 +37,12 @@ pub const ROUTES: &[&str] = &[
     "/",
     "/my-work",
     "/notes",
+    "/notes/partilhadas",
     "/notes/{note_id}",
     "/notes/{note_id}/gravar",
     "/notes/{note_id}/mover",
+    "/notes/{note_id}/partilhar",
+    "/notes/{note_id}/revogar/{person_id}",
     "/notes/folders",
     "/notes/folders/{folder_id}/apagar",
     "/me/files",
@@ -255,12 +258,21 @@ pub fn router(state: WorkspaceState) -> Router {
         // Notas pessoais. A criação e a lista partilham o caminho: `GET /notes`
         // mostra as notas, `POST /notes` cria uma e leva o membro ao editor.
         .route("/notes", get(notes_list).post(create_personal_note))
+        // As notas que outra pessoa partilhou com o membro — a vista de leitura.
+        .route("/notes/partilhadas", get(shared_notes_page))
         .route("/notes/{note_id}", get(note_editor))
         // O autosave: um POST em JSON, respondido em JSON (não uma página). A
         // fronteira same-origin protege-o como a qualquer outra escrita.
         .route("/notes/{note_id}/gravar", post(save_personal_note))
         // Mover uma nota para uma pasta: fetch em JSON, do editor.
         .route("/notes/{note_id}/mover", post(move_personal_note))
+        // Partilha: conceder acesso a uma pessoa e revogá-lo. Formulários, do
+        // dono; o Core recusa a quem não é dono da nota.
+        .route("/notes/{note_id}/partilhar", post(share_note_route))
+        .route(
+            "/notes/{note_id}/revogar/{person_id}",
+            post(revoke_note_share_route),
+        )
         // Pastas: criar (formulário) e apagar (formulário).
         .route("/notes/folders", post(create_note_folder))
         .route(
@@ -6837,6 +6849,13 @@ async fn create_personal_note(State(state): State<WorkspaceState>, headers: Head
 }
 
 /// O editor de uma nota.
+///
+/// A vista depende do acesso que o Core resolve — `owner`, `editor` ou `viewer`
+/// (ADR-0413 §9). O dono vê o painel de partilha e o selector de pasta; um
+/// editor vê a superfície de edição sem eles; quem só tem leitura vê o corpo
+/// derivado, sem editor. As pastas, as partilhas e as pessoas só se procuram
+/// quando servem a vista, e nunca são a autoridade — o Core recusa o que não
+/// deve.
 async fn note_editor(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
@@ -6848,17 +6867,91 @@ async fn note_editor(
         Ok(note) => note,
         Err(failure) => return failure_response(&failure),
     };
-    // As pastas para o selector — secundárias: sem elas, a nota abre sem o
-    // selector de pasta, mas abre.
-    let folders = optional(&state, &member, "/api/v1/me/folders").await;
+    let is_owner = note.get("access").and_then(Value::as_str) == Some("owner");
+    // As pastas, o painel de partilha e a lista de pessoas só interessam ao
+    // dono, e só se procuram para ele — secundárias todas: sem elas a nota abre
+    // à mesma. Um editor ou um leitor não recebe nenhuma.
+    let shares_path = format!("/api/v1/me/notes/{note_id}/shares");
+    let (folders, shares, people) = if is_owner {
+        tokio::join!(
+            optional(&state, &member, "/api/v1/me/folders"),
+            optional(&state, &member, &shares_path),
+            optional(&state, &member, "/api/v1/people?page_size=200"),
+        )
+    } else {
+        (Value::Null, Value::Null, Value::Null)
+    };
     let trail = vec![Crumb::to(Screen::Notes)];
     shell_page(
         "Nota",
         &viewer,
         Screen::Notes,
         trail,
-        ui::screens::notes::note_editor(&viewer, &note, &folders),
+        ui::screens::notes::note_editor(&viewer, &note, &folders, &shares, &people),
     )
+}
+
+/// A lista das notas que outra pessoa partilhou com o membro.
+async fn shared_notes_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    let payload = match required(&state, &member, "/api/v1/me/shared-notes?page_size=100").await {
+        Ok(payload) => payload,
+        Err(failure) => return failure_response(&failure),
+    };
+    let trail = vec![Crumb::to(Screen::Notes)];
+    shell_page(
+        "Partilhadas comigo",
+        &viewer,
+        Screen::Notes,
+        trail,
+        ui::screens::notes::shared_notes_list(&viewer, &payload),
+    )
+}
+
+/// Concede acesso a uma pessoa — formulário do dono.
+#[derive(Deserialize)]
+struct ShareNoteForm {
+    person_id: String,
+    role: String,
+}
+
+/// Partilha uma nota com uma pessoa e volta ao editor. O Core recusa se quem
+/// pede não for o dono, ou se o papel for desconhecido.
+async fn share_note_route(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(note_id): Path<Uuid>,
+    Form(form): Form<ShareNoteForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let body = serde_json::json!({ "person_id": form.person_id, "role": form.role });
+    let _ = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/notes/{note_id}/shares"),
+        &body,
+    )
+    .await;
+    Redirect::to(&format!("/notes/{note_id}")).into_response()
+}
+
+/// Revoga o acesso de uma pessoa e volta ao editor.
+async fn revoke_note_share_route(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path((note_id, person_id)): Path<(Uuid, Uuid)>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let _ = api::delete(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/notes/{note_id}/shares/{person_id}"),
+    )
+    .await;
+    Redirect::to(&format!("/notes/{note_id}")).into_response()
 }
 
 /// O autosave de uma nota — em JSON, para o editor no browser.

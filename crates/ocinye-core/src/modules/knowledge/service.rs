@@ -613,11 +613,18 @@ async fn index_personal_note(
     principal: &Principal,
     note: &Note,
 ) -> CoreResult<()> {
+    // O dono do índice é o dono da **nota**, e não quem grava: um editor com
+    // partilha grava o conteúdo, mas a nota continua a aparecer na pesquisa do
+    // dono, não na dele (a pesquisa de notas partilhadas é de uma fatia futura).
+    // A organização é a mesma — uma partilha vive dentro de uma organização.
+    let Some(owner_id) = note.owner_id else {
+        return Ok(());
+    };
     search::index_entity(
         tx,
         search::IndexRequest {
             organisation_id: principal.organisation_id,
-            owner_id: Some(principal.person_id),
+            owner_id: Some(owner_id),
             unit_id: None,
             workspace_id: None,
             entity_type: "note",
@@ -697,24 +704,86 @@ pub async fn move_personal_note(
     Ok(())
 }
 
-/// Load one personal note the acting member owns.
+/// How a principal reaches a note: as its owner, or through a live share.
 ///
-/// Returns [`CoreError::NotFound`] both when the note does not exist and when it
-/// is not theirs — the two are deliberately indistinguishable, so a member does
-/// not learn that a note exists by guessing identifiers.
+/// A note is the owner's, or shared with the caller as `Editor` (reads and
+/// writes) or `Viewer` (reads only). Anyone else has no access at all — the
+/// classification and membership clauses never let a `PlatformAdmin` in, and a
+/// linked privileged identity is its own person and inherits nothing (ADR-0413).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoteAccess {
+    /// The note belongs to the caller.
+    Owner,
+    /// Shared with the caller to read and edit.
+    Editor,
+    /// Shared with the caller to read only.
+    Viewer,
+}
+
+impl NoteAccess {
+    /// Whether this access may change the note's content.
+    #[must_use]
+    pub const fn can_write(self) -> bool {
+        matches!(self, Self::Owner | Self::Editor)
+    }
+
+    /// The stable word for the access, for a client to branch its Experience.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Owner => "owner",
+            Self::Editor => "editor",
+            Self::Viewer => "viewer",
+        }
+    }
+}
+
+/// Resolve the caller's access to a note: owner, or a live share, or nothing.
+///
+/// Read **now**, against the live share row — not from a resolved session — so a
+/// revoked share is gone the instant it is revoked (ADR-0411).
+async fn resolve_note_access<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+    principal: &Principal,
+    note: &Note,
+) -> CoreResult<Option<NoteAccess>> {
+    if note.owner_id == Some(principal.person_id) {
+        return Ok(Some(NoteAccess::Owner));
+    }
+    Ok(
+        match repo::note_share_role(executor, note.id, principal.person_id)
+            .await?
+            .as_deref()
+        {
+            Some("editor") => Some(NoteAccess::Editor),
+            Some("viewer") => Some(NoteAccess::Viewer),
+            _ => None,
+        },
+    )
+}
+
+/// Load one personal note the caller may reach — as owner or through a share.
+///
+/// Returns [`CoreError::NotFound`] both when the note does not exist and when the
+/// caller reaches it by nothing — the two are deliberately indistinguishable, so
+/// a member does not learn a note exists by guessing identifiers. Also returns
+/// **how** they reach it, so the Experience can be read-only for a viewer.
 ///
 /// # Errors
 ///
-/// [`CoreError::NotFound`] when absent or not the caller's.
+/// [`CoreError::NotFound`] when absent or not reachable by the caller.
 pub async fn get_personal_note(
     pool: &PgPool,
     principal: &Principal,
     note_id: Uuid,
-) -> CoreResult<Note> {
-    repo::find_note(pool, note_id, principal.organisation_id)
+) -> CoreResult<(Note, NoteAccess)> {
+    let note = repo::find_note(pool, note_id, principal.organisation_id)
         .await?
-        .filter(|n| n.owner_id == Some(principal.person_id))
-        .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))
+        .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))?;
+    let access = resolve_note_access(pool, principal, &note)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))?;
+    Ok((note, access))
 }
 
 /// The fields a personal-note edit carries.
@@ -755,8 +824,21 @@ pub async fn update_personal_note(
 ) -> CoreResult<Note> {
     let existing = repo::find_note(&mut **tx, note_id, principal.organisation_id)
         .await?
-        .filter(|n| n.owner_id == Some(principal.person_id))
         .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))?;
+
+    // A autoridade reavalia-se **aqui**, dentro da transacção que grava (ADR-0411):
+    // um editor a quem revogaram a partilha entre abrir e gravar já não a alcança,
+    // e um viewer não escreve. A recusa de escrita é distinta de «não existe» —
+    // quem lê sabe que a nota existe.
+    match resolve_note_access(&mut **tx, principal, &existing).await? {
+        Some(access) if access.can_write() => {}
+        Some(_) => {
+            return Err(CoreError::PermissionDenied(
+                "Esta nota foi partilhada consigo só para leitura.".to_owned(),
+            ))
+        }
+        None => return Err(CoreError::NotFound("Note not found.".to_owned())),
+    }
 
     let title = edit.title.trim();
     if title.is_empty() {
@@ -815,19 +897,160 @@ pub async fn update_personal_note(
     Ok(updated)
 }
 
-/// The revision history of a personal note the caller owns.
+/// The revision history of a personal note the caller may reach.
 ///
 /// # Errors
 ///
-/// [`CoreError::NotFound`] when absent or not the caller's.
+/// [`CoreError::NotFound`] when absent or not reachable by the caller.
 pub async fn personal_note_revisions(
     pool: &PgPool,
     principal: &Principal,
     note_id: Uuid,
 ) -> CoreResult<Vec<repo::NoteRevisionMeta>> {
-    // Confirm ownership before revealing anything about the note's history.
+    // Confirm access before revealing anything about the note's history — an
+    // owner or a sharee (viewer or editor) reads it; anyone else gets NotFound.
     get_personal_note(pool, principal, note_id).await?;
     repo::list_note_revisions(pool, note_id).await
+}
+
+/// The notes shared with the acting member — «partilhadas comigo».
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn notes_shared_with_me(
+    pool: &PgPool,
+    principal: &Principal,
+    page: PageRequest,
+) -> CoreResult<Vec<Note>> {
+    repo::list_notes_shared_with(pool, principal.person_id, page.limit(), page.offset()).await
+}
+
+/// Share a note with another member, as viewer or editor. Owner only.
+///
+/// Re-sharing changes the role rather than stacking a second live share. A note
+/// cannot be shared with someone outside the organisation, nor with its own
+/// owner (that means nothing).
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] when the note is not the caller's; [`CoreError::Validation`]
+/// when the target is not a member of the organisation or is the owner.
+pub async fn share_personal_note(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    note_id: Uuid,
+    person_id: Uuid,
+    role: ocinye_contracts::NoteShareRole,
+) -> CoreResult<()> {
+    // Only the owner shares — a sharee cannot re-share.
+    let note = repo::find_note(&mut **tx, note_id, principal.organisation_id)
+        .await?
+        .filter(|n| n.owner_id == Some(principal.person_id))
+        .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))?;
+
+    if person_id == principal.person_id {
+        return Err(CoreError::Validation(
+            "A nota já é sua; não precisa de a partilhar consigo.".to_owned(),
+        ));
+    }
+    // The target must be a real member of the same organisation — a share never
+    // reaches across organisations, and never names a person who is not here.
+    let target_org: Option<Uuid> =
+        sqlx::query_scalar("SELECT organisation_id FROM people WHERE id = $1")
+            .bind(person_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    if target_org != Some(principal.organisation_id) {
+        return Err(CoreError::Validation(
+            "Essa pessoa não está nesta organização.".to_owned(),
+        ));
+    }
+
+    repo::upsert_note_share(tx, note.id, person_id, role.as_str(), principal.person_id).await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::MEMBERSHIP_CHANGE, "note")
+            .resource(note.id)
+            .detail("shared_with", person_id.to_string())
+            .detail("role", role.as_str()),
+    )
+    .await?;
+    Ok(())
+}
+
+/// Revoke a member's share on a note. Owner only.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] when the note is not the caller's or there was no live
+/// share to revoke.
+pub async fn revoke_personal_note_share(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    note_id: Uuid,
+    person_id: Uuid,
+) -> CoreResult<()> {
+    let note = repo::find_note(&mut **tx, note_id, principal.organisation_id)
+        .await?
+        .filter(|n| n.owner_id == Some(principal.person_id))
+        .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))?;
+
+    let revoked =
+        repo::revoke_note_share(&mut **tx, note.id, person_id, principal.person_id).await?;
+    if !revoked {
+        return Err(CoreError::NotFound("Partilha não encontrada.".to_owned()));
+    }
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::MEMBERSHIP_CHANGE, "note")
+            .resource(note.id)
+            .detail("revoked_from", person_id.to_string()),
+    )
+    .await?;
+    Ok(())
+}
+
+/// The members a note is shared with. Owner only.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] when the note is not the caller's.
+pub async fn list_personal_note_shares(
+    pool: &PgPool,
+    principal: &Principal,
+    note_id: Uuid,
+) -> CoreResult<Vec<repo::NoteShareRow>> {
+    repo::find_note(pool, note_id, principal.organisation_id)
+        .await?
+        .filter(|n| n.owner_id == Some(principal.person_id))
+        .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))?;
+    repo::list_note_shares(pool, note_id).await
+}
+
+/// May this member view the bytes of a note's image?
+///
+/// Owner of the file, or the file is referenced by a note shared live with them.
+/// Because a note only ever references its **owner's** files, a shared note
+/// exposes exactly the images it contains, and no others (ADR-0413 §8).
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn member_can_view_note_file(
+    pool: &PgPool,
+    principal: &Principal,
+    file_version_id: Uuid,
+) -> CoreResult<bool> {
+    repo::shared_note_references_version(pool, principal.person_id, file_version_id).await
 }
 
 /// A file as it arrived from a caller, before validation.

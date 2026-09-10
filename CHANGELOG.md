@@ -7,6 +7,30 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Partilha das notas pessoais, por pessoa e por papel (fatia D) — 2026-09-10
+
+Uma nota pessoal pode agora **partilhar-se** com outra pessoa da instituição, só
+para leitura ou também para edição. A tabela `note_shares` (migração `0035`)
+guarda a partilha por pessoa e por papel (`viewer`/`editor`), com um índice único
+parcial que garante uma só partilha viva por pessoa e nota; revogar preenche
+`revoked_at`/`revoked_by_id` sem apagar o histórico. Só o **dono** partilha e
+revoga — quem recebeu não re-partilha —, e a partilha nunca atravessa a
+organização.
+
+A autoridade de escrita reestabelece-se **a cada gravação**, à fonte viva
+([ADR-0411](docs/adrs/0411-execution-time-principal-freshness.md)): um *viewer*
+que tente gravar é recusado com «só para leitura», e um *editor* revogado deixa de
+gravar na operação seguinte, mesmo com a nota aberta. A imagem de uma nota
+partilhada — que é um ficheiro do dono — vê-se por quem a recebeu e por mais
+ninguém: a pré-visualização autoriza o dono ou quem tem a nota que a cita
+partilhada viva.
+
+No Workspace, o editor ganha um painel de partilha (só o dono o vê), a lista de
+notas ganha «Partilhadas comigo», e quem recebe leitura abre a nota numa vista de
+leitura — o corpo derivado que o Core escapou por construção, sem editor nem
+autosave. Emenda à
+[ADR-0413](docs/adrs/0413-notes-as-institutional-knowledge.md).
+
 ### Pastas para as notas pessoais (fatia C) — 2026-09-10
 
 As notas pessoais podem agora arrumar-se em **pastas**. Os `folders` ganham o

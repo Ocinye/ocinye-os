@@ -488,6 +488,191 @@ pub async fn set_note_folder<'e>(
     Ok(done.rows_affected() > 0)
 }
 
+// ── Partilha de notas ───────────────────────────────────────────────────
+
+/// Um destinatário de uma partilha viva: quem, com que papel, desde quando.
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+pub struct NoteShareRow {
+    /// A pessoa com quem se partilhou.
+    pub person_id: Uuid,
+    /// O nome dessa pessoa, para a lista de destinatários.
+    pub person_name: String,
+    /// `viewer` ou `editor`.
+    pub role: String,
+    /// Quando a partilha foi concedida.
+    pub granted_at: DateTime<Utc>,
+}
+
+/// Partilha uma nota com uma pessoa, ou muda-lhe o papel.
+///
+/// Revoga qualquer partilha viva anterior da mesma pessoa e insere uma nova —
+/// assim mudar de `viewer` para `editor` não deixa duas linhas vivas, e o índice
+/// único de partilha viva é respeitado.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn upsert_note_share(
+    executor: &mut sqlx::PgConnection,
+    note_id: Uuid,
+    person_id: Uuid,
+    role: &str,
+    granted_by: Uuid,
+) -> CoreResult<()> {
+    sqlx::query(
+        "UPDATE note_shares SET revoked_at = now(), revoked_by_id = $3
+          WHERE note_id = $1 AND person_id = $2 AND revoked_at IS NULL",
+    )
+    .bind(note_id)
+    .bind(person_id)
+    .bind(granted_by)
+    .execute(&mut *executor)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO note_shares (note_id, person_id, role, granted_by_id)
+         VALUES ($1, $2, $3, $4)",
+    )
+    .bind(note_id)
+    .bind(person_id)
+    .bind(role)
+    .bind(granted_by)
+    .execute(&mut *executor)
+    .await?;
+    Ok(())
+}
+
+/// Revoga a partilha viva de uma pessoa sobre uma nota. Devolve se revogou.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn revoke_note_share<'e>(
+    executor: impl PgExecutor<'e>,
+    note_id: Uuid,
+    person_id: Uuid,
+    revoked_by: Uuid,
+) -> CoreResult<bool> {
+    let done = sqlx::query(
+        "UPDATE note_shares SET revoked_at = now(), revoked_by_id = $3
+          WHERE note_id = $1 AND person_id = $2 AND revoked_at IS NULL",
+    )
+    .bind(note_id)
+    .bind(person_id)
+    .bind(revoked_by)
+    .execute(executor)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// O papel vivo de uma pessoa sobre uma nota, se houver — a autoridade da
+/// partilha, lida agora.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn note_share_role<'e>(
+    executor: impl PgExecutor<'e>,
+    note_id: Uuid,
+    person_id: Uuid,
+) -> CoreResult<Option<String>> {
+    let role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM note_shares
+          WHERE note_id = $1 AND person_id = $2 AND revoked_at IS NULL",
+    )
+    .bind(note_id)
+    .bind(person_id)
+    .fetch_optional(executor)
+    .await?;
+    Ok(role)
+}
+
+/// Os destinatários vivos de uma nota.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_note_shares<'e>(
+    executor: impl PgExecutor<'e>,
+    note_id: Uuid,
+) -> CoreResult<Vec<NoteShareRow>> {
+    let shares = sqlx::query_as::<_, NoteShareRow>(
+        "SELECT s.person_id, p.full_name AS person_name, s.role, s.granted_at
+           FROM note_shares s
+           JOIN people p ON p.id = s.person_id
+          WHERE s.note_id = $1 AND s.revoked_at IS NULL
+          ORDER BY lower(p.full_name)",
+    )
+    .bind(note_id)
+    .fetch_all(executor)
+    .await?;
+    Ok(shares)
+}
+
+/// As notas vivas partilhadas com uma pessoa — «partilhadas comigo».
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_notes_shared_with<'e>(
+    executor: impl PgExecutor<'e>,
+    person_id: Uuid,
+    limit: i64,
+    offset: i64,
+) -> CoreResult<Vec<Note>> {
+    // As colunas qualificam-se com o alias da nota: `note_shares` também tem uma
+    // coluna `id`, e um `id` sem prefixo seria ambíguo neste JOIN.
+    let colunas: String = NOTE_COLUMNS
+        .split(',')
+        .map(|c| format!("n.{}", c.trim()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let notes = sqlx::query_as::<_, Note>(&format!(
+        "SELECT {colunas} FROM notes n
+           JOIN note_shares s ON s.note_id = n.id
+          WHERE s.person_id = $1 AND s.revoked_at IS NULL
+          ORDER BY n.updated_at DESC
+          LIMIT $2 OFFSET $3"
+    ))
+    .bind(person_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(executor)
+    .await?;
+    Ok(notes)
+}
+
+/// Uma versão de ficheiro é referenciada por uma nota partilhada viva com esta
+/// pessoa?
+///
+/// A pré-visualização de uma imagem numa nota partilhada passa por aqui: como as
+/// notas só referenciam ficheiros do próprio dono ([`super::service`]), uma nota
+/// partilhada expõe ao destinatário exactamente as imagens que ela contém, e mais
+/// nenhuma.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn shared_note_references_version<'e>(
+    executor: impl PgExecutor<'e>,
+    person_id: Uuid,
+    file_version_id: Uuid,
+) -> CoreResult<bool> {
+    let referencia = serde_json::json!([{ "file_version_id": file_version_id.to_string() }]);
+    let existe: Option<bool> = sqlx::query_scalar(
+        "SELECT TRUE FROM notes n
+           JOIN note_shares s ON s.note_id = n.id
+          WHERE s.person_id = $1 AND s.revoked_at IS NULL
+            AND n.document -> 'blocks' @> $2
+          LIMIT 1",
+    )
+    .bind(person_id)
+    .bind(referencia)
+    .fetch_optional(executor)
+    .await?;
+    Ok(existe.unwrap_or(false))
+}
+
 /// One row of a note's revision history: which revision, by whom, and when.
 #[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
 pub struct NoteRevisionMeta {

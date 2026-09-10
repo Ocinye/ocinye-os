@@ -77,6 +77,7 @@ pub fn notes_list(
                     <p>"As suas notas. Cada nota é sua, e guarda a sua própria história."</p>
                 </div>
                 <div class="oc-head__actions">
+                    {button(Button::new("Partilhadas comigo", Variant::Secondary).href("/notes/partilhadas"))}
                     <form method="post" action="/notes">
                         {button(Button::new("Nova nota", Variant::Gold))}
                     </form>
@@ -227,13 +228,83 @@ fn updated_label(iso: &str) -> String {
     }
 }
 
+/// A lista das notas partilhadas com o membro — as que são de outra pessoa.
+///
+/// Abrir uma leva a `/notes/{id}`, e é lá que o Core resolve o acesso: leitura
+/// ou edição. Esta lista não decide nada — só mostra o que já foi partilhado.
+pub fn shared_notes_list(_viewer: &Viewer, payload: &Value) -> impl IntoView {
+    let rows = payload.as_array().cloned().unwrap_or_default();
+    let has_notes = !rows.is_empty();
+
+    view! {
+        <div class="oc-page">
+            <div class="oc-head">
+                <div class="oc-head__text">
+                    <h1>"Partilhadas comigo"</h1>
+                    <p>"Notas que outra pessoa partilhou consigo. Cada uma continua a ser dela."</p>
+                </div>
+                <div class="oc-head__actions">
+                    {button(Button::new("As minhas notas", Variant::Secondary).href("/notes"))}
+                </div>
+            </div>
+
+            {if has_notes {
+                view! {
+                    <div class="oc-notes-list">
+                        {rows.iter().map(note_card).collect::<Vec<_>>()}
+                    </div>
+                }
+                    .into_any()
+            } else {
+                empty_state(EmptyState {
+                    icon: Icon::Document,
+                    title: "Ainda não há notas partilhadas".to_owned(),
+                    body: "Quando alguém partilhar uma nota consigo, ela aparece aqui — para \
+                           ler, ou para editar, conforme o acesso que lhe deram."
+                        .to_owned(),
+                    actions: Vec::new(),
+                    small: false,
+                })
+                    .into_any()
+            }}
+        </div>
+    }
+}
+
+/// A etiqueta legível de um papel de partilha.
+fn role_label(role: &str) -> &'static str {
+    match role {
+        "editor" => "Edição",
+        _ => "Leitura",
+    }
+}
+
 /// O editor de uma nota.
 ///
 /// A `note` é a `PersonalNoteView` do Core: traz o `document` estruturado
-/// canónico, a revisão que a próxima gravação apresenta como `base_revision`, e
-/// o título. O documento viaja num atributo de dados — o browser descodifica o
-/// valor, e não há como escapar de um `</script>` porque não há bloco inline.
-pub fn note_editor(_viewer: &Viewer, note: &Value, folders: &Value) -> impl IntoView {
+/// canónico, a revisão que a próxima gravação apresenta como `base_revision`, o
+/// título e o `access` — `owner`, `editor` ou `viewer` (ADR-0413 §9). O
+/// documento viaja num atributo de dados — o browser descodifica o valor, e não
+/// há como escapar de um `</script>` porque não há bloco inline.
+///
+/// Quem só tem leitura não recebe editor nenhum: vê o corpo derivado que o Core
+/// escapou por construção. Um editor recebe a superfície de edição, mas não o
+/// painel de partilha nem o selector de pasta — arrumar e partilhar são do dono.
+pub fn note_editor(
+    _viewer: &Viewer,
+    note: &Value,
+    folders: &Value,
+    shares: &Value,
+    people: &Value,
+) -> impl IntoView {
+    let access = field(note, "access");
+    let is_viewer = access == "viewer";
+    let is_owner = access == "owner";
+
+    if is_viewer {
+        return shared_note_reader(note).into_any();
+    }
+
     let id = field(note, "id").to_owned();
     let title = field(note, "title").to_owned();
     let revision = note.get("revision").and_then(Value::as_i64).unwrap_or(0);
@@ -261,6 +332,12 @@ pub fn note_editor(_viewer: &Viewer, note: &Value, folders: &Value) -> impl Into
                 </div>
             </div>
 
+            {(!is_owner).then(|| view! {
+                <div class="oc-notes-shared-banner">
+                    "Esta nota foi partilhada consigo. Pode editá-la; o dono continua a ser quem a criou."
+                </div>
+            })}
+
             <div
                 class="oc-notes-editor"
                 data-oc-notes-editor=""
@@ -277,37 +354,190 @@ pub fn note_editor(_viewer: &Viewer, note: &Value, folders: &Value) -> impl Into
                     aria-label="Título da nota"
                     autocomplete="off"
                 />
-                <input
-                    class="oc-notes-tags-input"
-                    data-oc-notes-tags=""
-                    type="text"
-                    value=tags
-                    placeholder="Etiquetas, separadas por vírgulas"
-                    aria-label="Etiquetas da nota"
-                    autocomplete="off"
-                />
-                <select
-                    class="oc-notes-folder-select"
-                    data-oc-notes-folder=""
-                    data-move-url=move_url
-                    aria-label="Pasta da nota"
-                >
-                    <option value="" selected=current_folder.is_empty()>"Sem pasta"</option>
-                    {folder_rows.iter().map(|folder| {
-                        let fid = field(folder, "id").to_owned();
-                        let fname = field(folder, "name").to_owned();
-                        let selected = fid == current_folder;
-                        view! { <option value=fid selected=selected>{fname}</option> }
-                    }).collect::<Vec<_>>()}
-                </select>
+                // Etiquetas e pasta são de quem arruma as suas notas — o dono.
+                // Um editor edita o conteúdo, não a organização do dono.
+                {is_owner.then(|| view! {
+                    <input
+                        class="oc-notes-tags-input"
+                        data-oc-notes-tags=""
+                        type="text"
+                        value=tags.clone()
+                        placeholder="Etiquetas, separadas por vírgulas"
+                        aria-label="Etiquetas da nota"
+                        autocomplete="off"
+                    />
+                    <select
+                        class="oc-notes-folder-select"
+                        data-oc-notes-folder=""
+                        data-move-url=move_url.clone()
+                        aria-label="Pasta da nota"
+                    >
+                        <option value="" selected=current_folder.is_empty()>"Sem pasta"</option>
+                        {folder_rows.iter().map(|folder| {
+                            let fid = field(folder, "id").to_owned();
+                            let fname = field(folder, "name").to_owned();
+                            let selected = fid == current_folder;
+                            view! { <option value=fid selected=selected>{fname}</option> }
+                        }).collect::<Vec<_>>()}
+                    </select>
+                })}
                 <div class="oc-notes-toolbar" data-oc-notes-toolbar="" role="toolbar" aria-label="Formatação"></div>
                 <div class="oc-notes-surface" data-oc-notes-surface=""></div>
                 <div class="oc-notes-status" data-oc-notes-status="" aria-live="polite"></div>
             </div>
 
+            {is_owner.then(|| share_panel(&id, shares, people))}
+
             // O editor vendorizado, same-origin (CSP script-src 'self'). Só esta
             // página o carrega; monta-se sozinho sobre o elemento acima.
             <script src="/static/notes-editor.js" defer></script>
         </div>
+    }
+    .into_any()
+}
+
+/// A vista de leitura de uma nota partilhada — sem editor.
+///
+/// O corpo é o HTML que o Core derivou e escapou por construção (`to_html`),
+/// e as imagens servem-se pela mesma rota same-origin do editor, que o Core
+/// autoriza a quem a nota foi partilhada. Nenhuma peça de edição é montada.
+fn shared_note_reader(note: &Value) -> impl IntoView {
+    let title = {
+        let t = field(note, "title");
+        if t.is_empty() {
+            "Sem título".to_owned()
+        } else {
+            t.to_owned()
+        }
+    };
+    let html = field(note, "html").to_owned();
+    let tags = tags_of(note);
+
+    view! {
+        <div class="oc-page">
+            <div class="oc-head">
+                <div class="oc-head__text">
+                    <h1>{title}</h1>
+                </div>
+                <div class="oc-head__actions">
+                    {button(Button::new("Voltar", Variant::Secondary).href("/notes/partilhadas"))}
+                </div>
+            </div>
+
+            <div class="oc-notes-shared-banner">
+                "Esta nota foi partilhada consigo só para leitura."
+            </div>
+
+            {(!tags.is_empty()).then(|| view! {
+                <div class="oc-note-card__tags">
+                    {tags.iter().map(|tag| view! {
+                        <span class="oc-tag">{tag.clone()}</span>
+                    }).collect::<Vec<_>>()}
+                </div>
+            })}
+
+            // O corpo derivado, escapado pelo Core. O `inner_html` não abre
+            // caminho a script: `to_html` só emite marcação de uma lista fechada
+            // de blocos, e a CSP do Workspace continua `script-src 'self'`.
+            <div class="oc-notes-reader" inner_html=html></div>
+        </div>
+    }
+}
+
+/// O painel de partilha de uma nota — só o dono o vê.
+///
+/// Concede acesso a uma pessoa (leitura ou edição) e revoga o que já concedeu.
+/// A lista de pessoas exclui já quem tem partilha viva, para não oferecer uma
+/// segunda concessão à mesma pessoa. O Core é a autoridade: recusa quem não é
+/// dono, e recusa partilhar com quem não pertence à instituição.
+fn share_panel(note_id: &str, shares: &Value, people: &Value) -> impl IntoView {
+    let share_rows = shares.as_array().cloned().unwrap_or_default();
+    let already: Vec<String> = share_rows
+        .iter()
+        .map(|s| field(s, "person_id").to_owned())
+        .collect();
+
+    let candidates: Vec<(String, String)> = people
+        .get("items")
+        .and_then(Value::as_array)
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|p| {
+                    let id = field(p, "id");
+                    if id.is_empty() || already.iter().any(|a| a == id) {
+                        return None;
+                    }
+                    let name = {
+                        let n = field(p, "full_name");
+                        if n.is_empty() {
+                            "—"
+                        } else {
+                            n
+                        }
+                    };
+                    let email = field(p, "email");
+                    Some((id.to_owned(), format!("{name} · {email}")))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let share_url = format!("/notes/{note_id}/partilhar");
+    let has_shares = !share_rows.is_empty();
+    let can_share = !candidates.is_empty();
+    let note_id = note_id.to_owned();
+
+    view! {
+        <section class="oc-notes-share">
+            <h2 class="oc-notes-share__title">"Partilha"</h2>
+            <p class="oc-notes-share__hint">
+                "Dê a uma pessoa acesso a esta nota — só de leitura, ou também de edição."
+            </p>
+
+            {if can_share {
+                view! {
+                    <form class="oc-notes-share__form" method="post" action=share_url>
+                        <select name="person_id" class="oc-notes-share__person" aria-label="Pessoa" required>
+                            {candidates.into_iter().map(|(id, label)| view! {
+                                <option value=id>{label}</option>
+                            }).collect::<Vec<_>>()}
+                        </select>
+                        <select name="role" class="oc-notes-share__role" aria-label="Acesso">
+                            <option value="viewer">"Leitura"</option>
+                            <option value="editor">"Edição"</option>
+                        </select>
+                        <button type="submit" class="oc-notes-share__submit">"Partilhar"</button>
+                    </form>
+                }
+                    .into_any()
+            } else {
+                view! {
+                    <p class="oc-notes-share__empty">
+                        "Não há mais ninguém com quem partilhar esta nota."
+                    </p>
+                }
+                    .into_any()
+            }}
+
+            {has_shares.then(|| view! {
+                <ul class="oc-notes-share__list">
+                    {share_rows.iter().map(|share| {
+                        let pid = field(share, "person_id").to_owned();
+                        let name = field(share, "person_name").to_owned();
+                        let role = role_label(field(share, "role"));
+                        let revoke_url = format!("/notes/{note_id}/revogar/{pid}");
+                        view! {
+                            <li class="oc-notes-share__item">
+                                <span class="oc-notes-share__name">{name}</span>
+                                <span class="oc-notes-share__badge">{role}</span>
+                                <form method="post" action=revoke_url class="oc-notes-share__revoke">
+                                    <button type="submit" class="oc-notes-share__revoke-btn">"Revogar"</button>
+                                </form>
+                            </li>
+                        }
+                    }).collect::<Vec<_>>()}
+                </ul>
+            })}
+        </section>
     }
 }
