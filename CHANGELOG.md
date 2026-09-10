@@ -7,6 +7,22 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### O editor de notas é um documento, não um campo (correcção de experiência) — 2026-09-11
+
+Correcção só de experiência: o corpo da nota deixa de parecer uma caixa de texto.
+A superfície de edição perde a moldura, o fundo e a caixa que crescia com o
+conteúdo — passa a ser a própria folha de trabalho, que rola naturalmente. O anel
+de foco dourado deixa de envolver o documento inteiro; dentro do editor o foco
+mostra-se pelo cursor, e os campos de metadados (título, pasta, etiquetas) mantêm
+o anel acessível do teclado. O cabeçalho fica mais calmo — título do documento e,
+por baixo, uma linha discreta `pasta · etiquetas` em vez de campos de formulário a
+toda a largura —, a barra de ferramentas fica leve e subordinada ao conteúdo, e
+uma nota vazia abre com o convite «Comece a escrever…» (uma decoração do editor,
+nunca gravada). Domínio, revisões, autosave, autorização, sanitização e
+persistência ficam **inalterados**. O corpo do editor vendorizado
+([apps/workspace/editor](apps/workspace/editor)) foi reconstruído a partir da
+fonte.
+
 ### Módulo de Notas certificado: `OCINYE_NOTES_READY` (fatias F e G) — 2026-09-10
 
 O módulo de Notas está completo e certificado no repositório. A **postura de

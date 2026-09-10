@@ -13,7 +13,7 @@ import { inputRules, textblockTypeInputRule, wrappingInputRule } from "prosemirr
 import { keymap } from "prosemirror-keymap";
 import { EditorState, Plugin } from "prosemirror-state";
 import { liftListItem, splitListItem, wrapInList } from "prosemirror-schema-list";
-import { EditorView } from "prosemirror-view";
+import { Decoration, DecorationSet, EditorView } from "prosemirror-view";
 
 import { isSafeHref, noteSchema } from "./schema.js";
 import { docToNote, noteToDoc } from "./serialize.js";
@@ -127,6 +127,31 @@ function linkCommand(schema) {
     if (view) view.focus();
     return true;
   };
+}
+
+// The empty-note invitation. When the document is a single empty paragraph, a
+// hint ("Comece a escrever…") is painted over it by CSS through a node
+// decoration — never a real node, so it is never typed, never serialised, and
+// never saved. It disappears the moment there is content.
+const PLACEHOLDER_TEXT = "Comece a escrever…";
+
+function placeholderPlugin(text) {
+  return new Plugin({
+    props: {
+      decorations(state) {
+        const { doc } = state;
+        const only = doc.childCount === 1 ? doc.firstChild : null;
+        if (only && only.isTextblock && only.content.size === 0) {
+          const deco = Decoration.node(0, only.nodeSize, {
+            class: "oc-notes-placeholder",
+            "data-placeholder": text,
+          });
+          return DecorationSet.create(doc, [deco]);
+        }
+        return null;
+      },
+    },
+  });
 }
 
 // The clickable checkbox: a click on the box toggles the item's checked state.
@@ -381,6 +406,7 @@ export function mount(root) {
       keymap(baseKeymap),
       history(),
       checklistPlugin(noteSchema),
+      placeholderPlugin(PLACEHOLDER_TEXT),
     ],
   });
 

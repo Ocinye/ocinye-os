@@ -429,42 +429,51 @@ pub fn note_editor(
                 data-revision=revision.to_string()
                 data-oc-notes-doc=document
             >
-                <input
-                    class="oc-notes-title-input"
-                    data-oc-notes-title=""
-                    type="text"
-                    value=title
-                    placeholder="Sem título"
-                    aria-label="Título da nota"
-                    autocomplete="off"
-                />
-                // Etiquetas e pasta são de quem arruma as suas notas — o dono.
-                // Um editor edita o conteúdo, não a organização do dono.
-                {is_owner.then(|| view! {
+                // O cabeçalho do documento: o título é o título da nota, e os
+                // metadados vivem por baixo, numa linha calma. Não é um painel de
+                // formulário — é a folha de rosto do documento (correcção de
+                // experiência: uma nota é um documento, não um campo de texto).
+                <header class="oc-notes-dochead">
                     <input
-                        class="oc-notes-tags-input"
-                        data-oc-notes-tags=""
+                        class="oc-notes-title-input"
+                        data-oc-notes-title=""
                         type="text"
-                        value=tags.clone()
-                        placeholder="Etiquetas, separadas por vírgulas"
-                        aria-label="Etiquetas da nota"
+                        value=title
+                        placeholder="Sem título"
+                        aria-label="Título da nota"
                         autocomplete="off"
                     />
-                    <select
-                        class="oc-notes-folder-select"
-                        data-oc-notes-folder=""
-                        data-move-url=move_url.clone()
-                        aria-label="Pasta da nota"
-                    >
-                        <option value="" selected=current_folder.is_empty()>"Sem pasta"</option>
-                        {folder_rows.iter().map(|folder| {
-                            let fid = field(folder, "id").to_owned();
-                            let fname = field(folder, "name").to_owned();
-                            let selected = fid == current_folder;
-                            view! { <option value=fid selected=selected>{fname}</option> }
-                        }).collect::<Vec<_>>()}
-                    </select>
-                })}
+                    // Etiquetas e pasta são de quem arruma as suas notas — o dono.
+                    // Um editor edita o conteúdo, não a organização do dono.
+                    {is_owner.then(|| view! {
+                        <div class="oc-notes-meta">
+                            <select
+                                class="oc-notes-folder-select"
+                                data-oc-notes-folder=""
+                                data-move-url=move_url.clone()
+                                aria-label="Pasta da nota"
+                            >
+                                <option value="" selected=current_folder.is_empty()>"Sem pasta"</option>
+                                {folder_rows.iter().map(|folder| {
+                                    let fid = field(folder, "id").to_owned();
+                                    let fname = field(folder, "name").to_owned();
+                                    let selected = fid == current_folder;
+                                    view! { <option value=fid selected=selected>{fname}</option> }
+                                }).collect::<Vec<_>>()}
+                            </select>
+                            <span class="oc-notes-meta__sep" aria-hidden="true">"·"</span>
+                            <input
+                                class="oc-notes-tags-input"
+                                data-oc-notes-tags=""
+                                type="text"
+                                value=tags.clone()
+                                placeholder="Adicionar etiquetas"
+                                aria-label="Etiquetas da nota"
+                                autocomplete="off"
+                            />
+                        </div>
+                    })}
+                </header>
                 <div class="oc-notes-toolbar" data-oc-notes-toolbar="" role="toolbar" aria-label="Formatação"></div>
                 <div class="oc-notes-surface" data-oc-notes-surface=""></div>
                 <div class="oc-notes-status" data-oc-notes-status="" aria-live="polite"></div>
