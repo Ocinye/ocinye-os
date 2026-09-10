@@ -21,6 +21,26 @@ Workspace, o editor ganha «Apagar», a lista ganha o «Lixo», e o Lixo lista a
 apagadas com restaurar e eliminar. Emenda à
 [ADR-0413](docs/adrs/0413-notes-as-institutional-knowledge.md).
 
+### Controlo e residência de um nó de compute; verdade documental do plano de IA — 2026-09-10
+
+Preparação mínima para o primeiro nó GPU real (uma NVIDIA L40S numa cloud de
+terceiros). Um `compute_node` passa a distinguir, com dois eixos tipados e
+independentes, **quem o controla** (`institutional_control`: `OCINYE`/`EXTERNAL`)
+de **onde o hardware reside** (`physical_residency`, reutilizando o enum de
+residência do armazenamento). Alugar hardware não cede controlo: o nó da L40S é
+`OCINYE` / `THIRD_PARTY_CLOUD` (migração `0036`,
+[ADR-0503](docs/adrs/0503-compute-node-control-and-residency.md)). Mudança
+aditiva, com defaults honestos; nenhum relaxamento de política, nenhuma ligação
+de nó, nenhum modelo, IA continua indisponível e `compute_nodes = 0`.
+
+Reconciliou-se também a **verdade documental** do `CLAUDE.md` com o código e as
+ADRs aceites: o Compute Registry, o protocolo do Node Agent (enrolamento +
+heartbeat) e o AI Gateway estão `IMPLEMENTED` (§1) — as secções §15/§29/§30/§41 e
+o glossário §82 diziam `PLANNED`/`NOT IMPLEMENTED`, o que contradizia a §1 e as
+ADRs [0300](docs/adrs/0300-ai-gateway.md)/[0500](docs/adrs/0500-compute-registry-node-agent.md).
+O que fica `PLANNED` é o que de facto falta: despacho de jobs, descoberta de
+GPU/modelos, e inferência real.
+
 ### Histórico e restauro das notas pessoais (fatia E) — 2026-09-10
 
 Uma nota guarda a sua história, e uma versão antiga pode agora **restaurar-se**.

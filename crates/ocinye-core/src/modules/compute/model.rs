@@ -1,7 +1,7 @@
 //! Compute rows and the node protocol payloads.
 
 use chrono::{DateTime, Duration, Utc};
-use ocinye_contracts::{ComputeNodeStatus, NodeKind};
+use ocinye_contracts::{ComputeNodeStatus, InstitutionalControl, NodeKind, Residency};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::FromRow;
@@ -20,6 +20,10 @@ pub struct ComputeNode {
     pub kind: String,
     /// Human label of where it is.
     pub location_label: Option<String>,
+    /// Who controls the software and data on the node (stored representation).
+    pub institutional_control: String,
+    /// Where the hardware physically resides (stored representation).
+    pub physical_residency: String,
     /// Stored status.
     pub status: String,
     /// Reported CPU cores.
@@ -45,6 +49,20 @@ impl ComputeNode {
     #[must_use]
     pub fn kind(&self) -> NodeKind {
         NodeKind::parse(&self.kind).unwrap_or(NodeKind::Cpu)
+    }
+
+    /// Who controls the software and data on the node. Defaults to `Ocinye` —
+    /// an enrolled node runs our agent under our credential (ADR-0503).
+    #[must_use]
+    pub fn institutional_control(&self) -> InstitutionalControl {
+        InstitutionalControl::parse(&self.institutional_control).unwrap_or_default()
+    }
+
+    /// Where the hardware physically resides. Defaults to `Undeclared` — the
+    /// system never claims a residency it was not told (ADR-0201, ADR-0503).
+    #[must_use]
+    pub fn physical_residency(&self) -> Residency {
+        Residency::parse(&self.physical_residency).unwrap_or_default()
     }
 
     /// Effective status, derived from the heartbeat rather than the stored flag.
