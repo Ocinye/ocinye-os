@@ -1,7 +1,7 @@
 # ADR-0413 — Notas: conhecimento institucional editável, versionado e partilhável
 
 - **Estado:** Accepted
-- **Domínio:** Native modules
+- **Domínio:** Knowledge
 - **Impacto:** HIGH
 - **Data:** 2026-09-10
 - **Relaciona-se com:** [ADR-0006](0006-modular-monolith.md) ·
