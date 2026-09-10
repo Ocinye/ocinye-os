@@ -26,7 +26,7 @@ pub use service::{
     attach_full_text, create_document, create_note, create_personal_note, create_source,
     get_document, get_note, get_personal_note, get_source, issue_download, link_objects,
     list_accessible_documents, list_accessible_sources, list_documents, list_links, list_notes,
-    list_personal_notes, list_sources, personal_note_revisions, record_operation_provenance,
-    review_bibliography, update_note, update_personal_note, NewDocument, NewNote, NewSource,
-    PersonalNoteEdit, UploadedFile,
+    list_personal_notes, list_sources, move_personal_note, personal_note_revisions,
+    record_operation_provenance, review_bibliography, update_note, update_personal_note,
+    NewDocument, NewNote, NewSource, PersonalNoteEdit, UploadedFile,
 };

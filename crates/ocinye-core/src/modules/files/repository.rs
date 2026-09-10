@@ -91,6 +91,104 @@ pub async fn personal_file_owner<'e>(
     Ok(owner)
 }
 
+// ── Pastas pessoais ─────────────────────────────────────────────────────
+
+/// Uma pasta de uma pessoa: identidade e nome, e nada que decida autoridade.
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+pub struct PersonalFolder {
+    /// A identidade.
+    pub id: Uuid,
+    /// O nome visível.
+    pub name: String,
+}
+
+/// Cria uma pasta de uma pessoa — plana, sem ambiente.
+///
+/// # Errors
+///
+/// Devolve erro quando a inserção falha, incluindo um nome repetido do mesmo
+/// dono, que o índice único recusa.
+pub async fn insert_personal_folder<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    owner_id: Uuid,
+    name: &str,
+) -> CoreResult<PersonalFolder> {
+    let folder = sqlx::query_as::<_, PersonalFolder>(
+        "INSERT INTO folders (organisation_id, owner_id, name, created_by_id)
+         VALUES ($1, $2, $3, $2) RETURNING id, name",
+    )
+    .bind(organisation_id)
+    .bind(owner_id)
+    .bind(name)
+    .fetch_one(executor)
+    .await?;
+    Ok(folder)
+}
+
+/// As pastas de uma pessoa, por ordem de nome.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_personal_folders<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+) -> CoreResult<Vec<PersonalFolder>> {
+    let folders = sqlx::query_as::<_, PersonalFolder>(
+        "SELECT id, name FROM folders WHERE owner_id = $1 ORDER BY lower(name)",
+    )
+    .bind(owner_id)
+    .fetch_all(executor)
+    .await?;
+    Ok(folders)
+}
+
+/// O dono de uma pasta pessoal, dentro da organização de quem pergunta.
+///
+/// `None` quando a pasta não existe, é de outra organização, ou é de ambiente
+/// (tem `workspace_id` e não dono).
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn personal_folder_owner<'e>(
+    executor: impl PgExecutor<'e>,
+    folder_id: Uuid,
+    organisation_id: Uuid,
+) -> CoreResult<Option<Uuid>> {
+    let owner: Option<Uuid> = sqlx::query_scalar(
+        "SELECT owner_id FROM folders
+          WHERE id = $1 AND organisation_id = $2 AND owner_id IS NOT NULL",
+    )
+    .bind(folder_id)
+    .bind(organisation_id)
+    .fetch_optional(executor)
+    .await?
+    .flatten();
+    Ok(owner)
+}
+
+/// Apaga uma pasta pessoal do dono, devolvendo se apagou.
+///
+/// As notas que estavam lá ficam sem pasta (`ON DELETE SET NULL`), não se perdem.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn delete_personal_folder<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    folder_id: Uuid,
+) -> CoreResult<bool> {
+    let done = sqlx::query("DELETE FROM folders WHERE id = $1 AND owner_id = $2")
+        .bind(folder_id)
+        .bind(owner_id)
+        .execute(executor)
+        .await?;
+    Ok(done.rows_affected() > 0)
+}
+
 /// Acrescenta uma versão, com o número que o Core determinou.
 ///
 /// # Porque a sequência vem calculada de fora

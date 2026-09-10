@@ -39,6 +39,9 @@ pub const ROUTES: &[&str] = &[
     "/notes",
     "/notes/{note_id}",
     "/notes/{note_id}/gravar",
+    "/notes/{note_id}/mover",
+    "/notes/folders",
+    "/notes/folders/{folder_id}/apagar",
     "/me/files",
     "/me/files/{version_id}/preview",
     "/messages",
@@ -256,6 +259,14 @@ pub fn router(state: WorkspaceState) -> Router {
         // O autosave: um POST em JSON, respondido em JSON (não uma página). A
         // fronteira same-origin protege-o como a qualquer outra escrita.
         .route("/notes/{note_id}/gravar", post(save_personal_note))
+        // Mover uma nota para uma pasta: fetch em JSON, do editor.
+        .route("/notes/{note_id}/mover", post(move_personal_note))
+        // Pastas: criar (formulário) e apagar (formulário).
+        .route("/notes/folders", post(create_note_folder))
+        .route(
+            "/notes/folders/{folder_id}/apagar",
+            post(delete_note_folder),
+        )
         // As imagens de uma nota: carregar (fetch, em JSON) e servir inline, na
         // origem do Workspace. A CSP continua `img-src 'self'`, e a página nunca
         // aprende onde os bytes estão guardados.
@@ -6748,14 +6759,16 @@ async fn create_idea(
 
 // ── Notas pessoais ───────────────────────────────────────────────────────
 
-/// A consulta da lista de notas: um filtro opcional por etiqueta.
+/// A consulta da lista de notas: filtros opcionais por etiqueta e por pasta.
 #[derive(Deserialize)]
 struct NotesListQuery {
     #[serde(default)]
     tag: Option<String>,
+    #[serde(default)]
+    folder: Option<String>,
 }
 
-/// A lista das notas do membro, com o filtro por etiqueta.
+/// A lista das notas do membro, com os filtros por etiqueta e por pasta.
 async fn notes_list(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
@@ -6764,26 +6777,30 @@ async fn notes_list(
     let member = member_or_login!(state, headers);
     let viewer = viewer(&state, &member).await;
     let tag = query.tag.as_deref().filter(|t| !t.is_empty());
+    let folder = query.folder.as_deref().filter(|f| !f.is_empty());
 
     // `required`, não `optional`: uma falha do Core mostra a razão. Uma lista
     // vazia por engano diria «não há notas», que é uma afirmação, e não um erro.
-    let path = match tag {
-        Some(tag) => format!(
-            "/api/v1/me/notes?page_size=100&tag={}",
-            urlencoding_minimal(tag)
-        ),
-        None => "/api/v1/me/notes?page_size=100".to_owned(),
-    };
+    let mut path = "/api/v1/me/notes?page_size=100".to_owned();
+    if let Some(tag) = tag {
+        path.push_str(&format!("&tag={}", urlencoding_minimal(tag)));
+    }
+    if let Some(folder) = folder {
+        path.push_str(&format!("&folder={}", urlencoding_minimal(folder)));
+    }
     let payload = match required(&state, &member, &path).await {
         Ok(payload) => payload,
         Err(failure) => return failure_response(&failure),
     };
+    // As pastas para a barra de filtros — secundárias: se falharem, a lista
+    // ainda serve, sem barra de pastas.
+    let folders = optional(&state, &member, "/api/v1/me/folders").await;
     shell_page(
         "Notas",
         &viewer,
         Screen::Notes,
         Vec::new(),
-        ui::screens::notes::notes_list(&viewer, &payload, tag),
+        ui::screens::notes::notes_list(&viewer, &payload, &folders, tag, folder),
     )
 }
 
@@ -6831,13 +6848,16 @@ async fn note_editor(
         Ok(note) => note,
         Err(failure) => return failure_response(&failure),
     };
+    // As pastas para o selector — secundárias: sem elas, a nota abre sem o
+    // selector de pasta, mas abre.
+    let folders = optional(&state, &member, "/api/v1/me/folders").await;
     let trail = vec![Crumb::to(Screen::Notes)];
     shell_page(
         "Nota",
         &viewer,
         Screen::Notes,
         trail,
-        ui::screens::notes::note_editor(&viewer, &note),
+        ui::screens::notes::note_editor(&viewer, &note, &folders),
     )
 }
 
@@ -6984,6 +7004,85 @@ async fn preview_personal_note_file(
                 .into_response()
         }
         Err(failure) => failure_response(&failure),
+    }
+}
+
+/// O formulário de criação de uma pasta de notas.
+#[derive(Deserialize)]
+struct NewNoteFolderForm {
+    name: String,
+}
+
+/// Cria uma pasta e leva o membro à lista recortada por ela.
+async fn create_note_folder(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<NewNoteFolderForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let body = serde_json::json!({ "name": form.name });
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/me/folders",
+        &body,
+    )
+    .await
+    {
+        Ok(folder) => {
+            let id = folder.get("id").and_then(Value::as_str).unwrap_or_default();
+            Redirect::to(&format!("/notes?folder={}", urlencoding_minimal(id))).into_response()
+        }
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+/// Apaga uma pasta e volta à lista. As notas ficam sem pasta, não se perdem.
+async fn delete_note_folder(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(folder_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let _ = api::delete(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/folders/{folder_id}"),
+    )
+    .await;
+    Redirect::to("/notes").into_response()
+}
+
+/// Move uma nota para uma pasta — fetch em JSON, do editor.
+///
+/// Como o autosave, falha fechada com `401` em vez de redireccionar, para o
+/// editor nunca confundir uma página de login com uma mudança bem-sucedida.
+async fn move_personal_note(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(note_id): Path<Uuid>,
+    axum::Json(body): axum::Json<Value>,
+) -> Response {
+    let member = match current_member(&state, &headers) {
+        Some(member) if !member.session.must_change_password && !member.session.mfa_required => {
+            member
+        }
+        _ => return StatusCode::UNAUTHORIZED.into_response(),
+    };
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/notes/{note_id}/folder"),
+        &body,
+    )
+    .await
+    {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(ApiFailure::Unauthorised) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(_) => StatusCode::BAD_GATEWAY.into_response(),
     }
 }
 

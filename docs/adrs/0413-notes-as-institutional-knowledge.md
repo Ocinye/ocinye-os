@@ -216,6 +216,15 @@ antes; só o índice de pesquisa activa o dono, guardando as cláusulas com
 `owner_id IS NULL`. Guardar uma nota pessoal indexa-a com o dono e a projecção de
 texto do corpo.
 
+**Emenda 2026-09-10 (etiquetas e pastas, fatia C).** Uma nota ganha etiquetas
+(já guardadas no modelo, agora expostas e filtráveis com `= ANY(tags)`) e um
+`folder_id`. Os `folders` ganham o mesmo *owner-scoping* dos `files` (migração
+`0034`, emenda também à [ADR-0204](0204-institutional-files-and-folders.md)): uma
+pasta é de um ambiente ou de uma pessoa. As pastas pessoais são planas nesta
+fatia. Arrumar uma nota numa pasta é um caminho próprio e **não cria revisão** —
+mover não é editar —, e uma nota não se arruma na pasta de outra pessoa. Apagar
+uma pasta desarruma as notas (`ON DELETE SET NULL`), não as perde.
+
 ### 9. Notificação em tempo real é planeada, não inventada agora
 
 Avisar «alguém acabou de actualizar esta nota» exige um canal e um evento novos

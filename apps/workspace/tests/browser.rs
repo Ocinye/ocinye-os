@@ -11342,3 +11342,63 @@ async fn uma_nota_ganha_etiquetas_e_filtra_se_por_elas() {
     esperar_por(&filtrada, "Reuniao de equipa").await;
     esperar_por(&filtrada, &format!("/notes/{note_id}")).await;
 }
+
+/// Uma pessoa cria uma pasta e arruma lá uma nota, pelo selector do editor.
+///
+/// A parte das pastas da fatia C: criar uma pasta na lista, arrumar uma nota
+/// nela pelo selector do editor (a mudança é um caminho próprio, não o autosave),
+/// e recortar a lista por essa pasta.
+#[tokio::test]
+async fn uma_nota_arruma_se_numa_pasta_pelo_editor() {
+    let harness = harness!();
+    let (_pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // Criar uma pasta.
+    let page = harness.open("/notes").await;
+    esperar_por(&page, "Notas").await;
+    set_field(&page, ".oc-notes-newfolder__input", "Trabalho").await;
+    submit(&page, "form[action=\"/notes/folders\"]").await;
+    let apos = wait_until_left(&page, "/notes").await;
+    let folder_id = apos.rsplit("folder=").next().unwrap_or_default().to_owned();
+    let folder_uuid =
+        Uuid::parse_str(&folder_id).unwrap_or_else(|_| panic!("a pasta não deu um id: {apos}"));
+
+    // Criar uma nota e arrumá-la na pasta pelo selector do editor.
+    let editor_page = harness.open("/notes").await;
+    esperar_por(&editor_page, "Notas").await;
+    submit(&editor_page, "form[action=\"/notes\"]").await;
+    let url = wait_until_left(&editor_page, "/notes").await;
+    let note_id = url.rsplit('/').next().unwrap_or_default().to_owned();
+    let note_uuid = Uuid::parse_str(&note_id).expect("id da nota");
+    let _ = elemento(&editor_page, "[data-oc-notes-surface] .ProseMirror").await;
+    set_field(&editor_page, "[data-oc-notes-title]", "Plano de trabalho").await;
+    // Esperar que o título fique guardado antes de arrumar: são caminhos
+    // diferentes, e a lista mostra o título, não o «Nota sem título» inicial.
+    esperar_por(&editor_page, "Guardado").await;
+    escolher(&editor_page, "[data-oc-notes-folder]", &folder_id).await;
+
+    // Arrumar é um fetch sem estado visível; espera-se pelo PostgreSQL.
+    let inicio = std::time::Instant::now();
+    loop {
+        let atual: Option<Uuid> =
+            sqlx::query_scalar::<_, Option<Uuid>>("SELECT folder_id FROM notes WHERE id = $1")
+                .bind(note_uuid)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("consulta")
+                .flatten();
+        if atual == Some(folder_uuid) {
+            break;
+        }
+        assert!(
+            inicio.elapsed() < DEADLINE,
+            "a nota não foi arrumada na pasta"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+
+    // A lista recortada pela pasta traz a nota.
+    let filtrada = harness.open(&format!("/notes?folder={folder_id}")).await;
+    esperar_por(&filtrada, "Plano de trabalho").await;
+    esperar_por(&filtrada, &format!("/notes/{note_id}")).await;
+}

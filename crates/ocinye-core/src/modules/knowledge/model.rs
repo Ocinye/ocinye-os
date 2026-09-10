@@ -281,6 +281,8 @@ pub struct Note {
     pub unit_id: Option<Uuid>,
     /// Owning workspace, for a workspace note.
     pub workspace_id: Option<Uuid>,
+    /// The folder that files a personal note, or `None` at the root.
+    pub folder_id: Option<Uuid>,
     /// Title.
     pub title: String,
     /// Plain-text projection of the body — for search and the excerpt.
