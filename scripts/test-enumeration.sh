@@ -198,7 +198,9 @@ suites() {
 # marcas.
 # 96 → 97 em 2026-09-10: a fatia B das Notas — largar uma imagem, que carrega
 # pelo Core e fica servida same-origin pela versão exacta. Uma viagem, uma marca.
-viagens-de-browser|97|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|97
+# 97 → 98 em 2026-09-10: a fatia C — escrever uma nota e encontrá-la pela
+# pesquisa, pelo corpo, com a ligação para o seu ecrã. Uma viagem, uma marca.
+viagens-de-browser|98|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|98
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
@@ -227,7 +229,9 @@ mfa-obrigatorio|3|-p ocinye-core --test mfa
 # hostil — e exigem recusa em todas.
 # 7 → 9 em 2026-09-10: a fatia B trouxe ficheiros com dono. Um ficheiro pessoal
 # é do dono e só dele, e uma nota não pode referenciar a imagem de outra pessoa.
-notas-pessoais|9|-p ocinye-core --test personal_notes
+# 9 → 10 em 2026-09-10: a fatia C indexa as notas pessoais para pesquisa — e uma
+# nota INTERNAL de uma pessoa não aparece na pesquisa de outra.
+notas-pessoais|10|-p ocinye-core --test personal_notes
 TABELA
 }
 

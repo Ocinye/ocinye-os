@@ -44,17 +44,22 @@ fn entity_label(entity_type: &str) -> &str {
 /// O destino de um resultado, quando o Workspace tem ecrã para ele.
 fn destination(hit: &Value) -> Option<String> {
     let id = hit.get("entity_id").and_then(Value::as_str)?;
+    let workspace = hit.get("workspace_id").and_then(Value::as_str);
     match text(hit, "entity_type") {
         "idea" | "project" => Some(format!("/workspaces/{id}")),
         "unit" => Some(format!("/units/{id}")),
-        // Fontes, notas, documentos e datasets vivem dentro de um Research
-        // Workspace; sem ecrã próprio, o resultado leva ao workspace que os
-        // contém. Sem workspace conhecido, não leva a lado nenhum — melhor do
-        // que uma ligação para 404 (briefing §3).
-        _ => hit
-            .get("workspace_id")
-            .and_then(Value::as_str)
-            .map(|workspace| format!("/workspaces/{workspace}")),
+        // Uma nota sem ambiente é uma nota **pessoal** (ADR-0413), e tem ecrã
+        // próprio. Com ambiente, é uma nota de um Research Workspace, e leva a
+        // ele como as fontes e os documentos.
+        "note" => Some(match workspace {
+            Some(ws) => format!("/workspaces/{ws}"),
+            None => format!("/notes/{id}"),
+        }),
+        // Fontes, documentos e datasets vivem dentro de um Research Workspace;
+        // sem ecrã próprio, o resultado leva ao workspace que os contém. Sem
+        // workspace conhecido, não leva a lado nenhum — melhor do que uma
+        // ligação para 404 (briefing §3).
+        _ => workspace.map(|workspace| format!("/workspaces/{workspace}")),
     }
 }
 
@@ -400,7 +405,9 @@ mod tests {
     }
 
     #[test]
-    fn um_resultado_sem_destino_conhecido_nao_finge_uma_ligacao() {
+    fn uma_nota_sem_ambiente_leva_a_nota_pessoal() {
+        // Uma nota sem `workspace_id` é uma nota pessoal (ADR-0413), e desde a
+        // fatia A tem ecrã próprio: o resultado leva a ele, e não a lado nenhum.
         let html = search(
             "x",
             &json!({"items": [{
@@ -416,8 +423,32 @@ mod tests {
 
         assert!(html.contains("Nota solta"));
         assert!(
-            !html.contains(r#"href="/notes"#),
-            "não deve inventar um ecrã que não existe"
+            html.contains(r#"href="/notes/22222222-2222-2222-2222-222222222222""#),
+            "uma nota pessoal deve levar ao seu ecrã: {html}"
+        );
+    }
+
+    #[test]
+    fn um_resultado_sem_destino_conhecido_nao_finge_uma_ligacao() {
+        // Um tipo sem ecrã próprio e sem ambiente conhecido não inventa uma
+        // ligação — melhor sem destino do que um 404.
+        let html = search(
+            "x",
+            &json!({"items": [{
+                "entity_type": "dataset",
+                "entity_id": "33333333-3333-3333-3333-333333333333",
+                "title": "Dataset solto",
+                "classification": "INTERNAL"
+            }], "total": 1}),
+            &Value::Null,
+            &semantic_off(),
+        )
+        .to_html();
+
+        assert!(html.contains("Dataset solto"));
+        assert!(
+            !html.contains(r#"<a class="oc-result""#),
+            "não deve inventar um destino para um recurso sem ambiente conhecido"
         );
     }
 

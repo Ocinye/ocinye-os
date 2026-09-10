@@ -30,6 +30,12 @@ pub struct VisibilityColumns {
     pub workspace: &'static str,
     /// Column holding the classification.
     pub classification: &'static str,
+    /// Column holding the owning **person**, when the table has one.
+    ///
+    /// `None` for every institutional table, which renders exactly as before. A
+    /// table that carries owner-scoped rows (the search index) sets it, and the
+    /// fragment then admits an owner-scoped row only to its owner.
+    pub owner: Option<&'static str>,
 }
 
 impl VisibilityColumns {
@@ -44,7 +50,15 @@ impl VisibilityColumns {
             unit,
             workspace,
             classification,
+            owner: None,
         }
+    }
+
+    /// The same columns, plus the person-owner column for an owner-scoped table.
+    #[must_use]
+    pub const fn with_owner(mut self, owner: &'static str) -> Self {
+        self.owner = Some(owner);
+        self
     }
 }
 
@@ -54,6 +68,7 @@ impl Default for VisibilityColumns {
             unit: "unit_id",
             workspace: "workspace_id",
             classification: "classification",
+            owner: None,
         }
     }
 }
@@ -85,6 +100,7 @@ pub fn to_sql(filter: &VisibilityFilter, columns: VisibilityColumns) -> String {
         unit,
         workspace,
         classification,
+        owner,
     } = columns;
     let mut clauses: Vec<String> = Vec::new();
 
@@ -125,10 +141,27 @@ pub fn to_sql(filter: &VisibilityFilter, columns: VisibilityColumns) -> String {
         ));
     }
 
-    if clauses.is_empty() {
-        return "(FALSE)".to_owned();
-    }
-    format!("({})", clauses.join(" OR "))
+    let institutional = if clauses.is_empty() {
+        "(FALSE)".to_owned()
+    } else {
+        format!("({})", clauses.join(" OR "))
+    };
+
+    // When the table has no owner column, this is byte-identical to before: the
+    // institutional predicate is the whole answer.
+    let Some(owner_col) = owner else {
+        return institutional;
+    };
+
+    // With an owner column, split the world in two. An institutional row (owner
+    // NULL) is decided by the clauses above; an owner-scoped row is admitted
+    // only to its owner, and never falls through the INTERNAL clause — that is
+    // the leak this guard exists to prevent.
+    let owner_clause = match filter.owner_id {
+        Some(id) => format!("{owner_col} = '{id}'"),
+        None => "FALSE".to_owned(),
+    };
+    format!("(({owner_col} IS NULL AND {institutional}) OR ({owner_clause}))")
 }
 
 /// A condição que um artefacto workspace-scoped tem de cumprir para aparecer
@@ -163,6 +196,7 @@ pub fn contained_in_visible_workspace(filter: &VisibilityFilter, alias: &str) ->
             unit: "w.unit_id",
             workspace: "w.id",
             classification: "w.classification",
+            owner: None,
         },
     );
     format!(
@@ -294,6 +328,41 @@ mod tests {
             );
         }
         assert!(!sql.contains("--"));
+    }
+
+    #[test]
+    fn without_an_owner_column_the_fragment_is_unchanged() {
+        // The owner dimension must not touch institutional tables: the predicate
+        // for a table with no owner column is exactly what it always was.
+        let sql = to_sql(
+            &VisibilityFilter::for_principal(&principal()),
+            VisibilityColumns::default(),
+        );
+        assert!(
+            !sql.contains("owner"),
+            "an institutional table grew an owner clause: {sql}"
+        );
+        assert!(sql.contains("IN ('PUBLIC', 'INTERNAL')"));
+    }
+
+    #[test]
+    fn an_owner_column_admits_the_owner_and_guards_the_internal_clause() {
+        let p = principal();
+        let sql = to_sql(
+            &VisibilityFilter::for_principal(&p),
+            VisibilityColumns::default().with_owner("sd.owner_id"),
+        );
+        // The owner sees their own rows...
+        assert!(
+            sql.contains(&format!("sd.owner_id = '{}'", p.person_id)),
+            "the owner clause is missing: {sql}"
+        );
+        // ...and the institutional clauses only apply where there is no owner, so
+        // a personal INTERNAL row cannot leak through them.
+        assert!(
+            sql.contains("sd.owner_id IS NULL AND"),
+            "the INTERNAL clause is not guarded by owner IS NULL: {sql}"
+        );
     }
 
     #[test]

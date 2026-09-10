@@ -152,6 +152,7 @@ pub async fn create_source(
         tx,
         search::IndexRequest {
             organisation_id: principal.organisation_id,
+            owner_id: None,
             unit_id: Some(workspace.unit_id),
             workspace_id: Some(workspace.id),
             entity_type: "source",
@@ -347,6 +348,7 @@ pub async fn create_note(
         tx,
         search::IndexRequest {
             organisation_id: principal.organisation_id,
+            owner_id: None,
             unit_id: Some(workspace.unit_id),
             workspace_id: Some(workspace.id),
             entity_type: "note",
@@ -438,6 +440,7 @@ pub async fn update_note(
         tx,
         search::IndexRequest {
             organisation_id: principal.organisation_id,
+            owner_id: None,
             unit_id: Some(workspace.unit_id),
             workspace_id: Some(workspace.id),
             entity_type: "note",
@@ -534,8 +537,8 @@ async fn authorize_referenced_files(
 /// O documento é **validado na fronteira** ([`NoteDocument::from_value`]): o que
 /// o esquema não conhece não entra, e uma referência a um ficheiro que não é do
 /// dono é recusada ([`authorize_referenced_files`]). O texto simples projecta-se
-/// dele para o excerto; a indexação de pesquisa de notas pessoais entra na fatia
-/// C, com a visibilidade por dono.
+/// dele para o excerto e para a pesquisa: a nota é indexada com o **dono**
+/// ([`index_personal_note`]), pelo que só aparece na pesquisa a quem a escreveu.
 ///
 /// # Errors
 ///
@@ -573,6 +576,8 @@ pub async fn create_personal_note(
     )
     .await?;
 
+    index_personal_note(tx, principal, &note).await?;
+
     outbox::emit(
         tx,
         event::NOTE_CREATED,
@@ -594,6 +599,35 @@ pub async fn create_personal_note(
     .await?;
 
     Ok(note)
+}
+
+/// Indexa uma nota pessoal para pesquisa, com o dono.
+///
+/// O âmbito é o **dono**, e não um ambiente: a linha indexada só aparece na
+/// pesquisa a quem a escreveu (a cláusula de dono do `VisibilityFilter`). Foi por
+/// faltar esta dimensão que a fatia A não indexou as notas pessoais; agora que
+/// existe, indexam-se. O texto é a projecção simples do corpo — nunca o
+/// documento estruturado cru.
+async fn index_personal_note(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    note: &Note,
+) -> CoreResult<()> {
+    search::index_entity(
+        tx,
+        search::IndexRequest {
+            organisation_id: principal.organisation_id,
+            owner_id: Some(principal.person_id),
+            unit_id: None,
+            workspace_id: None,
+            entity_type: "note",
+            entity_id: note.id,
+            title: note.title.clone(),
+            text: note.body.clone(),
+            classification: Classification::Internal,
+        },
+    )
+    .await
 }
 
 /// The personal notes of the acting member.
@@ -701,6 +735,8 @@ pub async fn update_personal_note(
                 .to_owned(),
         )
     })?;
+
+    index_personal_note(tx, principal, &updated).await?;
 
     outbox::emit(
         tx,
@@ -908,6 +944,7 @@ pub async fn create_document(
         tx,
         search::IndexRequest {
             organisation_id: principal.organisation_id,
+            owner_id: None,
             unit_id: Some(workspace.unit_id),
             workspace_id: Some(workspace.id),
             entity_type: "document",

@@ -28,6 +28,14 @@ pub struct VisibilityFilter {
     pub deny_all: bool,
     /// Organisation scope every clause is confined to.
     pub organisation_id: Option<Uuid>,
+    /// The acting person, for owner-scoped rows.
+    ///
+    /// A row that belongs to a **person** (a personal note, a note's image) is
+    /// visible only to that person — the classification and membership clauses
+    /// below never admit it. A row that belongs to no one (`owner` NULL) is
+    /// institutional, and the clauses below decide it. `None` denies every
+    /// owner-scoped row (an inactive or ownerless principal owns nothing).
+    pub owner_id: Option<Uuid>,
     /// Whether `PUBLIC` and `INTERNAL` rows are visible.
     pub allow_internal_and_below: bool,
     /// Whether `CONFIDENTIAL` is visible organisation-wide (administrative role).
@@ -60,6 +68,7 @@ impl VisibilityFilter {
         Self {
             deny_all: false,
             organisation_id: Some(principal.organisation_id),
+            owner_id: Some(principal.person_id),
             allow_internal_and_below: true,
             confidential_organisation_wide: principal.is_organisation_admin(),
             confidential_unit_ids: principal.unit_ids(),
@@ -75,12 +84,19 @@ impl VisibilityFilter {
     #[must_use]
     pub fn permits(
         &self,
+        owner_id: Option<Uuid>,
         unit_id: Option<Uuid>,
         workspace_id: Option<Uuid>,
         classification: Classification,
     ) -> bool {
         if self.deny_all {
             return false;
+        }
+
+        // An owner-scoped row is visible only to its owner; the classification
+        // and membership clauses never see it.
+        if let Some(owner) = owner_id {
+            return self.owner_id == Some(owner);
         }
 
         let in_units = |ids: &[Uuid]| unit_id.is_some_and(|id| ids.contains(&id));
