@@ -676,8 +676,10 @@ aprovações; Universal Command Surface. Compreende, planeia e orquestra —
 **Intelligence Plane** — AI Gateway; Model Registry; adaptadores de fornecedor;
 embeddings; RAG; routing; inferência. A inferência é `NO_RESOURCE`: zero nós.
 
-**Compute Plane** (`PLANNED`) — Compute Registry; nodes; jobs; GPU; CPU; HPC;
-capacidades; scheduling.
+**Compute Plane** — Compute Registry; nodes; jobs; GPU; CPU; HPC; capacidades;
+scheduling. O **Compute Registry e o protocolo do Node Agent** (enrolamento e
+heartbeat) estão `IMPLEMENTED` e devolvem `0` nós (§1); **despacho de jobs,
+descoberta de GPU/modelos e inferência continuam `PLANNED`**.
 
 **Security Plane** — *transversal*. Identidade; autenticação; autorização;
 classificação; secrets; auditoria; policy enforcement; segurança de rede;
@@ -969,7 +971,11 @@ ver.
 
 ## 29. Compute
 
-Criar futuramente o **Compute Registry** (`PLANNED` — `NOT IMPLEMENTED`).
+O **Compute Registry** está `IMPLEMENTED` (§1, [ADR-0500](docs/adrs/0500-compute-registry-node-agent.md)):
+registo de nós, credencial de máquina, liveness derivada, e `0` nós — que é o
+estado verdadeiro. O que **falta** é despacho e agendamento de jobs (`PLANNED`).
+Um nó diz também quem o controla e onde reside fisicamente — dois eixos
+independentes ([ADR-0503](docs/adrs/0503-compute-node-control-and-residency.md)).
 
 - Deve suportar **0 nodes**, **1 node**, **N nodes**.
 - **Não hardcodes uma RTX 4090**, nem um único nó, nem uma única localização.
@@ -983,9 +989,15 @@ Criar futuramente o **Compute Registry** (`PLANNED` — `NOT IMPLEMENTED`).
 
 ## 30. Node Agent
 
-Arquitectura futura para o **Ocinye Node Agent** (`PLANNED`). Responsabilidades
-previstas: enrollment; identidade própria; autenticação; health; resource
-reporting; capability reporting; model reporting; job execution; status.
+O **Ocinye Node Agent** existe hoje como **esqueleto `IMPLEMENTED`** (§1,
+[ADR-0500](docs/adrs/0500-compute-registry-node-agent.md)): enrolamento,
+identidade própria de máquina, autenticação por credencial própria, heartbeat e
+resource reporting de CPU/RAM. `PLANNED`, ainda: descoberta de GPU/VRAM/storage,
+capability e model reporting, execução de jobs, rotação de credencial e mTLS
+([ADR-0502](docs/adrs/0502-compute-intelligence-connection-contract.md)).
+Responsabilidades previstas, no total: enrollment; identidade própria;
+autenticação; health; resource reporting; capability reporting; model reporting;
+job execution; status.
 
 - O Node Agent tem **identidade própria** e credenciais próprias — nunca reutiliza
   credenciais de utilizador.
@@ -1255,7 +1267,13 @@ Nunca confies no nome de ficheiro nem no `Content-Type` enviados pelo cliente.
 
 ## 41. IA — Ocinye AI Gateway
 
-Toda a IA comunica através do **Ocinye AI Gateway** (`PLANNED` — `NOT IMPLEMENTED`).
+Toda a IA comunica através do **Ocinye AI Gateway**. O Gateway está
+`IMPLEMENTED` como código (§1, [ADR-0300](docs/adrs/0300-ai-gateway.md)) — o
+contrato canónico de inferência, o roteamento por capacidade e a montagem de
+contexto permission-aware existem e são testados. O que **falta** é um fornecedor
+real que sirva inferência: sem nó, o Gateway reporta `available: false` e
+`NO_RESOURCE`, que é o estado verdadeiro (**`IMPLEMENTED`, sem fornecedor**, não
+`NOT IMPLEMENTED`).
 
 **A aplicação pede capacidades, não modelos específicos.** Não acoples código a
 nomes de modelos.
@@ -2160,9 +2178,9 @@ Cada passo é a ligação de um novo recurso registado, não uma reescrita.
 | **Research Workspace** | Ambiente contextual de uma `Idea` ou `Project` dentro do Workspace. |
 | **Research Object** | Artefacto científico relacionável (source, dataset, experiment, result, …). |
 | **Ocinye Knowledge Graph** | Grafo futuro de relações entre research objects. `PLANNED`. |
-| **AI Gateway** | Ponto único de acesso a capacidades de IA; abstrai modelos e fornecedores. `PLANNED`. |
-| **Compute Registry** | Registo de nós de computação disponíveis à plataforma. `PLANNED`. |
-| **Ocinye Node Runtime** | Camada executada nos futuros nós computacionais; inclui o Node Agent. `PLANNED`. |
+| **AI Gateway** | Ponto único de acesso a capacidades de IA; abstrai modelos e fornecedores. `IMPLEMENTED` como código; sem fornecedor real (§1). |
+| **Compute Registry** | Registo de nós de computação disponíveis à plataforma. `IMPLEMENTED`; `0` nós (§1). Despacho de jobs `PLANNED`. |
+| **Ocinye Node Runtime** | Camada executada nos futuros nós computacionais; inclui o Node Agent (esqueleto `IMPLEMENTED`: enrolamento e heartbeat). Execução de jobs `PLANNED`. |
 | **Ocinye Capability Runtime** | Ambiente WASM/WASI para executar capacidades institucionais isoladas. |
 | **Idea** | Proposta exploratória, anterior e distinta de um projecto formal. |
 | **Project** | Iniciativa formalmente assumida, com escopo, responsáveis e recursos. |

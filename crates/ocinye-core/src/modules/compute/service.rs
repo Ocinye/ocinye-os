@@ -1,7 +1,9 @@
 //! Compute application layer.
 
 use chrono::{Duration, Utc};
-use ocinye_contracts::{ComputeNodeStatus, ComputeStatus, NodeKind};
+use ocinye_contracts::{
+    ComputeNodeStatus, ComputeStatus, InstitutionalControl, NodeKind, Residency,
+};
 use ocinye_domain::identifiers::validate_node_identifier;
 use ocinye_domain::policy::{authorize, Action, ResourceContext, ResourceKind};
 use ocinye_domain::Principal;
@@ -48,6 +50,10 @@ pub struct NewNode {
     pub kind: NodeKind,
     /// Human label of where it is.
     pub location_label: Option<String>,
+    /// Who controls the software and data. Defaults to `Ocinye` (ADR-0503).
+    pub institutional_control: InstitutionalControl,
+    /// Where the hardware physically resides. Defaults to `Undeclared`.
+    pub physical_residency: Residency,
 }
 
 /// A registered node together with its one-time enrollment token.
@@ -93,6 +99,8 @@ pub async fn register_node(
         display_name,
         request.kind.as_str(),
         request.location_label.as_deref(),
+        request.institutional_control.as_str(),
+        request.physical_residency.as_str(),
         principal.person_id,
     )
     .await?;

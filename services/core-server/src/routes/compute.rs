@@ -9,7 +9,7 @@ use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use ocinye_contracts::{ComputeStatus, NodeKind};
+use ocinye_contracts::{ComputeStatus, InstitutionalControl, NodeKind, Residency};
 use ocinye_core::modules::compute;
 use ocinye_core::CoreError;
 use serde::{Deserialize, Serialize};
@@ -53,6 +53,10 @@ struct NodeView {
     display_name: String,
     kind: String,
     location_label: Option<String>,
+    /// Who controls the software and data on the node.
+    institutional_control: String,
+    /// Where the hardware physically resides.
+    physical_residency: String,
     /// Derived from the last heartbeat, never from a stored flag.
     status: String,
     cpu_cores: Option<i32>,
@@ -77,6 +81,8 @@ async fn list_nodes(
                 display_name: node.display_name,
                 kind: node.kind,
                 location_label: node.location_label,
+                institutional_control: node.institutional_control,
+                physical_residency: node.physical_residency,
                 status: status.as_str().to_owned(),
                 cpu_cores: node.cpu_cores,
                 memory_bytes: node.memory_bytes,
@@ -98,6 +104,12 @@ struct RegisterNodeRequest {
     kind: Option<String>,
     #[serde(default)]
     location_label: Option<String>,
+    /// Who controls the software and data. Defaults to `OCINYE` when omitted.
+    #[serde(default)]
+    institutional_control: Option<String>,
+    /// Where the hardware physically resides. Defaults to `UNDECLARED`.
+    #[serde(default)]
+    physical_residency: Option<String>,
 }
 
 /// Register a node and issue a single-use enrollment token.
@@ -119,6 +131,25 @@ async fn register_node(
         .transpose()?
         .unwrap_or(NodeKind::Gpu);
 
+    let institutional_control = request
+        .institutional_control
+        .as_deref()
+        .map(|raw| {
+            InstitutionalControl::parse(raw)
+                .ok_or_else(|| CoreError::Validation("Unknown institutional control.".to_owned()))
+        })
+        .transpose()?
+        .unwrap_or_default();
+    let physical_residency = request
+        .physical_residency
+        .as_deref()
+        .map(|raw| {
+            Residency::parse(raw)
+                .ok_or_else(|| CoreError::Validation("Unknown physical residency.".to_owned()))
+        })
+        .transpose()?
+        .unwrap_or_default();
+
     let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
     let enrolled = compute::register_node(
         &mut tx,
@@ -130,6 +161,8 @@ async fn register_node(
             display_name: request.display_name,
             kind,
             location_label: request.location_label,
+            institutional_control,
+            physical_residency,
         },
     )
     .await?;
