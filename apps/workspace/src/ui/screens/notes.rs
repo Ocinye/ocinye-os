@@ -49,10 +49,25 @@ fn encode_query(value: &str) -> String {
 }
 
 /// A lista das notas do membro, com o botão de criar e o filtro por etiqueta.
-pub fn notes_list(_viewer: &Viewer, payload: &Value, active_tag: Option<&str>) -> impl IntoView {
+pub fn notes_list(
+    _viewer: &Viewer,
+    payload: &Value,
+    folders: &Value,
+    active_tag: Option<&str>,
+    active_folder: Option<&str>,
+) -> impl IntoView {
     let rows = payload.as_array().cloned().unwrap_or_default();
     let has_notes = !rows.is_empty();
     let active_tag = active_tag.map(ToOwned::to_owned);
+    let folder_rows = folders.as_array().cloned().unwrap_or_default();
+    let active_folder = active_folder.map(ToOwned::to_owned);
+    // O nome da pasta activa, para a dizer no cabeçalho do filtro.
+    let active_folder_name = active_folder.as_deref().and_then(|id| {
+        folder_rows
+            .iter()
+            .find(|f| field(f, "id") == id)
+            .map(|f| field(f, "name").to_owned())
+    });
 
     view! {
         <div class="oc-page">
@@ -68,11 +83,56 @@ pub fn notes_list(_viewer: &Viewer, payload: &Value, active_tag: Option<&str>) -
                 </div>
             </div>
 
+            <div class="oc-notes-folders">
+                <a
+                    class=if active_folder.is_none() { "oc-notes-folder is-active" } else { "oc-notes-folder" }
+                    href="/notes"
+                >"Todas"</a>
+                {folder_rows.iter().map(|folder| {
+                    let fid = field(folder, "id").to_owned();
+                    let fname = field(folder, "name").to_owned();
+                    let is_active = active_folder.as_deref() == Some(fid.as_str());
+                    let alvo = format!("/notes?folder={}", encode_query(&fid));
+                    view! {
+                        <a
+                            class=if is_active { "oc-notes-folder is-active" } else { "oc-notes-folder" }
+                            href=alvo
+                        >{fname}</a>
+                    }
+                }).collect::<Vec<_>>()}
+                <form class="oc-notes-newfolder" method="post" action="/notes/folders">
+                    <input
+                        class="oc-notes-newfolder__input"
+                        type="text"
+                        name="name"
+                        placeholder="Nova pasta"
+                        aria-label="Nome da nova pasta"
+                        maxlength="120"
+                        required
+                    />
+                    <button class="oc-notes-newfolder__button" type="submit">"Criar"</button>
+                </form>
+            </div>
+
             {active_tag.clone().map(|tag| view! {
                 <div class="oc-notes-filter">
                     <span>"Etiqueta: " <span class="oc-tag">{tag}</span></span>
                     <a class="oc-notes-filter__clear" href="/notes">"Ver todas"</a>
                 </div>
+            })}
+
+            {active_folder.clone().map(|fid| {
+                let name = active_folder_name.clone().unwrap_or_else(|| "Pasta".to_owned());
+                let apagar = format!("/notes/folders/{fid}/apagar");
+                view! {
+                    <div class="oc-notes-filter">
+                        <span>"Pasta: " <strong>{name}</strong></span>
+                        <a class="oc-notes-filter__clear" href="/notes">"Ver todas"</a>
+                        <form method="post" action=apagar class="oc-notes-filter__delete">
+                            <button type="submit" class="oc-notes-filter__delete-btn">"Apagar pasta"</button>
+                        </form>
+                    </div>
+                }
             })}
 
             {if has_notes {
@@ -91,6 +151,17 @@ pub fn notes_list(_viewer: &Viewer, payload: &Value, active_tag: Option<&str>) -
                     title: "Nenhuma nota com esta etiqueta".to_owned(),
                     body: "Nenhuma das suas notas tem esta etiqueta. Veja todas as notas ou \
                            etiquete uma."
+                        .to_owned(),
+                    actions: Vec::new(),
+                    small: false,
+                })
+                    .into_any()
+            } else if active_folder.is_some() {
+                empty_state(EmptyState {
+                    icon: Icon::Document,
+                    title: "Esta pasta está vazia".to_owned(),
+                    body: "Nenhuma das suas notas está nesta pasta. Arrume uma aqui pelo editor, \
+                           ou veja todas as notas."
                         .to_owned(),
                     actions: Vec::new(),
                     small: false,
@@ -162,12 +233,15 @@ fn updated_label(iso: &str) -> String {
 /// canónico, a revisão que a próxima gravação apresenta como `base_revision`, e
 /// o título. O documento viaja num atributo de dados — o browser descodifica o
 /// valor, e não há como escapar de um `</script>` porque não há bloco inline.
-pub fn note_editor(_viewer: &Viewer, note: &Value) -> impl IntoView {
+pub fn note_editor(_viewer: &Viewer, note: &Value, folders: &Value) -> impl IntoView {
     let id = field(note, "id").to_owned();
     let title = field(note, "title").to_owned();
     let revision = note.get("revision").and_then(Value::as_i64).unwrap_or(0);
     let save_url = format!("/notes/{id}/gravar");
+    let move_url = format!("/notes/{id}/mover");
     let tags = tags_of(note).join(", ");
+    let current_folder = field(note, "folder_id").to_owned();
+    let folder_rows = folders.as_array().cloned().unwrap_or_default();
 
     // O documento estruturado, tal como o Core o devolve. Nulo (nota antiga) ou
     // ausente vira uma string vazia, e o editor abre um documento vazio.
@@ -212,6 +286,20 @@ pub fn note_editor(_viewer: &Viewer, note: &Value) -> impl IntoView {
                     aria-label="Etiquetas da nota"
                     autocomplete="off"
                 />
+                <select
+                    class="oc-notes-folder-select"
+                    data-oc-notes-folder=""
+                    data-move-url=move_url
+                    aria-label="Pasta da nota"
+                >
+                    <option value="" selected=current_folder.is_empty()>"Sem pasta"</option>
+                    {folder_rows.iter().map(|folder| {
+                        let fid = field(folder, "id").to_owned();
+                        let fname = field(folder, "name").to_owned();
+                        let selected = fid == current_folder;
+                        view! { <option value=fid selected=selected>{fname}</option> }
+                    }).collect::<Vec<_>>()}
+                </select>
                 <div class="oc-notes-toolbar" data-oc-notes-toolbar="" role="toolbar" aria-label="Formatação"></div>
                 <div class="oc-notes-surface" data-oc-notes-surface=""></div>
                 <div class="oc-notes-status" data-oc-notes-status="" aria-live="polite"></div>

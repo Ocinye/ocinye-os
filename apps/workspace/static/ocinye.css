@@ -5910,3 +5910,40 @@ select.oc-entrada {
 }
 .oc-notes-filter__clear { color: var(--oc-navy-mid); text-decoration: none; font-weight: 600; }
 .oc-notes-filter__clear:hover { text-decoration: underline; }
+
+/* Notas — pastas (fatia C). */
+.oc-notes-folders {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin-bottom: var(--oc-space-6);
+}
+.oc-notes-folder {
+  display: inline-flex; align-items: center; padding: 4px 11px;
+  border: 1px solid var(--oc-border); border-radius: var(--oc-r-sm);
+  background: var(--oc-surface); color: var(--oc-text-secondary);
+  font-size: 13px; text-decoration: none;
+}
+.oc-notes-folder:hover { border-color: var(--oc-border-strong); color: var(--oc-text); }
+.oc-notes-folder.is-active { background: var(--oc-navy); border-color: var(--oc-navy); color: var(--oc-on-navy); }
+.oc-notes-newfolder { display: inline-flex; gap: 4px; margin-left: auto; }
+.oc-notes-newfolder__input {
+  border: 1px solid var(--oc-border); border-radius: var(--oc-r-sm); padding: 4px 9px;
+  font-family: var(--oc-font-sans); font-size: 13px; color: var(--oc-text); background: var(--oc-surface);
+  width: 12rem;
+}
+.oc-notes-newfolder__input::placeholder { color: var(--oc-placeholder); }
+.oc-notes-newfolder__button {
+  border: 1px solid var(--oc-border); border-radius: var(--oc-r-sm); padding: 4px 11px;
+  background: var(--oc-surface-muted); color: var(--oc-text-secondary);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.oc-notes-newfolder__button:hover { background: var(--oc-surface-hover); color: var(--oc-text); }
+.oc-notes-folder-select {
+  font-family: var(--oc-font-sans); font-size: 13px; color: var(--oc-text-secondary);
+  border: 1px solid var(--oc-border); border-radius: var(--oc-r-sm); padding: 4px 9px;
+  background: var(--oc-surface); align-self: flex-start;
+}
+.oc-notes-filter__delete { margin-left: auto; }
+.oc-notes-filter__delete-btn {
+  border: 1px solid var(--oc-error-border); background: var(--oc-error-bg); color: var(--oc-error-text);
+  border-radius: var(--oc-r-sm); padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+}

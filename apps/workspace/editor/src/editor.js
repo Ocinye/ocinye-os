@@ -423,6 +423,31 @@ export function mount(root) {
     tagsInput.addEventListener("input", scheduleSave);
   }
 
+  // The folder select moves the note — its own path, not the autosave, because
+  // filing a note is not editing its content and makes no revision. On failure
+  // the select reverts, so it never claims a move the Core refused.
+  const folderSelect = root.querySelector("[data-oc-notes-folder]");
+  if (folderSelect) {
+    const moveUrl = folderSelect.getAttribute("data-move-url");
+    let filed = folderSelect.value;
+    folderSelect.addEventListener("change", () => {
+      if (!moveUrl) return;
+      const target = folderSelect.value || null;
+      fetch(moveUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ folder_id: target }),
+      })
+        .then((res) => {
+          if (res.status === 200) filed = folderSelect.value;
+          else folderSelect.value = filed;
+        })
+        .catch(() => {
+          folderSelect.value = filed;
+        });
+    });
+  }
+
   setStatus("clean");
   return view;
 }
