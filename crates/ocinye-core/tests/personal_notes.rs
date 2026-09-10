@@ -1472,3 +1472,76 @@ async fn eliminar_exige_estar_no_lixo() {
         outro => panic!("eliminar uma nota viva devia dar Validation; veio {outro:?}"),
     }
 }
+
+// ── Fatia E — actividade ───────────────────────────────────────────────────
+//
+// A actividade de uma nota regista o seu ciclo de vida e os acessos — criar,
+// partilhar, revogar, apagar, restaurar. As edições vivem no histórico de
+// revisões, ao lado. A actividade é do dono e lê-se por quem alcança a nota.
+
+/// A actividade acompanha o ciclo de vida: criar, partilhar, apagar, restaurar.
+#[tokio::test]
+async fn a_actividade_de_uma_nota_acompanha_o_ciclo_de_vida() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let leitor = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Com actividade", "corpo").await;
+    partilha(
+        &pool,
+        &dono,
+        &ids,
+        nota.id,
+        leitor.person_id,
+        NoteShareRole::Viewer,
+    )
+    .await;
+    apagar(&pool, &dono, &ids, nota.id).await;
+    // Restaurar traz a nota de volta, e é ela que se lê agora.
+    let mut tx = pool.begin().await.expect("tx");
+    knowledge::restore_personal_note(&mut tx, &dono, &ids, nota.id)
+        .await
+        .expect("restaura");
+    tx.commit().await.expect("commit");
+
+    let feed = knowledge::note_activity(&pool, &dono, nota.id)
+        .await
+        .expect("actividade");
+    let verbos: std::collections::HashSet<&str> = feed.iter().map(|e| e.kind.as_str()).collect();
+    for esperado in ["created", "shared", "deleted", "restored"] {
+        assert!(
+            verbos.contains(esperado),
+            "a actividade não registou «{esperado}»: {verbos:?}"
+        );
+    }
+    // O mais recente primeiro: restaurar foi a última coisa que aconteceu.
+    assert_eq!(
+        feed.first().map(|e| e.kind.as_str()),
+        Some("restored"),
+        "a actividade não veio da mais recente para trás"
+    );
+    // E sabe quem fez — pelo nome, não por identificador.
+    assert!(
+        feed.iter().all(|e| e.actor_name.is_some()),
+        "uma entrada de actividade ficou sem autor"
+    );
+}
+
+/// A actividade de uma nota não se lê por quem não a alcança.
+#[tokio::test]
+async fn a_actividade_nao_se_le_por_estranho() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let estranho = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Privada", "corpo").await;
+
+    recusa_muda(
+        knowledge::note_activity(&pool, &estranho, nota.id).await,
+        "ler a actividade de uma nota de outro",
+    );
+}

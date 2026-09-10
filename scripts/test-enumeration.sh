@@ -246,7 +246,10 @@ mfa-obrigatorio|3|-p ocinye-core --test mfa
 # 25 → 30 em 2026-09-10: a fatia E acrescenta o Lixo — apagar leva ao Lixo (sai
 # da lista, da leitura e da pesquisa), restaurar traz de volta e reindexa, só o
 # dono apaga, e eliminar definitivamente exige estar no Lixo.
-notas-pessoais|30|-p ocinye-core --test personal_notes
+# 30 → 32 em 2026-09-10: a fatia E dá actividade às notas — o ciclo de vida
+# (criar, partilhar, revogar, apagar, restaurar) fica registado e owner-scoped,
+# e não se lê por quem não alcança a nota.
+notas-pessoais|32|-p ocinye-core --test personal_notes
 TABELA
 }
 

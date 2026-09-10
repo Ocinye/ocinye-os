@@ -6900,24 +6900,32 @@ async fn note_editor(
     // não recebe nenhuma destas.
     let shares_path = format!("/api/v1/me/notes/{note_id}/shares");
     let revisions_path = format!("/api/v1/me/notes/{note_id}/revisions");
-    let (folders, shares, people, revisions) = if is_owner {
-        let (folders, shares, people, revisions) = tokio::join!(
+    let activity_path = format!("/api/v1/me/notes/{note_id}/activity");
+    let (folders, shares, people, revisions, activity) = if is_owner {
+        let (folders, shares, people, revisions, activity) = tokio::join!(
             optional(&state, &member, "/api/v1/me/folders"),
             optional(&state, &member, &shares_path),
             optional(&state, &member, "/api/v1/people?page_size=200"),
             optional(&state, &member, &revisions_path),
+            optional(&state, &member, &activity_path),
         );
-        (folders, shares, people, revisions)
+        (folders, shares, people, revisions, activity)
     } else if can_write {
-        // Um editor partilhado: sem pastas nem partilha, mas com histórico.
+        // Um editor partilhado: sem pastas nem partilha, mas com histórico e
+        // actividade — vê o que aconteceu à nota que ajuda a escrever.
+        let (revisions, activity) = tokio::join!(
+            optional(&state, &member, &revisions_path),
+            optional(&state, &member, &activity_path),
+        );
+        (Value::Null, Value::Null, Value::Null, revisions, activity)
+    } else {
         (
             Value::Null,
             Value::Null,
             Value::Null,
-            optional(&state, &member, &revisions_path).await,
+            Value::Null,
+            Value::Null,
         )
-    } else {
-        (Value::Null, Value::Null, Value::Null, Value::Null)
     };
     let trail = vec![Crumb::to(Screen::Notes)];
     shell_page(
@@ -6925,7 +6933,9 @@ async fn note_editor(
         &viewer,
         Screen::Notes,
         trail,
-        ui::screens::notes::note_editor(&viewer, &note, &folders, &shares, &people, &revisions),
+        ui::screens::notes::note_editor(
+            &viewer, &note, &folders, &shares, &people, &revisions, &activity,
+        ),
     )
 }
 
