@@ -287,8 +287,11 @@ async fn locate(
                 kind: ResourceKind::Note,
                 title: note.title.clone(),
                 classification: stricter(note.classification(), workspace.classification()),
-                unit_id: note.unit_id,
-                workspace_id: Some(note.workspace_id),
+                // A `get_note` agentic resolve serve notas de workspace, e é o
+                // workspace que governa que dá a unidade e o ambiente. (As notas
+                // pessoais alcançam-se pelas suas próprias rotas, não por aqui.)
+                unit_id: workspace.unit_id,
+                workspace_id: Some(workspace.id),
             })
         }
         AgenticKind::Document => {

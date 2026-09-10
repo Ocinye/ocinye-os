@@ -411,14 +411,18 @@ pub async fn update_note(
 ) -> CoreResult<Note> {
     let existing = repo::find_note(&mut **tx, note_id, principal.organisation_id)
         .await?
+        .filter(|n| n.workspace_id.is_some())
         .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))?;
-    let workspace = get_workspace(&mut **tx, principal, existing.workspace_id).await?;
+    let workspace_id = existing
+        .workspace_id
+        .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))?;
+    let workspace = get_workspace(&mut **tx, principal, workspace_id).await?;
 
     let ctx = artefact_context(&workspace, ResourceKind::Note, existing.classification());
     authorize(principal, Action::Update, &ctx)
         .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
 
-    repo::snapshot_note(&mut **tx, &existing).await?;
+    repo::snapshot_note(&mut **tx, existing.id).await?;
 
     let updated = repo::update_note(
         &mut **tx,
@@ -491,6 +495,211 @@ pub async fn list_notes(
         page.offset(),
     )
     .await
+}
+
+// ── Notas pessoais ──────────────────────────────────────────────────────────
+//
+// Uma nota pessoal é do membro. A autoridade é a posse: o dono lê e escreve a
+// sua nota, e mais ninguém — a partilha por membro entra na fatia D, e até lá
+// não há atalho «até existir sharing». Um `PlatformAdmin` que não é o dono não
+// ganha leitura por ser administrador. A classificação é um tecto que só passa a
+// contar quando houver partilha; a nota do dono é sua.
+
+/// Cria uma nota pessoal a partir de um documento estruturado.
+///
+/// O documento é **validado na fronteira** ([`NoteDocument::from_value`]): o que
+/// o esquema não conhece não entra. O texto simples projecta-se dele para o
+/// excerto; a indexação de pesquisa de notas pessoais entra na fatia C, com a
+/// visibilidade por dono — indexá-la agora sob o modelo de workspace mostrá-la-ia
+/// a quem não é o dono.
+///
+/// # Errors
+///
+/// [`CoreError::Validation`] quando o título está vazio ou o documento não é
+/// válido.
+pub async fn create_personal_note(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    title: &str,
+    document: serde_json::Value,
+) -> CoreResult<Note> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err(CoreError::Validation("A note needs a title.".to_owned()));
+    }
+    let doc = super::document::NoteDocument::from_value(document)?;
+    let plain = doc.plain_text();
+    let doc_value = serde_json::to_value(&doc)
+        .map_err(|_| CoreError::Internal("could not serialise the note document".to_owned()))?;
+    let classification = Classification::Internal;
+
+    let note = repo::insert_personal_note(
+        &mut **tx,
+        principal.organisation_id,
+        principal.person_id,
+        title,
+        &plain,
+        &[],
+        classification,
+        &doc_value,
+        super::document::SCHEMA_VERSION as i32,
+        principal.person_id,
+    )
+    .await?;
+
+    outbox::emit(
+        tx,
+        event::NOTE_CREATED,
+        "note",
+        note.id,
+        &ids.correlation_id,
+        json!({ "owner_id": principal.person_id }),
+    )
+    .await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::CREATE, "note")
+            .resource(note.id)
+            .classified(classification),
+    )
+    .await?;
+
+    Ok(note)
+}
+
+/// The personal notes of the acting member.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn list_personal_notes(
+    pool: &PgPool,
+    principal: &Principal,
+    page: PageRequest,
+) -> CoreResult<Vec<Note>> {
+    repo::list_personal_notes(pool, principal.person_id, page.limit(), page.offset()).await
+}
+
+/// Load one personal note the acting member owns.
+///
+/// Returns [`CoreError::NotFound`] both when the note does not exist and when it
+/// is not theirs — the two are deliberately indistinguishable, so a member does
+/// not learn that a note exists by guessing identifiers.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] when absent or not the caller's.
+pub async fn get_personal_note(
+    pool: &PgPool,
+    principal: &Principal,
+    note_id: Uuid,
+) -> CoreResult<Note> {
+    repo::find_note(pool, note_id, principal.organisation_id)
+        .await?
+        .filter(|n| n.owner_id == Some(principal.person_id))
+        .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))
+}
+
+/// Update a personal note, guarded by the revision it was loaded at.
+///
+/// Snapshots the current revision, then advances only if the note is still at
+/// `base_revision`. If someone else advanced it since this editor loaded it, the
+/// conditional update matches nothing and this returns [`CoreError::Conflict`] —
+/// no silent overwrite (ADR-0413 §5). The full document is sent on each save;
+/// autosave never produces a revision per keystroke, because the editor
+/// coalesces before it calls.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] when absent or not the caller's, [`CoreError::Validation`]
+/// for an empty title or an invalid document, and [`CoreError::Conflict`] on a
+/// stale base revision.
+pub async fn update_personal_note(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    note_id: Uuid,
+    base_revision: i32,
+    title: &str,
+    document: serde_json::Value,
+    tags: Option<Vec<String>>,
+) -> CoreResult<Note> {
+    let existing = repo::find_note(&mut **tx, note_id, principal.organisation_id)
+        .await?
+        .filter(|n| n.owner_id == Some(principal.person_id))
+        .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))?;
+
+    let title = title.trim();
+    if title.is_empty() {
+        return Err(CoreError::Validation("A note needs a title.".to_owned()));
+    }
+    let doc = super::document::NoteDocument::from_value(document)?;
+    let plain = doc.plain_text();
+    let doc_value = serde_json::to_value(&doc)
+        .map_err(|_| CoreError::Internal("could not serialise the note document".to_owned()))?;
+
+    repo::snapshot_note(&mut **tx, existing.id).await?;
+
+    let updated = repo::update_note_at_revision(
+        &mut **tx,
+        existing.id,
+        base_revision,
+        title,
+        &plain,
+        tags.as_deref(),
+        &doc_value,
+        super::document::SCHEMA_VERSION as i32,
+        principal.person_id,
+    )
+    .await?
+    .ok_or_else(|| {
+        CoreError::Conflict(
+            "Esta nota foi alterada por outra sessão desde que a abriu. \
+             Recarregue para ver a versão mais recente."
+                .to_owned(),
+        )
+    })?;
+
+    outbox::emit(
+        tx,
+        event::NOTE_UPDATED,
+        "note",
+        updated.id,
+        &ids.correlation_id,
+        json!({ "owner_id": principal.person_id, "revision": updated.revision }),
+    )
+    .await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::UPDATE, "note")
+            .resource(updated.id)
+            .detail("revision", updated.revision),
+    )
+    .await?;
+
+    Ok(updated)
+}
+
+/// The revision history of a personal note the caller owns.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] when absent or not the caller's.
+pub async fn personal_note_revisions(
+    pool: &PgPool,
+    principal: &Principal,
+    note_id: Uuid,
+) -> CoreResult<Vec<repo::NoteRevisionMeta>> {
+    // Confirm ownership before revealing anything about the note's history.
+    get_personal_note(pool, principal, note_id).await?;
+    repo::list_note_revisions(pool, note_id).await
 }
 
 /// A file as it arrived from a caller, before validation.
@@ -774,10 +983,13 @@ pub async fn get_note(
     let note = repo::find_note(pool, note_id, principal.organisation_id)
         .await?
         .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))?;
+    let workspace_id = note
+        .workspace_id
+        .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))?;
     let workspace = readable_artefact_workspace(
         pool,
         principal,
-        note.workspace_id,
+        workspace_id,
         ResourceKind::Note,
         note.classification(),
     )

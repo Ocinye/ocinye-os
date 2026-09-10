@@ -265,17 +265,25 @@ impl Source {
 }
 
 /// A conceptual note.
+///
+/// A note belongs to a member (`owner_id`, a personal note) or to a Research
+/// Workspace (`workspace_id`), or both — never neither (ADR-0413). The canonical
+/// rich body is the structured `document`; `body` holds the derived plain-text
+/// projection that feeds search and the excerpt. A legacy note has no
+/// `document` and reads as the plain text in `body`.
 #[derive(Debug, Clone, FromRow)]
 pub struct Note {
     /// Identifier.
     pub id: Uuid,
-    /// Owning unit.
-    pub unit_id: Uuid,
-    /// Owning workspace.
-    pub workspace_id: Uuid,
+    /// Owning member, for a personal note.
+    pub owner_id: Option<Uuid>,
+    /// Owning unit, for a workspace note.
+    pub unit_id: Option<Uuid>,
+    /// Owning workspace, for a workspace note.
+    pub workspace_id: Option<Uuid>,
     /// Title.
     pub title: String,
-    /// Body.
+    /// Plain-text projection of the body — for search and the excerpt.
     pub body: String,
     /// Tags.
     pub tags: Vec<String>,
@@ -283,6 +291,10 @@ pub struct Note {
     pub classification: String,
     /// Current revision number.
     pub revision: i32,
+    /// The canonical structured document, when the note is rich.
+    pub document: Option<serde_json::Value>,
+    /// The schema version of `document`, when present.
+    pub schema_version: Option<i32>,
     /// Creation time.
     pub created_at: DateTime<Utc>,
     /// Last change.
