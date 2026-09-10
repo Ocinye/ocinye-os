@@ -350,7 +350,7 @@ fn a_prontidao_nao_e_inferida_de_um_pedido_de_dominio() {
 #[test]
 fn conteudo_do_dominio_nunca_vira_marcacao() {
     /// Onde `inner_html` é legítimo, e porquê.
-    const AUTORIZADOS: [(&str, &str); 2] = [
+    const AUTORIZADOS: [(&str, &str); 3] = [
         (
             "mail.rs",
             "o corpo da mensagem, já sanitizado pelo Core antes de sair de lá",
@@ -359,6 +359,14 @@ fn conteudo_do_dominio_nunca_vira_marcacao() {
             "mfa.rs",
             "o SVG do QR de enrolamento, gerado pelo crate `qrcode` a partir do \
              otpauth — marcação que a Experience produz, não conteúdo do domínio",
+        ),
+        (
+            "notes.rs",
+            "o corpo de uma nota partilhada só para leitura: o HTML derivado pelo \
+             Core (`document::to_html`) de um documento estruturado — um conjunto \
+             fechado de etiquetas, com todo o texto e atributo escapados por \
+             construção, e esquemas de ligação perigosos recusados na validação \
+             (nunca marcação vinda de quem escreve)",
         ),
     ];
 
