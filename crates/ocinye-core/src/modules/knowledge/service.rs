@@ -671,7 +671,7 @@ pub async fn move_personal_note(
     folder_id: Option<Uuid>,
 ) -> CoreResult<()> {
     if let Some(folder_id) = folder_id {
-        if !crate::modules::files::owns_personal_folder(&mut **tx, principal, folder_id).await? {
+        if !crate::modules::files::owns_personal_folder(tx, principal, folder_id).await? {
             return Err(CoreError::Validation("Essa pasta não é sua.".to_owned()));
         }
     }
