@@ -7,6 +7,22 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Módulo de Notas certificado: `OCINYE_NOTES_READY` (fatias F e G) — 2026-09-10
+
+O módulo de Notas está completo e certificado no repositório. A **postura de
+segurança** ficou registada no [modelo de ameaças](docs/threat-model/README.md) —
+XSS pelo corpo derivado, IDOR, leitura por `PlatformAdmin`, escrita com autoridade
+obsoleta, fuga de imagem partilhada, travessia de organização, fuga pela pesquisa
+ou pelo Lixo, e sobreposição silenciosa —, cada ameaça mapeada à sua reversão
+provada. A `Secção 1` do `CLAUDE.md` passa a declarar o módulo `CURRENT` e as
+contagens desta secção foram re-derivadas (`repository-facts.sh`): 38 migrations,
+61 ADRs, 175 caminhos, 207 operações, 80 ecrãs. A matriz de
+[feature-status](docs/feature-status/README.md) ganha a linha das Notas pessoais.
+
+`OCINYE_STABLE_PRE_AI_READY` **continua retido**: certifica o sistema inteiro, e a
+inferência real ainda não existe. O **deploy de produção** e uma **prova de
+backup disparada em produção** são passos operacionais, fora do repositório.
+
 ### Aviso em tempo real nas notas partilhadas (fatia E) — 2026-09-10
 
 Numa nota partilhada, quem a alcança passa a ser avisado, ao vivo, de que ela

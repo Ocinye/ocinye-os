@@ -152,6 +152,23 @@ arbitrários, e cujo conteúdo será renderizado a um membro autenticado.
 | **Correio como arquivo secundário** | `mail_messages` guarda metadados e excerto; corpos e anexos não são persistidos. | Implementado ([ADR-0407](../adrs/0407-mail-index-not-archive.md)). |
 | **Malware em anexo recebido** | — | **Não implementado.** A descarga de anexos está declarada indisponível na interface, o que hoje remove a via. Reabrir quando os anexos forem ligados. |
 
+### Notas
+
+Uma nota é conhecimento **pessoal**, e a partilha por pessoa e papel abre uma
+superfície de acesso nova. As ameaças e o que as fecha
+([ADR-0413](../adrs/0413-notes-as-institutional-knowledge.md)):
+
+| Ameaça | Mitigação | Estado |
+|---|---|---|
+| **XSS pelo corpo da nota** | O corpo canónico é um **documento estruturado**, não HTML; o `to_html` derivado só emite uma lista fechada de etiquetas e **escapa** todo o texto e atributo por construção; esquemas `javascript:`/`data:` são recusados na validação do documento. Os dois `inner_html` (vista de leitura e pré-visualização de revisão) estão na lista autorizada, documentados. | Implementado, testado (`html_hostil_no_texto_escapa_se`, `o_html_de_uma_imagem_...escapa_o_alt`, `uma_ligacao_javascript...`, guarda `conteudo_do_dominio_nunca_vira_marcacao`). |
+| **IDOR — ler a nota de outro pelo id** | Uma nota pessoal não tem workspace; o Core resolve o dono pela sessão, e uma nota alheia lê-se como **inexistente** (`NotFound`, nunca «sem acesso»). | Implementado, testado (`outro_membro_nao_le_a_nota_de_alguem`). |
+| **Leitura por privilégio (`PlatformAdmin`)** | A administração da plataforma não abre a nota pessoal de ninguém — a pertença/posse está na consulta, não o papel. | Implementado, testado (`o_platform_admin_nao_le_uma_nota_privada`). |
+| **Escrita com autoridade obsoleta** | A autoridade reestabelece-se **dentro da transacção da gravação** (ADR-0411): um *viewer* não escreve, e um *editor* revogado deixa de escrever e de restaurar na operação seguinte, mesmo com a nota aberta. | Implementado, testado (`um_leitor_nao_edita...`, `um_editor_revogado_deixa_de_gravar`, `um_editor_revogado_nao_restaura`). |
+| **Fuga de imagem de nota partilhada** | A imagem é um ficheiro do **dono**, servida same-origin pela versão exacta; a pré-visualização autoriza `dono ∨ nota partilhada viva que a cita` — um membro sem partilha não a vê. | Implementado, testado (`uma_imagem_de_nota_partilhada_ve_se_pelo_destinatario`). |
+| **Re-partilha ou travessia de organização** | Só o dono partilha e revoga; a partilha nunca atravessa a organização. | Implementado, testado (`partilhar_exige_ser_dono`, `partilhar_nao_atravessa_organizacao`). |
+| **Fuga pela pesquisa ou pelo Lixo** | A nota indexa-se com o dono; apagar de-indexa; uma nota `INTERNAL` de uma pessoa não aparece na pesquisa de outra, nem uma nota apagada em lista, leitura ou pesquisa. | Implementado, testado (`uma_nota_pessoal_e_pesquisavel_so_pelo_dono`, `apagar_uma_nota_leva_a_ao_lixo`). |
+| **Sobreposição silenciosa (lost update)** | A gravação é condicionada pela **revisão base**; uma base obsoleta é conflito (`409`), não última-escrita. O aviso em tempo real informa e **nunca recarrega**. | Implementado, testado (`uma_revisao_base_obsoleta_nao_sobrepoe`). |
+
 ### Plano agentic
 
 A afirmação que esta camada faz não é «o modelo resiste a instruções
