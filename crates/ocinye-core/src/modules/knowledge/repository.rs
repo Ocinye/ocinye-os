@@ -18,7 +18,7 @@ const SOURCE_COLUMNS: &str = "id, unit_id, workspace_id, source_type, title, aut
 
 const NOTE_COLUMNS: &str = "id, owner_id, unit_id, workspace_id, folder_id, title, body, tags,
                             classification, revision, document, schema_version, created_at,
-                            updated_at";
+                            updated_at, deleted_at";
 
 /// Document columns joined with their stored object, so a caller sees size and
 /// checksum without a second query.
@@ -300,6 +300,31 @@ pub async fn find_note<'e>(
     organisation_id: Uuid,
 ) -> CoreResult<Option<Note>> {
     let note = sqlx::query_as::<_, Note>(&format!(
+        "SELECT {NOTE_COLUMNS} FROM notes
+          WHERE id = $1 AND organisation_id = $2 AND deleted_at IS NULL"
+    ))
+    .bind(id)
+    .bind(organisation_id)
+    .fetch_optional(executor)
+    .await?;
+    Ok(note)
+}
+
+/// Find a note by id, **including one in the bin**.
+///
+/// The counterpart to [`find_note`], which sees only live notes. Restoring or
+/// purging a note operates on one already soft-deleted, so it needs to reach it;
+/// every other path uses [`find_note`] and a deleted note is invisible to it.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn find_note_any<'e>(
+    executor: impl PgExecutor<'e>,
+    id: Uuid,
+    organisation_id: Uuid,
+) -> CoreResult<Option<Note>> {
+    let note = sqlx::query_as::<_, Note>(&format!(
         "SELECT {NOTE_COLUMNS} FROM notes WHERE id = $1 AND organisation_id = $2"
     ))
     .bind(id)
@@ -307,6 +332,86 @@ pub async fn find_note<'e>(
     .fetch_optional(executor)
     .await?;
     Ok(note)
+}
+
+/// The bin of a member: their soft-deleted notes, most recently deleted first.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn list_deleted_personal_notes<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    limit: i64,
+    offset: i64,
+) -> CoreResult<Vec<Note>> {
+    let notes = sqlx::query_as::<_, Note>(&format!(
+        "SELECT {NOTE_COLUMNS} FROM notes
+          WHERE owner_id = $1 AND deleted_at IS NOT NULL
+          ORDER BY deleted_at DESC
+          LIMIT $2 OFFSET $3"
+    ))
+    .bind(owner_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(executor)
+    .await?;
+    Ok(notes)
+}
+
+/// Move a note to the bin. Returns whether a live note was affected.
+///
+/// # Errors
+///
+/// Returns an error when the update fails.
+pub async fn soft_delete_note<'e>(
+    executor: impl PgExecutor<'e>,
+    note_id: Uuid,
+    deleted_by: Uuid,
+) -> CoreResult<bool> {
+    let affected = sqlx::query(
+        "UPDATE notes SET deleted_at = now(), deleted_by_id = $2, updated_at = now()
+          WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(note_id)
+    .bind(deleted_by)
+    .execute(executor)
+    .await?
+    .rows_affected();
+    Ok(affected > 0)
+}
+
+/// Restore a note from the bin. Returns whether a deleted note was affected.
+///
+/// # Errors
+///
+/// Returns an error when the update fails.
+pub async fn restore_note<'e>(executor: impl PgExecutor<'e>, note_id: Uuid) -> CoreResult<bool> {
+    let affected = sqlx::query(
+        "UPDATE notes SET deleted_at = NULL, deleted_by_id = NULL, updated_at = now()
+          WHERE id = $1 AND deleted_at IS NOT NULL",
+    )
+    .bind(note_id)
+    .execute(executor)
+    .await?
+    .rows_affected();
+    Ok(affected > 0)
+}
+
+/// Delete a note permanently. Its revisions and shares go with it (CASCADE).
+///
+/// The referenced files are **not** touched: a file is an institutional object
+/// of its own, and deleting a note does not delete the owner's images (ADR-0413).
+///
+/// # Errors
+///
+/// Returns an error when the delete fails.
+pub async fn hard_delete_note<'e>(executor: impl PgExecutor<'e>, note_id: Uuid) -> CoreResult<()> {
+    sqlx::query("DELETE FROM notes WHERE id = $1")
+        .bind(note_id)
+        .execute(executor)
+        .await?;
+    Ok(())
 }
 
 /// Snapshot the current note into its revision history.
@@ -447,6 +552,7 @@ pub async fn list_personal_notes<'e>(
     let notes = sqlx::query_as::<_, Note>(&format!(
         "SELECT {NOTE_COLUMNS} FROM notes
           WHERE owner_id = $1
+            AND deleted_at IS NULL
             AND ($2::text IS NULL OR $2 = ANY(tags))
             AND ($3::uuid IS NULL OR folder_id = $3)
           ORDER BY updated_at DESC
@@ -630,7 +736,7 @@ pub async fn list_notes_shared_with<'e>(
     let notes = sqlx::query_as::<_, Note>(&format!(
         "SELECT {colunas} FROM notes n
            JOIN note_shares s ON s.note_id = n.id
-          WHERE s.person_id = $1 AND s.revoked_at IS NULL
+          WHERE s.person_id = $1 AND s.revoked_at IS NULL AND n.deleted_at IS NULL
           ORDER BY n.updated_at DESC
           LIMIT $2 OFFSET $3"
     ))
@@ -662,7 +768,7 @@ pub async fn shared_note_references_version<'e>(
     let existe: Option<bool> = sqlx::query_scalar(
         "SELECT TRUE FROM notes n
            JOIN note_shares s ON s.note_id = n.id
-          WHERE s.person_id = $1 AND s.revoked_at IS NULL
+          WHERE s.person_id = $1 AND s.revoked_at IS NULL AND n.deleted_at IS NULL
             AND n.document -> 'blocks' @> $2
           LIMIT 1",
     )

@@ -7,6 +7,20 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Lixo das notas pessoais: apagar reversível (fatia E) — 2026-09-10
+
+Apagar uma nota deixa de a destruir: leva-a ao **Lixo** (migração `0037`,
+`notes.deleted_at`). Uma nota apagada sai da lista, da leitura, da pesquisa e de
+«partilhadas comigo», mas espera no Lixo — de onde se **restaura** (volta à vida
+e à pesquisa, sem mexer na revisão) ou se **elimina definitivamente**. A
+eliminação definitiva só acontece a partir do Lixo (um segundo passo
+deliberado), leva com ela as revisões e as partilhas, mas não os ficheiros
+referenciados — uma imagem é um objecto institucional próprio. Apagar, restaurar
+e eliminar são **do dono**: um editor partilhado não apaga a nota alheia. No
+Workspace, o editor ganha «Apagar», a lista ganha o «Lixo», e o Lixo lista as
+apagadas com restaurar e eliminar. Emenda à
+[ADR-0413](docs/adrs/0413-notes-as-institutional-knowledge.md).
+
 ### Controlo e residência de um nó de compute; verdade documental do plano de IA — 2026-09-10
 
 Preparação mínima para o primeiro nó GPU real (uma NVIDIA L40S numa cloud de

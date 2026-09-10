@@ -1257,3 +1257,218 @@ async fn o_conteudo_de_uma_revisao_nao_se_le_por_estranho() {
         "ler o conteúdo de uma revisão de outro",
     );
 }
+
+// ── Fatia E — lixo (soft delete) ───────────────────────────────────────────
+//
+// Apagar uma nota é reversível (ADR-0413 §7): sai das listas, das leituras e da
+// pesquisa, mas espera no Lixo. Restaurar traz de volta; eliminar
+// definitivamente — e só a partir do Lixo — é que destrói.
+
+async fn apagar(pool: &PgPool, dono: &Principal, ids: &CorrelationIds, note_id: Uuid) {
+    let mut tx = pool.begin().await.expect("tx");
+    knowledge::delete_personal_note(&mut tx, dono, ids, note_id)
+        .await
+        .expect("apaga a nota");
+    tx.commit().await.expect("commit");
+}
+
+fn pagina() -> PageRequest {
+    PageRequest {
+        page: 1,
+        page_size: 50,
+    }
+}
+
+/// Apagar leva ao Lixo: sai da lista, da leitura e da pesquisa; fica no Lixo.
+#[tokio::test]
+async fn apagar_uma_nota_leva_a_ao_lixo() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let termo = format!("basalto{}", &Uuid::new_v4().simple().to_string()[..8]);
+    let nota = nova_nota(
+        &pool,
+        &dono,
+        &ids,
+        "Para apagar",
+        &format!("nota sobre {termo}"),
+    )
+    .await;
+
+    apagar(&pool, &dono, &ids, nota.id).await;
+
+    // Sai da leitura normal.
+    recusa_muda(
+        knowledge::get_personal_note(&pool, &dono, nota.id).await,
+        "ler uma nota apagada",
+    );
+    // Sai da lista de notas vivas.
+    let vivas = knowledge::list_personal_notes(&pool, &dono, None, None, pagina())
+        .await
+        .expect("lista");
+    assert!(
+        !vivas.iter().any(|n| n.id == nota.id),
+        "uma nota apagada continuou na lista de notas vivas"
+    );
+    // Sai da pesquisa.
+    let (_hits, total) =
+        ocinye_core::modules::search::search(&pool, &dono, &termo, None, None, pagina())
+            .await
+            .expect("pesquisa");
+    assert_eq!(
+        total, 0,
+        "uma nota apagada continuou a aparecer na pesquisa"
+    );
+    // Mas está no Lixo.
+    let lixo = knowledge::deleted_personal_notes(&pool, &dono, pagina())
+        .await
+        .expect("lixo");
+    assert!(
+        lixo.iter().any(|n| n.id == nota.id),
+        "a nota apagada não apareceu no Lixo"
+    );
+}
+
+/// Restaurar traz do Lixo e volta a indexar para a pesquisa.
+#[tokio::test]
+async fn restaurar_traz_do_lixo_e_reindexa() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let termo = format!("gnaisse{}", &Uuid::new_v4().simple().to_string()[..8]);
+    let nota = nova_nota(
+        &pool,
+        &dono,
+        &ids,
+        "Vai e volta",
+        &format!("nota sobre {termo}"),
+    )
+    .await;
+    apagar(&pool, &dono, &ids, nota.id).await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    knowledge::restore_personal_note(&mut tx, &dono, &ids, nota.id)
+        .await
+        .expect("restaura");
+    tx.commit().await.expect("commit");
+
+    // Volta a ler-se, e a revisão não avançou (restaurar do lixo não é editar).
+    let (lida, _acesso) = knowledge::get_personal_note(&pool, &dono, nota.id)
+        .await
+        .expect("lê a nota restaurada");
+    assert_eq!(
+        lida.revision, nota.revision,
+        "restaurar do lixo mexeu na revisão"
+    );
+    // Volta à pesquisa.
+    let (_hits, total) =
+        ocinye_core::modules::search::search(&pool, &dono, &termo, None, None, pagina())
+            .await
+            .expect("pesquisa");
+    assert_eq!(total, 1, "a nota restaurada não voltou à pesquisa");
+    // Sai do Lixo.
+    let lixo = knowledge::deleted_personal_notes(&pool, &dono, pagina())
+        .await
+        .expect("lixo");
+    assert!(
+        !lixo.iter().any(|n| n.id == nota.id),
+        "a nota restaurada continuou no Lixo"
+    );
+}
+
+/// Eliminar definitivamente, a partir do Lixo, destrói de vez.
+#[tokio::test]
+async fn eliminar_definitivamente_destroi() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Adeus", "corpo").await;
+    apagar(&pool, &dono, &ids, nota.id).await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    knowledge::purge_personal_note(&mut tx, &dono, &ids, nota.id)
+        .await
+        .expect("elimina definitivamente");
+    tx.commit().await.expect("commit");
+
+    // Já não está no Lixo, e as revisões foram com ela.
+    let lixo = knowledge::deleted_personal_notes(&pool, &dono, pagina())
+        .await
+        .expect("lixo");
+    assert!(
+        !lixo.iter().any(|n| n.id == nota.id),
+        "uma nota eliminada definitivamente continuou no Lixo"
+    );
+    let revisoes: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM note_revisions WHERE note_id = $1")
+            .bind(nota.id)
+            .fetch_one(&pool)
+            .await
+            .expect("consulta");
+    assert_eq!(
+        revisoes, 0,
+        "as revisões sobreviveram à eliminação definitiva"
+    );
+}
+
+/// Só o dono apaga: um editor partilhado não apaga a nota alheia.
+#[tokio::test]
+async fn so_o_dono_apaga_a_nota() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let editor = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Não é para apagares", "corpo").await;
+    partilha(
+        &pool,
+        &dono,
+        &ids,
+        nota.id,
+        editor.person_id,
+        NoteShareRole::Editor,
+    )
+    .await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    let tentativa = knowledge::delete_personal_note(&mut tx, &editor, &ids, nota.id).await;
+    match tentativa {
+        Err(CoreError::NotFound(_)) => {}
+        outro => panic!("um editor a apagar a nota do dono devia dar NotFound; veio {outro:?}"),
+    }
+    drop(tx);
+
+    // A nota continua viva para o dono.
+    let vivas = knowledge::list_personal_notes(&pool, &dono, None, None, pagina())
+        .await
+        .expect("lista");
+    assert!(
+        vivas.iter().any(|n| n.id == nota.id),
+        "a nota foi apagada por quem não é o dono"
+    );
+}
+
+/// Eliminar definitivamente exige estar no Lixo: uma nota viva não se destrói
+/// num passo só.
+#[tokio::test]
+async fn eliminar_exige_estar_no_lixo() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Viva", "corpo").await;
+    let mut tx = pool.begin().await.expect("tx");
+    let tentativa = knowledge::purge_personal_note(&mut tx, &dono, &ids, nota.id).await;
+    match tentativa {
+        Err(CoreError::Validation(_)) => {}
+        outro => panic!("eliminar uma nota viva devia dar Validation; veio {outro:?}"),
+    }
+}

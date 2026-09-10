@@ -61,8 +61,14 @@ pub fn routes() -> Router<AppState> {
         )
         .route(
             "/me/notes/{note_id}",
-            get(get_personal_note).post(update_personal_note),
+            get(get_personal_note)
+                .post(update_personal_note)
+                .delete(delete_personal_note),
         )
+        // O Lixo: as notas apagadas do membro, e restaurar/eliminar uma.
+        .route("/me/deleted-notes", get(list_deleted_notes))
+        .route("/me/notes/{note_id}/restore", post(restore_note))
+        .route("/me/notes/{note_id}/purge", delete(purge_note))
         .route(
             "/me/notes/{note_id}/revisions",
             get(list_personal_note_revisions),
@@ -799,6 +805,58 @@ async fn get_personal_note(
 ) -> Result<Json<PersonalNoteView>, ApiError> {
     let (note, access) = knowledge::get_personal_note(&state.pool, &principal, note_id).await?;
     Ok(Json(PersonalNoteView::for_access(note, access)))
+}
+
+async fn delete_personal_note(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(note_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    knowledge::delete_personal_note(&mut tx, &principal, &ids, note_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(serde_json::json!({ "deleted": true })))
+}
+
+async fn list_deleted_notes(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Query(query): Query<PageQuery>,
+) -> Result<Json<Vec<PersonalNoteSummary>>, ApiError> {
+    let notes = knowledge::deleted_personal_notes(
+        &state.pool,
+        &principal,
+        page_of(query.page, query.page_size),
+    )
+    .await?;
+    Ok(Json(
+        notes.into_iter().map(PersonalNoteSummary::from).collect(),
+    ))
+}
+
+async fn restore_note(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(note_id): Path<Uuid>,
+) -> Result<Json<PersonalNoteView>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let note = knowledge::restore_personal_note(&mut tx, &principal, &ids, note_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(PersonalNoteView::from(note)))
+}
+
+async fn purge_note(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(note_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    knowledge::purge_personal_note(&mut tx, &principal, &ids, note_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(serde_json::json!({ "purged": true })))
 }
 
 async fn update_personal_note(
