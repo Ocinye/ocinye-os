@@ -55,7 +55,10 @@ pub fn routes() -> Router<AppState> {
         // and the Core resolves the owner from the session, never from the
         // path — a personal note has no identifier a caller could name to
         // reach someone else's (ADR-0413 §4).
-        .route("/me/notes", get(list_personal_notes).post(create_personal_note))
+        .route(
+            "/me/notes",
+            get(list_personal_notes).post(create_personal_note),
+        )
         .route(
             "/me/notes/{note_id}",
             get(get_personal_note).post(update_personal_note),
@@ -617,9 +620,12 @@ async fn list_personal_notes(
     CurrentPrincipal(principal): CurrentPrincipal,
     Query(query): Query<PageQuery>,
 ) -> Result<Json<Vec<PersonalNoteSummary>>, ApiError> {
-    let notes =
-        knowledge::list_personal_notes(&state.pool, &principal, page_of(query.page, query.page_size))
-            .await?;
+    let notes = knowledge::list_personal_notes(
+        &state.pool,
+        &principal,
+        page_of(query.page, query.page_size),
+    )
+    .await?;
     Ok(Json(
         notes.into_iter().map(PersonalNoteSummary::from).collect(),
     ))
@@ -632,9 +638,14 @@ async fn create_personal_note(
     Json(request): Json<CreatePersonalNoteRequest>,
 ) -> Result<Json<PersonalNoteView>, ApiError> {
     let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
-    let note =
-        knowledge::create_personal_note(&mut tx, &principal, &ids, &request.title, request.document)
-            .await?;
+    let note = knowledge::create_personal_note(
+        &mut tx,
+        &principal,
+        &ids,
+        &request.title,
+        request.document,
+    )
+    .await?;
     tx.commit().await.map_err(CoreError::from)?;
     Ok(Json(PersonalNoteView::from(note)))
 }
@@ -661,10 +672,12 @@ async fn update_personal_note(
         &principal,
         &ids,
         note_id,
-        request.base_revision,
-        &request.title,
-        request.document,
-        request.tags,
+        knowledge::PersonalNoteEdit {
+            base_revision: request.base_revision,
+            title: request.title,
+            document: request.document,
+            tags: request.tags,
+        },
     )
     .await?;
     tx.commit().await.map_err(CoreError::from)?;

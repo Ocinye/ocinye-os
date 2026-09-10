@@ -6773,7 +6773,10 @@ async fn create_personal_note(State(state): State<WorkspaceState>, headers: Head
     .await
     {
         Ok(created) => {
-            let id = created.get("id").and_then(Value::as_str).unwrap_or_default();
+            let id = created
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             Redirect::to(&format!("/notes/{id}")).into_response()
         }
         Err(failure) => failure_response(&failure),
@@ -6820,9 +6823,7 @@ async fn save_personal_note(
     // Resolução manual, sem a macro: uma sessão anómala responde 401, nunca uma
     // redirecção que o editor confundiria com sucesso.
     let member = match current_member(&state, &headers) {
-        Some(member)
-            if !member.session.must_change_password && !member.session.mfa_required =>
-        {
+        Some(member) if !member.session.must_change_password && !member.session.mfa_required => {
             member
         }
         _ => return StatusCode::UNAUTHORIZED.into_response(),

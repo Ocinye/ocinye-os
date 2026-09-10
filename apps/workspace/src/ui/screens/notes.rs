@@ -66,7 +66,11 @@ fn note_card(note: &Value) -> impl IntoView {
     let id = field(note, "id").to_owned();
     let title = {
         let t = field(note, "title");
-        if t.is_empty() { "Sem título".to_owned() } else { t.to_owned() }
+        if t.is_empty() {
+            "Sem título".to_owned()
+        } else {
+            t.to_owned()
+        }
     };
     let excerpt = field(note, "excerpt").to_owned();
     let updated = updated_label(field(note, "updated_at"));

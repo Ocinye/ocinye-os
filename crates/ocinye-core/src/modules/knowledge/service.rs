@@ -604,14 +604,29 @@ pub async fn get_personal_note(
         .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))
 }
 
+/// The fields a personal-note edit carries.
+///
+/// Grouped into one value so the update reads as an intent — «grava esta versão,
+/// se a base ainda for esta» — and not as a long list of positional arguments.
+pub struct PersonalNoteEdit {
+    /// The revision the editor loaded, for the compare-and-set.
+    pub base_revision: i32,
+    /// The new title.
+    pub title: String,
+    /// The new canonical structured document.
+    pub document: serde_json::Value,
+    /// The new tags, when the caller sends them.
+    pub tags: Option<Vec<String>>,
+}
+
 /// Update a personal note, guarded by the revision it was loaded at.
 ///
 /// Snapshots the current revision, then advances only if the note is still at
-/// `base_revision`. If someone else advanced it since this editor loaded it, the
-/// conditional update matches nothing and this returns [`CoreError::Conflict`] —
-/// no silent overwrite (ADR-0413 §5). The full document is sent on each save;
-/// autosave never produces a revision per keystroke, because the editor
-/// coalesces before it calls.
+/// `edit.base_revision`. If someone else advanced it since this editor loaded
+/// it, the conditional update matches nothing and this returns
+/// [`CoreError::Conflict`] — no silent overwrite (ADR-0413 §5). The full document
+/// is sent on each save; autosave never produces a revision per keystroke,
+/// because the editor coalesces before it calls.
 ///
 /// # Errors
 ///
@@ -623,21 +638,18 @@ pub async fn update_personal_note(
     principal: &Principal,
     ids: &CorrelationIds,
     note_id: Uuid,
-    base_revision: i32,
-    title: &str,
-    document: serde_json::Value,
-    tags: Option<Vec<String>>,
+    edit: PersonalNoteEdit,
 ) -> CoreResult<Note> {
     let existing = repo::find_note(&mut **tx, note_id, principal.organisation_id)
         .await?
         .filter(|n| n.owner_id == Some(principal.person_id))
         .ok_or_else(|| CoreError::NotFound("Note not found.".to_owned()))?;
 
-    let title = title.trim();
+    let title = edit.title.trim();
     if title.is_empty() {
         return Err(CoreError::Validation("A note needs a title.".to_owned()));
     }
-    let doc = super::document::NoteDocument::from_value(document)?;
+    let doc = super::document::NoteDocument::from_value(edit.document)?;
     let plain = doc.plain_text();
     let doc_value = serde_json::to_value(&doc)
         .map_err(|_| CoreError::Internal("could not serialise the note document".to_owned()))?;
@@ -647,10 +659,10 @@ pub async fn update_personal_note(
     let updated = repo::update_note_at_revision(
         &mut **tx,
         existing.id,
-        base_revision,
+        edit.base_revision,
         title,
         &plain,
-        tags.as_deref(),
+        edit.tags.as_deref(),
         &doc_value,
         super::document::SCHEMA_VERSION as i32,
         principal.person_id,

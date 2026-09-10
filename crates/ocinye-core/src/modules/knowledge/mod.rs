@@ -28,5 +28,5 @@ pub use service::{
     list_accessible_documents, list_accessible_sources, list_documents, list_links, list_notes,
     list_personal_notes, list_sources, personal_note_revisions, record_operation_provenance,
     review_bibliography, update_note, update_personal_note, NewDocument, NewNote, NewSource,
-    UploadedFile,
+    PersonalNoteEdit, UploadedFile,
 };

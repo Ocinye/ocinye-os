@@ -192,7 +192,11 @@ suites() {
 # 93 → 94 em 2026-09-10: entrou o primeiro acesso — entrar com a temporária,
 # definir a palavra-passe do próprio, e ver a temporária deixar de valer. Uma
 # viagem, uma marca.
-viagens-de-browser|94|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|94
+# 94 → 96 em 2026-09-10: entraram as Notas (ADR-0413) — escrever uma nota de
+# ponta a ponta com o editor estruturado e vê-la ficar, e uma gravação com a
+# revisão base obsoleta a ser recusada sem perder o texto. Duas viagens, duas
+# marcas.
+viagens-de-browser|96|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|96
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
@@ -215,6 +219,11 @@ identidade-privilegiada|15|-p ocinye-core --test privileged_identity
 # gastar um código de recuperação uma só vez, e revogar a sessão de um membro
 # sem tocar na de outro (ADR-0107).
 mfa-obrigatorio|3|-p ocinye-core --test mfa
+# As notas pessoais são o primeiro objecto cujo dono é uma pessoa e não um
+# ambiente (ADR-0413). Estas provas percorrem a autorização pela porta errada —
+# outro membro, um PlatformAdmin, uma revisão base obsoleta, um documento
+# hostil — e exigem recusa em todas.
+notas-pessoais|7|-p ocinye-core --test personal_notes
 TABELA
 }
 

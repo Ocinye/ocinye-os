@@ -520,8 +520,14 @@ mod tests {
         }))
         .expect("o texto é texto, por mais hostil que pareça");
         let html = doc.to_html();
-        assert!(!html.contains("<script>"), "o texto hostil virou marcação: {html}");
-        assert!(html.contains("&lt;script&gt;"), "o texto hostil devia aparecer escapado");
+        assert!(
+            !html.contains("<script>"),
+            "o texto hostil virou marcação: {html}"
+        );
+        assert!(
+            html.contains("&lt;script&gt;"),
+            "o texto hostil devia aparecer escapado"
+        );
     }
 
     /// Uma ligação `javascript:` é recusada na fronteira.
