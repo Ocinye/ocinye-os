@@ -6,6 +6,7 @@ use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use ocinye_contracts::{Classification, Page, PageRequest};
 use ocinye_core::modules::{files, knowledge};
+use ocinye_core::realtime::events::{Channel, ServerEvent};
 use ocinye_core::CoreError;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -883,6 +884,24 @@ async fn update_personal_note(
     )
     .await?;
     tx.commit().await.map_err(CoreError::from)?;
+
+    // Persistido. Agora, e só agora, avisa-se quem mais alcança a nota — o dono
+    // e os destinatários vivos, menos quem gravou (ADR-0413 §9). Sem partilha,
+    // a lista é vazia e nada sai. Fogo-e-esquece: se o realtime estiver em baixo,
+    // a gravação continua verdadeira e o outro lado reconcilia ao recarregar.
+    if let Ok(recipients) =
+        knowledge::note_notify_recipients(&state.pool, note.id, principal.person_id).await
+    {
+        for pid in recipients {
+            state
+                .realtime
+                .publish(
+                    Channel::Person { id: pid },
+                    &ServerEvent::NoteUpdated { note_id: note.id },
+                )
+                .await;
+        }
+    }
     Ok(Json(PersonalNoteView::from(note)))
 }
 
@@ -1000,6 +1019,17 @@ async fn share_note(
     knowledge::share_personal_note(&mut tx, &principal, &ids, note_id, request.person_id, role)
         .await?;
     tx.commit().await.map_err(CoreError::from)?;
+    // Persistido. Avisa-se a pessoa com quem se partilhou, no seu canal
+    // (ADR-0413 §9). Fogo-e-esquece, degrada em silêncio.
+    state
+        .realtime
+        .publish(
+            Channel::Person {
+                id: request.person_id,
+            },
+            &ServerEvent::NoteShared { note_id },
+        )
+        .await;
     Ok(Json(serde_json::json!({ "shared": true })))
 }
 

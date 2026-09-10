@@ -110,6 +110,19 @@ async fn conduzir(state: AppState, mut socket: WebSocket, person_id: Uuid, ligac
     // servir batimentos e declarações — degradado, e não partido.
     let mut escuta = state.realtime.escutar().await;
 
+    // Uma ligação ouve sempre o **seu próprio** canal de pessoa, sem o pedir: é
+    // a própria, e por definição pode. Assim uma notícia dirigida à pessoa —
+    // uma nota partilhada consigo, uma nota que alcança actualizada noutro sítio
+    // (ADR-0413 §9), uma menção — chega sem o cliente ter de nomear o seu id. A
+    // entrega continua a reverificar a autorização a cada evento.
+    {
+        let meu_canal = Channel::Person { id: person_id };
+        if let Some(escuta) = escuta.as_mut() {
+            escuta.subscrever(meu_canal).await;
+        }
+        ligacao.pedidos.insert(meu_canal.topico());
+    }
+
     loop {
         // Três coisas podem acontecer a seguir: o cliente fala, o Redis
         // entrega, ou o relógio bate. A última existe para que a autoridade

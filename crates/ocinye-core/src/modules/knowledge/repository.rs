@@ -310,6 +310,34 @@ pub async fn find_note<'e>(
     Ok(note)
 }
 
+/// The people to tell that a note changed: its owner and its live sharees,
+/// minus whoever made the change.
+///
+/// The set a realtime `NoteUpdated` goes to (ADR-0413 §9). For an unshared note
+/// edited by its owner this is empty, so nothing is published.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn note_notify_recipients<'e>(
+    executor: impl PgExecutor<'e>,
+    note_id: Uuid,
+    actor_id: Uuid,
+) -> CoreResult<Vec<Uuid>> {
+    let ids = sqlx::query_scalar::<_, Uuid>(
+        "SELECT owner_id AS pid FROM notes
+          WHERE id = $1 AND owner_id IS NOT NULL AND owner_id <> $2 AND deleted_at IS NULL
+         UNION
+         SELECT person_id AS pid FROM note_shares
+          WHERE note_id = $1 AND revoked_at IS NULL AND person_id <> $2",
+    )
+    .bind(note_id)
+    .bind(actor_id)
+    .fetch_all(executor)
+    .await?;
+    Ok(ids)
+}
+
 /// Find a note by id, **including one in the bin**.
 ///
 /// The counterpart to [`find_note`], which sees only live notes. Restoring or

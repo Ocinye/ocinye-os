@@ -122,6 +122,18 @@ pub enum ServerEvent {
         /// Até onde. Move-se para a frente e nunca para trás.
         lido_ate: chrono::DateTime<chrono::Utc>,
     },
+    /// Uma nota que a pessoa alcança foi actualizada noutro sítio. Durável: a
+    /// gravação já persistiu quando isto sai. O corpo vai buscar-se ao Core, com
+    /// autorização — aqui viaja só o identificador (ADR-0413 §9).
+    NoteUpdated {
+        /// Qual nota.
+        note_id: Uuid,
+    },
+    /// Uma nota foi partilhada com a pessoa. Durável.
+    NoteShared {
+        /// Qual nota.
+        note_id: Uuid,
+    },
     /// O plano realtime perdeu o Redis, ou recuperou-o.
     ///
     /// # Porque isto é um evento e não silêncio

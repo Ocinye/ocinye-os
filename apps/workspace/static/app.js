@@ -2923,3 +2923,53 @@ document.addEventListener('keydown', (event) => {
     });
   });
 })();
+
+/* Tempo real das notas (ADR-0413 §9).
+ *
+ * Numa nota partilhada, avisar «isto foi actualizado noutro sítio» sem fingir.
+ * O socket diz só que a nota mudou; NÃO recarrega nem sobrepõe o que se está a
+ * escrever — a gravação com revisão base protege contra isso, e um recarregar
+ * automático deitaria fora texto por escrever. Mostra-se um aviso, e a pessoa
+ * decide. O servidor já subscreve esta ligação ao canal da própria pessoa, por
+ * isso aqui só se escuta. */
+(() => {
+  'use strict';
+  var raiz = document.querySelector('[data-oc-notes-editor][data-note-id]');
+  if (!raiz) return;
+  var noteId = raiz.getAttribute('data-note-id');
+  var aviso = document.querySelector('[data-oc-notes-live]');
+  if (!noteId || !aviso) return;
+
+  var socket = null;
+  var espera = 1000;
+
+  function ligar() {
+    var protocolo = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    try {
+      socket = new WebSocket(protocolo + '//' + window.location.host + '/realtime');
+    } catch (erro) {
+      return;
+    }
+    socket.addEventListener('open', function () {
+      espera = 1000;
+      window.setInterval(function () {
+        if (socket && socket.readyState === 1) {
+          socket.send(JSON.stringify({ tipo: 'heartbeat' }));
+        }
+      }, 20000);
+    });
+    socket.addEventListener('message', function (evento) {
+      var dados;
+      try { dados = JSON.parse(evento.data); } catch (erro) { return; }
+      if (dados.tipo === 'note_updated' && dados.note_id === noteId) {
+        aviso.hidden = false;
+      }
+    });
+    socket.addEventListener('close', function () {
+      socket = null;
+      espera = Math.min(espera * 2, 30000);
+      window.setTimeout(ligar, espera);
+    });
+  }
+  ligar();
+})();

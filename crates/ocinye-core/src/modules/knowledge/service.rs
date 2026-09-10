@@ -1070,6 +1070,20 @@ pub async fn personal_note_revisions(
     repo::list_note_revisions(pool, note_id).await
 }
 
+/// The people to notify in real time that a note changed — its owner and its
+/// live sharees, minus the actor (ADR-0413 §9). Empty for an unshared note.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn note_notify_recipients(
+    pool: &PgPool,
+    note_id: Uuid,
+    actor_id: Uuid,
+) -> CoreResult<Vec<Uuid>> {
+    repo::note_notify_recipients(pool, note_id, actor_id).await
+}
+
 /// The activity feed of a personal note the caller may reach: who did what.
 ///
 /// The lifecycle and access events of the note (created, shared, revoked,
