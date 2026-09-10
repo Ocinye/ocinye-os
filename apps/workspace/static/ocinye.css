@@ -6077,3 +6077,10 @@ select.oc-entrada {
   border-radius: var(--oc-r-sm); padding: 4px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
 }
 .oc-notes-trash__purge:hover { background: var(--oc-error); color: var(--oc-on-navy); border-color: var(--oc-error); }
+
+/* Notas — aviso de tempo real (fatia E). Informa, nunca sobrepõe. */
+.oc-notes-live {
+  max-width: 760px; margin: 0 auto var(--oc-space-5); width: 100%;
+  background: var(--oc-warning-bg); border: 1px solid var(--oc-warning-border); color: var(--oc-warning-text);
+  border-radius: var(--oc-r-md); padding: var(--oc-space-4) var(--oc-space-6); font-size: 13px;
+}

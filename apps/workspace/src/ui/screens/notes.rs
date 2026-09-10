@@ -413,9 +413,18 @@ pub fn note_editor(
                 </div>
             })}
 
+            // O aviso de tempo real: escondido até o socket dizer que a nota
+            // mudou noutro sítio. Não recarrega — informa, e a pessoa decide
+            // (ADR-0413 §9). O `app.js` revela-o; sem JavaScript nunca aparece,
+            // e a gravação com revisão base continua a proteger contra sobrepor.
+            <div class="oc-notes-live" data-oc-notes-live="" hidden>
+                "Esta nota foi actualizada noutro sítio. Recarregue para ver a versão actual."
+            </div>
+
             <div
                 class="oc-notes-editor"
                 data-oc-notes-editor=""
+                data-note-id=id.clone()
                 data-save-url=save_url
                 data-revision=revision.to_string()
                 data-oc-notes-doc=document

@@ -284,6 +284,19 @@ Avisar «alguém acabou de actualizar esta nota» exige um canal e um evento nov
 (o `realtime` de hoje só conhece conversas e pessoas). Fica para a fatia de
 histórico/actividade, e até lá a Experience não finge tempo real. CRDT não entra.
 
+**Emenda 2026-09-10 (fatia E — tempo real).** Entregue, e sem fingir. Dois
+eventos novos — `NoteUpdated { note_id }` e `NoteShared { note_id }` — viajam pelo
+canal **da pessoa** (`Channel::Person`), que uma ligação passa a subscrever
+sozinha, sem nomear o seu id: é a própria, por definição pode ouvir-se. Só o
+identificador viaja; o corpo vai buscar-se ao Core, com autorização. **Persistir
+primeiro, publicar depois**: o aviso de uma edição vai ao dono e aos
+destinatários vivos, menos quem gravou (uma nota não partilhada não avisa
+ninguém); o de uma partilha vai a quem a recebeu. É fogo-e-esquece — sem Redis, a
+gravação continua verdadeira e o outro lado reconcilia ao recarregar. No cliente,
+**não se sobrepõe nada**: mostra-se um aviso «esta nota foi actualizada noutro
+sítio — recarregue», e a pessoa decide. O clobber continua barrado pela gravação
+com revisão base (§5), não pelo tempo real. CRDT continua a não entrar.
+
 ## Alternatives
 
 - **Uma tabela `personal_notes` separada.** Duplicaria a primitiva de notas e as

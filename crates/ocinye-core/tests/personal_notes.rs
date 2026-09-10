@@ -1545,3 +1545,87 @@ async fn a_actividade_nao_se_le_por_estranho() {
         "ler a actividade de uma nota de outro",
     );
 }
+
+// ── Fatia E — tempo real (destinatários) ───────────────────────────────────
+//
+// Avisar «esta nota mudou noutro sítio» vai a quem mais a alcança — o dono e os
+// destinatários vivos —, menos quem fez a mudança (ADR-0413 §9). A publicação em
+// si é fogo-e-esquece; o que se prova aqui é **a quem** se avisaria.
+
+/// Os destinatários de um aviso são o dono e os partilhados, menos o actor.
+#[tokio::test]
+async fn o_aviso_de_uma_nota_vai_a_quem_a_alcanca_menos_o_actor() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let ids = CorrelationIds::generate();
+    let dono = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let a = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let b = person(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let nota = nova_nota(&pool, &dono, &ids, "Colaborada", "corpo").await;
+    partilha(
+        &pool,
+        &dono,
+        &ids,
+        nota.id,
+        a.person_id,
+        NoteShareRole::Viewer,
+    )
+    .await;
+    partilha(
+        &pool,
+        &dono,
+        &ids,
+        nota.id,
+        b.person_id,
+        NoteShareRole::Editor,
+    )
+    .await;
+
+    // O dono edita: avisam-se os dois destinatários, não o dono.
+    let quando_dono = knowledge::note_notify_recipients(&pool, nota.id, dono.person_id)
+        .await
+        .expect("destinatários");
+    let set_dono: std::collections::HashSet<_> = quando_dono.into_iter().collect();
+    assert_eq!(
+        set_dono,
+        [a.person_id, b.person_id].into_iter().collect(),
+        "o aviso do dono não foi exactamente para os dois destinatários"
+    );
+
+    // O editor B edita: avisam-se o dono e A, não o B.
+    let quando_b = knowledge::note_notify_recipients(&pool, nota.id, b.person_id)
+        .await
+        .expect("destinatários");
+    let set_b: std::collections::HashSet<_> = quando_b.into_iter().collect();
+    assert_eq!(
+        set_b,
+        [dono.person_id, a.person_id].into_iter().collect(),
+        "o aviso do editor não foi para o dono e o outro destinatário"
+    );
+
+    // Uma nota não partilhada, editada pelo dono: não se avisa ninguém.
+    let so_dono = nova_nota(&pool, &dono, &ids, "Só minha", "corpo").await;
+    let ninguem = knowledge::note_notify_recipients(&pool, so_dono.id, dono.person_id)
+        .await
+        .expect("destinatários");
+    assert!(
+        ninguem.is_empty(),
+        "uma nota não partilhada avisou alguém: {ninguem:?}"
+    );
+
+    // E uma partilha revogada deixa de receber avisos.
+    let mut tx = pool.begin().await.expect("tx");
+    knowledge::revoke_personal_note_share(&mut tx, &dono, &ids, nota.id, a.person_id)
+        .await
+        .expect("revoga");
+    tx.commit().await.expect("commit");
+    let apos = knowledge::note_notify_recipients(&pool, nota.id, dono.person_id)
+        .await
+        .expect("destinatários");
+    assert_eq!(
+        apos,
+        vec![b.person_id],
+        "um destinatário revogado continuou a receber avisos"
+    );
+}

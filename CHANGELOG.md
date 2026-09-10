@@ -7,6 +7,20 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Aviso em tempo real nas notas partilhadas (fatia E) — 2026-09-10
+
+Numa nota partilhada, quem a alcança passa a ser avisado, ao vivo, de que ela
+mudou noutro sítio — ou de que uma nota foi partilhada consigo. Dois eventos
+novos (`NoteUpdated`, `NoteShared`) viajam pelo canal da pessoa, que uma ligação
+realtime passa a subscrever sozinha (é a própria; por definição pode ouvir-se).
+Persistir primeiro, publicar depois: o aviso de edição vai ao dono e aos
+destinatários vivos, menos quem gravou; o de partilha, a quem a recebeu. É
+fogo-e-esquece e degrada em silêncio sem Redis. **O cliente não sobrepõe nada** —
+mostra um aviso «recarregue para ver a versão actual», e a pessoa decide; o
+clobber continua barrado pela gravação com revisão base. Emenda à
+[ADR-0413](docs/adrs/0413-notes-as-institutional-knowledge.md) §9, que estava
+`PLANNED`.
+
 ### Actividade das notas pessoais (fatia E) — 2026-09-10
 
 Uma nota passa a ter um **feed de actividade**: quem fez o quê e quando —

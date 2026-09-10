@@ -249,7 +249,10 @@ mfa-obrigatorio|3|-p ocinye-core --test mfa
 # 30 → 32 em 2026-09-10: a fatia E dá actividade às notas — o ciclo de vida
 # (criar, partilhar, revogar, apagar, restaurar) fica registado e owner-scoped,
 # e não se lê por quem não alcança a nota.
-notas-pessoais|32|-p ocinye-core --test personal_notes
+# 32 → 33 em 2026-09-10: a fatia E avisa em tempo real (ADR-0413 §9) — o aviso
+# de que uma nota mudou vai ao dono e aos destinatários vivos, menos quem a
+# mudou, e uma partilha revogada deixa de o receber.
+notas-pessoais|33|-p ocinye-core --test personal_notes
 TABELA
 }
 
