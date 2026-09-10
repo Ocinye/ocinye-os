@@ -204,6 +204,18 @@ que entre sem redesenho. Esta emenda toca a decisão de ficheiros de
 [ADR-0204](0204-institutional-files-and-folders.md), que passa a admitir um
 ficheiro com dono e sem ambiente.
 
+**Emenda 2026-09-10 (pesquisa, fatia C).** A fatia A não indexou as notas
+pessoais porque o índice de pesquisa não tinha como dizer «esta linha é de uma
+pessoa»: uma nota `INTERNAL`, indexada como estava, seria encontrada por toda a
+organização. O `VisibilityFilter` (o modelo de leitura, transversal a toda a
+pesquisa) ganha uma dimensão de **dono**: uma linha que pertence a uma pessoa só
+é visível a essa pessoa, e as cláusulas de classificação e de filiação nunca lhe
+tocam. O `search_documents` ganha `owner_id` (migração `0033`), e o renderizador
+de SQL adere por tabela — as tabelas institucionais renderizam byte a byte como
+antes; só o índice de pesquisa activa o dono, guardando as cláusulas com
+`owner_id IS NULL`. Guardar uma nota pessoal indexa-a com o dono e a projecção de
+texto do corpo.
+
 ### 9. Notificação em tempo real é planeada, não inventada agora
 
 Avisar «alguém acabou de actualizar esta nota» exige um canal e um evento novos

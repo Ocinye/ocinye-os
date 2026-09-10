@@ -7,6 +7,23 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Pesquisa das notas pessoais, só pelo dono (fatia C) — 2026-09-10
+
+As notas pessoais passam a ser **pesquisáveis** — e só por quem as escreveu. A
+fatia A não as tinha indexado de propósito: faltava ao índice de pesquisa a
+noção de «esta linha é de uma pessoa», e uma nota `INTERNAL` indexada como estava
+seria encontrada por toda a organização.
+
+O modelo de leitura (`VisibilityFilter`, transversal a toda a pesquisa) ganha uma
+dimensão de **dono**: uma linha que pertence a uma pessoa só é visível a essa
+pessoa, e as cláusulas de classificação e de filiação nunca lhe tocam. A mudança
+é aditiva — o renderizador de SQL adere por tabela, pelo que as tabelas
+institucionais renderizam exactamente como antes; só o índice de pesquisa activa
+o dono (`search_documents.owner_id`, migração `0033`), guardando as cláusulas com
+`owner_id IS NULL`. Guardar uma nota indexa-a com o dono e o texto do corpo, e na
+pesquisa uma nota sem ambiente leva ao seu ecrã pessoal. Emenda à
+[ADR-0413](docs/adrs/0413-notes-as-institutional-knowledge.md).
+
 ### Imagens nas notas, servidas same-origin (fatia B) — 2026-09-10
 
 Uma nota passa a poder ter imagens. Colar, largar ou escolher uma imagem
