@@ -16,7 +16,10 @@ mod model;
 mod repository;
 mod service;
 
-pub use activity::{record_activity, ActivityKind};
+pub use activity::{
+    list_personal_activity, record_activity, record_personal_activity, ActivityKind,
+    PersonalActivity,
+};
 pub use model::{ActivityEntry, Comment, Task, TaskPriority};
 pub use service::{
     add_comment, assign_task, create_task, get_task, list_activity, list_comments, list_tasks,

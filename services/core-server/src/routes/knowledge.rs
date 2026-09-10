@@ -73,6 +73,8 @@ pub fn routes() -> Router<AppState> {
             "/me/notes/{note_id}/revisions",
             get(list_personal_note_revisions),
         )
+        // A actividade de uma nota: quem fez o quê (criar, partilhar, apagar…).
+        .route("/me/notes/{note_id}/activity", get(note_activity))
         // Uma revisão exacta — o seu conteúdo derivado, para pré-visualizar — e o
         // restauro, que a repõe como uma revisão nova (ADR-0413 §6).
         .route(
@@ -891,6 +893,15 @@ async fn list_personal_note_revisions(
 ) -> Result<Json<Vec<knowledge::NoteRevisionMeta>>, ApiError> {
     let revisions = knowledge::personal_note_revisions(&state.pool, &principal, note_id).await?;
     Ok(Json(revisions))
+}
+
+async fn note_activity(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(note_id): Path<Uuid>,
+) -> Result<Json<Vec<ocinye_core::modules::collaboration::PersonalActivity>>, ApiError> {
+    let feed = knowledge::note_activity(&state.pool, &principal, note_id).await?;
+    Ok(Json(feed))
 }
 
 /// One revision, rendered read-only: the title and the derived HTML of what it

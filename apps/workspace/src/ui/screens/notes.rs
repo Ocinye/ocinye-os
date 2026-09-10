@@ -362,6 +362,7 @@ pub fn note_editor(
     shares: &Value,
     people: &Value,
     revisions: &Value,
+    activity: &Value,
 ) -> impl IntoView {
     let access = field(note, "access");
     let is_viewer = access == "viewer";
@@ -464,6 +465,8 @@ pub fn note_editor(
 
             {history_panel(&id, revisions)}
 
+            {activity_panel(activity)}
+
             // O editor vendorizado, same-origin (CSP script-src 'self'). Só esta
             // página o carrega; monta-se sozinho sobre o elemento acima.
             <script src="/static/notes-editor.js" defer></script>
@@ -478,6 +481,51 @@ pub fn note_editor(
 /// Restaurar não apaga nada: repõe uma revisão antiga como revisão nova
 /// (ADR-0413 §6). Só aparece quando há histórico — uma nota acabada de criar não
 /// tem revisões anteriores, e um painel vazio seria ruído.
+/// A etiqueta legível de um verbo de actividade.
+fn activity_label(kind: &str) -> &'static str {
+    match kind {
+        "created" => "Criou a nota",
+        "shared" => "Partilhou a nota",
+        "revoked" => "Revogou uma partilha",
+        "deleted" => "Apagou a nota",
+        "restored" => "Restaurou a nota",
+        "updated" => "Editou a nota",
+        _ => "Actividade",
+    }
+}
+
+/// O painel de actividade de uma nota — quem fez o quê, e quando.
+///
+/// Os acontecimentos de vida e de acesso da nota (criar, partilhar, revogar,
+/// apagar, restaurar); as edições vivem no histórico de revisões, ao lado. Só
+/// aparece quando há algo a mostrar.
+fn activity_panel(activity: &Value) -> impl IntoView {
+    let rows = activity.as_array().cloned().unwrap_or_default();
+    let has_activity = !rows.is_empty();
+
+    has_activity.then(|| view! {
+        <section class="oc-notes-history">
+            <h2 class="oc-notes-history__title">"Actividade"</h2>
+            <ul class="oc-notes-history__list">
+                {rows.iter().map(|entry| {
+                    let quem = {
+                        let a = field(entry, "actor_name");
+                        if a.is_empty() { "Alguém".to_owned() } else { a.to_owned() }
+                    };
+                    let verbo = activity_label(field(entry, "kind"));
+                    let quando = field(entry, "created_at").split('T').next().unwrap_or("").to_owned();
+                    view! {
+                        <li class="oc-notes-history__item">
+                            <span class="oc-notes-history__note-title">{verbo}</span>
+                            <span class="oc-notes-history__meta">{quem} " · " {quando}</span>
+                        </li>
+                    }
+                }).collect::<Vec<_>>()}
+            </ul>
+        </section>
+    })
+}
+
 fn history_panel(note_id: &str, revisions: &Value) -> impl IntoView {
     let rows = revisions.as_array().cloned().unwrap_or_default();
     let has_history = !rows.is_empty();

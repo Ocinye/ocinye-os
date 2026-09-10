@@ -16,7 +16,7 @@ use super::repository::{self as repo, NewSourceRow};
 use crate::audit::{self, action, AuditEntry};
 use crate::capabilities::{Capabilities, Component};
 use crate::error::{CoreError, CoreResult};
-use crate::modules::collaboration::{record_activity, ActivityKind};
+use crate::modules::collaboration::{record_activity, record_personal_activity, ActivityKind};
 use crate::modules::research::{
     artefact_context, get_workspace, readable_artefact_workspace, workspace_context,
     ResearchWorkspace,
@@ -598,6 +598,17 @@ pub async fn create_personal_note(
     )
     .await?;
 
+    record_personal_activity(
+        tx,
+        principal,
+        principal.person_id,
+        ActivityKind::Created,
+        "note",
+        note.id,
+        "Nota criada",
+    )
+    .await?;
+
     Ok(note)
 }
 
@@ -715,6 +726,16 @@ pub async fn delete_personal_note(
             .detail("event", "soft_deleted"),
     )
     .await?;
+    record_personal_activity(
+        tx,
+        principal,
+        note.owner_id.unwrap_or(principal.person_id),
+        ActivityKind::Deleted,
+        "note",
+        note.id,
+        "Nota apagada",
+    )
+    .await?;
     Ok(())
 }
 
@@ -745,6 +766,16 @@ pub async fn restore_personal_note(
         AuditEntry::new(action::UPDATE, "note")
             .resource(note.id)
             .detail("event", "restored"),
+    )
+    .await?;
+    record_personal_activity(
+        tx,
+        principal,
+        note.owner_id.unwrap_or(principal.person_id),
+        ActivityKind::Restored,
+        "note",
+        note.id,
+        "Nota restaurada do Lixo",
     )
     .await?;
     Ok(restored)
@@ -1039,6 +1070,25 @@ pub async fn personal_note_revisions(
     repo::list_note_revisions(pool, note_id).await
 }
 
+/// The activity feed of a personal note the caller may reach: who did what.
+///
+/// The lifecycle and access events of the note (created, shared, revoked,
+/// deleted, restored) — the edits themselves live in the revision history. Read
+/// access first: an owner or a sharee sees it, anyone else gets `NotFound`.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] when the note is not reachable by the caller.
+pub async fn note_activity(
+    pool: &PgPool,
+    principal: &Principal,
+    note_id: Uuid,
+) -> CoreResult<Vec<crate::modules::collaboration::PersonalActivity>> {
+    let (note, _access) = get_personal_note(pool, principal, note_id).await?;
+    let owner_id = note.owner_id.unwrap_or(principal.person_id);
+    crate::modules::collaboration::list_personal_activity(pool, owner_id, "note", note_id, 50).await
+}
+
 /// The content of one exact revision of a personal note the caller may reach.
 ///
 /// Returns the title and the document as they were at that revision, so the
@@ -1231,6 +1281,20 @@ pub async fn share_personal_note(
             .detail("role", role.as_str()),
     )
     .await?;
+    record_personal_activity(
+        tx,
+        principal,
+        principal.person_id,
+        ActivityKind::Shared,
+        "note",
+        note.id,
+        if role.can_write() {
+            "Nota partilhada para edição"
+        } else {
+            "Nota partilhada para leitura"
+        },
+    )
+    .await?;
     Ok(())
 }
 
@@ -1265,6 +1329,16 @@ pub async fn revoke_personal_note_share(
         AuditEntry::new(action::MEMBERSHIP_CHANGE, "note")
             .resource(note.id)
             .detail("revoked_from", person_id.to_string()),
+    )
+    .await?;
+    record_personal_activity(
+        tx,
+        principal,
+        principal.person_id,
+        ActivityKind::Revoked,
+        "note",
+        note.id,
+        "Partilha revogada",
     )
     .await?;
     Ok(())

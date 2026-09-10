@@ -7,6 +7,18 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Actividade das notas pessoais (fatia E) — 2026-09-10
+
+Uma nota passa a ter um **feed de actividade**: quem fez o quê e quando —
+**criar, partilhar, revogar, apagar, restaurar**. As edições não entram (vivem no
+histórico de revisões, que já diz quem editou; e o autosave inundaria o feed). A
+`activity_entries` ganha a dimensão de dono das notas/pastas/pesquisa (migração
+`0038`, `owner_id` + `workspace_id` opcional), reutilizada em vez de uma tabela
+nova, com quatro verbos novos. A actividade é do dono, lê-se por quem alcança a
+nota (dono ou destinatário de partilha), e diz o autor pelo nome. No Workspace, o
+editor ganha um painel de actividade ao lado do histórico. Emenda à
+[ADR-0413](docs/adrs/0413-notes-as-institutional-knowledge.md).
+
 ### Lixo das notas pessoais: apagar reversível (fatia E) — 2026-09-10
 
 Apagar uma nota deixa de a destruir: leva-a ao **Lixo** (migração `0037`,

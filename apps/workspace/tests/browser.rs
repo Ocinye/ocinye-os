@@ -11580,6 +11580,10 @@ async fn uma_versao_antiga_de_uma_nota_restaura_se() {
     // E as versões anteriores continuam no histórico — restaurar não apaga.
     let final_page = harness.open(&format!("/notes/{note_id}")).await;
     esperar_por(&final_page, "Histórico").await;
+
+    // E a actividade da nota mostra o seu ciclo de vida — desde a criação.
+    esperar_por(&final_page, "Actividade").await;
+    esperar_por(&final_page, "Criou a nota").await;
 }
 
 /// Apagar uma nota leva-a ao Lixo, e de lá restaura-se.

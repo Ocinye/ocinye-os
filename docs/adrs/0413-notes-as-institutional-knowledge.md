@@ -217,6 +217,18 @@ partir do Lixo** — é um segundo passo deliberado — e leva com ela as revis�
 as partilhas (CASCADE), mas **não** os ficheiros referenciados: uma imagem é um
 objecto institucional próprio. Um editor partilhado não apaga a nota do dono.
 
+**Emenda 2026-09-10 (fatia E — actividade).** Uma nota pessoal passa a ter
+**actividade** (`GET /me/notes/{id}/activity`). A `activity_entries` ganha a
+mesma dimensão de dono das notas/pastas/pesquisa (migração `0038`:
+`owner_id`, `workspace_id` opcional), reutilizada em vez de uma tabela nova, e
+quatro verbos novos — `shared`, `revoked`, `deleted`, `restored`. Regista-se o
+**ciclo de vida e os acessos** (criar, partilhar, revogar, apagar, restaurar);
+as **edições** não entram na actividade — vivem no histórico de revisões (§6),
+que já diz quem editou e quando, e o autosave gravaria a actividade a cada 1,2 s.
+A actividade é do dono, lê-se por quem alcança a nota (dono ou destinatário), e
+diz quem fez cada coisa pelo nome. No Workspace, o editor ganha um painel de
+actividade ao lado do histórico.
+
 ### 8. Imagens e anexos são Files; o corpo referencia a versão exacta
 
 Colar uma imagem envia os bytes **pelo Core** → Object Storage → `File`+`FileVersion`,
