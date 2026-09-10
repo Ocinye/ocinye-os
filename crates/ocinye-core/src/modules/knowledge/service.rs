@@ -638,9 +638,10 @@ async fn index_personal_note(
 pub async fn list_personal_notes(
     pool: &PgPool,
     principal: &Principal,
+    tag: Option<&str>,
     page: PageRequest,
 ) -> CoreResult<Vec<Note>> {
-    repo::list_personal_notes(pool, principal.person_id, page.limit(), page.offset()).await
+    repo::list_personal_notes(pool, principal.person_id, tag, page.limit(), page.offset()).await
 }
 
 /// Load one personal note the acting member owns.

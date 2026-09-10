@@ -435,16 +435,22 @@ pub async fn update_note_at_revision<'e>(
 pub async fn list_personal_notes<'e>(
     executor: impl PgExecutor<'e>,
     owner_id: Uuid,
+    tag: Option<&str>,
     limit: i64,
     offset: i64,
 ) -> CoreResult<Vec<Note>> {
+    // O filtro por etiqueta é opcional: `$2` nulo devolve todas. `= ANY(tags)`
+    // faz a filtragem na base, e não em memória — a paginação continua a contar
+    // a partir do conjunto já recortado.
     let notes = sqlx::query_as::<_, Note>(&format!(
         "SELECT {NOTE_COLUMNS} FROM notes
           WHERE owner_id = $1
+            AND ($2::text IS NULL OR $2 = ANY(tags))
           ORDER BY updated_at DESC
-          LIMIT $2 OFFSET $3"
+          LIMIT $3 OFFSET $4"
     ))
     .bind(owner_id)
+    .bind(tag)
     .bind(limit)
     .bind(offset)
     .fetch_all(executor)

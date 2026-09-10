@@ -200,7 +200,7 @@ suites() {
 # pelo Core e fica servida same-origin pela versão exacta. Uma viagem, uma marca.
 # 97 → 98 em 2026-09-10: a fatia C — escrever uma nota e encontrá-la pela
 # pesquisa, pelo corpo, com a ligação para o seu ecrã. Uma viagem, uma marca.
-viagens-de-browser|98|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|98
+viagens-de-browser|99|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|99
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
@@ -231,7 +231,8 @@ mfa-obrigatorio|3|-p ocinye-core --test mfa
 # é do dono e só dele, e uma nota não pode referenciar a imagem de outra pessoa.
 # 9 → 10 em 2026-09-10: a fatia C indexa as notas pessoais para pesquisa — e uma
 # nota INTERNAL de uma pessoa não aparece na pesquisa de outra.
-notas-pessoais|10|-p ocinye-core --test personal_notes
+# 10 → 11 em 2026-09-10: a lista de notas recorta-se por etiqueta.
+notas-pessoais|11|-p ocinye-core --test personal_notes
 TABELA
 }
 

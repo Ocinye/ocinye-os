@@ -622,14 +622,28 @@ struct UpdatePersonalNoteRequest {
     tags: Option<Vec<String>>,
 }
 
+/// A consulta da lista de notas pessoais: paginação e um filtro por etiqueta.
+#[derive(Deserialize)]
+struct PersonalNotesQuery {
+    #[serde(default)]
+    page: Option<u32>,
+    #[serde(default)]
+    page_size: Option<u32>,
+    #[serde(default)]
+    tag: Option<String>,
+}
+
 async fn list_personal_notes(
     State(state): State<AppState>,
     CurrentPrincipal(principal): CurrentPrincipal,
-    Query(query): Query<PageQuery>,
+    Query(query): Query<PersonalNotesQuery>,
 ) -> Result<Json<Vec<PersonalNoteSummary>>, ApiError> {
+    // Uma etiqueta vazia é o mesmo que nenhuma — `?tag=` não recorta.
+    let tag = query.tag.as_deref().filter(|t| !t.is_empty());
     let notes = knowledge::list_personal_notes(
         &state.pool,
         &principal,
+        tag,
         page_of(query.page, query.page_size),
     )
     .await?;

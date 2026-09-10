@@ -5894,3 +5894,19 @@ select.oc-entrada {
 }
 .oc-notes-status[data-state="uploading"] .oc-notes-status-text { color: var(--oc-info-text); }
 .oc-notes-status[data-state="image_error"] .oc-notes-status-text { color: var(--oc-error-text); }
+
+/* Notas — etiquetas (fatia C). */
+.oc-notes-tags-input {
+  font-family: var(--oc-font-sans); font-size: 13px; color: var(--oc-text-secondary);
+  border: none; background: transparent; width: 100%; padding: 0;
+}
+.oc-notes-tags-input::placeholder { color: var(--oc-text-ghost); }
+.oc-note-card__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.oc-note-card__tags .oc-tag { text-decoration: none; }
+.oc-note-card__tags .oc-tag:hover { border-color: var(--oc-border-strong); color: var(--oc-text); }
+.oc-notes-filter {
+  display: flex; align-items: center; gap: var(--oc-space-5); margin-bottom: var(--oc-space-6);
+  font-size: 13px; color: var(--oc-text-secondary);
+}
+.oc-notes-filter__clear { color: var(--oc-navy-mid); text-decoration: none; font-weight: 600; }
+.oc-notes-filter__clear:hover { text-decoration: underline; }
