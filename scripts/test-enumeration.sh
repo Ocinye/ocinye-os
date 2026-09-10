@@ -189,7 +189,10 @@ suites() {
 # 91 → 93 em 2026-09-10: entraram a criação de um dataset e a de uma referência
 # bibliográfica pelo produto — ambas eram exercitadas só pelo Core. Duas viagens,
 # duas marcas.
-viagens-de-browser|93|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|93
+# 93 → 94 em 2026-09-10: entrou o primeiro acesso — entrar com a temporária,
+# definir a palavra-passe do próprio, e ver a temporária deixar de valer. Uma
+# viagem, uma marca.
+viagens-de-browser|94|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|94
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
