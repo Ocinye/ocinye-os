@@ -9,7 +9,8 @@ use uuid::Uuid;
 use super::model::ComputeNode;
 use crate::error::CoreResult;
 
-const NODE_COLUMNS: &str = "id, identifier, display_name, kind, location_label, status,
+const NODE_COLUMNS: &str = "id, identifier, display_name, kind, location_label,
+                            institutional_control, physical_residency, status,
                             cpu_cores, memory_bytes, storage_bytes, gpus, capabilities,
                             agent_version, last_seen_at, created_at";
 
@@ -18,6 +19,10 @@ const NODE_COLUMNS: &str = "id, identifier, display_name, kind, location_label, 
 /// # Errors
 ///
 /// Returns an error when the insert fails.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "um parâmetro por coluna do registo; agrupá-los numa struct só para atravessar esta chamada não paga"
+)]
 pub async fn insert_node<'e>(
     executor: impl PgExecutor<'e>,
     organisation_id: Uuid,
@@ -25,13 +30,15 @@ pub async fn insert_node<'e>(
     display_name: &str,
     kind: &str,
     location_label: Option<&str>,
+    institutional_control: &str,
+    physical_residency: &str,
     created_by: Uuid,
 ) -> CoreResult<ComputeNode> {
     let node = sqlx::query_as::<_, ComputeNode>(&format!(
         "INSERT INTO compute_nodes
              (organisation_id, identifier, display_name, kind, location_label,
-              status, created_by_id)
-         VALUES ($1, $2, $3, $4, $5, 'pending_enrollment', $6)
+              institutional_control, physical_residency, status, created_by_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending_enrollment', $8)
          RETURNING {NODE_COLUMNS}"
     ))
     .bind(organisation_id)
@@ -39,6 +46,8 @@ pub async fn insert_node<'e>(
     .bind(display_name)
     .bind(kind)
     .bind(location_label)
+    .bind(institutional_control)
+    .bind(physical_residency)
     .bind(created_by)
     .fetch_one(executor)
     .await?;

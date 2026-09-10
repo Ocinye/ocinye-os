@@ -14,6 +14,15 @@ localização, estado, CPU, memória, GPUs, capacidades, modelos, saúde,
 Nenhum identificador de nó aparece no código. `CAM-01`, `HPC-01`, `DC-01` são
 valores que um registo futuro fornecerá.
 
+Um nó diz também **quem o controla** (`institutional_control`: `OCINYE` |
+`EXTERNAL`) e **onde reside fisicamente** (`physical_residency`, o mesmo enum de
+residência do armazenamento). São dois eixos independentes: uma máquina alugada
+numa cloud de terceiros mas a correr software da Ocinye é `OCINYE` /
+`THIRD_PARTY_CLOUD` — alugar hardware não cede controlo
+([ADR-0503](../adrs/0503-compute-node-control-and-residency.md)). Ambos são
+definidos no registo, com defaults honestos (`OCINYE` / `UNDECLARED`); o
+`location_label` continua a etiqueta legível.
+
 ## Liveness derivada
 
 Um nó está online se e só se o seu último heartbeat estiver dentro da janela.

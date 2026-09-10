@@ -43,7 +43,7 @@ pub use access::{AccountStatus, CredentialKind, CredentialState, Permission, Sco
 pub use agentic::{AgenticExposure, OperationId, TrustBoundary};
 pub use avatar::{AvatarChoice, AVATAR_PRESETS};
 pub use classification::Classification;
-pub use compute::{ComputeNodeStatus, ComputeStatus, JobStatus, NodeKind};
+pub use compute::{ComputeNodeStatus, ComputeStatus, InstitutionalControl, JobStatus, NodeKind};
 pub use error::{ErrorBody, ErrorCode};
 pub use ids::ResourceIdentifier;
 pub use intelligence::{AiCapability, CapabilityStatus, IntelligenceStatus, ModelStatus, RagScope};
