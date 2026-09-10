@@ -7,6 +7,20 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Pastas para as notas pessoais (fatia C) — 2026-09-10
+
+As notas pessoais podem agora arrumar-se em **pastas**. Os `folders` ganham o
+mesmo *owner-scoping* das notas e dos ficheiros (migração `0034`): uma pasta é de
+um ambiente **ou** de uma pessoa, nunca de ninguém. As pastas pessoais são planas
+nesta fatia (sem aninhamento). Uma nota ganha um `folder_id`; arrumá-la é um
+caminho próprio e **não cria revisão** — mover não é editar —, e uma nota não se
+arruma na pasta de outra pessoa. Apagar uma pasta desarruma as notas, não as
+perde (`ON DELETE SET NULL`). A lista mostra uma barra de pastas para filtrar, e
+o editor um selector para arrumar. Emenda à
+[ADR-0413](docs/adrs/0413-notes-as-institutional-knowledge.md) e à
+[ADR-0204](docs/adrs/0204-institutional-files-and-folders.md), que passa a
+admitir uma pasta com dono e sem ambiente.
+
 ### Etiquetas nas notas pessoais (fatia C) — 2026-09-10
 
 Uma nota pode agora ter **etiquetas**. O editor ganha um campo de etiquetas ao
