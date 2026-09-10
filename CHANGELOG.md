@@ -7,6 +7,15 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Etiquetas nas notas pessoais (fatia C) — 2026-09-10
+
+Uma nota pode agora ter **etiquetas**. O editor ganha um campo de etiquetas ao
+lado do título; as etiquetas viajam no autosave como o título e o documento. A
+lista de notas mostra as etiquetas de cada nota como *chips*, e recorta-se por
+etiqueta: um *chip* leva a `/notes?tag=…`, e o Core filtra na base (`= ANY(tags)`),
+pelo que a paginação conta a partir do conjunto já recortado. As etiquetas são
+desduplicadas e limitadas no editor.
+
 ### Pesquisa das notas pessoais, só pelo dono (fatia C) — 2026-09-10
 
 As notas pessoais passam a ser **pesquisáveis** — e só por quem as escreveu. A
