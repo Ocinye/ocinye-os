@@ -11266,3 +11266,40 @@ async fn uma_imagem_largada_numa_nota_carrega_e_fica() {
     let de_volta = harness.open(&format!("/notes/{note_id}")).await;
     esperar_por(&de_volta, &format!("/me/files/{versao}/preview")).await;
 }
+
+/// Uma pessoa escreve uma nota e encontra-a depois pela pesquisa.
+///
+/// O caminho da fatia C (ADR-0413): guardar uma nota indexa-a com o dono, e a
+/// pesquisa do membro encontra-a pelo **corpo** — o termo não está no título. O
+/// resultado leva à nota pessoal. A visibilidade por dono é a mesma que a suite
+/// do Core prova pela porta errada; aqui prova-se a ida de ponta a ponta.
+#[tokio::test]
+async fn uma_nota_encontra_se_pela_pesquisa() {
+    let harness = harness!();
+    let (_pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    let page = harness.open("/notes").await;
+    esperar_por(&page, "Notas").await;
+    submit(&page, "form[action=\"/notes\"]").await;
+    let url = wait_until_left(&page, "/notes").await;
+    let note_id = url.rsplit('/').next().unwrap_or_default().to_owned();
+    let editor = elemento(&page, "[data-oc-notes-surface] .ProseMirror").await;
+
+    // Um termo distintivo, só no corpo — assim a pesquisa prova o corpo, e não o
+    // título. Sem acentos: o CDP escreve por eventos de tecla.
+    let termo = format!("zircone{}", &Uuid::new_v4().simple().to_string()[..8]);
+    set_field(&page, "[data-oc-notes-title]", "Amostras de campo").await;
+    editor
+        .click()
+        .await
+        .expect("foco no editor")
+        .type_str(&format!("apontamento sobre {termo}"))
+        .await
+        .expect("escrever no editor");
+    esperar_por(&page, "Guardado").await;
+
+    // Pesquisar o termo e encontrar a nota, com a ligação para o seu ecrã.
+    let pesquisa = harness.open(&format!("/search?q={termo}")).await;
+    esperar_por(&pesquisa, "Amostras de campo").await;
+    esperar_por(&pesquisa, &format!("/notes/{note_id}")).await;
+}
