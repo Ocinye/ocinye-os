@@ -1614,6 +1614,58 @@ fn assistance_panel(view: &MailView, draft: &ComposeDraft) -> impl IntoView {
 /// Não devolve a senha. Uma vez guardada, é cifrada e só sai no momento de abrir
 /// uma sessão de IMAP. O campo abre sempre vazio: preenchê-lo com a senha
 /// existente seria pô-la a atravessar o browser outra vez, e a cada visita.
+/// O estado vazio de «As suas caixas»: ligar a caixa pessoal do membro.
+///
+/// A caixa ainda não existe. Este fluxo cria-a ao endereço institucional do
+/// membro **e** liga-a numa só acção — o Core resolve o endereço e a conta a
+/// partir da identidade de quem liga; o servidor é o da instituição, mostrado
+/// mas não editável; só a senha viaja, uma vez, a caminho da cifra, e é
+/// verificada contra o servidor antes de ser guardada.
+fn ligar_caixa_nova(member_email: &str, endpoints: &[String]) -> impl IntoView {
+    let email = member_email.to_owned();
+    let servidores = endpoints.join(" · ");
+    let tem_servidores = !servidores.is_empty();
+    view! {
+        <div class="oc-mail__ligacao" data-oc="ligar-caixa-nova">
+            <p class="oc-muted oc-mail__ligacao-caixa">
+                "Ainda não tem uma caixa institucional ligada."
+            </p>
+            <form class="oc-mail__conectar" method="post" action="/mail/connect">
+                <dl class="oc-facts oc-mail__conectar-factos">
+                    <dt>"E-mail institucional"</dt>
+                    <dd class="oc-mono">{email}</dd>
+                    {tem_servidores.then(|| view! {
+                        <dt>"Servidores"</dt>
+                        <dd class="oc-mono">{servidores.clone()}</dd>
+                    })}
+                </dl>
+                // A senha entra uma vez e nunca é pré-preenchida do estado do
+                // servidor: não há de onde a ler de volta.
+                <div class="oc-mail__conectar-campo">
+                    <label class="oc-field__label" for="mail-nova-senha">
+                        "Palavra-passe da caixa (ou App Password)"
+                    </label>
+                    <input
+                        class="oc-input"
+                        id="mail-nova-senha"
+                        type="password"
+                        name="password"
+                        autocomplete="off"
+                        required=""
+                    />
+                </div>
+                <p class="oc-muted oc-mail__ligacao-nota">
+                    "A senha é verificada contra o servidor e guardada cifrada. Nunca volta
+                     a ser mostrada."
+                </p>
+                <div>
+                    <button type="submit" class="oc-btn oc-btn--primary">"Guardar e ligar"</button>
+                </div>
+            </form>
+        </div>
+    }
+}
+
 fn ligacao_da_caixa(caixa: &Value) -> impl IntoView {
     let id = text(caixa, "id", "").to_owned();
     let endereco = text(caixa, "address", "").to_owned();
@@ -1702,7 +1754,13 @@ fn ligacao_da_caixa(caixa: &Value) -> impl IntoView {
     }
 }
 
-pub fn settings(view: &MailView, preferences: &Value, signature: &Value) -> impl IntoView {
+pub fn settings(
+    view: &MailView,
+    preferences: &Value,
+    signature: &Value,
+    member_email: &str,
+) -> impl IntoView {
+    let member_email = member_email.to_owned();
     // A linha pessoal do membro (o antigo campo «assinatura»), preservada.
     let personal_line = preferences
         .get("signature")
@@ -1764,11 +1822,7 @@ pub fn settings(view: &MailView, preferences: &Value, signature: &Value) -> impl
                         "A senha de cada caixa é sua, fica cifrada, e nunca volta a ser mostrada."
                     </p>
                     {view.boxes().iter().map(ligacao_da_caixa).collect_view()}
-                    {view.boxes().is_empty().then(|| view! {
-                        <p class="oc-muted">
-                            "Ainda não há nenhuma caixa institucional associada a si."
-                        </p>
-                    })}
+                    {view.boxes().is_empty().then(|| ligar_caixa_nova(&member_email, &endpoints))}
                 },
             )}
 
@@ -2186,6 +2240,55 @@ mod uma_pagina_coerente {
             None,
         )
         .to_html()
+    }
+
+    /// O estado vazio das Definições oferece uma acção real de ligação — não só
+    /// texto —, com o e-mail institucional, o servidor da instituição, e um
+    /// campo de senha que nunca traz valor de volta.
+    #[test]
+    fn o_estado_vazio_do_correio_oferece_ligar_a_caixa() {
+        let view = MailView {
+            status: json!({
+                "can_read": false,
+                "can_send": false,
+                "transport_configured": true,
+                "mailbox_linked": false,
+                "adapter": "imap_smtp",
+                "endpoints": ["imap mail.ocinye.com:993", "smtp mail.ocinye.com:465"],
+                "detail": "A sua caixa de correio ainda não está ligada.",
+            }),
+            sync_notice: None,
+            // Sem caixa nenhuma: é o estado que tinha só texto e nenhuma acção.
+            mailboxes: json!([]),
+            active_mailbox: None,
+            folder: "inbox".to_owned(),
+            query: String::new(),
+        };
+        let prefs = json!({ "official_signature": true, "remote_content_policy": "block" });
+        let sig = json!({ "text": "", "html": "" });
+        let html = settings(&view, &prefs, &sig, "fidel.monteiro@ocinye.com").to_html();
+
+        assert!(
+            html.contains("action=\"/mail/connect\""),
+            "o estado vazio não oferece uma acção de ligar a caixa:\n{html}"
+        );
+        assert!(html.contains("Guardar e ligar"));
+        assert!(
+            html.contains("fidel.monteiro@ocinye.com"),
+            "o e-mail institucional não aparece"
+        );
+        assert!(
+            html.contains("mail.ocinye.com:993"),
+            "o servidor institucional não aparece como configuração"
+        );
+        assert!(html.contains("type=\"password\""), "falta o campo da senha");
+        // A senha nunca vem pré-preenchida do estado do servidor.
+        assert!(
+            !html.contains("name=\"password\" value="),
+            "a senha não pode vir pré-preenchida"
+        );
+        // O texto morto do estado vazio antigo não regressa.
+        assert!(!html.contains("Ainda não há nenhuma caixa institucional associada a si"));
     }
 
     /// Uma pasta que não está a ser lida não se declara vazia.

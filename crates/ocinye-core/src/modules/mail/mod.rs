@@ -43,9 +43,9 @@ pub use registry::ProviderRegistry;
 pub use repository::{AccessibleMailbox, IndexedMessage, MailDraft, MailPreferences};
 pub use sanitize::{sanitize_html, text_to_html, SanitizedBody};
 pub use service::{
-    assist, connect_mailbox, disconnect_mailbox, evaluate_send, mailbox, mailboxes,
-    provision_personal_mailbox, read_message, safe_filename, send, sender_identity, set_flag, sync,
-    AssistRequest, AssistResult, MailboxConnection, ReadableMessage, SyncOutcome,
+    assist, connect_mailbox, connect_own_mailbox, disconnect_mailbox, evaluate_send, mailbox,
+    mailboxes, provision_personal_mailbox, read_message, safe_filename, send, sender_identity,
+    set_flag, sync, AssistRequest, AssistResult, MailboxConnection, ReadableMessage, SyncOutcome,
 };
 pub use signature::{
     signature_html, signature_text, LogoRef, Projections, SignatureFacts, LOGO_CONTENT_ID,

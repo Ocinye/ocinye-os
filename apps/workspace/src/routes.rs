@@ -75,6 +75,7 @@ pub const ROUTES: &[&str] = &[
     "/mail/assist",
     "/mail/send",
     "/mail/settings",
+    "/mail/connect",
     "/mail/{mailbox_id}/connect",
     "/mail/{mailbox_id}/disconnect",
     "/units",
@@ -216,6 +217,7 @@ pub fn router(state: WorkspaceState) -> Router {
         )
         // Declaradas antes de `/mail/{mailbox_id}`: são caminhos literais sob
         // um identificador, e a rota genérica apanhá-las-ia primeiro.
+        .route("/mail/connect", post(mail_connect_own))
         .route("/mail/{mailbox_id}/connect", post(mail_connect))
         .route("/mail/{mailbox_id}/disconnect", post(mail_disconnect))
         .route("/mail/message/{message_id}", get(mail_message))
@@ -1977,7 +1979,7 @@ async fn mail_settings(State(state): State<WorkspaceState>, headers: HeaderMap) 
         &viewer,
         Screen::Mail,
         vec![Crumb::to(Screen::Mail)],
-        ui::screens::mail::settings(&view, &preferences, &signature),
+        ui::screens::mail::settings(&view, &preferences, &signature, &member.session.email),
     )
 }
 
@@ -2637,6 +2639,36 @@ async fn mail_connect(
         &member.session.access_token,
         &member.correlation_id,
         &format!("/api/v1/mail/mailboxes/{mailbox_id}/connect"),
+        &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to("/mail/settings").into_response(),
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+/// Liga a caixa pessoal do próprio membro, criando-a se ainda não existe.
+///
+/// É o caminho do estado vazio: sem caixa nenhuma, o Core cria a caixa ao
+/// endereço institucional do membro e liga-a. Só a senha viaja — o endereço vem
+/// da identidade de quem liga, no Core.
+async fn mail_connect_own(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<LigacaoDeCaixa>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let body = serde_json::json!({
+        "password": form.password,
+    });
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/mail/mailbox/connect",
         &body,
     )
     .await

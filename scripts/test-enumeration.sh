@@ -200,7 +200,7 @@ suites() {
 # pelo Core e fica servida same-origin pela versão exacta. Uma viagem, uma marca.
 # 97 → 98 em 2026-09-10: a fatia C — escrever uma nota e encontrá-la pela
 # pesquisa, pelo corpo, com a ligação para o seu ecrã. Uma viagem, uma marca.
-viagens-de-browser|104|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|104
+viagens-de-browser|105|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|105
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

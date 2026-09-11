@@ -1770,6 +1770,13 @@ fn core_state(pool: PgPool, organisation_id: Uuid, database_url: &str) -> AppSta
     // viagem abria mensagens, nunca ninguém o viu.
     let mut config = config;
     config.sealing_key = Some(chave_do_correio().clone());
+    // O harness espelha a produção: a instituição declara o seu domínio. Sem
+    // isto, provisionar a caixa pessoal de um membro `@ocinye.com` seria
+    // recusado, e a viagem do estado vazio do correio não teria como criar a
+    // caixa. Só se preenche quando está vazio, para um `.env` local mandar.
+    if config.mail.institutional_domains.is_empty() {
+        config.mail.institutional_domains = vec!["ocinye.com".to_owned()];
+    }
 
     let mail_registry = Arc::new(
         ocinye_core::modules::mail::ProviderRegistry::new(
@@ -6181,6 +6188,83 @@ async fn uma_pessoa_liga_a_sua_caixa_de_correio() {
     .await
     .expect("credencial guardada");
 
+    assert!(
+        !String::from_utf8_lossy(&cifrado).contains(SENHA),
+        "a senha ficou legível na base de dados"
+    );
+}
+
+/// Uma pessoa **sem caixa nenhuma** liga a sua a partir do estado vazio: a
+/// mesma acção cria a caixa ao seu endereço institucional e liga-a.
+///
+/// Fecha a lacuna que existia — as Definições diziam «ligue a caixa» e não
+/// ofereciam onde. Aqui a pessoa não tem caixa, o ecrã oferece «Guardar e
+/// ligar», e o efeito prova-se na base: uma caixa pessoal viva com a credencial
+/// cifrada.
+#[tokio::test(flavor = "multi_thread")]
+async fn uma_pessoa_sem_caixa_liga_a_sua_do_estado_vazio() {
+    let harness = harness!();
+
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    // Sem `has_a_mailbox`: a pessoa começa sem caixa nenhuma.
+    const SENHA: &str = "senha-so-do-imap-4471";
+
+    let page = harness.open("/mail/settings").await;
+    esperar_por(&page, "Ainda não tem uma caixa institucional ligada").await;
+
+    // A acção existe, e o único campo editável é a senha — o e-mail e o servidor
+    // são mostrados, não pedidos.
+    let editaveis: Option<f64> = page
+        .evaluate(
+            "document.querySelectorAll(\
+               '[data-oc=ligar-caixa-nova] input:not([type=password]):not([readonly])'\
+             ).length",
+        )
+        .await
+        .expect("contagem")
+        .into_value()
+        .ok();
+    assert_eq!(
+        editaveis,
+        Some(0.0),
+        "o formulário do estado vazio tem um campo editável que não é a senha"
+    );
+
+    set_field(
+        &page,
+        "[data-oc=ligar-caixa-nova] input[name=password]",
+        SENHA,
+    )
+    .await;
+    submit(&page, "[data-oc=ligar-caixa-nova]").await;
+
+    esperar_por(&page, "Ligada").await;
+    let depois = page.content().await.expect("conteúdo");
+    assert!(
+        !depois.contains(SENHA),
+        "a senha da caixa voltou no documento"
+    );
+    let url = page.url().await.expect("endereço").unwrap_or_default();
+    assert!(
+        !url.contains(SENHA),
+        "a senha foi parar à barra de endereço: {url}"
+    );
+
+    // O efeito na base: a caixa foi criada ao endereço institucional do membro,
+    // ligada, e a senha ficou cifrada — nunca legível.
+    let (endereco, cifrado): (String, Vec<u8>) = sqlx::query_as(
+        "SELECT m.address, c.ciphertext FROM mailbox_credentials c
+           JOIN mailboxes m ON m.id = c.mailbox_id
+          WHERE m.owner_id = $1 AND m.kind = 'personal'",
+    )
+    .bind(person_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("a caixa pessoal foi criada e ligada");
+    assert!(
+        depois.contains(&endereco),
+        "o endereço da caixa recém-ligada não aparece nas definições"
+    );
     assert!(
         !String::from_utf8_lossy(&cifrado).contains(SENHA),
         "a senha ficou legível na base de dados"

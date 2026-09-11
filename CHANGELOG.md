@@ -7,6 +7,30 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Correio — ligar a caixa a partir das Definições — 2026-09-11
+
+As Definições de correio diziam «ligue a sua caixa» e não ofereciam onde: sem
+caixa nenhuma, o estado vazio era só texto. Passa a haver uma acção real.
+
+- **Estado vazio com «Guardar e ligar».** Um membro sem caixa vê o seu e-mail
+  institucional (autoritário, da identidade — não editável), os servidores da
+  instituição (também não editáveis), e pede-se-lhe só a senha da caixa. Uma
+  acção cria a caixa pessoal ao seu endereço institucional **e** liga-a.
+- **O endereço vem do Core, nunca do cliente.** Um membro liga a sua caixa, e
+  nunca a de outro: não há identificador de cliente que nomeie a caixa
+  (`CLAUDE.md` §34.2). Reusa as operações que já existiam — `provision` e
+  `connect` — sob [ADR-0409](docs/adrs/0409-mailbox-credentials-per-member.md).
+- **A senha é verificada contra o servidor antes de ser guardada**, cifrada com
+  o mecanismo canónico (ChaCha20-Poly1305, subchave de correio), e **nunca volta
+  a ser mostrada** — nem no documento, nem na barra de endereço, nem em log. Uma
+  senha recusada não guarda credencial.
+- **Uma pessoa desactivada não liga uma caixa;** um endereço fora do domínio da
+  instituição também não. Uma pessoa tem, no máximo, uma caixa pessoal.
+
+Sem migrations nem ADR novos — a operação já existia no Core e faltava a
+superfície. `Secção 1` re-derivada (177 caminhos, 209 operações, 549/1521
+funções de teste); o contrato de enumeração espera 105 viagens de browser.
+
 ### Correio — assinatura institucional e projecção HTML no envio — 2026-09-11
 
 O correio da Ocinye passa a acrescentar uma **assinatura institucional** às

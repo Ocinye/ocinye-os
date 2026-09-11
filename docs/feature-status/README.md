@@ -70,6 +70,7 @@ Os quatro primeiros são apurados em tempo real pelo Core e servidos em
 | **Correio — transporte IMAP** | implementado | n/a | serviço ausente | `NOT_CONFIGURED` |
 | **Correio — sincronização (`mail.sync`)** | manual e periódica, implementadas | botão «Actualizar» e passagem do worker | n/a | `AVAILABLE` |
 | **Correio — assinatura institucional** — projecção HTML determinística, logótipo por `cid`, `multipart/alternative` | composta no envio a partir de dados de confiança ([ADR-0414](../adrs/0414-mail-html-projection-and-signature.md)) | pré-visualização e opção nas Definições de correio | n/a | `AVAILABLE` |
+| **Correio — ligar a caixa (self-service)** — provisionar e ligar a caixa pessoal do membro | `provision` + `connect`, endereço resolvido pela identidade, senha verificada e cifrada ([ADR-0409](../adrs/0409-mailbox-credentials-per-member.md)) | estado vazio das Definições com «Guardar e ligar» | depende de um serviço de correio a responder | `AVAILABLE` |
 | **Correio — assistência de escrita** | implementado | implementado | sem nó de IA | `NO_RESOURCE` |
 | **Correio — anexos no envio** | modelo definido | — | depende de armazenamento institucional | `PLANNED` |
 | **Correio — descarga de anexos** | adaptador lê-os | declarada indisponível | falta rota e ecrã | `PLANNED` |
