@@ -1374,6 +1374,7 @@ pub(crate) mod link_tests {
                         "text": "Ana Fernandes\nInvestigadora\nOcinye\nana@ocinye.com",
                         "html": "<table><tr><td>Ana Fernandes</td></tr></table>"
                     }),
+                    "ana.fernandes@ocinye.com",
                 )
             ),
             // A Universal Command Surface, nos quatro estados que não podem

@@ -967,6 +967,65 @@ pub async fn connect_mailbox(
     Ok(())
 }
 
+/// Liga a caixa pessoal do próprio membro, criando-a se ainda não existe.
+///
+/// # Porque o endereço não vem do cliente
+///
+/// A caixa é sempre a do próprio: o endereço é o da identidade de quem liga
+/// (`people.email`), resolvido pelo Core. Um identificador vindo do cliente
+/// nomearia âmbito e não o concede (`CLAUDE.md` §34.2) — assim um membro nunca
+/// toca na caixa de outro, por muito que manipule o pedido.
+///
+/// Cria a caixa ao endereço institucional se ainda não existir, e liga-a com a
+/// credencial dada — verificada contra o servidor **antes** de ser guardada,
+/// como qualquer ligação (ver [`connect_mailbox`]).
+///
+/// # Errors
+///
+/// Recusa sem `MailUse`, quando a pessoa não existe ou está desactivada, quando
+/// o endereço não é institucional, quando a credencial não abre sessão, e sem
+/// chave de cifra configurada.
+pub async fn connect_own_mailbox(
+    pool: &PgPool,
+    principal: &Principal,
+    dominios: &[String],
+    ligacao: &MailboxConnection<'_>,
+    ids: &CorrelationIds,
+) -> CoreResult<Uuid> {
+    require(principal, Permission::MailUse)?;
+
+    let pessoa = crate::modules::identity::person_by_id(pool, principal.person_id)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Pessoa não encontrada.".to_owned()))?;
+
+    // A caixa pessoal que já existe, ou uma nova ao endereço institucional do
+    // membro. `provision_personal_mailbox` recusa um endereço fora do domínio e
+    // uma pessoa desactivada — a caixa é sempre a do próprio.
+    let existente: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM mailboxes WHERE kind = 'personal' AND owner_id = $1")
+            .bind(principal.person_id)
+            .fetch_optional(pool)
+            .await?;
+
+    let mailbox_id = match existente {
+        Some(id) => id,
+        None => {
+            provision_personal_mailbox(
+                pool,
+                dominios,
+                &pessoa.email,
+                &pessoa.email,
+                Some(&pessoa.full_name),
+                ids,
+            )
+            .await?
+        }
+    };
+
+    connect_mailbox(pool, principal, mailbox_id, ligacao, ids).await?;
+    Ok(mailbox_id)
+}
+
 /// Desliga uma caixa e esquece a credencial.
 ///
 /// # Errors

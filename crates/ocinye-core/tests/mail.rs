@@ -588,14 +588,21 @@ async fn a_assinatura_institucional_entra_no_envio() {
     let org = organisation(&pool).await;
 
     let member = person(&pool, org, &["research_member"]).await;
+    // Nome e endereço únicos: o teste corre contra uma base que pode já ter
+    // corrido, e um endereço fixo esbarraria na unicidade de `people.email`.
+    let sufixo = member.person_id.simple().to_string();
+    let nome = format!("Fidel Monteiro {sufixo}");
+    let email = format!("fidel.{sufixo}@ocinye.com");
     sqlx::query(
         "UPDATE people
-            SET full_name = 'Fidel Monteiro',
-                email = 'fidel.monteiro@ocinye.com',
+            SET full_name = $2,
+                email = $3,
                 institutional_position = 'founder'
           WHERE id = $1",
     )
     .bind(member.person_id)
+    .bind(&nome)
+    .bind(&email)
     .execute(&pool)
     .await
     .expect("dados do membro");
@@ -632,15 +639,15 @@ async fn a_assinatura_institucional_entra_no_envio() {
         enviada.text_body.contains("\n-- \n"),
         "falta o delimitador de assinatura"
     );
-    assert!(enviada.text_body.contains("Fidel Monteiro"));
+    assert!(enviada.text_body.contains(&nome));
     assert!(
         enviada.text_body.contains("Fundador"),
         "o cargo real não entrou"
     );
-    assert!(enviada.text_body.contains("fidel.monteiro@ocinye.com"));
+    assert!(enviada.text_body.contains(&email));
 
     let html = enviada.html_body.expect("há projecção HTML");
-    assert!(html.contains("Fidel Monteiro"));
+    assert!(html.contains(&nome));
     assert!(
         html.contains("src=\"cid:ocinye-logo\""),
         "o logótipo não é referido por cid"
@@ -821,6 +828,163 @@ async fn ligar_uma_caixa_guarda_a_senha_cifrada() {
         )
         .expect("abrir"),
         "a-senha-do-imap"
+    );
+}
+
+/// O estado vazio liga-se sozinho: sem caixa nenhuma, ligar a própria cria-a ao
+/// endereço institucional do membro, guarda a senha cifrada, e é idempotente.
+#[tokio::test]
+async fn ligar_a_propria_caixa_cria_a_e_e_idempotente() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let alice = person(&pool, org, &["research_member"]).await;
+
+    let email: String = sqlx::query_scalar("SELECT email FROM people WHERE id = $1")
+        .bind(alice.person_id)
+        .fetch_one(&pool)
+        .await
+        .expect("email");
+
+    let dominios = [DOMAIN.to_owned()];
+    let k = chave();
+    let id = mail::service::connect_own_mailbox(
+        &pool,
+        &alice,
+        &dominios,
+        &mail::service::MailboxConnection {
+            chave: Some(&k),
+            sonda: &SondaQueAceita::default(),
+            senha: "app-password-de-teste",
+        },
+        &CorrelationIds::generate(),
+    )
+    .await
+    .expect("ligar a própria caixa");
+
+    // Criou a caixa ao endereço institucional do membro, e o dono é ele — não há
+    // caminho para tocar na caixa de outro (o endereço vem da identidade).
+    let (addr, owner): (String, Uuid) =
+        sqlx::query_as("SELECT address, owner_id FROM mailboxes WHERE id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .expect("caixa");
+    assert_eq!(
+        addr, email,
+        "a caixa não foi criada ao endereço institucional"
+    );
+    assert_eq!(
+        owner, alice.person_id,
+        "a caixa não pertence a quem a ligou"
+    );
+
+    // A senha não fica legível.
+    let cifrado: Vec<u8> =
+        sqlx::query_scalar("SELECT ciphertext FROM mailbox_credentials WHERE mailbox_id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .expect("credencial");
+    assert!(!String::from_utf8_lossy(&cifrado).contains("app-password-de-teste"));
+
+    // Religar reusa a mesma caixa: uma pessoa tem uma.
+    let id2 = mail::service::connect_own_mailbox(
+        &pool,
+        &alice,
+        &dominios,
+        &mail::service::MailboxConnection {
+            chave: Some(&k),
+            sonda: &SondaQueAceita::default(),
+            senha: "outra-app-password",
+        },
+        &CorrelationIds::generate(),
+    )
+    .await
+    .expect("religar");
+    assert_eq!(id, id2, "religar criou uma segunda caixa");
+    let n: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM mailboxes WHERE owner_id = $1 AND kind = 'personal'",
+    )
+    .bind(alice.person_id)
+    .fetch_one(&pool)
+    .await
+    .expect("contagem");
+    assert_eq!(
+        n, 1,
+        "uma pessoa passou a ter mais do que uma caixa pessoal"
+    );
+}
+
+/// Uma senha que o servidor recusa não guarda credencial — verificada antes de
+/// escrita. A caixa fica criada, para a nova tentativa ser só a senha.
+#[tokio::test]
+async fn ligar_a_propria_com_senha_recusada_nao_guarda_credencial() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let alice = person(&pool, org, &["research_member"]).await;
+
+    let k = chave();
+    let erro = mail::service::connect_own_mailbox(
+        &pool,
+        &alice,
+        &[DOMAIN.to_owned()],
+        &mail::service::MailboxConnection {
+            chave: Some(&k),
+            sonda: &SondaQueRecusa,
+            senha: "a-errada",
+        },
+        &CorrelationIds::generate(),
+    )
+    .await;
+    assert!(erro.is_err(), "uma senha recusada não devia ligar");
+
+    let caixa: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM mailboxes WHERE owner_id = $1 AND kind = 'personal'")
+            .bind(alice.person_id)
+            .fetch_optional(&pool)
+            .await
+            .expect("caixa");
+    let caixa = caixa.expect("a caixa fica criada para a nova tentativa");
+    let cred: Option<Uuid> =
+        sqlx::query_scalar("SELECT mailbox_id FROM mailbox_credentials WHERE mailbox_id = $1")
+            .bind(caixa)
+            .fetch_optional(&pool)
+            .await
+            .expect("credencial");
+    assert!(
+        cred.is_none(),
+        "guardou uma credencial que o servidor recusou"
+    );
+}
+
+/// Uma pessoa desactivada não liga uma caixa: o domínio recusa provisioná-la.
+#[tokio::test]
+async fn uma_pessoa_desactivada_nao_liga_caixa() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let alice = person(&pool, org, &["research_member"]).await;
+    sqlx::query("UPDATE people SET deactivated_at = now() WHERE id = $1")
+        .bind(alice.person_id)
+        .execute(&pool)
+        .await
+        .expect("desactivar");
+
+    let k = chave();
+    let erro = mail::service::connect_own_mailbox(
+        &pool,
+        &alice,
+        &[DOMAIN.to_owned()],
+        &mail::service::MailboxConnection {
+            chave: Some(&k),
+            sonda: &SondaQueAceita::default(),
+            senha: "qualquer",
+        },
+        &CorrelationIds::generate(),
+    )
+    .await;
+    assert!(
+        erro.is_err(),
+        "uma pessoa desactivada não devia ligar uma caixa"
     );
 }
 

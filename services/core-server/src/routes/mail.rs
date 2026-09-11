@@ -30,6 +30,7 @@ pub fn routes() -> Router<AppState> {
         .route("/mail/mailboxes", get(list_mailboxes))
         .route("/mail/mailboxes/{mailbox_id}/messages", get(list_messages))
         .route("/mail/mailboxes/{mailbox_id}/sync", post(sync))
+        .route("/mail/mailbox/connect", post(connect_own))
         .route("/mail/mailboxes/{mailbox_id}/connect", post(connect))
         .route("/mail/mailboxes/{mailbox_id}/disconnect", post(disconnect))
         .route("/mail/messages/{message_id}", get(read_message))
@@ -164,6 +165,37 @@ async fn connect(
     .map_err(|error| ApiError::new(error, &ids))?;
 
     Ok(Json(serde_json::json!({ "connected": true })))
+}
+
+/// `POST /mail/mailbox/connect`
+///
+/// Liga a caixa pessoal do próprio membro, criando-a ao endereço institucional
+/// se ainda não existir. O endereço vem da identidade de quem liga, não do
+/// cliente — um membro liga a sua caixa, nunca a de outro.
+async fn connect_own(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Json(body): Json<ConnectBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let dominios = state.institutional_domains().await;
+    let mailbox_id = mail::connect_own_mailbox(
+        &state.pool,
+        &principal,
+        &dominios,
+        &mail::MailboxConnection {
+            chave: state.config.sealing_key.as_ref(),
+            sonda: state.mail_probe.as_ref(),
+            senha: &body.password,
+        },
+        &ids,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+
+    Ok(Json(
+        serde_json::json!({ "connected": true, "mailbox_id": mailbox_id }),
+    ))
 }
 
 /// `POST /mail/mailboxes/{id}/disconnect`

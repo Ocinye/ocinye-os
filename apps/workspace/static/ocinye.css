@@ -4413,6 +4413,16 @@ select.oc-entrada {
   .oc-mail__ligacao-form { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* Ligar a primeira caixa (estado vazio): uma coluna simples, com o e-mail e os
+   servidores institucionais mostrados mas não editáveis, e só a senha a pedir. */
+.oc-mail__conectar {
+  display: flex; flex-direction: column; gap: var(--oc-space-5);
+  max-width: 26rem; margin-top: var(--oc-space-4);
+}
+.oc-mail__conectar-factos { margin: 0; }
+.oc-mail__conectar-campo { display: flex; flex-direction: column; gap: var(--oc-space-2); }
+.oc-mail__conectar-campo .oc-input { width: 100%; }
+
 [hidden] { display: none !important; }
 
 /* ── Participantes ───────────────────────────────────────────────────────
