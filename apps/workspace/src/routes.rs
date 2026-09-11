@@ -1967,14 +1967,17 @@ async fn mail_settings(State(state): State<WorkspaceState>, headers: HeaderMap) 
     let viewer = viewer(&state, &member).await;
 
     let view = mail_context(&state, &member, None, "inbox".to_owned(), String::new()).await;
-    let preferences = optional(&state, &member, "/api/v1/mail/preferences").await;
+    let (preferences, signature) = tokio::join!(
+        optional(&state, &member, "/api/v1/mail/preferences"),
+        optional(&state, &member, "/api/v1/mail/signature"),
+    );
 
     shell_page(
         "Definições de correio",
         &viewer,
         Screen::Mail,
         vec![Crumb::to(Screen::Mail)],
-        ui::screens::mail::settings(&view, &preferences),
+        ui::screens::mail::settings(&view, &preferences, &signature),
     )
 }
 
@@ -2554,6 +2557,10 @@ async fn messaging_leave(
 struct MailSettingsForm {
     #[serde(default)]
     signature: String,
+    // Uma checkbox: presente quando marcada, ausente quando não. `Some` = usar
+    // a assinatura oficial.
+    #[serde(default)]
+    official_signature: Option<String>,
     #[serde(default)]
     remote_content_policy: String,
 }
@@ -2567,6 +2574,7 @@ async fn save_mail_settings(
 
     let body = serde_json::json!({
         "signature": form.signature,
+        "official_signature": form.official_signature.is_some(),
         "remote_content_policy": form.remote_content_policy,
     });
 

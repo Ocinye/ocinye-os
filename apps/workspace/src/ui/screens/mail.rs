@@ -23,8 +23,8 @@ use serde_json::Value;
 use ocinye_contracts::{ComposeAction, RemoteContentPolicy};
 
 use crate::ui::components::{
-    badge, button, card, empty_state, field_with_value, section_head, select, select_labelled,
-    textarea_with_value, Button, EmptyState, SelectOption, Tone, Variant,
+    badge, button, card, empty_state, field_with_value, named_checkbox, section_head, select,
+    select_labelled, textarea_with_value, Button, EmptyState, SelectOption, Tone, Variant,
 };
 use crate::ui::icon::{icon, Icon};
 use crate::ui::shell::Viewer;
@@ -1702,9 +1702,22 @@ fn ligacao_da_caixa(caixa: &Value) -> impl IntoView {
     }
 }
 
-pub fn settings(view: &MailView, preferences: &Value) -> impl IntoView {
-    let signature = preferences
+pub fn settings(view: &MailView, preferences: &Value, signature: &Value) -> impl IntoView {
+    // A linha pessoal do membro (o antigo campo «assinatura»), preservada.
+    let personal_line = preferences
         .get("signature")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
+    // Se o membro usa a assinatura institucional oficial. Por omissão, sim.
+    let official = preferences
+        .get("official_signature")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    // A pré-visualização, gerada pelo Core a partir dos dados reais do membro —
+    // é fiel ao que o destinatário recebe (o logótipo vem por URL same-origin).
+    let signature_html = signature
+        .get("html")
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_owned();
@@ -1785,13 +1798,32 @@ pub fn settings(view: &MailView, preferences: &Value) -> impl IntoView {
                     section_head("Preferências", None, None),
                     view! {
                         <form method="post" action="/mail/settings">
+                            <div class="oc-mail__sig">
+                                <h3 class="oc-mail__sig-title">"Assinatura institucional"</h3>
+                                <p class="oc-muted oc-mail__sig-note">
+                                    "A Ocinye acrescenta esta assinatura às mensagens que
+                                     enviar. É gerada dos seus dados; um campo em falta é
+                                     omitido, não deixa linha vazia."
+                                </p>
+                                // A pré-visualização é HTML gerado pelo Core a partir de
+                                // dados estruturados — nunca marcação de quem escreve — e
+                                // é fiel ao que o destinatário recebe.
+                                <div class="oc-mail__sig-preview" inner_html=signature_html></div>
+                                {named_checkbox(
+                                    "mail-official",
+                                    "official_signature",
+                                    "Utilizar a assinatura institucional oficial",
+                                    official,
+                                )}
+                            </div>
+
                             {textarea_with_value(
                                 "mail-signature",
-                                "Assinatura",
+                                "Linha pessoal (opcional)",
                                 "signature",
-                                "Acrescentada ao fim das mensagens que escrever.",
-                                120,
-                                signature,
+                                "Uma linha sua, acrescentada acima da assinatura oficial.",
+                                80,
+                                personal_line,
                             )}
 
                             {select_labelled(

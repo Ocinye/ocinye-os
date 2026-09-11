@@ -722,21 +722,26 @@ pub async fn accessible_draft<'e>(
 /// What a member has chosen about how their mail behaves.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct MailPreferences {
-    /// Appended to messages they write. `None` when they have set none.
+    /// A linha pessoal opcional do membro, acrescentada acima da assinatura
+    /// oficial. `None` quando não definiu nenhuma. Texto simples.
     pub signature: Option<String>,
+    /// Se o membro acrescenta a assinatura institucional oficial ao enviar
+    /// (ADR-0414). Por omissão, sim.
+    pub official_signature: bool,
     /// Whether remote content loads, and when.
     pub remote_content_policy: RemoteContentPolicy,
 }
 
 impl Default for MailPreferences {
-    /// Blocking, with no signature.
+    /// Blocking, with no personal line, and the official signature on.
     ///
     /// The default matters: a member who has never opened the settings screen
-    /// must not be tracked by senders, and the row for them does not exist yet
-    /// (briefing §12).
+    /// must not be tracked by senders (briefing §12), and the institutional
+    /// default is to sign with the institution's signature.
     fn default() -> Self {
         Self {
             signature: None,
+            official_signature: true,
             remote_content_policy: RemoteContentPolicy::Block,
         }
     }
@@ -752,7 +757,7 @@ pub async fn preferences<'e>(
     person_id: Uuid,
 ) -> CoreResult<MailPreferences> {
     let row = sqlx::query(
-        "SELECT signature, remote_content_policy
+        "SELECT signature, official_signature, remote_content_policy
            FROM mail_preferences
           WHERE person_id = $1",
     )
@@ -770,6 +775,7 @@ pub async fn preferences<'e>(
 
     Ok(MailPreferences {
         signature: row.try_get("signature")?,
+        official_signature: row.try_get("official_signature")?,
         // Anything unrecognised reads as blocking. A corrupted setting cannot
         // turn tracking back on.
         remote_content_policy: RemoteContentPolicy::parse(&policy),
@@ -795,15 +801,18 @@ pub async fn save_preferences<'e>(
         .filter(|value| !value.is_empty());
 
     sqlx::query(
-        "INSERT INTO mail_preferences (person_id, signature, remote_content_policy)
-              VALUES ($1, $2, $3)
+        "INSERT INTO mail_preferences
+             (person_id, signature, official_signature, remote_content_policy)
+              VALUES ($1, $2, $3, $4)
          ON CONFLICT (person_id) DO UPDATE
                 SET signature = EXCLUDED.signature,
+                    official_signature = EXCLUDED.official_signature,
                     remote_content_policy = EXCLUDED.remote_content_policy,
                     updated_at = now()",
     )
     .bind(person_id)
     .bind(signature)
+    .bind(preferences.official_signature)
     .bind(preferences.remote_content_policy.as_str())
     .execute(executor)
     .await?;

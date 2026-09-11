@@ -353,7 +353,9 @@ fn conteudo_do_dominio_nunca_vira_marcacao() {
     const AUTORIZADOS: [(&str, &str); 3] = [
         (
             "mail.rs",
-            "o corpo da mensagem, já sanitizado pelo Core antes de sair de lá",
+            "o corpo da mensagem, já sanitizado pelo Core antes de sair de lá; e a \
+             pré-visualização da assinatura institucional, HTML que o Core gera de \
+             dados estruturados (ADR-0414), nunca marcação de quem escreve",
         ),
         (
             "mfa.rs",

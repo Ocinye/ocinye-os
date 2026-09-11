@@ -11,8 +11,8 @@
 //! that a person had to act on (briefing §15).
 
 use ocinye_contracts::{
-    AiCapability, Classification, ComposeAction, DraftOrigin, MailAddress, MailFolder, Permission,
-    SystemCapabilities, SystemCapability,
+    AiCapability, Classification, ComposeAction, DraftOrigin, InstitutionalPosition, MailAddress,
+    MailFolder, Permission, SystemCapabilities, SystemCapability,
 };
 use ocinye_domain::{can, Principal, ResourceContext, ResourceKind};
 use ocinye_observability::CorrelationIds;
@@ -20,8 +20,9 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::policy::{SendDecision, SendPolicy};
-use super::provider::{MailProvider, OutgoingMessage, ProviderAddress, ProviderError};
+use super::provider::{InlineImage, MailProvider, OutgoingMessage, ProviderAddress, ProviderError};
 use super::repository as repo;
+use super::signature::{self, LogoRef, Projections, SignatureFacts, LOGO_CONTENT_ID};
 use crate::audit::{self, action, AuditEntry};
 use crate::error::{CoreError, CoreResult};
 
@@ -634,7 +635,7 @@ pub async fn send(
     registry: &super::ProviderRegistry,
     principal: &Principal,
     mailbox_id: Uuid,
-    message: OutgoingMessage,
+    mut message: OutgoingMessage,
     recipients: &[MailAddress],
     attachment_classifications: &[Classification],
     confirmed: bool,
@@ -699,6 +700,12 @@ pub async fn send(
         SendDecision::Allowed => {}
     }
 
+    // A assinatura institucional entra aqui, no Core, a partir de dados de
+    // confiança — o texto que o membro escreveu vira as duas projecções
+    // (texto/HTML) e a assinatura é acrescentada. Nada do HTML do membro
+    // atravessa (ADR-0414).
+    apply_signature(pool, principal, &mut message).await?;
+
     provider
         .send_message(&mailbox.address, &message)
         .await
@@ -727,6 +734,90 @@ pub async fn send(
     tx.commit().await?;
 
     Ok(())
+}
+
+/// Os factos da assinatura de um membro: nome, cargo (se factual, em português),
+/// o endereço institucional, e a linha pessoal guardada.
+///
+/// O email é o do próprio membro (`people.email`) — a sua identidade —, o mesmo
+/// na pré-visualização e no envio.
+async fn signature_facts(
+    pool: &PgPool,
+    person_id: Uuid,
+    personal_line: Option<String>,
+) -> CoreResult<SignatureFacts> {
+    let person = crate::modules::identity::person_by_id(pool, person_id)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Pessoa não encontrada.".to_owned()))?;
+    // O cargo só entra quando é factual e conhecido. Um código que o domínio
+    // não reconhece não vira uma linha: a assinatura só afirma o que é verdade.
+    let role = person
+        .institutional_position
+        .as_deref()
+        .and_then(InstitutionalPosition::parse)
+        .map(|posicao| posicao.label_pt().to_owned());
+    Ok(SignatureFacts {
+        full_name: person.full_name,
+        role,
+        email: person.email,
+        personal_line,
+    })
+}
+
+/// Compõe a assinatura no corpo de saída, conforme a preferência do membro.
+///
+/// O `text_body` que entra é o texto que o membro escreveu; sai com as duas
+/// projecções e a assinatura. O logótipo só viaja embutido quando a assinatura
+/// oficial está ligada — só ela o refere.
+async fn apply_signature(
+    pool: &PgPool,
+    principal: &Principal,
+    message: &mut OutgoingMessage,
+) -> CoreResult<()> {
+    let prefs = repo::preferences(pool, principal.person_id).await?;
+    let facts = signature_facts(pool, principal.person_id, prefs.signature.clone()).await?;
+
+    let projections = signature::compose(
+        &message.text_body,
+        &facts,
+        prefs.official_signature,
+        LogoRef::Cid(LOGO_CONTENT_ID),
+    );
+    message.text_body = projections.text;
+    if let Some(html) = projections.html {
+        message.html_body = Some(html);
+        if prefs.official_signature {
+            message.inline_images.push(InlineImage {
+                content_id: LOGO_CONTENT_ID.to_owned(),
+                content_type: signature::LOGO_CONTENT_TYPE.to_owned(),
+                content: signature::LOGO_PNG.to_vec(),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// A pré-visualização da assinatura institucional de um membro.
+///
+/// Devolve as duas projecções (texto e HTML) da assinatura oficial com os dados
+/// reais do membro — o que o ecrã de definições mostra. É fiel ao que o
+/// destinatário recebe; a única diferença é o logótipo, referido por URL porque
+/// `cid:` não resolve num navegador.
+///
+/// # Errors
+///
+/// Devolve erro quando a pessoa não existe ou a consulta falha.
+pub async fn preview_signature(
+    pool: &PgPool,
+    principal: &Principal,
+    logo_url: &str,
+) -> CoreResult<Projections> {
+    let prefs = repo::preferences(pool, principal.person_id).await?;
+    let facts = signature_facts(pool, principal.person_id, prefs.signature.clone()).await?;
+    Ok(Projections {
+        text: signature::signature_text(&facts),
+        html: Some(signature::signature_html(&facts, LogoRef::Url(logo_url))),
+    })
 }
 
 /// Build the sender identity for an address.

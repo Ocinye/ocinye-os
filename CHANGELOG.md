@@ -7,6 +7,39 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Correio — assinatura institucional e projecção HTML no envio — 2026-09-11
+
+O correio da Ocinye passa a acrescentar uma **assinatura institucional** às
+mensagens que se enviam, com o **logótipo** da instituição — sem se tornar um
+compositor de HTML arbitrário ([ADR-0414](docs/adrs/0414-mail-html-projection-and-signature.md)).
+
+- **A autoria continua a ser texto simples.** O envio produz
+  `multipart/alternative`: o texto do membro é projectado, de forma
+  determinística e **escapada**, numa parte `text/html` com a assinatura; o
+  `text/plain` fica canónico e completo (um cliente que recuse HTML recebe a
+  mensagem inteira). Nada do HTML é escrito pelo membro.
+- **A assinatura só afirma factos:** nome, cargo institucional *quando existe*,
+  Ocinye, endereço. Um campo em falta desaparece, não deixa linha vazia; não
+  inventa telefone, cargo nem website. Sóbria — sem faixa, sem rodapé de
+  marketing, sem ícones sociais.
+- **O logótipo viaja embutido por `cid:`** (numa parte `multipart/related`),
+  numa versão optimizada para email (~180 px) — sem pedido remoto, que seria um
+  sinal de leitura. `OutgoingMessage` distingue agora `text_body`, `html_body` e
+  `inline_images`, em vez de esconder HTML no corpo.
+- **Fronteira de saída distinta da de entrada:** o sanitizador de entrada
+  ([ADR-0402](docs/adrs/0402-mail-html-sanitisation.md)) limpa conteúdo externo;
+  a projecção de saída é conteúdo da instituição, determinístico, com o seu
+  próprio teste de que nada do texto do membro atravessa como marcação.
+- **Definições de correio** ganham a **pré-visualização** da assinatura (fiel ao
+  que o destinatário recebe) e a opção «utilizar a assinatura oficial». O campo
+  de assinatura que existia **preserva-se** como linha pessoal opcional (escapada
+  na projecção), e deixa de ser configuração morta: passa a ser consumido no
+  envio.
+
+Migração 0039 (aditiva): `mail_preferences.official_signature`. `Secção 1`
+re-derivada (39 migrations, 62 ADRs, 176 caminhos, 208 operações, 546/1517
+funções de teste).
+
 ### Administração de membros — a secção activa vê-se, e a unidade aparece na lista — 2026-09-11
 
 Duas correcções na Administração → Membros, sem modelo de pertença novo — reusa

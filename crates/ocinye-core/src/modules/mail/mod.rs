@@ -35,6 +35,7 @@ pub mod registry;
 pub mod repository;
 pub mod sanitize;
 pub mod service;
+pub mod signature;
 
 pub use policy::{SendDecision, SendPolicy};
 pub use provider::{MailProvider, ProviderError, ProviderHealth, ProviderResult};
@@ -45,6 +46,9 @@ pub use service::{
     assist, connect_mailbox, disconnect_mailbox, evaluate_send, mailbox, mailboxes,
     provision_personal_mailbox, read_message, safe_filename, send, sender_identity, set_flag, sync,
     AssistRequest, AssistResult, MailboxConnection, ReadableMessage, SyncOutcome,
+};
+pub use signature::{
+    signature_html, signature_text, LogoRef, Projections, SignatureFacts, LOGO_CONTENT_ID,
 };
 
 /// Constrói o adaptador de correio a partir da configuração desta instalação.
