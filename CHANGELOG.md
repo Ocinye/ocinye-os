@@ -7,6 +7,30 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### `OCINYE_STABLE_PRE_AI_READY` — declarado, e o `main` em produção — 2026-09-11
+
+O último portão antes da IA/Computação está declarado. A correcção de experiência
+das Notas foi mergeada (PR #68) e **deployada**: produção passou a correr o release
+`90b9d0d728de` (o `main @ 90b9d0d`) — Core, Workspace e Worker saudáveis,
+`os.ocinye.com` e `api.ocinye.com` a servir. Sem migrations novas neste release.
+
+Com a integração em produção feita, a sequência canónica fica inteira e cada
+pré-requisito provado por evidência própria — Administração, sincronização de
+correio, Notas, *Zero Dead UI* de todo o sistema, certificação E2E de browser
+completa, prova de instalação de raiz, prova final de backup/restauro, contrato de
+Computação/Inteligência e aceitação em produção. A matriz vive na
+[ADR-0413](docs/adrs/0413-notes-as-institutional-knowledge.md#estado-2026-09-11--ocinye_stable_pre_ai_ready-declarado)
+e a `Secção 1` do [`CLAUDE.md`](CLAUDE.md) regista o portão.
+
+**Corrige-se a leitura de 2026-09-10:** «a inferência real ainda não existe»
+**não** era um pré-requisito deste portão. O que o retinha era a certificação do
+sistema inteiro e a integração em produção; a inferência real pertence ao milestone
+seguinte (M4 — primeiro nó OVHcloud L40S), e a sua ausência é a **pré-condição**
+deste portão. **Estado factual de IA, inalterado:** 0 nós de computação, 0
+fornecedores, 0 modelos, IA indisponível, `Pesquisar` operacional,
+`Perguntar`/`Executar` `NO_RESOURCE`. Declaração documental — nada de runtime muda,
+nenhum GPU ligado ou simulado.
+
 ### O editor de notas é um documento, não um campo (correcção de experiência) — 2026-09-11
 
 Correcção só de experiência: o corpo da nota deixa de parecer uma caixa de texto.
