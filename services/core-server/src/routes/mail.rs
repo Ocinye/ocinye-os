@@ -38,6 +38,7 @@ pub fn routes() -> Router<AppState> {
         .route("/mail/assist", post(assist))
         .route("/mail/status", get(status))
         .route("/mail/preferences", get(preferences).post(save_preferences))
+        .route("/mail/signature", get(signature_preview))
 }
 
 // ── Mailboxes ───────────────────────────────────────────────────────────
@@ -432,10 +433,14 @@ async fn send(
         cc: to_provider(cc),
         bcc: to_provider(bcc),
         subject: request.subject,
-        body: request.body,
+        // O membro escreve texto simples; a assinatura e a projecção HTML são
+        // acrescentadas pelo Core no envio (ADR-0414).
+        text_body: request.body,
+        html_body: None,
         in_reply_to: None,
         references: Vec::new(),
         attachments: Vec::new(),
+        inline_images: Vec::new(),
     };
 
     // Attachments are `PLANNED`: with no object storage configured there is
@@ -540,8 +545,16 @@ async fn preferences(
 struct PreferencesRequest {
     #[serde(default)]
     signature: Option<String>,
+    /// Se acrescenta a assinatura institucional oficial. Ausente lê-se como sim
+    /// — o padrão institucional é assinar.
+    #[serde(default = "sim")]
+    official_signature: bool,
     #[serde(default)]
     remote_content_policy: Option<String>,
+}
+
+const fn sim() -> bool {
+    true
 }
 
 /// `POST /mail/preferences`
@@ -567,6 +580,7 @@ async fn save_preferences(
 
     let preferences = mail::MailPreferences {
         signature: request.signature,
+        official_signature: request.official_signature,
         // Anything unrecognised blocks. A malformed value cannot turn tracking
         // on by accident (see `RemoteContentPolicy::parse`).
         remote_content_policy: RemoteContentPolicy::parse(
@@ -579,6 +593,33 @@ async fn save_preferences(
         .map_err(|error| ApiError::new(error, &ids))?;
 
     Ok(Json(preferences))
+}
+
+#[derive(Serialize)]
+struct SignaturePreview {
+    /// A projecção em texto simples da assinatura oficial.
+    text: String,
+    /// A projecção HTML — fiel ao que o destinatário recebe, com o logótipo por
+    /// URL (o `cid:` não resolve num navegador).
+    html: Option<String>,
+}
+
+/// `GET /mail/signature` — a pré-visualização da assinatura institucional do
+/// membro, com os seus dados reais. O logótipo é servido same-origin pela versão
+/// optimizada para email.
+async fn signature_preview(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+) -> Result<Json<SignaturePreview>, ApiError> {
+    let projections =
+        mail::service::preview_signature(&state.pool, &principal, "/static/ocinye-logo-email.png")
+            .await
+            .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(Json(SignaturePreview {
+        text: projections.text,
+        html: projections.html,
+    }))
 }
 
 // ── Status ──────────────────────────────────────────────────────────────

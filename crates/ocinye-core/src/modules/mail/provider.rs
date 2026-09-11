@@ -187,18 +187,33 @@ pub struct OutgoingMessage {
     pub bcc: Vec<ProviderAddress>,
     /// Subject.
     pub subject: String,
-    /// The body, as plain text.
+    /// The body, as plain text — canónico e completo.
     ///
-    /// Ocinye Mail composes plain text. A composer that produced HTML would
-    /// make the institution a source of the very content the reader has to
-    /// distrust, and buys nothing an institutional message needs.
-    pub body: String,
+    /// **A autoria é sempre texto simples.** O Ocinye Mail não é um compositor
+    /// de HTML arbitrário: o membro escreve texto, e é este `text_body` que
+    /// carrega essa escrita. É a representação canónica e a alternativa de
+    /// recurso — um cliente que recuse HTML recebe uma mensagem completa aqui
+    /// (ADR-0414).
+    pub text_body: String,
+    /// A projecção HTML determinística, gerada pelo Ocinye — nunca HTML do
+    /// membro.
+    ///
+    /// `None` quando não há projecção (a mensagem viaja só como texto). Quando
+    /// existe, é produzida a partir do `text_body` escapado, com os parágrafos
+    /// preservados, e com a assinatura institucional acrescentada. É outra
+    /// fronteira de confiança que a entrada (ADR-0402): aqui o conteúdo é da
+    /// instituição, não de quem enviou a mensagem (ADR-0414).
+    pub html_body: Option<String>,
     /// The message this replies to, for correct threading.
     pub in_reply_to: Option<String>,
     /// The `References` chain to continue.
     pub references: Vec<String>,
     /// Attachments, with their bytes.
     pub attachments: Vec<OutgoingAttachment>,
+    /// Imagens embutidas por referência `cid:` na projecção HTML — hoje, o
+    /// logótipo institucional. Viajam numa parte `multipart/related`, sem
+    /// pedido remoto: a assinatura não pinga um servidor ao ser aberta.
+    pub inline_images: Vec<InlineImage>,
 }
 
 /// An attachment with its content.
@@ -209,6 +224,21 @@ pub struct OutgoingAttachment {
     /// Content type.
     pub content_type: String,
     /// The bytes.
+    pub content: Vec<u8>,
+}
+
+/// Uma imagem embutida na projecção HTML, referida por `cid:<content_id>`.
+///
+/// Não é um anexo que o destinatário guarda: é uma parte `related` que só o
+/// HTML da própria mensagem usa. O `content_id` é o que aparece em
+/// `<img src="cid:…">` e no cabeçalho `Content-ID`.
+#[derive(Debug, Clone)]
+pub struct InlineImage {
+    /// O identificador da parte, sem os sinais `<>` — p.ex. `ocinye-logo`.
+    pub content_id: String,
+    /// O tipo de conteúdo, p.ex. `image/png`.
+    pub content_type: String,
+    /// Os bytes da imagem.
     pub content: Vec<u8>,
 }
 
@@ -573,10 +603,12 @@ mod tests {
             cc: Vec::new(),
             bcc: Vec::new(),
             subject: "Teste".into(),
-            body: "Corpo".into(),
+            text_body: "Corpo".into(),
+            html_body: None,
             in_reply_to: None,
             references: Vec::new(),
             attachments: Vec::new(),
+            inline_images: Vec::new(),
         };
 
         assert!(provider

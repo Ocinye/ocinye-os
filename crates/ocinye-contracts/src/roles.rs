@@ -63,6 +63,26 @@ impl InstitutionalPosition {
             _ => return None,
         })
     }
+
+    /// O rótulo em português europeu — a língua institucional da Ocinye.
+    ///
+    /// Uma só tradução, canónica: a lista de membros, o detalhe do membro e a
+    /// assinatura do correio lêem daqui, para que «founder» nunca apareça cru
+    /// num sítio e «Fundador» noutro.
+    #[must_use]
+    pub const fn label_pt(self) -> &'static str {
+        match self {
+            Self::Founder => "Fundador",
+            Self::Director => "Director",
+            Self::UnitLead => "Responsável de unidade",
+            Self::PrincipalInvestigator => "Investigador principal",
+            Self::Researcher => "Investigador",
+            Self::Engineer => "Engenheiro",
+            Self::Fellow => "Bolseiro",
+            Self::Student => "Estudante",
+            Self::ExternalCollaborator => "Colaborador externo",
+        }
+    }
 }
 
 /// What a person *may do* on the platform.

@@ -514,6 +514,83 @@ impl ImapSmtpProvider {
 
         Ok(LettreMailbox::new(address.display_name.clone(), parsed))
     }
+
+    /// Constrói a mensagem MIME a partir de uma `OutgoingMessage`.
+    ///
+    /// O texto simples é sempre completo e canónico. Quando há projecção HTML,
+    /// ela viaja numa `multipart/alternative`, e a sua parte HTML leva as
+    /// imagens embutidas (o logótipo) numa `multipart/related` — por `cid:`, sem
+    /// pedido remoto. Anexos, se existirem, envolvem tudo numa `multipart/mixed`.
+    /// Um cliente que recuse HTML lê a mensagem inteira no texto simples
+    /// (ADR-0414).
+    ///
+    /// Extraído de `send_message` para a estrutura ser verificável sem falar com
+    /// um servidor.
+    fn construir_mime(message: &OutgoingMessage) -> ProviderResult<Message> {
+        let mut builder = Message::builder()
+            .from(Self::to_lettre(&message.from)?)
+            .subject(&message.subject);
+
+        for recipient in &message.to {
+            builder = builder.to(Self::to_lettre(recipient)?);
+        }
+        for recipient in &message.cc {
+            builder = builder.cc(Self::to_lettre(recipient)?);
+        }
+        for recipient in &message.bcc {
+            builder = builder.bcc(Self::to_lettre(recipient)?);
+        }
+
+        if let Some(parent) = &message.in_reply_to {
+            builder = builder.in_reply_to(parent.clone());
+        }
+        if !message.references.is_empty() {
+            builder = builder.references(message.references.join(" "));
+        }
+
+        let parse_ct = |ct: &str| -> lettre::message::header::ContentType {
+            ct.parse::<lettre::message::header::ContentType>()
+                .unwrap_or(lettre::message::header::ContentType::TEXT_PLAIN)
+        };
+
+        let alternativa = message.html_body.as_ref().map(|html| {
+            let mut related = MultiPart::related().singlepart(SinglePart::html(html.clone()));
+            for imagem in &message.inline_images {
+                related = related.singlepart(
+                    lettre::message::Attachment::new_inline(imagem.content_id.clone())
+                        .body(imagem.content.clone(), parse_ct(&imagem.content_type)),
+                );
+            }
+            MultiPart::alternative()
+                .singlepart(SinglePart::plain(message.text_body.clone()))
+                .multipart(related)
+        });
+
+        let resultado = if message.attachments.is_empty() {
+            match alternativa {
+                Some(alternativa) => builder.multipart(alternativa),
+                None => builder.singlepart(SinglePart::plain(message.text_body.clone())),
+            }
+        } else {
+            let mut mixed = match alternativa {
+                Some(alternativa) => MultiPart::mixed().multipart(alternativa),
+                None => MultiPart::mixed().singlepart(SinglePart::plain(message.text_body.clone())),
+            };
+            for attachment in &message.attachments {
+                mixed = mixed.singlepart(
+                    lettre::message::Attachment::new(attachment.filename.clone()).body(
+                        attachment.content.clone(),
+                        parse_ct(&attachment.content_type),
+                    ),
+                );
+            }
+            builder.multipart(mixed)
+        };
+
+        resultado.map_err(|_| {
+            ProviderError::Rejected("Não foi possível construir a mensagem.".to_owned())
+        })
+    }
 }
 
 #[async_trait]
@@ -756,52 +833,7 @@ impl MailProvider for ImapSmtpProvider {
             ));
         }
 
-        let mut builder = Message::builder()
-            .from(Self::to_lettre(&message.from)?)
-            .subject(&message.subject);
-
-        for recipient in &message.to {
-            builder = builder.to(Self::to_lettre(recipient)?);
-        }
-        for recipient in &message.cc {
-            builder = builder.cc(Self::to_lettre(recipient)?);
-        }
-        for recipient in &message.bcc {
-            builder = builder.bcc(Self::to_lettre(recipient)?);
-        }
-
-        if let Some(parent) = &message.in_reply_to {
-            builder = builder.in_reply_to(parent.clone());
-        }
-        if !message.references.is_empty() {
-            builder = builder.references(message.references.join(" "));
-        }
-
-        // A plain-text part, plus one part per attachment. No HTML body: see
-        // `OutgoingMessage::body`.
-        let built = if message.attachments.is_empty() {
-            builder.body(message.body.clone())
-        } else {
-            let mut multipart =
-                MultiPart::mixed().singlepart(SinglePart::plain(message.body.clone()));
-
-            for attachment in &message.attachments {
-                let content_type = attachment
-                    .content_type
-                    .parse::<lettre::message::header::ContentType>()
-                    .unwrap_or(lettre::message::header::ContentType::TEXT_PLAIN);
-
-                multipart = multipart.singlepart(
-                    lettre::message::Attachment::new(attachment.filename.clone())
-                        .body(attachment.content.clone(), content_type),
-                );
-            }
-
-            builder.multipart(multipart)
-        }
-        .map_err(|_| {
-            ProviderError::Rejected("Não foi possível construir a mensagem.".to_owned())
-        })?;
+        let built = Self::construir_mime(message)?;
 
         match self.smtp.send(built).await {
             Ok(response) => {
@@ -1019,6 +1051,88 @@ pub fn attachment_bytes(raw: &[u8], index: usize) -> ProviderResult<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::modules::mail::provider::{InlineImage, OutgoingAttachment};
+
+    fn endereco(address: &str) -> ProviderAddress {
+        ProviderAddress {
+            address: address.to_owned(),
+            display_name: None,
+        }
+    }
+
+    fn mensagem() -> OutgoingMessage {
+        OutgoingMessage {
+            from: endereco("ana@ocinye.com"),
+            to: vec![endereco("colega@exemplo.com")],
+            cc: Vec::new(),
+            bcc: Vec::new(),
+            subject: "Assunto".to_owned(),
+            text_body: "Corpo em texto.".to_owned(),
+            html_body: None,
+            in_reply_to: None,
+            references: Vec::new(),
+            attachments: Vec::new(),
+            inline_images: Vec::new(),
+        }
+    }
+
+    /// Uma projecção HTML com logótipo vira `multipart/alternative` +
+    /// `multipart/related`, com a parte de texto e a imagem embutida por `cid:`.
+    #[test]
+    fn o_html_com_logo_produz_alternative_e_related_por_cid() {
+        let mut msg = mensagem();
+        msg.html_body = Some("<div>Corpo <b>rico</b></div>".to_owned());
+        msg.inline_images.push(InlineImage {
+            content_id: "ocinye-logo".to_owned(),
+            content_type: "image/png".to_owned(),
+            content: vec![1, 2, 3, 4],
+        });
+
+        let mime = ImapSmtpProvider::construir_mime(&msg).expect("mime");
+        let bytes = mime.formatted();
+        let texto = String::from_utf8_lossy(&bytes);
+
+        assert!(texto.contains("multipart/alternative"), "{texto}");
+        assert!(texto.contains("multipart/related"), "{texto}");
+        assert!(texto.contains("text/plain"), "falta a alternativa de texto");
+        assert!(texto.contains("text/html"), "falta a parte HTML");
+        assert!(
+            texto.contains("Content-ID: <ocinye-logo>"),
+            "o logótipo não é `cid`"
+        );
+        assert!(
+            texto.to_lowercase().contains("content-disposition: inline"),
+            "o logótipo não é uma parte inline"
+        );
+        // O texto simples viaja completo.
+        assert!(texto.contains("Corpo em texto."));
+    }
+
+    /// Sem projecção HTML, a mensagem é `text/plain` só — sem `multipart`.
+    #[test]
+    fn so_texto_nao_e_multipart() {
+        let mime = ImapSmtpProvider::construir_mime(&mensagem()).expect("mime");
+        let texto = String::from_utf8_lossy(&mime.formatted()).into_owned();
+        assert!(texto.contains("text/plain"));
+        assert!(!texto.contains("multipart/alternative"));
+    }
+
+    /// Um anexo envolve tudo numa `multipart/mixed`, mantendo a alternativa.
+    #[test]
+    fn um_anexo_envolve_a_alternativa_numa_mixed() {
+        let mut msg = mensagem();
+        msg.html_body = Some("<p>Olá</p>".to_owned());
+        msg.attachments.push(OutgoingAttachment {
+            filename: "nota.txt".to_owned(),
+            content_type: "text/plain".to_owned(),
+            content: b"anexo".to_vec(),
+        });
+        let mime = ImapSmtpProvider::construir_mime(&msg).expect("mime");
+        let texto = String::from_utf8_lossy(&mime.formatted()).into_owned();
+        assert!(texto.contains("multipart/mixed"));
+        assert!(texto.contains("multipart/alternative"));
+        assert!(texto.contains("nota.txt"));
+    }
 
     /// The folder names a server reports are not the ones we would have
     /// guessed, and the mapping has to survive that.

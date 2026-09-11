@@ -1365,7 +1365,15 @@ pub(crate) mod link_tests {
                 Screen::Mail,
                 screens::mail::settings(
                     &mail_view(true, true),
-                    &json!({"signature": "Ana Fernandes · Ocinye", "remote_content_policy": "block"}),
+                    &json!({
+                        "signature": "Ana Fernandes",
+                        "official_signature": true,
+                        "remote_content_policy": "block"
+                    }),
+                    &json!({
+                        "text": "Ana Fernandes\nInvestigadora\nOcinye\nana@ocinye.com",
+                        "html": "<table><tr><td>Ana Fernandes</td></tr></table>"
+                    }),
                 )
             ),
             // A Universal Command Surface, nos quatro estados que não podem

@@ -53,11 +53,18 @@ struct RecordingProvider {
     /// The number that matters is zero: several tests exist to prove a path
     /// leaves it there.
     sends: AtomicUsize,
+    /// A última mensagem entregue, para provar o que o Core lhe passou —
+    /// nomeadamente que a assinatura institucional entrou no caminho de envio.
+    last: std::sync::Mutex<Option<OutgoingMessage>>,
 }
 
 impl RecordingProvider {
     fn sends(&self) -> usize {
         self.sends.load(Ordering::SeqCst)
+    }
+
+    fn last(&self) -> Option<OutgoingMessage> {
+        self.last.lock().expect("lock").clone()
     }
 }
 
@@ -136,9 +143,10 @@ impl MailProvider for RecordingProvider {
     async fn send_message(
         &self,
         _from: &str,
-        _message: &OutgoingMessage,
+        message: &OutgoingMessage,
     ) -> ProviderResult<Option<String>> {
         self.sends.fetch_add(1, Ordering::SeqCst);
+        *self.last.lock().expect("lock") = Some(message.clone());
         Ok(Some("recorded".to_owned()))
     }
 
@@ -338,10 +346,12 @@ fn outgoing(from: &str, to: &str) -> OutgoingMessage {
         cc: Vec::new(),
         bcc: Vec::new(),
         subject: "Assunto".to_owned(),
-        body: "Corpo.".to_owned(),
+        text_body: "Corpo.".to_owned(),
+        html_body: None,
         in_reply_to: None,
         references: Vec::new(),
         attachments: Vec::new(),
+        inline_images: Vec::new(),
     }
 }
 
@@ -528,7 +538,7 @@ async fn sending_leaves_an_audit_trail_without_the_message_in_it() {
 
     let mut message = outgoing(&mailbox.address, "colega@ocinye.com");
     message.subject = "SEGREDO-NO-ASSUNTO".to_owned();
-    message.body = "SEGREDO-NO-CORPO".to_owned();
+    message.text_body = "SEGREDO-NO-CORPO".to_owned();
 
     mail::send(
         &pool,
@@ -567,6 +577,128 @@ async fn sending_leaves_an_audit_trail_without_the_message_in_it() {
     .await
     .expect("audit");
     assert_eq!(leaked, 0, "o conteúdo da mensagem entrou na auditoria");
+}
+
+/// A assinatura institucional entra no caminho de envio: com os dados reais do
+/// membro, o logótipo embutido por `cid:`, e as duas projecções — e desliga-se
+/// por inteiro quando o membro a recusa (ADR-0414).
+#[tokio::test]
+async fn a_assinatura_institucional_entra_no_envio() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+
+    let member = person(&pool, org, &["research_member"]).await;
+    sqlx::query(
+        "UPDATE people
+            SET full_name = 'Fidel Monteiro',
+                email = 'fidel.monteiro@ocinye.com',
+                institutional_position = 'founder'
+          WHERE id = $1",
+    )
+    .bind(member.person_id)
+    .execute(&pool)
+    .await
+    .expect("dados do membro");
+
+    let mailbox_id = personal_mailbox(&pool, org, member.person_id).await;
+    let mailbox = mail::mailbox(&pool, &member, mailbox_id)
+        .await
+        .expect("mailbox");
+
+    let provider = std::sync::Arc::new(RecordingProvider::default());
+    let registo = registo_de(&provider);
+
+    // Por omissão a assinatura oficial está ligada.
+    mail::send(
+        &pool,
+        &registo,
+        &member,
+        mailbox_id,
+        outgoing(&mailbox.address, "colega@ocinye.com"),
+        &[address("colega@ocinye.com")],
+        &[],
+        false,
+        &CorrelationIds::generate(),
+    )
+    .await
+    .expect("send");
+
+    let enviada = provider.last().expect("mensagem registada");
+    assert!(
+        enviada.text_body.contains("Corpo."),
+        "o corpo do membro perdeu-se"
+    );
+    assert!(
+        enviada.text_body.contains("\n-- \n"),
+        "falta o delimitador de assinatura"
+    );
+    assert!(enviada.text_body.contains("Fidel Monteiro"));
+    assert!(
+        enviada.text_body.contains("Fundador"),
+        "o cargo real não entrou"
+    );
+    assert!(enviada.text_body.contains("fidel.monteiro@ocinye.com"));
+
+    let html = enviada.html_body.expect("há projecção HTML");
+    assert!(html.contains("Fidel Monteiro"));
+    assert!(
+        html.contains("src=\"cid:ocinye-logo\""),
+        "o logótipo não é referido por cid"
+    );
+    assert!(!html.to_lowercase().contains("<script"));
+
+    assert_eq!(
+        enviada.inline_images.len(),
+        1,
+        "o logótipo devia viajar embutido"
+    );
+    assert_eq!(enviada.inline_images[0].content_id, "ocinye-logo");
+    assert_eq!(enviada.inline_images[0].content_type, "image/png");
+    assert!(
+        !enviada.inline_images[0].content.is_empty(),
+        "o logótipo veio vazio"
+    );
+
+    // Desligada, e sem linha pessoal: a mensagem viaja só como texto, completo,
+    // sem parte HTML e sem logótipo.
+    sqlx::query(
+        "INSERT INTO mail_preferences (person_id, official_signature, signature)
+              VALUES ($1, false, NULL)
+         ON CONFLICT (person_id) DO UPDATE
+                SET official_signature = false, signature = NULL",
+    )
+    .bind(member.person_id)
+    .execute(&pool)
+    .await
+    .expect("prefs");
+
+    mail::send(
+        &pool,
+        &registo,
+        &member,
+        mailbox_id,
+        outgoing(&mailbox.address, "colega@ocinye.com"),
+        &[address("colega@ocinye.com")],
+        &[],
+        false,
+        &CorrelationIds::generate(),
+    )
+    .await
+    .expect("send");
+
+    let enviada = provider.last().expect("mensagem registada");
+    assert_eq!(
+        enviada.text_body, "Corpo.",
+        "sem assinatura o texto fica exactamente como foi escrito"
+    );
+    assert!(
+        enviada.html_body.is_none(),
+        "não devia haver HTML sem assinatura"
+    );
+    assert!(
+        enviada.inline_images.is_empty(),
+        "não devia viajar logótipo"
+    );
 }
 
 // ── ADR-0406: generated is not sent ─────────────────────────────────────
