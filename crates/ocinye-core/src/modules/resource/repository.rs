@@ -132,6 +132,113 @@ pub async fn profile_rule<'e>(
     }))
 }
 
+/// One profile of an organisation by id, if it belongs to that organisation.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn profile_by_id<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    profile_id: Uuid,
+) -> CoreResult<Option<ResourceProfile>> {
+    let row = sqlx::query(
+        "SELECT id, code, name, description, is_default, priority, status
+           FROM resource_profiles
+          WHERE id = $1 AND organisation_id = $2",
+    )
+    .bind(profile_id)
+    .bind(organisation_id)
+    .fetch_optional(executor)
+    .await?;
+
+    row.as_ref().map(profile_from_row).transpose()
+}
+
+/// The profile a member is assigned, if they have one set.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn member_profile<'e>(
+    executor: impl PgExecutor<'e>,
+    person_id: Uuid,
+) -> CoreResult<Option<ResourceProfile>> {
+    let row = sqlx::query(
+        "SELECT p.id, p.code, p.name, p.description, p.is_default, p.priority, p.status
+           FROM people m
+           JOIN resource_profiles p ON p.id = m.resource_profile_id
+          WHERE m.id = $1",
+    )
+    .bind(person_id)
+    .fetch_optional(executor)
+    .await?;
+
+    row.as_ref().map(profile_from_row).transpose()
+}
+
+/// Assign a profile to a member (or clear it with `None`).
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+pub async fn assign_member_profile<'e>(
+    executor: impl PgExecutor<'e>,
+    person_id: Uuid,
+    profile_id: Option<Uuid>,
+) -> CoreResult<()> {
+    sqlx::query("UPDATE people SET resource_profile_id = $2 WHERE id = $1")
+        .bind(person_id)
+        .bind(profile_id)
+        .execute(executor)
+        .await?;
+    Ok(())
+}
+
+/// Create the default `MEMBER_STANDARD` profile for an organisation, with its
+/// storage rule, if none exists. Returns the default profile's id.
+///
+/// Idempotent: an organisation that already has a default keeps it untouched.
+///
+/// # Errors
+///
+/// Returns an error when a statement fails.
+pub async fn ensure_default_profile(
+    pool: &sqlx::PgPool,
+    organisation_id: Uuid,
+    storage_quota_bytes: i64,
+) -> CoreResult<Uuid> {
+    if let Some(existing) = default_profile(pool, organisation_id).await? {
+        return Ok(existing.id);
+    }
+
+    let mut tx = pool.begin().await?;
+    let profile_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO resource_profiles
+             (organisation_id, code, name, description, is_default, priority)
+         VALUES ($1, 'MEMBER_STANDARD', 'Membro padrão',
+                 'Perfil de recursos por omissão de um membro da instituição.', TRUE, 'normal')
+         ON CONFLICT (organisation_id, code) DO UPDATE SET is_default = TRUE
+         RETURNING id",
+    )
+    .bind(organisation_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO resource_profile_rules (profile_id, resource_type, quantity, unit)
+         VALUES ($1, 'persistent_storage', $2, 'bytes')
+         ON CONFLICT (profile_id, resource_type) DO NOTHING",
+    )
+    .bind(profile_id)
+    .bind(storage_quota_bytes)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(profile_id)
+}
+
 /// The live allocations of a scope for one resource — active status, not
 /// expired at `now`.
 ///

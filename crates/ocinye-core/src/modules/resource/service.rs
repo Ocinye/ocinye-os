@@ -9,12 +9,23 @@
 
 use ocinye_contracts::{AllocationSource, Permission, ResourceScopeType, ResourceType};
 use ocinye_domain::{can, Principal, ResourceContext, ResourceKind};
+use ocinye_observability::CorrelationIds;
 use sqlx::PgPool;
 use uuid::Uuid;
+
+use crate::audit::{self, action, AuditEntry};
 
 use super::model::{Entitlement, EntitlementPart, ResourceProfileDetail};
 use super::repository as repo;
 use crate::error::{CoreError, CoreResult};
+
+/// The conservative default personal storage quota, in bytes (10 GiB).
+///
+/// Institutional configuration, not frozen policy: it seeds a new organisation's
+/// default profile and is editable from there. A later slice moves the seed
+/// value to `OCINYE_STORAGE_QUOTA_BYTES` so an installation can set it before
+/// bootstrap; the stored profile rule remains the authority either way.
+pub const DEFAULT_STORAGE_QUOTA_BYTES: i64 = 10 * 1024 * 1024 * 1024;
 
 /// Authorise a resource permission, or fail closed.
 fn require(principal: &Principal, permission: Permission) -> CoreResult<()> {
@@ -102,10 +113,15 @@ pub async fn resolve_entitlement(
             });
         }
         None => {
-            // No allocation yet: fall back to the institution's default profile.
-            // A scope that is not a member gets no implicit base (0).
+            // No allocation yet: fall back to the member's assigned profile, or
+            // the institution's default when none is assigned. A scope that is
+            // not a member gets no implicit base (0).
             if scope_type == ResourceScopeType::Member {
-                if let Some(profile) = repo::default_profile(pool, organisation_id).await? {
+                let profile = match repo::member_profile(pool, scope_id).await? {
+                    Some(assigned) => Some(assigned),
+                    None => repo::default_profile(pool, organisation_id).await?,
+                };
+                if let Some(profile) = profile {
                     if let Some(rule) = repo::profile_rule(pool, profile.id, resource_type).await? {
                         quantity += rule.quantity;
                         parts.push(EntitlementPart {
@@ -168,4 +184,78 @@ pub async fn member_entitlement(
         resource_type,
     )
     .await
+}
+
+/// Ensure an organisation has a default allocation profile, creating the
+/// conservative `MEMBER_STANDARD` one if it has none.
+///
+/// A system operation, run when an organisation is provisioned so every
+/// installation has a default from the start (existing organisations were seeded
+/// by the migration). It authorises nothing itself — the caller is the bootstrap
+/// path, which is already the institution's root authority.
+///
+/// # Errors
+///
+/// Returns an error when a statement fails.
+pub async fn ensure_default_profile(pool: &PgPool, organisation_id: Uuid) -> CoreResult<Uuid> {
+    repo::ensure_default_profile(pool, organisation_id, DEFAULT_STORAGE_QUOTA_BYTES).await
+}
+
+/// Assign an allocation profile to a member, or clear it back to the default.
+///
+/// This is a resource operation, not an access one: it changes *how much* the
+/// member may consume, and never *what* they may reach. It grants no membership
+/// anywhere. Authorised by `resources.allocate`, audited, and the profile must
+/// belong to the actor's institution.
+///
+/// # Errors
+///
+/// [`CoreError::PermissionDenied`] without `resources.allocate`;
+/// [`CoreError::NotFound`] when the profile is not the institution's, or the
+/// member is not.
+pub async fn assign_member_profile(
+    pool: &PgPool,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    person_id: Uuid,
+    profile_id: Option<Uuid>,
+) -> CoreResult<()> {
+    require(principal, Permission::ResourcesAllocate)?;
+
+    // The member must be one of the actor's institution. A profile, when given,
+    // must be the institution's too — assigning across organisations is not a
+    // thing that can happen by naming an identifier.
+    let target_org: Option<Uuid> =
+        sqlx::query_scalar("SELECT organisation_id FROM people WHERE id = $1")
+            .bind(person_id)
+            .fetch_optional(pool)
+            .await?;
+    if target_org != Some(principal.organisation_id) {
+        return Err(CoreError::NotFound("Membro não encontrado.".to_owned()));
+    }
+
+    let profile_code = match profile_id {
+        Some(profile_id) => {
+            let profile = repo::profile_by_id(pool, principal.organisation_id, profile_id)
+                .await?
+                .ok_or_else(|| CoreError::NotFound("Perfil não encontrado.".to_owned()))?;
+            Some(profile.code)
+        }
+        None => None,
+    };
+
+    let mut tx = pool.begin().await?;
+    repo::assign_member_profile(&mut *tx, person_id, profile_id).await?;
+    audit::record(
+        &mut tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::RESOURCE_PROFILE_ASSIGNED, "person")
+            .resource(person_id)
+            .detail("profile", profile_code.as_deref().unwrap_or("(default)")),
+    )
+    .await?;
+    tx.commit().await?;
+
+    Ok(())
 }

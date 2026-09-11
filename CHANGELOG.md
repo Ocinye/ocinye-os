@@ -7,6 +7,21 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Governança de recursos — perfis e ciclo de vida do membro (M4, fatia B) — 2026-09-12
+
+- **Cada membro tem um perfil de alocação.** Uma coluna `people.resource_profile_id`
+  (migração 0041) nomeia o perfil atribuído; `NULL` resolve o perfil por omissão
+  da instituição, e um membro resolve um entitlement desde o primeiro dia sem
+  materializar nada.
+- **A resolução usa o perfil atribuído**, caindo para o perfil por omissão quando
+  não há um. Atribuir um perfil diferente muda o que o membro pode consumir — e
+  **não** muda o que pode aceder.
+- **Orgs novas nascem com um perfil por omissão** (`ensure_default_profile`, ligado
+  ao bootstrap); as existentes foram semeadas pela migração 0040.
+- **Atribuir um perfil é uma operação de recurso auditada** (`resources.allocate`),
+  e um perfil de outra instituição não se atribui por nomear o identificador
+  (recusado como «não encontrado»).
+
 ### Governança de recursos — fundação do domínio (M4, fatia A) — 2026-09-12
 
 O Ocinye OS passa a ter a fundação do **control-plane de recursos institucionais**
