@@ -1477,6 +1477,36 @@ async fn esperar_texto(page: &Page, agulha: &str) {
     }
 }
 
+/// Sonda a base até a pertença de uma pessoa a uma unidade estar no estado
+/// esperado, ou até ao prazo. `papel` = `Some("member"|"manager")` exige uma
+/// pertença viva com esse papel; `None` exige que não haja pertença viva.
+///
+/// O gatilho da verdade é a base, não o ecrã: uma mutação de pertença é um POST
+/// com redirect, e o ecrã pode mostrar o nome da unidade por outras razões (uma
+/// opção de seletor). O efeito só existe quando o Core o persistiu.
+async fn esperar_pertenca(pool: &PgPool, unidade: Uuid, pessoa: Uuid, papel: Option<&str>) {
+    let inicio = std::time::Instant::now();
+    loop {
+        let atual: Option<String> = sqlx::query_scalar(
+            "SELECT role FROM unit_memberships
+              WHERE unit_id = $1 AND person_id = $2 AND revoked_at IS NULL",
+        )
+        .bind(unidade)
+        .bind(pessoa)
+        .fetch_optional(pool)
+        .await
+        .expect("pertença");
+        if atual.as_deref() == papel {
+            return;
+        }
+        assert!(
+            inicio.elapsed() < DEADLINE,
+            "a pertença não chegou ao estado {papel:?} em {DEADLINE:?} (está {atual:?})"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+}
+
 /// Espera que um texto apareça na página.
 async fn esperar_por(page: &Page, agulha: &str) {
     let inicio = std::time::Instant::now();
@@ -10759,30 +10789,10 @@ async fn o_detalhe_do_membro_marca_a_seccao_e_atribui_uma_unidade() {
     .await;
     submit(&page, "form[action$=\"/units\"]").await;
 
-    // O gatilho da verdade é a base, não o ecrã: o nome «Núcleo de
-    // Administração» aparece na página mesmo por atribuir (é uma opção do
-    // seletor), por isso esperar por ele correria à frente do POST. Espera-se
-    // pela **pertença viva** — o efeito que só existe se o Core a aceitou.
-    let inicio = std::time::Instant::now();
-    loop {
-        let vivas: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM unit_memberships
-              WHERE unit_id = $1 AND person_id = $2 AND revoked_at IS NULL",
-        )
-        .bind(unidade)
-        .bind(alvo)
-        .fetch_one(&harness.pool)
-        .await
-        .expect("pertença");
-        if vivas == 1 {
-            break;
-        }
-        assert!(
-            inicio.elapsed() < DEADLINE,
-            "a atribuição não persistiu como pertença viva em {DEADLINE:?}"
-        );
-        tokio::time::sleep(Duration::from_millis(150)).await;
-    }
+    // A atribuição persistiu como pertença viva, com o papel por omissão
+    // («member»). Espera-se pela base, não pelo nome no ecrã (que aparece na
+    // opção do seletor mesmo por atribuir).
+    esperar_pertenca(&harness.pool, unidade, alvo, Some("member")).await;
 
     // O perfil recarregado mostra a unidade pelo nome, agora como pertença.
     let perfil = harness.open(&format!("/admin/members/{alvo}")).await;
@@ -10792,6 +10802,39 @@ async fn o_detalhe_do_membro_marca_a_seccao_e_atribui_uma_unidade() {
     // A lista de membros vive em `/admin`.
     let lista = harness.open("/admin").await;
     esperar_texto(&lista, "Núcleo de Administração").await;
+
+    // Alterar o papel na unidade, pelo mesmo detalhe. O seletor da pertença é
+    // ancorado à unidade (`…/units/{id}/role`) para não colidir com o de outra.
+    let acao_role = format!("form[action$=\"/units/{unidade}/role\"]");
+    let acao_remove = format!("form[action$=\"/units/{unidade}/remove\"]");
+
+    let perfil = harness.open(&format!("/admin/members/{alvo}")).await;
+    escolher(
+        &perfil,
+        &format!("{acao_role} select[name=\"role\"]"),
+        "manager",
+    )
+    .await;
+    submit(&perfil, &acao_role).await;
+    esperar_pertenca(&harness.pool, unidade, alvo, Some("manager")).await;
+
+    // E voltar a «member» — também para o remover a seguir não esbarrar na
+    // regra de «não deixar a unidade sem gestor» (o alvo não é gestor).
+    let perfil = harness.open(&format!("/admin/members/{alvo}")).await;
+    escolher(
+        &perfil,
+        &format!("{acao_role} select[name=\"role\"]"),
+        "member",
+    )
+    .await;
+    submit(&perfil, &acao_role).await;
+    esperar_pertenca(&harness.pool, unidade, alvo, Some("member")).await;
+
+    // Remover a pertença: soft delete no Core (a linha fica, `revoked_at` marca).
+    // Deixa de haver pertença viva.
+    let perfil = harness.open(&format!("/admin/members/{alvo}")).await;
+    submit(&perfil, &acao_remove).await;
+    esperar_pertenca(&harness.pool, unidade, alvo, None).await;
 }
 
 // ── O segundo factor, de ponta a ponta (ADR-0107) ───────────────────────────
