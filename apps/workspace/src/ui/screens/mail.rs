@@ -4,8 +4,11 @@
 //!
 //! **O único sítio do Workspace onde entra HTML alheio.** O corpo de uma
 //! mensagem é escrito por quem a enviou. Chega aqui já limpo pelo Ocinye Core
-//! (`ocinye_core::modules::mail::sanitize`) e é o único `inner_html` da
-//! interface. Nenhum outro ecrã injecta markup que não tenha construído.
+//! (`ocinye_core::modules::mail::sanitize`) e é o único `inner_html` de
+//! conteúdo alheio da interface. Os outros `inner_html` deste ecrã — a
+//! pré-visualização da assinatura institucional nas definições e no compositor
+//! — não são conteúdo alheio: são projecções que o próprio Core constrói de
+//! dados estruturados (ADR-0414), com todo o texto escapado por construção.
 //!
 //! **Gerar não é enviar.** O composer é um formulário com dois botões de
 //! submissão e destinos diferentes: `/mail/assist` devolve texto para o campo,
@@ -23,8 +26,8 @@ use serde_json::Value;
 use ocinye_contracts::{ComposeAction, RemoteContentPolicy};
 
 use crate::ui::components::{
-    badge, button, card, empty_state, field_with_value, named_checkbox, section_head, select,
-    select_labelled, textarea_with_value, Button, EmptyState, SelectOption, Tone, Variant,
+    badge, button, card, empty_state, named_checkbox, section_head, select_labelled,
+    textarea_with_value, Button, EmptyState, SelectOption, Tone, Variant,
 };
 use crate::ui::icon::{icon, Icon};
 use crate::ui::shell::Viewer;
@@ -1087,6 +1090,12 @@ pub struct ComposeDraft {
     pub error: Option<String>,
     /// Aviso de que o texto abaixo foi gerado e ainda não foi enviado.
     pub generated: bool,
+    /// A pré-visualização da assinatura institucional que será acrescentada no
+    /// envio, quando o membro a tem activa. `None` quando não será acrescentada
+    /// ou não pôde ser obtida — nunca se afirma uma assinatura que não vai sair.
+    /// É HTML que o Core gera de dados estruturados (ADR-0414), não texto de
+    /// quem escreve.
+    pub signature_html: Option<String>,
 }
 
 /// O compositor, como janela sobre o correio.
@@ -1136,6 +1145,7 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
     let gerado = draft.generated;
     let confirmacao = draft.confirmation.clone();
     let cc_aberto = !cc.is_empty();
+    let assinatura = draft.signature_html.clone();
 
     view! {
         <div class="oc-comp" data-oc="compositor" role="dialog" aria-label=titulo>
@@ -1227,6 +1237,20 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                 // A instrução da assistência viaja com o formulário para não
                 // se perder quando o texto é regenerado.
                 <input type="hidden" name="instruction" value=instrucao />
+
+                // A assinatura institucional não se escreve aqui: é
+                // acrescentada no envio, como projecção determinística do Core
+                // (ADR-0414). Mostra-se para quem escreve saber o que vai sair
+                // — «não via a assinatura em baixo» —, mas não é editável, e por
+                // isso vive fora do corpo submetido.
+                {assinatura.map(|html| view! {
+                    <details class="oc-comp__assinatura" data-oc="assinatura">
+                        <summary class="oc-comp__assinatura-rotulo">
+                            "Assinatura institucional — acrescentada ao enviar"
+                        </summary>
+                        <div class="oc-comp__assinatura-corpo" inner_html=html></div>
+                    </details>
+                })}
 
                 {confirmacao.map(|_| view! {
                     <label class="oc-comp__confirmar" for="mail-confirm">
@@ -1359,241 +1383,6 @@ fn assistencia_na_barra(view: &MailView) -> impl IntoView {
             .collect_view()}
         </div>
     }
-    .into_any()
-}
-
-/// O ecrã de composição.
-pub fn compose(view: &MailView, draft: &ComposeDraft) -> impl IntoView {
-    let boxes = view.boxes().to_vec();
-    let can_send = view.can_send();
-
-    let identities: Vec<(String, bool)> = boxes
-        .iter()
-        .filter(|mailbox| {
-            mailbox
-                .get("may_send")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-        })
-        .map(|mailbox| (text(mailbox, "address", "").to_owned(), true))
-        .collect();
-
-    let no_identity = identities.is_empty();
-
-    view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{if draft.reply_to.is_some() { "Responder" } else { "Nova mensagem" }}</h1>
-                    <p>
-                        "Nada é enviado antes de carregar em «Enviar». A assistência de escrita
-                         devolve texto para este formulário e nunca envia."
-                    </p>
-                </div>
-                <div class="oc-head__actions">
-                    {button(Button::new("Voltar ao correio", Variant::Secondary).href("/mail"))}
-                </div>
-            </div>
-
-            {draft.error.as_ref().map(|reason| view! {
-                <div class="oc-callout oc-callout--error oc-mail__banner" role="alert">
-                    {icon(Icon::Shield, 15)}
-                    <p>{reason.clone()}</p>
-                </div>
-            })}
-
-            {draft.confirmation.as_ref().map(|reason| view! {
-                <div class="oc-callout oc-callout--warning oc-mail__banner" role="alert">
-                    {icon(Icon::Shield, 15)}
-                    <p>{reason.clone()}</p>
-                </div>
-            })}
-
-            {draft.generated.then(|| view! {
-                // A distinção mais importante deste ecrã, dita por escrito
-                // (briefing §15).
-                <div class="oc-callout oc-mail__banner oc-mail__banner--ai" role="status">
-                    <span class="oc-btn__dot"></span>
-                    <p>
-                        "Texto sugerido pela assistência do Ocinye OS. "
-                        <strong>"Ainda não foi enviado."</strong>
-                        " Reveja-o e edite-o antes de enviar."
-                    </p>
-                </div>
-            })}
-
-            // Um só formulário, dois destinos. O botão de assistência submete para
-            // `/mail/assist`, que devolve texto; o de envio submete para
-            // `/mail/send`, que é a única rota que fala com o serviço de correio.
-            <form class="oc-mail__compose" method="post" action="/mail/send">
-                <input type="hidden" name="mailbox_id" value=draft.mailbox_id.clone() />
-                {draft.reply_to.as_ref().map(|id| view! {
-                    <input type="hidden" name="reply_to" value=id.clone() />
-                })}
-
-                {if no_identity {
-                    view! {
-                        <p class="oc-mail__no-identity" role="status">
-                            "Não possui nenhuma identidade de correio a partir da qual possa enviar."
-                        </p>
-                    }
-                    .into_any()
-                } else if identities.len() == 1 {
-                    // Uma identidade não é uma escolha.
-                    //
-                    // Um selector com uma opção pede uma decisão que não
-                    // existe, e sugere que o remetente é escolhível — quando o
-                    // Core o determina a partir de quem está a enviar e recusa
-                    // qualquer outro. Mostra-se o endereço, e envia-se num
-                    // campo que ninguém edita.
-                    let unica = identities
-                        .first()
-                        .map(|(endereco, _)| endereco.clone())
-                        .unwrap_or_default();
-                    let rotulo = unica.clone();
-                    view! {
-                        <div class="oc-field">
-                            <span class="oc-field__label">"De"</span>
-                            <p class="oc-mail__de oc-mono">{rotulo}</p>
-                            <input type="hidden" name="from" value=unica />
-                        </div>
-                    }
-                    .into_any()
-                } else {
-                    select("mail-from", "De", "from", identities).into_any()
-                }}
-
-                {field_with_value("mail-to", "Para", "to",
-                    "endereços separados por vírgula", "text", draft.to.clone())}
-                {field_with_value("mail-cc", "Cc", "cc",
-                    "opcional", "text", draft.cc.clone())}
-                {field_with_value("mail-subject", "Assunto", "subject",
-                    "assunto da mensagem", "text", draft.subject.clone())}
-                {textarea_with_value("mail-body", "Mensagem", "body",
-                    "Escreva a mensagem…", 260, draft.body.clone())}
-
-                {assistance_panel(view, draft)}
-
-                {draft.confirmation.is_some().then(|| view! {
-                    <label class="oc-check" for="mail-confirm">
-                        <input type="checkbox" id="mail-confirm" name="confirmed" value="true" />
-                        <span>
-                            "Confirmo que pretendo enviar esta mensagem para fora da instituição."
-                        </span>
-                    </label>
-                })}
-
-                <div class="oc-mail__compose-actions">
-                    {if can_send && !no_identity {
-                        view! {
-                            <button type="submit" class="oc-btn oc-btn--primary">
-                                {icon(Icon::Send, 13)}
-                                "Enviar"
-                            </button>
-                        }
-                        .into_any()
-                    } else {
-                        view! {
-                            <span class="oc-btn oc-btn--primary oc-unavailable" aria-disabled="true"
-                                  title="O serviço de envio não está disponível.">
-                                "Enviar"
-                            </span>
-                        }
-                        .into_any()
-                    }}
-                    <a class="oc-btn oc-btn--secondary" href="/mail">"Descartar"</a>
-                </div>
-            </form>
-        </div>
-    }
-}
-
-/// O painel de assistência de escrita.
-///
-/// Vive dentro do formulário para poder ler o que já foi escrito, mas o seu
-/// botão submete para outra rota. As três situações — pode e há, pode e não há,
-/// não pode — dizem-se por extenso: um painel apagado sem explicação é tão
-/// opaco como um controlo que não faz nada (briefing §61).
-fn assistance_panel(view: &MailView, draft: &ComposeDraft) -> impl IntoView {
-    let may = view.may_use_ai();
-    let available = view.ai_available();
-    let instruction = draft.instruction.clone();
-
-    let head = section_head("Assistência de escrita", None, None);
-
-    if !may {
-        return card(
-            head,
-            view! {
-                <p class="oc-mail__assist-note">
-                    "Não possui autorização para usar a assistência de escrita no correio.
-                     Escrever, responder e enviar continuam disponíveis."
-                </p>
-            },
-        )
-        .into_any();
-    }
-
-    if !available {
-        return card(
-            head,
-            view! {
-                <p class="oc-mail__assist-note">
-                    "A assistência de escrita depende de uma capacidade de IA do Ocinye OS,
-                     que não está actualmente disponível. Escrever, responder e enviar não
-                     dependem dela e continuam a funcionar normalmente."
-                </p>
-                <a class="oc-mail__assist-link" href="/ai">"Ver o estado da inteligência"</a>
-            },
-        )
-        .into_any();
-    }
-
-    card(
-        head,
-        view! {
-            <p class="oc-mail__assist-note">
-                "A assistência devolve texto para o campo «Mensagem». Nunca envia."
-            </p>
-
-            // As acções vêm do contrato, não de uma lista escrita aqui: uma
-            // acção acrescentada ao Core aparece sozinha, e uma removida
-            // desaparece em vez de ficar a produzir recusas.
-            {select_labelled(
-                "mail-assist-action",
-                "O que pretende",
-                "action",
-                ComposeAction::all()
-                    .into_iter()
-                    .map(|action| {
-                        SelectOption::new(action.as_str(), action.label())
-                            .selected(action == ComposeAction::Generate)
-                    })
-                    .collect(),
-            )}
-
-            {textarea_with_value(
-                "mail-instruction",
-                "Instrução",
-                "instruction",
-                "Descreva o que pretende. O conteúdo do email é tratado como dados, nunca como instruções.",
-                92,
-                instruction,
-            )}
-
-            // Submete para `/mail/assist`. O `formaction` é o mecanismo do
-            // próprio HTML: nenhum script, nenhuma ambiguidade sobre qual das
-            // duas rotas é chamada.
-            <button
-                type="submit"
-                formaction="/mail/assist"
-                class="oc-btn oc-btn--secondary"
-            >
-                <span class="oc-btn__dot"></span>
-                "Gerar sugestão"
-            </button>
-        },
-    )
     .into_any()
 }
 

@@ -1098,6 +1098,12 @@
 
     /* ── Fichas e sugestões ───────────────────────────────────────────── */
 
+    /* Cada linha de destinatários deixa aqui a sua forma de «aceitar o que
+       está por confirmar». O envio corre-as todas antes de submeter: sem
+       isto, escrever um endereço e carregar em Enviar com o rato perdia-o —
+       o `submit` dispara antes do `blur` diferido que o aceitava. */
+    const escoar = [];
+
     janela.querySelectorAll('[data-oc="destinatarios"]').forEach((linha) => {
       const entrada = linha.querySelector('[data-oc="destino-entrada"]');
       const fichas = linha.querySelector('[data-oc="fichas"]');
@@ -1228,6 +1234,12 @@
         }, 160);
       });
 
+      /* No envio, aceitar sincronamente o que ficou por confirmar. O `blur`
+         acima faz o mesmo, mas diferido: contra o `submit` chega tarde. */
+      escoar.push(() => {
+        if (entrada.value.trim()) aceitar(entrada.value);
+      });
+
       sincronizar();
     });
 
@@ -1235,10 +1247,15 @@
 
     const forma = janela.querySelector('form');
     const enviar = janela.querySelector('[data-oc="compositor-enviar"]');
-    if (forma && enviar) {
+    if (forma) {
       forma.addEventListener('submit', (evento) => {
+        /* Qualquer submissão — envio ou assistência — leva os destinatários
+           que ficaram por confirmar no campo de texto. */
+        escoar.forEach((fn) => fn());
+
         /* A assistência submete o mesmo formulário para outra rota, e não é
            um envio: bloqueá-la seria bloquear o botão errado. */
+        if (!enviar) return;
         if (evento.submitter && evento.submitter !== enviar) return;
         if (forma.dataset.ocEnviando === 'true') {
           evento.preventDefault();

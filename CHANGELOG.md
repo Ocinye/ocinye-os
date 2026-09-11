@@ -7,6 +7,37 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### CI/Infra — MinIO a partir de quay.io — 2026-09-12
+
+A CI (e o Compose de desenvolvimento e de produção) puxavam as imagens do MinIO
+(`minio/minio`, `minio/mc`) do Docker Hub, por pull anónimo. O Docker Hub passou
+a negar esses pulls nos runners partilhados (`pull access denied`), bloqueando
+«Testes» e «Stack local» de todas as PRs — sem nada no código estar errado. As
+seis referências passam para o espelho oficial **`quay.io/minio/*`**, sem os
+limites de pull anónimo do Docker Hub. Mesmas versões, registo diferente;
+validado por `docker compose config` e por subir o stack local de quay.io.
+
+### Correio — o compositor numa só janela, e o destinatário que se perdia — 2026-09-11
+
+Escrever um e-mail e carregar em «Enviar» podia recusar com «Indique pelo menos
+um destinatário» — logo a seguir a ter escrito o destinatário. E o erro abria uma
+**segunda** janela, uma página à parte com o mesmo formulário e outra aparência.
+
+- **O destinatário por confirmar conta no envio.** O campo «Para» desenha fichas;
+  o que se escrevia só passava a ficha ao sair do campo, por um temporizador de
+  160 ms que o `submit` por rato ultrapassava. O envio passa a fixar
+  sincronamente o que está escrito antes de submeter. Provado por reversão numa
+  viagem de browser.
+- **Uma só janela.** Falhar um envio e gerar texto com a assistência voltavam a
+  desenhar uma página inteira à parte; passam a devolver o mesmo compositor
+  flutuante sobre a mesma caixa. A página inteira foi removida.
+- **A assinatura institucional pré-vista no compositor.** Não se via onde ia
+  aparecer. Mostra-se agora, dobrada, com a projecção que o Core acrescenta no
+  envio — não editável, fora do corpo submetido, fiel à ADR-0414.
+
+Sem migrations nem ADR novos — a composição continua em texto simples, e o HTML
+da assinatura continua a ser projecção determinística de saída.
+
 ### Correio — ligar a caixa a partir das Definições — 2026-09-11
 
 As Definições de correio diziam «ligue a sua caixa» e não ofereciam onde: sem

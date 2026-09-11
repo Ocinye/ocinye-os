@@ -1342,22 +1342,33 @@ pub(crate) mod link_tests {
             page!(
                 "mail-compose",
                 Screen::Mail,
-                screens::mail::compose(
+                screens::mail::mail(
+                    &viewer(),
                     &mail_view(true, true),
-                    &screens::mail::ComposeDraft {
+                    &json!({"items": []}),
+                    None,
+                    Some(&screens::mail::ComposeDraft {
                         mailbox_id: "33333333-3333-3333-3333-333333333333".to_owned(),
                         to: "parceiro@exemplo.com".to_owned(),
                         subject: "Re: Proposta de colaboração".to_owned(),
+                        signature_html: Some(
+                            "<table><tr><td>Ana Fernandes<br>Investigadora<br>\
+                             Ocinye<br>ana@ocinye.com</td></tr></table>"
+                                .to_owned(),
+                        ),
                         ..Default::default()
-                    },
+                    }),
                 )
             ),
             page!(
                 "mail-compose-no-ai",
                 Screen::Mail,
-                screens::mail::compose(
+                screens::mail::mail(
+                    &viewer(),
                     &mail_view(true, false),
-                    &screens::mail::ComposeDraft::default(),
+                    &json!({"items": []}),
+                    None,
+                    Some(&screens::mail::ComposeDraft::default()),
                 )
             ),
             page!(

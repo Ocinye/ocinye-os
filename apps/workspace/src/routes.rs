@@ -1693,6 +1693,69 @@ struct ComposeQuery {
     reply: Option<Uuid>,
 }
 
+/// A caixa por baixo do compositor: as mensagens da caixa activa, para o
+/// correio não desaparecer enquanto se escreve.
+///
+/// O compositor é uma janela sobre o correio, e não uma página à parte — abrir,
+/// gerar texto e falhar um envio mostram todos a mesma janela sobre a mesma
+/// caixa. Esta função é o que essas três rotas partilham.
+async fn caixa_por_baixo(
+    state: &WorkspaceState,
+    member: &Member,
+    view: &ui::screens::mail::MailView,
+) -> Value {
+    let caixa = view
+        .mailboxes
+        .as_array()
+        .and_then(|caixas| {
+            view.active_mailbox.as_ref().map_or_else(
+                || caixas.first(),
+                |querida| {
+                    caixas.iter().find(|caixa| {
+                        caixa.get("id").and_then(Value::as_str) == Some(querida.as_str())
+                    })
+                },
+            )
+        })
+        .and_then(|caixa| caixa.get("id"))
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+
+    match caixa {
+        Some(id) => {
+            optional(
+                state,
+                member,
+                &format!("/api/v1/mail/mailboxes/{id}/messages?folder=inbox"),
+            )
+            .await
+        }
+        None => Value::Null,
+    }
+}
+
+/// A assinatura institucional a pré-visualizar no compositor.
+///
+/// `None` quando o membro a desligou nas preferências, ou quando não pôde ser
+/// obtida: o compositor nunca afirma uma assinatura que não vai sair. O HTML é
+/// a mesma projecção determinística que o envio acrescenta (ADR-0414).
+async fn assinatura_para_previsualizar(state: &WorkspaceState, member: &Member) -> Option<String> {
+    let preferencias = optional(state, member, "/api/v1/mail/preferences").await;
+    let activa = preferencias
+        .get("official_signature")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    if !activa {
+        return None;
+    }
+
+    optional(state, member, "/api/v1/mail/signature")
+        .await
+        .get("html")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+}
+
 async fn compose(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
@@ -1712,6 +1775,7 @@ async fn compose(
 
     let mut draft = ui::screens::mail::ComposeDraft {
         mailbox_id: query.mailbox.unwrap_or_default(),
+        signature_html: assinatura_para_previsualizar(&state, &member).await,
         ..Default::default()
     };
 
@@ -1752,32 +1816,7 @@ async fn compose(
     // Era uma página só com o formulário. Escrever passou a acontecer a olhar
     // para a caixa — que é como se escreve: a confirmar um nome, a reler o que
     // se responde, a ver o que entretanto chegou.
-    let messages = match view
-        .mailboxes
-        .as_array()
-        .and_then(|caixas| {
-            view.active_mailbox.as_ref().map_or_else(
-                || caixas.first(),
-                |querida| {
-                    caixas.iter().find(|caixa| {
-                        caixa.get("id").and_then(Value::as_str) == Some(querida.as_str())
-                    })
-                },
-            )
-        })
-        .and_then(|caixa| caixa.get("id"))
-        .and_then(Value::as_str)
-    {
-        Some(id) => {
-            optional(
-                &state,
-                &member,
-                &format!("/api/v1/mail/mailboxes/{id}/messages?folder=inbox"),
-            )
-            .await
-        }
-        None => Value::Null,
-    };
+    let messages = caixa_por_baixo(&state, &member, &view).await;
 
     shell_page(
         "Nova mensagem",
@@ -1825,6 +1864,9 @@ impl ComposeForm {
             confirmation: None,
             error: None,
             generated: false,
+            // A assinatura não vem do formulário: é lida do Core pela rota que
+            // volta a desenhar o compositor, para não viajar no cliente.
+            signature_html: None,
         }
     }
 }
@@ -1880,12 +1922,17 @@ async fn assist(
         Err(failure) => draft.error = Some(failure.to_string()),
     }
 
+    // Uma só janela: gerar texto devolve o mesmo compositor sobre a mesma
+    // caixa, e não uma página à parte.
+    draft.signature_html = assinatura_para_previsualizar(&state, &member).await;
+    let messages = caixa_por_baixo(&state, &member, &view).await;
+
     shell_page(
         "Nova mensagem",
         &viewer,
         Screen::Mail,
         vec![Crumb::to(Screen::Mail)],
-        ui::screens::mail::compose(&view, &draft),
+        ui::screens::mail::mail(&viewer, &view, &messages, None, Some(&draft)),
     )
 }
 
@@ -1949,6 +1996,12 @@ async fn send_mail(
                 draft.error = Some(reason);
             }
 
+            // O erro volta na mesma janela sobre a mesma caixa. Era aqui que
+            // uma segunda janela aparecia — uma página à parte, com o mesmo
+            // formulário e outra aparência — e é o que se deixou de fazer.
+            draft.signature_html = assinatura_para_previsualizar(&state, &member).await;
+            let messages = caixa_por_baixo(&state, &member, &view).await;
+
             (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 shell_page(
@@ -1956,7 +2009,7 @@ async fn send_mail(
                     &viewer,
                     Screen::Mail,
                     vec![Crumb::to(Screen::Mail)],
-                    ui::screens::mail::compose(&view, &draft),
+                    ui::screens::mail::mail(&viewer, &view, &messages, None, Some(&draft)),
                 ),
             )
                 .into_response()

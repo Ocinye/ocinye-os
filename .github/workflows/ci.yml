@@ -407,7 +407,7 @@ jobs:
             -p 9000:9000 \
             -e MINIO_ROOT_USER="$OCINYE_TEST_STORAGE_ACCESS_KEY" \
             -e MINIO_ROOT_PASSWORD="$OCINYE_TEST_STORAGE_SECRET_KEY" \
-            minio/minio:RELEASE.2025-04-22T22-12-26Z \
+            quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z \
             server /data
 
           # Esperar que responda, e falhar se não responder. Um teste contra um
@@ -430,7 +430,7 @@ jobs:
           set -euo pipefail
           docker run --rm --network host \
             --entrypoint sh \
-            minio/mc:RELEASE.2025-04-16T18-13-26Z -c "
+            quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z -c "
               mc alias set ci http://127.0.0.1:9000 \
                 '$OCINYE_TEST_STORAGE_ACCESS_KEY' '$OCINYE_TEST_STORAGE_SECRET_KEY' &&
               mc mb --ignore-existing ci/$OCINYE_TEST_STORAGE_BUCKET &&
