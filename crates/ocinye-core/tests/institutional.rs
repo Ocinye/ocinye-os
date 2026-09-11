@@ -1604,7 +1604,10 @@ async fn units_for_people_agrupa_a_pertenca_viva() {
     let admin = pessoa(
         &pool,
         organisation_id,
-        &[TechnicalRole::OrganisationAdmin, TechnicalRole::ResearchLead],
+        &[
+            TechnicalRole::OrganisationAdmin,
+            TechnicalRole::ResearchLead,
+        ],
     )
     .await;
 
@@ -1655,13 +1658,10 @@ async fn units_for_people_agrupa_a_pertenca_viva() {
         tx.commit().await.expect("commit");
     }
 
-    let mapa = organisation::units_for_people(
-        &pool,
-        &admin,
-        &[membro.person_id, sem_unidade.person_id],
-    )
-    .await
-    .expect("units_for_people");
+    let mapa =
+        organisation::units_for_people(&pool, &admin, &[membro.person_id, sem_unidade.person_id])
+            .await
+            .expect("units_for_people");
 
     let do_membro = mapa.get(&membro.person_id).expect("o membro tem unidades");
     assert_eq!(do_membro.len(), 2, "as duas unidades vivas têm de vir");

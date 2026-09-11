@@ -1790,7 +1790,8 @@ mod tests {
         // Inactivo não é desactivado: os separadores navegáveis não são
         // aria-disabled.
         assert!(
-            html.contains("href=\"#membro-acesso\"") && !html.contains("#membro-acesso\" aria-disabled"),
+            html.contains("href=\"#membro-acesso\"")
+                && !html.contains("#membro-acesso\" aria-disabled"),
             "um separador inactivo não pode parecer desactivado"
         );
         // Indisponível continua indisponível, e nunca activo.

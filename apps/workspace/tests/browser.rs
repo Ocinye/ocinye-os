@@ -2015,16 +2015,14 @@ async fn submit(page: &Page, formulario: &str) {
 /// correr, o separador certo está marcado. Sonda até ao prazo, nunca por
 /// intervalo fixo (o observador pode ainda não ter assentado).
 async fn esperar_aria_current(page: &Page, href: &str) {
+    let seletor = format!("[data-oc-section-nav] a[href=\"{href}\"]");
     let inicio = std::time::Instant::now();
     loop {
-        let atual = page
-            .find_element(&format!("[data-oc-section-nav] a[href=\"{href}\"]"))
-            .await
-            .ok();
-        if let Some(elemento) = atual {
-            if elemento.attribute("aria-current").await.ok().flatten().as_deref()
-                == Some("location")
-            {
+        // `find_element` tolerado: o `Result` é examinado no mesmo sítio, dentro
+        // do ciclo de sondagem — a ausência é o que se procura, não uma surpresa.
+        if let Ok(elemento) = page.find_element(&seletor).await {
+            let marca = elemento.attribute("aria-current").await.ok().flatten();
+            if marca.as_deref() == Some("location") {
                 return;
             }
         }
