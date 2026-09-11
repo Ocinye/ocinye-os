@@ -7,6 +7,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### CI/Infra — MinIO a partir de quay.io — 2026-09-12
+
+A CI (e o Compose de desenvolvimento e de produção) puxavam as imagens do MinIO
+(`minio/minio`, `minio/mc`) do Docker Hub, por pull anónimo. O Docker Hub passou
+a negar esses pulls nos runners partilhados (`pull access denied`), bloqueando
+«Testes» e «Stack local» de todas as PRs — sem nada no código estar errado. As
+seis referências passam para o espelho oficial **`quay.io/minio/*`**, sem os
+limites de pull anónimo do Docker Hub. Mesmas versões, registo diferente;
+validado por `docker compose config` e por subir o stack local de quay.io.
+
 ### Correio — o compositor numa só janela, e o destinatário que se perdia — 2026-09-11
 
 Escrever um e-mail e carregar em «Enviar» podia recusar com «Indique pelo menos
