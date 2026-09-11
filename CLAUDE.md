@@ -261,7 +261,7 @@ sem que nada falhe.
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
 - **63 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
-  **65 READMEs**, `docs/` povoado — incluindo
+  **66 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
