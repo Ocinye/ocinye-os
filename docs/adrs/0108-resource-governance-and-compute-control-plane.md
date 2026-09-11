@@ -1,7 +1,7 @@
 # ADR-0108 — Governança de recursos e o control-plane de computação
 
 - **Estado:** Accepted
-- **Domínio:** Identity, segurança, autorização e governação
+- **Domínio:** Identity
 - **Impacto:** FOUNDATIONAL
 - **Data:** 2026-09-12
 - **Complementa:** [ADR-0100](0100-authorization-model.md) · [ADR-0101](0101-permissions-scopes-and-grants.md) · [ADR-0500](0500-compute-registry-node-agent.md) · [ADR-0300](0300-ai-gateway.md) · [ADR-0304](0304-canonical-inference-contract.md)
