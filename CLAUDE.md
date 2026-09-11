@@ -34,9 +34,23 @@ descrevem o mesmo sistema: quando divergirem, é defeito, e corrige-se nas duas.
 
 **Verificado em 2026-08-28**; o estado de deploy e de MFA re-verificado em
 2026-09-09, contra a produção a correr; o **módulo de Notas** e as contagens
-desta secção re-verificados em **2026-09-10** no repositório (não deployado).
-Cada afirmação abaixo é verificável correndo `./scripts/verify.sh` no
-repositório — e as de produção, contra o servidor.
+desta secção re-verificados em **2026-09-10** no repositório, e a **2026-09-11**
+em produção — o Workspace, o Core e o Worker correm o release `90b9d0d728de`
+(o `main @ 90b9d0d`), com o módulo de Notas incluído e a correcção de
+experiência do editor. Cada afirmação abaixo é verificável correndo
+`./scripts/verify.sh` no repositório — e as de produção, contra o servidor.
+
+**Portão `OCINYE_STABLE_PRE_AI_READY` — declarado a 2026-09-11.** Todos os
+pré-requisitos da sequência canónica estão provados por evidência própria:
+Administração, sincronização de correio, Notas, *Zero Dead UI* de todo o sistema,
+certificação E2E de browser completa, prova de instalação de raiz, prova final de
+backup/restauro, contrato de Computação/Inteligência e aceitação em produção. O
+estado factual de IA **mantém-se e é o esperado neste portão**: 0 nós de
+computação, 0 fornecedores de inferência, 0 modelos instalados, IA indisponível,
+`Pesquisar` operacional, `Perguntar`/`Executar` a partir de linguagem natural
+`NO_RESOURCE`. **A ausência de inferência real não é uma lacuna do portão — é a
+sua pré-condição:** este é o último estado estável *antes* de se ligar o primeiro
+nó de IA/Computação (M4). A declaração é documental: **nada de runtime muda**.
 
 Os **números** desta secção não são escritos à mão: saem de
 `./scripts/repository-facts.sh`, que os deriva da árvore e só lê. Já houve aqui

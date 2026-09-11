@@ -373,3 +373,33 @@ O que **fica fora** do repositório, e por isso não se declara feito: a
 backup/restauro disparada em produção** dependem de infraestrutura, e são passos
 operacionais. `OCINYE_STABLE_PRE_AI_READY` **continua retido**: certifica o
 sistema inteiro, não um módulo, e a inferência real ainda não existe.
+
+**Estado 2026-09-11 — `OCINYE_STABLE_PRE_AI_READY`, declarado.** O portão está
+declarado, no repositório e em produção. A sequência canónica está inteira, cada
+pré-requisito provado por evidência própria e não inferido de outro portão:
+
+| Pré-requisito | Estado | Evidência |
+|---|---|---|
+| Administração completa | PASS | Identidade/sessões, autorização/permissões/grants e Unidades `AVAILABLE` na [matriz](../feature-status/README.md); MFA obrigatório e operacional, bootstrap, 72 permissões (§1 do `CLAUDE.md`). |
+| Sincronização de correio | PASS | `Correio — sincronização (mail.sync)` `AVAILABLE` (manual e periódica; passagem do worker). |
+| Notas completas | PASS | `OCINYE_NOTES_READY` (acima); módulo `AVAILABLE`; em produção desde `90b9d0d728de`. |
+| *Zero Dead UI* — sistema inteiro | PASS | Os quatro guardas de contrato de ecrã/elemento interactivo correm verdes no job `Testes` da CI em `90b9d0d`. |
+| Certificação E2E de browser completa | PASS | Viagens de browser + contrato de enumeração (`test-enumeration.sh`: `esperados == passados`, `saltados == 0`) verdes no mesmo job. |
+| Prova de instalação de raiz | PASS | «Validar migrations a partir de base vazia» (as 38 migrations) verde no mesmo job. |
+| Prova final de backup/restauro | PASS | Dois ensaios a 2026-08-29 (§1), com as três verificações a passar; o portão de continuidade `toda_a_tabela_do_esquema_tem_uma_decisao` cobre as tabelas novas de Notas (`note_shares`, `notes.deleted_at`, `activity_entries` owner-scoped) e passa. |
+| Contrato de Computação/Inteligência | PASS | Contrato canónico de inferência ([ADR-0304](0304-canonical-inference-contract.md)), contrato de ligação ([ADR-0502](0502-compute-intelligence-connection-contract.md)) e Provider Conformance Suite `AVAILABLE`. |
+| Aceitação em produção | PASS | `90b9d0d728de` em produção; Core, Workspace e Worker saudáveis; `os.ocinye.com` e `api.ocinye.com` a servir (verificado a 2026-09-11). |
+
+**Correcção à leitura anterior.** A frase de 2026-09-10 «a inferência real ainda
+não existe» **não era um pré-requisito válido** deste portão. O que retinha
+legitimamente a declaração era a **certificação do sistema inteiro** e a
+**integração em produção** — ambas agora satisfeitas. A inferência real pertence
+ao milestone **seguinte** (M4 — primeiro nó OVHcloud L40S); a sua ausência é a
+**pré-condição** deste portão, não uma lacuna. `OCINYE_STABLE_PRE_AI_READY` é
+exactamente o último estado estável *antes* de ligar o primeiro nó de
+IA/Computação.
+
+**Estado factual de IA, inalterado por esta declaração:** 0 nós de computação, 0
+fornecedores de inferência, 0 modelos instalados, IA indisponível, `Pesquisar`
+operacional, `Perguntar`/`Executar` a partir de linguagem natural `NO_RESOURCE`.
+Nada de runtime muda; nenhum GPU foi ligado nem simulado.
