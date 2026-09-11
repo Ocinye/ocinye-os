@@ -7515,6 +7515,57 @@ async fn o_compositor_obedece_e_guarda_o_que_se_escreveu() {
     );
 }
 
+/// Um destinatário escrito e não confirmado conta na mesma ao enviar.
+///
+/// # O defeito que isto guarda
+///
+/// O campo «Para» desenha fichas: o que se escreve só passa a ficha ao
+/// carregar em Enter, ao pôr uma vírgula, ou ao sair do campo. Essa última via
+/// era diferida — um `setTimeout` de 160 ms depois do `blur` — e o `submit`
+/// por rato chegava primeiro. Resultado: escrever um endereço e carregar em
+/// «Enviar» submetia `to` vazio, e o Core recusava com «Indique pelo menos um
+/// destinatário», apagando o endereço que estava à frente dos olhos.
+///
+/// Mede-se o que o formulário submeteria: o endereço por confirmar tem de ir
+/// no campo `to`, sem depender do relógio.
+#[tokio::test]
+async fn o_destinatario_por_confirmar_conta_no_envio() {
+    let harness = harness!();
+    let (person_id, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let (caixa, _) = harness.has_a_mailbox(person_id).await;
+
+    let page = harness
+        .open(&format!("/mail/compose?mailbox={caixa}"))
+        .await;
+    janela(&page, JANELA).await;
+    esperar_por(&page, "Nova mensagem").await;
+
+    // Escrever um endereço e enviar de imediato, tudo síncrono e dentro dos
+    // 160 ms: é a corrida que o defeito perdia. Lê-se o que o formulário
+    // submeteria, sem o deixar navegar.
+    let submetido = page
+        .evaluate(
+            "(() => { \
+               const entrada = document.querySelector('[data-oc-campo=to] [data-oc=destino-entrada]'); \
+               entrada.value = 'sem-enter@exemplo.com'; \
+               entrada.dispatchEvent(new Event('input', {bubbles: true})); \
+               const forma = document.querySelector('[data-oc=compositor] form'); \
+               forma.addEventListener('submit', (e) => e.preventDefault(), {once: true}); \
+               document.querySelector('[data-oc=compositor-enviar]').click(); \
+               return new FormData(forma).get('to'); \
+             })()",
+        )
+        .await
+        .expect("submeter")
+        .into_value::<String>()
+        .unwrap_or_default();
+
+    assert_eq!(
+        submetido, "sem-enter@exemplo.com",
+        "o destinatário por confirmar não foi no envio: to={submetido:?}"
+    );
+}
+
 /// A página do Correio não rola; os painéis é que rolam.
 ///
 /// # O defeito que isto guarda

@@ -2519,6 +2519,31 @@ div.oc-result { cursor: default; }
   color: var(--oc-text-body);
 }
 
+/* ── A assinatura institucional, pré-vista e não editável ─────────────────
+
+   Acrescentada no envio como projecção do Core (ADR-0414). Mostra-se para
+   quem escreve saber o que vai sair, dobrada por omissão para não competir
+   com o corpo. */
+.oc-comp__assinatura {
+  border-top: 1px solid var(--oc-border-faint);
+  padding: 8px 14px 10px;
+}
+.oc-comp__assinatura-rotulo {
+  font: 400 11px var(--oc-font-sans);
+  color: var(--oc-text-meta);
+  cursor: pointer;
+}
+.oc-comp__assinatura-corpo {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--oc-surface-subtle);
+  border: 1px solid var(--oc-border-faint);
+  border-radius: var(--oc-r-md);
+  overflow-x: auto;
+  font: 400 12px var(--oc-font-sans);
+  color: var(--oc-text-body);
+}
+
 /* ── A barra ────────────────────────────────────────────────────────────
 
    Enviar à direita, com o peso de acção primária. A assistência à esquerda,

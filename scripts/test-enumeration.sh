@@ -200,7 +200,10 @@ suites() {
 # pelo Core e fica servida same-origin pela versão exacta. Uma viagem, uma marca.
 # 97 → 98 em 2026-09-10: a fatia C — escrever uma nota e encontrá-la pela
 # pesquisa, pelo corpo, com a ligação para o seu ecrã. Uma viagem, uma marca.
-viagens-de-browser|105|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|105
+# 105 → 106 em 2026-09-11: entrou a regressão do destinatário por confirmar —
+# escrever um endereço sem o confirmar e enviar, e vê-lo ir no campo `to` em vez
+# de o envio recusar com a caixa vazia. Uma viagem, uma marca.
+viagens-de-browser|106|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|106
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
