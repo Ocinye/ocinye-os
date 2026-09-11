@@ -1142,6 +1142,16 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 .oc-tabs--ctx .oc-tab {
   height: 32px; padding: 0 12px; border-radius: var(--oc-r-md) var(--oc-r-md) 0 0;
 }
+/* O separador activo de uma navegação por secções: texto navy e um sublinhado
+   dourado calmo — não o preenchimento sólido dos separadores-pílula. O estado é
+   `aria-current="location"`: o servidor marca a secção por omissão, e o `app.js`
+   acompanha a âncora e o scroll. Um separador indisponível é outra coisa
+   (`.oc-unavailable[aria-disabled]`) e não se confunde com este. */
+.oc-tabs--ctx .oc-tab[aria-current="location"] {
+  color: var(--oc-navy); font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--oc-gold);
+}
+.oc-tabs--ctx .oc-tab[aria-current="location"]:hover { background: var(--oc-surface-tint); }
 
 .oc-tabs--under { border-bottom: 1px solid var(--oc-border); margin-bottom: 16px; }
 

@@ -1589,3 +1589,100 @@ async fn um_membro_convidado_recebe_unidade_antes_do_primeiro_login() {
         "atribuir uma unidade não devia mudar o estado da conta"
     );
 }
+
+/// `units_for_people` agrupa a pertença **viva** por pessoa, numa consulta só.
+///
+/// É o que alimenta a coluna «Unidade» da lista de membros. Prova três coisas:
+/// uma pessoa em duas unidades traz as duas (não há principal — CLAUDE.md §34.3),
+/// uma pertença revogada não viaja, e quem não pertence a nenhuma não tem entrada.
+#[tokio::test]
+async fn units_for_people_agrupa_a_pertenca_viva() {
+    let Some(pool) = pool().await else {
+        return;
+    };
+    let organisation_id = organizacao(&pool, "units-for-people").await;
+    let admin = pessoa(
+        &pool,
+        organisation_id,
+        &[
+            TechnicalRole::OrganisationAdmin,
+            TechnicalRole::ResearchLead,
+        ],
+    )
+    .await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    let unidade_a = organisation::create_unit(
+        &mut tx,
+        &admin,
+        &ids(),
+        organisation::NewUnit {
+            code: "UFPA".to_owned(),
+            name: "Energia".to_owned(),
+            description: None,
+            research_areas: Vec::new(),
+        },
+    )
+    .await
+    .expect("unidade A");
+    let unidade_b = organisation::create_unit(
+        &mut tx,
+        &admin,
+        &ids(),
+        organisation::NewUnit {
+            code: "UFPB".to_owned(),
+            name: "Sistemas".to_owned(),
+            description: None,
+            research_areas: Vec::new(),
+        },
+    )
+    .await
+    .expect("unidade B");
+    tx.commit().await.expect("commit");
+
+    // Um membro nas duas unidades; outra pessoa em nenhuma.
+    let membro = pessoa(&pool, organisation_id, &[TechnicalRole::ResearchMember]).await;
+    let sem_unidade = pessoa(&pool, organisation_id, &[TechnicalRole::ResearchMember]).await;
+    for unidade in [unidade_a.id, unidade_b.id] {
+        let mut tx = pool.begin().await.expect("tx");
+        organisation::add_unit_member(
+            &mut tx,
+            &admin,
+            &ids(),
+            unidade,
+            membro.person_id,
+            ocinye_contracts::UnitRole::Member,
+        )
+        .await
+        .expect("pertença");
+        tx.commit().await.expect("commit");
+    }
+
+    let mapa =
+        organisation::units_for_people(&pool, &admin, &[membro.person_id, sem_unidade.person_id])
+            .await
+            .expect("units_for_people");
+
+    let do_membro = mapa.get(&membro.person_id).expect("o membro tem unidades");
+    assert_eq!(do_membro.len(), 2, "as duas unidades vivas têm de vir");
+    let codigos: Vec<&str> = do_membro.iter().map(|u| u.code.as_str()).collect();
+    assert!(codigos.contains(&"UFPA") && codigos.contains(&"UFPB"));
+    assert!(
+        !mapa.contains_key(&sem_unidade.person_id),
+        "quem não pertence a nenhuma unidade não tem entrada"
+    );
+
+    // Revogar uma pertença: deixa de viajar.
+    let mut tx = pool.begin().await.expect("tx");
+    organisation::revoke_unit_member(&mut tx, &admin, &ids(), unidade_a.id, membro.person_id)
+        .await
+        .expect("revogar");
+    tx.commit().await.expect("commit");
+
+    let mapa = organisation::units_for_people(&pool, &admin, &[membro.person_id])
+        .await
+        .expect("units_for_people depois de revogar");
+    let do_membro = mapa.get(&membro.person_id).expect("ainda tem a unidade B");
+    assert_eq!(do_membro.len(), 1, "a pertença revogada não pode viajar");
+    assert_eq!(do_membro[0].code, "UFPB");
+}

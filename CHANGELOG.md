@@ -7,6 +7,29 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Administração de membros — a secção activa vê-se, e a unidade aparece na lista — 2026-09-11
+
+Duas correcções na Administração → Membros, sem modelo de pertença novo — reusa
+`unit_memberships`, `organisation::{add,revoke}_unit_member` e a autorização
+`ManageMembers` que já existiam.
+
+- **Separador activo restaurado.** A barra de secções do detalhe de um membro
+  (`Overview · Acesso · Segurança · Unidades · Research Workspaces`) voltou a
+  indicar qual está activa: `aria-current="location"` — a convenção do resto da
+  navegação —, marcado pelo servidor por omissão e acompanhado pelo `app.js`
+  conforme a âncora, o clique e o scroll (`IntersectionObserver`, sem polling).
+  Tratamento calmo (texto navy, sublinhado dourado). Inactivo **não** se confunde
+  com indisponível: `Actividade` e `Audit` continuam `aria-disabled`.
+- **A coluna «Unidade» da lista reflecte a pertença.** Lia um campo que o Core
+  nunca emitia e ficava «—» para sempre. O `/api/v1/people` passa a trazer as
+  unidades de cada pessoa (uma consulta por página, `units_for_people`), e a
+  coluna mostra o nome quando há uma e a contagem quando há várias — **sem
+  inventar uma unidade principal** (CLAUDE.md §34.3). Atribuir uma unidade a um
+  membro `invited` continua a ser válido e não activa a conta.
+
+A `Secção 1` re-derivou as contagens de teste (545 exigem PostgreSQL, 1505 no
+total) e o contrato de enumeração passa a esperar 104 viagens de browser.
+
 ### `OCINYE_STABLE_PRE_AI_READY` — declarado, e o `main` em produção — 2026-09-11
 
 O último portão antes da IA/Computação está declarado. A correcção de experiência

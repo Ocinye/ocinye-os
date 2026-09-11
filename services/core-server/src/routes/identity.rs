@@ -5,7 +5,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use ocinye_contracts::{AvatarChoice, InstitutionalPosition, Page, PageRequest, TechnicalRole};
-use ocinye_core::modules::identity;
+use ocinye_core::modules::{identity, organisation};
 use ocinye_core::CoreError;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -194,6 +194,11 @@ struct PersonView {
     institutional_position: Option<String>,
     orcid: Option<String>,
     status: String,
+    /// The units this person belongs to now, each `{code, name}`. Empty when
+    /// none. There is no primary unit: the institution does not infer one
+    /// (CLAUDE.md §34.3), so a list column reads all of them, honestly.
+    #[serde(default)]
+    units: Vec<organisation::PersonUnit>,
 }
 
 impl From<identity::Person> for PersonView {
@@ -206,6 +211,7 @@ impl From<identity::Person> for PersonView {
             institutional_position: person.institutional_position,
             orcid: person.orcid,
             status: person.status,
+            units: Vec::new(),
         }
     }
 }
@@ -216,11 +222,25 @@ async fn list_people(
     Query(page): Query<PageRequest>,
 ) -> Result<Json<Page<PersonView>>, ApiError> {
     let (people, total) = identity::list_people(&state.pool, &principal, page).await?;
-    Ok(Json(Page::new(
-        people.into_iter().map(PersonView::from).collect(),
-        page,
-        total,
-    )))
+
+    // As unidades de toda a página numa consulta só — nunca uma por linha. A
+    // coluna «Unidade» da lista de membros lê daqui; sem isto mostrava sempre
+    // «—», por o Core nunca ter emitido a pertença.
+    let ids: Vec<Uuid> = people.iter().map(|p| p.id).collect();
+    let mut por_pessoa = organisation::units_for_people(&state.pool, &principal, &ids).await?;
+
+    let views = people
+        .into_iter()
+        .map(|person| {
+            let units = por_pessoa.remove(&person.id).unwrap_or_default();
+            PersonView {
+                units,
+                ..PersonView::from(person)
+            }
+        })
+        .collect();
+
+    Ok(Json(Page::new(views, page, total)))
 }
 
 async fn get_person(
