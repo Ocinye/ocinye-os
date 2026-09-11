@@ -19,5 +19,6 @@ mod service;
 pub use model::{Organisation, Unit, UnitMember, UnitStatus};
 pub use service::{
     add_unit_member, archive_unit, bootstrap_organisation, create_unit, get_organisation, get_unit,
-    list_unit_members, list_units, revoke_unit_member, unit_context, NewUnit,
+    list_unit_members, list_units, revoke_unit_member, unit_context, units_for_people, NewUnit,
+    PersonUnit,
 };

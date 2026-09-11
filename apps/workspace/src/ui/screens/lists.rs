@@ -396,6 +396,32 @@ fn truncated(payload: &Value, shown: usize) -> bool {
 }
 
 /// Uma data ISO reduzida a `AAAA-MM-DD`.
+/// A célula «Unidade» da lista de membros, a partir do array `units` que o Core
+/// devolve (`[{code, name}, …]`, vazio quando o membro não pertence a nenhuma).
+///
+/// Não há unidade principal (CLAUDE.md §34.3): com uma, mostra-se o nome; com
+/// duas ou mais, a contagem — eleger uma seria inventar uma hierarquia que o
+/// domínio recusa. Sem nenhuma, a célula fica «—» (`Cell::Empty`).
+fn unit_cell(row: &Value) -> Cell {
+    let unidades = row.get("units").and_then(Value::as_array);
+    match unidades.map(Vec::as_slice) {
+        Some([]) | None => Cell::Empty,
+        Some([uma]) => {
+            let nome = uma
+                .get("name")
+                .and_then(Value::as_str)
+                .or_else(|| uma.get("code").and_then(Value::as_str))
+                .unwrap_or("");
+            if nome.is_empty() {
+                Cell::Empty
+            } else {
+                Cell::Text(nome.to_owned())
+            }
+        }
+        Some(varias) => Cell::Text(format!("{} unidades", varias.len())),
+    }
+}
+
 fn day(row: &Value, key: &str) -> String {
     row.get(key)
         .and_then(Value::as_str)
@@ -1032,7 +1058,11 @@ pub fn members(viewer: &Viewer, payload: &Value) -> impl IntoView {
                     vec![
                         Cell::Primary(text(row, "full_name")),
                         Cell::Mono(text(row, "email")),
-                        Cell::Mono(text(row, "unit_code")),
+                        // A pertença factual do membro. Não há unidade principal
+                        // (CLAUDE.md §34.3): com uma, mostra-se o nome; com
+                        // várias, a contagem — nunca se elege uma. Sem nenhuma,
+                        // a célula fica «—».
+                        unit_cell(row),
                         // A posição institucional, em português e pela mesma
                         // tradução do resto da Administração. Não concede
                         // permissões, e a interface não sugere que conceda.
@@ -2064,6 +2094,37 @@ mod tests {
 
         let html = members(&viewer(), &payload).to_html();
         assert!(html.contains(r#"href="/admin/members/new""#));
+    }
+
+    /// A coluna «Unidade» da lista de membros reflecte a pertença real, sem
+    /// inventar uma unidade principal (CLAUDE.md §34.3): com uma, o nome; com
+    /// várias, a contagem; sem nenhuma, «—».
+    #[test]
+    fn a_coluna_de_unidade_reflecte_a_pertenca() {
+        let payload = json!({
+            "items": [
+                { "id": "00000000-0000-0000-0000-000000000001", "full_name": "Sem Unidade",
+                  "email": "s@ocinye.com", "status": "active", "units": [] },
+                { "id": "00000000-0000-0000-0000-000000000002", "full_name": "Uma Unidade",
+                  "email": "u@ocinye.com", "status": "active",
+                  "units": [{ "code": "ESC", "name": "Energia e Sistemas Computacionais" }] },
+                { "id": "00000000-0000-0000-0000-000000000003", "full_name": "Duas Unidades",
+                  "email": "d@ocinye.com", "status": "active",
+                  "units": [{ "code": "ESC", "name": "Energia" }, { "code": "BIO", "name": "Bio" }] },
+            ],
+            "total": 3
+        });
+        let html = members(&viewer(), &payload).to_html();
+        // Com uma, o nome — nunca o UUID.
+        assert!(
+            html.contains("Energia e Sistemas Computacionais"),
+            "uma unidade devia mostrar-se pelo nome"
+        );
+        // Com várias, a contagem honesta — sem eleger uma principal.
+        assert!(
+            html.contains("2 unidades"),
+            "várias unidades resumem-se pela contagem, sem inventar uma principal"
+        );
     }
 
     #[test]

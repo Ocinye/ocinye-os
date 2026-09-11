@@ -259,6 +259,51 @@ pub async fn list_unit_members(
     repo::list_members(pool, unit.id).await
 }
 
+/// A unit a person belongs to, reduced to what a list needs: its code and name.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PersonUnit {
+    /// Short institutional code (e.g. `ESC`).
+    pub code: String,
+    /// Human name of the unit.
+    pub name: String,
+}
+
+/// The live units of each person in a set, grouped by person.
+///
+/// One query for the whole page (never one per row). A person with no live
+/// membership simply has no entry. The caller reads units to show *where a
+/// member sits now* — the same institutional shape that `list_units` already
+/// exposes to any active member (a unit's existence is `INTERNAL`), so this
+/// reuses the `Read` authorization on units and adds no new visibility.
+///
+/// # Errors
+///
+/// Returns an error when the caller may not read units, or the query fails.
+pub async fn units_for_people(
+    pool: &PgPool,
+    principal: &Principal,
+    person_ids: &[Uuid],
+) -> CoreResult<std::collections::HashMap<Uuid, Vec<PersonUnit>>> {
+    let ctx = ResourceContext::organisation(ResourceKind::Unit, principal.organisation_id);
+    authorize(principal, Action::Read, &ctx)
+        .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+
+    if person_ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+
+    let rows = repo::units_of_people(pool, principal.organisation_id, person_ids).await?;
+    let mut por_pessoa: std::collections::HashMap<Uuid, Vec<PersonUnit>> =
+        std::collections::HashMap::new();
+    for (person_id, code, name) in rows {
+        por_pessoa
+            .entry(person_id)
+            .or_default()
+            .push(PersonUnit { code, name });
+    }
+    Ok(por_pessoa)
+}
+
 /// Add or update a unit membership.
 ///
 /// # Errors

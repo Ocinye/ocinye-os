@@ -191,6 +191,33 @@ pub async fn list_members<'e>(
     Ok(members)
 }
 
+/// The live units of each person in a set, as `(person_id, code, name)`.
+///
+/// One query for the whole page — never one per row. Revoked memberships do not
+/// travel: that a person once belonged to a unit is memory, not current
+/// structure, and this feeds a «where does this member sit now?» column.
+/// Ordered by code so the caller's grouping is stable.
+pub async fn units_of_people<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    person_ids: &[Uuid],
+) -> CoreResult<Vec<(Uuid, String, String)>> {
+    let rows = sqlx::query_as::<_, (Uuid, String, String)>(
+        "SELECT m.person_id, u.code, u.name
+           FROM unit_memberships m
+           JOIN units u ON u.id = m.unit_id
+          WHERE m.person_id = ANY($1)
+            AND m.revoked_at IS NULL
+            AND u.organisation_id = $2
+          ORDER BY u.code",
+    )
+    .bind(person_ids)
+    .bind(organisation_id)
+    .fetch_all(executor)
+    .await?;
+    Ok(rows)
+}
+
 /// Grant or restore a unit membership.
 ///
 /// # Errors

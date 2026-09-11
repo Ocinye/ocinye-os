@@ -2973,3 +2973,98 @@ document.addEventListener('keydown', (event) => {
   }
   ligar();
 })();
+
+// ---------------------------------------------------------------------------
+// Navegação por secções do detalhe de um membro.
+//
+// A barra de secções (`[data-oc-section-nav]`) leva a cada secção por âncora
+// (`href="#membro-…"`): funciona sem JavaScript, e o servidor marca «Overview»
+// como activa por omissão. Aqui, com JavaScript, o separador activo acompanha
+// a âncora e o scroll — clique, hashchange, back/forward, deep-link — sem
+// recarregar e sem polling. O estado é `aria-current="location"`, o que o
+// leitor de ecrã anuncia (mesma convenção do resto da navegação).
+//
+// Não confundir inactivo com indisponível: só os `<a>` são geridos aqui; os
+// separadores desactivados são `<span aria-disabled="true">` e ficam de fora.
+(function () {
+  'use strict';
+  function iniciar() {
+    var nav = document.querySelector('[data-oc-section-nav]');
+    if (!nav) return;
+    var tabs = Array.prototype.slice.call(
+      nav.querySelectorAll('a.oc-tab[href^="#"]')
+    );
+    if (!tabs.length) return;
+
+    var ids = tabs.map(function (t) {
+      return t.getAttribute('href').slice(1);
+    });
+    var seccoes = ids
+      .map(function (id) { return document.getElementById(id); })
+      .filter(Boolean);
+
+    var ativo = null;
+    function activar(id) {
+      // Idempotente: só escreve no DOM quando a secção activa muda mesmo. O
+      // observador dispara a cada travessia de banda, e reescrever o mesmo
+      // estado a cada disparo era ruído — e fazia uma página que nunca assenta.
+      if (ids.indexOf(id) === -1 || id === ativo) return;
+      ativo = id;
+      tabs.forEach(function (t) {
+        if (t.getAttribute('href') === '#' + id) {
+          t.setAttribute('aria-current', 'location');
+        } else {
+          t.removeAttribute('aria-current');
+        }
+      });
+    }
+
+    function daAncora() {
+      var id = (window.location.hash || '').slice(1);
+      return ids.indexOf(id) !== -1 ? id : ids[0];
+    }
+
+    // Estado inicial: respeita o deep-link, cai em «Overview» sem âncora.
+    activar(daAncora());
+
+    // Clique: resposta imediata, antes de o scroll assentar.
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function () {
+        activar(t.getAttribute('href').slice(1));
+      });
+    });
+
+    // Back/forward e alteração manual da âncora.
+    window.addEventListener('hashchange', function () {
+      activar(daAncora());
+    });
+
+    // Sincronizar com o scroll: a primeira secção que cruza uma banda no
+    // terço superior do ecrã é a activa. IntersectionObserver, nunca polling.
+    if (typeof window.IntersectionObserver === 'function' && seccoes.length) {
+      var visiveis = Object.create(null);
+      var observador = new window.IntersectionObserver(
+        function (entradas) {
+          entradas.forEach(function (entrada) {
+            if (entrada.isIntersecting) {
+              visiveis[entrada.target.id] = true;
+            } else {
+              delete visiveis[entrada.target.id];
+            }
+          });
+          for (var i = 0; i < ids.length; i += 1) {
+            if (visiveis[ids[i]]) { activar(ids[i]); break; }
+          }
+        },
+        { rootMargin: '-30% 0px -60% 0px', threshold: 0 }
+      );
+      seccoes.forEach(function (s) { observador.observe(s); });
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', iniciar);
+  } else {
+    iniciar();
+  }
+})();

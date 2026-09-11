@@ -1455,6 +1455,28 @@ impl Harness {
     }
 }
 
+/// Espera que um texto apareça na página, por presença e não por estabilidade.
+///
+/// `esperar_por` exige duas leituras byte-a-byte iguais — o que é o certo para
+/// uma navegação, mas briga com uma página cujo DOM muda ao vivo de propósito (a
+/// nav de secções escreve `aria-current` conforme o scroll). Aqui basta que o
+/// texto **esteja lá**: uma vez renderizado pelo servidor, está.
+async fn esperar_texto(page: &Page, agulha: &str) {
+    let inicio = std::time::Instant::now();
+    loop {
+        if let Ok(html) = page.content().await {
+            if html.contains(agulha) {
+                return;
+            }
+        }
+        assert!(
+            inicio.elapsed() < DEADLINE,
+            "«{agulha}» não apareceu em {DEADLINE:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(120)).await;
+    }
+}
+
 /// Espera que um texto apareça na página.
 async fn esperar_por(page: &Page, agulha: &str) {
     let inicio = std::time::Instant::now();
@@ -1984,6 +2006,34 @@ async fn submit(page: &Page, formulario: &str) {
         .click()
         .await
         .expect("submeter");
+}
+
+/// Espera que o separador cuja âncora é `href` fique com `aria-current=location`.
+///
+/// O estado de partida vem do servidor, mas o `app.js` acompanha a âncora, o
+/// clique e o scroll — e é o que este helper prova: que, depois de o JavaScript
+/// correr, o separador certo está marcado. Sonda até ao prazo, nunca por
+/// intervalo fixo (o observador pode ainda não ter assentado).
+async fn esperar_aria_current(page: &Page, href: &str) {
+    let inicio = std::time::Instant::now();
+    loop {
+        let atual = page
+            .find_element(&format!("[data-oc-section-nav] a[href=\"{href}\"]"))
+            .await
+            .ok();
+        if let Some(elemento) = atual {
+            if elemento.attribute("aria-current").await.ok().flatten().as_deref()
+                == Some("location")
+            {
+                return;
+            }
+        }
+        assert!(
+            inicio.elapsed() < DEADLINE,
+            "o separador «{href}» não ficou activo (aria-current=location) em {DEADLINE:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(120)).await;
+    }
 }
 
 /// Abre o Centro Temporal pelo relógio, como uma pessoa faria.
@@ -10637,6 +10687,113 @@ async fn dar_acesso_a_quem_ja_existe_nao_cria_uma_segunda_pessoa() {
         !html.contains("Dar acesso"),
         "o botão continua a oferecer uma operação que o Core já recusa"
     );
+}
+
+/// O detalhe de um membro: a secção activa vê-se, e atribuir uma unidade
+/// aparece no perfil **e** na lista.
+///
+/// # A viagem
+///
+/// ```text
+/// entrar como identidade privilegiada
+///   → /admin/members/{alvo} → «Overview» activo (servidor + app.js)
+///   → deep-link #membro-unidades → «Unidades» activo (app.js segue a âncora)
+///   → clicar «Segurança» → «Segurança» activo (app.js segue o clique)
+///   → Unidades → escolher a unidade no seletor → Atribuir
+///   → Core (reautoriza o actor) → PostgreSQL: pertença viva
+///   → o perfil mostra a unidade → a lista de membros mostra-a também
+/// ```
+///
+/// Prova as duas regressões de uma vez: o separador activo (que tinha deixado de
+/// se ver) e a coluna «Unidade» da lista (que lia um campo que o Core nunca
+/// emitia, e ficava «—» para sempre).
+#[tokio::test]
+async fn o_detalhe_do_membro_marca_a_seccao_e_atribui_uma_unidade() {
+    let harness = harness!();
+
+    let (identidade, _) = harness.sign_in(&[TechnicalRole::PlatformAdmin]).await;
+
+    // Uma unidade da instituição, com nome reconhecível, e um membro a quem
+    // ainda não pertence.
+    let unidade: Uuid = sqlx::query_scalar(
+        "INSERT INTO units (organisation_id, code, name, created_by_id)
+             VALUES ($1, $2, $3, $4) RETURNING id",
+    )
+    .bind(harness.organisation_id)
+    .bind("NADM")
+    .bind("Núcleo de Administração")
+    .bind(identidade)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("unidade");
+    let alvo: Uuid = sqlx::query_scalar(
+        "INSERT INTO people (organisation_id, full_name, email, status)
+             VALUES ($1, 'Membro Alvo', $2, 'active') RETURNING id",
+    )
+    .bind(harness.organisation_id)
+    .bind(format!("alvo{}@ocinye.com", Uuid::new_v4().simple()))
+    .fetch_one(&harness.pool)
+    .await
+    .expect("alvo");
+
+    // Sem âncora: «Overview» é a secção activa (servidor, confirmado pelo app.js).
+    let page = harness.open(&format!("/admin/members/{alvo}")).await;
+    esperar_por(&page, "Pertenças a unidades").await;
+    esperar_aria_current(&page, "#membro-overview").await;
+
+    // Deep-link directo a uma secção: o app.js corrige o activo no carregamento.
+    let page = harness
+        .open(&format!("/admin/members/{alvo}#membro-unidades"))
+        .await;
+    esperar_aria_current(&page, "#membro-unidades").await;
+
+    // Clicar noutro separador move o activo, sem recarregar.
+    clicar(&page, "[data-oc-section-nav] a[href=\"#membro-seguranca\"]").await;
+    esperar_aria_current(&page, "#membro-seguranca").await;
+
+    // Atribuir a unidade pelo seletor humano (mostra nomes; o valor é o id, que
+    // a pessoa nunca escreve à mão).
+    escolher(
+        &page,
+        "form[action$=\"/units\"] select[name=\"unit_id\"]",
+        &unidade.to_string(),
+    )
+    .await;
+    submit(&page, "form[action$=\"/units\"]").await;
+
+    // O gatilho da verdade é a base, não o ecrã: o nome «Núcleo de
+    // Administração» aparece na página mesmo por atribuir (é uma opção do
+    // seletor), por isso esperar por ele correria à frente do POST. Espera-se
+    // pela **pertença viva** — o efeito que só existe se o Core a aceitou.
+    let inicio = std::time::Instant::now();
+    loop {
+        let vivas: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM unit_memberships
+              WHERE unit_id = $1 AND person_id = $2 AND revoked_at IS NULL",
+        )
+        .bind(unidade)
+        .bind(alvo)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("pertença");
+        if vivas == 1 {
+            break;
+        }
+        assert!(
+            inicio.elapsed() < DEADLINE,
+            "a atribuição não persistiu como pertença viva em {DEADLINE:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+
+    // O perfil recarregado mostra a unidade pelo nome, agora como pertença.
+    let perfil = harness.open(&format!("/admin/members/{alvo}")).await;
+    esperar_texto(&perfil, "Núcleo de Administração").await;
+
+    // E a lista de membros reflecte-a: a coluna «Unidade» deixou de ser «—».
+    // A lista de membros vive em `/admin`.
+    let lista = harness.open("/admin").await;
+    esperar_texto(&lista, "Núcleo de Administração").await;
 }
 
 // ── O segundo factor, de ponta a ponta (ADR-0107) ───────────────────────────

@@ -813,8 +813,12 @@ pub fn member_detail(
                 </div>
             </div>
 
-            <nav class="oc-tabs oc-tabs--ctx" aria-label="Secções do membro">
-                <a class="oc-tab" href="#membro-overview">"Overview"</a>
+            // `data-oc-section-nav`: o `app.js` acompanha a secção activa pela
+            // âncora e pelo scroll. O servidor marca «Overview» activa por
+            // omissão (`aria-current="location"`) — funciona sem JavaScript, e
+            // um deep-link para outra secção é corrigido no carregamento.
+            <nav class="oc-tabs oc-tabs--ctx" aria-label="Secções do membro" data-oc-section-nav="">
+                <a class="oc-tab" href="#membro-overview" aria-current="location">"Overview"</a>
                 <a class="oc-tab" href="#membro-acesso">"Acesso"</a>
                 <a class="oc-tab" href="#membro-seguranca">"Segurança"</a>
                 <a class="oc-tab" href="#membro-unidades">"Unidades"</a>
@@ -1736,6 +1740,63 @@ mod tests {
         assert!(
             !html.contains("title=\"Ainda não disponível\""),
             "um separador do membro ainda usa a razão genérica em vez de dizer qual"
+        );
+    }
+
+    /// O separador activo está marcado, e o inactivo não se confunde com o
+    /// indisponível.
+    ///
+    /// Por omissão — sem JavaScript, sem âncora — «Overview» é a secção activa,
+    /// com `aria-current="location"` (a mesma convenção do resto da navegação, e
+    /// o que o leitor de ecrã anuncia). O `app.js` mantém-no conforme a âncora e
+    /// o scroll; o servidor garante o ponto de partida. Os separadores
+    /// indisponíveis (`Actividade`, `Audit`) continuam `aria-disabled` e **nunca**
+    /// activos: inactivo é uma coisa, indisponível é outra.
+    #[test]
+    fn o_separador_activo_do_membro_esta_marcado() {
+        let person = json!({
+            "id": PID,
+            "full_name": "Ana Fernandes",
+            "email": "ana@ocinye.com",
+            "status": "invited",
+            "institutional_position": "Investigadora",
+        });
+        let html = member_detail(
+            &person,
+            &json!({ "account_status": "invited" }),
+            &json!({}),
+            &json!([]),
+            &json!({ "items": [] }),
+            &json!([]),
+            None,
+        )
+        .to_html();
+
+        // A barra é o gancho que o `app.js` procura.
+        assert!(
+            html.contains("data-oc-section-nav"),
+            "a barra de secções perdeu o gancho que o app.js segue"
+        );
+        // «Overview» nasce activa, e é a única.
+        assert!(
+            html.contains("href=\"#membro-overview\" aria-current=\"location\""),
+            "o Overview devia nascer activo, com aria-current=location"
+        );
+        assert_eq!(
+            html.matches("aria-current=\"location\"").count(),
+            1,
+            "só um separador de secção pode estar activo de partida"
+        );
+        // Inactivo não é desactivado: os separadores navegáveis não são
+        // aria-disabled.
+        assert!(
+            html.contains("href=\"#membro-acesso\"") && !html.contains("#membro-acesso\" aria-disabled"),
+            "um separador inactivo não pode parecer desactivado"
+        );
+        // Indisponível continua indisponível, e nunca activo.
+        assert!(
+            html.contains("aria-disabled=\"true\""),
+            "os separadores indisponíveis perderam o seu estado"
         );
     }
 
