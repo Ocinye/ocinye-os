@@ -827,6 +827,10 @@ fn reading(viewer: &Viewer, view: &MailView, payload: &Value) -> impl IntoView {
         .get("is_starred")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let unread = !message
+        .get("is_read")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
 
     let body_html = payload
         .get("body_html")
@@ -896,7 +900,14 @@ fn reading(viewer: &Viewer, view: &MailView, payload: &Value) -> impl IntoView {
                     } else {
                         "Assinalar"
                     }, Icon::Star)}
-                    {flag_form(&id, "read", false, "Marcar como não lida", Icon::Mail)}
+                    // A acção reflecte o estado: uma mensagem lida oferece
+                    // marcá-la como não lida, e uma não lida o inverso. Um botão
+                    // que dissesse sempre o mesmo mentiria sobre o que faz.
+                    {if unread {
+                        flag_form(&id, "read", true, "Marcar como lida", Icon::Mail)
+                    } else {
+                        flag_form(&id, "read", false, "Marcar como não lida", Icon::Mail)
+                    }}
                 </div>
             </header>
 
@@ -2514,6 +2525,72 @@ mod compositor_com_rascunho {
         assert!(
             out.contains(r#"data-oc="tirar-anexo""#),
             "falta o botão de retirar o anexo"
+        );
+    }
+
+    /// A acção do detalhe reflecte o estado: lida oferece «Marcar como não
+    /// lida», não lida oferece «Marcar como lida». O bug reportado deixava o
+    /// botão a dizer sempre o mesmo.
+    #[test]
+    fn a_accao_de_leitura_reflecte_o_estado() {
+        let vista = MailView {
+            status: json!({
+                "can_read": true, "can_send": true, "transport_configured": true,
+                "mailbox_linked": true, "detail": "",
+            }),
+            sync_notice: None,
+            mailboxes: json!([{
+                "id": CAIXA, "address": "fidel.monteiro@ocinye.com",
+                "kind": "personal", "may_send": true, "unread": [],
+            }]),
+            active_mailbox: Some(CAIXA.to_owned()),
+            folder: "inbox".to_owned(),
+            query: String::new(),
+        };
+        let aberta = |lida: bool| {
+            json!({
+                "message": {
+                    "id": "33333333-3333-4333-8333-333333333333",
+                    "mailbox_id": CAIXA,
+                    "folder": "inbox",
+                    "from_address": "externo@exemplo.com",
+                    "subject": "Olá",
+                    "sent_at": "2026-09-09T08:53:00Z",
+                    "is_read": lida,
+                    "is_starred": false,
+                },
+                "body_html": "<p>corpo</p>",
+                "attachments": [], "to": [], "cc": [],
+                "linked_domains": [], "blocked_remote_count": 0, "inline_image_count": 0,
+            })
+        };
+
+        let lida = aberta(true);
+        let html_lida = mail(
+            &super::integridade::viewer(),
+            &vista,
+            &json!({"items": []}),
+            Some(&lida),
+            None,
+        )
+        .to_html();
+        assert!(
+            html_lida.contains("Marcar como não lida"),
+            "uma mensagem lida deve oferecer marcá-la como não lida"
+        );
+
+        let nao_lida = aberta(false);
+        let html_nao = mail(
+            &super::integridade::viewer(),
+            &vista,
+            &json!({"items": []}),
+            Some(&nao_lida),
+            None,
+        )
+        .to_html();
+        assert!(
+            html_nao.contains("Marcar como lida") && !html_nao.contains("Marcar como não lida"),
+            "uma mensagem não lida deve oferecer marcá-la como lida"
         );
     }
 

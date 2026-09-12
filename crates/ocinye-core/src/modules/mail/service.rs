@@ -350,6 +350,15 @@ pub fn safe_filename(raw: &str) -> String {
 
 /// Read one message.
 ///
+/// `mark_read` is the **open transition**: when true and the message is unread,
+/// opening it marks it read. It is a decision the caller makes — not a reactive
+/// effect on the message's own state — so an explicit "mark unread" can leave the
+/// same message open (caller passes `false`) without the open immediately undoing
+/// it. The provider is authoritative (synchronisation projects `\Seen` back), so
+/// `\Seen` is set first and only then the local projection; a provider that
+/// refuses leaves the message unread rather than claiming a durable read it did
+/// not persist.
+///
 /// # Errors
 ///
 /// Returns [`CoreError::NotFound`] when the message is not in a mailbox the
@@ -360,11 +369,12 @@ pub async fn read_message(
     principal: &Principal,
     message_id: Uuid,
     allow_remote: bool,
+    mark_read: bool,
     ids: &CorrelationIds,
 ) -> CoreResult<ReadableMessage> {
     require(principal, Permission::MailUse)?;
 
-    let (indexed, mailbox_id, mailbox_address) =
+    let (mut indexed, mailbox_id, mailbox_address) =
         repo::accessible_message(pool, principal.person_id, message_id)
             .await?
             .ok_or_else(|| CoreError::NotFound("Mensagem não encontrada.".to_owned()))?;
@@ -412,6 +422,28 @@ pub async fn read_message(
         )
         .await?;
         tx.commit().await?;
+    }
+
+    // The open transition: mark an unread message read. `\Seen` on the provider
+    // first (it is authoritative and sync projects it back), then the local
+    // projection; a provider that refuses leaves it unread, honestly.
+    if mark_read && !indexed.is_read {
+        match provider
+            .set_read(&mailbox_address, folder, &indexed.provider_id, true)
+            .await
+        {
+            Ok(()) => {
+                repo::set_flag(pool, principal.person_id, message_id, Some(true), None).await?;
+                indexed.is_read = true;
+            }
+            Err(error) => {
+                tracing::warn!(
+                    correlation_id = %ids.correlation_id,
+                    cause = %from_provider(error),
+                    "could not mark a message read on open; it stays unread"
+                );
+            }
+        }
     }
 
     // Colhidos antes de consumir os anexos.

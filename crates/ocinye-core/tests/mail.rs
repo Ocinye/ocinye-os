@@ -56,6 +56,9 @@ struct RecordingProvider {
     /// A última mensagem entregue, para provar o que o Core lhe passou —
     /// nomeadamente que a assinatura institucional entrou no caminho de envio.
     last: std::sync::Mutex<Option<OutgoingMessage>>,
+    /// O último `\Seen` que o Core mandou aplicar (`Some(true)` = marcar lida),
+    /// para provar a projecção do estado de leitura no fornecedor.
+    last_read: std::sync::Mutex<Option<bool>>,
 }
 
 impl RecordingProvider {
@@ -65,6 +68,10 @@ impl RecordingProvider {
 
     fn last(&self) -> Option<OutgoingMessage> {
         self.last.lock().expect("lock").clone()
+    }
+
+    fn last_read(&self) -> Option<bool> {
+        *self.last_read.lock().expect("lock")
     }
 }
 
@@ -165,8 +172,9 @@ impl MailProvider for RecordingProvider {
         _mailbox_address: &str,
         _folder: MailFolder,
         _provider_id: &str,
-        _read: bool,
+        read: bool,
     ) -> ProviderResult<()> {
+        *self.last_read.lock().expect("lock") = Some(read);
         Ok(())
     }
 
@@ -396,7 +404,7 @@ async fn no_administrative_role_reaches_a_personal_mailbox() {
         other => panic!("esperava NotFound, obtive {other:?}"),
     }
 
-    match mail::read_message(&pool, &registo, &administrator, message, false, &ids).await {
+    match mail::read_message(&pool, &registo, &administrator, message, false, false, &ids).await {
         Err(CoreError::NotFound(_)) => {}
         other => panic!("esperava NotFound ao ler mensagem alheia, obtive {other:?}"),
     }
@@ -423,6 +431,106 @@ async fn a_message_identifier_is_not_a_key() {
         .await
         .expect("query");
     assert!(found.is_some(), "o dono deixou de alcançar a sua mensagem");
+}
+
+// ── Read/unread state machine ──────────────────────────────────────────────
+
+async fn is_read(pool: &PgPool, message_id: Uuid) -> bool {
+    sqlx::query_scalar("SELECT is_read FROM mail_messages WHERE id = $1")
+        .bind(message_id)
+        .fetch_one(pool)
+        .await
+        .expect("is_read")
+}
+
+async fn set_read_flag(pool: &PgPool, message_id: Uuid, value: bool) {
+    sqlx::query("UPDATE mail_messages SET is_read = $2 WHERE id = $1")
+        .bind(message_id)
+        .bind(value)
+        .execute(pool)
+        .await
+        .expect("set is_read");
+}
+
+/// Opening an unread message with the open transition marks it read — locally
+/// and on the provider (`\Seen`), which is authoritative.
+#[tokio::test]
+async fn opening_an_unread_message_marks_it_read() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let member = person(&pool, org, &["research_member"]).await;
+    let mailbox = personal_mailbox(&pool, org, member.person_id).await;
+    let message = message_in(&pool, mailbox).await;
+    let provider = std::sync::Arc::new(RecordingProvider::default());
+    let registo = registo_de(&provider);
+    let ids = CorrelationIds::generate();
+
+    assert!(!is_read(&pool, message).await, "a mensagem começa não lida");
+
+    mail::read_message(&pool, &registo, &member, message, false, true, &ids)
+        .await
+        .expect("read");
+
+    assert!(is_read(&pool, message).await, "abrir não marcou como lida");
+    assert_eq!(
+        provider.last_read(),
+        Some(true),
+        "o \\Seen não foi projectado no fornecedor"
+    );
+}
+
+/// Opening without the open transition (the reopen right after "mark unread")
+/// does NOT mark it read — the explicit action is not undone.
+#[tokio::test]
+async fn opening_without_the_transition_leaves_it_unread() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let member = person(&pool, org, &["research_member"]).await;
+    let mailbox = personal_mailbox(&pool, org, member.person_id).await;
+    let message = message_in(&pool, mailbox).await;
+    let provider = std::sync::Arc::new(RecordingProvider::default());
+    let registo = registo_de(&provider);
+    let ids = CorrelationIds::generate();
+
+    mail::read_message(&pool, &registo, &member, message, false, false, &ids)
+        .await
+        .expect("read");
+
+    assert!(
+        !is_read(&pool, message).await,
+        "abrir sem transição marcou como lida e desfez o «marcar não lida»"
+    );
+    assert_eq!(
+        provider.last_read(),
+        None,
+        "não devia ter tocado no fornecedor"
+    );
+}
+
+/// Opening an already-read message does not touch the provider — idempotent, and
+/// no needless `\Seen` write.
+#[tokio::test]
+async fn opening_an_already_read_message_is_idempotent() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let member = person(&pool, org, &["research_member"]).await;
+    let mailbox = personal_mailbox(&pool, org, member.person_id).await;
+    let message = message_in(&pool, mailbox).await;
+    set_read_flag(&pool, message, true).await;
+    let provider = std::sync::Arc::new(RecordingProvider::default());
+    let registo = registo_de(&provider);
+    let ids = CorrelationIds::generate();
+
+    mail::read_message(&pool, &registo, &member, message, false, true, &ids)
+        .await
+        .expect("read");
+
+    assert!(is_read(&pool, message).await, "continua lida");
+    assert_eq!(
+        provider.last_read(),
+        None,
+        "escreveu \\Seen numa mensagem já lida"
+    );
 }
 
 // ── ADR-0403: classification on the way out ─────────────────────────────
