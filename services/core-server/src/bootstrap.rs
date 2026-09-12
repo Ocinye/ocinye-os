@@ -182,6 +182,13 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
         .await
         .context("organização")?;
 
+    // The institution has a default resource profile from the start, so every
+    // member resolves an entitlement (ADR-0108). Existing installations were
+    // seeded by the migration; a fresh bootstrap creates it here.
+    ocinye_core::modules::resource::ensure_default_profile(&pool, organisation.id)
+        .await
+        .context("perfil de recursos por omissão")?;
+
     let authenticator = Arc::new(Authenticator::new(
         Hasher::new(HashingParams {
             memory_kib: config.auth.argon2_memory_kib,

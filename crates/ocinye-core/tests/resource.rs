@@ -10,6 +10,7 @@
 use ocinye_contracts::{ResourceScopeType, ResourceType, TechnicalRole};
 use ocinye_core::modules::resource;
 use ocinye_domain::Principal;
+use ocinye_observability::CorrelationIds;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -322,4 +323,144 @@ async fn listar_perfis_exige_resources_view() {
         perfis.iter().any(|p| p.profile.code == "MEMBER_STANDARD"),
         "o perfil por omissão não apareceu"
     );
+}
+
+/// Seed an additional named profile with a storage rule. Returns its id.
+async fn named_profile(
+    pool: &PgPool,
+    organisation_id: Uuid,
+    code: &str,
+    storage_bytes: i64,
+) -> Uuid {
+    let profile_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO resource_profiles (organisation_id, code, name)
+         VALUES ($1, $2, $2) RETURNING id",
+    )
+    .bind(organisation_id)
+    .bind(code)
+    .fetch_one(pool)
+    .await
+    .expect("perfil");
+    sqlx::query(
+        "INSERT INTO resource_profile_rules (profile_id, resource_type, quantity, unit)
+         VALUES ($1, 'persistent_storage', $2, 'bytes')",
+    )
+    .bind(profile_id)
+    .bind(storage_bytes)
+    .execute(pool)
+    .await
+    .expect("regra");
+    profile_id
+}
+
+/// Assigning a profile changes the member's resolved entitlement — and it is a
+/// resource operation, not an access one.
+#[tokio::test]
+async fn atribuir_um_perfil_muda_a_resolucao() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    default_profile(&pool, org, 10 * GIB).await;
+    let pesado = named_profile(&pool, org, "COMPUTE_HEAVY", 50 * GIB).await;
+
+    let quem = member(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let admin = member(&pool, org, &[TechnicalRole::OrganisationAdmin]).await;
+    let ids = CorrelationIds::generate();
+
+    // Antes: resolve o perfil por omissão (10 GiB).
+    let antes = resource::resolve_entitlement(
+        &pool,
+        org,
+        ResourceScopeType::Member,
+        quem.person_id,
+        ResourceType::PersistentStorage,
+    )
+    .await
+    .expect("antes");
+    assert_eq!(antes.quantity, 10 * GIB);
+
+    // O administrador atribui o perfil pesado.
+    resource::assign_member_profile(&pool, &admin, &ids, quem.person_id, Some(pesado))
+        .await
+        .expect("atribuir");
+
+    let depois = resource::resolve_entitlement(
+        &pool,
+        org,
+        ResourceScopeType::Member,
+        quem.person_id,
+        ResourceType::PersistentStorage,
+    )
+    .await
+    .expect("depois");
+    assert_eq!(
+        depois.quantity,
+        50 * GIB,
+        "a atribuição não mudou a resolução"
+    );
+
+    // Um membro comum não atribui perfis.
+    assert!(
+        resource::assign_member_profile(&pool, &quem, &ids, quem.person_id, Some(pesado))
+            .await
+            .is_err(),
+        "um membro comum atribuiu um perfil"
+    );
+}
+
+/// A profile from another institution cannot be assigned by naming it.
+#[tokio::test]
+async fn atribuir_perfil_de_outra_org_e_recusado() {
+    let Some(pool) = pool().await else { return };
+    let org_a = organisation(&pool).await;
+    let org_b = organisation(&pool).await;
+    default_profile(&pool, org_a, 10 * GIB).await;
+    let perfil_b = named_profile(&pool, org_b, "OUTRO", 99 * GIB).await;
+
+    let admin_a = member(&pool, org_a, &[TechnicalRole::OrganisationAdmin]).await;
+    let membro_a = member(&pool, org_a, &[TechnicalRole::ResearchMember]).await;
+    let ids = CorrelationIds::generate();
+
+    assert!(
+        resource::assign_member_profile(&pool, &admin_a, &ids, membro_a.person_id, Some(perfil_b))
+            .await
+            .is_err(),
+        "um perfil de outra instituição foi atribuído"
+    );
+}
+
+/// Ensuring the default profile is idempotent — one default per organisation.
+#[tokio::test]
+async fn ensure_default_profile_e_idempotente() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+
+    let a = resource::ensure_default_profile(&pool, org)
+        .await
+        .expect("primeira");
+    let b = resource::ensure_default_profile(&pool, org)
+        .await
+        .expect("segunda");
+    assert_eq!(a, b, "a segunda chamada criou um perfil diferente");
+
+    let defaults: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM resource_profiles WHERE organisation_id = $1 AND is_default",
+    )
+    .bind(org)
+    .fetch_one(&pool)
+    .await
+    .expect("contagem");
+    assert_eq!(defaults, 1, "há mais do que um perfil por omissão");
+
+    // E resolve os 10 GiB por omissão.
+    let quem = member(&pool, org, &[TechnicalRole::ResearchMember]).await;
+    let ent = resource::resolve_entitlement(
+        &pool,
+        org,
+        ResourceScopeType::Member,
+        quem.person_id,
+        ResourceType::PersistentStorage,
+    )
+    .await
+    .expect("resolver");
+    assert_eq!(ent.quantity, resource::DEFAULT_STORAGE_QUOTA_BYTES);
 }

@@ -98,6 +98,8 @@ pub mod action {
     /// esconderia que a anterior foi retirada; «reposta» diria que havia acesso
     /// utilizável, e não havia.
     pub const ACCOUNT_ACCESS_REISSUED: &str = "account_access_reissued";
+    /// A member's resource allocation profile was assigned or changed.
+    pub const RESOURCE_PROFILE_ASSIGNED: &str = "resource_profile_assigned";
     /// An explicit access grant was created.
     pub const GRANT_CREATED: &str = "grant_created";
     /// An explicit access grant was revoked.

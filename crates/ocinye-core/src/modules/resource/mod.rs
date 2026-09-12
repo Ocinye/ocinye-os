@@ -20,4 +20,7 @@ pub mod service;
 pub use model::{
     Allocation, Entitlement, EntitlementPart, ProfileRule, ResourceProfile, ResourceProfileDetail,
 };
-pub use service::{list_profiles, member_entitlement, resolve_entitlement};
+pub use service::{
+    assign_member_profile, ensure_default_profile, list_profiles, member_entitlement,
+    resolve_entitlement, DEFAULT_STORAGE_QUOTA_BYTES,
+};
