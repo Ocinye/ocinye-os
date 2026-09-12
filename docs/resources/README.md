@@ -39,17 +39,21 @@ para uma instituição sem armazenamento físico declarado.
 
 ## Estado de implementação
 
-Entregue em fatias revíveis. **Esta é a fatia A: domínio + esquema, sem
-enforcement.**
+Entregue em fatias revíveis.
 
-- **Feito:** vocabulário tipado (`crates/ocinye-contracts/src/resource.rs`),
-  esquema (`migrations/0040_resource_governance.sql`: `resource_profiles`,
+- **Feito (fatias A–C):** vocabulário tipado
+  (`crates/ocinye-contracts/src/resource.rs`), esquema
+  (`migrations/0040_resource_governance.sql`: `resource_profiles`,
   `resource_profile_rules`, `resource_allocations`, `resource_usage_events`),
-  resolução de entitlement (`crates/ocinye-core/src/modules/resource/`),
-  permissões de governança.
-- **A seguir:** perfis + ciclo de vida do membro, storage pessoal com
-  enforcement e admissão segura à concorrência, ledger de uso, «Meus Recursos»,
-  Administração → Recursos, pedidos, registo de capacidade, reserva + admissão,
+  resolução de entitlement, permissões de governança; perfis atribuídos por
+  membro (`people.resource_profile_id`, migração 0041) com perfil por omissão no
+  bootstrap e atribuição auditada; e **armazenamento pessoal medido e imposto no
+  servidor** — uso por `SUM(size_bytes)` sobre `owner_id`, admissão fail-closed
+  com tranca por membro (segura à concorrência), redução de quota segura (nunca
+  apaga), estados `Normal`/`Warning`/`Critical`/`OverQuota`
+  (`crates/ocinye-core/src/modules/resource/storage.rs`).
+- **A seguir:** ledger de uso, «Meus Recursos» (membro), Administração →
+  Recursos, pedidos, registo de capacidade, reserva + admissão de computação,
   fronteira do scheduler, control-plane de computação, entitlements de IA,
   endurecimento de segurança, e certificação E2E → `OCINYE_RESOURCE_GOVERNANCE_READY`.
 

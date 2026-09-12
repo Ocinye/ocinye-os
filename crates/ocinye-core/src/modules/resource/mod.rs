@@ -16,6 +16,7 @@
 pub mod model;
 pub mod repository;
 pub mod service;
+pub mod storage;
 
 pub use model::{
     Allocation, Entitlement, EntitlementPart, ProfileRule, ResourceProfile, ResourceProfileDetail,
@@ -23,4 +24,7 @@ pub use model::{
 pub use service::{
     assign_member_profile, ensure_default_profile, list_profiles, member_entitlement,
     resolve_entitlement, DEFAULT_STORAGE_QUOTA_BYTES,
+};
+pub use storage::{
+    admit_personal_bytes, personal_storage_status, personal_usage_bytes, PersonalStorageStatus,
 };

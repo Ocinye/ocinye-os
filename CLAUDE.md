@@ -127,10 +127,15 @@ sem que nada falhe.
   o esquema de perfis, regras, alocações e o ledger de uso append-only (migração
   0040), e a resolução do entitlement efectivo de um âmbito — perfil por omissão
   (`MEMBER_STANDARD`, storage 10 GiB configurável) mais overrides e concessões
-  temporárias que expiram, com explicação. **Nada é imposto ainda**: o
-  enforcement de storage, a admissão, a capacidade, os pedidos e a experiência
-  chegam nas fatias seguintes. `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão
-  distinto de `OCINYE_AI_READY`, e **não** torna a IA disponível.
+  temporárias que expiram, com explicação. O **armazenamento pessoal é
+  imposto**: o uso mede-se directamente dos bytes que o membro possui
+  (`SUM(size_bytes)` sobre `owner_id`), o limite é o entitlement, e uma escrita
+  pessoal nova é admitida no servidor contra `usado + a entrar ≤ limite`, com
+  tranca por membro que serializa carregamentos em paralelo. Reduzir a quota
+  abaixo do uso **não apaga nada** — o membro fica acima da quota e as escritas
+  novas param. Falta ainda a admissão de computação, a capacidade, os pedidos e
+  a experiência «Meus Recursos»/Administração. `OCINYE_RESOURCE_GOVERNANCE_READY`
+  é um portão distinto de `OCINYE_AI_READY`, e **não** torna a IA disponível.
 - **41 migrations**, aplicáveis de base vazia; 80 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
@@ -280,14 +285,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1532 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1538 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **558 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **564 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se
