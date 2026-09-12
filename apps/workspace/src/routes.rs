@@ -1849,6 +1849,10 @@ async fn compose(
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_owned();
+            draft.body_html = saved
+                .get("body_html")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
             draft.reply_to = saved
                 .get("in_reply_to_id")
                 .and_then(Value::as_str)
@@ -1922,6 +1926,8 @@ struct ComposeForm {
     #[serde(default)]
     body: String,
     #[serde(default)]
+    html_body: String,
+    #[serde(default)]
     reply_to: Option<String>,
     #[serde(default)]
     action: String,
@@ -1942,6 +1948,7 @@ impl ComposeForm {
             bcc: self.bcc.clone(),
             subject: self.subject.clone(),
             body: self.body.clone(),
+            body_html: Some(self.html_body.clone()).filter(|html| !html.is_empty()),
             reply_to: self.reply_to.clone(),
             instruction: self.instruction.clone(),
             confirmation: None,
@@ -2036,6 +2043,7 @@ async fn send_mail(
             .collect()
     };
 
+    let html_body = Some(form.html_body.clone()).filter(|html| !html.is_empty());
     let body = serde_json::json!({
         "mailbox_id": form.mailbox_id,
         "to": split(&form.to),
@@ -2043,6 +2051,7 @@ async fn send_mail(
         "bcc": split(&form.bcc),
         "subject": form.subject,
         "body": form.body,
+        "html_body": html_body,
         "confirmed": form.confirmed.is_some(),
     });
 
@@ -2143,6 +2152,7 @@ fn corpo_de_rascunho(recebido: &Value) -> Value {
         "bcc": split("bcc"),
         "subject": recebido.get("subject").and_then(Value::as_str).unwrap_or(""),
         "body": recebido.get("body").and_then(Value::as_str).unwrap_or(""),
+        "html_body": recebido.get("html_body").and_then(Value::as_str),
         "in_reply_to": recebido.get("in_reply_to").and_then(Value::as_str),
     })
 }

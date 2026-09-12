@@ -416,8 +416,13 @@ struct SendRequest {
     bcc: Vec<String>,
     #[serde(default)]
     subject: String,
+    /// The plain-text body — canonical, and the `text/plain` alternative.
     #[serde(default)]
     body: String,
+    /// Authored rich-text HTML, when the member formatted the message. Sanitised
+    /// server-side before it becomes MIME (ADR-0415); `None` means plain text.
+    #[serde(default)]
+    html_body: Option<String>,
     /// Answer to a previous confirmation request. Never turns a refusal into a
     /// send: the policy re-decides, and a refusal stays refused.
     #[serde(default)]
@@ -464,16 +469,26 @@ async fn send(
             .collect()
     };
 
+    // Authored HTML crosses the outbound sanitisation boundary here, at the
+    // server — whatever the client did is redone (ADR-0415, briefing §13, §49).
+    // An empty formatting shell falls back to plain text.
+    let html_body = request
+        .html_body
+        .as_deref()
+        .map(mail::outbound::sanitize_outbound)
+        .filter(|html| mail::outbound::has_visible_content(html));
+
     let message = OutgoingMessage {
         from: mail::sender_identity(&mailbox.address, mailbox.display_name.clone()),
         to: to_provider(to),
         cc: to_provider(cc),
         bcc: to_provider(bcc),
         subject: request.subject,
-        // O membro escreve texto simples; a assinatura e a projecção HTML são
-        // acrescentadas pelo Core no envio (ADR-0414).
+        // O corpo em texto é canónico e a alternativa `text/plain`; o HTML de
+        // autoria, quando existe, já vem higienizado. A assinatura é
+        // acrescentada às duas partes no envio (ADR-0414, ADR-0415).
         text_body: request.body,
-        html_body: None,
+        html_body,
         in_reply_to: None,
         references: Vec::new(),
         attachments: Vec::new(),
@@ -526,6 +541,8 @@ struct DraftBody {
     #[serde(default)]
     body: String,
     #[serde(default)]
+    html_body: Option<String>,
+    #[serde(default)]
     in_reply_to: Option<Uuid>,
 }
 
@@ -560,6 +577,7 @@ async fn create_draft(
             bcc: body.bcc,
             subject: body.subject,
             body: body.body,
+            body_html: body.html_body,
             in_reply_to: body.in_reply_to,
         },
     )
@@ -590,6 +608,7 @@ async fn update_draft(
             bcc: body.bcc,
             subject: body.subject,
             body: body.body,
+            body_html: body.html_body,
             in_reply_to: body.in_reply_to,
         },
     )

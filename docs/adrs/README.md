@@ -174,6 +174,7 @@ Decisões próprias de cada módulo do Ocinye OS.
 - [ADR-0412](0412-scientific-lifecycle-and-provenance.md) — Ciclo de vida científico e proveniência de primeira classe
 - [ADR-0413](0413-notes-as-institutional-knowledge.md) — Notas: conhecimento institucional editável, versionado e partilhável
 - [ADR-0414](0414-mail-html-projection-and-signature.md) — Correio: projecção HTML determinística e assinatura institucional
+- [ADR-0415](0415-mail-outbound-authored-html.md) — Correio: HTML de autoria com fronteira de saída própria
 
 ### 0500–0599 · Computação, Nós e Capability Runtime
 
@@ -261,6 +262,7 @@ preencher.
 | [0412](0412-scientific-lifecycle-and-provenance.md) | Ciclo de vida científico e proveniência de primeira classe | Science | `HIGH` | Accepted |
 | [0413](0413-notes-as-institutional-knowledge.md) | Notas: conhecimento institucional editável, versionado e partilhável | Knowledge | `HIGH` | Accepted |
 | [0414](0414-mail-html-projection-and-signature.md) | Correio: projecção HTML determinística e assinatura institucional | Mail | `MEDIUM` | Accepted |
+| [0415](0415-mail-outbound-authored-html.md) | Correio: HTML de autoria com fronteira de saída própria | Mail | `HIGH` | Accepted |
 | [0500](0500-compute-registry-node-agent.md) | Compute Registry e Node Agent | Compute | `HIGH` | Accepted |
 | [0501](0501-capability-runtime-wasm.md) | Capability Runtime em WebAssembly/WASI | Compute | `HIGH` | Accepted |
 | [0502](0502-compute-intelligence-connection-contract.md) | Contrato de ligação do nó Compute/Intelligence | Compute | `HIGH` | Accepted |

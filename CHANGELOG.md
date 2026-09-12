@@ -7,6 +7,27 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Correio — corpo de texto rico com fronteira de saída (fatia C) — 2026-09-12
+
+O compositor ganha formatação, sem abrir uma superfície de HTML arbitrário
+(ADR-0415, que revê o «HTML nunca é de autoria» do ADR-0414).
+
+- **Editor rico** no corpo (`contenteditable`, progressivo — sem JS, o
+  `textarea` continua a submeter texto simples): negrito, itálico, sublinhado,
+  rasurado, listas, citação, ligação, limpar formatação, com atalhos
+  Cmd/Ctrl+B/I/U/K. Colar entra como texto simples, para markup de Word/páginas
+  não explodir a mensagem.
+- **Fronteira de saída própria** (`mail::outbound::sanitize_outbound`): lista de
+  permissões `ammonia` semântica e estreita, **distinta da de entrada** — retira
+  `script`, `style`, `on*`, imagens, tabelas, esquemas perigosos; a formatação
+  sobrevive por tags, não por estilo inline. O cliente higieniza para dar
+  resposta; **o servidor é a autoridade** e re-higieniza no envio e ao guardar.
+- **Envio `multipart/alternative`** com o HTML de autoria + assinatura, e a
+  parte `text/plain` (a projecção do editor) + assinatura. Nunca só-HTML.
+- **O rascunho guarda o corpo rico** (`mail_drafts.body_html`, migração 0042) e
+  reabre com a formatação que tinha; um rascunho sem formatação fica texto
+  simples (`body_html` NULL).
+
 ### Correio — To/Cc/Bcc e recusa de injecção de cabeçalho (fatia B) — 2026-09-12
 
 - **Bcc no compositor.** Cc e Bcc são botões discretos ao lado do «Para»; abrir
