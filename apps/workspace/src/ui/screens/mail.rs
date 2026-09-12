@@ -1297,6 +1297,18 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                 // envio: nenhum controlo do cliente é a fronteira de segurança.
                 {barra_de_formatacao()}
 
+                // Os anexos aparecem logo abaixo da barra, para ficarem à vista
+                // assim que se juntam. A lista só ocupa espaço quando tem fichas
+                // (`:not(:empty)` no CSS). Cada anexo já guardado vem do servidor;
+                // o JS acrescenta os novos e trata a remoção. Os bytes passam pela
+                // quota (ADR-0108) e são validados no Core (§40).
+                <ul class="oc-comp__anexos-lista" data-oc="anexos-lista">
+                    {anexos
+                        .into_iter()
+                        .map(|anexo| ficha_de_anexo(&anexo.id, &anexo.filename, &anexo.size))
+                        .collect_view()}
+                </ul>
+
                 {match corpo_html.clone() {
                     Some(html) => view! {
                         <div
@@ -1339,30 +1351,6 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                     data-oc="compositor-html"
                     value=corpo_html.unwrap_or_default()
                 />
-
-                // Anexos. O botão abre o selector; largar um ficheiro sobre o
-                // compositor também anexa (o JS liga isso). Cada anexo já
-                // guardado aparece como ficha; o JS acrescenta as dos novos e
-                // trata a remoção. Os bytes passam pela quota (ADR-0108) e são
-                // re-higienizados/validados no Core (§40).
-                <div class="oc-comp__anexos" data-oc="compositor-anexos">
-                    <ul class="oc-comp__anexos-lista" data-oc="anexos-lista">
-                        {anexos
-                            .into_iter()
-                            .map(|anexo| ficha_de_anexo(&anexo.id, &anexo.filename, &anexo.size))
-                            .collect_view()}
-                    </ul>
-                    <label class="oc-comp__anexar">
-                        {icon(Icon::Attach, 14)}
-                        <span>"Anexar"</span>
-                        <input
-                            type="file"
-                            multiple
-                            data-oc="compositor-ficheiro"
-                            class="oc-sr"
-                        />
-                    </label>
-                </div>
 
                 // A instrução da assistência viaja com o formulário para não
                 // se perder quando o texto é regenerado.
@@ -1546,6 +1534,24 @@ fn barra_de_formatacao() -> impl IntoView {
                     }
                 })
                 .collect_view()}
+
+            <span class="oc-comp__ferramenta-sep" aria-hidden="true"></span>
+
+            // Anexar vive na barra, ao lado da formatação — faz parte das
+            // ferramentas de composição, não de uma fila solta lá em baixo. O
+            // `label` abre o selector; largar ficheiros sobre a janela também
+            // anexa (o JS liga isso).
+            <label class="oc-comp__ferramenta oc-comp__anexar" title="Anexar ficheiro">
+                {icon(Icon::Attach, 15)}
+                <span class="oc-comp__anexar-txt">"Anexar"</span>
+                <input
+                    type="file"
+                    multiple
+                    data-oc="compositor-ficheiro"
+                    class="oc-sr"
+                    aria-label="Anexar ficheiro"
+                />
+            </label>
         </div>
     }
 }

@@ -1441,11 +1441,13 @@
     }
 
     /* Guarda o rascunho. Resolve `true` em sucesso. Escoa primeiro o que ficou
-       por confirmar, para o snapshot igualar o que foi enviado. */
-    function guardar() {
+       por confirmar, para o snapshot igualar o que foi enviado. Com `forcar`,
+       cria o rascunho mesmo sem conteúdo — anexar um ficheiro precisa de um
+       rascunho onde o pousar, e um anexo é conteúdo, mesmo sem texto. */
+    function guardar(forcar) {
       escoar.forEach((fn) => fn());
       const snap = instantaneo();
-      if (!temConteudo(snap)) return Promise.resolve(true);
+      if (!forcar && !temConteudo(snap)) return Promise.resolve(true);
       const id = draftIdInput ? draftIdInput.value : '';
       const novo = !id;
       aGuardar = true;
@@ -1620,7 +1622,9 @@
 
     async function garantirRascunho() {
       if (draftIdInput && draftIdInput.value) return draftIdInput.value;
-      await guardar();
+      // Força a criação: sem isto, anexar num compositor ainda vazio não criava
+      // rascunho nenhum, e o ficheiro era largado em silêncio.
+      await guardar(true);
       return draftIdInput && draftIdInput.value ? draftIdInput.value : null;
     }
 
