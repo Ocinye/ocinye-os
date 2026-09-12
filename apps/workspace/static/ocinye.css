@@ -2588,7 +2588,7 @@ div.oc-result { cursor: default; }
 .oc-comp__descartar {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: var(--oc-z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
