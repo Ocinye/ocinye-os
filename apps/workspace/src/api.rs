@@ -148,6 +148,34 @@ pub async fn post(
     interpret(response).await
 }
 
+/// Send a JSON body to the Core by `PUT`.
+///
+/// Existe para as actualizações idempotentes — um autosave de rascunho reescreve
+/// o mesmo recurso, e `PUT` di-lo, onde `POST` sugeriria criar outro.
+///
+/// # Errors
+///
+/// Returns [`ApiFailure`] when the Core is unreachable or refuses.
+pub async fn put(
+    state: &WorkspaceState,
+    token: &str,
+    correlation_id: &str,
+    path: &str,
+    body: &Value,
+) -> Result<Value, ApiFailure> {
+    let response = state
+        .http
+        .put(format!("{}{path}", state.config.core_url))
+        .bearer_auth(token)
+        .header(ocinye_observability::CORRELATION_ID_HEADER, correlation_id)
+        .json(body)
+        .send()
+        .await
+        .map_err(|error| ApiFailure::Failed(format!("the Core is unreachable: {error}")))?;
+
+    interpret(response).await
+}
+
 /// Envia bytes crus ao Core, por `PUT`.
 ///
 /// # Porque bytes e não `multipart`

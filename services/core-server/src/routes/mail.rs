@@ -36,6 +36,11 @@ pub fn routes() -> Router<AppState> {
         .route("/mail/messages/{message_id}", get(read_message))
         .route("/mail/messages/{message_id}/flags", post(set_flags))
         .route("/mail/send", post(send))
+        .route("/mail/drafts", get(list_drafts).post(create_draft))
+        .route(
+            "/mail/drafts/{draft_id}",
+            get(get_draft).put(update_draft).delete(discard_draft),
+        )
         .route("/mail/assist", post(assist))
         .route("/mail/status", get(status))
         .route("/mail/preferences", get(preferences).post(save_preferences))
@@ -496,6 +501,140 @@ async fn send(
     .map_err(|error| ApiError::new(error, &ids))?;
 
     Ok(Json(serde_json::json!({ "sent": true })))
+}
+
+// ── Drafts ────────────────────────────────────────────────────────────────
+//
+// A draft belongs to Ocinye until sent or discarded. These endpoints back the
+// composer's autosave and safe-close: create on first meaningful edit, update on
+// autosave, delete on discard. Ownership is enforced in the service/repository,
+// never here.
+
+#[derive(Deserialize)]
+struct DraftBody {
+    /// Required on create; ignored on update (a draft does not change mailbox).
+    #[serde(default)]
+    mailbox_id: Option<Uuid>,
+    #[serde(default)]
+    to: Vec<String>,
+    #[serde(default)]
+    cc: Vec<String>,
+    #[serde(default)]
+    bcc: Vec<String>,
+    #[serde(default)]
+    subject: Option<String>,
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    in_reply_to: Option<Uuid>,
+}
+
+#[derive(Deserialize)]
+struct DraftListQuery {
+    #[serde(default)]
+    mailbox_id: Option<Uuid>,
+}
+
+/// `POST /mail/drafts` — create a draft (first meaningful edit).
+async fn create_draft(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Json(body): Json<DraftBody>,
+) -> Result<Json<mail::MailDraft>, ApiError> {
+    let mailbox_id = body.mailbox_id.ok_or_else(|| {
+        ApiError::new(
+            CoreError::Validation("Indique a caixa de correio do rascunho.".to_owned()),
+            &ids,
+        )
+    })?;
+    let draft = mail::save_draft(
+        &state.pool,
+        &principal,
+        &ids,
+        mail::DraftInput {
+            draft_id: None,
+            mailbox_id,
+            to: body.to,
+            cc: body.cc,
+            bcc: body.bcc,
+            subject: body.subject,
+            body: body.body,
+            in_reply_to: body.in_reply_to,
+        },
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(Json(draft))
+}
+
+/// `PUT /mail/drafts/{draft_id}` — autosave an existing draft.
+async fn update_draft(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(draft_id): Path<Uuid>,
+    Json(body): Json<DraftBody>,
+) -> Result<Json<mail::MailDraft>, ApiError> {
+    let draft = mail::save_draft(
+        &state.pool,
+        &principal,
+        &ids,
+        mail::DraftInput {
+            draft_id: Some(draft_id),
+            // A caixa não se reescreve num update; passa-se um valor qualquer que
+            // o serviço ignora neste caminho.
+            mailbox_id: body.mailbox_id.unwrap_or(draft_id),
+            to: body.to,
+            cc: body.cc,
+            bcc: body.bcc,
+            subject: body.subject,
+            body: body.body,
+            in_reply_to: body.in_reply_to,
+        },
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(Json(draft))
+}
+
+/// `GET /mail/drafts/{draft_id}` — load a draft to resume editing.
+async fn get_draft(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(draft_id): Path<Uuid>,
+) -> Result<Json<mail::MailDraft>, ApiError> {
+    let draft = mail::get_draft(&state.pool, &principal, draft_id)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(Json(draft))
+}
+
+/// `GET /mail/drafts` — list the caller's drafts, newest first.
+async fn list_drafts(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Query(query): Query<DraftListQuery>,
+) -> Result<Json<Vec<mail::MailDraftSummary>>, ApiError> {
+    let drafts = mail::list_drafts(&state.pool, &principal, query.mailbox_id)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(Json(drafts))
+}
+
+/// `DELETE /mail/drafts/{draft_id}` — discard a draft.
+async fn discard_draft(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(draft_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    mail::discard_draft(&state.pool, &principal, &ids, draft_id)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(Json(serde_json::json!({ "discarded": true })))
 }
 
 // ── Assistance ──────────────────────────────────────────────────────────

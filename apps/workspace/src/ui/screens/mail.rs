@@ -1070,6 +1070,10 @@ fn human_size(bytes: i64) -> String {
 /// os campos vazios perderia o trabalho de quem escreveu.
 #[derive(Default)]
 pub struct ComposeDraft {
+    /// O rascunho persistido no Core, quando já existe um. É o que o autosave
+    /// actualiza e o que sobrevive a um recarregamento da página. `None` num
+    /// compositor novo até à primeira gravação.
+    pub draft_id: Option<String>,
     /// A caixa a partir da qual se envia.
     pub mailbox_id: String,
     /// Destinatários, separados por vírgula.
@@ -1135,6 +1139,7 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
     };
 
     let mailbox_id = draft.mailbox_id.clone();
+    let draft_id = draft.draft_id.clone();
     let reply_to = draft.reply_to.clone();
     let to = draft.to.clone();
     let cc = draft.cc.clone();
@@ -1148,7 +1153,13 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
     let assinatura = draft.signature_html.clone();
 
     view! {
-        <div class="oc-comp" data-oc="compositor" role="dialog" aria-label=titulo>
+        <div
+            class="oc-comp"
+            data-oc="compositor"
+            data-oc-draft-id=draft_id.clone().unwrap_or_default()
+            role="dialog"
+            aria-label=titulo
+        >
             // A pega é o cabeçalho inteiro: agarrar por uma barra fina é
             // preciso de mais para uma janela que se quer mover à pressa.
             <header class="oc-comp__topo" data-oc="compositor-pega">
@@ -1164,10 +1175,16 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                         <span class="oc-sr">"Expandir o compositor"</span>
                         {icon(Icon::Filter, 14)}
                     </button>
-                    // Fechar é uma ligação, e não um botão de JavaScript:
-                    // fechar sem script tem de funcionar, e voltar ao correio
-                    // é exactamente o que fechar significa.
-                    <a class="oc-icon-btn" href="/mail" title="Fechar">
+                    // Fechar continua a ser uma ligação — fechar sem script tem
+                    // de funcionar, e voltar ao correio é o que fechar significa.
+                    // Com script, é interceptada: se houver alterações por
+                    // guardar, pergunta antes de sair (briefing §2).
+                    <a
+                        class="oc-icon-btn"
+                        href="/mail"
+                        title="Fechar"
+                        data-oc="compositor-fechar"
+                    >
                         <span class="oc-sr">"Fechar o compositor"</span>
                         {icon(Icon::Close, 14)}
                     </a>
@@ -1187,6 +1204,15 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
 
             <form class="oc-comp__forma" method="post" action="/mail/send">
                 <input type="hidden" name="mailbox_id" value=mailbox_id />
+                // O identificador do rascunho persistido, quando já existe. O JS
+                // do autosave lê-o e reescreve-o; viaja no formulário para o
+                // envio saber que rascunho fechar.
+                <input
+                    type="hidden"
+                    name="draft_id"
+                    data-oc="compositor-draft-id"
+                    value=draft_id.clone().unwrap_or_default()
+                />
                 {reply_to.map(|id| view! {
                     <input type="hidden" name="reply_to" value=id />
                 })}
@@ -1265,6 +1291,16 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                 <footer class="oc-comp__barra">
                     {assistencia_na_barra(view)}
                     <div class="oc-comp__enviar">
+                        // Estado do autosave: discreto, ao lado do envio. Só o JS
+                        // o preenche («A guardar…», «Guardado às HH:MM», «Erro ao
+                        // guardar»); sem script fica vazio e o envio funciona na
+                        // mesma (briefing §55).
+                        <span
+                            class="oc-comp__estado"
+                            data-oc="compositor-estado"
+                            role="status"
+                            aria-live="polite"
+                        ></span>
                         <button
                             type="submit"
                             class="oc-btn oc-btn--primary"
@@ -1277,6 +1313,50 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                     </div>
                 </footer>
             </form>
+
+            // O diálogo de fecho com alterações por guardar. Nativo do Ocinye,
+            // nunca `confirm()` do browser (briefing §58). Escondido até ser
+            // preciso; o JS mostra-o, prende-lhe o foco, e trata cada acção.
+            <div
+                class="oc-comp__descartar"
+                data-oc="compositor-descartar"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="oc-descartar-titulo"
+                hidden
+            >
+                <div class="oc-comp__descartar-caixa">
+                    <h3 id="oc-descartar-titulo" class="oc-comp__descartar-titulo">
+                        "Guardar esta mensagem como rascunho?"
+                    </h3>
+                    <p class="oc-comp__descartar-corpo">
+                        "Esta mensagem ainda não foi enviada e contém alterações."
+                    </p>
+                    <div class="oc-comp__descartar-accoes">
+                        <button
+                            type="button"
+                            class="oc-btn oc-btn--primary"
+                            data-oc="descartar-guardar"
+                        >
+                            "Guardar rascunho"
+                        </button>
+                        <button
+                            type="button"
+                            class="oc-btn oc-btn--danger"
+                            data-oc="descartar-descartar"
+                        >
+                            "Descartar"
+                        </button>
+                        <button
+                            type="button"
+                            class="oc-btn"
+                            data-oc="descartar-cancelar"
+                        >
+                            "Cancelar"
+                        </button>
+                    </div>
+                </div>
+            </div>
 
             <span
                 class="oc-comp__puxador"
@@ -2120,6 +2200,89 @@ mod uma_pagina_coerente {
             !servico_em_baixo.contains("Ligar a minha caixa"),
             "ofereceu ligar uma caixa que já está ligada, para um problema que \
              não é dela"
+        );
+    }
+}
+
+#[cfg(test)]
+mod compositor_com_rascunho {
+    use super::*;
+    use serde_json::json;
+
+    const CAIXA: &str = "11111111-1111-4111-8111-111111111111";
+
+    fn vista_com_caixa() -> MailView {
+        MailView {
+            status: json!({
+                "can_read": true,
+                "can_send": true,
+                "transport_configured": true,
+                "mailbox_linked": true,
+                "detail": "",
+            }),
+            sync_notice: None,
+            mailboxes: json!([{
+                "id": CAIXA,
+                "address": "fidel.monteiro@ocinye.com",
+                "kind": "personal",
+                "may_send": true,
+                "unread": [],
+            }]),
+            active_mailbox: None,
+            folder: "inbox".to_owned(),
+            query: String::new(),
+        }
+    }
+
+    fn html(draft: &ComposeDraft) -> String {
+        mail(
+            &super::integridade::viewer(),
+            &vista_com_caixa(),
+            &json!({"items": []}),
+            None,
+            Some(draft),
+        )
+        .to_html()
+    }
+
+    /// O compositor traz o indicador de gravação, o fecho interceptável, e o
+    /// diálogo nativo de descartar — a peça central do fecho seguro (briefing §58).
+    #[test]
+    fn o_compositor_tem_estado_de_gravacao_e_dialogo_de_descartar() {
+        let out = html(&ComposeDraft {
+            mailbox_id: CAIXA.to_owned(),
+            ..Default::default()
+        });
+        assert!(
+            out.contains(r#"data-oc="compositor-estado""#),
+            "falta o indicador de gravação"
+        );
+        assert!(
+            out.contains(r#"data-oc="compositor-fechar""#),
+            "o fechar tem de ser interceptável pelo JS"
+        );
+        assert!(
+            out.contains(r#"data-oc="compositor-descartar""#),
+            "falta o diálogo de descartar"
+        );
+        assert!(out.contains("Guardar rascunho"));
+        assert!(out.contains("Descartar"));
+        assert!(out.contains("Cancelar"));
+    }
+
+    /// Um rascunho já guardado traz o seu identificador ao cliente, para o
+    /// autosave o actualizar em vez de criar outro.
+    #[test]
+    fn um_rascunho_guardado_traz_o_seu_id() {
+        let id = "22222222-2222-4222-8222-222222222222";
+        let out = html(&ComposeDraft {
+            draft_id: Some(id.to_owned()),
+            mailbox_id: CAIXA.to_owned(),
+            ..Default::default()
+        });
+        assert!(
+            out.contains(id),
+            "o id do rascunho não chegou ao campo escondido"
         );
     }
 }

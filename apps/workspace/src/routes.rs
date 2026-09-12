@@ -12,7 +12,7 @@ use axum::extract::{DefaultBodyLimit, Form, Multipart, Path, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::routing::{get, post, put};
-use axum::Router;
+use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::Value;
 use tower_http::services::ServeDir;
@@ -72,6 +72,8 @@ pub const ROUTES: &[&str] = &[
     "/mail/message/{message_id}",
     "/mail/message/{message_id}/flags",
     "/mail/compose",
+    "/mail/drafts",
+    "/mail/drafts/{draft_id}",
     "/mail/people",
     "/mail/assist",
     "/mail/send",
@@ -213,6 +215,11 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/mail/people", get(mail_people))
         .route("/mail/assist", post(assist))
         .route("/mail/send", post(send_mail))
+        .route("/mail/drafts", post(draft_create))
+        .route(
+            "/mail/drafts/{draft_id}",
+            put(draft_update).delete(draft_discard),
+        )
         .route(
             "/mail/settings",
             get(mail_settings).post(save_mail_settings),
@@ -1711,6 +1718,10 @@ struct ComposeQuery {
     mailbox: Option<String>,
     #[serde(default)]
     reply: Option<Uuid>,
+    /// Um rascunho a retomar. Faz o compositor sobreviver a um recarregamento e
+    /// abre um rascunho guardado tal como ficou.
+    #[serde(default)]
+    draft: Option<Uuid>,
 }
 
 /// A caixa por baixo do compositor: as mensagens da caixa activa, para o
@@ -1794,10 +1805,55 @@ async fn compose(
     .await;
 
     let mut draft = ui::screens::mail::ComposeDraft {
-        mailbox_id: query.mailbox.unwrap_or_default(),
+        mailbox_id: query.mailbox.clone().unwrap_or_default(),
         signature_html: assinatura_para_previsualizar(&state, &member).await,
         ..Default::default()
     };
+
+    // Retomar um rascunho guardado — o que torna o compositor à prova de um
+    // recarregamento e o que a lista de Rascunhos abre. Vem inteiro do Core,
+    // resolvido pela sessão; um identificador que não seja do membro dá 404 e
+    // o compositor abre vazio, sem revelar que o rascunho existe.
+    if let Some(draft_id) = query.draft {
+        let path = format!("/api/v1/mail/drafts/{draft_id}");
+        if let Ok(saved) = required(&state, &member, &path).await {
+            let join = |chave: &str| -> String {
+                saved
+                    .get(chave)
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
+                    .unwrap_or_default()
+            };
+            draft.draft_id = Some(draft_id.to_string());
+            draft.mailbox_id = saved
+                .get("mailbox_id")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            draft.to = join("to_addresses");
+            draft.cc = join("cc_addresses");
+            draft.subject = saved
+                .get("subject")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            draft.body = saved
+                .get("body")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            draft.reply_to = saved
+                .get("in_reply_to_id")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+        }
+    }
 
     // Uma resposta traz o destinatário e o assunto já preenchidos, e a citação
     // do que se responde. Nada disto é gerado: é o que a mensagem original diz.
@@ -1851,6 +1907,8 @@ async fn compose(
 #[derive(Deserialize)]
 struct ComposeForm {
     #[serde(default)]
+    draft_id: Option<String>,
+    #[serde(default)]
     mailbox_id: String,
     #[serde(default)]
     to: String,
@@ -1874,6 +1932,7 @@ impl ComposeForm {
     /// O rascunho tal como está, para o devolver intacto ao ecrã.
     fn draft(&self) -> ui::screens::mail::ComposeDraft {
         ui::screens::mail::ComposeDraft {
+            draft_id: self.draft_id.clone(),
             mailbox_id: self.mailbox_id.clone(),
             to: self.to.clone(),
             cc: self.cc.clone(),
@@ -1991,7 +2050,21 @@ async fn send_mail(
     )
     .await
     {
-        Ok(_) => Redirect::to("/mail").into_response(),
+        Ok(_) => {
+            // Enviada: o rascunho que a suportava deixa de fazer sentido. É um
+            // best-effort — se a limpeza falhar, o rascunho fica na pasta, o que
+            // é preferível a falhar um envio que já aconteceu.
+            if let Some(draft_id) = form.draft_id.as_deref().filter(|id| !id.is_empty()) {
+                let _ = api::delete(
+                    &state,
+                    &member.session.access_token,
+                    &member.correlation_id,
+                    &format!("/api/v1/mail/drafts/{draft_id}"),
+                )
+                .await;
+            }
+            Redirect::to("/mail").into_response()
+        }
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         Err(failure) => {
             let view = mail_context(
@@ -2035,6 +2108,127 @@ async fn send_mail(
                 .into_response()
         }
     }
+}
+
+// ── Rascunhos (autosave, fecho seguro) ─────────────────────────────────────
+//
+// Estes endpoints são chamados pelo JS do compositor (mesmo origem) e devolvem
+// JSON, não HTML: um autosave não navega. A autoridade é do Core — aqui só se
+// reencaminha com o token do membro. Sem sessão, respondem 401 em JSON, para o
+// `fetch` distinguir «não guardado» de «guardado».
+
+/// Parte as strings de destinatários em arrays, como o envio faz, e devolve o
+/// corpo pronto para o Core.
+fn corpo_de_rascunho(recebido: &Value) -> Value {
+    let split = |chave: &str| -> Vec<String> {
+        recebido
+            .get(chave)
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .split([',', ';'])
+            .map(str::trim)
+            .filter(|address| !address.is_empty())
+            .map(str::to_owned)
+            .collect()
+    };
+    serde_json::json!({
+        "mailbox_id": recebido.get("mailbox_id").and_then(Value::as_str),
+        "to": split("to"),
+        "cc": split("cc"),
+        "bcc": split("bcc"),
+        "subject": recebido.get("subject").and_then(Value::as_str).unwrap_or(""),
+        "body": recebido.get("body").and_then(Value::as_str).unwrap_or(""),
+        "in_reply_to": recebido.get("in_reply_to").and_then(Value::as_str),
+    })
+}
+
+/// Traduz o resultado de uma chamada ao Core numa resposta JSON para o `fetch`.
+fn resposta_de_rascunho(resultado: std::result::Result<Value, ApiFailure>) -> Response {
+    match resultado {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(ApiFailure::Unauthorised) => (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "sessão expirada" })),
+        )
+            .into_response(),
+        Err(failure) => (
+            StatusCode::BAD_GATEWAY,
+            Json(serde_json::json!({ "error": failure.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// `POST /mail/drafts` — cria um rascunho (primeira alteração com conteúdo).
+async fn draft_create(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "sem sessão" })),
+        )
+            .into_response();
+    };
+    let resultado = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/mail/drafts",
+        &corpo_de_rascunho(&body),
+    )
+    .await;
+    resposta_de_rascunho(resultado)
+}
+
+/// `PUT /mail/drafts/{draft_id}` — autosave de um rascunho existente.
+async fn draft_update(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(draft_id): Path<String>,
+    Json(body): Json<Value>,
+) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "sem sessão" })),
+        )
+            .into_response();
+    };
+    let resultado = api::put(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/mail/drafts/{draft_id}"),
+        &corpo_de_rascunho(&body),
+    )
+    .await;
+    resposta_de_rascunho(resultado)
+}
+
+/// `DELETE /mail/drafts/{draft_id}` — descarta um rascunho.
+async fn draft_discard(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(draft_id): Path<String>,
+) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "sem sessão" })),
+        )
+            .into_response();
+    };
+    let resultado = api::delete(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/mail/drafts/{draft_id}"),
+    )
+    .await;
+    resposta_de_rascunho(resultado)
 }
 
 async fn mail_settings(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
