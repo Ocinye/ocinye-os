@@ -2530,12 +2530,30 @@ div.oc-result { cursor: default; }
   font: 500 13px var(--oc-font-sans);
   color: var(--oc-text-secondary);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .oc-comp__ferramenta:hover { background: var(--oc-surface-muted); color: var(--oc-navy); }
 .oc-ff__b { font-weight: 700; }
 .oc-ff__i { font-style: italic; }
 .oc-ff__u { text-decoration: underline; }
 .oc-ff__s { text-decoration: line-through; }
+
+/* Um separador fino entre a formatação e o anexar. */
+.oc-comp__ferramenta-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 6px;
+  background: var(--oc-border);
+}
+/* Anexar como acção da barra: ícone + texto, ao lado das ferramentas. */
+.oc-comp__anexar {
+  min-width: auto;
+  gap: 5px;
+  padding: 0 9px;
+}
+.oc-comp__anexar-txt { font: 500 12px var(--oc-font-sans); }
 
 /* O editor de corpo rico: parece um documento, não uma caixa com bordas. */
 .oc-comp__editor {
@@ -2563,16 +2581,8 @@ div.oc-result { cursor: default; }
 }
 .oc-comp__editor a { color: var(--oc-navy); }
 
-/* Anexos: uma lista de fichas e um botão discreto de anexar. */
-.oc-comp__anexos {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-top: 1px solid var(--oc-border);
-  flex-shrink: 0;
-}
+/* Anexos: as fichas aparecem logo abaixo da barra. A lista só ocupa espaço
+   (padding e divisor) quando tem fichas — vazia, é invisível. */
 .oc-comp__anexos-lista {
   display: flex;
   flex-wrap: wrap;
@@ -2580,6 +2590,11 @@ div.oc-result { cursor: default; }
   margin: 0;
   padding: 0;
   list-style: none;
+  flex-shrink: 0;
+}
+.oc-comp__anexos-lista:not(:empty) {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--oc-border);
 }
 .oc-comp__anexo {
   display: inline-flex;
@@ -2605,17 +2620,6 @@ div.oc-result { cursor: default; }
   line-height: 1;
 }
 .oc-comp__anexo-tirar:hover { color: var(--oc-error); }
-.oc-comp__anexar {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 8px;
-  border-radius: var(--oc-r-sm);
-  font: 500 12px var(--oc-font-sans);
-  color: var(--oc-text-secondary);
-  cursor: pointer;
-}
-.oc-comp__anexar:hover { background: var(--oc-surface-muted); color: var(--oc-navy); }
 /* Enquanto se arrasta um ficheiro sobre o compositor. */
 .oc-comp[data-oc-arrastar="true"] { outline: 2px dashed var(--oc-navy); outline-offset: -4px; }
 

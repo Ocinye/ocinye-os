@@ -7,6 +7,20 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Correio — anexar na barra, anexos à vista, e não se perdem — 2026-09-13
+
+Anexar um ficheiro num compositor ainda vazio não criava rascunho nenhum, e o
+ficheiro era largado em silêncio — nada aparecia. E o «Anexar» vivia numa fila
+solta lá em baixo, longe do fluxo de composição.
+
+- **Corrigida a raiz:** anexar força a criação do rascunho (um anexo é conteúdo,
+  mesmo sem texto), por isso o upload acontece sempre e a ficha aparece.
+- **«Anexar» sobe para a barra**, ao lado da formatação — faz parte das
+  ferramentas de composição, não de uma fila à parte.
+- **Os anexos aparecem logo abaixo da barra**, à vista assim que se juntam; cada
+  um com nome, tamanho e × para retirar. A lista só ocupa espaço quando tem
+  fichas. Bloquear o envio enquanto um upload não termina mantém-se.
+
 ### Notas — a área de escrita passa a folha branca — 2026-09-12
 
 O editor de Notas fundia-se com o fundo da página e parecia plano. Passa a ser
