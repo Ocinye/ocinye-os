@@ -7,6 +7,21 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Notas — a área de escrita passa a folha branca — 2026-09-12
+
+O editor de Notas fundia-se com o fundo da página e parecia plano. Passa a ser
+uma **folha branca** distinta, com o mesmo princípio do corpo do compositor de
+correio: a página fica no fundo neutro, e a zona de escrita é uma superfície
+clara e delimitada — «é aqui que se escreve».
+
+- O editor (`.oc-notes-editor`: título, metadados, barra e área editável) assenta
+  numa superfície `--oc-surface` com contorno `--oc-border`, canto `--oc-r-lg` e
+  a sombra suave de cartão (`--oc-shadow-card`), com margem interna confortável.
+- A barra de formatação fixa passa a ter o fundo da folha (branco), para o texto
+  não transparecer por baixo ao rolar uma nota longa.
+- Só tokens do sistema; sem redesenho, sem perda de altura útil de escrita, e o
+  convite «Comece a escrever…» continua legível sobre o branco.
+
 ### Correio — corrigido o estado lido/não lida ao abrir — 2026-09-12
 
 Abrir uma mensagem não a marcava como lida: depois de «Marcar como não lida», ela
