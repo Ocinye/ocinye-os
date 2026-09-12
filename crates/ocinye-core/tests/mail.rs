@@ -579,6 +579,47 @@ async fn sending_leaves_an_audit_trail_without_the_message_in_it() {
     assert_eq!(leaked, 0, "o conteúdo da mensagem entrou na auditoria");
 }
 
+/// Header injection is refused at the door: a line break in the subject or a
+/// recipient stops the send, and the provider never sees it (briefing §9, §48).
+#[tokio::test]
+async fn a_line_break_in_a_header_is_refused_before_the_provider() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+
+    let member = person(&pool, org, &["research_member"]).await;
+    let mailbox_id = personal_mailbox(&pool, org, member.person_id).await;
+    let mailbox = mail::mailbox(&pool, &member, mailbox_id)
+        .await
+        .expect("mailbox");
+
+    let provider = std::sync::Arc::new(RecordingProvider::default());
+    let registo = registo_de(&provider);
+    let ids = CorrelationIds::generate();
+
+    // A subject carrying CRLF and a smuggled Bcc header.
+    let mut message = outgoing(&mailbox.address, "colega@ocinye.com");
+    message.subject = "Olá\r\nBcc: vitima@exemplo.com".to_owned();
+
+    let refused = mail::send(
+        &pool,
+        &registo,
+        &member,
+        mailbox_id,
+        message,
+        &[address("colega@ocinye.com")],
+        &[],
+        false,
+        &ids,
+    )
+    .await;
+
+    assert!(
+        matches!(refused, Err(ocinye_core::CoreError::Validation(_))),
+        "um assunto com quebra de linha foi aceite: {refused:?}"
+    );
+    assert_eq!(provider.sends(), 0, "a mensagem chegou ao fornecedor");
+}
+
 /// A assinatura institucional entra no caminho de envio: com os dados reais do
 /// membro, o logótipo embutido por `cid:`, e as duas projecções — e desliga-se
 /// por inteiro quando o membro a recusa (ADR-0414).

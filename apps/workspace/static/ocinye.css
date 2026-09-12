@@ -2400,6 +2400,7 @@ div.oc-result { cursor: default; }
   border-radius: var(--oc-r-xs);
 }
 .oc-comp__cc:hover { background: var(--oc-surface-muted); color: var(--oc-navy); }
+.oc-comp__ccbcc { flex-shrink: 0; display: inline-flex; gap: 2px; }
 
 /* ── As fichas ──────────────────────────────────────────────────────────
 

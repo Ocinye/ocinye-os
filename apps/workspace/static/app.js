@@ -1085,16 +1085,24 @@
 
     /* ── Cc ───────────────────────────────────────────────────────────── */
 
-    const mostrarCc = janela.querySelector('[data-oc="mostrar-cc"]');
-    const linhaCc = janela.querySelector('[data-oc="linha-cc"]');
-    if (mostrarCc && linhaCc) {
-      mostrarCc.addEventListener('click', () => {
-        linhaCc.removeAttribute('hidden');
-        mostrarCc.setAttribute('hidden', '');
-        const entrada = linhaCc.querySelector('[data-oc="destino-entrada"]');
+    /* Abrir Cc ou Bcc só revela a linha; nunca mexe em destinatários. */
+    function abrirLinha(botao, linha) {
+      if (!botao || !linha) return;
+      botao.addEventListener('click', () => {
+        linha.removeAttribute('hidden');
+        botao.setAttribute('hidden', '');
+        const entrada = linha.querySelector('[data-oc="destino-entrada"]');
         if (entrada) entrada.focus();
       });
     }
+    abrirLinha(
+      janela.querySelector('[data-oc="mostrar-cc"]'),
+      janela.querySelector('[data-oc="linha-cc"]'),
+    );
+    abrirLinha(
+      janela.querySelector('[data-oc="mostrar-bcc"]'),
+      janela.querySelector('[data-oc="linha-bcc"]'),
+    );
 
     /* ── Fichas e sugestões ───────────────────────────────────────────── */
 

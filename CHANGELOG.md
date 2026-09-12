@@ -7,6 +7,17 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Correio — To/Cc/Bcc e recusa de injecção de cabeçalho (fatia B) — 2026-09-12
+
+- **Bcc no compositor.** Cc e Bcc são botões discretos ao lado do «Para»; abrir
+  um revela a linha (com fichas, autocomplete e teclado, como o «Para») e não
+  mexe em destinatários. O Bcc é privado — persistido no rascunho, enviado, e
+  **nunca** exposto nos cabeçalhos nem aos outros destinatários (ADR-0403).
+- **Recusa de injecção de cabeçalho, de primeira classe.** O envio recusa uma
+  quebra de linha (`\r`/`\n`) ou carácter de controlo no assunto, em qualquer
+  endereço, ou num nome a mostrar — antes de chegar ao fornecedor, sem depender
+  do `lettre` para o fazer (briefing §9, §48; provado por teste).
+
 ### Correio — ciclo de rascunho e fecho seguro do compositor (fatia A) — 2026-09-12
 
 O compositor deixa de perder o que se escreve. Primeira fatia do milestone do
