@@ -29,5 +29,6 @@ pub mod messaging;
 pub mod organisation;
 pub mod platform;
 pub mod research;
+pub mod resource;
 pub mod science;
 pub mod search;

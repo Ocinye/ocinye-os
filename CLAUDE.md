@@ -89,7 +89,7 @@ sem que nada falhe.
   `Fidel Admin` enrolou o segundo factor pelo browser (TOTP confirmado, dez
   códigos de recuperação vivos), e a única sessão privilegiada viva é
   MFA-assegurada. `MFA` continua **não exigido** a identidades não privilegiadas.
-- **Autorização por permissões nomeadas: `IMPLEMENTED`.** 72 permissões, quatro
+- **Autorização por permissões nomeadas: `IMPLEMENTED`.** 76 permissões, quatro
   âmbitos, grants explícitos atribuíveis e revogáveis, e acesso explicável
   ([ADR-0101](docs/adrs/0101-permissions-scopes-and-grants.md)). Nenhuma operação
   de administração pode deixar a instituição sem um administrador da plataforma
@@ -119,7 +119,19 @@ sem que nada falhe.
   o `text/plain` fica canónico e completo. Nada do HTML é escrito pelo membro —
   é uma projecção de saída, fronteira de confiança distinta da entrada
   ([ADR-0414](docs/adrs/0414-mail-html-projection-and-signature.md)).
-- **39 migrations**, aplicáveis de base vazia; 76 tabelas.
+- **Governança de recursos: `IMPLEMENTED` (fundação), sem enforcement.** O
+  domínio distingue **capacidade, entitlement, reserva e uso** e trata acesso e
+  entitlement como sistemas separados — uma alocação não concede acesso, uma
+  posição não concede capacidade ([ADR-0108](docs/adrs/0108-resource-governance-and-compute-control-plane.md)).
+  Existe o vocabulário tipado (`ResourceType`/`ResourceUnit`/`ResourceScopeType`),
+  o esquema de perfis, regras, alocações e o ledger de uso append-only (migração
+  0040), e a resolução do entitlement efectivo de um âmbito — perfil por omissão
+  (`MEMBER_STANDARD`, storage 10 GiB configurável) mais overrides e concessões
+  temporárias que expiram, com explicação. **Nada é imposto ainda**: o
+  enforcement de storage, a admissão, a capacidade, os pedidos e a experiência
+  chegam nas fatias seguintes. `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão
+  distinto de `OCINYE_AI_READY`, e **não** torna a IA disponível.
+- **40 migrations**, aplicáveis de base vazia; 80 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -248,8 +260,8 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **62 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
-  **65 READMEs**, `docs/` povoado — incluindo
+- **63 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
+  **66 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -268,14 +280,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1522 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1529 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **550 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **555 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

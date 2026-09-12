@@ -34,6 +34,7 @@ pub mod page;
 pub mod provenance;
 pub mod readiness;
 pub mod research;
+pub mod resource;
 pub mod roles;
 pub mod storage;
 pub mod system_capability;
@@ -53,6 +54,10 @@ pub use mail::{
 };
 pub use page::{Page, PageRequest};
 pub use research::{IdeaState, ProjectState, TaskState, WorkspaceKind};
+pub use resource::{
+    AllocationSource, ProfileStatus, ResourceScopeType, ResourceType, ResourceUnit,
+    SchedulingPriority, StorageState,
+};
 pub use roles::{InstitutionalPosition, NoteShareRole, TechnicalRole, UnitRole, WorkspaceRole};
 pub use storage::{MigrationState, Residency};
 pub use system_capability::{

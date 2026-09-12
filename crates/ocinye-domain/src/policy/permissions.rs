@@ -103,6 +103,12 @@ pub const fn role_permissions(role: TechnicalRole) -> &'static [Permission] {
             P::ComputeManageNodes,
             P::ComputeManageJobs,
             P::ComputeAdmin,
+            // Governa a capacidade institucional. Não é acesso: alocar não abre
+            // dados, e administrar a plataforma não é capacidade ilimitada.
+            P::ResourcesView,
+            P::ResourcesAllocate,
+            P::ResourcesProfilesManage,
+            P::ResourcesRequestsReview,
             // Administra o **serviço** de correio: configuração, diagnóstico,
             // caixas partilhadas. Não é uma chave para correspondência alheia,
             // e não pode ser: a pertença à caixa é decidida em SQL, contra o
@@ -137,6 +143,11 @@ pub const fn role_permissions(role: TechnicalRole) -> &'static [Permission] {
             P::ProjectsView,
             P::AgentsView,
             P::ComputeView,
+            // Aloca recursos aos membros e revê pedidos; não define os perfis,
+            // que são política de plataforma.
+            P::ResourcesView,
+            P::ResourcesAllocate,
+            P::ResourcesRequestsReview,
             P::MessagingUse,
             P::MailUse,
             P::CalendarView,

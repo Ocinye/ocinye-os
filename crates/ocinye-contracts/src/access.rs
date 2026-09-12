@@ -399,6 +399,21 @@ pub enum Permission {
     /// Administer the compute plane.
     ComputeAdmin,
 
+    // ── Governança de recursos ──────────────────────────────────────────
+    /// See resource profiles, allocations and usage across the institution.
+    ///
+    /// Distinct from consuming a resource, and from access to the underlying
+    /// data: seeing that a member holds a storage quota is not seeing their
+    /// files. A member always sees their own resources without this.
+    ResourcesView,
+    /// Allocate resources: assign profiles, set overrides, grant temporary
+    /// allocations. Grants no access to any data those resources hold.
+    ResourcesAllocate,
+    /// Create and edit allocation profiles.
+    ResourcesProfilesManage,
+    /// Review, approve, adjust and reject members' resource requests.
+    ResourcesRequestsReview,
+
     // ── Mensagens ───────────────────────────────────────────────────────
     /// Abrir as Mensagens, ler as suas conversas e escrever nelas.
     ///
@@ -523,6 +538,11 @@ impl Permission {
             Self::ComputeManageNodes => "compute.manage_nodes",
             Self::ComputeAdmin => "compute.admin",
 
+            Self::ResourcesView => "resources.view",
+            Self::ResourcesAllocate => "resources.allocate",
+            Self::ResourcesProfilesManage => "resources.profiles.manage",
+            Self::ResourcesRequestsReview => "resources.requests.review",
+
             Self::MessagingUse => "messaging.use",
             Self::MessagingAiUse => "messaging.ai_use",
             Self::MailUse => "mail.use",
@@ -553,7 +573,7 @@ impl Permission {
 
     /// Every permission in the catalogue.
     #[must_use]
-    pub const fn all() -> [Self; 72] {
+    pub const fn all() -> [Self; 76] {
         [
             Self::OrganisationView,
             Self::OrganisationManage,
@@ -612,6 +632,10 @@ impl Permission {
             Self::ComputeManageJobs,
             Self::ComputeManageNodes,
             Self::ComputeAdmin,
+            Self::ResourcesView,
+            Self::ResourcesAllocate,
+            Self::ResourcesProfilesManage,
+            Self::ResourcesRequestsReview,
             Self::MessagingUse,
             Self::MessagingAiUse,
             Self::MailUse,

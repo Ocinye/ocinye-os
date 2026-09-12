@@ -7,6 +7,29 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Governança de recursos — fundação do domínio (M4, fatia A) — 2026-09-12
+
+O Ocinye OS passa a ter a fundação do **control-plane de recursos institucionais**
+— saber *quanto* de capacidade cada âmbito pode consumir, um eixo separado de
+*o que* pode aceder ([ADR-0108](docs/adrs/0108-resource-governance-and-compute-control-plane.md)).
+
+- **Quatro conceitos distintos:** capacidade, entitlement, reserva e uso — nunca
+  um contador mutável. Acesso e entitlement são sistemas separados: uma alocação
+  não abre dados, uma posição institucional não concede capacidade.
+- **Vocabulário tipado** (`ResourceType`, `ResourceUnit`, `ResourceScopeType`):
+  um número sem unidade é um defeito; o âmbito é um par `(tipo, id)` para admitir
+  um âmbito novo sem reescrever o esquema.
+- **Esquema (migração 0040):** perfis de alocação configuráveis, regras tipadas,
+  alocações (perfil/override/temporária) e o **ledger de uso append-only** (a BD
+  recusa alterá-lo, como a auditoria). Perfil por omissão `MEMBER_STANDARD` com
+  storage de 10 GiB — conservador e editável, não congelado em código.
+- **Resolução de entitlement efectivo** de um âmbito, com explicação (§54):
+  override substitui a base do perfil; temporárias somam e expiram.
+- **Permissões novas** (`resources.view/allocate/profiles.manage/requests.review`),
+  concedidas a quem administra e a mais ninguém.
+- **Sem enforcement ainda** — storage, admissão, capacidade, pedidos e a
+  experiência chegam nas fatias seguintes. Estado de IA inalterado.
+
 ### CI/Infra — MinIO a partir de quay.io — 2026-09-12
 
 A CI (e o Compose de desenvolvimento e de produção) puxavam as imagens do MinIO

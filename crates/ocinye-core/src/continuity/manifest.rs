@@ -227,6 +227,16 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     ),
     ("ai_jobs", Comparacao::Identidades),
     ("action_plans", Comparacao::Identidades),
+    // ── Governança de recursos ──────────────────────────────────────────
+    //
+    // Estado institucional: os perfis, as suas regras e as alocações são o que
+    // decide quanto cada âmbito pode consumir, e viajam com a instituição. O
+    // ledger de uso é evidência, e viaja também — uma instituição restaurada
+    // sem o seu histórico de consumo perdeu memória (ADR-0108, ADR-0700).
+    ("resource_profiles", Comparacao::Identidades),
+    ("resource_profile_rules", Comparacao::Identidades),
+    ("resource_allocations", Comparacao::Identidades),
+    ("resource_usage_events", Comparacao::Identidades),
     // ── Comparadas por outro mecanismo ──────────────────────────────────
     (
         "research_links",
