@@ -259,7 +259,10 @@ mod tests {
         assert!(html.contains("5.0 GiB"), "uso legível");
         assert!(html.contains("10.0 GiB"), "limite legível");
         // 50% de uso.
-        assert!(html.contains(r#"aria-valuenow="50""#), "a barra reflecte o uso");
+        assert!(
+            html.contains(r#"aria-valuenow="50""#),
+            "a barra reflecte o uso"
+        );
     }
 
     #[test]
@@ -281,7 +284,10 @@ mod tests {
             "storage_entitlement": {"parts": []}
         });
         let html = resources(&over).to_html();
-        assert!(html.contains("Acima da quota"), "o estado é dito em voz alta");
+        assert!(
+            html.contains("Acima da quota"),
+            "o estado é dito em voz alta"
+        );
         // A barra satura em 100%, não estoura.
         assert!(html.contains(r#"aria-valuenow="100""#));
     }
@@ -294,6 +300,9 @@ mod tests {
         });
         let html = resources(&none).to_html();
         assert!(html.contains("sem limite"), "diz que não há limite");
-        assert!(!html.contains("progressbar"), "não desenha uma barra sem limite");
+        assert!(
+            !html.contains("progressbar"),
+            "não desenha uma barra sem limite"
+        );
     }
 }

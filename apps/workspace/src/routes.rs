@@ -1438,7 +1438,13 @@ async fn meus_recursos(State(state): State<WorkspaceState>, headers: HeaderMap) 
     let me = optional(&state, &member, "/api/v1/resources/me").await;
 
     let content = ui::screens::resources::resources(&me);
-    shell_page("Meus Recursos", &viewer, Screen::Resources, Vec::new(), content)
+    shell_page(
+        "Meus Recursos",
+        &viewer,
+        Screen::Resources,
+        Vec::new(),
+        content,
+    )
 }
 
 // ── Correio ──────────────────────────────────────────────────────────────
