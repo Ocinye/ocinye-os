@@ -617,12 +617,39 @@ pub struct MailDraft {
     pub sender_address: String,
     /// Recipients.
     pub to_addresses: Vec<String>,
+    /// Cc recipients.
+    pub cc_addresses: Vec<String>,
+    /// Bcc recipients. Private: never surfaced to other recipients (ADR-0403).
+    pub bcc_addresses: Vec<String>,
     /// Subject.
     pub subject: Option<String>,
     /// Body.
     pub body: String,
+    /// The message this draft replies to, when it is a reply.
+    pub in_reply_to_id: Option<Uuid>,
     /// How it came to be written.
     pub origin: DraftOrigin,
+    /// When it was last written. Serves as `last_saved_at` for the composer.
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// A draft as it appears in the Drafts list — enough to recognise and resume it.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MailDraftSummary {
+    /// Identifier.
+    pub id: Uuid,
+    /// The mailbox it belongs to.
+    pub mailbox_id: Uuid,
+    /// Recipients, for a preview line.
+    pub to_addresses: Vec<String>,
+    /// Subject, when set.
+    pub subject: Option<String>,
+    /// A short preview of the body.
+    pub snippet: String,
+    /// When it was last written.
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    /// Whether it carries attachments.
+    pub has_attachments: bool,
 }
 
 /// Write a draft.
@@ -687,7 +714,8 @@ pub async fn accessible_draft<'e>(
     draft_id: Uuid,
 ) -> CoreResult<Option<MailDraft>> {
     let row = sqlx::query(
-        "SELECT d.id, d.mailbox_id, d.sender_address, d.to_addresses, d.subject, d.body, d.origin
+        "SELECT d.id, d.mailbox_id, d.sender_address, d.to_addresses, d.cc_addresses,
+                d.bcc_addresses, d.subject, d.body, d.in_reply_to_id, d.origin, d.updated_at
            FROM mail_drafts d
            JOIN mailboxes b ON b.id = d.mailbox_id
            LEFT JOIN shared_mailbox_memberships s
@@ -713,10 +741,204 @@ pub async fn accessible_draft<'e>(
         mailbox_id: row.try_get("mailbox_id")?,
         sender_address: row.try_get("sender_address")?,
         to_addresses: row.try_get("to_addresses")?,
+        cc_addresses: row.try_get("cc_addresses")?,
+        bcc_addresses: row.try_get("bcc_addresses")?,
         subject: row.try_get("subject")?,
         body: row.try_get("body")?,
+        in_reply_to_id: row.try_get("in_reply_to_id")?,
         origin: DraftOrigin::parse(&origin),
+        updated_at: row.try_get("updated_at")?,
     }))
+}
+
+/// Insert a new composer draft, returning its id.
+///
+/// The sender address comes from the mailbox row, never from the caller: a draft
+/// that could name its own sender would be a way to send as someone else once it
+/// reaches the send path. Ownership is enforced in the `SELECT … FROM mailboxes`
+/// — a mailbox the caller cannot reach yields no row and a `NotFound`. The origin
+/// is `manual`: this is a person composing, not the agentic plane.
+///
+/// # Errors
+///
+/// [`crate::error::CoreError::NotFound`] when the mailbox is not one the caller
+/// may send from; other errors when the statement fails.
+#[allow(clippy::too_many_arguments)]
+pub async fn insert_composer_draft<'e>(
+    executor: impl PgExecutor<'e>,
+    mailbox_id: Uuid,
+    author_id: Uuid,
+    to: &[String],
+    cc: &[String],
+    bcc: &[String],
+    subject: Option<&str>,
+    body: &str,
+    in_reply_to: Option<Uuid>,
+) -> CoreResult<Uuid> {
+    let id: Uuid = sqlx::query_scalar(
+        "INSERT INTO mail_drafts
+             (mailbox_id, author_id, sender_address, to_addresses, cc_addresses,
+              bcc_addresses, subject, body, in_reply_to_id, origin)
+         SELECT b.id, $2, b.address, $3, $4, $5, $6, $7, $8, 'manual'
+           FROM mailboxes b
+           LEFT JOIN shared_mailbox_memberships s
+                  ON s.mailbox_id = b.id AND s.person_id = $2 AND s.revoked_at IS NULL
+          WHERE b.id = $1
+            AND (
+                (b.kind = 'personal' AND b.owner_id = $2)
+                OR (b.kind = 'shared' AND s.id IS NOT NULL)
+            )
+         RETURNING id",
+    )
+    .bind(mailbox_id)
+    .bind(author_id)
+    .bind(to)
+    .bind(cc)
+    .bind(bcc)
+    .bind(subject)
+    .bind(body)
+    .bind(in_reply_to)
+    .fetch_optional(executor)
+    .await?
+    .ok_or_else(|| {
+        crate::error::CoreError::NotFound("Caixa de correio não encontrada.".to_owned())
+    })?;
+
+    Ok(id)
+}
+
+/// Update an existing composer draft in place, returning whether it existed.
+///
+/// The `WHERE` clause re-checks ownership, so an autosave against another
+/// member's draft touches nothing and returns `false`. The mailbox and sender
+/// are not rewritten here — a draft does not change which identity it sends from
+/// mid-edit. `updated_at` is refreshed so the composer can show "saved at".
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+#[allow(clippy::too_many_arguments)]
+pub async fn update_composer_draft<'e>(
+    executor: impl PgExecutor<'e>,
+    person_id: Uuid,
+    draft_id: Uuid,
+    to: &[String],
+    cc: &[String],
+    bcc: &[String],
+    subject: Option<&str>,
+    body: &str,
+) -> CoreResult<bool> {
+    let updated = sqlx::query(
+        "UPDATE mail_drafts d
+            SET to_addresses = $3, cc_addresses = $4, bcc_addresses = $5,
+                subject = $6, body = $7, updated_at = now()
+           FROM mailboxes b
+           LEFT JOIN shared_mailbox_memberships s
+                  ON s.mailbox_id = b.id AND s.person_id = $1 AND s.revoked_at IS NULL
+          WHERE d.id = $2
+            AND b.id = d.mailbox_id
+            AND (
+                (b.kind = 'personal' AND b.owner_id = $1)
+                OR (b.kind = 'shared' AND s.id IS NOT NULL)
+            )",
+    )
+    .bind(person_id)
+    .bind(draft_id)
+    .bind(to)
+    .bind(cc)
+    .bind(bcc)
+    .bind(subject)
+    .bind(body)
+    .execute(executor)
+    .await?;
+
+    Ok(updated.rows_affected() > 0)
+}
+
+/// Delete a draft the caller owns, returning whether one was removed.
+///
+/// Ownership is in the `WHERE`; a draft the caller cannot reach is not deleted
+/// and the caller cannot tell it apart from one that never existed. Attachment
+/// rows cascade with the draft (schema); the storage objects they referenced are
+/// cleaned up separately.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+pub async fn delete_draft<'e>(
+    executor: impl PgExecutor<'e>,
+    person_id: Uuid,
+    draft_id: Uuid,
+) -> CoreResult<bool> {
+    let deleted = sqlx::query(
+        "DELETE FROM mail_drafts d
+          USING mailboxes b
+          LEFT JOIN shared_mailbox_memberships s
+                 ON s.mailbox_id = b.id AND s.person_id = $1 AND s.revoked_at IS NULL
+          WHERE d.id = $2
+            AND b.id = d.mailbox_id
+            AND (
+                (b.kind = 'personal' AND b.owner_id = $1)
+                OR (b.kind = 'shared' AND s.id IS NOT NULL)
+            )",
+    )
+    .bind(person_id)
+    .bind(draft_id)
+    .execute(executor)
+    .await?;
+
+    Ok(deleted.rows_affected() > 0)
+}
+
+/// Every draft the caller may reach, newest first, optionally one mailbox only.
+///
+/// The ownership filter is the same as everywhere in this module. The snippet is
+/// the first line of the body, trimmed — enough to recognise a draft without
+/// reading it whole.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn list_composer_drafts<'e>(
+    executor: impl PgExecutor<'e>,
+    person_id: Uuid,
+    mailbox_id: Option<Uuid>,
+) -> CoreResult<Vec<MailDraftSummary>> {
+    let rows = sqlx::query(
+        "SELECT d.id, d.mailbox_id, d.to_addresses, d.subject,
+                left(d.body, 240) AS snippet, d.updated_at,
+                EXISTS (SELECT 1 FROM mail_draft_attachments a WHERE a.draft_id = d.id)
+                    AS has_attachments
+           FROM mail_drafts d
+           JOIN mailboxes b ON b.id = d.mailbox_id
+           LEFT JOIN shared_mailbox_memberships s
+                  ON s.mailbox_id = b.id AND s.person_id = $1 AND s.revoked_at IS NULL
+          WHERE ($2::uuid IS NULL OR d.mailbox_id = $2)
+            AND (
+                (b.kind = 'personal' AND b.owner_id = $1)
+                OR (b.kind = 'shared' AND s.id IS NOT NULL)
+            )
+          ORDER BY d.updated_at DESC",
+    )
+    .bind(person_id)
+    .bind(mailbox_id)
+    .fetch_all(executor)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            let snippet: String = row.try_get("snippet")?;
+            Ok(MailDraftSummary {
+                id: row.try_get("id")?,
+                mailbox_id: row.try_get("mailbox_id")?,
+                to_addresses: row.try_get("to_addresses")?,
+                subject: row.try_get("subject")?,
+                snippet: snippet.trim().to_owned(),
+                updated_at: row.try_get("updated_at")?,
+                has_attachments: row.try_get("has_attachments")?,
+            })
+        })
+        .collect()
 }
 
 /// What a member has chosen about how their mail behaves.

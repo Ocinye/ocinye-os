@@ -2573,8 +2573,54 @@ div.oc-result { cursor: default; }
 .oc-comp__ia-nota { font: 400 11px var(--oc-font-sans); color: var(--oc-text-meta); }
 .oc-comp__ia-link { font: 400 11px var(--oc-font-sans); color: var(--oc-navy); }
 
-.oc-comp__enviar { flex-shrink: 0; }
+.oc-comp__enviar { flex-shrink: 0; display: inline-flex; align-items: center; gap: 10px; }
 .oc-comp__enviar .oc-btn { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Estado do autosave: discreto, ao lado do envio. */
+.oc-comp__estado {
+  font: 400 11px var(--oc-font-sans);
+  color: var(--oc-text-meta);
+  white-space: nowrap;
+}
+
+/* O diálogo de fecho com alterações por guardar. Cobre só o compositor, e não
+   a página inteira: é uma decisão sobre esta janela. */
+.oc-comp__descartar {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--oc-navy) 32%, transparent);
+  border-radius: inherit;
+}
+.oc-comp__descartar-caixa {
+  background: var(--oc-surface);
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-md);
+  box-shadow: var(--oc-shadow-overlay);
+  padding: 18px 18px 14px;
+  max-width: 340px;
+  width: 100%;
+}
+.oc-comp__descartar-titulo {
+  font: 600 14.5px var(--oc-font-sans);
+  color: var(--oc-text-body);
+  margin: 0 0 6px;
+}
+.oc-comp__descartar-corpo {
+  font: 400 12.5px var(--oc-font-sans);
+  color: var(--oc-text-secondary);
+  margin: 0 0 14px;
+}
+.oc-comp__descartar-accoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
 
 /* O puxador do canto. Uma área de agarrar, não uma decoração. */
 .oc-comp__puxador {

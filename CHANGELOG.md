@@ -7,6 +7,28 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Correio — ciclo de rascunho e fecho seguro do compositor (fatia A) — 2026-09-12
+
+O compositor deixa de perder o que se escreve. Primeira fatia do milestone do
+compositor de produção (ADR-0407 — o rascunho pertence ao Ocinye até ser enviado).
+
+- **Rascunho no servidor.** `POST/PUT/GET/DELETE /api/v1/mail/drafts` — cria na
+  primeira alteração com conteúdo, actualiza depois, lista, retoma e descarta. A
+  posse é validada em SQL (um rascunho é privado ao seu autor; IDOR provado por
+  reversão). O remetente vem sempre da caixa, nunca do cliente.
+- **Autosave com atraso** (não a cada tecla) com indicador discreto: «A
+  guardar…», «Guardado às HH:MM», «Erro ao guardar rascunho». Um endereço a meio
+  de escrever é um estado normal de rascunho — o autosave não o recusa; a
+  validação é do envio.
+- **Sobrevive a um recarregamento**: `/mail/compose?draft=<id>` reabre o rascunho
+  tal como ficou. Um `beforeunload` só avisa quando há alterações por guardar.
+- **Fecho seguro** (briefing §2, §58): fechar com alterações por guardar abre um
+  diálogo nativo do Ocinye — «Guardar rascunho / Descartar / Cancelar» — nunca o
+  `confirm()` do browser; foco presilhado, Escape cancela. Um compositor vazio
+  fecha em silêncio; um já guardado e igual também. Enviar limpa o rascunho.
+- Novos códigos de auditoria `mail_draft_created` / `mail_draft_discarded`; o
+  autosave **não** gera ruído de auditoria (só a criação e o descarte).
+
 ### Governança de recursos — «Meus Recursos» (M4, fatia E) — 2026-09-12
 
 A quota imposta na fatia C passa a ser **visível ao membro que vive sob ela**

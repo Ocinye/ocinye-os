@@ -127,6 +127,10 @@ pub mod action {
     pub const SECURITY_DENIAL: &str = "security_denial";
     /// A compute node was enrolled.
     pub const NODE_ENROLLMENT: &str = "node_enrollment";
+    /// A mail draft was created by a member composing.
+    pub const MAIL_DRAFT_CREATED: &str = "mail_draft_created";
+    /// A mail draft was discarded — deliberately thrown away, not sent.
+    pub const MAIL_DRAFT_DISCARDED: &str = "mail_draft_discarded";
 
     // ── Agentic Control Plane ───────────────────────────────────────────
     //

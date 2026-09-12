@@ -1266,6 +1266,221 @@
         enviar.textContent = 'A enviar…';
       });
     }
+
+    /* ── Autosave e rascunho ──────────────────────────────────────────────
+
+       O rascunho vive no Core, não no browser. Cria-se na primeira alteração
+       com conteúdo (POST), actualiza-se depois (PUT), com atraso — nunca a
+       cada tecla. Sobrevive a um recarregamento porque `/mail/compose?draft=`
+       o volta a abrir tal como ficou. */
+
+    const draftIdInput = janela.querySelector('[data-oc="compositor-draft-id"]');
+    const estado = janela.querySelector('[data-oc="compositor-estado"]');
+    const mailboxInput = janela.querySelector('input[name="mailbox_id"]');
+    const assuntoInput = janela.querySelector('input[name="subject"]');
+    const corpoInput = janela.querySelector('textarea[name="body"]');
+    const replyInput = janela.querySelector('input[name="reply_to"]');
+
+    /* O estado do compositor como texto comparável, sem mutar nada: lê os
+       campos escondidos (destinatários já aceites) e o texto por confirmar. */
+    function instantaneo() {
+      const linhas = [];
+      janela.querySelectorAll('[data-oc="destinatarios"]').forEach((linha) => {
+        const escondido = linha.querySelector('input[type="hidden"][name]');
+        const entrada = linha.querySelector('[data-oc="destino-entrada"]');
+        linhas.push(
+          (escondido ? escondido.value : '') + '|' + (entrada ? entrada.value.trim() : ''),
+        );
+      });
+      return JSON.stringify({
+        r: linhas,
+        subject: assuntoInput ? assuntoInput.value.trim() : '',
+        body: corpoInput ? corpoInput.value : '',
+      });
+    }
+
+    function temConteudo(snap) {
+      const d = JSON.parse(snap);
+      const destinatarios = (d.r || []).some((x) => x.replace('|', '').trim());
+      return Boolean(destinatarios || d.subject || (d.body && d.body.trim()));
+    }
+
+    let guardado = instantaneo(); // o último estado persistido, ou o inicial
+    let aGuardar = false;
+    let falhou = false;
+    let pendente = null;
+
+    const sujo = () => instantaneo() !== guardado;
+    const marcar = (texto) => {
+      if (estado) estado.textContent = texto;
+    };
+    function horaAgora() {
+      const d = new Date();
+      const dois = (n) => String(n).padStart(2, '0');
+      return dois(d.getHours()) + ':' + dois(d.getMinutes());
+    }
+
+    function corpoDoPedido() {
+      const valor = (nome) => {
+        const el = janela.querySelector('[name="' + nome + '"]');
+        return el ? el.value : '';
+      };
+      return {
+        mailbox_id: mailboxInput ? mailboxInput.value : '',
+        to: valor('to'),
+        cc: valor('cc'),
+        bcc: valor('bcc'),
+        subject: assuntoInput ? assuntoInput.value : '',
+        body: corpoInput ? corpoInput.value : '',
+        in_reply_to: replyInput ? replyInput.value : '',
+      };
+    }
+
+    /* Guarda o rascunho. Resolve `true` em sucesso. Escoa primeiro o que ficou
+       por confirmar, para o snapshot igualar o que foi enviado. */
+    function guardar() {
+      escoar.forEach((fn) => fn());
+      const snap = instantaneo();
+      if (!temConteudo(snap)) return Promise.resolve(true);
+      const id = draftIdInput ? draftIdInput.value : '';
+      const novo = !id;
+      aGuardar = true;
+      marcar('A guardar…');
+      const url = novo ? '/mail/drafts' : '/mail/drafts/' + encodeURIComponent(id);
+      return fetch(url, {
+        method: novo ? 'POST' : 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(corpoDoPedido()),
+      })
+        .then((resposta) => {
+          if (!resposta.ok) throw new Error('save failed');
+          return resposta.json();
+        })
+        .then((dados) => {
+          if (dados && dados.id && draftIdInput) {
+            draftIdInput.value = dados.id;
+            janela.dataset.ocDraftId = dados.id;
+          }
+          guardado = snap;
+          aGuardar = false;
+          falhou = false;
+          marcar('Guardado às ' + horaAgora());
+          return true;
+        })
+        .catch(() => {
+          aGuardar = false;
+          falhou = true;
+          marcar('Erro ao guardar rascunho');
+          return false;
+        });
+    }
+
+    function agendarAutosave() {
+      clearTimeout(pendente);
+      pendente = setTimeout(() => {
+        if (sujo()) guardar();
+      }, 1500);
+    }
+
+    janela.addEventListener('input', agendarAutosave);
+    janela.addEventListener('change', agendarAutosave);
+    /* Tirar uma ficha não dispara `input`; apanha-se o clique no × dela. */
+    janela.addEventListener('click', (evento) => {
+      if (evento.target.closest('.oc-chip button')) agendarAutosave();
+    });
+
+    /* ── Fechar com confirmação ───────────────────────────────────────────
+
+       Fechar com alterações por guardar pergunta antes de sair — nunca o
+       `confirm()` do browser, um diálogo nativo do Ocinye (briefing §58). */
+
+    const fechar = janela.querySelector('[data-oc="compositor-fechar"]');
+    const dialogo = janela.querySelector('[data-oc="compositor-descartar"]');
+    let aFechar = false;
+
+    const sair = () => {
+      aFechar = true;
+      window.location.assign('/mail');
+    };
+    const abrirDialogo = () => {
+      if (!dialogo) return;
+      dialogo.removeAttribute('hidden');
+      const primeiro = dialogo.querySelector('[data-oc="descartar-guardar"]');
+      if (primeiro) primeiro.focus();
+    };
+    const fecharDialogo = () => {
+      if (dialogo) dialogo.setAttribute('hidden', '');
+      if (fechar) fechar.focus();
+    };
+
+    if (fechar) {
+      fechar.addEventListener('click', (evento) => {
+        const snap = instantaneo();
+        const porGuardar =
+          sujo() || (temConteudo(snap) && draftIdInput && !draftIdInput.value);
+        if (!porGuardar) return; // pristina, ou já guardada e igual: fecha
+        evento.preventDefault();
+        abrirDialogo();
+      });
+    }
+
+    if (dialogo) {
+      const guardarBtn = dialogo.querySelector('[data-oc="descartar-guardar"]');
+      const descartarBtn = dialogo.querySelector('[data-oc="descartar-descartar"]');
+      const cancelarBtn = dialogo.querySelector('[data-oc="descartar-cancelar"]');
+
+      if (guardarBtn) {
+        guardarBtn.addEventListener('click', () => {
+          guardar().then((ok) => {
+            if (ok) sair();
+            else fecharDialogo(); // guardar falhou: fica aberto, com o erro
+          });
+        });
+      }
+      if (descartarBtn) {
+        descartarBtn.addEventListener('click', () => {
+          const id = draftIdInput ? draftIdInput.value : '';
+          if (id) {
+            fetch('/mail/drafts/' + encodeURIComponent(id), { method: 'DELETE' })
+              .then(sair)
+              .catch(sair);
+          } else {
+            sair(); // nada foi persistido
+          }
+        });
+      }
+      if (cancelarBtn) cancelarBtn.addEventListener('click', fecharDialogo);
+
+      dialogo.addEventListener('keydown', (evento) => {
+        if (evento.key === 'Escape') {
+          evento.preventDefault();
+          fecharDialogo();
+        } else if (evento.key === 'Tab') {
+          const focaveis = dialogo.querySelectorAll('button');
+          if (!focaveis.length) return;
+          const primeiro = focaveis[0];
+          const ultimo = focaveis[focaveis.length - 1];
+          if (evento.shiftKey && document.activeElement === primeiro) {
+            evento.preventDefault();
+            ultimo.focus();
+          } else if (!evento.shiftKey && document.activeElement === ultimo) {
+            evento.preventDefault();
+            primeiro.focus();
+          }
+        }
+      });
+    }
+
+    /* Recarregar ou fechar a aba com alterações por guardar avisa. Se está
+       tudo guardado, não incomoda — o rascunho está no Core. */
+    window.addEventListener('beforeunload', (evento) => {
+      if (aFechar) return;
+      if (forma && forma.dataset.ocEnviando === 'true') return;
+      if (sujo() || aGuardar || falhou) {
+        evento.preventDefault();
+        evento.returnValue = '';
+      }
+    });
   }
 
   /* ── Arranque ─────────────────────────────────────────────────────── */

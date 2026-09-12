@@ -586,6 +586,188 @@ fn build_instruction(request: &AssistRequest, source: Option<&repo::IndexedMessa
     instruction
 }
 
+// ── Drafts ──────────────────────────────────────────────────────────────
+//
+// A composer draft belongs to Ocinye until it is sent or discarded (ADR-0407):
+// it is the deliberate exception to "the provider is the archive". Autosave keeps
+// it alive across a reload, a crash, a different device — so the member never
+// loses what they were writing. Recipients are stored as the member typed them;
+// autosave does not hard-validate an address still being typed, because an
+// in-progress address is a normal draft state, not an error. Validation is the
+// send path's job (`send`).
+
+/// What the composer sends to persist a draft.
+#[derive(Debug, Clone)]
+pub struct DraftInput {
+    /// The draft to update, or `None` to create a new one.
+    pub draft_id: Option<Uuid>,
+    /// The mailbox the draft is composed from.
+    pub mailbox_id: Uuid,
+    /// To recipients, as typed.
+    pub to: Vec<String>,
+    /// Cc recipients, as typed.
+    pub cc: Vec<String>,
+    /// Bcc recipients, as typed. Kept private on send (ADR-0403).
+    pub bcc: Vec<String>,
+    /// Subject.
+    pub subject: Option<String>,
+    /// Body.
+    pub body: String,
+    /// The message being replied to, when the draft is a reply.
+    pub in_reply_to: Option<Uuid>,
+}
+
+/// Trim recipient entries and drop the empty ones, preserving order.
+fn tidy_recipients(raw: Vec<String>) -> Vec<String> {
+    raw.into_iter()
+        .map(|address| address.trim().to_owned())
+        .filter(|address| !address.is_empty())
+        .collect()
+}
+
+/// Persist a composer draft — create one, or update the one named.
+///
+/// Creating audits once (`mail_draft_created`); updating does not, so autosave
+/// never floods the audit trail (briefing §51). Ownership is enforced in the
+/// repository query, so an autosave against another member's draft touches
+/// nothing and reads as not found.
+///
+/// # Errors
+///
+/// [`CoreError::PermissionDenied`] without `mail.use`; [`CoreError::NotFound`]
+/// when creating from a mailbox the caller cannot send from, or updating a draft
+/// that is not theirs.
+pub async fn save_draft(
+    pool: &PgPool,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    input: DraftInput,
+) -> CoreResult<repo::MailDraft> {
+    require(principal, Permission::MailUse)?;
+
+    let to = tidy_recipients(input.to);
+    let cc = tidy_recipients(input.cc);
+    let bcc = tidy_recipients(input.bcc);
+    let subject = input
+        .subject
+        .as_deref()
+        .map(str::trim)
+        .filter(|subject| !subject.is_empty());
+
+    let id = match input.draft_id {
+        Some(draft_id) => {
+            let existed = repo::update_composer_draft(
+                pool,
+                principal.person_id,
+                draft_id,
+                &to,
+                &cc,
+                &bcc,
+                subject,
+                &input.body,
+            )
+            .await?;
+            if !existed {
+                return Err(CoreError::NotFound("Rascunho não encontrado.".to_owned()));
+            }
+            draft_id
+        }
+        None => {
+            let mut tx = pool.begin().await?;
+            let id = repo::insert_composer_draft(
+                &mut *tx,
+                input.mailbox_id,
+                principal.person_id,
+                &to,
+                &cc,
+                &bcc,
+                subject,
+                &input.body,
+                input.in_reply_to,
+            )
+            .await?;
+            audit::record(
+                &mut tx,
+                Some(principal),
+                ids,
+                AuditEntry::new(action::MAIL_DRAFT_CREATED, "mail_draft").resource(id),
+            )
+            .await?;
+            tx.commit().await?;
+            id
+        }
+    };
+
+    repo::accessible_draft(pool, principal.person_id, id)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Rascunho não encontrado.".to_owned()))
+}
+
+/// One draft the caller may reach, to resume editing it.
+///
+/// # Errors
+///
+/// [`CoreError::PermissionDenied`] without `mail.use`; [`CoreError::NotFound`]
+/// when the draft is not the caller's.
+pub async fn get_draft(
+    pool: &PgPool,
+    principal: &Principal,
+    draft_id: Uuid,
+) -> CoreResult<repo::MailDraft> {
+    require(principal, Permission::MailUse)?;
+    repo::accessible_draft(pool, principal.person_id, draft_id)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Rascunho não encontrado.".to_owned()))
+}
+
+/// Every draft the caller may reach, newest first.
+///
+/// # Errors
+///
+/// [`CoreError::PermissionDenied`] without `mail.use`.
+pub async fn list_drafts(
+    pool: &PgPool,
+    principal: &Principal,
+    mailbox_id: Option<Uuid>,
+) -> CoreResult<Vec<repo::MailDraftSummary>> {
+    require(principal, Permission::MailUse)?;
+    repo::list_composer_drafts(pool, principal.person_id, mailbox_id).await
+}
+
+/// Discard a draft the caller owns.
+///
+/// Idempotent: discarding a draft that is already gone succeeds — the member's
+/// intent (it should not exist) is satisfied either way, and a stale composer
+/// tab must not surface an error for a draft another tab already removed.
+/// Attachment rows cascade with the draft; releasing the storage objects they
+/// referenced is handled by attachment cleanup.
+///
+/// # Errors
+///
+/// [`CoreError::PermissionDenied`] without `mail.use`.
+pub async fn discard_draft(
+    pool: &PgPool,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    draft_id: Uuid,
+) -> CoreResult<()> {
+    require(principal, Permission::MailUse)?;
+
+    let mut tx = pool.begin().await?;
+    let deleted = repo::delete_draft(&mut *tx, principal.person_id, draft_id).await?;
+    if deleted {
+        audit::record(
+            &mut tx,
+            Some(principal),
+            ids,
+            AuditEntry::new(action::MAIL_DRAFT_DISCARDED, "mail_draft").resource(draft_id),
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 /// Decide whether a draft may be sent, without sending it.
 ///
 /// Lets the composer ask before the member commits, so a refusal is discovered
