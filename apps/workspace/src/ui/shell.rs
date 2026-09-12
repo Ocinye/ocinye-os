@@ -28,6 +28,8 @@ pub enum Screen {
     Mail,
     /// Mensagens entre membros.
     Messaging,
+    /// Os recursos do próprio membro — quota de armazenamento e entitlements.
+    Resources,
     /// Unidades científicas.
     Units,
     /// Ideias.
@@ -78,6 +80,7 @@ impl Screen {
             Self::Notes => "/notes",
             Self::Mail => "/mail",
             Self::Messaging => "/messages",
+            Self::Resources => "/resources",
             Self::Units => "/units",
             Self::Ideas => "/ideas",
             Self::Projects => "/projects",
@@ -111,6 +114,7 @@ impl Screen {
             Self::Notes => "Notas",
             Self::Mail => "Correio",
             Self::Messaging => "Mensagens",
+            Self::Resources => "Meus Recursos",
             Self::Units => "Unidades",
             Self::Ideas => "Ideias",
             Self::Projects => "Projectos",
@@ -141,6 +145,7 @@ impl Screen {
             Self::Calendar => Icon::Calendar,
             Self::Mail => Icon::Mail,
             Self::Messaging => Icon::Messaging,
+            Self::Resources => Icon::Compute,
             Self::Units => Icon::Units,
             Self::Ideas => Icon::Idea,
             Self::Projects => Icon::Project,
@@ -175,6 +180,7 @@ const GROUPS: [(&str, &[Screen]); 5] = [
             Screen::Calendar,
             Screen::Messaging,
             Screen::Mail,
+            Screen::Resources,
         ],
     ),
     (
@@ -396,7 +402,16 @@ const fn screen_permission(screen: Screen) -> Option<Permission> {
         // As notas pessoais são do próprio membro: qualquer pessoa autenticada
         // tem as suas, e o Core resolve o dono pela sessão. Não há direito
         // institucional a exigir para ver a entrada.
-        Screen::Home | Screen::MyWork | Screen::Notes | Screen::Settings | Screen::Help => None,
+        // «Meus Recursos» é do próprio membro: cada pessoa vê a sua quota e os
+        // seus entitlements, e o Core resolve o dono pela sessão. Não há direito
+        // institucional a exigir para ver a entrada — ver os recursos de outro
+        // membro é outra coisa, governada por `resources.view` na Administração.
+        Screen::Home
+        | Screen::MyWork
+        | Screen::Notes
+        | Screen::Resources
+        | Screen::Settings
+        | Screen::Help => None,
         // O Calendário: a agenda pessoal é do próprio, e `CalendarView` é o que
         // dá acesso aos eventos de unidade, workspace e instituição.
         Screen::Calendar => Some(Permission::CalendarView),
@@ -1256,12 +1271,13 @@ fn create_menu(viewer: &Viewer) -> impl IntoView {
     not(test),
     allow(dead_code, reason = "lida pela auditoria de estado activo")
 )]
-const SCREENS: [Screen; 22] = [
+const SCREENS: [Screen; 23] = [
     Screen::Home,
     Screen::MyWork,
     Screen::Calendar,
     Screen::Messaging,
     Screen::Mail,
+    Screen::Resources,
     Screen::Units,
     Screen::Ideas,
     Screen::Projects,
@@ -1326,13 +1342,14 @@ impl Screen {
 }
 
 /// Os destinos da command palette.
-const PALETTE_NAV: [Screen; 19] = [
+const PALETTE_NAV: [Screen; 20] = [
     Screen::Home,
     Screen::MyWork,
     Screen::Notes,
     Screen::Calendar,
     Screen::Messaging,
     Screen::Mail,
+    Screen::Resources,
     Screen::Units,
     Screen::Ideas,
     Screen::Projects,

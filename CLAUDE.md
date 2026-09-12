@@ -66,7 +66,7 @@ sem que nada falhe.
   3 serviços (`core-server`, `worker`, `node-agent`) e 1 aplicação
   (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 177 caminhos e 209 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 178 caminhos e 210 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -98,7 +98,7 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED` e em produção** 80 ecrãs em Leptos SSR,
+- **Ocinye Workspace: `IMPLEMENTED` e em produção** 81 ecrãs em Leptos SSR,
   servido de `os.ocinye.com`, atrás da Cloudflare, do mesmo SHA que o Core;
   sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
   pelas permissões que o Core calcula.
@@ -133,9 +133,13 @@ sem que nada falhe.
   pessoal nova é admitida no servidor contra `usado + a entrar ≤ limite`, com
   tranca por membro que serializa carregamentos em paralelo. Reduzir a quota
   abaixo do uso **não apaga nada** — o membro fica acima da quota e as escritas
-  novas param. Falta ainda a admissão de computação, a capacidade, os pedidos e
-  a experiência «Meus Recursos»/Administração. `OCINYE_RESOURCE_GOVERNANCE_READY`
-  é um portão distinto de `OCINYE_AI_READY`, e **não** torna a IA disponível.
+  novas param. O membro **vê** a sua quota: o ecrã «Meus Recursos» mostra uso,
+  limite e disponível, o estado (`Normal`/`Aviso`/`Crítico`/`Acima da quota`) e a
+  explicação de como o limite se compõe (perfil mais concessões temporárias),
+  a partir de `GET /api/v1/resources/me` (o Core resolve o dono pela sessão).
+  Falta ainda a admissão de computação, a capacidade, os pedidos e a superfície
+  de Administração de recursos. `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão
+  distinto de `OCINYE_AI_READY`, e **não** torna a IA disponível.
 - **41 migrations**, aplicáveis de base vazia; 80 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
@@ -285,7 +289,7 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1538 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1542 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida

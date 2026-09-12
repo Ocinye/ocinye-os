@@ -36,6 +36,7 @@ use crate::WorkspaceState;
 pub const ROUTES: &[&str] = &[
     "/",
     "/my-work",
+    "/resources",
     "/notes",
     "/notes/partilhadas",
     "/notes/lixo",
@@ -189,6 +190,7 @@ pub fn router(state: WorkspaceState) -> Router {
         // Pessoal
         .route("/", get(home))
         .route("/my-work", get(my_work))
+        .route("/resources", get(meus_recursos))
         // Correio
         // ── Mensagens ───────────────────────────────────────────────────
         .route(ui::screens::messaging::ROUTE, get(messaging))
@@ -1422,6 +1424,24 @@ async fn my_work(State(state): State<WorkspaceState>, headers: HeaderMap) -> Res
         "O Meu Trabalho",
         &viewer,
         Screen::MyWork,
+        Vec::new(),
+        content,
+    )
+}
+
+/// «Meus Recursos» — a quota de armazenamento do próprio membro e como se chega
+/// a ela. O Core resolve e autoriza a partir da sessão; o ecrã só apresenta.
+async fn meus_recursos(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+
+    let me = optional(&state, &member, "/api/v1/resources/me").await;
+
+    let content = ui::screens::resources::resources(&me);
+    shell_page(
+        "Meus Recursos",
+        &viewer,
+        Screen::Resources,
         Vec::new(),
         content,
     )
