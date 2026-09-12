@@ -528,6 +528,12 @@ async fn guardar_bytes_personal(
     let size = i64::try_from(data.len())
         .map_err(|_| CoreError::Validation("O ficheiro é demasiado grande.".to_owned()))?;
 
+    // Personal storage is governed: new personal bytes are admitted against the
+    // member's quota, serialised per member so parallel uploads cannot both slip
+    // past a full quota (ADR-0108). The advisory lock is held to the end of this
+    // transaction, so the INSERT below is covered by the same admission.
+    crate::modules::resource::admit_personal_bytes(tx, principal.person_id, size).await?;
+
     let object_id = Uuid::new_v4();
     let object_key = crate::storage::build_object_key_personal(
         organisation_slug,

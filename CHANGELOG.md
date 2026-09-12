@@ -7,6 +7,29 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Governança de recursos — armazenamento pessoal imposto (M4, fatia C) — 2026-09-12
+
+O armazenamento pessoal deixa de crescer sem limite: passa a ser **medido e
+imposto no servidor** (ADR-0108).
+
+- **Contabilidade sem deriva.** O uso pessoal é `SUM(size_bytes)` sobre os
+  objectos que o membro possui (`owner_id`) — medido directamente, não um
+  contador que possa divergir (§61). Objectos de ambiente não contam como uso
+  pessoal, mesmo quando foi o membro a carregá-los.
+- **Admissão fail-closed, segura à concorrência.** Uma escrita pessoal nova é
+  admitida contra `usado + a entrar ≤ limite`, com uma **tranca por membro** que
+  serializa carregamentos em paralelo — dois que caibam sozinhos mas não juntos
+  não passam ambos (§10, provado por corrida). O limite usado pela admissão é
+  provado igual ao resolvedor que o ecrã mostra, para os dois nunca discordarem.
+- **Redução de quota é segura.** Reduzir a quota abaixo do uso põe o membro
+  **acima da quota**, mantém os bytes existentes intactos, e **bloqueia** escritas
+  novas até o uso descer ou a quota subir. **Nunca apaga** (§7, §8).
+- **Estados** `Normal`/`Warning`/`Critical`/`OverQuota` derivados de uso vs
+  limite. Provado ponta-a-ponta contra object storage real.
+
+Sem migração nova — usa o esquema da fatia A. Sem enforcement de computação
+ainda (capacidade zero). IA inalterada.
+
 ### Governança de recursos — perfis e ciclo de vida do membro (M4, fatia B) — 2026-09-12
 
 - **Cada membro tem um perfil de alocação.** Uma coluna `people.resource_profile_id`
