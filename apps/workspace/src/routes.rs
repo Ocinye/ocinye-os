@@ -74,6 +74,8 @@ pub const ROUTES: &[&str] = &[
     "/mail/compose",
     "/mail/drafts",
     "/mail/drafts/{draft_id}",
+    "/mail/drafts/{draft_id}/attachments",
+    "/mail/drafts/{draft_id}/attachments/{attachment_id}",
     "/mail/people",
     "/mail/assist",
     "/mail/send",
@@ -219,6 +221,14 @@ pub fn router(state: WorkspaceState) -> Router {
         .route(
             "/mail/drafts/{draft_id}",
             put(draft_update).delete(draft_discard),
+        )
+        .route(
+            "/mail/drafts/{draft_id}/attachments",
+            post(draft_attach).layer(DefaultBodyLimit::max(27 * 1024 * 1024)),
+        )
+        .route(
+            "/mail/drafts/{draft_id}/attachments/{attachment_id}",
+            axum::routing::delete(draft_attachment_remove),
         )
         .route(
             "/mail/settings",
@@ -1770,6 +1780,60 @@ async fn caixa_por_baixo(
 /// `None` quando o membro a desligou nas preferências, ou quando não pôde ser
 /// obtida: o compositor nunca afirma uma assinatura que não vai sair. O HTML é
 /// a mesma projecção determinística que o envio acrescenta (ADR-0414).
+/// Um tamanho em bytes, legível. Unidades binárias, como uma quota.
+fn bytes_legiveis(n: i64) -> String {
+    if n <= 0 {
+        return "0 B".to_owned();
+    }
+    const UNIDADES: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
+    let mut tamanho = n as f64;
+    let mut unidade = 0;
+    while tamanho >= 1024.0 && unidade < UNIDADES.len() - 1 {
+        tamanho /= 1024.0;
+        unidade += 1;
+    }
+    if unidade == 0 {
+        format!("{n} B")
+    } else {
+        format!("{tamanho:.1} {}", UNIDADES[unidade])
+    }
+}
+
+/// Os anexos já guardados num rascunho, para os mostrar no compositor.
+async fn anexos_do_rascunho(
+    state: &WorkspaceState,
+    member: &Member,
+    draft_id: &str,
+) -> Vec<ui::screens::mail::ComposeAttachmentView> {
+    let lista = optional(
+        state,
+        member,
+        &format!("/api/v1/mail/drafts/{draft_id}/attachments"),
+    )
+    .await;
+    lista
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .map(|a| ui::screens::mail::ComposeAttachmentView {
+                    id: a
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned(),
+                    filename: a
+                        .get("filename")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned(),
+                    size: bytes_legiveis(a.get("size_bytes").and_then(Value::as_i64).unwrap_or(0)),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 async fn assinatura_para_previsualizar(state: &WorkspaceState, member: &Member) -> Option<String> {
     let preferencias = optional(state, member, "/api/v1/mail/preferences").await;
     let activa = preferencias
@@ -1857,6 +1921,7 @@ async fn compose(
                 .get("in_reply_to_id")
                 .and_then(Value::as_str)
                 .map(str::to_owned);
+            draft.attachments = anexos_do_rascunho(&state, &member, &draft_id.to_string()).await;
         }
     }
 
@@ -1949,6 +2014,9 @@ impl ComposeForm {
             subject: self.subject.clone(),
             body: self.body.clone(),
             body_html: Some(self.html_body.clone()).filter(|html| !html.is_empty()),
+            // Os anexos vêm do Core (a rota que re-desenha carrega-os); não
+            // viajam no formulário.
+            attachments: Vec::new(),
             reply_to: self.reply_to.clone(),
             instruction: self.instruction.clone(),
             confirmation: None,
@@ -2044,6 +2112,7 @@ async fn send_mail(
     };
 
     let html_body = Some(form.html_body.clone()).filter(|html| !html.is_empty());
+    let draft_id = form.draft_id.clone().filter(|id| !id.is_empty());
     let body = serde_json::json!({
         "mailbox_id": form.mailbox_id,
         "to": split(&form.to),
@@ -2052,6 +2121,7 @@ async fn send_mail(
         "subject": form.subject,
         "body": form.body,
         "html_body": html_body,
+        "draft_id": draft_id,
         "confirmed": form.confirmed.is_some(),
     });
 
@@ -2091,6 +2161,11 @@ async fn send_mail(
             .await;
 
             let mut draft = form.draft();
+            // Os anexos persistem no rascunho; recarrega-os para a janela que
+            // volta não os perder de vista.
+            if let Some(draft_id) = form.draft_id.as_deref().filter(|id| !id.is_empty()) {
+                draft.attachments = anexos_do_rascunho(&state, &member, draft_id).await;
+            }
             let reason = failure.to_string();
 
             // O Core distingue «confirme» de «recusado». A interface tem de
@@ -2241,6 +2316,64 @@ async fn draft_discard(
         &member.session.access_token,
         &member.correlation_id,
         &format!("/api/v1/mail/drafts/{draft_id}"),
+    )
+    .await;
+    resposta_de_rascunho(resultado)
+}
+
+/// `POST /mail/drafts/{draft_id}/attachments` — anexa um ficheiro ao rascunho.
+async fn draft_attach(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(draft_id): Path<String>,
+    multipart: Multipart,
+) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "sem sessão" })),
+        )
+            .into_response();
+    };
+    let (ficheiro, _campos) = ler_carregamento(multipart).await;
+    let Some((nome, tipo, dados)) = ficheiro else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "ficheiro em falta" })),
+        )
+            .into_response();
+    };
+    let resultado = api::upload(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/mail/drafts/{draft_id}/attachments"),
+        nome,
+        tipo,
+        dados,
+    )
+    .await;
+    resposta_de_rascunho(resultado)
+}
+
+/// `DELETE /mail/drafts/{draft_id}/attachments/{attachment_id}` — retira um anexo.
+async fn draft_attachment_remove(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path((draft_id, attachment_id)): Path<(String, String)>,
+) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "sem sessão" })),
+        )
+            .into_response();
+    };
+    let resultado = api::delete(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/mail/drafts/{draft_id}/attachments/{attachment_id}"),
     )
     .await;
     resposta_de_rascunho(resultado)

@@ -20,11 +20,14 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::policy::{SendDecision, SendPolicy};
-use super::provider::{InlineImage, MailProvider, OutgoingMessage, ProviderAddress, ProviderError};
+use super::provider::{
+    InlineImage, MailProvider, OutgoingAttachment, OutgoingMessage, ProviderAddress, ProviderError,
+};
 use super::repository as repo;
 use super::signature::{self, LogoRef, Projections, SignatureFacts, LOGO_CONTENT_ID};
 use crate::audit::{self, action, AuditEntry};
 use crate::error::{CoreError, CoreResult};
+use crate::storage::ObjectStore;
 
 /// Turn a provider failure into a Core error a member can act on.
 ///
@@ -799,13 +802,20 @@ pub async fn list_drafts(
 pub async fn discard_draft(
     pool: &PgPool,
     principal: &Principal,
+    store: Option<&ObjectStore>,
     ids: &CorrelationIds,
     draft_id: Uuid,
 ) -> CoreResult<()> {
     require(principal, Permission::MailUse)?;
 
+    // The objects the draft's attachments reference, gathered before the draft
+    // (and its attachment rows) go. Reading these is not gated by ownership, but
+    // nothing is acted on unless the ownership-checked delete succeeds.
+    let object_ids = repo::draft_attachment_object_ids(pool, draft_id).await?;
+
     let mut tx = pool.begin().await?;
     let deleted = repo::delete_draft(&mut *tx, principal.person_id, draft_id).await?;
+    let mut keys: Vec<String> = Vec::new();
     if deleted {
         audit::record(
             &mut tx,
@@ -814,9 +824,193 @@ pub async fn discard_draft(
             AuditEntry::new(action::MAIL_DRAFT_DISCARDED, "mail_draft").resource(draft_id),
         )
         .await?;
+        // The attachment rows cascaded with the draft; free the storage objects
+        // they held (RESTRICT means the rows had to go first), keeping the keys
+        // to remove the bytes after the rows commit.
+        for object_id in &object_ids {
+            if let Some(key) = repo::delete_storage_object(&mut *tx, *object_id).await? {
+                keys.push(key);
+            }
+        }
     }
     tx.commit().await?;
+
+    // Bytes after the rows, best-effort: a discarded draft must not leak objects
+    // (briefing §17). A failed byte delete is logged inside `store.delete`.
+    if let Some(store) = store {
+        for key in keys {
+            store.delete(&key).await;
+        }
+    }
     Ok(())
+}
+
+/// The largest a single attachment may be (25 MiB).
+pub const MAX_ATTACHMENT_BYTES: i64 = 25 * 1024 * 1024;
+/// The largest a message's attachments may total (25 MiB).
+pub const MAX_ATTACHMENTS_TOTAL_BYTES: i64 = 25 * 1024 * 1024;
+/// The most attachments one draft may carry.
+pub const MAX_ATTACHMENTS: i64 = 20;
+
+/// The organisation's slug, for building a personal object key.
+async fn organisation_slug(pool: &PgPool, organisation_id: Uuid) -> CoreResult<String> {
+    let slug: String = sqlx::query_scalar("SELECT slug FROM organisations WHERE id = $1")
+        .bind(organisation_id)
+        .fetch_one(pool)
+        .await?;
+    Ok(slug)
+}
+
+/// Attach an uploaded file to a draft.
+///
+/// The bytes cross the personal storage boundary — quota admitted, MIME
+/// validated, checksummed, owner-keyed (§40, ADR-0108) — and the row makes them
+/// part of the draft. Limits (count, single size, total size) are checked
+/// against configuration, and the server is authoritative.
+///
+/// # Errors
+///
+/// [`CoreError::PermissionDenied`] without `mail.use`; [`CoreError::NotFound`]
+/// when the draft is not the caller's; [`CoreError::Validation`] when a limit is
+/// exceeded or the type is not allowed.
+pub async fn attach_to_draft(
+    pool: &PgPool,
+    principal: &Principal,
+    store: &ObjectStore,
+    draft_id: Uuid,
+    filename: &str,
+    content_type: &str,
+    bytes: Vec<u8>,
+) -> CoreResult<repo::DraftAttachment> {
+    require(principal, Permission::MailUse)?;
+
+    repo::accessible_draft(pool, principal.person_id, draft_id)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Rascunho não encontrado.".to_owned()))?;
+
+    let size = i64::try_from(bytes.len())
+        .map_err(|_| CoreError::Validation("O anexo é demasiado grande.".to_owned()))?;
+    if size > MAX_ATTACHMENT_BYTES {
+        return Err(CoreError::Validation(
+            "O anexo excede o tamanho máximo permitido.".to_owned(),
+        ));
+    }
+    let (count, total) = repo::draft_attachment_totals(pool, draft_id).await?;
+    if count >= MAX_ATTACHMENTS {
+        return Err(CoreError::Validation(
+            "Esta mensagem já tem o número máximo de anexos.".to_owned(),
+        ));
+    }
+    if total + size > MAX_ATTACHMENTS_TOTAL_BYTES {
+        return Err(CoreError::Validation(
+            "O tamanho total dos anexos excede o limite permitido.".to_owned(),
+        ));
+    }
+
+    let slug = organisation_slug(pool, principal.organisation_id).await?;
+    let mut tx = pool.begin().await?;
+    let object = crate::modules::files::guardar_bytes_personal(
+        &mut tx,
+        principal,
+        store,
+        &slug,
+        filename,
+        content_type,
+        bytes,
+    )
+    .await?;
+    let id = repo::insert_draft_attachment(
+        &mut *tx,
+        draft_id,
+        &object.filename,
+        &object.content_type,
+        object.size,
+        &object.checksum,
+        object.object_id,
+    )
+    .await?;
+    tx.commit().await?;
+
+    Ok(repo::DraftAttachment {
+        id,
+        filename: object.filename,
+        content_type: object.content_type,
+        size_bytes: object.size,
+    })
+}
+
+/// A draft's attachments, for display.
+///
+/// # Errors
+///
+/// [`CoreError::PermissionDenied`] without `mail.use`; [`CoreError::NotFound`]
+/// when the draft is not the caller's.
+pub async fn list_attachments(
+    pool: &PgPool,
+    principal: &Principal,
+    draft_id: Uuid,
+) -> CoreResult<Vec<repo::DraftAttachment>> {
+    require(principal, Permission::MailUse)?;
+    repo::accessible_draft(pool, principal.person_id, draft_id)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Rascunho não encontrado.".to_owned()))?;
+    repo::list_draft_attachments(pool, draft_id).await
+}
+
+/// Remove one attachment from a draft, freeing its bytes.
+///
+/// # Errors
+///
+/// [`CoreError::PermissionDenied`] without `mail.use`; [`CoreError::NotFound`]
+/// when the draft is not the caller's.
+pub async fn remove_attachment(
+    pool: &PgPool,
+    principal: &Principal,
+    store: &ObjectStore,
+    draft_id: Uuid,
+    attachment_id: Uuid,
+) -> CoreResult<()> {
+    require(principal, Permission::MailUse)?;
+    repo::accessible_draft(pool, principal.person_id, draft_id)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Rascunho não encontrado.".to_owned()))?;
+
+    let mut tx = pool.begin().await?;
+    let mut key: Option<String> = None;
+    if let Some(object_id) =
+        repo::delete_draft_attachment(&mut *tx, draft_id, attachment_id).await?
+    {
+        key = repo::delete_storage_object(&mut *tx, object_id).await?;
+    }
+    tx.commit().await?;
+
+    if let Some(key) = key {
+        store.delete(&key).await;
+    }
+    Ok(())
+}
+
+/// Load a draft's attachments as message parts, reading their bytes.
+///
+/// # Errors
+///
+/// Returns an error when a query fails or the object store cannot be read.
+pub async fn attachments_for_send(
+    pool: &PgPool,
+    store: &ObjectStore,
+    draft_id: Uuid,
+) -> CoreResult<Vec<OutgoingAttachment>> {
+    let objects = repo::draft_attachment_objects(pool, draft_id).await?;
+    let mut parts = Vec::with_capacity(objects.len());
+    for object in objects {
+        let bytes = store.get(&object.object_key).await?;
+        parts.push(OutgoingAttachment {
+            filename: object.filename,
+            content_type: object.content_type,
+            content: bytes,
+        });
+    }
+    Ok(parts)
 }
 
 /// Decide whether a draft may be sent, without sending it.

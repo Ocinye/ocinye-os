@@ -950,6 +950,221 @@ pub async fn list_composer_drafts<'e>(
         .collect()
 }
 
+/// A draft attachment, as the composer shows it.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DraftAttachment {
+    /// Identifier.
+    pub id: Uuid,
+    /// The name the recipient will see.
+    pub filename: String,
+    /// The declared content type.
+    pub content_type: String,
+    /// The size in bytes.
+    pub size_bytes: i64,
+}
+
+/// One attachment's stored bytes, for building the message and for cleanup.
+#[derive(Debug, Clone)]
+pub struct AttachmentObject {
+    /// The attachment row id.
+    pub id: Uuid,
+    /// The name to put on the MIME part.
+    pub filename: String,
+    /// The content type of the part.
+    pub content_type: String,
+    /// The storage object's opaque key, to read the bytes.
+    pub object_key: String,
+}
+
+/// Attach an uploaded object to a draft, returning the attachment id.
+///
+/// The `storage_object_id` names bytes already stored through the personal
+/// storage boundary (quota admitted, MIME validated). The row is what makes the
+/// object part of this draft; the XOR CHECK in the schema keeps document and
+/// object sources mutually exclusive.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+#[allow(clippy::too_many_arguments)]
+pub async fn insert_draft_attachment<'e>(
+    executor: impl PgExecutor<'e>,
+    draft_id: Uuid,
+    filename: &str,
+    content_type: &str,
+    size_bytes: i64,
+    checksum: &str,
+    storage_object_id: Uuid,
+) -> CoreResult<Uuid> {
+    let id: Uuid = sqlx::query_scalar(
+        "INSERT INTO mail_draft_attachments
+             (draft_id, filename, content_type, size_bytes, checksum_sha256,
+              storage_object_id, classification)
+         VALUES ($1, $2, $3, $4, $5, $6, 'INTERNAL')
+         RETURNING id",
+    )
+    .bind(draft_id)
+    .bind(filename)
+    .bind(content_type)
+    .bind(size_bytes)
+    .bind(checksum)
+    .bind(storage_object_id)
+    .fetch_one(executor)
+    .await?;
+    Ok(id)
+}
+
+/// The attachments of a draft, for display.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn list_draft_attachments<'e>(
+    executor: impl PgExecutor<'e>,
+    draft_id: Uuid,
+) -> CoreResult<Vec<DraftAttachment>> {
+    let rows = sqlx::query(
+        "SELECT id, filename, content_type, size_bytes
+           FROM mail_draft_attachments
+          WHERE draft_id = $1
+          ORDER BY created_at",
+    )
+    .bind(draft_id)
+    .fetch_all(executor)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(DraftAttachment {
+                id: row.try_get("id")?,
+                filename: row.try_get("filename")?,
+                content_type: row.try_get("content_type")?,
+                size_bytes: row.try_get("size_bytes")?,
+            })
+        })
+        .collect()
+}
+
+/// The stored bytes' keys for a draft's attachments, to build the message.
+///
+/// Only attachments backed by a storage object are returned here; a document
+/// source (institutional artefact) is a later concern.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn draft_attachment_objects<'e>(
+    executor: impl PgExecutor<'e>,
+    draft_id: Uuid,
+) -> CoreResult<Vec<AttachmentObject>> {
+    let rows = sqlx::query(
+        "SELECT a.id, a.filename, a.content_type, o.object_key
+           FROM mail_draft_attachments a
+           JOIN storage_objects o ON o.id = a.storage_object_id
+          WHERE a.draft_id = $1
+          ORDER BY a.created_at",
+    )
+    .bind(draft_id)
+    .fetch_all(executor)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(AttachmentObject {
+                id: row.try_get("id")?,
+                filename: row.try_get("filename")?,
+                content_type: row.try_get("content_type")?,
+                object_key: row.try_get("object_key")?,
+            })
+        })
+        .collect()
+}
+
+/// How many attachments a draft has, and their total size — for the limits.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn draft_attachment_totals<'e>(
+    executor: impl PgExecutor<'e>,
+    draft_id: Uuid,
+) -> CoreResult<(i64, i64)> {
+    let row = sqlx::query(
+        "SELECT count(*)::bigint AS n, COALESCE(SUM(size_bytes), 0)::bigint AS total
+           FROM mail_draft_attachments
+          WHERE draft_id = $1",
+    )
+    .bind(draft_id)
+    .fetch_one(executor)
+    .await?;
+    Ok((row.try_get("n")?, row.try_get("total")?))
+}
+
+/// Delete one attachment of a draft, returning the storage object it referenced.
+///
+/// The caller deletes the object afterwards: the FK is `ON DELETE RESTRICT`, so
+/// the row must go first. Ownership is the draft's, checked by the caller.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+pub async fn delete_draft_attachment<'e>(
+    executor: impl PgExecutor<'e>,
+    draft_id: Uuid,
+    attachment_id: Uuid,
+) -> CoreResult<Option<Uuid>> {
+    let removed: Option<Uuid> = sqlx::query_scalar(
+        "DELETE FROM mail_draft_attachments
+          WHERE id = $1 AND draft_id = $2
+         RETURNING storage_object_id",
+    )
+    .bind(attachment_id)
+    .bind(draft_id)
+    .fetch_optional(executor)
+    .await?
+    .flatten();
+    Ok(removed)
+}
+
+/// The storage objects a draft's attachments reference, for cleanup on discard.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn draft_attachment_object_ids<'e>(
+    executor: impl PgExecutor<'e>,
+    draft_id: Uuid,
+) -> CoreResult<Vec<Uuid>> {
+    let ids: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT storage_object_id FROM mail_draft_attachments
+          WHERE draft_id = $1 AND storage_object_id IS NOT NULL",
+    )
+    .bind(draft_id)
+    .fetch_all(executor)
+    .await?;
+    Ok(ids)
+}
+
+/// Delete a storage object row, returning its key so the bytes can be removed.
+///
+/// Used only after the attachment rows that referenced it are gone (the FK is
+/// `ON DELETE RESTRICT`). Returns `None` when the row was already absent.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+pub async fn delete_storage_object<'e>(
+    executor: impl PgExecutor<'e>,
+    object_id: Uuid,
+) -> CoreResult<Option<String>> {
+    let key: Option<String> =
+        sqlx::query_scalar("DELETE FROM storage_objects WHERE id = $1 RETURNING object_key")
+            .bind(object_id)
+            .fetch_optional(executor)
+            .await?;
+    Ok(key)
+}
+
 /// What a member has chosen about how their mail behaves.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct MailPreferences {

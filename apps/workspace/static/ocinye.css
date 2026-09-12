@@ -2563,6 +2563,62 @@ div.oc-result { cursor: default; }
 }
 .oc-comp__editor a { color: var(--oc-navy); }
 
+/* Anexos: uma lista de fichas e um botão discreto de anexar. */
+.oc-comp__anexos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--oc-border);
+  flex-shrink: 0;
+}
+.oc-comp__anexos-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.oc-comp__anexo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 8px;
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-sm);
+  background: var(--oc-surface-subtle);
+  font: 400 12px var(--oc-font-sans);
+  color: var(--oc-text-body);
+}
+.oc-comp__anexo[data-oc-estado="a-carregar"] { opacity: 0.6; }
+.oc-comp__anexo[data-oc-estado="erro"] { border-color: var(--oc-error); color: var(--oc-error); }
+.oc-comp__anexo-tam { color: var(--oc-text-meta); font-size: 11px; }
+.oc-comp__anexo-tirar {
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  cursor: pointer;
+  color: var(--oc-text-meta);
+  font-size: 14px;
+  line-height: 1;
+}
+.oc-comp__anexo-tirar:hover { color: var(--oc-error); }
+.oc-comp__anexar {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: var(--oc-r-sm);
+  font: 500 12px var(--oc-font-sans);
+  color: var(--oc-text-secondary);
+  cursor: pointer;
+}
+.oc-comp__anexar:hover { background: var(--oc-surface-muted); color: var(--oc-navy); }
+/* Enquanto se arrasta um ficheiro sobre o compositor. */
+.oc-comp[data-oc-arrastar="true"] { outline: 2px dashed var(--oc-navy); outline-offset: -4px; }
+
 .oc-comp__confirmar {
   display: flex;
   align-items: flex-start;

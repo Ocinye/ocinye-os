@@ -1409,6 +1409,7 @@
 
     let guardado = instantaneo(); // o último estado persistido, ou o inicial
     let aGuardar = false;
+    let aCarregar = 0; // anexos por terminar; bloqueiam o envio
     let falhou = false;
     let pendente = null;
 
@@ -1579,11 +1580,156 @@
     window.addEventListener('beforeunload', (evento) => {
       if (aFechar) return;
       if (forma && forma.dataset.ocEnviando === 'true') return;
-      if (sujo() || aGuardar || falhou) {
+      if (sujo() || aGuardar || falhou || aCarregar > 0) {
         evento.preventDefault();
         evento.returnValue = '';
       }
     });
+
+    /* ── Anexos ────────────────────────────────────────────────────────────
+
+       Os bytes vão para o Core, que os admite contra a quota, valida o tipo e os
+       guarda (ADR-0108, §40). Um anexo precisa de um rascunho: se ainda não
+       existe, cria-se antes de carregar. Enviar fica bloqueado enquanto houver
+       um carregamento por terminar (briefing §16). */
+
+    const ficheiroInput = janela.querySelector('[data-oc="compositor-ficheiro"]');
+    const anexosLista = janela.querySelector('[data-oc="anexos-lista"]');
+
+    function bytesLegiveis(n) {
+      if (!n || n <= 0) return '0 B';
+      const u = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+      let t = n;
+      let i = 0;
+      while (t >= 1024 && i < u.length - 1) {
+        t /= 1024;
+        i += 1;
+      }
+      return (i === 0 ? n + ' B' : t.toFixed(1) + ' ' + u[i]);
+    }
+
+    function actualizarEnvio() {
+      if (!enviar) return;
+      if (aCarregar > 0) {
+        enviar.disabled = true;
+      } else if (!envioBloqueadoInicial) {
+        enviar.disabled = false;
+      }
+    }
+    const envioBloqueadoInicial = enviar ? enviar.disabled : false;
+
+    async function garantirRascunho() {
+      if (draftIdInput && draftIdInput.value) return draftIdInput.value;
+      await guardar();
+      return draftIdInput && draftIdInput.value ? draftIdInput.value : null;
+    }
+
+    function construirFicha(dados) {
+      const li = document.createElement('li');
+      li.className = 'oc-comp__anexo';
+      li.dataset.oc = 'anexo';
+      li.dataset.ocId = dados.id || '';
+      const nome = document.createElement('span');
+      nome.className = 'oc-comp__anexo-nome';
+      nome.textContent = dados.filename || '';
+      const tam = document.createElement('span');
+      tam.className = 'oc-comp__anexo-tam';
+      tam.textContent = bytesLegiveis(dados.size_bytes);
+      const tirar = document.createElement('button');
+      tirar.type = 'button';
+      tirar.className = 'oc-comp__anexo-tirar';
+      tirar.dataset.oc = 'tirar-anexo';
+      tirar.setAttribute('aria-label', 'Retirar ' + (dados.filename || ''));
+      tirar.textContent = '×';
+      li.appendChild(nome);
+      li.appendChild(tam);
+      li.appendChild(tirar);
+      return li;
+    }
+
+    async function anexar(ficheiros) {
+      if (!anexosLista || !ficheiros || !ficheiros.length) return;
+      const id = await garantirRascunho();
+      if (!id) return;
+      for (const ficheiro of ficheiros) {
+        aCarregar += 1;
+        actualizarEnvio();
+        /* Ficha provisória, a dizer que está a carregar. */
+        const provisoria = construirFicha({ filename: ficheiro.name, size_bytes: ficheiro.size });
+        provisoria.dataset.ocEstado = 'a-carregar';
+        anexosLista.appendChild(provisoria);
+        try {
+          const fd = new FormData();
+          fd.append('file', ficheiro, ficheiro.name);
+          const resposta = await fetch(
+            '/mail/drafts/' + encodeURIComponent(id) + '/attachments',
+            { method: 'POST', body: fd },
+          );
+          if (!resposta.ok) throw new Error('upload falhou');
+          const dados = await resposta.json();
+          const real = construirFicha(dados);
+          anexosLista.replaceChild(real, provisoria);
+        } catch (erro) {
+          provisoria.dataset.ocEstado = 'erro';
+          const nome = provisoria.querySelector('.oc-comp__anexo-nome');
+          if (nome) nome.textContent = (ficheiro.name || '') + ' — falhou';
+        } finally {
+          aCarregar -= 1;
+          actualizarEnvio();
+        }
+      }
+    }
+
+    if (ficheiroInput) {
+      ficheiroInput.addEventListener('change', () => {
+        anexar(ficheiroInput.files);
+        ficheiroInput.value = '';
+      });
+    }
+
+    /* Largar ficheiros sobre o compositor anexa-os. */
+    janela.addEventListener('dragover', (evento) => {
+      if (evento.dataTransfer && Array.from(evento.dataTransfer.types || []).includes('Files')) {
+        evento.preventDefault();
+        janela.dataset.ocArrastar = 'true';
+      }
+    });
+    janela.addEventListener('dragleave', (evento) => {
+      if (evento.target === janela) delete janela.dataset.ocArrastar;
+    });
+    janela.addEventListener('drop', (evento) => {
+      if (evento.dataTransfer && evento.dataTransfer.files && evento.dataTransfer.files.length) {
+        evento.preventDefault();
+        delete janela.dataset.ocArrastar;
+        anexar(evento.dataTransfer.files);
+      }
+    });
+
+    /* Retirar um anexo: delegação, para apanhar as fichas do servidor e as
+       acrescentadas pelo JS. */
+    if (anexosLista) {
+      anexosLista.addEventListener('click', async (evento) => {
+        const botao = evento.target.closest('[data-oc="tirar-anexo"]');
+        if (!botao) return;
+        const li = botao.closest('[data-oc="anexo"]');
+        const id = draftIdInput ? draftIdInput.value : '';
+        const anexoId = li ? li.dataset.ocId : '';
+        if (!li) return;
+        if (!id || !anexoId) {
+          li.remove();
+          return;
+        }
+        try {
+          await fetch(
+            '/mail/drafts/' + encodeURIComponent(id) + '/attachments/' + encodeURIComponent(anexoId),
+            { method: 'DELETE' },
+          );
+        } catch (erro) {
+          /* Best-effort: mesmo que a rede falhe, tira-se da vista. */
+        }
+        li.remove();
+      });
+    }
   }
 
   /* ── Arranque ─────────────────────────────────────────────────────── */

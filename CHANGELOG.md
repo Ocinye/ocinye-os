@@ -7,6 +7,26 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Correio — anexos, com quota e limpeza (fatia D) — 2026-09-12
+
+O compositor ganha anexos, ligados ao armazenamento canónico e à governança de
+recursos (§40, ADR-0108).
+
+- **Anexar** por botão ou largando ficheiros sobre o compositor. Cada anexo
+  aparece como ficha (nome, tamanho, retirar); Enviar fica bloqueado enquanto um
+  carregamento não termina (§16).
+- **Bytes pela fronteira pessoal.** Um anexo passa por `guardar_bytes_personal`
+  — **admissão de quota** (`admit_personal_bytes`), tipo validado por lista de
+  permissões, checksum, chave opaca, dono — e a linha em `mail_draft_attachments`
+  liga-o ao rascunho. Nenhuma inserção directa que contorne a quota.
+- **Limites no servidor:** tamanho por anexo, total da mensagem, e número máximo
+  — o cliente ajuda, o Core decide.
+- **Envio** inclui os anexos do rascunho como `multipart/mixed` (o construtor
+  MIME já existia); cada um é INTERNAL para a política de envio (ADR-0403).
+- **Sem objectos órfãos:** descartar o rascunho apaga as linhas e liberta os
+  objectos de armazenamento; retirar um anexo liberta o seu (§17, §59, provado
+  por teste). Um rascunho é privado ao autor — IDOR provado por reversão.
+
 ### Correio — corpo de texto rico com fronteira de saída (fatia C) — 2026-09-12
 
 O compositor ganha formatação, sem abrir uma superfície de HTML arbitrário

@@ -30,7 +30,7 @@ Assistência: [ai.md](ai.md).
 | Descoberta de pastas | **`CURRENT`** | Perguntada ao servidor, não fixada no código |
 | **Sincronização** | **`DEGRADED`** | Manual. Não existe worker de ingestão periódica |
 | Assistência de escrita | **`CURRENT`** | Depende de um nó de IA |
-| Anexos institucionais no envio | **`PLANNED`** | Depende de object storage |
+| Anexos no envio | **`CURRENT`** | Carregados para o rascunho, pela quota pessoal; enviados em `multipart/mixed` (ADR-0108) |
 | Descarga de anexos recebidos | **`PLANNED`** | O adaptador lê-os; falta a rota e o ecrã |
 | Caixas partilhadas — administração | **`PLANNED`** | Modelo e consultas existem; ecrã não |
 | Agentes que actuam sobre correio | **`NOT IMPLEMENTED`** | Exige ADR próprio |
