@@ -7,6 +7,39 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Prompt Ocinye — superfície de comando sempre operacional (M5.1) — 2026-09-13
+
+O Prompt tratava a ausência de IA como avaria: com zero modelos, `POST /ai/prompt`
+respondia `503`, e o Workspace desactivava o input, as sugestões e as
+capacidades. Isso confundia **degradação** com **falha** — `providers = 0` é um
+estado operacional válido, não o Core em baixo. O Prompt passa a ser o que é: uma
+**superfície de comando**, operacional sempre que o Core está saudável e o membro
+tem autorização, mesmo sem nenhum fornecedor, modelo ou nó
+([ADR-0308](docs/adrs/0308-typed-ai-interaction-envelope.md)).
+
+- **Envelope tipado de interacção** em `ocinye-contracts`: `AiInteractionResponse`
+  com `origin` (`SYSTEM`/`MODEL`/`TOOL`/`AGENT`), `status`
+  (`COMPLETED`/`DEGRADED`), `reason_code` (conjunto fechado em
+  `SCREAMING_SNAKE_CASE`, começando por `AI_NO_PROVIDER_AVAILABLE`), e
+  `model`/`provider`/`compute_node` — presentes e nulos, para se **provar** a
+  ausência de modelo em vez de a inferir.
+- **`POST /ai/prompt` devolve `200`** com o envelope quando o pedido é processado
+  sem inferência: `origin=SYSTEM`, `status=DEGRADED`,
+  `reason_code=AI_NO_PROVIDER_AVAILABLE`. Deixou de haver `503` neste caminho. Os
+  erros reais — permissão (`403`), pedido vazio (`422`) — continuam a ser erros.
+- **Fuga de inglês corrigida**: a mensagem do estado de IA («No Ocinye AI node…»)
+  passa a português europeu, e afirma que o Prompt está operacional.
+- **Input sempre activo**: textarea, enviar e sugestões deixam de ser desactivados
+  por ausência de IA. As sugestões continuam a submeter.
+- **Capacidade seleccionável** independentemente da disponibilidade (radios
+  associados ao formulário, sem JavaScript): escolher `Código` sem modelo de
+  código activo é legítimo e conclui como resposta de sistema.
+- **Turno de conversa**: o pedido do membro e a resposta aparecem com a origem
+  explícita; uma resposta de sistema nunca se apresenta como resposta de modelo.
+- A procura fica registada no ledger `ai_jobs` com o **código-máquina** da razão,
+  sem consumir tokens nem reservar GPU. `OCINYE_AI_ALLOW_EXTERNAL_PROVIDERS`
+  mantém-se `false`: zero pedidos de inferência externa.
+
 ### Correio — anexar na barra, anexos à vista, e não se perdem — 2026-09-13
 
 Anexar um ficheiro num compositor ainda vazio não criava rascunho nenhum, e o

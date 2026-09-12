@@ -5956,14 +5956,18 @@ struct PromptForm {
     prompt: String,
     #[serde(default)]
     workspace: Option<String>,
+    /// A capacidade escolhida na barra (`GENERAL`, `CODING`, …).
+    #[serde(default)]
+    capability: Option<String>,
 }
 
 /// `POST /ai/prompt`
 ///
-/// Antes desta auditoria este caminho não existia: o formulário submetia e o
-/// Axum devolvia 405. Agora o Core decide, e a sua recusa — permissão, ou
-/// capacidade sem nó — aparece como estado nativo do ecrã, nunca como alerta
-/// do browser (briefing §8).
+/// O Prompt é uma superfície de comando: aceita o pedido sempre que o Core está
+/// saudável e o membro tem autorização. A resposta do Core — hoje uma conclusão
+/// de sistema, `origin=SYSTEM`, `status=DEGRADED`, porque não há inferência —
+/// aparece como um turno de conversa, com a origem explícita, nunca disfarçada
+/// de resposta de modelo (M5 §5, §8, §12).
 async fn submit_prompt(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
@@ -5993,25 +5997,59 @@ async fn submit_prompt(
         None => None,
     };
 
-    let outcome = api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/ai/prompt",
-        &serde_json::json!({ "prompt": form.prompt }),
-    )
-    .await;
+    // Um pedido vazio não é um turno: nada foi pedido. Volta ao estado vazio
+    // sem inventar uma resposta.
+    let exchange = if form.prompt.trim().is_empty() {
+        None
+    } else {
+        let mut body = serde_json::json!({ "prompt": form.prompt });
+        if let Some(capability) = form.capability.as_deref().filter(|c| !c.is_empty()) {
+            body["capability"] = Value::String(capability.to_owned());
+        }
+        let outcome = api::post(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            "/api/v1/ai/prompt",
+            &body,
+        )
+        .await;
 
-    let notice = match outcome {
-        // Inalcançável nesta instalação, e deliberadamente não simulado: quando
-        // existir inferência, é aqui que a resposta entra.
-        Ok(_) => Some(ui::screens::prompt::Notice::accepted()),
-        Err(ApiFailure::Unauthorised) => return Redirect::to("/login").into_response(),
-        Err(failure) => Some(ui::screens::prompt::Notice::refused(failure.to_string())),
+        match outcome {
+            // O caminho normal desta instalação: 200 com o envelope tipado.
+            Ok(value) => Some(exchange_from_envelope(&form.prompt, &value)),
+            Err(ApiFailure::Unauthorised) => return Redirect::to("/login").into_response(),
+            // O membro não pode usar IA: uma resposta de sistema honesta, com o
+            // seu código-máquina — não uma falha silenciosa.
+            Err(ApiFailure::Forbidden | ApiFailure::Denied) => {
+                Some(ui::screens::prompt::PromptExchange {
+                    prompt: form.prompt.clone(),
+                    origin: "SYSTEM".to_owned(),
+                    status: "DEGRADED".to_owned(),
+                    reason_code: Some("AI_PERMISSION_DENIED".to_owned()),
+                    model: None,
+                    content: "Não tem autorização para utilizar as capacidades de IA nesta \
+                              instalação do Ocinye OS."
+                        .to_owned(),
+                })
+            }
+            // Qualquer outra recusa do Core chega ao membro nas palavras que o
+            // Core deu, ainda como turno de sistema.
+            Err(failure) => Some(ui::screens::prompt::PromptExchange {
+                prompt: form.prompt.clone(),
+                origin: "SYSTEM".to_owned(),
+                status: "DEGRADED".to_owned(),
+                reason_code: None,
+                model: None,
+                content: failure.to_string(),
+            }),
+        }
     };
 
-    let content =
-        ui::screens::prompt::prompt(ui::screens::prompt::context_from(&status, context), notice);
+    let content = ui::screens::prompt::prompt(
+        ui::screens::prompt::context_from(&status, context),
+        exchange,
+    );
 
     shell_page(
         "Prompt Ocinye",
@@ -6020,6 +6058,23 @@ async fn submit_prompt(
         Vec::new(),
         content,
     )
+}
+
+/// Constrói o turno de conversa a partir do envelope tipado do Core.
+///
+/// Lê os campos tal como o Core os deu — `origin`, `status`, `reason_code`,
+/// `model`, `content`. Nunca infere um modelo: se o Core disse `origin=SYSTEM`,
+/// é do sistema.
+fn exchange_from_envelope(prompt: &str, value: &Value) -> ui::screens::prompt::PromptExchange {
+    let field = |key: &str| value.get(key).and_then(Value::as_str).map(str::to_owned);
+    ui::screens::prompt::PromptExchange {
+        prompt: prompt.to_owned(),
+        origin: field("origin").unwrap_or_else(|| "SYSTEM".to_owned()),
+        status: field("status").unwrap_or_else(|| "DEGRADED".to_owned()),
+        reason_code: field("reason_code"),
+        model: field("model"),
+        content: field("content").unwrap_or_default(),
+    }
 }
 
 /// Termo de pesquisa.

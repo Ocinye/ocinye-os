@@ -19,39 +19,67 @@ use serde_json::Value;
 
 use crate::ui::icon::{icon, Icon};
 
-/// O que o Core respondeu ao último pedido.
+/// Uma capacidade oferecida na barra, e o seu estado.
 ///
-/// Existe para que submeter um prompt nunca produza «nada»: a resposta do Core
-/// — incluindo a recusa por não haver nó — aparece como estado do ecrã, nunca
-/// como alerta do browser (briefing §8).
-pub struct Notice {
-    /// Título curto.
-    pub title: &'static str,
-    /// Explicação, tal como o Core a redigiu.
-    pub detail: String,
-    /// Se descreve uma recusa.
-    pub refused: bool,
+/// A capacidade é **seleccionável** independentemente de estar disponível:
+/// autorização e disponibilidade são eixos distintos. Escolher `Código` sem um
+/// modelo de código activo é legítimo — o pedido conclui como resposta de
+/// sistema, e não é escondido (M5 §10).
+pub struct CapabilityChip {
+    /// Rótulo em português.
+    pub label: &'static str,
+    /// Código estável (`GENERAL`, `CODING`, …), submetido com o pedido.
+    pub code: String,
+    /// Se um modelo saudável a serve agora.
+    pub available: bool,
+    /// Se é a escolha por omissão.
+    pub first: bool,
 }
 
-impl Notice {
-    /// O pedido foi aceite pelo Core.
+/// Um turno de conversa já concluído: o pedido do membro e a resposta tipada.
+///
+/// Existe para que o Prompt seja uma superfície de comando, e não um widget de
+/// LLM: o pedido submetido aparece como mensagem do membro, e a resposta do
+/// Core aparece com a sua **origem** explícita. Uma resposta de sistema —
+/// escrita pela plataforma porque não havia inferência — nunca se disfarça de
+/// resposta de modelo (M5 §8, §15).
+pub struct PromptExchange {
+    /// O que o membro pediu.
+    pub prompt: String,
+    /// Quem redigiu a resposta: `SYSTEM`, `MODEL`, `TOOL` ou `AGENT`.
+    pub origin: String,
+    /// Como concluiu: `COMPLETED` ou `DEGRADED`.
+    pub status: String,
+    /// O código-máquina da razão, quando degradou.
+    pub reason_code: Option<String>,
+    /// O modelo que respondeu, quando existiu.
+    pub model: Option<String>,
+    /// A resposta, nas palavras de quem a redigiu.
+    pub content: String,
+}
+
+impl PromptExchange {
+    /// A etiqueta de autoria da resposta, derivada da origem.
+    ///
+    /// `SYSTEM` é «Ocinye · Sistema» — uma resposta determinística da
+    /// plataforma. `MODEL` nomeia o modelo. Nunca se confundem.
     #[must_use]
-    pub fn accepted() -> Self {
-        Self {
-            title: "Pedido submetido",
-            detail: "O pedido foi aceite pelo Ocinye Core.".to_owned(),
-            refused: false,
+    pub fn author(&self) -> String {
+        match self.origin.as_str() {
+            "MODEL" => match &self.model {
+                Some(model) => format!("Ocinye AI · {model}"),
+                None => "Ocinye AI".to_owned(),
+            },
+            "TOOL" => "Ocinye · Ferramenta".to_owned(),
+            "AGENT" => "Ocinye · Agente".to_owned(),
+            _ => "Ocinye · Sistema".to_owned(),
         }
     }
 
-    /// O Core recusou, e diz porquê.
+    /// Se a resposta é uma conclusão degradada (sem inferência).
     #[must_use]
-    pub fn refused(detail: String) -> Self {
-        Self {
-            title: "IA ainda não disponível",
-            detail,
-            refused: true,
-        }
+    pub fn degraded(&self) -> bool {
+        self.status == "DEGRADED"
     }
 }
 
@@ -61,8 +89,8 @@ pub struct PromptContext {
     pub agent: Option<String>,
     /// Research Workspace vinculado, quando aberto de dentro de um.
     pub workspace: Option<(String, String)>,
-    /// Capacidades e a sua disponibilidade real.
-    pub capabilities: Vec<(String, bool, bool)>,
+    /// Capacidades oferecidas, seleccionáveis independentemente do estado.
+    pub capabilities: Vec<CapabilityChip>,
     /// Se alguma capacidade pode ser servida.
     pub available: bool,
     /// A explicação do estado, vinda do Core.
@@ -87,18 +115,26 @@ pub fn context_from(status: &Value, workspace: Option<(String, String)>) -> Prom
             list.iter()
                 .enumerate()
                 .map(|(i, entry)| {
-                    let name = match entry.get("capability").and_then(Value::as_str) {
-                        Some("GENERAL") => "Geral",
-                        Some("REASONING") => "Raciocínio",
-                        Some("CODING") => "Código",
-                        Some("EMBEDDING") => "Dados",
-                        other => other.unwrap_or("Capacidade"),
+                    let code = entry
+                        .get("capability")
+                        .and_then(Value::as_str)
+                        .unwrap_or("GENERAL");
+                    let label = match code {
+                        "REASONING" => "Raciocínio",
+                        "CODING" => "Código",
+                        "EMBEDDING" => "Dados",
+                        _ => "Geral",
                     };
                     let ready = entry
                         .get("available")
                         .and_then(Value::as_bool)
                         .unwrap_or(false);
-                    (name.to_owned(), ready, i == 0)
+                    CapabilityChip {
+                        label,
+                        code: code.to_owned(),
+                        available: ready,
+                        first: i == 0,
+                    }
                 })
                 .collect()
         })
@@ -129,12 +165,18 @@ const SUGGESTIONS: [&str; 4] = [
 ];
 
 /// O ecrã do Prompt Ocinye.
-pub fn prompt(ctx: PromptContext, notice: Option<Notice>) -> impl IntoView {
+///
+/// O Prompt é uma **superfície de comando**, e mantém-se operacional sempre que
+/// o Core está saudável e o membro tem autorização — independentemente de haver
+/// zero fornecedores, modelos ou nós. O input não é desactivado por ausência de
+/// IA: um pedido que precise de inferência conclui com uma resposta de sistema,
+/// visível na conversa (M5 §4, §12).
+pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl IntoView {
     let PromptContext {
         agent,
         workspace,
         capabilities,
-        available,
+        available: _available,
         message,
     } = ctx;
     let agent_label = agent.unwrap_or_else(|| "Sem agente seleccionado".to_owned());
@@ -142,6 +184,7 @@ pub fn prompt(ctx: PromptContext, notice: Option<Notice>) -> impl IntoView {
     // isto, submeter dentro de um Research Workspace devolveria o ecrã
     // institucional e o membro perderia o contexto sem perceber porquê.
     let workspace_id = workspace.as_ref().map(|(code, _)| code.clone());
+    let has_exchange = exchange.is_some();
 
     view! {
         <div class="oc-prompt">
@@ -171,34 +214,32 @@ pub fn prompt(ctx: PromptContext, notice: Option<Notice>) -> impl IntoView {
 
                 <div class="oc-spacer"></div>
 
-                <div class="oc-caps" role="group" aria-label="Capacidade">
+                // A capacidade é seleccionável, autorização e disponibilidade
+                // sendo eixos distintos: escolher `Código` sem modelo de código
+                // activo é legítimo e conclui como resposta de sistema (M5 §10).
+                // Radios associados ao formulário do dock por `form=`, para
+                // viajarem com a submissão sem JavaScript.
+                <div class="oc-caps" role="radiogroup" aria-label="Capacidade">
                     {capabilities
                         .into_iter()
-                        .map(|(name, ready, first)| {
-                            if ready {
-                                view! {
-                                    <button
-                                        type="button"
-                                        class="oc-cap"
-                                        aria-selected=if first { "true" } else { "false" }
-                                    >
-                                        {name}
-                                    </button>
-                                }
-                                    .into_any()
-                            } else {
-                                // Uma capacidade indisponível é mostrada como
-                                // tal, com a razão, em vez de escondida.
-                                view! {
-                                    <span
-                                        class="oc-cap"
-                                        aria-disabled="true"
-                                    >
-                                        {name}
-                                        <small>"indisponível"</small>
-                                    </span>
-                                }
-                                    .into_any()
+                        .map(|chip| {
+                            let CapabilityChip { label, code, available, first } = chip;
+                            let id = format!("cap-{}", code.to_lowercase());
+                            view! {
+                                <input
+                                    type="radio"
+                                    class="oc-cap__in"
+                                    form="oc-prompt-form"
+                                    name="capability"
+                                    id=id.clone()
+                                    value=code
+                                    checked=first
+                                />
+                                <label class="oc-cap" for=id>
+                                    {label}
+                                    {(!available)
+                                        .then(|| view! { <small>"sem modelo activo"</small> })}
+                                </label>
                             }
                         })
                         .collect_view()}
@@ -206,73 +247,90 @@ pub fn prompt(ctx: PromptContext, notice: Option<Notice>) -> impl IntoView {
             </div>
 
             // ── Conversa ───────────────────────────────────────────────
-            <div class="oc-prompt__conv">
-                {notice
-                    .map(|notice| {
-                        let class = if notice.refused {
-                            "oc-callout oc-callout--warning oc-prompt__notice"
-                        } else {
-                            "oc-callout oc-prompt__notice"
-                        };
+            <div class=if has_exchange {
+                "oc-prompt__conv oc-prompt__conv--thread"
+            } else {
+                "oc-prompt__conv"
+            }>
+                {match exchange {
+                    // Um turno concluído: o pedido do membro, e a resposta com a
+                    // sua origem explícita. Uma resposta de sistema nunca se
+                    // apresenta como resposta de modelo (M5 §8, §15).
+                    Some(ex) => {
+                        let author = ex.author();
+                        let degraded = ex.degraded();
+                        let PromptExchange { prompt, content, reason_code, .. } = ex;
                         view! {
-                            <div class=class role="status" aria-live="polite">
-                                <strong>{notice.title}</strong>
-                                <p>{notice.detail}</p>
+                            <div class="oc-prompt__thread">
+                                <div class="oc-msg oc-msg--member">
+                                    <span class="oc-msg__who">"Você"</span>
+                                    <p class="oc-msg__body">{prompt}</p>
+                                </div>
+                                <div class="oc-msg oc-msg--system">
+                                    <span class="oc-msg__who">
+                                        {author}
+                                        {degraded
+                                            .then(|| {
+                                                view! {
+                                                    <span class="oc-msg__badge">"ESTADO"</span>
+                                                }
+                                            })}
+                                    </span>
+                                    <p class="oc-msg__body">{content}</p>
+                                    {reason_code
+                                        .map(|code| {
+                                            view! { <span class="oc-msg__code">{code}</span> }
+                                        })}
+                                </div>
                             </div>
                         }
-                    })}
+                            .into_any()
+                    }
+                    // Estado vazio: sem conversa ainda. O ecrã diz o que é, com
+                    // a explicação vinda do Core — nunca «desactivado».
+                    None => {
+                        view! {
+                            <div class="oc-prompt__hero">
+                                <span class="oc-empty__tile oc-empty__tile--prompt">
+                                    {icon(Icon::AiHexMd, 26)}
+                                </span>
+                                <h1>"Interagir com Ocinye"</h1>
+                                <p class="oc-t-caption--muted">{message}</p>
+                                <p class="oc-t-soft">
+                                    "As respostas respeitarão sempre aquilo a que tem acesso: um
+                                     modelo nunca recebe um artefacto que não conseguiria abrir."
+                                </p>
+                            </div>
 
-                <div class="oc-prompt__hero">
-                    <span
-                        class="oc-empty__tile oc-empty__tile--prompt"
-                    >
-                        {icon(Icon::AiHexMd, 26)}
-                    </span>
-                    <h1>"Interagir com Ocinye"</h1>
-                    <p class="oc-t-caption--muted" >
-                        {message}
-                    </p>
-                    <p class="oc-t-soft" >
-                        "As respostas respeitarão sempre aquilo a que tem acesso: um modelo nunca
-                         recebe um artefacto que não conseguiria abrir."
-                    </p>
-
-                </div>
-
-                // Cada sugestão submete o pedido que enuncia. Antes eram
-                // botões sem handler: clicá-las não fazia nada, mesmo com IA
-                // disponível (briefing §3).
-                <div class="oc-prompt__suggestions">
-                    {SUGGESTIONS
-                        .iter()
-                        .map(|text| {
-                            view! {
-                                <form method="post" action="/ai/prompt">
-                                    <input type="hidden" name="prompt" value=*text />
-                                    <button
-                                        type="submit"
-                                        class="oc-suggestion"
-                                        disabled=!available
-                                        title=if available {
-                                            String::new()
-                                        } else {
-                                            "Nenhuma capacidade de IA compatível está \
-                                             actualmente disponível."
-                                                .to_owned()
+                            // Cada sugestão submete o pedido que enuncia, e
+                            // continua utilizável sem IA: prova que o Prompt é
+                            // uma superfície de comando, não um widget de LLM
+                            // (M5 §12).
+                            <div class="oc-prompt__suggestions">
+                                {SUGGESTIONS
+                                    .iter()
+                                    .map(|text| {
+                                        view! {
+                                            <form method="post" action="/ai/prompt">
+                                                <input type="hidden" name="prompt" value=*text />
+                                                <button type="submit" class="oc-suggestion">
+                                                    {*text}
+                                                </button>
+                                            </form>
                                         }
-                                    >
-                                        {*text}
-                                    </button>
-                                </form>
-                            }
-                        })
-                        .collect_view()}
-                </div>
+                                    })
+                                    .collect_view()}
+                            </div>
+                        }
+                            .into_any()
+                    }
+                }}
             </div>
 
             // ── Input ──────────────────────────────────────────────────
             <div class="oc-prompt__dock">
                 <form
+                    id="oc-prompt-form"
                     method="post"
                     action="/ai/prompt"
                     class="oc-prompt__input"
@@ -286,7 +344,6 @@ pub fn prompt(ctx: PromptContext, notice: Option<Notice>) -> impl IntoView {
                         name="prompt"
                         class="oc-textarea"
                         placeholder="Escreva o seu pedido…"
-                        disabled=!available
                     ></textarea>
 
                     <div class="oc-prompt__actions">
@@ -309,12 +366,7 @@ pub fn prompt(ctx: PromptContext, notice: Option<Notice>) -> impl IntoView {
                         <button
                             type="submit"
                             aria-label="Enviar"
-                            title=if available {
-                                "Enviar"
-                            } else {
-                                "Nenhuma capacidade de IA compatível está actualmente disponível."
-                            }
-                            disabled=!available
+                            title="Enviar"
                             class="oc-prompt__send"
                         >
                             {icon(Icon::Send, 16)}
@@ -359,7 +411,8 @@ mod tests {
         json!({
             "available": false,
             "providers": 0,
-            "message": "Nenhum nó de IA Ocinye está actualmente disponível.",
+            "message": "O Prompt Ocinye está operacional. Actualmente não existe nenhum nó \
+                        Ocinye AI activo. Nenhum fornecedor externo é utilizado em substituição.",
             "capabilities": [
                 {"capability": "GENERAL", "available": false},
                 {"capability": "REASONING", "available": false},
@@ -369,12 +422,33 @@ mod tests {
         })
     }
 
+    fn degraded_exchange() -> PromptExchange {
+        PromptExchange {
+            prompt: "Cria uma função Rust que some dois números.".to_owned(),
+            origin: "SYSTEM".to_owned(),
+            status: "DEGRADED".to_owned(),
+            reason_code: Some("AI_NO_PROVIDER_AVAILABLE".to_owned()),
+            model: None,
+            content: "Nenhuma capacidade de inferência está actualmente disponível.".to_owned(),
+        }
+    }
+
     #[test]
-    fn sem_no_o_envio_esta_desactivado_e_o_ecra_diz_porque() {
+    fn sem_no_o_prompt_continua_operacional_e_o_ecra_diz_porque() {
+        // O contrato M5: com zero modelos, o Prompt está operacional. O input
+        // não é desactivado; a razão vive nas capacidades e na resposta.
         let html = prompt(context_from(&unavailable(), None), None).to_html();
-        assert!(html.contains("Nenhum nó de IA Ocinye está actualmente disponível"));
-        assert!(html.contains("disabled"));
-        assert!(html.contains("indisponível"));
+        assert!(html.contains("O Prompt Ocinye está operacional"));
+        // O atributo booleano `disabled` (precedido de espaço) não aparece em
+        // nenhum controlo — distinto de `aria-disabled` dos chips de contexto,
+        // que ainda não têm endpoint e são um assunto à parte.
+        assert!(
+            !html.contains(" disabled"),
+            "o input do Prompt nunca é desactivado por ausência de IA"
+        );
+        // A capacidade continua seleccionável, com o seu estado ao lado.
+        assert!(html.contains("sem modelo activo"));
+        assert!(html.contains("name=\"capability\""));
     }
 
     #[test]
@@ -383,6 +457,23 @@ mod tests {
         for label in ["Geral", "Raciocínio", "Código", "Dados"] {
             assert!(html.contains(label), "falta a capacidade {label}");
         }
+    }
+
+    #[test]
+    fn uma_resposta_de_sistema_aparece_como_sistema() {
+        // A resposta degradada é do SISTEMA, e nunca se disfarça de modelo.
+        let html = prompt(
+            context_from(&unavailable(), None),
+            Some(degraded_exchange()),
+        )
+        .to_html();
+        assert!(html.contains("Cria uma função Rust")); // o pedido do membro
+        assert!(html.contains("Ocinye · Sistema"));
+        assert!(html.contains("AI_NO_PROVIDER_AVAILABLE"));
+        assert!(
+            !html.contains("Ocinye AI ·"),
+            "uma resposta de sistema não nomeia um modelo"
+        );
     }
 
     #[test]
