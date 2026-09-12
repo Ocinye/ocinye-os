@@ -64,6 +64,42 @@ pub(super) fn from_provider(error: ProviderError) -> CoreError {
     }
 }
 
+/// Refuse an outgoing message whose subject or any address carries a line break
+/// or control character.
+///
+/// A first-class header-injection guard: a `\r`/`\n` in a header value is the
+/// classic way to inject a second header. Tab is allowed (it is legal folding
+/// whitespace); every other C0 control, and both line-break characters, are
+/// refused across the subject and every address the message names.
+fn reject_unsafe_headers(message: &OutgoingMessage) -> CoreResult<()> {
+    fn safe(value: &str) -> bool {
+        !value
+            .chars()
+            .any(|c| c == '\r' || c == '\n' || (c.is_control() && c != '\t'))
+    }
+
+    let mut values = vec![message.subject.as_str(), message.from.address.as_str()];
+    for address in message
+        .to
+        .iter()
+        .chain(message.cc.iter())
+        .chain(message.bcc.iter())
+    {
+        values.push(address.address.as_str());
+        if let Some(name) = address.display_name.as_deref() {
+            values.push(name);
+        }
+    }
+
+    if values.into_iter().all(safe) {
+        Ok(())
+    } else {
+        Err(CoreError::Validation(
+            "Um destinatário ou o assunto contém caracteres não permitidos.".to_owned(),
+        ))
+    }
+}
+
 /// Authorise a mail permission, or fail closed.
 fn require(principal: &Principal, permission: Permission) -> CoreResult<()> {
     let ctx = ResourceContext::organisation(ResourceKind::Person, principal.organisation_id);
@@ -853,6 +889,13 @@ pub async fn send(
             "Indique pelo menos um destinatário.".to_owned(),
         ));
     }
+
+    // Header injection is refused at the door, not left to the transport. A
+    // `\r` or `\n` in a recipient or the subject could smuggle a second header
+    // — a hidden Bcc, another To — past what the member intended. `lettre`
+    // encodes header values when it builds the MIME, but a security boundary
+    // does not rest on a library's incidental behaviour (briefing §9, §48).
+    reject_unsafe_headers(&message)?;
 
     let decision = SendPolicy::evaluate(recipients, attachment_classifications, confirmed);
     let external = recipients.iter().filter(|r| r.is_external()).count();

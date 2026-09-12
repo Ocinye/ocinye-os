@@ -1838,6 +1838,7 @@ async fn compose(
                 .to_owned();
             draft.to = join("to_addresses");
             draft.cc = join("cc_addresses");
+            draft.bcc = join("bcc_addresses");
             draft.subject = saved
                 .get("subject")
                 .and_then(Value::as_str)
@@ -1915,6 +1916,8 @@ struct ComposeForm {
     #[serde(default)]
     cc: String,
     #[serde(default)]
+    bcc: String,
+    #[serde(default)]
     subject: String,
     #[serde(default)]
     body: String,
@@ -1936,6 +1939,7 @@ impl ComposeForm {
             mailbox_id: self.mailbox_id.clone(),
             to: self.to.clone(),
             cc: self.cc.clone(),
+            bcc: self.bcc.clone(),
             subject: self.subject.clone(),
             body: self.body.clone(),
             reply_to: self.reply_to.clone(),
@@ -2036,6 +2040,7 @@ async fn send_mail(
         "mailbox_id": form.mailbox_id,
         "to": split(&form.to),
         "cc": split(&form.cc),
+        "bcc": split(&form.bcc),
         "subject": form.subject,
         "body": form.body,
         "confirmed": form.confirmed.is_some(),

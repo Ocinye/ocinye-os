@@ -1080,6 +1080,8 @@ pub struct ComposeDraft {
     pub to: String,
     /// Em cópia.
     pub cc: String,
+    /// Em cópia oculta. Privada: nunca chega aos outros destinatários (ADR-0403).
+    pub bcc: String,
     /// Assunto.
     pub subject: String,
     /// Corpo.
@@ -1143,6 +1145,7 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
     let reply_to = draft.reply_to.clone();
     let to = draft.to.clone();
     let cc = draft.cc.clone();
+    let bcc = draft.bcc.clone();
     let subject = draft.subject.clone();
     let corpo = draft.body.clone();
     let instrucao = draft.instruction.clone();
@@ -1150,6 +1153,7 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
     let gerado = draft.generated;
     let confirmacao = draft.confirmation.clone();
     let cc_aberto = !cc.is_empty();
+    let bcc_aberto = !bcc.is_empty();
     let assinatura = draft.signature_html.clone();
 
     view! {
@@ -1241,6 +1245,10 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
 
                 <div class="oc-comp__linha oc-comp__linha--cc" data-oc="linha-cc" hidden=!cc_aberto>
                     {campo_de_destinatarios("cc", "Cc", &cc, false)}
+                </div>
+
+                <div class="oc-comp__linha oc-comp__linha--cc" data-oc="linha-bcc" hidden=!bcc_aberto>
+                    {campo_de_destinatarios("bcc", "Bcc", &bcc, false)}
                 </div>
 
                 <input
@@ -1401,10 +1409,14 @@ fn campo_de_destinatarios(
                 <ul class="oc-sugestoes" data-oc="sugestoes" hidden></ul>
             </div>
             {principal.then(|| view! {
-                // `Cc` é uma acção discreta, e não um campo vazio permanente:
-                // a maioria das mensagens não leva cópia, e um campo que quase
-                // nunca se usa a ocupar uma linha é ruído em todas as outras.
-                <button type="button" class="oc-comp__cc" data-oc="mostrar-cc">"Cc"</button>
+                // `Cc` e `Bcc` são acções discretas, e não campos vazios
+                // permanentes: a maioria das mensagens não leva cópia, e um campo
+                // que quase nunca se usa a ocupar uma linha é ruído em todas as
+                // outras. Abrir um não muda destinatários — só revela a linha.
+                <span class="oc-comp__ccbcc">
+                    <button type="button" class="oc-comp__cc" data-oc="mostrar-cc">"Cc"</button>
+                    <button type="button" class="oc-comp__cc" data-oc="mostrar-bcc">"Bcc"</button>
+                </span>
             })}
         </div>
     }
@@ -2268,6 +2280,29 @@ mod compositor_com_rascunho {
         assert!(out.contains("Guardar rascunho"));
         assert!(out.contains("Descartar"));
         assert!(out.contains("Cancelar"));
+    }
+
+    /// O compositor oferece Cc e Bcc, e a linha de Bcc existe (escondida) para o
+    /// botão a revelar — sem uma segunda janela nem um campo sempre presente.
+    #[test]
+    fn o_compositor_oferece_cc_e_bcc() {
+        let out = html(&ComposeDraft {
+            mailbox_id: CAIXA.to_owned(),
+            ..Default::default()
+        });
+        assert!(out.contains(r#"data-oc="mostrar-cc""#), "falta o botão Cc");
+        assert!(
+            out.contains(r#"data-oc="mostrar-bcc""#),
+            "falta o botão Bcc"
+        );
+        assert!(
+            out.contains(r#"data-oc="linha-bcc""#),
+            "falta a linha de Bcc"
+        );
+        assert!(
+            out.contains(r#"name="bcc""#),
+            "o campo de Bcc não submete com o nome certo"
+        );
     }
 
     /// Um rascunho já guardado traz o seu identificador ao cliente, para o
