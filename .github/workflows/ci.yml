@@ -544,12 +544,6 @@ jobs:
         # assim que três contagens diferentes chegaram a circular ao mesmo tempo.
         run: ./scripts/operation-matrix.sh --check
 
-      - name: Disco antes de builds de release
-        run: ./scripts/ci-disk.sh medir "builds de release"
-
-      - name: Builds de release
-        run: cargo build --release --workspace
-
       # O `FixtureProvider` é infraestrutura de testes e não pode entrar no
       # binário do servidor. A verificação é estrutural: pergunta ao Cargo com
       # que features o binário do servidor resolve o `ocinye-core`.
@@ -571,6 +565,27 @@ jobs:
             exit 1
           fi
           echo "o servidor não activa test-fixtures"
+
+  # A compilação de release corre à parte, em paralelo com os testes: é uma
+  # prova independente (o workspace compila optimizado) e não precisa de base de
+  # dados, armazenamento nem browser. Tirá-la do caminho crítico do job de testes
+  # encurta a espera sem perder a garantia — continua a ser um required check.
+  release:
+    name: Compilação de release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.3.0
+
+      - name: Toolchain
+        run: rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.8.1
+
+      - name: Libertar disco
+        run: ./scripts/ci-disk.sh libertar
+
+      - name: Build de release do workspace
+        run: cargo build --release --workspace
 
   compose:
     name: Stack local
