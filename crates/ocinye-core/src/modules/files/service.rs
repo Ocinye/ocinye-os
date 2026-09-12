@@ -405,10 +405,17 @@ pub async fn upload_version(
 }
 
 /// O que ficou guardado.
-struct BytesGuardados {
-    object_id: Uuid,
-    filename: String,
-    size: i64,
+pub struct BytesGuardados {
+    /// O identificador do objecto guardado.
+    pub object_id: Uuid,
+    /// O nome de ficheiro normalizado (sem travessias nem controlo).
+    pub filename: String,
+    /// O tamanho em bytes.
+    pub size: i64,
+    /// O tipo validado (da lista de permissões), com `;charset` retirado.
+    pub content_type: String,
+    /// A soma SHA-256 dos bytes.
+    pub checksum: String,
 }
 
 /// Valida, guarda e regista os bytes.
@@ -490,6 +497,8 @@ async fn guardar_bytes(
         object_id,
         filename,
         size,
+        content_type,
+        checksum,
     })
 }
 
@@ -498,7 +507,14 @@ async fn guardar_bytes(
 /// A mesma validação de [`guardar_bytes`], com a chave do objecto keyed no dono
 /// e o `owner_id` guardado na linha, para a governação saber de quem são os
 /// bytes e o caminho não os misturar com os de um ambiente.
-async fn guardar_bytes_personal(
+/// Guarda bytes pessoais de um membro e devolve o objecto guardado.
+///
+/// Exposta para além dos ficheiros pessoais — um anexo de correio é um objecto
+/// pessoal do autor — para que quem guarda passe pela mesma fronteira: validação
+/// de tipo, soma, chave opaca, dono, e **admissão de quota** (`admit_personal_bytes`,
+/// ADR-0108). Não cria uma linha em `files`: devolve só o objecto, para o
+/// chamador o referenciar onde precisar (§40).
+pub async fn guardar_bytes_personal(
     tx: &mut Tx<'_>,
     principal: &Principal,
     store: &ObjectStore,
@@ -576,6 +592,8 @@ async fn guardar_bytes_personal(
         object_id,
         filename,
         size,
+        content_type,
+        checksum,
     })
 }
 

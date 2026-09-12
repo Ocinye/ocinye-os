@@ -1063,6 +1063,17 @@ fn human_size(bytes: i64) -> String {
 
 // ── O composer ──────────────────────────────────────────────────────────
 
+/// Um anexo já guardado no rascunho, tal como o compositor o mostra.
+#[derive(Default, Clone)]
+pub struct ComposeAttachmentView {
+    /// O identificador da linha de anexo, para o retirar.
+    pub id: String,
+    /// O nome do ficheiro.
+    pub filename: String,
+    /// O tamanho legível (p.ex. «1.2 MiB»).
+    pub size: String,
+}
+
 /// O que o composer tem neste momento.
 ///
 /// Existe porque o composer é re-renderizado com o que já lá estava: com uma
@@ -1089,6 +1100,8 @@ pub struct ComposeDraft {
     /// O corpo em HTML de autoria, já higienizado pelo Core (ADR-0415). `None`
     /// quando é texto simples; preenche o editor ao retomar um rascunho rico.
     pub body_html: Option<String>,
+    /// Os anexos já guardados no rascunho, para os mostrar ao retomar.
+    pub attachments: Vec<ComposeAttachmentView>,
     /// A mensagem a que isto responde, quando é uma resposta.
     pub reply_to: Option<String>,
     /// Instrução dada à assistência, para não se perder ao regenerar.
@@ -1152,6 +1165,7 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
     let subject = draft.subject.clone();
     let corpo = draft.body.clone();
     let corpo_html = draft.body_html.clone();
+    let anexos = draft.attachments.clone();
     let instrucao = draft.instruction.clone();
     let erro = draft.error.clone();
     let gerado = draft.generated;
@@ -1315,6 +1329,30 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                     value=corpo_html.unwrap_or_default()
                 />
 
+                // Anexos. O botão abre o selector; largar um ficheiro sobre o
+                // compositor também anexa (o JS liga isso). Cada anexo já
+                // guardado aparece como ficha; o JS acrescenta as dos novos e
+                // trata a remoção. Os bytes passam pela quota (ADR-0108) e são
+                // re-higienizados/validados no Core (§40).
+                <div class="oc-comp__anexos" data-oc="compositor-anexos">
+                    <ul class="oc-comp__anexos-lista" data-oc="anexos-lista">
+                        {anexos
+                            .into_iter()
+                            .map(|anexo| ficha_de_anexo(&anexo.id, &anexo.filename, &anexo.size))
+                            .collect_view()}
+                    </ul>
+                    <label class="oc-comp__anexar">
+                        {icon(Icon::Attach, 14)}
+                        <span>"Anexar"</span>
+                        <input
+                            type="file"
+                            multiple
+                            data-oc="compositor-ficheiro"
+                            class="oc-sr"
+                        />
+                    </label>
+                </div>
+
                 // A instrução da assistência viaja com o formulário para não
                 // se perder quando o texto é regenerado.
                 <input type="hidden" name="instruction" value=instrucao />
@@ -1430,6 +1468,29 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
 /// lê este campo, desenha as fichas, e volta a escrevê-lo a cada alteração. Se
 /// o script não correr, fica um campo de texto com endereços separados por
 /// vírgula — que é feio e funciona.
+/// Uma ficha de anexo: nome, tamanho, e um botão para o retirar.
+///
+/// O botão leva `data-oc` (contrato de comportamento) e o `data-oc-id` que o JS
+/// usa para chamar a remoção no Core.
+fn ficha_de_anexo(id: &str, filename: &str, size: &str) -> impl IntoView {
+    let rotulo = format!("Retirar {filename}");
+    view! {
+        <li class="oc-comp__anexo" data-oc="anexo" data-oc-id=id.to_owned()>
+            {icon(Icon::Attach, 12)}
+            <span class="oc-comp__anexo-nome">{filename.to_owned()}</span>
+            <span class="oc-comp__anexo-tam">{size.to_owned()}</span>
+            <button
+                type="button"
+                class="oc-comp__anexo-tirar"
+                data-oc="tirar-anexo"
+                aria-label=rotulo
+            >
+                <span aria-hidden="true">"×"</span>
+            </button>
+        </li>
+    }
+}
+
 /// A barra de formatação do corpo.
 ///
 /// Cada botão nomeia o comando de edição que executa (`data-oc-cmd`); o JS
@@ -2425,6 +2486,34 @@ mod compositor_com_rascunho {
         assert!(
             out.contains(r#"name="html_body""#),
             "falta o campo escondido de HTML de autoria"
+        );
+    }
+
+    /// O compositor oferece anexar ficheiros, e um anexo já guardado aparece
+    /// como ficha com um botão de o retirar (com comportamento definido).
+    #[test]
+    fn o_compositor_oferece_anexos() {
+        let out = html(&ComposeDraft {
+            mailbox_id: CAIXA.to_owned(),
+            attachments: vec![super::ComposeAttachmentView {
+                id: "aa".to_owned(),
+                filename: "relatorio.pdf".to_owned(),
+                size: "1.2 MiB".to_owned(),
+            }],
+            ..Default::default()
+        });
+        assert!(
+            out.contains(r#"data-oc="compositor-ficheiro""#),
+            "falta o selector de ficheiros"
+        );
+        assert!(
+            out.contains("relatorio.pdf"),
+            "a ficha do anexo não aparece"
+        );
+        assert!(out.contains("1.2 MiB"), "o tamanho do anexo não aparece");
+        assert!(
+            out.contains(r#"data-oc="tirar-anexo""#),
+            "falta o botão de retirar o anexo"
         );
     }
 

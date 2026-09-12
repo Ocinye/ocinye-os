@@ -242,7 +242,7 @@ async fn discard_removes_the_draft() {
     let saved = mail::save_draft(&pool, &author, &ids, input(mailbox, None, "x", "y"))
         .await
         .expect("save");
-    mail::discard_draft(&pool, &author, &ids, saved.id)
+    mail::discard_draft(&pool, &author, None, &ids, saved.id)
         .await
         .expect("discard");
 
@@ -262,7 +262,7 @@ async fn discard_is_idempotent() {
     let author = person(&pool, org).await;
     let ids = CorrelationIds::generate();
 
-    mail::discard_draft(&pool, &author, &ids, Uuid::new_v4())
+    mail::discard_draft(&pool, &author, None, &ids, Uuid::new_v4())
         .await
         .expect("discarding a non-existent draft is not an error");
 }
@@ -303,7 +303,7 @@ async fn a_draft_is_private_to_its_author() {
     );
     // A discard by the intruder deletes nothing (idempotent success), and the
     // author still finds their draft intact.
-    mail::discard_draft(&pool, &intruder, &ids, saved.id)
+    mail::discard_draft(&pool, &intruder, None, &ids, saved.id)
         .await
         .expect("idempotent");
     let still = mail::get_draft(&pool, &author, saved.id)

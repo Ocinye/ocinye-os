@@ -7,7 +7,7 @@
 //! and none can: a personal mailbox is not reachable by privilege
 //! (briefing §26).
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use ocinye_contracts::{
@@ -40,6 +40,20 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/mail/drafts/{draft_id}",
             get(get_draft).put(update_draft).delete(discard_draft),
+        )
+        .route(
+            "/mail/drafts/{draft_id}/attachments",
+            // O limite de corpo aplica-se só a esta rota (folga sobre o limite
+            // do anexo para o envelope multipart), não ao resto do correio.
+            get(list_attachments)
+                .post(attach)
+                .layer(DefaultBodyLimit::max(
+                    (mail::MAX_ATTACHMENT_BYTES as usize) + 1024 * 1024,
+                )),
+        )
+        .route(
+            "/mail/drafts/{draft_id}/attachments/{attachment_id}",
+            axum::routing::delete(remove_attachment),
         )
         .route("/mail/assist", post(assist))
         .route("/mail/status", get(status))
@@ -423,6 +437,10 @@ struct SendRequest {
     /// server-side before it becomes MIME (ADR-0415); `None` means plain text.
     #[serde(default)]
     html_body: Option<String>,
+    /// The draft this send comes from, when it has one. Its attachments travel
+    /// with the message; the draft is cleared after the send succeeds.
+    #[serde(default)]
+    draft_id: Option<Uuid>,
     /// Answer to a previous confirmation request. Never turns a refusal into a
     /// send: the policy re-decides, and a refusal stays refused.
     #[serde(default)]
@@ -478,6 +496,17 @@ async fn send(
         .map(mail::outbound::sanitize_outbound)
         .filter(|html| mail::outbound::has_visible_content(html));
 
+    // The draft's attachments travel with the message. Their bytes are read from
+    // storage and each is INTERNAL (a personal object), which is what the send
+    // policy sees (briefing §35).
+    let attachments = match (request.draft_id, state.store.as_deref()) {
+        (Some(draft_id), Some(store)) => mail::attachments_for_send(&state.pool, store, draft_id)
+            .await
+            .map_err(|error| ApiError::new(error, &ids))?,
+        _ => Vec::new(),
+    };
+    let classifications: Vec<Classification> = vec![Classification::Internal; attachments.len()];
+
     let message = OutgoingMessage {
         from: mail::sender_identity(&mailbox.address, mailbox.display_name.clone()),
         to: to_provider(to),
@@ -491,15 +520,9 @@ async fn send(
         html_body,
         in_reply_to: None,
         references: Vec::new(),
-        attachments: Vec::new(),
+        attachments,
         inline_images: Vec::new(),
     };
-
-    // Attachments are `PLANNED`: with no object storage configured there is
-    // nothing to attach, so the classification list is empty and the policy
-    // sees an unclassified message. When attachments arrive, their
-    // classifications come from `mail_draft_attachments` (briefing §35).
-    let classifications: Vec<Classification> = Vec::new();
 
     mail::send(
         &state.pool,
@@ -650,10 +673,85 @@ async fn discard_draft(
     CurrentPrincipal(principal): CurrentPrincipal,
     Path(draft_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    mail::discard_draft(&state.pool, &principal, &ids, draft_id)
+    mail::discard_draft(
+        &state.pool,
+        &principal,
+        state.store.as_deref(),
+        &ids,
+        draft_id,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(Json(serde_json::json!({ "discarded": true })))
+}
+
+// ── Attachments ───────────────────────────────────────────────────────────
+
+/// The message when this installation has no object storage to attach into.
+const NO_STORAGE: &str =
+    "Esta instalação não tem armazenamento configurado; não é possível anexar ficheiros.";
+
+/// `POST /mail/drafts/{draft_id}/attachments` — attach an uploaded file.
+async fn attach(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(draft_id): Path<Uuid>,
+    multipart: Multipart,
+) -> Result<Json<mail::DraftAttachment>, ApiError> {
+    let store = state.store.as_deref().ok_or_else(|| {
+        ApiError::new(
+            CoreError::CapabilityUnavailable(NO_STORAGE.to_owned()),
+            &ids,
+        )
+    })?;
+    let upload = super::knowledge::read_upload_public(multipart)
         .await
         .map_err(|error| ApiError::new(error, &ids))?;
-    Ok(Json(serde_json::json!({ "discarded": true })))
+    let attachment = mail::attach_to_draft(
+        &state.pool,
+        &principal,
+        store,
+        draft_id,
+        &upload.filename,
+        &upload.content_type,
+        upload.data,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(Json(attachment))
+}
+
+/// `GET /mail/drafts/{draft_id}/attachments` — the draft's attachments.
+async fn list_attachments(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(draft_id): Path<Uuid>,
+) -> Result<Json<Vec<mail::DraftAttachment>>, ApiError> {
+    let attachments = mail::list_attachments(&state.pool, &principal, draft_id)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(Json(attachments))
+}
+
+/// `DELETE /mail/drafts/{draft_id}/attachments/{attachment_id}` — remove one.
+async fn remove_attachment(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path((draft_id, attachment_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let store = state.store.as_deref().ok_or_else(|| {
+        ApiError::new(
+            CoreError::CapabilityUnavailable(NO_STORAGE.to_owned()),
+            &ids,
+        )
+    })?;
+    mail::remove_attachment(&state.pool, &principal, store, draft_id, attachment_id)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(Json(serde_json::json!({ "removed": true })))
 }
 
 // ── Assistance ──────────────────────────────────────────────────────────

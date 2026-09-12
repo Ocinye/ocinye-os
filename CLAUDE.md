@@ -66,7 +66,7 @@ sem que nada falhe.
   3 serviços (`core-server`, `worker`, `node-agent`) e 1 aplicação
   (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 180 caminhos e 215 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 182 caminhos e 218 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -134,6 +134,11 @@ sem que nada falhe.
   **recusa injecção de cabeçalho** à porta: uma quebra de linha ou carácter de
   controlo no assunto, num endereço ou num nome a mostrar pára o envio, sem
   depender do transporte para o fazer.
+  O compositor tem **anexos**: os bytes passam pela fronteira de armazenamento
+  pessoal — quota admitida, tipo validado, chave opaca, dono (§40, ADR-0108) —,
+  ficam ligados ao rascunho (`mail_draft_attachments`), viajam no envio como
+  `multipart/mixed`, e são libertados ao descartar o rascunho, sem objectos
+  órfãos. Limites de tamanho, total e número são impostos no servidor.
 - **Governança de recursos: `IMPLEMENTED` (fundação), sem enforcement.** O
   domínio distingue **capacidade, entitlement, reserva e uso** e trata acesso e
   entitlement como sistemas separados — uma alocação não concede acesso, uma
@@ -304,14 +309,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1564 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1569 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **575 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **579 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

@@ -42,14 +42,17 @@ pub use policy::{SendDecision, SendPolicy};
 pub use provider::{MailProvider, ProviderError, ProviderHealth, ProviderResult};
 pub use registry::ProviderRegistry;
 pub use repository::{
-    AccessibleMailbox, IndexedMessage, MailDraft, MailDraftSummary, MailPreferences,
+    AccessibleMailbox, DraftAttachment, IndexedMessage, MailDraft, MailDraftSummary,
+    MailPreferences,
 };
 pub use sanitize::{sanitize_html, text_to_html, SanitizedBody};
 pub use service::{
-    assist, connect_mailbox, connect_own_mailbox, discard_draft, disconnect_mailbox, evaluate_send,
-    get_draft, list_drafts, mailbox, mailboxes, provision_personal_mailbox, read_message,
-    safe_filename, save_draft, send, sender_identity, set_flag, sync, AssistRequest, AssistResult,
-    DraftInput, MailboxConnection, ReadableMessage, SyncOutcome,
+    assist, attach_to_draft, attachments_for_send, connect_mailbox, connect_own_mailbox,
+    discard_draft, disconnect_mailbox, evaluate_send, get_draft, list_attachments, list_drafts,
+    mailbox, mailboxes, provision_personal_mailbox, read_message, remove_attachment, safe_filename,
+    save_draft, send, sender_identity, set_flag, sync, AssistRequest, AssistResult, DraftInput,
+    MailboxConnection, ReadableMessage, SyncOutcome, MAX_ATTACHMENTS, MAX_ATTACHMENTS_TOTAL_BYTES,
+    MAX_ATTACHMENT_BYTES,
 };
 pub use signature::{
     signature_html, signature_text, LogoRef, Projections, SignatureFacts, LOGO_CONTENT_ID,
