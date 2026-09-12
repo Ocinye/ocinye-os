@@ -315,6 +315,12 @@ struct ReadQuery {
     /// message was opened (briefing §12).
     #[serde(default)]
     allow_remote: bool,
+    /// Whether opening this message marks it read (the open transition). The
+    /// caller decides, so a "mark unread" action can reopen the same message
+    /// without the open undoing it. Defaults to `false` — only a genuine open
+    /// passes `true`.
+    #[serde(default)]
+    mark_read: bool,
 }
 
 /// `GET /mail/messages/{id}`
@@ -331,6 +337,7 @@ async fn read_message(
         &principal,
         message_id,
         query.allow_remote,
+        query.mark_read,
         &ids,
     )
     .await

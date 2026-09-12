@@ -7,6 +7,26 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Correio — corrigido o estado lido/não lida ao abrir — 2026-09-12
+
+Abrir uma mensagem não a marcava como lida: depois de «Marcar como não lida», ela
+ficava não lida para sempre, mesmo ao reabri-la. Corrigido o ciclo de estado.
+
+- **Abrir marca como lida** (a *transição de abertura*): abrir uma mensagem não
+  lida marca-a como lida — no Core e no fornecedor (`\Seen`), que é a autoridade
+  (a sincronização projecta-o de volta, por isso o `\Seen` é escrito primeiro).
+- **Não desfaz a acção explícita:** «Marcar como não lida» reabre a mesma
+  mensagem com `?unread=1`, e essa abertura **não** volta a marcá-la como lida.
+  Só uma abertura posterior (a partir da lista) a marca. O marcar-como-lida está
+  atado à transição de abertura, não a um efeito reactivo sobre o estado.
+- **Acção do detalhe ciente do estado:** uma mensagem lida oferece «Marcar como
+  não lida», uma não lida oferece «Marcar como lida».
+- **Contador e lista** derivam do estado autoritativo (SSR relê da base): abrir
+  baixa o contador e apaga o ponto de não lida, sem recarregar à mão.
+- Idempotente e fail-closed: abrir uma já lida não reescreve `\Seen`; um
+  fornecedor que recuse deixa a mensagem não lida, sem fingir sucesso. Posse
+  validada em SQL (IDOR provado).
+
 ### Correio — anexos, com quota e limpeza (fatia D) — 2026-09-12
 
 O compositor ganha anexos, ligados ao armazenamento canónico e à governança de

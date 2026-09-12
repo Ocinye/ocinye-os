@@ -243,6 +243,7 @@ async fn o_dono_alcanca_a_sua_propria_caixa() {
         &c.dono,
         c.mensagem_do_dono,
         false,
+        false,
         &CorrelationIds::generate(),
     )
     .await
@@ -273,6 +274,7 @@ async fn conhecer_o_identificador_nao_le_a_mensagem() {
             &registry(),
             &c.intruso,
             c.mensagem_do_dono,
+            false,
             false,
             &CorrelationIds::generate(),
         )
@@ -622,6 +624,7 @@ async fn uma_caixa_ligada_le_se_com_a_credencial_do_proprio() {
         &registo,
         &c.dono,
         c.mensagem_do_dono,
+        false,
         false,
         &CorrelationIds::generate(),
     )

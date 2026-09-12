@@ -1636,6 +1636,11 @@ struct MessageQuery {
     /// Se o membro pediu explicitamente o conteúdo remoto desta mensagem.
     #[serde(default)]
     remote: Option<String>,
+    /// Marca a re-abertura logo após «Marcar como não lida»: nesse caso, abrir
+    /// **não** volta a marcar como lida, para não desfazer a acção explícita.
+    /// Uma abertura normal (a partir da lista) não o traz, e marca como lida.
+    #[serde(default)]
+    unread: Option<String>,
 }
 
 async fn mail_message(
@@ -1649,7 +1654,13 @@ async fn mail_message(
     // Nunca por omissão: carregar conteúdo remoto informa quem enviou a
     // mensagem de que ela foi aberta (briefing §12).
     let allow_remote = query.remote.as_deref() == Some("1");
-    let path = format!("/api/v1/mail/messages/{message_id}?allow_remote={allow_remote}");
+    // Abrir marca como lida — a transição de abertura —, excepto quando é a
+    // re-abertura imediata a seguir a «Marcar como não lida» (`?unread=1`), que
+    // não pode desfazer a acção explícita. Uma abertura vinda da lista marca.
+    let mark_read = query.unread.as_deref() != Some("1");
+    let path = format!(
+        "/api/v1/mail/messages/{message_id}?allow_remote={allow_remote}&mark_read={mark_read}"
+    );
 
     let opened = match required(&state, &member, &path).await {
         Ok(message) => message,
@@ -1705,6 +1716,17 @@ async fn mail_flags(
         _ => return failure_response(&ApiFailure::Denied),
     };
 
+    // Marcar como não lida tem de sobreviver à re-abertura imediata: o destino
+    // leva `?unread=1`, para a mensagem voltar a mostrar-se **sem** ser marcada
+    // como lida outra vez. Qualquer outra acção (marcar como lida, assinalar)
+    // abre normalmente.
+    let marcou_nao_lida = form.field == "read" && !value;
+    let destino = if marcou_nao_lida {
+        format!("/mail/message/{message_id}?unread=1")
+    } else {
+        format!("/mail/message/{message_id}")
+    };
+
     let path = format!("/api/v1/mail/messages/{message_id}/flags");
     match api::post(
         &state,
@@ -1715,9 +1737,7 @@ async fn mail_flags(
     )
     .await
     {
-        Ok(_) | Err(ApiFailure::Denied) => {
-            Redirect::to(&format!("/mail/message/{message_id}")).into_response()
-        }
+        Ok(_) | Err(ApiFailure::Denied) => Redirect::to(&destino).into_response(),
         Err(failure) => failure_response(&failure),
     }
 }
