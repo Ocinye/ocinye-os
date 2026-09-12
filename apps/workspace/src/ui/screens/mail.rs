@@ -1463,6 +1463,7 @@ fn barra_de_formatacao() -> impl IntoView {
                         <button
                             type="button"
                             class="oc-comp__ferramenta"
+                            data-oc="ferramenta"
                             data-oc-cmd=cmd
                             data-oc-arg=arg
                             title=rotulo
