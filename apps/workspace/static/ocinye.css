@@ -1710,6 +1710,8 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 
 /* Capacidade não é uma tab: é um estado do motor. Daí o chip próprio. */
 .oc-caps { display: flex; gap: 5px; }
+/* O selector de capacidade dentro do dock, acima da área de escrita. */
+.oc-caps--dock { flex-wrap: wrap; margin-bottom: var(--oc-space-3); }
 .oc-cap {
   height: 29px; padding: 0 11px; border-radius: var(--oc-r-md);
   display: inline-flex; align-items: center; gap: 6px;

@@ -186,6 +186,37 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
     let workspace_id = workspace.as_ref().map(|(code, _)| code.clone());
     let has_exchange = exchange.is_some();
 
+    // O selector de capacidade vive **dentro** do formulário do dock: é um campo
+    // com destino real (submete com o pedido), sem depender de associação por
+    // `form=`. Seleccionável independentemente da disponibilidade — autorização e
+    // disponibilidade são eixos distintos (M5 §10).
+    let caps_view = capabilities
+        .into_iter()
+        .map(|chip| {
+            let CapabilityChip {
+                label,
+                code,
+                available,
+                first,
+            } = chip;
+            let id = format!("cap-{}", code.to_lowercase());
+            view! {
+                <input
+                    type="radio"
+                    class="oc-cap__in"
+                    name="capability"
+                    id=id.clone()
+                    value=code
+                    checked=first
+                />
+                <label class="oc-cap" for=id>
+                    {label}
+                    {(!available).then(|| view! { <small>"sem modelo activo"</small> })}
+                </label>
+            }
+        })
+        .collect_view();
+
     view! {
         <div class="oc-prompt">
             // ── Barra de contexto ──────────────────────────────────────
@@ -213,37 +244,6 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                     })}
 
                 <div class="oc-spacer"></div>
-
-                // A capacidade é seleccionável, autorização e disponibilidade
-                // sendo eixos distintos: escolher `Código` sem modelo de código
-                // activo é legítimo e conclui como resposta de sistema (M5 §10).
-                // Radios associados ao formulário do dock por `form=`, para
-                // viajarem com a submissão sem JavaScript.
-                <div class="oc-caps" role="radiogroup" aria-label="Capacidade">
-                    {capabilities
-                        .into_iter()
-                        .map(|chip| {
-                            let CapabilityChip { label, code, available, first } = chip;
-                            let id = format!("cap-{}", code.to_lowercase());
-                            view! {
-                                <input
-                                    type="radio"
-                                    class="oc-cap__in"
-                                    form="oc-prompt-form"
-                                    name="capability"
-                                    id=id.clone()
-                                    value=code
-                                    checked=first
-                                />
-                                <label class="oc-cap" for=id>
-                                    {label}
-                                    {(!available)
-                                        .then(|| view! { <small>"sem modelo activo"</small> })}
-                                </label>
-                            }
-                        })
-                        .collect_view()}
-                </div>
             </div>
 
             // ── Conversa ───────────────────────────────────────────────
@@ -337,6 +337,10 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                 >
                     {workspace_id
                         .map(|id| view! { <input type="hidden" name="workspace" value=id /> })}
+
+                    <div class="oc-caps oc-caps--dock" role="radiogroup" aria-label="Capacidade">
+                        {caps_view}
+                    </div>
 
                     <label class="oc-sr" for="prompt-input">"Escreva o seu pedido"</label>
                     <textarea
