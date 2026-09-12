@@ -1251,12 +1251,102 @@
       sincronizar();
     });
 
+    /* ── Editor de corpo rico ─────────────────────────────────────────────
+
+       Progressive enhancement: o editor `contenteditable` toma o lugar do
+       `textarea`, que fica escondido e continua a ser o que submete texto
+       simples. Um campo escondido leva o HTML de autoria. A formatação é por
+       tags semânticas (não por style inline, que o sanitizador de saída
+       descarta), e o Core re-higieniza tudo no envio (ADR-0415). */
+
+    const editor = janela.querySelector('[data-oc="compositor-editor"]');
+    const ferramentas = janela.querySelector('[data-oc="compositor-ferramentas"]');
+    const corpoTexto = janela.querySelector('[data-oc="compositor-corpo"]');
+    const corpoHtml = janela.querySelector('[data-oc="compositor-html"]');
+
+    function temFormatacao(el) {
+      return !!el.querySelector('strong,b,em,i,u,s,a,ul,ol,blockquote,h1,h2,h3,code,pre');
+    }
+    function sincronizarEditor() {
+      if (!editor) return;
+      if (corpoTexto) corpoTexto.value = editor.innerText;
+      if (corpoHtml) corpoHtml.value = temFormatacao(editor) ? editor.innerHTML : '';
+    }
+    function inserirLigacao() {
+      const url = window.prompt('Endereço da ligação (https://…)');
+      if (!url) return;
+      /* Só esquemas seguros; o Core recusa o resto de qualquer forma. */
+      if (!/^(https?:|mailto:)/i.test(url)) return;
+      document.execCommand('createLink', false, url);
+    }
+
+    if (editor) {
+      editor.removeAttribute('hidden');
+      if (ferramentas) ferramentas.removeAttribute('hidden');
+      if (corpoTexto) corpoTexto.setAttribute('hidden', '');
+      /* Formatação por tags, não por style inline. */
+      try {
+        document.execCommand('styleWithCSS', false, false);
+      } catch (erro) {
+        /* Navegadores antigos: a formatação ainda funciona, só menos limpa. */
+      }
+
+      editor.addEventListener('input', sincronizarEditor);
+
+      /* Colar entra como texto simples: markup de Word/páginas não explode a
+         mensagem (briefing §14). A formatação faz-se com a barra. */
+      editor.addEventListener('paste', (evento) => {
+        evento.preventDefault();
+        const dados = evento.clipboardData || window.clipboardData;
+        const texto = dados ? dados.getData('text/plain') : '';
+        document.execCommand('insertText', false, texto);
+      });
+
+      /* Atalhos: Cmd/Ctrl+B/I/U formatam; Cmd/Ctrl+K liga. */
+      editor.addEventListener('keydown', (evento) => {
+        if (!(evento.metaKey || evento.ctrlKey)) return;
+        const tecla = evento.key.toLowerCase();
+        const mapa = { b: 'bold', i: 'italic', u: 'underline' };
+        if (mapa[tecla]) {
+          evento.preventDefault();
+          document.execCommand(mapa[tecla]);
+          sincronizarEditor();
+        } else if (tecla === 'k') {
+          evento.preventDefault();
+          inserirLigacao();
+          sincronizarEditor();
+        }
+      });
+
+      if (ferramentas) {
+        ferramentas.querySelectorAll('[data-oc-cmd]').forEach((botao) => {
+          botao.addEventListener('click', () => {
+            editor.focus();
+            const cmd = botao.getAttribute('data-oc-cmd');
+            const arg = botao.getAttribute('data-oc-arg') || '';
+            if (cmd === 'link') {
+              inserirLigacao();
+            } else if (cmd === 'formatBlock') {
+              document.execCommand('formatBlock', false, arg);
+            } else {
+              document.execCommand(cmd);
+            }
+            sincronizarEditor();
+          });
+        });
+      }
+
+      sincronizarEditor();
+    }
+
     /* ── Enviar uma vez ───────────────────────────────────────────────── */
 
     const forma = janela.querySelector('form');
     const enviar = janela.querySelector('[data-oc="compositor-enviar"]');
     if (forma) {
       forma.addEventListener('submit', (evento) => {
+        /* O editor rico sincroniza para os campos escondidos antes de submeter. */
+        sincronizarEditor();
         /* Qualquer submissão — envio ou assistência — leva os destinatários
            que ficaram por confirmar no campo de texto. */
         escoar.forEach((fn) => fn());
@@ -1292,6 +1382,9 @@
     /* O estado do compositor como texto comparável, sem mutar nada: lê os
        campos escondidos (destinatários já aceites) e o texto por confirmar. */
     function instantaneo() {
+      /* O editor rico sincroniza para os campos escondidos, para o instantâneo
+         apanhar também as alterações de formatação. */
+      sincronizarEditor();
       const linhas = [];
       janela.querySelectorAll('[data-oc="destinatarios"]').forEach((linha) => {
         const escondido = linha.querySelector('input[type="hidden"][name]');
@@ -1304,6 +1397,7 @@
         r: linhas,
         subject: assuntoInput ? assuntoInput.value.trim() : '',
         body: corpoInput ? corpoInput.value : '',
+        html: corpoHtml ? corpoHtml.value : '',
       });
     }
 
@@ -1340,6 +1434,7 @@
         bcc: valor('bcc'),
         subject: assuntoInput ? assuntoInput.value : '',
         body: corpoInput ? corpoInput.value : '',
+        html_body: corpoHtml ? corpoHtml.value : '',
         in_reply_to: replyInput ? replyInput.value : '',
       };
     }

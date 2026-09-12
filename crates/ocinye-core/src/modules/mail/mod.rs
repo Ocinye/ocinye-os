@@ -29,6 +29,7 @@
 //! (briefing §6).
 
 pub mod imap_smtp;
+pub mod outbound;
 pub mod policy;
 pub mod provider;
 pub mod registry;

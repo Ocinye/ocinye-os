@@ -112,7 +112,11 @@ sem que nada falhe.
   A interface distingue as ausências em vez de mostrar uma caixa vazia. **A
   ingestão é periódica**: o worker percorre as caixas ligadas, e uma que recuse
   não interrompe as outras — a razão fica guardada na caixa que falhou.
-  A composição continua a ser **texto simples**, mas o envio produz
+  A composição aceita **texto rico de autoria** — negrito, itálico, listas,
+  citação, ligações — através de uma **fronteira de saída própria**: o HTML do
+  membro é higienizado por uma lista de permissões semântica, distinta da de
+  entrada, e re-higienizada no servidor (ADR-0415). Texto simples continua a ser
+  um caminho de primeira classe; o envio produz
   **`multipart/alternative`**: o texto do membro é projectado, de forma
   determinística e escapada, numa parte HTML com a **assinatura institucional**
   (nome, cargo factual, Ocinye, endereço, e o **logótipo embutido por `cid:`**);
@@ -151,7 +155,7 @@ sem que nada falhe.
   Falta ainda a admissão de computação, a capacidade, os pedidos e a superfície
   de Administração de recursos. `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão
   distinto de `OCINYE_AI_READY`, e **não** torna a IA disponível.
-- **41 migrations**, aplicáveis de base vazia; 80 tabelas.
+- **42 migrations**, aplicáveis de base vazia; 80 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -280,7 +284,7 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **63 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
+- **64 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
   **66 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -300,14 +304,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1554 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1564 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **573 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **575 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

@@ -255,6 +255,80 @@ pub fn compose(
     }
 }
 
+/// Compose the projections for a message whose body the member authored as rich
+/// text (ADR-0415).
+///
+/// Unlike [`compose`], the HTML body comes in already — sanitised member HTML,
+/// not a projection of plain text — and is used verbatim. `authored_text` is the
+/// plain-text alternative (the editor's own text), used for `text/plain`. The
+/// signature is appended to both parts, exactly as in [`compose`]. Because the
+/// member formatted the message, this always yields an HTML part, signature or
+/// not.
+#[must_use]
+pub fn compose_rich(
+    authored_html: &str,
+    authored_text: &str,
+    facts: &SignatureFacts,
+    official: bool,
+    logo: LogoRef,
+) -> Projections {
+    let tem_pessoal = facts
+        .personal_line
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|linha| !linha.is_empty());
+    let ha_assinatura = official || tem_pessoal;
+
+    let assinatura_texto = if official {
+        signature_text(facts)
+    } else if tem_pessoal {
+        facts
+            .personal_line
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default()
+            .to_owned()
+    } else {
+        String::new()
+    };
+    let text = if ha_assinatura {
+        format!("{authored_text}\n\n-- \n{assinatura_texto}")
+    } else {
+        authored_text.to_owned()
+    };
+
+    let assinatura_html = if !ha_assinatura {
+        String::new()
+    } else if official {
+        format!(
+            "<div style=\"margin-top:16px;\">{}</div>",
+            signature_html(facts, logo)
+        )
+    } else {
+        let linha = facts
+            .personal_line
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default();
+        format!(
+            "<div style=\"margin-top:16px;color:{TEXT_SECONDARY};font-family:{FONT};\
+             font-size:13px;line-height:1.5;\">{}</div>",
+            escape(linha).replace('\n', "<br>")
+        )
+    };
+
+    let html = format!(
+        "<div style=\"font-family:{FONT};font-size:14px;color:{TEXT_SECONDARY};\">\
+           {authored_html}{assinatura_html}\
+         </div>"
+    );
+
+    Projections {
+        text,
+        html: Some(html),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -2510,6 +2510,59 @@ div.oc-result { cursor: default; }
 }
 .oc-comp__corpo:focus { outline: none; }
 
+/* A barra de formatação: discreta, por cima do editor. */
+.oc-comp__ferramentas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--oc-border);
+  background: var(--oc-surface-subtle);
+  flex-shrink: 0;
+}
+.oc-comp__ferramenta {
+  min-width: 28px;
+  height: 26px;
+  border: 0;
+  background: none;
+  padding: 0 6px;
+  border-radius: var(--oc-r-xs);
+  font: 500 13px var(--oc-font-sans);
+  color: var(--oc-text-secondary);
+  cursor: pointer;
+}
+.oc-comp__ferramenta:hover { background: var(--oc-surface-muted); color: var(--oc-navy); }
+.oc-ff__b { font-weight: 700; }
+.oc-ff__i { font-style: italic; }
+.oc-ff__u { text-decoration: underline; }
+.oc-ff__s { text-decoration: line-through; }
+
+/* O editor de corpo rico: parece um documento, não uma caixa com bordas. */
+.oc-comp__editor {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  font: 400 13px var(--oc-font-sans);
+  line-height: 1.6;
+  color: var(--oc-text-body);
+}
+.oc-comp__editor:focus { outline: none; }
+.oc-comp__editor:empty::before {
+  content: "Escreva a mensagem…";
+  color: var(--oc-text-ghost);
+}
+.oc-comp__editor p { margin: 0 0 10px; }
+.oc-comp__editor ul,
+.oc-comp__editor ol { margin: 0 0 10px; padding-left: 22px; }
+.oc-comp__editor blockquote {
+  margin: 0 0 10px;
+  padding-left: 12px;
+  border-left: 3px solid var(--oc-border);
+  color: var(--oc-text-secondary);
+}
+.oc-comp__editor a { color: var(--oc-navy); }
+
 .oc-comp__confirmar {
   display: flex;
   align-items: flex-start;

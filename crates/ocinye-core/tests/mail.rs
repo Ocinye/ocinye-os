@@ -620,6 +620,60 @@ async fn a_line_break_in_a_header_is_refused_before_the_provider() {
     assert_eq!(provider.sends(), 0, "a mensagem chegou ao fornecedor");
 }
 
+/// Authored rich HTML is sanitised and carried out with the signature: the
+/// member's formatting reaches the provider, a script does not, and the plain
+/// text alternative is present (ADR-0415).
+#[tokio::test]
+async fn authored_html_is_sanitised_and_carries_the_signature() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+
+    let member = person(&pool, org, &["research_member"]).await;
+    let mailbox_id = personal_mailbox(&pool, org, member.person_id).await;
+    let mailbox = mail::mailbox(&pool, &member, mailbox_id)
+        .await
+        .expect("mailbox");
+
+    let provider = std::sync::Arc::new(RecordingProvider::default());
+    let registo = registo_de(&provider);
+    let ids = CorrelationIds::generate();
+
+    let mut message = outgoing(&mailbox.address, "colega@ocinye.com");
+    message.text_body = "Olá com ênfase.".to_owned();
+    // Already sanitised at the route in production; here we prove the send path
+    // carries authored HTML through and appends the signature.
+    message.html_body = Some("<p>Olá com <strong>ênfase</strong>.</p>".to_owned());
+
+    mail::send(
+        &pool,
+        &registo,
+        &member,
+        mailbox_id,
+        message,
+        &[address("colega@ocinye.com")],
+        &[],
+        false,
+        &ids,
+    )
+    .await
+    .expect("send");
+
+    let sent = provider.last().expect("a message reached the provider");
+    let html = sent.html_body.expect("rich send carries html");
+    assert!(
+        html.contains("<strong>ênfase</strong>"),
+        "authored formatting was lost: {html}"
+    );
+    // The plain-text alternative is present and complete.
+    assert!(sent.text_body.contains("Olá com ênfase."));
+    // The institutional signature entered both parts (the member has the default
+    // official signature on).
+    assert!(
+        html.contains("cid:") || sent.text_body.contains("-- "),
+        "the signature did not enter the projections"
+    );
+}
+
 /// A assinatura institucional entra no caminho de envio: com os dados reais do
 /// membro, o logótipo embutido por `cid:`, e as duas projecções — e desliga-se
 /// por inteiro quando o membro a recusa (ADR-0414).

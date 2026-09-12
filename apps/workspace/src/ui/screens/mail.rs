@@ -1084,8 +1084,11 @@ pub struct ComposeDraft {
     pub bcc: String,
     /// Assunto.
     pub subject: String,
-    /// Corpo.
+    /// Corpo — texto simples (a projecção do editor).
     pub body: String,
+    /// O corpo em HTML de autoria, já higienizado pelo Core (ADR-0415). `None`
+    /// quando é texto simples; preenche o editor ao retomar um rascunho rico.
+    pub body_html: Option<String>,
     /// A mensagem a que isto responde, quando é uma resposta.
     pub reply_to: Option<String>,
     /// Instrução dada à assistência, para não se perder ao regenerar.
@@ -1148,6 +1151,7 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
     let bcc = draft.bcc.clone();
     let subject = draft.subject.clone();
     let corpo = draft.body.clone();
+    let corpo_html = draft.body_html.clone();
     let instrucao = draft.instruction.clone();
     let erro = draft.error.clone();
     let gerado = draft.generated;
@@ -1260,6 +1264,42 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                     aria-label="Assunto"
                 />
 
+                // A formatação e o editor de corpo rico (ADR-0415). Progressivo:
+                // sem JavaScript, a barra e o editor ficam escondidos e o
+                // `textarea` submete texto simples; com JavaScript, o editor
+                // `contenteditable` toma o lugar e mantém os campos escondidos —
+                // texto e HTML — sincronizados. O Core re-higieniza o HTML no
+                // envio: nenhum controlo do cliente é a fronteira de segurança.
+                {barra_de_formatacao()}
+
+                {match corpo_html.clone() {
+                    Some(html) => view! {
+                        <div
+                            class="oc-comp__editor"
+                            data-oc="compositor-editor"
+                            contenteditable="true"
+                            role="textbox"
+                            aria-multiline="true"
+                            aria-label="Mensagem"
+                            inner_html=html
+                            hidden
+                        ></div>
+                    }
+                    .into_any(),
+                    None => view! {
+                        <div
+                            class="oc-comp__editor"
+                            data-oc="compositor-editor"
+                            contenteditable="true"
+                            role="textbox"
+                            aria-multiline="true"
+                            aria-label="Mensagem"
+                            hidden
+                        >{corpo.clone()}</div>
+                    }
+                    .into_any(),
+                }}
+
                 <textarea
                     class="oc-comp__corpo"
                     name="body"
@@ -1267,6 +1307,13 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                     placeholder="Escreva a mensagem…"
                     aria-label="Mensagem"
                 >{corpo}</textarea>
+
+                <input
+                    type="hidden"
+                    name="html_body"
+                    data-oc="compositor-html"
+                    value=corpo_html.unwrap_or_default()
+                />
 
                 // A instrução da assistência viaja com o formulário para não
                 // se perder quando o texto é regenerado.
@@ -1383,6 +1430,53 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
 /// lê este campo, desenha as fichas, e volta a escrevê-lo a cada alteração. Se
 /// o script não correr, fica um campo de texto com endereços separados por
 /// vírgula — que é feio e funciona.
+/// A barra de formatação do corpo.
+///
+/// Cada botão nomeia o comando de edição que executa (`data-oc-cmd`); o JS
+/// liga-os ao editor e não há aqui nenhum controlo morto (briefing §12). Fica
+/// escondida sem JavaScript — sem editor não há formatação a aplicar.
+fn barra_de_formatacao() -> impl IntoView {
+    // (comando, argumento, rótulo, glifo, classe do glifo)
+    let botoes: [(&str, &str, &str, &str, &str); 9] = [
+        ("bold", "", "Negrito", "B", "oc-ff__b"),
+        ("italic", "", "Itálico", "I", "oc-ff__i"),
+        ("underline", "", "Sublinhado", "U", "oc-ff__u"),
+        ("strikeThrough", "", "Rasurado", "S", "oc-ff__s"),
+        ("insertUnorderedList", "", "Lista", "•", ""),
+        ("insertOrderedList", "", "Lista numerada", "1.", ""),
+        ("formatBlock", "blockquote", "Citação", "❝", ""),
+        ("link", "", "Ligação", "↗", ""),
+        ("removeFormat", "", "Limpar formatação", "⌫", ""),
+    ];
+    view! {
+        <div
+            class="oc-comp__ferramentas"
+            data-oc="compositor-ferramentas"
+            role="toolbar"
+            aria-label="Formatação"
+            hidden
+        >
+            {botoes
+                .into_iter()
+                .map(|(cmd, arg, rotulo, glifo, classe)| {
+                    view! {
+                        <button
+                            type="button"
+                            class="oc-comp__ferramenta"
+                            data-oc-cmd=cmd
+                            data-oc-arg=arg
+                            title=rotulo
+                            aria-label=rotulo
+                        >
+                            <span class=classe aria-hidden="true">{glifo}</span>
+                        </button>
+                    }
+                })
+                .collect_view()}
+        </div>
+    }
+}
+
 fn campo_de_destinatarios(
     nome: &'static str,
     rotulo: &'static str,
@@ -2302,6 +2396,49 @@ mod compositor_com_rascunho {
         assert!(
             out.contains(r#"name="bcc""#),
             "o campo de Bcc não submete com o nome certo"
+        );
+    }
+
+    /// O compositor traz o editor rico e a barra de formatação, com controlos que
+    /// nomeiam o comando que executam — nada de botões mortos (briefing §12).
+    #[test]
+    fn o_compositor_tem_editor_rico_e_barra_de_formatacao() {
+        let out = html(&ComposeDraft {
+            mailbox_id: CAIXA.to_owned(),
+            ..Default::default()
+        });
+        assert!(
+            out.contains(r#"data-oc="compositor-editor""#),
+            "falta o editor rico"
+        );
+        assert!(
+            out.contains(r#"data-oc="compositor-ferramentas""#),
+            "falta a barra de formatação"
+        );
+        assert!(out.contains(r#"data-oc-cmd="bold""#), "falta o negrito");
+        assert!(
+            out.contains(r#"data-oc-cmd="insertUnorderedList""#),
+            "falta a lista"
+        );
+        assert!(out.contains(r#"data-oc-cmd="link""#), "falta a ligação");
+        assert!(
+            out.contains(r#"name="html_body""#),
+            "falta o campo escondido de HTML de autoria"
+        );
+    }
+
+    /// Um rascunho rico traz o seu HTML já higienizado ao editor, para o retomar
+    /// com a formatação que tinha.
+    #[test]
+    fn um_rascunho_rico_reabre_com_a_formatacao() {
+        let out = html(&ComposeDraft {
+            mailbox_id: CAIXA.to_owned(),
+            body_html: Some("<p>Olá <strong>forte</strong></p>".to_owned()),
+            ..Default::default()
+        });
+        assert!(
+            out.contains("<strong>forte</strong>"),
+            "o HTML de autoria não reabriu no editor"
         );
     }
 

@@ -83,6 +83,7 @@ fn input(mailbox_id: Uuid, draft_id: Option<Uuid>, subject: &str, body: &str) ->
         bcc: Vec::new(),
         subject: Some(subject.to_owned()),
         body: body.to_owned(),
+        body_html: None,
         in_reply_to: None,
     }
 }
@@ -143,6 +144,7 @@ async fn a_draft_round_trips_recipients_including_bcc() {
             bcc: vec!["c@exemplo.com".to_owned()],
             subject: Some("Assunto".to_owned()),
             body: "Corpo".to_owned(),
+            body_html: None,
             in_reply_to: None,
         },
     )
@@ -155,6 +157,46 @@ async fn a_draft_round_trips_recipients_including_bcc() {
     assert_eq!(got.to_addresses, vec!["a@exemplo.com"]);
     assert_eq!(got.cc_addresses, vec!["b@exemplo.com"]);
     assert_eq!(got.bcc_addresses, vec!["c@exemplo.com"]);
+}
+
+/// A rich draft stores the authored HTML, sanitised — formatting survives, and
+/// a script does not (ADR-0415).
+#[tokio::test]
+async fn a_rich_draft_stores_sanitised_html() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let author = person(&pool, org).await;
+    let mailbox = personal_mailbox(&pool, org, author.person_id).await;
+    let ids = CorrelationIds::generate();
+
+    let saved = mail::save_draft(
+        &pool,
+        &author,
+        &ids,
+        DraftInput {
+            draft_id: None,
+            mailbox_id: mailbox,
+            to: vec!["a@exemplo.com".to_owned()],
+            cc: Vec::new(),
+            bcc: Vec::new(),
+            subject: Some("Rico".to_owned()),
+            body: "forte e ligação".to_owned(),
+            body_html: Some(r#"<p><strong>forte</strong></p><script>alert(1)</script>"#.to_owned()),
+            in_reply_to: None,
+        },
+    )
+    .await
+    .expect("save");
+
+    let html = saved.body_html.expect("rich draft keeps html");
+    assert!(
+        html.contains("<strong>forte</strong>"),
+        "formatting lost: {html}"
+    );
+    assert!(
+        !html.contains("script"),
+        "script survived into the draft: {html}"
+    );
 }
 
 /// Autosave stores an address still being typed without refusing it — an
@@ -179,6 +221,7 @@ async fn autosave_does_not_hard_validate_addresses() {
             bcc: Vec::new(),
             subject: None,
             body: "meio a escrever".to_owned(),
+            body_html: None,
             in_reply_to: None,
         },
     )

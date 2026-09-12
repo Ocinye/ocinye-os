@@ -647,8 +647,11 @@ pub struct DraftInput {
     pub bcc: Vec<String>,
     /// Subject.
     pub subject: Option<String>,
-    /// Body.
+    /// Body — the plain-text projection (the editor's text).
     pub body: String,
+    /// Authored rich-text HTML, as the client sent it. Sanitised here before it
+    /// is stored (ADR-0415); `None` or empty means a plain-text draft.
+    pub body_html: Option<String>,
     /// The message being replied to, when the draft is a reply.
     pub in_reply_to: Option<Uuid>,
 }
@@ -690,6 +693,16 @@ pub async fn save_draft(
         .map(str::trim)
         .filter(|subject| !subject.is_empty());
 
+    // Rich HTML is sanitised here, at the storage boundary, so the draft never
+    // holds raw member markup — and an empty formatting shell stores as NULL, a
+    // plain-text draft (ADR-0415).
+    let body_html = input
+        .body_html
+        .as_deref()
+        .map(super::outbound::sanitize_outbound);
+    let body_html = body_html.filter(|html| super::outbound::has_visible_content(html));
+    let body_html = body_html.as_deref();
+
     let id = match input.draft_id {
         Some(draft_id) => {
             let existed = repo::update_composer_draft(
@@ -701,6 +714,7 @@ pub async fn save_draft(
                 &bcc,
                 subject,
                 &input.body,
+                body_html,
             )
             .await?;
             if !existed {
@@ -719,6 +733,7 @@ pub async fn save_draft(
                 &bcc,
                 subject,
                 &input.body,
+                body_html,
                 input.in_reply_to,
             )
             .await?;
@@ -1002,12 +1017,25 @@ async fn apply_signature(
     let prefs = repo::preferences(pool, principal.person_id).await?;
     let facts = signature_facts(pool, principal.person_id, prefs.signature.clone()).await?;
 
-    let projections = signature::compose(
-        &message.text_body,
-        &facts,
-        prefs.official_signature,
-        LogoRef::Cid(LOGO_CONTENT_ID),
-    );
+    // Two paths, one signature. When the member authored rich HTML it arrives
+    // already sanitised (ADR-0415) in `html_body`, and the plain text in
+    // `text_body` is its projection; the signature is appended to both. Without
+    // authored HTML, the deterministic text→html projection runs (ADR-0414).
+    let projections = match message.html_body.as_deref() {
+        Some(authored_html) => signature::compose_rich(
+            authored_html,
+            &message.text_body,
+            &facts,
+            prefs.official_signature,
+            LogoRef::Cid(LOGO_CONTENT_ID),
+        ),
+        None => signature::compose(
+            &message.text_body,
+            &facts,
+            prefs.official_signature,
+            LogoRef::Cid(LOGO_CONTENT_ID),
+        ),
+    };
     message.text_body = projections.text;
     if let Some(html) = projections.html {
         message.html_body = Some(html);

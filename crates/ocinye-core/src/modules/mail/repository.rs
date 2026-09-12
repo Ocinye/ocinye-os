@@ -623,8 +623,11 @@ pub struct MailDraft {
     pub bcc_addresses: Vec<String>,
     /// Subject.
     pub subject: Option<String>,
-    /// Body.
+    /// Body — the plain-text projection, always present.
     pub body: String,
+    /// The authored rich-text HTML, already sanitised (ADR-0415). `None` for a
+    /// plain-text draft.
+    pub body_html: Option<String>,
     /// The message this draft replies to, when it is a reply.
     pub in_reply_to_id: Option<Uuid>,
     /// How it came to be written.
@@ -715,7 +718,8 @@ pub async fn accessible_draft<'e>(
 ) -> CoreResult<Option<MailDraft>> {
     let row = sqlx::query(
         "SELECT d.id, d.mailbox_id, d.sender_address, d.to_addresses, d.cc_addresses,
-                d.bcc_addresses, d.subject, d.body, d.in_reply_to_id, d.origin, d.updated_at
+                d.bcc_addresses, d.subject, d.body, d.body_html, d.in_reply_to_id,
+                d.origin, d.updated_at
            FROM mail_drafts d
            JOIN mailboxes b ON b.id = d.mailbox_id
            LEFT JOIN shared_mailbox_memberships s
@@ -745,6 +749,7 @@ pub async fn accessible_draft<'e>(
         bcc_addresses: row.try_get("bcc_addresses")?,
         subject: row.try_get("subject")?,
         body: row.try_get("body")?,
+        body_html: row.try_get("body_html")?,
         in_reply_to_id: row.try_get("in_reply_to_id")?,
         origin: DraftOrigin::parse(&origin),
         updated_at: row.try_get("updated_at")?,
@@ -773,13 +778,14 @@ pub async fn insert_composer_draft<'e>(
     bcc: &[String],
     subject: Option<&str>,
     body: &str,
+    body_html: Option<&str>,
     in_reply_to: Option<Uuid>,
 ) -> CoreResult<Uuid> {
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO mail_drafts
              (mailbox_id, author_id, sender_address, to_addresses, cc_addresses,
-              bcc_addresses, subject, body, in_reply_to_id, origin)
-         SELECT b.id, $2, b.address, $3, $4, $5, $6, $7, $8, 'manual'
+              bcc_addresses, subject, body, body_html, in_reply_to_id, origin)
+         SELECT b.id, $2, b.address, $3, $4, $5, $6, $7, $8, $9, 'manual'
            FROM mailboxes b
            LEFT JOIN shared_mailbox_memberships s
                   ON s.mailbox_id = b.id AND s.person_id = $2 AND s.revoked_at IS NULL
@@ -797,6 +803,7 @@ pub async fn insert_composer_draft<'e>(
     .bind(bcc)
     .bind(subject)
     .bind(body)
+    .bind(body_html)
     .bind(in_reply_to)
     .fetch_optional(executor)
     .await?
@@ -827,11 +834,12 @@ pub async fn update_composer_draft<'e>(
     bcc: &[String],
     subject: Option<&str>,
     body: &str,
+    body_html: Option<&str>,
 ) -> CoreResult<bool> {
     let updated = sqlx::query(
         "UPDATE mail_drafts d
             SET to_addresses = $3, cc_addresses = $4, bcc_addresses = $5,
-                subject = $6, body = $7, updated_at = now()
+                subject = $6, body = $7, body_html = $8, updated_at = now()
            FROM mailboxes b
            LEFT JOIN shared_mailbox_memberships s
                   ON s.mailbox_id = b.id AND s.person_id = $1 AND s.revoked_at IS NULL
@@ -849,6 +857,7 @@ pub async fn update_composer_draft<'e>(
     .bind(bcc)
     .bind(subject)
     .bind(body)
+    .bind(body_html)
     .execute(executor)
     .await?;
 
