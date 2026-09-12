@@ -52,8 +52,15 @@ Entregue em fatias revíveis.
   com tranca por membro (segura à concorrência), redução de quota segura (nunca
   apaga), estados `Normal`/`Warning`/`Critical`/`OverQuota`
   (`crates/ocinye-core/src/modules/resource/storage.rs`).
-- **A seguir:** ledger de uso, «Meus Recursos» (membro), Administração →
-  Recursos, pedidos, registo de capacidade, reserva + admissão de computação,
+- **Feito (fatia E):** «Meus Recursos» — o ecrã do membro
+  (`apps/workspace/src/ui/screens/resources.rs`, servido em `/resources`) mostra
+  uso, limite, disponível, o estado derivado e a explicação de como o limite se
+  compõe (perfil mais concessões temporárias), a partir de
+  `GET /api/v1/resources/me` (o Core resolve o dono pela sessão e autoriza).
+  Torna visível a imposição da fatia C: uma parede que o membro passa a ver
+  antes de bater nela.
+- **A seguir:** ledger de uso, Administração → Recursos (ver e alocar a outros
+  membros), pedidos, registo de capacidade, reserva + admissão de computação,
   fronteira do scheduler, control-plane de computação, entitlements de IA,
   endurecimento de segurança, e certificação E2E → `OCINYE_RESOURCE_GOVERNANCE_READY`.
 

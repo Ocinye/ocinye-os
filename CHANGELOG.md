@@ -7,6 +7,24 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Governança de recursos — «Meus Recursos» (M4, fatia E) — 2026-09-12
+
+A quota imposta na fatia C passa a ser **visível ao membro que vive sob ela**
+(ADR-0108).
+
+- **Ecrã «Meus Recursos»** (`/resources`, em PESSOAL na navegação, aberto a
+  qualquer membro autenticado — cada pessoa vê a sua). Mostra o armazenamento
+  pessoal: uso, limite e disponível legíveis, uma barra de progresso, e o estado
+  derivado (`Normal`/`Aviso`/`Crítico`/`Acima da quota`) dito em voz alta, nunca
+  disfarçado.
+- **O limite é explicado, não mágico.** A secção «Como se chega a este limite»
+  enumera as partes do entitlement — o perfil de alocação e as concessões
+  temporárias que somam por cima, com a data em que expiram.
+- **`GET /api/v1/resources/me`** — o Core resolve o dono pela sessão e autoriza;
+  nenhum identificador do cliente escolhe de quem são os recursos mostrados. Ver
+  os recursos de outro membro fica para a Administração, sob `resources.view`.
+- Sem limite resolvido, o ecrã diz «sem limite» em vez de inventar 0% ou 100%.
+
 ### Governança de recursos — armazenamento pessoal imposto (M4, fatia C) — 2026-09-12
 
 O armazenamento pessoal deixa de crescer sem limite: passa a ser **medido e

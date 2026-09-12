@@ -27,6 +27,7 @@ pub mod my_work;
 pub mod notes;
 pub mod notice;
 pub mod prompt;
+pub mod resources;
 pub mod science;
 pub mod search;
 pub mod settings;
