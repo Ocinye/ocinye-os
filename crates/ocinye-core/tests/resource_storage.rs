@@ -217,7 +217,7 @@ async fn a_admissao_recusa_acima_da_quota() {
         "admitiu acima da quota"
     );
     assert!(
-        resource::admit_personal_bytes(&mut tx, quem.person_id, 1 * GIB)
+        resource::admit_personal_bytes(&mut tx, quem.person_id, GIB)
             .await
             .is_ok(),
         "recusou um ficheiro que cabia"
