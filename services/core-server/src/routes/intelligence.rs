@@ -9,9 +9,11 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use ocinye_contracts::{
     AiCapability, AiInteractionResponse, AiReasonCode, Classification, IntelligenceStatus,
-    Permission, SystemCapability, SystemCapabilityState,
+    InteractionOrigin, InteractionStatus, Permission,
 };
-use ocinye_core::modules::intelligence::{self, AgentScope, NewAgent};
+use ocinye_core::modules::intelligence::{
+    self, infer_within_deadline, AgentScope, InferenceRequest, ModelResolution, NewAgent,
+};
 use ocinye_core::modules::platform;
 use ocinye_core::CoreError;
 use ocinye_domain::{can, ResourceContext, ResourceKind};
@@ -307,55 +309,96 @@ async fn submit_prompt(
 
     let capability = parse_capability(request.capability.as_deref(), &ids)?;
 
-    let capabilities = platform::system_capabilities(
-        &state.pool,
-        &state.config,
-        state.store.is_some(),
-        state.mail_registry.reachability().await,
-    )
-    .await
-    .map_err(|error| ApiError::new(error, &ids))?;
+    // The Model Router is the authority on availability for this path. It reads
+    // the node-reported inventory fresh on every request, so a node that
+    // connects or drops changes the answer with no restart — and «zero models»
+    // is an ordinary typed result, not an error (M5 §20, §21).
+    let resolution = intelligence::resolve_capability(&state.pool, &state.config.ai, capability)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
 
-    let system = match capability {
-        AiCapability::General => SystemCapability::AiGeneral,
-        AiCapability::Coding => SystemCapability::AiCoding,
-        AiCapability::Reasoning => SystemCapability::AiReasoning,
-        AiCapability::Embedding => SystemCapability::AiEmbedding,
+    let model = match resolution {
+        ModelResolution::NoCandidate(reason_code) => {
+            return Ok(Json(
+                degraded(&state, &principal, capability, reason_code).await,
+            ));
+        }
+        ModelResolution::Resolved(model) => model,
     };
 
-    // Classify the conclusion. A usable capability still has no inference
-    // provider wired in this installation (`NoProvider` is the default), so the
-    // reason is the same `AI_NO_PROVIDER_AVAILABLE` — the difference an
-    // unusable capability adds is only *why* nothing can serve it.
-    let reason_code = if capabilities.is_usable(system) {
-        // Reached only when a capability reports usable, which needs a healthy
-        // model and so cannot happen today. Even then, execution is `PLANNED`
-        // (docs/ai/): a registered model with no serving provider is still
-        // `AI_NO_PROVIDER_AVAILABLE`.
-        AiReasonCode::AiNoProviderAvailable
-    } else {
-        capabilities
-            .get(system)
-            .map_or(AiReasonCode::AiNoProviderAvailable, |report| {
-                reason_code_for_state(report.state)
-            })
-    };
+    // A model serves the capability, but only a provider wired into this process
+    // can run it. In production that is `NoProvider`, whose `serves` is always
+    // false, so this degrades cleanly with no model involved.
+    if !state.inference.serves(capability) {
+        return Ok(Json(
+            degraded(
+                &state,
+                &principal,
+                capability,
+                AiReasonCode::AiNoProviderAvailable,
+            )
+            .await,
+        ));
+    }
 
-    // The human sentence: the report's own pt-PT reason, when there is one,
-    // under a stable institutional preamble.
-    let detail = capabilities
-        .get(system)
-        .map(|report| report.reason.clone())
-        .filter(|reason| !reason.is_empty());
-    let content = degraded_prompt_content(detail.as_deref());
+    // Execute. The prompt carries no retrieved context here — permission-aware
+    // context assembly is a separate concern — so no classified material leaves
+    // the Core (ADR-0300, ADR-0304). The Core enforces its own contract around
+    // the provider via `infer_within_deadline`.
+    let inference = InferenceRequest::new(capability, system_instruction(), request.prompt.clone());
+    match infer_within_deadline(state.inference.as_ref(), &inference).await {
+        Ok(response) => {
+            if let Ok(mut tx) = state.pool.begin().await {
+                let recorded = intelligence::record_completed_job(
+                    &mut tx,
+                    &principal,
+                    capability,
+                    ocinye_contracts::RagScope::Institutional,
+                    None,
+                    model.id,
+                )
+                .await;
+                if recorded.is_ok() {
+                    let _ = tx.commit().await;
+                }
+            }
+            Ok(Json(AiInteractionResponse {
+                origin: InteractionOrigin::Model,
+                status: InteractionStatus::Completed,
+                reason_code: None,
+                model: Some(response.model.model),
+                provider: Some(response.model.provider),
+                compute_node: model.node_id.map(|id| id.to_string()),
+                content: response.text,
+            }))
+        }
+        Err(error) => Ok(Json(
+            degraded(
+                &state,
+                &principal,
+                capability,
+                reason_code_for_inference_error(error),
+            )
+            .await,
+        )),
+    }
+}
 
-    // Record the demand so an operator sees a capability being asked for that
-    // no node yet serves — the evidence that justifies enrolling one.
-    // Best-effort: failing to record must not change the answer.
+/// Build the degraded system envelope and record the demand.
+///
+/// A degraded conclusion is a `SYSTEM` answer: the request was processed, and no
+/// inference could run it. Recording the demand is best-effort — failing to
+/// record must never change the answer.
+async fn degraded(
+    state: &AppState,
+    principal: &ocinye_domain::Principal,
+    capability: AiCapability,
+    reason_code: AiReasonCode,
+) -> AiInteractionResponse {
     if let Ok(mut tx) = state.pool.begin().await {
         let recorded = intelligence::record_rejected_job(
             &mut tx,
-            &principal,
+            principal,
             capability,
             ocinye_contracts::RagScope::Institutional,
             None,
@@ -366,24 +409,28 @@ async fn submit_prompt(
             let _ = tx.commit().await;
         }
     }
-
-    Ok(Json(AiInteractionResponse::degraded(reason_code, content)))
+    AiInteractionResponse::degraded(reason_code, degraded_prompt_content())
 }
 
-/// Map a capability's state to the machine reason it cannot be served.
+/// The Ocinye OS's own instruction to a model.
 ///
-/// Only `NoResource` is reachable in M5.1 (no models). The rest name the
-/// distinct future conditions so the vocabulary is complete now (M5 §7).
-fn reason_code_for_state(state: SystemCapabilityState) -> AiReasonCode {
-    match state {
-        SystemCapabilityState::NoResource => AiReasonCode::AiNoProviderAvailable,
-        SystemCapabilityState::NotConfigured => AiReasonCode::AiNoCompatibleModel,
-        SystemCapabilityState::Unavailable => AiReasonCode::AiProviderUnhealthy,
-        SystemCapabilityState::Planned => AiReasonCode::AiCapacityUnavailable,
-        // Usable states never reach this mapping; classify conservatively.
-        SystemCapabilityState::Available | SystemCapabilityState::Degraded => {
-            AiReasonCode::AiNoProviderAvailable
-        }
+/// Written by the Core, never by a member and never by retrieved content
+/// (ADR-0304). Kept short and deterministic.
+fn system_instruction() -> String {
+    "És o Ocinye AI, ao serviço do sistema operacional institucional da Ocinye. Responde em \
+     português europeu, com rigor, e nunca inventes factos."
+        .to_owned()
+}
+
+/// Map an inference failure to a machine reason for the degraded envelope.
+///
+/// `NoProvider` is «nothing serves this»; every other failure means a provider
+/// was present but could not produce a usable answer — an unhealthy provider.
+fn reason_code_for_inference_error(error: intelligence::InferenceError) -> AiReasonCode {
+    match error {
+        intelligence::InferenceError::NoProvider => AiReasonCode::AiNoProviderAvailable,
+        intelligence::InferenceError::ContextExceeded => AiReasonCode::AiModelHardwareNotSatisfied,
+        _ => AiReasonCode::AiProviderUnhealthy,
     }
 }
 
@@ -391,18 +438,11 @@ fn reason_code_for_state(state: SystemCapabilityState) -> AiReasonCode {
 ///
 /// Written by the platform, not a model: it says what happened plainly, affirms
 /// the Prompt is operational, and states that no external provider is used in
-/// substitution (M5 §9). The capability's own reason is appended when present.
-fn degraded_prompt_content(detail: Option<&str>) -> String {
-    let mut content = String::from(
-        "Nenhuma capacidade de inferência está actualmente disponível para executar este \
-         pedido. O Prompt Ocinye continua operacional, e nenhum fornecedor externo é utilizado \
-         em substituição.",
-    );
-    if let Some(detail) = detail {
-        content.push(' ');
-        content.push_str(detail);
-    }
-    content
+/// substitution (M5 §9).
+fn degraded_prompt_content() -> String {
+    "Nenhuma capacidade de inferência está actualmente disponível para executar este pedido. O \
+     Prompt Ocinye continua operacional, e nenhum fornecedor externo é utilizado em substituição."
+        .to_owned()
 }
 
 /// Read a capability from a request, defaulting to `GENERAL`.

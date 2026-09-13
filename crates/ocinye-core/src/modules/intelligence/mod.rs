@@ -38,12 +38,12 @@ mod repository;
 mod service;
 
 pub use agents::{Agent, AgentScope, AgentState, NewAgent};
-pub use model::{RegisteredModel, RetrievedRef};
+pub use model::{ModelResolution, RegisteredModel, RetrievedRef};
 pub use provider::{
     infer_within_deadline, ContractVersion, DataBlock, InferenceError, InferenceProvider,
     InferenceRequest, InferenceResponse, InferenceResult, ModelIdentity, NoProvider, TokenUsage,
 };
 pub use service::{
-    assemble_context, intelligence_status, list_models, record_rejected_job, refresh_availability,
-    resolve_capability,
+    assemble_context, intelligence_status, list_models, record_completed_job, record_rejected_job,
+    refresh_availability, resolve_capability,
 };

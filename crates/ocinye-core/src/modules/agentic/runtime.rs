@@ -20,7 +20,10 @@
 //! cannot run today.
 
 use ocinye_contracts::agentic::{ActionPlan, ExecutionStatus, Intent, PlanState, ResourceRef};
-use ocinye_contracts::{AiCapability, RagScope, SystemCapabilities, SystemCapability};
+use ocinye_contracts::{
+    AiCapability, AiReasonCode, RagScope, SystemCapabilities, SystemCapability,
+    SystemCapabilityState,
+};
 use ocinye_domain::{AgentBoundary, Principal};
 use ocinye_observability::CorrelationIds;
 use serde::Serialize;
@@ -91,6 +94,9 @@ pub enum AgenticOutcome {
     Unavailable {
         /// Why, in the platform's own words.
         reason: String,
+        /// The machine-readable reason, shared with the Prompt envelope
+        /// ([`ocinye_contracts::AiReasonCode`]).
+        reason_code: AiReasonCode,
         /// What still works.
         alternative: String,
     },
@@ -117,6 +123,7 @@ pub async fn invoke(
     if !context::may_use_assistance(principal) {
         return Ok(AgenticOutcome::Unavailable {
             reason: "Não possui acesso à assistência do Ocinye OS.".to_owned(),
+            reason_code: AiReasonCode::AiPermissionDenied,
             alternative: "A pesquisa e a navegação continuam disponíveis.".to_owned(),
         });
     }
@@ -132,13 +139,18 @@ pub async fn invoke(
 
     // ── Ask and Act: these need a model ─────────────────────────────────
     if !capabilities.is_usable(SystemCapability::AiGeneral) {
-        let reason = capabilities.get(SystemCapability::AiGeneral).map_or_else(
+        let report = capabilities.get(SystemCapability::AiGeneral);
+        let reason = report.map_or_else(
             || "Nenhuma capacidade de IA está disponível.".to_owned(),
             |report| report.reason.clone(),
         );
+        let reason_code = report.map_or(AiReasonCode::AiNoProviderAvailable, |report| {
+            reason_code_for_state(report.state)
+        });
 
         return Ok(AgenticOutcome::Unavailable {
             reason,
+            reason_code,
             alternative: "A pesquisa, a navegação e todas as acções do Workspace \
                           continuam a funcionar normalmente."
                 .to_owned(),
@@ -314,10 +326,28 @@ pub async fn invoke(
 }
 
 /// The unavailable outcome, with the one alternative that is always true.
+///
+/// Every call site here is a **post-resolution** failure: a model was usable,
+/// and the provider then did not produce a usable plan. That is an unhealthy
+/// provider, not a missing one — hence [`AiReasonCode::AiProviderUnhealthy`].
 fn unavailable(reason: String) -> AgenticOutcome {
     AgenticOutcome::Unavailable {
         reason,
+        reason_code: AiReasonCode::AiProviderUnhealthy,
         alternative: "A pesquisa e todas as acções do Workspace continuam disponíveis.".to_owned(),
+    }
+}
+
+/// Map a capability's reported state to the machine reason it cannot be served.
+fn reason_code_for_state(state: SystemCapabilityState) -> AiReasonCode {
+    match state {
+        SystemCapabilityState::NotConfigured => AiReasonCode::AiNoCompatibleModel,
+        SystemCapabilityState::Unavailable => AiReasonCode::AiProviderUnhealthy,
+        SystemCapabilityState::Planned => AiReasonCode::AiCapacityUnavailable,
+        // `NoResource`, and the usable states that never reach here.
+        SystemCapabilityState::NoResource
+        | SystemCapabilityState::Available
+        | SystemCapabilityState::Degraded => AiReasonCode::AiNoProviderAvailable,
     }
 }
 

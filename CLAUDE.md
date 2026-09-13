@@ -256,7 +256,18 @@ sem que nada falhe.
   independentemente da disponibilidade — autorização e disponibilidade são eixos
   distintos. A procura fica registada no ledger `ai_jobs` com o código-máquina da
   razão, sem consumir tokens nem reservar GPU, e nenhum fornecedor externo é
-  usado em substituição. `OCINYE_AI_CONTROL_PLANE_READY` continua **não
+  usado em substituição.
+  O pedido **roteia pelo Model Router**: o inventário de modelos reportado pelo
+  nó decide, lido a cada pedido, pelo que um nó a ligar-se ou a cair muda a
+  resposta sem reinício. «Zero candidatos» é um **resultado tipado**, não uma
+  excepção — `AI_NO_PROVIDER_AVAILABLE` quando nada está reportado,
+  `AI_NO_COMPATIBLE_MODEL` quando há modelos mas nenhum serve a capacidade
+  ([ADR-0304](docs/adrs/0304-canonical-inference-contract.md)). Quando um
+  fornecedor de inferência serve a capacidade, o pedido **executa** e conclui
+  como resposta de modelo (`origin=MODEL`, `status=COMPLETED`, a nomear modelo e
+  fornecedor) — caminho exercido de ponta a ponta por um fornecedor de teste; em
+  produção o fornecedor por omissão é o `NoProvider` e a conclusão é sempre
+  `SYSTEM`/`DEGRADED`. `OCINYE_AI_CONTROL_PLANE_READY` continua **não
   declarado** — falta o resto das fatias M5 —, e distinto de
   `OCINYE_AI_RUNTIME_READY`, que permanece falso.
 - **Ciclo de vida científico e proveniência: `IMPLEMENTED`.** Hipótese,

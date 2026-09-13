@@ -1,7 +1,7 @@
 //! Intelligence rows.
 
 use chrono::{DateTime, Utc};
-use ocinye_contracts::{AiCapability, Classification, ModelStatus};
+use ocinye_contracts::{AiCapability, AiReasonCode, Classification, ModelStatus};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::FromRow;
@@ -63,6 +63,23 @@ impl RegisteredModel {
                     .any(|value| value.as_str() == Some(capability.as_str()))
             })
     }
+}
+
+/// The outcome of routing a capability to a model.
+///
+/// Zero candidates is an **ordinary result**, not an exception: a healthy Core
+/// with no model that serves a capability has resolved the question correctly —
+/// the answer is «none», with a typed reason — rather than failed to answer it
+/// (M5 §20). Only a real fault (a database error) is an `Err` around this.
+#[derive(Debug, Clone)]
+pub enum ModelResolution {
+    /// A model serves the capability and was selected.
+    ///
+    /// Boxed: a resolved model is far larger than a reason code, and the two
+    /// variants should not force every `NoCandidate` to carry that weight.
+    Resolved(Box<RegisteredModel>),
+    /// No model serves the capability, with the machine reason why.
+    NoCandidate(AiReasonCode),
 }
 
 /// A reference to an artefact placed in an AI context.
