@@ -1059,6 +1059,7 @@ async fn ask_and_act_are_unavailable_with_no_provider_and_mutate_nothing() {
         let runtime::AgenticOutcome::Unavailable {
             reason,
             alternative,
+            ..
         } = outcome
         else {
             panic!("{intent:?} não se declarou indisponível: {outcome:?}");

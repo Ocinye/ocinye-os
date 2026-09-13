@@ -62,7 +62,22 @@ fn config() -> CoreConfig {
 /// O Core desta instalação: sem armazenamento, sem embeddings, e — o que
 /// importa aqui — com o fornecedor de inferência por omissão, `NoProvider`. Zero
 /// modelos, zero nós. É o estado que M5.1 tem de servir sem falhar.
-fn state(pool: PgPool, organisation_id: Uuid) -> AppState {
+fn nucleo(pool: PgPool, organisation_id: Uuid) -> AppState {
+    nucleo_com(
+        pool,
+        organisation_id,
+        Arc::new(ocinye_core::modules::intelligence::NoProvider),
+    )
+}
+
+/// O mesmo, com um fornecedor de inferência à escolha — para provar que o
+/// caminho de execução roteia quando um fornecedor serve (M5.2, e a base do
+/// hot-plug de M5.3).
+fn nucleo_com(
+    pool: PgPool,
+    organisation_id: Uuid,
+    inference: Arc<dyn ocinye_core::modules::intelligence::InferenceProvider>,
+) -> AppState {
     let config = config();
     let verifier = TokenVerifier::new(config.oidc.clone()).expect("verificador");
     let authenticator = Arc::new(Authenticator::new(
@@ -91,7 +106,7 @@ fn state(pool: PgPool, organisation_id: Uuid) -> AppState {
         authenticator,
         store: None,
         embeddings: None,
-        inference: Arc::new(ocinye_core::modules::intelligence::NoProvider),
+        inference,
         mail_registry,
         realtime: Arc::new(ocinye_core::realtime::Realtime::ausente()),
         mail_probe: Arc::new(SondaDoHarness),
@@ -184,79 +199,46 @@ async fn submit(state: &AppState, token: &Secret, body: Value) -> (StatusCode, V
     )
 }
 
-/// Teste de aceitação principal de M5.1.
+/// Regista um modelo de nó que serve as capacidades dadas, `available`.
 ///
-/// Zero fornecedores, zero modelos, zero nós, Core saudável. Um pedido de código
-/// é aceite, processado, e concluído como resposta de sistema degradada — com o
-/// código-máquina certo e sem provenance de modelo nenhum.
-#[tokio::test]
-async fn sem_no_um_pedido_conclui_como_resposta_de_sistema() {
-    let pool = pool!();
-    let organisation_id = organisation(&pool).await;
-    let state = state(pool.clone(), organisation_id);
-    let (person_id, token) = membro(&pool, organisation_id).await;
-
-    let (status, corpo) = submit(
-        &state,
-        &token,
-        json!({
-            "prompt": "Cria uma função Rust que some dois números.",
-            "capability": "CODING",
-        }),
+/// Um modelo `ocinye_node` precisa de um nó; o estado do nó é irrelevante para o
+/// router, que decide por `serves()` do modelo.
+async fn seed_serving_model(pool: &PgPool, organisation_id: Uuid, capabilities: &[&str]) {
+    let identifier: String = Uuid::new_v4()
+        .simple()
+        .to_string()
+        .chars()
+        .take(24)
+        .collect();
+    let node_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO compute_nodes (organisation_id, identifier, display_name, status)
+             VALUES ($1, $2, 'Nó de teste', 'online') RETURNING id",
     )
-    .await;
-
-    // Um pedido processado não é uma falha: HTTP 200, nunca 503.
-    assert_eq!(
-        status,
-        StatusCode::OK,
-        "um pedido processado sem inferência devolveu erro em vez de estado: {corpo}"
-    );
-
-    // A origem é o SISTEMA — nunca um modelo.
-    assert_eq!(corpo["origin"], "SYSTEM", "{corpo}");
-    assert_eq!(corpo["status"], "DEGRADED", "{corpo}");
-    assert_eq!(corpo["reason_code"], "AI_NO_PROVIDER_AVAILABLE", "{corpo}");
-
-    // Nenhuma proveniência de modelo: os três campos estão presentes e nulos,
-    // para que se prove a ausência em vez de a inferir de uma omissão.
-    assert!(
-        corpo.get("model").is_some() && corpo["model"].is_null(),
-        "{corpo}"
-    );
-    assert!(
-        corpo.get("provider").is_some() && corpo["provider"].is_null(),
-        "{corpo}"
-    );
-    assert!(
-        corpo.get("compute_node").is_some() && corpo["compute_node"].is_null(),
-        "{corpo}"
-    );
-
-    // A resposta é do sistema, em português, e afirma-o.
-    let content = corpo["content"].as_str().unwrap_or_default();
-    assert!(
-        content.contains("Prompt Ocinye continua operacional"),
-        "a resposta de sistema não afirma que o Prompt está operacional: «{content}»"
-    );
-
-    // A procura ficou registada no ledger, como recusa, com o código-máquina —
-    // a evidência de demanda que justifica um nó. Nenhum token, nenhuma GPU.
-    let (registados, razao): (i64, Option<String>) = sqlx::query_as(
-        "SELECT count(*), max(rejection_reason)
-             FROM ai_jobs
-             WHERE requested_by_id = $1 AND status = 'rejected' AND capability = 'CODING'",
-    )
-    .bind(person_id)
-    .fetch_one(&pool)
+    .bind(organisation_id)
+    .bind(identifier)
+    .fetch_one(pool)
     .await
-    .expect("ledger");
-    assert_eq!(registados, 1, "a procura não ficou registada uma vez");
-    assert_eq!(
-        razao.as_deref(),
-        Some("AI_NO_PROVIDER_AVAILABLE"),
-        "o ledger não guardou o código-máquina da razão"
+    .expect("nó");
+
+    let caps = serde_json::Value::Array(
+        capabilities
+            .iter()
+            .map(|c| serde_json::Value::String((*c).to_owned()))
+            .collect(),
     );
+    sqlx::query(
+        "INSERT INTO ai_models
+             (provider_kind, provider_name, node_id, model_name, version,
+              capabilities, status, enabled)
+         VALUES ('ocinye_node', $1, $2, $3, 'v1', $4, 'available', TRUE)",
+    )
+    .bind(format!("prov-{}", Uuid::new_v4().simple()))
+    .bind(node_id)
+    .bind(format!("modelo-{}", Uuid::new_v4().simple()))
+    .bind(caps)
+    .execute(pool)
+    .await
+    .expect("modelo");
 }
 
 /// O input mantém-se operacional: um segundo pedido conclui do mesmo modo.
@@ -267,7 +249,7 @@ async fn sem_no_um_pedido_conclui_como_resposta_de_sistema() {
 async fn o_prompt_continua_operacional_apos_uma_resposta_degradada() {
     let pool = pool!();
     let organisation_id = organisation(&pool).await;
-    let state = state(pool.clone(), organisation_id);
+    let state = nucleo(pool.clone(), organisation_id);
     let (_person_id, token) = membro(&pool, organisation_id).await;
 
     for pedido in ["Primeiro pedido.", "Segundo pedido."] {
@@ -286,11 +268,176 @@ async fn o_prompt_continua_operacional_apos_uma_resposta_degradada() {
 async fn um_pedido_vazio_e_uma_falha_de_validacao() {
     let pool = pool!();
     let organisation_id = organisation(&pool).await;
-    let state = state(pool.clone(), organisation_id);
+    let state = nucleo(pool.clone(), organisation_id);
     let (_person_id, token) = membro(&pool, organisation_id).await;
 
     let (status, _corpo) = submit(&state, &token, json!({ "prompt": "   " })).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+/// Limpa o inventário global de modelos e nós.
+///
+/// `ai_models` não tem âmbito de organização — `list_models` devolve todos —,
+/// por isso os cenários de router têm de partir de um inventário conhecido. Este
+/// teste corre-os em sequência, num só processo, para não competir com o
+/// inventário de testes paralelos.
+async fn clear_inventory(pool: &PgPool) {
+    sqlx::query("DELETE FROM ai_models")
+        .execute(pool)
+        .await
+        .expect("limpar modelos");
+    sqlx::query("DELETE FROM compute_nodes")
+        .execute(pool)
+        .await
+        .expect("limpar nós");
+}
+
+/// O router classifica o pedido pelo estado do inventário, e a execução roteia
+/// quando um fornecedor serve (M5.2, resultado-chave §20; base do hot-plug §21).
+///
+/// Sequencial e isolado de propósito: `ai_models` é global.
+#[tokio::test]
+async fn o_router_classifica_o_inventario_e_a_execucao_roteia() {
+    let pool = pool!();
+    let organisation_id = organisation(&pool).await;
+    let (person_id, token) = membro(&pool, organisation_id).await;
+
+    // ── Cenário 0 (aceitação principal, M5.1 §16): inventário vazio, zero
+    // fornecedores. Um pedido de código é processado e conclui como resposta de
+    // sistema degradada, sem provenance de modelo, registada no ledger.
+    clear_inventory(&pool).await;
+    let state = nucleo(pool.clone(), organisation_id); // NoProvider
+    let (status, corpo) = submit(
+        &state,
+        &token,
+        json!({
+            "prompt": "Cria uma função Rust que some dois números.",
+            "capability": "CODING",
+        }),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "um pedido processado não é falha: {corpo}"
+    );
+    assert_eq!(corpo["origin"], "SYSTEM", "{corpo}");
+    assert_eq!(corpo["status"], "DEGRADED", "{corpo}");
+    assert_eq!(corpo["reason_code"], "AI_NO_PROVIDER_AVAILABLE", "{corpo}");
+    // Proveniência presente e nula — prova-se a ausência de modelo.
+    for campo in ["model", "provider", "compute_node"] {
+        assert!(
+            corpo.get(campo).is_some() && corpo[campo].is_null(),
+            "{campo}: {corpo}"
+        );
+    }
+    assert!(
+        corpo["content"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Prompt Ocinye continua operacional"),
+        "{corpo}"
+    );
+    let (rejeitados, razao): (i64, Option<String>) = sqlx::query_as(
+        "SELECT count(*), max(rejection_reason) FROM ai_jobs
+             WHERE requested_by_id = $1 AND status = 'rejected' AND capability = 'CODING'",
+    )
+    .bind(person_id)
+    .fetch_one(&pool)
+    .await
+    .expect("ledger");
+    assert_eq!(rejeitados, 1, "a procura não ficou registada uma vez");
+    assert_eq!(
+        razao.as_deref(),
+        Some("AI_NO_PROVIDER_AVAILABLE"),
+        "{corpo}"
+    );
+
+    // ── Cenário 1: modelos existem, nenhum serve CÓDIGO → NO_COMPATIBLE_MODEL.
+    clear_inventory(&pool).await;
+    seed_serving_model(&pool, organisation_id, &["GENERAL"]).await;
+    let state = nucleo(pool.clone(), organisation_id); // NoProvider
+    let (status, corpo) = submit(
+        &state,
+        &token,
+        json!({ "prompt": "Escreve código.", "capability": "CODING" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{corpo}");
+    assert_eq!(corpo["origin"], "SYSTEM", "{corpo}");
+    assert_eq!(
+        corpo["reason_code"], "AI_NO_COMPATIBLE_MODEL",
+        "modelos existem mas nenhum serve CÓDIGO: {corpo}"
+    );
+
+    // ── Cenário 2: um modelo serve CÓDIGO, mas o fornecedor não o executa.
+    clear_inventory(&pool).await;
+    seed_serving_model(&pool, organisation_id, &["CODING"]).await;
+    let state = nucleo(pool.clone(), organisation_id); // NoProvider
+    let (status, corpo) = submit(
+        &state,
+        &token,
+        json!({ "prompt": "Escreve código.", "capability": "CODING" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{corpo}");
+    assert_eq!(corpo["origin"], "SYSTEM", "{corpo}");
+    assert_eq!(
+        corpo["reason_code"], "AI_NO_PROVIDER_AVAILABLE",
+        "modelo resolvido mas sem fornecedor: {corpo}"
+    );
+    assert!(corpo["model"].is_null(), "{corpo}");
+
+    // ── Cenário 3: modelo E fornecedor que serve → COMPLETED (origin=MODEL).
+    // O mesmo inventário do cenário 2; só muda o fornecedor injectado — a prova
+    // de que um fornecedor a aparecer roteia sem redeploy nem toggle (§21).
+    let state = nucleo_com(
+        pool.clone(),
+        organisation_id,
+        Arc::new(ocinye_core::modules::intelligence::fixture::FixtureProvider::cooperative()),
+    );
+    let (status, corpo) = submit(
+        &state,
+        &token,
+        json!({ "prompt": "Soma dois números.", "capability": "CODING" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{corpo}");
+    assert_eq!(corpo["origin"], "MODEL", "{corpo}");
+    assert_eq!(corpo["status"], "COMPLETED", "{corpo}");
+    assert!(corpo["reason_code"].is_null(), "{corpo}");
+    assert!(corpo["model"].is_string(), "{corpo}");
+    assert!(corpo["provider"].is_string(), "{corpo}");
+    assert!(
+        corpo["content"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Resposta de teste"),
+        "{corpo}"
+    );
+
+    // ── Cenário 4: o fornecedor desaparece de novo → SYSTEM/DEGRADED.
+    let state = nucleo(pool.clone(), organisation_id); // volta a NoProvider
+    let (status, corpo) = submit(
+        &state,
+        &token,
+        json!({ "prompt": "Soma dois números.", "capability": "CODING" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{corpo}");
+    assert_eq!(corpo["origin"], "SYSTEM", "{corpo}");
+    assert_eq!(corpo["reason_code"], "AI_NO_PROVIDER_AVAILABLE", "{corpo}");
+
+    // O ledger tem exactamente um trabalho concluído (o cenário 3), com modelo.
+    let (concluidos,): (i64,) = sqlx::query_as(
+        "SELECT count(*) FROM ai_jobs
+             WHERE requested_by_id = $1 AND status = 'succeeded' AND model_id IS NOT NULL",
+    )
+    .bind(person_id)
+    .fetch_one(&pool)
+    .await
+    .expect("ledger");
+    assert_eq!(concluidos, 1, "só o cenário 3 devia ter concluído");
 }
 
 /// A sonda do harness: aceita, porque não há servidor de correio para

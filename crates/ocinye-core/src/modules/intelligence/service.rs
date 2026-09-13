@@ -1,14 +1,15 @@
 //! Intelligence application layer — the AI Gateway.
 
 use ocinye_contracts::{
-    AiCapability, CapabilityStatus, Classification, IntelligenceStatus, PageRequest, RagScope,
+    AiCapability, AiReasonCode, CapabilityStatus, Classification, IntelligenceStatus, PageRequest,
+    RagScope,
 };
 use ocinye_domain::policy::{authorize, Action, ResourceContext, ResourceKind};
 use ocinye_domain::Principal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::model::{RegisteredModel, RetrievedRef};
+use super::model::{ModelResolution, RegisteredModel, RetrievedRef};
 use super::repository as repo;
 use crate::config::AiConfig;
 use crate::error::{CoreError, CoreResult};
@@ -38,17 +39,29 @@ pub async fn list_models(pool: &PgPool, principal: &Principal) -> CoreResult<Vec
 /// failure of the platform: it is the accurate answer while no Ocinye node is
 /// enrolled, and callers are expected to degrade explicitly.
 ///
+/// # Zero candidates is a result, not an error
+///
+/// Returns `Ok(ModelResolution::NoCandidate(reason))` when no enabled, healthy
+/// model serves the capability, or when configuration maps it to a model that is
+/// not currently reported by any node. The reason is a typed [`AiReasonCode`]:
+/// `AI_NO_PROVIDER_AVAILABLE` when nothing is reported at all,
+/// `AI_NO_COMPATIBLE_MODEL` when models exist but none serve this capability (or
+/// the configured one is absent). A healthy Core with no model has resolved the
+/// question correctly (M5 §20).
+///
 /// # Errors
 ///
-/// Returns [`CoreError::CapabilityUnavailable`] when no enabled, healthy model
-/// serves the capability, or when configuration maps it to a model that is not
-/// currently reported by any node.
+/// Returns an error only on a real fault — a database failure while listing
+/// models.
 pub async fn resolve_capability(
     pool: &PgPool,
     config: &AiConfig,
     capability: AiCapability,
-) -> CoreResult<RegisteredModel> {
+) -> CoreResult<ModelResolution> {
     let models = repo::list_models(pool).await?;
+    // Kept to distinguish «nothing is reported at all» from «models exist but
+    // none serve this capability» — two different machine reasons.
+    let reported_any = !models.is_empty();
 
     let candidates: Vec<RegisteredModel> = models
         .into_iter()
@@ -61,30 +74,29 @@ pub async fn resolve_capability(
         .collect();
 
     if candidates.is_empty() {
-        return Err(CoreError::CapabilityUnavailable(
-            "Nenhum nó do Ocinye OS fornece esta capacidade nesta instalação.".to_owned(),
-        ));
+        let reason = if reported_any {
+            AiReasonCode::AiNoCompatibleModel
+        } else {
+            AiReasonCode::AiNoProviderAvailable
+        };
+        return Ok(ModelResolution::NoCandidate(reason));
     }
 
     // Configuration decides *which* model serves a capability. Code never does.
     if let Some(configured) = config.capability_map.get(&capability) {
-        return candidates
+        return Ok(candidates
             .into_iter()
             .find(|model| &model.model_name == configured)
-            .ok_or_else(|| {
-                CoreError::CapabilityUnavailable(
-                    "O modelo configurado para esta capacidade não está disponível \
-                     neste momento."
-                        .to_owned(),
-                )
-            });
+            .map_or_else(
+                || ModelResolution::NoCandidate(AiReasonCode::AiNoCompatibleModel),
+                |model| ModelResolution::Resolved(Box::new(model)),
+            ));
     }
 
-    candidates.into_iter().next().ok_or_else(|| {
-        CoreError::CapabilityUnavailable(
-            "Nenhum nó do Ocinye OS fornece esta capacidade nesta instalação.".to_owned(),
-        )
-    })
+    Ok(candidates.into_iter().next().map_or_else(
+        || ModelResolution::NoCandidate(AiReasonCode::AiNoCompatibleModel),
+        |model| ModelResolution::Resolved(Box::new(model)),
+    ))
 }
 
 /// Report the state of the Intelligence Plane.
@@ -260,6 +272,38 @@ pub async fn record_rejected_job(
         scope.as_str(),
         "rejected",
         Some(reason),
+        &serde_json::Value::Array(vec![]),
+    )
+    .await
+}
+
+/// Record a capability request that a model completed.
+///
+/// The ledger keeps *that* it happened, with which model — never the prompt or
+/// the completion. `retrieved_refs` stays empty here; content provenance is a
+/// separate concern (`ai_jobs` deliberately does not store prompts).
+///
+/// # Errors
+///
+/// Returns an error when the insert fails.
+pub async fn record_completed_job(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    capability: AiCapability,
+    scope: RagScope,
+    workspace_id: Option<Uuid>,
+    model_id: Uuid,
+) -> CoreResult<Uuid> {
+    repo::insert_job(
+        &mut **tx,
+        principal.organisation_id,
+        workspace_id,
+        principal.person_id,
+        capability.as_str(),
+        Some(model_id),
+        scope.as_str(),
+        "succeeded",
+        None,
         &serde_json::Value::Array(vec![]),
     )
     .await

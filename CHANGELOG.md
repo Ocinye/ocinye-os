@@ -7,6 +7,32 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Prompt Ocinye — Model Router tipado e caminho de execução (M5.2) — 2026-09-13
+
+O router de capacidades existia mas nada roteava por ele, e devolvia um erro
+quando não havia modelo. O Prompt passa a **rotear pelo Model Router**, que é a
+autoridade de disponibilidade deste caminho, e «zero candidatos» passa a ser um
+resultado tipado, não uma excepção (resultado-chave de M5.2).
+
+- **`resolve_capability` devolve `ModelResolution`** (`Resolved` | `NoCandidate`):
+  lê o inventário de modelos a cada pedido, e classifica a ausência com o
+  código-máquina certo — `AI_NO_PROVIDER_AVAILABLE` quando nada está reportado,
+  `AI_NO_COMPATIBLE_MODEL` quando há modelos mas nenhum serve a capacidade. Um
+  erro fica reservado para uma falha real (a base de dados).
+- **`/ai/prompt` roteia pelo router e executa**: com um fornecedor de inferência
+  a servir a capacidade, o pedido corre através do contrato canónico
+  (`infer_within_deadline`) e conclui como resposta de modelo — `origin=MODEL`,
+  `status=COMPLETED`, a nomear modelo e fornecedor —, registada no ledger como
+  concluída (nunca o prompt nem a resposta). Em produção o fornecedor é o
+  `NoProvider`, e a conclusão é sempre `SYSTEM`/`DEGRADED`.
+- **Hot-plug provado a este nível**: um fornecedor a aparecer roteia o próximo
+  pedido; a desaparecer, volta a `SYSTEM`/`DEGRADED` — sem redeploy, sem toggle
+  (teste de aceitação com um fornecedor de teste).
+- **`AgenticOutcome::Unavailable` ganha `reason_code`**, unificando o vocabulário
+  de razões entre a superfície agentic e o envelope do Prompt.
+- Sem alteração de comportamento em produção (0 nós, 0 modelos): a resposta
+  observável continua a ser a de sistema degradada.
+
 ### Prompt Ocinye — superfície de comando sempre operacional (M5.1) — 2026-09-13
 
 O Prompt tratava a ausência de IA como avaria: com zero modelos, `POST /ai/prompt`
