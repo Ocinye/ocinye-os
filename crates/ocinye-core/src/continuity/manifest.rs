@@ -226,6 +226,8 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
         ),
     ),
     ("ai_jobs", Comparacao::Identidades),
+    ("ai_conversations", Comparacao::Identidades),
+    ("ai_conversation_turns", Comparacao::Identidades),
     ("action_plans", Comparacao::Identidades),
     // ── Governança de recursos ──────────────────────────────────────────
     //

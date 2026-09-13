@@ -66,7 +66,7 @@ sem que nada falhe.
   3 serviços (`core-server`, `worker`, `node-agent`) e 1 aplicação
   (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 182 caminhos e 218 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 184 caminhos e 220 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -171,7 +171,7 @@ sem que nada falhe.
   capacidade, e a superfície de Administração de recursos.
   `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão distinto de `OCINYE_AI_READY`, e
   **não** torna a IA disponível.
-- **43 migrations**, aplicáveis de base vazia; 80 tabelas.
+- **44 migrations**, aplicáveis de base vazia; 82 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -278,9 +278,16 @@ sem que nada falhe.
   como resposta de modelo (`origin=MODEL`, `status=COMPLETED`, a nomear modelo e
   fornecedor) — caminho exercido de ponta a ponta por um fornecedor de teste; em
   produção o fornecedor por omissão é o `NoProvider` e a conclusão é sempre
-  `SYSTEM`/`DEGRADED`. `OCINYE_AI_CONTROL_PLANE_READY` continua **não
-  declarado** — falta o resto das fatias M5 —, e distinto de
-  `OCINYE_AI_RUNTIME_READY`, que permanece falso.
+  `SYSTEM`/`DEGRADED`.
+  Toda a interacção é **persistida como conversa** do membro — privada ao dono,
+  legível por `GET /api/v1/ai/conversations` e `…/{id}` (owner-scoped, IDOR
+  fechado) —, com o prompt e a resposta guardados e a **origem tipada** de cada
+  turno (`member`/`system`/`model`/`tool`/`agent`). Um turno de sistema nunca é
+  reescrito como turno de modelo: a verdade histórica mantém-se
+  ([ADR-0309](docs/adrs/0309-ai-conversation-persistence-and-provenance.md)).
+  `OCINYE_AI_CONTROL_PLANE_READY` continua **não declarado** — falta a
+  certificação integral —, e distinto de `OCINYE_AI_RUNTIME_READY`, que permanece
+  falso.
 - **Ciclo de vida científico e proveniência: `IMPLEMENTED`.** Hipótese,
   metodologia, versão de metodologia, estudo, execução, resultado, e a
   validação ou reprodução que alguém registou
@@ -327,7 +334,7 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **66 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
+- **67 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
   **66 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -347,14 +354,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1583 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1586 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **588 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **591 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

@@ -29,6 +29,7 @@
 pub mod agents;
 #[cfg(feature = "test-fixtures")]
 pub mod conformance;
+pub mod conversations;
 pub mod embeddings;
 #[cfg(feature = "test-fixtures")]
 pub mod fixture;
@@ -38,6 +39,10 @@ mod repository;
 mod service;
 
 pub use agents::{Agent, AgentScope, AgentState, NewAgent};
+pub use conversations::{
+    get_conversation, list_conversations, record_interaction, ConversationSummary,
+    ConversationView, ResponseTurn, TurnView,
+};
 pub use model::{ModelResolution, RegisteredModel, RetrievedRef};
 pub use provider::{
     infer_within_deadline, ContractVersion, DataBlock, InferenceError, InferenceProvider,

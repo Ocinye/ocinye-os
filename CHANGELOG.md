@@ -7,6 +7,25 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### IA — persistência de conversas com proveniência tipada (M5.3 I) — 2026-09-13
+
+Uma interacção com o Prompt deixava de existir depois de renderizada. Passa a ser
+**persistida como conversa** do membro, preservando a verdade histórica: uma
+resposta que o sistema deu porque não havia inferência é um turno `system`, e uma
+resposta de modelo futura é um turno `model` — a primeira nunca é reescrita como a
+segunda ([ADR-0309](docs/adrs/0309-ai-conversation-persistence-and-provenance.md)).
+
+- **Conversas owner-private** (migração 0044: `ai_conversations`,
+  `ai_conversation_turns`): guardam o prompt e a resposta — ao contrário do
+  `ai_jobs`, que por decisão não guarda conteúdo. A conversa é do membro, morre
+  com ele, e outra pessoa não a distingue de inexistente (`404`, IDOR fechado).
+- **Proveniência tipada por turno**: `role` (`member` ou a origem da resposta:
+  `system`/`model`/`tool`/`agent`), estado, código de razão, e — quando um modelo
+  responde — modelo, fornecedor e nó (proveniência que sobrevive à sua remoção).
+- **Leitura owner-scoped**: `GET /ai/conversations` e `GET /ai/conversations/{id}`.
+- O `/ai/prompt` persiste cada interacção, degradada ou concluída, na mesma
+  transacção que regista o uso e o trabalho.
+
 ### IA — admissão de recursos no caminho de execução (M5.3 H) — 2026-09-13
 
 Antes de qualquer inferência, o pedido de IA passa agora pela governança de
