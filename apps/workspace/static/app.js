@@ -1686,8 +1686,15 @@
 
     if (ficheiroInput) {
       ficheiroInput.addEventListener('change', () => {
-        anexar(ficheiroInput.files);
+        /* Instantâneo antes de limpar: `anexar` é async e só percorre os
+           ficheiros depois de `await garantirRascunho()`. A `FileList` do input
+           é viva — limpar o input aqui esvaziá-la-ia nesse intervalo, e o loop
+           de upload não encontraria nada. `Array.from` fixa os `File`, que
+           sobrevivem à limpeza; o input limpa-se para se poder reescolher o
+           mesmo ficheiro. */
+        const escolhidos = Array.from(ficheiroInput.files);
         ficheiroInput.value = '';
+        anexar(escolhidos);
       });
     }
 
@@ -1705,7 +1712,9 @@
       if (evento.dataTransfer && evento.dataTransfer.files && evento.dataTransfer.files.length) {
         evento.preventDefault();
         delete janela.dataset.ocArrastar;
-        anexar(evento.dataTransfer.files);
+        /* Também um instantâneo: a `dataTransfer` não é garantida depois de o
+           handler do evento retornar, e `anexar` lê-a de forma assíncrona. */
+        anexar(Array.from(evento.dataTransfer.files));
       }
     });
 
