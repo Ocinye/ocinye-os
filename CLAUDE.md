@@ -157,10 +157,21 @@ sem que nada falhe.
   limite e disponível, o estado (`Normal`/`Aviso`/`Crítico`/`Acima da quota`) e a
   explicação de como o limite se compõe (perfil mais concessões temporárias),
   a partir de `GET /api/v1/resources/me` (o Core resolve o dono pela sessão).
-  Falta ainda a admissão de computação, a capacidade, os pedidos e a superfície
-  de Administração de recursos. `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão
-  distinto de `OCINYE_AI_READY`, e **não** torna a IA disponível.
-- **42 migrations**, aplicáveis de base vazia; 80 tabelas.
+  O **pedido de IA também é admitido**: antes de qualquer inferência, o Core
+  admite o pedido contra o entitlement de `model_access` do membro, com a mesma
+  disciplina do storage — *advisory lock* por membro, uso medido do ledger,
+  limite resolvido na mesma transacção, `usado + pedido ≤ limite`, **fail-closed**
+  — e grava o consumo no ledger `resource_usage_events` só quando um modelo
+  responde (a transacção é a reserva; uma falha não cobra nada). Sem quota de IA
+  configurada o limite é zero e tudo é admitido, como no storage. O ledger é
+  **proveniência imutável**: as suas colunas de contexto deixaram de ter FKs
+  `SET NULL` (migração 0043), pelo que apagar um modelo ou um nó não colide com a
+  sua append-only-ness ([ADR-0109](docs/adrs/0109-ai-request-admission-and-immutable-usage-ledger.md)).
+  Falta ainda a admissão de computação assíncrona (reservas persistidas), a
+  capacidade, e a superfície de Administração de recursos.
+  `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão distinto de `OCINYE_AI_READY`, e
+  **não** torna a IA disponível.
+- **43 migrations**, aplicáveis de base vazia; 80 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -316,7 +327,7 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **65 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
+- **66 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
   **66 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -336,14 +347,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1580 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1583 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **585 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **588 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

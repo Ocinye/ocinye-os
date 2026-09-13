@@ -7,6 +7,30 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### IA — admissão de recursos no caminho de execução (M5.3 H) — 2026-09-13
+
+Antes de qualquer inferência, o pedido de IA passa agora pela governança de
+recursos, ligando o caminho de execução ao control-plane que o [ADR-0108]
+construiu ([ADR-0109](docs/adrs/0109-ai-request-admission-and-immutable-usage-ledger.md)).
+
+- **Admissão fail-closed**: o Core admite o pedido contra o entitlement de
+  `model_access` do membro — *advisory lock* por membro, uso medido do ledger,
+  limite resolvido na mesma transacção, `usado + pedido ≤ limite`. Acima da
+  quota, o pedido conclui como resposta de sistema, `AI_RESOURCE_QUOTA_EXCEEDED`,
+  sem chamar o modelo. Sem quota configurada o limite é zero e tudo é admitido,
+  como no storage.
+- **Reserva pela transacção**: um modelo que responde grava o consumo no ledger
+  `resource_usage_events` (o seu primeiro escritor) na mesma transacção da
+  admissão; uma falha não cobra nada. O ledger guarda *que* o acesso aconteceu,
+  com o modelo — nunca o prompt nem a resposta.
+- **Ledger de proveniência imutável** (migração 0043): as colunas de contexto do
+  `resource_usage_events` deixam de ter FKs `ON DELETE SET NULL` — eram
+  incompatíveis com a sua natureza append-only (apagar um modelo referenciado
+  ficava bloqueado, e o `ai_models` é apagado/reinserido a cada relatório de nó).
+  Passam a ser UUIDs de proveniência que sobrevivem à remoção do que referenciam.
+- Sem alteração em produção: o perfil por omissão não tem quota de IA, e com o
+  `NoProvider` a admissão nem sequer é alcançada.
+
 ### Prompt Ocinye — Model Router tipado e caminho de execução (M5.2) — 2026-09-13
 
 O router de capacidades existia mas nada roteava por ele, e devolvia um erro

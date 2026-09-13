@@ -275,6 +275,27 @@ async fn um_pedido_vazio_e_uma_falha_de_validacao() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
+/// Concede a um membro uma quota de `model_access` (override), para provar a
+/// admissão de recursos no caminho de IA (H).
+async fn seed_model_access_quota(
+    pool: &PgPool,
+    organisation_id: Uuid,
+    person_id: Uuid,
+    quantity: i64,
+) {
+    sqlx::query(
+        "INSERT INTO resource_allocations
+             (organisation_id, resource_type, unit, scope_type, scope_id, quantity, source, reason)
+         VALUES ($1, 'model_access', 'count', 'member', $2, $3, 'override', 'prova')",
+    )
+    .bind(organisation_id)
+    .bind(person_id)
+    .bind(quantity)
+    .execute(pool)
+    .await
+    .expect("quota");
+}
+
 /// Limpa o inventário global de modelos e nós.
 ///
 /// `ai_models` não tem âmbito de organização — `list_models` devolve todos —,
@@ -487,10 +508,65 @@ async fn o_router_classifica_o_inventario_e_a_execucao_roteia() {
     );
     assert_eq!(corpo["reason_code"], "AI_NO_PROVIDER_AVAILABLE", "{corpo}");
 
-    // O ledger regista dois trabalhos concluídos — o cenário 3 e o passo 6 do
-    // hot-plug. O `model_id` de ambos ficou nulo quando o respectivo modelo foi
-    // removido (FK `ON DELETE SET NULL`): o trabalho sobrevive ao seu modelo, o
-    // que é o comportamento correcto. Nunca se guarda o prompt nem a resposta.
+    // ── Cenário 8: admissão de recursos (H) — quota de ModelAccess ──────
+    //
+    // Um membro novo (uso zero) com uma quota de 2 acessos: dois pedidos
+    // completam, o terceiro é recusado — fail-closed — com o código de quota,
+    // sem chamar o modelo. Prova que a Resource Governance está ligada ao
+    // caminho de execução (ADR-0108).
+    clear_inventory(&pool).await;
+    seed_serving_model(&pool, organisation_id, &["CODING"]).await;
+    let (quota_person, quota_token) = membro(&pool, organisation_id).await;
+    seed_model_access_quota(&pool, organisation_id, quota_person, 2).await;
+
+    for i in 1..=2 {
+        let (status, corpo) = submit(
+            &nucleo_fixo,
+            &quota_token,
+            json!({ "prompt": "Soma dois números.", "capability": "CODING" }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "pedido {i}: {corpo}");
+        assert_eq!(
+            corpo["status"], "COMPLETED",
+            "pedido {i} dentro da quota: {corpo}"
+        );
+    }
+
+    // O terceiro excede a quota → recusado, sem modelo.
+    let (status, corpo) = submit(
+        &nucleo_fixo,
+        &quota_token,
+        json!({ "prompt": "Soma dois números.", "capability": "CODING" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{corpo}");
+    assert_eq!(
+        corpo["origin"], "SYSTEM",
+        "acima da quota é do sistema: {corpo}"
+    );
+    assert_eq!(
+        corpo["reason_code"], "AI_RESOURCE_QUOTA_EXCEEDED",
+        "{corpo}"
+    );
+    assert!(corpo["model"].is_null(), "{corpo}");
+
+    // O ledger de uso registou exactamente os dois acessos admitidos.
+    let (usados,): (i64,) = sqlx::query_as(
+        "SELECT COALESCE(SUM(quantity), 0)::bigint FROM resource_usage_events
+             WHERE charge_scope_type = 'member' AND charge_scope_id = $1
+               AND resource_type = 'model_access'",
+    )
+    .bind(quota_person)
+    .fetch_one(&pool)
+    .await
+    .expect("ledger de uso");
+    assert_eq!(usados, 2, "o 3.\u{ba} pedido não devia ter sido cobrado");
+
+    // O ledger de trabalhos regista dois concluídos para o `person_id` original
+    // — o cenário 3 e o passo 6 do hot-plug. O `model_id` de ambos ficou nulo
+    // quando o modelo foi removido (FK `ON DELETE SET NULL`): o trabalho
+    // sobrevive ao seu modelo. Nunca se guarda o prompt nem a resposta.
     let (concluidos,): (i64,) = sqlx::query_as(
         "SELECT count(*) FROM ai_jobs
              WHERE requested_by_id = $1 AND status = 'succeeded'",

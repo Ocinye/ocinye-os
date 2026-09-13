@@ -14,7 +14,7 @@ use ocinye_contracts::{
 use ocinye_core::modules::intelligence::{
     self, infer_within_deadline, AgentScope, InferenceRequest, ModelResolution, NewAgent,
 };
-use ocinye_core::modules::platform;
+use ocinye_core::modules::{platform, resource};
 use ocinye_core::CoreError;
 use ocinye_domain::{can, ResourceContext, ResourceKind};
 use serde::{Deserialize, Serialize};
@@ -341,27 +341,89 @@ async fn submit_prompt(
         ));
     }
 
-    // Execute. The prompt carries no retrieved context here — permission-aware
-    // context assembly is a separate concern — so no classified material leaves
-    // the Core (ADR-0300, ADR-0304). The Core enforces its own contract around
-    // the provider via `infer_within_deadline`.
+    // ── Resource admission (ADR-0108) ──────────────────────────────────
+    //
+    // A model serves and a provider can run it. Before inference, admit the
+    // request against the member's AI entitlement, fail-closed. The admission
+    // transaction holds a per-member advisory lock across the inference call —
+    // it is the request's reservation — and either commits the usage (a model
+    // answered) or releases it (it did not), atomically. With no `model_access`
+    // entitlement configured the limit is zero and everything is admitted, so
+    // an installation that has not chosen to meter AI is not blocked by it.
+    let mut tx = match state.pool.begin().await {
+        Ok(tx) => tx,
+        Err(_) => {
+            return Ok(Json(
+                degraded(
+                    &state,
+                    &principal,
+                    capability,
+                    AiReasonCode::AiProviderUnhealthy,
+                )
+                .await,
+            ));
+        }
+    };
+    match resource::admit_ai_access(&mut tx, principal.person_id, 1).await {
+        Ok(true) => {}
+        Ok(false) => {
+            drop(tx); // release the reservation
+            return Ok(Json(
+                degraded(
+                    &state,
+                    &principal,
+                    capability,
+                    AiReasonCode::AiResourceQuotaExceeded,
+                )
+                .await,
+            ));
+        }
+        Err(_) => {
+            drop(tx);
+            return Ok(Json(
+                degraded(
+                    &state,
+                    &principal,
+                    capability,
+                    AiReasonCode::AiProviderUnhealthy,
+                )
+                .await,
+            ));
+        }
+    }
+
+    // Execute, still holding the reservation. The prompt carries no retrieved
+    // context here — permission-aware context assembly is a separate concern —
+    // so no classified material leaves the Core (ADR-0300, ADR-0304). The Core
+    // enforces its own contract around the provider via `infer_within_deadline`.
     let inference = InferenceRequest::new(capability, system_instruction(), request.prompt.clone());
     match infer_within_deadline(state.inference.as_ref(), &inference).await {
         Ok(response) => {
-            if let Ok(mut tx) = state.pool.begin().await {
-                let recorded = intelligence::record_completed_job(
-                    &mut tx,
-                    &principal,
-                    capability,
-                    ocinye_contracts::RagScope::Institutional,
-                    None,
-                    model.id,
-                )
-                .await;
-                if recorded.is_ok() {
-                    let _ = tx.commit().await;
-                }
-            }
+            // Commit the reservation: record the completed job and the usage in
+            // the admission transaction, so the charge lands with the answer.
+            let job_id = intelligence::record_completed_job(
+                &mut tx,
+                &principal,
+                capability,
+                ocinye_contracts::RagScope::Institutional,
+                None,
+                model.id,
+            )
+            .await
+            .ok();
+            let _ = resource::record_ai_access(
+                &mut *tx,
+                principal.organisation_id,
+                principal.person_id,
+                Some(model.id),
+                model.node_id,
+                job_id,
+                &ids.correlation_id,
+                1,
+            )
+            .await;
+            let _ = tx.commit().await;
+
             Ok(Json(AiInteractionResponse {
                 origin: InteractionOrigin::Model,
                 status: InteractionStatus::Completed,
@@ -372,15 +434,18 @@ async fn submit_prompt(
                 content: response.text,
             }))
         }
-        Err(error) => Ok(Json(
-            degraded(
-                &state,
-                &principal,
-                capability,
-                reason_code_for_inference_error(error),
-            )
-            .await,
-        )),
+        Err(error) => {
+            drop(tx); // release: a failed request charges nothing
+            Ok(Json(
+                degraded(
+                    &state,
+                    &principal,
+                    capability,
+                    reason_code_for_inference_error(error),
+                )
+                .await,
+            ))
+        }
     }
 }
 
