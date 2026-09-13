@@ -7,6 +7,18 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Correio — o rascunho também falhava por `in_reply_to` vazio — 2026-09-13
+
+A correcção anterior ligou o `mailbox_id` à caixa, mas a gravação do rascunho
+continuava a dar `422`: numa mensagem nova, o compositor envia `in_reply_to`
+vazio, e — como o `mailbox_id` — o Core desserializa-o para `Option<Uuid>`, onde
+`""` não é um UUID. Era o **mesmo defeito noutro campo**.
+
+- **`in_reply_to` vazio viaja agora como `null`**, nunca como `""`, tal como o
+  `mailbox_id`. Com os dois únicos campos `Uuid` do rascunho tratados, uma
+  mensagem nova grava, e o anexo passa a aparecer.
+- Teste que prova que ambos os campos `Uuid` vazios viajam como `null`.
+
 ### Correio — corrigida a gravação do rascunho e o anexo que caía com ela — 2026-09-13
 
 Anexar um ficheiro num compositor aberto sem uma caixa no URL não fazia nada, e o

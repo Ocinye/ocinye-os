@@ -2256,7 +2256,12 @@ fn corpo_de_rascunho(recebido: &Value) -> Value {
         "subject": recebido.get("subject").and_then(Value::as_str).unwrap_or(""),
         "body": recebido.get("body").and_then(Value::as_str).unwrap_or(""),
         "html_body": recebido.get("html_body").and_then(Value::as_str),
-        "in_reply_to": recebido.get("in_reply_to").and_then(Value::as_str),
+        // Como o `mailbox_id`: `in_reply_to` também é `Option<Uuid>` no Core, e
+        // uma mensagem nova traz `""`. Vazio viaja como `null`, nunca como `""`.
+        "in_reply_to": recebido
+            .get("in_reply_to")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty()),
     })
 }
 
@@ -10788,5 +10793,51 @@ async fn unit_member_remove(
         Ok(_) => de_volta_a_unidade(unit_id, "ok=removido"),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         Err(falha) => de_volta_a_unidade(unit_id, &format!("erro={}", motivo_da_recusa(&falha))),
+    }
+}
+
+#[cfg(test)]
+mod corpo_de_rascunho_tests {
+    use super::corpo_de_rascunho;
+    use serde_json::json;
+
+    /// Campos `Option<Uuid>` vazios viajam como `null`, nunca como `""`.
+    ///
+    /// O Core desserializa `mailbox_id` e `in_reply_to` para `Option<Uuid>`, e
+    /// `""` não é um UUID — dava um `422` que o compositor mostrava como «Erro ao
+    /// guardar rascunho», levando o anexo consigo. Uma mensagem nova traz os dois
+    /// vazios.
+    #[test]
+    fn campos_uuid_vazios_viajam_como_null() {
+        let corpo = corpo_de_rascunho(&json!({
+            "mailbox_id": "",
+            "in_reply_to": "",
+            "to": "",
+            "subject": "",
+            "body": "",
+        }));
+        assert!(
+            corpo["mailbox_id"].is_null(),
+            "mailbox_id vazio devia ser null"
+        );
+        assert!(
+            corpo["in_reply_to"].is_null(),
+            "in_reply_to vazio devia ser null"
+        );
+    }
+
+    /// Um `mailbox_id` real é preservado; um `in_reply_to` real também.
+    #[test]
+    fn campos_uuid_preenchidos_sao_preservados() {
+        let id = "70bc515b-020e-4d7c-8805-36845d1e4537";
+        let reply = "11111111-1111-4111-8111-111111111111";
+        let corpo = corpo_de_rascunho(&json!({
+            "mailbox_id": id,
+            "in_reply_to": reply,
+            "to": "a@b.com",
+        }));
+        assert_eq!(corpo["mailbox_id"], id);
+        assert_eq!(corpo["in_reply_to"], reply);
+        assert_eq!(corpo["to"], json!(["a@b.com"]));
     }
 }
