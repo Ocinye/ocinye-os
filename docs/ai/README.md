@@ -5,6 +5,11 @@
 Esta secção existe na plataforma e reporta esse estado. Não o esconde, e não
 recorre a um fornecedor externo para o disfarçar.
 
+O **plano de controlo** de IA está certificado — independente de fornecedor,
+pronto para o primeiro nó sem redesenho: ver
+[a certificação `OCINYE_AI_CONTROL_PLANE_READY`](control-plane-certification.md).
+`OCINYE_AI_RUNTIME_READY` permanece falso enquanto não houver GPU física.
+
 ## O princípio
 
 A IA é uma **capacidade transversal** da Ocinye, não um módulo, um departamento

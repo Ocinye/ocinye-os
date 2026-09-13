@@ -52,6 +52,30 @@ computação, 0 fornecedores de inferência, 0 modelos instalados, IA indisponí
 sua pré-condição:** este é o último estado estável *antes* de se ligar o primeiro
 nó de IA/Computação (M4). A declaração é documental: **nada de runtime muda**.
 
+**Portão `OCINYE_AI_CONTROL_PLANE_READY` — declarado a 2026-09-13.** O plano de
+controlo de IA está completo e independente de fornecedor: quando a primeira GPU
+entrar, liga-se como recurso, sem redesenhar Workspace nem Core. Provado por
+evidência própria, sem hardware: o **Prompt é uma superfície de comando sempre
+operacional** com o Core saudável (input nunca desactivado por ausência de IA); a
+interacção conclui num **envelope tipado** (`origin` · `status` · `reason_code`,
+com proveniência de modelo nula e explícita quando não há modelo, ADR-0308); a
+capacidade é **seleccionável** independentemente da disponibilidade; o **Model
+Router** trata «zero candidatos» como resultado tipado, não excepção, e o
+**caminho de execução** roteia e conclui como resposta de modelo quando um
+fornecedor serve (ADR-0304); o **hot-plug sem reinício** está provado com um
+fornecedor de teste (nó liga→roteia, desliga→degrada, sem redeploy nem toggle); a
+**admissão de recursos** liga a governança ao caminho de IA — entitlement,
+admissão fail-closed, reserva/libertação pela transacção, ledger de uso imutável
+(ADR-0109); e a **conversa é persistida** com proveniência tipada por turno,
+owner-private, preservando a verdade histórica (ADR-0309). A **soberania**
+mantém-se: `OCINYE_AI_ALLOW_EXTERNAL_PROVIDERS=false`, e o estado sem fornecedor
+não faz nenhum pedido de inferência externo. O estado factual de runtime
+**mantém-se e é o esperado**: `OCINYE_AI_RUNTIME_READY` permanece **falso** — 0
+fornecedores, 0 nós, 0 modelos residentes, 0 GPU —, e em produção a conclusão de
+um pedido é sempre `SYSTEM`/`DEGRADED`. Isto **não é uma lacuna**: um plano de
+controlo pronto sem runtime é exactamente o estado que precede o primeiro nó. A
+declaração é documental: **nada de runtime muda**.
+
 Os **números** desta secção não são escritos à mão: saem de
 `./scripts/repository-facts.sh`, que os deriva da árvore e só lê. Já houve aqui
 quatro contagens em circulação ao mesmo tempo — 62 caminhos contra 131, 12
@@ -285,9 +309,9 @@ sem que nada falhe.
   turno (`member`/`system`/`model`/`tool`/`agent`). Um turno de sistema nunca é
   reescrito como turno de modelo: a verdade histórica mantém-se
   ([ADR-0309](docs/adrs/0309-ai-conversation-persistence-and-provenance.md)).
-  `OCINYE_AI_CONTROL_PLANE_READY` continua **não declarado** — falta a
-  certificação integral —, e distinto de `OCINYE_AI_RUNTIME_READY`, que permanece
-  falso.
+  O plano de controlo de IA está **certificado** — `OCINYE_AI_CONTROL_PLANE_READY`
+  declarado (ver o portão acima) —, distinto de `OCINYE_AI_RUNTIME_READY`, que
+  permanece **falso** enquanto não houver GPU física.
 - **Ciclo de vida científico e proveniência: `IMPLEMENTED`.** Hipótese,
   metodologia, versão de metodologia, estudo, execução, resultado, e a
   validação ou reprodução que alguém registou

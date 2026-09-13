@@ -7,6 +7,23 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### IA — plano de controlo certificado (M5.3 M) — 2026-09-13
+
+Declarado o portão **`OCINYE_AI_CONTROL_PLANE_READY`**: o plano de controlo de IA
+está completo e independente de fornecedor — quando a primeira GPU entrar,
+liga-se como recurso, sem redesenhar Workspace nem Core. Documental: nada de
+runtime muda.
+
+- Reúne a evidência de M5.1–M5.3, provada sem hardware: Prompt sempre operacional,
+  envelope tipado, capacidade seleccionável, Model Router com «zero candidatos»
+  tipado, caminho de execução, hot-plug sem reinício, admissão de recursos
+  fail-closed, ledger de uso imutável, e conversas persistidas com proveniência.
+- **Soberania mantida**: `OCINYE_AI_ALLOW_EXTERNAL_PROVIDERS=false`; o estado sem
+  fornecedor não faz nenhum pedido de inferência externo.
+- **`OCINYE_AI_RUNTIME_READY` permanece falso** — 0 fornecedores, 0 nós, 0 modelos
+  residentes, 0 GPU. Em produção a conclusão de um pedido é sempre `SYSTEM`/`DEGRADED`.
+- Registo: [`docs/ai/control-plane-certification.md`](docs/ai/control-plane-certification.md).
+
 ### IA — persistência de conversas com proveniência tipada (M5.3 I) — 2026-09-13
 
 Uma interacção com o Prompt deixava de existir depois de renderizada. Passa a ser
