@@ -428,16 +428,78 @@ async fn o_router_classifica_o_inventario_e_a_execucao_roteia() {
     assert_eq!(corpo["origin"], "SYSTEM", "{corpo}");
     assert_eq!(corpo["reason_code"], "AI_NO_PROVIDER_AVAILABLE", "{corpo}");
 
-    // O ledger tem exactamente um trabalho concluído (o cenário 3), com modelo.
+    // ── Hot-plug SEM reinício (M5.3 §21) ────────────────────────────────
+    //
+    // A prova fiel: uma **única** `AppState`, com o adaptador de inferência
+    // fixo — como o adaptador de rede de um nó, que sabe falar com nós e não
+    // muda. O que muda dinamicamente é o inventário `ai_models`, reportado pelo
+    // nó: ligá-lo, e desligá-lo. O router lê-o a cada pedido, por isso o
+    // roteamento segue o estado sem redeploy do Workspace, sem reinício do Core,
+    // e sem nenhum interruptor manual `AI_ENABLED`.
+    let nucleo_fixo = nucleo_com(
+        pool.clone(),
+        organisation_id,
+        Arc::new(ocinye_core::modules::intelligence::fixture::FixtureProvider::cooperative()),
+    );
+
+    // 5. Nó ausente (inventário vazio) → SYSTEM/DEGRADED, mesmo com adaptador.
+    clear_inventory(&pool).await;
+    let (status, corpo) = submit(
+        &nucleo_fixo,
+        &token,
+        json!({ "prompt": "Soma dois números.", "capability": "CODING" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{corpo}");
+    assert_eq!(
+        corpo["origin"], "SYSTEM",
+        "hot-plug: sem nó, é do sistema: {corpo}"
+    );
+    assert_eq!(corpo["reason_code"], "AI_NO_PROVIDER_AVAILABLE", "{corpo}");
+
+    // 6. O nó liga-se (reporta um modelo) → o MESMO núcleo passa a COMPLETED.
+    seed_serving_model(&pool, organisation_id, &["CODING"]).await;
+    let (status, corpo) = submit(
+        &nucleo_fixo,
+        &token,
+        json!({ "prompt": "Soma dois números.", "capability": "CODING" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{corpo}");
+    assert_eq!(
+        corpo["origin"], "MODEL",
+        "hot-plug: nó ligado, o pedido devia rotear sem reinício: {corpo}"
+    );
+    assert_eq!(corpo["status"], "COMPLETED", "{corpo}");
+
+    // 7. O nó desliga-se (inventário limpo) → o MESMO núcleo volta a DEGRADED.
+    clear_inventory(&pool).await;
+    let (status, corpo) = submit(
+        &nucleo_fixo,
+        &token,
+        json!({ "prompt": "Soma dois números.", "capability": "CODING" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{corpo}");
+    assert_eq!(
+        corpo["origin"], "SYSTEM",
+        "hot-plug: nó desligado, volta a ser do sistema: {corpo}"
+    );
+    assert_eq!(corpo["reason_code"], "AI_NO_PROVIDER_AVAILABLE", "{corpo}");
+
+    // O ledger regista dois trabalhos concluídos — o cenário 3 e o passo 6 do
+    // hot-plug. O `model_id` de ambos ficou nulo quando o respectivo modelo foi
+    // removido (FK `ON DELETE SET NULL`): o trabalho sobrevive ao seu modelo, o
+    // que é o comportamento correcto. Nunca se guarda o prompt nem a resposta.
     let (concluidos,): (i64,) = sqlx::query_as(
         "SELECT count(*) FROM ai_jobs
-             WHERE requested_by_id = $1 AND status = 'succeeded' AND model_id IS NOT NULL",
+             WHERE requested_by_id = $1 AND status = 'succeeded'",
     )
     .bind(person_id)
     .fetch_one(&pool)
     .await
     .expect("ledger");
-    assert_eq!(concluidos, 1, "só o cenário 3 devia ter concluído");
+    assert_eq!(concluidos, 2, "o cenário 3 e o hot-plug passo 6 concluíram");
 }
 
 /// A sonda do harness: aceita, porque não há servidor de correio para
