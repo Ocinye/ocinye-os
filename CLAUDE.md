@@ -243,6 +243,22 @@ sem que nada falhe.
   **`Pesquisar` funciona com zero nós de IA**; `Perguntar` e `Executar`
   declaram-se indisponíveis com a razão. Nenhuma capability alcança shell, SQL,
   ficheiros, rede ou segredos, e existe um teste que o verifica.
+- **Prompt Ocinye: `IMPLEMENTED`, superfície de comando sempre operacional.** O
+  Prompt aceita pedidos sempre que o Core está saudável e o membro tem
+  autorização — **independentemente de haver zero fornecedores, modelos ou nós**.
+  O input não é desactivado por ausência de IA. Um pedido que precise de
+  inferência é recebido, autorizado e processado, e conclui num **envelope
+  tipado** com HTTP de sucesso, não num `503`: `origin=SYSTEM`,
+  `status=DEGRADED`, `reason_code=AI_NO_PROVIDER_AVAILABLE`, com `model`,
+  `provider` e `compute_node` nulos e explícitos — a resposta é da plataforma, e
+  nunca se disfarça de resposta de modelo ([ADR-0308](docs/adrs/0308-typed-ai-interaction-envelope.md)).
+  A capacidade (`Geral`/`Código`/`Raciocínio`/`Dados`) é **seleccionável**
+  independentemente da disponibilidade — autorização e disponibilidade são eixos
+  distintos. A procura fica registada no ledger `ai_jobs` com o código-máquina da
+  razão, sem consumir tokens nem reservar GPU, e nenhum fornecedor externo é
+  usado em substituição. `OCINYE_AI_CONTROL_PLANE_READY` continua **não
+  declarado** — falta o resto das fatias M5 —, e distinto de
+  `OCINYE_AI_RUNTIME_READY`, que permanece falso.
 - **Ciclo de vida científico e proveniência: `IMPLEMENTED`.** Hipótese,
   metodologia, versão de metodologia, estudo, execução, resultado, e a
   validação ou reprodução que alguém registou
@@ -289,7 +305,7 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **64 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
+- **65 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
   **66 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -309,14 +325,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1573 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1580 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **582 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **585 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

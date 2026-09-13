@@ -127,10 +127,12 @@ pub async fn intelligence_status(
         providers,
         capabilities,
         message: if available {
-            "Ocinye AI capabilities are available.".to_owned()
+            "As capacidades de IA Ocinye estão disponíveis.".to_owned()
         } else {
-            "No Ocinye AI node is currently available. The platform operates fully without \
-             one, and no external provider is used in its place."
+            "O Prompt Ocinye está operacional. Actualmente não existe nenhum nó Ocinye AI \
+             activo. Pode continuar a utilizar o Prompt; os pedidos que necessitem de \
+             inferência recebem uma resposta de estado até existir capacidade compatível. \
+             Nenhum fornecedor externo é utilizado em substituição."
                 .to_owned()
         },
     })

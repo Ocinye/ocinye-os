@@ -1710,6 +1710,8 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 
 /* Capacidade não é uma tab: é um estado do motor. Daí o chip próprio. */
 .oc-caps { display: flex; gap: 5px; }
+/* O selector de capacidade dentro do dock, acima da área de escrita. */
+.oc-caps--dock { flex-wrap: wrap; margin-bottom: var(--oc-space-3); }
 .oc-cap {
   height: 29px; padding: 0 11px; border-radius: var(--oc-r-md);
   display: inline-flex; align-items: center; gap: 6px;
@@ -1719,6 +1721,55 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 .oc-cap[aria-selected="true"] { border-color: var(--oc-navy); color: var(--oc-navy); }
 .oc-cap[aria-disabled="true"] { color: var(--oc-text-ghost); border-color: var(--oc-border-soft); cursor: default; }
 .oc-cap small { font: 400 9.5px var(--oc-font-mono); opacity: .8; }
+/* A capacidade é um radio real: escondido para leitores mas focável, com o
+   estilo no rótulo irmão. Seleccionável sem JavaScript e independente da
+   disponibilidade (M5 §10). */
+.oc-cap { cursor: pointer; }
+.oc-cap__in {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.oc-cap__in:checked + .oc-cap { border-color: var(--oc-navy); color: var(--oc-navy); }
+.oc-cap__in:focus-visible + .oc-cap {
+  outline: var(--oc-focus-width) solid var(--oc-focus-color);
+  outline-offset: var(--oc-focus-offset);
+}
+
+/* Um turno de conversa: pedido do membro e resposta com a origem explícita.
+   Uma resposta de sistema nunca se apresenta como resposta de modelo. */
+.oc-prompt__conv--thread { justify-content: flex-start; align-items: stretch; }
+.oc-prompt__thread {
+  width: 100%; max-width: 720px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: var(--oc-space-4);
+}
+.oc-msg {
+  display: flex; flex-direction: column; gap: var(--oc-space-2);
+  padding: var(--oc-space-4) var(--oc-space-5);
+  border-radius: var(--oc-r-lg); border: 1px solid var(--oc-border);
+}
+.oc-msg--member { background: var(--oc-surface-subtle); }
+.oc-msg--system { background: var(--oc-surface); border-color: var(--oc-border-strong); }
+.oc-msg__who {
+  display: flex; align-items: center; gap: var(--oc-space-2);
+  font: 600 11px var(--oc-font-mono); color: var(--oc-text-secondary);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.oc-msg__body {
+  font: 400 14px/1.55 var(--oc-font-sans); color: var(--oc-text);
+  white-space: pre-wrap;
+}
+.oc-msg__badge {
+  font: 600 9.5px var(--oc-font-mono); letter-spacing: .05em;
+  color: var(--oc-gold-text); background: var(--oc-gold-bg);
+  border: 1px solid var(--oc-gold-border); border-radius: var(--oc-r-xs);
+  padding: 1px 5px;
+}
+.oc-msg__code {
+  align-self: flex-start;
+  font: 400 10px var(--oc-font-mono); color: var(--oc-text-meta);
+  background: var(--oc-surface-muted); border-radius: var(--oc-r-xs);
+  padding: 2px 6px;
+}
 
 .oc-prompt__conv {
   flex: 1; min-height: 0; overflow-y: auto;

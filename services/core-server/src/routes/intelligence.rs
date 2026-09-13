@@ -8,7 +8,8 @@ use axum::extract::{Query, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use ocinye_contracts::{
-    AiCapability, Classification, IntelligenceStatus, Permission, SystemCapability,
+    AiCapability, AiInteractionResponse, AiReasonCode, Classification, IntelligenceStatus,
+    Permission, SystemCapability, SystemCapabilityState,
 };
 use ocinye_core::modules::intelligence::{self, AgentScope, NewAgent};
 use ocinye_core::modules::platform;
@@ -271,25 +272,30 @@ struct PromptRequest {
 
 /// `POST /ai/prompt`
 ///
-/// # Why this endpoint exists with no AI node
+/// # A processed request is not a failed one
 ///
-/// Because the alternative is worse. Without it the Workspace form posts to a
-/// route that does not exist and the member gets a bare 405 — the exact "botão
-/// que não faz nada" this audit exists to remove (briefing §8).
+/// The Prompt is a command surface, not a model widget: it stays operational
+/// whenever the Core is healthy and the member may use AI, even with zero
+/// providers, models or nodes. A request that is received, authorized and
+/// processed but that no inference capacity can execute did **not** fail —
+/// it concluded, deterministically, as `DEGRADED`. So this endpoint returns
+/// HTTP success with a typed [`AiInteractionResponse`] whose `origin` is
+/// `SYSTEM`, never a 503 (M5 §5, §6). Nothing is broken; there is simply no
+/// model, and no external provider is reached in its place.
 ///
-/// With no capability available it returns
-/// [`CoreError::CapabilityUnavailable`], which carries a 503 and an
-/// institutional message. The Workspace renders that as a native state, not an
-/// alert.
+/// Real failures still fail: a caller without `AiUse` is denied (403), and an
+/// empty prompt is a validation error (400). Those are genuine errors, kept
+/// distinct from the degraded conclusion.
 async fn submit_prompt(
     State(state): State<AppState>,
     Ids(ids): Ids,
     CurrentPrincipal(principal): CurrentPrincipal,
     Json(request): Json<PromptRequest>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<Json<AiInteractionResponse>, ApiError> {
     // Permission first, then availability. Conflating them would tell someone
     // who may not use AI that the hardware is missing, and someone who may that
-    // they lack permission (briefing §57).
+    // they lack permission (briefing §57). Permission denial is a real failure
+    // and stays an error, not a degraded envelope.
     require(&principal, Permission::AiUse, &ids)?;
 
     if request.prompt.trim().is_empty() {
@@ -317,45 +323,86 @@ async fn submit_prompt(
         AiCapability::Embedding => SystemCapability::AiEmbedding,
     };
 
-    if !capabilities.is_usable(system) {
-        let reason = capabilities.get(system).map_or_else(
-            || "Nenhuma capacidade de IA compatível está disponível.".to_owned(),
-            |report| report.reason.clone(),
-        );
-        // Recorded so an operator can see demand for a capability that does not
-        // yet exist — which is exactly the evidence that justifies a node.
-        // Best-effort: failing to record demand must not change the answer.
-        if let Ok(mut tx) = state.pool.begin().await {
-            let recorded = intelligence::record_rejected_job(
-                &mut tx,
-                &principal,
-                capability,
-                ocinye_contracts::RagScope::Institutional,
-                None,
-                &reason,
-            )
-            .await;
-            if recorded.is_ok() {
-                let _ = tx.commit().await;
-            }
+    // Classify the conclusion. A usable capability still has no inference
+    // provider wired in this installation (`NoProvider` is the default), so the
+    // reason is the same `AI_NO_PROVIDER_AVAILABLE` — the difference an
+    // unusable capability adds is only *why* nothing can serve it.
+    let reason_code = if capabilities.is_usable(system) {
+        // Reached only when a capability reports usable, which needs a healthy
+        // model and so cannot happen today. Even then, execution is `PLANNED`
+        // (docs/ai/): a registered model with no serving provider is still
+        // `AI_NO_PROVIDER_AVAILABLE`.
+        AiReasonCode::AiNoProviderAvailable
+    } else {
+        capabilities
+            .get(system)
+            .map_or(AiReasonCode::AiNoProviderAvailable, |report| {
+                reason_code_for_state(report.state)
+            })
+    };
+
+    // The human sentence: the report's own pt-PT reason, when there is one,
+    // under a stable institutional preamble.
+    let detail = capabilities
+        .get(system)
+        .map(|report| report.reason.clone())
+        .filter(|reason| !reason.is_empty());
+    let content = degraded_prompt_content(detail.as_deref());
+
+    // Record the demand so an operator sees a capability being asked for that
+    // no node yet serves — the evidence that justifies enrolling one.
+    // Best-effort: failing to record must not change the answer.
+    if let Ok(mut tx) = state.pool.begin().await {
+        let recorded = intelligence::record_rejected_job(
+            &mut tx,
+            &principal,
+            capability,
+            ocinye_contracts::RagScope::Institutional,
+            None,
+            reason_code.as_str(),
+        )
+        .await;
+        if recorded.is_ok() {
+            let _ = tx.commit().await;
         }
-        return Err(ApiError::new(
-            CoreError::CapabilityUnavailable(reason),
-            &ids,
-        ));
     }
 
-    // Reached only when a capability is genuinely available, which cannot
-    // happen in this installation today. The inference path itself is
-    // `PLANNED`: see docs/ai/ and the Feature Status document.
-    Err(ApiError::new(
-        CoreError::CapabilityUnavailable(
-            "A execução de pedidos ainda não está activada nesta instalação do \
-             Ocinye OS, mesmo com uma capacidade registada."
-                .to_owned(),
-        ),
-        &ids,
-    ))
+    Ok(Json(AiInteractionResponse::degraded(reason_code, content)))
+}
+
+/// Map a capability's state to the machine reason it cannot be served.
+///
+/// Only `NoResource` is reachable in M5.1 (no models). The rest name the
+/// distinct future conditions so the vocabulary is complete now (M5 §7).
+fn reason_code_for_state(state: SystemCapabilityState) -> AiReasonCode {
+    match state {
+        SystemCapabilityState::NoResource => AiReasonCode::AiNoProviderAvailable,
+        SystemCapabilityState::NotConfigured => AiReasonCode::AiNoCompatibleModel,
+        SystemCapabilityState::Unavailable => AiReasonCode::AiProviderUnhealthy,
+        SystemCapabilityState::Planned => AiReasonCode::AiCapacityUnavailable,
+        // Usable states never reach this mapping; classify conservatively.
+        SystemCapabilityState::Available | SystemCapabilityState::Degraded => {
+            AiReasonCode::AiNoProviderAvailable
+        }
+    }
+}
+
+/// The deterministic pt-PT answer shown when no inference could run.
+///
+/// Written by the platform, not a model: it says what happened plainly, affirms
+/// the Prompt is operational, and states that no external provider is used in
+/// substitution (M5 §9). The capability's own reason is appended when present.
+fn degraded_prompt_content(detail: Option<&str>) -> String {
+    let mut content = String::from(
+        "Nenhuma capacidade de inferência está actualmente disponível para executar este \
+         pedido. O Prompt Ocinye continua operacional, e nenhum fornecedor externo é utilizado \
+         em substituição.",
+    );
+    if let Some(detail) = detail {
+        content.push(' ');
+        content.push_str(detail);
+    }
+    content
 }
 
 /// Read a capability from a request, defaulting to `GENERAL`.

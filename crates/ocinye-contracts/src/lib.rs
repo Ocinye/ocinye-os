@@ -47,7 +47,10 @@ pub use classification::Classification;
 pub use compute::{ComputeNodeStatus, ComputeStatus, InstitutionalControl, JobStatus, NodeKind};
 pub use error::{ErrorBody, ErrorCode};
 pub use ids::ResourceIdentifier;
-pub use intelligence::{AiCapability, CapabilityStatus, IntelligenceStatus, ModelStatus, RagScope};
+pub use intelligence::{
+    AiCapability, AiInteractionResponse, AiReasonCode, CapabilityStatus, IntelligenceStatus,
+    InteractionOrigin, InteractionStatus, ModelStatus, RagScope,
+};
 pub use mail::{
     ComposeAction, DraftOrigin, MailAddress, MailFolder, MailboxKind, OutboxState, RecipientScope,
     RemoteContentPolicy, SharedMailboxRole,
