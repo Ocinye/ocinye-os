@@ -41,12 +41,6 @@ SEM_LEITOR: dict[str, str] = {
         "em baixo devolve erro a quem enviou, e a mensagem não fica em fila. "
         "O esquema promete uma garantia que a implementação não dá"
     ),
-    "resource_usage_events": (
-        "o ledger de uso de recursos, append-only (ADR-0108). A fundação da "
-        "governança criou-o; o código que lhe escreve — o registo de consumo "
-        "de storage e computação — chega na fatia do ledger de uso. Até lá o "
-        "esquema promete um registo que ainda ninguém preenche"
-    ),
     "_sqlx_migrations": "registo do próprio migrador",
 }
 

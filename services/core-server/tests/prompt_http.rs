@@ -275,6 +275,27 @@ async fn um_pedido_vazio_e_uma_falha_de_validacao() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
+/// Concede a um membro uma quota de `model_access` (override), para provar a
+/// admissão de recursos no caminho de IA (H).
+async fn seed_model_access_quota(
+    pool: &PgPool,
+    organisation_id: Uuid,
+    person_id: Uuid,
+    quantity: i64,
+) {
+    sqlx::query(
+        "INSERT INTO resource_allocations
+             (organisation_id, resource_type, unit, scope_type, scope_id, quantity, source, reason)
+         VALUES ($1, 'model_access', 'count', 'member', $2, $3, 'override', 'prova')",
+    )
+    .bind(organisation_id)
+    .bind(person_id)
+    .bind(quantity)
+    .execute(pool)
+    .await
+    .expect("quota");
+}
+
 /// Limpa o inventário global de modelos e nós.
 ///
 /// `ai_models` não tem âmbito de organização — `list_models` devolve todos —,
@@ -428,16 +449,133 @@ async fn o_router_classifica_o_inventario_e_a_execucao_roteia() {
     assert_eq!(corpo["origin"], "SYSTEM", "{corpo}");
     assert_eq!(corpo["reason_code"], "AI_NO_PROVIDER_AVAILABLE", "{corpo}");
 
-    // O ledger tem exactamente um trabalho concluído (o cenário 3), com modelo.
+    // ── Hot-plug SEM reinício (M5.3 §21) ────────────────────────────────
+    //
+    // A prova fiel: uma **única** `AppState`, com o adaptador de inferência
+    // fixo — como o adaptador de rede de um nó, que sabe falar com nós e não
+    // muda. O que muda dinamicamente é o inventário `ai_models`, reportado pelo
+    // nó: ligá-lo, e desligá-lo. O router lê-o a cada pedido, por isso o
+    // roteamento segue o estado sem redeploy do Workspace, sem reinício do Core,
+    // e sem nenhum interruptor manual `AI_ENABLED`.
+    let nucleo_fixo = nucleo_com(
+        pool.clone(),
+        organisation_id,
+        Arc::new(ocinye_core::modules::intelligence::fixture::FixtureProvider::cooperative()),
+    );
+
+    // 5. Nó ausente (inventário vazio) → SYSTEM/DEGRADED, mesmo com adaptador.
+    clear_inventory(&pool).await;
+    let (status, corpo) = submit(
+        &nucleo_fixo,
+        &token,
+        json!({ "prompt": "Soma dois números.", "capability": "CODING" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{corpo}");
+    assert_eq!(
+        corpo["origin"], "SYSTEM",
+        "hot-plug: sem nó, é do sistema: {corpo}"
+    );
+    assert_eq!(corpo["reason_code"], "AI_NO_PROVIDER_AVAILABLE", "{corpo}");
+
+    // 6. O nó liga-se (reporta um modelo) → o MESMO núcleo passa a COMPLETED.
+    seed_serving_model(&pool, organisation_id, &["CODING"]).await;
+    let (status, corpo) = submit(
+        &nucleo_fixo,
+        &token,
+        json!({ "prompt": "Soma dois números.", "capability": "CODING" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{corpo}");
+    assert_eq!(
+        corpo["origin"], "MODEL",
+        "hot-plug: nó ligado, o pedido devia rotear sem reinício: {corpo}"
+    );
+    assert_eq!(corpo["status"], "COMPLETED", "{corpo}");
+
+    // 7. O nó desliga-se (inventário limpo) → o MESMO núcleo volta a DEGRADED.
+    clear_inventory(&pool).await;
+    let (status, corpo) = submit(
+        &nucleo_fixo,
+        &token,
+        json!({ "prompt": "Soma dois números.", "capability": "CODING" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{corpo}");
+    assert_eq!(
+        corpo["origin"], "SYSTEM",
+        "hot-plug: nó desligado, volta a ser do sistema: {corpo}"
+    );
+    assert_eq!(corpo["reason_code"], "AI_NO_PROVIDER_AVAILABLE", "{corpo}");
+
+    // ── Cenário 8: admissão de recursos (H) — quota de ModelAccess ──────
+    //
+    // Um membro novo (uso zero) com uma quota de 2 acessos: dois pedidos
+    // completam, o terceiro é recusado — fail-closed — com o código de quota,
+    // sem chamar o modelo. Prova que a Resource Governance está ligada ao
+    // caminho de execução (ADR-0108).
+    clear_inventory(&pool).await;
+    seed_serving_model(&pool, organisation_id, &["CODING"]).await;
+    let (quota_person, quota_token) = membro(&pool, organisation_id).await;
+    seed_model_access_quota(&pool, organisation_id, quota_person, 2).await;
+
+    for i in 1..=2 {
+        let (status, corpo) = submit(
+            &nucleo_fixo,
+            &quota_token,
+            json!({ "prompt": "Soma dois números.", "capability": "CODING" }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "pedido {i}: {corpo}");
+        assert_eq!(
+            corpo["status"], "COMPLETED",
+            "pedido {i} dentro da quota: {corpo}"
+        );
+    }
+
+    // O terceiro excede a quota → recusado, sem modelo.
+    let (status, corpo) = submit(
+        &nucleo_fixo,
+        &quota_token,
+        json!({ "prompt": "Soma dois números.", "capability": "CODING" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{corpo}");
+    assert_eq!(
+        corpo["origin"], "SYSTEM",
+        "acima da quota é do sistema: {corpo}"
+    );
+    assert_eq!(
+        corpo["reason_code"], "AI_RESOURCE_QUOTA_EXCEEDED",
+        "{corpo}"
+    );
+    assert!(corpo["model"].is_null(), "{corpo}");
+
+    // O ledger de uso registou exactamente os dois acessos admitidos.
+    let (usados,): (i64,) = sqlx::query_as(
+        "SELECT COALESCE(SUM(quantity), 0)::bigint FROM resource_usage_events
+             WHERE charge_scope_type = 'member' AND charge_scope_id = $1
+               AND resource_type = 'model_access'",
+    )
+    .bind(quota_person)
+    .fetch_one(&pool)
+    .await
+    .expect("ledger de uso");
+    assert_eq!(usados, 2, "o 3.\u{ba} pedido não devia ter sido cobrado");
+
+    // O ledger de trabalhos regista dois concluídos para o `person_id` original
+    // — o cenário 3 e o passo 6 do hot-plug. O `model_id` de ambos ficou nulo
+    // quando o modelo foi removido (FK `ON DELETE SET NULL`): o trabalho
+    // sobrevive ao seu modelo. Nunca se guarda o prompt nem a resposta.
     let (concluidos,): (i64,) = sqlx::query_as(
         "SELECT count(*) FROM ai_jobs
-             WHERE requested_by_id = $1 AND status = 'succeeded' AND model_id IS NOT NULL",
+             WHERE requested_by_id = $1 AND status = 'succeeded'",
     )
     .bind(person_id)
     .fetch_one(&pool)
     .await
     .expect("ledger");
-    assert_eq!(concluidos, 1, "só o cenário 3 devia ter concluído");
+    assert_eq!(concluidos, 2, "o cenário 3 e o hot-plug passo 6 concluíram");
 }
 
 /// A sonda do harness: aceita, porque não há servidor de correio para

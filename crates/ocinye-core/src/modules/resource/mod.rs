@@ -13,11 +13,13 @@
 //! reservation (capacity committed to an operation) and usage (what was
 //! consumed) are distinct, and never one mutable counter (ADR-0108).
 
+pub mod ai;
 pub mod model;
 pub mod repository;
 pub mod service;
 pub mod storage;
 
+pub use ai::{admit_ai_access, ai_access_status, ai_access_used, record_ai_access, AiAccessStatus};
 pub use model::{
     Allocation, Entitlement, EntitlementPart, ProfileRule, ResourceProfile, ResourceProfileDetail,
 };

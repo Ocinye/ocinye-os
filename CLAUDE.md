@@ -52,6 +52,30 @@ computação, 0 fornecedores de inferência, 0 modelos instalados, IA indisponí
 sua pré-condição:** este é o último estado estável *antes* de se ligar o primeiro
 nó de IA/Computação (M4). A declaração é documental: **nada de runtime muda**.
 
+**Portão `OCINYE_AI_CONTROL_PLANE_READY` — declarado a 2026-09-13.** O plano de
+controlo de IA está completo e independente de fornecedor: quando a primeira GPU
+entrar, liga-se como recurso, sem redesenhar Workspace nem Core. Provado por
+evidência própria, sem hardware: o **Prompt é uma superfície de comando sempre
+operacional** com o Core saudável (input nunca desactivado por ausência de IA); a
+interacção conclui num **envelope tipado** (`origin` · `status` · `reason_code`,
+com proveniência de modelo nula e explícita quando não há modelo, ADR-0308); a
+capacidade é **seleccionável** independentemente da disponibilidade; o **Model
+Router** trata «zero candidatos» como resultado tipado, não excepção, e o
+**caminho de execução** roteia e conclui como resposta de modelo quando um
+fornecedor serve (ADR-0304); o **hot-plug sem reinício** está provado com um
+fornecedor de teste (nó liga→roteia, desliga→degrada, sem redeploy nem toggle); a
+**admissão de recursos** liga a governança ao caminho de IA — entitlement,
+admissão fail-closed, reserva/libertação pela transacção, ledger de uso imutável
+(ADR-0109); e a **conversa é persistida** com proveniência tipada por turno,
+owner-private, preservando a verdade histórica (ADR-0309). A **soberania**
+mantém-se: `OCINYE_AI_ALLOW_EXTERNAL_PROVIDERS=false`, e o estado sem fornecedor
+não faz nenhum pedido de inferência externo. O estado factual de runtime
+**mantém-se e é o esperado**: `OCINYE_AI_RUNTIME_READY` permanece **falso** — 0
+fornecedores, 0 nós, 0 modelos residentes, 0 GPU —, e em produção a conclusão de
+um pedido é sempre `SYSTEM`/`DEGRADED`. Isto **não é uma lacuna**: um plano de
+controlo pronto sem runtime é exactamente o estado que precede o primeiro nó. A
+declaração é documental: **nada de runtime muda**.
+
 Os **números** desta secção não são escritos à mão: saem de
 `./scripts/repository-facts.sh`, que os deriva da árvore e só lê. Já houve aqui
 quatro contagens em circulação ao mesmo tempo — 62 caminhos contra 131, 12
@@ -66,7 +90,7 @@ sem que nada falhe.
   3 serviços (`core-server`, `worker`, `node-agent`) e 1 aplicação
   (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 182 caminhos e 218 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 184 caminhos e 220 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -157,10 +181,21 @@ sem que nada falhe.
   limite e disponível, o estado (`Normal`/`Aviso`/`Crítico`/`Acima da quota`) e a
   explicação de como o limite se compõe (perfil mais concessões temporárias),
   a partir de `GET /api/v1/resources/me` (o Core resolve o dono pela sessão).
-  Falta ainda a admissão de computação, a capacidade, os pedidos e a superfície
-  de Administração de recursos. `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão
-  distinto de `OCINYE_AI_READY`, e **não** torna a IA disponível.
-- **42 migrations**, aplicáveis de base vazia; 80 tabelas.
+  O **pedido de IA também é admitido**: antes de qualquer inferência, o Core
+  admite o pedido contra o entitlement de `model_access` do membro, com a mesma
+  disciplina do storage — *advisory lock* por membro, uso medido do ledger,
+  limite resolvido na mesma transacção, `usado + pedido ≤ limite`, **fail-closed**
+  — e grava o consumo no ledger `resource_usage_events` só quando um modelo
+  responde (a transacção é a reserva; uma falha não cobra nada). Sem quota de IA
+  configurada o limite é zero e tudo é admitido, como no storage. O ledger é
+  **proveniência imutável**: as suas colunas de contexto deixaram de ter FKs
+  `SET NULL` (migração 0043), pelo que apagar um modelo ou um nó não colide com a
+  sua append-only-ness ([ADR-0109](docs/adrs/0109-ai-request-admission-and-immutable-usage-ledger.md)).
+  Falta ainda a admissão de computação assíncrona (reservas persistidas), a
+  capacidade, e a superfície de Administração de recursos.
+  `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão distinto de `OCINYE_AI_READY`, e
+  **não** torna a IA disponível.
+- **44 migrations**, aplicáveis de base vazia; 82 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -267,9 +302,16 @@ sem que nada falhe.
   como resposta de modelo (`origin=MODEL`, `status=COMPLETED`, a nomear modelo e
   fornecedor) — caminho exercido de ponta a ponta por um fornecedor de teste; em
   produção o fornecedor por omissão é o `NoProvider` e a conclusão é sempre
-  `SYSTEM`/`DEGRADED`. `OCINYE_AI_CONTROL_PLANE_READY` continua **não
-  declarado** — falta o resto das fatias M5 —, e distinto de
-  `OCINYE_AI_RUNTIME_READY`, que permanece falso.
+  `SYSTEM`/`DEGRADED`.
+  Toda a interacção é **persistida como conversa** do membro — privada ao dono,
+  legível por `GET /api/v1/ai/conversations` e `…/{id}` (owner-scoped, IDOR
+  fechado) —, com o prompt e a resposta guardados e a **origem tipada** de cada
+  turno (`member`/`system`/`model`/`tool`/`agent`). Um turno de sistema nunca é
+  reescrito como turno de modelo: a verdade histórica mantém-se
+  ([ADR-0309](docs/adrs/0309-ai-conversation-persistence-and-provenance.md)).
+  O plano de controlo de IA está **certificado** — `OCINYE_AI_CONTROL_PLANE_READY`
+  declarado (ver o portão acima) —, distinto de `OCINYE_AI_RUNTIME_READY`, que
+  permanece **falso** enquanto não houver GPU física.
 - **Ciclo de vida científico e proveniência: `IMPLEMENTED`.** Hipótese,
   metodologia, versão de metodologia, estudo, execução, resultado, e a
   validação ou reprodução que alguém registou
@@ -316,7 +358,7 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **65 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
+- **67 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
   **66 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -336,14 +378,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1580 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1586 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **585 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **591 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

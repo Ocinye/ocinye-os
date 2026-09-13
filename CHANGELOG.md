@@ -7,6 +7,66 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### IA — plano de controlo certificado (M5.3 M) — 2026-09-13
+
+Declarado o portão **`OCINYE_AI_CONTROL_PLANE_READY`**: o plano de controlo de IA
+está completo e independente de fornecedor — quando a primeira GPU entrar,
+liga-se como recurso, sem redesenhar Workspace nem Core. Documental: nada de
+runtime muda.
+
+- Reúne a evidência de M5.1–M5.3, provada sem hardware: Prompt sempre operacional,
+  envelope tipado, capacidade seleccionável, Model Router com «zero candidatos»
+  tipado, caminho de execução, hot-plug sem reinício, admissão de recursos
+  fail-closed, ledger de uso imutável, e conversas persistidas com proveniência.
+- **Soberania mantida**: `OCINYE_AI_ALLOW_EXTERNAL_PROVIDERS=false`; o estado sem
+  fornecedor não faz nenhum pedido de inferência externo.
+- **`OCINYE_AI_RUNTIME_READY` permanece falso** — 0 fornecedores, 0 nós, 0 modelos
+  residentes, 0 GPU. Em produção a conclusão de um pedido é sempre `SYSTEM`/`DEGRADED`.
+- Registo: [`docs/ai/control-plane-certification.md`](docs/ai/control-plane-certification.md).
+
+### IA — persistência de conversas com proveniência tipada (M5.3 I) — 2026-09-13
+
+Uma interacção com o Prompt deixava de existir depois de renderizada. Passa a ser
+**persistida como conversa** do membro, preservando a verdade histórica: uma
+resposta que o sistema deu porque não havia inferência é um turno `system`, e uma
+resposta de modelo futura é um turno `model` — a primeira nunca é reescrita como a
+segunda ([ADR-0309](docs/adrs/0309-ai-conversation-persistence-and-provenance.md)).
+
+- **Conversas owner-private** (migração 0044: `ai_conversations`,
+  `ai_conversation_turns`): guardam o prompt e a resposta — ao contrário do
+  `ai_jobs`, que por decisão não guarda conteúdo. A conversa é do membro, morre
+  com ele, e outra pessoa não a distingue de inexistente (`404`, IDOR fechado).
+- **Proveniência tipada por turno**: `role` (`member` ou a origem da resposta:
+  `system`/`model`/`tool`/`agent`), estado, código de razão, e — quando um modelo
+  responde — modelo, fornecedor e nó (proveniência que sobrevive à sua remoção).
+- **Leitura owner-scoped**: `GET /ai/conversations` e `GET /ai/conversations/{id}`.
+- O `/ai/prompt` persiste cada interacção, degradada ou concluída, na mesma
+  transacção que regista o uso e o trabalho.
+
+### IA — admissão de recursos no caminho de execução (M5.3 H) — 2026-09-13
+
+Antes de qualquer inferência, o pedido de IA passa agora pela governança de
+recursos, ligando o caminho de execução ao control-plane que o [ADR-0108]
+construiu ([ADR-0109](docs/adrs/0109-ai-request-admission-and-immutable-usage-ledger.md)).
+
+- **Admissão fail-closed**: o Core admite o pedido contra o entitlement de
+  `model_access` do membro — *advisory lock* por membro, uso medido do ledger,
+  limite resolvido na mesma transacção, `usado + pedido ≤ limite`. Acima da
+  quota, o pedido conclui como resposta de sistema, `AI_RESOURCE_QUOTA_EXCEEDED`,
+  sem chamar o modelo. Sem quota configurada o limite é zero e tudo é admitido,
+  como no storage.
+- **Reserva pela transacção**: um modelo que responde grava o consumo no ledger
+  `resource_usage_events` (o seu primeiro escritor) na mesma transacção da
+  admissão; uma falha não cobra nada. O ledger guarda *que* o acesso aconteceu,
+  com o modelo — nunca o prompt nem a resposta.
+- **Ledger de proveniência imutável** (migração 0043): as colunas de contexto do
+  `resource_usage_events` deixam de ter FKs `ON DELETE SET NULL` — eram
+  incompatíveis com a sua natureza append-only (apagar um modelo referenciado
+  ficava bloqueado, e o `ai_models` é apagado/reinserido a cada relatório de nó).
+  Passam a ser UUIDs de proveniência que sobrevivem à remoção do que referenciam.
+- Sem alteração em produção: o perfil por omissão não tem quota de IA, e com o
+  `NoProvider` a admissão nem sequer é alcançada.
+
 ### Prompt Ocinye — Model Router tipado e caminho de execução (M5.2) — 2026-09-13
 
 O router de capacidades existia mas nada roteava por ele, e devolvia um erro

@@ -56,6 +56,7 @@ flowchart TB
     A0306["ADR-0306<br/>Resolução de recursos"]
     A0307["ADR-0307<br/>Dual Entry,<br/>Single Authority"]
     A0308["ADR-0308<br/>Envelope de interacção"]
+    A0309["ADR-0309<br/>Conversas de IA"]
     A0400["ADR-0400<br/>Ocinye Mail"]
     A0500["ADR-0500<br/>Compute Registry"]
     A0501["ADR-0501<br/>Capability Runtime"]
@@ -80,6 +81,7 @@ flowchart TB
     A0304 --> A0305
     A0300 --> A0308
     A0301 --> A0308
+    A0308 --> A0309
     A0303 --> A0306
     A0302 --> A0306
     A0301 --> A0302
@@ -132,6 +134,7 @@ Quem entra, o que pode, e como fica registado.
 - [ADR-0105](0105-dependency-advisory-coverage.md) — Nenhuma base de advisories é tratada como exaustiva
 - [ADR-0107](0107-mandatory-mfa-sessions-and-recovery.md) — MFA obrigatório para identidades privilegiadas, sessões e recuperação
 - [ADR-0108](0108-resource-governance-and-compute-control-plane.md) — Governança de recursos e o control-plane de computação
+- [ADR-0109](0109-ai-request-admission-and-immutable-usage-ledger.md) — Admissão de pedidos de IA e o ledger de uso imutável
 
 ### 0200–0299 · Conhecimento, Dados, Armazenamento e Memória Institucional
 
@@ -158,6 +161,7 @@ Como a inteligência opera o sistema sem o governar.
 - [ADR-0306](0306-resource-resolution-as-authorization-boundary.md) — Resolução de recursos como fronteira de autorização
 - [ADR-0307](0307-dual-entry-single-authority.md) — Dual Entry, Single Authority: operabilidade agentic universal por capabilities tipadas
 - [ADR-0308](0308-typed-ai-interaction-envelope.md) — O envelope tipado de interacção de IA: origem, estado e códigos de razão
+- [ADR-0309](0309-ai-conversation-persistence-and-provenance.md) — Persistência e proveniência de conversas de IA
 
 ### 0400–0499 · Módulos Institucionais Nativos
 
@@ -236,6 +240,7 @@ preencher.
 | [0104](0104-password-policy-and-hashing.md) | Política de palavras-passe e armazenamento de verificadores | Identity | `MEDIUM` | Accepted |
 | [0107](0107-mandatory-mfa-sessions-and-recovery.md) | MFA obrigatório para identidades privilegiadas, sessões e recuperação | Identity | `FOUNDATIONAL` | Accepted |
 | [0108](0108-resource-governance-and-compute-control-plane.md) | Governança de recursos e o control-plane de computação | Identity | `FOUNDATIONAL` | Accepted |
+| [0109](0109-ai-request-admission-and-immutable-usage-ledger.md) | Admissão de pedidos de IA e o ledger de uso imutável | Identity | `HIGH` | Accepted |
 | [0200](0200-object-storage.md) | Object Storage S3-compatible | Data | `HIGH` | Accepted |
 | [0201](0201-data-residency.md) | Residência de dados explícita | Data | `MEDIUM` | Accepted |
 | [0202](0202-search-fts-pgvector.md) | Pesquisa: PostgreSQL FTS agora, pgvector preparado | Knowledge | `MEDIUM` | Accepted |

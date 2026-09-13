@@ -4,7 +4,7 @@
 //! true state — unavailable — rather than hiding the section or, worse,
 //! reaching for an external provider to make it look populated (ADR-0300).
 
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use ocinye_contracts::{
@@ -14,7 +14,7 @@ use ocinye_contracts::{
 use ocinye_core::modules::intelligence::{
     self, infer_within_deadline, AgentScope, InferenceRequest, ModelResolution, NewAgent,
 };
-use ocinye_core::modules::platform;
+use ocinye_core::modules::{platform, resource};
 use ocinye_core::CoreError;
 use ocinye_domain::{can, ResourceContext, ResourceKind};
 use serde::{Deserialize, Serialize};
@@ -31,6 +31,56 @@ pub fn routes() -> Router<AppState> {
         .route("/ai/context-preview", get(context_preview))
         .route("/ai/agents", get(list_agents).post(create_agent))
         .route("/ai/prompt", post(submit_prompt))
+        .route("/ai/conversations", get(list_conversations))
+        .route("/ai/conversations/{id}", get(get_conversation))
+}
+
+#[derive(Serialize)]
+struct ConversationList {
+    items: Vec<intelligence::ConversationSummary>,
+    total: usize,
+}
+
+/// `GET /ai/conversations` — the caller's own conversations, newest first.
+///
+/// Owner-scoped: a member sees only their own history, never anyone else's.
+async fn list_conversations(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+) -> Result<Json<ConversationList>, ApiError> {
+    require(&principal, Permission::AiUse, &ids)?;
+    let items = intelligence::list_conversations(&state.pool, &principal)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(Json(ConversationList {
+        total: items.len(),
+        items,
+    }))
+}
+
+/// `GET /ai/conversations/{id}` — one conversation the caller owns, with turns.
+///
+/// A conversation that does not exist and one the caller does not own are
+/// indistinguishable — both are `404` — so this never reveals another member's
+/// conversation (ADR-0100).
+async fn get_conversation(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(id): Path<Uuid>,
+) -> Result<Json<intelligence::ConversationView>, ApiError> {
+    require(&principal, Permission::AiUse, &ids)?;
+    let view = intelligence::get_conversation(&state.pool, &principal, id)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?
+        .ok_or_else(|| {
+            ApiError::new(
+                CoreError::NotFound("Conversa não encontrada.".to_owned()),
+                &ids,
+            )
+        })?;
+    Ok(Json(view))
 }
 
 /// Report what the Intelligence Plane can currently do.
@@ -320,7 +370,7 @@ async fn submit_prompt(
     let model = match resolution {
         ModelResolution::NoCandidate(reason_code) => {
             return Ok(Json(
-                degraded(&state, &principal, capability, reason_code).await,
+                degraded(&state, &principal, capability, reason_code, &request.prompt).await,
             ));
         }
         ModelResolution::Resolved(model) => model,
@@ -336,32 +386,117 @@ async fn submit_prompt(
                 &principal,
                 capability,
                 AiReasonCode::AiNoProviderAvailable,
+                &request.prompt,
             )
             .await,
         ));
     }
 
-    // Execute. The prompt carries no retrieved context here — permission-aware
-    // context assembly is a separate concern — so no classified material leaves
-    // the Core (ADR-0300, ADR-0304). The Core enforces its own contract around
-    // the provider via `infer_within_deadline`.
+    // ── Resource admission (ADR-0108) ──────────────────────────────────
+    //
+    // A model serves and a provider can run it. Before inference, admit the
+    // request against the member's AI entitlement, fail-closed. The admission
+    // transaction holds a per-member advisory lock across the inference call —
+    // it is the request's reservation — and either commits the usage (a model
+    // answered) or releases it (it did not), atomically. With no `model_access`
+    // entitlement configured the limit is zero and everything is admitted, so
+    // an installation that has not chosen to meter AI is not blocked by it.
+    let mut tx = match state.pool.begin().await {
+        Ok(tx) => tx,
+        Err(_) => {
+            return Ok(Json(
+                degraded(
+                    &state,
+                    &principal,
+                    capability,
+                    AiReasonCode::AiProviderUnhealthy,
+                    &request.prompt,
+                )
+                .await,
+            ));
+        }
+    };
+    match resource::admit_ai_access(&mut tx, principal.person_id, 1).await {
+        Ok(true) => {}
+        Ok(false) => {
+            drop(tx); // release the reservation
+            return Ok(Json(
+                degraded(
+                    &state,
+                    &principal,
+                    capability,
+                    AiReasonCode::AiResourceQuotaExceeded,
+                    &request.prompt,
+                )
+                .await,
+            ));
+        }
+        Err(_) => {
+            drop(tx);
+            return Ok(Json(
+                degraded(
+                    &state,
+                    &principal,
+                    capability,
+                    AiReasonCode::AiProviderUnhealthy,
+                    &request.prompt,
+                )
+                .await,
+            ));
+        }
+    }
+
+    // Execute, still holding the reservation. The prompt carries no retrieved
+    // context here — permission-aware context assembly is a separate concern —
+    // so no classified material leaves the Core (ADR-0300, ADR-0304). The Core
+    // enforces its own contract around the provider via `infer_within_deadline`.
     let inference = InferenceRequest::new(capability, system_instruction(), request.prompt.clone());
     match infer_within_deadline(state.inference.as_ref(), &inference).await {
         Ok(response) => {
-            if let Ok(mut tx) = state.pool.begin().await {
-                let recorded = intelligence::record_completed_job(
-                    &mut tx,
-                    &principal,
-                    capability,
-                    ocinye_contracts::RagScope::Institutional,
-                    None,
-                    model.id,
-                )
-                .await;
-                if recorded.is_ok() {
-                    let _ = tx.commit().await;
-                }
-            }
+            // Commit the reservation: record the completed job and the usage in
+            // the admission transaction, so the charge lands with the answer.
+            let job_id = intelligence::record_completed_job(
+                &mut tx,
+                &principal,
+                capability,
+                ocinye_contracts::RagScope::Institutional,
+                None,
+                model.id,
+            )
+            .await
+            .ok();
+            let _ = resource::record_ai_access(
+                &mut *tx,
+                principal.organisation_id,
+                principal.person_id,
+                Some(model.id),
+                model.node_id,
+                job_id,
+                &ids.correlation_id,
+                1,
+            )
+            .await;
+            // Persist the conversation turn with full model provenance, in the
+            // same transaction, so history and usage land together.
+            let _ = intelligence::record_interaction(
+                &mut tx,
+                &principal,
+                None,
+                None,
+                &request.prompt,
+                &intelligence::ResponseTurn {
+                    origin: InteractionOrigin::Model,
+                    status: InteractionStatus::Completed,
+                    reason_code: None,
+                    model: Some(&response.model.model),
+                    provider: Some(&response.model.provider),
+                    compute_node_id: model.node_id,
+                    content: &response.text,
+                },
+            )
+            .await;
+            let _ = tx.commit().await;
+
             Ok(Json(AiInteractionResponse {
                 origin: InteractionOrigin::Model,
                 status: InteractionStatus::Completed,
@@ -372,31 +507,39 @@ async fn submit_prompt(
                 content: response.text,
             }))
         }
-        Err(error) => Ok(Json(
-            degraded(
-                &state,
-                &principal,
-                capability,
-                reason_code_for_inference_error(error),
-            )
-            .await,
-        )),
+        Err(error) => {
+            drop(tx); // release: a failed request charges nothing
+            Ok(Json(
+                degraded(
+                    &state,
+                    &principal,
+                    capability,
+                    reason_code_for_inference_error(error),
+                    &request.prompt,
+                )
+                .await,
+            ))
+        }
     }
 }
 
-/// Build the degraded system envelope and record the demand.
+/// Build the degraded system envelope, record the demand, and persist the turn.
 ///
 /// A degraded conclusion is a `SYSTEM` answer: the request was processed, and no
-/// inference could run it. Recording the demand is best-effort — failing to
-/// record must never change the answer.
+/// inference could run it. Both the operational demand (`ai_jobs`) and the
+/// conversation turn (the member's prompt and this system answer) are recorded
+/// best-effort in one transaction — failing to record must never change the
+/// answer.
 async fn degraded(
     state: &AppState,
     principal: &ocinye_domain::Principal,
     capability: AiCapability,
     reason_code: AiReasonCode,
+    prompt: &str,
 ) -> AiInteractionResponse {
+    let response = AiInteractionResponse::degraded(reason_code, degraded_prompt_content());
     if let Ok(mut tx) = state.pool.begin().await {
-        let recorded = intelligence::record_rejected_job(
+        let _ = intelligence::record_rejected_job(
             &mut tx,
             principal,
             capability,
@@ -405,11 +548,26 @@ async fn degraded(
             reason_code.as_str(),
         )
         .await;
-        if recorded.is_ok() {
-            let _ = tx.commit().await;
-        }
+        let _ = intelligence::record_interaction(
+            &mut tx,
+            principal,
+            None,
+            None,
+            prompt,
+            &intelligence::ResponseTurn {
+                origin: response.origin,
+                status: response.status,
+                reason_code: response.reason_code,
+                model: None,
+                provider: None,
+                compute_node_id: None,
+                content: &response.content,
+            },
+        )
+        .await;
+        let _ = tx.commit().await;
     }
-    AiInteractionResponse::degraded(reason_code, degraded_prompt_content())
+    response
 }
 
 /// The Ocinye OS's own instruction to a model.
