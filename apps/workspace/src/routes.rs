@@ -2241,7 +2241,15 @@ fn corpo_de_rascunho(recebido: &Value) -> Value {
             .collect()
     };
     serde_json::json!({
-        "mailbox_id": recebido.get("mailbox_id").and_then(Value::as_str),
+        // Uma caixa vazia viaja como `null`, nunca como `""`: o Core desserializa
+        // `mailbox_id` para `Option<Uuid>`, e `""` não é um UUID — dava um `422`
+        // opaco que o compositor mostrava como «Erro ao guardar rascunho»,
+        // levando o anexo consigo. `null` chega como ausência, e o Core devolve a
+        // razão legível.
+        "mailbox_id": recebido
+            .get("mailbox_id")
+            .and_then(Value::as_str)
+            .filter(|caixa| !caixa.is_empty()),
         "to": split("to"),
         "cc": split("cc"),
         "bcc": split("bcc"),
