@@ -7,6 +7,21 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Correio — corrigida a gravação do rascunho e o anexo que caía com ela — 2026-09-13
+
+Anexar um ficheiro num compositor aberto sem uma caixa no URL não fazia nada, e o
+rodapé dizia «Erro ao guardar rascunho». Causa: o «De» vinha da primeira caixa
+que envia, mas o `mailbox_id` do rascunho vinha do parâmetro `?mailbox=`; sem ele,
+o `mailbox_id` ficava vazio enquanto o «De» mostrava um endereço. O Core
+desserializa `mailbox_id` para `Option<Uuid>`, e uma string vazia não é um UUID —
+devolvia `422`, que o compositor mostrava como erro de rascunho e, sem rascunho,
+o anexo não tinha onde pousar.
+
+- **O `mailbox_id` liga-se agora à mesma caixa que o «De»** quando o URL não a
+  traz — os dois deixam de poder divergir.
+- **Defesa no BFF**: uma caixa vazia viaja como `null`, nunca como `""`, para o
+  Core devolver a razão legível em vez de uma rejeição opaca.
+
 ### IA — plano de controlo certificado (M5.3 M) — 2026-09-13
 
 Declarado o portão **`OCINYE_AI_CONTROL_PLANE_READY`**: o plano de controlo de IA
@@ -66,7 +81,6 @@ construiu ([ADR-0109](docs/adrs/0109-ai-request-admission-and-immutable-usage-le
   Passam a ser UUIDs de proveniência que sobrevivem à remoção do que referenciam.
 - Sem alteração em produção: o perfil por omissão não tem quota de IA, e com o
   `NoProvider` a admissão nem sequer é alcançada.
-
 ### Prompt Ocinye — Model Router tipado e caminho de execução (M5.2) — 2026-09-13
 
 O router de capacidades existia mas nada roteava por ele, e devolvia um erro

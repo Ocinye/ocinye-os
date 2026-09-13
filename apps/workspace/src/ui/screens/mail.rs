@@ -1146,7 +1146,12 @@ pub struct ComposeDraft {
 /// destinatário, o redimensionar e o expandir são **melhorias**: se nenhuma
 /// carregar, ficam os campos de texto e o botão, e a mensagem sai na mesma.
 fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView {
-    let identidades: Vec<String> = view
+    // As caixas de onde se pode enviar. O «De» e o `mailbox_id` do rascunho têm
+    // de sair **da mesma** caixa: mostrar um endereço mas guardar o rascunho sem
+    // a caixa (`mailbox_id` vazio) fazia a gravação falhar com `422` e, com ela,
+    // o anexo caía. Quando o compositor abre sem `?mailbox=`, resolve-se a
+    // primeira caixa que envia, a mesma que o «De» apresenta.
+    let caixas_de_envio: Vec<(String, String)> = view
         .boxes()
         .iter()
         .filter(|caixa| {
@@ -1155,7 +1160,17 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                 .and_then(Value::as_bool)
                 .unwrap_or(false)
         })
-        .map(|caixa| text(caixa, "address", "").to_owned())
+        .map(|caixa| {
+            (
+                text(caixa, "id", "").to_owned(),
+                text(caixa, "address", "").to_owned(),
+            )
+        })
+        .collect();
+
+    let identidades: Vec<String> = caixas_de_envio
+        .iter()
+        .map(|(_, endereco)| endereco.clone())
         .collect();
 
     let de = identidades.first().cloned().unwrap_or_default();
@@ -1167,7 +1182,15 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
         "Nova mensagem"
     };
 
-    let mailbox_id = draft.mailbox_id.clone();
+    // O `mailbox_id` do URL manda; se vier vazio, usa-se a caixa do «De».
+    let mailbox_id = if draft.mailbox_id.is_empty() {
+        caixas_de_envio
+            .first()
+            .map(|(id, _)| id.clone())
+            .unwrap_or_default()
+    } else {
+        draft.mailbox_id.clone()
+    };
     let draft_id = draft.draft_id.clone();
     let reply_to = draft.reply_to.clone();
     let to = draft.to.clone();
@@ -2453,6 +2476,31 @@ mod compositor_com_rascunho {
         assert!(out.contains("Guardar rascunho"));
         assert!(out.contains("Descartar"));
         assert!(out.contains("Cancelar"));
+    }
+
+    /// Sem caixa no rascunho, o compositor liga-se à caixa do «De».
+    ///
+    /// # O defeito que isto guarda
+    ///
+    /// O «De» vinha da primeira caixa que envia, mas o `mailbox_id` do rascunho
+    /// vinha do `?mailbox=` do URL. Abrir o compositor sem esse parâmetro deixava
+    /// o `mailbox_id` vazio enquanto o «De» mostrava um endereço — e a gravação
+    /// do rascunho falhava com `422` («Erro ao guardar rascunho»), levando o
+    /// anexo consigo. O `mailbox_id` tem de sair da mesma caixa que o «De».
+    #[test]
+    fn sem_caixa_no_rascunho_o_compositor_liga_se_a_caixa_do_de() {
+        let out = html(&ComposeDraft {
+            mailbox_id: String::new(),
+            ..Default::default()
+        });
+        assert!(
+            out.contains(&format!(r#"name="mailbox_id" value="{CAIXA}""#)),
+            "o mailbox_id devia cair para a caixa do «De», e não ficar vazio: {out}"
+        );
+        assert!(
+            !out.contains(r#"name="mailbox_id" value="""#),
+            "o compositor nunca deve submeter um mailbox_id vazio"
+        );
     }
 
     /// O compositor oferece Cc e Bcc, e a linha de Bcc existe (escondida) para o
