@@ -6163,6 +6163,105 @@ select.oc-entrada {
 .oc-files__lixo-nome { display: flex; flex-direction: column; gap: var(--oc-space-1); }
 .oc-files__lixo-accoes { display: flex; align-items: center; gap: var(--oc-space-4); flex-wrap: wrap; }
 
+/* ─── Ficheiros: o explorador (grelha/lista, barra, menus por ficha) ───── */
+.oc-fs { display: flex; flex-direction: column; gap: var(--oc-space-6); }
+.oc-fs__toolbar {
+  display: flex; align-items: center; gap: var(--oc-space-4); flex-wrap: wrap;
+  padding-bottom: var(--oc-space-5); border-bottom: 1px solid var(--oc-border);
+}
+.oc-fs__trilho {
+  display: flex; align-items: center; gap: var(--oc-space-3);
+  font: 600 16px var(--oc-font-sans); color: var(--oc-text);
+}
+.oc-fs__trilho a, .oc-fs__acima { color: var(--oc-text-muted); text-decoration: none; }
+.oc-fs__trilho a:hover { color: var(--oc-navy); }
+.oc-fs__sep { color: var(--oc-text-ghost); }
+.oc-fs__aqui { color: var(--oc-text); }
+.oc-fs__quota { font: 400 11.5px var(--oc-font-sans); color: var(--oc-text-meta); }
+.oc-fs__ferramenta {
+  height: 32px; min-width: 32px; padding: 0 9px; border-radius: var(--oc-r-md);
+  display: inline-flex; align-items: center; gap: 6px; justify-content: center;
+  border: 1px solid var(--oc-border); background: var(--oc-surface);
+  color: var(--oc-text-secondary); font: 500 12px var(--oc-font-sans);
+  cursor: pointer; text-decoration: none; white-space: nowrap;
+  transition: border-color var(--oc-duration-normal), color var(--oc-duration-normal);
+}
+.oc-fs__ferramenta:hover { border-color: var(--oc-navy); color: var(--oc-navy); }
+
+/* Menus: um pop ancorado, aberto só quando preciso. */
+.oc-fs__menu, .oc-fs__acoes { position: relative; }
+.oc-fs__menu > summary, .oc-fs__acoes > summary { list-style: none; cursor: pointer; }
+.oc-fs__menu > summary::-webkit-details-marker,
+.oc-fs__acoes > summary::-webkit-details-marker { display: none; }
+.oc-fs__pop {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: var(--oc-z-dropdown);
+  min-width: 230px; padding: var(--oc-space-5);
+  background: var(--oc-surface); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-md); box-shadow: var(--oc-shadow-menu);
+  display: flex; flex-direction: column; gap: var(--oc-space-4);
+}
+.oc-fs__pop form { display: flex; align-items: center; gap: var(--oc-space-3); flex-wrap: wrap; }
+.oc-fs__pop .oc-input, .oc-fs__pop .oc-select { flex: 1; min-width: 120px; }
+.oc-fs__acao {
+  font: 500 12.5px var(--oc-font-sans); color: var(--oc-text);
+  text-decoration: none; padding: 4px 0;
+}
+.oc-fs__acao:hover { color: var(--oc-navy); }
+.oc-fs__acao-form { border-top: 1px solid var(--oc-border-soft); padding-top: var(--oc-space-4); }
+.oc-fs__carregar { display: inline-flex; align-items: center; gap: var(--oc-space-3); }
+.oc-fs__carregar-btn { cursor: pointer; }
+.oc-fs__destino { max-width: 190px; }
+
+/* A grelha e a lista: as mesmas fichas, dispostas de duas maneiras. */
+.oc-fs__grelha[data-view="grid"] {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: var(--oc-space-5);
+}
+.oc-fs__grelha[data-view="list"] { display: flex; flex-direction: column; gap: 1px; }
+.oc-fs__item {
+  position: relative; display: flex; text-decoration: none; color: inherit;
+  border: 1px solid transparent; border-radius: var(--oc-r-md);
+  transition: background var(--oc-duration-fast), border-color var(--oc-duration-fast);
+}
+.oc-fs__item:hover { background: var(--oc-surface-hover); border-color: var(--oc-border); }
+.oc-fs__abrir { text-decoration: none; color: inherit; min-width: 0; }
+.oc-fs__icone { color: var(--oc-navy-mid); }
+.oc-fs__icone--pasta { color: var(--oc-gold-text); }
+.oc-fs__nome {
+  font: 500 12.5px var(--oc-font-sans); color: var(--oc-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.oc-fs__meta { font: 400 10.5px var(--oc-font-sans); color: var(--oc-text-meta); }
+/* Grelha: coluna centrada. */
+[data-view="grid"] .oc-fs__item {
+  flex-direction: column; align-items: center; padding: 16px 10px; text-align: center;
+}
+[data-view="grid"] .oc-fs__abrir {
+  display: flex; flex-direction: column; align-items: center; gap: var(--oc-space-2); width: 100%;
+}
+[data-view="grid"] .oc-fs__nome { width: 100%; }
+[data-view="grid"] .oc-fs__acoes { position: absolute; top: 6px; right: 6px; }
+/* Lista: linha. */
+[data-view="list"] .oc-fs__item { flex-direction: row; align-items: center; gap: var(--oc-space-4); padding: 8px 10px; }
+[data-view="list"] .oc-fs__abrir { display: flex; flex-direction: row; align-items: center; gap: var(--oc-space-4); flex: 1; }
+[data-view="list"] .oc-fs__icone { flex-shrink: 0; }
+[data-view="list"] .oc-fs__icone svg { width: 20px; height: 20px; }
+[data-view="list"] .oc-fs__nome { flex: 1; font-size: 13px; }
+[data-view="list"] .oc-fs__meta { flex-shrink: 0; }
+.oc-fs__acoes-btn {
+  height: 26px; width: 26px; border-radius: var(--oc-r-sm);
+  display: inline-grid; place-items: center;
+  color: var(--oc-text-meta); background: var(--oc-surface); border: 1px solid var(--oc-border);
+  font: 700 14px var(--oc-font-sans); line-height: 1;
+}
+.oc-fs__acoes-btn:hover, .oc-fs__acoes[open] .oc-fs__acoes-btn {
+  color: var(--oc-navy); border-color: var(--oc-navy);
+}
+.oc-fs__vazio {
+  display: flex; flex-direction: column; align-items: center; gap: var(--oc-space-3);
+  padding: 48px 24px; text-align: center;
+}
+
 /* «Meus ficheiros»: Nome · Tipo · Tamanho · Versões. */
 .oc-table--files-me .oc-table__head,
 .oc-table--files-me .oc-table__row {

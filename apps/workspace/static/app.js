@@ -1841,11 +1841,67 @@
     }
   });
 
+  /* ── Ficheiros: o explorador ──────────────────────────────────────────
+   *
+   * A grelha e a lista são a mesma marcação com um atributo; a vista lembra-se
+   * por browser. Carregar dispara ao escolher o ficheiro — sem dois passos. E
+   * os menus «⋯» fecham ao clicar fora ou com Escape, como qualquer menu. */
+  function initFiles() {
+    const fs = document.querySelector('[data-oc="fs"]');
+    if (!fs) return;
+
+    const grelha = fs.querySelector('[data-oc="fs-grelha"]');
+    const alternar = fs.querySelector('[data-oc="fs-vista"]');
+    const CHAVE = 'ocinye.files.view';
+    const aplicar = (v) => {
+      if (grelha) grelha.setAttribute('data-view', v === 'list' ? 'list' : 'grid');
+    };
+    if (grelha) {
+      let v = 'grid';
+      try { v = localStorage.getItem(CHAVE) || 'grid'; } catch { /* modo privado */ }
+      aplicar(v);
+    }
+    if (alternar) {
+      alternar.addEventListener('click', () => {
+        const actual = grelha && grelha.getAttribute('data-view') === 'list' ? 'list' : 'grid';
+        const nova = actual === 'list' ? 'grid' : 'list';
+        aplicar(nova);
+        try { localStorage.setItem(CHAVE, nova); } catch { /* sem armazenamento */ }
+      });
+    }
+
+    /* Carregar: escolher um ficheiro submete logo. */
+    const campo = fs.querySelector('[data-oc="fs-carregar"]');
+    if (campo) {
+      campo.addEventListener('change', () => {
+        if (campo.files && campo.files.length) {
+          const form = campo.closest('[data-oc="fs-carregar-form"]');
+          if (form) {
+            if (form.requestSubmit) form.requestSubmit();
+            else form.submit();
+          }
+        }
+      });
+    }
+
+    /* Fechar os menus abertos ao clicar fora ou com Escape. */
+    document.addEventListener('click', (evento) => {
+      fs.querySelectorAll('details.oc-fs__acoes[open], details.oc-fs__menu[open]')
+        .forEach((d) => { if (!d.contains(evento.target)) d.removeAttribute('open'); });
+    });
+    document.addEventListener('keydown', (evento) => {
+      if (evento.key === 'Escape') {
+        fs.querySelectorAll('details[open]').forEach((d) => d.removeAttribute('open'));
+      }
+    });
+  }
+
   /* ── Arranque ─────────────────────────────────────────────────────── */
 
   const start = () => {
     initSidebar();
     initPrompt();
+    initFiles();
     initSino();
     initCreateMenu();
     initAccountMenu();
