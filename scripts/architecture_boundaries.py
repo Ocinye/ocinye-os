@@ -143,6 +143,11 @@ EXPERIENCE_RUNTIME = {
     "leptos",
     "ocinye-contracts",
     "ocinye-observability",
+    # Renderiza o Markdown das respostas do Prompt. Presentation pura: recebe
+    # texto e devolve marcação, percorrendo os eventos do parser e emitindo só a
+    # árvore autorizada (`ui::markdown`); não alcança estado institucional, e o
+    # HTML em bruto é escapado, nunca injectado.
+    "pulldown-cmark",
     # Renderiza o QR do enrolamento de MFA para SVG. Presentation pura: recebe
     # o texto do otpauth e devolve marcação; não alcança estado institucional.
     "qrcode",

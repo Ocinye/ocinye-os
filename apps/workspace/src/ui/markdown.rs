@@ -137,7 +137,9 @@ pub fn render(source: &str) -> String {
                 Tag::Emphasis => out.push_str("<em>"),
                 Tag::Strong => out.push_str("<strong>"),
                 Tag::Strikethrough => out.push_str("<del>"),
-                Tag::Link { dest_url, title, .. } => {
+                Tag::Link {
+                    dest_url, title, ..
+                } => {
                     if let Some(href) = safe_href(&dest_url) {
                         out.push_str("<a href=\"");
                         out.push_str(&href);
@@ -208,8 +210,10 @@ pub fn render(source: &str) -> String {
                     } else {
                         escape(&code_lang, &mut out);
                     }
-                    out.push_str("</span><button type=\"button\" class=\"oc-md-code__copy\" \
-                                  data-oc=\"copiar-codigo\">Copiar</button></div><pre><code>");
+                    out.push_str(
+                        "</span><button type=\"button\" class=\"oc-md-code__copy\" \
+                                  data-oc=\"copiar-codigo\">Copiar</button></div><pre><code>",
+                    );
                     escape(&code_buf, &mut out);
                     out.push_str("</code></pre></div>");
                 }
