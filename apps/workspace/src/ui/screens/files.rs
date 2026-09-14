@@ -261,33 +261,15 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
     }
 
     // ── Meus ficheiros ──────────────────────────────────────────────────
-    // O sítio para onde os formulários voltam, e a base das ligações da lista:
-    // dentro de uma pasta, fica-se nela.
+    // O espaço pessoal como um explorador: uma barra com o caminho e as acções,
+    // e as pastas e os ficheiros como fichas — grelha ou lista, à escolha. Base
+    // dos formulários e das ligações: dentro de uma pasta, fica-se nela.
     let base_pessoal = open_folder.as_ref().map_or_else(
         || "/files".to_owned(),
         |(id, _)| format!("/files?folder={id}"),
     );
-
-    let meu_vazio = personal_files.is_empty();
-    let linhas_pessoais: Vec<(Option<String>, Vec<Cell>)> = personal_files
-        .iter()
-        .map(|f| {
-            let id = text(f, "id");
-            let sep = if base_pessoal.contains('?') { '&' } else { '?' };
-            (
-                // A linha abre o painel de gestão do ficheiro — mudar nome,
-                // mover, descarregar — sem sair da pasta onde se está.
-                Some(format!("{base_pessoal}{sep}file={id}")),
-                vec![
-                    Cell::Primary(text(f, "name")),
-                    Cell::Text(tipo_legivel(&text(f, "content_type"))),
-                    Cell::Mono(tamanho(number(f, "size_bytes"))),
-                    Cell::Mono(format!("v{}", number(f, "versions"))),
-                ],
-            )
-        })
-        .collect();
-    let pessoais_mostrados = linhas_pessoais.len();
+    let _ = &managed_file; // o painel permanente deu lugar aos menus por ficha.
+    let meu_vazio = personal_files.is_empty() && personal_folders.is_empty();
 
     // ── Institucional ───────────────────────────────────────────────────
     let inst_vazio = files.is_empty();
@@ -324,86 +306,122 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
 
             {notice.map(|(ok, mensagem)| aviso(ok, &mensagem))}
 
-            // ── Meus ficheiros: existe sempre, sem exigir ambiente nenhum ──
-            <section class="oc-files__seccao">
-                <div class="oc-files__seccao-cab">
-                    <h2 class="oc-t-strong">
+            // ── Meus ficheiros: um explorador, não um formulário ──────────
+            <section class="oc-fs" data-oc="fs">
+                <div class="oc-fs__toolbar">
+                    <nav class="oc-fs__trilho" aria-label="Localização">
                         {open_folder.as_ref().map_or_else(
-                            || view! { <a href="/files">"Meus ficheiros"</a> }.into_any(),
+                            || view! { <span class="oc-fs__aqui">"Meus ficheiros"</span> }
+                                .into_any(),
                             |(_, nome)| view! {
-                                <a href="/files">"Meus ficheiros"</a>
-                                <span class="oc-t-meta">" / "</span>
-                                {nome.clone()}
-                            }.into_any(),
+                                <a class="oc-fs__acima" href="/files">"Meus ficheiros"</a>
+                                <span class="oc-fs__sep" aria-hidden="true">"›"</span>
+                                <span class="oc-fs__aqui">{nome.clone()}</span>
+                            }
+                            .into_any(),
                         )}
-                    </h2>
-                    <span class="oc-t-caption--muted">
-                        {quota_texto(storage_used, storage_limit)}
-                    </span>
+                    </nav>
+                    <span class="oc-fs__quota">{quota_texto(storage_used, storage_limit)}</span>
                     <div class="oc-spacer"></div>
-                    <a class="oc-files__lixo-link" href="/files?trash=1">"Lixo"</a>
+
+                    // Alternar grelha/lista — enriquecido por JS, a grelha é o
+                    // padrão. O rótulo acessível diz o que faz.
+                    <button
+                        type="button"
+                        class="oc-fs__ferramenta"
+                        data-oc="fs-vista"
+                        title="Grelha ou lista"
+                        aria-label="Alternar entre grelha e lista"
+                    >
+                        {icon(Icon::Filter, 15)}
+                    </button>
+                    <a class="oc-fs__ferramenta" href="/files?trash=1" title="Lixo" aria-label="Lixo">
+                        {icon(Icon::Trash, 15)}
+                    </a>
+
+                    // Nova pasta: o formulário vive num menu, aberto só quando
+                    // preciso — não é uma barra permanente.
+                    <details class="oc-fs__menu">
+                        <summary class="oc-fs__ferramenta oc-fs__ferramenta--txt">
+                            {icon(Icon::Folder, 14)}
+                            <span>"Nova pasta"</span>
+                        </summary>
+                        <div class="oc-fs__pop">
+                            <form method="post" action="/me/folders">
+                                <label class="oc-sr" for="oc-nova-pasta">"Nome da pasta"</label>
+                                <input
+                                    class="oc-input"
+                                    id="oc-nova-pasta"
+                                    name="name"
+                                    placeholder="Nome da pasta…"
+                                    data-oc="nova-pasta"
+                                    required
+                                />
+                                <button class="oc-btn oc-btn--secondary oc-btn--sm" type="submit">
+                                    "Criar"
+                                </button>
+                            </form>
+                        </div>
+                    </details>
+
+                    // Carregar: um rótulo que dispara o campo escondido — nunca
+                    // um «Choose File» do browser. O JS submete ao escolher.
+                    <form
+                        class="oc-fs__carregar"
+                        method="post"
+                        action="/files/upload"
+                        enctype="multipart/form-data"
+                        data-oc="fs-carregar-form"
+                    >
+                        {(!destinos.is_empty()).then(|| {
+                            let opcoes = destinos
+                                .iter()
+                                .map(|(id, et)| view! {
+                                    <option value=id.clone()>{et.clone()}</option>
+                                })
+                                .collect_view();
+                            view! {
+                                <label class="oc-sr" for="oc-destino">"Destino do carregamento"</label>
+                                <select class="oc-select oc-fs__destino" id="oc-destino" name="workspace_id">
+                                    <option value="">"Meus ficheiros"</option>
+                                    {opcoes}
+                                </select>
+                            }
+                        })}
+                        <label class="oc-btn oc-btn--primary oc-fs__carregar-btn">
+                            {icon(Icon::Attach, 14)}
+                            <span>"Carregar"</span>
+                            <input class="oc-sr" type="file" name="file" data-oc="fs-carregar" />
+                        </label>
+                    </form>
                 </div>
 
-                // Dentro de uma pasta: mudar-lhe o nome ou eliminá-la. Na raiz:
-                // as pastas e o formulário para criar uma.
-                {match &open_folder {
-                    Some((id, nome)) => painel_de_pasta(id, nome).into_any(),
-                    None => area_de_pastas(&personal_folders).into_any(),
-                }}
-
-                // Carregar é uma submissão de formulário: funciona sem
-                // JavaScript, para o membro que só quer pôr um ficheiro lá.
-                <form
-                    class="oc-files__carregar oc-mb-5"
-                    method="post"
-                    action="/files/upload"
-                    enctype="multipart/form-data"
-                >
-                    <label class="oc-sr" for="oc-file-pessoal">"Ficheiro a carregar"</label>
-                    <input
-                        class="oc-input oc-files__ficheiro"
-                        type="file"
-                        name="file"
-                        id="oc-file-pessoal"
-                        data-oc="carregar-pessoal"
-                        required
-                    />
-                    <button class="oc-btn oc-btn--primary" type="submit">"Carregar"</button>
-                </form>
-
-                // O painel de gestão de um ficheiro, quando aberto pela lista.
-                {managed_file.map(|f| painel_de_ficheiro(&f, &personal_folders, &base_pessoal))}
+                // Dentro de uma pasta: mudar-lhe o nome ou eliminá-la.
+                {open_folder.as_ref().map(|(id, nome)| painel_de_pasta(id, nome))}
 
                 {if meu_vazio {
-                    empty_state(EmptyState {
-                        icon: Icon::Files,
-                        title: "Ainda não carregou nenhum ficheiro".to_owned(),
-                        body: "Este é o seu espaço pessoal. Carregue um ficheiro \
-                               acima — fica só seu, e conta para a sua quota de \
-                               armazenamento."
-                            .to_owned(),
-                        actions: Vec::new(),
-                        small: true,
-                    })
+                    view! {
+                        <div class="oc-fs__vazio">
+                            <span class="oc-empty__tile">{icon(Icon::Files, 24)}</span>
+                            <p class="oc-t-strong">"Esta pasta está vazia"</p>
+                            <p class="oc-t-caption--muted">
+                                "Carregue um ficheiro ou crie uma pasta para começar."
+                            </p>
+                        </div>
+                    }
                     .into_any()
                 } else {
-                    data_table(Table {
-                        tabs: vec![],
-                        search: "Filtrar os meus ficheiros",
-                        truncated: false,
-                        shape: "files-me",
-                        columns: vec![
-                            Column::new("Nome"),
-                            Column::new("Tipo"),
-                            Column::right("Tamanho"),
-                            Column::right("Versões"),
-                        ],
-                        rows: linhas_pessoais,
-                        footer: format!("{pessoais_mostrados} ficheiros"),
-                        previous: None,
-                        next: None,
-                        empty: "Nenhum ficheiro pessoal.",
-                    })
+                    let pastas = personal_folders.iter().map(ficha_de_pasta).collect_view();
+                    let fich = personal_files
+                        .iter()
+                        .map(|f| ficha_de_ficheiro(f, &personal_folders, &base_pessoal))
+                        .collect_view();
+                    view! {
+                        <div class="oc-fs__grelha" data-oc="fs-grelha" data-view="grid">
+                            {pastas}
+                            {fich}
+                        </div>
+                    }
                     .into_any()
                 }}
             </section>
@@ -520,38 +538,22 @@ fn vista_do_lixo(trash: &[Value], notice: Option<(bool, String)>) -> impl IntoVi
     .into_any()
 }
 
-/// As pastas pessoais como fichas, e o formulário para criar uma.
-fn area_de_pastas(folders: &[Value]) -> impl IntoView {
-    let fichas = folders
-        .iter()
-        .map(|p| {
-            let id = text(p, "id");
-            let nome = text(p, "name");
-            view! {
-                <a class="oc-chip oc-files__pasta" href=format!("/files?folder={id}")>
-                    {icon(Icon::Folder, 13)}
-                    {nome}
-                </a>
-            }
-        })
-        .collect_view();
-
+/// Uma pasta como ficha: abre ao clicar; a gestão vive lá dentro.
+fn ficha_de_pasta(p: &Value) -> impl IntoView {
+    let id = text(p, "id");
+    let nome = text(p, "name");
+    let titulo = nome.clone();
     view! {
-        <div class="oc-files__pastas oc-mb-5">
-            {(!folders.is_empty()).then(|| view! { <div class="oc-files__pasta-fichas">{fichas}</div> })}
-            <form class="oc-files__nova-pasta" method="post" action="/me/folders">
-                <label class="oc-sr" for="oc-nova-pasta">"Nome da nova pasta"</label>
-                <input
-                    class="oc-input"
-                    id="oc-nova-pasta"
-                    name="name"
-                    placeholder="Nome da pasta…"
-                    data-oc="nova-pasta"
-                    required
-                />
-                <button class="oc-btn oc-btn--secondary" type="submit">"Nova pasta"</button>
-            </form>
-        </div>
+        <a
+            class="oc-fs__item oc-fs__item--pasta"
+            href=format!("/files?folder={id}")
+            data-oc="fs-item"
+            title=titulo
+        >
+            <span class="oc-fs__icone oc-fs__icone--pasta">{icon(Icon::Folder, 30)}</span>
+            <span class="oc-fs__nome">{nome}</span>
+            <span class="oc-fs__meta">"Pasta"</span>
+        </a>
     }
 }
 
@@ -576,11 +578,14 @@ fn painel_de_pasta(id: &str, nome: &str) -> impl IntoView {
     }
 }
 
-/// O painel de gestão de um ficheiro pessoal: mudar nome, mover, descarregar.
-fn painel_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView {
+/// Um ficheiro como ficha: abre ao clicar, e traz as acções num menu «⋯» — não
+/// num formulário permanente. Descarregar, mudar nome, mover, eliminar.
+fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView {
     let id = text(f, "id");
     let nome = text(f, "name");
     let version_id = text(f, "version_id");
+    let tipo = tipo_legivel(&text(f, "content_type"));
+    let dim = tamanho(number(f, "size_bytes"));
     let base = base.to_owned();
 
     let opcoes = folders
@@ -593,39 +598,48 @@ fn painel_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView
         .collect_view();
 
     view! {
-        <div class="oc-files__gerir oc-mb-5">
-            <div class="oc-files__gerir-cab">
-                <span class="oc-t-strong">{nome.clone()}</span>
-                <a class="oc-btn oc-btn--secondary" href=format!("/me/files/{version_id}/download")>
-                    "Descarregar"
-                </a>
-            </div>
-
-            <form class="oc-files__linha-accao" method="post" action="/me/files/rename">
-                <input type="hidden" name="file_id" value=id.clone() />
-                <input type="hidden" name="return_to" value=base.clone() />
-                <label class="oc-sr" for="oc-ficheiro-nome">"Novo nome do ficheiro"</label>
-                <input class="oc-input" id="oc-ficheiro-nome" name="name" value=nome required />
-                <button class="oc-btn oc-btn--secondary" type="submit">"Mudar nome"</button>
-            </form>
-
-            <form class="oc-files__linha-accao" method="post" action="/me/files/move">
-                <input type="hidden" name="file_id" value=id.clone() />
-                <input type="hidden" name="return_to" value=base.clone() />
-                <label class="oc-label" for="oc-ficheiro-pasta">"Mover para"</label>
-                <select class="oc-select" id="oc-ficheiro-pasta" name="folder_id">
-                    <option value="">"Meus ficheiros (raiz)"</option>
-                    {opcoes}
-                </select>
-                <button class="oc-btn oc-btn--secondary" type="submit">"Mover"</button>
-            </form>
-
-            <form class="oc-files__linha-accao" method="post" action="/me/files/delete">
-                <input type="hidden" name="file_id" value=id />
-                <input type="hidden" name="return_to" value=base />
-                <button class="oc-btn oc-btn--danger" type="submit">"Eliminar"</button>
-                <span class="oc-t-caption--muted">"Vai para o Lixo; pode restaurá-lo."</span>
-            </form>
+        <div class="oc-fs__item oc-fs__item--ficheiro" data-oc="fs-item">
+            <a
+                class="oc-fs__abrir"
+                href=format!("/me/files/{version_id}/download")
+                title=nome.clone()
+            >
+                <span class="oc-fs__icone">{icon(Icon::Document, 30)}</span>
+                <span class="oc-fs__nome">{nome.clone()}</span>
+                <span class="oc-fs__meta">{tipo}" · "{dim}</span>
+            </a>
+            <details class="oc-fs__acoes">
+                <summary class="oc-fs__acoes-btn" aria-label="Acções do ficheiro">"⋯"</summary>
+                <div class="oc-fs__pop oc-fs__pop--acoes">
+                    <a class="oc-fs__acao" href=format!("/me/files/{version_id}/download")>
+                        "Descarregar"
+                    </a>
+                    <form class="oc-fs__acao-form" method="post" action="/me/files/rename">
+                        <input type="hidden" name="file_id" value=id.clone() />
+                        <input type="hidden" name="return_to" value=base.clone() />
+                        <label class="oc-sr" for=format!("nome-{id}")>"Novo nome"</label>
+                        <input class="oc-input" id=format!("nome-{id}") name="name" value=nome />
+                        <button class="oc-btn oc-btn--sm oc-btn--secondary" type="submit">
+                            "Mudar nome"
+                        </button>
+                    </form>
+                    <form class="oc-fs__acao-form" method="post" action="/me/files/move">
+                        <input type="hidden" name="file_id" value=id.clone() />
+                        <input type="hidden" name="return_to" value=base.clone() />
+                        <label class="oc-sr" for=format!("pasta-{id}")>"Mover para"</label>
+                        <select class="oc-select" id=format!("pasta-{id}") name="folder_id">
+                            <option value="">"Meus ficheiros (raiz)"</option>
+                            {opcoes}
+                        </select>
+                        <button class="oc-btn oc-btn--sm oc-btn--secondary" type="submit">"Mover"</button>
+                    </form>
+                    <form method="post" action="/me/files/delete">
+                        <input type="hidden" name="file_id" value=id />
+                        <input type="hidden" name="return_to" value=base />
+                        <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">"Eliminar"</button>
+                    </form>
+                </div>
+            </details>
         </div>
     }
 }
@@ -642,15 +656,39 @@ fn tipo_legivel(content_type: &str) -> String {
         "image/png" => "Imagem PNG".to_owned(),
         "image/jpeg" => "Imagem JPEG".to_owned(),
         "image/webp" => "Imagem WebP".to_owned(),
+        "image/gif" => "Imagem GIF".to_owned(),
+        "image/svg+xml" => "Imagem SVG".to_owned(),
         "text/plain" => "Texto".to_owned(),
         "text/csv" => "CSV".to_owned(),
         "text/markdown" => "Markdown".to_owned(),
+        "application/json" => "JSON".to_owned(),
         "application/zip" => "ZIP".to_owned(),
-        outro => outro
-            .rsplit('/')
-            .next()
-            .unwrap_or(outro)
-            .to_ascii_uppercase(),
+        "application/msword" => "Word".to_owned(),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
+            "Word".to_owned()
+        }
+        "application/vnd.ms-excel" => "Folha de cálculo".to_owned(),
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => {
+            "Folha de cálculo".to_owned()
+        }
+        "application/vnd.ms-powerpoint" => "Apresentação".to_owned(),
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation" => {
+            "Apresentação".to_owned()
+        }
+        outro if outro.starts_with("video/") => "Vídeo".to_owned(),
+        outro if outro.starts_with("audio/") => "Áudio".to_owned(),
+        outro if outro.starts_with("image/") => "Imagem".to_owned(),
+        outro if outro.starts_with("text/") => "Texto".to_owned(),
+        // Um tipo desconhecido diz o seu sufixo curto, nunca o MIME inteiro.
+        outro => {
+            let sufixo = outro.rsplit('/').next().unwrap_or(outro);
+            let curto = sufixo.rsplit(['.', '+']).next().unwrap_or(sufixo);
+            if curto.len() > 12 {
+                "Ficheiro".to_owned()
+            } else {
+                curto.to_ascii_uppercase()
+            }
+        }
     }
 }
 
@@ -1275,19 +1313,19 @@ mod tests {
     }
 
     #[test]
-    fn a_forma_da_tabela_e_o_sufixo_e_nao_a_classe_inteira() {
-        // A regressão que se corrigiu: a forma é o sufixo de `oc-table--…`, e
-        // uma tabela com ficheiros tem de sair com as colunas certas.
+    fn os_ficheiros_saem_como_fichas_num_explorador() {
+        // O explorador substituiu a tabela: cada ficheiro é uma ficha na
+        // grelha, com o nome e a via de abrir.
         let html = all_files(membro_sem_ambiente(vec![json!({
             "id": "1", "version_id": "a", "name": "prova.pdf",
             "content_type": "application/pdf", "size_bytes": 2048, "versions": 1
         })]))
         .to_html();
-        assert!(html.contains("oc-table--files-me"));
-        assert!(
-            !html.contains("oc-table--oc-table--"),
-            "a forma da tabela voltou a trazer o seu próprio prefixo"
-        );
+        assert!(html.contains("oc-fs__grelha"), "falta a grelha de fichas");
+        assert!(html.contains("oc-fs__item"), "o ficheiro não é uma ficha");
+        assert!(html.contains("prova.pdf"), "falta o nome do ficheiro");
+        // E a forma da tabela institucional nunca traz o seu próprio prefixo.
+        assert!(!html.contains("oc-table--oc-table--"));
     }
 
     #[test]
@@ -1307,14 +1345,14 @@ mod tests {
     }
 
     #[test]
-    fn o_painel_de_gestao_traz_mudar_nome_mover_e_descarregar() {
+    fn o_menu_de_uma_ficha_traz_mudar_nome_mover_descarregar_e_eliminar() {
+        // As acções vivem num menu por ficha — não num formulário permanente.
         let ficheiro = json!({
             "id": "x", "version_id": "v", "name": "a.pdf",
             "content_type": "application/pdf", "size_bytes": 10, "versions": 1
         });
-        let mut v = membro_sem_ambiente(vec![ficheiro.clone()]);
-        v.managed_file = Some(ficheiro);
-        let html = all_files(v).to_html();
+        let html = all_files(membro_sem_ambiente(vec![ficheiro])).to_html();
+        assert!(html.contains("oc-fs__acoes"), "falta o menu de acções");
         assert!(
             html.contains("action=\"/me/files/rename\""),
             "falta mudar nome"

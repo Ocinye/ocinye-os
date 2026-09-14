@@ -7,6 +7,30 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros — «Meus ficheiros» passa a explorador de conteúdo (FILES-P1) — 2026-09-14
+
+A superfície pessoal deixou de ser uma tabela de administração com formulários
+sempre abertos e passou a **explorador de ficheiros** — a experiência que o
+membro espera de um sistema operativo, sobre exactamente o mesmo backend
+governado (sem rotas novas, sem migração, sem dependência de IA). Fase 1 de
+três: a casca nativa. As fases seguintes trazem a pré-visualização e os
+visualizadores (P2) e o *media*/Office/versões com trabalhador isolado (P3).
+
+- **Vista em grelha e em lista**, alternáveis por um botão da barra e
+  lembradas no cliente. Pastas e ficheiros são **fichas** com ícone, nome e tipo
+  legível («PDF», «Folha de cálculo», «Imagem PNG», «Apresentação»), não linhas
+  de tabela nem *chips*.
+- **Barra de ferramentas** com trilho («Meus ficheiros» / pasta aberta),
+  indicador de quota, «Nova pasta», «Lixo» e um **«Carregar»** próprio — o
+  `<input type="file">` nativo desaparece da vista, escondido atrás do botão.
+- **Acções por ficha** num menu `⋯` que abre à pedido — descarregar, mudar o
+  nome, mover e eliminar — em vez de um formulário permanente por ficheiro a
+  encher o ecrã.
+- Alteração **exclusiva de experiência**: `apps/workspace` apenas (ecrã,
+  `app.js`, `ocinye.css`). As rotas, a posse, a admissão de quota e o Lixo das
+  fatias A–C mantêm-se intactos. Testes do ecrã provam a grelha, o menu de
+  acções e a ausência da mensagem «Não tem onde carregar».
+
 ### Ficheiros — Lixo: apagar é reversível, e apagar de vez liberta (fatia C) — 2026-09-14
 
 Apagar um ficheiro pessoal passa a ser reversível. Vai para o **Lixo**, de onde
