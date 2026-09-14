@@ -7,6 +7,33 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros — todo o membro tem «Meus ficheiros» (fatia A) — 2026-09-14
+
+Um membro sem ambiente de investigação via «Não tem onde carregar ficheiros». Era
+conceptualmente errado: o espaço pessoal já existia no Core — o ficheiro do dono
+(`owner_id`), a quota de armazenamento pessoal governada (10 GiB por omissão),
+as chaves de objecto pessoais — mas só era canalização (notas, anexos), nunca
+uma superfície navegável. Esta fatia expõe-o.
+
+- **«Meus ficheiros» existe para todo o membro activo**, sem exigir unidade,
+  projecto, ambiente de investigação — nem IA (ADR-0207). O ecrã de Ficheiros
+  passa a liderar com o espaço pessoal (carregar, listar, descarregar, com um
+  indicador de quota), e os ambientes institucionais aparecem como destinos
+  **adicionais** quando o membro lá tem autoridade. A mensagem «Não tem onde
+  carregar ficheiros» desaparece.
+- **Reutiliza o domínio canónico** (`storage_objects → file_versions → files`),
+  diferenciado por `owner_id` — sem tabela nova, sem migração, sem silo. Os
+  membros existentes ganham o espaço sem serem recriados (provisionamento
+  preguiçoso pela chave e pela coluna).
+- **A autoridade é a posse.** `GET /me/files` (ficheiros + pastas + quota),
+  `POST /me/files/uploads` (admitido contra a quota pessoal, aborta sem consumir
+  espaço se exceder) e `GET /me/files/{version_id}/download` (ligação assinada)
+  fecham-se sobre `person_id`: um identificador de outra pessoa responde «não
+  encontrado».
+- Testes provam a listagem do dono, a **fronteira IDOR** (um membro não lista
+  nem abre os ficheiros de outro) e que tudo funciona **com zero capacidade de
+  IA** — o invariante do ADR-0207.
+
 ### Prompt Ocinye — a conversa como documento, não como tabela — 2026-09-14
 
 A superfície de conversa do Prompt era funcional mas parecia administrativa:

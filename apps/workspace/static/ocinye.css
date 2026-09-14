@@ -6111,6 +6111,26 @@ select.oc-entrada {
 }
 .oc-files__destino .oc-select { flex: 1; min-width: 220px; }
 
+/* Cada secção de Ficheiros — «Meus ficheiros» e os ambientes — respira. */
+.oc-files__seccao { margin-bottom: var(--oc-space-8); }
+.oc-files__seccao-cab {
+  display: flex; align-items: baseline; gap: var(--oc-space-4);
+  margin-bottom: var(--oc-space-5);
+}
+.oc-files__seccao-cab h2 { font: 600 15px/1.3 var(--oc-font-sans); color: var(--oc-text); }
+/* Carregar: o campo e o botão lado a lado, a quebrar quando o ecrã aperta. */
+.oc-files__carregar {
+  display: flex; align-items: center; gap: var(--oc-space-4); flex-wrap: wrap;
+}
+.oc-files__ficheiro { flex: 1; min-width: 240px; max-width: 460px; }
+
+/* «Meus ficheiros»: Nome · Tipo · Tamanho · Versões. */
+.oc-table--files-me .oc-table__head,
+.oc-table--files-me .oc-table__row {
+  grid-template-columns: minmax(260px, 2.6fr) 160px 110px 90px;
+  min-width: 720px;
+}
+
 .oc-table--files-all .oc-table__head,
 .oc-table--files-all .oc-table__row {
   grid-template-columns: minmax(260px,2.4fr) 140px 130px 100px 90px;

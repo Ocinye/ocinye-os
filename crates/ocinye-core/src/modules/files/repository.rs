@@ -91,6 +91,73 @@ pub async fn personal_file_owner<'e>(
     Ok(owner)
 }
 
+/// Um ficheiro pessoal tal como a listagem de «Meus ficheiros» o mostra.
+///
+/// Traz já a versão corrente — a de maior sequência — para que a interface
+/// possa pré-visualizar e descarregar sem uma segunda consulta, e o `folder_id`
+/// para agrupar por pasta do dono.
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+pub struct PersonalFileListing {
+    /// A identidade do ficheiro.
+    pub id: Uuid,
+    /// A versão corrente, por onde saem a pré-visualização e a descarga.
+    pub version_id: Uuid,
+    /// O nome visível.
+    pub name: String,
+    /// A pasta do dono onde vive, quando alguma.
+    pub folder_id: Option<Uuid>,
+    /// O tipo do conteúdo da versão corrente.
+    pub content_type: String,
+    /// O tamanho da versão corrente, em bytes.
+    pub size_bytes: i64,
+    /// Quantas versões existem.
+    pub versions: i64,
+    /// Quando mudou pela última vez.
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Os ficheiros pessoais de uma pessoa — os que têm dono e nenhum ambiente.
+///
+/// A autoridade é o dono, e a consulta fecha-se sobre `owner_id`: nunca devolve
+/// o ficheiro de outra pessoa, nem um ficheiro institucional. Sem visibilidade
+/// ABAC — um ficheiro pessoal não compõe classificação com ambiente nenhum.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_personal_files<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    folder_id: Option<Uuid>,
+    limit: i64,
+) -> CoreResult<Vec<PersonalFileListing>> {
+    let linhas = sqlx::query_as::<_, PersonalFileListing>(
+        "SELECT f.id, v.version_id, f.name, f.folder_id,
+                o.content_type, o.size_bytes,
+                (SELECT count(*) FROM file_versions x WHERE x.file_id = f.id) AS versions,
+                f.updated_at
+           FROM files f
+           JOIN LATERAL (
+               SELECT fv.id AS version_id, fv.storage_object_id
+                 FROM file_versions fv
+                WHERE fv.file_id = f.id
+                ORDER BY fv.sequence DESC
+                LIMIT 1
+           ) v ON TRUE
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE f.owner_id = $1
+            AND f.folder_id IS NOT DISTINCT FROM $2
+          ORDER BY f.updated_at DESC
+          LIMIT $3",
+    )
+    .bind(owner_id)
+    .bind(folder_id)
+    .bind(limit)
+    .fetch_all(executor)
+    .await?;
+    Ok(linhas)
+}
+
 // ── Pastas pessoais ─────────────────────────────────────────────────────
 
 /// Uma pasta de uma pessoa: identidade e nome, e nada que decida autoridade.

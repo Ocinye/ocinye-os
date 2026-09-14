@@ -147,6 +147,7 @@ Onde o material da instituição vive, e o que o acompanha.
 - [ADR-0204](0204-institutional-files-and-folders.md) — O ficheiro institucional é a autoridade sobre os bytes
 - [ADR-0205](0205-content-extraction-and-lexical-body-search.md) — Extracção de conteúdo e pesquisa lexical do corpo
 - [ADR-0206](0206-embeddings-and-hybrid-retrieval.md) — Embeddings versionados e recuperação híbrida
+- [ADR-0207](0207-personal-files-and-storage.md) — Ficheiros pessoais: todo o membro tem um espaço próprio
 
 ### 0300–0399 · IA, Controlo Agentic e Inferência
 
