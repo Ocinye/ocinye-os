@@ -7,6 +7,25 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros — arrumar o espaço pessoal: pastas, mudar nome, mover (fatia B) — 2026-09-14
+
+Depois de «Meus ficheiros» existir (fatia A), esta fatia dá-lhe o arrumar. As
+pastas pessoais já existiam no Core (serviam as notas); passam a ser navegáveis
+e geríveis, e os ficheiros ganham mudar-nome e mover — tudo owner-scoped, sem
+IA (ADR-0207).
+
+- **Pastas pessoais** em «Meus ficheiros»: criar, abrir, mudar o nome, eliminar.
+  Eliminar uma pasta **não apaga os ficheiros** — devolve-os à raiz (a chave é
+  `RESTRICT`, e o Core desprende-os antes de apagar).
+- **Ficheiro**: mudar o nome e mover para uma pasta (ou para a raiz), por um
+  painel de gestão que a lista abre — com a descarga ao lado.
+- **A posse decide as duas pontas**: mover um ficheiro para a pasta de outra
+  pessoa é recusado, e abrir uma pasta que não é sua devolve a raiz. Rotas Core
+  novas (`/me/files/rename`, `/me/files/move`, `/me/folders`,
+  `/me/folders/rename`, `/me/folders/delete`) fecham-se sobre `person_id`.
+- Testes provam mudar-nome, mover, o regresso à raiz ao apagar a pasta, e a
+  recusa de mover para a pasta de outrem.
+
 ### Ficheiros — todo o membro tem «Meus ficheiros» (fatia A) — 2026-09-14
 
 Um membro sem ambiente de investigação via «Não tem onde carregar ficheiros». Era

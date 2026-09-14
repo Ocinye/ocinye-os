@@ -491,7 +491,9 @@ async fn meus_ficheiros_e_o_espaco_do_dono_e_a_posse_e_a_autoridade() {
     personal_file(&pool, org, a.person_id, "notas.txt").await;
 
     // A vê os seus dois ficheiros, com a versão corrente por onde descarregar.
-    let vista_a = files::list_personal(&pool, &a, 100).await.expect("lista A");
+    let vista_a = files::list_personal(&pool, &a, None, 100)
+        .await
+        .expect("lista A");
     assert_eq!(vista_a.files.len(), 2, "A não vê os seus dois ficheiros");
     assert!(vista_a.files.iter().any(|f| f.name == "recibo.pdf"));
     assert!(
@@ -500,7 +502,9 @@ async fn meus_ficheiros_e_o_espaco_do_dono_e_a_posse_e_a_autoridade() {
     );
 
     // B não vê nada de A: a listagem não atravessa donos.
-    let vista_b = files::list_personal(&pool, &b, 100).await.expect("lista B");
+    let vista_b = files::list_personal(&pool, &b, None, 100)
+        .await
+        .expect("lista B");
     assert!(vista_b.files.is_empty(), "B viu ficheiros que não são seus");
 
     // E B não é dono da versão de A — conhecer o identificador não abre nada.
@@ -530,7 +534,7 @@ async fn meus_ficheiros_funcionam_sem_qualquer_capacidade_de_ia() {
 
     // Nenhum modelo, provedor ou nó existe nesta base — e mesmo assim:
     personal_file(&pool, org, quem.person_id, "relatorio.pdf").await;
-    let vista = files::list_personal(&pool, &quem, 100)
+    let vista = files::list_personal(&pool, &quem, None, 100)
         .await
         .expect("lista");
     assert_eq!(vista.files.len(), 1, "listar exigiu IA");
@@ -538,4 +542,99 @@ async fn meus_ficheiros_funcionam_sem_qualquer_capacidade_de_ia() {
         vista.storage.used_bytes >= 1024,
         "a quota não contou o ficheiro sem IA"
     );
+}
+
+/// Arrumar o espaço pessoal: mudar o nome, mover para uma pasta, e — ao apagar
+/// a pasta — os ficheiros voltam à raiz em vez de a chave `RESTRICT` recusar.
+#[tokio::test]
+async fn arrumar_ficheiros_pessoais_muda_nome_move_e_apagar_a_pasta_devolve_a_raiz() {
+    let Some(pool) = pool().await else { return };
+    backend_por_omissao(&pool).await;
+    let org = organisation(&pool).await;
+    let a = member(&pool, org).await;
+    let ids = CorrelationIds::generate();
+
+    let (file_id, _) = personal_file(&pool, org, a.person_id, "rascunho.txt").await;
+
+    {
+        let mut tx = pool.begin().await.expect("tx");
+        files::rename_personal_file(&mut tx, &a, &ids, file_id, "final.txt")
+            .await
+            .expect("rename");
+        tx.commit().await.expect("commit");
+    }
+    let vista = files::list_personal(&pool, &a, None, 100)
+        .await
+        .expect("lista");
+    assert!(
+        vista.files.iter().any(|f| f.name == "final.txt"),
+        "o nome novo não pegou"
+    );
+
+    let folder = {
+        let mut tx = pool.begin().await.expect("tx");
+        let f = files::create_personal_folder(&mut tx, &a, &ids, "Arquivo")
+            .await
+            .expect("pasta");
+        tx.commit().await.expect("commit");
+        f
+    };
+    {
+        let mut tx = pool.begin().await.expect("tx");
+        files::move_personal_file(&mut tx, &a, &ids, file_id, Some(folder.id))
+            .await
+            .expect("move");
+        tx.commit().await.expect("commit");
+    }
+    let dentro = files::list_personal(&pool, &a, Some(folder.id), 100)
+        .await
+        .expect("dentro");
+    assert_eq!(dentro.files.len(), 1, "o ficheiro não está na pasta");
+    let raiz = files::list_personal(&pool, &a, None, 100)
+        .await
+        .expect("raiz");
+    assert!(raiz.files.is_empty(), "o ficheiro ficou também na raiz");
+
+    {
+        let mut tx = pool.begin().await.expect("tx");
+        files::delete_personal_folder(&mut tx, &a, &ids, folder.id)
+            .await
+            .expect("apagar pasta");
+        tx.commit().await.expect("commit");
+    }
+    let raiz = files::list_personal(&pool, &a, None, 100)
+        .await
+        .expect("raiz2");
+    assert_eq!(
+        raiz.files.len(),
+        1,
+        "apagar a pasta não devolveu o ficheiro à raiz"
+    );
+}
+
+/// Mover um ficheiro para a pasta de outra pessoa é recusado: a posse decide as
+/// duas pontas.
+#[tokio::test]
+async fn mover_para_a_pasta_de_outra_pessoa_e_recusado() {
+    let Some(pool) = pool().await else { return };
+    backend_por_omissao(&pool).await;
+    let org = organisation(&pool).await;
+    let a = member(&pool, org).await;
+    let b = member(&pool, org).await;
+    let ids = CorrelationIds::generate();
+
+    let (file_id, _) = personal_file(&pool, org, a.person_id, "meu.txt").await;
+    let pasta_b = {
+        let mut tx = pool.begin().await.expect("tx");
+        let f = files::create_personal_folder(&mut tx, &b, &ids, "B")
+            .await
+            .expect("pasta B");
+        tx.commit().await.expect("commit");
+        f
+    };
+
+    let mut tx = pool.begin().await.expect("tx");
+    let r = files::move_personal_file(&mut tx, &a, &ids, file_id, Some(pasta_b.id)).await;
+    let _ = tx.rollback().await;
+    assert!(r.is_err(), "A moveu um ficheiro para a pasta de B");
 }

@@ -256,6 +256,100 @@ pub async fn delete_personal_folder<'e>(
     Ok(done.rows_affected() > 0)
 }
 
+/// Muda o nome de um ficheiro do dono. Fecha-se sobre `owner_id`: o ficheiro de
+/// outra pessoa não muda de nome por aqui.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn rename_personal_file<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    file_id: Uuid,
+    name: &str,
+) -> CoreResult<bool> {
+    let done = sqlx::query(
+        "UPDATE files SET name = $3, updated_at = now()
+          WHERE id = $1 AND owner_id = $2",
+    )
+    .bind(file_id)
+    .bind(owner_id)
+    .bind(name)
+    .execute(executor)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// Move um ficheiro do dono para uma pasta sua (ou para a raiz, com `None`).
+///
+/// Fecha-se sobre `owner_id` no ficheiro; a posse da pasta é verificada por quem
+/// chama, antes de chegar aqui.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn move_personal_file<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    file_id: Uuid,
+    folder_id: Option<Uuid>,
+) -> CoreResult<bool> {
+    let done = sqlx::query(
+        "UPDATE files SET folder_id = $3, updated_at = now()
+          WHERE id = $1 AND owner_id = $2",
+    )
+    .bind(file_id)
+    .bind(owner_id)
+    .bind(folder_id)
+    .execute(executor)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// Tira da pasta todos os ficheiros do dono que lá estavam, deixando-os na
+/// raiz. Corre antes de apagar a pasta: a chave estrangeira é `RESTRICT`, e sem
+/// isto apagar uma pasta com ficheiros seria recusado pela base.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn detach_personal_folder_files<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    folder_id: Uuid,
+) -> CoreResult<()> {
+    sqlx::query(
+        "UPDATE files SET folder_id = NULL, updated_at = now()
+          WHERE owner_id = $1 AND folder_id = $2",
+    )
+    .bind(owner_id)
+    .bind(folder_id)
+    .execute(executor)
+    .await?;
+    Ok(())
+}
+
+/// Muda o nome de uma pasta do dono.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha — incluindo um nome repetido do dono,
+/// que o índice único recusa.
+pub async fn rename_personal_folder<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    folder_id: Uuid,
+    name: &str,
+) -> CoreResult<bool> {
+    let done = sqlx::query("UPDATE folders SET name = $3 WHERE id = $1 AND owner_id = $2")
+        .bind(folder_id)
+        .bind(owner_id)
+        .bind(name)
+        .execute(executor)
+        .await?;
+    Ok(done.rows_affected() > 0)
+}
+
 /// Acrescenta uma versão, com o número que o Core determinou.
 ///
 /// # Porque a sequência vem calculada de fora

@@ -1236,9 +1236,23 @@ pub struct PersonalFiles {
 pub async fn list_personal(
     pool: &sqlx::PgPool,
     principal: &Principal,
+    folder: Option<Uuid>,
     limit: i64,
 ) -> CoreResult<PersonalFiles> {
-    let files = repo::list_personal_files(pool, principal.person_id, None, limit).await?;
+    // Uma pasta pedida tem de ser do dono: pedir a pasta de outra pessoa não
+    // devolve os ficheiros dela — devolve a raiz, como se a pasta não existisse.
+    let folder = match folder {
+        Some(id) => {
+            let mut conn = pool.acquire().await?;
+            if owns_personal_folder(&mut conn, principal, id).await? {
+                Some(id)
+            } else {
+                None
+            }
+        }
+        None => None,
+    };
+    let files = repo::list_personal_files(pool, principal.person_id, folder, limit).await?;
     let folders = repo::list_personal_folders(pool, principal.person_id).await?;
     let storage =
         crate::modules::resource::personal_storage_status(pool, principal, principal.person_id)
@@ -1248,6 +1262,84 @@ pub async fn list_personal(
         folders,
         storage,
     })
+}
+
+/// Muda o nome de um ficheiro pessoal do próprio.
+///
+/// # Errors
+///
+/// [`CoreError::Validation`] quando o nome está vazio; [`CoreError::NotFound`]
+/// quando o ficheiro não é do dono.
+pub async fn rename_personal_file(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    file_id: Uuid,
+    name: &str,
+) -> CoreResult<()> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(CoreError::Validation(
+            "O ficheiro precisa de um nome.".to_owned(),
+        ));
+    }
+    let mudou = repo::rename_personal_file(&mut **tx, principal.person_id, file_id, name).await?;
+    if !mudou {
+        return Err(CoreError::NotFound("Ficheiro não encontrado.".to_owned()));
+    }
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::UPDATE, "file")
+            .resource(file_id)
+            .detail("owner_id", principal.person_id.to_string()),
+    )
+    .await?;
+    Ok(())
+}
+
+/// Move um ficheiro pessoal para uma pasta do próprio, ou para a raiz.
+///
+/// A posse decide as duas pontas: o ficheiro e a pasta de destino têm de ser do
+/// mesmo dono. Uma pasta que não seja sua responde «não encontrada» — não se
+/// arruma um ficheiro na pasta de outra pessoa.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] quando o ficheiro ou a pasta de destino não são do
+/// dono.
+pub async fn move_personal_file(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    file_id: Uuid,
+    folder_id: Option<Uuid>,
+) -> CoreResult<()> {
+    if let Some(destino) = folder_id {
+        if !owns_personal_folder(&mut *tx, principal, destino).await? {
+            return Err(CoreError::NotFound("Pasta não encontrada.".to_owned()));
+        }
+    }
+    let mudou =
+        repo::move_personal_file(&mut **tx, principal.person_id, file_id, folder_id).await?;
+    if !mudou {
+        return Err(CoreError::NotFound("Ficheiro não encontrado.".to_owned()));
+    }
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::UPDATE, "file")
+            .resource(file_id)
+            .detail("owner_id", principal.person_id.to_string())
+            .detail(
+                "folder_id",
+                folder_id.map_or_else(|| "raiz".to_owned(), |f| f.to_string()),
+            ),
+    )
+    .await?;
+    Ok(())
 }
 
 /// Uma ligação assinada de curta duração para a versão de um ficheiro pessoal.
@@ -1389,6 +1481,10 @@ pub async fn delete_personal_folder(
     ids: &CorrelationIds,
     folder_id: Uuid,
 ) -> CoreResult<()> {
+    // Os ficheiros que lá estavam ficam na raiz — a pasta desaparece, o que
+    // estava dentro não. Sem isto, a chave estrangeira `RESTRICT` recusaria
+    // apagar uma pasta com ficheiros.
+    repo::detach_personal_folder_files(&mut **tx, principal.person_id, folder_id).await?;
     let apagou = repo::delete_personal_folder(&mut **tx, principal.person_id, folder_id).await?;
     if !apagou {
         return Err(CoreError::NotFound("Pasta não encontrada.".to_owned()));
@@ -1398,6 +1494,51 @@ pub async fn delete_personal_folder(
         Some(principal),
         ids,
         AuditEntry::new(action::DELETE, "folder").resource(folder_id),
+    )
+    .await?;
+    Ok(())
+}
+
+/// Muda o nome de uma pasta do dono.
+///
+/// # Errors
+///
+/// [`CoreError::Validation`] quando o nome está vazio ou já existe uma pasta do
+/// dono com esse nome; [`CoreError::NotFound`] quando a pasta não é do dono.
+pub async fn rename_personal_folder(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    folder_id: Uuid,
+    name: &str,
+) -> CoreResult<()> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(CoreError::Validation(
+            "A pasta precisa de um nome.".to_owned(),
+        ));
+    }
+    // Um nome repetido do próprio recusa-se com uma mensagem do domínio, e não
+    // com um erro de base — exceptuando a própria pasta, que pode manter o nome.
+    if repo::list_personal_folders(&mut **tx, principal.person_id)
+        .await?
+        .iter()
+        .any(|f| f.id != folder_id && f.name.eq_ignore_ascii_case(name))
+    {
+        return Err(CoreError::Validation(
+            "Já tem uma pasta com esse nome.".to_owned(),
+        ));
+    }
+    let mudou =
+        repo::rename_personal_folder(&mut **tx, principal.person_id, folder_id, name).await?;
+    if !mudou {
+        return Err(CoreError::NotFound("Pasta não encontrada.".to_owned()));
+    }
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::UPDATE, "folder").resource(folder_id),
     )
     .await?;
     Ok(())
