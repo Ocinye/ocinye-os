@@ -7,6 +7,43 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Prompt Ocinye — a conversa como documento, não como tabela — 2026-09-14
+
+A superfície de conversa do Prompt era funcional mas parecia administrativa:
+cada turno dentro de um rectângulo com borda, a autoria numa coluna à parte, o
+texto do membro centrado, a resposta apertada e cortada na vertical. Redesenhada
+para ser uma **superfície de conversa/conhecimento** — o conteúdo é o objecto
+visual principal. A arquitectura tipada do plano de controlo (sempre operacional,
+envelope `SYSTEM|MODEL|TOOL|AGENT`, conclusão degradada) mantém-se intacta: isto
+é só a experiência.
+
+- **Sem cartões pesados.** O turno do membro é uma superfície discreta com um
+  rótulo pequeno; a resposta da Ocinye é um documento por baixo de uma linha de
+  proveniência elegante (`OCINYE · SISTEMA`, `OCINYE AI · <modelo>`), nunca um
+  balão nem um cartão com borda.
+- **Nada de corte.** Nenhum turno tem altura fixa; a resposta cresce com o que
+  diz — uma linha, duzentas, blocos de código, tabelas. Largura de leitura
+  central (~820px), tipografia de documento.
+- **Pipeline de Markdown seguro** (`ui::markdown`, sobre `pulldown-cmark`):
+  parágrafos, títulos, listas, ênfase, código em linha, blocos de código com
+  língua e «Copiar», citações, ligações, tabelas que deslizam. Percorre os
+  eventos do parser e emite só a árvore autorizada — HTML em bruto é escapado,
+  esquemas de ligação perigosos são recusados. Nunca se injecta marcação de um
+  modelo.
+- **Estado degradado informa, não alarma**: um selo `ESTADO` neutro, não um
+  bloco de erro vermelho. A metadata-máquina (razão, modelo) fica secundária,
+  num detalhe que se abre.
+- **Composer** refinado e colado ao fundo: a caixa cresce com o texto e pára,
+  Enter envia e Shift+Enter quebra a linha, «Copiar» na resposta e em cada bloco
+  de código, e a conversa rola para o turno mais recente ao abrir. Nada disto
+  simula IA — é a ergonomia de uma superfície de comando.
+
+### Correio — o ícone de anexar dispensa o rótulo — 2026-09-14
+
+Com o anexo já a aparecer, o texto «Anexar» ao lado do clipe na barra do
+compositor era ruído: o gesto é universal. Fica só o clipe, com o nome acessível
+no `title` e no `aria-label` do campo.
+
 ### Correio — o rascunho também falhava por `in_reply_to` vazio — 2026-09-13
 
 A correcção anterior ligou o `mailbox_id` à caixa, mas a gravação do rascunho

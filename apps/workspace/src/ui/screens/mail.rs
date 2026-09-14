@@ -1563,10 +1563,10 @@ fn barra_de_formatacao() -> impl IntoView {
             // Anexar vive na barra, ao lado da formatação — faz parte das
             // ferramentas de composição, não de uma fila solta lá em baixo. O
             // `label` abre o selector; largar ficheiros sobre a janela também
-            // anexa (o JS liga isso).
-            <label class="oc-comp__ferramenta oc-comp__anexar" title="Anexar ficheiro">
+            // anexa (o JS liga isso). Só o clipe: o gesto é universal, e o nome
+            // acessível fica no `title` e no `aria-label` do campo.
+            <label class="oc-comp__ferramenta oc-comp__anexar" title="Anexar ficheiro" aria-label="Anexar ficheiro">
                 {icon(Icon::Attach, 15)}
-                <span class="oc-comp__anexar-txt">"Anexar"</span>
                 <input
                     type="file"
                     multiple
