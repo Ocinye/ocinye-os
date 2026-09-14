@@ -7,6 +7,19 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros — carregar para um ambiente a partir de «Meus ficheiros» (fatia D) — 2026-09-14
+
+O carregar de «Meus ficheiros» ganha um destino. Por omissão é o espaço pessoal;
+quando o membro tem autoridade nalgum ambiente de investigação, esse ambiente
+aparece como alternativa explícita no mesmo formulário.
+
+- Um selector de destino no carregar, com «Meus ficheiros» por omissão e os
+  ambientes autorizados a seguir. O Core **reautoriza a escrita no momento** —
+  esconder um destino nunca foi a defesa, e um destino não autorizado é
+  recusado na mesma.
+- Um carregamento para um ambiente mostra-se onde o ficheiro caiu — no ambiente
+  —, e não na lista pessoal onde ele não está.
+
 ### Ficheiros — Lixo: apagar é reversível, e apagar de vez liberta (fatia C) — 2026-09-14
 
 Apagar um ficheiro pessoal passa a ser reversível. Vai para o **Lixo**, de onde

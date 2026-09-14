@@ -10211,7 +10211,15 @@ async fn files_upload(
     };
 
     match resultado {
-        Ok(_) => regresso(&campos, "ok=carregado"),
+        // Um carregamento institucional feito a partir de «Meus ficheiros» (sem
+        // `return_to`) mostra-se onde o ficheiro caiu — no ambiente —, e não na
+        // lista pessoal, onde ele não está.
+        Ok(_) => match campos.get("workspace_id").filter(|w| !w.is_empty()) {
+            Some(ws) if campos.get("return_to").filter(|r| !r.is_empty()).is_none() => {
+                Redirect::to(&format!("/files?workspace={ws}&ok=carregado")).into_response()
+            }
+            _ => regresso(&campos, "ok=carregado"),
+        },
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         Err(ApiFailure::Unavailable(_)) => regresso(&campos, "erro=armazenamento"),
         Err(_) => regresso(&campos, "erro=recusado"),

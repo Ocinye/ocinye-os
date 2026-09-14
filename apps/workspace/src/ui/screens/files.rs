@@ -368,6 +368,25 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                         data-oc="carregar-pessoal"
                         required
                     />
+                    // O destino: o espaço pessoal por omissão, e — quando o
+                    // membro tem autoridade nalgum — os ambientes de
+                    // investigação como alternativa explícita. O Core reautoriza
+                    // a escrita no momento; esconder um destino não é a defesa.
+                    {(!destinos.is_empty()).then(|| {
+                        let opcoes = destinos
+                            .iter()
+                            .map(|(id, etiqueta)| view! {
+                                <option value=id.clone()>{etiqueta.clone()}</option>
+                            })
+                            .collect_view();
+                        view! {
+                            <label class="oc-sr" for="oc-carregar-destino">"Destino"</label>
+                            <select class="oc-select" id="oc-carregar-destino" name="workspace_id">
+                                <option value="">"Meus ficheiros"</option>
+                                {opcoes}
+                            </select>
+                        }
+                    })}
                     <button class="oc-btn oc-btn--primary" type="submit">"Carregar"</button>
                 </form>
 
@@ -1345,5 +1364,18 @@ mod tests {
             html.contains("action=\"/me/files/purge\""),
             "falta apagar definitivamente"
         );
+    }
+
+    #[test]
+    fn com_ambientes_o_carregar_oferece_o_destino() {
+        let mut v = membro_sem_ambiente(vec![]);
+        v.destinos = vec![("ws1".to_owned(), "IDE-0142 · UENR".to_owned())];
+        let html = all_files(v).to_html();
+        assert!(
+            html.contains("name=\"workspace_id\""),
+            "falta o selector de destino no carregar"
+        );
+        assert!(html.contains("Meus ficheiros"), "falta o destino pessoal");
+        assert!(html.contains("IDE-0142"), "falta o ambiente como destino");
     }
 }
