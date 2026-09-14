@@ -147,6 +147,7 @@ pub async fn list_personal_files<'e>(
            JOIN storage_objects o ON o.id = v.storage_object_id
           WHERE f.owner_id = $1
             AND f.folder_id IS NOT DISTINCT FROM $2
+            AND f.deleted_at IS NULL
           ORDER BY f.updated_at DESC
           LIMIT $3",
     )
@@ -156,6 +157,143 @@ pub async fn list_personal_files<'e>(
     .fetch_all(executor)
     .await?;
     Ok(linhas)
+}
+
+/// Os ficheiros no Lixo de uma pessoa — os apagados, mais recente primeiro.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_personal_trash<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    limit: i64,
+) -> CoreResult<Vec<PersonalFileListing>> {
+    let linhas = sqlx::query_as::<_, PersonalFileListing>(
+        "SELECT f.id, v.version_id, f.name, f.folder_id,
+                o.content_type, o.size_bytes,
+                (SELECT count(*) FROM file_versions x WHERE x.file_id = f.id) AS versions,
+                f.updated_at
+           FROM files f
+           JOIN LATERAL (
+               SELECT fv.id AS version_id, fv.storage_object_id
+                 FROM file_versions fv
+                WHERE fv.file_id = f.id
+                ORDER BY fv.sequence DESC
+                LIMIT 1
+           ) v ON TRUE
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE f.owner_id = $1
+            AND f.deleted_at IS NOT NULL
+          ORDER BY f.deleted_at DESC
+          LIMIT $2",
+    )
+    .bind(owner_id)
+    .bind(limit)
+    .fetch_all(executor)
+    .await?;
+    Ok(linhas)
+}
+
+/// Põe um ficheiro do dono no Lixo (`apagar = true`) ou tira-o de lá
+/// (`false`). Fecha-se sobre `owner_id`.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn set_personal_file_deleted<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    file_id: Uuid,
+    apagar: bool,
+) -> CoreResult<bool> {
+    let done = sqlx::query(
+        "UPDATE files
+            SET deleted_at = CASE WHEN $3 THEN now() ELSE NULL END,
+                updated_at = now()
+          WHERE id = $1 AND owner_id = $2",
+    )
+    .bind(file_id)
+    .bind(owner_id)
+    .bind(apagar)
+    .execute(executor)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// As chaves de objecto de todas as versões de um ficheiro do dono.
+///
+/// Colhidas **antes** de apagar, para que o apagar definitivo saiba que bytes
+/// remover do armazenamento. Fecha-se sobre `owner_id`.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn personal_file_object_keys<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    file_id: Uuid,
+) -> CoreResult<Vec<String>> {
+    let chaves: Vec<String> = sqlx::query_scalar(
+        "SELECT o.object_key
+           FROM files f
+           JOIN file_versions fv ON fv.file_id = f.id
+           JOIN storage_objects o ON o.id = fv.storage_object_id
+          WHERE f.id = $1 AND f.owner_id = $2",
+    )
+    .bind(file_id)
+    .bind(owner_id)
+    .fetch_all(executor)
+    .await?;
+    Ok(chaves)
+}
+
+/// Apaga definitivamente um ficheiro do dono: a linha do ficheiro (as versões
+/// caem com ela, por cascata) e os objectos que lhe pertenciam.
+///
+/// Só toca em objectos referenciados por este ficheiro; a chave `RESTRICT`
+/// entre versão e objecto obriga a apagar as versões primeiro, e a cascata
+/// `files → file_versions` trata disso. Devolve se apagou alguma coisa.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn purge_personal_file(
+    executor: &mut sqlx::PgConnection,
+    owner_id: Uuid,
+    file_id: Uuid,
+) -> CoreResult<bool> {
+    // Os objectos primeiro, enquanto as versões ainda os referenciam — para os
+    // conhecer. Depois o ficheiro (as versões caem por cascata), e por fim os
+    // objectos, agora sem quem os aponte.
+    let objectos: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT DISTINCT o.id
+           FROM files f
+           JOIN file_versions fv ON fv.file_id = f.id
+           JOIN storage_objects o ON o.id = fv.storage_object_id
+          WHERE f.id = $1 AND f.owner_id = $2",
+    )
+    .bind(file_id)
+    .bind(owner_id)
+    .fetch_all(&mut *executor)
+    .await?;
+
+    let apagou = sqlx::query("DELETE FROM files WHERE id = $1 AND owner_id = $2")
+        .bind(file_id)
+        .bind(owner_id)
+        .execute(&mut *executor)
+        .await?
+        .rows_affected()
+        > 0;
+
+    if apagou && !objectos.is_empty() {
+        sqlx::query("DELETE FROM storage_objects WHERE id = ANY($1)")
+            .bind(&objectos)
+            .execute(&mut *executor)
+            .await?;
+    }
+
+    Ok(apagou)
 }
 
 // ── Pastas pessoais ─────────────────────────────────────────────────────
@@ -251,6 +389,100 @@ pub async fn delete_personal_folder<'e>(
     let done = sqlx::query("DELETE FROM folders WHERE id = $1 AND owner_id = $2")
         .bind(folder_id)
         .bind(owner_id)
+        .execute(executor)
+        .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// Muda o nome de um ficheiro do dono. Fecha-se sobre `owner_id`: o ficheiro de
+/// outra pessoa não muda de nome por aqui.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn rename_personal_file<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    file_id: Uuid,
+    name: &str,
+) -> CoreResult<bool> {
+    let done = sqlx::query(
+        "UPDATE files SET name = $3, updated_at = now()
+          WHERE id = $1 AND owner_id = $2",
+    )
+    .bind(file_id)
+    .bind(owner_id)
+    .bind(name)
+    .execute(executor)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// Move um ficheiro do dono para uma pasta sua (ou para a raiz, com `None`).
+///
+/// Fecha-se sobre `owner_id` no ficheiro; a posse da pasta é verificada por quem
+/// chama, antes de chegar aqui.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn move_personal_file<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    file_id: Uuid,
+    folder_id: Option<Uuid>,
+) -> CoreResult<bool> {
+    let done = sqlx::query(
+        "UPDATE files SET folder_id = $3, updated_at = now()
+          WHERE id = $1 AND owner_id = $2",
+    )
+    .bind(file_id)
+    .bind(owner_id)
+    .bind(folder_id)
+    .execute(executor)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// Tira da pasta todos os ficheiros do dono que lá estavam, deixando-os na
+/// raiz. Corre antes de apagar a pasta: a chave estrangeira é `RESTRICT`, e sem
+/// isto apagar uma pasta com ficheiros seria recusado pela base.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn detach_personal_folder_files<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    folder_id: Uuid,
+) -> CoreResult<()> {
+    sqlx::query(
+        "UPDATE files SET folder_id = NULL, updated_at = now()
+          WHERE owner_id = $1 AND folder_id = $2",
+    )
+    .bind(owner_id)
+    .bind(folder_id)
+    .execute(executor)
+    .await?;
+    Ok(())
+}
+
+/// Muda o nome de uma pasta do dono.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha — incluindo um nome repetido do dono,
+/// que o índice único recusa.
+pub async fn rename_personal_folder<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    folder_id: Uuid,
+    name: &str,
+) -> CoreResult<bool> {
+    let done = sqlx::query("UPDATE folders SET name = $3 WHERE id = $1 AND owner_id = $2")
+        .bind(folder_id)
+        .bind(owner_id)
+        .bind(name)
         .execute(executor)
         .await?;
     Ok(done.rows_affected() > 0)

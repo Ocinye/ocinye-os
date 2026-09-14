@@ -7,6 +7,48 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros — Lixo: apagar é reversível, e apagar de vez liberta (fatia C) — 2026-09-14
+
+Apagar um ficheiro pessoal passa a ser reversível. Vai para o **Lixo**, de onde
+se restaura ou se apaga definitivamente — e só o definitivo liberta os bytes e a
+quota (ADR-0207, ADR-0108).
+
+- **Migração 0045**: `files.deleted_at` — aditiva, nula por omissão; nenhum
+  ficheiro existente muda de estado.
+- **Apagar** põe no Lixo (`deleted_at`); o ficheiro sai da lista viva mas os
+  bytes ficam, e **continuam a contar para a quota**. **Restaurar** devolve-o.
+  **Apagar definitivamente** exige que o ficheiro já esteja no Lixo, remove a
+  linha e os objectos, e é aí — e só aí — que a quota se liberta. Os bytes são
+  removidos do armazenamento depois de a transacção fechar: em falha, fica um
+  objecto órfão, nunca um ficheiro sem bytes.
+- **Workspace**: «Eliminar» no painel de gestão; uma vista de **Lixo** com
+  restaurar e apagar definitivamente por ficheiro. Rotas Core
+  (`/me/files/trash`, `/me/files/delete`, `/me/files/restore`,
+  `/me/files/purge`), fechadas sobre `person_id`.
+- Testes provam que o Lixo esconde e não liberta quota, que restaurar devolve, e
+  que o apagar definitivo exige o Lixo e liberta a quota (contra armazenamento
+  real).
+
+### Ficheiros — arrumar o espaço pessoal: pastas, mudar nome, mover (fatia B) — 2026-09-14
+
+Depois de «Meus ficheiros» existir (fatia A), esta fatia dá-lhe o arrumar. As
+pastas pessoais já existiam no Core (serviam as notas); passam a ser navegáveis
+e geríveis, e os ficheiros ganham mudar-nome e mover — tudo owner-scoped, sem
+IA (ADR-0207).
+
+- **Pastas pessoais** em «Meus ficheiros»: criar, abrir, mudar o nome, eliminar.
+  Eliminar uma pasta **não apaga os ficheiros** — devolve-os à raiz (a chave é
+  `RESTRICT`, e o Core desprende-os antes de apagar).
+- **Ficheiro**: mudar o nome e mover para uma pasta (ou para a raiz), por um
+  painel de gestão que a lista abre — com a descarga ao lado.
+- **A posse decide as duas pontas**: mover um ficheiro para a pasta de outra
+  pessoa é recusado, e abrir uma pasta que não é sua devolve a raiz. Rotas Core
+  novas (`/me/files/rename`, `/me/files/move`, `/me/folders/rename`) fecham-se
+  sobre `person_id`; criar, listar e apagar pastas reutilizam as rotas que já
+  serviam as Notas (`/me/folders`), agora com o desprender-para-a-raiz ao apagar.
+- Testes provam mudar-nome, mover, o regresso à raiz ao apagar a pasta, e a
+  recusa de mover para a pasta de outrem.
+
 ### Ficheiros — todo o membro tem «Meus ficheiros» (fatia A) — 2026-09-14
 
 Um membro sem ambiente de investigação via «Não tem onde carregar ficheiros». Era

@@ -146,6 +146,14 @@ pub const ROUTES: &[&str] = &[
     "/file-versions/{version_id}/preview",
     "/file-versions/{version_id}/download",
     "/me/files/{version_id}/download",
+    "/me/files/rename",
+    "/me/files/move",
+    "/me/files/delete",
+    "/me/files/restore",
+    "/me/files/purge",
+    "/me/folders",
+    "/me/folders/rename",
+    "/me/folders/delete",
     "/bibliography",
     "/bibliography/tools",
     "/datasets",
@@ -452,6 +460,14 @@ pub fn router(state: WorkspaceState) -> Router {
             "/me/files/{version_id}/download",
             get(version_download_personal),
         )
+        .route("/me/files/rename", post(me_file_rename))
+        .route("/me/files/move", post(me_file_move))
+        .route("/me/files/delete", post(me_file_delete))
+        .route("/me/files/restore", post(me_file_restore))
+        .route("/me/files/purge", post(me_file_purge))
+        .route("/me/folders", post(me_folder_new))
+        .route("/me/folders/rename", post(me_folder_rename))
+        .route("/me/folders/delete", post(me_folder_delete))
         // Inteligência
         .route("/ai", get(ai_hub))
         .route("/ai/agents", get(agents))
@@ -9644,6 +9660,12 @@ struct FilesQuery {
     page: Option<i64>,
     #[serde(default)]
     folder: Option<Uuid>,
+    /// O ficheiro pessoal a gerir (mudar nome, mover), quando aberto do painel.
+    #[serde(default)]
+    file: Option<Uuid>,
+    /// «1» abre o Lixo dos ficheiros pessoais.
+    #[serde(default)]
+    trash: Option<String>,
     #[serde(default)]
     ok: Option<String>,
     #[serde(default)]
@@ -9689,14 +9711,65 @@ async fn files_browse(
     // institucionais juntam-se-lhe quando existem.
     let Some(workspace_id) = query.workspace else {
         let tudo = optional(&state, &member, "/api/v1/files").await;
-        let meu = optional(&state, &member, "/api/v1/me/files").await;
+        // O espaço pessoal, dentro da pasta pedida quando alguma.
+        let caminho_meu = query.folder.map_or_else(
+            || "/api/v1/me/files".to_owned(),
+            |f| format!("/api/v1/me/files?folder={f}"),
+        );
+        let meu = optional(&state, &member, &caminho_meu).await;
         let armazenamento = meu.get("storage");
-        let content = ui::screens::files::all_files(ui::screens::files::AllFilesView {
-            personal_files: meu
-                .get("files")
-                .and_then(Value::as_array)
+        let ficheiros_pessoais = meu
+            .get("files")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let pastas_pessoais = meu
+            .get("folders")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        // A pasta aberta, resolvida contra as pastas que o Core devolveu — nunca
+        // um nome vindo do URL.
+        let open_folder = query.folder.and_then(|id| {
+            pastas_pessoais.iter().find_map(|p| {
+                (p.get("id").and_then(Value::as_str) == Some(id.to_string().as_str())).then(|| {
+                    (
+                        id.to_string(),
+                        p.get("name")
+                            .and_then(Value::as_str)
+                            .unwrap_or("Pasta")
+                            .to_owned(),
+                    )
+                })
+            })
+        });
+        // O ficheiro a gerir, encontrado na lista devolvida — e não construído
+        // a partir do URL.
+        let managed_file = query.file.and_then(|id| {
+            ficheiros_pessoais
+                .iter()
+                .find(|f| f.get("id").and_then(Value::as_str) == Some(id.to_string().as_str()))
                 .cloned()
-                .unwrap_or_default(),
+        });
+        // O Lixo, só quando pedido: uma consulta a mais em cada visita seria um
+        // custo por uma vista que raramente se abre.
+        let viewing_trash = query.trash.as_deref() == Some("1");
+        let trash_files = if viewing_trash {
+            optional(&state, &member, "/api/v1/me/files/trash")
+                .await
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let content = ui::screens::files::all_files(ui::screens::files::AllFilesView {
+            personal_files: ficheiros_pessoais.clone(),
+            personal_folders: pastas_pessoais,
+            open_folder,
+            managed_file,
+            viewing_trash,
+            trash_files,
             storage_used: armazenamento
                 .and_then(|s| s.get("used_bytes"))
                 .and_then(Value::as_i64)
@@ -10192,6 +10265,277 @@ async fn files_new_folder(
         // di-lo em vez de falar de restrições da base.
         Err(_) => regresso(&campos, "erro=nome"),
     }
+}
+
+// ── Meus ficheiros: arrumar (pastas, mudar nome, mover) ──────────────────
+//
+// Formulários que submetem para o BFF, que fala com o Core por JSON. O destino
+// de regresso viaja no próprio formulário, e é sempre uma rota de Ficheiros.
+
+/// Um destino de regresso seguro: só rotas de Ficheiros, nunca uma URL externa.
+fn regresso_ficheiros(destino: &str, sufixo: &str) -> Response {
+    let base = if destino.starts_with("/files") {
+        destino
+    } else {
+        "/files"
+    };
+    let juncao = if base.contains('?') { '&' } else { '?' };
+    Redirect::to(&format!("{base}{juncao}{sufixo}")).into_response()
+}
+
+#[derive(Deserialize)]
+struct MeFolderNewForm {
+    name: String,
+}
+
+async fn me_folder_new(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MeFolderNewForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    if form.name.trim().is_empty() {
+        return regresso_ficheiros("/files", "erro=nome");
+    }
+    let corpo = serde_json::json!({ "name": form.name.trim() });
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/me/folders",
+        &corpo,
+    )
+    .await
+    {
+        Ok(_) => regresso_ficheiros("/files", "ok=pasta"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(_) => regresso_ficheiros("/files", "erro=nome"),
+    }
+}
+
+#[derive(Deserialize)]
+struct MeFolderRenameForm {
+    folder_id: Uuid,
+    name: String,
+}
+
+async fn me_folder_rename(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MeFolderRenameForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = format!("/files?folder={}", form.folder_id);
+    if form.name.trim().is_empty() {
+        return regresso_ficheiros(&destino, "erro=nome");
+    }
+    let corpo = serde_json::json!({ "folder_id": form.folder_id, "name": form.name.trim() });
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/me/folders/rename",
+        &corpo,
+    )
+    .await
+    {
+        Ok(_) => regresso_ficheiros(&destino, "ok=pasta"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(_) => regresso_ficheiros(&destino, "erro=nome"),
+    }
+}
+
+#[derive(Deserialize)]
+struct MeFolderDeleteForm {
+    folder_id: Uuid,
+}
+
+async fn me_folder_delete(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MeFolderDeleteForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    // Apagar uma pasta pessoal é a rota que já existe (servia as notas):
+    // `DELETE /me/folders/{id}`. O serviço desprende os ficheiros para a raiz.
+    match api::delete(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/folders/{}", form.folder_id),
+    )
+    .await
+    {
+        Ok(_) => regresso_ficheiros("/files", "ok=pasta-apagada"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(_) => regresso_ficheiros("/files", "erro=recusado"),
+    }
+}
+
+#[derive(Deserialize)]
+struct MeFileRenameForm {
+    file_id: Uuid,
+    name: String,
+    #[serde(default)]
+    return_to: String,
+}
+
+async fn me_file_rename(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MeFileRenameForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = if form.return_to.is_empty() {
+        "/files".to_owned()
+    } else {
+        form.return_to.clone()
+    };
+    if form.name.trim().is_empty() {
+        return regresso_ficheiros(&destino, "erro=nome");
+    }
+    let corpo = serde_json::json!({ "file_id": form.file_id, "name": form.name.trim() });
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/me/files/rename",
+        &corpo,
+    )
+    .await
+    {
+        Ok(_) => regresso_ficheiros(&destino, "ok=renomeado"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(_) => regresso_ficheiros(&destino, "erro=nome"),
+    }
+}
+
+#[derive(Deserialize)]
+struct MeFileMoveForm {
+    file_id: Uuid,
+    /// A pasta de destino; vazia move para a raiz.
+    #[serde(default)]
+    folder_id: String,
+    #[serde(default)]
+    return_to: String,
+}
+
+async fn me_file_move(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MeFileMoveForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = if form.return_to.is_empty() {
+        "/files".to_owned()
+    } else {
+        form.return_to.clone()
+    };
+    // Uma pasta vazia é a raiz: viaja como `null`, nunca como `""`.
+    let folder = Uuid::parse_str(form.folder_id.trim()).ok();
+    let corpo = serde_json::json!({ "file_id": form.file_id, "folder_id": folder });
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/me/files/move",
+        &corpo,
+    )
+    .await
+    {
+        Ok(_) => regresso_ficheiros(&destino, "ok=movido"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(_) => regresso_ficheiros(&destino, "erro=recusado"),
+    }
+}
+
+#[derive(Deserialize)]
+struct MeFileActionForm {
+    file_id: Uuid,
+    #[serde(default)]
+    return_to: String,
+}
+
+/// Uma acção sobre um ficheiro pessoal — apagar (para o Lixo), restaurar ou
+/// apagar definitivamente. Todas seguem a mesma forma.
+async fn me_file_action(
+    state: &WorkspaceState,
+    member: &Member,
+    caminho: &str,
+    file_id: Uuid,
+    destino: &str,
+    ok: &'static str,
+) -> Response {
+    let corpo = serde_json::json!({ "file_id": file_id });
+    match api::post(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        caminho,
+        &corpo,
+    )
+    .await
+    {
+        Ok(_) => regresso_ficheiros(destino, ok),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(_) => regresso_ficheiros(destino, "erro=recusado"),
+    }
+}
+
+async fn me_file_delete(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MeFileActionForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = if form.return_to.is_empty() {
+        "/files".to_owned()
+    } else {
+        form.return_to
+    };
+    me_file_action(
+        &state,
+        &member,
+        "/api/v1/me/files/delete",
+        form.file_id,
+        &destino,
+        "ok=lixo",
+    )
+    .await
+}
+
+async fn me_file_restore(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MeFileActionForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    me_file_action(
+        &state,
+        &member,
+        "/api/v1/me/files/restore",
+        form.file_id,
+        "/files?trash=1",
+        "ok=restaurado",
+    )
+    .await
+}
+
+async fn me_file_purge(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MeFileActionForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    me_file_action(
+        &state,
+        &member,
+        "/api/v1/me/files/purge",
+        form.file_id,
+        "/files?trash=1",
+        "ok=apagado",
+    )
+    .await
 }
 
 /// A página de um ficheiro.
