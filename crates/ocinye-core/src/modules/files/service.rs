@@ -1204,6 +1204,95 @@ pub async fn owns_personal_file_version(
     Ok(owner == Some(principal.person_id))
 }
 
+// ── Meus ficheiros ──────────────────────────────────────────────────────
+//
+// > **Todo o membro activo tem um espaço de ficheiros pessoal.** Não exige
+// > unidade, projecto nem ambiente de investigação — nem IA. A autoridade é o
+// > dono; a quota é a do armazenamento pessoal já governado (ADR-0207).
+
+pub use repo::PersonalFileListing;
+
+/// A vista de «Meus ficheiros»: os ficheiros do dono, as suas pastas e o estado
+/// do armazenamento pessoal.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PersonalFiles {
+    /// Os ficheiros do dono, mais recentes primeiro.
+    pub files: Vec<repo::PersonalFileListing>,
+    /// As pastas do dono.
+    pub folders: Vec<repo::PersonalFolder>,
+    /// Usado, limite e disponível — a mesma medida de «Meus Recursos».
+    pub storage: crate::modules::resource::PersonalStorageStatus,
+}
+
+/// Lista o espaço pessoal de quem pergunta: ficheiros, pastas e quota.
+///
+/// Não há permissão de ficheiros a exigir — um ficheiro pessoal é do dono, e a
+/// consulta fecha-se sobre `person_id`. Um membro sem ambiente nenhum tem este
+/// espaço na mesma: é o que faz «Meus ficheiros» existir sempre.
+///
+/// # Errors
+///
+/// Devolve erro quando uma das consultas falha.
+pub async fn list_personal(
+    pool: &sqlx::PgPool,
+    principal: &Principal,
+    limit: i64,
+) -> CoreResult<PersonalFiles> {
+    let files = repo::list_personal_files(pool, principal.person_id, None, limit).await?;
+    let folders = repo::list_personal_folders(pool, principal.person_id).await?;
+    let storage =
+        crate::modules::resource::personal_storage_status(pool, principal, principal.person_id)
+            .await?;
+    Ok(PersonalFiles {
+        files,
+        folders,
+        storage,
+    })
+}
+
+/// Uma ligação assinada de curta duração para a versão de um ficheiro pessoal.
+///
+/// A autoridade é a posse: `owns_personal_file_version` recusa a versão que não
+/// for do dono — conhecer um identificador de versão não abre o ficheiro de
+/// outra pessoa. Como em todo o lado, o Core assina e não transporta os bytes.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] quando a versão não é do dono; erro quando o objecto
+/// não está disponível.
+pub async fn download_url_personal(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    store: &ObjectStore,
+    version_id: Uuid,
+) -> CoreResult<String> {
+    if !owns_personal_file_version(&mut *tx, principal, version_id).await? {
+        return Err(CoreError::NotFound("Ficheiro não encontrado.".to_owned()));
+    }
+    let versao = repo::find_version(&mut **tx, version_id)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Ficheiro não encontrado.".to_owned()))?;
+    let (chave, nome) = repo::object_location(&mut **tx, versao.storage_object_id)
+        .await?
+        .ok_or_else(|| {
+            CoreError::StorageUnavailable("Este objecto não está disponível.".to_owned())
+        })?;
+    let url = store.presigned_download(&chave, &nome).await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::DOWNLOAD, "file_version")
+            .resource(version_id)
+            .detail("owner_id", principal.person_id.to_string()),
+    )
+    .await?;
+
+    Ok(url)
+}
+
 // ── Pastas pessoais ─────────────────────────────────────────────────────
 
 pub use repo::PersonalFolder;

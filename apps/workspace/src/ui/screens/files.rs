@@ -1,9 +1,11 @@
-//! Ficheiros — os ficheiros institucionais de um Research Workspace.
+//! Ficheiros — o espaço pessoal do membro e os ficheiros dos seus ambientes.
 //!
 //! # O que este ecrã é
 //!
 //! Um sítio para arrumar, carregar, navegar, ver, versionar e descarregar
-//! ficheiros. Nada mais.
+//! ficheiros. «Meus ficheiros» existe para todo o membro activo, sem exigir
+//! ambiente nenhum (ADR-0207); os ambientes de investigação juntam-se-lhe como
+//! destinos adicionais quando o membro lá tem autoridade. Nada mais.
 //!
 //! # O que este ecrã não faz
 //!
@@ -172,7 +174,7 @@ pub fn files(view: FilesView) -> impl IntoView {
                     tabs: vec![],
                     search: "Filtrar ficheiros",
                     truncated: false,
-                    shape: "oc-table--files",
+                    shape: "files",
                     columns: vec![
                         Column::new("Nome"),
                         Column::new("Tipo"),
@@ -206,7 +208,14 @@ pub fn files(view: FilesView) -> impl IntoView {
 /// Continua a haver ambientes: cada linha diz de onde vem, e entrar num deles
 /// mostra as pastas.
 pub struct AllFilesView {
-    /// Os ficheiros alcançáveis, do mais recente para trás.
+    /// Os ficheiros pessoais do membro — «Meus ficheiros». Todo o membro activo
+    /// tem este espaço, sem exigir ambiente nenhum.
+    pub personal_files: Vec<Value>,
+    /// Bytes ocupados pelo espaço pessoal.
+    pub storage_used: i64,
+    /// O limite do espaço pessoal, em bytes. Zero lê-se como «sem limite».
+    pub storage_limit: i64,
+    /// Os ficheiros institucionais alcançáveis, do mais recente para trás.
     pub files: Vec<Value>,
     /// Quantos existem, pelo mesmo predicado da lista.
     pub total: i64,
@@ -220,15 +229,39 @@ pub struct AllFilesView {
 #[allow(clippy::too_many_lines)]
 pub fn all_files(view: AllFilesView) -> impl IntoView {
     let AllFilesView {
+        personal_files,
+        storage_used,
+        storage_limit,
         files,
         total,
         destinos,
         notice,
     } = view;
 
-    let vazio = files.is_empty();
-    let mostrados = files.len();
+    // ── Meus ficheiros ──────────────────────────────────────────────────
+    let meu_vazio = personal_files.is_empty();
+    let linhas_pessoais: Vec<(Option<String>, Vec<Cell>)> = personal_files
+        .iter()
+        .map(|f| {
+            let vid = text(f, "version_id");
+            (
+                // A linha leva à descarga da versão corrente, por ligação
+                // assinada — a mesma postura dos ficheiros institucionais.
+                Some(format!("/me/files/{vid}/download")),
+                vec![
+                    Cell::Primary(text(f, "name")),
+                    Cell::Text(tipo_legivel(&text(f, "content_type"))),
+                    Cell::Mono(tamanho(number(f, "size_bytes"))),
+                    Cell::Mono(format!("v{}", number(f, "versions"))),
+                ],
+            )
+        })
+        .collect();
+    let pessoais_mostrados = linhas_pessoais.len();
 
+    // ── Institucional ───────────────────────────────────────────────────
+    let inst_vazio = files.is_empty();
+    let inst_mostrados = files.len();
     let linhas: Vec<(Option<String>, Vec<Cell>)> = files
         .iter()
         .map(|f| {
@@ -245,6 +278,7 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
             )
         })
         .collect();
+    let mostrar_institucional = !destinos.is_empty() || !inst_vazio;
 
     view! {
         <div class="oc-page">
@@ -252,73 +286,158 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                 <div class="oc-head__text">
                     <h1>"Ficheiros"</h1>
                     <p>
-                        "Os ficheiros institucionais que alcança, em todos os \
-                         ambientes a que pertence."
+                        "Os seus ficheiros pessoais, e os dos ambientes de \
+                         investigação a que pertence."
                     </p>
                 </div>
             </div>
 
             {notice.map(|(ok, mensagem)| aviso(ok, &mensagem))}
-            {destino_de_carregamento(&destinos)}
 
-            {if vazio {
-                empty_state(EmptyState {
-                    icon: Icon::Files,
-                    title: "Ainda não tem ficheiros acessíveis".to_owned(),
-                    body: if destinos.is_empty() {
-                        "Os ficheiros são governados pelos ambientes de \
-                         investigação a que pertence. Um gestor da sua unidade \
-                         ou a liderança de um projecto pode acrescentá-lo a um."
-                            .to_owned()
+            // ── Meus ficheiros: existe sempre, sem exigir ambiente nenhum ──
+            <section class="oc-files__seccao">
+                <div class="oc-files__seccao-cab">
+                    <h2 class="oc-t-strong">"Meus ficheiros"</h2>
+                    <span class="oc-t-caption--muted">
+                        {quota_texto(storage_used, storage_limit)}
+                    </span>
+                </div>
+
+                // Carregar é uma submissão de formulário: funciona sem
+                // JavaScript, para o membro que só quer pôr um ficheiro lá.
+                <form
+                    class="oc-files__carregar oc-mb-5"
+                    method="post"
+                    action="/files/upload"
+                    enctype="multipart/form-data"
+                >
+                    <label class="oc-sr" for="oc-file-pessoal">"Ficheiro a carregar"</label>
+                    <input
+                        class="oc-input oc-files__ficheiro"
+                        type="file"
+                        name="file"
+                        id="oc-file-pessoal"
+                        data-oc="carregar-pessoal"
+                        required
+                    />
+                    <button class="oc-btn oc-btn--primary" type="submit">"Carregar"</button>
+                </form>
+
+                {if meu_vazio {
+                    empty_state(EmptyState {
+                        icon: Icon::Files,
+                        title: "Ainda não carregou nenhum ficheiro".to_owned(),
+                        body: "Este é o seu espaço pessoal. Carregue um ficheiro \
+                               acima — fica só seu, e conta para a sua quota de \
+                               armazenamento."
+                            .to_owned(),
+                        actions: Vec::new(),
+                        small: true,
+                    })
+                    .into_any()
+                } else {
+                    data_table(Table {
+                        tabs: vec![],
+                        search: "Filtrar os meus ficheiros",
+                        truncated: false,
+                        shape: "files-me",
+                        columns: vec![
+                            Column::new("Nome"),
+                            Column::new("Tipo"),
+                            Column::right("Tamanho"),
+                            Column::right("Versões"),
+                        ],
+                        rows: linhas_pessoais,
+                        footer: format!("{pessoais_mostrados} ficheiros"),
+                        previous: None,
+                        next: None,
+                        empty: "Nenhum ficheiro pessoal.",
+                    })
+                    .into_any()
+                }}
+            </section>
+
+            // ── Ambientes de investigação: adicionais, quando existem ──
+            {mostrar_institucional.then(|| view! {
+                <section class="oc-files__seccao">
+                    <div class="oc-files__seccao-cab">
+                        <h2 class="oc-t-strong">"Ambientes de investigação"</h2>
+                    </div>
+                    {destino_de_carregamento(&destinos)}
+                    {if inst_vazio {
+                        empty_state(EmptyState {
+                            icon: Icon::Files,
+                            title: "Ainda não há ficheiros nos seus ambientes".to_owned(),
+                            body: "Escolha um ambiente acima para carregar o primeiro."
+                                .to_owned(),
+                            actions: Vec::new(),
+                            small: true,
+                        })
+                        .into_any()
                     } else {
-                        "Ainda não há ficheiros nos ambientes a que pertence. \
-                         Carregue o primeiro."
-                            .to_owned()
-                    },
-                    actions: Vec::new(),
-                    small: false,
-                })
-                .into_any()
-            } else {
-                data_table(Table {
-                    tabs: vec![],
-                    search: "Filtrar ficheiros",
-                    truncated: i64::try_from(mostrados).unwrap_or(0) < total,
-                    shape: "oc-table--files-all",
-                    columns: vec![
-                        Column::new("Nome"),
-                        Column::new("Ambiente"),
-                        Column::new("Classificação"),
-                        Column::right("Tamanho"),
-                        Column::right("Versões"),
-                    ],
-                    rows: linhas,
-                    // O total vem do mesmo predicado da lista: não há aqui um
-                    // número maior a contar o que a lista esconde.
-                    footer: format!("{mostrados} de {total}"),
-                    previous: None,
-                    next: None,
-                    empty: "Nenhum ficheiro acessível.",
-                })
-                .into_any()
-            }}
+                        data_table(Table {
+                            tabs: vec![],
+                            search: "Filtrar ficheiros",
+                            truncated: i64::try_from(inst_mostrados).unwrap_or(0) < total,
+                            shape: "files-all",
+                            columns: vec![
+                                Column::new("Nome"),
+                                Column::new("Ambiente"),
+                                Column::new("Classificação"),
+                                Column::right("Tamanho"),
+                                Column::right("Versões"),
+                            ],
+                            rows: linhas,
+                            footer: format!("{inst_mostrados} de {total}"),
+                            previous: None,
+                            next: None,
+                            empty: "Nenhum ficheiro acessível.",
+                        })
+                        .into_any()
+                    }}
+                </section>
+            })}
         </div>
     }
 }
 
-/// Onde se pode carregar, e o que dizer quando não há onde.
+/// Um tipo de conteúdo, dito de forma legível.
+fn tipo_legivel(content_type: &str) -> String {
+    let base = content_type
+        .split(';')
+        .next()
+        .unwrap_or(content_type)
+        .trim();
+    match base {
+        "application/pdf" => "PDF".to_owned(),
+        "image/png" => "Imagem PNG".to_owned(),
+        "image/jpeg" => "Imagem JPEG".to_owned(),
+        "image/webp" => "Imagem WebP".to_owned(),
+        "text/plain" => "Texto".to_owned(),
+        "text/csv" => "CSV".to_owned(),
+        "text/markdown" => "Markdown".to_owned(),
+        "application/zip" => "ZIP".to_owned(),
+        outro => outro
+            .rsplit('/')
+            .next()
+            .unwrap_or(outro)
+            .to_ascii_uppercase(),
+    }
+}
+
+/// «3,2 GB de 10 GB utilizados», ou «… · sem limite» quando não há quota.
+fn quota_texto(used: i64, limit: i64) -> String {
+    if limit <= 0 {
+        return format!("{} utilizados", tamanho(used));
+    }
+    format!("{} de {} utilizados", tamanho(used), tamanho(limit))
+}
+
+/// O selector de ambiente institucional onde carregar. Só se chama quando há
+/// pelo menos um destino — o espaço pessoal trata do «sempre há onde».
 fn destino_de_carregamento(destinos: &[(String, String)]) -> impl IntoView {
     if destinos.is_empty() {
-        return view! {
-            <div class="oc-note oc-mb-5">
-                <p class="oc-t-strong">"Não tem onde carregar ficheiros"</p>
-                <p class="oc-t-caption--muted">
-                    "Carregar um ficheiro exige um ambiente de investigação onde \
-                     tenha autoridade para o fazer."
-                </p>
-            </div>
-        }
-        .into_any();
+        return view! { <span hidden=true></span> }.into_any();
     }
 
     let opcoes = destinos
@@ -326,16 +445,13 @@ fn destino_de_carregamento(destinos: &[(String, String)]) -> impl IntoView {
         .map(|(id, etiqueta)| view! { <option value=id.clone()>{etiqueta.clone()}</option> })
         .collect_view();
 
-    // Um destino ou vários: a escolha é sempre explícita. Pré-seleccionar o
-    // único é conveniência; escolher por alguém entre vários seria decidir onde
-    // o trabalho dela fica guardado.
     view! {
         <form class="oc-files__destino oc-mb-5" method="get" action="/files">
-            <label class="oc-label" for="oc-files-destino">"Carregar em"</label>
+            <label class="oc-label" for="oc-files-destino">"Abrir ambiente"</label>
             <select class="oc-select" id="oc-files-destino" name="workspace" required>
                 {opcoes}
             </select>
-            <button class="oc-btn oc-btn--primary" type="submit">"Abrir ambiente"</button>
+            <button class="oc-btn oc-btn--secondary" type="submit">"Abrir"</button>
         </form>
     }
     .into_any()
@@ -823,7 +939,7 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
                     tabs: vec![],
                     search: "Filtrar versões",
                     truncated: false,
-                    shape: "oc-table--versions",
+                    shape: "versions",
                     columns: vec![
                         Column::new("Versão"),
                         Column::new("Por"),
@@ -890,5 +1006,53 @@ fn previsualizacao(preview: Preview) -> impl IntoView {
             </div>
         }
         .into_any(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn membro_sem_ambiente(personal: Vec<Value>) -> AllFilesView {
+        AllFilesView {
+            personal_files: personal,
+            storage_used: 0,
+            storage_limit: 10_737_418_240,
+            files: vec![],
+            total: 0,
+            destinos: vec![],
+            notice: None,
+        }
+    }
+
+    #[test]
+    fn um_membro_sem_ambiente_ve_sempre_meus_ficheiros_e_carregar() {
+        // O caso do ecrã: sem destinos institucionais, «Meus ficheiros» existe
+        // na mesma, com carregar — e a antiga mensagem de recusa desaparece.
+        let html = all_files(membro_sem_ambiente(vec![])).to_html();
+        assert!(html.contains("Meus ficheiros"));
+        assert!(html.contains("action=\"/files/upload\""));
+        assert!(html.contains("type=\"file\""));
+        assert!(
+            !html.contains("Não tem onde carregar ficheiros"),
+            "a mensagem de recusa não pode voltar para um membro activo"
+        );
+    }
+
+    #[test]
+    fn a_forma_da_tabela_e_o_sufixo_e_nao_a_classe_inteira() {
+        // A regressão que se corrigiu: a forma é o sufixo de `oc-table--…`, e
+        // uma tabela com ficheiros tem de sair com as colunas certas.
+        let html = all_files(membro_sem_ambiente(vec![json!({
+            "id": "1", "version_id": "a", "name": "prova.pdf",
+            "content_type": "application/pdf", "size_bytes": 2048, "versions": 1
+        })]))
+        .to_html();
+        assert!(html.contains("oc-table--files-me"));
+        assert!(
+            !html.contains("oc-table--oc-table--"),
+            "a forma da tabela voltou a trazer o seu próprio prefixo"
+        );
     }
 }

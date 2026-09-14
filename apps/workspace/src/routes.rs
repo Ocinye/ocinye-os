@@ -145,6 +145,7 @@ pub const ROUTES: &[&str] = &[
     "/files/{file_id}/preview",
     "/file-versions/{version_id}/preview",
     "/file-versions/{version_id}/download",
+    "/me/files/{version_id}/download",
     "/bibliography",
     "/bibliography/tools",
     "/datasets",
@@ -446,6 +447,10 @@ pub fn router(state: WorkspaceState) -> Router {
         .route(
             "/file-versions/{version_id}/download",
             get(version_download),
+        )
+        .route(
+            "/me/files/{version_id}/download",
+            get(version_download_personal),
         )
         // Inteligência
         .route("/ai", get(ai_hub))
@@ -9679,10 +9684,27 @@ async fn files_browse(
     let lista = optional(&state, &member, "/api/v1/workspaces?page_size=100").await;
     let workspaces = ambientes(&lista);
 
-    // Sem ambiente indicado: a vista agregada, que é o que o módulo é.
+    // Sem ambiente indicado: a vista agregada, que é o que o módulo é. O espaço
+    // pessoal vem sempre — todo o membro activo o tem —, e os ambientes
+    // institucionais juntam-se-lhe quando existem.
     let Some(workspace_id) = query.workspace else {
         let tudo = optional(&state, &member, "/api/v1/files").await;
+        let meu = optional(&state, &member, "/api/v1/me/files").await;
+        let armazenamento = meu.get("storage");
         let content = ui::screens::files::all_files(ui::screens::files::AllFilesView {
+            personal_files: meu
+                .get("files")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default(),
+            storage_used: armazenamento
+                .and_then(|s| s.get("used_bytes"))
+                .and_then(Value::as_i64)
+                .unwrap_or(0),
+            storage_limit: armazenamento
+                .and_then(|s| s.get("limit_bytes"))
+                .and_then(Value::as_i64)
+                .unwrap_or(0),
             files: tudo
                 .get("items")
                 .and_then(Value::as_array)
@@ -10067,9 +10089,6 @@ async fn files_upload(
     let member = member_or_login!(state, headers);
     let (ficheiro, campos) = ler_carregamento(multipart).await;
 
-    let Some(workspace_id) = campos.get("workspace_id").cloned() else {
-        return Redirect::to("/files").into_response();
-    };
     let Some((nome, tipo, dados)) = ficheiro else {
         return regresso(&campos, "erro=vazio");
     };
@@ -10077,26 +10096,46 @@ async fn files_upload(
         return regresso(&campos, "erro=vazio");
     }
 
-    let resultado = api::upload_with_fields(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/workspaces/{workspace_id}/files"),
-        nome,
-        tipo,
-        dados,
-        vec![
-            (
-                "classification",
-                campos.get("classification").cloned().unwrap_or_default(),
-            ),
-            (
-                "folder_id",
-                campos.get("folder_id").cloned().unwrap_or_default(),
-            ),
-        ],
-    )
-    .await;
+    // Sem ambiente indicado, o destino é o espaço pessoal: «Meus ficheiros»
+    // existe para todo o membro activo, sem exigir ambiente nenhum. Com
+    // ambiente, é um carregamento institucional, autorizado pelo Core.
+    let resultado = match campos.get("workspace_id").filter(|w| !w.is_empty()) {
+        None => {
+            api::upload_with_fields(
+                &state,
+                &member.session.access_token,
+                &member.correlation_id,
+                "/api/v1/me/files/uploads",
+                nome,
+                tipo,
+                dados,
+                vec![],
+            )
+            .await
+        }
+        Some(workspace_id) => {
+            api::upload_with_fields(
+                &state,
+                &member.session.access_token,
+                &member.correlation_id,
+                &format!("/api/v1/workspaces/{workspace_id}/files"),
+                nome,
+                tipo,
+                dados,
+                vec![
+                    (
+                        "classification",
+                        campos.get("classification").cloned().unwrap_or_default(),
+                    ),
+                    (
+                        "folder_id",
+                        campos.get("folder_id").cloned().unwrap_or_default(),
+                    ),
+                ],
+            )
+            .await
+        }
+    };
 
     match resultado {
         Ok(_) => regresso(&campos, "ok=carregado"),
@@ -10529,6 +10568,24 @@ async fn version_download(
         &state,
         &member,
         &format!("/api/v1/file-versions/{version_id}/download"),
+    )
+    .await
+}
+
+/// Descarrega um ficheiro pessoal pela sua versão corrente.
+///
+/// A autoridade é a posse, reavaliada no Core: uma versão que não seja do dono
+/// responde «não encontrado».
+async fn version_download_personal(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(version_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    ligacao_assinada(
+        &state,
+        &member,
+        &format!("/api/v1/me/files/{version_id}/download"),
     )
     .await
 }

@@ -8333,8 +8333,8 @@ async fn uma_pessoa_organiza_e_percorre_os_ficheiros_no_browser() {
 
     // O ambiente escolhe-se: não há um por omissão.
     let page = harness.open("/files").await;
-    // O módulo abre na vista agregada: não se escolhe um ambiente para ver.
-    esperar_por(&page, "em todos os ambientes a que pertence").await;
+    // O módulo abre com «Meus ficheiros» e a vista agregada dos ambientes.
+    esperar_por(&page, "Meus ficheiros").await;
 
     let lista = harness
         .open(&format!("/files?workspace={workspace_id}"))
@@ -9460,7 +9460,7 @@ async fn ver_a_entrada_de_ficheiros_nao_da_acesso_a_ficheiro_nenhum() {
     // membro activo o alcança — por isso ele aparece na escolha, e deve
     // aparecer. O que **não** aparece é o ficheiro RESTRICTED lá dentro.
     let ficheiros = harness.open("/files").await;
-    esperar_por(&ficheiros, "em todos os ambientes a que pertence").await;
+    esperar_por(&ficheiros, "Meus ficheiros").await;
 
     let dentro = harness
         .open(&format!("/files?workspace={workspace_id}"))
@@ -9521,14 +9521,18 @@ async fn uma_conta_de_investigacao_sem_pertencas_ve_os_modulos_de_investigacao()
         );
     }
 
-    // E entrar não dá acesso: o ecrã diz a verdade em vez de recusar.
+    // E entrar dá-lhe o seu espaço pessoal: «Meus ficheiros» existe sem pertença
+    // nenhuma, com carregar. A antiga recusa desapareceu (ADR-0207).
     let ficheiros = harness.open("/files").await;
-    // Sem pertenças: um estado vazio que ensina, e não uma recusa.
-    esperar_por(&ficheiros, "Ainda não tem ficheiros acessíveis").await;
+    esperar_por(&ficheiros, "Meus ficheiros").await;
     let html = ficheiros.content().await.expect("conteúdo");
     assert!(
-        html.contains("Não tem onde carregar ficheiros"),
-        "a página não diz que não há onde carregar"
+        html.contains("Carregar"),
+        "um membro sem pertenças não vê como carregar no seu espaço pessoal"
+    );
+    assert!(
+        !html.contains("Não tem onde carregar ficheiros"),
+        "a antiga recusa voltou para um membro activo"
     );
 }
 
@@ -9773,7 +9777,7 @@ async fn a_vista_agregada_de_ficheiros_atravessa_ambientes_e_conta_o_que_mostra(
     semear_ficheiro(&harness, alheio, &nome_escondido, "RESTRICTED").await;
 
     let pagina = harness.open("/files").await;
-    esperar_por(&pagina, "em todos os ambientes a que pertence").await;
+    esperar_por(&pagina, "Ambientes de investigação").await;
     let html = pagina.content().await.expect("conteúdo");
 
     // A vista agregada mostra os dois, de ambientes diferentes.

@@ -449,3 +449,93 @@ async fn o_carregamento_pessoal_e_admitido_contra_a_quota() {
         .expect("uso");
     assert_eq!(uso, 4 * 1024 * 1024, "o uso contou o ficheiro recusado");
 }
+
+/// Insere um ficheiro pessoal com uma versão, sem passar pelo armazenamento —
+/// prova a autoridade da listagem e da posse sem exigir um MinIO.
+async fn personal_file(pool: &PgPool, org: Uuid, owner: Uuid, name: &str) -> (Uuid, Uuid) {
+    let object_id = stored_object(pool, org, owner, 1024).await;
+    let file_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO files (organisation_id, owner_id, name, classification, created_by_id)
+         VALUES ($1, $2, $3, 'INTERNAL', $2) RETURNING id",
+    )
+    .bind(org)
+    .bind(owner)
+    .bind(name)
+    .fetch_one(pool)
+    .await
+    .expect("ficheiro pessoal");
+    let version_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO file_versions (file_id, sequence, storage_object_id, created_by_id)
+         VALUES ($1, 1, $2, $3) RETURNING id",
+    )
+    .bind(file_id)
+    .bind(object_id)
+    .bind(owner)
+    .fetch_one(pool)
+    .await
+    .expect("versão");
+    (file_id, version_id)
+}
+
+/// «Meus ficheiros» é o espaço do dono, e de mais ninguém: a listagem fecha-se
+/// sobre `person_id`, e a posse decide quem abre uma versão (IDOR).
+#[tokio::test]
+async fn meus_ficheiros_e_o_espaco_do_dono_e_a_posse_e_a_autoridade() {
+    let Some(pool) = pool().await else { return };
+    backend_por_omissao(&pool).await;
+    let org = organisation(&pool).await;
+    let a = member(&pool, org).await;
+    let b = member(&pool, org).await;
+
+    let (_fa, va) = personal_file(&pool, org, a.person_id, "recibo.pdf").await;
+    personal_file(&pool, org, a.person_id, "notas.txt").await;
+
+    // A vê os seus dois ficheiros, com a versão corrente por onde descarregar.
+    let vista_a = files::list_personal(&pool, &a, 100).await.expect("lista A");
+    assert_eq!(vista_a.files.len(), 2, "A não vê os seus dois ficheiros");
+    assert!(vista_a.files.iter().any(|f| f.name == "recibo.pdf"));
+    assert!(
+        vista_a.files.iter().all(|f| f.versions >= 1),
+        "faltou a versão corrente"
+    );
+
+    // B não vê nada de A: a listagem não atravessa donos.
+    let vista_b = files::list_personal(&pool, &b, 100).await.expect("lista B");
+    assert!(vista_b.files.is_empty(), "B viu ficheiros que não são seus");
+
+    // E B não é dono da versão de A — conhecer o identificador não abre nada.
+    let mut conn = pool.acquire().await.expect("conn");
+    assert!(
+        !files::owns_personal_file_version(&mut conn, &b, va)
+            .await
+            .expect("posse B"),
+        "B foi tratado como dono de uma versão de A"
+    );
+    assert!(
+        files::owns_personal_file_version(&mut conn, &a, va)
+            .await
+            .expect("posse A"),
+        "A não foi reconhecido dono da sua própria versão"
+    );
+}
+
+/// O espaço pessoal não depende de IA: sem provedores, modelos ou nós, listar e
+/// medir a quota funcionam na mesma. É o invariante do ADR-0207.
+#[tokio::test]
+async fn meus_ficheiros_funcionam_sem_qualquer_capacidade_de_ia() {
+    let Some(pool) = pool().await else { return };
+    backend_por_omissao(&pool).await;
+    let org = organisation(&pool).await;
+    let quem = member(&pool, org).await;
+
+    // Nenhum modelo, provedor ou nó existe nesta base — e mesmo assim:
+    personal_file(&pool, org, quem.person_id, "relatorio.pdf").await;
+    let vista = files::list_personal(&pool, &quem, 100)
+        .await
+        .expect("lista");
+    assert_eq!(vista.files.len(), 1, "listar exigiu IA");
+    assert!(
+        vista.storage.used_bytes >= 1024,
+        "a quota não contou o ficheiro sem IA"
+    );
+}

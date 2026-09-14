@@ -82,6 +82,18 @@ pub fn routes() -> Router<AppState> {
             get(download_version),
         )
         .route("/files/{file_id}/folder", post(move_file))
+        // ── Meus ficheiros ──────────────────────────────────────────────
+        //
+        // O espaço pessoal de todo o membro activo. Existe sem unidade,
+        // projecto ou ambiente de investigação — e sem IA. É o que faz «Meus
+        // ficheiros» nunca estar sem destino (ADR-0207). A autoridade é a
+        // posse; a quota é a do armazenamento pessoal já governado.
+        .route("/me/files", get(my_files))
+        .route(
+            "/me/files/uploads",
+            post(upload_my_file.layer(DefaultBodyLimit::max(super::UPLOAD_BODY_LIMIT_BYTES))),
+        )
+        .route("/me/files/{version_id}/download", get(download_my_file))
 }
 
 // --- Views -----------------------------------------------------------------
@@ -601,6 +613,88 @@ async fn download_file(
     let store = state.store()?;
     let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
     let url = files::download_url(&mut tx, &principal, &ids, store, file_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(serde_json::json!({
+        "url": url,
+        "expires_in_seconds": ocinye_core::storage::DOWNLOAD_URL_TTL.as_secs(),
+    })))
+}
+
+// --- Meus ficheiros ---------------------------------------------------------
+//
+// O espaço pessoal, servido a quem pergunta e a mais ninguém. Não há permissão
+// de ficheiros a exigir: um ficheiro pessoal é do dono, e cada consulta e cada
+// escrita fecham-se sobre `person_id`. Nada aqui depende de IA (ADR-0207).
+
+#[derive(Deserialize)]
+struct MyFilesQuery {
+    /// Quantos ficheiros listar, no máximo. Limitado, para uma página não pedir
+    /// o espaço inteiro de uma vez.
+    #[serde(default)]
+    limit: Option<i64>,
+}
+
+/// `GET /me/files` — os ficheiros pessoais, as pastas e a quota do membro.
+async fn my_files(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Query(query): Query<MyFilesQuery>,
+) -> Result<Json<files::PersonalFiles>, ApiError> {
+    let limit = query.limit.unwrap_or(200).clamp(1, 500);
+    let personal = files::list_personal(&state.pool, &principal, limit).await?;
+    Ok(Json(personal))
+}
+
+/// `POST /me/files/uploads` — carrega um ficheiro para o espaço pessoal.
+///
+/// Aceita a lista geral de tipos (não só imagens, ao contrário do caminho das
+/// notas): é a superfície de Ficheiros, não a de uma nota. A quota pessoal é
+/// admitida dentro de `create_personal`, e uma admissão recusada aborta a
+/// transacção sem consumir espaço.
+async fn upload_my_file(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    multipart: Multipart,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let upload = super::knowledge::read_upload_public(multipart).await?;
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let version = files::create_personal(
+        &mut tx,
+        &principal,
+        &ids,
+        store,
+        &state.config.organisation_slug,
+        files::NewFile {
+            filename: upload.filename,
+            content_type: upload.content_type,
+            data: upload.data,
+            classification: None,
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(serde_json::json!({
+        "file_id": version.file_id,
+        "version_id": version.version_id,
+    })))
+}
+
+/// `GET /me/files/{version_id}/download` — uma ligação assinada para a versão.
+///
+/// A posse é a autoridade: uma versão que não seja do dono responde «não
+/// encontrado», e não «recusado» — não se confirma a existência do ficheiro de
+/// outra pessoa.
+async fn download_my_file(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(version_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let url = files::download_url_personal(&mut tx, &principal, &ids, store, version_id).await?;
     tx.commit().await.map_err(CoreError::from)?;
     Ok(Json(serde_json::json!({
         "url": url,
