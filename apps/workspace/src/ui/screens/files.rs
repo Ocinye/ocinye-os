@@ -218,6 +218,10 @@ pub struct AllFilesView {
     /// O ficheiro pessoal a gerir (mudar nome, mover), quando o painel está
     /// aberto.
     pub managed_file: Option<Value>,
+    /// Se se está a ver o Lixo em vez do espaço vivo.
+    pub viewing_trash: bool,
+    /// Os ficheiros no Lixo, quando se está a vê-lo.
+    pub trash_files: Vec<Value>,
     /// Bytes ocupados pelo espaço pessoal.
     pub storage_used: i64,
     /// O limite do espaço pessoal, em bytes. Zero lê-se como «sem limite».
@@ -240,6 +244,8 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
         personal_folders,
         open_folder,
         managed_file,
+        viewing_trash,
+        trash_files,
         storage_used,
         storage_limit,
         files,
@@ -247,6 +253,12 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
         destinos,
         notice,
     } = view;
+
+    // O Lixo é uma vista à parte: os ficheiros apagados, para restaurar ou
+    // apagar de vez. Nada do espaço vivo aparece aqui.
+    if viewing_trash {
+        return vista_do_lixo(&trash_files, notice).into_any();
+    }
 
     // ── Meus ficheiros ──────────────────────────────────────────────────
     // O sítio para onde os formulários voltam, e a base das ligações da lista:
@@ -328,6 +340,8 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                     <span class="oc-t-caption--muted">
                         {quota_texto(storage_used, storage_limit)}
                     </span>
+                    <div class="oc-spacer"></div>
+                    <a class="oc-files__lixo-link" href="/files?trash=1">"Lixo"</a>
                 </div>
 
                 // Dentro de uma pasta: mudar-lhe o nome ou eliminá-la. Na raiz:
@@ -436,6 +450,74 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
             })}
         </div>
     }
+    .into_any()
+}
+
+/// O Lixo dos ficheiros pessoais: restaurar ou apagar de vez.
+fn vista_do_lixo(trash: &[Value], notice: Option<(bool, String)>) -> impl IntoView {
+    let itens = trash
+        .iter()
+        .map(|f| {
+            let id = text(f, "id");
+            let nome = text(f, "name");
+            view! {
+                <div class="oc-files__lixo-item">
+                    <div class="oc-files__lixo-nome">
+                        <span class="oc-t-strong">{nome}</span>
+                        <span class="oc-t-caption--muted">
+                            {tipo_legivel(&text(f, "content_type"))}
+                            " · "
+                            {tamanho(number(f, "size_bytes"))}
+                        </span>
+                    </div>
+                    <div class="oc-files__lixo-accoes">
+                        <form method="post" action="/me/files/restore">
+                            <input type="hidden" name="file_id" value=id.clone() />
+                            <button class="oc-btn oc-btn--secondary" type="submit">"Restaurar"</button>
+                        </form>
+                        <form method="post" action="/me/files/purge">
+                            <input type="hidden" name="file_id" value=id />
+                            <button class="oc-btn oc-btn--danger" type="submit">
+                                "Eliminar definitivamente"
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            }
+        })
+        .collect_view();
+
+    view! {
+        <div class="oc-page">
+            <div class="oc-head">
+                <div class="oc-head__text">
+                    <h1>"Lixo"</h1>
+                    <p>
+                        <a href="/files">"← Meus ficheiros"</a>
+                        ". Um ficheiro apagado fica aqui, e continua a contar para \
+                         a sua quota até ser eliminado definitivamente."
+                    </p>
+                </div>
+            </div>
+
+            {notice.map(|(ok, mensagem)| aviso(ok, &mensagem))}
+
+            {if trash.is_empty() {
+                empty_state(EmptyState {
+                    icon: Icon::Trash,
+                    title: "O Lixo está vazio".to_owned(),
+                    body: "Os ficheiros que apagar aparecem aqui, e pode restaurá-los."
+                        .to_owned(),
+                    actions: Vec::new(),
+                    small: true,
+                })
+                .into_any()
+            } else {
+                view! { <div class="oc-files__lixo">{itens}</div> }.into_any()
+            }}
+        </div>
+    }
+    .into_any()
 }
 
 /// As pastas pessoais como fichas, e o formulário para criar uma.
@@ -528,14 +610,21 @@ fn painel_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView
             </form>
 
             <form class="oc-files__linha-accao" method="post" action="/me/files/move">
-                <input type="hidden" name="file_id" value=id />
-                <input type="hidden" name="return_to" value=base />
+                <input type="hidden" name="file_id" value=id.clone() />
+                <input type="hidden" name="return_to" value=base.clone() />
                 <label class="oc-label" for="oc-ficheiro-pasta">"Mover para"</label>
                 <select class="oc-select" id="oc-ficheiro-pasta" name="folder_id">
                     <option value="">"Meus ficheiros (raiz)"</option>
                     {opcoes}
                 </select>
                 <button class="oc-btn oc-btn--secondary" type="submit">"Mover"</button>
+            </form>
+
+            <form class="oc-files__linha-accao" method="post" action="/me/files/delete">
+                <input type="hidden" name="file_id" value=id />
+                <input type="hidden" name="return_to" value=base />
+                <button class="oc-btn oc-btn--danger" type="submit">"Eliminar"</button>
+                <span class="oc-t-caption--muted">"Vai para o Lixo; pode restaurá-lo."</span>
             </form>
         </div>
     }
@@ -1160,6 +1249,8 @@ mod tests {
             personal_folders: vec![],
             open_folder: None,
             managed_file: None,
+            viewing_trash: false,
+            trash_files: vec![],
             storage_used: 0,
             storage_limit: 10_737_418_240,
             files: vec![],
@@ -1230,5 +1321,29 @@ mod tests {
         );
         assert!(html.contains("action=\"/me/files/move\""), "falta mover");
         assert!(html.contains("/me/files/v/download"), "falta descarregar");
+        assert!(
+            html.contains("action=\"/me/files/delete\""),
+            "falta eliminar"
+        );
+    }
+
+    #[test]
+    fn a_vista_do_lixo_oferece_restaurar_e_apagar_definitivo() {
+        let mut v = membro_sem_ambiente(vec![]);
+        v.viewing_trash = true;
+        v.trash_files = vec![json!({
+            "id": "t1", "version_id": "v", "name": "velho.txt",
+            "content_type": "text/plain", "size_bytes": 5, "versions": 1
+        })];
+        let html = all_files(v).to_html();
+        assert!(html.contains("velho.txt"), "o apagado não aparece no Lixo");
+        assert!(
+            html.contains("action=\"/me/files/restore\""),
+            "falta restaurar"
+        );
+        assert!(
+            html.contains("action=\"/me/files/purge\""),
+            "falta apagar definitivamente"
+        );
     }
 }

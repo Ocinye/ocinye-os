@@ -95,10 +95,14 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/me/files/rename", post(rename_my_file))
         .route("/me/files/move", post(move_my_file))
+        .route("/me/files/trash", get(my_trash))
+        .route("/me/files/delete", post(trash_my_file))
+        .route("/me/files/restore", post(restore_my_file))
+        .route("/me/files/purge", post(purge_my_file))
         .route("/me/files/{version_id}/download", get(download_my_file))
-        .route("/me/folders", post(create_my_folder))
+        // Criar/listar/apagar pastas pessoais já vivem em `knowledge` (serviam
+        // as notas); aqui só se acrescenta o mudar-nome, que faltava.
         .route("/me/folders/rename", post(rename_my_folder))
-        .route("/me/folders/delete", post(delete_my_folder))
 }
 
 // --- Views -----------------------------------------------------------------
@@ -700,24 +704,58 @@ async fn move_my_file(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
-#[derive(Deserialize)]
-struct NewMyFolder {
-    name: String,
+/// `GET /me/files/trash` — os ficheiros pessoais no Lixo.
+async fn my_trash(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Query(query): Query<MyFilesQuery>,
+) -> Result<Json<Vec<files::PersonalFileListing>>, ApiError> {
+    let limit = query.limit.unwrap_or(200).clamp(1, 500);
+    let lixo = files::list_personal_trash(&state.pool, &principal, limit).await?;
+    Ok(Json(lixo))
 }
 
-/// `POST /me/folders` — cria uma pasta pessoal.
-async fn create_my_folder(
+#[derive(Deserialize)]
+struct FileAction {
+    file_id: Uuid,
+}
+
+/// `POST /me/files/delete` — põe um ficheiro pessoal no Lixo (reversível).
+async fn trash_my_file(
     State(state): State<AppState>,
     CurrentPrincipal(principal): CurrentPrincipal,
     Ids(ids): Ids,
-    Json(request): Json<NewMyFolder>,
+    Json(request): Json<FileAction>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
-    let folder = files::create_personal_folder(&mut tx, &principal, &ids, &request.name).await?;
+    files::trash_personal_file(&mut tx, &principal, &ids, request.file_id).await?;
     tx.commit().await.map_err(CoreError::from)?;
-    Ok(Json(
-        serde_json::json!({ "id": folder.id, "name": folder.name }),
-    ))
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// `POST /me/files/restore` — tira um ficheiro pessoal do Lixo.
+async fn restore_my_file(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Json(request): Json<FileAction>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    files::restore_personal_file(&mut tx, &principal, &ids, request.file_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// `POST /me/files/purge` — apaga definitivamente um ficheiro que está no Lixo.
+async fn purge_my_file(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Json(request): Json<FileAction>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let store = state.store()?;
+    files::purge_personal_file(&state.pool, &principal, &ids, store, request.file_id).await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 #[derive(Deserialize)]
@@ -726,7 +764,9 @@ struct RenameFolder {
     name: String,
 }
 
-/// `POST /me/folders/rename` — muda o nome de uma pasta pessoal.
+/// `POST /me/folders/rename` — muda o nome de uma pasta pessoal. Criar, listar
+/// e apagar pastas pessoais vivem em `knowledge` (serviam as notas); só o
+/// mudar-nome faltava, e é o que se acrescenta aqui.
 async fn rename_my_folder(
     State(state): State<AppState>,
     CurrentPrincipal(principal): CurrentPrincipal,
@@ -736,25 +776,6 @@ async fn rename_my_folder(
     let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
     files::rename_personal_folder(&mut tx, &principal, &ids, request.folder_id, &request.name)
         .await?;
-    tx.commit().await.map_err(CoreError::from)?;
-    Ok(Json(serde_json::json!({ "ok": true })))
-}
-
-#[derive(Deserialize)]
-struct DeleteFolder {
-    folder_id: Uuid,
-}
-
-/// `POST /me/folders/delete` — apaga uma pasta pessoal; os ficheiros que lá
-/// estavam ficam na raiz.
-async fn delete_my_folder(
-    State(state): State<AppState>,
-    CurrentPrincipal(principal): CurrentPrincipal,
-    Ids(ids): Ids,
-    Json(request): Json<DeleteFolder>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
-    files::delete_personal_folder(&mut tx, &principal, &ids, request.folder_id).await?;
     tx.commit().await.map_err(CoreError::from)?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }

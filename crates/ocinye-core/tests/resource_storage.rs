@@ -638,3 +638,150 @@ async fn mover_para_a_pasta_de_outra_pessoa_e_recusado() {
     let _ = tx.rollback().await;
     assert!(r.is_err(), "A moveu um ficheiro para a pasta de B");
 }
+
+/// O Lixo esconde e restaura: apagar tira da lista viva e põe no Lixo, restaurar
+/// devolve — e os bytes ficam (a quota continua a contá-los) até ao definitivo.
+#[tokio::test]
+async fn o_lixo_esconde_e_restaura_um_ficheiro_pessoal() {
+    let Some(pool) = pool().await else { return };
+    backend_por_omissao(&pool).await;
+    let org = organisation(&pool).await;
+    let a = member(&pool, org).await;
+    let ids = CorrelationIds::generate();
+    let (file_id, _) = personal_file(&pool, org, a.person_id, "temporario.txt").await;
+    let uso_antes = resource::personal_usage_bytes(&pool, a.person_id)
+        .await
+        .expect("uso");
+
+    // Apagar: sai da lista viva, entra no Lixo — mas os bytes ficam.
+    {
+        let mut tx = pool.begin().await.expect("tx");
+        files::trash_personal_file(&mut tx, &a, &ids, file_id)
+            .await
+            .expect("trash");
+        tx.commit().await.expect("commit");
+    }
+    assert!(
+        files::list_personal(&pool, &a, None, 100)
+            .await
+            .expect("viva")
+            .files
+            .is_empty(),
+        "o apagado ainda aparece vivo"
+    );
+    assert_eq!(
+        files::list_personal_trash(&pool, &a, 100)
+            .await
+            .expect("lixo")
+            .len(),
+        1,
+        "não está no Lixo"
+    );
+    assert_eq!(
+        resource::personal_usage_bytes(&pool, a.person_id)
+            .await
+            .expect("uso2"),
+        uso_antes,
+        "o Lixo não devia libertar a quota"
+    );
+
+    // Restaurar: volta à lista viva.
+    {
+        let mut tx = pool.begin().await.expect("tx");
+        files::restore_personal_file(&mut tx, &a, &ids, file_id)
+            .await
+            .expect("restore");
+        tx.commit().await.expect("commit");
+    }
+    assert_eq!(
+        files::list_personal(&pool, &a, None, 100)
+            .await
+            .expect("viva2")
+            .files
+            .len(),
+        1,
+        "restaurar não devolveu o ficheiro à lista viva"
+    );
+}
+
+/// Apagar definitivamente exige o Lixo, e liberta os bytes. Contra armazenamento
+/// real, como o E2E; saltado sem `OCINYE_TEST_STORAGE_ENDPOINT`.
+#[tokio::test]
+async fn apagar_definitivamente_exige_o_lixo_e_liberta_a_quota() {
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else {
+        eprintln!("saltado: OCINYE_TEST_STORAGE_ENDPOINT não está definida");
+        return;
+    };
+    backend_por_omissao(&pool).await;
+    let org = organisation(&pool).await;
+    let slug: String = sqlx::query_scalar("SELECT slug FROM organisations WHERE id = $1")
+        .bind(org)
+        .fetch_one(&pool)
+        .await
+        .expect("slug");
+    let a = member(&pool, org).await;
+    let ids = CorrelationIds::generate();
+
+    // Um ficheiro real, com bytes reais no armazenamento.
+    let file_id = {
+        let mut tx = pool.begin().await.expect("tx");
+        let v = files::create_personal(
+            &mut tx,
+            &a,
+            &ids,
+            &store,
+            &slug,
+            files::NewFile {
+                filename: "prova.txt".to_owned(),
+                content_type: "text/plain".to_owned(),
+                data: vec![9u8; 4096],
+                classification: None,
+            },
+        )
+        .await
+        .expect("criar");
+        tx.commit().await.expect("commit");
+        v.file_id
+    };
+    assert!(
+        resource::personal_usage_bytes(&pool, a.person_id)
+            .await
+            .expect("uso")
+            >= 4096
+    );
+
+    // Apagar definitivamente um ficheiro vivo é recusado: primeiro o Lixo.
+    assert!(
+        files::purge_personal_file(&pool, &a, &ids, &store, file_id)
+            .await
+            .is_err(),
+        "apagou definitivamente um ficheiro que não estava no Lixo"
+    );
+
+    // Para o Lixo, e então apagar de vez — a quota é libertada.
+    {
+        let mut tx = pool.begin().await.expect("tx");
+        files::trash_personal_file(&mut tx, &a, &ids, file_id)
+            .await
+            .expect("trash");
+        tx.commit().await.expect("commit");
+    }
+    files::purge_personal_file(&pool, &a, &ids, &store, file_id)
+        .await
+        .expect("purge");
+    assert!(
+        files::list_personal_trash(&pool, &a, 100)
+            .await
+            .expect("lixo")
+            .is_empty(),
+        "o ficheiro continua no Lixo depois de apagado"
+    );
+    assert_eq!(
+        resource::personal_usage_bytes(&pool, a.person_id)
+            .await
+            .expect("uso final"),
+        0,
+        "apagar definitivamente não libertou a quota"
+    );
+}

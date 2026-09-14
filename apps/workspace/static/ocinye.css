@@ -6147,6 +6147,22 @@ select.oc-entrada {
 }
 .oc-files__gerir .oc-input { flex: 0 1 300px; }
 
+/* O Lixo: uma ligação discreta no cabeçalho, e a lista de apagados. */
+.oc-files__lixo-link {
+  font: 500 12px var(--oc-font-sans); color: var(--oc-text-muted);
+  text-decoration: none;
+}
+.oc-files__lixo-link:hover { color: var(--oc-navy); }
+.oc-files__lixo { display: flex; flex-direction: column; gap: var(--oc-space-4); }
+.oc-files__lixo-item {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--oc-space-5); flex-wrap: wrap;
+  border: 1px solid var(--oc-border); border-radius: var(--oc-r-md);
+  padding: var(--oc-space-5) var(--oc-space-6); background: var(--oc-surface);
+}
+.oc-files__lixo-nome { display: flex; flex-direction: column; gap: var(--oc-space-1); }
+.oc-files__lixo-accoes { display: flex; align-items: center; gap: var(--oc-space-4); flex-wrap: wrap; }
+
 /* «Meus ficheiros»: Nome · Tipo · Tamanho · Versões. */
 .oc-table--files-me .oc-table__head,
 .oc-table--files-me .oc-table__row {

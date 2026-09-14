@@ -1342,6 +1342,141 @@ pub async fn move_personal_file(
     Ok(())
 }
 
+/// Os ficheiros no Lixo do próprio.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_personal_trash(
+    pool: &sqlx::PgPool,
+    principal: &Principal,
+    limit: i64,
+) -> CoreResult<Vec<repo::PersonalFileListing>> {
+    repo::list_personal_trash(pool, principal.person_id, limit).await
+}
+
+/// Põe um ficheiro pessoal no Lixo. Reversível: os bytes ficam, e a quota
+/// continua a contá-los até ao apagar definitivo.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] quando o ficheiro não é do dono.
+pub async fn trash_personal_file(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    file_id: Uuid,
+) -> CoreResult<()> {
+    let mudou =
+        repo::set_personal_file_deleted(&mut **tx, principal.person_id, file_id, true).await?;
+    if !mudou {
+        return Err(CoreError::NotFound("Ficheiro não encontrado.".to_owned()));
+    }
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::DELETE, "file")
+            .resource(file_id)
+            .detail("owner_id", principal.person_id.to_string())
+            .detail("event", "trashed"),
+    )
+    .await?;
+    Ok(())
+}
+
+/// Tira um ficheiro pessoal do Lixo.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] quando o ficheiro não é do dono.
+pub async fn restore_personal_file(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    file_id: Uuid,
+) -> CoreResult<()> {
+    let mudou =
+        repo::set_personal_file_deleted(&mut **tx, principal.person_id, file_id, false).await?;
+    if !mudou {
+        return Err(CoreError::NotFound("Ficheiro não encontrado.".to_owned()));
+    }
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::UPDATE, "file")
+            .resource(file_id)
+            .detail("owner_id", principal.person_id.to_string())
+            .detail("event", "restored"),
+    )
+    .await?;
+    Ok(())
+}
+
+/// Apaga definitivamente um ficheiro pessoal: a linha e os bytes.
+///
+/// A metadata é apagada numa transacção; os bytes são removidos do
+/// armazenamento **depois** de a transacção fechar. Se o armazenamento falhar,
+/// fica um objecto órfão — nunca um ficheiro sem bytes —, e o registo de
+/// auditoria diz o que aconteceu. Só se pode apagar definitivamente o que já
+/// está no Lixo: um passo de cada vez.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] quando o ficheiro não é do dono ou não está no Lixo.
+pub async fn purge_personal_file(
+    pool: &sqlx::PgPool,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    store: &ObjectStore,
+    file_id: Uuid,
+) -> CoreResult<()> {
+    let mut tx = pool.begin().await?;
+
+    // Só do Lixo: apagar definitivamente exige que o ficheiro já lá esteja.
+    let no_lixo: Option<bool> = sqlx::query_scalar(
+        "SELECT deleted_at IS NOT NULL FROM files WHERE id = $1 AND owner_id = $2",
+    )
+    .bind(file_id)
+    .bind(principal.person_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if no_lixo != Some(true) {
+        return Err(CoreError::NotFound(
+            "Ficheiro não encontrado no Lixo.".to_owned(),
+        ));
+    }
+
+    let chaves = repo::personal_file_object_keys(&mut *tx, principal.person_id, file_id).await?;
+    let apagou = repo::purge_personal_file(&mut tx, principal.person_id, file_id).await?;
+    if !apagou {
+        return Err(CoreError::NotFound("Ficheiro não encontrado.".to_owned()));
+    }
+
+    audit::record(
+        &mut tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::DELETE, "file")
+            .resource(file_id)
+            .detail("owner_id", principal.person_id.to_string())
+            .detail("event", "purged")
+            .detail("objects", chaves.len().to_string()),
+    )
+    .await?;
+
+    tx.commit().await?;
+
+    // Os bytes, agora que a metadata caiu. `delete` é best-effort e não falha:
+    // um objecto que fique para trás é órfão, não um ficheiro partido.
+    for chave in &chaves {
+        store.delete(chave).await;
+    }
+
+    Ok(())
+}
+
 /// Uma ligação assinada de curta duração para a versão de um ficheiro pessoal.
 ///
 /// A autoridade é a posse: `owns_personal_file_version` recusa a versão que não
