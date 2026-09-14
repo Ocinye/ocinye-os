@@ -33,6 +33,7 @@ anyhow = { workspace = true }
 rand = { workspace = true }
 url = { workspace = true }
 qrcode = { workspace = true }
+pulldown-cmark = { workspace = true }
 
 [dev-dependencies]
 # `async-trait`, só para as sondas de credencial dos harnesses.

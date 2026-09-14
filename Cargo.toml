@@ -87,6 +87,13 @@ chrono = { version = "0.4", features = ["serde"] }
 # reescrever mal uma base de dados que já existe e é mantida.
 chrono-tz = { version = "0.10", features = ["serde"] }
 url = "2"
+# Markdown das respostas do Prompt Ocinye. `default-features = false` retira o
+# `getopts` do CLI, que nada aqui usa, e — de propósito — o feature `html`: a
+# renderização por `push_html` deixaria passar HTML em bruto vindo do modelo. O
+# Prompt percorre os eventos do parser e emite só a árvore que autoriza,
+# escapando texto e recusando esquemas de URL fora de `http/https/mailto`
+# (`ui::markdown`). O modelo produz conteúdo; nunca produz marcação de confiança.
+pulldown-cmark = { version = "0.12", default-features = false }
 
 # --- security ---------------------------------------------------------------
 # A versão 10 exige que o backend criptográfico seja escolhido, e a escolha aqui

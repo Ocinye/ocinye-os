@@ -219,22 +219,21 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
 
     view! {
         <div class="oc-prompt">
-            // ── Barra de contexto ──────────────────────────────────────
-            <div class="oc-prompt__bar">
+            // ── Cabeçalho da conversa ──────────────────────────────────
+            // Compacto: com que agente se fala, e — dentro de um Research
+            // Workspace — o contexto vinculado. Configuração da conversa, não
+            // uma barra de navegação (§26, §27).
+            <header class="oc-prompt__bar">
                 // Uma ligação para os agentes, e não um `listbox` que não abre.
-                // Escolher um agente na barra exige uma lista de agentes que o
-                // Core sirva por âmbito; até lá, levar à lista é honesto e
-                // funciona (briefing §2).
-                <a class="oc-btn oc-btn--secondary" href="/ai/agents">
-                    <span class="oc-btn__dot"></span>
+                // Escolher um agente exige uma lista que o Core sirva por
+                // âmbito; até lá, levar à lista é honesto e funciona (briefing §2).
+                <a class="oc-prompt__agent" href="/ai/agents">
+                    <span class="oc-prompt__agent-dot"></span>
                     {agent_label}
                 </a>
 
                 {workspace
                     .map(|(code, unit)| {
-                        // Contexto preenchido: distingue visualmente uma
-                        // conversa vinculada a um Research Workspace de uma
-                        // conversa institucional geral.
                         view! {
                             <span class="oc-prompt__context">
                                 <i>"CONTEXTO"</i>
@@ -244,14 +243,17 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                     })}
 
                 <div class="oc-spacer"></div>
-            </div>
+            </header>
 
             // ── Conversa ───────────────────────────────────────────────
-            <div class=if has_exchange {
-                "oc-prompt__conv oc-prompt__conv--thread"
-            } else {
-                "oc-prompt__conv"
-            }>
+            // A área rola no seu próprio eixo, alinhada ao topo; o conteúdo vive
+            // numa coluna de largura de leitura. Nunca centrada, nunca cortada:
+            // um turno cresce com o que diz (§5, §6, §20, §23).
+            <div
+                class=if has_exchange { "oc-prompt__conv oc-prompt__conv--thread" }
+                    else { "oc-prompt__conv" }
+                data-oc="prompt-scroll"
+            >
                 {match exchange {
                     // Um turno concluído: o pedido do membro, e a resposta com a
                     // sua origem explícita. Uma resposta de sistema nunca se
@@ -259,67 +261,52 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                     Some(ex) => {
                         let author = ex.author();
                         let degraded = ex.degraded();
-                        let PromptExchange { prompt, content, reason_code, .. } = ex;
+                        let PromptExchange { prompt, origin, content, reason_code, model, .. } = ex;
                         view! {
-                            <div class="oc-prompt__thread">
-                                <div class="oc-msg oc-msg--member">
-                                    <span class="oc-msg__who">"Você"</span>
-                                    <p class="oc-msg__body">{prompt}</p>
-                                </div>
-                                <div class="oc-msg oc-msg--system">
-                                    <span class="oc-msg__who">
-                                        {author}
-                                        {degraded
-                                            .then(|| {
-                                                view! {
-                                                    <span class="oc-msg__badge">"ESTADO"</span>
-                                                }
-                                            })}
-                                    </span>
-                                    <p class="oc-msg__body">{content}</p>
-                                    {reason_code
-                                        .map(|code| {
-                                            view! { <span class="oc-msg__code">{code}</span> }
-                                        })}
-                                </div>
+                            <div class="oc-thread">
+                                {member_turn(prompt)}
+                                {ocinye_turn(&author, &origin, degraded, &content, reason_code, model)}
                             </div>
                         }
                             .into_any()
                     }
-                    // Estado vazio: sem conversa ainda. O ecrã diz o que é, com
-                    // a explicação vinda do Core — nunca «desactivado».
+                    // Estado vazio: sem conversa ainda. Desaparece assim que a
+                    // conversa começa (§24). O ecrã diz o que é, com a explicação
+                    // vinda do Core — nunca «desactivado».
                     None => {
                         view! {
-                            <div class="oc-prompt__hero">
-                                <span class="oc-empty__tile oc-empty__tile--prompt">
-                                    {icon(Icon::AiHexMd, 26)}
-                                </span>
-                                <h1>"Interagir com Ocinye"</h1>
-                                <p class="oc-t-caption--muted">{message}</p>
-                                <p class="oc-t-soft">
-                                    "As respostas respeitarão sempre aquilo a que tem acesso: um
-                                     modelo nunca recebe um artefacto que não conseguiria abrir."
-                                </p>
-                            </div>
+                            <div class="oc-thread oc-thread--empty">
+                                <div class="oc-prompt__hero">
+                                    <span class="oc-empty__tile oc-empty__tile--prompt">
+                                        {icon(Icon::AiHexMd, 26)}
+                                    </span>
+                                    <h1>"Interagir com Ocinye"</h1>
+                                    <p class="oc-t-caption--muted">{message}</p>
+                                    <p class="oc-t-soft">
+                                        "As respostas respeitarão sempre aquilo a que tem acesso: um
+                                         modelo nunca recebe um artefacto que não conseguiria abrir."
+                                    </p>
+                                </div>
 
-                            // Cada sugestão submete o pedido que enuncia, e
-                            // continua utilizável sem IA: prova que o Prompt é
-                            // uma superfície de comando, não um widget de LLM
-                            // (M5 §12).
-                            <div class="oc-prompt__suggestions">
-                                {SUGGESTIONS
-                                    .iter()
-                                    .map(|text| {
-                                        view! {
-                                            <form method="post" action="/ai/prompt">
-                                                <input type="hidden" name="prompt" value=*text />
-                                                <button type="submit" class="oc-suggestion">
-                                                    {*text}
-                                                </button>
-                                            </form>
-                                        }
-                                    })
-                                    .collect_view()}
+                                // Cada sugestão submete o pedido que enuncia, e
+                                // continua utilizável sem IA: prova que o Prompt é
+                                // uma superfície de comando, não um widget de LLM
+                                // (M5 §12).
+                                <div class="oc-prompt__suggestions">
+                                    {SUGGESTIONS
+                                        .iter()
+                                        .map(|text| {
+                                            view! {
+                                                <form method="post" action="/ai/prompt">
+                                                    <input type="hidden" name="prompt" value=*text />
+                                                    <button type="submit" class="oc-suggestion">
+                                                        {*text}
+                                                    </button>
+                                                </form>
+                                            }
+                                        })
+                                        .collect_view()}
+                                </div>
                             </div>
                         }
                             .into_any()
@@ -328,12 +315,15 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
             </div>
 
             // ── Input ──────────────────────────────────────────────────
+            // Superfície própria, colada ao fundo, distinta da conversa (§21,
+            // §22). A coluna do input acompanha a largura da conversa.
             <div class="oc-prompt__dock">
                 <form
                     id="oc-prompt-form"
                     method="post"
                     action="/ai/prompt"
                     class="oc-prompt__input"
+                    data-oc="prompt-form"
                 >
                     {workspace_id
                         .map(|id| view! { <input type="hidden" name="workspace" value=id /> })}
@@ -346,16 +336,17 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                     <textarea
                         id="prompt-input"
                         name="prompt"
-                        class="oc-textarea"
+                        class="oc-prompt__textarea"
+                        rows="1"
                         placeholder="Escreva o seu pedido…"
+                        data-oc="prompt-textarea"
                     ></textarea>
 
                     <div class="oc-prompt__actions">
                         // Anexar contexto é do dossier e continua visível, mas
-                        // declarado indisponível com a razão: eram botões sem
-                        // handler nem endpoint, e um controlo que não faz nada
-                        // é pior do que um que diz porque ainda não faz
-                        // (briefing §2C, §53).
+                        // declarado indisponível com a razão: eram controlos sem
+                        // handler nem endpoint, e um que não faz nada é pior do
+                        // que um que diz porque ainda não faz (briefing §2C, §53).
                         {action_chip(Icon::Attach, "Anexar")}
                         {action_chip(Icon::Dataset, "Dataset")}
                         {action_chip(Icon::Document, "Documento")}
@@ -363,15 +354,12 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
 
                         <div class="oc-spacer"></div>
 
-                        // A afirmação «⏎ enviar» foi retirada: sem JavaScript,
-                        // Enter numa textarea insere uma linha. Uma promessa de
-                        // atalho que não existe é dead UI escrita.
-
                         <button
                             type="submit"
                             aria-label="Enviar"
                             title="Enviar"
                             class="oc-prompt__send"
+                            data-oc="prompt-send"
                         >
                             {icon(Icon::Send, 16)}
                         </button>
@@ -382,6 +370,76 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                     "O Ocinye AI pode cometer erros. Verifique informação crítica e consulte as
                      fontes citadas."
                 </p>
+            </div>
+        </div>
+    }
+}
+
+/// O turno do membro: o pedido submetido, compacto e legível.
+///
+/// Alinhado à esquerda, numa superfície discreta com um rótulo pequeno — nunca
+/// um balão gigante, para que um pedido longo continue a ler-se (§3). O texto é
+/// do membro: entra escapado, com as quebras de linha preservadas, e nunca vira
+/// marcação.
+fn member_turn(prompt: String) -> impl IntoView {
+    view! {
+        <div class="oc-turn oc-turn--member">
+            <span class="oc-turn__who">"Você"</span>
+            <div class="oc-turn__said">{prompt}</div>
+        </div>
+    }
+}
+
+/// O turno da Ocinye: proveniência tipada e a resposta como documento.
+///
+/// A resposta não é um balão: é conteúdo renderizado. A origem — `SYSTEM`,
+/// `MODEL`, `TOOL`, `AGENT` — aparece numa linha discreta, e uma conclusão
+/// degradada traz um selo `ESTADO` neutro, nunca vermelho de erro (§4, §13). O
+/// conteúdo é Markdown renderizado por `ui::markdown`, seguro por construção. A
+/// metadata-máquina (razão, modelo) fica secundária, num detalhe que se abre.
+fn ocinye_turn(
+    author: &str,
+    origin: &str,
+    degraded: bool,
+    content: &str,
+    reason_code: Option<String>,
+    model: Option<String>,
+) -> impl IntoView {
+    let body = crate::ui::markdown::render(content);
+    let has_meta = reason_code.is_some() || model.is_some();
+    view! {
+        <div class="oc-turn oc-turn--ocinye">
+            <div class="oc-turn__prov">
+                <span class="oc-turn__mark">{icon(Icon::AiHexMd, 13)}</span>
+                <span class="oc-turn__who">{author.to_owned()}</span>
+                {degraded.then(|| view! { <span class="oc-turn__badge">"ESTADO"</span> })}
+            </div>
+
+            <div class="oc-md" data-oc="resposta" inner_html=body></div>
+
+            <div class="oc-turn__bar">
+                <button type="button" class="oc-turn__act" data-oc="copiar-resposta">
+                    "Copiar"
+                </button>
+                {has_meta.then(|| {
+                    view! {
+                        <details class="oc-turn__meta">
+                            <summary>"Detalhes"</summary>
+                            <dl>
+                                <div>
+                                    <dt>"Origem"</dt>
+                                    <dd>{origin.to_owned()}</dd>
+                                </div>
+                                {model.map(|m| view! {
+                                    <div><dt>"Modelo"</dt><dd>{m}</dd></div>
+                                })}
+                                {reason_code.map(|code| view! {
+                                    <div><dt>"Razão"</dt><dd class="oc-mono">{code}</dd></div>
+                                })}
+                            </dl>
+                        </details>
+                    }
+                })}
             </div>
         </div>
     }
@@ -499,5 +557,28 @@ mod tests {
     fn o_aviso_sobre_erros_esta_sempre_presente() {
         let html = prompt(context_from(&unavailable(), None), None).to_html();
         assert!(html.contains("pode cometer erros"));
+    }
+
+    #[test]
+    fn a_resposta_do_modelo_e_renderizada_como_documento() {
+        // Uma resposta de modelo com Markdown vira estrutura — título, código,
+        // tabela — através de `ui::markdown`, e não texto plano de textarea.
+        let exchange = PromptExchange {
+            prompt: "Cria uma API Rust.".to_owned(),
+            origin: "MODEL".to_owned(),
+            status: "COMPLETED".to_owned(),
+            reason_code: None,
+            model: Some("Qwen Coder".to_owned()),
+            content: "## Estrutura\n\nUsa `axum`.\n\n```rust\nfn main() {}\n```".to_owned(),
+        };
+        let html = prompt(context_from(&unavailable(), None), Some(exchange)).to_html();
+        // O título desceu de nível, o código traz barra com «Copiar», e a
+        // autoria nomeia o modelo — nunca o sistema.
+        assert!(html.contains("<h3>Estrutura</h3>"));
+        assert!(html.contains("oc-md-code__lang"));
+        assert!(html.contains("data-oc=\"copiar-codigo\""));
+        assert!(html.contains("Ocinye AI · Qwen Coder"));
+        // A acção de copiar a resposta está presente e é discreta.
+        assert!(html.contains("data-oc=\"copiar-resposta\""));
     }
 }

@@ -1690,10 +1690,25 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 
 .oc-prompt { display: flex; flex-direction: column; height: 100%; background: var(--oc-surface); }
 
+/* Cabeçalho da conversa: compacto, configuração e não navegação. */
 .oc-prompt__bar {
   height: var(--oc-topbar-h); flex-shrink: 0;
   display: flex; align-items: center; gap: 12px; padding: 0 24px;
   border-bottom: 1px solid var(--oc-border);
+}
+/* O selector de agente: uma pastilha discreta com um ponto de estado. */
+.oc-prompt__agent {
+  height: 30px; padding: 0 12px; border-radius: var(--oc-r-md);
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1px solid var(--oc-border); background: var(--oc-surface);
+  color: var(--oc-text-secondary); font: 500 12px var(--oc-font-sans);
+  white-space: nowrap;
+  transition: border-color var(--oc-duration-normal), color var(--oc-duration-normal);
+}
+.oc-prompt__agent:hover { border-color: var(--oc-border-strong); color: var(--oc-text); }
+.oc-prompt__agent-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  background: var(--oc-gold);
 }
 /* O contexto não é um alerta: é um facto. Fica em superfície neutra, e é o
    código do Research Workspace que carrega a informação. */
@@ -1735,54 +1750,169 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
   outline-offset: var(--oc-focus-offset);
 }
 
-/* Um turno de conversa: pedido do membro e resposta com a origem explícita.
-   Uma resposta de sistema nunca se apresenta como resposta de modelo. */
-.oc-prompt__conv--thread { justify-content: flex-start; align-items: stretch; }
-.oc-prompt__thread {
-  width: 100%; max-width: 720px; margin: 0 auto;
-  display: flex; flex-direction: column; gap: var(--oc-space-4);
-}
-.oc-msg {
-  display: flex; flex-direction: column; gap: var(--oc-space-2);
-  padding: var(--oc-space-4) var(--oc-space-5);
-  border-radius: var(--oc-r-lg); border: 1px solid var(--oc-border);
-}
-.oc-msg--member { background: var(--oc-surface-subtle); }
-.oc-msg--system { background: var(--oc-surface); border-color: var(--oc-border-strong); }
-.oc-msg__who {
-  display: flex; align-items: center; gap: var(--oc-space-2);
-  font: 600 11px var(--oc-font-mono); color: var(--oc-text-secondary);
-  text-transform: uppercase; letter-spacing: .04em;
-}
-.oc-msg__body {
-  font: 400 14px/1.55 var(--oc-font-sans); color: var(--oc-text);
-  white-space: pre-wrap;
-}
-.oc-msg__badge {
-  font: 600 9.5px var(--oc-font-mono); letter-spacing: .05em;
-  color: var(--oc-gold-text); background: var(--oc-gold-bg);
-  border: 1px solid var(--oc-gold-border); border-radius: var(--oc-r-xs);
-  padding: 1px 5px;
-}
-.oc-msg__code {
-  align-self: flex-start;
-  font: 400 10px var(--oc-font-mono); color: var(--oc-text-meta);
-  background: var(--oc-surface-muted); border-radius: var(--oc-r-xs);
-  padding: 2px 6px;
-}
-
+/* A conversa rola no seu eixo, alinhada ao topo; o conteúdo vive numa coluna
+   de largura de leitura. Um turno cresce com o que diz — nunca cortado. */
 .oc-prompt__conv {
   flex: 1; min-height: 0; overflow-y: auto;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 48px 24px; gap: 26px;
 }
+/* Com conversa, a área alinha ao topo e o conteúdo estica na largura de leitura;
+   sem ela, o hero fica centrado. Um turno cresce com o que diz, nunca cortado. */
+.oc-prompt__conv--thread { justify-content: flex-start; align-items: stretch; }
+.oc-thread { width: 100%; max-width: 820px; margin: 0 auto; }
+.oc-thread:not(.oc-thread--empty) {
+  display: flex; flex-direction: column; gap: 36px;
+}
+/* Estado vazio: desaparece assim que a conversa começa. */
+.oc-thread--empty {
+  display: flex; flex-direction: column; align-items: center; gap: 26px;
+}
+
+/* Um turno entra com o mesmo fade discreto do resto da interface. */
+.oc-turn { animation: ocFade var(--oc-duration-slow) both; }
+.oc-turn__who {
+  font: 600 10.5px var(--oc-font-mono); color: var(--oc-text-meta);
+  text-transform: uppercase; letter-spacing: .06em;
+}
+
+/* Turno do membro: superfície discreta, alinhado à esquerda, nunca um balão
+   gigante — um pedido longo continua a ler-se. */
+.oc-turn--member {
+  display: flex; flex-direction: column; gap: var(--oc-space-3); align-items: flex-start;
+}
+.oc-turn__said {
+  align-self: stretch;
+  background: var(--oc-surface-subtle); border: 1px solid var(--oc-border-soft);
+  border-radius: var(--oc-r-lg); padding: 12px 16px;
+  font: 400 14.5px/1.62 var(--oc-font-sans); color: var(--oc-text-body);
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* Turno da Ocinye: proveniência tipada e a resposta como documento — sem
+   cartão a envolver a resposta. */
+.oc-turn--ocinye { display: flex; flex-direction: column; gap: var(--oc-space-4); }
+.oc-turn__prov { display: flex; align-items: center; gap: var(--oc-space-3); }
+.oc-turn__mark { display: inline-grid; place-items: center; color: var(--oc-navy); }
+.oc-turn__badge {
+  font: 600 9.5px var(--oc-font-mono); letter-spacing: .06em;
+  color: var(--oc-gold-text); background: var(--oc-gold-bg);
+  border: 1px solid var(--oc-gold-border); border-radius: var(--oc-r-xs);
+  padding: 2px 6px;
+}
+/* A barra de acções da resposta: discreta, por baixo do conteúdo. */
+.oc-turn__bar {
+  display: flex; align-items: center; gap: var(--oc-space-5);
+  flex-wrap: wrap; margin-top: var(--oc-space-1);
+}
+.oc-turn__act {
+  height: 26px; padding: 0 9px; border-radius: var(--oc-r-sm);
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid transparent; background: transparent;
+  color: var(--oc-text-meta); font: 500 11.5px var(--oc-font-sans); cursor: pointer;
+  transition: color var(--oc-duration-normal), background var(--oc-duration-normal),
+              border-color var(--oc-duration-normal);
+}
+.oc-turn__act:hover { color: var(--oc-navy); background: var(--oc-surface-muted); border-color: var(--oc-border); }
+.oc-turn__act[data-oc-copiado="true"] { color: var(--oc-success-text); }
+/* A metadata-máquina fica secundária: um detalhe que se abre. */
+.oc-turn__meta { font: 400 11.5px var(--oc-font-sans); color: var(--oc-text-meta); }
+.oc-turn__meta summary {
+  cursor: pointer; color: var(--oc-text-meta); list-style: none; padding: 4px 0;
+}
+.oc-turn__meta summary::-webkit-details-marker { display: none; }
+.oc-turn__meta summary:hover { color: var(--oc-text-secondary); }
+.oc-turn__meta dl {
+  margin: 6px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 14px;
+}
+.oc-turn__meta dl > div { display: contents; }
+.oc-turn__meta dt { color: var(--oc-text-ghost); }
+.oc-turn__meta dd { margin: 0; color: var(--oc-text-secondary); }
+
+/* ── A resposta como documento: tipografia de leitura, não texto de textarea ─ */
+.oc-md { font: 400 15px/1.68 var(--oc-font-sans); color: var(--oc-text-body); }
+.oc-md > :first-child { margin-top: 0; }
+.oc-md > :last-child { margin-bottom: 0; }
+.oc-md p { margin: 0 0 14px; }
+.oc-md h2 { font: 600 19px/1.35 var(--oc-font-sans); color: var(--oc-text); margin: 26px 0 12px; }
+.oc-md h3 { font: 600 16px/1.4 var(--oc-font-sans); color: var(--oc-text); margin: 22px 0 10px; }
+.oc-md h4, .oc-md h5 { font: 600 14px/1.4 var(--oc-font-sans); color: var(--oc-text); margin: 18px 0 8px; }
+.oc-md ul, .oc-md ol { margin: 0 0 14px; padding-left: 24px; }
+.oc-md ul { list-style: disc; }
+.oc-md ol { list-style: decimal; }
+.oc-md li { margin: 4px 0; }
+.oc-md li::marker { color: var(--oc-text-meta); }
+.oc-md ul ul, .oc-md ol ol, .oc-md ul ol, .oc-md ol ul { margin: 4px 0 0; }
+.oc-md li::marker { color: var(--oc-text-meta); }
+.oc-md strong { font-weight: 600; color: var(--oc-text); }
+.oc-md em { font-style: italic; }
+.oc-md del { color: var(--oc-text-meta); }
+.oc-md a { color: var(--oc-navy); text-decoration: underline; text-underline-offset: 2px; }
+.oc-md a:hover { color: var(--oc-navy-hover); }
+.oc-md hr { border: 0; border-top: 1px solid var(--oc-border); margin: 22px 0; }
+.oc-md blockquote {
+  margin: 0 0 14px; padding: 4px 16px;
+  border-left: 3px solid var(--oc-border-strong); color: var(--oc-text-secondary);
+}
+.oc-md-inline {
+  font: 400 .88em var(--oc-font-mono); color: var(--oc-navy-deep);
+  background: var(--oc-surface-muted); border: 1px solid var(--oc-border-soft);
+  border-radius: var(--oc-r-xs); padding: 1px 5px;
+}
+.oc-md-deadlink { color: var(--oc-text-secondary); text-decoration: underline dotted; }
+.oc-md-img { color: var(--oc-text-meta); font-style: italic; }
+
+/* Blocos de código: claros e distinguíveis da prosa, não decorativos escuros. */
+.oc-md-code {
+  margin: 0 0 14px; border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-md); overflow: hidden; background: var(--oc-surface-subtle);
+}
+.oc-md-code__bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px; border-bottom: 1px solid var(--oc-border-soft);
+  background: var(--oc-surface-muted);
+}
+.oc-md-code__lang {
+  font: 500 10.5px var(--oc-font-mono); color: var(--oc-text-meta);
+  text-transform: lowercase; letter-spacing: .03em;
+}
+.oc-md-code__copy {
+  font: 500 11px var(--oc-font-sans); color: var(--oc-text-meta);
+  background: transparent; border: 0; cursor: pointer; padding: 2px 4px;
+  transition: color var(--oc-duration-normal);
+}
+.oc-md-code__copy:hover { color: var(--oc-navy); }
+.oc-md-code__copy[data-oc-copiado="true"] { color: var(--oc-success-text); }
+.oc-md-code pre {
+  margin: 0; padding: 12px 14px; overflow-x: auto;
+  font: 400 12.5px/1.6 var(--oc-font-mono); color: var(--oc-text);
+}
+.oc-md-code code { font: inherit; }
+
+/* Tabelas: rolam dentro do seu contentor, nunca partem a página. */
+.oc-md-table {
+  margin: 0 0 14px; overflow-x: auto;
+  border: 1px solid var(--oc-border); border-radius: var(--oc-r-md);
+}
+.oc-md-table table { border-collapse: collapse; width: 100%; }
+.oc-md-table th, .oc-md-table td {
+  padding: 8px 12px; text-align: left; font-size: 13.5px;
+  border-bottom: 1px solid var(--oc-border-soft);
+}
+.oc-md-table th { font-weight: 600; color: var(--oc-text); background: var(--oc-surface-muted); }
+.oc-md-table td { color: var(--oc-text-body); }
+.oc-md-table tr:last-child td { border-bottom: 0; }
+.oc-md-table .oc-md-c { text-align: center; }
+.oc-md-table .oc-md-r { text-align: right; }
+
+/* ── Estado vazio ──────────────────────────────────────────────────────── */
 .oc-prompt__hero {
   max-width: 560px; text-align: center;
   display: flex; flex-direction: column; align-items: center; gap: 14px;
 }
-.oc-prompt__hero h1 { font: 600 18px/1.3 var(--oc-font-sans); color: var(--oc-text); }
+.oc-prompt__hero h1 { font: 600 20px/1.3 var(--oc-font-sans); color: var(--oc-text); }
 .oc-prompt__suggestions {
-  max-width: 720px;
+  max-width: 640px;
   display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
 }
 .oc-suggestion {
@@ -1793,23 +1923,28 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
   transition: background var(--oc-duration-normal), border-color var(--oc-duration-normal);
 }
 .oc-suggestion:hover:not([disabled]) { border-color: var(--oc-navy); background: var(--oc-surface-subtle); }
-/* Um controlo desactivado tem de o parecer: o cursor não chega, e sem IA
-   estas sugestões não disparam nada. Mesma opacidade do `.oc-page-btn`. */
 .oc-suggestion[disabled] { opacity: .4; cursor: default; }
 
-.oc-prompt__dock { flex-shrink: 0; padding: 0 24px 22px; }
+/* ── O dock: superfície própria, colada ao fundo, distinta da conversa ──── */
+.oc-prompt__dock {
+  flex-shrink: 0; padding: 12px 24px 20px;
+  border-top: 1px solid var(--oc-border-soft); background: var(--oc-surface);
+}
 .oc-prompt__input {
   max-width: 880px; margin: 0 auto;
   background: var(--oc-surface); border: 1px solid var(--oc-border);
   border-radius: var(--oc-r-xl); box-shadow: var(--oc-shadow-input);
   padding: 14px 15px 11px;
+  transition: border-color var(--oc-duration-normal);
 }
 .oc-prompt__input:focus-within { border-color: var(--oc-navy); }
-.oc-prompt__input textarea {
-  width: 100%; height: 62px; border: 0; outline: 0; padding: 0; resize: none;
-  background: transparent; font: 400 13.5px/1.6 var(--oc-font-sans); color: var(--oc-text);
+.oc-prompt__textarea {
+  width: 100%; min-height: 24px; max-height: 240px;
+  border: 0; outline: 0; padding: 0; resize: none; display: block; overflow-y: auto;
+  background: transparent; font: 400 14.5px/1.6 var(--oc-font-sans); color: var(--oc-text);
 }
-.oc-prompt__actions { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.oc-prompt__textarea::placeholder { color: var(--oc-placeholder); }
+.oc-prompt__actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .oc-chip {
   height: 29px; padding: 0 10px; border-radius: var(--oc-r-md);
   display: inline-flex; align-items: center; gap: 7px;
@@ -1826,6 +1961,8 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 }
 .oc-prompt__send:hover:not([disabled]) { filter: brightness(1.06); }
 .oc-prompt__send[disabled] { opacity: .4; cursor: default; }
+/* Enquanto o pedido está em curso, o botão pulsa com a animação do dossier. */
+.oc-prompt__send[data-oc-ocupado="true"] { animation: ocPulse 2.6s infinite; }
 .oc-prompt__note {
   max-width: 880px; margin: 10px auto 0; text-align: center;
   font: 400 10.5px var(--oc-font-sans); color: var(--oc-text-ghost);
@@ -2598,13 +2735,10 @@ div.oc-result { cursor: default; }
   margin: 4px 6px;
   background: var(--oc-border);
 }
-/* Anexar como acção da barra: ícone + texto, ao lado das ferramentas. */
+/* Anexar como acção da barra: só o clipe, ao lado das ferramentas. */
 .oc-comp__anexar {
-  min-width: auto;
-  gap: 5px;
-  padding: 0 9px;
+  cursor: pointer;
 }
-.oc-comp__anexar-txt { font: 500 12px var(--oc-font-sans); }
 
 /* O editor de corpo rico: parece um documento, não uma caixa com bordas. */
 .oc-comp__editor {

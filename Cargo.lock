@@ -3623,6 +3623,7 @@ dependencies = [
  "ocinye-core",
  "ocinye-core-server",
  "ocinye-observability",
+ "pulldown-cmark",
  "qrcode",
  "rand 0.10.2",
  "reqwest 0.12.28",
@@ -4049,6 +4050,17 @@ dependencies = [
  "syn 2.0.119",
  "version_check",
  "yansi",
+]
+
+[[package]]
+name = "pulldown-cmark"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f86ba2052aebccc42cbbb3ed234b8b13ce76f75c3551a303cb2bcffcff12bb14"
+dependencies = [
+ "bitflags",
+ "memchr",
+ "unicase",
 ]
 
 [[package]]

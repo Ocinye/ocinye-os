@@ -1745,10 +1745,107 @@
     }
   }
 
+  /* ── Prompt Ocinye ────────────────────────────────────────────────────
+   *
+   * O input é a peça mais bem resolvida do ecrã. Aqui liga-se o que precisa de
+   * browser: a caixa cresce com o texto (e pára, rolando por dentro); Enter
+   * envia e Shift+Enter quebra a linha; a resposta e cada bloco de código têm
+   * um «Copiar»; e a conversa rola para o turno mais recente ao abrir. Nada
+   * disto simula IA — é a ergonomia de uma superfície de comando. */
+  function initPrompt() {
+    const prompt = $('.oc-prompt');
+    if (!prompt) return;
+
+    const textarea = $('[data-oc="prompt-textarea"]', prompt);
+    const form = $('[data-oc="prompt-form"]', prompt);
+    const scroll = $('[data-oc="prompt-scroll"]', prompt);
+
+    /* A caixa cresce com o conteúdo até ao máximo do CSS; daí em diante rola
+       por dentro. Mede-se a partir de `auto` para poder também encolher. */
+    const ajustar = () => {
+      if (!textarea) return;
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 240) + 'px';
+    };
+
+    if (textarea) {
+      ajustar();
+      textarea.addEventListener('input', ajustar);
+
+      /* Enter envia; Shift+Enter quebra a linha. O envio passa pela submissão
+         real do formulário — a mesma que o botão dispara —, para que a
+         validação do browser e o POST sejam idênticos. */
+      textarea.addEventListener('keydown', (evento) => {
+        if (evento.key === 'Enter' && !evento.shiftKey && !evento.isComposing) {
+          evento.preventDefault();
+          if (form && textarea.value.trim() !== '') {
+            if (typeof form.requestSubmit === 'function') form.requestSubmit();
+            else form.submit();
+          }
+        }
+      });
+    }
+
+    /* Enquanto o pedido está em curso, o botão de envio assinala-o. A página
+       recarrega com a resposta — não há streaming a fingir. */
+    if (form) {
+      form.addEventListener('submit', () => {
+        const enviar = $('[data-oc="prompt-send"]', form);
+        if (enviar) enviar.setAttribute('data-oc-ocupado', 'true');
+      });
+    }
+
+    /* Ao abrir com uma conversa, mostra-se o turno mais recente e devolve-se o
+       foco ao input, para escrever a seguir sem procurar o cursor. */
+    if (scroll && $('.oc-thread:not(.oc-thread--empty)', scroll)) {
+      scroll.scrollTop = scroll.scrollHeight;
+    }
+    if (textarea) {
+      try { textarea.focus({ preventScroll: true }); } catch { textarea.focus(); }
+    }
+  }
+
+  /* Copiar a resposta, ou um bloco de código, sem depender de mais nada na
+     página. A confirmação vive no próprio botão por um instante. */
+  function copiarTexto(texto, botao, rotulo) {
+    const feito = () => {
+      const antes = botao.textContent;
+      botao.textContent = rotulo;
+      botao.setAttribute('data-oc-copiado', 'true');
+      setTimeout(() => {
+        botao.textContent = antes;
+        botao.removeAttribute('data-oc-copiado');
+      }, 1500);
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(texto).then(feito).catch(() => {});
+        return;
+      }
+    } catch { /* sem clipboard: nada a fazer senão falhar em silêncio */ }
+  }
+
+  document.addEventListener('click', (evento) => {
+    const copiarResposta = evento.target.closest('[data-oc="copiar-resposta"]');
+    if (copiarResposta) {
+      const turno = copiarResposta.closest('.oc-turn--ocinye');
+      const corpo = turno && turno.querySelector('.oc-md');
+      if (corpo) copiarTexto(corpo.innerText.trim(), copiarResposta, 'Copiado');
+      return;
+    }
+    const copiarCodigo = evento.target.closest('[data-oc="copiar-codigo"]');
+    if (copiarCodigo) {
+      const bloco = copiarCodigo.closest('.oc-md-code');
+      const codigo = bloco && bloco.querySelector('pre code');
+      if (codigo) copiarTexto(codigo.innerText, copiarCodigo, 'Copiado');
+    }
+  });
+
   /* ── Arranque ─────────────────────────────────────────────────────── */
 
   const start = () => {
     initSidebar();
+    initPrompt();
     initSino();
     initCreateMenu();
     initAccountMenu();

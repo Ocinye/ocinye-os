@@ -350,7 +350,15 @@ fn a_prontidao_nao_e_inferida_de_um_pedido_de_dominio() {
 #[test]
 fn conteudo_do_dominio_nunca_vira_marcacao() {
     /// Onde `inner_html` é legítimo, e porquê.
-    const AUTORIZADOS: [(&str, &str); 3] = [
+    const AUTORIZADOS: [(&str, &str); 4] = [
+        (
+            "prompt.rs",
+            "a resposta do Prompt renderizada de Markdown por `ui::markdown` — um \
+             conjunto fechado de etiquetas produzido pela Experience a partir do \
+             fluxo de eventos do parser, com todo o texto escapado, HTML em bruto \
+             tratado como texto, e esquemas de ligação perigosos recusados (nunca \
+             marcação de confiança vinda do Core ou de um modelo)",
+        ),
         (
             "mail.rs",
             "o corpo da mensagem, já sanitizado pelo Core antes de sair de lá; e a \
