@@ -302,7 +302,7 @@ pub async fn list_personal_trash<'e>(
         "SELECT f.id, v.version_id, f.name, f.folder_id,
                 o.content_type, o.size_bytes,
                 (SELECT count(*) FROM file_versions x WHERE x.file_id = f.id) AS versions,
-                f.updated_at
+                f.updated_at, FALSE AS favourite
            FROM files f
            JOIN LATERAL (
                SELECT fv.id AS version_id, fv.storage_object_id
