@@ -67,9 +67,6 @@ const MAX_SOURCE_PIXELS: u64 = 64_000_000;
 pub const THUMBNAILABLE_TYPES: [&str; 4] =
     ["image/png", "image/jpeg", "image/webp", "application/pdf"];
 
-/// Os tipos de imagem que o gerador descodifica directamente.
-const IMAGE_TYPES: [&str; 3] = ["image/png", "image/jpeg", "image/webp"];
-
 /// Quanto tempo se dá ao renderizador de PDF antes de o abater. Um PDF hostil
 /// não segura o worker: passado isto, é uma falha, e o ficheiro fica com o ícone.
 const PDF_RASTER_TIMEOUT_SECS: u64 = 20;
