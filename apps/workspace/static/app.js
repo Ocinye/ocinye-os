@@ -1894,6 +1894,116 @@
         fs.querySelectorAll('details[open]').forEach((d) => d.removeAttribute('open'));
       }
     });
+
+    /* O menu de acções por ficha escolhe o lado com espaço, para nunca sair
+     * do ecrã: mede a ficha ao abrir e acrescenta a classe de posição. */
+    fs.querySelectorAll('details.oc-fs__acoes').forEach((d) => {
+      d.addEventListener('toggle', () => {
+        d.classList.remove(
+          'oc-fs__acoes--abre-esquerda',
+          'oc-fs__acoes--abre-direita',
+          'oc-fs__acoes--abre-cima',
+        );
+        if (!d.open) return;
+        const r = d.getBoundingClientRect();
+        d.classList.add(
+          r.left < window.innerWidth / 2
+            ? 'oc-fs__acoes--abre-direita'
+            : 'oc-fs__acoes--abre-esquerda',
+        );
+        if (window.innerHeight - r.bottom < 280) {
+          d.classList.add('oc-fs__acoes--abre-cima');
+        }
+      });
+    });
+
+    /* Quick Look: abrir um ficheiro pré-visualiza-o na camada, same-origin. */
+    const camada = fs.querySelector('[data-oc="fs-quicklook"]');
+    if (camada) {
+      const corpo = camada.querySelector('[data-oc="fs-ql-corpo"]');
+      const rotulo = camada.querySelector('[data-oc="fs-ql-nome"]');
+      const descarregar = camada.querySelector('[data-oc="fs-ql-descarregar"]');
+      const IMAGENS = ['image/png', 'image/jpeg', 'image/webp'];
+      const TEXTUAIS = [
+        'application/json', 'application/xml', 'application/javascript',
+        'application/x-yaml', 'application/toml',
+      ];
+      const eTexto = (t) => t.indexOf('text/') === 0 || TEXTUAIS.indexOf(t) !== -1;
+      let versaoActual = null;
+
+      const fichaSemVista = (nome) => {
+        corpo.textContent = '';
+        const bloco = document.createElement('div');
+        bloco.className = 'oc-fs__ql-ficha';
+        const n = document.createElement('p');
+        n.className = 'oc-fs__ql-ficha-nome';
+        n.textContent = nome;
+        const p = document.createElement('p');
+        p.textContent = 'Sem pré-visualização para este tipo. Use Descarregar para o abrir.';
+        bloco.appendChild(n);
+        bloco.appendChild(p);
+        corpo.appendChild(bloco);
+      };
+
+      const abrir = (version, nome, tipo) => {
+        versaoActual = version;
+        rotulo.textContent = nome;
+        corpo.textContent = '';
+        const base = (tipo || '').split(';')[0].trim();
+        const uri = '/me/files/' + encodeURIComponent(version);
+        if (IMAGENS.indexOf(base) !== -1) {
+          const img = document.createElement('img');
+          img.src = uri + '/preview';
+          img.alt = nome;
+          corpo.appendChild(img);
+        } else if (eTexto(base)) {
+          const espera = document.createElement('p');
+          espera.className = 'oc-fs__ql-espera';
+          espera.textContent = 'A carregar…';
+          corpo.appendChild(espera);
+          fetch(uri + '/text', { headers: { accept: 'text/plain' } })
+            .then((r) => (r.ok ? r.text() : Promise.reject(r)))
+            .then((texto) => {
+              corpo.textContent = '';
+              const pre = document.createElement('pre');
+              pre.className = 'oc-fs__ql-texto';
+              pre.textContent = texto; /* textContent escapa por si */
+              corpo.appendChild(pre);
+            })
+            .catch(() => fichaSemVista(nome));
+        } else {
+          fichaSemVista(nome);
+        }
+        camada.hidden = false;
+      };
+
+      const fechar = () => {
+        camada.hidden = true;
+        corpo.textContent = '';
+        versaoActual = null;
+      };
+
+      fs.querySelectorAll('[data-oc="fs-abrir"]').forEach((a) => {
+        a.addEventListener('click', (evento) => {
+          const version = a.getAttribute('data-version');
+          if (!version) return;
+          evento.preventDefault();
+          abrir(version, a.getAttribute('data-nome') || '', a.getAttribute('data-tipo') || '');
+        });
+      });
+      if (descarregar) {
+        descarregar.addEventListener('click', () => {
+          if (versaoActual) {
+            window.location.assign('/me/files/' + encodeURIComponent(versaoActual) + '/raw');
+          }
+        });
+      }
+      camada.querySelectorAll('[data-oc="fs-ql-fechar"]')
+        .forEach((el) => el.addEventListener('click', fechar));
+      document.addEventListener('keydown', (evento) => {
+        if (evento.key === 'Escape' && !camada.hidden) fechar();
+      });
+    }
   }
 
   /* ── Arranque ─────────────────────────────────────────────────────── */

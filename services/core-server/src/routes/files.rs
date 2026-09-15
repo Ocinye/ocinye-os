@@ -6,8 +6,12 @@
 //! file, of a version, of a folder — grants nothing that the file itself would
 //! refuse.
 //!
-//! The Core never proxies bytes. Uploads arrive as multipart and downloads
-//! leave as short-lived signed URLs, which is the only way to obtain one.
+//! For institutional files the Core never proxies bytes: uploads arrive as
+//! multipart and downloads leave as short-lived signed URLs. Personal files are
+//! the exception the deployment forces — the object store has no public
+//! endpoint, so a signed URL would name the internal host and no browser could
+//! reach it. There, the Core serves the bytes same-origin (`/me/files/{v}/raw`,
+//! `…/preview`, `…/text`), and the storage location never reaches the page.
 
 use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
 use axum::handler::Handler;
@@ -100,6 +104,8 @@ pub fn routes() -> Router<AppState> {
         .route("/me/files/restore", post(restore_my_file))
         .route("/me/files/purge", post(purge_my_file))
         .route("/me/files/{version_id}/download", get(download_my_file))
+        .route("/me/files/{version_id}/raw", get(raw_my_file))
+        .route("/me/files/{version_id}/text", get(text_my_file))
         // Criar/listar/apagar pastas pessoais já vivem em `knowledge` (serviam
         // as notas); aqui só se acrescenta o mudar-nome, que faltava.
         .route("/me/folders/rename", post(rename_my_folder))
@@ -835,6 +841,93 @@ async fn download_my_file(
         "url": url,
         "expires_in_seconds": ocinye_core::storage::DOWNLOAD_URL_TTL.as_secs(),
     })))
+}
+
+/// `GET /me/files/{version_id}/raw` — descarrega uma versão pessoal, same-origin.
+///
+/// A posse é a autoridade (reavaliada no Core). Serve os bytes com
+/// `Content-Disposition: attachment` pela origem do Workspace — o armazenamento
+/// não tem endpoint público, pelo que uma URL assinada apontaria para um host
+/// que o browser não alcança. O nome do ficheiro é higienizado à porta para não
+/// poder quebrar o cabeçalho.
+async fn raw_my_file(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(version_id): Path<Uuid>,
+) -> Result<axum::response::Response, ApiError> {
+    use axum::http::header;
+    use axum::response::IntoResponse;
+
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let vista =
+        files::read_version_download_personal(&mut tx, &principal, &ids, store, version_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+
+    // O nome viaja num cabeçalho: uma aspa ou um carácter de controlo quebra-o.
+    // Removem-se à porta, como no caminho assinado.
+    let seguro: String = vista
+        .filename
+        .chars()
+        .filter(|c| *c != '"' && *c != '\\' && !c.is_control())
+        .collect();
+    let disposition = format!("attachment; filename=\"{seguro}\"");
+    let etag = format!("\"{}\"", vista.checksum_sha256);
+
+    Ok((
+        [
+            (header::CONTENT_TYPE, vista.content_type),
+            (header::CONTENT_DISPOSITION, disposition),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned()),
+            (
+                header::CACHE_CONTROL,
+                "private, max-age=0, must-revalidate".to_owned(),
+            ),
+            (header::ETAG, etag),
+        ],
+        vista.bytes,
+    )
+        .into_response())
+}
+
+/// `GET /me/files/{version_id}/text` — o texto de uma versão pessoal, inline.
+///
+/// A posse é a autoridade (o Core reavalia-a): uma versão que não seja do dono
+/// responde «não encontrado». Serve same-origin, como `text/plain` escapável
+/// pelo cliente — nunca se interpreta o conteúdo. Só tipos textuais e até um
+/// tecto de tamanho; fora disso, uma recusa tipada.
+async fn text_my_file(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(version_id): Path<Uuid>,
+) -> Result<axum::response::Response, ApiError> {
+    use axum::http::header;
+    use axum::response::IntoResponse;
+
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let vista =
+        files::read_version_text_personal(&mut tx, &principal, &ids, store, version_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+
+    let etag = format!("\"{}\"", vista.checksum_sha256);
+
+    Ok((
+        [
+            (header::CONTENT_TYPE, "text/plain; charset=utf-8".to_owned()),
+            (header::CONTENT_DISPOSITION, "inline".to_owned()),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned()),
+            (
+                header::CACHE_CONTROL,
+                "private, max-age=0, must-revalidate".to_owned(),
+            ),
+            (header::ETAG, etag),
+        ],
+        vista.text,
+    )
+        .into_response())
 }
 
 /// Serve os bytes da versão corrente inline.

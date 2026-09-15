@@ -556,6 +556,52 @@ pub async fn upload_with_fields(
 /// # Errors
 ///
 /// Devolve [`ApiFailure`] a descrever porque não se conseguiu.
+/// Como [`get_inline`], mas também devolve o `Content-Disposition` que o Core
+/// enviou, para uma descarga same-origin preservar o nome do ficheiro.
+pub async fn get_download(
+    state: &WorkspaceState,
+    token: &str,
+    correlation_id: &str,
+    path: &str,
+) -> Result<(String, Option<String>, Vec<u8>), ApiFailure> {
+    let response = state
+        .http
+        .get(format!("{}{path}", state.config.core_url))
+        .bearer_auth(token)
+        .header(ocinye_observability::CORRELATION_ID_HEADER, correlation_id)
+        .send()
+        .await
+        .map_err(|error| ApiFailure::Failed(format!("the Core is unreachable: {error}")))?;
+
+    match response.status().as_u16() {
+        200..=299 => {
+            let tipo = response
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|valor| valor.to_str().ok())
+                .unwrap_or("application/octet-stream")
+                .to_owned();
+            let disposition = response
+                .headers()
+                .get(reqwest::header::CONTENT_DISPOSITION)
+                .and_then(|valor| valor.to_str().ok())
+                .map(ToOwned::to_owned);
+            let bytes = response
+                .bytes()
+                .await
+                .map_err(|error| ApiFailure::Failed(format!("unexpected response: {error}")))?;
+            Ok((tipo, disposition, bytes.to_vec()))
+        }
+        401 => Err(ApiFailure::Unauthorised),
+        403 => Err(ApiFailure::Forbidden),
+        404 => Err(ApiFailure::Denied),
+        503 => Err(ApiFailure::Unavailable(None)),
+        status => Err(ApiFailure::Failed(format!(
+            "the Core returned status {status}"
+        ))),
+    }
+}
+
 pub async fn get_inline(
     state: &WorkspaceState,
     token: &str,
