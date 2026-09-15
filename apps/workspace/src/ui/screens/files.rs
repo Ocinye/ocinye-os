@@ -314,7 +314,11 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                             || view! { <span class="oc-fs__aqui">"Meus ficheiros"</span> }
                                 .into_any(),
                             |(_, nome)| view! {
-                                <a class="oc-fs__acima" href="/files">"Meus ficheiros"</a>
+                                <a
+                                    class="oc-fs__acima"
+                                    href="/files"
+                                    data-alvo-raiz="1"
+                                >"Meus ficheiros"</a>
                                 <span class="oc-fs__sep" aria-hidden="true">"›"</span>
                                 <span class="oc-fs__aqui">{nome.clone()}</span>
                             }
@@ -395,6 +399,10 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                         </label>
                     </form>
                 </div>
+
+                // A barra de selecção: aparece (via JS) quando há ficheiros
+                // escolhidos, e move ou elimina em lote.
+                {barra_de_seleccao(&personal_folders, &base_pessoal)}
 
                 // Dentro de uma pasta: mudar-lhe o nome ou eliminá-la.
                 {open_folder.as_ref().map(|(id, nome)| painel_de_pasta(id, nome))}
@@ -576,6 +584,46 @@ fn vista_do_lixo(trash: &[Value], notice: Option<(bool, String)>) -> impl IntoVi
     .into_any()
 }
 
+/// A barra de acções em lote: povoada e revelada pelo JS quando há selecção.
+///
+/// Os `file_ids` viajam num campo escondido que o JS preenche com o que estiver
+/// escolhido; o Core reautoriza cada ficheiro à porta, um a um.
+fn barra_de_seleccao(folders: &[Value], base: &str) -> impl IntoView {
+    let base = base.to_owned();
+    let opcoes = folders
+        .iter()
+        .map(|p| {
+            let pid = text(p, "id");
+            let pnome = text(p, "name");
+            view! { <option value=pid>{pnome}</option> }
+        })
+        .collect_view();
+    view! {
+        <div class="oc-fs__lote" data-oc="fs-lote" hidden>
+            <span class="oc-fs__lote-conta" data-oc="fs-lote-conta"></span>
+            <div class="oc-spacer"></div>
+            <form class="oc-fs__lote-form" method="post" action="/me/files/batch/move">
+                <input type="hidden" name="file_ids" data-oc="fs-lote-ids" />
+                <input type="hidden" name="return_to" value=base.clone() />
+                <label class="oc-sr" for="oc-lote-pasta">"Mover a selecção para"</label>
+                <select class="oc-select" id="oc-lote-pasta" name="folder_id">
+                    <option value="">"Meus ficheiros (raiz)"</option>
+                    {opcoes}
+                </select>
+                <button class="oc-btn oc-btn--sm oc-btn--secondary" type="submit">"Mover"</button>
+            </form>
+            <form class="oc-fs__lote-form" method="post" action="/me/files/batch/delete">
+                <input type="hidden" name="file_ids" data-oc="fs-lote-ids" />
+                <input type="hidden" name="return_to" value=base />
+                <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">"Eliminar"</button>
+            </form>
+            <button class="oc-btn oc-btn--sm oc-btn--secondary" type="button" data-oc="fs-lote-limpar">
+                "Limpar"
+            </button>
+        </div>
+    }
+}
+
 /// Uma pasta como ficha: abre ao clicar; a gestão vive lá dentro.
 fn ficha_de_pasta(p: &Value) -> impl IntoView {
     let id = text(p, "id");
@@ -586,6 +634,8 @@ fn ficha_de_pasta(p: &Value) -> impl IntoView {
             class="oc-fs__item oc-fs__item--pasta"
             href=format!("/files?folder={id}")
             data-oc="fs-item"
+            data-alvo-pasta=id.clone()
+            draggable="false"
             title=titulo
         >
             <span class="oc-fs__icone oc-fs__icone--pasta">{icon(Icon::Folder, 30)}</span>
@@ -626,10 +676,11 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
     let tipo = tipo_legivel(&ctype);
     let dim = tamanho(number(f, "size_bytes"));
     let base = base.to_owned();
-    // Uma imagem traz a sua miniatura por cima do ícone. Se ainda não estiver
-    // pronta, o `/thumbnail` responde 404 e o `app.js` remove a `<img>`,
-    // deixando o ícone à mostra.
-    let e_imagem = ["image/png", "image/jpeg", "image/webp"].contains(&ctype.as_str());
+    // Uma imagem ou um PDF trazem a sua miniatura por cima do ícone. Se ainda
+    // não estiver pronta, o `/thumbnail` responde 404 e o `app.js` remove a
+    // `<img>`, deixando o ícone à mostra.
+    let e_com_miniatura =
+        ["image/png", "image/jpeg", "image/webp", "application/pdf"].contains(&ctype.as_str());
     let thumb_src = format!("/me/files/{version_id}/thumbnail");
 
     let opcoes = folders
@@ -642,11 +693,25 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
         .collect_view();
 
     view! {
-        <div class="oc-fs__item oc-fs__item--ficheiro" data-oc="fs-item">
+        <div
+            class="oc-fs__item oc-fs__item--ficheiro"
+            data-oc="fs-item"
+            data-id=id.clone()
+            data-nome=nome.clone()
+            draggable="true"
+        >
+            <input
+                class="oc-fs__sel"
+                type="checkbox"
+                data-oc="fs-sel"
+                data-id=id.clone()
+                aria-label=format!("Seleccionar {nome}")
+            />
             <a
                 class="oc-fs__abrir"
                 href=format!("/me/files/{version_id}/raw")
                 title=nome.clone()
+                draggable="false"
                 data-oc="fs-abrir"
                 data-version=version_id.clone()
                 data-nome=nome.clone()
@@ -654,7 +719,7 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
             >
                 <span class="oc-fs__icone">
                     {icon(Icon::Document, 30)}
-                    {e_imagem.then(|| view! {
+                    {e_com_miniatura.then(|| view! {
                         <img
                             class="oc-fs__thumb"
                             data-oc="fs-thumb"
@@ -677,7 +742,7 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
                         <input type="hidden" name="file_id" value=id.clone() />
                         <input type="hidden" name="return_to" value=base.clone() />
                         <label class="oc-sr" for=format!("nome-{id}")>"Novo nome"</label>
-                        <input class="oc-input" id=format!("nome-{id}") name="name" value=nome />
+                        <input class="oc-input" id=format!("nome-{id}") name="name" value=nome.clone() />
                         <button class="oc-btn oc-btn--sm oc-btn--secondary" type="submit">
                             "Mudar nome"
                         </button>
@@ -693,7 +758,7 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
                         <button class="oc-btn oc-btn--sm oc-btn--secondary" type="submit">"Mover"</button>
                     </form>
                     <form method="post" action="/me/files/delete">
-                        <input type="hidden" name="file_id" value=id />
+                        <input type="hidden" name="file_id" value=id.clone() />
                         <input type="hidden" name="return_to" value=base />
                         <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">"Eliminar"</button>
                     </form>
@@ -1475,15 +1540,60 @@ mod tests {
             "a miniatura não aponta para a rota same-origin"
         );
 
-        // Um PDF não traz miniatura de imagem — cai no ícone do tipo.
+        // Um PDF também traz miniatura (a primeira página, rasterizada).
         let pdf = json!({
             "id": "p", "version_id": "w", "name": "a.pdf",
             "content_type": "application/pdf", "size_bytes": 10, "versions": 1
         });
         let html = all_files(membro_sem_ambiente(vec![pdf])).to_html();
         assert!(
+            html.contains("data-oc=\"fs-thumb\""),
+            "um PDF devia trazer a miniatura da primeira página"
+        );
+
+        // Um tipo sem miniatura (uma folha de cálculo) cai no ícone do tipo.
+        let csv = json!({
+            "id": "c", "version_id": "x", "name": "dados.csv",
+            "content_type": "text/csv", "size_bytes": 10, "versions": 1
+        });
+        let html = all_files(membro_sem_ambiente(vec![csv])).to_html();
+        assert!(
             !html.contains("data-oc=\"fs-thumb\""),
-            "um PDF não devia trazer miniatura de imagem"
+            "um CSV não devia trazer miniatura"
+        );
+    }
+
+    #[test]
+    fn a_grelha_traz_seleccao_lote_e_arrastar() {
+        let mut v = membro_sem_ambiente(vec![json!({
+            "id": "a", "version_id": "v", "name": "foto.png",
+            "content_type": "image/png", "size_bytes": 10, "versions": 1
+        })]);
+        v.personal_folders = vec![json!({"id": "f1", "name": "Projeto X"})];
+        let html = all_files(v).to_html();
+        assert!(
+            html.contains("data-oc=\"fs-sel\""),
+            "falta a caixa de selecção"
+        );
+        assert!(
+            html.contains("data-oc=\"fs-lote\""),
+            "falta a barra de lote"
+        );
+        assert!(
+            html.contains("action=\"/me/files/batch/move\""),
+            "falta mover em lote"
+        );
+        assert!(
+            html.contains("action=\"/me/files/batch/delete\""),
+            "falta eliminar em lote"
+        );
+        assert!(
+            html.contains("draggable=\"true\""),
+            "as fichas não são arrastáveis"
+        );
+        assert!(
+            html.contains("data-alvo-pasta=\"f1\""),
+            "a pasta não é alvo de largada"
         );
     }
 

@@ -1923,6 +1923,106 @@
       img.addEventListener('error', () => img.remove());
     });
 
+    /* Selecção múltipla + acções em lote, e arrastar para mover. */
+    const lote = fs.querySelector('[data-oc="fs-lote"]');
+    if (lote) {
+      const conta = lote.querySelector('[data-oc="fs-lote-conta"]');
+      const camposIds = lote.querySelectorAll('[data-oc="fs-lote-ids"]');
+      const seleccao = new Set();
+
+      const sincronizar = () => {
+        const ids = Array.from(seleccao).join(',');
+        camposIds.forEach((campo) => { campo.value = ids; });
+        conta.textContent =
+          seleccao.size === 1 ? '1 seleccionado' : seleccao.size + ' seleccionados';
+        lote.hidden = seleccao.size === 0;
+        fs.querySelectorAll('[data-oc="fs-sel"]').forEach((cb) => {
+          const item = cb.closest('.oc-fs__item');
+          if (item) {
+            item.classList.toggle('oc-fs__item--sel', seleccao.has(cb.getAttribute('data-id')));
+          }
+        });
+      };
+
+      fs.querySelectorAll('[data-oc="fs-sel"]').forEach((cb) => {
+        cb.addEventListener('click', (evento) => evento.stopPropagation());
+        cb.addEventListener('change', () => {
+          const id = cb.getAttribute('data-id');
+          if (!id) return;
+          if (cb.checked) seleccao.add(id);
+          else seleccao.delete(id);
+          sincronizar();
+        });
+      });
+
+      const limpar = lote.querySelector('[data-oc="fs-lote-limpar"]');
+      if (limpar) {
+        limpar.addEventListener('click', () => {
+          seleccao.clear();
+          fs.querySelectorAll('[data-oc="fs-sel"]').forEach((cb) => { cb.checked = false; });
+          sincronizar();
+        });
+      }
+
+      /* Arrastar um ficheiro (ou a selecção, se o arrastado faz parte dela)
+       * para uma pasta, ou para a raiz no trilho. Constrói e submete o mesmo
+       * formulário de mover — a operação, e a autorização, são as de sempre. */
+      const submeterMover = (fileIds, folderId) => {
+        const form = document.createElement('form');
+        form.method = 'post';
+        form.action = fileIds.length > 1 ? '/me/files/batch/move' : '/me/files/move';
+        const campos = fileIds.length > 1
+          ? { file_ids: fileIds.join(','), folder_id: folderId }
+          : { file_id: fileIds[0], folder_id: folderId };
+        campos.return_to = window.location.pathname + window.location.search;
+        Object.keys(campos).forEach((chave) => {
+          const campo = document.createElement('input');
+          campo.type = 'hidden';
+          campo.name = chave;
+          campo.value = campos[chave];
+          form.appendChild(campo);
+        });
+        document.body.appendChild(form);
+        form.submit();
+      };
+
+      let arrastado = null;
+      fs.querySelectorAll('.oc-fs__item--ficheiro[draggable="true"]').forEach((item) => {
+        item.addEventListener('dragstart', (evento) => {
+          arrastado = item.getAttribute('data-id');
+          if (evento.dataTransfer) {
+            evento.dataTransfer.effectAllowed = 'move';
+            try { evento.dataTransfer.setData('text/plain', arrastado || ''); } catch { /* ok */ }
+          }
+        });
+        item.addEventListener('dragend', () => { arrastado = null; });
+      });
+
+      const alvos = [];
+      fs.querySelectorAll('[data-alvo-pasta]').forEach((el) =>
+        alvos.push([el, () => el.getAttribute('data-alvo-pasta') || '']));
+      fs.querySelectorAll('[data-alvo-raiz]').forEach((el) => alvos.push([el, () => '']));
+      alvos.forEach((par) => {
+        const el = par[0];
+        const pastaDe = par[1];
+        el.addEventListener('dragover', (evento) => {
+          if (!arrastado) return;
+          evento.preventDefault();
+          el.classList.add('oc-fs__item--alvo');
+        });
+        el.addEventListener('dragleave', () => el.classList.remove('oc-fs__item--alvo'));
+        el.addEventListener('drop', (evento) => {
+          el.classList.remove('oc-fs__item--alvo');
+          if (!arrastado) return;
+          evento.preventDefault();
+          const ids = (seleccao.size > 1 && seleccao.has(arrastado))
+            ? Array.from(seleccao)
+            : [arrastado];
+          submeterMover(ids, pastaDe());
+        });
+      });
+    }
+
     /* Quick Look: abrir um ficheiro pré-visualiza-o na camada, same-origin. */
     const camada = fs.querySelector('[data-oc="fs-quicklook"]');
     if (camada) {

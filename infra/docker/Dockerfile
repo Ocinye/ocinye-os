@@ -58,8 +58,12 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
 # dentro para perceber porque é que o Core não fala com o PostgreSQL.
 FROM debian:bookworm-slim AS runtime
 
+# `poppler-utils` traz o `pdftoppm`, que o worker usa para rasterizar a primeira
+# página de um PDF numa imagem — sem executar o JavaScript embutido no documento
+# (o poppler é um renderizador, não um motor de scripts; spec §76). Vai em todas
+# as imagens porque a construção é uma só; só o worker o invoca.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates libssl3 curl \
+ && apt-get install -y --no-install-recommends ca-certificates libssl3 curl poppler-utils \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --create-home --uid 10001 ocinye
 

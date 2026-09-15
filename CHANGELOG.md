@@ -7,6 +7,29 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros — selecção em lote, arrastar para mover, e miniaturas de PDF (FILES-P3-B) — 2026-09-15
+
+Três peças que dão à grelha o poder de gestão de um explorador nativo.
+
+- **Selecção múltipla + acções em lote.** Cada ficha tem uma caixa (aparece ao
+  passar o rato ou quando marcada); com selecção, uma barra move ou elimina os
+  escolhidos de uma vez. As rotas de lote (`/me/files/batch/move`,
+  `/me/files/batch/delete`) reutilizam as operações de um — cada ficheiro é
+  reautorizado pela posse no Core, e um que recuse não pára os outros.
+- **Arrastar para mover.** Arrasta-se um ficheiro (ou a selecção inteira, se o
+  arrastado faz parte dela) para uma pasta, ou para a raiz no trilho. Constrói e
+  submete o mesmo formulário de mover — a operação, e a autorização, são as de
+  sempre; nada de novo decide no cliente.
+- **Miniaturas de PDF.** A primeira página de um PDF passa a aparecer na grelha,
+  como as imagens. O worker rasteriza-a com o `pdftoppm` do poppler — um
+  **renderizador**, não um motor de scripts: corre como subprocesso isolado, sob
+  o utilizador não privilegiado do worker, com prazo e `kill_on_drop`, e **não
+  executa o JavaScript embutido no documento** (spec §76). A imagem resultante
+  segue o mesmo caminho das miniaturas de imagem (re-codificada para WebP). Um
+  endurecimento mais forte — seccomp, contentor à parte — fica para depois.
+- Só o worker ganha uma dependência de sistema (`poppler-utils` na imagem); o
+  resto é experiência e reutilização. Sem migração nem tabela nova.
+
 ### Ficheiros — miniaturas de imagens na grelha (FILES-P3-A) — 2026-09-15
 
 A grelha deixa de mostrar um ícone genérico para cada imagem: mostra a imagem.
