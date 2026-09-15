@@ -105,6 +105,7 @@ pub fn routes() -> Router<AppState> {
         .route("/me/files/purge", post(purge_my_file))
         .route("/me/files/{version_id}/download", get(download_my_file))
         .route("/me/files/{version_id}/raw", get(raw_my_file))
+        .route("/me/files/{version_id}/inline", get(inline_my_file))
         .route("/me/files/{version_id}/text", get(text_my_file))
         // Criar/listar/apagar pastas pessoais já vivem em `knowledge` (serviam
         // as notas); aqui só se acrescenta o mudar-nome, que faltava.
@@ -879,6 +880,45 @@ async fn raw_my_file(
         [
             (header::CONTENT_TYPE, vista.content_type),
             (header::CONTENT_DISPOSITION, disposition),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned()),
+            (
+                header::CACHE_CONTROL,
+                "private, max-age=0, must-revalidate".to_owned(),
+            ),
+            (header::ETAG, etag),
+        ],
+        vista.bytes,
+    )
+        .into_response())
+}
+
+/// `GET /me/files/{version_id}/inline` — mostra uma versão pessoal inline.
+///
+/// A posse é a autoridade (reavaliada no Core). Serve os bytes com
+/// `Content-Disposition: inline` para o Quick Look — imagens e PDF —, na origem
+/// do Workspace. Só a lista fechada de tipos de visualização; um PDF é
+/// desenhado pelo visualizador do browser, fora do processo da página.
+async fn inline_my_file(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(version_id): Path<Uuid>,
+) -> Result<axum::response::Response, ApiError> {
+    use axum::http::header;
+    use axum::response::IntoResponse;
+
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let vista =
+        files::read_version_inline_personal(&mut tx, &principal, &ids, store, version_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+
+    let etag = format!("\"{}\"", vista.checksum_sha256);
+
+    Ok((
+        [
+            (header::CONTENT_TYPE, vista.content_type),
+            (header::CONTENT_DISPOSITION, "inline".to_owned()),
             (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned()),
             (
                 header::CACHE_CONTROL,

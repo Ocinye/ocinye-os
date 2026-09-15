@@ -90,7 +90,7 @@ sem que nada falhe.
   3 serviços (`core-server`, `worker`, `node-agent`) e 1 aplicação
   (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 195 caminhos e 232 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 196 caminhos e 233 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -122,7 +122,7 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED` e em produção** 84 ecrãs em Leptos SSR,
+- **Ocinye Workspace: `IMPLEMENTED` e em produção** 85 ecrãs em Leptos SSR,
   servido de `os.ocinye.com`, atrás da Cloudflare, do mesmo SHA que o Core;
   sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
   pelas permissões que o Core calcula.

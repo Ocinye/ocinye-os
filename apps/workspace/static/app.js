@@ -1956,6 +1956,12 @@
           img.src = uri + '/preview';
           img.alt = nome;
           corpo.appendChild(img);
+        } else if (base === 'application/pdf') {
+          const quadro = document.createElement('iframe');
+          quadro.className = 'oc-fs__ql-quadro';
+          quadro.src = uri + '/inline';
+          quadro.title = nome;
+          corpo.appendChild(quadro);
         } else if (eTexto(base)) {
           const espera = document.createElement('p');
           espera.className = 'oc-fs__ql-espera';
