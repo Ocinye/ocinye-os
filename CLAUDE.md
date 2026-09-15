@@ -249,6 +249,25 @@ sem que nada falhe.
   **Não existe ainda** OCR, um provider de embeddings real integrado, nem a
   superfície de resposta do Prompt — a execução de inferência é `PLANNED` e
   precede esta milestone.
+- **Ficheiros pessoais: `IMPLEMENTED`, um explorador de conteúdo, em produção**
+  ([ADR-0607](docs/adrs/0607-files-as-a-content-browser.md)). «Meus ficheiros»
+  deixou de ser uma tabela de administração: é uma grelha ou lista de fichas,
+  com trilho, quota, «Nova pasta», Lixo e um «Carregar» próprio — sem o
+  `<input type="file">` nativo à vista. Abrir um ficheiro pré-visualiza-o num
+  **Quick Look**: imagem e PDF inline, texto e código escapados, e uma ficha com
+  descarregar para o resto. As **miniaturas** de imagem e da primeira página de
+  cada PDF aparecem na grelha, geradas por um trabalhador — o PDF rasterizado por
+  um subprocesso isolado (`pdftoppm`) que **não executa o JavaScript do
+  documento**. Há **selecção múltipla** com mover/eliminar em lote, **arrastar
+  para mover**, e **Favoritos** e **Recentes** como vistas que atravessam pastas.
+  Tudo reautoriza pela posse no Core, ficheiro a ficheiro. Como o armazenamento
+  **não tem endpoint público**, o Core serve os bytes pessoais same-origin
+  (pré-visualização, miniatura, texto, descarga) — uma excepção deliberada e
+  contida ao caminho pessoal; a descarga **institucional** tem o mesmo defeito
+  latente por resolver. Ficam **explicitamente adiadas**, como trabalho futuro e
+  não como lacuna: miniaturas de **Office e vídeo** (exigem um conversor pesado —
+  LibreOffice, ffmpeg) e um **isolamento mais forte** da rasterização (seccomp ou
+  contentor à parte) acima do subprocesso com prazo de hoje.
 - **Notas: `IMPLEMENTED`, o módulo completo** ([ADR-0413](docs/adrs/0413-notes-as-institutional-knowledge.md)).
   Uma nota é conhecimento **pessoal** do membro — a `notes` serve dono e ambiente
   sem os confundir. O corpo canónico é um **documento estruturado versionado**
@@ -358,7 +377,7 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **68 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
+- **69 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
   **66 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
