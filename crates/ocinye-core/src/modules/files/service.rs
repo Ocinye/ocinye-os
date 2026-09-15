@@ -1041,6 +1041,40 @@ pub struct InlinePreview {
     pub checksum_sha256: String,
 }
 
+/// O maior objecto textual que se transporta para ler inline.
+///
+/// Um visualizador de texto ou de código não é um editor: mostra o suficiente
+/// para se reconhecer o ficheiro, não o ficheiro inteiro a qualquer tamanho.
+pub const TEXT_PREVIEW_MAX_BYTES: i64 = 512 * 1024;
+
+/// Os tipos que se lêem inline como texto simples.
+///
+/// `text/*` cobre o código carregado como texto (um `.rs`, um `.py`, um
+/// `.csv`). A lista fechada acrescenta os formatos estruturados de base
+/// textual. **Nunca** se interpreta: o cliente escapa e mostra num `<pre>`,
+/// pelo que um `text/html` é lido como o seu código-fonte, não renderizado.
+pub fn is_textual_type(content_type: &str) -> bool {
+    content_type.starts_with("text/")
+        || matches!(
+            content_type,
+            "application/json"
+                | "application/xml"
+                | "application/javascript"
+                | "application/x-yaml"
+                | "application/toml"
+        )
+}
+
+/// Uma representação textual autorizada de um ficheiro, para ler inline.
+pub struct InlineText {
+    /// O tipo guardado — nunca o que o cliente disse.
+    pub content_type: String,
+    /// O texto, já validado como UTF-8.
+    pub text: String,
+    /// A soma dos bytes guardados, para quem quiser derivar um `ETag`.
+    pub checksum_sha256: String,
+}
+
 /// Os bytes de **uma versão determinada**, para mostrar inline.
 ///
 /// A autoridade é a do ficheiro, reavaliada aqui: `get_version` resolve através
@@ -1520,6 +1554,144 @@ pub async fn download_url_personal(
     Ok(url)
 }
 
+/// O texto de uma versão de um ficheiro **de uma pessoa**, para ler inline.
+///
+/// A autoridade é a posse, reavaliada aqui: só o dono lê os bytes, e um
+/// identificador de versão de outra pessoa responde «não encontrado». Serve
+/// same-origin — o Workspace mostra o texto sem nunca aprender a chave do
+/// objecto — e só tipos textuais ([`is_textual_type`]), com um tecto de
+/// tamanho ([`TEXT_PREVIEW_MAX_BYTES`]).
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] quando a versão não é do dono; [`CoreError::Validation`]
+/// quando o tipo não é textual, é grande de mais, ou os bytes não são UTF-8; e
+/// erro de armazenamento quando o objecto não está disponível.
+pub async fn read_version_text_personal(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    store: &ObjectStore,
+    version_id: Uuid,
+) -> CoreResult<InlineText> {
+    if !owns_personal_file_version(&mut *tx, principal, version_id).await? {
+        return Err(CoreError::NotFound("Ficheiro não encontrado.".to_owned()));
+    }
+
+    let linha: Option<(String, String, i64, String)> = sqlx::query_as(
+        "SELECT o.object_key, o.content_type, o.size_bytes, o.checksum_sha256
+           FROM file_versions v
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE v.id = $1",
+    )
+    .bind(version_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    let (chave, tipo, tamanho, soma) = linha
+        .ok_or_else(|| CoreError::StorageUnavailable("Esta versão não tem objecto.".to_owned()))?;
+
+    if !is_textual_type(&tipo) {
+        return Err(CoreError::Validation(
+            "Este tipo não se lê como texto.".to_owned(),
+        ));
+    }
+    if tamanho > TEXT_PREVIEW_MAX_BYTES {
+        return Err(CoreError::Validation(
+            "Este ficheiro é grande de mais para ler inline.".to_owned(),
+        ));
+    }
+
+    let bytes = store.get(&chave).await?;
+    let text = String::from_utf8(bytes)
+        .map_err(|_| CoreError::Validation("Este ficheiro não é texto legível.".to_owned()))?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::PREVIEW, "file_version")
+            .resource(version_id)
+            .detail("owner_id", principal.person_id.to_string()),
+    )
+    .await?;
+
+    Ok(InlineText {
+        content_type: tipo,
+        text,
+        checksum_sha256: soma,
+    })
+}
+
+/// Uma descarga autorizada de um ficheiro pessoal, servida same-origin.
+pub struct PersonalDownload {
+    /// O tipo guardado.
+    pub content_type: String,
+    /// O nome com que o ficheiro foi carregado.
+    pub filename: String,
+    /// Os bytes.
+    pub bytes: Vec<u8>,
+    /// A soma dos bytes guardados.
+    pub checksum_sha256: String,
+}
+
+/// Os bytes de uma versão pessoal, para **descarregar** same-origin.
+///
+/// A posse é a autoridade, reavaliada aqui: uma versão que não seja do dono
+/// responde «não encontrado». Serve pela origem do Workspace em vez de uma URL
+/// assinada porque o armazenamento não tem endpoint público — uma URL assinada
+/// apontaria para o host interno, que o browser não alcança. Assim o Core
+/// transporta os bytes desta descarga, e a localização do armazenamento nunca
+/// chega à página (§26, §40).
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] quando a versão não é do dono; erro de armazenamento
+/// quando o objecto não está disponível.
+pub async fn read_version_download_personal(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    store: &ObjectStore,
+    version_id: Uuid,
+) -> CoreResult<PersonalDownload> {
+    if !owns_personal_file_version(&mut *tx, principal, version_id).await? {
+        return Err(CoreError::NotFound("Ficheiro não encontrado.".to_owned()));
+    }
+
+    let linha: Option<(String, String, String, String)> = sqlx::query_as(
+        "SELECT o.object_key, o.content_type, o.original_filename, o.checksum_sha256
+           FROM file_versions v
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE v.id = $1",
+    )
+    .bind(version_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    let (chave, tipo, nome, soma) = linha
+        .ok_or_else(|| CoreError::StorageUnavailable("Esta versão não tem objecto.".to_owned()))?;
+
+    let bytes = store.get(&chave).await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::DOWNLOAD, "file_version")
+            .resource(version_id)
+            .detail("owner_id", principal.person_id.to_string()),
+    )
+    .await?;
+
+    Ok(PersonalDownload {
+        content_type: tipo,
+        filename: nome,
+        bytes,
+        checksum_sha256: soma,
+    })
+}
+
 // ── Pastas pessoais ─────────────────────────────────────────────────────
 
 pub use repo::PersonalFolder;
@@ -1895,4 +2067,24 @@ pub async fn all(pool: &sqlx::PgPool, principal: &Principal, limit: i64) -> Core
         total,
         destinos,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_textual_type;
+
+    #[test]
+    fn is_textual_type_aceita_texto_e_codigo_e_recusa_binario() {
+        // Texto e código lêem-se inline; um binário nunca.
+        assert!(is_textual_type("text/plain"));
+        assert!(is_textual_type("text/csv"));
+        assert!(is_textual_type("text/markdown"));
+        assert!(is_textual_type("application/json"));
+        assert!(is_textual_type("application/xml"));
+        assert!(!is_textual_type("image/png"));
+        assert!(!is_textual_type("application/pdf"));
+        assert!(!is_textual_type(
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        ));
+    }
 }

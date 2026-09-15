@@ -424,6 +424,44 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                     }
                     .into_any()
                 }}
+
+                // ── Quick Look: uma camada de pré-visualização, povoada em JS ──
+                //
+                // A imagem serve-se same-origin (`img-src 'self'`), o texto e o
+                // código lêem-se same-origin e mostram-se escapados; um tipo sem
+                // vista inline traz uma ficha com o descarregar. Nada aqui abre
+                // sozinho — o JS enche o corpo e revela a camada.
+                <div class="oc-fs__ql" data-oc="fs-quicklook" hidden>
+                    <div class="oc-fs__ql-fundo" data-oc="fs-ql-fechar"></div>
+                    <div
+                        class="oc-fs__ql-painel"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Pré-visualização do ficheiro"
+                    >
+                        <header class="oc-fs__ql-cab">
+                            <span class="oc-fs__ql-nome" data-oc="fs-ql-nome"></span>
+                            <div class="oc-fs__ql-cab-accoes">
+                                <button
+                                    class="oc-btn oc-btn--sm oc-btn--secondary"
+                                    type="button"
+                                    data-oc="fs-ql-descarregar"
+                                >
+                                    "Descarregar"
+                                </button>
+                                <button
+                                    class="oc-fs__ql-fechar"
+                                    type="button"
+                                    data-oc="fs-ql-fechar"
+                                    aria-label="Fechar"
+                                >
+                                    "×"
+                                </button>
+                            </div>
+                        </header>
+                        <div class="oc-fs__ql-corpo" data-oc="fs-ql-corpo"></div>
+                    </div>
+                </div>
             </section>
 
             // ── Ambientes de investigação: adicionais, quando existem ──
@@ -584,7 +622,8 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
     let id = text(f, "id");
     let nome = text(f, "name");
     let version_id = text(f, "version_id");
-    let tipo = tipo_legivel(&text(f, "content_type"));
+    let ctype = text(f, "content_type");
+    let tipo = tipo_legivel(&ctype);
     let dim = tamanho(number(f, "size_bytes"));
     let base = base.to_owned();
 
@@ -601,8 +640,12 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
         <div class="oc-fs__item oc-fs__item--ficheiro" data-oc="fs-item">
             <a
                 class="oc-fs__abrir"
-                href=format!("/me/files/{version_id}/download")
+                href=format!("/me/files/{version_id}/raw")
                 title=nome.clone()
+                data-oc="fs-abrir"
+                data-version=version_id.clone()
+                data-nome=nome.clone()
+                data-tipo=ctype.clone()
             >
                 <span class="oc-fs__icone">{icon(Icon::Document, 30)}</span>
                 <span class="oc-fs__nome">{nome.clone()}</span>
@@ -611,7 +654,7 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
             <details class="oc-fs__acoes">
                 <summary class="oc-fs__acoes-btn" aria-label="Acções do ficheiro">"⋯"</summary>
                 <div class="oc-fs__pop oc-fs__pop--acoes">
-                    <a class="oc-fs__acao" href=format!("/me/files/{version_id}/download")>
+                    <a class="oc-fs__acao" href=format!("/me/files/{version_id}/raw")>
                         "Descarregar"
                     </a>
                     <form class="oc-fs__acao-form" method="post" action="/me/files/rename">
@@ -1358,10 +1401,44 @@ mod tests {
             "falta mudar nome"
         );
         assert!(html.contains("action=\"/me/files/move\""), "falta mover");
-        assert!(html.contains("/me/files/v/download"), "falta descarregar");
+        assert!(
+            html.contains("/me/files/v/raw"),
+            "falta descarregar same-origin"
+        );
         assert!(
             html.contains("action=\"/me/files/delete\""),
             "falta eliminar"
+        );
+    }
+
+    #[test]
+    fn a_ficha_abre_o_quick_look_e_descarrega_same_origin() {
+        // O clique principal abre o Quick Look (data-oc), e o recurso é
+        // same-origin — nunca a ligação assinada para o host interno.
+        let ficheiro = json!({
+            "id": "x", "version_id": "v", "name": "foto.png",
+            "content_type": "image/png", "size_bytes": 10, "versions": 1
+        });
+        let html = all_files(membro_sem_ambiente(vec![ficheiro])).to_html();
+        assert!(
+            html.contains("data-oc=\"fs-abrir\""),
+            "a ficha não abre o Quick Look"
+        );
+        assert!(
+            html.contains("data-tipo=\"image/png\""),
+            "a ficha não diz o tipo ao Quick Look"
+        );
+        assert!(
+            html.contains("href=\"/me/files/v/raw\""),
+            "o recurso da ficha não é same-origin"
+        );
+        assert!(
+            !html.contains("/me/files/v/download"),
+            "a ficha ainda usa a ligação assinada quebrada"
+        );
+        assert!(
+            html.contains("data-oc=\"fs-quicklook\""),
+            "falta a camada de Quick Look"
         );
     }
 

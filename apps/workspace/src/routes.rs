@@ -146,6 +146,8 @@ pub const ROUTES: &[&str] = &[
     "/file-versions/{version_id}/preview",
     "/file-versions/{version_id}/download",
     "/me/files/{version_id}/download",
+    "/me/files/{version_id}/text",
+    "/me/files/{version_id}/raw",
     "/me/files/rename",
     "/me/files/move",
     "/me/files/delete",
@@ -460,6 +462,8 @@ pub fn router(state: WorkspaceState) -> Router {
             "/me/files/{version_id}/download",
             get(version_download_personal),
         )
+        .route("/me/files/{version_id}/text", get(me_file_text))
+        .route("/me/files/{version_id}/raw", get(me_file_raw))
         .route("/me/files/rename", post(me_file_rename))
         .route("/me/files/move", post(me_file_move))
         .route("/me/files/delete", post(me_file_delete))
@@ -7853,6 +7857,98 @@ async fn preview_personal_note_file(
             )
                 .into_response()
         }
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+/// Descarrega um ficheiro pessoal same-origin, com o nome que o Core devolve.
+///
+/// Substitui a ligação assinada, que apontava para o host interno do
+/// armazenamento e o browser não alcançava. Aqui os bytes vêm pela origem do
+/// Workspace, e o `Content-Disposition` do Core — que traz o nome higienizado —
+/// é retransmitido tal e qual.
+async fn me_file_raw(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(version_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    match api::get_download(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/files/{version_id}/raw"),
+    )
+    .await
+    {
+        Ok((tipo, disposition, bytes)) => {
+            let Ok(tipo) = HeaderValue::from_str(&tipo) else {
+                return StatusCode::BAD_GATEWAY.into_response();
+            };
+            let disposition = disposition
+                .as_deref()
+                .and_then(|d| HeaderValue::from_str(d).ok())
+                .unwrap_or_else(|| HeaderValue::from_static("attachment"));
+            (
+                [
+                    (header::CONTENT_TYPE, tipo),
+                    (header::CONTENT_DISPOSITION, disposition),
+                    (
+                        header::X_CONTENT_TYPE_OPTIONS,
+                        HeaderValue::from_static("nosniff"),
+                    ),
+                    (
+                        header::CACHE_CONTROL,
+                        HeaderValue::from_static("private, max-age=0, must-revalidate"),
+                    ),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+/// Serve o texto de uma versão pessoal, same-origin, para o Quick Look.
+///
+/// O Core reavalia a posse e devolve `text/plain` já validado como UTF-8; aqui
+/// só se retransmite, com `nosniff`, para o visualizador o mostrar escapado num
+/// `<pre>` — nunca interpretado.
+async fn me_file_text(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(version_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    match api::get_inline(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/files/{version_id}/text"),
+    )
+    .await
+    {
+        Ok((_tipo, bytes)) => (
+            [
+                (
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static("text/plain; charset=utf-8"),
+                ),
+                (
+                    header::X_CONTENT_TYPE_OPTIONS,
+                    HeaderValue::from_static("nosniff"),
+                ),
+                (
+                    header::CACHE_CONTROL,
+                    HeaderValue::from_static("private, max-age=0, must-revalidate"),
+                ),
+            ],
+            bytes,
+        )
+            .into_response(),
         Err(failure) => failure_response(&failure),
     }
 }

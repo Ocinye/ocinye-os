@@ -7,6 +7,31 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros — Quick Look, e a descarga que voltou a funcionar (FILES-P2-A) — 2026-09-15
+
+Abrir um ficheiro pessoal deixou de mandar o browser para uma URL assinada que
+apontava para o host interno do armazenamento (`object-store:9000`) — que
+nenhum browser alcança. Passa a **pré-visualizar same-origin**, e a descarga faz-se
+pela origem do Workspace.
+
+- **Quick Look**: clicar num ficheiro abre uma camada de pré-visualização.
+  **Imagens** (PNG/JPEG/WebP) servem-se same-origin (`img-src 'self'`); **texto e
+  código** (`text/*`, JSON, XML, …) lêem-se same-origin e mostram-se escapados
+  num `<pre>` — nunca interpretados; outros tipos trazem uma ficha com o
+  descarregar. Fecha com `Escape`, no fundo ou no ×.
+- **Descarga same-origin**: nova rota `GET /me/files/{version_id}/raw` — o Core
+  reavalia a posse e transporta os bytes com o nome higienizado, porque o
+  armazenamento não tem endpoint público e uma ligação assinada nomearia um host
+  interno. A localização do armazenamento continua a não chegar à página (§26,
+  §40). Nova rota `GET /me/files/{version_id}/text` para o visualizador de texto,
+  com tecto de tamanho e só tipos textuais.
+- **Correcções da casca (FILES-P1)**: cada ficha da grelha ganha o seu
+  rectângulo (o «cartão»), visível sempre e não só ao passar o rato; o menu `⋯`
+  escolhe o lado com espaço e **deixa de sair do ecrã**.
+- Ainda **não** há visualização inline de PDF — exige abrir `object-src` na CSP,
+  uma decisão deliberada que fica para a fatia seguinte; por agora um PDF traz a
+  ficha com o descarregar.
+
 ### Ficheiros — «Meus ficheiros» passa a explorador de conteúdo (FILES-P1) — 2026-09-14
 
 A superfície pessoal deixou de ser uma tabela de administração com formulários
