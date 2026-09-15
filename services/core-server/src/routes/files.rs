@@ -65,6 +65,11 @@ pub fn routes() -> Router<AppState> {
                 .post(upload_version.layer(DefaultBodyLimit::max(super::UPLOAD_BODY_LIMIT_BYTES))),
         )
         .route("/files/{file_id}/download", get(download_file))
+        // A descarga same-origin. Os bytes saem por aqui, na origem do Core, com
+        // `Content-Disposition: attachment` — o armazenamento não tem endpoint
+        // público, e uma ligação assinada apontaria para um host que o browser
+        // não alcança (ADR-0608). É o caminho que a experiência usa.
+        .route("/files/{file_id}/raw", get(raw_file))
         // A representação inline. Não é a descarga, e não emite ligação
         // assinada nenhuma: os bytes saem por aqui, na origem do Core.
         .route("/files/{file_id}/preview", get(preview_file))
@@ -86,6 +91,9 @@ pub fn routes() -> Router<AppState> {
             "/file-versions/{version_id}/download",
             get(download_version),
         )
+        // A descarga same-origin de uma versão exacta. Abrir uma citação abre os
+        // bytes que foram lidos, e não o que o ficheiro diz hoje (ADR-0608).
+        .route("/file-versions/{version_id}/raw", get(raw_version))
         .route("/files/{file_id}/folder", post(move_file))
         // ── Meus ficheiros ──────────────────────────────────────────────
         //
@@ -639,6 +647,57 @@ async fn download_file(
     })))
 }
 
+/// Serve uma descarga same-origin com `Content-Disposition: attachment`.
+///
+/// O nome viaja num cabeçalho: uma aspa, uma barra invertida ou um carácter de
+/// controlo quebra-o. Removem-se à porta, como no caminho assinado. É o corpo
+/// partilhado por [`raw_file`], [`raw_version`] e [`raw_my_file`].
+fn resposta_de_descarga(vista: files::FileDownload) -> axum::response::Response {
+    use axum::http::header;
+    use axum::response::IntoResponse;
+
+    let seguro: String = vista
+        .filename
+        .chars()
+        .filter(|c| *c != '"' && *c != '\\' && !c.is_control())
+        .collect();
+    let disposition = format!("attachment; filename=\"{seguro}\"");
+    let etag = format!("\"{}\"", vista.checksum_sha256);
+
+    (
+        [
+            (header::CONTENT_TYPE, vista.content_type),
+            (header::CONTENT_DISPOSITION, disposition),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned()),
+            (
+                header::CACHE_CONTROL,
+                "private, max-age=0, must-revalidate".to_owned(),
+            ),
+            (header::ETAG, etag),
+        ],
+        vista.bytes,
+    )
+        .into_response()
+}
+
+/// `GET /files/{file_id}/raw` — descarrega a versão corrente, same-origin.
+///
+/// A autoridade é a do ficheiro (`Action::Download` contra a classificação
+/// efectiva, reavaliada no Core). Serve os bytes pela origem do Workspace porque
+/// o armazenamento não tem endpoint público (ADR-0608).
+async fn raw_file(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(file_id): Path<Uuid>,
+) -> Result<axum::response::Response, ApiError> {
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let vista = files::read_download(&mut tx, &principal, &ids, store, file_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(resposta_de_descarga(vista))
+}
+
 // --- Meus ficheiros ---------------------------------------------------------
 //
 // O espaço pessoal, servido a quem pergunta e a mais ninguém. Não há permissão
@@ -891,39 +950,12 @@ async fn raw_my_file(
     Ids(ids): Ids,
     Path(version_id): Path<Uuid>,
 ) -> Result<axum::response::Response, ApiError> {
-    use axum::http::header;
-    use axum::response::IntoResponse;
-
     let store = state.store()?;
     let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
     let vista =
         files::read_version_download_personal(&mut tx, &principal, &ids, store, version_id).await?;
     tx.commit().await.map_err(CoreError::from)?;
-
-    // O nome viaja num cabeçalho: uma aspa ou um carácter de controlo quebra-o.
-    // Removem-se à porta, como no caminho assinado.
-    let seguro: String = vista
-        .filename
-        .chars()
-        .filter(|c| *c != '"' && *c != '\\' && !c.is_control())
-        .collect();
-    let disposition = format!("attachment; filename=\"{seguro}\"");
-    let etag = format!("\"{}\"", vista.checksum_sha256);
-
-    Ok((
-        [
-            (header::CONTENT_TYPE, vista.content_type),
-            (header::CONTENT_DISPOSITION, disposition),
-            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned()),
-            (
-                header::CACHE_CONTROL,
-                "private, max-age=0, must-revalidate".to_owned(),
-            ),
-            (header::ETAG, etag),
-        ],
-        vista.bytes,
-    )
-        .into_response())
+    Ok(resposta_de_descarga(vista))
 }
 
 /// `GET /me/files/{version_id}/inline` — mostra uma versão pessoal inline.
@@ -1170,4 +1202,22 @@ async fn download_version(
         "url": url,
         "expires_in_seconds": ocinye_core::storage::DOWNLOAD_URL_TTL.as_secs(),
     })))
+}
+
+/// `GET /file-versions/{version_id}/raw` — descarrega uma versão exacta,
+/// same-origin.
+///
+/// A autoridade é a do ficheiro que governa a versão. Abrir uma citação abre os
+/// bytes que foram lidos, e não o que o ficheiro diz hoje (ADR-0608).
+async fn raw_version(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(version_id): Path<Uuid>,
+) -> Result<axum::response::Response, ApiError> {
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let vista = files::read_version_download(&mut tx, &principal, &ids, store, version_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(resposta_de_descarga(vista))
 }

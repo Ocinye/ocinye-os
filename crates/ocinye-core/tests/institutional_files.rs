@@ -1091,6 +1091,109 @@ async fn a_descarga_recusa_a_quem_a_leitura_recusa() {
     );
 }
 
+/// A descarga same-origin transporta os bytes exactos, e com a mesma autoridade.
+///
+/// # Porque isto tem teste próprio
+///
+/// Porque a descarga institucional deixou de emitir uma ligação assinada — que
+/// apontava para o host interno do armazenamento, inalcançável pelo browser — e
+/// passou a servir os bytes pela origem do Workspace (ADR-0608). O que **não**
+/// pode mudar com essa troca é a autoridade: quem a leitura recusa continua a
+/// não obter os bytes, pela versão corrente e pela versão exacta. E o que a nova
+/// forma acrescenta, e a assinada não provava aqui, é que os bytes servidos são
+/// os bytes guardados.
+#[tokio::test]
+async fn a_descarga_same_origin_transporta_os_bytes_e_mantem_a_autoridade() {
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else { return };
+    let ctx = contexto(&pool).await;
+    let dono = membro(&pool, &ctx, "lead").await;
+    let forasteiro = estranho(&pool, &ctx).await;
+    let ids = ocinye_observability::CorrelationIds::generate();
+
+    // RESTRITO de propósito: um `estranho` é membro da organização, e um
+    // ficheiro INTERNO é legível por toda a organização — deixá-lo passar seria
+    // a política a funcionar, não uma fuga. A denegação que este teste mede é a
+    // de quem não alcança o ambiente, e essa só se vê acima de INTERNAL.
+    let conteudo = b"\x89PNG same-origin bytes".to_vec();
+    let criado = criar_ficheiro(
+        &pool,
+        &dono,
+        &store,
+        ctx.workspace_id,
+        ocinye_core::modules::files::NewFile {
+            filename: "descarga.png".to_owned(),
+            content_type: "image/png".to_owned(),
+            data: conteudo.clone(),
+            classification: Some(ocinye_contracts::Classification::Restricted),
+        },
+    )
+    .await;
+
+    // A versão corrente: o estranho não obtém os bytes, e a recusa é
+    // indistinguível de o ficheiro não existir.
+    let mut tx = pool.begin().await.expect("tx");
+    let negada = ocinye_core::modules::files::read_download(
+        &mut tx,
+        &forasteiro,
+        &ids,
+        &store,
+        criado.file_id,
+    )
+    .await;
+    tx.rollback().await.expect("desfazer");
+    assert!(
+        negada.is_err(),
+        "um estranho descarregou os bytes same-origin da versão corrente"
+    );
+
+    // O dono obtém exactamente os bytes guardados, com o nome e o tipo certos.
+    let mut tx = pool.begin().await.expect("tx");
+    let vista =
+        ocinye_core::modules::files::read_download(&mut tx, &dono, &ids, &store, criado.file_id)
+            .await
+            .expect("o dono não conseguiu descarregar a versão corrente");
+    tx.commit().await.expect("commit");
+    assert_eq!(
+        vista.bytes, conteudo,
+        "os bytes servidos não são os guardados"
+    );
+    assert_eq!(vista.filename, "descarga.png");
+    assert_eq!(vista.content_type, "image/png");
+
+    // A versão exacta: os mesmos bytes, e a mesma autoridade do ficheiro.
+    let mut tx = pool.begin().await.expect("tx");
+    let por_versao = ocinye_core::modules::files::read_version_download(
+        &mut tx,
+        &dono,
+        &ids,
+        &store,
+        criado.version_id,
+    )
+    .await
+    .expect("a versão exacta não descarregou para o dono");
+    tx.commit().await.expect("commit");
+    assert_eq!(
+        por_versao.bytes, conteudo,
+        "a versão exacta não devolveu os bytes daquela versão"
+    );
+
+    let mut tx = pool.begin().await.expect("tx");
+    let negada_versao = ocinye_core::modules::files::read_version_download(
+        &mut tx,
+        &forasteiro,
+        &ids,
+        &store,
+        criado.version_id,
+    )
+    .await;
+    tx.rollback().await.expect("desfazer");
+    assert!(
+        negada_versao.is_err(),
+        "um estranho descarregou a versão exacta same-origin"
+    );
+}
+
 // ── A matriz de paridade ────────────────────────────────────────────────
 //
 // A autoridade do artefacto mudou de representante: era `Document`, é `File`.

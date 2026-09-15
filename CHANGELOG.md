@@ -7,6 +7,31 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros — a descarga institucional volta a descarregar — 2026-09-15
+
+A descarga de um ficheiro institucional — a versão corrente e uma versão exacta —
+redireccionava o browser para uma **ligação assinada** apontada ao host interno
+do armazenamento (`object-store:9000`), que nenhum browser alcança: o clique
+terminava num «não foi possível encontrar o servidor», e não num ficheiro. Era o
+defeito latente que a [ADR-0607](docs/adrs/0607-files-as-a-content-browser.md)
+tinha registado como trabalho à parte.
+
+Agora os bytes saem **same-origin** pelo Core, como a pré-visualização e a
+descarga pessoal já saíam ([ADR-0608](docs/adrs/0608-same-origin-institutional-downloads.md)).
+
+- **Duas rotas novas no Core**: `GET /files/{id}/raw` (versão corrente) e
+  `GET /file-versions/{vid}/raw` (versão exacta), que reavaliam a autorização —
+  a **mesma** composição de classificação e a **mesma** `Action::Download` da
+  ligação assinada — e servem os bytes com `Content-Disposition: attachment`, o
+  nome higienizado à porta.
+- **O BFF transporta os bytes** em vez de redireccionar; a experiência liga a
+  `/download` como antes. A localização do armazenamento nunca chega à página.
+- As rotas `/download` presigned **mantêm-se** como contrato de API — voltam a
+  ser o caminho certo no dia em que exista um endpoint público de armazenamento —,
+  sem consumidor na experiência.
+- O mesmo caminho fecha o último redireccionamento-armadilha da descarga pessoal
+  legada (`/me/files/{v}/download`), que passa também a servir same-origin.
+
 ### Ficheiros — o explorador de conteúdo está pronto (OCINYE_FILES_READY) — 2026-09-15
 
 O milestone «Files — Premium Virtual Filesystem & Content Browser» está entregue

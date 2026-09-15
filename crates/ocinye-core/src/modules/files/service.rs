@@ -717,6 +717,71 @@ pub async fn download_url(
     Ok(url)
 }
 
+/// Os bytes da versão corrente de um ficheiro, para **descarregar** same-origin.
+///
+/// A autorização é exactamente a da ligação assinada — `get` compõe a
+/// classificação efectiva e `Action::Download` corre contra ela —, mas os bytes
+/// saem pela origem do Workspace em vez de uma URL assinada. O armazenamento não
+/// tem endpoint público, pelo que a URL assinada apontaria para o host interno,
+/// que o browser não alcança; o Core transporta os bytes, e a localização do
+/// armazenamento nunca chega à página (§26, §40, ADR-0608).
+///
+/// # Errors
+///
+/// Devolve erro quando o ficheiro não é alcançável, quando a autorização recusa,
+/// ou quando o objecto não está disponível.
+pub async fn read_download(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    store: &ObjectStore,
+    file_id: Uuid,
+) -> CoreResult<FileDownload> {
+    let (ficheiro, workspace) = get(tx, principal, file_id).await?;
+
+    authorize(
+        principal,
+        Action::Download,
+        &file_context(&workspace, ficheiro.classification()),
+    )
+    .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+
+    let linha: Option<(String, String, String, String)> = sqlx::query_as(
+        "SELECT o.object_key, o.content_type, o.original_filename, o.checksum_sha256
+           FROM file_versions v
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE v.file_id = $1
+          ORDER BY v.sequence DESC
+          LIMIT 1",
+    )
+    .bind(file_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    let (chave, tipo, nome, soma) = linha
+        .ok_or_else(|| CoreError::StorageUnavailable("O ficheiro não tem versões.".to_owned()))?;
+
+    let bytes = store.get(&chave).await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::DOWNLOAD, "file")
+            .resource(file_id)
+            .context(&file_context(&workspace, ficheiro.classification()))
+            .classified(ficheiro.classification()),
+    )
+    .await?;
+
+    Ok(FileDownload {
+        content_type: tipo,
+        filename: nome,
+        bytes,
+        checksum_sha256: soma,
+    })
+}
+
 // ── Pastas ──────────────────────────────────────────────────────────────
 //
 // > **Uma pasta é uma estrutura de navegação dentro de um contentor de
@@ -1009,6 +1074,71 @@ pub async fn version_download_url(
     .await?;
 
     Ok(url)
+}
+
+/// Os bytes de uma **versão exacta** de um ficheiro, para descarregar
+/// same-origin.
+///
+/// A autoridade é a do ficheiro que governa a versão (via `get_version`), com a
+/// mesma composição de classificação de [`version_download_url`]; os bytes saem
+/// pela origem do Workspace pela razão de sempre — o armazenamento não tem
+/// endpoint público (§26, §40, ADR-0608). Abrir uma citação abre os bytes que
+/// foram lidos, e não o que o ficheiro diz hoje.
+///
+/// # Errors
+///
+/// Devolve erro quando a versão não é alcançável, quando a autorização recusa,
+/// ou quando o objecto não está disponível.
+pub async fn read_version_download(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    store: &ObjectStore,
+    version_id: Uuid,
+) -> CoreResult<FileDownload> {
+    let (versao, ficheiro) = get_version(tx, principal, version_id).await?;
+    let (_, workspace) = get(tx, principal, versao.file_id).await?;
+
+    authorize(
+        principal,
+        Action::Download,
+        &file_context(&workspace, ficheiro.classification()),
+    )
+    .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+
+    let linha: Option<(String, String, String, String)> = sqlx::query_as(
+        "SELECT o.object_key, o.content_type, o.original_filename, o.checksum_sha256
+           FROM file_versions v
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE v.id = $1",
+    )
+    .bind(version_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    let (chave, tipo, nome, soma) = linha.ok_or_else(|| {
+        CoreError::StorageUnavailable("Este objecto não está disponível.".to_owned())
+    })?;
+
+    let bytes = store.get(&chave).await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::DOWNLOAD, "file_version")
+            .resource(version_id)
+            .context(&file_context(&workspace, ficheiro.classification()))
+            .classified(ficheiro.classification()),
+    )
+    .await?;
+
+    Ok(FileDownload {
+        content_type: tipo,
+        filename: nome,
+        bytes,
+        checksum_sha256: soma,
+    })
 }
 
 // ── Pré-visualização ────────────────────────────────────────────────────
@@ -1710,7 +1840,7 @@ pub async fn read_version_text_personal(
 }
 
 /// Uma descarga autorizada de um ficheiro pessoal, servida same-origin.
-pub struct PersonalDownload {
+pub struct FileDownload {
     /// O tipo guardado.
     pub content_type: String,
     /// O nome com que o ficheiro foi carregado.
@@ -1740,7 +1870,7 @@ pub async fn read_version_download_personal(
     ids: &CorrelationIds,
     store: &ObjectStore,
     version_id: Uuid,
-) -> CoreResult<PersonalDownload> {
+) -> CoreResult<FileDownload> {
     if !owns_personal_file_version(&mut *tx, principal, version_id).await? {
         return Err(CoreError::NotFound("Ficheiro não encontrado.".to_owned()));
     }
@@ -1770,7 +1900,7 @@ pub async fn read_version_download_personal(
     )
     .await?;
 
-    Ok(PersonalDownload {
+    Ok(FileDownload {
         content_type: tipo,
         filename: nome,
         bytes,

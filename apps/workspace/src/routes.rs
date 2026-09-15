@@ -11269,62 +11269,67 @@ async fn file_version_preview(
     }
 }
 
-/// Descarrega a versão corrente.
+/// Descarrega a versão corrente, same-origin.
+///
+/// Antes redireccionava para uma ligação assinada; essa ligação aponta para o
+/// host interno do armazenamento (`object-store:9000`), que o browser não
+/// alcança, e por isso a descarga institucional estava partida. Agora os bytes
+/// saem pela origem do Workspace, como a pré-visualização e a descarga pessoal
+/// já saíam (ADR-0608).
 async fn file_download(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
     Path(file_id): Path<Uuid>,
 ) -> Response {
     let member = member_or_login!(state, headers);
-    ligacao_assinada(
-        &state,
-        &member,
-        &format!("/api/v1/files/{file_id}/download"),
-    )
-    .await
+    descarga_same_origin(&state, &member, &format!("/api/v1/files/{file_id}/raw")).await
 }
 
-/// Descarrega uma versão exacta.
+/// Descarrega uma versão exacta, same-origin (ADR-0608).
 async fn version_download(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
     Path(version_id): Path<Uuid>,
 ) -> Response {
     let member = member_or_login!(state, headers);
-    ligacao_assinada(
+    descarga_same_origin(
         &state,
         &member,
-        &format!("/api/v1/file-versions/{version_id}/download"),
+        &format!("/api/v1/file-versions/{version_id}/raw"),
     )
     .await
 }
 
-/// Descarrega um ficheiro pessoal pela sua versão corrente.
+/// Descarrega um ficheiro pessoal pela sua versão corrente, same-origin.
 ///
 /// A autoridade é a posse, reavaliada no Core: uma versão que não seja do dono
-/// responde «não encontrado».
+/// responde «não encontrado». Serve os bytes pela origem do Workspace (ADR-0608),
+/// como [`me_file_raw`] — a experiência liga ao `/raw`; esta rota é o caminho
+/// equivalente para a versão corrente.
 async fn version_download_personal(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
     Path(version_id): Path<Uuid>,
 ) -> Response {
     let member = member_or_login!(state, headers);
-    ligacao_assinada(
+    descarga_same_origin(
         &state,
         &member,
-        &format!("/api/v1/me/files/{version_id}/download"),
+        &format!("/api/v1/me/files/{version_id}/raw"),
     )
     .await
 }
 
-/// Pede a ligação ao Core e encaminha para lá.
+/// Pede os bytes ao Core e serve-os same-origin, com o `attachment` que o Core
+/// já compôs.
 ///
-/// A ligação não é escrita na página: é pedida no momento do clique e usada uma
-/// vez. Uma URL assinada colada num `href` ficaria no histórico do browser e em
-/// qualquer registo pelo caminho, e continuaria a valer depois de a pessoa
-/// deixar de ter acesso.
-async fn ligacao_assinada(state: &WorkspaceState, member: &Member, caminho: &str) -> Response {
-    match api::get::<Value>(
+/// Substitui o redireccionamento para uma ligação assinada: o armazenamento não
+/// tem endpoint público, pelo que essa ligação apontava para um host que o
+/// browser não alcança (ADR-0608). Os bytes saem pela origem do Workspace, e a
+/// localização do armazenamento nunca chega à página — como uma URL assinada num
+/// `href` também nunca chegava, e pela mesma razão de privacidade.
+async fn descarga_same_origin(state: &WorkspaceState, member: &Member, caminho: &str) -> Response {
+    match api::get_download(
         state,
         &member.session.access_token,
         &member.correlation_id,
@@ -11332,10 +11337,31 @@ async fn ligacao_assinada(state: &WorkspaceState, member: &Member, caminho: &str
     )
     .await
     {
-        Ok(resposta) => resposta.get("url").and_then(Value::as_str).map_or_else(
-            || failure_response(&ApiFailure::Unavailable(None)),
-            |url| Redirect::to(url).into_response(),
-        ),
+        Ok((tipo, disposition, bytes)) => {
+            let Ok(tipo) = HeaderValue::from_str(&tipo) else {
+                return StatusCode::BAD_GATEWAY.into_response();
+            };
+            let disposition = disposition
+                .as_deref()
+                .and_then(|d| HeaderValue::from_str(d).ok())
+                .unwrap_or_else(|| HeaderValue::from_static("attachment"));
+            (
+                [
+                    (header::CONTENT_TYPE, tipo),
+                    (header::CONTENT_DISPOSITION, disposition),
+                    (
+                        header::X_CONTENT_TYPE_OPTIONS,
+                        HeaderValue::from_static("nosniff"),
+                    ),
+                    (
+                        header::CACHE_CONTROL,
+                        HeaderValue::from_static("private, max-age=0, must-revalidate"),
+                    ),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
         Err(failure) => failure_response(&failure),
     }
 }
