@@ -90,7 +90,7 @@ sem que nada falhe.
   3 serviços (`core-server`, `worker`, `node-agent`) e 1 aplicação
   (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 198 caminhos e 235 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 200 caminhos e 237 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -261,13 +261,15 @@ sem que nada falhe.
   documento**. Há **selecção múltipla** com mover/eliminar em lote, **arrastar
   para mover**, e **Favoritos** e **Recentes** como vistas que atravessam pastas.
   Tudo reautoriza pela posse no Core, ficheiro a ficheiro. Como o armazenamento
-  **não tem endpoint público**, o Core serve os bytes pessoais same-origin
-  (pré-visualização, miniatura, texto, descarga) — uma excepção deliberada e
-  contida ao caminho pessoal; a descarga **institucional** tem o mesmo defeito
-  latente por resolver. Ficam **explicitamente adiadas**, como trabalho futuro e
-  não como lacuna: miniaturas de **Office e vídeo** (exigem um conversor pesado —
-  LibreOffice, ffmpeg) e um **isolamento mais forte** da rasterização (seccomp ou
-  contentor à parte) acima do subprocesso com prazo de hoje.
+  **não tem endpoint público**, o Core serve os bytes **same-origin**
+  (pré-visualização, miniatura, texto, descarga) — para os ficheiros pessoais e,
+  agora, também para a **descarga institucional**, que redireccionava para uma
+  ligação assinada apontada ao host interno e por isso estava partida
+  ([ADR-0608](docs/adrs/0608-same-origin-institutional-downloads.md)). Ficam
+  **explicitamente adiadas**, como trabalho futuro e não como lacuna: miniaturas
+  de **Office e vídeo** (exigem um conversor pesado — LibreOffice, ffmpeg) e um
+  **isolamento mais forte** da rasterização (seccomp ou contentor à parte) acima
+  do subprocesso com prazo de hoje.
 - **Notas: `IMPLEMENTED`, o módulo completo** ([ADR-0413](docs/adrs/0413-notes-as-institutional-knowledge.md)).
   Uma nota é conhecimento **pessoal** do membro — a `notes` serve dono e ambiente
   sem os confundir. O corpo canónico é um **documento estruturado versionado**
@@ -377,7 +379,7 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **69 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
+- **70 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
   **66 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -397,14 +399,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1619 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1620 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **597 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **598 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

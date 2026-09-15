@@ -206,6 +206,7 @@ A interface humana.
 - [ADR-0605](0605-first-production-deployment.md) — Primeira instalação de produção e fronteiras públicas de serviço
 - [ADR-0606](0606-linked-privileged-identity.md) — Identidade privilegiada ligada
 - [ADR-0607](0607-files-as-a-content-browser.md) — Ficheiros como um explorador de conteúdo
+- [ADR-0608](0608-same-origin-institutional-downloads.md) — Descarga institucional servida same-origin
 
 ### 0700–0799 · Deployment, rede, operação e resiliência
 
@@ -285,6 +286,8 @@ preencher.
 | [0604](0604-workspace-access-presentation.md) | Apresentação de acesso e autorização contextual no Workspace | Workspace | `FOUNDATIONAL` | Accepted |
 | [0605](0605-first-production-deployment.md) | Primeira instalação de produção e fronteiras públicas de serviço | Workspace | `FOUNDATIONAL` | Accepted |
 | [0606](0606-linked-privileged-identity.md) | Identidade privilegiada ligada | Identity | `FOUNDATIONAL` | Accepted |
+| [0607](0607-files-as-a-content-browser.md) | Ficheiros como um explorador de conteúdo | Workspace | `HIGH` | Accepted |
+| [0608](0608-same-origin-institutional-downloads.md) | Descarga institucional servida same-origin | Workspace | `MEDIUM` | Accepted |
 | [0700](0700-institutional-continuity-and-portability.md) | Continuidade institucional e portabilidade entre servidores | Operations | `FOUNDATIONAL` | Accepted |
 
 ---
