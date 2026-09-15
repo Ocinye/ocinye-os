@@ -7,6 +7,34 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros — miniaturas de imagens na grelha (FILES-P3-A) — 2026-09-15
+
+A grelha deixa de mostrar um ícone genérico para cada imagem: mostra a imagem.
+
+- **Migração 0046** — `file_thumbnails`: liga uma versão à sua miniatura (um
+  objecto derivado em `storage_objects`), com estado
+  (`QUEUED`/`READY`/`UNSUPPORTED`/`FAILED`), o gerador e a soma da origem. Não é
+  uma versão — não é citável nem entra no histórico —, e é reconstruível, pelo
+  que a continuidade a deixa de fora do que viaja.
+- **Geração no worker**, pelo mesmo outbox da extracção de conteúdo: ao carregar
+  uma imagem pessoal (`image/png|jpeg|webp`) enfileira-se a miniatura; o worker
+  descodifica com limites, aplica a orientação EXIF, redimensiona preservando a
+  proporção (cabe em 480 px) e **re-codifica de raiz para WebP** — os pixels
+  entram, a metadata da origem não passa. Reutiliza o crate `image` (já usado nos
+  avatares) e o caminho de armazenamento; não é um pipeline novo.
+- **Serviço same-origin** `GET /me/files/{version_id}/thumbnail`, posse
+  reavaliada no Core. Quando ainda não há miniatura, responde `404` **e põe a
+  versão na fila** — os ficheiros anteriores à funcionalidade ganham-na na
+  próxima visita, sem preenchimento em massa. A grelha mostra a miniatura por
+  cima do ícone; se falhar (ainda a gerar), o `app.js` remove-a e o ícone
+  reaparece.
+- **Apagar definitivamente** leva também os derivados: os objectos de miniatura
+  saem com a origem, sem deixar bytes órfãos.
+- A miniatura **não passa pela admissão de quota** — é um derivado do sistema, e
+  recusá-la a quem está no limite deixaria sem miniaturas exactamente quem mais
+  ficheiros tem. PDF, Office e vídeo ficam para o trabalhador de conversão
+  isolado (P3, spec §76).
+
 ### Ficheiros — pré-visualização de PDF no Quick Look (FILES-P2-B) — 2026-09-15
 
 Um PDF deixou de mostrar «Sem pré-visualização» — abre inline no Quick Look.

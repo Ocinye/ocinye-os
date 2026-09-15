@@ -148,6 +148,7 @@ pub const ROUTES: &[&str] = &[
     "/me/files/{version_id}/download",
     "/me/files/{version_id}/text",
     "/me/files/{version_id}/inline",
+    "/me/files/{version_id}/thumbnail",
     "/me/files/{version_id}/raw",
     "/me/files/rename",
     "/me/files/move",
@@ -465,6 +466,7 @@ pub fn router(state: WorkspaceState) -> Router {
         )
         .route("/me/files/{version_id}/text", get(me_file_text))
         .route("/me/files/{version_id}/inline", get(me_file_inline))
+        .route("/me/files/{version_id}/thumbnail", get(me_file_thumbnail))
         .route("/me/files/{version_id}/raw", get(me_file_raw))
         .route("/me/files/rename", post(me_file_rename))
         .route("/me/files/move", post(me_file_move))
@@ -7927,6 +7929,55 @@ async fn me_file_inline(
                 .into_response()
         }
         Err(failure) => failure_response(&failure),
+    }
+}
+
+/// Serve a miniatura de um ficheiro pessoal, same-origin, para a grelha.
+///
+/// Quando ainda não há miniatura pronta, o Core responde `404` (e põe a versão
+/// na fila); aqui retransmite-se esse `404` para a `<img>` da ficha cair no
+/// ícone do tipo, sem quebrar nada. Qualquer outra falha também vira `404`: uma
+/// miniatura em falta nunca é motivo para uma página de erro.
+async fn me_file_thumbnail(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(version_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    match api::get_inline(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/files/{version_id}/thumbnail"),
+    )
+    .await
+    {
+        Ok((tipo, bytes)) => {
+            let Ok(tipo) = HeaderValue::from_str(&tipo) else {
+                return StatusCode::BAD_GATEWAY.into_response();
+            };
+            (
+                [
+                    (header::CONTENT_TYPE, tipo),
+                    (
+                        header::CONTENT_DISPOSITION,
+                        HeaderValue::from_static("inline"),
+                    ),
+                    (
+                        header::X_CONTENT_TYPE_OPTIONS,
+                        HeaderValue::from_static("nosniff"),
+                    ),
+                    (
+                        header::CACHE_CONTROL,
+                        HeaderValue::from_static("private, max-age=0, must-revalidate"),
+                    ),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
 }
 

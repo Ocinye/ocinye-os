@@ -317,6 +317,15 @@ pub async fn create_personal(
     )
     .await?;
 
+    // Uma imagem pessoal pede a sua miniatura, na mesma transacção que a cria: a
+    // grelha de Ficheiros mostra o conteúdo em vez de um ícone. O worker gera-a
+    // depois; até lá, a grelha cai no ícone. A extracção de corpo continua a
+    // **não** ser enfileirada aqui (ver acima) — a miniatura é visual, não texto
+    // pesquisável, e não tem a mesma questão de visibilidade.
+    if super::thumbnail::THUMBNAILABLE_TYPES.contains(&objecto.content_type.as_str()) {
+        super::thumbnail::queue(tx, version_id, ids).await?;
+    }
+
     audit::record(
         tx,
         Some(principal),
@@ -1482,7 +1491,12 @@ pub async fn purge_personal_file(
         ));
     }
 
-    let chaves = repo::personal_file_object_keys(&mut *tx, principal.person_id, file_id).await?;
+    let mut chaves =
+        repo::personal_file_object_keys(&mut *tx, principal.person_id, file_id).await?;
+    // Os derivados (miniaturas) não saem com o objecto de origem — apagam-se
+    // aqui, e as suas chaves juntam-se às que os bytes vão seguir.
+    let miniaturas = super::thumbnail::purge_personal_thumbnail_objects(&mut tx, file_id).await?;
+    chaves.extend(miniaturas);
     let apagou = repo::purge_personal_file(&mut tx, principal.person_id, file_id).await?;
     if !apagou {
         return Err(CoreError::NotFound("Ficheiro não encontrado.".to_owned()));

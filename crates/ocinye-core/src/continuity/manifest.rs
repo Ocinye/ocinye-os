@@ -309,6 +309,14 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
              autoridade de coisa nenhuma e não guarda classificação",
         ),
     ),
+    (
+        "file_thumbnails",
+        Comparacao::Fora(
+            "miniatura derivada de uma versão de imagem, reconstruível a partir \
+             dos bytes de origem e do gerador. Um objecto que se regenera não é \
+             perda, e a ligação renasce com ele",
+        ),
+    ),
     // Os conjuntos de embeddings são derivados reconstruíveis, e a resposta
     // não foi escrita por conveniência: reconstroem-se a partir de
     // `FileVersion` + a extracção + a identidade do modelo, e as três estão
