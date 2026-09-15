@@ -20,6 +20,11 @@ Um PDF deixou de mostrar «Sem pré-visualização» — abre inline no Quick Lo
   pelo que o JavaScript embutido no PDF não alcança a origem do Workspace. A CSP
   ganha `frame-src 'self'` (só a própria origem, nunca `*`), agora parte do
   contrato de cabeçalhos de segurança.
+- A resposta de `/inline` **abre o enquadramento só para a própria origem**
+  (`X-Frame-Options: SAMEORIGIN`, `frame-ancestors 'self'`): sem isto, o
+  `X-Frame-Options: DENY` que o middleware carimba em tudo deixava o PDF em
+  branco. O resto da resposta continua fechado (`default-src 'none'`), com
+  `object-src 'self'` só para o visualizador se instanciar.
 - A rasterização por trabalhador isolado, mais estrita (spec §76), fica para o
   endurecimento do P3.
 

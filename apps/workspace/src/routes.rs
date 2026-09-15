@@ -7888,6 +7888,14 @@ async fn me_file_inline(
             let Ok(tipo) = HeaderValue::from_str(&tipo) else {
                 return StatusCode::BAD_GATEWAY.into_response();
             };
+            // Esta resposta é enquadrada pela própria página (a `iframe` do Quick
+            // Look). Os cabeçalhos anti-enquadramento que o middleware carimba em
+            // tudo — `X-Frame-Options: DENY` e `frame-ancestors 'none'` — recusam
+            // esse enquadramento, e deixariam o PDF em branco. Aqui abrem-se para
+            // **a própria origem, e só ela**: pré-definidos no handler, o
+            // `or_insert` do middleware mantém-nos. O resto continua fechado
+            // (`default-src 'none'`); `object-src 'self'` deixa o visualizador de
+            // PDF do browser instanciar-se same-origin.
             (
                 [
                     (header::CONTENT_TYPE, tipo),
@@ -7898,6 +7906,16 @@ async fn me_file_inline(
                     (
                         header::X_CONTENT_TYPE_OPTIONS,
                         HeaderValue::from_static("nosniff"),
+                    ),
+                    (
+                        header::X_FRAME_OPTIONS,
+                        HeaderValue::from_static("SAMEORIGIN"),
+                    ),
+                    (
+                        header::CONTENT_SECURITY_POLICY,
+                        HeaderValue::from_static(
+                            "default-src 'none'; object-src 'self'; frame-ancestors 'self'",
+                        ),
                     ),
                     (
                         header::CACHE_CONTROL,
