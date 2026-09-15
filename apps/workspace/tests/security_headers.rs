@@ -112,6 +112,11 @@ async fn a_politica_de_conteudo_continua_fechada() {
         "form-action 'self'",
         "base-uri 'none'",
         "frame-ancestors 'none'",
+        // Aberto de propósito para o Quick Look mostrar um PDF pessoal numa
+        // `iframe` da própria origem — só `'self'`, nunca de outra origem nem
+        // `*`. O PDF é desenhado pelo visualizador do browser, fora do processo
+        // da página.
+        "frame-src 'self'",
     ] {
         assert!(
             politica.contains(exigido),

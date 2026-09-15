@@ -6323,6 +6323,11 @@ select.oc-entrada {
   font: 400 12.5px/1.6 var(--oc-font-mono); color: var(--oc-text);
   white-space: pre; tab-size: 2; text-align: left; align-self: stretch;
 }
+.oc-fs__ql-quadro {
+  width: 100%; height: 76vh; border: 0;
+  border-radius: var(--oc-r-md); background: var(--oc-surface);
+  align-self: stretch;
+}
 .oc-fs__ql-ficha {
   display: flex; flex-direction: column; align-items: center; gap: var(--oc-space-3);
   padding: 48px 24px; text-align: center; color: var(--oc-text-meta);

@@ -7,6 +7,22 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros — pré-visualização de PDF no Quick Look (FILES-P2-B) — 2026-09-15
+
+Um PDF deixou de mostrar «Sem pré-visualização» — abre inline no Quick Look.
+
+- **Rota same-origin** `GET /me/files/{version_id}/inline` — serve imagens e PDF
+  com `Content-Disposition: inline`, posse reavaliada no Core, lista fechada de
+  tipos (`INLINE_VIEWER_TYPES`) e tecto de 16 MiB. A localização do armazenamento
+  continua a não chegar à página.
+- **Visualizador de PDF**: o Quick Look mostra o PDF numa `iframe` da própria
+  origem, desenhada pelo visualizador do browser **fora do processo da página** —
+  pelo que o JavaScript embutido no PDF não alcança a origem do Workspace. A CSP
+  ganha `frame-src 'self'` (só a própria origem, nunca `*`), agora parte do
+  contrato de cabeçalhos de segurança.
+- A rasterização por trabalhador isolado, mais estrita (spec §76), fica para o
+  endurecimento do P3.
+
 ### Ficheiros — Quick Look, e a descarga que voltou a funcionar (FILES-P2-A) — 2026-09-15
 
 Abrir um ficheiro pessoal deixou de mandar o browser para uma URL assinada que

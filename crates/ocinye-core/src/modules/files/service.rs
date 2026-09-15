@@ -1692,6 +1692,83 @@ pub async fn read_version_download_personal(
     })
 }
 
+/// Os tipos que o Quick Look mostra **inline** na origem do Workspace.
+///
+/// Os rasters já se serviam ([`PREVIEWABLE_TYPES`]); junta-se-lhes o PDF, que o
+/// browser desenha no seu visualizador próprio, **fora do processo da página** —
+/// pelo que o JavaScript embutido no documento não alcança a origem do
+/// Workspace (o DOM, os cookies, os pedidos same-origin). O SVG continua de
+/// fora — é um documento com script, e servi-lo inline seria executá-lo na
+/// nossa origem. A rasterização por trabalhador isolado, mais estrita, fica
+/// para o endurecimento do P3 (spec §76).
+pub const INLINE_VIEWER_TYPES: [&str; 4] =
+    ["image/png", "image/jpeg", "image/webp", "application/pdf"];
+
+/// Os bytes de uma versão pessoal, para **ver inline** no Quick Look.
+///
+/// A posse é a autoridade, reavaliada aqui: uma versão que não seja do dono
+/// responde «não encontrado». Serve same-origin, só a lista fechada
+/// [`INLINE_VIEWER_TYPES`], até ao tecto de [`PREVIEW_MAX_BYTES`].
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] quando a versão não é do dono; [`CoreError::Validation`]
+/// quando o tipo não se vê inline ou é grande de mais; erro de armazenamento
+/// quando o objecto não está disponível.
+pub async fn read_version_inline_personal(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    store: &ObjectStore,
+    version_id: Uuid,
+) -> CoreResult<InlinePreview> {
+    if !owns_personal_file_version(&mut *tx, principal, version_id).await? {
+        return Err(CoreError::NotFound("Ficheiro não encontrado.".to_owned()));
+    }
+
+    let linha: Option<(String, String, i64, String)> = sqlx::query_as(
+        "SELECT o.object_key, o.content_type, o.size_bytes, o.checksum_sha256
+           FROM file_versions v
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE v.id = $1",
+    )
+    .bind(version_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    let (chave, tipo, tamanho, soma) = linha
+        .ok_or_else(|| CoreError::StorageUnavailable("Esta versão não tem objecto.".to_owned()))?;
+
+    if !INLINE_VIEWER_TYPES.contains(&tipo.as_str()) {
+        return Err(CoreError::Validation(
+            "Este tipo não se mostra inline.".to_owned(),
+        ));
+    }
+    if tamanho > PREVIEW_MAX_BYTES {
+        return Err(CoreError::Validation(
+            "Este ficheiro é grande de mais para mostrar inline.".to_owned(),
+        ));
+    }
+
+    let bytes = store.get(&chave).await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::PREVIEW, "file_version")
+            .resource(version_id)
+            .detail("owner_id", principal.person_id.to_string()),
+    )
+    .await?;
+
+    Ok(InlinePreview {
+        content_type: tipo,
+        bytes,
+        checksum_sha256: soma,
+    })
+}
+
 // ── Pastas pessoais ─────────────────────────────────────────────────────
 
 pub use repo::PersonalFolder;

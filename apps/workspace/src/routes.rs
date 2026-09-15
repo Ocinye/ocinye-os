@@ -147,6 +147,7 @@ pub const ROUTES: &[&str] = &[
     "/file-versions/{version_id}/download",
     "/me/files/{version_id}/download",
     "/me/files/{version_id}/text",
+    "/me/files/{version_id}/inline",
     "/me/files/{version_id}/raw",
     "/me/files/rename",
     "/me/files/move",
@@ -463,6 +464,7 @@ pub fn router(state: WorkspaceState) -> Router {
             get(version_download_personal),
         )
         .route("/me/files/{version_id}/text", get(me_file_text))
+        .route("/me/files/{version_id}/inline", get(me_file_inline))
         .route("/me/files/{version_id}/raw", get(me_file_raw))
         .route("/me/files/rename", post(me_file_rename))
         .route("/me/files/move", post(me_file_move))
@@ -696,6 +698,7 @@ async fn security_headers(
              font-src https://fonts.gstatic.com; \
              img-src 'self' data:; \
              connect-src 'self'; \
+             frame-src 'self'; \
              form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
         ),
         (
@@ -7830,6 +7833,54 @@ async fn preview_personal_note_file(
         &member.session.access_token,
         &member.correlation_id,
         &format!("/api/v1/me/files/{version_id}/preview"),
+    )
+    .await
+    {
+        Ok((tipo, bytes)) => {
+            let Ok(tipo) = HeaderValue::from_str(&tipo) else {
+                return StatusCode::BAD_GATEWAY.into_response();
+            };
+            (
+                [
+                    (header::CONTENT_TYPE, tipo),
+                    (
+                        header::CONTENT_DISPOSITION,
+                        HeaderValue::from_static("inline"),
+                    ),
+                    (
+                        header::X_CONTENT_TYPE_OPTIONS,
+                        HeaderValue::from_static("nosniff"),
+                    ),
+                    (
+                        header::CACHE_CONTROL,
+                        HeaderValue::from_static("private, max-age=0, must-revalidate"),
+                    ),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
+        Err(failure) => failure_response(&failure),
+    }
+}
+
+/// Mostra um ficheiro pessoal inline (Quick Look), same-origin.
+///
+/// Retransmite os bytes que o Core serve — imagem ou PDF — com
+/// `Content-Disposition: inline`. O PDF é desenhado dentro de uma `iframe`
+/// isolada na página; aqui só se garante que os bytes chegam à origem própria.
+async fn me_file_inline(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(version_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    match api::get_inline(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/me/files/{version_id}/inline"),
     )
     .await
     {
