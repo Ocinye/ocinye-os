@@ -7,6 +7,20 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros — Favoritos e Recentes (FILES-P3-C) — 2026-09-15
+
+Duas vistas que atravessam pastas, para encontrar o que interessa sem navegar.
+
+- **Favoritos**: marcar um ficheiro seu (no menu `⋯`) junta-o à vista
+  «Favoritos»; uma estrela na ficha diz quais são. A marca é do membro, não do
+  ficheiro — não muda quem o vê nem onde vive —, e viaja na continuidade como
+  preferência que é (migração 0047 `file_favourites`, chave `(pessoa, ficheiro)`).
+- **Recentes**: a vista «Recentes» lista os ficheiros do membro, o mais mexido
+  primeiro, atravessando pastas. Sem novo registo — usa os tempos que já existem.
+- Ambas se abrem por `/files?view=favourites|recents`; a barra ganha os dois
+  atalhos. A posse é a autoridade: `POST /me/files/favourite` alterna a marca de
+  um ficheiro do próprio, e um identificador de outra pessoa não faz nada.
+
 ### Ficheiros — selecção em lote, arrastar para mover, e miniaturas de PDF (FILES-P3-B) — 2026-09-15
 
 Três peças que dão à grelha o poder de gestão de um explorador nativo.

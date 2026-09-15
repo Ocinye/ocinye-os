@@ -154,6 +154,7 @@ pub const ROUTES: &[&str] = &[
     "/me/files/move",
     "/me/files/batch/move",
     "/me/files/batch/delete",
+    "/me/files/favourite",
     "/me/files/delete",
     "/me/files/restore",
     "/me/files/purge",
@@ -474,6 +475,7 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/me/files/move", post(me_file_move))
         .route("/me/files/batch/move", post(me_files_batch_move))
         .route("/me/files/batch/delete", post(me_files_batch_delete))
+        .route("/me/files/favourite", post(me_file_favourite))
         .route("/me/files/delete", post(me_file_delete))
         .route("/me/files/restore", post(me_file_restore))
         .route("/me/files/purge", post(me_file_purge))
@@ -9886,6 +9888,9 @@ struct FilesQuery {
     /// «1» abre o Lixo dos ficheiros pessoais.
     #[serde(default)]
     trash: Option<String>,
+    /// A vista pessoal: `favourites` ou `recents`. Ausente é a navegação normal.
+    #[serde(default)]
+    view: Option<String>,
     #[serde(default)]
     ok: Option<String>,
     #[serde(default)]
@@ -9931,11 +9936,20 @@ async fn files_browse(
     // institucionais juntam-se-lhe quando existem.
     let Some(workspace_id) = query.workspace else {
         let tudo = optional(&state, &member, "/api/v1/files").await;
-        // O espaço pessoal, dentro da pasta pedida quando alguma.
-        let caminho_meu = query.folder.map_or_else(
-            || "/api/v1/me/files".to_owned(),
-            |f| format!("/api/v1/me/files?folder={f}"),
-        );
+        // A vista pessoal: favoritos ou recentes atravessam pastas; fora disso,
+        // é a navegação por pasta. Só uma destas alimenta o pedido.
+        let vista = match query.view.as_deref() {
+            Some("favourites") => Some("favourites"),
+            Some("recents") => Some("recents"),
+            _ => None,
+        };
+        let caminho_meu = match vista {
+            Some(v) => format!("/api/v1/me/files?view={v}"),
+            None => query.folder.map_or_else(
+                || "/api/v1/me/files".to_owned(),
+                |f| format!("/api/v1/me/files?folder={f}"),
+            ),
+        };
         let meu = optional(&state, &member, &caminho_meu).await;
         let armazenamento = meu.get("storage");
         let ficheiros_pessoais = meu
@@ -9986,7 +10000,10 @@ async fn files_browse(
         let content = ui::screens::files::all_files(ui::screens::files::AllFilesView {
             personal_files: ficheiros_pessoais.clone(),
             personal_folders: pastas_pessoais,
-            open_folder,
+            // Numa vista de favoritos ou recentes não se está «dentro» de uma
+            // pasta — a lista atravessa-as.
+            open_folder: if vista.is_some() { None } else { open_folder },
+            view_mode: vista.unwrap_or_default().to_owned(),
             managed_file,
             viewing_trash,
             trash_files,
@@ -10778,6 +10795,41 @@ async fn me_files_batch_delete(
         }
     }
     regresso_ficheiros(&destino, &format!("ok=lixo&n={apagados}"))
+}
+
+#[derive(Deserialize)]
+struct MeFileFavouriteForm {
+    file_id: Uuid,
+    #[serde(default)]
+    return_to: String,
+}
+
+/// Alterna a marca de favorito de um ficheiro pessoal e volta à lista.
+async fn me_file_favourite(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MeFileFavouriteForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = if form.return_to.is_empty() {
+        "/files".to_owned()
+    } else {
+        form.return_to.clone()
+    };
+    let corpo = serde_json::json!({ "file_id": form.file_id });
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/me/files/favourite",
+        &corpo,
+    )
+    .await
+    {
+        Ok(_) => regresso_ficheiros(&destino, "ok=favorito"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(_) => regresso_ficheiros(&destino, "erro=recusado"),
+    }
 }
 
 #[derive(Deserialize)]

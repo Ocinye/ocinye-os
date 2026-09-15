@@ -1307,6 +1307,78 @@ pub async fn list_personal(
     })
 }
 
+/// Os ficheiros favoritos do membro, atravessando pastas — a vista «Favoritos».
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_personal_favourites(
+    pool: &sqlx::PgPool,
+    principal: &Principal,
+    limit: i64,
+) -> CoreResult<PersonalFiles> {
+    let files = repo::list_personal_favourites(pool, principal.person_id, limit).await?;
+    let folders = repo::list_personal_folders(pool, principal.person_id).await?;
+    let storage =
+        crate::modules::resource::personal_storage_status(pool, principal, principal.person_id)
+            .await?;
+    Ok(PersonalFiles {
+        files,
+        folders,
+        storage,
+    })
+}
+
+/// Os ficheiros recentes do membro, atravessando pastas — a vista «Recentes».
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_personal_recent(
+    pool: &sqlx::PgPool,
+    principal: &Principal,
+    limit: i64,
+) -> CoreResult<PersonalFiles> {
+    let files = repo::list_personal_recent(pool, principal.person_id, limit).await?;
+    let folders = repo::list_personal_folders(pool, principal.person_id).await?;
+    let storage =
+        crate::modules::resource::personal_storage_status(pool, principal, principal.person_id)
+            .await?;
+    Ok(PersonalFiles {
+        files,
+        folders,
+        storage,
+    })
+}
+
+/// Alterna a marca de favorito de um ficheiro do próprio, e devolve o estado
+/// novo (`None` quando o ficheiro não é do dono ou está no Lixo).
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn toggle_personal_favourite(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    file_id: Uuid,
+) -> CoreResult<Option<bool>> {
+    let estado = repo::toggle_personal_favourite(tx, principal.person_id, file_id).await?;
+    if let Some(marcado) = estado {
+        audit::record(
+            tx,
+            Some(principal),
+            ids,
+            AuditEntry::new(action::UPDATE, "file")
+                .resource(file_id)
+                .detail("owner_id", principal.person_id.to_string())
+                .detail("favourite", marcado.to_string()),
+        )
+        .await?;
+    }
+    Ok(estado)
+}
+
 /// Muda o nome de um ficheiro pessoal do próprio.
 ///
 /// # Errors

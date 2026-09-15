@@ -177,6 +177,10 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     // sete, e um identificador refeito no destino apagaria essa frase.
     ("files", Comparacao::Identidades),
     ("file_versions", Comparacao::Identidades),
+    // A marca de favorito é preferência do membro, não derivável de nada — se
+    // não viajasse, um restauro devolveria a instituição com as escolhas de
+    // cada pessoa apagadas. Viaja por identidade, como o que a origina.
+    ("file_favourites", Comparacao::Identidades),
     // A árvore de navegação. Viaja por identidade porque os ficheiros apontam
     // para ela: um restauro que a recriasse com identificadores novos deixaria
     // todos os ficheiros na raiz, e a organização que alguém construiu ao longo

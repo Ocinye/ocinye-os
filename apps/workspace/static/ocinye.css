@@ -6188,6 +6188,7 @@ select.oc-entrada {
   transition: border-color var(--oc-duration-normal), color var(--oc-duration-normal);
 }
 .oc-fs__ferramenta:hover { border-color: var(--oc-navy); color: var(--oc-navy); }
+.oc-fs__ferramenta--on { border-color: var(--oc-navy); color: var(--oc-navy); background: var(--oc-surface-hover); }
 
 /* Menus: um pop ancorado, aberto só quando preciso. */
 .oc-fs__menu, .oc-fs__acoes { position: relative; }
@@ -6213,7 +6214,16 @@ select.oc-entrada {
   text-decoration: none; padding: 4px 0;
 }
 .oc-fs__acao:hover { color: var(--oc-navy); }
+.oc-fs__acao--botao {
+  background: none; border: 0; cursor: pointer; text-align: left; width: 100%;
+}
 .oc-fs__acao-form { border-top: 1px solid var(--oc-border-soft); padding-top: var(--oc-space-4); }
+/* A estrela de favorito: um canto discreto na ficha. */
+.oc-fs__estrela {
+  position: absolute; left: 8px; bottom: 8px; z-index: var(--oc-z-base);
+  color: var(--oc-gold-text); display: inline-flex;
+}
+[data-view="list"] .oc-fs__estrela { left: auto; right: 40px; bottom: 50%; transform: translateY(50%); }
 .oc-fs__carregar { display: inline-flex; align-items: center; gap: var(--oc-space-3); }
 .oc-fs__carregar-btn { cursor: pointer; }
 .oc-fs__destino { max-width: 190px; }

@@ -215,6 +215,9 @@ pub struct AllFilesView {
     pub personal_folders: Vec<Value>,
     /// A pasta pessoal aberta (id, nome), quando dentro de uma.
     pub open_folder: Option<(String, String)>,
+    /// A vista pessoal: `""` (normal), `"favourites"` ou `"recents"`. As duas
+    /// últimas atravessam pastas e não mostram fichas de pasta.
+    pub view_mode: String,
     /// O ficheiro pessoal a gerir (mudar nome, mover), quando o painel está
     /// aberto.
     pub managed_file: Option<Value>,
@@ -243,6 +246,7 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
         personal_files,
         personal_folders,
         open_folder,
+        view_mode,
         managed_file,
         viewing_trash,
         trash_files,
@@ -260,6 +264,15 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
         return vista_do_lixo(&trash_files, notice).into_any();
     }
 
+    // Favoritos e Recentes são vistas planas: atravessam pastas, e por isso não
+    // mostram fichas de pasta nem se está «dentro» de uma.
+    let vista_nome = match view_mode.as_str() {
+        "favourites" => Some("Favoritos"),
+        "recents" => Some("Recentes"),
+        _ => None,
+    };
+    let em_vista = vista_nome.is_some();
+
     // ── Meus ficheiros ──────────────────────────────────────────────────
     // O espaço pessoal como um explorador: uma barra com o caminho e as acções,
     // e as pastas e os ficheiros como fichas — grelha ou lista, à escolha. Base
@@ -269,7 +282,9 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
         |(id, _)| format!("/files?folder={id}"),
     );
     let _ = &managed_file; // o painel permanente deu lugar aos menus por ficha.
-    let meu_vazio = personal_files.is_empty() && personal_folders.is_empty();
+                           // Numa vista plana (favoritos/recentes) só contam os ficheiros; as pastas não
+                           // aparecem, e por isso não pesam no «vazio».
+    let meu_vazio = personal_files.is_empty() && (em_vista || personal_folders.is_empty());
 
     // ── Institucional ───────────────────────────────────────────────────
     let inst_vazio = files.is_empty();
@@ -310,17 +325,25 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
             <section class="oc-fs" data-oc="fs">
                 <div class="oc-fs__toolbar">
                     <nav class="oc-fs__trilho" aria-label="Localização">
-                        {open_folder.as_ref().map_or_else(
-                            || view! { <span class="oc-fs__aqui">"Meus ficheiros"</span> }
+                        {vista_nome.map_or_else(
+                            || open_folder.as_ref().map_or_else(
+                                || view! { <span class="oc-fs__aqui">"Meus ficheiros"</span> }
+                                    .into_any(),
+                                |(_, nome)| view! {
+                                    <a
+                                        class="oc-fs__acima"
+                                        href="/files"
+                                        data-alvo-raiz="1"
+                                    >"Meus ficheiros"</a>
+                                    <span class="oc-fs__sep" aria-hidden="true">"›"</span>
+                                    <span class="oc-fs__aqui">{nome.clone()}</span>
+                                }
                                 .into_any(),
-                            |(_, nome)| view! {
-                                <a
-                                    class="oc-fs__acima"
-                                    href="/files"
-                                    data-alvo-raiz="1"
-                                >"Meus ficheiros"</a>
+                            ),
+                            |nome| view! {
+                                <a class="oc-fs__acima" href="/files">"Meus ficheiros"</a>
                                 <span class="oc-fs__sep" aria-hidden="true">"›"</span>
-                                <span class="oc-fs__aqui">{nome.clone()}</span>
+                                <span class="oc-fs__aqui">{nome}</span>
                             }
                             .into_any(),
                         )}
@@ -339,6 +362,22 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                     >
                         {icon(Icon::Filter, 15)}
                     </button>
+                    <a
+                        class=if view_mode == "favourites" { "oc-fs__ferramenta oc-fs__ferramenta--txt oc-fs__ferramenta--on" } else { "oc-fs__ferramenta oc-fs__ferramenta--txt" }
+                        href="/files?view=favourites"
+                        title="Favoritos"
+                    >
+                        {icon(Icon::Star, 14)}
+                        <span>"Favoritos"</span>
+                    </a>
+                    <a
+                        class=if view_mode == "recents" { "oc-fs__ferramenta oc-fs__ferramenta--txt oc-fs__ferramenta--on" } else { "oc-fs__ferramenta oc-fs__ferramenta--txt" }
+                        href="/files?view=recents"
+                        title="Recentes"
+                    >
+                        {icon(Icon::Calendar, 14)}
+                        <span>"Recentes"</span>
+                    </a>
                     <a class="oc-fs__ferramenta" href="/files?trash=1" title="Lixo" aria-label="Lixo">
                         {icon(Icon::Trash, 15)}
                     </a>
@@ -408,18 +447,32 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                 {open_folder.as_ref().map(|(id, nome)| painel_de_pasta(id, nome))}
 
                 {if meu_vazio {
+                    let (titulo, dica) = match view_mode.as_str() {
+                        "favourites" => (
+                            "Ainda não há favoritos",
+                            "Marque um ficheiro como favorito para o encontrar aqui.",
+                        ),
+                        "recents" => (
+                            "Ainda não há nada recente",
+                            "Os ficheiros que carregar ou mexer aparecem aqui.",
+                        ),
+                        _ => (
+                            "Esta pasta está vazia",
+                            "Carregue um ficheiro ou crie uma pasta para começar.",
+                        ),
+                    };
                     view! {
                         <div class="oc-fs__vazio">
                             <span class="oc-empty__tile">{icon(Icon::Files, 24)}</span>
-                            <p class="oc-t-strong">"Esta pasta está vazia"</p>
-                            <p class="oc-t-caption--muted">
-                                "Carregue um ficheiro ou crie uma pasta para começar."
-                            </p>
+                            <p class="oc-t-strong">{titulo}</p>
+                            <p class="oc-t-caption--muted">{dica}</p>
                         </div>
                     }
                     .into_any()
                 } else {
-                    let pastas = personal_folders.iter().map(ficha_de_pasta).collect_view();
+                    // Nas vistas planas não há fichas de pasta — a lista atravessa-as.
+                    let pastas = (!em_vista)
+                        .then(|| personal_folders.iter().map(ficha_de_pasta).collect_view());
                     let fich = personal_files
                         .iter()
                         .map(|f| ficha_de_ficheiro(f, &personal_folders, &base_pessoal))
@@ -682,6 +735,7 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
     let e_com_miniatura =
         ["image/png", "image/jpeg", "image/webp", "application/pdf"].contains(&ctype.as_str());
     let thumb_src = format!("/me/files/{version_id}/thumbnail");
+    let favorito = f.get("favourite").and_then(Value::as_bool).unwrap_or(false);
 
     let opcoes = folders
         .iter()
@@ -707,6 +761,11 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
                 data-id=id.clone()
                 aria-label=format!("Seleccionar {nome}")
             />
+            {favorito.then(|| view! {
+                <span class="oc-fs__estrela" title="Favorito" aria-hidden="true">
+                    {icon(Icon::Star, 13)}
+                </span>
+            })}
             <a
                 class="oc-fs__abrir"
                 href=format!("/me/files/{version_id}/raw")
@@ -738,6 +797,13 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
                     <a class="oc-fs__acao" href=format!("/me/files/{version_id}/raw")>
                         "Descarregar"
                     </a>
+                    <form class="oc-fs__acao-form" method="post" action="/me/files/favourite">
+                        <input type="hidden" name="file_id" value=id.clone() />
+                        <input type="hidden" name="return_to" value=base.clone() />
+                        <button class="oc-fs__acao oc-fs__acao--botao" type="submit">
+                            {if favorito { "Remover dos favoritos" } else { "Marcar como favorito" }}
+                        </button>
+                    </form>
                     <form class="oc-fs__acao-form" method="post" action="/me/files/rename">
                         <input type="hidden" name="file_id" value=id.clone() />
                         <input type="hidden" name="return_to" value=base.clone() />
@@ -1410,6 +1476,7 @@ mod tests {
             personal_files: personal,
             personal_folders: vec![],
             open_folder: None,
+            view_mode: String::new(),
             managed_file: None,
             viewing_trash: false,
             trash_files: vec![],
@@ -1561,6 +1628,53 @@ mod tests {
             !html.contains("data-oc=\"fs-thumb\""),
             "um CSV não devia trazer miniatura"
         );
+    }
+
+    #[test]
+    fn as_vistas_favoritos_recentes_e_o_alternar_favorito() {
+        let f = json!({
+            "id": "a", "version_id": "v", "name": "foto.png",
+            "content_type": "image/png", "size_bytes": 10, "versions": 1,
+            "favourite": true
+        });
+        let html = all_files(membro_sem_ambiente(vec![f])).to_html();
+        assert!(
+            html.contains("href=\"/files?view=favourites\""),
+            "falta a vista Favoritos"
+        );
+        assert!(
+            html.contains("href=\"/files?view=recents\""),
+            "falta a vista Recentes"
+        );
+        assert!(
+            html.contains("action=\"/me/files/favourite\""),
+            "falta o alternar favorito"
+        );
+        assert!(
+            html.contains("oc-fs__estrela"),
+            "um ficheiro favorito não mostra a estrela"
+        );
+        assert!(
+            html.contains("Remover dos favoritos"),
+            "o menu não reflecte o estado favorito"
+        );
+    }
+
+    #[test]
+    fn a_vista_favoritos_nao_mostra_pastas() {
+        let mut v = membro_sem_ambiente(vec![json!({
+            "id": "a", "version_id": "v", "name": "foto.png",
+            "content_type": "image/png", "size_bytes": 10, "versions": 1
+        })]);
+        v.personal_folders = vec![json!({"id": "f1", "name": "Projeto X"})];
+        v.view_mode = "favourites".to_owned();
+        let html = all_files(v).to_html();
+        // A pasta existe, mas a vista plana não a desenha como ficha.
+        assert!(
+            !html.contains("data-alvo-pasta=\"f1\""),
+            "a vista de favoritos não devia mostrar fichas de pasta"
+        );
+        assert!(html.contains("Favoritos"), "falta o rótulo da vista");
     }
 
     #[test]

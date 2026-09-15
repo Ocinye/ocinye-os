@@ -100,6 +100,7 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/me/files/rename", post(rename_my_file))
         .route("/me/files/move", post(move_my_file))
+        .route("/me/files/favourite", post(favourite_my_file))
         .route("/me/files/trash", get(my_trash))
         .route("/me/files/delete", post(trash_my_file))
         .route("/me/files/restore", post(restore_my_file))
@@ -649,6 +650,10 @@ struct MyFilesQuery {
     /// A pasta do dono a abrir; ausente é a raiz.
     #[serde(default)]
     folder: Option<Uuid>,
+    /// A vista: `favourites` (só favoritos) ou `recents` (mais mexidos primeiro),
+    /// atravessando pastas. Ausente é a navegação normal por pasta.
+    #[serde(default)]
+    view: Option<String>,
     /// Quantos ficheiros listar, no máximo. Limitado, para uma página não pedir
     /// o espaço inteiro de uma vez.
     #[serde(default)]
@@ -662,8 +667,35 @@ async fn my_files(
     Query(query): Query<MyFilesQuery>,
 ) -> Result<Json<files::PersonalFiles>, ApiError> {
     let limit = query.limit.unwrap_or(200).clamp(1, 500);
-    let personal = files::list_personal(&state.pool, &principal, query.folder, limit).await?;
+    let personal = match query.view.as_deref() {
+        Some("favourites") => {
+            files::list_personal_favourites(&state.pool, &principal, limit).await?
+        }
+        Some("recents") => files::list_personal_recent(&state.pool, &principal, limit).await?,
+        _ => files::list_personal(&state.pool, &principal, query.folder, limit).await?,
+    };
     Ok(Json(personal))
+}
+
+#[derive(Deserialize)]
+struct FavouriteFile {
+    file_id: Uuid,
+}
+
+/// `POST /me/files/favourite` — alterna a marca de favorito de um ficheiro do
+/// próprio. A posse é a autoridade; um ficheiro que não seja do dono não muda e
+/// não se confirma que existe.
+async fn favourite_my_file(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Json(request): Json<FavouriteFile>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let estado =
+        files::toggle_personal_favourite(&mut tx, &principal, &ids, request.file_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(serde_json::json!({ "favourite": estado })))
 }
 
 #[derive(Deserialize)]

@@ -114,6 +114,8 @@ pub struct PersonalFileListing {
     pub versions: i64,
     /// Quando mudou pela última vez.
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    /// Se o dono o marcou como favorito.
+    pub favourite: bool,
 }
 
 /// Os ficheiros pessoais de uma pessoa — os que têm dono e nenhum ambiente.
@@ -135,7 +137,11 @@ pub async fn list_personal_files<'e>(
         "SELECT f.id, v.version_id, f.name, f.folder_id,
                 o.content_type, o.size_bytes,
                 (SELECT count(*) FROM file_versions x WHERE x.file_id = f.id) AS versions,
-                f.updated_at
+                f.updated_at,
+                EXISTS (
+                    SELECT 1 FROM file_favourites ff
+                     WHERE ff.person_id = $1 AND ff.file_id = f.id
+                ) AS favourite
            FROM files f
            JOIN LATERAL (
                SELECT fv.id AS version_id, fv.storage_object_id
@@ -157,6 +163,129 @@ pub async fn list_personal_files<'e>(
     .fetch_all(executor)
     .await?;
     Ok(linhas)
+}
+
+/// Os ficheiros favoritos de uma pessoa — atravessam pastas, mais recente
+/// primeiro. A marca é do dono, e a consulta fecha-se sobre `owner_id`.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_personal_favourites<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    limit: i64,
+) -> CoreResult<Vec<PersonalFileListing>> {
+    let linhas = sqlx::query_as::<_, PersonalFileListing>(
+        "SELECT f.id, v.version_id, f.name, f.folder_id,
+                o.content_type, o.size_bytes,
+                (SELECT count(*) FROM file_versions x WHERE x.file_id = f.id) AS versions,
+                f.updated_at, TRUE AS favourite
+           FROM files f
+           JOIN file_favourites ff ON ff.file_id = f.id AND ff.person_id = $1
+           JOIN LATERAL (
+               SELECT fv.id AS version_id, fv.storage_object_id
+                 FROM file_versions fv
+                WHERE fv.file_id = f.id
+                ORDER BY fv.sequence DESC
+                LIMIT 1
+           ) v ON TRUE
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE f.owner_id = $1
+            AND f.deleted_at IS NULL
+          ORDER BY ff.created_at DESC
+          LIMIT $2",
+    )
+    .bind(owner_id)
+    .bind(limit)
+    .fetch_all(executor)
+    .await?;
+    Ok(linhas)
+}
+
+/// Os ficheiros recentes de uma pessoa — atravessam pastas, o mais mexido
+/// primeiro. É a mesma consulta dos pessoais sem o recorte de pasta.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn list_personal_recent<'e>(
+    executor: impl PgExecutor<'e>,
+    owner_id: Uuid,
+    limit: i64,
+) -> CoreResult<Vec<PersonalFileListing>> {
+    let linhas = sqlx::query_as::<_, PersonalFileListing>(
+        "SELECT f.id, v.version_id, f.name, f.folder_id,
+                o.content_type, o.size_bytes,
+                (SELECT count(*) FROM file_versions x WHERE x.file_id = f.id) AS versions,
+                f.updated_at,
+                EXISTS (
+                    SELECT 1 FROM file_favourites ff
+                     WHERE ff.person_id = $1 AND ff.file_id = f.id
+                ) AS favourite
+           FROM files f
+           JOIN LATERAL (
+               SELECT fv.id AS version_id, fv.storage_object_id
+                 FROM file_versions fv
+                WHERE fv.file_id = f.id
+                ORDER BY fv.sequence DESC
+                LIMIT 1
+           ) v ON TRUE
+           JOIN storage_objects o ON o.id = v.storage_object_id
+          WHERE f.owner_id = $1
+            AND f.deleted_at IS NULL
+          ORDER BY f.updated_at DESC
+          LIMIT $2",
+    )
+    .bind(owner_id)
+    .bind(limit)
+    .fetch_all(executor)
+    .await?;
+    Ok(linhas)
+}
+
+/// Alterna a marca de favorito de um ficheiro do próprio, e devolve o estado
+/// novo. A posse é a autoridade: só marca um ficheiro que seja do dono e que não
+/// esteja no Lixo. Um identificador de outra pessoa não faz nada.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn toggle_personal_favourite(
+    conn: &mut sqlx::PgConnection,
+    owner_id: Uuid,
+    file_id: Uuid,
+) -> CoreResult<Option<bool>> {
+    // Só um ficheiro vivo do dono se marca. Fora isso, nada acontece e não se
+    // revela que o ficheiro existe.
+    let seu: Option<bool> = sqlx::query_scalar(
+        "SELECT true FROM files
+          WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(file_id)
+    .bind(owner_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    if seu != Some(true) {
+        return Ok(None);
+    }
+
+    let apagou = sqlx::query("DELETE FROM file_favourites WHERE person_id = $1 AND file_id = $2")
+        .bind(owner_id)
+        .bind(file_id)
+        .execute(&mut *conn)
+        .await?;
+
+    if apagou.rows_affected() > 0 {
+        return Ok(Some(false));
+    }
+
+    sqlx::query("INSERT INTO file_favourites (person_id, file_id) VALUES ($1, $2)")
+        .bind(owner_id)
+        .bind(file_id)
+        .execute(&mut *conn)
+        .await?;
+    Ok(Some(true))
 }
 
 /// Os ficheiros no Lixo de uma pessoa — os apagados, mais recente primeiro.
