@@ -7,6 +7,30 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros — o explorador de conteúdo está pronto (OCINYE_FILES_READY) — 2026-09-15
+
+O milestone «Files — Premium Virtual Filesystem & Content Browser» está entregue
+e em produção, documentado na [ADR-0607](docs/adrs/0607-files-as-a-content-browser.md).
+«Meus ficheiros» deixou de ser uma tabela de administração e é um explorador de
+conteúdo: grelha/lista, trilho, quota, «Carregar» próprio (sem `<input>`
+nativo), **Quick Look** (imagem/PDF/texto same-origin), **miniaturas** de imagem
+e da primeira página de PDF, **selecção em lote**, **arrastar para mover**, e
+**Favoritos** e **Recentes**. Tudo reautoriza pela posse no Core; como o
+armazenamento não tem endpoint público, o Core serve os bytes pessoais
+same-origin — excepção deliberada e contida ao caminho pessoal.
+
+Entregue nas fatias P1 (casca), P2-A (Quick Look + descarga same-origin), P2-B
+(PDF inline), P3-A (miniaturas de imagem), P3-B (lote + arrastar + miniaturas de
+PDF) e P3-C (Favoritos + Recentes), cada uma com o seu portão canónico verde e
+aceitação em produção.
+
+**Adiado explicitamente**, como trabalho futuro e não como lacuna deste marco:
+miniaturas de **Office e vídeo** (exigem um conversor pesado — LibreOffice,
+ffmpeg — num trabalhador dedicado) e um **isolamento mais forte** da
+rasterização (seccomp ou contentor à parte) acima do subprocesso com prazo de
+hoje. A **descarga institucional** tem o mesmo defeito latente que a pessoal
+tinha (URL assinada para o host interno) e continua por resolver.
+
 ### Ficheiros — Favoritos e Recentes (FILES-P3-C) — 2026-09-15
 
 Duas vistas que atravessam pastas, para encontrar o que interessa sem navegar.

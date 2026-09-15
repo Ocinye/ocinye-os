@@ -205,6 +205,7 @@ A interface humana.
 - [ADR-0604](0604-workspace-access-presentation.md) — Apresentação de acesso e autorização contextual no Workspace
 - [ADR-0605](0605-first-production-deployment.md) — Primeira instalação de produção e fronteiras públicas de serviço
 - [ADR-0606](0606-linked-privileged-identity.md) — Identidade privilegiada ligada
+- [ADR-0607](0607-files-as-a-content-browser.md) — Ficheiros como um explorador de conteúdo
 
 ### 0700–0799 · Deployment, rede, operação e resiliência
 
