@@ -1111,6 +1111,10 @@ async fn a_descarga_same_origin_transporta_os_bytes_e_mantem_a_autoridade() {
     let forasteiro = estranho(&pool, &ctx).await;
     let ids = ocinye_observability::CorrelationIds::generate();
 
+    // RESTRITO de propósito: um `estranho` é membro da organização, e um
+    // ficheiro INTERNO é legível por toda a organização — deixá-lo passar seria
+    // a política a funcionar, não uma fuga. A denegação que este teste mede é a
+    // de quem não alcança o ambiente, e essa só se vê acima de INTERNAL.
     let conteudo = b"\x89PNG same-origin bytes".to_vec();
     let criado = criar_ficheiro(
         &pool,
@@ -1121,7 +1125,7 @@ async fn a_descarga_same_origin_transporta_os_bytes_e_mantem_a_autoridade() {
             filename: "descarga.png".to_owned(),
             content_type: "image/png".to_owned(),
             data: conteudo.clone(),
-            classification: Some(ocinye_contracts::Classification::Internal),
+            classification: Some(ocinye_contracts::Classification::Restricted),
         },
     )
     .await;
