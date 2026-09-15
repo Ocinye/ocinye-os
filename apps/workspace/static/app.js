@@ -1920,6 +1920,14 @@
     /* Quick Look: abrir um ficheiro pré-visualiza-o na camada, same-origin. */
     const camada = fs.querySelector('[data-oc="fs-quicklook"]');
     if (camada) {
+      /* A camada é um modal de ecrã inteiro. Nascida dentro de `.oc-content`
+       * — que rola (`overflow`) —, o WebKit posiciona um `position: fixed`
+       * relativamente a esse contentor, e não à janela: a camada aparecia
+       * descentrada, à direita da barra lateral. Movê-la para o `body`, como a
+       * command palette, devolve-lhe a janela inteira. */
+      if (camada.parentElement !== document.body) {
+        document.body.appendChild(camada);
+      }
       const corpo = camada.querySelector('[data-oc="fs-ql-corpo"]');
       const rotulo = camada.querySelector('[data-oc="fs-ql-nome"]');
       const descarregar = camada.querySelector('[data-oc="fs-ql-descarregar"]');
