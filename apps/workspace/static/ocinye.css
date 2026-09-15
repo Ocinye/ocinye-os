@@ -6231,8 +6231,14 @@ select.oc-entrada {
 }
 .oc-fs__item:hover { background: var(--oc-surface-hover); border-color: var(--oc-border); }
 .oc-fs__abrir { text-decoration: none; color: inherit; min-width: 0; }
-.oc-fs__icone { color: var(--oc-navy-mid); }
+.oc-fs__icone { color: var(--oc-navy-mid); position: relative; display: inline-grid; place-items: center; }
 .oc-fs__icone--pasta { color: var(--oc-gold-text); }
+/* A miniatura cobre o ícone: se carregar, é o que se vê; se falhar (404, ainda
+ * não gerada), o `app.js` remove-a e o ícone reaparece. */
+.oc-fs__thumb {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; border-radius: var(--oc-r-sm);
+}
 .oc-fs__nome {
   font: 500 12.5px var(--oc-font-sans); color: var(--oc-text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -6249,13 +6255,16 @@ select.oc-entrada {
 [data-view="grid"] .oc-fs__abrir {
   display: flex; flex-direction: column; align-items: center; gap: var(--oc-space-2); width: 100%;
 }
+/* Na grelha, o ícone é uma zona de pré-visualização: a miniatura enche-a. */
+[data-view="grid"] .oc-fs__icone { width: 100%; height: 88px; }
 [data-view="grid"] .oc-fs__nome { width: 100%; }
 [data-view="grid"] .oc-fs__acoes { position: absolute; top: 6px; right: 6px; }
 /* Lista: linha. */
 [data-view="list"] .oc-fs__item { flex-direction: row; align-items: center; gap: var(--oc-space-4); padding: 8px 10px; }
 [data-view="list"] .oc-fs__abrir { display: flex; flex-direction: row; align-items: center; gap: var(--oc-space-4); flex: 1; }
-[data-view="list"] .oc-fs__icone { flex-shrink: 0; }
+[data-view="list"] .oc-fs__icone { flex-shrink: 0; width: 24px; height: 24px; }
 [data-view="list"] .oc-fs__icone svg { width: 20px; height: 20px; }
+[data-view="list"] .oc-fs__thumb { border-radius: var(--oc-r-sm); }
 [data-view="list"] .oc-fs__nome { flex: 1; font-size: 13px; }
 [data-view="list"] .oc-fs__meta { flex-shrink: 0; }
 .oc-fs__acoes-btn {

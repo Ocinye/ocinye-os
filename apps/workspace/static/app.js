@@ -1917,6 +1917,12 @@
       });
     });
 
+    /* Miniaturas: uma que falhe (404 — ainda não gerada) sai, e o ícone do tipo
+     * reaparece por baixo. Na próxima visita, já gerada, a miniatura fica. */
+    fs.querySelectorAll('[data-oc="fs-thumb"]').forEach((img) => {
+      img.addEventListener('error', () => img.remove());
+    });
+
     /* Quick Look: abrir um ficheiro pré-visualiza-o na camada, same-origin. */
     const camada = fs.querySelector('[data-oc="fs-quicklook"]');
     if (camada) {

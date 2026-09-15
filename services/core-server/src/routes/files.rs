@@ -11,7 +11,8 @@
 //! the exception the deployment forces — the object store has no public
 //! endpoint, so a signed URL would name the internal host and no browser could
 //! reach it. There, the Core serves the bytes same-origin (`/me/files/{v}/raw`,
-//! `…/preview`, `…/text`), and the storage location never reaches the page.
+//! `…/inline`, `…/thumbnail`, `…/text`), and the storage location never reaches
+//! the page.
 
 use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
 use axum::handler::Handler;
@@ -106,6 +107,7 @@ pub fn routes() -> Router<AppState> {
         .route("/me/files/{version_id}/download", get(download_my_file))
         .route("/me/files/{version_id}/raw", get(raw_my_file))
         .route("/me/files/{version_id}/inline", get(inline_my_file))
+        .route("/me/files/{version_id}/thumbnail", get(thumbnail_my_file))
         .route("/me/files/{version_id}/text", get(text_my_file))
         // Criar/listar/apagar pastas pessoais já vivem em `knowledge` (serviam
         // as notas); aqui só se acrescenta o mudar-nome, que faltava.
@@ -929,6 +931,55 @@ async fn inline_my_file(
         vista.bytes,
     )
         .into_response())
+}
+
+/// `GET /me/files/{version_id}/thumbnail` — a miniatura de uma versão pessoal.
+///
+/// A posse é a autoridade (reavaliada no Core). Devolve a miniatura WebP inline
+/// quando está pronta; quando ainda não existe, põe a versão na fila de geração
+/// (para os ficheiros anteriores à funcionalidade a ganharem) e responde `404` —
+/// a grelha cai no ícone do tipo, sem erro, e a próxima visita já a mostra.
+async fn thumbnail_my_file(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(version_id): Path<Uuid>,
+) -> Result<axum::response::Response, ApiError> {
+    use axum::http::{header, StatusCode};
+    use axum::response::IntoResponse;
+
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let vista =
+        files::thumbnail::read_thumbnail_personal(&mut tx, &principal, store, version_id).await?;
+
+    let resposta = match vista {
+        Some(vista) => {
+            let etag = format!("\"{}\"", vista.checksum_sha256);
+            (
+                [
+                    (header::CONTENT_TYPE, vista.content_type),
+                    (header::CONTENT_DISPOSITION, "inline".to_owned()),
+                    (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned()),
+                    (
+                        header::CACHE_CONTROL,
+                        "private, max-age=0, must-revalidate".to_owned(),
+                    ),
+                    (header::ETAG, etag),
+                ],
+                vista.bytes,
+            )
+                .into_response()
+        }
+        None => {
+            // Ainda não há miniatura: garante a fila e diz «não encontrado».
+            files::thumbnail::ensure_queued_personal(&mut tx, &principal, &ids, version_id).await?;
+            StatusCode::NOT_FOUND.into_response()
+        }
+    };
+
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(resposta)
 }
 
 /// `GET /me/files/{version_id}/text` — o texto de uma versão pessoal, inline.

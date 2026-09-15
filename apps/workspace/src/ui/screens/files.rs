@@ -626,6 +626,11 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
     let tipo = tipo_legivel(&ctype);
     let dim = tamanho(number(f, "size_bytes"));
     let base = base.to_owned();
+    // Uma imagem traz a sua miniatura por cima do ícone. Se ainda não estiver
+    // pronta, o `/thumbnail` responde 404 e o `app.js` remove a `<img>`,
+    // deixando o ícone à mostra.
+    let e_imagem = ["image/png", "image/jpeg", "image/webp"].contains(&ctype.as_str());
+    let thumb_src = format!("/me/files/{version_id}/thumbnail");
 
     let opcoes = folders
         .iter()
@@ -647,7 +652,18 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
                 data-nome=nome.clone()
                 data-tipo=ctype.clone()
             >
-                <span class="oc-fs__icone">{icon(Icon::Document, 30)}</span>
+                <span class="oc-fs__icone">
+                    {icon(Icon::Document, 30)}
+                    {e_imagem.then(|| view! {
+                        <img
+                            class="oc-fs__thumb"
+                            data-oc="fs-thumb"
+                            src=thumb_src
+                            alt=""
+                            loading="lazy"
+                        />
+                    })}
+                </span>
                 <span class="oc-fs__nome">{nome.clone()}</span>
                 <span class="oc-fs__meta">{tipo}" · "{dim}</span>
             </a>
@@ -1439,6 +1455,35 @@ mod tests {
         assert!(
             html.contains("data-oc=\"fs-quicklook\""),
             "falta a camada de Quick Look"
+        );
+    }
+
+    #[test]
+    fn uma_ficha_de_imagem_traz_a_miniatura_e_as_outras_nao() {
+        // Uma imagem mostra a miniatura same-origin por cima do ícone.
+        let img = json!({
+            "id": "i", "version_id": "v", "name": "foto.png",
+            "content_type": "image/png", "size_bytes": 10, "versions": 1
+        });
+        let html = all_files(membro_sem_ambiente(vec![img])).to_html();
+        assert!(
+            html.contains("data-oc=\"fs-thumb\""),
+            "falta a miniatura na ficha de imagem"
+        );
+        assert!(
+            html.contains("/me/files/v/thumbnail"),
+            "a miniatura não aponta para a rota same-origin"
+        );
+
+        // Um PDF não traz miniatura de imagem — cai no ícone do tipo.
+        let pdf = json!({
+            "id": "p", "version_id": "w", "name": "a.pdf",
+            "content_type": "application/pdf", "size_bytes": 10, "versions": 1
+        });
+        let html = all_files(membro_sem_ambiente(vec![pdf])).to_html();
+        assert!(
+            !html.contains("data-oc=\"fs-thumb\""),
+            "um PDF não devia trazer miniatura de imagem"
         );
     }
 

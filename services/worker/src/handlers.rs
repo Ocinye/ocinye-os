@@ -6,7 +6,7 @@
 //! crash between the handler succeeding and the row being marked published, so
 //! "ran twice" is a normal case, not an exception (briefing §74).
 
-use ocinye_core::modules::files::{embedding, extraction};
+use ocinye_core::modules::files::{embedding, extraction, thumbnail};
 use ocinye_core::modules::intelligence;
 use ocinye_core::modules::intelligence::embeddings::EmbeddingProvider;
 use ocinye_core::storage::ObjectStore;
@@ -54,7 +54,47 @@ pub async fn handle(
         return embeber_conteudo(tx, event, embeddings).await;
     }
 
+    if event.name == thumbnail::EVENT_THUMBNAIL {
+        return gerar_miniatura(tx, event, store).await;
+    }
+
     Ok(())
+}
+
+/// Gera a miniatura de uma versão de imagem.
+///
+/// # Sem armazenamento, o evento espera
+///
+/// Sem `ObjectStore` não há bytes de origem para ler. Isto é um erro, não um
+/// estado: a instalação pode ganhar armazenamento amanhã, e o evento tem de
+/// continuar a existir para então ser processado. Marcar `FAILED` afirmaria que
+/// a imagem não gera miniatura, quando o que aconteceu foi o disco não atender.
+///
+/// # Idempotência
+///
+/// `process` reclama a linha com `FOR UPDATE` e devolve `None` quando já está
+/// assente. Um evento reentregue passa por aqui e não gera duas miniaturas.
+async fn gerar_miniatura(
+    tx: &mut Transaction<'_, Postgres>,
+    event: &OutboxEvent,
+    store: Option<&ObjectStore>,
+) -> anyhow::Result<()> {
+    let Some(store) = store else {
+        anyhow::bail!("no object store is configured; thumbnails cannot be generated");
+    };
+
+    match thumbnail::process(tx, store, event.aggregate_id).await {
+        Ok(Some(estado)) => {
+            tracing::info!(
+                file_version_id = %event.aggregate_id,
+                estado = ?estado,
+                "thumbnail generation settled"
+            );
+            Ok(())
+        }
+        Ok(None) => Ok(()),
+        Err(erro) => Err(anyhow::anyhow!(erro)),
+    }
 }
 
 /// Produz o conjunto de embeddings de uma versão.
