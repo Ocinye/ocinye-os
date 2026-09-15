@@ -39,7 +39,10 @@ pela origem do Workspace.
   **Imagens** (PNG/JPEG/WebP) servem-se same-origin (`img-src 'self'`); **texto e
   código** (`text/*`, JSON, XML, …) lêem-se same-origin e mostram-se escapados
   num `<pre>` — nunca interpretados; outros tipos trazem uma ficha com o
-  descarregar. Fecha com `Escape`, no fundo ou no ×.
+  descarregar. Fecha com `Escape`, no fundo ou no ×. A camada é movida para o
+  `body` ao arrancar, como a command palette: nascida dentro do `.oc-content`
+  que rola, o WebKit prendia-a a esse contentor e ela aparecia descentrada, à
+  direita da barra lateral — no `body` cobre a janela inteira e centra.
 - **Descarga same-origin**: nova rota `GET /me/files/{version_id}/raw` — o Core
   reavalia a posse e transporta os bytes com o nome higienizado, porque o
   armazenamento não tem endpoint público e uma ligação assinada nomearia um host
