@@ -6239,6 +6239,29 @@ select.oc-entrada {
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover; border-radius: var(--oc-r-sm);
 }
+/* Selecção: a caixa no canto da ficha aparece ao passar o rato ou quando
+ * marcada; a ficha escolhida ganha um anel, e o alvo de largada um realce. */
+.oc-fs__sel {
+  position: absolute; top: 8px; left: 8px; z-index: var(--oc-z-base);
+  width: 16px; height: 16px; cursor: pointer; accent-color: var(--oc-navy);
+  opacity: 0; transition: opacity var(--oc-duration-fast);
+}
+.oc-fs__item:hover .oc-fs__sel, .oc-fs__sel:checked, .oc-fs__sel:focus-visible { opacity: 1; }
+.oc-fs__item--sel { border-color: var(--oc-navy); background: var(--oc-surface-hover); }
+.oc-fs__item--alvo { border-color: var(--oc-gold-text); background: var(--oc-surface-hover); }
+/* Na lista há um lugar reservado à esquerda para a caixa, sem cobrir o ícone. */
+[data-view="list"] .oc-fs__item { padding-left: 30px; }
+[data-view="list"] .oc-fs__sel { top: 50%; left: 9px; transform: translateY(-50%); }
+
+/* A barra de acções em lote: aparece quando há selecção. */
+.oc-fs__lote {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--oc-space-4);
+  padding: var(--oc-space-3) var(--oc-space-4); margin-bottom: var(--oc-space-5);
+  background: var(--oc-surface); border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-md); box-shadow: var(--oc-shadow-card);
+}
+.oc-fs__lote-conta { font: 600 12.5px var(--oc-font-sans); color: var(--oc-text); }
+.oc-fs__lote-form { display: flex; align-items: center; gap: var(--oc-space-3); }
 .oc-fs__nome {
   font: 500 12.5px var(--oc-font-sans); color: var(--oc-text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

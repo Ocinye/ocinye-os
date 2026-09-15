@@ -152,6 +152,8 @@ pub const ROUTES: &[&str] = &[
     "/me/files/{version_id}/raw",
     "/me/files/rename",
     "/me/files/move",
+    "/me/files/batch/move",
+    "/me/files/batch/delete",
     "/me/files/delete",
     "/me/files/restore",
     "/me/files/purge",
@@ -470,6 +472,8 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/me/files/{version_id}/raw", get(me_file_raw))
         .route("/me/files/rename", post(me_file_rename))
         .route("/me/files/move", post(me_file_move))
+        .route("/me/files/batch/move", post(me_files_batch_move))
+        .route("/me/files/batch/delete", post(me_files_batch_delete))
         .route("/me/files/delete", post(me_file_delete))
         .route("/me/files/restore", post(me_file_restore))
         .route("/me/files/purge", post(me_file_purge))
@@ -10663,6 +10667,117 @@ async fn me_file_move(
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         Err(_) => regresso_ficheiros(&destino, "erro=recusado"),
     }
+}
+
+/// Uma lista de identificadores separada por vírgulas, como a selecção a envia.
+///
+/// Cada um é validado ao ser parseado; o que não for um `Uuid` cai fora em
+/// silêncio, porque veio do cliente e não é autoridade. O Core reautoriza cada
+/// ficheiro à porta, um a um.
+fn ids_da_seleccao(bruto: &str) -> Vec<Uuid> {
+    bruto
+        .split(',')
+        .filter_map(|parte| Uuid::parse_str(parte.trim()).ok())
+        .collect()
+}
+
+#[derive(Deserialize)]
+struct MeFilesBatchMoveForm {
+    #[serde(default)]
+    file_ids: String,
+    #[serde(default)]
+    folder_id: String,
+    #[serde(default)]
+    return_to: String,
+}
+
+/// Move vários ficheiros pessoais de uma vez para uma pasta (ou para a raiz).
+///
+/// Reutiliza a operação de mover um: cada ficheiro é reautorizado pela posse no
+/// Core. Um que recuse não pára os outros; o regresso diz quantos moveram.
+async fn me_files_batch_move(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MeFilesBatchMoveForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = if form.return_to.is_empty() {
+        "/files".to_owned()
+    } else {
+        form.return_to.clone()
+    };
+    let folder = Uuid::parse_str(form.folder_id.trim()).ok();
+    let ids = ids_da_seleccao(&form.file_ids);
+    if ids.is_empty() {
+        return regresso_ficheiros(&destino, "erro=vazio");
+    }
+
+    let mut movidos = 0_usize;
+    for file_id in ids {
+        let corpo = serde_json::json!({ "file_id": file_id, "folder_id": folder });
+        match api::post(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            "/api/v1/me/files/move",
+            &corpo,
+        )
+        .await
+        {
+            Ok(_) => movidos += 1,
+            Err(ApiFailure::Unauthorised) => return Redirect::to("/login").into_response(),
+            Err(_) => {}
+        }
+    }
+    regresso_ficheiros(&destino, &format!("ok=movidos&n={movidos}"))
+}
+
+#[derive(Deserialize)]
+struct MeFilesBatchDeleteForm {
+    #[serde(default)]
+    file_ids: String,
+    #[serde(default)]
+    return_to: String,
+}
+
+/// Põe vários ficheiros pessoais no Lixo de uma vez.
+///
+/// Reutiliza o apagar de um (que é reversível, vai para o Lixo); cada ficheiro é
+/// reautorizado pela posse no Core.
+async fn me_files_batch_delete(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MeFilesBatchDeleteForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = if form.return_to.is_empty() {
+        "/files".to_owned()
+    } else {
+        form.return_to.clone()
+    };
+    let ids = ids_da_seleccao(&form.file_ids);
+    if ids.is_empty() {
+        return regresso_ficheiros(&destino, "erro=vazio");
+    }
+
+    let mut apagados = 0_usize;
+    for file_id in ids {
+        let corpo = serde_json::json!({ "file_id": file_id });
+        match api::post(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            "/api/v1/me/files/delete",
+            &corpo,
+        )
+        .await
+        {
+            Ok(_) => apagados += 1,
+            Err(ApiFailure::Unauthorised) => return Redirect::to("/login").into_response(),
+            Err(_) => {}
+        }
+    }
+    regresso_ficheiros(&destino, &format!("ok=lixo&n={apagados}"))
 }
 
 #[derive(Deserialize)]
