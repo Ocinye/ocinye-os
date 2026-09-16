@@ -11343,7 +11343,7 @@ async fn o_criar_global_abre_cada_criacao_deterministica() {
     // ── Nova Nota: cria de imediato e abre o editor ─────────────────────
     // Abrir o menu torna os itens visíveis; a Nota é um POST, submetido daqui.
     clicar(&page, "[data-oc=\"create-toggle\"]").await;
-    submit(&page, ".oc-create__menu form[action=\"/notes\"]").await;
+    submit(&page, ".oc-create__menu form[action=\"/notes/new\"]").await;
 
     // Levou ao editor de uma nota real (URL /notes/{uuid}).
     let url = wait_until_left(&page, "/").await;

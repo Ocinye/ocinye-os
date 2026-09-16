@@ -26,7 +26,7 @@ P2, [findings](docs/audits/pre-ai-final/findings.md#F-08)).
 - **Destinos reais.** Ideia→`/ideas/new`, Projecto→`/projects/new` (promoção de
   ideia, com estado vazio quando não há candidata), Referência→`/bibliography/new`,
   Dataset→`/datasets/new`, Agente→`/ai/agents/new`. A **Nota** cria-se de imediato
-  (`POST /notes`) e abre o editor.
+  (`POST /notes/new`) e abre o editor.
 - **Fluxo de Tarefa criado** — a peça que faltava. `GET/POST /tasks/new` com
   selector de ambiente, título, descrição, prioridade e prazo, submetendo ao
   `collaboration::create_task` que já existia no Core. O responsável escolhe-se no

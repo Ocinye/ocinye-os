@@ -1197,9 +1197,11 @@ const CREATE_ITEMS: [CreateAction; 7] = [
         key: "P",
     },
     // Uma nota pessoal não precisa de contexto: cria-se e abre-se o editor.
+    // Caminho próprio (`/notes/new`) para não colidir, no DOM, com o formulário
+    // de criação da lista de Notas — os dois criam a mesma nota pessoal.
     CreateAction {
         label: "Nova Nota",
-        via: CreateVia::Create("/notes"),
+        via: CreateVia::Create("/notes/new"),
         key: "N",
     },
     CreateAction {
@@ -1629,10 +1631,11 @@ mod tests {
             );
         }
 
-        // A Nota cria-se de imediato: um POST, não um link.
+        // A Nota cria-se de imediato: um POST (para o seu caminho próprio,
+        // distinto do formulário da lista), não um link.
         assert!(
-            html.contains("action=\"/notes\""),
-            "a Nota deve criar-se por POST /notes, não por um link"
+            html.contains("action=\"/notes/new\""),
+            "a Nota deve criar-se por POST /notes/new, não por um link"
         );
     }
 
@@ -1753,7 +1756,7 @@ mod tests {
     fn o_menu_criar_esta_sempre_presente() {
         let html = render(&viewer_with(&[Permission::IdeasView]));
         assert!(html.contains("data-oc=\"create-toggle\""));
-        assert!(html.contains(r#"action="/notes""#));
+        assert!(html.contains(r#"action="/notes/new""#));
     }
 
     /// O «Criar» não cinzenta a criação por uma permissão de contexto.
@@ -1789,7 +1792,7 @@ mod tests {
             );
         }
         assert!(
-            html.contains(r#"action="/notes""#),
+            html.contains(r#"action="/notes/new""#),
             "a Nota deixou de se criar por POST"
         );
     }

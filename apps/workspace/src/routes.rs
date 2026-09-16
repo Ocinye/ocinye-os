@@ -38,6 +38,7 @@ pub const ROUTES: &[&str] = &[
     "/my-work",
     "/resources",
     "/notes",
+    "/notes/new",
     "/notes/partilhadas",
     "/notes/lixo",
     "/notes/{note_id}/apagar",
@@ -309,6 +310,11 @@ pub fn router(state: WorkspaceState) -> Router {
         // Notas pessoais. A criação e a lista partilham o caminho: `GET /notes`
         // mostra as notas, `POST /notes` cria uma e leva o membro ao editor.
         .route("/notes", get(notes_list).post(create_personal_note))
+        // A criação a partir do «+ Criar» global tem o seu próprio caminho: o
+        // formulário do menu vive na barra de topo de todas as páginas, e um
+        // `action="/notes"` colidiria, no DOM, com o formulário de criação da
+        // própria lista de Notas. Mesmo efeito, caminho distinto.
+        .route("/notes/new", post(create_personal_note))
         // As notas que outra pessoa partilhou com o membro — a vista de leitura.
         .route("/notes/partilhadas", get(shared_notes_page))
         // O Lixo: as notas apagadas, de onde se restauram ou se eliminam de vez.
