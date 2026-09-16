@@ -1307,8 +1307,9 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
     let accao_conceder = format!("/admin/members/{person_id}/roles");
 
     view! {
-        {pode_gerir.then(|| view! {
-            <div class="oc-mt-6">
+        <div class="oc-mt-6">
+            {if pode_gerir {
+                view! {
                 {card(
                     section_head("Gerir papéis técnicos", None, None),
                     view! {
@@ -1371,8 +1372,29 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
                         }}
                     },
                 )}
-            </div>
-        })}
+                }
+                .into_any()
+            } else {
+                // Não renderizar nada deixava o defeito que o utilizador viu: a
+                // opção de mudar o acesso «desaparecia» sem explicação. Quem pode
+                // ver o membro mas não gerir papéis vê agora a condição, em vez do
+                // vazio — o mesmo princípio do «Criar» (autoridade explicada, §3).
+                view! {
+                {card(
+                    section_head("Papéis técnicos", None, None),
+                    view! {
+                        <p class="oc-muted">
+                            "Conceder ou revogar papéis técnicos — incluindo tornar um \
+                             membro administrador da plataforma ou da organização — exige \
+                             uma sessão de administrador da plataforma com segundo factor \
+                             activo. Os papéis actuais deste membro estão acima."
+                        </p>
+                    },
+                )}
+                }
+                .into_any()
+            }}
+        </div>
     }
 }
 
@@ -2271,8 +2293,9 @@ mod tests {
 
     // ── Fatia 3: Acesso / Segurança ──────────────────────────────────────
 
-    /// A autoridade é do actor. Sem o sinal do Core, a gestão de papéis não
-    /// aparece — nem revogar, nem conceder.
+    /// A autoridade é do actor. Sem o sinal do Core, não há como **gerir**
+    /// papéis — nem revogar, nem conceder —, mas a condição é **explicada** em
+    /// vez de a opção desaparecer sem rasto.
     #[test]
     fn gerir_papeis_so_aparece_quando_o_actor_pode() {
         let sem = roles_admin(
@@ -2282,6 +2305,9 @@ mod tests {
         .to_html();
         assert!(!sem.contains("Gerir papéis técnicos"));
         assert!(!sem.contains("/roles/research_member/revoke"));
+        // Mas a razão pela qual não pode gerir é dita, não escondida.
+        assert!(sem.contains("Papéis técnicos"));
+        assert!(sem.contains("segundo factor"));
 
         let com = roles_admin(
             PID,

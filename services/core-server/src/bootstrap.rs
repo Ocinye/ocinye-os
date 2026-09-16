@@ -189,6 +189,13 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
         .await
         .context("perfil de recursos por omissão")?;
 
+    // A instituição começa com unidades — defaults sensatos, não uma lista fixa
+    // (§2, §7). Idempotente: adoptar uma organização já semeada não duplica nada.
+    // Uma instalação existente é semeada pela migração; uma nova, aqui.
+    organisation::seed_initial_units(&pool, organisation.id, &ids)
+        .await
+        .context("unidades iniciais")?;
+
     let authenticator = Arc::new(Authenticator::new(
         Hasher::new(HashingParams {
             memory_kib: config.auth.argon2_memory_kib,

@@ -85,6 +85,10 @@ falhas=0
 # pergunta de porquê.
 suites() {
     cat <<'TABELA'
+# 107 desde 2026-09-16: entrou a viagem do «Criar» global — o menu abre cada
+# criação determinista sem esbater nenhuma, cria uma Nota de imediato pelo
+# próprio menu, e cria uma Tarefa que persiste depois de recarregar.
+#
 # 75 viagens e 74 marcas, e os números **não** têm de coincidir.
 #
 # A marca conta levantamentos de harness, não viagens. Duas das 75 são análise
@@ -203,7 +207,7 @@ suites() {
 # 105 → 106 em 2026-09-11: entrou a regressão do destinatário por confirmar —
 # escrever um endereço sem o confirmar e enviar, e vê-lo ir no campo `to` em vez
 # de o envio recusar com a caixa vazia. Uma viagem, uma marca.
-viagens-de-browser|106|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|106
+viagens-de-browser|107|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|107
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
