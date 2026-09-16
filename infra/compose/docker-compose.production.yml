@@ -102,6 +102,11 @@ services:
       # construir por aqui.
       context: ../..
       dockerfile: infra/docker/Dockerfile
+      # `target` explícito. O Dockerfile tem stages depois do `runtime` (o
+      # conversor, o runner), e um build sem `target` escolhe o **último** stage,
+      # não o `runtime` — foi o que partiu produção uma vez. Cada serviço nomeia
+      # o seu stage; nenhum depende de qual é o último.
+      target: runtime
       args:
         BIN: ocinye-workspace
     env_file:
@@ -148,6 +153,7 @@ services:
       # construir por aqui.
       context: ../..
       dockerfile: infra/docker/Dockerfile
+      target: runtime
       args:
         BIN: ocinye-core-server
     env_file:
@@ -183,6 +189,7 @@ services:
       # construir por aqui.
       context: ../..
       dockerfile: infra/docker/Dockerfile
+      target: runtime
       args:
         BIN: ocinye-worker
     env_file:
