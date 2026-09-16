@@ -117,7 +117,144 @@ fn tabs(labels: &[&'static str], workspace_id: &str) -> Vec<Tab> {
         .collect()
 }
 
-/// O Research Workspace.
+/// O rótulo em português de um estado de ideia.
+fn idea_state_label(code: &str) -> &'static str {
+    match code {
+        "discovery" => "Descoberta",
+        "exploration" => "Exploração",
+        "concept" => "Conceito",
+        "review" => "Revisão",
+        "project_candidate" => "Candidata a Projecto",
+        "promoted" => "Promovida",
+        "rejected" => "Rejeitada",
+        "archived" => "Arquivada",
+        _ => "Estado",
+    }
+}
+
+/// O verbo do botão que move a ideia para um estado.
+fn idea_transition_verb(code: &str) -> String {
+    match code {
+        "rejected" => "Rejeitar".to_owned(),
+        "archived" => "Arquivar".to_owned(),
+        "discovery" => "Reabrir".to_owned(),
+        "project_candidate" => "Marcar como candidata a projecto".to_owned(),
+        other => format!("Avançar para {}", idea_state_label(other)),
+    }
+}
+
+/// Os controlos do ciclo de vida de uma ideia.
+///
+/// A lista de movimentos é do Core (`available_transitions`), não da interface:
+/// o ecrã só oferece o que o domínio permite para esta ideia, agora. Fechar
+/// (rejeitar/arquivar) pede a razão, que é memória institucional. «Promover a
+/// Projecto» é a acção primária quando a ideia chega a candidata.
+fn idea_lifecycle_actions(id: &str, idea: &Value, workspace: &Value) -> impl IntoView {
+    let may_transition = workspace
+        .get("may_transition")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let promotable = idea
+        .get("promotable")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let transitions: Vec<(String, bool)> = idea
+        .get("available_transitions")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|t| {
+                    let state = t.get("state").and_then(Value::as_str)?.to_owned();
+                    let requires_note = t
+                        .get("requires_note")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    Some((state, requires_note))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Sem autoridade para transitar e sem promoção possível, não há nada a
+    // mostrar — e um strip vazio seria ruído.
+    if !may_transition && !promotable {
+        return view! { <span hidden></span> }.into_any();
+    }
+
+    // A transição é sobre a **ideia** (`/ideas/{idea}/transition`); a promoção
+    // pré-escolhe o **ambiente** no selector (`?workspace={ws}`). São dois ids.
+    let idea_id = text(idea, "id");
+    let action = format!("/ideas/{idea_id}/transition");
+    let promote_href = format!("/projects/new?workspace={id}");
+
+    view! {
+        <div class="oc-lifecycle" role="group" aria-label="Ciclo de vida da ideia">
+            <span class="oc-lifecycle__label">"Ciclo de vida"</span>
+
+            {promotable.then(|| {
+                button(Button::new("Promover a Projecto", Variant::Gold).href(promote_href.clone()))
+            })}
+
+            {may_transition.then(|| {
+                transitions
+                    .clone()
+                    .into_iter()
+                    .map(|(estado, requires_note)| {
+                        let verbo = idea_transition_verb(&estado);
+                        let accao = action.clone();
+                        if requires_note {
+                            view! {
+                                <details class="oc-lifecycle__close">
+                                    <summary class="oc-btn oc-btn--sm oc-btn--secondary">
+                                        {verbo}
+                                    </summary>
+                                    <form
+                                        method="post"
+                                        action=accao
+                                        class="oc-row oc-row--wrap oc-gap-3 oc-mt-3"
+                                    >
+                                        <input type="hidden" name="state" value=estado />
+                                        <input
+                                            class="oc-input"
+                                            type="text"
+                                            name="outcome_note"
+                                            required
+                                            minlength="3"
+                                            placeholder="Razão (fica no registo)"
+                                        />
+                                        <button
+                                            class="oc-btn oc-btn--sm oc-btn--danger"
+                                            type="submit"
+                                        >
+                                            "Confirmar"
+                                        </button>
+                                    </form>
+                                </details>
+                            }
+                            .into_any()
+                        } else {
+                            view! {
+                                <form method="post" action=accao class="oc-lifecycle__step">
+                                    <input type="hidden" name="state" value=estado />
+                                    <button
+                                        class="oc-btn oc-btn--sm oc-btn--secondary"
+                                        type="submit"
+                                    >
+                                        {verbo}
+                                    </button>
+                                </form>
+                            }
+                            .into_any()
+                        }
+                    })
+                    .collect_view()
+            })}
+        </div>
+    }
+    .into_any()
+}
+
+/// O Research Workspace — o detalhe partilhado de uma Ideia ou de um Projecto.
 pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
     let WorkspaceView {
         overview,
@@ -180,18 +317,6 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                 </div>
 
                 <div class="oc-head__actions">
-                    {button(Button::new("Partilhar", Variant::Secondary).not_yet_available())}
-                    // A promoção passou a existir. Era `not_yet_available` quando
-                    // não havia ecrã por trás; agora leva ao selector com esta
-                    // ideia já escolhida. O Core decide na mesma se ela está em
-                    // estado de ser promovida.
-                    {(!is_project)
-                        .then(|| {
-                            button(
-                                Button::new("Promover a Projecto", Variant::Secondary)
-                                    .href(format!("/projects/new?workspace={id}")),
-                            )
-                        })}
                     {button(
                         Button::new("IA neste workspace", Variant::Primary)
                             .href(format!("/ai/prompt?workspace={id}"))
@@ -199,6 +324,12 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                     )}
                 </div>
             </div>
+
+            // O ciclo de vida da ideia: avançar de estado, marcá-la candidata,
+            // promovê-la, ou fechá-la — só os movimentos que o Core devolveu como
+            // legais, e só a quem os pode fazer. Era isto que faltava para uma
+            // ideia poder chegar a projecto pelo produto (F-10).
+            {(!is_project).then(|| idea_lifecycle_actions(&id, &idea, &workspace))}
 
             {context_tabs(tabs(tab_labels, &id), "Secções do Research Workspace")}
         </div>
@@ -943,12 +1074,15 @@ pub(crate) mod tests {
         assert_eq!(ai.href.as_deref(), Some("/ai/prompt?workspace=abc-123"));
     }
 
-    #[test]
-    fn uma_ideia_oferece_promocao_e_um_projecto_nao() {
-        let idea = research_workspace(WorkspaceView {
+    /// Helper: render an idea workspace with a given state, transitions and
+    /// promotable/may_transition flags.
+    fn idea_ws(state: &str, transitions: Value, promotable: bool, may_transition: bool) -> String {
+        research_workspace(WorkspaceView {
             overview: json!({
-                "workspace": {"id": "w1", "code": "AI-IDEA-001", "classification": "INTERNAL"},
-                "idea": {"id": "i1", "title": "Ideia", "state": "exploration"},
+                "workspace": {"id": "w1", "code": "AI-IDEA-001", "classification": "INTERNAL",
+                               "may_transition": may_transition},
+                "idea": {"id": "i1", "title": "Ideia", "state": state,
+                          "available_transitions": transitions, "promotable": promotable},
                 "project": null,
                 "members": []
             }),
@@ -962,10 +1096,47 @@ pub(crate) mod tests {
             may_use_assistance: true,
             gestao: gestao_de_prova(),
         })
-        .to_html();
+        .to_html()
+    }
 
-        assert!(idea.contains("Promover a Projecto"));
-        assert!(idea.contains("IDEIA"));
+    /// Uma ideia por promover oferece os movimentos legais do Core — e **não**
+    /// «Promover a Projecto», que só surge quando ela é candidata.
+    #[test]
+    fn uma_ideia_oferece_o_ciclo_de_vida_que_o_core_permite() {
+        // Em exploração: pode avançar para Conceito; ainda não é promovível.
+        let cedo = idea_ws(
+            "exploration",
+            json!([
+                {"state": "concept", "requires_note": false},
+                {"state": "rejected", "requires_note": true}
+            ]),
+            false,
+            true,
+        );
+        assert!(
+            cedo.contains("Avançar para Conceito"),
+            "falta o avanço de estado"
+        );
+        assert!(cedo.contains("Rejeitar"), "falta a acção de fechar");
+        assert!(cedo.contains(r#"action="/ideas/i1/transition""#));
+        assert!(
+            !cedo.contains("Promover a Projecto"),
+            "uma ideia não-candidata não deve oferecer promoção"
+        );
+
+        // Candidata a projecto: agora sim, «Promover a Projecto» é a acção primária.
+        let madura = idea_ws(
+            "project_candidate",
+            json!([{"state": "review", "requires_note": false}]),
+            true,
+            true,
+        );
+        assert!(madura.contains("Promover a Projecto"));
+        assert!(madura.contains(r#"href="/projects/new?workspace=w1""#));
+
+        // Sem autoridade e sem promoção, o strip não aparece.
+        let sem_poder = idea_ws("exploration", json!([]), false, false);
+        assert!(!sem_poder.contains("Ciclo de vida"));
     }
 
     #[test]

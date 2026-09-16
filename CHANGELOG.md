@@ -7,6 +7,32 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ideia → Projecto funciona pelo produto (certificação final pré-IA) — 2026-09-17
+
+Um membro conseguia abrir uma ideia mas não a levar a projecto: o defeito que
+motivou a certificação final. Uma ideia nasce em `discovery` e só é promovível em
+`project_candidate`, mas o Workspace **não oferecia controlo nenhum** para a mover
+pelos estados (`Discovery→Exploration→Concept→Review→ProjectCandidate`). O Core já
+tinha `transition_idea` (`POST /ideas/{id}/transitions`) — nunca chamado pelo
+Workspace (`F-10`, P1).
+
+- **Ciclo de vida accionável.** O Core passa a expor, na ideia, os movimentos
+  legais (`available_transitions`, do domínio `idea_targets_from` — a interface
+  não duplica o grafo) e `promotable`, e no ambiente `may_transition`. O Workspace
+  tem um **strip de ciclo de vida**: avançar de estado, fechar (rejeitar/arquivar,
+  com a razão que é memória institucional), e **Promover a Projecto** — que só
+  aparece quando a ideia é candidata. Rota `POST /ideas/{id}/transition`.
+- **Abrir um projecto por URL deixou de estar partido** (`F-16`, P2, descoberto
+  pela E2E ao recarregar): `GET /api/v1/projects/{id}` não devolvia `workspace_id`,
+  e o redirecto de `/projects/{id}` dependia dele — logo abrir um projecto da
+  lista, ou recarregá-lo, caía sem destino. `workspace_id` acrescentado ao
+  `ProjectView`.
+- **E2E `idea_to_project_e2e`**: cria uma ideia, avança-a pelo ciclo de vida até
+  candidata pelos controlos do produto, promove-a, e prova no PostgreSQL que a
+  ideia ficou `promoted` ligada ao projecto e o projecto regista a ideia de
+  origem — com recarregar. Registo vivo em
+  [`DEFECT_REGISTER.md`](docs/audits/pre-ai-final/DEFECT_REGISTER.md).
+
 ### Global Create — todas as criações deterministas funcionam agora — 2026-09-16
 
 O menu global «+ Criar» esbatia a maioria das acções, dando a impressão de um
