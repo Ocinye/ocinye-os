@@ -150,6 +150,21 @@ fn number(row: &Value, key: &str) -> String {
         .map_or_else(|| "—".to_owned(), |n| n.to_string())
 }
 
+/// Lê uma lista de strings (por exemplo, as áreas de investigação de uma unidade).
+fn string_list(row: &Value, key: &str) -> Vec<String> {
+    row.get(key)
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .filter(|s| !s.is_empty())
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Extrai a lista de itens de uma resposta paginada do Core.
 fn items(payload: &Value) -> Vec<Value> {
     payload
@@ -1598,7 +1613,7 @@ pub fn new_project(
 /// colocar o que criasse. O Core já aceitava `POST /api/v1/units`; era o
 /// Workspace que não lhe chegava, e «Nova Unidade» era um botão sem destino.
 pub fn new_unit(error: Option<String>) -> impl IntoView {
-    use crate::ui::components::{card, section_head, text_field, textarea};
+    use crate::ui::components::{card, section_head, textarea};
 
     view! {
         <div class="oc-page oc-page--narrow">
@@ -1617,24 +1632,40 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
                     view! { <div class="oc-card oc-alert" role="alert">{message}</div> }
                 })}
 
+            // Sem campo de código: o código é institucional e gerado. Quem cria
+            // uma unidade dá-lhe um nome; o Ocinye atribui o identificador.
             <form method="post" action="/units/new">
                 {card(
                     section_head("A UNIDADE", None, None),
                     view! {
-                        {text_field(
-                            "unit-code",
-                            "Código",
-                            "code",
-                            "Ex.: UENR-001",
-                            "text",
-                        )}
-                        {text_field(
-                            "unit-name",
-                            "Nome",
-                            "name",
-                            "Ex.: Unidade de Energias Renováveis",
-                            "text",
-                        )}
+                        <div class="oc-field">
+                            <label class="oc-field__label" for="unit-name">"Nome"</label>
+                            <input
+                                class="oc-input"
+                                id="unit-name"
+                                name="name"
+                                type="text"
+                                placeholder="Ex.: Unidade de Energias Renováveis"
+                                autocomplete="off"
+                                data-oc-code-source
+                            />
+                        </div>
+
+                        // O código gerado, mostrado a quem cria. Sem JavaScript,
+                        // fica a explicação; com JavaScript, o código previsto
+                        // aparece aqui à medida que o nome é escrito.
+                        <div class="oc-field">
+                            <label class="oc-field__label" for="unit-code-preview">"Código"</label>
+                            <output
+                                class="oc-code-preview"
+                                id="unit-code-preview"
+                                data-oc-code-preview
+                                data-oc-code-endpoint="/units/code-suggestion"
+                            >
+                                "Gerado automaticamente a partir do nome, no formato U<SIGLA>-NNN."
+                            </output>
+                        </div>
+
                         {textarea(
                             "unit-description",
                             "Descrição",
@@ -1642,19 +1673,127 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
                             "O que esta unidade investiga",
                             92,
                         )}
-                        {text_field(
-                            "unit-areas",
-                            "Áreas de investigação",
-                            "research_areas",
-                            "separadas por vírgulas",
-                            "text",
-                        )}
+
+                        // As áreas de investigação. Base: um campo de texto com
+                        // valores separados por vírgulas, que funciona sem
+                        // JavaScript. Com JavaScript, o app.js promove-o a fichas.
+                        <div class="oc-field">
+                            <label class="oc-field__label" for="unit-areas">
+                                "Áreas de investigação"
+                            </label>
+                            <input
+                                class="oc-input"
+                                id="unit-areas"
+                                name="research_areas"
+                                type="text"
+                                placeholder="separadas por vírgulas"
+                                autocomplete="off"
+                                data-oc-chips
+                                data-oc-chips-hint="Escreva uma área e prima Enter."
+                            />
+                        </div>
                     },
                 )}
 
                 <div class="oc-row--end oc-gap-5 oc-mt-8">
                     {button(Button::new("Cancelar", Variant::Secondary).href("/units"))}
                     {button(Button::new("Criar Unidade", Variant::Gold))}
+                </div>
+            </form>
+        </div>
+    }
+}
+
+/// O formulário de edição de uma unidade.
+///
+/// O código **não** é editável — é identidade institucional e aparece em
+/// citações; renomear nunca renumera. Por isso é mostrado, e não pedido. Os
+/// campos vêm preenchidos com o que já lá está: editar não é começar do zero.
+pub fn edit_unit(unit: &Value, error: Option<String>) -> impl IntoView {
+    use crate::ui::components::{card, field_with_value, section_head, textarea_with_value};
+
+    let id = text(unit, "id");
+    let code = text(unit, "code");
+    let code_hidden = code.clone();
+    let name = text(unit, "name");
+    let description = text(unit, "description");
+    let areas = string_list(unit, "research_areas").join(", ");
+    let action = format!("/units/{id}/edit");
+
+    view! {
+        <div class="oc-page oc-page--narrow">
+            <div class="oc-head">
+                <div class="oc-head__text">
+                    <h1>"Editar Unidade"</h1>
+                    <p>"O nome, a descrição e as áreas mudam. O código não — é a identidade da unidade."</p>
+                </div>
+            </div>
+
+            {error
+                .map(|message| {
+                    view! { <div class="oc-card oc-alert" role="alert">{message}</div> }
+                })}
+
+            <form method="post" action=action>
+                {card(
+                    section_head("A UNIDADE", None, None),
+                    view! {
+                        <div class="oc-field">
+                            <label class="oc-field__label" for="unit-code-fixed">"Código"</label>
+                            <input
+                                class="oc-input oc-input--readonly"
+                                id="unit-code-fixed"
+                                type="text"
+                                value=code
+                                readonly
+                                aria-describedby="unit-code-note"
+                            />
+                            // Round-trip do código para o re-render de erro; nunca vai ao Core.
+                            <input type="hidden" name="code" value=code_hidden />
+                            <p class="oc-field__note" id="unit-code-note">
+                                "O código é a identidade da unidade e não muda."
+                            </p>
+                        </div>
+
+                        {field_with_value(
+                            "unit-name",
+                            "Nome",
+                            "name",
+                            "Ex.: Unidade de Energias Renováveis",
+                            "text",
+                            name,
+                        )}
+                        {textarea_with_value(
+                            "unit-description",
+                            "Descrição",
+                            "description",
+                            "O que esta unidade investiga",
+                            92,
+                            description,
+                        )}
+
+                        <div class="oc-field">
+                            <label class="oc-field__label" for="unit-areas">
+                                "Áreas de investigação"
+                            </label>
+                            <input
+                                class="oc-input"
+                                id="unit-areas"
+                                name="research_areas"
+                                type="text"
+                                value=areas
+                                placeholder="separadas por vírgulas"
+                                autocomplete="off"
+                                data-oc-chips
+                                data-oc-chips-hint="Escreva uma área e prima Enter."
+                            />
+                        </div>
+                    },
+                )}
+
+                <div class="oc-row--end oc-gap-5 oc-mt-8">
+                    {button(Button::new("Cancelar", Variant::Secondary).href(format!("/units/{id}")))}
+                    {button(Button::new("Guardar", Variant::Gold))}
                 </div>
             </form>
         </div>
@@ -2217,5 +2356,45 @@ mod tests {
         assert_eq!(size(&json!({"n": 2048}), "n"), "2.0 kB");
         assert_eq!(size(&json!({"n": 5_368_709_120_i64}), "n"), "5.0 GB");
         assert_eq!(size(&json!({}), "n"), "—");
+    }
+
+    /// A «Nova Unidade» não pede um código: ele é gerado.
+    #[test]
+    fn nova_unidade_nao_pede_codigo_e_anuncia_que_e_gerado() {
+        let html = new_unit(None).to_html();
+        // Não há campo submissível `name="code"`.
+        assert!(
+            !html.contains("name=\"code\""),
+            "a criação não pode pedir um código: ele é gerado"
+        );
+        // Há o alvo da pré-visualização e a fonte (o nome).
+        assert!(html.contains("data-oc-code-preview"));
+        assert!(html.contains("data-oc-code-source"));
+        // As áreas são um campo promovível a fichas, com o nome que o Core lê.
+        assert!(html.contains("data-oc-chips"));
+        assert!(html.contains("name=\"research_areas\""));
+    }
+
+    /// Editar mostra o código como fixo e traz os campos preenchidos.
+    #[test]
+    fn editar_unidade_mostra_o_codigo_fixo_e_preenche_os_campos() {
+        let unit = json!({
+            "id": "11111111-1111-1111-1111-111111111111",
+            "code": "UCS-001",
+            "name": "Computação e Sistemas",
+            "description": "Descrição existente",
+            "research_areas": ["Sistemas distribuídos", "Engenharia de software"],
+        });
+        let html = edit_unit(&unit, None).to_html();
+        // O código aparece, mas só-de-leitura — não é um campo que se submeta
+        // como mutável (vai num hidden apenas para re-render de erro).
+        assert!(html.contains("UCS-001"));
+        assert!(html.contains("readonly"));
+        // Os campos vêm preenchidos.
+        assert!(html.contains("Computação e Sistemas"));
+        assert!(html.contains("Descrição existente"));
+        assert!(html.contains("Sistemas distribuídos, Engenharia de software"));
+        // O formulário aponta para a rota de edição.
+        assert!(html.contains("/units/11111111-1111-1111-1111-111111111111/edit"));
     }
 }

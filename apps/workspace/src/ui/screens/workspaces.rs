@@ -577,6 +577,19 @@ pub fn unit_detail(
         })
         .collect();
 
+    let research_areas: Vec<String> = unit
+        .get("research_areas")
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .filter(|s| !s.is_empty())
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+
     view! {
         <div class="oc-band" >
             <div class="oc-row oc-row--wrap oc-gap-6 oc-mb-2" >
@@ -585,6 +598,15 @@ pub fn unit_detail(
                 </h1>
                 {pill(text(unit, "code"))}
                 {badge(status.clone(), Tone::of(&status))}
+                // Editar só a quem pode gerir a unidade. A ausência não é a
+                // defesa: o Core recusa o mesmo PUT a quem o tente directamente.
+                {gestao.pode_gerir.then(|| {
+                    let href = format!("/units/{id}/edit");
+                    view! {
+                        <span class="oc-row__spacer" ></span>
+                        {button(Button::new("Editar", Variant::Secondary).href(href))}
+                    }
+                })}
             </div>
             <div class="oc-mono oc-mb-5" >
                 {format!("{} membros · {ideas} ideias · {projects} projectos", member_rows.len())}
@@ -600,14 +622,24 @@ pub fn unit_detail(
                         <p class="oc-t-body" >
                             {text(unit, "description")}
                         </p>
-                        <div class="oc-split oc-split--2" >
+                        {(!research_areas.is_empty()).then(|| {
+                            view! {
+                                <div class="oc-field__label oc-mt-5" >"Áreas de investigação"</div>
+                                <div class="oc-chips oc-chips--static" >
+                                    {research_areas
+                                        .iter()
+                                        .map(|area| view! {
+                                            <span class="oc-chip" >{area.clone()}</span>
+                                        })
+                                        .collect_view()}
+                                </div>
+                            }
+                        })}
+                        <div class="oc-split oc-split--2 oc-mt-5" >
                             {metric("Membros", member_rows.len())}
                             {metric("Ideias", ideas)}
                             {metric("Projectos", projects)}
-                            {metric("Áreas", unit
-                                .get("research_areas")
-                                .and_then(Value::as_array)
-                                .map_or(0, Vec::len))}
+                            {metric("Áreas", research_areas.len())}
                         </div>
                     </div>
                 </section>

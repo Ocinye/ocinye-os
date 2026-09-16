@@ -3939,9 +3939,155 @@ document.addEventListener('keydown', (event) => {
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', iniciar);
-  } else {
+  /* ── A «Nova Unidade»: código gerado e áreas em fichas ──────────────────
+   *
+   * Progressive enhancement puro. Sem JavaScript, o formulário funciona: o
+   * código é gerado no servidor, e as áreas vão num campo separado por
+   * vírgulas. Com JavaScript, o código previsto aparece à medida que se
+   * escreve o nome, e as áreas tornam-se fichas — a mesma peça visual que os
+   * destinatários do correio. */
+
+  function ligarPreVisualizacaoDeCodigo() {
+    var saida = document.querySelector('[data-oc-code-preview]');
+    var fonte = document.querySelector('[data-oc-code-source]');
+    if (!saida || !fonte) return;
+    var endpoint = saida.getAttribute('data-oc-code-endpoint');
+    if (!endpoint) return;
+
+    var explicacao = saida.textContent;
+    var pedidoActual = 0;
+
+    function repor() {
+      saida.textContent = explicacao;
+      saida.classList.remove('oc-code-preview--filled');
+    }
+
+    function actualizar() {
+      var nome = fonte.value.trim();
+      if (!nome) { repor(); return; }
+      var meu = (pedidoActual += 1);
+      fetch(endpoint + '?name=' + encodeURIComponent(nome), {
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (dados) {
+          /* Uma resposta atrasada nunca sobrepõe uma mais recente. */
+          if (meu !== pedidoActual) return;
+          if (dados && typeof dados.code === 'string') {
+            saida.textContent = dados.code;
+            saida.classList.add('oc-code-preview--filled');
+          }
+        })
+        .catch(function () { /* offline ou recusado: fica a explicação */ });
+    }
+
+    var temporizador = null;
+    fonte.addEventListener('input', function () {
+      if (temporizador) clearTimeout(temporizador);
+      temporizador = setTimeout(actualizar, 250);
+    });
+  }
+
+  function promoverCamposEmFichas() {
+    var campos = document.querySelectorAll('input[data-oc-chips]');
+    Array.prototype.forEach.call(campos, function (campo) {
+      if (campo.dataset.ocChipsPronto) return;
+      campo.dataset.ocChipsPronto = '1';
+
+      var valores = campo.value
+        .split(',')
+        .map(function (v) { return v.trim(); })
+        .filter(Boolean);
+
+      var envolvente = document.createElement('div');
+      envolvente.className = 'oc-chips oc-chips--editor';
+
+      var entrada = document.createElement('input');
+      entrada.type = 'text';
+      entrada.className = 'oc-chips__input';
+      entrada.autocomplete = 'off';
+      entrada.placeholder = campo.getAttribute('placeholder') || '';
+      var dica = campo.getAttribute('data-oc-chips-hint');
+      if (dica) entrada.setAttribute('aria-label', dica);
+
+      /* O rótulo passa a apontar para o campo visível; o campo original fica
+       * escondido a carregar o valor, com o mesmo `name`. */
+      var idOriginal = campo.id;
+      if (idOriginal) { campo.removeAttribute('id'); entrada.id = idOriginal; }
+      campo.type = 'hidden';
+      campo.removeAttribute('placeholder');
+      campo.parentNode.insertBefore(envolvente, campo);
+
+      function sincronizar() { campo.value = valores.join(', '); }
+
+      function desenhar() {
+        Array.prototype.slice
+          .call(envolvente.querySelectorAll('.oc-chip'))
+          .forEach(function (c) { c.remove(); });
+        valores.forEach(function (valor, indice) {
+          var ficha = document.createElement('span');
+          ficha.className = 'oc-chip';
+          var texto = document.createElement('span');
+          texto.textContent = valor;
+          ficha.appendChild(texto);
+          var remover = document.createElement('button');
+          remover.type = 'button';
+          remover.setAttribute('aria-label', 'Remover ' + valor);
+          remover.textContent = '×';
+          remover.addEventListener('click', function () {
+            valores.splice(indice, 1);
+            desenhar();
+            entrada.focus();
+          });
+          ficha.appendChild(remover);
+          envolvente.insertBefore(ficha, entrada);
+        });
+        sincronizar();
+      }
+
+      function adicionar(bruto) {
+        var v = bruto.trim();
+        if (v && valores.indexOf(v) === -1) { valores.push(v); }
+        entrada.value = '';
+        desenhar();
+      }
+
+      entrada.addEventListener('keydown', function (evento) {
+        if (evento.key === 'Enter' || evento.key === ',') {
+          evento.preventDefault();
+          adicionar(entrada.value);
+        } else if (evento.key === 'Backspace' && !entrada.value && valores.length) {
+          valores.pop();
+          desenhar();
+        }
+      });
+      /* Escrever uma área e sair do campo não a deve perder. */
+      entrada.addEventListener('blur', function () {
+        if (entrada.value.trim()) adicionar(entrada.value);
+      });
+
+      envolvente.appendChild(entrada);
+      envolvente.addEventListener('click', function (evento) {
+        if (evento.target === envolvente) entrada.focus();
+      });
+      desenhar();
+    });
+  }
+
+  function melhorarFormularioDeUnidade() {
+    ligarPreVisualizacaoDeCodigo();
+    promoverCamposEmFichas();
+  }
+
+  function arrancar() {
     iniciar();
+    melhorarFormularioDeUnidade();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', arrancar);
+  } else {
+    arrancar();
   }
 })();
