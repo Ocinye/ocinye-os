@@ -92,6 +92,159 @@ pub async fn code_taken<'e>(
     Ok(exists)
 }
 
+/// The advisory-lock namespace under which unit-code numbers are allocated.
+///
+/// Any constant that is stable and unlikely to collide with another use of
+/// `pg_advisory_xact_lock` in the same transaction would do; this one reads as
+/// «UNIT» so a `pg_locks` row is legible to an operator.
+const UNIT_CODE_LOCK_NAMESPACE: i32 = 0x554E_4954; // "UNIT"
+
+/// Allocate the next free `<stem>-NNN` code for an organisation.
+///
+/// The number is per-stem and per-organisation: `UCS-001`, then `UCS-002`, while
+/// `UDC-001` counts on its own. Allocation is serialised for the transaction by
+/// an advisory lock keyed on the organisation, so two units created at the same
+/// instant can never read the same maximum and race onto the same number — the
+/// second waits, then sees the first.
+///
+/// Pure counting, not parsing intent: it reads the numbers already spent on this
+/// stem and returns the lowest three-digit suffix above them all, starting at
+/// `001`.
+///
+/// # Errors
+///
+/// Returns an error when the lock or the query fails.
+pub async fn next_unit_code(
+    conn: &mut sqlx::PgConnection,
+    organisation_id: Uuid,
+    stem: &str,
+) -> CoreResult<String> {
+    // Hold the organisation's unit-code namespace for the rest of the
+    // transaction. Released on commit or rollback — never left dangling.
+    sqlx::query("SELECT pg_advisory_xact_lock($1, hashtext($2))")
+        .bind(UNIT_CODE_LOCK_NAMESPACE)
+        .bind(organisation_id.to_string())
+        .execute(&mut *conn)
+        .await?;
+
+    let prefix = format!("{stem}-");
+    let spent = codes_with_prefix(&mut *conn, organisation_id, &prefix).await?;
+    Ok(format!("{prefix}{:03}", next_number(&spent, &prefix)))
+}
+
+/// The code the next unit of this stem *would* get, without allocating it.
+///
+/// Read-only and lock-free: for a live preview in a form, where the exact number
+/// is indicative and only confirmed when the unit is actually created (another
+/// unit created in between simply shifts it). [`next_unit_code`] is the
+/// authority; this only shows what it is about to do.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn peek_unit_code<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    stem: &str,
+) -> CoreResult<String> {
+    let prefix = format!("{stem}-");
+    let spent = codes_with_prefix(executor, organisation_id, &prefix).await?;
+    Ok(format!("{prefix}{:03}", next_number(&spent, &prefix)))
+}
+
+/// Codes in this organisation that begin with `prefix`.
+async fn codes_with_prefix<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    prefix: &str,
+) -> CoreResult<Vec<String>> {
+    let codes = sqlx::query_scalar::<_, String>(
+        "SELECT code FROM units WHERE organisation_id = $1 AND code LIKE $2",
+    )
+    .bind(organisation_id)
+    .bind(format!("{prefix}%"))
+    .fetch_all(executor)
+    .await?;
+    Ok(codes)
+}
+
+/// The lowest free number above every `<prefix>NNN` already spent, from `1`.
+fn next_number(spent: &[String], prefix: &str) -> u32 {
+    spent
+        .iter()
+        .filter_map(|code| code.strip_prefix(prefix))
+        .filter_map(|suffix| suffix.parse::<u32>().ok())
+        .max()
+        .map_or(1, |highest| highest + 1)
+}
+
+/// Insert a unit only if its code is free, for idempotent seeding.
+///
+/// Returns the new unit, or `None` when a unit with this code already exists —
+/// so re-running a seed adds nothing and clobbers nothing. `created_by_id` is
+/// left null: a seeded unit has no human author, and saying so is honest.
+///
+/// # Errors
+///
+/// Returns an error when the insert fails.
+pub async fn insert_unit_if_absent<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    code: &str,
+    name: &str,
+    description: Option<&str>,
+    research_areas: &[String],
+) -> CoreResult<Option<Unit>> {
+    let unit = sqlx::query_as::<_, Unit>(&format!(
+        "INSERT INTO units (organisation_id, code, name, description, research_areas)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (organisation_id, code) DO NOTHING
+         RETURNING {UNIT_COLUMNS}"
+    ))
+    .bind(organisation_id)
+    .bind(code)
+    .bind(name)
+    .bind(description)
+    .bind(research_areas)
+    .fetch_optional(executor)
+    .await?;
+    Ok(unit)
+}
+
+/// Update a unit's editable fields: name, description and research areas.
+///
+/// The **code is not editable**: it is institutional identity, appears in
+/// citations, and stays stable for the life of the unit. Renaming a unit does
+/// not renumber it.
+///
+/// # Errors
+///
+/// Returns an error when the update fails.
+pub async fn update_unit<'e>(
+    executor: impl PgExecutor<'e>,
+    unit_id: Uuid,
+    name: &str,
+    description: Option<&str>,
+    research_areas: &[String],
+    updated_by: Uuid,
+) -> CoreResult<Unit> {
+    let unit = sqlx::query_as::<_, Unit>(&format!(
+        "UPDATE units
+            SET name = $2, description = $3, research_areas = $4,
+                updated_by_id = $5, updated_at = now()
+          WHERE id = $1
+         RETURNING {UNIT_COLUMNS}"
+    ))
+    .bind(unit_id)
+    .bind(name)
+    .bind(description)
+    .bind(research_areas)
+    .bind(updated_by)
+    .fetch_one(executor)
+    .await?;
+    Ok(unit)
+}
+
 /// List units.
 ///
 /// Units carry no classification of their own: their existence is `INTERNAL`,

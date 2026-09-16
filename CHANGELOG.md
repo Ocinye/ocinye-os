@@ -7,6 +7,40 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Unidades — defaults institucionais, códigos gerados e edição (Core) — 2026-09-16
+
+A «Nova Unidade» deixa de ser um formulário genérico vazio que pede um código à
+mão. Esta fatia é a **fundação no Core**; a experiência do Workspace (fichas de
+áreas, código gerado à vista, ecrã de edição) segue numa fatia própria.
+
+- **Unidades iniciais semeadas como dados, não como enum.** Quatro defaults
+  sensatos — `UAI-001` Inteligência Artificial, `UCS-001` Computação e Sistemas,
+  `UDC-001` Dados e Conhecimento, `UID-001` Investigação e Desenvolvimento —
+  entram como **linhas**. Nada no sistema ramifica sobre estes códigos (§2, §7).
+  Uma instalação renomeia-as, arquiva-as ou acrescenta às suas. **Migração 0049**
+  semeia as organizações existentes (idempotente, `ON CONFLICT DO NOTHING`); o
+  `bootstrap-admin` semeia uma instalação nova pelo mesmo caminho.
+- **Geração de código institucional.** Uma unidade nova sem código recebe
+  `U<ABREVIATURA>-NNN`, derivado do nome de forma determinista — `Computação e
+  Sistemas` → `UCS-001`, e o número sobe por radical e por organização, alocado
+  sob *advisory lock* para dois pedidos simultâneos nunca colidirem. A
+  abreviatura nunca se forma de *stopwords* (`de`, `da`, `e`). Um código
+  explícito continua a ser aceite (seed, importação, um administrador que quer um
+  específico). §14: uma unidade que não existia quando o Ocinye foi compilado é
+  tão criável como qualquer outra.
+- **Edição de unidade** (`PUT /units/{id}`): nome, descrição e áreas de
+  investigação. O **código é imutável** — é identidade institucional, aparece em
+  citações, e renomear nunca renumera. Exige a autoridade que gere a unidade
+  (gestor, lead ou administrador da organização) — nunca por título.
+- **Pesquisa de unidades.** Uma unidade é indexada e encontrável por nome, por
+  código e pela área em que trabalha; a linha é `INTERNAL` e visível a todo o
+  membro activo, como `list_units`. Arquivar tira-a do índice sem apagar a linha.
+  A migração 0049 faz *backfill* do índice para as unidades que antecedem esta
+  indexação.
+- **Pré-visualização de código** (`GET /units/code-suggestion?name=…`): mostra o
+  código que uma unidade com aquele nome receberia — indicativo, confirmado só na
+  criação —, para o formulário do Workspace o exibir em tempo real.
+
 ### Continuidade — o manifesto voltou a descrever-se sobre o esquema real — 2026-09-16
 
 O `snapshot` de continuidade — a espinha do `institutional-backup` e do

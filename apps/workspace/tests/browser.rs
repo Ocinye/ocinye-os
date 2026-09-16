@@ -9928,7 +9928,7 @@ async fn conceder_e_revogar_uma_pertenca_veem_se_na_mesma_sessao() {
         &quem_gere,
         &ids,
         ocinye_core::modules::organisation::NewUnit {
-            code: format!("F{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase(),
+            code: Some(format!("F{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase()),
             name: "Unidade de frescura".to_owned(),
             description: None,
             research_areas: Vec::new(),

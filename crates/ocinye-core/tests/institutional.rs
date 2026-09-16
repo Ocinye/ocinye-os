@@ -175,7 +175,7 @@ async fn uma_instituicao_vazia_chega_a_projecto_sem_sql() {
         &admin,
         &ids(),
         organisation::NewUnit {
-            code: format!("ENG{marca}"),
+            code: Some(format!("ENG{marca}")),
             name: "Engenharia Computacional".to_owned(),
             description: None,
             research_areas: vec!["computação".to_owned()],
@@ -411,7 +411,7 @@ async fn instituicao(pool: &PgPool) -> Instituicao {
         &admin,
         &ids(),
         organisation::NewUnit {
-            code: format!("ENA{marca}"),
+            code: Some(format!("ENA{marca}")),
             name: "Energia".to_owned(),
             description: None,
             research_areas: Vec::new(),
@@ -424,7 +424,7 @@ async fn instituicao(pool: &PgPool) -> Instituicao {
         &admin,
         &ids(),
         organisation::NewUnit {
-            code: format!("SIS{marca}"),
+            code: Some(format!("SIS{marca}")),
             name: "Sistemas Digitais".to_owned(),
             description: None,
             research_areas: Vec::new(),
@@ -1440,7 +1440,7 @@ async fn pertencer_a_uma_unidade_expande_o_acesso_efectivo() {
         &admin,
         &ids(),
         organisation::NewUnit {
-            code: format!("MEM{marca}"),
+            code: Some(format!("MEM{marca}")),
             name: "Unidade de prova".to_owned(),
             description: None,
             research_areas: Vec::new(),
@@ -1531,7 +1531,7 @@ async fn um_membro_convidado_recebe_unidade_antes_do_primeiro_login() {
         &admin,
         &ids(),
         organisation::NewUnit {
-            code: format!("SIS{marca}"),
+            code: Some(format!("SIS{marca}")),
             name: "Sistemas Digitais".to_owned(),
             description: None,
             research_areas: Vec::new(),
@@ -1617,7 +1617,7 @@ async fn units_for_people_agrupa_a_pertenca_viva() {
         &admin,
         &ids(),
         organisation::NewUnit {
-            code: "UFPA".to_owned(),
+            code: Some("UFPA".to_owned()),
             name: "Energia".to_owned(),
             description: None,
             research_areas: Vec::new(),
@@ -1630,7 +1630,7 @@ async fn units_for_people_agrupa_a_pertenca_viva() {
         &admin,
         &ids(),
         organisation::NewUnit {
-            code: "UFPB".to_owned(),
+            code: Some("UFPB".to_owned()),
             name: "Sistemas".to_owned(),
             description: None,
             research_areas: Vec::new(),
