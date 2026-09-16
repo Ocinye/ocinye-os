@@ -13,6 +13,7 @@
 
 #![forbid(unsafe_code)]
 
+mod conversion;
 mod handlers;
 mod outbox;
 mod reminders;
@@ -80,6 +81,12 @@ async fn main() -> anyhow::Result<()> {
              while lexical retrieval continues to work"
         ),
     }
+
+    // A fronteira de conversão de conteúdo não confiável. O worker fala com o
+    // Conversion Runner por HTTP; nunca corre parsers hostis nem contentores no
+    // seu próprio processo (ADR-0609). Sem o runner, uma miniatura de PDF fica
+    // por gerar e o outbox volta a tentar — a de imagem não depende disto.
+    let converter = conversion::RunnerBoundary::from_env();
 
     let offline_after = i64::try_from(config.compute.node_offline_after.as_secs()).unwrap_or(120);
 
@@ -164,7 +171,7 @@ async fn main() -> anyhow::Result<()> {
                     Err(error) => tracing::error!(error = %error, "mail ingestion pass failed"),
                 }
             }
-            drained = outbox::drain(&pool, BATCH_SIZE, store.as_ref(), embeddings.as_deref()) => {
+            drained = outbox::drain(&pool, BATCH_SIZE, store.as_ref(), embeddings.as_deref(), &converter) => {
                 match drained {
                     // An empty pass means idle: back off rather than spin.
                     Ok(0) => tokio::time::sleep(IDLE_POLL_INTERVAL).await,

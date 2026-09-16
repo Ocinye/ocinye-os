@@ -1,0 +1,32 @@
+[package]
+name = "ocinye-conversion-runner"
+description = "Ocinye Conversion Runner — the isolation boundary that converts untrusted files in disposable, hardened containers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Two binaries share one crate because they share the closed profile catalogue
+# (`lib.rs`): the runner, a sidecar that owns the container-spawning authority,
+# and `ocinye-convert`, the tiny entrypoint that runs inside each disposable
+# converter. Keeping the profile names in one place is the point — a profile the
+# runner accepts and the converter does not recognise is a bug the shared module
+# makes impossible.
+
+[[bin]]
+name = "ocinye-conversion-runner"
+path = "src/bin/runner.rs"
+
+[[bin]]
+name = "ocinye-convert"
+path = "src/bin/convert.rs"
+
+[dependencies]
+ocinye-observability = { workspace = true }
+
+tokio = { workspace = true }
+axum = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }

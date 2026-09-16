@@ -87,8 +87,8 @@ sem que nada falhe.
 
 - **Monorepo Rust**, Cargo workspace com 5 crates (`ocinye-contracts`,
   `ocinye-domain`, `ocinye-observability`, `ocinye-core`, `ocinye-capabilities`),
-  3 serviços (`core-server`, `worker`, `node-agent`) e 1 aplicação
-  (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
+  4 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`) e 1
+  aplicação (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
 - **Ocinye Core: `IMPLEMENTED` e em produção.** 200 caminhos e 237 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
@@ -256,20 +256,24 @@ sem que nada falhe.
   `<input type="file">` nativo à vista. Abrir um ficheiro pré-visualiza-o num
   **Quick Look**: imagem e PDF inline, texto e código escapados, e uma ficha com
   descarregar para o resto. As **miniaturas** de imagem e da primeira página de
-  cada PDF aparecem na grelha, geradas por um trabalhador — o PDF rasterizado por
-  um subprocesso isolado (`pdftoppm`) que **não executa o JavaScript do
-  documento**. Há **selecção múltipla** com mover/eliminar em lote, **arrastar
-  para mover**, e **Favoritos** e **Recentes** como vistas que atravessam pastas.
-  Tudo reautoriza pela posse no Core, ficheiro a ficheiro. Como o armazenamento
-  **não tem endpoint público**, o Core serve os bytes **same-origin**
-  (pré-visualização, miniatura, texto, descarga) — para os ficheiros pessoais e,
-  agora, também para a **descarga institucional**, que redireccionava para uma
-  ligação assinada apontada ao host interno e por isso estava partida
+  cada PDF aparecem na grelha, geradas por um trabalhador. A rasterização do PDF
+  (`pdftoppm`, um renderizador que **não executa o JavaScript do documento**)
+  corre num **contentor descartável e endurecido**, criado pelo **Conversion
+  Runner** — o único serviço com o socket do Docker; o worker nunca corre parsers
+  hostis nem contentores no próprio processo, e comprometê-lo não dá root sobre o
+  host ([ADR-0609](docs/adrs/0609-disposable-conversion-isolation.md)). Há
+  **selecção múltipla** com mover/eliminar em lote, **arrastar para mover**, e
+  **Favoritos** e **Recentes** como vistas que atravessam pastas. Tudo reautoriza
+  pela posse no Core, ficheiro a ficheiro. Como o armazenamento **não tem
+  endpoint público**, o Core serve os bytes **same-origin** (pré-visualização,
+  miniatura, texto, descarga) — para os ficheiros pessoais e também para a
+  **descarga institucional**, que redireccionava para uma ligação assinada
+  apontada ao host interno e por isso estava partida
   ([ADR-0608](docs/adrs/0608-same-origin-institutional-downloads.md)). Ficam
-  **explicitamente adiadas**, como trabalho futuro e não como lacuna: miniaturas
-  de **Office e vídeo** (exigem um conversor pesado — LibreOffice, ffmpeg) e um
-  **isolamento mais forte** da rasterização (seccomp ou contentor à parte) acima
-  do subprocesso com prazo de hoje.
+  **explicitamente adiadas**, como trabalho futuro e não como lacuna, as
+  miniaturas de **Office e vídeo** — a fronteira de conversão está pronta para as
+  receber (um perfil na lista fechada, a ferramenta na imagem do conversor), o
+  que falta é o conversor pesado (LibreOffice, ffmpeg).
 - **Notas: `IMPLEMENTED`, o módulo completo** ([ADR-0413](docs/adrs/0413-notes-as-institutional-knowledge.md)).
   Uma nota é conhecimento **pessoal** do membro — a `notes` serve dono e ambiente
   sem os confundir. O corpo canónico é um **documento estruturado versionado**
@@ -379,8 +383,8 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **70 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
-  **66 READMEs**, `docs/` povoado — incluindo
+- **71 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
+  **67 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -399,7 +403,7 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1620 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1623 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
@@ -990,7 +994,8 @@ apps/workspace                  crates/ocinye-contracts
 crates/ocinye-domain            crates/ocinye-observability
 crates/ocinye-core              crates/ocinye-capabilities
 services/core-server            services/worker
-services/node-agent             wasm/capabilities/bibtex-import
+services/node-agent             services/conversion-runner
+wasm/capabilities/bibtex-import
 design    docs    infra    migrations    scripts
 ```
 

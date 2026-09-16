@@ -7,6 +7,37 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros — a conversão de conteúdo não confiável sai para uma caixa descartável — 2026-09-16
+
+A rasterização de um PDF para miniatura corria como subprocesso **dentro do
+worker**. Um PDF é conteúdo de um utilizador real, potencialmente hostil, e o
+worker escoa a fila inteira da instituição — não é onde um parser grande deve
+correr, e a seguir vinham LibreOffice e ffmpeg, muito piores.
+
+A conversão passa a correr num **contentor descartável e endurecido**, criado por
+um serviço novo, o **Conversion Runner**
+([ADR-0609](docs/adrs/0609-disposable-conversion-isolation.md)).
+
+- **O worker deixou de correr parsers hostis e contentores.** Pede ao runner, por
+  HTTP na rede interna, um perfil de uma **lista fechada**, e recebe o derivado.
+  No domínio, a rasterização passou a ser uma trait injectada
+  (`thumbnail::ConversionBoundary`): o `ocinye-core` não conhece Docker.
+- **O socket do Docker vive só no runner** — a autoridade de criar contentores,
+  contida numa caixa mínima que não faz parsing de nada. Comprometer o worker
+  **não** dá root sobre o host, porque o worker nunca teve o socket.
+- **Cada conversão é descartável e endurecida:** `--network=none`,
+  `--read-only`, input só-leitura, output temporário, sem segredos, `--user
+  65534`, `--security-opt no-new-privileges`, `--cap-drop=ALL`, tectos de CPU,
+  memória, processos e tempo, destruída após. O derivado é tratado como não
+  confiável até a geração o re-codificar de raiz.
+- Serviço novo `services/conversion-runner` (o runner + o `ocinye-convert` que
+  corre dentro do contentor); imagem de conversor descartável no Dockerfile
+  (perfil `build`); o deploy garante o spool no host. Verificado no host de
+  produção antes de construir: o contentor endurecido corre o `pdftoppm`, sem
+  rede, com o rootfs só-leitura, e o transporte por montagem irmã funciona.
+- Prepara o caminho para **Office e vídeo**: acrescentar um formato é um perfil na
+  lista fechada e a ferramenta na imagem — sem o worker ganhar autoridade nova.
+
 ### Ficheiros — a descarga institucional volta a descarregar — 2026-09-15
 
 A descarga de um ficheiro institucional — a versão corrente e uma versão exacta —

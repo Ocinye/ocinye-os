@@ -9,6 +9,7 @@ members = [
     "services/core-server",
     "services/worker",
     "services/node-agent",
+    "services/conversion-runner",
     "apps/workspace",
 ]
 # Capabilities compile to wasm32-wasip1 and are built separately; including them
