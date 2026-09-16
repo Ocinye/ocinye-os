@@ -57,37 +57,80 @@ pub const MAX_SOURCE_BYTES: i64 = 32 * 1024 * 1024;
 /// O tecto de pixels da origem, recusado a partir do cabeçalho, antes de alocar.
 const MAX_SOURCE_PIXELS: u64 = 64_000_000;
 
-/// Os tipos de origem de que se gera uma miniatura: rasters e PDF. Um SVG é um
-/// documento com script e fica de fora; um PDF rasteriza-se a primeira página
-/// num renderizador que não executa o seu JavaScript (spec §76).
-pub const THUMBNAILABLE_TYPES: [&str; 4] =
-    ["image/png", "image/jpeg", "image/webp", "application/pdf"];
+/// Os rasters, que se descodificam **no processo** pela biblioteca `image` — o
+/// risco é o dela, e não há parser externo a correr. Um SVG fica de fora: é um
+/// documento com script.
+pub const RASTER_TYPES: [&str; 3] = ["image/png", "image/jpeg", "image/webp"];
+
+/// Os documentos, rasterizados a uma imagem **na fronteira isolada**: o PDF
+/// directo, e os formatos de escritório que o LibreOffice converte a PDF antes.
+/// Nenhum executa scripts nem macros (spec §76): o PDF por um renderizador, o
+/// Office num LibreOffice `--headless` sem rede, ambos num contentor descartável.
+pub const DOCUMENT_TYPES: [&str; 11] = [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.oasis.opendocument.text",
+    "application/vnd.oasis.opendocument.spreadsheet",
+    "application/vnd.oasis.opendocument.presentation",
+    "application/rtf",
+];
+
+/// Os vídeos, de que se extrai um fotograma **na fronteira isolada**, com o
+/// `ffmpeg`.
+pub const VIDEO_TYPES: [&str; 5] = [
+    "video/mp4",
+    "video/webm",
+    "video/quicktime",
+    "video/x-matroska",
+    "video/x-msvideo",
+];
+
+/// Um raster descodifica-se no processo; tudo o resto vai à fronteira.
+#[must_use]
+pub fn is_raster(content_type: &str) -> bool {
+    RASTER_TYPES.contains(&content_type)
+}
+
+/// De que tipos de origem se gera uma miniatura de todo.
+#[must_use]
+pub fn is_thumbnailable(content_type: &str) -> bool {
+    RASTER_TYPES.contains(&content_type)
+        || DOCUMENT_TYPES.contains(&content_type)
+        || VIDEO_TYPES.contains(&content_type)
+}
 
 /// A fronteira que converte conteúdo não confiável fora do processo do worker.
 ///
-/// Um raster (PNG/JPEG/WebP) descodifica-se no processo — é a biblioteca `image`,
-/// e o risco é o dela. Um PDF é outra coisa: rasterizá-lo é correr um parser
-/// grande sobre bytes potencialmente hostis, e isso **não** deve acontecer dentro
-/// do worker. Esta trait é o ponto onde a rasterização sai para uma fronteira
-/// isolada — em produção, um contentor descartável e endurecido gerido pelo
-/// Conversion Runner (ADR-0609). O domínio não sabe como a fronteira isola; sabe
-/// que recebe bytes e devolve uma imagem, e trata o resultado como ainda não
-/// confiável (re-codifica-o de raiz em [`gerar`]).
+/// Um raster descodifica-se no processo ([`is_raster`]) — é a biblioteca `image`,
+/// e o risco é o dela. Um documento ou um vídeo é outra coisa: convertê-lo é
+/// correr um parser grande (poppler, LibreOffice, ffmpeg) sobre bytes
+/// potencialmente hostis, e isso **não** deve acontecer dentro do worker. Esta
+/// trait é o ponto onde a conversão sai para uma fronteira isolada — em produção,
+/// um contentor descartável e endurecido gerido pelo Conversion Runner
+/// (ADR-0609). O domínio não sabe como a fronteira isola nem que ferramenta
+/// corre; sabe que dá um tipo e bytes e recebe uma imagem, e trata o resultado
+/// como ainda não confiável (re-codifica-o de raiz em [`gerar`]).
 ///
 /// Injecta-se em [`process`] para que o `ocinye-core` não conheça nem Docker nem
-/// subprocessos: quem os conhece é o worker, que constrói a implementação.
+/// subprocessos: quem os conhece é o worker, que constrói a implementação e
+/// mapeia o tipo para o perfil de conversão.
 #[async_trait::async_trait]
 pub trait ConversionBoundary: Send + Sync {
-    /// Rasteriza a primeira página de um PDF numa imagem (PNG), numa fronteira
-    /// isolada.
+    /// Converte bytes não confiáveis do tipo dado numa imagem (PNG), numa
+    /// fronteira isolada. Só se chama para tipos que não são raster.
     ///
     /// # Errors
     ///
-    /// [`CoreError::Validation`] quando o PDF não converte — um estado de
+    /// [`CoreError::Validation`] quando o conteúdo não converte — um estado de
     /// miniatura, não uma avaria, e o ficheiro fica com o ícone.
     /// [`CoreError::Internal`] quando a própria fronteira não respondeu, que é
     /// retentável pelo outbox.
-    async fn rasterize_pdf(&self, bytes: &[u8]) -> CoreResult<Vec<u8>>;
+    async fn to_thumbnail_image(&self, content_type: &str, bytes: &[u8]) -> CoreResult<Vec<u8>>;
 }
 
 /// O estado da geração — que não é o estado do armazenamento.
@@ -185,10 +228,7 @@ pub async fn ensure_queued_personal(
     .fetch_optional(&mut **tx)
     .await?;
 
-    if tipo
-        .as_deref()
-        .is_some_and(|t| THUMBNAILABLE_TYPES.contains(&t))
-    {
+    if tipo.as_deref().is_some_and(is_thumbnailable) {
         queue(tx, file_version_id, ids).await?;
     }
 
@@ -444,7 +484,7 @@ pub async fn process(
         return Ok(None);
     };
 
-    if !THUMBNAILABLE_TYPES.contains(&trabalho.content_type.as_str()) {
+    if !is_thumbnailable(&trabalho.content_type) {
         return Ok(Some(
             record_estado(tx, file_version_id, Estado::Unsupported, None).await?,
         ));
@@ -467,14 +507,18 @@ pub async fn process(
     // quando o que aconteceu foi o disco não atender.
     let bytes = store.get(&trabalho.object_key).await?;
 
-    // Um PDF rasteriza-se primeiro a primeira página numa imagem; um raster
-    // segue directo. A rasterização sai para a fronteira de conversão — em
-    // produção, um contentor descartável e endurecido que não executa o
-    // JavaScript do documento e não alcança o resto do sistema (spec §76,
-    // ADR-0609).
-    let pixels = if trabalho.content_type == "application/pdf" {
-        match converter.rasterize_pdf(&bytes).await {
-            Ok(png) => png,
+    // Um raster segue directo — descodifica-se no processo pela `image`. Um
+    // documento ou um vídeo sai para a fronteira de conversão: em produção, um
+    // contentor descartável e endurecido que não executa scripts nem macros e
+    // não alcança o resto do sistema (spec §76, ADR-0609).
+    let pixels = if is_raster(&trabalho.content_type) {
+        bytes.clone()
+    } else {
+        match converter
+            .to_thumbnail_image(&trabalho.content_type, &bytes)
+            .await
+        {
+            Ok(imagem) => imagem,
             Err(CoreError::Validation(razao)) => {
                 return Ok(Some(
                     record_estado(tx, file_version_id, Estado::Failed, Some(&razao)).await?,
@@ -482,8 +526,6 @@ pub async fn process(
             }
             Err(outro) => return Err(outro),
         }
-    } else {
-        bytes.clone()
     };
 
     let mini = match gerar(&pixels) {

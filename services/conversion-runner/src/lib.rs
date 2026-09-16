@@ -34,13 +34,33 @@ pub struct Profile {
 
 /// Os perfis que existem. Fechado por decisão: uma conversão que não esteja aqui
 /// não acontece.
-pub const PROFILES: &[Profile] = &[Profile {
-    name: "pdf-thumbnail",
-    timeout_secs: 25,
-    memory: "768m",
-    pids: 128,
-    cpus: "1",
-}];
+///
+/// Os tectos diferem por peso do parser: o `pdftoppm` é leve; o LibreOffice
+/// arranca devagar, come memória e forqueia processos-filho, por isso leva prazo,
+/// memória e `pids` maiores; o `ffmpeg` fica no meio.
+pub const PROFILES: &[Profile] = &[
+    Profile {
+        name: "pdf-thumbnail",
+        timeout_secs: 25,
+        memory: "768m",
+        pids: 128,
+        cpus: "1",
+    },
+    Profile {
+        name: "office-thumbnail",
+        timeout_secs: 90,
+        memory: "1024m",
+        pids: 512,
+        cpus: "1",
+    },
+    Profile {
+        name: "video-thumbnail",
+        timeout_secs: 45,
+        memory: "768m",
+        pids: 256,
+        cpus: "1",
+    },
+];
 
 /// Resolve um perfil pelo nome, ou `None` se não existir.
 #[must_use]

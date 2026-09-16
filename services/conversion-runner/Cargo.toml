@@ -27,6 +27,7 @@ ocinye-observability = { workspace = true }
 
 tokio = { workspace = true }
 axum = { workspace = true }
+serde = { workspace = true }
 uuid = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }

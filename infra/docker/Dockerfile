@@ -90,8 +90,17 @@ ENTRYPOINT ["/usr/local/bin/ocinye"]
 #
 # Constrói-se com `--build-arg BIN=ocinye-convert`.
 FROM debian:bookworm-slim AS converter
+# `poppler-utils` para o PDF; `libreoffice` (núcleo + os filtros de Writer/Calc/
+# Impress) para converter Office a PDF; `ffmpeg` para o fotograma de vídeo.
+# `--no-install-recommends` corta o que não se usa; ainda assim o LibreOffice
+# pesa — é o custo de gerar miniaturas de Office, e vive só nesta imagem
+# descartável, nunca no worker (ADR-0609).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends poppler-utils \
+ && apt-get install -y --no-install-recommends \
+      poppler-utils \
+      libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui \
+      ffmpeg \
+      fonts-dejavu-core \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /usr/local/bin/ocinye-binario /usr/local/bin/ocinye-convert
 ENTRYPOINT ["/usr/local/bin/ocinye-convert"]

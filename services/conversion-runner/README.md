@@ -1,8 +1,10 @@
 # `conversion-runner` — a fronteira de conversão
 
-Converte conteúdo **não confiável** em derivados (hoje, a miniatura da primeira
-página de um PDF) sem que os parsers hostis toquem no worker da Ocinye. É a
-implementação da [ADR-0609](../../docs/adrs/0609-disposable-conversion-isolation.md).
+Converte conteúdo **não confiável** em derivados — a miniatura de um PDF
+(`pdftoppm`), de um documento de Office (LibreOffice → PDF → `pdftoppm`) ou de um
+fotograma de vídeo (`ffmpeg`) — sem que os parsers hostis toquem no worker da
+Ocinye. É a implementação da
+[ADR-0609](../../docs/adrs/0609-disposable-conversion-isolation.md).
 
 ## O que pertence aqui
 

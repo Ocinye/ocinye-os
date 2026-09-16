@@ -322,7 +322,7 @@ pub async fn create_personal(
     // depois; até lá, a grelha cai no ícone. A extracção de corpo continua a
     // **não** ser enfileirada aqui (ver acima) — a miniatura é visual, não texto
     // pesquisável, e não tem a mesma questão de visibilidade.
-    if super::thumbnail::THUMBNAILABLE_TYPES.contains(&objecto.content_type.as_str()) {
+    if super::thumbnail::is_thumbnailable(&objecto.content_type) {
         super::thumbnail::queue(tx, version_id, ids).await?;
     }
 
