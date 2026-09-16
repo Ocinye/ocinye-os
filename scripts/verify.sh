@@ -207,6 +207,11 @@ step "Biblioteca de ADRs"
 # resolva. Se um domínio está certo é pergunta para uma pessoa.
 python3 scripts/check-adrs.py
 
+step "Alvos de construção do Compose"
+# Cada serviço multi-stage nomeia o stage que constrói — um build sem `target`
+# escolhe o último stage, e produção já caiu por causa disso.
+python3 scripts/compose_build_targets.py
+
 step "Contrato de autoria"
 # Os commits pertencem exclusivamente aos autores humanos (`CLAUDE.md` §72).
 #

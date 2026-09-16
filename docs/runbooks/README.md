@@ -45,10 +45,25 @@ controlo negativo que distingue restaurar de recriar
 Object Storage **não**: essa metade continua por exercitar, e o runbook di-lo
 no sítio onde está.
 
-## Runbooks necessários antes de qualquer deployment
+## Deployment e operação
 
-**Estes não existem**, porque nada está deployado. Escrevê-los agora produziria
-documentação que descreve uma realidade inexistente (`CLAUDE.md` §69).
+Produção **está deployada** — Core, Workspace, Worker e o Conversion Runner,
+atrás da Cloudflare, do mesmo SHA de `origin/main`
+([deployment](../deployment/README.md)).
+
+| Runbook | Quando |
+|---|---|
+| [Reverter produção para um release anterior](rollback-production.md) | Um deploy deixou produção degradada e é preciso repor o release anterior depressa |
+
+O **deploy** em si corre por `scripts/deploy-production.sh` (empacota `origin/main`,
+constrói no host, troca o symlink `current`); um runbook dedicado do deploy e os
+de resposta a falhas (correio, object-store, base de dados, disco) estão por
+escrever, e ficam listados abaixo.
+
+## Runbooks operacionais ainda por escrever
+
+Estes **não existem** ainda. Produção corre sem eles; escrevê-los é parte de
+fechar a operação, não decoração.
 
 | Runbook | Porquê |
 |---|---|
