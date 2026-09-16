@@ -1,0 +1,67 @@
+{
+  "audit": "OCINYE_PRE_AI_SYSTEM audit",
+  "version": "0.2",
+  "date": "2026-09-16",
+  "status": "in-progress",
+  "aggregate_gate": {
+    "name": "OCINYE_PRE_AI_SYSTEM_READY",
+    "declared": false,
+    "reason": "criteria 9, 11, 12, 13 remain (live rollback, E2E partials, authenticated acceptance, remaining hostile fixtures)"
+  },
+  "revisions": {
+    "note": "counts are derived by scripts/repository-facts.sh, never hand-written",
+    "main_sha": "settled at consolidation time; see git",
+    "production_sha": "deployed release; see docs/deployment and production smoke",
+    "migration_head": 48,
+    "tables": 84,
+    "core_paths": 200,
+    "core_operations": 237,
+    "workspace_screens": 86,
+    "permissions": 76,
+    "test_functions": 1629,
+    "db_test_functions": 599,
+    "adrs": 71,
+    "runbooks": 12,
+    "readmes": 68,
+    "services": 4
+  },
+  "defects": {
+    "found": { "P0": 1, "P1": 1, "P2": 1, "P3": 5 },
+    "open": { "P0": 0, "P1": 0, "P2": 0, "P3": 2 },
+    "highlights": [
+      { "id": "F-08", "sev": "P1", "state": "FIXED", "pr": 115, "summary": "continuity snapshot broke on the current schema (file_favourites had no id); backup could not produce a verifiable copy; found by proving backup" },
+      { "id": "F-02", "sev": "P0", "state": "FIXED", "pr": 109, "guarded_by": 111, "summary": "Dockerfile stage drift took the workspace down" },
+      { "id": "F-01", "sev": "P2", "state": "FIXED", "pr": 107, "summary": "institutional download signed for the unreachable internal host" },
+      { "id": "F-07", "sev": "P3", "state": "FIXED", "pr": 113, "summary": "implemented Create actions falsely labelled unavailable" }
+    ]
+  },
+  "prs_this_audit": [107, 108, 109, 110, 111, 112, 113, 114, 115],
+  "security": {
+    "broken_access_control": "none found",
+    "idor": "none found",
+    "csrf": "same-origin write guard; SameSite=Strict",
+    "xss": "covered on notes, mail, prompt markdown; structural inner_html guard",
+    "ssrf": "no attacker-controlled fetch; remote fetches use redirect::none to configured hosts",
+    "mock_ai_in_production": "impossible (test-fixtures compile-gated, dev-dependency only; NoProvider in prod; cargo-tree guard)",
+    "hostile_fixtures_added": ["image decompression bomb (#14)", "converter hardening flags (#12/#16)"],
+    "hostile_fixtures_remaining": ["byte-vs-declared MIME (#7)", "extension spoof (#8)", "malformed Office (#13)", "induced converter timeout (#15)"]
+  },
+  "operations": {
+    "backup_restore": { "proven": true, "scope": "database (isolated Docker rehearsal); negative control passes; objects half to re-exercise", "doc": "09-backup-restore.md" },
+    "rollback": { "script": "scripts/rollback-production.sh", "list_verified": true, "live_flip": "pending single controlled authorization", "doc": "10-deploy-rollback.md" },
+    "deploy": { "stage_drift_guard": "scripts/compose_build_targets.py", "in_ci": true },
+    "ai_control_plane": { "hot_plug_proven": true, "health_readiness_distinct_from_ai": true, "doc": "14-ai-control-plane.md" }
+  },
+  "e2e": {
+    "browser_suite": "apps/workspace/tests/browser.rs",
+    "browser_journeys_active": 106,
+    "covered": ["J1", "J2", "J3", "J5", "J6", "J7", "J8", "J10", "J12", "J13", "J14", "J16", "J21"],
+    "partial": ["J4", "J11", "J15", "J17"],
+    "missing_browser_covered_at_core": ["J9", "J18", "J19", "J20"],
+    "operational_not_browser": ["J22", "J23"],
+    "browser_engines": ["chromium"],
+    "browser_engines_target": ["chromium", "webkit", "firefox"],
+    "note": "authenticated behaviour proves out on CI ephemeral DB; authenticated production render needs the human"
+  },
+  "ai_runtime_blockers": ["physical node enrollment", "GPU/driver discovery", "inference runtime (vLLM/SGLang)", "model weights", "measured VRAM/tokens", "provider conformance with a real model", "model tool-call behaviour"]
+}

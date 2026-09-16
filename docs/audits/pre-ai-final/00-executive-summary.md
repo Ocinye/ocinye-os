@@ -34,11 +34,15 @@ guardado não conta como aberto.
 | Sev | Encontrados | **Abertos** |
 |---|---|---|
 | P0 | 1 (outage por *stage drift*) — FIXED + guardado | **0** |
-| P1 | 0 | **0** |
+| P1 | 1 (**backup partido** no esquema actual) — FIXED | **0** |
 | P2 | 1 (descarga institucional) — FIXED | **0** |
-| P3 | 4 | 2 (copy do «Criar», nits em avaliação) |
+| P3 | 5 (copy do «Criar» FIXED; 2 nits em avaliação) | **2** |
 
-Detalhe em [findings.md](findings.md).
+O achado do backup (F-08) veio de **provar** o backup em vez de o assumir: o
+`snapshot` falhava no esquema actual e produção não conseguia produzir uma cópia
+verificável. Corrigido (migração 0048 + guarda que corre o manifesto), e o ciclo
+backup→restauro provado num ambiente isolado. Detalhe em
+[findings.md](findings.md) e [09](09-backup-restore.md).
 
 ## Os dois limites honestos desta auditoria
 

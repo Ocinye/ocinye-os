@@ -15,7 +15,7 @@ causa era dupla — várias acções apontavam a **listas** em vez de fluxos de
 criação, a Tarefa não tinha destino nenhum, e as acções eram gateadas por
 permissões que vêm da **filiação** (unidade/ambiente), pelo que um administrador
 sem filiação via quase tudo indisponível (`GLOBAL_CREATE_DISABLED_DETERMINISTIC_ACTIONS`,
-P2, [findings](docs/audits/pre-ai-final/findings.md#F-08)).
+P2, [findings](docs/audits/pre-ai-final/findings.md#F-09)).
 
 - **O menu deixa de esbater por contexto.** É um registo tipado (§28) sem
   permissão: cada acção abre o seu fluxo, e o contexto (unidade, ambiente, ideia)

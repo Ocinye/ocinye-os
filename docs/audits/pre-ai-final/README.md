@@ -13,8 +13,11 @@ o primeiro runtime de IA/GPU. Evidência permanente, versionada, sem segredos.
 - [02 — Inventário de funcionalidades](02-feature-inventory.md)
 - [04 — Matriz E2E e cobertura](04-e2e-matrix.md)
 - [05 — Revisão de segurança](05-security-review.md)
+- [09 — Backup / restauro (provado; apanhou um P1)](09-backup-restore.md)
+- [10 — Deploy / rollback](10-deploy-rollback.md)
 - [11 — Verificação de produção](11-production-verification.md)
 - [12 — Lista de bloqueios de runtime de IA](12-ai-runtime-gap.md)
+- [14 — Plano de controlo de IA (pré-runtime)](14-ai-control-plane.md)
 - [findings.md — registo de defeitos](findings.md)
 - [gate.md — portão agregado](gate.md)
 - Handoff de IA: [`docs/operations/AI_RUNTIME_HANDOFF.md`](../../operations/AI_RUNTIME_HANDOFF.md)
@@ -28,7 +31,7 @@ que a evidência não sustenta.
 
 ## Documentos ainda por escrever nesta pass
 
-`03-requirements-traceability.md`, `06-ui-ux-review.md`, `07-data-integrity.md`,
-`08-performance.md`, `09-backup-restore.md`, `10-deploy-rollback.md`,
+`03-requirements-traceability.md`, `06-ui-ux-review.md` (precisa de render visual,
+que é do humano), `07-data-integrity.md`, `08-performance.md`,
 `13-known-limitations.md`, `evidence-manifest.json` — à medida que as fatias
 correspondentes forem exercitadas. A numeração segue a estrutura da missão.
