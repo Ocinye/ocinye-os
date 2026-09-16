@@ -25,7 +25,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use axum::body::Bytes;
-use axum::extract::{DefaultBodyLimit, Path, State};
+use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -105,11 +105,19 @@ async fn main() -> anyhow::Result<()> {
 async fn convert(
     State(config): State<Config>,
     Path(profile): Path<String>,
+    Query(pedido): Query<ConvertQuery>,
     corpo: Bytes,
 ) -> Response {
     let Some(perfil) = ocinye_conversion_runner::profile(&profile) else {
         return (StatusCode::NOT_FOUND, "perfil desconhecido").into_response();
     };
+
+    // A extensão é uma pista para o conversor (o LibreOffice precisa dela), e
+    // higieniza-se à porta: só letras e dígitos, curta. Um valor fora disto
+    // descarta-se em vez de viajar para a linha de comando do contentor.
+    let extensao = pedido
+        .ext
+        .filter(|e| !e.is_empty() && e.len() <= 8 && e.chars().all(|c| c.is_ascii_alphanumeric()));
 
     if corpo.is_empty() {
         return (StatusCode::BAD_REQUEST, "entrada vazia").into_response();
@@ -127,7 +135,7 @@ async fn convert(
         return (StatusCode::INTERNAL_SERVER_ERROR, "falha a preparar").into_response();
     }
 
-    let resultado = correr(&config, perfil, &job, &entrada, &saida).await;
+    let resultado = correr(&config, perfil, &job, &entrada, &saida, extensao.as_deref()).await;
     let _ = tokio::fs::remove_dir_all(&dir).await;
 
     match resultado {
@@ -169,6 +177,13 @@ async fn preparar(
     Ok(())
 }
 
+/// A extensão do ficheiro de origem, pista para o conversor. Opcional.
+#[derive(serde::Deserialize)]
+struct ConvertQuery {
+    #[serde(default)]
+    ext: Option<String>,
+}
+
 /// Uma falha de conversão (conteúdo que não converte) é diferente de uma falha
 /// do runner (o Docker não atendeu). A primeira é um estado do ficheiro; a
 /// segunda, um erro que o worker deve voltar a tentar.
@@ -185,6 +200,7 @@ async fn correr(
     job: &str,
     entrada: &std::path::Path,
     saida: &std::path::Path,
+    extensao: Option<&str>,
 ) -> Result<Vec<u8>, Falha> {
     let nome = format!("oc-conv-{job}");
     let entrada_s = entrada.to_string_lossy().into_owned();
@@ -220,6 +236,11 @@ async fn correr(
         &config.converter_image,
         perfil.name,
     ]);
+    // A extensão, quando há, é o argumento seguinte do `ocinye-convert`. Já foi
+    // higienizada à porta; não passa conteúdo hostil.
+    if let Some(ext) = extensao {
+        comando.arg(ext);
+    }
     comando.kill_on_drop(true);
 
     let prazo = Duration::from_secs(perfil.timeout_secs);

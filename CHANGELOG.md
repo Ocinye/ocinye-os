@@ -7,6 +7,24 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros — miniaturas de Office e vídeo — 2026-09-16
+
+Com a fronteira de conversão pronta (contentor descartável e endurecido,
+ADR-0609), a grelha passa a mostrar miniaturas de mais do que imagens e PDF:
+
+- **Office** — Word, Excel, PowerPoint, OpenDocument e RTF. O LibreOffice
+  (`--headless`, sem rede, com o perfil de utilizador no `tmpfs`) converte o
+  documento a PDF dentro do contentor descartável, e daí segue o caminho do PDF.
+- **Vídeo** — MP4, WebM, MOV, MKV, AVI. O `ffmpeg` extrai um fotograma.
+
+Dois perfis novos na lista fechada (`office-thumbnail`, `video-thumbnail`), com
+tectos próprios de tempo, memória e processos — o LibreOffice é pesado e forqueia,
+por isso leva mais folga. O worker mapeia o tipo de conteúdo no perfil; o
+`ocinye-core` só distingue «raster, descodifica-se no processo» de «tudo o resto
+vai à fronteira». O LibreOffice e o `ffmpeg` vivem **só** na imagem do conversor
+descartável, nunca no worker. Um formato que não converta fica com o ícone, sem
+avaria.
+
 ### Ficheiros — a conversão de conteúdo não confiável sai para uma caixa descartável — 2026-09-16
 
 A rasterização de um PDF para miniatura corria como subprocesso **dentro do
