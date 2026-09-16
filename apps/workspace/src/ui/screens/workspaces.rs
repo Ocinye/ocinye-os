@@ -92,27 +92,44 @@ pub struct WorkspaceView {
     pub gestao: GestaoDePessoas,
 }
 
-/// Constrói as tabs: só as que têm ecrã navegam.
+/// O destino de um separador do Research Workspace.
+///
+/// Um separador ou salta para uma secção deste ecrã (âncora `#…`, e o conteúdo
+/// já está renderizado por baixo), ou leva a outro ecrã (cadeia científica, IA),
+/// ou **não existe ainda** — e nesse caso não é um separador. Um separador
+/// inerte que não navega é um controlo morto, e era o defeito (F-11).
+fn tab_destination(label: &str, workspace_id: &str) -> Option<String> {
+    Some(match label {
+        // Secções deste ecrã — âncora para o conteúdo já renderizado.
+        "Visão geral" => "#ws-visao-geral".to_owned(),
+        "Membros" => "#ws-membros".to_owned(),
+        // «Fontes» e «Bibliografia» são a mesma coisa: as referências do ambiente.
+        "Bibliografia" | "Fontes" => "#ws-bibliografia".to_owned(),
+        "Notas" => "#ws-notas".to_owned(),
+        "Documentos" => "#ws-documentos".to_owned(),
+        "Datasets" | "Dados" => "#ws-datasets".to_owned(),
+        "Tarefas" => "#ws-tarefas".to_owned(),
+        // A actividade é a história do ambiente.
+        "Actividade" | "Histórico" => "#ws-actividade".to_owned(),
+        // Outros ecrãs.
+        "IA" => format!("/ai/prompt?workspace={workspace_id}"),
+        // Experiências e Resultados são duas leituras da mesma cadeia
+        // científica, e por isso levam ao mesmo ecrã.
+        "Experiências" | "Resultados" => format!("/workspaces/{workspace_id}/science"),
+        // «Código», «Planeamento», «Financiamento» ainda não existem como ecrã;
+        // não se mostram como separador morto.
+        _ => return None,
+    })
+}
+
+/// Constrói os separadores: só os que têm destino real. Os que não têm ficam de
+/// fora, em vez de aparecerem inertes.
 fn tabs(labels: &[&'static str], workspace_id: &str) -> Vec<Tab> {
     labels
         .iter()
-        .enumerate()
-        .map(|(i, label)| match *label {
-            "Visão geral" => Tab::link(*label, format!("/workspaces/{workspace_id}"), i == 0),
-            "IA" => Tab::link(
-                *label,
-                format!("/ai/prompt?workspace={workspace_id}"),
-                false,
-            ),
-            // Experiências e Resultados são duas leituras da mesma cadeia
-            // científica, e por isso levam ao mesmo ecrã. Duas páginas que
-            // partissem a cadeia ao meio obrigariam a saltar entre elas para
-            // seguir uma linhagem — que é a única coisa que a cadeia serve
-            // para fazer.
-            "Experiências" | "Resultados" => {
-                Tab::link(*label, format!("/workspaces/{workspace_id}/science"), false)
-            }
-            other => Tab::inert(other),
+        .filter_map(|label| {
+            tab_destination(label, workspace_id)
+                .map(|href| Tab::link(*label, href, *label == "Visão geral"))
         })
         .collect()
 }
@@ -334,7 +351,7 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
             {context_tabs(tabs(tab_labels, &id), "Secções do Research Workspace")}
         </div>
 
-        <div class="oc-page oc-page" >
+        <div class="oc-page oc-page" id="ws-visao-geral" >
             <div class="oc-grid oc-grid--ws">
                 {if is_project {
                     project_overview(&project, &members).into_any()
@@ -342,7 +359,7 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                     idea_overview(&idea, &sources, &datasets).into_any()
                 }}
 
-                {pessoas_do_ambiente(&id, &members, &gestao)}
+                <div id="ws-membros">{pessoas_do_ambiente(&id, &members, &gestao)}</div>
 
                 {assist(Assist {
                     here: if is_project { "este Projecto" } else { "esta Ideia" },
@@ -361,25 +378,33 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                     may_use: may_use_assistance,
                 })}
 
-                <section class="oc-card">
+                <section class="oc-card" id="ws-actividade">
                     {section_head("Actividade recente", None, None)}
                     <div class="oc-card__body">{activity_list(&activity)}</div>
                 </section>
 
-                <section class="oc-card">
+                <section class="oc-card" id="ws-tarefas">
                     {section_head("Tarefas", None, None)}
                     <div class="oc-card__body">{task_list(&tasks)}</div>
                 </section>
             </div>
 
             <div class="oc-grid oc-grid--detail oc-mt-7" >
-                {artefact_card("Bibliografia", &sources, "title", "/bibliography")}
-                {artefact_card("Notas", &notes, "title", "/knowledge")}
+                <div id="ws-bibliografia">
+                    {artefact_card("Bibliografia", &sources, "title", "/bibliography")}
+                </div>
+                <div id="ws-notas">
+                    {artefact_card("Notas", &notes, "title", "/knowledge")}
+                </div>
             </div>
 
             <div class="oc-grid oc-grid--detail oc-mt-7" >
-                {artefact_card("Documentos", &documents, "title", "/knowledge")}
-                {artefact_card("Datasets", &datasets, "title", "/datasets")}
+                <div id="ws-documentos">
+                    {artefact_card("Documentos", &documents, "title", "/knowledge")}
+                </div>
+                <div id="ws-datasets">
+                    {artefact_card("Datasets", &datasets, "title", "/datasets")}
+                </div>
             </div>
         </div>
     }
@@ -1072,6 +1097,50 @@ pub(crate) mod tests {
             .find(|t| t.label == "IA")
             .expect("a tab IA existe");
         assert_eq!(ai.href.as_deref(), Some("/ai/prompt?workspace=abc-123"));
+    }
+
+    /// Nenhum separador do ambiente é inerte: cada um ou salta para uma secção
+    /// deste ecrã (âncora), ou leva a outro ecrã. Os que não têm destino ficam
+    /// fora, em vez de aparecerem mortos (F-11).
+    #[test]
+    fn nenhum_separador_do_ambiente_e_morto() {
+        let built = tabs(&IDEA_TABS, "abc-123");
+        // Todos os separadores construídos navegam.
+        assert!(
+            built.iter().all(|t| t.href.is_some()),
+            "um separador ficou sem destino"
+        );
+        // As secções deste ecrã são âncoras.
+        for (label, ancora) in [
+            ("Notas", "#ws-notas"),
+            ("Documentos", "#ws-documentos"),
+            ("Datasets", "#ws-datasets"),
+            ("Tarefas", "#ws-tarefas"),
+            ("Actividade", "#ws-actividade"),
+            ("Bibliografia", "#ws-bibliografia"),
+        ] {
+            let tab = built
+                .iter()
+                .find(|t| t.label == label)
+                .unwrap_or_else(|| panic!("falta o separador {label}"));
+            assert_eq!(tab.href.as_deref(), Some(ancora));
+        }
+        // «Código» ainda não existe: não aparece como separador.
+        assert!(
+            built.iter().all(|t| t.label != "Código"),
+            "«Código» não tem ecrã e não devia ser um separador"
+        );
+
+        // E o ecrã não renderiza nenhum separador «Ainda não disponível».
+        let html = idea_ws("exploration", json!([]), false, false);
+        assert!(!html.contains("Ainda não disponível"));
+        // As secções âncora existem no corpo.
+        for id in ["ws-notas", "ws-tarefas", "ws-actividade", "ws-datasets"] {
+            assert!(
+                html.contains(&format!("id=\"{id}\"")),
+                "falta a secção {id}"
+            );
+        }
     }
 
     /// Helper: render an idea workspace with a given state, transitions and

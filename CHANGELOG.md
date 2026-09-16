@@ -32,6 +32,10 @@ Workspace (`F-10`, P1).
   ideia ficou `promoted` ligada ao projecto e o projecto regista a ideia de
   origem — com recarregar. Registo vivo em
   [`DEFECT_REGISTER.md`](docs/audits/pre-ai-final/DEFECT_REGISTER.md).
+- **Separadores do ambiente deixaram de ser mortos** (`F-11`, P2): os que têm
+  conteúdo (Notas, Documentos, Datasets, Tarefas, Actividade, Bibliografia) passam
+  a âncoras para as secções já renderizadas, com realce do activo ao rolar; os sem
+  ecrã (Código/Planeamento/Financiamento) saem da barra em vez de fingirem existir.
 
 ### Global Create — todas as criações deterministas funcionam agora — 2026-09-16
 

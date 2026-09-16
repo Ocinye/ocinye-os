@@ -20,7 +20,7 @@ Estado: **OPEN** · **FIXED** (com prova) · **DEFERRED** (adiado com razão) ·
 |---|---|---|
 | P0 | 0 | **0** |
 | P1 | 1 (F-10 Ideia→Projecto) | **0** |
-| P2 | 4 (F-11 tabs; F-13 Dataset; F-14 Tarefas; F-16 abrir projecto) | **3** (F-16 corrigido nesta fatia) |
+| P2 | 4 (F-11 tabs; F-13 Dataset; F-14 Tarefas; F-16 abrir projecto) | **2** (F-11, F-16 corrigidos) |
 | P3 | 2 (F-12 «Partilhar» morto; F-15 detalhe de Agente) | **2** |
 
 ## Registo
@@ -29,7 +29,7 @@ Estado: **OPEN** · **FIXED** (com prova) · **DEFERRED** (adiado com razão) ·
 |---|---|---|---|---|
 | F-10 | P1 | Ideias/Projectos | **Ideia → Projecto impossível pelo produto.** Uma ideia nasce em `discovery` e só é promovível em `project_candidate`, mas o Workspace não oferecia **nenhum** controlo para a mover pelos estados (`Discovery→Exploration→Concept→Review→ProjectCandidate`). O Core tinha `transition_idea` (`POST /ideas/{id}/transitions`), nunca chamado pelo Workspace. O botão «Promover a Projecto» aparecia em qualquer ideia e levava a um formulário que o Core recusava. | **FIXED** — o Core expõe `available_transitions`+`promotable` na ideia e `may_transition` no ambiente; o Workspace tem um strip de ciclo de vida (avançar/fechar com razão/promover) e a rota `POST /ideas/{id}/transition`. E2E `idea_to_project_e2e`. |
 | F-16 | P2 | Projectos | **Abrir um projecto por URL estava partido.** `GET /api/v1/projects/{id}` (`ProjectView`) não devolvia `workspace_id`, e o handler `project_workspace` redirige por ele — logo abrir `/projects/{id}` (da lista de Projectos, ou o recarregar) caía sem destino. Descoberto pela E2E `idea_to_project_e2e` ao recarregar o projecto. | **FIXED** — `workspace_id` acrescentado ao `ProjectView`. |
-| F-11 | P2 | Research Workspace | **9 de 13 separadores** do ambiente de ideia/projecto são `Tab::inert` — visíveis mas não navegam (Bibliografia, Fontes, Notas, Documentos, Datasets, Código, Tarefas, Actividade, Histórico). Controlos mortos. | **OPEN** (fatia própria) |
+| F-11 | P2 | Research Workspace | **Separadores inertes** no ambiente de ideia/projecto — visíveis mas sem navegar (Bibliografia, Fontes, Notas, Documentos, Datasets, Tarefas, Actividade, Histórico). Controlos mortos. | **FIXED** — o conteúdo já se rendia como secções; os separadores passam a âncoras (`#ws-…`) com scroll nativo e realce do activo (`data-oc-section-nav`); os sem ecrã (Código/Planeamento/Financiamento) saem da barra em vez de ficarem inertes. |
 | F-12 | P3 | Research Workspace | Botão **«Partilhar»** no detalhe de ideia/projecto é `not_yet_available()` — morto. | **OPEN** |
 | F-13 | P2 | Datasets | **Sem página de detalhe de Dataset**: as linhas não ligam a lado nenhum, não há `/datasets/{id}`. Um dataset é uma entidade de domínio (§14), não só um upload. | **OPEN** |
 | F-14 | P2 | Tarefas | **Sem lista nem detalhe de Tarefa**, e sem UI para mudar estado/atribuir. Só `/tasks/new`; as tarefas aparecem embutidas e só de leitura. | **OPEN** |
