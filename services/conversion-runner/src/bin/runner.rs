@@ -192,29 +192,27 @@ enum Falha {
     Interna(String),
 }
 
-/// Corre a conversão num contentor descartável e endurecido, e devolve os bytes
-/// do derivado.
-async fn correr(
-    config: &Config,
+/// Os argumentos do `docker run` que endurecem o contentor de conversão.
+///
+/// Extraída de [`correr`] para ser testável: o endurecimento é a fronteira de
+/// segurança (ADR-0609), e uma flag que caia sem que nada o diga é o contentor a
+/// deixar de ser uma caixa fechada. Todos os argumentos são fixos ou vêm de
+/// valores validados (o nome do perfil, da lista fechada; um UUID; uma extensão
+/// higienizada). Os bytes hostis **não** estão aqui — estão no ficheiro montado
+/// só-leitura.
+fn docker_run_args(
     perfil: &Profile,
-    job: &str,
-    entrada: &std::path::Path,
-    saida: &std::path::Path,
+    nome: &str,
+    entrada: &str,
+    saida: &str,
+    imagem: &str,
     extensao: Option<&str>,
-) -> Result<Vec<u8>, Falha> {
-    let nome = format!("oc-conv-{job}");
-    let entrada_s = entrada.to_string_lossy().into_owned();
-    let saida_s = saida.to_string_lossy().into_owned();
-
-    // Todos os argumentos são fixos ou vêm de valores validados (o nome do
-    // perfil, da lista fechada; um UUID). Os bytes hostis **não** estão aqui —
-    // estão no ficheiro montado só-leitura.
-    let mut comando = Command::new("docker");
-    comando.args([
+) -> Vec<String> {
+    let mut args: Vec<String> = [
         "run",
         "--rm",
         "--name",
-        &nome,
+        nome,
         "--network=none",
         "--read-only",
         "--cap-drop=ALL",
@@ -230,17 +228,45 @@ async fn correr(
         "--tmpfs",
         "/tmp:rw,nosuid,nodev,size=256m",
         "-v",
-        &format!("{entrada_s}:/in:ro"),
+        &format!("{entrada}:/in:ro"),
         "-v",
-        &format!("{saida_s}:/out"),
-        &config.converter_image,
+        &format!("{saida}:/out"),
+        imagem,
         perfil.name,
-    ]);
-    // A extensão, quando há, é o argumento seguinte do `ocinye-convert`. Já foi
-    // higienizada à porta; não passa conteúdo hostil.
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    // A extensão, quando há, é o argumento seguinte do `ocinye-convert`.
     if let Some(ext) = extensao {
-        comando.arg(ext);
+        args.push(ext.to_owned());
     }
+    args
+}
+
+/// Corre a conversão num contentor descartável e endurecido, e devolve os bytes
+/// do derivado.
+async fn correr(
+    config: &Config,
+    perfil: &Profile,
+    job: &str,
+    entrada: &std::path::Path,
+    saida: &std::path::Path,
+    extensao: Option<&str>,
+) -> Result<Vec<u8>, Falha> {
+    let nome = format!("oc-conv-{job}");
+    let entrada_s = entrada.to_string_lossy().into_owned();
+    let saida_s = saida.to_string_lossy().into_owned();
+
+    let mut comando = Command::new("docker");
+    comando.args(docker_run_args(
+        perfil,
+        &nome,
+        &entrada_s,
+        &saida_s,
+        &config.converter_image,
+        extensao,
+    ));
     comando.kill_on_drop(true);
 
     let prazo = Duration::from_secs(perfil.timeout_secs);
@@ -280,5 +306,62 @@ async fn correr(
         _ => Err(Falha::Conversao(
             "a conversão não produziu derivado".to_owned(),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// O contentor de conversão corre endurecido, e o argv nunca é um comando
+    /// arbitrário — só a imagem e o perfil da lista fechada.
+    ///
+    /// A fronteira de segurança do ADR-0609 vive nestas flags. Uma que caísse
+    /// sem que nada o dissesse abriria a caixa; este teste recusa a queda.
+    #[test]
+    fn o_contentor_de_conversao_corre_endurecido() {
+        let perfil = ocinye_conversion_runner::profile("pdf-thumbnail").expect("perfil");
+        let args = docker_run_args(
+            perfil,
+            "oc-conv-x",
+            "/spool/j/in",
+            "/spool/j/out",
+            "img:sha",
+            Some("pdf"),
+        );
+
+        for flag in [
+            "--network=none",
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--pids-limit",
+            "--memory",
+            "--cpus",
+        ] {
+            assert!(
+                args.iter().any(|a| a == flag),
+                "falta a flag de endurecimento {flag}"
+            );
+        }
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "--user" && w[1] == "65534:65534"),
+            "o conversor não corre como não-root"
+        );
+        assert!(
+            args.iter().any(|a| a.ends_with(":/in:ro")),
+            "a entrada não é montada só-leitura"
+        );
+        // Termina na imagem + perfil (+ extensão), nunca num comando arbitrário.
+        assert!(
+            args.contains(&"img:sha".to_owned()),
+            "falta a imagem do conversor"
+        );
+        assert!(
+            args.contains(&"pdf-thumbnail".to_owned()),
+            "falta o nome do perfil"
+        );
+        assert!(args.contains(&"pdf".to_owned()), "falta a extensão passada");
     }
 }

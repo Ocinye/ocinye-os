@@ -683,4 +683,75 @@ mod tests {
     fn lixo_nao_e_imagem() {
         assert!(gerar(b"isto nao e uma imagem nenhuma").is_err());
     }
+
+    /// CRC-32/ISO-HDLC, o que o PNG usa nos seus chunks. Escrito à mão para o
+    /// teste não depender de uma crate só para forjar um cabeçalho.
+    fn crc32(bytes: &[u8]) -> u32 {
+        let mut crc: u32 = 0xFFFF_FFFF;
+        for &b in bytes {
+            crc ^= u32::from(b);
+            for _ in 0..8 {
+                let mask = (crc & 1).wrapping_neg();
+                crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
+            }
+        }
+        !crc
+    }
+
+    /// Um PNG que **declara** `largura`×`altura` no IHDR mas não traz os pixels —
+    /// o cabeçalho de uma bomba de descompressão. O ficheiro fica minúsculo; a
+    /// imagem que ele afirma ter é gigantesca.
+    fn png_declarando(largura: u32, altura: u32) -> Vec<u8> {
+        fn chunk(tipo: &[u8; 4], dados: &[u8]) -> Vec<u8> {
+            let mut c = Vec::new();
+            c.extend_from_slice(&(dados.len() as u32).to_be_bytes());
+            c.extend_from_slice(tipo);
+            c.extend_from_slice(dados);
+            let mut crc_in = tipo.to_vec();
+            crc_in.extend_from_slice(dados);
+            c.extend_from_slice(&crc32(&crc_in).to_be_bytes());
+            c
+        }
+        let mut ihdr = Vec::new();
+        ihdr.extend_from_slice(&largura.to_be_bytes());
+        ihdr.extend_from_slice(&altura.to_be_bytes());
+        ihdr.extend_from_slice(&[8, 2, 0, 0, 0]); // 8 bits, RGB, sem compressão/filtro/entrelaçado exóticos
+        let mut png = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+        png.extend_from_slice(&chunk(b"IHDR", &ihdr));
+        // Um IDAT com um fluxo zlib vazio válido, e o IEND — o suficiente para o
+        // descodificador ler o cabeçalho e devolver as dimensões.
+        png.extend_from_slice(&chunk(
+            b"IDAT",
+            &[
+                0x78, 0x9C, 0x01, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x01,
+            ],
+        ));
+        png.extend_from_slice(&chunk(b"IEND", &[]));
+        png
+    }
+
+    /// Uma imagem que declara mais pixels do que o Ocinye aceita é recusada
+    /// **antes** de se alocar — o cabeçalho chega, os pixels não precisam de vir.
+    ///
+    /// É a defesa contra a bomba de descompressão (#14): 20000×20000 = 400M
+    /// pixels afirmados num ficheiro de dezenas de bytes. `gerar` lê as dimensões
+    /// do IHDR e recusa acima de [`MAX_SOURCE_PIXELS`], sem descodificar o IDAT.
+    #[test]
+    fn uma_imagem_com_dimensoes_absurdas_e_recusada_antes_de_alocar() {
+        let bomba = png_declarando(20_000, 20_000);
+        assert!(
+            bomba.len() < 4096,
+            "o cabeçalho da bomba devia ser minúsculo, tinha {} bytes",
+            bomba.len()
+        );
+        assert!(
+            u64::from(20_000u32) * u64::from(20_000u32) > MAX_SOURCE_PIXELS,
+            "o teste tem de afirmar mais pixels do que o tecto"
+        );
+        let resultado = gerar(&bomba);
+        assert!(
+            resultado.is_err(),
+            "uma imagem de 400M pixels foi aceite — a bomba passou"
+        );
+    }
 }
