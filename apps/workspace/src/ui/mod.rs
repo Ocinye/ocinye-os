@@ -2346,17 +2346,20 @@ pub(crate) mod link_tests {
         abertos > fechados
     }
 
-    /// As acções sem ecrã continuam visíveis, e declaradas como indisponíveis.
+    /// As acções do «Criar» ficam visíveis — o design declara, não esconde.
     ///
-    /// O oposto de as esconder: o design exige que estejam lá.
+    /// Que uma acção implementada nunca se declare «indisponível» (o defeito de
+    /// copy F-07) prova-se com precisão no `shell.rs`, onde o menu se renderiza
+    /// isolado; aqui só se garante que as acções continuam presentes.
     #[test]
-    fn as_accoes_sem_ecra_ficam_visiveis_e_declaradas() {
+    fn as_accoes_do_criar_ficam_visiveis() {
         let html: String = catalogue().into_iter().map(|(_, html)| html).collect();
 
         for action in [
             "Novo Projecto",
             "Nova Nota",
             "Nova Referência",
+            "Novo Dataset",
             "Nova Tarefa",
         ] {
             assert!(
@@ -2364,9 +2367,5 @@ pub(crate) mod link_tests {
                 "a acção {action} deixou de estar visível"
             );
         }
-        assert!(
-            html.contains("Ainda não disponível"),
-            "as acções sem ecrã devem declarar-se indisponíveis"
-        );
     }
 }

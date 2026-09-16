@@ -86,7 +86,10 @@ pub fn home(data: Dashboard) -> impl IntoView {
                         Button::new("Nova Ideia", Variant::Secondary)
                             .unavailable_because("Não tem autorização para criar ideias.")
                     })}
-                    {button(Button::new("Novo Projecto", Variant::Secondary).not_yet_available())}
+                    // O projecto cria-se em contexto (promove-se uma ideia); o
+                    // botão leva à lista de projectos, em vez de se declarar
+                    // «indisponível» quando existe (F-07).
+                    {button(Button::new("Novo Projecto", Variant::Secondary).href("/projects"))}
                     {button(
                         Button::new("Prompt Ocinye", Variant::Primary).href("/ai/prompt").with_dot(),
                     )}
@@ -327,12 +330,11 @@ fn ai_card(status: &Value) -> impl IntoView {
 }
 
 fn quick_access(can_create_idea: bool) -> impl IntoView {
-    // Só as acções cujo ecrã existe navegam; o dossier lista quatro, e dois
-    // dos ecrãs ainda não foram especificados.
-    //
-    // A razão viaja com a acção. Dizer «ainda não disponível» a quem apenas não
-    // tem a permissão seria falso — o ecrã existe, e é o acesso que falta.
-    const POR_ESPECIFICAR: &str = "Ainda não disponível";
+    // Cada acção do acesso rápido leva ao ecrã onde se cria — o projecto e o
+    // dataset criam-se em contexto (a lista é a porta), e por isso navegam para
+    // lá em vez de se declararem «indisponíveis», que dizia que não existiam
+    // quando existem (F-07). Só a falta de **permissão** desactiva um item, e aí
+    // a razão é essa, não a do vizinho.
     const SEM_PERMISSAO: &str = "Não tem autorização para criar ideias.";
 
     let actions: [(&str, Option<&str>, &str); 4] = [
@@ -341,9 +343,9 @@ fn quick_access(can_create_idea: bool) -> impl IntoView {
             can_create_idea.then_some("/ideas/new"),
             SEM_PERMISSAO,
         ),
-        ("Novo Projecto", None, POR_ESPECIFICAR),
-        ("Novo Dataset", None, POR_ESPECIFICAR),
-        ("Prompt IA", Some("/ai/prompt"), POR_ESPECIFICAR),
+        ("Novo Projecto", Some("/projects"), ""),
+        ("Novo Dataset", Some("/datasets"), ""),
+        ("Prompt IA", Some("/ai/prompt"), ""),
     ];
 
     card(
@@ -456,15 +458,21 @@ mod tests {
         assert_eq!(html.matches(r#"href="/ideas/new""#).count(), 2);
     }
 
-    /// A razão de cada acção indisponível é a sua, e não a do vizinho.
+    /// Uma acção implementada leva ao seu ecrã; só a falta de permissão a
+    /// desactiva, e aí com a sua própria razão — não «indisponível».
     ///
-    /// «Ainda não disponível» é verdade para «Novo Projecto», cujo ecrã não
-    /// existe, e mentira para quem apenas não tem acesso.
+    /// «Novo Projecto» e «Novo Dataset» criam-se em contexto e navegam para a
+    /// lista respectiva; «Ainda não disponível» dizia que não existiam (F-07).
     #[test]
     fn cada_accao_indisponivel_diz_a_sua_propria_razao() {
+        // Sem permissão para ideias: a Ideia desactiva-se com a sua razão.
         let html = home(painel(false)).to_html();
-        assert!(html.contains("Ainda não disponível"));
         assert!(html.contains("Não tem autorização para criar ideias."));
+        // Mas as acções implementadas continuam a levar ao seu ecrã, nunca
+        // declaradas «indisponíveis».
+        assert!(!html.contains("Ainda não disponível"));
+        assert!(html.contains(r#"href="/projects""#));
+        assert!(html.contains(r#"href="/datasets""#));
     }
 }
 
