@@ -9583,20 +9583,24 @@ async fn uma_unidade_nasce_governavel_e_a_pertenca_concede_se_pelo_produto() {
 
     let (admin_id, _) = harness.sign_in(&[TechnicalRole::PlatformAdmin]).await;
 
-    // Criar a unidade pelo ecrã, como uma pessoa faz.
+    // Criar a unidade pelo ecrã, como uma pessoa faz. O código já não se
+    // escreve — é gerado do nome —, por isso a unidade procura-se pelo nome,
+    // que se faz único para não colidir entre corridas.
+    let nome = format!(
+        "Unidade de prova {}",
+        &Uuid::new_v4().simple().to_string()[..6]
+    );
     let form = harness.open("/units/new").await;
     esperar_por(&form, "Nova Unidade").await;
-    let codigo = format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase();
-    set_field(&form, "input[name=code]", &codigo).await;
-    set_field(&form, "input[name=name]", "Unidade de prova").await;
+    set_field(&form, "input[name=name]", &nome).await;
     submit(&form, "form[action=\"/units/new\"]").await;
 
     let unit_id = {
         let limite = std::time::Instant::now();
         loop {
             let encontrado: Option<Uuid> =
-                sqlx::query_scalar("SELECT id FROM units WHERE code = $1")
-                    .bind(&codigo)
+                sqlx::query_scalar("SELECT id FROM units WHERE name = $1")
+                    .bind(&nome)
                     .fetch_optional(&harness.pool)
                     .await
                     .expect("procura da unidade");
