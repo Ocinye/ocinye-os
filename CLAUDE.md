@@ -381,7 +381,7 @@ sem que nada falhe.
   dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
-- **71 ADRs** em `docs/adrs/`, **11 runbooks** em `docs/runbooks/`,
+- **71 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
   **67 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
