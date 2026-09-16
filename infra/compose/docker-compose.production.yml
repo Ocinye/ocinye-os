@@ -188,11 +188,59 @@ services:
     env_file:
       - /etc/ocinye/comum.env
       - /etc/ocinye/core.env
+    environment:
+      # A fronteira de conversão vive noutro serviço; o worker fala com ela pelo
+      # nome, na rede interna. Nunca corre parsers hostis no próprio processo.
+      OCINYE_CONVERSION_RUNNER_URL: http://conversion-runner:8730
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      conversion-runner:
+        condition: service_started
+
+  # ── A fronteira de conversão de conteúdo não confiável ────────────────
+  #
+  # Parsers pesados (poppler hoje; LibreOffice e ffmpeg a seguir) processam
+  # ficheiros de utilizadores reais, potencialmente hostis. Não correm no worker:
+  # correm em contentores descartáveis e endurecidos, criados por este runner
+  # (ADR-0609). É o **único** serviço com o socket do Docker — a autoridade de
+  # criar contentores fica contida nesta caixa mínima, que não faz parsing de
+  # nada e só sabe correr uma lista fechada de perfis. Sem `ports:` e sem
+  # `env_file`: não é pública e não conhece segredos.
+  conversion-runner:
+    <<: *comum
+    image: ocinye/ocinye-conversion-runner:${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+      target: conversion-runner
+      args:
+        BIN: ocinye-conversion-runner
+    environment:
+      OCINYE_CONVERTER_IMAGE: ocinye/ocinye-converter:${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
+      OCINYE_CONVERSION_SPOOL: /srv/ocinye/conversion-spool
+      OCINYE_LOG_FORMAT: json
+    volumes:
+      # O socket do Docker: a autoridade de criar contentores, contida aqui.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # O spool tem de estar no **mesmo caminho** no host e aqui, para que o
+      # caminho que passamos ao `docker run` irmão se resolva no host.
+      - /srv/ocinye/conversion-spool:/srv/ocinye/conversion-spool
+
+  # A imagem do conversor descartável. Constrói-se, mas não corre como serviço —
+  # o runner cria uma instância descartável por conversão. O perfil `build`
+  # mantém-na fora do `up`, e o deploy constrói-a com `--profile build`.
+  converter:
+    image: ocinye/ocinye-converter:${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
+    profiles: ["build"]
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+      target: converter
+      args:
+        BIN: ocinye-convert
 
   # ── Estado institucional ──────────────────────────────────────────────
   #

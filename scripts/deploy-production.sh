@@ -94,9 +94,18 @@ ssh_ "sudo install -m 640 -o root -g ocinye \
 echo "  $(ls infra/nginx/*.conf | wc -l | tr -d ' ') ficheiro(s) instalado(s)"
 
 # ── 5. Construir ────────────────────────────────────────────────────────
+#
+# `--profile build` inclui a imagem do conversor descartável, que não corre como
+# serviço mas tem de existir para o runner a instanciar por conversão (ADR-0609).
 passo "Construir as imagens"
 ssh_ "cd '$RAIZ/releases/$CURTO' \
-      && OCINYE_RELEASE_SHA='$CURTO' docker compose -f '$COMPOSE' build"
+      && OCINYE_RELEASE_SHA='$CURTO' docker compose -f '$COMPOSE' --profile build build"
+
+# O spool da conversão. Tem de existir no host, no mesmo caminho que o runner vê,
+# para o `docker run` irmão montar os directórios efémeros por job (ADR-0609).
+passo "Spool de conversão"
+ssh_ "install -d -m 755 /srv/ocinye/conversion-spool"
+echo "  /srv/ocinye/conversion-spool"
 
 # ── 6. O apontador ──────────────────────────────────────────────────────
 #

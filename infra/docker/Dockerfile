@@ -78,3 +78,38 @@ USER ocinye
 WORKDIR /srv/ocinye
 
 ENTRYPOINT ["/usr/local/bin/ocinye"]
+
+# ── A imagem do conversor descartável ─────────────────────────────────────
+#
+# O que corre **dentro** de cada contentor de conversão, e nada mais. Quase
+# vazio de propósito: só o `ocinye-convert` e as ferramentas de conversão. Sem
+# rede, sem segredos, sem o resto do sistema — é a caixa que uma vulnerabilidade
+# de parsing de conteúdo hostil encontra, em vez do worker (ADR-0609). O runner
+# corre-a com `--user 65534`, `--read-only`, `--network=none`, `--cap-drop=ALL` e
+# os restantes tectos; a imagem não precisa de mais do que a ferramenta.
+#
+# Constrói-se com `--build-arg BIN=ocinye-convert`.
+FROM debian:bookworm-slim AS converter
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends poppler-utils \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /usr/local/bin/ocinye-binario /usr/local/bin/ocinye-convert
+ENTRYPOINT ["/usr/local/bin/ocinye-convert"]
+
+# ── A imagem do Conversion Runner ─────────────────────────────────────────
+#
+# O sidecar que detém a autoridade de criar contentores. Traz **só o cliente**
+# do Docker — copiado da imagem oficial, um binário estático — para falar com o
+# socket do host montado; não corre daemon nenhum. Corre como root porque é o
+# dono do socket, e a fronteira de confiança é o socket, não o uid — é a única
+# imagem onde o socket é montado (ADR-0609).
+#
+# Constrói-se com `--build-arg BIN=ocinye-conversion-runner`.
+FROM debian:bookworm-slim AS conversion-runner
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=docker:27-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=builder /usr/local/bin/ocinye-binario /usr/local/bin/ocinye-conversion-runner
+WORKDIR /srv/ocinye
+ENTRYPOINT ["/usr/local/bin/ocinye-conversion-runner"]

@@ -48,6 +48,7 @@ pub async fn drain(
     batch_size: i64,
     store: Option<&ocinye_core::storage::ObjectStore>,
     embeddings: Option<&dyn ocinye_core::modules::intelligence::embeddings::EmbeddingProvider>,
+    converter: &dyn ocinye_core::modules::files::thumbnail::ConversionBoundary,
 ) -> anyhow::Result<usize> {
     let mut tx = pool.begin().await?;
 
@@ -75,7 +76,7 @@ pub async fn drain(
     let mut processed = 0_usize;
 
     for event in &events {
-        match handlers::handle(&mut tx, event, store, embeddings).await {
+        match handlers::handle(&mut tx, event, store, embeddings, converter).await {
             Ok(()) => {
                 sqlx::query("UPDATE outbox_events SET published_at = now() WHERE id = $1")
                     .bind(event.id)

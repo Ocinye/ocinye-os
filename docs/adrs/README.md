@@ -207,6 +207,7 @@ A interface humana.
 - [ADR-0606](0606-linked-privileged-identity.md) — Identidade privilegiada ligada
 - [ADR-0607](0607-files-as-a-content-browser.md) — Ficheiros como um explorador de conteúdo
 - [ADR-0608](0608-same-origin-institutional-downloads.md) — Descarga institucional servida same-origin
+- [ADR-0609](0609-disposable-conversion-isolation.md) — Conversão de conteúdo não confiável em contentores descartáveis
 
 ### 0700–0799 · Deployment, rede, operação e resiliência
 
@@ -288,6 +289,7 @@ preencher.
 | [0606](0606-linked-privileged-identity.md) | Identidade privilegiada ligada | Identity | `FOUNDATIONAL` | Accepted |
 | [0607](0607-files-as-a-content-browser.md) | Ficheiros como um explorador de conteúdo | Workspace | `HIGH` | Accepted |
 | [0608](0608-same-origin-institutional-downloads.md) | Descarga institucional servida same-origin | Workspace | `MEDIUM` | Accepted |
+| [0609](0609-disposable-conversion-isolation.md) | Conversão de conteúdo não confiável em contentores descartáveis | Workspace | `HIGH` | Accepted |
 | [0700](0700-institutional-continuity-and-portability.md) | Continuidade institucional e portabilidade entre servidores | Operations | `FOUNDATIONAL` | Accepted |
 
 ---

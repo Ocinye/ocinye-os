@@ -3486,6 +3486,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ocinye-conversion-runner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "ocinye-observability",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "ocinye-core"
 version = "0.1.0"
 dependencies = [
@@ -3594,10 +3606,12 @@ name = "ocinye-worker"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "ocinye-contracts",
  "ocinye-core",
  "ocinye-observability",
+ "reqwest 0.12.28",
  "serde_json",
  "sqlx",
  "tokio",

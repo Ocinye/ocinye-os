@@ -91,6 +91,10 @@ NORMAIS = {
     },
     "ocinye-worker": {"ocinye-contracts", "ocinye-core", "ocinye-observability"},
     "ocinye-node-agent": {"ocinye-contracts", "ocinye-observability"},
+    # A fronteira de conversão. Só observabilidade: não conhece o domínio nem a
+    # persistência de propósito — recebe bytes, corre um contentor descartável,
+    # devolve um derivado (ADR-0609). Não deve ganhar `ocinye-core`.
+    "ocinye-conversion-runner": {"ocinye-observability"},
     # A Experience consome contratos tipados. Não conhece `ocinye-core`, nem
     # `ocinye-domain`, nem persistência. Acrescentar aqui qualquer um deles é
     # mover a autoridade institucional para dentro da apresentação.

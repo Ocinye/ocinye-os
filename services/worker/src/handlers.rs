@@ -24,6 +24,7 @@ pub async fn handle(
     event: &OutboxEvent,
     store: Option<&ObjectStore>,
     embeddings: Option<&dyn EmbeddingProvider>,
+    converter: &dyn thumbnail::ConversionBoundary,
 ) -> anyhow::Result<()> {
     // Events are logged with their identifiers only. Payloads never carry
     // content, so this line is safe to keep at info level.
@@ -55,7 +56,7 @@ pub async fn handle(
     }
 
     if event.name == thumbnail::EVENT_THUMBNAIL {
-        return gerar_miniatura(tx, event, store).await;
+        return gerar_miniatura(tx, event, store, converter).await;
     }
 
     Ok(())
@@ -78,12 +79,13 @@ async fn gerar_miniatura(
     tx: &mut Transaction<'_, Postgres>,
     event: &OutboxEvent,
     store: Option<&ObjectStore>,
+    converter: &dyn thumbnail::ConversionBoundary,
 ) -> anyhow::Result<()> {
     let Some(store) = store else {
         anyhow::bail!("no object store is configured; thumbnails cannot be generated");
     };
 
-    match thumbnail::process(tx, store, event.aggregate_id).await {
+    match thumbnail::process(tx, store, converter, event.aggregate_id).await {
         Ok(Some(estado)) => {
             tracing::info!(
                 file_version_id = %event.aggregate_id,

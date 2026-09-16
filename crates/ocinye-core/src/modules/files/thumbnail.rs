@@ -24,10 +24,6 @@ use image::imageops::FilterType;
 use image::{ImageDecoder, ImageFormat, ImageReader};
 use serde_json::json;
 use std::io::Cursor;
-use std::time::Duration;
-use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
-use tokio::time::timeout;
 use uuid::Uuid;
 
 use crate::error::{CoreError, CoreResult};
@@ -67,9 +63,32 @@ const MAX_SOURCE_PIXELS: u64 = 64_000_000;
 pub const THUMBNAILABLE_TYPES: [&str; 4] =
     ["image/png", "image/jpeg", "image/webp", "application/pdf"];
 
-/// Quanto tempo se dá ao renderizador de PDF antes de o abater. Um PDF hostil
-/// não segura o worker: passado isto, é uma falha, e o ficheiro fica com o ícone.
-const PDF_RASTER_TIMEOUT_SECS: u64 = 20;
+/// A fronteira que converte conteúdo não confiável fora do processo do worker.
+///
+/// Um raster (PNG/JPEG/WebP) descodifica-se no processo — é a biblioteca `image`,
+/// e o risco é o dela. Um PDF é outra coisa: rasterizá-lo é correr um parser
+/// grande sobre bytes potencialmente hostis, e isso **não** deve acontecer dentro
+/// do worker. Esta trait é o ponto onde a rasterização sai para uma fronteira
+/// isolada — em produção, um contentor descartável e endurecido gerido pelo
+/// Conversion Runner (ADR-0609). O domínio não sabe como a fronteira isola; sabe
+/// que recebe bytes e devolve uma imagem, e trata o resultado como ainda não
+/// confiável (re-codifica-o de raiz em [`gerar`]).
+///
+/// Injecta-se em [`process`] para que o `ocinye-core` não conheça nem Docker nem
+/// subprocessos: quem os conhece é o worker, que constrói a implementação.
+#[async_trait::async_trait]
+pub trait ConversionBoundary: Send + Sync {
+    /// Rasteriza a primeira página de um PDF numa imagem (PNG), numa fronteira
+    /// isolada.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::Validation`] quando o PDF não converte — um estado de
+    /// miniatura, não uma avaria, e o ficheiro fica com o ícone.
+    /// [`CoreError::Internal`] quando a própria fronteira não respondeu, que é
+    /// retentável pelo outbox.
+    async fn rasterize_pdf(&self, bytes: &[u8]) -> CoreResult<Vec<u8>>;
+}
 
 /// O estado da geração — que não é o estado do armazenamento.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -338,94 +357,6 @@ fn gerar(source: &[u8]) -> CoreResult<Miniatura> {
     })
 }
 
-/// Rasteriza a primeira página de um PDF numa imagem PNG, isolada e com prazo.
-///
-/// # Isolamento (spec §76)
-///
-/// O `pdftoppm` do poppler é um **renderizador**, não um motor de scripts: não
-/// executa o JavaScript embutido no documento, nem macros. Corre como
-/// subprocesso, sob o utilizador não privilegiado do worker, com um prazo que o
-/// abate se um PDF hostil o tentar segurar, e `kill_on_drop` para não deixar
-/// processos pendurados. Um endurecimento mais forte — seccomp, um contentor à
-/// parte — fica para depois; isto é a fronteira que separa o conteúdo não
-/// confiável do processo do worker.
-///
-/// # Errors
-///
-/// [`CoreError::Validation`] quando o PDF não rasteriza, excede o prazo, ou não
-/// produz imagem — um estado de miniatura, não uma avaria. [`CoreError::Internal`]
-/// quando o renderizador não está sequer disponível, que é retentável.
-async fn rasterizar_pdf(bytes: &[u8]) -> CoreResult<Vec<u8>> {
-    let base = std::env::temp_dir().join(format!("oc-thumb-{}", Uuid::new_v4().simple()));
-    let entrada = base.with_extension("pdf");
-    let saida = base.with_extension("png");
-
-    {
-        let mut ficheiro = tokio::fs::File::create(&entrada).await.map_err(|error| {
-            tracing::error!(error = ?error, "thumbnail: could not stage the pdf");
-            CoreError::Internal("Não foi possível preparar a rasterização.".to_owned())
-        })?;
-        ficheiro.write_all(bytes).await.map_err(|error| {
-            tracing::error!(error = ?error, "thumbnail: could not write the pdf");
-            CoreError::Internal("Não foi possível preparar a rasterização.".to_owned())
-        })?;
-        ficheiro.flush().await.ok();
-    }
-
-    // `-singlefile` faz a saída ser `{base}.png` sem número de página;
-    // `-scale-to 960` leva o lado maior a 960 px; `-f 1 -l 1` é só a primeira.
-    let execucao = timeout(
-        Duration::from_secs(PDF_RASTER_TIMEOUT_SECS),
-        Command::new("pdftoppm")
-            .arg("-png")
-            .arg("-f")
-            .arg("1")
-            .arg("-l")
-            .arg("1")
-            .arg("-singlefile")
-            .arg("-scale-to")
-            .arg("960")
-            .arg(&entrada)
-            .arg(&base)
-            .kill_on_drop(true)
-            .output(),
-    )
-    .await;
-
-    let _ = tokio::fs::remove_file(&entrada).await;
-
-    let png = match execucao {
-        Ok(Ok(saida_processo)) if saida_processo.status.success() => {
-            let bytes = tokio::fs::read(&saida).await.map_err(|_| {
-                CoreError::Validation("A rasterização não produziu imagem.".to_owned())
-            })?;
-            let _ = tokio::fs::remove_file(&saida).await;
-            bytes
-        }
-        Ok(Ok(saida_processo)) => {
-            let _ = tokio::fs::remove_file(&saida).await;
-            return Err(CoreError::Validation(format!(
-                "o renderizador de PDF terminou com {}",
-                saida_processo.status
-            )));
-        }
-        Ok(Err(error)) => {
-            tracing::error!(error = ?error, "thumbnail: pdftoppm could not be run");
-            return Err(CoreError::Internal(
-                "O renderizador de PDF não está disponível.".to_owned(),
-            ));
-        }
-        Err(_) => {
-            let _ = tokio::fs::remove_file(&saida).await;
-            return Err(CoreError::Validation(
-                "a rasterização do PDF excedeu o tempo".to_owned(),
-            ));
-        }
-    };
-
-    Ok(png)
-}
-
 /// Guarda o objecto derivado da miniatura e devolve o seu id.
 ///
 /// Não passa pela admissão de quota: uma miniatura não é um carregamento do
@@ -506,6 +437,7 @@ async fn guardar_objecto(
 pub async fn process(
     tx: &mut Tx<'_>,
     store: &ObjectStore,
+    converter: &dyn ConversionBoundary,
     file_version_id: Uuid,
 ) -> CoreResult<Option<Estado>> {
     let Some(trabalho) = claim(tx, file_version_id).await? else {
@@ -536,10 +468,12 @@ pub async fn process(
     let bytes = store.get(&trabalho.object_key).await?;
 
     // Um PDF rasteriza-se primeiro a primeira página numa imagem; um raster
-    // segue directo. A rasterização é um subprocesso isolado, com prazo, que
-    // não executa o JavaScript do documento (spec §76).
+    // segue directo. A rasterização sai para a fronteira de conversão — em
+    // produção, um contentor descartável e endurecido que não executa o
+    // JavaScript do documento e não alcança o resto do sistema (spec §76,
+    // ADR-0609).
     let pixels = if trabalho.content_type == "application/pdf" {
-        match rasterizar_pdf(&bytes).await {
+        match converter.rasterize_pdf(&bytes).await {
             Ok(png) => png,
             Err(CoreError::Validation(razao)) => {
                 return Ok(Some(
