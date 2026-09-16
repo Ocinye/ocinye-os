@@ -56,9 +56,9 @@ impl CapabilityHandler for CreateUnit {
             classification_ceiling: None,
             input_schema: serde_json::json!({
                 "type": "object",
-                "required": ["code", "name"],
+                "required": ["name"],
                 "properties": {
-                    "code": {"type": "string", "description": "Sigla institucional, por exemplo ENG."},
+                    "code": {"type": "string", "description": "Código institucional, por exemplo UCS-001. Opcional: se omitido, é gerado a partir do nome."},
                     "name": {"type": "string"},
                     "description": {"type": "string"},
                     "research_areas": {"type": "array", "items": {"type": "string"}}
@@ -68,16 +68,20 @@ impl CapabilityHandler for CreateUnit {
     }
 
     async fn execute(&self, ctx: &ExecutionContext<'_>) -> CoreResult<CapabilityResult> {
-        let code = ctx.text("code")?;
+        let code: Option<String> = ctx.optional("code")?;
         let name = ctx.text("name")?;
         let description: Option<String> = ctx.optional("description")?;
         let research_areas: Vec<String> = ctx.optional("research_areas")?.unwrap_or_default();
 
         if ctx.dry_run {
+            let rotulo = match code.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
+                Some(code) => format!("«{name}» ({code})"),
+                None => format!("«{name}» (código gerado a partir do nome)"),
+            };
             return Ok(CapabilityResult {
                 capability: self.descriptor().id,
                 status: ExecutionStatus::DryRun,
-                detail: format!("Seria criada a unidade «{name}» ({code})."),
+                detail: format!("Seria criada a unidade {rotulo}."),
                 resources: Vec::new(),
                 reversibility: Reversibility::NothingToUndo,
                 output: None,
@@ -90,7 +94,7 @@ impl CapabilityHandler for CreateUnit {
             ctx.principal,
             ctx.ids,
             NewUnit {
-                code: code.clone(),
+                code,
                 name: name.clone(),
                 description,
                 research_areas,
@@ -102,7 +106,7 @@ impl CapabilityHandler for CreateUnit {
         Ok(CapabilityResult {
             capability: self.descriptor().id,
             status: ExecutionStatus::Succeeded,
-            detail: format!("Unidade «{name}» ({code}) criada."),
+            detail: format!("Unidade «{name}» ({}) criada.", unit.code),
             resources: vec![ResourceRef {
                 kind: AgenticKind::Unit,
                 id: unit.id,

@@ -17,7 +17,11 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/organisation", get(get_organisation))
         .route("/units", get(list_units).post(create_unit))
-        .route("/units/{unit_id}", get(get_unit).delete(archive_unit))
+        .route("/units/code-suggestion", get(suggest_code))
+        .route(
+            "/units/{unit_id}",
+            get(get_unit).put(update_unit).delete(archive_unit),
+        )
         .route(
             "/units/{unit_id}/members",
             get(list_members).post(add_member),
@@ -126,7 +130,9 @@ async fn get_unit(
 
 #[derive(Deserialize)]
 struct CreateUnitRequest {
-    code: String,
+    /// Optional: omit to have the Core generate `U<ABBREV>-NNN` from the name.
+    #[serde(default)]
+    code: Option<String>,
     name: String,
     #[serde(default)]
     description: Option<String>,
@@ -147,6 +153,63 @@ async fn create_unit(
         &ids,
         organisation::NewUnit {
             code: request.code,
+            name: request.name,
+            description: request.description,
+            research_areas: request.research_areas,
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(UnitView::from(unit)))
+}
+
+#[derive(Deserialize)]
+struct SuggestCodeQuery {
+    name: String,
+}
+
+#[derive(Serialize)]
+struct SuggestCodeView {
+    code: String,
+}
+
+/// Preview the code a unit with this name would receive.
+///
+/// Indicative: the number is confirmed only when the unit is created. Requires
+/// the authority to create a unit.
+async fn suggest_code(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Query(query): Query<SuggestCodeQuery>,
+) -> Result<Json<SuggestCodeView>, ApiError> {
+    let code = organisation::suggest_unit_code(&state.pool, &principal, &query.name).await?;
+    Ok(Json(SuggestCodeView { code }))
+}
+
+#[derive(Deserialize)]
+struct UpdateUnitRequest {
+    name: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    research_areas: Vec<String>,
+}
+
+/// Update a unit's name, description and research areas. The code is immutable.
+async fn update_unit(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(unit_id): Path<Uuid>,
+    Json(request): Json<UpdateUnitRequest>,
+) -> Result<Json<UnitView>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let unit = organisation::update_unit(
+        &mut tx,
+        &principal,
+        &ids,
+        unit_id,
+        organisation::UnitEdit {
             name: request.name,
             description: request.description,
             research_areas: request.research_areas,

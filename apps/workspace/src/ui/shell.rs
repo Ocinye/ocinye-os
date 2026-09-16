@@ -492,10 +492,6 @@ pub fn shell(
 ) -> impl IntoView {
     let avatar = initials(&viewer.name);
     let core_status = viewer.core_status.clone();
-    let can_create = viewer.can(Permission::IdeasCreate)
-        || viewer.can(Permission::NotesCreate)
-        || viewer.can(Permission::DatasetsCreate)
-        || viewer.can(Permission::AgentsCreatePersonal);
 
     view! {
         <a class="oc-skip" href="#conteudo">"Saltar para o conteúdo"</a>
@@ -506,7 +502,7 @@ pub fn shell(
             {sidebar(viewer, &avatar, active)}
 
             <div class="oc-main">
-                {topbar(viewer, current, trail, &core_status, can_create)}
+                {topbar(viewer, current, trail, &core_status)}
                 <main class="oc-content" id="conteudo">
                     {content}
                 </main>
@@ -904,7 +900,6 @@ fn topbar(
     current: &str,
     trail: Vec<Crumb>,
     core_status: &CoreStatus,
-    can_create: bool,
 ) -> impl IntoView {
     // O dia de hoje onde a pessoa está, e não em Greenwich.
     let hoje = crate::ui::tempo::hoje_civil(chrono::Utc::now(), viewer.zona);
@@ -978,25 +973,12 @@ fn topbar(
 
             <div class="oc-spacer"></div>
 
-            // O «+ Criar» aparece sempre. Sem nenhuma das permissões que
-            // abre, fica visível e declarado em vez de desaparecer: uma
-            // interface que muda de forma consoante quem olha esconde a própria
-            // existência da acção, e quem não a vê não fica a saber porquê.
-            {if can_create {
-                create_menu(viewer).into_any()
-            } else {
-                view! {
-                    <span
-                        class="oc-btn oc-btn--gold oc-unavailable"
-                        aria-disabled="true"
-                        title="Não pertence a nenhuma unidade, e é a filiação que dá acesso a criar."
-                    >
-                        {icon(Icon::Plus, 13)}
-                        "Criar"
-                    </span>
-                }
-                .into_any()
-            }}
+            // O «+ Criar» está sempre disponível: toda a criação determinista
+            // funciona sem GPU, e a mais simples — uma nota pessoal — está ao
+            // alcance de qualquer membro. O contexto (unidade, ambiente, ideia)
+            // resolve-se no formulário de cada acção, com estado vazio accionável
+            // quando falta; a autoridade real é sempre do Core (§2, §3, §15).
+            {create_menu()}
 
             <span class="oc-divider" aria-hidden="true"></span>
 
@@ -1169,85 +1151,82 @@ fn core_status_pill(estado: &CoreStatus) -> impl IntoView {
     .into_any()
 }
 
-/// As acções do menu `+ Criar`, com os atalhos do design.
+/// Como uma acção do «Criar» se concretiza.
 ///
-/// O destino é `None` quando o ecrã de criação ainda não existe. O dossier
-/// especifica as sete acções mas apenas dois dos ecrãs; as restantes ficam
-/// visíveis e declaradas como indisponíveis, em vez de levarem a um 404.
-/// As acções do menu «Criar»: rótulo, destino, tecla, permissão, e — quando a
-/// acção não tem um destino directo — **onde** se cria.
+/// Toda a criação determinista funciona sem GPU nem modelo: a ausência de
+/// inferência só degrada a **execução** de um agente, nunca a criação de um
+/// artefacto (regra pré-IA). Cada acção ou abre o formulário onde o contexto se
+/// resolve, ou cria de imediato.
+#[derive(Clone, Copy)]
+enum CreateVia {
+    /// Abre um formulário/página (GET). O contexto (unidade, ambiente, ideia)
+    /// resolve-se lá, com estado vazio accionável quando falta.
+    Open(&'static str),
+    /// Cria de imediato (POST) e o servidor abre o objecto novo. Para a acção
+    /// que não precisa de contexto nenhum: uma nota pessoal.
+    Create(&'static str),
+}
+
+/// Uma acção de criação, orientada a dados: um único registo tipado, e não sete
+/// ramos condicionais espalhados (briefing §28).
 ///
-/// Uma acção implementada nunca se declara «indisponível»: ou leva ao ecrã onde
-/// se cria (o destino), ou diz onde se cria (a pista). «Indisponível» ficaria a
-/// dizer que a funcionalidade não existe, e existe — só se cria em contexto. Só a
-/// falta de **autorização** desactiva um item de facto.
-const CREATE_ITEMS: [(&str, Option<&str>, &str, Permission, &str); 7] = [
-    (
-        "Nova Ideia",
-        Some("/ideas/new"),
-        "I",
-        Permission::IdeasCreate,
-        "",
-    ),
-    // O projecto nasce da promoção de uma ideia (domínio §9); o ecrã de projectos
-    // é onde isso acontece.
-    (
-        "Novo Projecto",
-        Some("/projects"),
-        "P",
-        Permission::ProjectsCreate,
-        "",
-    ),
-    (
-        "Nova Nota",
-        Some("/notes"),
-        "N",
-        Permission::NotesCreate,
-        "",
-    ),
-    (
-        "Nova Referência",
-        Some("/bibliography"),
-        "R",
-        Permission::BibliographyCreate,
-        "",
-    ),
-    (
-        "Novo Dataset",
-        Some("/datasets"),
-        "D",
-        Permission::DatasetsCreate,
-        "",
-    ),
-    // A tarefa cria-se dentro de um projecto; não há criação global. Fica visível
-    // e diz onde se faz, em vez de se declarar indisponível.
-    (
-        "Nova Tarefa",
-        None,
-        "T",
-        Permission::IdeasEdit,
-        "Cria-se dentro de um projecto.",
-    ),
-    (
-        "Novo Agente IA",
-        Some("/ai/agents/new"),
-        "A",
-        Permission::AgentsCreatePersonal,
-        "",
-    ),
+/// **Sem permissão no menu.** Toda a criação determinista funciona sem GPU, e o
+/// que decide se uma criação acontece é a autoridade do Core, sempre. O menu não
+/// cinzenta acções por uma permissão que é, no fundo, um proxy de contexto (a
+/// filiação numa unidade ou ambiente): cinzentar assim escondia acções que o
+/// membro pode fazer, e foi o defeito visível. Cada acção abre o seu fluxo, onde
+/// o contexto se resolve com estado vazio accionável quando falta (§2, §3, §15).
+struct CreateAction {
+    /// O que se lê no menu.
+    label: &'static str,
+    /// Como se concretiza.
+    via: CreateVia,
+    /// A tecla de acesso, activada com o menu aberto.
+    key: &'static str,
+}
+
+const CREATE_ITEMS: [CreateAction; 7] = [
+    CreateAction {
+        label: "Nova Ideia",
+        via: CreateVia::Open("/ideas/new"),
+        key: "I",
+    },
+    CreateAction {
+        label: "Novo Projecto",
+        via: CreateVia::Open("/projects/new"),
+        key: "P",
+    },
+    // Uma nota pessoal não precisa de contexto: cria-se e abre-se o editor.
+    // Caminho próprio (`/notes/new`) para não colidir, no DOM, com o formulário
+    // de criação da lista de Notas — os dois criam a mesma nota pessoal.
+    CreateAction {
+        label: "Nova Nota",
+        via: CreateVia::Create("/notes/new"),
+        key: "N",
+    },
+    CreateAction {
+        label: "Nova Referência",
+        via: CreateVia::Open("/bibliography/new"),
+        key: "R",
+    },
+    CreateAction {
+        label: "Novo Dataset",
+        via: CreateVia::Open("/datasets/new"),
+        key: "D",
+    },
+    CreateAction {
+        label: "Nova Tarefa",
+        via: CreateVia::Open("/tasks/new"),
+        key: "T",
+    },
+    CreateAction {
+        label: "Novo Agente IA",
+        via: CreateVia::Open("/ai/agents/new"),
+        key: "A",
+    },
 ];
 
-fn create_menu(viewer: &Viewer) -> impl IntoView {
-    // Todas as acções, com a marca de quais o membro pode executar. Filtrar
-    // as outras deixava o menu a mudar de tamanho consoante quem o abre, e sem
-    // dizer o que falta para as ter.
-    let items: Vec<(&str, Option<&str>, &str, bool, &str)> = CREATE_ITEMS
-        .iter()
-        .map(|(label, href, key, permission, pista)| {
-            (*label, *href, *key, viewer.can(*permission), *pista)
-        })
-        .collect();
-
+fn create_menu() -> impl IntoView {
     view! {
         <div class="oc-create" data-oc="create">
             <button
@@ -1262,55 +1241,48 @@ fn create_menu(viewer: &Viewer) -> impl IntoView {
             </button>
 
             <div class="oc-create__menu" data-oc="create-menu" role="menu" hidden>
-                {items
-                    .into_iter()
-                    .map(|(label, href, key, permitido, pista)| {
-                        // Duas razões distintas para um item não ser um link, e a
-                        // interface tem de as distinguir: falta de **autorização**
-                        // (desactiva de facto), ou uma acção que só se cria em
-                        // **contexto** (existe — a pista diz onde). Uma acção
-                        // implementada nunca se declara «indisponível».
-                        let href = if permitido { href } else { None };
-                        let razao = if permitido {
-                            pista
-                        } else {
-                            "Não tem autorização para esta acção."
-                        };
-                        href.map_or_else(
-                            || {
-                                view! {
-                                    <span
-                                        class="oc-create__item oc-unavailable"
-                                        role="menuitem"
-                                        aria-disabled="true"
-                                        title=razao
-                                    >
-                                        {label}
-                                        {(!razao.is_empty())
-                                            .then(|| {
-                                                view! {
-                                                    <small class="oc-create__pista">{razao}</small>
-                                                }
-                                            })}
-                                        <kbd class="oc-kbd">{key}</kbd>
-                                    </span>
-                                }
-                                    .into_any()
-                            },
-                            |href| {
-                                view! {
-                                    <a class="oc-create__item" role="menuitem" href=href>
-                                        {label}
-                                        <kbd class="oc-kbd">{key}</kbd>
-                                    </a>
-                                }
-                                    .into_any()
-                            },
-                        )
-                    })
+                {CREATE_ITEMS
+                    .iter()
+                    .map(create_menu_item)
                     .collect_view()}
             </div>
         </div>
+    }
+}
+
+/// Um item do menu «Criar».
+///
+/// Duas formas, e a interface distingue-as: uma acção que abre um formulário, uma
+/// ligação; uma criação imediata, um botão que submete. `data-oc-key` leva a
+/// tecla de acesso ao `app.js`, que a activa com o menu aberto.
+fn create_menu_item(action: &CreateAction) -> impl IntoView {
+    let CreateAction { label, via, key } = *action;
+
+    match via {
+        CreateVia::Open(href) => view! {
+            <a class="oc-create__item" role="menuitem" href=href data-oc-key=key>
+                {label}
+                <kbd class="oc-kbd">{key}</kbd>
+            </a>
+        }
+        .into_any(),
+        // Uma criação imediata é um `POST`, e por isso um formulário — nunca um
+        // `GET` com efeito. O botão é o item do menu, focável e activável pela
+        // tecla de acesso como qualquer outro.
+        CreateVia::Create(action_url) => view! {
+            <form class="oc-create__form" method="post" action=action_url role="none">
+                <button
+                    type="submit"
+                    class="oc-create__item"
+                    role="menuitem"
+                    data-oc-key=key
+                >
+                    {label}
+                    <kbd class="oc-kbd">{key}</kbd>
+                </button>
+            </form>
+        }
+        .into_any(),
     }
 }
 
@@ -1615,15 +1587,15 @@ mod tests {
         .to_html()
     }
 
-    /// O «Criar» nunca declara «indisponível» uma acção que existe (F-07).
+    /// O «Criar» leva cada acção determinista ao seu fluxo real.
     ///
-    /// O defeito era: cinco das sete acções — Projecto, Nota, Referência,
-    /// Dataset, Tarefa — apareciam como «Ainda não disponível», que diz que a
-    /// funcionalidade não existe. Existe: cria-se em contexto. Agora ou levam ao
-    /// ecrã onde se cria, ou dizem onde (a Tarefa). Só a falta de autorização
-    /// desactiva de facto.
+    /// O defeito (F-07 / GLOBAL_CREATE): acções apareciam como «Ainda não
+    /// disponível» ou apontavam a listas, e a Tarefa não tinha destino. Todas as
+    /// sete criações deterministas funcionam sem GPU — cada uma abre o formulário
+    /// onde o contexto se resolve, ou cria de imediato (a Nota). Só a falta de
+    /// autorização desactiva de facto.
     #[test]
-    fn o_criar_nunca_declara_indisponivel_uma_accao_que_existe() {
+    fn o_criar_leva_cada_accao_ao_seu_fluxo_real() {
         let html = render(&viewer_with(&ocinye_contracts::Permission::all()));
 
         for accao in [
@@ -1639,20 +1611,32 @@ mod tests {
         }
 
         assert!(
-            !html.contains("Ainda não disponível"),
-            "o «Criar» declara uma acção implementada como «indisponível» (F-07)"
+            !html.contains("Ainda não disponível") && !html.contains("oc-unavailable"),
+            "o «Criar» declara uma acção implementada como indisponível"
         );
-        assert!(
-            html.contains("Cria-se dentro de um projecto."),
-            "a Tarefa deve dizer onde se cria, em vez de «indisponível»"
-        );
-        // As acções implementadas levam ao ecrã onde se cria.
-        for destino in ["/projects", "/notes", "/bibliography", "/datasets"] {
+
+        // As acções que abrem um formulário levam ao ecrã onde o contexto se
+        // resolve — não à lista.
+        for destino in [
+            "/ideas/new",
+            "/projects/new",
+            "/bibliography/new",
+            "/datasets/new",
+            "/tasks/new",
+            "/ai/agents/new",
+        ] {
             assert!(
                 html.contains(&format!("href=\"{destino}\"")),
                 "o «Criar» não leva a {destino}"
             );
         }
+
+        // A Nota cria-se de imediato: um POST (para o seu caminho próprio,
+        // distinto do formulário da lista), não um link.
+        assert!(
+            html.contains("action=\"/notes/new\""),
+            "a Nota deve criar-se por POST /notes/new, não por um link"
+        );
     }
 
     /// Um atalho mostrado é um atalho que funciona.
@@ -1765,39 +1749,52 @@ mod tests {
         assert!(html.contains(r#"href="/my-work""#));
     }
 
+    /// O «Criar» está sempre presente: toda a criação determinista funciona, e a
+    /// mais simples — uma nota pessoal — está ao alcance de qualquer membro. Um
+    /// membro só com uma permissão de leitura vê-o na mesma.
     #[test]
-    fn o_menu_criar_desaparece_quando_nao_ha_nada_a_criar() {
+    fn o_menu_criar_esta_sempre_presente() {
         let html = render(&viewer_with(&[Permission::IdeasView]));
-        assert!(!html.contains("data-oc=\"create-toggle\""));
+        assert!(html.contains("data-oc=\"create-toggle\""));
+        assert!(html.contains(r#"action="/notes/new""#));
     }
 
+    /// O «Criar» não cinzenta a criação por uma permissão de contexto.
+    ///
+    /// O defeito visível (GLOBAL_CREATE): um membro sem filiação numa unidade ou
+    /// ambiente — um administrador que nunca entrou numa — via quase todo o menu
+    /// esbatido, porque as permissões de criação vêm da filiação, não do papel
+    /// técnico. Cinzentar assim escondia acções que o membro pode iniciar. Agora
+    /// toda a criação determinista é accionável; a autoridade real é do Core, e
+    /// o contexto resolve-se no formulário (§2, §3, §15).
     #[test]
-    fn o_menu_criar_mostra_tudo_e_so_deixa_seguir_o_permitido() {
-        // As acções deixaram de ser filtradas em silêncio: o menu passou a
-        // mostrar todas e a declarar as que a pessoa não pode usar. O que se
-        // mantém é o que importa — só as permitidas navegam.
-        let member = viewer_with(&[Permission::IdeasCreate, Permission::NotesCreate]);
-        let html = render(&member);
+    fn o_criar_nao_cinzenta_a_criacao_por_falta_de_contexto() {
+        // Um membro sem *nenhuma* das permissões de criação de contexto.
+        let html = render(&viewer_with(&[]));
 
         assert!(html.contains("data-oc=\"create-toggle\""));
-        for label in ["Nova Ideia", "Nova Nota", "Novo Dataset", "Novo Agente IA"] {
-            assert!(html.contains(label), "«{label}» desapareceu do menu");
+        // Todas as sete acções continuam accionáveis: nada esbatido.
+        assert!(
+            !html.contains("oc-unavailable") && !html.contains("Não tem autorização"),
+            "o «Criar» voltou a cinzentar acções por falta de contexto"
+        );
+        for destino in [
+            "/ideas/new",
+            "/projects/new",
+            "/bibliography/new",
+            "/datasets/new",
+            "/tasks/new",
+            "/ai/agents/new",
+        ] {
+            assert!(
+                html.contains(&format!("href=\"{destino}\"")),
+                "«{destino}» deixou de ser accionável"
+            );
         }
-
-        // As permitidas são ligações; as outras não têm para onde ir.
         assert!(
-            html.contains(r#"href="/ideas/new""#),
-            "«Nova Ideia» não navega apesar da permissão"
+            html.contains(r#"action="/notes/new""#),
+            "a Nota deixou de se criar por POST"
         );
-        assert!(
-            !html.contains(r#"href="/datasets/new""#),
-            "«Novo Dataset» navega sem a permissão que exige"
-        );
-        assert!(
-            !html.contains(r#"href="/ai/agents/new""#),
-            "«Novo Agente IA» navega sem a permissão que exige"
-        );
-        assert!(html.contains("Não tem autorização para esta acção."));
     }
 
     #[test]

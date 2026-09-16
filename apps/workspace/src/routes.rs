@@ -38,6 +38,7 @@ pub const ROUTES: &[&str] = &[
     "/my-work",
     "/resources",
     "/notes",
+    "/notes/new",
     "/notes/partilhadas",
     "/notes/lixo",
     "/notes/{note_id}/apagar",
@@ -84,7 +85,9 @@ pub const ROUTES: &[&str] = &[
     "/mail/{mailbox_id}/connect",
     "/mail/{mailbox_id}/disconnect",
     "/units",
+    "/units/code-suggestion",
     "/units/{unit_id}",
+    "/units/{unit_id}/edit",
     "/units/{unit_id}/members",
     "/workspaces/{workspace_id}/members",
     "/workspaces/{workspace_id}/members/remove",
@@ -95,6 +98,7 @@ pub const ROUTES: &[&str] = &[
     "/projects/new",
     "/bibliography/new",
     "/datasets/new",
+    "/tasks/new",
     "/calendar",
     "/calendar/events/new",
     "/calendar/events/{event_id}",
@@ -263,7 +267,12 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/mail/{mailbox_id}/sync", post(mail_sync))
         // Investigação
         .route("/units", get(units))
+        .route("/units/code-suggestion", get(unit_code_suggestion))
         .route("/units/{unit_id}", get(unit_detail))
+        .route(
+            "/units/{unit_id}/edit",
+            get(edit_unit_form).post(update_unit),
+        )
         // Gerir quem pertence a uma unidade. Três operações, três caminhos: uma
         // pertença é autoridade, e cada alteração dela é um acto próprio.
         .route(
@@ -301,6 +310,11 @@ pub fn router(state: WorkspaceState) -> Router {
         // Notas pessoais. A criação e a lista partilham o caminho: `GET /notes`
         // mostra as notas, `POST /notes` cria uma e leva o membro ao editor.
         .route("/notes", get(notes_list).post(create_personal_note))
+        // A criação a partir do «+ Criar» global tem o seu próprio caminho: o
+        // formulário do menu vive na barra de topo de todas as páginas, e um
+        // `action="/notes"` colidiria, no DOM, com o formulário de criação da
+        // própria lista de Notas. Mesmo efeito, caminho distinto.
+        .route("/notes/new", post(create_personal_note))
         // As notas que outra pessoa partilhou com o membro — a vista de leitura.
         .route("/notes/partilhadas", get(shared_notes_page))
         // O Lixo: as notas apagadas, de onde se restauram ou se eliminam de vez.
@@ -355,6 +369,7 @@ pub fn router(state: WorkspaceState) -> Router {
             get(new_source_form).post(create_source),
         )
         .route("/datasets/new", get(new_dataset_form).post(create_dataset))
+        .route("/tasks/new", get(new_task_form).post(create_task))
         .route("/help", get(help))
         .route("/settings", get(settings_account))
         .route("/settings/security", get(settings_security))
@@ -6564,6 +6579,79 @@ async fn create_dataset(
     }
 }
 
+async fn new_task_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    let destinos = creation_destinations(&state, &member).await;
+    let trail = vec![Crumb::to(Screen::MyWork)];
+    shell_page(
+        "Nova Tarefa",
+        &viewer,
+        Screen::MyWork,
+        trail,
+        ui::screens::lists::new_task(&destinos, None),
+    )
+}
+
+#[derive(Deserialize)]
+struct NewTaskForm {
+    workspace_id: Uuid,
+    title: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    priority: String,
+    #[serde(default)]
+    due_on: String,
+}
+
+async fn create_task(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<NewTaskForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let mut body = serde_json::json!({
+        "title": form.title,
+        "description": blank_to_none(form.description),
+    });
+    // Só se enviam quando têm valor: um campo vazio não é uma escolha, e o Core
+    // aplica os seus próprios defaults (prioridade normal, sem prazo).
+    if let Some(priority) = blank_to_none(form.priority) {
+        body["priority"] = Value::String(priority);
+    }
+    if let Some(due_on) = blank_to_none(form.due_on) {
+        body["due_on"] = Value::String(due_on);
+    }
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/workspaces/{}/tasks", form.workspace_id),
+        &body,
+    )
+    .await
+    {
+        // A tarefa vive no ambiente que a governa; abre-se lá, onde é listada.
+        Ok(_) => Redirect::to(&format!("/workspaces/{}", form.workspace_id)).into_response(),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(failure) => {
+            let viewer = viewer(&state, &member).await;
+            let destinos = creation_destinations(&state, &member).await;
+            let trail = vec![Crumb::to(Screen::MyWork)];
+            shell_page(
+                "Nova Tarefa",
+                &viewer,
+                Screen::MyWork,
+                trail,
+                ui::screens::lists::new_task(&destinos, Some(failure.to_string())),
+            )
+        }
+    }
+}
+
 /// O resultado de uma mudança de imagem de perfil, tal como volta do redirect.
 #[derive(Debug, Default, Deserialize)]
 struct AvatarOutcome {
@@ -7206,12 +7294,20 @@ async fn new_unit_form(State(state): State<WorkspaceState>, headers: HeaderMap) 
 
 #[derive(Deserialize)]
 struct NewUnitForm {
-    code: String,
     name: String,
     #[serde(default)]
     description: String,
     #[serde(default)]
     research_areas: String,
+}
+
+/// Split a comma-separated research-areas field into a clean list.
+fn parse_research_areas(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|a| !a.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
 }
 
 async fn create_unit(
@@ -7221,19 +7317,12 @@ async fn create_unit(
 ) -> Response {
     let member = member_or_login!(state, headers);
 
-    let areas: Vec<String> = form
-        .research_areas
-        .split(',')
-        .map(str::trim)
-        .filter(|a| !a.is_empty())
-        .map(ToOwned::to_owned)
-        .collect();
-
+    // No `code`: the Core generates it from the name. Sending an empty one would
+    // be an explicit empty code, which is a different thing.
     let body = serde_json::json!({
-        "code": form.code,
         "name": form.name,
         "description": blank_to_none(form.description),
-        "research_areas": areas,
+        "research_areas": parse_research_areas(&form.research_areas),
     });
 
     match api::post(
@@ -7248,8 +7337,8 @@ async fn create_unit(
         Ok(_) => Redirect::to("/units").into_response(),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         Err(failure) => {
-            // A recusa vem do Core e é mostrada tal como veio: um código
-            // repetido ou um nome inválido têm de ser legíveis a quem escreveu.
+            // A recusa vem do Core e é mostrada tal como veio: um nome inválido
+            // tem de ser legível a quem o escreveu.
             let viewer = viewer(&state, &member).await;
             let trail = vec![Crumb::to(Screen::Units)];
             shell_page(
@@ -7258,6 +7347,135 @@ async fn create_unit(
                 Screen::Units,
                 trail,
                 ui::screens::lists::new_unit(Some(failure.to_string())),
+            )
+        }
+    }
+}
+
+/// `GET /units/code-suggestion?name=…` — proxy to the Core's code preview.
+///
+/// The browser reaches only the Workspace origin (`connect-src 'self'`), so the
+/// live code preview in the «Nova Unidade» form fetches this, and the Workspace
+/// asks the Core with the member's session. Returns the Core's JSON verbatim
+/// (`{"code": "UCS-001"}`).
+#[derive(Deserialize)]
+struct CodeSuggestionQuery {
+    name: String,
+}
+
+async fn unit_code_suggestion(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(query): Query<CodeSuggestionQuery>,
+) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+
+    let encoded = urlencoding_minimal(&query.name);
+    match api::get::<Value>(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/units/code-suggestion?name={encoded}"),
+    )
+    .await
+    {
+        Ok(value) => Json(value).into_response(),
+        Err(ApiFailure::Unauthorised) => StatusCode::UNAUTHORIZED.into_response(),
+        Err(_) => StatusCode::BAD_GATEWAY.into_response(),
+    }
+}
+
+/// `GET /units/{id}/edit` — the edit form, pre-filled with the current unit.
+async fn edit_unit_form(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(unit_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let unit = match api::get::<Value>(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/units/{unit_id}"),
+    )
+    .await
+    {
+        Ok(unit) => unit,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    let viewer = viewer(&state, &member).await;
+    let trail = vec![Crumb::to(Screen::Units)];
+    shell_page(
+        "Editar Unidade",
+        &viewer,
+        Screen::Units,
+        trail,
+        ui::screens::lists::edit_unit(&unit, None),
+    )
+}
+
+#[derive(Deserialize)]
+struct EditUnitForm {
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    research_areas: String,
+    // Round-trips for the read-only display only; never sent to the Core. Lets
+    // an error re-render show the code without a second fetch.
+    #[serde(default)]
+    code: String,
+}
+
+/// `POST /units/{id}/edit` — apply the edit through the Core's `PUT /units/{id}`.
+///
+/// The code is not sent: it is immutable, and the Core ignores it anyway.
+async fn update_unit(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(unit_id): Path<Uuid>,
+    Form(form): Form<EditUnitForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let body = serde_json::json!({
+        "name": form.name.clone(),
+        "description": blank_to_none(form.description.clone()),
+        "research_areas": parse_research_areas(&form.research_areas),
+    });
+
+    match api::put(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/units/{unit_id}"),
+        &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!("/units/{unit_id}")).into_response(),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(failure) => {
+            // Re-render the edit form with the Core's message and what was typed.
+            let unit = serde_json::json!({
+                "id": unit_id.to_string(),
+                "code": form.code,
+                "name": form.name,
+                "description": blank_to_none(form.description),
+                "research_areas": parse_research_areas(&form.research_areas),
+            });
+            let viewer = viewer(&state, &member).await;
+            let trail = vec![Crumb::to(Screen::Units)];
+            shell_page(
+                "Editar Unidade",
+                &viewer,
+                Screen::Units,
+                trail,
+                ui::screens::lists::edit_unit(&unit, Some(failure.to_string())),
             )
         }
     }
@@ -9034,6 +9252,7 @@ mod router_tests {
             (Method::POST, "/projects/new".to_owned()),
             (Method::POST, "/bibliography/new".to_owned()),
             (Method::POST, "/datasets/new".to_owned()),
+            (Method::POST, "/tasks/new".to_owned()),
             (Method::POST, "/settings/password".to_owned()),
             (Method::POST, format!("/settings/sessions/{NADA}/revoke")),
             (Method::POST, "/login".to_owned()),

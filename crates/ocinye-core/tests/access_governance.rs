@@ -110,7 +110,7 @@ async fn quem_cria_uma_unidade_pode_continuar_a_geri_la() {
         &admin,
         &ids,
         ocinye_core::modules::organisation::NewUnit {
-            code: format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase(),
+            code: Some(format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase()),
             name: "Unidade de prova".to_owned(),
             description: None,
             research_areas: Vec::new(),
@@ -166,7 +166,7 @@ async fn o_bootstrap_nao_e_uma_porta_para_criar_unidades() {
         &membro,
         &ids,
         ocinye_core::modules::organisation::NewUnit {
-            code: format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase(),
+            code: Some(format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase()),
             name: "Não devia existir".to_owned(),
             description: None,
             research_areas: Vec::new(),
@@ -196,7 +196,7 @@ async fn ninguem_se_acrescenta_nem_se_promove_numa_unidade_alheia() {
         &admin,
         &ids,
         ocinye_core::modules::organisation::NewUnit {
-            code: format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase(),
+            code: Some(format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase()),
             name: "Unidade fechada".to_owned(),
             description: None,
             research_areas: Vec::new(),
@@ -261,7 +261,7 @@ async fn quem_cria_uma_ideia_pode_continuar_a_usar_o_ambiente() {
         &admin,
         &ids,
         ocinye_core::modules::organisation::NewUnit {
-            code: format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase(),
+            code: Some(format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase()),
             name: "Unidade".to_owned(),
             description: None,
             research_areas: Vec::new(),
@@ -406,7 +406,7 @@ async fn a_relevancia_nao_muda_quando_a_pertenca_muda() {
         &admin,
         &ids,
         ocinye_core::modules::organisation::NewUnit {
-            code: format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase(),
+            code: Some(format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase()),
             name: "Unidade".to_owned(),
             description: None,
             research_areas: Vec::new(),
@@ -465,7 +465,7 @@ async fn administrar_a_plataforma_nao_da_acesso_a_investigacao_restrita() {
         &dono,
         &ids,
         ocinye_core::modules::organisation::NewUnit {
-            code: format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase(),
+            code: Some(format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase()),
             name: "Unidade".to_owned(),
             description: None,
             research_areas: Vec::new(),

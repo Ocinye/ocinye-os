@@ -282,7 +282,7 @@ async fn unidade_com_gestor(pool: &PgPool, org: Uuid) -> (Uuid, Principal, Secre
         &admin,
         &CorrelationIds::generate(),
         organisation::NewUnit {
-            code: format!("H{}", &Uuid::new_v4().simple().to_string()[..5]),
+            code: Some(format!("H{}", &Uuid::new_v4().simple().to_string()[..5])),
             name: "Unidade".to_owned(),
             description: None,
             research_areas: Vec::new(),

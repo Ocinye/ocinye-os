@@ -111,7 +111,7 @@ async fn unidade(pool: &PgPool, admin: &Principal) -> Uuid {
         admin,
         &ids(),
         organisation::NewUnit {
-            code: format!("C{}", &Uuid::new_v4().simple().to_string()[..5]),
+            code: Some(format!("C{}", &Uuid::new_v4().simple().to_string()[..5])),
             name: "Unidade".to_owned(),
             description: None,
             research_areas: Vec::new(),

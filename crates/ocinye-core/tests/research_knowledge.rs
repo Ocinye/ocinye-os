@@ -3157,7 +3157,7 @@ async fn uma_instalacao_vazia_consegue_criar_a_primeira_unidade_e_usa_la() {
         &admin,
         &ids,
         ocinye_core::modules::organisation::NewUnit {
-            code: format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase(),
+            code: Some(format!("U{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase()),
             name: "Unidade de Energias Renováveis".to_owned(),
             description: Some("Primeira unidade da instituição.".to_owned()),
             research_areas: vec!["Energia".to_owned()],
@@ -3229,7 +3229,7 @@ async fn um_membro_sem_autorizacao_nao_cria_a_primeira_unidade() {
         &membro,
         &ids,
         ocinye_core::modules::organisation::NewUnit {
-            code: "INTRUSA".to_owned(),
+            code: Some("INTRUSA".to_owned()),
             name: "Unidade intrusa".to_owned(),
             description: None,
             research_areas: Vec::new(),

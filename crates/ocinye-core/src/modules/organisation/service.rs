@@ -1,7 +1,7 @@
 //! Organisation application layer.
 
 use ocinye_contracts::{Classification, UnitRole};
-use ocinye_domain::identifiers::validate_unit_code;
+use ocinye_domain::identifiers::{unit_code_stem, validate_unit_code};
 use ocinye_domain::policy::{authorize, Action, ResourceContext, ResourceKind};
 use ocinye_domain::Principal;
 use ocinye_observability::CorrelationIds;
@@ -12,6 +12,7 @@ use super::model::{Organisation, Unit, UnitMember};
 use super::repository as repo;
 use crate::audit::{self, action, AuditEntry};
 use crate::error::{CoreError, CoreResult};
+use crate::modules::search;
 use crate::Tx;
 
 /// Authorization context for a unit.
@@ -28,14 +29,58 @@ pub fn unit_context(unit: &Unit) -> ResourceContext {
 /// Details of a new unit.
 #[derive(Debug, Clone)]
 pub struct NewUnit {
-    /// Short code, for example `AI`.
-    pub code: String,
+    /// Short code, for example `UCS-001`.
+    ///
+    /// `None` asks the Core to generate one from the name — the usual path, so a
+    /// person creating a unit names it and never has to invent an identifier.
+    /// `Some` supplies an explicit code, for seeding, import, or an administrator
+    /// who wants a specific one; it is validated like any other.
+    pub code: Option<String>,
     /// Display name.
     pub name: String,
     /// Description.
     pub description: Option<String>,
     /// Declared areas of research.
     pub research_areas: Vec<String>,
+}
+
+/// Build the search title and indexable text for a unit.
+///
+/// A unit is found by name **and** by code — an investigator searches for
+/// «Inteligência Artificial» or for «UAI». The research areas are indexed too,
+/// so a unit surfaces for the field it works in.
+fn unit_index_text(unit: &Unit) -> (String, String) {
+    let mut parts = vec![unit.code.clone(), unit.name.clone()];
+    if let Some(description) = &unit.description {
+        parts.push(description.clone());
+    }
+    parts.extend(unit.research_areas.iter().cloned());
+    (unit.name.clone(), parts.join("\n"))
+}
+
+/// Index a unit in the transaction that created or changed it.
+///
+/// A unit's existence is `INTERNAL` and organisation-wide (every active member
+/// sees the shape of the institution), so the row carries no owner, unit or
+/// workspace scope — the `INTERNAL` clause admits it to every active member,
+/// exactly as [`list_units`] does.
+async fn index_unit(tx: &mut Tx<'_>, unit: &Unit) -> CoreResult<()> {
+    let (title, text) = unit_index_text(unit);
+    search::index_entity(
+        tx,
+        search::IndexRequest {
+            organisation_id: unit.organisation_id,
+            owner_id: None,
+            unit_id: None,
+            workspace_id: None,
+            entity_type: "unit",
+            entity_id: unit.id,
+            title,
+            text,
+            classification: Classification::Internal,
+        },
+    )
+    .await
 }
 
 /// Ensure the organisation exists, creating it on first start.
@@ -73,6 +118,123 @@ pub async fn bootstrap_organisation(
 
     tracing::info!(slug, "organisation created");
     Ok(organisation)
+}
+
+/// The institution's initial units — sensible defaults, not a fixed taxonomy.
+///
+/// These are **seed data**: rows an installation starts with so «Nova Unidade»
+/// is not an empty generic form on day one. They are not an enumeration that
+/// business logic may branch on — nothing in the system does `if code ==
+/// "UAI-001"`, and nothing should (§2, §7). An installation renames, archives,
+/// or adds to them freely; a unit that did not exist when Ocinye was compiled is
+/// as first-class as any of these.
+///
+/// The explicit `-001` codes are the institution's chosen identifiers, not what
+/// the generator would produce (it would abbreviate «Inteligência Artificial»
+/// to `UIA`, not `UAI`); the generator serves the units created afterwards.
+const INITIAL_UNITS: &[(&str, &str, &str, &[&str])] = &[
+    (
+        "UAI-001",
+        "Inteligência Artificial",
+        "Investigação e engenharia de sistemas de inteligência artificial.",
+        &[
+            "Aprendizagem automática",
+            "Processamento de linguagem natural",
+            "Visão computacional",
+        ],
+    ),
+    (
+        "UCS-001",
+        "Computação e Sistemas",
+        "Sistemas computacionais, infraestrutura e engenharia de software.",
+        &[
+            "Sistemas distribuídos",
+            "Computação de alto desempenho",
+            "Engenharia de software",
+        ],
+    ),
+    (
+        "UDC-001",
+        "Dados e Conhecimento",
+        "Ciência de dados, gestão de conhecimento e recuperação de informação.",
+        &[
+            "Ciência de dados",
+            "Bases de dados",
+            "Recuperação de informação",
+        ],
+    ),
+    (
+        "UID-001",
+        "Investigação e Desenvolvimento",
+        "Investigação aplicada e transferência tecnológica transversais.",
+        &[
+            "Investigação aplicada",
+            "Transferência tecnológica",
+            "Prototipagem",
+        ],
+    ),
+];
+
+/// Seed the institution's initial units, if they are not already present.
+///
+/// Idempotent by design: each unit inserts only when its code is free
+/// (`ON CONFLICT (organisation_id, code) DO NOTHING`), so running the bootstrap
+/// again, or an installation that already created some of these, changes
+/// nothing. A seeded unit has no human author (`created_by_id` null) and no
+/// manager — an organisation administrator adopts it, appointing whoever leads
+/// it. Each newly seeded unit is indexed for search in the same transaction.
+///
+/// This is the fresh-install path (a new organisation created by the bootstrap).
+/// Existing organisations are seeded by the migration, which also backfills the
+/// search index for every unit that predates unit indexing.
+///
+/// # Errors
+///
+/// Returns an error when a seed insert, its indexing, or the audit write fails.
+pub async fn seed_initial_units(
+    pool: &PgPool,
+    organisation_id: Uuid,
+    ids: &CorrelationIds,
+) -> CoreResult<u32> {
+    let mut seeded = 0_u32;
+    for (code, name, description, areas) in INITIAL_UNITS {
+        let areas: Vec<String> = areas.iter().map(|area| (*area).to_owned()).collect();
+
+        let mut tx = pool.begin().await?;
+        let Some(unit) = repo::insert_unit_if_absent(
+            &mut *tx,
+            organisation_id,
+            code,
+            name,
+            Some(description),
+            &areas,
+        )
+        .await?
+        else {
+            tx.rollback().await?;
+            continue;
+        };
+
+        index_unit(&mut tx, &unit).await?;
+        audit::record(
+            &mut tx,
+            None,
+            ids,
+            AuditEntry::new(action::ADMIN_OPERATION, "unit")
+                .resource(unit.id)
+                .scope(Some(unit.id), None)
+                .detail("event", "seed")
+                .detail("code", unit.code.as_str()),
+        )
+        .await?;
+        tx.commit().await?;
+        seeded += 1;
+    }
+
+    if seeded > 0 {
+        tracing::info!(organisation_id = %organisation_id, seeded, "initial units seeded");
+    }
+    Ok(seeded)
 }
 
 /// Load the institution this deployment serves.
@@ -131,6 +293,30 @@ pub async fn get_unit<'e>(
     Ok(unit)
 }
 
+/// Suggest the code a new unit with this name would receive.
+///
+/// For a live preview in the «Nova Unidade» form: someone types a name and sees
+/// the institutional code that will be generated, before saving. Indicative —
+/// the number is only fixed when the unit is created (a unit created in the
+/// meantime shifts it), and the form says so. Requires the authority to create a
+/// unit, since only that person needs the suggestion.
+///
+/// # Errors
+///
+/// Returns an error when the caller may not create a unit, or the query fails.
+pub async fn suggest_unit_code(
+    pool: &PgPool,
+    principal: &Principal,
+    name: &str,
+) -> CoreResult<String> {
+    let ctx = ResourceContext::organisation(ResourceKind::Unit, principal.organisation_id);
+    authorize(principal, Action::Create, &ctx)
+        .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+
+    let stem = unit_code_stem(name.trim());
+    repo::peek_unit_code(pool, principal.organisation_id, &stem).await
+}
+
 /// Create a unit.
 ///
 /// # Errors
@@ -147,17 +333,30 @@ pub async fn create_unit(
     authorize(principal, Action::Create, &ctx)
         .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
 
-    let code = validate_unit_code(&request.code)?;
     let name = request.name.trim();
     if name.is_empty() {
         return Err(CoreError::Validation("A unit needs a name.".to_owned()));
     }
 
-    if repo::code_taken(&mut **tx, principal.organisation_id, &code).await? {
-        return Err(CoreError::Conflict(
-            "A unit with this code already exists.".to_owned(),
-        ));
-    }
+    // The code is either supplied explicitly (seed, import, an administrator who
+    // wants a specific one) or generated from the name. Generation allocates
+    // `U<ABBREV>-NNN` under a per-organisation lock, so the returned code is
+    // already free; an explicit code is validated and checked for collision.
+    let code = match request.code.as_deref().map(str::trim) {
+        Some(explicit) if !explicit.is_empty() => {
+            let code = validate_unit_code(explicit)?;
+            if repo::code_taken(&mut **tx, principal.organisation_id, &code).await? {
+                return Err(CoreError::Conflict(
+                    "A unit with this code already exists.".to_owned(),
+                ));
+            }
+            code
+        }
+        _ => {
+            let stem = unit_code_stem(name);
+            repo::next_unit_code(tx, principal.organisation_id, &stem).await?
+        }
+    };
 
     let unit = repo::insert_unit(
         &mut **tx,
@@ -210,7 +409,80 @@ pub async fn create_unit(
     )
     .await?;
 
+    index_unit(tx, &unit).await?;
+
     Ok(unit)
+}
+
+/// Changes to a unit's editable fields.
+#[derive(Debug, Clone)]
+pub struct UnitEdit {
+    /// New display name.
+    pub name: String,
+    /// New description.
+    pub description: Option<String>,
+    /// New declared areas of research.
+    pub research_areas: Vec<String>,
+}
+
+/// Update a unit's name, description and research areas.
+///
+/// The **code does not change**: it is institutional identity that appears in
+/// citations, and renaming a unit never renumbers it. Editing requires the same
+/// authority as classifying or managing members — a unit manager, or an
+/// organisation administrator.
+///
+/// # Errors
+///
+/// Returns an error when the caller may not manage the unit, the name is empty,
+/// or the unit does not exist.
+pub async fn update_unit(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    unit_id: Uuid,
+    edit: UnitEdit,
+) -> CoreResult<Unit> {
+    let unit = repo::find_unit(&mut **tx, unit_id, principal.organisation_id)
+        .await?
+        .ok_or_else(|| CoreError::NotFound("Unit not found.".to_owned()))?;
+
+    // Editing a unit is a membership-and-classification-grade change: the same
+    // authority that may manage its members may edit it. `ManageMembers` on the
+    // unit context is granted to a unit manager, a workspace lead, or an
+    // organisation admin (ADR-0100) — never by title alone.
+    authorize(principal, Action::ManageMembers, &unit_context(&unit))
+        .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+
+    let name = edit.name.trim();
+    if name.is_empty() {
+        return Err(CoreError::Validation("A unit needs a name.".to_owned()));
+    }
+
+    let updated = repo::update_unit(
+        &mut **tx,
+        unit.id,
+        name,
+        edit.description.as_deref(),
+        &edit.research_areas,
+        principal.person_id,
+    )
+    .await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::UPDATE, "unit")
+            .resource(updated.id)
+            .scope(Some(updated.id), None)
+            .detail("code", updated.code.as_str()),
+    )
+    .await?;
+
+    index_unit(tx, &updated).await?;
+
+    Ok(updated)
 }
 
 /// Archive a unit.
@@ -232,6 +504,11 @@ pub async fn archive_unit(
         .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
 
     repo::archive_unit(&mut **tx, unit.id, principal.person_id).await?;
+
+    // An archived unit leaves search: its existence is no longer current
+    // structure. The row stays in `units` (archive-only, never deleted); the
+    // finding aid simply stops pointing at it.
+    search::remove_entity(tx, "unit", unit.id).await?;
 
     audit::record(
         tx,

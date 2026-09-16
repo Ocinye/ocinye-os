@@ -18,11 +18,12 @@ imediatamente antes) e corrigidos.
 |---|---|---|
 | P0 | 1 (F-02, outage por *stage drift*) | **0** |
 | P1 | 0 | **0** |
-| P2 | 1 (F-01, descarga institucional) | **0** |
-| P3 | 4 (F-03..F-07) | 2 (F-05, F-06 — em avaliação; F-07 é copy, a corrigir) |
+| P2 | 2 (F-01 descarga; F-08 Global Create) | **0** |
+| P3 | 4 (F-03..F-07) | 2 (F-05, F-06 — em avaliação; F-07 subsumido por F-08) |
 
 | ID | Sev | Domínio | Descrição | Estado |
 |---|---|---|---|---|
+| F-08 | P2 | UX/Create | **`GLOBAL_CREATE_DISABLED_DETERMINISTIC_ACTIONS`.** O menu global «+ Criar» esbatia a maioria das criações deterministas: várias apontavam a listas em vez de fluxos de criação, a Tarefa não tinha destino nenhum, e as acções eram gateadas por permissões que vêm da **filiação** (unidade/ambiente) — pelo que um administrador sem filiação via quase tudo indisponível. Criação determinista exposta como indisponível sem GPU envolvida | **FIXED** (menu re-orientado a dados sem esbater por contexto; fluxo de Tarefa criado; contexto resolvido no formulário; teclado/atalhos; E2E `o_criar_global_abre_cada_criacao_deterministica`) |
 | F-01 | P2 | Files | Descarga institucional redireccionava para o host interno do armazenamento (`object-store:9000`), inalcançável — descarga partida | **FIXED** (#107, ADR-0608) |
 | F-02 | P0 | Deploy | Um stage novo no Dockerfile mudou o alvo *default*; core/worker/workspace saíram do stage errado → workspace em baixo (502) | **FIXED** (#109) + guardado (#111) |
 | F-03 | P3 | Ops | Sem rollback rápido: um deploy mau exigia corrigir-para-a-frente (~30 min com produção em baixo) | **FIXED** (#111, `rollback-production.sh` + runbook) |
