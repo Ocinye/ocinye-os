@@ -20,19 +20,20 @@ indisponível.»*
 | 6 | Fronteira de conversão endurecida, provada em produção | [11](11-production-verification.md) | **✓** |
 | 7 | Guarda contra *stage drift* do Dockerfile | `compose_build_targets.py` (PR #111) | **✓** |
 | 8 | P0 abertos = 0, P1 abertos = 0, P2 abertos = 0 (salvo deferimento autorizado) | [findings.md](findings.md) | **✓** (abertos: P0=0, P1=0, P2=0) |
-| 9 | Rollback rápido provado (RTO medido ao vivo) | script escrito; `--list` verificado; **flip ao vivo por exercer** | **✗** |
-| 10 | Backup/restauro provado nesta baseline | ensaio de 2026-08-29 existe; **não re-exercido nesta pass** | **✗** |
-| 11 | Jornadas E2E — parciais fechadas (J4/J9/J11/J15/J17/J18) | [04](04-e2e-matrix.md) | **✗** (parciais) |
+| 9 | Rollback rápido provado (RTO medido ao vivo) | script escrito; `--list` verificado; **flip ao vivo por exercer** | **✗** (autorização única no fim) |
+| 10 | Backup/restauro provado nesta baseline | **provado** num ensaio isolado (base); apanhou e corrigiu um P1 ([09](09-backup-restore.md)) | **✓** (metade dos objectos a re-exercer) |
+| 11 | Jornadas E2E — parciais/em-falta fechadas (J4/J9/J11/J15/J18-20) | [04](04-e2e-matrix.md) | **✗** (parciais) |
 | 12 | Aceitação visual autenticada em produção | precisa do Fidel | **pendente (humano)** |
-| 13 | Revisão dedicada de HTTP-headers/CSRF/XSS/SSRF por fixture hostil | testes existentes cobrem parte; fatia própria por correr | **✗** |
+| 13 | Fixtures hostis (XSS/CSRF/IDOR já cobertos; bomba de imagem e endurecimento acrescentados) | [05](05-security-review.md); #114; lacunas #7/#8/#13/#15 por fechar | **parcial** |
+| 14 | Plano de controlo de IA pré-runtime provado (hot-plug, §84, degradado) | [14](14-ai-control-plane.md) | **✓** |
 
 ## Porque não está declarado
 
-Sete critérios estão provados (1-8). Faltam: o **rollback ao vivo** (9, bloqueado
-pela permissão de mutação de produção), o **re-exercício de backup/restauro** nesta
-baseline (10), o **fecho das jornadas E2E parciais** (11), a **aceitação
-autenticada** que é do humano (12), e uma **fatia de segurança dedicada** por
-fixture hostil (13).
+Dez critérios estão provados (1-8, 10, 14 — incluindo o backup/restauro, que
+apanhou e corrigiu um P1). Faltam: o **rollback ao vivo** (9, uma autorização
+controlada única no fim), o **fecho das jornadas E2E parciais/em-falta** (11), a
+**aceitação autenticada** que é do humano (12), e o **fecho das fixtures hostis
+restantes** (13 — #7/#8/#13/#15).
 
 Declarar READY agora seria inventar evidência (§59, §69). O portão fica **fechado**
 até estes critérios terem prova executável.
