@@ -2,7 +2,7 @@
 
 Uma suite de browser E2E **real** existe — `apps/workspace/tests/browser.rs`, que
 conduz o Chrome (`chromiumoxide`), arranca Core + Workspace por teste, e emite a
-marca de execução `VIAGEM LEVANTADA` (106 viagens activas; 4 `#[ignore]` são
+marca de execução `VIAGEM LEVANTADA` (107 viagens activas; 4 `#[ignore]` são
 geradores de captura, não verificação). Corre na CI com BD + MinIO. O resto da
 cobertura é integração Core/HTTP.
 
@@ -39,7 +39,7 @@ autenticada em produção é do Fidel.
 | J22 | Backup/restauro | operacional | scripts `institutional-backup/-restore/-verify`; não é jornada de browser |
 | J23 | Deploy/rollback | operacional | `deploy-production.sh`, `rollback-production.sh`; não é jornada de browser |
 
-**Resumo:** 13 cobertas no browser, 4 parciais (J4/J11/J15/J17), 6 em falta no
+**Resumo:** 14 cobertas no browser, 4 parciais (J4/J11/J15/J17), 6 em falta no
 browser (J9/J18/J19/J20 cobertas ao nível Core/HTTP; J22/J23 são operacionais por
 natureza).
 
@@ -59,6 +59,6 @@ Trabalho declarado desta auditoria, não bloqueante do determinista:
 `scripts/test-enumeration.sh` impede uma suite de passar por verde sem correr:
 para cada suite crítica exige `esperados == passados`, `descobertos == passados +
 ignorados`, `saltados == 0`, e `marcas de execução == execuções esperadas`
-(browser: 106 viagens == 106 marcas `VIAGEM LEVANTADA`). Os `esperados` vivem numa
+(browser: 107 viagens == 107 marcas `VIAGEM LEVANTADA`). Os `esperados` vivem numa
 tabela deliberada; um número só muda por decisão. A CI adiciona um piso
 (`MINIMUM_WORKSPACE_TESTS`) e falha se aparecer qualquer `SKIPPED/SALTADO`.
