@@ -959,6 +959,13 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 }
 .oc-create__item:hover { background: var(--oc-surface-tint); }
 .oc-create__item .oc-kbd { margin-left: auto; }
+/* Uma acção que se cria em contexto diz onde, numa segunda linha esbatida, em
+   vez de se declarar «indisponível» (F-07). */
+.oc-create__item:has(.oc-create__pista) { height: auto; flex-wrap: wrap; padding: 6px 9px; }
+.oc-create__pista {
+  flex-basis: 100%; order: 3;
+  font: 400 10.5px var(--oc-font-sans); color: var(--oc-text-muted);
+}
 
 /* Tile de acesso rápido (Home). Não é um botão comum: mais alto, alinhado à
    esquerda e em navy, tal como no dossier. */

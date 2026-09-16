@@ -1174,23 +1174,66 @@ fn core_status_pill(estado: &CoreStatus) -> impl IntoView {
 /// O destino é `None` quando o ecrã de criação ainda não existe. O dossier
 /// especifica as sete acções mas apenas dois dos ecrãs; as restantes ficam
 /// visíveis e declaradas como indisponíveis, em vez de levarem a um 404.
-const CREATE_ITEMS: [(&str, Option<&str>, &str, Permission); 7] = [
+/// As acções do menu «Criar»: rótulo, destino, tecla, permissão, e — quando a
+/// acção não tem um destino directo — **onde** se cria.
+///
+/// Uma acção implementada nunca se declara «indisponível»: ou leva ao ecrã onde
+/// se cria (o destino), ou diz onde se cria (a pista). «Indisponível» ficaria a
+/// dizer que a funcionalidade não existe, e existe — só se cria em contexto. Só a
+/// falta de **autorização** desactiva um item de facto.
+const CREATE_ITEMS: [(&str, Option<&str>, &str, Permission, &str); 7] = [
     (
         "Nova Ideia",
         Some("/ideas/new"),
         "I",
         Permission::IdeasCreate,
+        "",
     ),
-    ("Novo Projecto", None, "P", Permission::ProjectsCreate),
-    ("Nova Nota", None, "N", Permission::NotesCreate),
-    ("Nova Referência", None, "R", Permission::BibliographyCreate),
-    ("Novo Dataset", None, "D", Permission::DatasetsCreate),
-    ("Nova Tarefa", None, "T", Permission::IdeasEdit),
+    // O projecto nasce da promoção de uma ideia (domínio §9); o ecrã de projectos
+    // é onde isso acontece.
+    (
+        "Novo Projecto",
+        Some("/projects"),
+        "P",
+        Permission::ProjectsCreate,
+        "",
+    ),
+    (
+        "Nova Nota",
+        Some("/notes"),
+        "N",
+        Permission::NotesCreate,
+        "",
+    ),
+    (
+        "Nova Referência",
+        Some("/bibliography"),
+        "R",
+        Permission::BibliographyCreate,
+        "",
+    ),
+    (
+        "Novo Dataset",
+        Some("/datasets"),
+        "D",
+        Permission::DatasetsCreate,
+        "",
+    ),
+    // A tarefa cria-se dentro de um projecto; não há criação global. Fica visível
+    // e diz onde se faz, em vez de se declarar indisponível.
+    (
+        "Nova Tarefa",
+        None,
+        "T",
+        Permission::IdeasEdit,
+        "Cria-se dentro de um projecto.",
+    ),
     (
         "Novo Agente IA",
         Some("/ai/agents/new"),
         "A",
         Permission::AgentsCreatePersonal,
+        "",
     ),
 ];
 
@@ -1198,9 +1241,11 @@ fn create_menu(viewer: &Viewer) -> impl IntoView {
     // Todas as acções, com a marca de quais o membro pode executar. Filtrar
     // as outras deixava o menu a mudar de tamanho consoante quem o abre, e sem
     // dizer o que falta para as ter.
-    let items: Vec<(&str, Option<&str>, &str, bool)> = CREATE_ITEMS
+    let items: Vec<(&str, Option<&str>, &str, bool, &str)> = CREATE_ITEMS
         .iter()
-        .map(|(label, href, key, permission)| (*label, *href, *key, viewer.can(*permission)))
+        .map(|(label, href, key, permission, pista)| {
+            (*label, *href, *key, viewer.can(*permission), *pista)
+        })
         .collect();
 
     view! {
@@ -1219,13 +1264,15 @@ fn create_menu(viewer: &Viewer) -> impl IntoView {
             <div class="oc-create__menu" data-oc="create-menu" role="menu" hidden>
                 {items
                     .into_iter()
-                    .map(|(label, href, key, permitido)| {
-                        // A razão é a de cada acção: o ecrã pode não existir, ou
-                        // pode ser o acesso que falta. São coisas diferentes e a
-                        // interface tem de as distinguir.
+                    .map(|(label, href, key, permitido, pista)| {
+                        // Duas razões distintas para um item não ser um link, e a
+                        // interface tem de as distinguir: falta de **autorização**
+                        // (desactiva de facto), ou uma acção que só se cria em
+                        // **contexto** (existe — a pista diz onde). Uma acção
+                        // implementada nunca se declara «indisponível».
                         let href = if permitido { href } else { None };
                         let razao = if permitido {
-                            "Ainda não disponível"
+                            pista
                         } else {
                             "Não tem autorização para esta acção."
                         };
@@ -1239,6 +1286,12 @@ fn create_menu(viewer: &Viewer) -> impl IntoView {
                                         title=razao
                                     >
                                         {label}
+                                        {(!razao.is_empty())
+                                            .then(|| {
+                                                view! {
+                                                    <small class="oc-create__pista">{razao}</small>
+                                                }
+                                            })}
                                         <kbd class="oc-kbd">{key}</kbd>
                                     </span>
                                 }
@@ -1560,6 +1613,46 @@ mod tests {
             view! { <p>"x"</p> },
         )
         .to_html()
+    }
+
+    /// O «Criar» nunca declara «indisponível» uma acção que existe (F-07).
+    ///
+    /// O defeito era: cinco das sete acções — Projecto, Nota, Referência,
+    /// Dataset, Tarefa — apareciam como «Ainda não disponível», que diz que a
+    /// funcionalidade não existe. Existe: cria-se em contexto. Agora ou levam ao
+    /// ecrã onde se cria, ou dizem onde (a Tarefa). Só a falta de autorização
+    /// desactiva de facto.
+    #[test]
+    fn o_criar_nunca_declara_indisponivel_uma_accao_que_existe() {
+        let html = render(&viewer_with(&ocinye_contracts::Permission::all()));
+
+        for accao in [
+            "Nova Ideia",
+            "Novo Projecto",
+            "Nova Nota",
+            "Nova Referência",
+            "Novo Dataset",
+            "Nova Tarefa",
+            "Novo Agente IA",
+        ] {
+            assert!(html.contains(accao), "a acção {accao} sumiu do «Criar»");
+        }
+
+        assert!(
+            !html.contains("Ainda não disponível"),
+            "o «Criar» declara uma acção implementada como «indisponível» (F-07)"
+        );
+        assert!(
+            html.contains("Cria-se dentro de um projecto."),
+            "a Tarefa deve dizer onde se cria, em vez de «indisponível»"
+        );
+        // As acções implementadas levam ao ecrã onde se cria.
+        for destino in ["/projects", "/notes", "/bibliography", "/datasets"] {
+            assert!(
+                html.contains(&format!("href=\"{destino}\"")),
+                "o «Criar» não leva a {destino}"
+            );
+        }
     }
 
     /// Um atalho mostrado é um atalho que funciona.
