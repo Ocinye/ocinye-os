@@ -342,14 +342,22 @@
     const menu = $('[data-oc="create-menu"]', wrap);
     if (!button || !menu) return;
 
-    const close = () => {
+    const enabledItems = () =>
+      $$('.oc-create__item', menu).filter(
+        (el) => el.getAttribute('aria-disabled') !== 'true',
+      );
+
+    const close = ({ restoreFocus = false } = {}) => {
       menu.hidden = true;
       button.setAttribute('aria-expanded', 'false');
+      /* Fechar devolve o foco a quem o abriu — senão o foco cai para o corpo e
+       * o teclado perde-se (task §4). */
+      if (restoreFocus) button.focus();
     };
     const open = () => {
       menu.hidden = false;
       button.setAttribute('aria-expanded', 'true');
-      const first = $('.oc-create__item', menu);
+      const first = enabledItems()[0];
       if (first) first.focus();
     };
 
@@ -363,13 +371,36 @@
     });
 
     menu.addEventListener('keydown', (event) => {
-      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-      event.preventDefault();
-      const items = $$('.oc-create__item', menu);
-      const at = items.indexOf(document.activeElement);
-      const next = event.key === 'ArrowDown' ? at + 1 : at - 1;
-      const target = items[(next + items.length) % items.length];
-      if (target) target.focus();
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        close({ restoreFocus: true });
+        return;
+      }
+
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const items = enabledItems();
+        if (!items.length) return;
+        const at = items.indexOf(document.activeElement);
+        const step = event.key === 'ArrowDown' ? 1 : -1;
+        const target = items[(at + step + items.length) % items.length];
+        if (target) target.focus();
+        return;
+      }
+
+      /* Teclas de acesso: com o menu aberto, a letra anunciada na linha activa
+       * essa acção. Só com o menu aberto e sem modificadores — nunca colide com
+       * o que se escreve noutro sítio, porque o foco está dentro do menu. */
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key.length !== 1) return;
+      const letra = event.key.toUpperCase();
+      const alvo = enabledItems().find(
+        (el) => (el.getAttribute('data-oc-key') || '').toUpperCase() === letra,
+      );
+      if (alvo) {
+        event.preventDefault();
+        alvo.click();
+      }
     });
 
     window.ocCloseCreate = close;

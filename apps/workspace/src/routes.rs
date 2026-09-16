@@ -97,6 +97,7 @@ pub const ROUTES: &[&str] = &[
     "/projects/new",
     "/bibliography/new",
     "/datasets/new",
+    "/tasks/new",
     "/calendar",
     "/calendar/events/new",
     "/calendar/events/{event_id}",
@@ -362,6 +363,7 @@ pub fn router(state: WorkspaceState) -> Router {
             get(new_source_form).post(create_source),
         )
         .route("/datasets/new", get(new_dataset_form).post(create_dataset))
+        .route("/tasks/new", get(new_task_form).post(create_task))
         .route("/help", get(help))
         .route("/settings", get(settings_account))
         .route("/settings/security", get(settings_security))
@@ -6571,6 +6573,79 @@ async fn create_dataset(
     }
 }
 
+async fn new_task_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    let destinos = creation_destinations(&state, &member).await;
+    let trail = vec![Crumb::to(Screen::MyWork)];
+    shell_page(
+        "Nova Tarefa",
+        &viewer,
+        Screen::MyWork,
+        trail,
+        ui::screens::lists::new_task(&destinos, None),
+    )
+}
+
+#[derive(Deserialize)]
+struct NewTaskForm {
+    workspace_id: Uuid,
+    title: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    priority: String,
+    #[serde(default)]
+    due_on: String,
+}
+
+async fn create_task(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<NewTaskForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let mut body = serde_json::json!({
+        "title": form.title,
+        "description": blank_to_none(form.description),
+    });
+    // Só se enviam quando têm valor: um campo vazio não é uma escolha, e o Core
+    // aplica os seus próprios defaults (prioridade normal, sem prazo).
+    if let Some(priority) = blank_to_none(form.priority) {
+        body["priority"] = Value::String(priority);
+    }
+    if let Some(due_on) = blank_to_none(form.due_on) {
+        body["due_on"] = Value::String(due_on);
+    }
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/workspaces/{}/tasks", form.workspace_id),
+        &body,
+    )
+    .await
+    {
+        // A tarefa vive no ambiente que a governa; abre-se lá, onde é listada.
+        Ok(_) => Redirect::to(&format!("/workspaces/{}", form.workspace_id)).into_response(),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(failure) => {
+            let viewer = viewer(&state, &member).await;
+            let destinos = creation_destinations(&state, &member).await;
+            let trail = vec![Crumb::to(Screen::MyWork)];
+            shell_page(
+                "Nova Tarefa",
+                &viewer,
+                Screen::MyWork,
+                trail,
+                ui::screens::lists::new_task(&destinos, Some(failure.to_string())),
+            )
+        }
+    }
+}
+
 /// O resultado de uma mudança de imagem de perfil, tal como volta do redirect.
 #[derive(Debug, Default, Deserialize)]
 struct AvatarOutcome {
@@ -9171,6 +9246,7 @@ mod router_tests {
             (Method::POST, "/projects/new".to_owned()),
             (Method::POST, "/bibliography/new".to_owned()),
             (Method::POST, "/datasets/new".to_owned()),
+            (Method::POST, "/tasks/new".to_owned()),
             (Method::POST, "/settings/password".to_owned()),
             (Method::POST, format!("/settings/sessions/{NADA}/revoke")),
             (Method::POST, "/login".to_owned()),

@@ -7,6 +7,43 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Global Create — todas as criações deterministas funcionam agora — 2026-09-16
+
+O menu global «+ Criar» esbatia a maioria das acções, dando a impressão de um
+Ocinye por acabar. Estava errado: a criação determinista funciona sem GPU. A
+causa era dupla — várias acções apontavam a **listas** em vez de fluxos de
+criação, a Tarefa não tinha destino nenhum, e as acções eram gateadas por
+permissões que vêm da **filiação** (unidade/ambiente), pelo que um administrador
+sem filiação via quase tudo indisponível (`GLOBAL_CREATE_DISABLED_DETERMINISTIC_ACTIONS`,
+P2, [findings](docs/audits/pre-ai-final/findings.md#F-08)).
+
+- **O menu deixa de esbater por contexto.** É um registo tipado (§28) sem
+  permissão: cada acção abre o seu fluxo, e o contexto (unidade, ambiente, ideia)
+  resolve-se no formulário, com **estado vazio accionável** quando falta — nunca
+  «indisponível». A autoridade real é sempre do Core. O «+ Criar» está sempre
+  presente: a criação mais simples, uma nota pessoal, está ao alcance de qualquer
+  membro.
+- **Destinos reais.** Ideia→`/ideas/new`, Projecto→`/projects/new` (promoção de
+  ideia, com estado vazio quando não há candidata), Referência→`/bibliography/new`,
+  Dataset→`/datasets/new`, Agente→`/ai/agents/new`. A **Nota** cria-se de imediato
+  (`POST /notes`) e abre o editor.
+- **Fluxo de Tarefa criado** — a peça que faltava. `GET/POST /tasks/new` com
+  selector de ambiente, título, descrição, prioridade e prazo, submetendo ao
+  `collaboration::create_task` que já existia no Core. O responsável escolhe-se no
+  detalhe (depende do ambiente). Sem ambiente, estado accionável, não «indisponível».
+- **Teclado.** O menu fecha com `Escape` devolvendo o foco ao botão, navega por
+  setas, e as teclas anunciadas (I/P/N/R/D/T/A) são **teclas de acesso** que
+  activam a acção com o menu aberto — sem colidir com o que se escreve.
+- **Gestão de acesso de membros.** Onde o membro-detalhe não podia gerir papéis
+  técnicos, mostrava **nada**; agora **explica a condição** (é preciso uma sessão
+  de administrador da plataforma com segundo factor) em vez do vazio — o mesmo
+  princípio de autoridade explicada. O controlo de conceder/revogar papéis
+  (incluindo tornar admin) mantém-se, gateado pelo Core.
+- **E2E de browser** `o_criar_global_abre_cada_criacao_deterministica`: o menu
+  abre sem nenhuma acção esbatida, cria uma Nota de imediato (persiste ao
+  recarregar) e uma Tarefa dentro de um ambiente (persiste ao recarregar). Zero
+  dependência de GPU.
+
 ### Unidades — defaults institucionais, códigos gerados e edição (Core) — 2026-09-16
 
 A «Nova Unidade» deixa de ser um formulário genérico vazio que pede um código à

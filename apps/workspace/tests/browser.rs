@@ -11289,6 +11289,90 @@ async fn uma_pessoa_cria_uma_referencia_no_seu_ambiente() {
     esperar_por(&pagina, &titulo).await;
 }
 
+/// GLOBAL CREATE — o «+ Criar» abre cada criação determinista, sem GPU.
+///
+/// O defeito: o menu global esbatia acções que o membro pode iniciar, porque as
+/// gateava por uma permissão que é, no fundo, filiação. Esta viagem prova o
+/// contrário de ponta a ponta: um membro abre o menu do Home e vê as sete
+/// acções **accionáveis** (nenhuma desactivada), cria uma Nota de imediato pelo
+/// próprio menu (a mais simples, sem contexto), e cria uma Tarefa — a peça que
+/// faltava — dentro de um ambiente, com a tarefa a persistir depois de
+/// recarregar. Nenhuma criação depende de GPU.
+#[tokio::test]
+async fn o_criar_global_abre_cada_criacao_deterministica() {
+    let harness = harness!();
+    let (pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let workspace_id = harness.owns_a_workspace(pessoa).await;
+
+    // ── O menu abre-se do Home, e nada está esbatido ────────────────────
+    let page = harness.open("/").await;
+    esperar_por(&page, "Criar").await;
+
+    // As sete acções estão no DOM e nenhuma desactivada — o item existe mesmo
+    // com o menu fechado; a desactivação seria um atributo, não a ausência.
+    let desactivadas = page
+        .evaluate(
+            "document.querySelectorAll('.oc-create__menu .oc-create__item[aria-disabled=\"true\"], \
+             .oc-create__menu .oc-unavailable').length",
+        )
+        .await
+        .expect("contar desactivadas")
+        .into_value::<i64>()
+        .expect("número");
+    assert_eq!(desactivadas, 0, "o «Criar» esbate acções deterministas");
+
+    for destino in [
+        "/ideas/new",
+        "/projects/new",
+        "/bibliography/new",
+        "/datasets/new",
+        "/tasks/new",
+        "/ai/agents/new",
+    ] {
+        let existe = page
+            .evaluate(format!(
+                "document.querySelector('.oc-create__menu a[href=\"{destino}\"]') !== null"
+            ))
+            .await
+            .expect("procurar destino")
+            .into_value::<bool>()
+            .expect("booleano");
+        assert!(existe, "o «Criar» não leva a {destino}");
+    }
+
+    // ── Nova Nota: cria de imediato e abre o editor ─────────────────────
+    // Abrir o menu torna os itens visíveis; a Nota é um POST, submetido daqui.
+    clicar(&page, "[data-oc=\"create-toggle\"]").await;
+    submit(&page, ".oc-create__menu form[action=\"/notes\"]").await;
+
+    // Levou ao editor de uma nota real (URL /notes/{uuid}).
+    let url = wait_until_left(&page, "/").await;
+    let note_id = url.rsplit('/').next().unwrap_or_default().to_owned();
+    Uuid::parse_str(&note_id)
+        .unwrap_or_else(|_| panic!("a Nota não abriu o editor de uma nota: {url}"));
+    elemento(&page, "[data-oc-notes-surface] .ProseMirror").await;
+
+    // Recarregar: a nota continua lá — a criação foi persistida, não um ecrã.
+    let recarregada = harness.open(&format!("/notes/{note_id}")).await;
+    elemento(&recarregada, "[data-oc-notes-surface] .ProseMirror").await;
+
+    // ── Nova Tarefa: a peça que faltava, dentro de um ambiente ──────────
+    let titulo = unique_title("Calibrar o sensor");
+    let form = harness.open("/tasks/new").await;
+    esperar_por(&form, "Nova Tarefa").await;
+    let destino = valor_de(&form, "select[name=workspace_id] option:nth-child(1)").await;
+    escolher(&form, "select[name=workspace_id]", &destino).await;
+    set_field(&form, "input[name=title]", &titulo).await;
+    submit(&form, "form[action$='/tasks/new']").await;
+
+    // A tarefa vive no ambiente que a governa, e aparece lá.
+    esperar_por(&form, &titulo).await;
+
+    // Recarregar o ambiente: a tarefa persiste.
+    let ambiente = harness.open(&format!("/workspaces/{workspace_id}")).await;
+    esperar_por(&ambiente, &titulo).await;
+}
+
 /// O primeiro acesso troca a credencial temporária pela palavra-passe do próprio.
 ///
 /// Prova o coração do onboarding canónico do lado do membro: entrar com a

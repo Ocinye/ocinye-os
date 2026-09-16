@@ -1470,6 +1470,93 @@ pub fn new_dataset(workspaces: &Value, error: Option<String>) -> impl IntoView {
     }
 }
 
+/// O formulário de criação de uma tarefa.
+///
+/// Uma tarefa pertence a um Research Workspace — a mesma unidade de contexto que
+/// governa ideias, referências e datasets. Sem nenhum ambiente onde criar, o
+/// formulário diz onde a filiação se obtém, em vez de se declarar indisponível.
+///
+/// O responsável **não** se escolhe aqui: quem pode ser atribuído depende do
+/// ambiente escolhido, e resolve-se no detalhe da tarefa. A tarefa nasce por
+/// atribuir, e é uma atribuição legítima.
+pub fn new_task(workspaces: &Value, error: Option<String>) -> impl IntoView {
+    use crate::ui::components::{
+        card, section_head, select_labelled, text_field, textarea, SelectOption,
+    };
+
+    let tem_destino = destinations(workspaces) > 0;
+
+    view! {
+        <div class="oc-page oc-page--narrow">
+            <div class="oc-head">
+                <div class="oc-head__text">
+                    <h1>"Nova Tarefa"</h1>
+                    <p>
+                        "Uma tarefa é uma unidade de trabalho dentro de um Research Workspace —
+                         a ideia ou o projecto a que pertence."
+                    </p>
+                </div>
+            </div>
+
+            {error
+                .map(|message| {
+                    view! { <div class="oc-card oc-alert" role="alert">{message}</div> }
+                })}
+
+            {if tem_destino {
+                view! {
+                    <form method="post" action="/tasks/new">
+                        {card(
+                            section_head("A TAREFA", None, None),
+                            view! {
+                                {workspace_destination(workspaces)}
+                                {text_field(
+                                    "task-title",
+                                    "Título",
+                                    "title",
+                                    "O que precisa de ser feito",
+                                    "text",
+                                )}
+                                {textarea(
+                                    "task-description",
+                                    "Descrição",
+                                    "description",
+                                    "Detalhes, quando ajudam",
+                                    92,
+                                )}
+                                {select_labelled(
+                                    "task-priority",
+                                    "Prioridade",
+                                    "priority",
+                                    vec![
+                                        SelectOption::new("normal", "Normal").selected(true),
+                                        SelectOption::new("low", "Baixa"),
+                                        SelectOption::new("high", "Alta"),
+                                        SelectOption::new("critical", "Crítica"),
+                                    ],
+                                )}
+                                {text_field("task-due", "Prazo", "due_on", "", "date")}
+                                <p class="oc-muted oc-t-caption--muted">
+                                    "O responsável escolhe-se no detalhe da tarefa: quem pode
+                                     ser atribuído depende do ambiente."
+                                </p>
+                            },
+                        )}
+
+                        <div class="oc-row--end oc-gap-5 oc-mt-8">
+                            {button(Button::new("Cancelar", Variant::Secondary).href("/my-work"))}
+                            {button(Button::new("Criar Tarefa", Variant::Gold))}
+                        </div>
+                    </form>
+                }
+                    .into_any()
+            } else {
+                no_destination("tarefas").into_any()
+            }}
+        </div>
+    }
+}
+
 /// O ecrã de promoção de uma ideia a projecto.
 ///
 /// # Porque não é um formulário de criação
@@ -2373,6 +2460,30 @@ mod tests {
         // As áreas são um campo promovível a fichas, com o nome que o Core lê.
         assert!(html.contains("data-oc-chips"));
         assert!(html.contains("name=\"research_areas\""));
+    }
+
+    /// A «Nova Tarefa» resolve o ambiente e oferece os campos canónicos.
+    #[test]
+    fn nova_tarefa_resolve_ambiente_e_oferece_os_campos() {
+        // Com um ambiente onde criar, há formulário para /tasks/new.
+        let com = json!({
+            "items": [
+                {"id": "22222222-2222-2222-2222-222222222222",
+                 "code": "P-001", "title": "Projecto", "may_create": true}
+            ]
+        });
+        let html = new_task(&com, None).to_html();
+        assert!(html.contains("action=\"/tasks/new\""));
+        assert!(html.contains("name=\"workspace_id\""));
+        assert!(html.contains("name=\"title\""));
+        assert!(html.contains("name=\"priority\""));
+        assert!(html.contains("name=\"due_on\""));
+
+        // Sem ambiente, um estado accionável — nunca «indisponível».
+        let sem = json!({"items": []});
+        let vazio = new_task(&sem, None).to_html();
+        assert!(vazio.contains("Não tem onde criar tarefas"));
+        assert!(!vazio.contains("action=\"/tasks/new\""));
     }
 
     /// Editar mostra o código como fixo e traz os campos preenchidos.

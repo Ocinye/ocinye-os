@@ -35,6 +35,7 @@ autenticada em produção é do Fidel.
 | J19 | Prompt com contexto de ficheiro autorizado | **em falta (browser)** | coberta no Core (`agentic_file_content`) |
 | J20 | Prompt nega contexto não autorizado | **em falta (browser)** | coberta no Core (`agentic`/`authorization`) |
 | J21 | Segurança/revogação de admin | **COBERTA** | revogar sessão, MFA E2E, código de recuperação, suspensão a meio da sessão |
+| J24 | Global Create (todas as criações deterministas) | **COBERTA** | `o_criar_global_abre_cada_criacao_deterministica`: menu sem esbater, Nota criada de imediato, Tarefa criada e persistida; criação de Ideia/Referência/Dataset já cobertas em J4/J5/J6 |
 | J22 | Backup/restauro | operacional | scripts `institutional-backup/-restore/-verify`; não é jornada de browser |
 | J23 | Deploy/rollback | operacional | `deploy-production.sh`, `rollback-production.sh`; não é jornada de browser |
 
