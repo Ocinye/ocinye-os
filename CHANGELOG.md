@@ -7,6 +7,29 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Continuidade — o manifesto voltou a descrever-se sobre o esquema real — 2026-09-16
+
+O `snapshot` de continuidade — a espinha do `institutional-backup` e do
+`verify-snapshot` — falhava no esquema actual com «column "id" does not exist», e
+por isso **produção não conseguia produzir uma cópia verificável**. A causa: a
+`file_favourites` (migração 0047) nasceu com chave composta `(person_id, file_id)`
+e **sem `id`**, mas está declarada como tabela que viaja, e a enumeração do
+manifesto lê cada tabela que viaja por `SELECT id FROM {tabela}`. Toda a convenção
+do esquema é que uma tabela que viaja tem um `id UUID`; a 0047 foi a única a
+quebrá-la, e o defeito entrou depois do ensaio de continuidade de 2026-08-29.
+
+- **Migração 0048** dá à `file_favourites` um `id UUID` único (a chave primária
+  continua a ser o par; o upsert e a posse não mudam). A marca de um membro volta
+  a poder ser enumerada e a viajar.
+- **Guarda de regressão** (`crates/ocinye-core/tests/continuity.rs`): um teste que
+  corre o manifesto de facto contra o esquema real e exige `Ok` — o portão de
+  decisões via que cada tabela tinha uma decisão, mas não que a decisão
+  `Identidades` se conseguia executar. Agora vê.
+
+Provado num ensaio isolado (Postgres descartável): estado conhecido → backup
+cifrado com `age` → restauro para uma base vazia → o estado reaparece idêntico; e
+o controlo negativo (chave errada) recusa abrir o conjunto.
+
 ### Ficheiros — miniaturas de Office e vídeo — 2026-09-16
 
 Com a fronteira de conversão pronta (contentor descartável e endurecido,
