@@ -7,6 +7,20 @@ polimento/não-bloqueante.
 Estado: **OPEN** · **FIXED** (com PR) · **DEFERRED** (adiado com razão) ·
 **WONTFIX** (por desenho).
 
+## Contagem — encontrados vs. abertos
+
+Um defeito **encontrado** e corrigido não é um defeito **aberto**. O portão final
+exige `P0 abertos = 0`, `P1 abertos = 0`, `P2 abertos = 0` (salvo deferimento
+autorizado). Os P0/P2 desta tabela foram encontrados **durante** a auditoria (ou
+imediatamente antes) e corrigidos.
+
+| Sev | Encontrados | **Abertos** |
+|---|---|---|
+| P0 | 1 (F-02, outage por *stage drift*) | **0** |
+| P1 | 0 | **0** |
+| P2 | 1 (F-01, descarga institucional) | **0** |
+| P3 | 4 (F-03..F-07) | 2 (F-05, F-06 — em avaliação; F-07 é copy, a corrigir) |
+
 | ID | Sev | Domínio | Descrição | Estado |
 |---|---|---|---|---|
 | F-01 | P2 | Files | Descarga institucional redireccionava para o host interno do armazenamento (`object-store:9000`), inalcançável — descarga partida | **FIXED** (#107, ADR-0608) |

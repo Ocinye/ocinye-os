@@ -19,7 +19,7 @@ indisponível.»*
 | 5 | Sem mock de IA roteável em produção (§84) | `test-fixtures` gated + `test_supply_chain.py` | **✓** |
 | 6 | Fronteira de conversão endurecida, provada em produção | [11](11-production-verification.md) | **✓** |
 | 7 | Guarda contra *stage drift* do Dockerfile | `compose_build_targets.py` (PR #111) | **✓** |
-| 8 | Sem P0/P1 abertos | [findings.md](findings.md) | **✓** |
+| 8 | P0 abertos = 0, P1 abertos = 0, P2 abertos = 0 (salvo deferimento autorizado) | [findings.md](findings.md) | **✓** (abertos: P0=0, P1=0, P2=0) |
 | 9 | Rollback rápido provado (RTO medido ao vivo) | script escrito; `--list` verificado; **flip ao vivo por exercer** | **✗** |
 | 10 | Backup/restauro provado nesta baseline | ensaio de 2026-08-29 existe; **não re-exercido nesta pass** | **✗** |
 | 11 | Jornadas E2E — parciais fechadas (J4/J9/J11/J15/J17/J18) | [04](04-e2e-matrix.md) | **✗** (parciais) |
@@ -37,10 +37,22 @@ fixture hostil (13).
 Declarar READY agora seria inventar evidência (§59, §69). O portão fica **fechado**
 até estes critérios terem prova executável.
 
-## Como se ligaria a evidência executável
+## Como se liga a evidência executável (fail-closed)
 
-Quando os critérios 9-13 fecharem, este portão deve ser um verificador que:
-recusa se as suites canónicas não passam, se há P0/P1 aberto, se a manifesto de
-evidência não está actual, se produção ≠ `main`, ou se a prova de rollback/backup
-não existe — tal como os outros portões de `main` correm contra evidência, não
-contra prosa.
+Este portão não se declara por prosa. Quando os critérios 9-13 fecharem, será um
+verificador que **recusa** se qualquer destes falhar:
+
+- required CI verde e portão canónico de `main` verde;
+- manifesto de E2E canónico válido (`test-enumeration.sh`);
+- migrações consistentes (árvore == BD);
+- guarda de verdade documental (`section-one-contract.py`);
+- **P0 abertos = 0, P1 abertos = 0, P2 abertos = 0** (salvo deferimento autorizado);
+- evidência de backup/restauro re-exercida nesta baseline;
+- evidência de rollback (RTO medido);
+- evidência de smoke de produção;
+- **zero `FixtureProvider` no binário de produção** (`test_supply_chain.py`);
+- a lista de bloqueios de IA limitada a hardware/inferência de modelo
+  ([12](12-ai-runtime-gap.md)).
+
+Tal como os outros portões de `main`, corre contra evidência, não contra uma linha
+de Markdown.

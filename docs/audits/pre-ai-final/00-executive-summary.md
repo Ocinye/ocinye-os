@@ -26,14 +26,17 @@ a evidência a sustentar (fail-closed).
   (`rollback-production.sh` + runbook) e um guarda que impede o *stage drift* do
   Dockerfile que causou um outage (`compose_build_targets.py`).
 
-## Defeitos e disposição
+## Defeitos — encontrados vs. abertos
 
-| Sev | Encontrados | Estado |
+O portão final exige **abertos** a zero, não encontrados. Um defeito corrigido e
+guardado não conta como aberto.
+
+| Sev | Encontrados | **Abertos** |
 |---|---|---|
-| P0 | 1 (outage por *stage drift*) | **FIXED** + guardado |
-| P1 | 0 | — |
-| P2 | 1 (descarga institucional partida) | **FIXED** antes desta pass |
-| P3 | 4 | 1 FIXED (rollback), 1 WONTFIX-por-desenho (assist 503), 2 em avaliação |
+| P0 | 1 (outage por *stage drift*) — FIXED + guardado | **0** |
+| P1 | 0 | **0** |
+| P2 | 1 (descarga institucional) — FIXED | **0** |
+| P3 | 4 | 2 (copy do «Criar», nits em avaliação) |
 
 Detalhe em [findings.md](findings.md).
 
