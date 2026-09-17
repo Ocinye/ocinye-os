@@ -7,6 +7,32 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Estado activo de navegação canónico — azul + branco, sem dourado — 2026-09-17
+
+O separador activo de uma navegação por secções (Research Workspace) mostrava
+**dois** indicadores a competir — a pílula azul e um sublinhado dourado — e o
+texto ficava navy sobre azul, ilegível. Uma inconsistência global do estado
+activo de navegação.
+
+- **Regra canónica.** Todos os sistemas de menu e navegação — sidebar, tabs em
+  pill, tabs contextuais/de secção — partilham **um único** estado activo:
+  superfície azul Ocinye preenchida + primeiro plano branco. Sem sublinhado
+  dourado, sem `border-bottom`/`box-shadow` como indicador, sem segundo indicador
+  a competir. O dourado continua a ser acento (CTA `+ Criar`, pontos, foco), mas
+  deixou de ser o indicador de navegação activa.
+- **Centralizado.** Uma regra CSS que as pílulas (`aria-selected`) e os
+  separadores de secção (`aria-current`) consomem em conjunto. A sidebar já
+  conformava e serve de referência.
+- **Semântica correcta e sem JavaScript.** O separador de secção activo é marcado
+  pelo servidor com `aria-current="location"` (funciona sem JS; o `app.js` só o
+  move com o scroll), em vez de depender de uma segunda marca. Persiste ao
+  recarregar e no Back/Forward.
+- **Prova.** Guarda de semântica `ui::components::tabs::tests` e E2E
+  `o_separador_de_navegacao_activo_e_azul_branco_sem_dourado` (estilo computado na
+  página real: fundo `rgb(11,45,74)`, texto `rgb(255,255,255)`, `box-shadow:none`,
+  com recarregar). Verificado visualmente em desktop e a 375px. Regra documentada
+  em [`design/README.md` §7.7](design/README.md) e `CLAUDE.md` §45.
+
 ### Clicar numa Ideia ou Projecto na lista abre o ambiente — 2026-09-17
 
 Na aceitação autenticada em produção, clicar numa Ideia (ou Projecto) na lista

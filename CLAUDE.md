@@ -406,14 +406,14 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1656 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1658 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **614 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **615 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se
@@ -1539,6 +1539,18 @@ azul; ocre/dourado; cinzas claros; tipografia limpa.
 
 Prepara: tokens; typography; spacing; states; badges; tables; forms; navigation;
 command/search; research cards; status indicators.
+
+**Estado activo de navegação (regra canónica).** Todos os sistemas de menu e
+navegação — sidebar, tabs em pill, tabs contextuais/de secção, e qualquer barra
+de secções que actue como navegação — usam **um único** estado activo: superfície
+azul Ocinye preenchida com primeiro plano branco. **Não** se usa sublinhado
+dourado nem qualquer `border-bottom`/`box-shadow` como indicador de navegação
+activa, e nunca há um segundo indicador a competir. Foco, hover e indisponível são
+visualmente distintos do activo. O dourado continua a ser acento (CTA, pontos,
+estados, foco), mas não é o indicador de navegação activa. A especificação vive em
+[`design/README.md` §7.7](design/README.md), e a semântica (`aria-current` para
+rota/secção, `aria-selected` para tabs) tem guarda em
+`ui::components::tabs::tests`.
 
 ---
 

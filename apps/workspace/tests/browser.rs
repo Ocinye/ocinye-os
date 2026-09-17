@@ -11404,6 +11404,95 @@ async fn clicar_numa_ideia_na_lista_leva_ao_ambiente() {
     );
 }
 
+/// O separador de navegação activo é azul com texto branco, sem dourado.
+///
+/// Prova o estado activo canónico (CLAUDE.md §45, design §7.7) **na página real**, pelo estilo
+/// computado — não só pela semântica: o separador de secção activo tem a
+/// superfície azul Ocinye (`rgb(11, 45, 74)` = `#0B2D4A`), o texto branco, e
+/// **nenhum** sublinhado (`box-shadow: none`) — o dourado deixou de ser o
+/// indicador de navegação activa. E persiste ao recarregar.
+#[tokio::test]
+async fn o_separador_de_navegacao_activo_e_azul_branco_sem_dourado() {
+    let harness = harness!();
+    let (pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.manages_a_unit(pessoa).await;
+
+    let titulo = unique_title("Estado activo de navegação");
+    let page = harness.open("/ideas/new").await;
+    esperar_por(&page, "Nova Ideia").await;
+    let unidade = valor_de(&page, "select[name=unit_id] option:nth-child(1)").await;
+    escolher(&page, "select[name=unit_id]", &unidade).await;
+    set_field(&page, "input[name=title]", &titulo).await;
+    submit(&page, "form[action$='/ideas/new']").await;
+    esperar_texto(&page, &titulo).await;
+
+    let workspace_id: Uuid = {
+        let limite = std::time::Instant::now();
+        loop {
+            let found: Option<Uuid> =
+                sqlx::query_scalar("SELECT workspace_id FROM ideas WHERE title = $1")
+                    .bind(&titulo)
+                    .fetch_optional(&harness.pool)
+                    .await
+                    .expect("procura da ideia");
+            if let Some(id) = found {
+                break id;
+            }
+            assert!(limite.elapsed() < DEADLINE, "a ideia não foi criada");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    };
+
+    async fn estilo_do_activo(page: &Page) -> String {
+        page.evaluate(
+            r#"(() => {
+                 const e = document.querySelector(
+                   '[data-oc-section-nav] a.oc-tab[aria-current="location"]');
+                 if (!e) return 'ausente';
+                 const c = getComputedStyle(e);
+                 return 'bg=' + c.backgroundColor + ' cor=' + c.color
+                      + ' sombra=' + c.boxShadow;
+               })()"#,
+        )
+        .await
+        .ok()
+        .and_then(|v| v.into_value::<String>().ok())
+        .unwrap_or_default()
+    }
+
+    esperar_aria_current(&page, "#ws-visao-geral").await;
+    let estilo = estilo_do_activo(&page).await;
+    assert!(
+        estilo.contains("rgb(11, 45, 74)"),
+        "o separador activo não tem a superfície azul Ocinye: {estilo}"
+    );
+    assert!(
+        estilo.contains("bg=rgb(11, 45, 74)"),
+        "o azul não é o fundo do separador activo: {estilo}"
+    );
+    assert!(
+        estilo.contains("cor=rgb(255, 255, 255)"),
+        "o texto do separador activo não é branco: {estilo}"
+    );
+    assert!(
+        estilo.contains("sombra=none"),
+        "o separador activo ainda tem um sublinhado (dourado?): {estilo}"
+    );
+
+    // Recarregar: o estado activo persiste (o servidor marca-o, sem depender de JS).
+    let recarregado = harness.open(&format!("/workspaces/{workspace_id}")).await;
+    esperar_aria_current(&recarregado, "#ws-visao-geral").await;
+    let estilo2 = estilo_do_activo(&recarregado).await;
+    assert!(
+        estilo2.contains("bg=rgb(11, 45, 74)"),
+        "após recarregar: {estilo2}"
+    );
+    assert!(
+        estilo2.contains("sombra=none"),
+        "após recarregar: {estilo2}"
+    );
+}
+
 /// TASK_LIFECYCLE_E2E — uma tarefa deixou de ser uma linha só de leitura.
 ///
 /// Cria uma tarefa, abre o seu detalhe pela lista do ambiente, muda-lhe o estado

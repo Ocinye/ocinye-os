@@ -225,7 +225,10 @@ suites() {
 # 111 → 112 em 2026-09-17: regressão da aceitação em produção — abrir uma ideia
 # pela lista (`/ideas/{id}`) tem de aterrar no ambiente, não em «Página não
 # encontrada» (o `IdeaView` não devolvia `workspace_id`). Uma viagem, uma marca.
-viagens-de-browser|112|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|112
+# 112 → 113 em 2026-09-17: o estado activo de navegação canónico — o separador
+# activo é azul com texto branco e sem sublinhado dourado, provado pelo estilo
+# computado na página real e com recarregar. Uma viagem, uma marca.
+viagens-de-browser|113|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|113
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

@@ -1148,7 +1148,16 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
   transition: background var(--oc-duration-normal), color var(--oc-duration-normal);
 }
 .oc-tab:hover { background: var(--oc-surface-tint); }
-.oc-tab[aria-selected="true"] { background: var(--oc-navy); color: var(--oc-on-navy); }
+/* Estado activo canónico de navegação (CLAUDE.md §45, design §7.7): superfície azul Ocinye
+   preenchida (`--oc-navy`) e primeiro plano branco (`--oc-on-navy`). Sem
+   sublinhado dourado e sem um segundo indicador a competir. As tabs em pill
+   (`aria-selected`) e as de secção (`aria-current`) consomem exactamente o mesmo
+   estado — a regra é uma só. O dourado continua a ser acento noutros sítios,
+   mas **não** é o indicador de navegação activa. */
+.oc-tabs:not(.oc-tabs--ctx) .oc-tab[aria-selected="true"],
+.oc-tabs--ctx .oc-tab[aria-current="location"] {
+  background: var(--oc-navy); color: var(--oc-on-navy);
+}
 
 .oc-tabs--ctx {
   gap: 2px; overflow-x: auto; scrollbar-width: thin;
@@ -1157,16 +1166,16 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 .oc-tabs--ctx .oc-tab {
   height: 32px; padding: 0 12px; border-radius: var(--oc-r-md) var(--oc-r-md) 0 0;
 }
-/* O separador activo de uma navegação por secções: texto navy e um sublinhado
-   dourado calmo — não o preenchimento sólido dos separadores-pílula. O estado é
-   `aria-current="location"`: o servidor marca a secção por omissão, e o `app.js`
-   acompanha a âncora e o scroll. Um separador indisponível é outra coisa
-   (`.oc-unavailable[aria-disabled]`) e não se confunde com este. */
-.oc-tabs--ctx .oc-tab[aria-current="location"] {
-  color: var(--oc-navy); font-weight: 600;
-  box-shadow: inset 0 -2px 0 var(--oc-gold);
+/* O separador activo de uma navegação por secções usa o **mesmo** estado activo
+   canónico das pílulas — superfície azul preenchida e texto branco (regra acima)
+   —, não um sublinhado dourado com texto navy que competia com a pílula e ficava
+   ilegível. O estado é `aria-current="location"`: o servidor marca a secção por
+   omissão (funciona sem JavaScript), e o `app.js` acompanha a âncora e o scroll.
+   Um separador indisponível é outra coisa (`.oc-unavailable[aria-disabled]`) e
+   não se confunde com este. */
+.oc-tabs--ctx .oc-tab[aria-current="location"]:hover {
+  background: var(--oc-navy); color: var(--oc-on-navy);
 }
-.oc-tabs--ctx .oc-tab[aria-current="location"]:hover { background: var(--oc-surface-tint); }
 
 .oc-tabs--under { border-bottom: 1px solid var(--oc-border); margin-bottom: 16px; }
 
