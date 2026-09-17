@@ -582,11 +582,16 @@ pub fn ideas(viewer: &Viewer, payload: &Value, slice: Slice) -> impl IntoView {
         rows: rows
             .iter()
             .map(|row| {
+                // A lista de Ideias é servida por `/workspaces?kind=idea`: cada
+                // linha é um Research Workspace, e `id` é o id do **ambiente**,
+                // não o da ideia. Ligar a `/ideas/{id}` daria esse id de ambiente
+                // a uma rota que espera um id de ideia — e caía em «Página não
+                // encontrada». O ambiente abre-se directamente, como na Home.
                 let id = text(row, "id");
                 let state = text(row, "state");
                 let priority = text(row, "priority");
                 (
-                    Some(format!("/ideas/{id}")),
+                    Some(format!("/workspaces/{id}")),
                     vec![
                         Cell::Primary(text(row, "title")),
                         Cell::Mono(text(row, "unit_code")),
@@ -698,6 +703,10 @@ pub fn projects(viewer: &Viewer, payload: &Value, slice: Slice) -> impl IntoView
         rows: rows
             .iter()
             .map(|row| {
+                // Como a lista de Ideias: `/workspaces?kind=project` devolve
+                // ambientes, e `id` é o id do ambiente, não o do projecto. Ligar
+                // a `/projects/{id}` daria um id de ambiente a uma rota que espera
+                // um id de projecto — o mesmo 404 da lista de Ideias.
                 let id = text(row, "id");
                 let state = text(row, "state");
                 let progress = row
@@ -705,7 +714,7 @@ pub fn projects(viewer: &Viewer, payload: &Value, slice: Slice) -> impl IntoView
                     .and_then(Value::as_i64)
                     .and_then(|p| u8::try_from(p).ok());
                 (
-                    Some(format!("/projects/{id}")),
+                    Some(format!("/workspaces/{id}")),
                     vec![
                         Cell::Mono(text(row, "code")),
                         Cell::Primary(text(row, "title")),
@@ -2322,6 +2331,40 @@ mod tests {
 
         let html = members(&viewer(), &payload).to_html();
         assert!(html.contains(r#"href="/admin/members/new""#));
+    }
+
+    /// As listas de Ideias e Projectos são servidas por `/workspaces?kind=…`: o
+    /// `id` de cada linha é o do **ambiente**. A linha tem de ligar a
+    /// `/workspaces/{id}` — ligar a `/ideas/{id}` ou `/projects/{id}` daria esse
+    /// id de ambiente a uma rota que espera um id de ideia/projecto, e caía em
+    /// «Página não encontrada» (defeito da aceitação em produção).
+    #[test]
+    fn a_linha_de_ideia_ou_projecto_liga_ao_ambiente() {
+        let ws = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+        let payload = json!({
+            "items": [{ "id": ws, "code": "UCS-001-IDEA-001", "title": "Nzayilu",
+                        "state": "discovery", "classification": "INTERNAL" }],
+            "total": 1
+        });
+        let ideias = ideas(&viewer(), &payload, Slice::default()).to_html();
+        assert!(
+            ideias.contains(&format!("href=\"/workspaces/{ws}\"")),
+            "a linha da ideia não liga ao ambiente"
+        );
+        assert!(
+            !ideias.contains(&format!("/ideas/{ws}")),
+            "a linha da ideia liga a /ideas/{{ambiente}} — a rota errada (404)"
+        );
+
+        let projectos = projects(&viewer(), &payload, Slice::default()).to_html();
+        assert!(
+            projectos.contains(&format!("href=\"/workspaces/{ws}\"")),
+            "a linha do projecto não liga ao ambiente"
+        );
+        assert!(
+            !projectos.contains(&format!("/projects/{ws}")),
+            "a linha do projecto liga a /projects/{{ambiente}} — a rota errada (404)"
+        );
     }
 
     /// A coluna «Unidade» da lista de membros reflecte a pertença real, sem

@@ -11334,6 +11334,76 @@ async fn idea_to_project_e2e() {
     esperar_por(&recarregado, &marca).await;
 }
 
+/// Clicar numa ideia na lista leva ao seu ambiente — não a «Página não encontrada».
+///
+/// Regressão do defeito encontrado na aceitação em produção. A lista de Ideias é
+/// servida por `/workspaces?kind=idea`, pelo que o `id` de cada linha é o do
+/// **ambiente**, não o da ideia. A linha ligava a `/ideas/{id}`, dando esse id
+/// de ambiente a uma rota que procura uma ideia com esse id — que não existe —,
+/// e caía em «Página não encontrada». O `idea_to_project_e2e` não o apanhava
+/// porque nunca abria a ideia **pela lista**: criava-a e era logo redirigido
+/// para o ambiente.
+#[tokio::test]
+async fn clicar_numa_ideia_na_lista_leva_ao_ambiente() {
+    let harness = harness!();
+    let (pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.manages_a_unit(pessoa).await;
+
+    // Cria a ideia pelo produto (nasce dentro de um Research Workspace novo).
+    let titulo = unique_title("Nzayilu — derivado OpenFOAM");
+    let page = harness.open("/ideas/new").await;
+    esperar_por(&page, "Nova Ideia").await;
+    let unidade = valor_de(&page, "select[name=unit_id] option:nth-child(1)").await;
+    escolher(&page, "select[name=unit_id]", &unidade).await;
+    set_field(&page, "input[name=title]", &titulo).await;
+    submit(&page, "form[action$='/ideas/new']").await;
+    esperar_por(&page, &titulo).await;
+
+    // O ambiente da ideia — é este id que a lista devolve em cada linha.
+    let workspace_id: Uuid = {
+        let limite = std::time::Instant::now();
+        loop {
+            let found: Option<Uuid> =
+                sqlx::query_scalar("SELECT workspace_id FROM ideas WHERE title = $1")
+                    .bind(&titulo)
+                    .fetch_optional(&harness.pool)
+                    .await
+                    .expect("procura da ideia");
+            if let Some(id) = found {
+                break id;
+            }
+            assert!(limite.elapsed() < DEADLINE, "a ideia não foi criada");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    };
+
+    // A lista de Ideias — o ecrã onde o utilizador estava.
+    let lista = harness.open("/ideas").await;
+    esperar_por(&lista, &titulo).await;
+    let html = lista.content().await.unwrap_or_default();
+    // A linha liga ao ambiente, e **não** a `/ideas/{workspace_id}` (o 404).
+    assert!(
+        html.contains(&format!("/workspaces/{workspace_id}")),
+        "a linha da ideia não liga ao seu ambiente"
+    );
+    assert!(
+        !html.contains(&format!("/ideas/{workspace_id}")),
+        "a linha da ideia liga a /ideas/{{id-do-ambiente}} — a rota errada, que dá 404"
+    );
+
+    // E seguir essa ligação chega mesmo ao ambiente, sem 404.
+    let ambiente = harness.open(&format!("/workspaces/{workspace_id}")).await;
+    esperar_por(&ambiente, &titulo).await;
+    assert!(
+        !ambiente
+            .content()
+            .await
+            .unwrap_or_default()
+            .contains("Página não encontrada"),
+        "abrir a ideia pela lista caiu em «Página não encontrada»"
+    );
+}
+
 /// TASK_LIFECYCLE_E2E — uma tarefa deixou de ser uma linha só de leitura.
 ///
 /// Cria uma tarefa, abre o seu detalhe pela lista do ambiente, muda-lhe o estado

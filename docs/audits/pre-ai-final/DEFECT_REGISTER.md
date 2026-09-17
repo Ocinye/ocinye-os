@@ -19,7 +19,7 @@ Estado: **OPEN** · **FIXED** (com prova) · **DEFERRED** (adiado com razão) ·
 | Sev | Encontrados | **Abertos** |
 |---|---|---|
 | P0 | 0 | **0** |
-| P1 | 1 (F-10 Ideia→Projecto) | **0** |
+| P1 | 2 (F-10 Ideia→Projecto; F-17 abrir ideia/projecto da lista) | **0** |
 | P2 | 4 (F-11 tabs; F-13 Dataset; F-14 Tarefas; F-16 abrir projecto) | **0** (F-11, F-13, F-14, F-16 corrigidos) |
 | P3 | 2 (F-12 «Partilhar» morto; F-15 detalhe de Agente) | **0** (F-15 corrigido; F-12 já não se reproduz) |
 
@@ -34,6 +34,7 @@ Estado: **OPEN** · **FIXED** (com prova) · **DEFERRED** (adiado com razão) ·
 | F-13 | P2 | Datasets | **Sem página de detalhe de Dataset**: as linhas não ligam a lado nenhum, não há `/datasets/{id}`. Um dataset é uma entidade de domínio (§14), não só um upload. | **FIXED** — as linhas da lista de Datasets ligam a `/datasets/{id}`; página de detalhe com a governança (código, classificação, estado, origem, licença, restrições de uso, palavras-chave) e as versões (rótulo, estado, ficheiros, tamanho, proveniência). Nova rota no Core `GET /datasets/{id}` (`data::get_dataset` reautoriza pela posse e pela classificação do próprio dataset). E2E `dataset_detail_e2e`. |
 | F-14 | P2 | Tarefas | **Sem lista nem detalhe de Tarefa**, e sem UI para mudar estado/atribuir. Só `/tasks/new`; as tarefas aparecem embutidas e só de leitura. | **FIXED** — as linhas de tarefa do ambiente ligam a `/tasks/{id}`; página de detalhe com transições de estado (a partir de `available_transitions` que o Core deriva de `task_targets_from`) e atribuição de responsável, ambas gated por `may_create`. Novas rotas no Core `GET /tasks/{id}` e `POST /tasks/{id}/assignee`. E2E `task_lifecycle_e2e` (criar→abrir→mudar estado→atribuir→prova em PostgreSQL→recarregar). |
 | F-15 | P3 | Agentes | **Sem página de detalhe de Agente** (a lista não liga a cada agente). | **FIXED** — as linhas da lista de Agentes ligam a `/ai/agents/{id}`; página de detalhe com a definição (capacidade, âmbito, tecto de classificação, fontes, instruções, autor) e o **estado real derivado** — configurado, com a explicação de que corre quando existir capacidade. Nova rota no Core `GET /ai/agents/{id}` (`intelligence::agents::get` decide a visibilidade em SQL, como a lista). E2E `agent_detail_e2e`. |
+| F-17 | P1 | Ideias/Projectos | **Clicar numa Ideia (ou Projecto) na lista dava «Página não encontrada».** As listas de Ideias e Projectos são servidas por `/api/v1/workspaces?kind=…`, pelo que o `id` de cada linha é o do **Research Workspace**, não o da ideia/projecto. A linha ligava a `/ideas/{id}` (e `/projects/{id}`), dando esse id de ambiente a uma rota que procura uma ideia/projecto com esse id — que não existe — e caía em 404. A Home já ligava bem (`/workspaces/{id}`); só as listas estavam erradas. Encontrado na aceitação autenticada em produção. O `idea_to_project_e2e` não o apanhava porque nunca abria pela lista (criava e era logo redirigido para o ambiente). | **FIXED** — as linhas de Ideia e Projecto ligam a `/workspaces/{id}`, como a Home. Guarda de ecrã `a_linha_de_ideia_ou_projecto_liga_ao_ambiente` e E2E `clicar_numa_ideia_na_lista_leva_ao_ambiente`. |
 
 ## Notas
 
