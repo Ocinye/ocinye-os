@@ -11334,6 +11334,84 @@ async fn idea_to_project_e2e() {
     esperar_por(&recarregado, &marca).await;
 }
 
+/// TASK_LIFECYCLE_E2E — uma tarefa deixou de ser uma linha só de leitura.
+///
+/// Cria uma tarefa, abre o seu detalhe pela lista do ambiente, muda-lhe o estado
+/// e atribui-lhe um responsável pelos controlos do produto, e prova no
+/// PostgreSQL que o estado e o responsável mudaram — com recarregar (F-14).
+#[tokio::test]
+async fn task_lifecycle_e2e() {
+    let harness = harness!();
+    let (pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.owns_a_workspace(pessoa).await;
+
+    // ── Criar a tarefa ──────────────────────────────────────────────────
+    let titulo = unique_title("Calibrar a bancada");
+    let page = harness.open("/tasks/new").await;
+    esperar_por(&page, "Nova Tarefa").await;
+    let destino = valor_de(&page, "select[name=workspace_id] option:nth-child(1)").await;
+    escolher(&page, "select[name=workspace_id]", &destino).await;
+    set_field(&page, "input[name=title]", &titulo).await;
+    submit(&page, "form[action$='/tasks/new']").await;
+    esperar_por(&page, &titulo).await; // aparece na lista de tarefas do ambiente
+
+    // A tarefa é uma entidade real: procura-se o seu id para abrir o detalhe.
+    let task_id: Uuid = {
+        let limite = std::time::Instant::now();
+        loop {
+            let found: Option<Uuid> = sqlx::query_scalar("SELECT id FROM tasks WHERE title = $1")
+                .bind(&titulo)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("procura da tarefa");
+            if let Some(id) = found {
+                break id;
+            }
+            assert!(limite.elapsed() < DEADLINE, "a tarefa não foi criada");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    };
+
+    // ── Abrir o detalhe e mudar o estado ────────────────────────────────
+    let detail = harness.open(&format!("/tasks/{task_id}")).await;
+    esperar_por(&detail, "Mudar estado").await;
+    // Uma tarefa nasce em «todo»; avança-se para «em curso».
+    submit(&detail, "form:has(input[value=\"in_progress\"])").await;
+    esperar_por(&detail, "Em curso").await;
+
+    // ── Atribuir o responsável (o próprio membro é o líder do ambiente) ──
+    let candidato = valor_de(&detail, "select[name=assignee_id] option:nth-child(2)").await;
+    escolher(&detail, "select[name=assignee_id]", &candidato).await;
+    submit(&detail, "form[action$='/assignee']").await;
+    esperar_por(&detail, "Em curso").await;
+
+    // ── Prova no PostgreSQL, e persiste ao recarregar ───────────────────
+    let (estado, responsavel): (String, Option<Uuid>) = {
+        let limite = std::time::Instant::now();
+        loop {
+            let row: (String, Option<Uuid>) =
+                sqlx::query_as("SELECT state, assignee_id FROM tasks WHERE id = $1")
+                    .bind(task_id)
+                    .fetch_one(&harness.pool)
+                    .await
+                    .expect("consulta da tarefa");
+            if row.0 == "in_progress" && row.1.is_some() {
+                break row;
+            }
+            assert!(
+                limite.elapsed() < DEADLINE,
+                "o estado/responsável não mudou"
+            );
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    };
+    assert_eq!(estado, "in_progress");
+    assert!(responsavel.is_some(), "a tarefa ficou sem responsável");
+
+    let recarregada = harness.open(&format!("/tasks/{task_id}")).await;
+    esperar_por(&recarregada, "Em curso").await;
+}
+
 /// Uma pessoa cria um dataset pelo produto, dentro de um ambiente onde escreve.
 ///
 /// A criação de datasets era exercitada só pelo Core; aqui percorre-se o ecrã:

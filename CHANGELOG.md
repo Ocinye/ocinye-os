@@ -7,6 +7,26 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Tarefas ganham detalhe accionável (certificação final pré-IA) — 2026-09-17
+
+As tarefas de um ambiente apareciam embutidas e só de leitura: não havia lista
+nem detalhe, nem forma de mudar estado ou atribuir responsável pelo produto — só
+`/tasks/new` (`F-14`, P2).
+
+- **Detalhe de tarefa.** As linhas de tarefa do ambiente passam a ligar a
+  `/tasks/{id}`, uma página com o estado, a prioridade, o prazo e o responsável, e
+  duas acções: **mudar de estado** (os movimentos legais vêm de
+  `available_transitions`, que o Core deriva de `task_targets_from` — a interface
+  não duplica o grafo do ciclo de vida) e **atribuir** um responsável de entre os
+  membros do ambiente. Ambas gated por `may_create` (o Core decide; o Workspace
+  esconde, não autoriza).
+- **Rotas novas no Core.** `GET /api/v1/tasks/{id}` (com os movimentos legais) e
+  `POST /api/v1/tasks/{id}/assignee`.
+- **E2E `task_lifecycle_e2e`**: cria uma tarefa, abre-a, muda-a para «em curso»,
+  atribui um responsável, prova no PostgreSQL o estado e o responsável, e
+  recarrega. Registo vivo em
+  [`DEFECT_REGISTER.md`](docs/audits/pre-ai-final/DEFECT_REGISTER.md).
+
 ### Ideia → Projecto funciona pelo produto (certificação final pré-IA) — 2026-09-17
 
 Um membro conseguia abrir uma ideia mas não a levar a projecto: o defeito que

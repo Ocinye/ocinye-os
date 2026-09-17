@@ -554,6 +554,17 @@ fn metric(label: &'static str, value: usize) -> impl IntoView {
     }
 }
 
+/// Como [`metric`], mas para um valor textual (estado, responsável, prazo).
+fn metric_text(label: &'static str, value: &str) -> impl IntoView {
+    let value = value.to_owned();
+    view! {
+        <div class="oc-split__cell" >
+            <div class="oc-t-cell-2" >{value}</div>
+            <div class="oc-t-hint oc-mt-1" >{label}</div>
+        </div>
+    }
+}
+
 fn activity_list(payload: &Value) -> AnyView {
     let rows = items(payload);
     if rows.is_empty() {
@@ -600,8 +611,11 @@ fn task_list(payload: &Value) -> AnyView {
                     // ainda não têm percentagem no Core, e mostrar uma
                     // inventada seria pior do que mostrar zero.
                     let pct = if state == "done" { 100 } else { 0 };
+                    // A tarefa abre no seu detalhe, onde muda de estado e ganha
+                    // responsável — deixou de ser uma linha só de leitura (F-14).
+                    let href = format!("/tasks/{}", text(row, "id"));
                     view! {
-                        <div>
+                        <a class="oc-task-row" href=href>
                             <div class="oc-row oc-gap-5 oc-mb-1" >
                                 <span class="oc-fill oc-truncate oc-t-cell-2" >
                                     {text(row, "title")}
@@ -609,10 +623,155 @@ fn task_list(payload: &Value) -> AnyView {
                                 {badge(state.clone(), Tone::of(&state))}
                             </div>
                             {progress_bar(pct)}
-                        </div>
+                        </a>
                     }
                 })
                 .collect_view()}
+        </div>
+    }
+    .into_any()
+}
+
+/// O rótulo em português de um estado de tarefa.
+fn task_state_label(code: &str) -> &'static str {
+    match code {
+        "todo" => "A fazer",
+        "in_progress" => "Em curso",
+        "blocked" => "Bloqueada",
+        "in_review" => "Em revisão",
+        "done" => "Concluída",
+        "cancelled" => "Cancelada",
+        _ => "Estado",
+    }
+}
+
+/// O detalhe de uma tarefa: o que é, e as acções sobre ela.
+///
+/// Uma tarefa deixou de ser uma linha só de leitura: aqui muda de estado (pelos
+/// movimentos que o Core devolveu como legais) e ganha ou perde responsável. A
+/// autoridade real é do Core; os controlos só aparecem a quem escreve no
+/// ambiente.
+pub fn task_detail(
+    task: &Value,
+    overview: &Value,
+    ok: Option<&str>,
+    erro: Option<&str>,
+) -> AnyView {
+    let task_id = text(task, "id");
+    let state = text(task, "state");
+    let priority = text(task, "priority");
+    let workspace = overview.get("workspace").cloned().unwrap_or(Value::Null);
+    let workspace_id = text(task, "workspace_id");
+    let may_act = workspace
+        .get("may_create")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let members = items(&overview.get("members").cloned().unwrap_or(Value::Null));
+
+    let assignee_id = task
+        .get("assignee_id")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let assignee_name = members
+        .iter()
+        .find(|m| m.get("person_id").and_then(Value::as_str) == Some(assignee_id))
+        .map_or_else(|| "Sem responsável".to_owned(), |m| text(m, "full_name"));
+
+    let transitions: Vec<String> = task
+        .get("available_transitions")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|t| t.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let transition_action = format!("/tasks/{task_id}/transition");
+    let assign_action = format!("/tasks/{task_id}/assignee");
+
+    view! {
+        <div class="oc-band">
+            <div class="oc-row oc-row--wrap oc-gap-6 oc-mb-2">
+                {pill("TAREFA")}
+                <h1 class="oc-t-screen">{text(task, "title")}</h1>
+                {badge(task_state_label(&state).to_owned(), Tone::of(&state))}
+                {badge(priority.clone(), Tone::of(&priority))}
+            </div>
+            <div class="oc-mono oc-mb-5">
+                <a href=format!("/workspaces/{workspace_id}")>"← Voltar ao ambiente"</a>
+            </div>
+        </div>
+
+        <div class="oc-page">
+            {ok.filter(|s| !s.is_empty()).map(|m| view! {
+                <div class="oc-card oc-note" role="status">{m.to_owned()}</div>
+            })}
+            {erro.filter(|s| !s.is_empty()).map(|m| view! {
+                <div class="oc-card oc-alert" role="alert">{m.to_owned()}</div>
+            })}
+
+            <div class="oc-grid oc-grid--detail">
+                <section class="oc-card">
+                    {section_head("Sobre a tarefa", None, None)}
+                    <div class="oc-card__body">
+                        <p class="oc-t-body">{text(task, "description")}</p>
+                        <div class="oc-split oc-split--2 oc-mt-5">
+                            {metric_text("Estado", task_state_label(&state))}
+                            {metric_text("Prioridade", &priority)}
+                            {metric_text("Prazo", &text(task, "due_on"))}
+                            {metric_text("Responsável", &assignee_name)}
+                        </div>
+                    </div>
+                </section>
+
+                {may_act.then(|| view! {
+                    <section class="oc-card">
+                        {section_head("Acções", None, None)}
+                        <div class="oc-card__body">
+                            <div class="oc-field__label">"Mudar estado"</div>
+                            <div class="oc-lifecycle">
+                                {if transitions.is_empty() {
+                                    view! {
+                                        <span class="oc-muted">
+                                            "Esta tarefa não tem mais movimentos."
+                                        </span>
+                                    }.into_any()
+                                } else {
+                                    transitions.clone().into_iter().map(|estado| {
+                                        let accao = transition_action.clone();
+                                        let rotulo = format!("Marcar «{}»", task_state_label(&estado));
+                                        view! {
+                                            <form method="post" action=accao class="oc-lifecycle__step">
+                                                <input type="hidden" name="state" value=estado />
+                                                <button class="oc-btn oc-btn--sm oc-btn--secondary" type="submit">
+                                                    {rotulo}
+                                                </button>
+                                            </form>
+                                        }
+                                    }).collect_view().into_any()
+                                }}
+                            </div>
+
+                            <div class="oc-field__label oc-mt-6">"Responsável"</div>
+                            <form method="post" action=assign_action class="oc-row oc-row--wrap oc-gap-3">
+                                <select class="oc-select" name="assignee_id">
+                                    <option value="">"Sem responsável"</option>
+                                    {members.iter().map(|m| {
+                                        let pid = text(m, "person_id");
+                                        let nome = text(m, "full_name");
+                                        let escolhido = pid == assignee_id;
+                                        view! { <option value=pid selected=escolhido>{nome}</option> }
+                                    }).collect_view()}
+                                </select>
+                                <button class="oc-btn oc-btn--sm oc-btn--primary" type="submit">
+                                    "Atribuir"
+                                </button>
+                            </form>
+                        </div>
+                    </section>
+                })}
+            </div>
         </div>
     }
     .into_any()
@@ -1141,6 +1300,42 @@ pub(crate) mod tests {
                 "falta a secção {id}"
             );
         }
+    }
+
+    /// O detalhe de uma tarefa oferece os movimentos legais e a atribuição —
+    /// e nada disso a quem não escreve no ambiente (F-14).
+    #[test]
+    fn o_detalhe_de_uma_tarefa_permite_mudar_estado_e_atribuir() {
+        let task = json!({
+            "id": "33333333-3333-4333-8333-333333333333",
+            "workspace_id": "w1",
+            "title": "Calibrar",
+            "description": "Detalhe",
+            "state": "todo",
+            "priority": "normal",
+            "assignee_id": null,
+            "available_transitions": ["in_progress", "blocked", "cancelled"],
+        });
+        let overview = json!({
+            "workspace": {"id": "w1", "may_create": true},
+            "members": [{"person_id": "p1", "full_name": "Ana"}]
+        });
+        let html = task_detail(&task, &overview, None, None).to_html();
+        assert!(html.contains("A fazer"), "falta o rótulo do estado");
+        assert!(
+            html.contains("Marcar «Em curso»"),
+            "falta o botão de transição"
+        );
+        assert!(html.contains(r#"action="/tasks/33333333-3333-4333-8333-333333333333/transition""#));
+        assert!(html.contains(r#"action="/tasks/33333333-3333-4333-8333-333333333333/assignee""#));
+        assert!(html.contains("Ana"), "falta o candidato a responsável");
+        assert!(html.contains("Sem responsável"));
+
+        // Sem autoridade para escrever, os controlos não aparecem.
+        let so_leitura = json!({"workspace": {"id": "w1", "may_create": false}, "members": []});
+        let read = task_detail(&task, &so_leitura, None, None).to_html();
+        assert!(!read.contains("Marcar «Em curso»"));
+        assert!(!read.contains("Atribuir"));
     }
 
     /// Helper: render an idea workspace with a given state, transitions and

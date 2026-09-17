@@ -13,4 +13,4 @@ pub mod task;
 
 pub use idea::{assert_idea_transition, idea_targets_from, requires_outcome_note, PROMOTABLE_FROM};
 pub use project::{assert_project_transition, project_targets_from};
-pub use task::assert_task_transition;
+pub use task::{assert_task_transition, task_targets_from};

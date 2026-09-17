@@ -20,8 +20,10 @@ use crate::state::AppState;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/tasks", get(list_tasks))
+        .route("/tasks/{task_id}", get(get_task))
         .route("/workspaces/{workspace_id}/tasks", post(create_task))
         .route("/tasks/{task_id}/transitions", post(transition_task))
+        .route("/tasks/{task_id}/assignee", post(assign_task))
         .route("/workspaces/{workspace_id}/comments", post(create_comment))
         .route(
             "/workspaces/{workspace_id}/comments/list",
@@ -64,10 +66,21 @@ struct TaskView {
     assignee_id: Option<Uuid>,
     due_on: Option<chrono::NaiveDate>,
     classification: String,
+    /// The states this task may move to next — the lifecycle, made actionable.
+    /// From the domain graph (`task_targets_from`), so the UI never hardcodes it.
+    available_transitions: Vec<String>,
 }
 
 impl From<collaboration::Task> for TaskView {
     fn from(task: collaboration::Task) -> Self {
+        let available_transitions = TaskState::parse(&task.state)
+            .map(|current| {
+                ocinye_domain::workflow::task_targets_from(current)
+                    .iter()
+                    .map(|target| target.as_str().to_owned())
+                    .collect()
+            })
+            .unwrap_or_default();
         Self {
             id: task.id,
             workspace_id: task.workspace_id,
@@ -78,6 +91,7 @@ impl From<collaboration::Task> for TaskView {
             assignee_id: task.assignee_id,
             due_on: task.due_on,
             classification: task.classification,
+            available_transitions,
         }
     }
 }
@@ -179,6 +193,38 @@ async fn create_task(
 #[derive(Deserialize)]
 struct TransitionTaskRequest {
     state: String,
+}
+
+/// One task, with the states it may move to next.
+async fn get_task(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(task_id): Path<Uuid>,
+) -> Result<Json<TaskView>, ApiError> {
+    let (task, _workspace) = collaboration::get_task(&state.pool, &principal, task_id).await?;
+    Ok(Json(TaskView::from(task)))
+}
+
+#[derive(Deserialize)]
+struct AssignTaskRequest {
+    /// The person to make responsible, or `null` to clear the assignee.
+    #[serde(default)]
+    assignee_id: Option<Uuid>,
+}
+
+/// Set or clear a task's assignee.
+async fn assign_task(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Path(task_id): Path<Uuid>,
+    Json(request): Json<AssignTaskRequest>,
+) -> Result<Json<TaskView>, ApiError> {
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let task =
+        collaboration::assign_task(&mut tx, &principal, &ids, task_id, request.assignee_id).await?;
+    tx.commit().await.map_err(CoreError::from)?;
+    Ok(Json(TaskView::from(task)))
 }
 
 async fn transition_task(

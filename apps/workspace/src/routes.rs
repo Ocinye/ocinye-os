@@ -100,6 +100,9 @@ pub const ROUTES: &[&str] = &[
     "/bibliography/new",
     "/datasets/new",
     "/tasks/new",
+    "/tasks/{task_id}",
+    "/tasks/{task_id}/transition",
+    "/tasks/{task_id}/assignee",
     "/calendar",
     "/calendar/events/new",
     "/calendar/events/{event_id}",
@@ -371,6 +374,9 @@ pub fn router(state: WorkspaceState) -> Router {
         )
         .route("/datasets/new", get(new_dataset_form).post(create_dataset))
         .route("/tasks/new", get(new_task_form).post(create_task))
+        .route("/tasks/{task_id}", get(task_detail))
+        .route("/tasks/{task_id}/transition", post(task_transition))
+        .route("/tasks/{task_id}/assignee", post(task_assign))
         .route("/help", get(help))
         .route("/settings", get(settings_account))
         .route("/settings/security", get(settings_security))
@@ -6712,6 +6718,133 @@ async fn create_task(
                 trail,
                 ui::screens::lists::new_task(&destinos, Some(failure.to_string())),
             )
+        }
+    }
+}
+
+/// O detalhe de uma tarefa: o que é, o seu estado, e as acções sobre ela.
+async fn task_detail(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    Query(aviso): Query<AvisoQuery>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let task = match api::get::<Value>(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/tasks/{task_id}"),
+    )
+    .await
+    {
+        Ok(task) => task,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    // O ambiente dá o título, os membros (para o responsável) e a autoridade.
+    let workspace_id = task
+        .get("workspace_id")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let overview = optional(
+        &state,
+        &member,
+        &format!("/api/v1/workspaces/{workspace_id}"),
+    )
+    .await;
+
+    let viewer = viewer(&state, &member).await;
+    let trail = vec![Crumb::to(Screen::MyWork)];
+    shell_page(
+        "Tarefa",
+        &viewer,
+        Screen::MyWork,
+        trail,
+        ui::screens::workspaces::task_detail(
+            &task,
+            &overview,
+            aviso.ok.as_deref(),
+            aviso.erro.as_deref(),
+        ),
+    )
+}
+
+#[derive(Deserialize)]
+struct TaskTransitionForm {
+    state: String,
+}
+
+/// `POST /tasks/{id}/transition` — muda o estado da tarefa (proxy ao Core).
+async fn task_transition(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    Form(form): Form<TaskTransitionForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let body = serde_json::json!({ "state": form.state });
+    task_action_redirect(
+        &state,
+        &member,
+        task_id,
+        &format!("/api/v1/tasks/{task_id}/transitions"),
+        &body,
+    )
+    .await
+}
+
+#[derive(Deserialize)]
+struct TaskAssignForm {
+    #[serde(default)]
+    assignee_id: String,
+}
+
+/// `POST /tasks/{id}/assignee` — atribui (ou limpa) o responsável.
+async fn task_assign(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    Form(form): Form<TaskAssignForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    // Vazio significa «sem responsável»: envia-se `null`, não uma string vazia.
+    let assignee = blank_to_none(form.assignee_id);
+    let body = serde_json::json!({ "assignee_id": assignee });
+    task_action_redirect(
+        &state,
+        &member,
+        task_id,
+        &format!("/api/v1/tasks/{task_id}/assignee"),
+        &body,
+    )
+    .await
+}
+
+/// Submete uma acção sobre a tarefa ao Core e volta ao seu detalhe, com o aviso.
+async fn task_action_redirect(
+    state: &WorkspaceState,
+    member: &Member,
+    task_id: Uuid,
+    path: &str,
+    body: &Value,
+) -> Response {
+    match api::post(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        path,
+        body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!("/tasks/{task_id}")).into_response(),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(failure) => {
+            let motivo = urlencoding_minimal(&failure.to_string());
+            Redirect::to(&format!("/tasks/{task_id}?erro={motivo}")).into_response()
         }
     }
 }

@@ -6,7 +6,7 @@ use crate::error::{DomainError, DomainResult};
 
 /// States reachable from `current`.
 #[must_use]
-pub(crate) fn task_targets_from(current: TaskState) -> &'static [TaskState] {
+pub fn task_targets_from(current: TaskState) -> &'static [TaskState] {
     use TaskState::{Blocked, Cancelled, Done, InProgress, InReview, Todo};
     match current {
         Todo => &[InProgress, Blocked, Cancelled],
