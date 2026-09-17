@@ -7,6 +7,24 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Clicar numa Ideia ou Projecto na lista abre o ambiente — 2026-09-17
+
+Na aceitação autenticada em produção, clicar numa Ideia (ou Projecto) na lista
+dava **«Página não encontrada»** (`F-17`, P1).
+
+- **Causa.** As listas de Ideias e Projectos são servidas por
+  `/api/v1/workspaces?kind=…`: cada linha é um **Research Workspace**, e o seu
+  `id` é o do ambiente, não o da ideia/projecto. As linhas ligavam a `/ideas/{id}`
+  e `/projects/{id}`, dando esse id de ambiente a rotas que procuram uma
+  ideia/projecto com esse id — que não existe — e caíam em 404. A Home já ligava
+  correctamente (`/workspaces/{id}`); só as listas estavam erradas.
+- **Correcção.** As linhas de Ideia e Projecto ligam a `/workspaces/{id}`, o
+  mesmo destino directo que a Home usa. Guarda de ecrã
+  `a_linha_de_ideia_ou_projecto_liga_ao_ambiente` e E2E
+  `clicar_numa_ideia_na_lista_leva_ao_ambiente` (criar → abrir pela lista →
+  aterrar no ambiente, sem 404). O `idea_to_project_e2e` não o apanhava porque
+  nunca abria pela lista: criava a ideia e era logo redirigido para o ambiente.
+
 ### Agentes ganham página de detalhe (certificação final pré-IA) — 2026-09-17
 
 Um agente é definível e persistido **sem nó de IA**, mas na lista era uma linha
