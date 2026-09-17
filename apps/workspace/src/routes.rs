@@ -99,7 +99,11 @@ pub const ROUTES: &[&str] = &[
     "/projects/new",
     "/bibliography/new",
     "/datasets/new",
+    "/datasets/{dataset_id}",
     "/tasks/new",
+    "/tasks/{task_id}",
+    "/tasks/{task_id}/transition",
+    "/tasks/{task_id}/assignee",
     "/calendar",
     "/calendar/events/new",
     "/calendar/events/{event_id}",
@@ -172,6 +176,7 @@ pub const ROUTES: &[&str] = &[
     "/ai",
     "/ai/agents",
     "/ai/agents/new",
+    "/ai/agents/{agent_id}",
     "/ai/prompt",
     "/compute",
     "/activity",
@@ -370,7 +375,11 @@ pub fn router(state: WorkspaceState) -> Router {
             get(new_source_form).post(create_source),
         )
         .route("/datasets/new", get(new_dataset_form).post(create_dataset))
+        .route("/datasets/{dataset_id}", get(dataset_detail))
         .route("/tasks/new", get(new_task_form).post(create_task))
+        .route("/tasks/{task_id}", get(task_detail))
+        .route("/tasks/{task_id}/transition", post(task_transition))
+        .route("/tasks/{task_id}/assignee", post(task_assign))
         .route("/help", get(help))
         .route("/settings", get(settings_account))
         .route("/settings/security", get(settings_security))
@@ -503,6 +512,7 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/ai", get(ai_hub))
         .route("/ai/agents", get(agents))
         .route("/ai/agents/new", get(new_agent).post(create_agent))
+        .route("/ai/agents/{agent_id}", get(agent_detail))
         .route("/ai/prompt", get(prompt).post(submit_prompt))
         .route("/compute", get(compute))
         // Institucional
@@ -5949,6 +5959,41 @@ fn agent_trail() -> Vec<Crumb> {
     vec![Crumb::to(Screen::Agents)]
 }
 
+/// `GET /ai/agents/{id}` — o detalhe de um agente: a sua definição.
+///
+/// Um agente é definível e persistido sem nó de IA; o detalhe mostra o que ele
+/// é (capacidade, âmbito, tecto de classificação, fontes) e o seu estado real,
+/// derivado da disponibilidade. Abrir por identificador reautoriza pela
+/// visibilidade no Core — um agente que não se pode ver dá 404 (F-15).
+async fn agent_detail(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(agent_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let agent = match api::get::<Value>(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/ai/agents/{agent_id}"),
+    )
+    .await
+    {
+        Ok(agent) => agent,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    let viewer = viewer(&state, &member).await;
+    shell_page(
+        "Agente IA",
+        &viewer,
+        Screen::Agents,
+        agent_trail(),
+        ui::screens::ai::agent_detail(&agent),
+    )
+}
+
 /// Campos do construtor de agentes.
 #[derive(Deserialize)]
 struct NewAgentForm {
@@ -6712,6 +6757,175 @@ async fn create_task(
                 trail,
                 ui::screens::lists::new_task(&destinos, Some(failure.to_string())),
             )
+        }
+    }
+}
+
+/// O detalhe de uma tarefa: o que é, o seu estado, e as acções sobre ela.
+/// `GET /datasets/{id}` — o detalhe de um dataset: metadados de governança e as
+/// suas versões. O Core reautoriza pela posse e pela classificação do próprio
+/// dataset (`data::get_dataset`), pelo que um dataset escondido da lista não é
+/// alcançável por identificador.
+async fn dataset_detail(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(dataset_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let dataset = match api::get::<Value>(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/datasets/{dataset_id}"),
+    )
+    .await
+    {
+        Ok(dataset) => dataset,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    // As versões são o material do dataset; a lista já é autorizada pelo Core.
+    let versions = optional(
+        &state,
+        &member,
+        &format!("/api/v1/datasets/{dataset_id}/versions"),
+    )
+    .await;
+
+    let viewer = viewer(&state, &member).await;
+    let trail = vec![Crumb::to(Screen::Datasets)];
+    shell_page(
+        "Dataset",
+        &viewer,
+        Screen::Datasets,
+        trail,
+        ui::screens::workspaces::dataset_detail(&dataset, &versions),
+    )
+}
+
+async fn task_detail(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    Query(aviso): Query<AvisoQuery>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let task = match api::get::<Value>(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/tasks/{task_id}"),
+    )
+    .await
+    {
+        Ok(task) => task,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    // O ambiente dá o título, os membros (para o responsável) e a autoridade.
+    let workspace_id = task
+        .get("workspace_id")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let overview = optional(
+        &state,
+        &member,
+        &format!("/api/v1/workspaces/{workspace_id}"),
+    )
+    .await;
+
+    let viewer = viewer(&state, &member).await;
+    let trail = vec![Crumb::to(Screen::MyWork)];
+    shell_page(
+        "Tarefa",
+        &viewer,
+        Screen::MyWork,
+        trail,
+        ui::screens::workspaces::task_detail(
+            &task,
+            &overview,
+            aviso.ok.as_deref(),
+            aviso.erro.as_deref(),
+        ),
+    )
+}
+
+#[derive(Deserialize)]
+struct TaskTransitionForm {
+    state: String,
+}
+
+/// `POST /tasks/{id}/transition` — muda o estado da tarefa (proxy ao Core).
+async fn task_transition(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    Form(form): Form<TaskTransitionForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let body = serde_json::json!({ "state": form.state });
+    task_action_redirect(
+        &state,
+        &member,
+        task_id,
+        &format!("/api/v1/tasks/{task_id}/transitions"),
+        &body,
+    )
+    .await
+}
+
+#[derive(Deserialize)]
+struct TaskAssignForm {
+    #[serde(default)]
+    assignee_id: String,
+}
+
+/// `POST /tasks/{id}/assignee` — atribui (ou limpa) o responsável.
+async fn task_assign(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(task_id): Path<Uuid>,
+    Form(form): Form<TaskAssignForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    // Vazio significa «sem responsável»: envia-se `null`, não uma string vazia.
+    let assignee = blank_to_none(form.assignee_id);
+    let body = serde_json::json!({ "assignee_id": assignee });
+    task_action_redirect(
+        &state,
+        &member,
+        task_id,
+        &format!("/api/v1/tasks/{task_id}/assignee"),
+        &body,
+    )
+    .await
+}
+
+/// Submete uma acção sobre a tarefa ao Core e volta ao seu detalhe, com o aviso.
+async fn task_action_redirect(
+    state: &WorkspaceState,
+    member: &Member,
+    task_id: Uuid,
+    path: &str,
+    body: &Value,
+) -> Response {
+    match api::post(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        path,
+        body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!("/tasks/{task_id}")).into_response(),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(failure) => {
+            let motivo = urlencoding_minimal(&failure.to_string());
+            Redirect::to(&format!("/tasks/{task_id}?erro={motivo}")).into_response()
         }
     }
 }

@@ -554,6 +554,17 @@ fn metric(label: &'static str, value: usize) -> impl IntoView {
     }
 }
 
+/// Como [`metric`], mas para um valor textual (estado, responsável, prazo).
+fn metric_text(label: &'static str, value: &str) -> impl IntoView {
+    let value = value.to_owned();
+    view! {
+        <div class="oc-split__cell" >
+            <div class="oc-t-cell-2" >{value}</div>
+            <div class="oc-t-hint oc-mt-1" >{label}</div>
+        </div>
+    }
+}
+
 fn activity_list(payload: &Value) -> AnyView {
     let rows = items(payload);
     if rows.is_empty() {
@@ -600,8 +611,11 @@ fn task_list(payload: &Value) -> AnyView {
                     // ainda não têm percentagem no Core, e mostrar uma
                     // inventada seria pior do que mostrar zero.
                     let pct = if state == "done" { 100 } else { 0 };
+                    // A tarefa abre no seu detalhe, onde muda de estado e ganha
+                    // responsável — deixou de ser uma linha só de leitura (F-14).
+                    let href = format!("/tasks/{}", text(row, "id"));
                     view! {
-                        <div>
+                        <a class="oc-task-row" href=href>
                             <div class="oc-row oc-gap-5 oc-mb-1" >
                                 <span class="oc-fill oc-truncate oc-t-cell-2" >
                                     {text(row, "title")}
@@ -609,10 +623,279 @@ fn task_list(payload: &Value) -> AnyView {
                                 {badge(state.clone(), Tone::of(&state))}
                             </div>
                             {progress_bar(pct)}
-                        </div>
+                        </a>
                     }
                 })
                 .collect_view()}
+        </div>
+    }
+    .into_any()
+}
+
+/// O rótulo em português de um estado de tarefa.
+fn task_state_label(code: &str) -> &'static str {
+    match code {
+        "todo" => "A fazer",
+        "in_progress" => "Em curso",
+        "blocked" => "Bloqueada",
+        "in_review" => "Em revisão",
+        "done" => "Concluída",
+        "cancelled" => "Cancelada",
+        _ => "Estado",
+    }
+}
+
+/// O detalhe de uma tarefa: o que é, e as acções sobre ela.
+///
+/// Uma tarefa deixou de ser uma linha só de leitura: aqui muda de estado (pelos
+/// movimentos que o Core devolveu como legais) e ganha ou perde responsável. A
+/// autoridade real é do Core; os controlos só aparecem a quem escreve no
+/// ambiente.
+pub fn task_detail(
+    task: &Value,
+    overview: &Value,
+    ok: Option<&str>,
+    erro: Option<&str>,
+) -> AnyView {
+    let task_id = text(task, "id");
+    let state = text(task, "state");
+    let priority = text(task, "priority");
+    let workspace = overview.get("workspace").cloned().unwrap_or(Value::Null);
+    let workspace_id = text(task, "workspace_id");
+    let may_act = workspace
+        .get("may_create")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let members = items(&overview.get("members").cloned().unwrap_or(Value::Null));
+
+    let assignee_id = task
+        .get("assignee_id")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let assignee_name = members
+        .iter()
+        .find(|m| m.get("person_id").and_then(Value::as_str) == Some(assignee_id))
+        .map_or_else(|| "Sem responsável".to_owned(), |m| text(m, "full_name"));
+
+    let transitions: Vec<String> = task
+        .get("available_transitions")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|t| t.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let transition_action = format!("/tasks/{task_id}/transition");
+    let assign_action = format!("/tasks/{task_id}/assignee");
+
+    view! {
+        <div class="oc-band">
+            <div class="oc-row oc-row--wrap oc-gap-6 oc-mb-2">
+                {pill("TAREFA")}
+                <h1 class="oc-t-screen">{text(task, "title")}</h1>
+                {badge(task_state_label(&state).to_owned(), Tone::of(&state))}
+                {badge(priority.clone(), Tone::of(&priority))}
+            </div>
+            <div class="oc-mono oc-mb-5">
+                <a href=format!("/workspaces/{workspace_id}")>"← Voltar ao ambiente"</a>
+            </div>
+        </div>
+
+        <div class="oc-page">
+            {ok.filter(|s| !s.is_empty()).map(|m| view! {
+                <div class="oc-card oc-note" role="status">{m.to_owned()}</div>
+            })}
+            {erro.filter(|s| !s.is_empty()).map(|m| view! {
+                <div class="oc-card oc-alert" role="alert">{m.to_owned()}</div>
+            })}
+
+            <div class="oc-grid oc-grid--detail">
+                <section class="oc-card">
+                    {section_head("Sobre a tarefa", None, None)}
+                    <div class="oc-card__body">
+                        <p class="oc-t-body">{text(task, "description")}</p>
+                        <div class="oc-split oc-split--2 oc-mt-5">
+                            {metric_text("Estado", task_state_label(&state))}
+                            {metric_text("Prioridade", &priority)}
+                            {metric_text("Prazo", &text(task, "due_on"))}
+                            {metric_text("Responsável", &assignee_name)}
+                        </div>
+                    </div>
+                </section>
+
+                {may_act.then(|| view! {
+                    <section class="oc-card">
+                        {section_head("Acções", None, None)}
+                        <div class="oc-card__body">
+                            <div class="oc-field__label">"Mudar estado"</div>
+                            <div class="oc-lifecycle">
+                                {if transitions.is_empty() {
+                                    view! {
+                                        <span class="oc-muted">
+                                            "Esta tarefa não tem mais movimentos."
+                                        </span>
+                                    }.into_any()
+                                } else {
+                                    transitions.clone().into_iter().map(|estado| {
+                                        let accao = transition_action.clone();
+                                        let rotulo = format!("Marcar «{}»", task_state_label(&estado));
+                                        view! {
+                                            <form method="post" action=accao class="oc-lifecycle__step">
+                                                <input type="hidden" name="state" value=estado />
+                                                <button class="oc-btn oc-btn--sm oc-btn--secondary" type="submit">
+                                                    {rotulo}
+                                                </button>
+                                            </form>
+                                        }
+                                    }).collect_view().into_any()
+                                }}
+                            </div>
+
+                            <div class="oc-field__label oc-mt-6">"Responsável"</div>
+                            <form method="post" action=assign_action class="oc-row oc-row--wrap oc-gap-3">
+                                <select class="oc-select" name="assignee_id">
+                                    <option value="">"Sem responsável"</option>
+                                    {members.iter().map(|m| {
+                                        let pid = text(m, "person_id");
+                                        let nome = text(m, "full_name");
+                                        let escolhido = pid == assignee_id;
+                                        view! { <option value=pid selected=escolhido>{nome}</option> }
+                                    }).collect_view()}
+                                </select>
+                                <button class="oc-btn oc-btn--sm oc-btn--primary" type="submit">
+                                    "Atribuir"
+                                </button>
+                            </form>
+                        </div>
+                    </section>
+                })}
+            </div>
+        </div>
+    }
+    .into_any()
+}
+
+/// Bytes em unidade legível — o material de uma versão de dataset tem tamanho,
+/// e mostrá-lo em bytes crus não informa ninguém.
+fn human_bytes(bytes: i64) -> String {
+    const UNITS: [&str; 5] = ["B", "kB", "MB", "GB", "TB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
+
+/// O detalhe de um dataset: a sua governança e as suas versões.
+///
+/// Um dataset é uma entidade de domínio (§14), não um upload: tem código,
+/// classificação, origem, licença e restrições de uso, e uma história de versões
+/// material. A autoridade é do Core — abrir por identificador reautoriza pela
+/// posse e pela classificação do próprio dataset (F-13).
+pub fn dataset_detail(dataset: &Value, versions: &Value) -> AnyView {
+    let workspace_id = text(dataset, "workspace_id");
+    let classification = text(dataset, "classification");
+    let state = text(dataset, "state");
+    let keywords = dataset
+        .get("keywords")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|k| k.as_str())
+                .collect::<Vec<_>>()
+                .join(" · ")
+        })
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "—".to_owned());
+    let versoes = items(versions);
+
+    view! {
+        <div class="oc-band">
+            <div class="oc-row oc-row--wrap oc-gap-6 oc-mb-2">
+                {pill("DATASET")}
+                <h1 class="oc-t-screen">{text(dataset, "title")}</h1>
+                {classification_badge(&classification)}
+                {badge(state.clone(), Tone::of(&state))}
+            </div>
+            <div class="oc-mono oc-mb-5">
+                <a href=format!("/workspaces/{workspace_id}")>"← Voltar ao ambiente"</a>
+            </div>
+        </div>
+
+        <div class="oc-page">
+            <div class="oc-grid oc-grid--detail">
+                <section class="oc-card">
+                    {section_head("Sobre o dataset", None, None)}
+                    <div class="oc-card__body">
+                        <p class="oc-t-body">{text(dataset, "description")}</p>
+                        <div class="oc-split oc-split--2 oc-mt-5">
+                            {metric_text("Código", &text(dataset, "code"))}
+                            {metric_text("Classificação", &classification)}
+                            {metric_text("Estado", &state)}
+                            {metric_text("Origem", &text(dataset, "origin"))}
+                            {metric_text("Licença", &text(dataset, "licence"))}
+                            {metric_text("Restrições de uso", &text(dataset, "usage_restrictions"))}
+                        </div>
+                        <div class="oc-field__label oc-mt-6">"Palavras-chave"</div>
+                        <p class="oc-t-note">{keywords}</p>
+                    </div>
+                </section>
+
+                <section class="oc-card">
+                    {section_head("Versões", None, None)}
+                    <div class="oc-card__body">
+                        {if versoes.is_empty() {
+                            view! {
+                                <p class="oc-muted">
+                                    "Este dataset ainda não tem versões. Uma versão \
+                                     agrupa os ficheiros materiais de um estado do dataset."
+                                </p>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <div class="oc-col oc-gap-9">
+                                    {versoes.iter().map(|v| {
+                                        let status = text(v, "status");
+                                        let ficheiros = v.get("file_count")
+                                            .and_then(Value::as_i64).unwrap_or(0);
+                                        let tamanho = human_bytes(
+                                            v.get("total_size_bytes")
+                                                .and_then(Value::as_i64).unwrap_or(0),
+                                        );
+                                        let publicada = text(v, "published_at");
+                                        view! {
+                                            <div>
+                                                <div class="oc-row oc-gap-5 oc-mb-1">
+                                                    <span class="oc-fill oc-t-cell-2">
+                                                        {text(v, "label")}
+                                                    </span>
+                                                    {badge(status.clone(), Tone::of(&status))}
+                                                </div>
+                                                <div class="oc-mono oc-t-ghost">
+                                                    {format!("{ficheiros} ficheiro(s) · {tamanho}")}
+                                                    {(!publicada.is_empty()).then(
+                                                        || format!(" · publicada {publicada}"))}
+                                                </div>
+                                                {(!text(v, "provenance").is_empty()).then(|| view! {
+                                                    <div class="oc-t-note">{text(v, "provenance")}</div>
+                                                })}
+                                            </div>
+                                        }
+                                    }).collect_view()}
+                                </div>
+                            }.into_any()
+                        }}
+                    </div>
+                </section>
+            </div>
         </div>
     }
     .into_any()
@@ -1141,6 +1424,83 @@ pub(crate) mod tests {
                 "falta a secção {id}"
             );
         }
+    }
+
+    /// O detalhe de uma tarefa oferece os movimentos legais e a atribuição —
+    /// e nada disso a quem não escreve no ambiente (F-14).
+    #[test]
+    fn o_detalhe_de_uma_tarefa_permite_mudar_estado_e_atribuir() {
+        let task = json!({
+            "id": "33333333-3333-4333-8333-333333333333",
+            "workspace_id": "w1",
+            "title": "Calibrar",
+            "description": "Detalhe",
+            "state": "todo",
+            "priority": "normal",
+            "assignee_id": null,
+            "available_transitions": ["in_progress", "blocked", "cancelled"],
+        });
+        let overview = json!({
+            "workspace": {"id": "w1", "may_create": true},
+            "members": [{"person_id": "p1", "full_name": "Ana"}]
+        });
+        let html = task_detail(&task, &overview, None, None).to_html();
+        assert!(html.contains("A fazer"), "falta o rótulo do estado");
+        assert!(
+            html.contains("Marcar «Em curso»"),
+            "falta o botão de transição"
+        );
+        assert!(html.contains(r#"action="/tasks/33333333-3333-4333-8333-333333333333/transition""#));
+        assert!(html.contains(r#"action="/tasks/33333333-3333-4333-8333-333333333333/assignee""#));
+        assert!(html.contains("Ana"), "falta o candidato a responsável");
+        assert!(html.contains("Sem responsável"));
+
+        // Sem autoridade para escrever, os controlos não aparecem.
+        let so_leitura = json!({"workspace": {"id": "w1", "may_create": false}, "members": []});
+        let read = task_detail(&task, &so_leitura, None, None).to_html();
+        assert!(!read.contains("Marcar «Em curso»"));
+        assert!(!read.contains("Atribuir"));
+    }
+
+    /// O detalhe de um dataset mostra a sua governança e as suas versões, e
+    /// liga de volta ao ambiente — deixou de ser uma linha morta na lista (F-13).
+    #[test]
+    fn o_detalhe_de_um_dataset_mostra_governanca_e_versoes() {
+        let dataset = json!({
+            "id": "44444444-4444-4444-8444-444444444444",
+            "workspace_id": "w7",
+            "code": "DS-001",
+            "title": "Leituras de campo",
+            "description": "Séries temporais.",
+            "origin": "measured",
+            "licence": "CC-BY-4.0",
+            "usage_restrictions": "Uso interno",
+            "keywords": ["clima", "sensor"],
+            "classification": "INTERNAL",
+            "state": "active",
+        });
+        let versions = json!([
+            {"id": "v1", "label": "v1", "status": "published", "provenance": "Recolha inicial",
+             "file_count": 3, "total_size_bytes": 2048, "published_at": "2026-09-01"}
+        ]);
+        let html = dataset_detail(&dataset, &versions).to_html();
+        assert!(html.contains("DS-001"), "falta o código");
+        assert!(html.contains("CC-BY-4.0"), "falta a licença");
+        assert!(html.contains("clima · sensor"), "faltam as palavras-chave");
+        assert!(html.contains("Versões"), "falta a secção de versões");
+        assert!(
+            html.contains("3 ficheiro(s) · 2.0 kB"),
+            "falta o material da versão"
+        );
+        assert!(html.contains("Recolha inicial"), "falta a proveniência");
+        assert!(
+            html.contains(r#"href="/workspaces/w7""#),
+            "falta a ligação de volta ao ambiente"
+        );
+
+        // Sem versões, o dataset explica o que uma versão é em vez de ficar vazio.
+        let vazio = dataset_detail(&dataset, &json!([])).to_html();
+        assert!(vazio.contains("ainda não tem versões"));
     }
 
     /// Helper: render an idea workspace with a given state, transitions and

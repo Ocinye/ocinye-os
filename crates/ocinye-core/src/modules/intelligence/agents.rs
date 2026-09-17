@@ -382,6 +382,49 @@ pub async fn list(
         .collect()
 }
 
+/// Read a single agent the actor may see.
+///
+/// Visibility is decided in the same SQL as [`list`], so an agent the actor may
+/// not see returns [`CoreError::NotFound`] rather than travelling out of the
+/// database — an agent hidden from the list is not reachable by identifier.
+///
+/// # Errors
+///
+/// Returns [`CoreError::NotFound`] when no visible agent has that id.
+pub async fn get(
+    pool: &PgPool,
+    actor: &Principal,
+    agent_id: Uuid,
+    capabilities: &SystemCapabilities,
+) -> CoreResult<Agent> {
+    let row = sqlx::query(
+        "SELECT a.id, a.name, a.purpose, a.instructions, a.capability, a.scope, a.scope_id,
+                a.max_classification, a.uses_bibliography, a.uses_documents, a.uses_datasets,
+                a.enabled, a.created_at, p.full_name AS created_by_name
+           FROM ai_agents a
+           JOIN people p ON p.id = a.created_by_id
+          WHERE a.organisation_id = $1
+            AND a.archived_at IS NULL
+            AND a.id = $5
+            AND (
+                a.scope = 'institutional'
+                OR (a.scope = 'personal' AND a.created_by_id = $2)
+                OR (a.scope = 'unit' AND a.scope_id = ANY($3))
+                OR (a.scope = 'workspace' AND a.scope_id = ANY($4))
+            )",
+    )
+    .bind(actor.organisation_id)
+    .bind(actor.person_id)
+    .bind(actor.unit_ids())
+    .bind(actor.workspace_ids())
+    .bind(agent_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| CoreError::NotFound("Agent not found.".to_owned()))?;
+
+    agent_from_row(&row, capabilities)
+}
+
 /// Build an agent from a row, deriving its execution state.
 fn agent_from_row(
     row: &sqlx::postgres::PgRow,

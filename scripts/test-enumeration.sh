@@ -85,6 +85,9 @@ falhas=0
 # pergunta de porquê.
 suites() {
     cat <<'TABELA'
+# 109 desde 2026-09-17: entrou a TASK_LIFECYCLE_E2E — criar uma tarefa, abrir o
+# detalhe, mudar-lhe o estado e atribuir responsável, com prova em PostgreSQL.
+#
 # 108 desde 2026-09-17: entrou a IDEA_TO_PROJECT_E2E — abrir uma ideia, avançá-la
 # de estado até candidata, promovê-la, e ver o projecto nascer ligado.
 #
@@ -210,7 +213,16 @@ suites() {
 # 105 → 106 em 2026-09-11: entrou a regressão do destinatário por confirmar —
 # escrever um endereço sem o confirmar e enviar, e vê-lo ir no campo `to` em vez
 # de o envio recusar com a caixa vazia. Uma viagem, uma marca.
-viagens-de-browser|108|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|108
+# 106 → 109 em 2026-09-16/17 (certificação final pré-IA): o menu Criar abre cada
+# criação determinista; Ideia → Projecto pelo produto até promover; e o ciclo de
+# vida de uma Tarefa pelo detalhe. Três viagens, três marcas.
+# 109 → 110 em 2026-09-17: o detalhe de um dataset (F-13) — criar um dataset,
+# provar que a linha da lista liga ao detalhe, e abrir a sua governança. Uma
+# viagem, uma marca.
+# 110 → 111 em 2026-09-17: o detalhe de um agente (F-15) — criar um agente,
+# provar que a linha da lista liga ao detalhe, e ver a sua definição e o estado
+# real (configurado, sem nó). Uma viagem, uma marca.
+viagens-de-browser|111|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|111
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

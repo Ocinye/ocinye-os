@@ -6911,3 +6911,14 @@ select.oc-entrada {
 .oc-lifecycle__close > summary::-webkit-details-marker { display: none; }
 .oc-lifecycle__close[open] > summary { border-color: var(--oc-navy); }
 .oc-lifecycle__close .oc-input { min-width: 220px; }
+
+/* ── Uma linha de tarefa que abre o detalhe ─────────────────────────────
+   A tarefa deixou de ser só de leitura: a linha inteira é uma ligação. */
+.oc-task-row {
+  display: block;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  border-radius: var(--oc-r-sm);
+  color: inherit;
+}
+.oc-task-row:hover { background: var(--oc-surface-tint); }

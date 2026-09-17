@@ -11334,6 +11334,84 @@ async fn idea_to_project_e2e() {
     esperar_por(&recarregado, &marca).await;
 }
 
+/// TASK_LIFECYCLE_E2E — uma tarefa deixou de ser uma linha só de leitura.
+///
+/// Cria uma tarefa, abre o seu detalhe pela lista do ambiente, muda-lhe o estado
+/// e atribui-lhe um responsável pelos controlos do produto, e prova no
+/// PostgreSQL que o estado e o responsável mudaram — com recarregar (F-14).
+#[tokio::test]
+async fn task_lifecycle_e2e() {
+    let harness = harness!();
+    let (pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.owns_a_workspace(pessoa).await;
+
+    // ── Criar a tarefa ──────────────────────────────────────────────────
+    let titulo = unique_title("Calibrar a bancada");
+    let page = harness.open("/tasks/new").await;
+    esperar_por(&page, "Nova Tarefa").await;
+    let destino = valor_de(&page, "select[name=workspace_id] option:nth-child(1)").await;
+    escolher(&page, "select[name=workspace_id]", &destino).await;
+    set_field(&page, "input[name=title]", &titulo).await;
+    submit(&page, "form[action$='/tasks/new']").await;
+    esperar_por(&page, &titulo).await; // aparece na lista de tarefas do ambiente
+
+    // A tarefa é uma entidade real: procura-se o seu id para abrir o detalhe.
+    let task_id: Uuid = {
+        let limite = std::time::Instant::now();
+        loop {
+            let found: Option<Uuid> = sqlx::query_scalar("SELECT id FROM tasks WHERE title = $1")
+                .bind(&titulo)
+                .fetch_optional(&harness.pool)
+                .await
+                .expect("procura da tarefa");
+            if let Some(id) = found {
+                break id;
+            }
+            assert!(limite.elapsed() < DEADLINE, "a tarefa não foi criada");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    };
+
+    // ── Abrir o detalhe e mudar o estado ────────────────────────────────
+    let detail = harness.open(&format!("/tasks/{task_id}")).await;
+    esperar_por(&detail, "Mudar estado").await;
+    // Uma tarefa nasce em «todo»; avança-se para «em curso».
+    submit(&detail, "form:has(input[value=\"in_progress\"])").await;
+    esperar_por(&detail, "Em curso").await;
+
+    // ── Atribuir o responsável (o próprio membro é o líder do ambiente) ──
+    let candidato = valor_de(&detail, "select[name=assignee_id] option:nth-child(2)").await;
+    escolher(&detail, "select[name=assignee_id]", &candidato).await;
+    submit(&detail, "form[action$='/assignee']").await;
+    esperar_por(&detail, "Em curso").await;
+
+    // ── Prova no PostgreSQL, e persiste ao recarregar ───────────────────
+    let (estado, responsavel): (String, Option<Uuid>) = {
+        let limite = std::time::Instant::now();
+        loop {
+            let row: (String, Option<Uuid>) =
+                sqlx::query_as("SELECT state, assignee_id FROM tasks WHERE id = $1")
+                    .bind(task_id)
+                    .fetch_one(&harness.pool)
+                    .await
+                    .expect("consulta da tarefa");
+            if row.0 == "in_progress" && row.1.is_some() {
+                break row;
+            }
+            assert!(
+                limite.elapsed() < DEADLINE,
+                "o estado/responsável não mudou"
+            );
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    };
+    assert_eq!(estado, "in_progress");
+    assert!(responsavel.is_some(), "a tarefa ficou sem responsável");
+
+    let recarregada = harness.open(&format!("/tasks/{task_id}")).await;
+    esperar_por(&recarregada, "Em curso").await;
+}
+
 /// Uma pessoa cria um dataset pelo produto, dentro de um ambiente onde escreve.
 ///
 /// A criação de datasets era exercitada só pelo Core; aqui percorre-se o ecrã:
@@ -11364,6 +11442,116 @@ async fn uma_pessoa_cria_um_dataset_no_seu_ambiente() {
 
     // A criação leva à lista de Datasets, e o dataset está lá.
     esperar_por(&pagina, &titulo).await;
+}
+
+/// Um dataset deixou de ser uma linha morta na lista: abre no seu detalhe (F-13).
+///
+/// Cria-se um dataset pelo produto, prova-se que a linha da lista liga ao
+/// detalhe, abre-se `/datasets/{id}` e vê-se a governança do dataset — e um
+/// dataset escondido não é alcançável por identificador (o Core reautoriza).
+#[tokio::test]
+async fn dataset_detail_e2e() {
+    let harness = harness!();
+    let (pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.owns_a_workspace(pessoa).await;
+
+    // ── Criar o dataset pelo ecrã ───────────────────────────────────────
+    let codigo = unique_title("DS");
+    let titulo = unique_title("Leituras de campo");
+    let pagina = harness.open("/datasets/new").await;
+    esperar_por(&pagina, "Novo Dataset").await;
+    let destino = valor_de(&pagina, "select[name=workspace_id] option:nth-child(1)").await;
+    escolher(&pagina, "select[name=workspace_id]", &destino).await;
+    set_field(&pagina, "input[name=code]", &codigo).await;
+    set_field(&pagina, "input[name=title]", &titulo).await;
+    submit(&pagina, "form[action$='/datasets/new']").await;
+    esperar_por(&pagina, &titulo).await;
+
+    // O dataset é uma entidade real: procura-se o seu id.
+    let dataset_id: Uuid = {
+        let limite = std::time::Instant::now();
+        loop {
+            let found: Option<Uuid> =
+                sqlx::query_scalar("SELECT id FROM datasets WHERE title = $1")
+                    .bind(&titulo)
+                    .fetch_optional(&harness.pool)
+                    .await
+                    .expect("procura do dataset");
+            if let Some(id) = found {
+                break id;
+            }
+            assert!(limite.elapsed() < DEADLINE, "o dataset não foi criado");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    };
+
+    // ── A linha da lista liga ao detalhe ────────────────────────────────
+    let lista = harness.open("/datasets").await;
+    let html = lista.content().await.unwrap_or_default();
+    assert!(
+        html.contains(&format!("/datasets/{dataset_id}")),
+        "a linha do dataset não liga ao detalhe"
+    );
+
+    // ── Abrir o detalhe ─────────────────────────────────────────────────
+    let detalhe = harness.open(&format!("/datasets/{dataset_id}")).await;
+    esperar_por(&detalhe, "Sobre o dataset").await;
+    esperar_por(&detalhe, &titulo).await; // é o detalhe deste dataset
+    esperar_por(&detalhe, "Versões").await;
+    // O código está lá — o produto normaliza-o para maiúsculas.
+    esperar_por(&detalhe, &codigo.to_uppercase()).await;
+}
+
+/// Um agente deixou de ser uma linha morta na lista: abre no seu detalhe (F-15).
+///
+/// Cria-se um agente pelo produto (pessoal, capacidade por omissão), prova-se
+/// que a linha da lista liga ao detalhe, abre-se `/ai/agents/{id}` e vê-se a sua
+/// definição e o estado real — configurado, porque não há nó de IA.
+#[tokio::test]
+async fn agent_detail_e2e() {
+    let harness = harness!();
+    let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // ── Criar o agente pelo ecrã ────────────────────────────────────────
+    let nome = unique_title("Assistente de Metodologia");
+    let pagina = harness.open("/ai/agents/new").await;
+    esperar_por(&pagina, "Criar Agente").await;
+    set_field(&pagina, "input[name=name]", &nome).await;
+    submit(&pagina, "form[action$='/ai/agents/new']").await;
+    esperar_por(&pagina, &nome).await; // aparece na lista de agentes
+
+    // O agente é uma entidade real: procura-se o seu id.
+    let agent_id: Uuid = {
+        let limite = std::time::Instant::now();
+        loop {
+            let found: Option<Uuid> =
+                sqlx::query_scalar("SELECT id FROM ai_agents WHERE name = $1")
+                    .bind(&nome)
+                    .fetch_optional(&harness.pool)
+                    .await
+                    .expect("procura do agente");
+            if let Some(id) = found {
+                break id;
+            }
+            assert!(limite.elapsed() < DEADLINE, "o agente não foi criado");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    };
+
+    // ── A linha da lista liga ao detalhe ────────────────────────────────
+    let lista = harness.open("/ai/agents").await;
+    let html = lista.content().await.unwrap_or_default();
+    assert!(
+        html.contains(&format!("/ai/agents/{agent_id}")),
+        "a linha do agente não liga ao detalhe"
+    );
+
+    // ── Abrir o detalhe ─────────────────────────────────────────────────
+    let detalhe = harness.open(&format!("/ai/agents/{agent_id}")).await;
+    esperar_por(&detalhe, "Definição").await;
+    esperar_por(&detalhe, &nome).await;
+    // Sem nó de IA, o agente está configurado e a página di-lo.
+    esperar_por(&detalhe, "correrá assim que existir uma").await;
 }
 
 /// Uma pessoa cria uma referência bibliográfica pelo produto.

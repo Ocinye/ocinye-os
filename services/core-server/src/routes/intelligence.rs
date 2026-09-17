@@ -30,6 +30,7 @@ pub fn routes() -> Router<AppState> {
         .route("/ai/models", get(list_models))
         .route("/ai/context-preview", get(context_preview))
         .route("/ai/agents", get(list_agents).post(create_agent))
+        .route("/ai/agents/{agent_id}", get(get_agent))
         .route("/ai/prompt", post(submit_prompt))
         .route("/ai/conversations", get(list_conversations))
         .route("/ai/conversations/{id}", get(get_conversation))
@@ -226,6 +227,46 @@ async fn list_agents(
 struct AgentList {
     items: Vec<intelligence::Agent>,
     total: usize,
+    execution_available: bool,
+}
+
+/// `GET /ai/agents/{id}`
+///
+/// One agent the caller may see, with its **derived** execution state and
+/// whether any AI capability can run today — so the detail can explain *why* the
+/// agent reads `configured` rather than `ready`. An agent hidden from the list
+/// is not reachable by identifier: visibility is decided in SQL (briefing §9).
+async fn get_agent(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(agent_id): Path<Uuid>,
+) -> Result<Json<AgentDetail>, ApiError> {
+    require(&principal, Permission::AgentsView, &ids)?;
+
+    let capabilities = platform::system_capabilities(
+        &state.pool,
+        &state.config,
+        state.store.is_some(),
+        state.mail_registry.reachability().await,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+
+    let agent = intelligence::agents::get(&state.pool, &principal, agent_id, &capabilities)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+
+    Ok(Json(AgentDetail {
+        execution_available: capabilities.any_ai_usable(),
+        agent,
+    }))
+}
+
+#[derive(Serialize)]
+struct AgentDetail {
+    #[serde(flatten)]
+    agent: intelligence::Agent,
     execution_available: bool,
 }
 
