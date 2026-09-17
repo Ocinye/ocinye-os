@@ -121,8 +121,10 @@ pub struct Comment {
 pub struct ActivityEntry {
     /// Identifier.
     pub id: Uuid,
-    /// Owning workspace.
-    pub workspace_id: Uuid,
+    /// Owning workspace. `None` for owner-scoped activity (a personal note has a
+    /// dono, not a workspace — migração 0038 tornou a coluna anulável). Sem isto
+    /// uma linha owner-scoped no feed falhava a descodificação `NULL`→`Uuid`.
+    pub workspace_id: Option<Uuid>,
     /// Who acted.
     pub actor_person_id: Option<Uuid>,
     /// Their name, joined for display.

@@ -7,6 +7,27 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### «Actividade» deixa de dar 502 (o Core devolvia 500) — 2026-09-17
+
+Abrir **Actividade** (`/activity`) dava 502; o Core devolvia **500** em 3 ms — um
+erro de descodificação, não uma consulta lenta (`F-18`, P1).
+
+- **Causa.** A `activity_entries` passou a ter linhas **owner-scoped** (a
+  actividade de uma nota pessoal: `workspace_id IS NULL`, migrações 0031/0038),
+  mas o feed institucional lia `workspace_id` para um `Uuid` **não-opcional** — e
+  `NULL`→`Uuid` falha. Só aparecia com dados reais e visibilidade larga (um
+  `PlatformAdmin` alcança essas linhas, e `page_size=100` puxa-as); a base fresca
+  do CI nunca continha uma. Confirmado nos logs de produção.
+- **Correcção.** `ActivityEntry.workspace_id` e `ActivityView.workspace_id`
+  passam a `Option<Uuid>` (a verdade do esquema desde 0038), **e** o feed
+  institucional filtra `WHERE workspace_id IS NOT NULL`: a actividade owner-scoped
+  é privada ao dono, tem o seu próprio painel, e não entra no feed partilhado —
+  onde, aliás, um administrador de visibilidade larga não a deve ver.
+- **Prova.** Teste com base
+  `o_feed_de_actividade_ignora_actividade_owner_scoped_e_nao_rebenta` (não rebenta
+  e não mostra a linha owner-scoped), verificado por reversão. Registo em
+  [`DEFECT_REGISTER.md`](docs/audits/pre-ai-final/DEFECT_REGISTER.md) → F-18.
+
 ### Estado activo de navegação canónico — azul + branco, sem dourado — 2026-09-17
 
 O separador activo de uma navegação por secções (Research Workspace) mostrava

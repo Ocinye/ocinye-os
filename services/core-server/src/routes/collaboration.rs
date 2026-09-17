@@ -332,7 +332,8 @@ struct ActivityQuery {
 #[derive(Serialize)]
 struct ActivityView {
     id: Uuid,
-    workspace_id: Uuid,
+    /// `None` para actividade owner-scoped (nota pessoal), que não tem workspace.
+    workspace_id: Option<Uuid>,
     actor_name: Option<String>,
     kind: String,
     subject_type: String,
