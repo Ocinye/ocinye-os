@@ -82,6 +82,11 @@ struct WorkspaceView {
     /// executar. Continua a ser cortesia de renderização — as duas operações
     /// decidem outra vez, e há uma viagem que exige que decidam.
     may_manage_members: bool,
+    /// Se este membro pode mover a ideia deste ambiente na sua vida (avançar de
+    /// estado, marcá-la candidata, fechá-la). É a mesma pergunta que
+    /// `transition_idea` faz — `Action::Transition` — para o controlo não
+    /// aparecer a quem o Core recusaria.
+    may_transition: bool,
 }
 
 impl From<&research::ResearchWorkspace> for WorkspaceView {
@@ -97,6 +102,7 @@ impl From<&research::ResearchWorkspace> for WorkspaceView {
             // resposta conservadora é a única honesta.
             may_create: false,
             may_manage_members: false,
+            may_transition: false,
         }
     }
 }
@@ -126,6 +132,12 @@ impl WorkspaceView {
                     workspace,
                     ocinye_domain::ResourceKind::ResearchWorkspace,
                 ),
+            )
+            .is_ok(),
+            may_transition: ocinye_domain::policy::authorize(
+                principal,
+                ocinye_domain::Action::Transition,
+                &research::workspace_context(workspace, ocinye_domain::ResourceKind::Idea),
             )
             .is_ok(),
             ..Self::from(workspace)
@@ -202,6 +214,19 @@ async fn list_workspaces(
     )))
 }
 
+/// A state an idea may legally move to next, with what the move requires.
+///
+/// The list comes from the domain lifecycle (`idea_targets_from`), so the
+/// Workspace never hardcodes which state can follow which — it just renders the
+/// options the Core allows for this idea, right now.
+#[derive(Serialize)]
+struct TransitionOption {
+    /// Stable code of the target state, e.g. `exploration`.
+    state: String,
+    /// Whether moving here needs a recorded reason (closing an idea).
+    requires_note: bool,
+}
+
 #[derive(Serialize)]
 struct IdeaView {
     id: Uuid,
@@ -213,6 +238,10 @@ struct IdeaView {
     keywords: Vec<String>,
     state: String,
     outcome_note: Option<String>,
+    /// The states this idea may move to next — the lifecycle, made actionable.
+    available_transitions: Vec<TransitionOption>,
+    /// Whether the idea is in the state from which it may be promoted.
+    promotable: bool,
     /// Set once the idea has become a project. The lineage is kept on both
     /// sides and never rewritten.
     promoted_project_id: Option<Uuid>,
@@ -220,6 +249,21 @@ struct IdeaView {
 
 impl From<research::Idea> for IdeaView {
     fn from(idea: research::Idea) -> Self {
+        // The lifecycle is the domain's, not the UI's: the allowed next states
+        // (and whether each needs a reason) come from `idea_targets_from`.
+        let (available_transitions, promotable) = match IdeaState::parse(&idea.state) {
+            Some(current) => (
+                ocinye_domain::workflow::idea_targets_from(current)
+                    .iter()
+                    .map(|target| TransitionOption {
+                        state: target.as_str().to_owned(),
+                        requires_note: ocinye_domain::workflow::requires_outcome_note(*target),
+                    })
+                    .collect(),
+                current == IdeaState::ProjectCandidate,
+            ),
+            None => (Vec::new(), false),
+        };
         Self {
             id: idea.id,
             title: idea.title,
@@ -230,6 +274,8 @@ impl From<research::Idea> for IdeaView {
             keywords: idea.keywords,
             state: idea.state,
             outcome_note: idea.outcome_note,
+            available_transitions,
+            promotable,
             promoted_project_id: idea.promoted_project_id,
         }
     }
@@ -238,6 +284,9 @@ impl From<research::Idea> for IdeaView {
 #[derive(Serialize)]
 struct ProjectView {
     id: Uuid,
+    /// The Research Workspace that hosts the project. Without it, opening a
+    /// project by URL (`/projects/{id}`) cannot resolve where to go.
+    workspace_id: Uuid,
     code: String,
     title: String,
     summary: Option<String>,
@@ -252,6 +301,7 @@ impl From<research::Project> for ProjectView {
     fn from(project: research::Project) -> Self {
         Self {
             id: project.id,
+            workspace_id: project.workspace_id,
             code: project.code,
             title: project.title,
             summary: project.summary,

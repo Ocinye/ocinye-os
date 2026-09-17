@@ -94,6 +94,7 @@ pub const ROUTES: &[&str] = &[
     "/units/{unit_id}/members/role",
     "/units/{unit_id}/members/remove",
     "/ideas",
+    "/ideas/{idea_id}/transition",
     "/units/new",
     "/projects/new",
     "/bibliography/new",
@@ -392,6 +393,7 @@ pub fn router(state: WorkspaceState) -> Router {
         )
         .route("/ideas/new", get(new_idea_form).post(create_idea))
         .route("/ideas/{idea_id}", get(idea_workspace))
+        .route("/ideas/{idea_id}/transition", post(transition_idea))
         .route("/projects", get(projects))
         .route("/projects/{project_id}", get(project_workspace))
         .route("/workspaces/{workspace_id}", get(research_workspace))
@@ -4383,6 +4385,7 @@ async fn idea_workspace(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
     Path(idea_id): Path<Uuid>,
+    Query(aviso): Query<AvisoQuery>,
 ) -> Response {
     let member = member_or_login!(state, headers);
 
@@ -4401,9 +4404,70 @@ async fn idea_workspace(
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_owned();
-            Redirect::to(&format!("/workspaces/{workspace_id}")).into_response()
+            // Um aviso (o resultado de uma transição, por exemplo) viaja com o
+            // redirecto para o ambiente, onde é mostrado.
+            let mut destino = format!("/workspaces/{workspace_id}");
+            let mut query: Vec<String> = Vec::new();
+            if let Some(ok) = aviso.ok.as_deref().filter(|s| !s.is_empty()) {
+                query.push(format!("ok={}", urlencoding_minimal(ok)));
+            }
+            if let Some(erro) = aviso.erro.as_deref().filter(|s| !s.is_empty()) {
+                query.push(format!("erro={}", urlencoding_minimal(erro)));
+            }
+            if !query.is_empty() {
+                destino.push('?');
+                destino.push_str(&query.join("&"));
+            }
+            Redirect::to(&destino).into_response()
         }
         Err(failure) => failure_response(&failure),
+    }
+}
+
+#[derive(Deserialize)]
+struct TransitionForm {
+    state: String,
+    #[serde(default)]
+    outcome_note: String,
+}
+
+/// Move uma ideia na sua vida — avançar de estado, marcá-la candidata a
+/// projecto, ou fechá-la (rejeitar/arquivar, com a razão).
+///
+/// Proxy para `POST /api/v1/ideas/{id}/transitions`. O ciclo de vida é do
+/// domínio: a interface só oferece os estados que o Core devolveu como legais
+/// para esta ideia, e o Core reautoriza e revalida a transição.
+async fn transition_idea(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(idea_id): Path<Uuid>,
+    Form(form): Form<TransitionForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let body = serde_json::json!({
+        "state": form.state,
+        "outcome_note": blank_to_none(form.outcome_note),
+    });
+
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/ideas/{idea_id}/transitions"),
+        &body,
+    )
+    .await
+    {
+        // A ideia abre no seu ambiente, onde o novo estado já se vê.
+        Ok(_) => Redirect::to(&format!("/ideas/{idea_id}")).into_response(),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        // A recusa (transição ilegal, falta de autoridade) volta ao ambiente da
+        // ideia com a razão do Core, em vez de ser engolida.
+        Err(failure) => {
+            let motivo = urlencoding_minimal(&failure.to_string());
+            Redirect::to(&format!("/ideas/{idea_id}?erro={motivo}")).into_response()
+        }
     }
 }
 

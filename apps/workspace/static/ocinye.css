@@ -6885,3 +6885,29 @@ select.oc-entrada {
   background: var(--oc-warning-bg); border: 1px solid var(--oc-warning-border); color: var(--oc-warning-text);
   border-radius: var(--oc-r-md); padding: var(--oc-space-4) var(--oc-space-6); font-size: 13px;
 }
+
+/* ── Ciclo de vida de uma ideia ─────────────────────────────────────────
+   O strip que torna as transições de estado accionáveis: avançar, marcar
+   candidata, promover, ou fechar. Só aparece a quem as pode fazer. */
+.oc-lifecycle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.oc-lifecycle__label {
+  font: 500 9.5px var(--oc-font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--oc-text-meta);
+  margin-right: 2px;
+}
+/* Um `<form>` de um passo não deve quebrar o alinhamento do strip: o botão é
+   que é o item. */
+.oc-lifecycle__step { display: contents; }
+.oc-lifecycle__close { position: relative; }
+.oc-lifecycle__close > summary { list-style: none; cursor: pointer; }
+.oc-lifecycle__close > summary::-webkit-details-marker { display: none; }
+.oc-lifecycle__close[open] > summary { border-color: var(--oc-navy); }
+.oc-lifecycle__close .oc-input { min-width: 220px; }

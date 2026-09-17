@@ -92,32 +92,186 @@ pub struct WorkspaceView {
     pub gestao: GestaoDePessoas,
 }
 
-/// Constrói as tabs: só as que têm ecrã navegam.
+/// O destino de um separador do Research Workspace.
+///
+/// Um separador ou salta para uma secção deste ecrã (âncora `#…`, e o conteúdo
+/// já está renderizado por baixo), ou leva a outro ecrã (cadeia científica, IA),
+/// ou **não existe ainda** — e nesse caso não é um separador. Um separador
+/// inerte que não navega é um controlo morto, e era o defeito (F-11).
+fn tab_destination(label: &str, workspace_id: &str) -> Option<String> {
+    Some(match label {
+        // Secções deste ecrã — âncora para o conteúdo já renderizado.
+        "Visão geral" => "#ws-visao-geral".to_owned(),
+        "Membros" => "#ws-membros".to_owned(),
+        // «Fontes» e «Bibliografia» são a mesma coisa: as referências do ambiente.
+        "Bibliografia" | "Fontes" => "#ws-bibliografia".to_owned(),
+        "Notas" => "#ws-notas".to_owned(),
+        "Documentos" => "#ws-documentos".to_owned(),
+        "Datasets" | "Dados" => "#ws-datasets".to_owned(),
+        "Tarefas" => "#ws-tarefas".to_owned(),
+        // A actividade é a história do ambiente.
+        "Actividade" | "Histórico" => "#ws-actividade".to_owned(),
+        // Outros ecrãs.
+        "IA" => format!("/ai/prompt?workspace={workspace_id}"),
+        // Experiências e Resultados são duas leituras da mesma cadeia
+        // científica, e por isso levam ao mesmo ecrã.
+        "Experiências" | "Resultados" => format!("/workspaces/{workspace_id}/science"),
+        // «Código», «Planeamento», «Financiamento» ainda não existem como ecrã;
+        // não se mostram como separador morto.
+        _ => return None,
+    })
+}
+
+/// Constrói os separadores: só os que têm destino real. Os que não têm ficam de
+/// fora, em vez de aparecerem inertes.
 fn tabs(labels: &[&'static str], workspace_id: &str) -> Vec<Tab> {
     labels
         .iter()
-        .enumerate()
-        .map(|(i, label)| match *label {
-            "Visão geral" => Tab::link(*label, format!("/workspaces/{workspace_id}"), i == 0),
-            "IA" => Tab::link(
-                *label,
-                format!("/ai/prompt?workspace={workspace_id}"),
-                false,
-            ),
-            // Experiências e Resultados são duas leituras da mesma cadeia
-            // científica, e por isso levam ao mesmo ecrã. Duas páginas que
-            // partissem a cadeia ao meio obrigariam a saltar entre elas para
-            // seguir uma linhagem — que é a única coisa que a cadeia serve
-            // para fazer.
-            "Experiências" | "Resultados" => {
-                Tab::link(*label, format!("/workspaces/{workspace_id}/science"), false)
-            }
-            other => Tab::inert(other),
+        .filter_map(|label| {
+            tab_destination(label, workspace_id)
+                .map(|href| Tab::link(*label, href, *label == "Visão geral"))
         })
         .collect()
 }
 
-/// O Research Workspace.
+/// O rótulo em português de um estado de ideia.
+fn idea_state_label(code: &str) -> &'static str {
+    match code {
+        "discovery" => "Descoberta",
+        "exploration" => "Exploração",
+        "concept" => "Conceito",
+        "review" => "Revisão",
+        "project_candidate" => "Candidata a Projecto",
+        "promoted" => "Promovida",
+        "rejected" => "Rejeitada",
+        "archived" => "Arquivada",
+        _ => "Estado",
+    }
+}
+
+/// O verbo do botão que move a ideia para um estado.
+fn idea_transition_verb(code: &str) -> String {
+    match code {
+        "rejected" => "Rejeitar".to_owned(),
+        "archived" => "Arquivar".to_owned(),
+        "discovery" => "Reabrir".to_owned(),
+        "project_candidate" => "Marcar como candidata a projecto".to_owned(),
+        other => format!("Avançar para {}", idea_state_label(other)),
+    }
+}
+
+/// Os controlos do ciclo de vida de uma ideia.
+///
+/// A lista de movimentos é do Core (`available_transitions`), não da interface:
+/// o ecrã só oferece o que o domínio permite para esta ideia, agora. Fechar
+/// (rejeitar/arquivar) pede a razão, que é memória institucional. «Promover a
+/// Projecto» é a acção primária quando a ideia chega a candidata.
+fn idea_lifecycle_actions(id: &str, idea: &Value, workspace: &Value) -> impl IntoView {
+    let may_transition = workspace
+        .get("may_transition")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let promotable = idea
+        .get("promotable")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let transitions: Vec<(String, bool)> = idea
+        .get("available_transitions")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|t| {
+                    let state = t.get("state").and_then(Value::as_str)?.to_owned();
+                    let requires_note = t
+                        .get("requires_note")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    Some((state, requires_note))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Sem autoridade para transitar e sem promoção possível, não há nada a
+    // mostrar — e um strip vazio seria ruído.
+    if !may_transition && !promotable {
+        return view! { <span hidden></span> }.into_any();
+    }
+
+    // A transição é sobre a **ideia** (`/ideas/{idea}/transition`); a promoção
+    // pré-escolhe o **ambiente** no selector (`?workspace={ws}`). São dois ids.
+    let idea_id = text(idea, "id");
+    let action = format!("/ideas/{idea_id}/transition");
+    let promote_href = format!("/projects/new?workspace={id}");
+
+    view! {
+        <div class="oc-lifecycle" role="group" aria-label="Ciclo de vida da ideia">
+            <span class="oc-lifecycle__label">"Ciclo de vida"</span>
+
+            {promotable.then(|| {
+                button(Button::new("Promover a Projecto", Variant::Gold).href(promote_href.clone()))
+            })}
+
+            {may_transition.then(|| {
+                transitions
+                    .clone()
+                    .into_iter()
+                    .map(|(estado, requires_note)| {
+                        let verbo = idea_transition_verb(&estado);
+                        let accao = action.clone();
+                        if requires_note {
+                            view! {
+                                <details class="oc-lifecycle__close">
+                                    <summary class="oc-btn oc-btn--sm oc-btn--secondary">
+                                        {verbo}
+                                    </summary>
+                                    <form
+                                        method="post"
+                                        action=accao
+                                        class="oc-row oc-row--wrap oc-gap-3 oc-mt-3"
+                                    >
+                                        <input type="hidden" name="state" value=estado />
+                                        <input
+                                            class="oc-input"
+                                            type="text"
+                                            name="outcome_note"
+                                            required
+                                            minlength="3"
+                                            placeholder="Razão (fica no registo)"
+                                        />
+                                        <button
+                                            class="oc-btn oc-btn--sm oc-btn--danger"
+                                            type="submit"
+                                        >
+                                            "Confirmar"
+                                        </button>
+                                    </form>
+                                </details>
+                            }
+                            .into_any()
+                        } else {
+                            view! {
+                                <form method="post" action=accao class="oc-lifecycle__step">
+                                    <input type="hidden" name="state" value=estado />
+                                    <button
+                                        class="oc-btn oc-btn--sm oc-btn--secondary"
+                                        type="submit"
+                                    >
+                                        {verbo}
+                                    </button>
+                                </form>
+                            }
+                            .into_any()
+                        }
+                    })
+                    .collect_view()
+            })}
+        </div>
+    }
+    .into_any()
+}
+
+/// O Research Workspace — o detalhe partilhado de uma Ideia ou de um Projecto.
 pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
     let WorkspaceView {
         overview,
@@ -180,18 +334,6 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                 </div>
 
                 <div class="oc-head__actions">
-                    {button(Button::new("Partilhar", Variant::Secondary).not_yet_available())}
-                    // A promoção passou a existir. Era `not_yet_available` quando
-                    // não havia ecrã por trás; agora leva ao selector com esta
-                    // ideia já escolhida. O Core decide na mesma se ela está em
-                    // estado de ser promovida.
-                    {(!is_project)
-                        .then(|| {
-                            button(
-                                Button::new("Promover a Projecto", Variant::Secondary)
-                                    .href(format!("/projects/new?workspace={id}")),
-                            )
-                        })}
                     {button(
                         Button::new("IA neste workspace", Variant::Primary)
                             .href(format!("/ai/prompt?workspace={id}"))
@@ -200,10 +342,16 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                 </div>
             </div>
 
+            // O ciclo de vida da ideia: avançar de estado, marcá-la candidata,
+            // promovê-la, ou fechá-la — só os movimentos que o Core devolveu como
+            // legais, e só a quem os pode fazer. Era isto que faltava para uma
+            // ideia poder chegar a projecto pelo produto (F-10).
+            {(!is_project).then(|| idea_lifecycle_actions(&id, &idea, &workspace))}
+
             {context_tabs(tabs(tab_labels, &id), "Secções do Research Workspace")}
         </div>
 
-        <div class="oc-page oc-page" >
+        <div class="oc-page oc-page" id="ws-visao-geral" >
             <div class="oc-grid oc-grid--ws">
                 {if is_project {
                     project_overview(&project, &members).into_any()
@@ -211,7 +359,7 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                     idea_overview(&idea, &sources, &datasets).into_any()
                 }}
 
-                {pessoas_do_ambiente(&id, &members, &gestao)}
+                <div id="ws-membros">{pessoas_do_ambiente(&id, &members, &gestao)}</div>
 
                 {assist(Assist {
                     here: if is_project { "este Projecto" } else { "esta Ideia" },
@@ -230,25 +378,33 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                     may_use: may_use_assistance,
                 })}
 
-                <section class="oc-card">
+                <section class="oc-card" id="ws-actividade">
                     {section_head("Actividade recente", None, None)}
                     <div class="oc-card__body">{activity_list(&activity)}</div>
                 </section>
 
-                <section class="oc-card">
+                <section class="oc-card" id="ws-tarefas">
                     {section_head("Tarefas", None, None)}
                     <div class="oc-card__body">{task_list(&tasks)}</div>
                 </section>
             </div>
 
             <div class="oc-grid oc-grid--detail oc-mt-7" >
-                {artefact_card("Bibliografia", &sources, "title", "/bibliography")}
-                {artefact_card("Notas", &notes, "title", "/knowledge")}
+                <div id="ws-bibliografia">
+                    {artefact_card("Bibliografia", &sources, "title", "/bibliography")}
+                </div>
+                <div id="ws-notas">
+                    {artefact_card("Notas", &notes, "title", "/knowledge")}
+                </div>
             </div>
 
             <div class="oc-grid oc-grid--detail oc-mt-7" >
-                {artefact_card("Documentos", &documents, "title", "/knowledge")}
-                {artefact_card("Datasets", &datasets, "title", "/datasets")}
+                <div id="ws-documentos">
+                    {artefact_card("Documentos", &documents, "title", "/knowledge")}
+                </div>
+                <div id="ws-datasets">
+                    {artefact_card("Datasets", &datasets, "title", "/datasets")}
+                </div>
             </div>
         </div>
     }
@@ -943,12 +1099,59 @@ pub(crate) mod tests {
         assert_eq!(ai.href.as_deref(), Some("/ai/prompt?workspace=abc-123"));
     }
 
+    /// Nenhum separador do ambiente é inerte: cada um ou salta para uma secção
+    /// deste ecrã (âncora), ou leva a outro ecrã. Os que não têm destino ficam
+    /// fora, em vez de aparecerem mortos (F-11).
     #[test]
-    fn uma_ideia_oferece_promocao_e_um_projecto_nao() {
-        let idea = research_workspace(WorkspaceView {
+    fn nenhum_separador_do_ambiente_e_morto() {
+        let built = tabs(&IDEA_TABS, "abc-123");
+        // Todos os separadores construídos navegam.
+        assert!(
+            built.iter().all(|t| t.href.is_some()),
+            "um separador ficou sem destino"
+        );
+        // As secções deste ecrã são âncoras.
+        for (label, ancora) in [
+            ("Notas", "#ws-notas"),
+            ("Documentos", "#ws-documentos"),
+            ("Datasets", "#ws-datasets"),
+            ("Tarefas", "#ws-tarefas"),
+            ("Actividade", "#ws-actividade"),
+            ("Bibliografia", "#ws-bibliografia"),
+        ] {
+            let tab = built
+                .iter()
+                .find(|t| t.label == label)
+                .unwrap_or_else(|| panic!("falta o separador {label}"));
+            assert_eq!(tab.href.as_deref(), Some(ancora));
+        }
+        // «Código» ainda não existe: não aparece como separador.
+        assert!(
+            built.iter().all(|t| t.label != "Código"),
+            "«Código» não tem ecrã e não devia ser um separador"
+        );
+
+        // E o ecrã não renderiza nenhum separador «Ainda não disponível».
+        let html = idea_ws("exploration", json!([]), false, false);
+        assert!(!html.contains("Ainda não disponível"));
+        // As secções âncora existem no corpo.
+        for id in ["ws-notas", "ws-tarefas", "ws-actividade", "ws-datasets"] {
+            assert!(
+                html.contains(&format!("id=\"{id}\"")),
+                "falta a secção {id}"
+            );
+        }
+    }
+
+    /// Helper: render an idea workspace with a given state, transitions and
+    /// promotable/may_transition flags.
+    fn idea_ws(state: &str, transitions: Value, promotable: bool, may_transition: bool) -> String {
+        research_workspace(WorkspaceView {
             overview: json!({
-                "workspace": {"id": "w1", "code": "AI-IDEA-001", "classification": "INTERNAL"},
-                "idea": {"id": "i1", "title": "Ideia", "state": "exploration"},
+                "workspace": {"id": "w1", "code": "AI-IDEA-001", "classification": "INTERNAL",
+                               "may_transition": may_transition},
+                "idea": {"id": "i1", "title": "Ideia", "state": state,
+                          "available_transitions": transitions, "promotable": promotable},
                 "project": null,
                 "members": []
             }),
@@ -962,10 +1165,47 @@ pub(crate) mod tests {
             may_use_assistance: true,
             gestao: gestao_de_prova(),
         })
-        .to_html();
+        .to_html()
+    }
 
-        assert!(idea.contains("Promover a Projecto"));
-        assert!(idea.contains("IDEIA"));
+    /// Uma ideia por promover oferece os movimentos legais do Core — e **não**
+    /// «Promover a Projecto», que só surge quando ela é candidata.
+    #[test]
+    fn uma_ideia_oferece_o_ciclo_de_vida_que_o_core_permite() {
+        // Em exploração: pode avançar para Conceito; ainda não é promovível.
+        let cedo = idea_ws(
+            "exploration",
+            json!([
+                {"state": "concept", "requires_note": false},
+                {"state": "rejected", "requires_note": true}
+            ]),
+            false,
+            true,
+        );
+        assert!(
+            cedo.contains("Avançar para Conceito"),
+            "falta o avanço de estado"
+        );
+        assert!(cedo.contains("Rejeitar"), "falta a acção de fechar");
+        assert!(cedo.contains(r#"action="/ideas/i1/transition""#));
+        assert!(
+            !cedo.contains("Promover a Projecto"),
+            "uma ideia não-candidata não deve oferecer promoção"
+        );
+
+        // Candidata a projecto: agora sim, «Promover a Projecto» é a acção primária.
+        let madura = idea_ws(
+            "project_candidate",
+            json!([{"state": "review", "requires_note": false}]),
+            true,
+            true,
+        );
+        assert!(madura.contains("Promover a Projecto"));
+        assert!(madura.contains(r#"href="/projects/new?workspace=w1""#));
+
+        // Sem autoridade e sem promoção, o strip não aparece.
+        let sem_poder = idea_ws("exploration", json!([]), false, false);
+        assert!(!sem_poder.contains("Ciclo de vida"));
     }
 
     #[test]

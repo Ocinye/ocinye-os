@@ -46,7 +46,11 @@ impl Tab {
 
 fn render(tabs: Vec<Tab>, class: &'static str, label: &'static str) -> impl IntoView {
     view! {
-        <div class=class role="tablist" aria-label=label>
+        // `data-oc-section-nav`: quando os separadores são âncoras (`#…`) para
+        // secções deste ecrã, o `app.js` marca o activo à medida que se rola. Não
+        // faz nada para separadores que levam a outro ecrã — não têm `href^="#"`.
+        <div class=class role="tablist" aria-label=label data-oc-section-nav="">
+
             {tabs
                 .into_iter()
                 .map(|tab| {

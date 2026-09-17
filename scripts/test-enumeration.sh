@@ -85,6 +85,9 @@ falhas=0
 # pergunta de porquê.
 suites() {
     cat <<'TABELA'
+# 108 desde 2026-09-17: entrou a IDEA_TO_PROJECT_E2E — abrir uma ideia, avançá-la
+# de estado até candidata, promovê-la, e ver o projecto nascer ligado.
+#
 # 107 desde 2026-09-16: entrou a viagem do «Criar» global — o menu abre cada
 # criação determinista sem esbater nenhuma, cria uma Nota de imediato pelo
 # próprio menu, e cria uma Tarefa que persiste depois de recarregar.
@@ -207,7 +210,7 @@ suites() {
 # 105 → 106 em 2026-09-11: entrou a regressão do destinatário por confirmar —
 # escrever um endereço sem o confirmar e enviar, e vê-lo ir no campo `to` em vez
 # de o envio recusar com a caixa vazia. Uma viagem, uma marca.
-viagens-de-browser|107|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|107
+viagens-de-browser|108|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|108
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

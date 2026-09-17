@@ -11231,6 +11231,109 @@ async fn uma_pessoa_cria_uma_ideia_e_nasce_o_workspace() {
     esperar_por(&lista, &titulo).await;
 }
 
+/// IDEA_TO_PROJECT_E2E — o defeito conhecido: uma ideia chega a projecto.
+///
+/// Prova o ciclo de vida inteiro pelo produto, que era o que faltava: abrir uma
+/// ideia, avançá-la de estado pelos controlos do ambiente até candidata a
+/// projecto, promovê-la, e ver o projecto nascer com a linhagem — sem tocar na
+/// base de dados. Cada passo é uma operação real, e a prova é o **efeito**: o
+/// estado muda, a promoção aparece só quando é legal, e no fim existe um
+/// projecto ligado à ideia, que fica marcada como promovida.
+#[tokio::test]
+async fn idea_to_project_e2e() {
+    let harness = harness!();
+    let (pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.manages_a_unit(pessoa).await;
+
+    // ── Criar a ideia (nasce em «discovery») ────────────────────────────
+    let titulo = unique_title("Sensores autónomos de campo");
+    let page = harness.open("/ideas/new").await;
+    esperar_por(&page, "Nova Ideia").await;
+    let unidade = valor_de(&page, "select[name=unit_id] option:nth-child(1)").await;
+    escolher(&page, "select[name=unit_id]", &unidade).await;
+    set_field(&page, "input[name=title]", &titulo).await;
+    submit(&page, "form[action$='/ideas/new']").await;
+    esperar_por(&page, &titulo).await; // o ambiente da ideia
+
+    // Ainda não há promoção: a ideia está em «discovery».
+    assert!(
+        !conteudo_estavel(&page)
+            .await
+            .contains("Promover a Projecto"),
+        "uma ideia recém-criada não devia oferecer promoção"
+    );
+
+    // ── Avançar o ciclo de vida até candidata a projecto ────────────────
+    // Cada botão submete um `POST /ideas/{id}/transition`; o Core valida o
+    // movimento e o ambiente re-renderiza com o estado novo e os passos seguintes.
+    for estado in ["exploration", "concept", "review", "project_candidate"] {
+        submit(&page, &format!("form:has(input[value=\"{estado}\"])")).await;
+        esperar_por(&page, "Ciclo de vida").await;
+    }
+
+    // ── Agora é candidata: promover a projecto ──────────────────────────
+    esperar_por(&page, "Promover a Projecto").await;
+    clicar(&page, "a[href*='/projects/new?workspace=']").await;
+    esperar_por(&page, "Novo Projecto").await;
+
+    // A ideia candidata é a opção do selector (pré-escolhida pelo ?workspace).
+    let candidata = valor_de(&page, "select[name=workspace_id] option:nth-child(1)").await;
+    escolher(&page, "select[name=workspace_id]", &candidata).await;
+    // Um código de projecto válido: começa por letra, só `[A-Z0-9-]`.
+    let codigo = format!("PRJ-{}", &Uuid::new_v4().simple().to_string()[..6]).to_uppercase();
+    set_field(&page, "input[name=code]", &codigo).await;
+    submit(&page, "form[action$='/projects/new']").await;
+
+    // O ambiente passa a ser um Projecto — a linhagem carrega consigo. Prova-se
+    // pelo sufixo único (ASCII) do título, que sobrevive à promoção.
+    let marca = titulo
+        .rsplit(' ')
+        .next()
+        .expect("sufixo do título")
+        .to_owned();
+    esperar_por(&page, "PROJECTO").await;
+    esperar_por(&page, &marca).await;
+
+    // ── Prova no PostgreSQL: a ideia ficou promovida, ligada ao projecto ─
+    let (idea_state, promoted_project): (String, Option<Uuid>) = {
+        let limite = std::time::Instant::now();
+        loop {
+            let row: Option<(String, Option<Uuid>)> =
+                sqlx::query_as("SELECT state, promoted_project_id FROM ideas WHERE title = $1")
+                    .bind(&titulo)
+                    .fetch_optional(&harness.pool)
+                    .await
+                    .expect("consulta da ideia");
+            if let Some((s, p)) = row {
+                if s == "promoted" && p.is_some() {
+                    break (s, p);
+                }
+            }
+            assert!(limite.elapsed() < DEADLINE, "a ideia não ficou promovida");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    };
+    assert_eq!(idea_state, "promoted");
+    let project_id = promoted_project.expect("a ideia aponta para o projecto");
+
+    // O projecto existe e aponta de volta para a ideia — linhagem nos dois lados.
+    let origin_idea: Option<Uuid> =
+        sqlx::query_scalar("SELECT origin_idea_id FROM projects WHERE id = $1")
+            .bind(project_id)
+            .fetch_one(&harness.pool)
+            .await
+            .expect("consulta do projecto");
+    assert!(
+        origin_idea.is_some(),
+        "o projecto não regista a ideia de origem"
+    );
+
+    // ── Recarregar: a relação persiste ──────────────────────────────────
+    let recarregado = harness.open(&format!("/projects/{project_id}")).await;
+    esperar_por(&recarregado, "PROJECTO").await;
+    esperar_por(&recarregado, &marca).await;
+}
+
 /// Uma pessoa cria um dataset pelo produto, dentro de um ambiente onde escreve.
 ///
 /// A criação de datasets era exercitada só pelo Core; aqui percorre-se o ecrã:
