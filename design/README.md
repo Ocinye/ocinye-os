@@ -387,9 +387,31 @@ título 600/15–15.5px; explicação 12.5px/1.65 `#5F7183` com largura máxima 
 Sem ilustrações decorativas.
 
 ### 7.6 Tabs
-Pill (listas): altura 27px, `padding:0 11px`, radius 7px, activa `#0B2D4A`/branco.
+Pill (listas): altura 27px, `padding:0 11px`, radius 7px.
 Contextual (cabeçalhos de detalhe): altura 32px, `padding:0 12px`,
-`border-radius:8px 8px 0 0`, activa navy, hover `#F1F4F8`, scroll horizontal quando excedem.
+`border-radius:8px 8px 0 0`, hover `#F1F4F8`, scroll horizontal quando excedem.
+
+Ambas seguem a **regra do estado activo de navegação** (§7.7).
+
+### 7.7 Estado activo de navegação (regra canónica)
+Todos os sistemas de menu e navegação do Ocinye OS — sidebar, tabs em pill, tabs
+contextuais/de secção, e qualquer barra de secções que actue como navegação —
+partilham **um único** estado activo:
+
+| Estado | Fundo | Primeiro plano | Indicador |
+| --- | --- | --- | --- |
+| **Activo** | azul Ocinye preenchido (`#0B2D4A`; a sidebar, sobre navy, usa `rgba(255,255,255,.10)`) | branco (`#FFFFFF` / `currentColor`) | **só** a superfície azul |
+| Inactivo | transparente | `#5F7183` | nenhum |
+| Hover | tinte subtil | — | distinto do activo |
+| Foco | anel de foco canónico (`outline`), visível ao teclado | — | separado do activo |
+| Indisponível | esbatido (`aria-disabled`) | — | nunca parece activo |
+
+- **Não** há sublinhado dourado, nem `border-bottom`, nem `box-shadow` inset como
+  indicador de navegação activa. O activo lê-se **só** pela superfície azul + texto branco.
+- Semântica: navegação por rota/secção usa `aria-current`; sistemas de tab usam
+  `aria-selected`. Nunca dois indicadores a competir no mesmo item.
+- O dourado (`#E0A731`) **continua** a ser acento Ocinye — CTA `+ Criar`, pontos,
+  estados, foco — mas **deixou de ser** o indicador de navegação activa.
 
 ## 8. Interacções e comportamento
 
