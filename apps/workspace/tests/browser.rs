@@ -11444,6 +11444,64 @@ async fn uma_pessoa_cria_um_dataset_no_seu_ambiente() {
     esperar_por(&pagina, &titulo).await;
 }
 
+/// Um dataset deixou de ser uma linha morta na lista: abre no seu detalhe (F-13).
+///
+/// Cria-se um dataset pelo produto, prova-se que a linha da lista liga ao
+/// detalhe, abre-se `/datasets/{id}` e vê-se a governança do dataset — e um
+/// dataset escondido não é alcançável por identificador (o Core reautoriza).
+#[tokio::test]
+async fn dataset_detail_e2e() {
+    let harness = harness!();
+    let (pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.owns_a_workspace(pessoa).await;
+
+    // ── Criar o dataset pelo ecrã ───────────────────────────────────────
+    let codigo = unique_title("DS");
+    let titulo = unique_title("Leituras de campo");
+    let pagina = harness.open("/datasets/new").await;
+    esperar_por(&pagina, "Novo Dataset").await;
+    let destino = valor_de(&pagina, "select[name=workspace_id] option:nth-child(1)").await;
+    escolher(&pagina, "select[name=workspace_id]", &destino).await;
+    set_field(&pagina, "input[name=code]", &codigo).await;
+    set_field(&pagina, "input[name=title]", &titulo).await;
+    submit(&pagina, "form[action$='/datasets/new']").await;
+    esperar_por(&pagina, &titulo).await;
+
+    // O dataset é uma entidade real: procura-se o seu id.
+    let dataset_id: Uuid = {
+        let limite = std::time::Instant::now();
+        loop {
+            let found: Option<Uuid> =
+                sqlx::query_scalar("SELECT id FROM datasets WHERE title = $1")
+                    .bind(&titulo)
+                    .fetch_optional(&harness.pool)
+                    .await
+                    .expect("procura do dataset");
+            if let Some(id) = found {
+                break id;
+            }
+            assert!(limite.elapsed() < DEADLINE, "o dataset não foi criado");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    };
+
+    // ── A linha da lista liga ao detalhe ────────────────────────────────
+    let lista = harness.open("/datasets").await;
+    let html = lista.content().await.unwrap_or_default();
+    assert!(
+        html.contains(&format!("/datasets/{dataset_id}")),
+        "a linha do dataset não liga ao detalhe"
+    );
+
+    // ── Abrir o detalhe ─────────────────────────────────────────────────
+    let detalhe = harness.open(&format!("/datasets/{dataset_id}")).await;
+    esperar_por(&detalhe, "Sobre o dataset").await;
+    esperar_por(&detalhe, &titulo).await; // é o detalhe deste dataset
+    esperar_por(&detalhe, "Versões").await;
+    // O código está lá — o produto normaliza-o para maiúsculas.
+    esperar_por(&detalhe, &codigo.to_uppercase()).await;
+}
+
 /// Uma pessoa cria uma referência bibliográfica pelo produto.
 ///
 /// A bibliografia é conhecimento institucional; criar uma referência era

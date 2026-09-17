@@ -20,7 +20,7 @@ Estado: **OPEN** · **FIXED** (com prova) · **DEFERRED** (adiado com razão) ·
 |---|---|---|
 | P0 | 0 | **0** |
 | P1 | 1 (F-10 Ideia→Projecto) | **0** |
-| P2 | 4 (F-11 tabs; F-13 Dataset; F-14 Tarefas; F-16 abrir projecto) | **1** (F-11, F-14, F-16 corrigidos) |
+| P2 | 4 (F-11 tabs; F-13 Dataset; F-14 Tarefas; F-16 abrir projecto) | **0** (F-11, F-13, F-14, F-16 corrigidos) |
 | P3 | 2 (F-12 «Partilhar» morto; F-15 detalhe de Agente) | **2** |
 
 ## Registo
@@ -31,7 +31,7 @@ Estado: **OPEN** · **FIXED** (com prova) · **DEFERRED** (adiado com razão) ·
 | F-16 | P2 | Projectos | **Abrir um projecto por URL estava partido.** `GET /api/v1/projects/{id}` (`ProjectView`) não devolvia `workspace_id`, e o handler `project_workspace` redirige por ele — logo abrir `/projects/{id}` (da lista de Projectos, ou o recarregar) caía sem destino. Descoberto pela E2E `idea_to_project_e2e` ao recarregar o projecto. | **FIXED** — `workspace_id` acrescentado ao `ProjectView`. |
 | F-11 | P2 | Research Workspace | **Separadores inertes** no ambiente de ideia/projecto — visíveis mas sem navegar (Bibliografia, Fontes, Notas, Documentos, Datasets, Tarefas, Actividade, Histórico). Controlos mortos. | **FIXED** — o conteúdo já se rendia como secções; os separadores passam a âncoras (`#ws-…`) com scroll nativo e realce do activo (`data-oc-section-nav`); os sem ecrã (Código/Planeamento/Financiamento) saem da barra em vez de ficarem inertes. |
 | F-12 | P3 | Research Workspace | Botão **«Partilhar»** no detalhe de ideia/projecto é `not_yet_available()` — morto. | **OPEN** |
-| F-13 | P2 | Datasets | **Sem página de detalhe de Dataset**: as linhas não ligam a lado nenhum, não há `/datasets/{id}`. Um dataset é uma entidade de domínio (§14), não só um upload. | **OPEN** |
+| F-13 | P2 | Datasets | **Sem página de detalhe de Dataset**: as linhas não ligam a lado nenhum, não há `/datasets/{id}`. Um dataset é uma entidade de domínio (§14), não só um upload. | **FIXED** — as linhas da lista de Datasets ligam a `/datasets/{id}`; página de detalhe com a governança (código, classificação, estado, origem, licença, restrições de uso, palavras-chave) e as versões (rótulo, estado, ficheiros, tamanho, proveniência). Nova rota no Core `GET /datasets/{id}` (`data::get_dataset` reautoriza pela posse e pela classificação do próprio dataset). E2E `dataset_detail_e2e`. |
 | F-14 | P2 | Tarefas | **Sem lista nem detalhe de Tarefa**, e sem UI para mudar estado/atribuir. Só `/tasks/new`; as tarefas aparecem embutidas e só de leitura. | **FIXED** — as linhas de tarefa do ambiente ligam a `/tasks/{id}`; página de detalhe com transições de estado (a partir de `available_transitions` que o Core deriva de `task_targets_from`) e atribuição de responsável, ambas gated por `may_create`. Novas rotas no Core `GET /tasks/{id}` e `POST /tasks/{id}/assignee`. E2E `task_lifecycle_e2e` (criar→abrir→mudar estado→atribuir→prova em PostgreSQL→recarregar). |
 | F-15 | P3 | Agentes | **Sem página de detalhe de Agente** (a lista não liga a cada agente). | **OPEN** |
 
@@ -39,8 +39,8 @@ Estado: **OPEN** · **FIXED** (com prova) · **DEFERRED** (adiado com razão) ·
 
 - **F-10** é o defeito que motivou esta pass (relatado manualmente). Corrigido
   primeiro, com E2E dedicada, tratado como P1.
-- **F-11/F-14** entregues (separadores vivos; detalhe de Tarefa). **F-13**
-  (detalhe de Dataset) é a próxima fatia. Cada uma é uma PR coerente.
+- **F-11/F-13/F-14** entregues (separadores vivos; detalhe de Dataset; detalhe
+  de Tarefa). Restam só **F-12** e **F-15** (P3). Cada fatia é uma PR coerente.
 - Separadores inertes noutros ecrãs (Compute, IA, Conhecimento, «O Meu Trabalho»)
   e `Adicionar Nó` (Compute) estão a avaliar: alguns são estado **planeado** real
   (o nó inscreve-se sozinho pelo Node Agent, não por formulário), outros degradam

@@ -888,8 +888,9 @@ pub fn datasets(viewer: &Viewer, payload: &Value) -> impl IntoView {
             .iter()
             .map(|row| {
                 let state = text(row, "state");
+                let id = text(row, "id");
                 (
-                    None,
+                    Some(format!("/datasets/{id}")),
                     vec![
                         Cell::Primary(text(row, "title")),
                         Cell::Text(text(row, "responsible")),

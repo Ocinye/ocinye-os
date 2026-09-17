@@ -7,6 +7,23 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Datasets ganham página de detalhe (certificação final pré-IA) — 2026-09-17
+
+Um dataset é uma entidade de domínio (§14), não um upload — mas na lista era uma
+linha morta: não ligava a lado nenhum, e não existia `/datasets/{id}` (`F-13`, P2).
+
+- **Detalhe de dataset.** As linhas da lista de Datasets passam a ligar a
+  `/datasets/{id}` — uma página com a **governança** (código, classificação,
+  estado, origem, licença, restrições de uso, palavras-chave) e as **versões**
+  (rótulo, estado, número de ficheiros, tamanho, proveniência, publicação).
+- **Rota nova no Core:** `GET /api/v1/datasets/{id}`. A autorização é
+  `data::get_dataset` — lê o ambiente **e** limpa a classificação do próprio
+  dataset, pelo que um dataset escondido da lista não é alcançável por
+  identificador.
+- **E2E `dataset_detail_e2e`**: cria um dataset pelo produto, prova que a linha
+  da lista liga ao detalhe, e abre a sua governança. Registo vivo em
+  [`DEFECT_REGISTER.md`](docs/audits/pre-ai-final/DEFECT_REGISTER.md).
+
 ### Tarefas ganham detalhe accionável (certificação final pré-IA) — 2026-09-17
 
 As tarefas de um ambiente apareciam embutidas e só de leitura: não havia lista

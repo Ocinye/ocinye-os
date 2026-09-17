@@ -99,6 +99,7 @@ pub const ROUTES: &[&str] = &[
     "/projects/new",
     "/bibliography/new",
     "/datasets/new",
+    "/datasets/{dataset_id}",
     "/tasks/new",
     "/tasks/{task_id}",
     "/tasks/{task_id}/transition",
@@ -373,6 +374,7 @@ pub fn router(state: WorkspaceState) -> Router {
             get(new_source_form).post(create_source),
         )
         .route("/datasets/new", get(new_dataset_form).post(create_dataset))
+        .route("/datasets/{dataset_id}", get(dataset_detail))
         .route("/tasks/new", get(new_task_form).post(create_task))
         .route("/tasks/{task_id}", get(task_detail))
         .route("/tasks/{task_id}/transition", post(task_transition))
@@ -6723,6 +6725,48 @@ async fn create_task(
 }
 
 /// O detalhe de uma tarefa: o que é, o seu estado, e as acções sobre ela.
+/// `GET /datasets/{id}` — o detalhe de um dataset: metadados de governança e as
+/// suas versões. O Core reautoriza pela posse e pela classificação do próprio
+/// dataset (`data::get_dataset`), pelo que um dataset escondido da lista não é
+/// alcançável por identificador.
+async fn dataset_detail(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(dataset_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let dataset = match api::get::<Value>(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/datasets/{dataset_id}"),
+    )
+    .await
+    {
+        Ok(dataset) => dataset,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    // As versões são o material do dataset; a lista já é autorizada pelo Core.
+    let versions = optional(
+        &state,
+        &member,
+        &format!("/api/v1/datasets/{dataset_id}/versions"),
+    )
+    .await;
+
+    let viewer = viewer(&state, &member).await;
+    let trail = vec![Crumb::to(Screen::Datasets)];
+    shell_page(
+        "Dataset",
+        &viewer,
+        Screen::Datasets,
+        trail,
+        ui::screens::workspaces::dataset_detail(&dataset, &versions),
+    )
+}
+
 async fn task_detail(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,

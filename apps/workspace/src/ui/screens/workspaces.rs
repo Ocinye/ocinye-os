@@ -777,6 +777,130 @@ pub fn task_detail(
     .into_any()
 }
 
+/// Bytes em unidade legível — o material de uma versão de dataset tem tamanho,
+/// e mostrá-lo em bytes crus não informa ninguém.
+fn human_bytes(bytes: i64) -> String {
+    const UNITS: [&str; 5] = ["B", "kB", "MB", "GB", "TB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
+
+/// O detalhe de um dataset: a sua governança e as suas versões.
+///
+/// Um dataset é uma entidade de domínio (§14), não um upload: tem código,
+/// classificação, origem, licença e restrições de uso, e uma história de versões
+/// material. A autoridade é do Core — abrir por identificador reautoriza pela
+/// posse e pela classificação do próprio dataset (F-13).
+pub fn dataset_detail(dataset: &Value, versions: &Value) -> AnyView {
+    let workspace_id = text(dataset, "workspace_id");
+    let classification = text(dataset, "classification");
+    let state = text(dataset, "state");
+    let keywords = dataset
+        .get("keywords")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|k| k.as_str())
+                .collect::<Vec<_>>()
+                .join(" · ")
+        })
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "—".to_owned());
+    let versoes = items(versions);
+
+    view! {
+        <div class="oc-band">
+            <div class="oc-row oc-row--wrap oc-gap-6 oc-mb-2">
+                {pill("DATASET")}
+                <h1 class="oc-t-screen">{text(dataset, "title")}</h1>
+                {classification_badge(&classification)}
+                {badge(state.clone(), Tone::of(&state))}
+            </div>
+            <div class="oc-mono oc-mb-5">
+                <a href=format!("/workspaces/{workspace_id}")>"← Voltar ao ambiente"</a>
+            </div>
+        </div>
+
+        <div class="oc-page">
+            <div class="oc-grid oc-grid--detail">
+                <section class="oc-card">
+                    {section_head("Sobre o dataset", None, None)}
+                    <div class="oc-card__body">
+                        <p class="oc-t-body">{text(dataset, "description")}</p>
+                        <div class="oc-split oc-split--2 oc-mt-5">
+                            {metric_text("Código", &text(dataset, "code"))}
+                            {metric_text("Classificação", &classification)}
+                            {metric_text("Estado", &state)}
+                            {metric_text("Origem", &text(dataset, "origin"))}
+                            {metric_text("Licença", &text(dataset, "licence"))}
+                            {metric_text("Restrições de uso", &text(dataset, "usage_restrictions"))}
+                        </div>
+                        <div class="oc-field__label oc-mt-6">"Palavras-chave"</div>
+                        <p class="oc-t-note">{keywords}</p>
+                    </div>
+                </section>
+
+                <section class="oc-card">
+                    {section_head("Versões", None, None)}
+                    <div class="oc-card__body">
+                        {if versoes.is_empty() {
+                            view! {
+                                <p class="oc-muted">
+                                    "Este dataset ainda não tem versões. Uma versão \
+                                     agrupa os ficheiros materiais de um estado do dataset."
+                                </p>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <div class="oc-col oc-gap-9">
+                                    {versoes.iter().map(|v| {
+                                        let status = text(v, "status");
+                                        let ficheiros = v.get("file_count")
+                                            .and_then(Value::as_i64).unwrap_or(0);
+                                        let tamanho = human_bytes(
+                                            v.get("total_size_bytes")
+                                                .and_then(Value::as_i64).unwrap_or(0),
+                                        );
+                                        let publicada = text(v, "published_at");
+                                        view! {
+                                            <div>
+                                                <div class="oc-row oc-gap-5 oc-mb-1">
+                                                    <span class="oc-fill oc-t-cell-2">
+                                                        {text(v, "label")}
+                                                    </span>
+                                                    {badge(status.clone(), Tone::of(&status))}
+                                                </div>
+                                                <div class="oc-mono oc-t-ghost">
+                                                    {format!("{ficheiros} ficheiro(s) · {tamanho}")}
+                                                    {(!publicada.is_empty()).then(
+                                                        || format!(" · publicada {publicada}"))}
+                                                </div>
+                                                {(!text(v, "provenance").is_empty()).then(|| view! {
+                                                    <div class="oc-t-note">{text(v, "provenance")}</div>
+                                                })}
+                                            </div>
+                                        }
+                                    }).collect_view()}
+                                </div>
+                            }.into_any()
+                        }}
+                    </div>
+                </section>
+            </div>
+        </div>
+    }
+    .into_any()
+}
+
 fn artefact_card(
     title: &'static str,
     payload: &Value,
@@ -1336,6 +1460,47 @@ pub(crate) mod tests {
         let read = task_detail(&task, &so_leitura, None, None).to_html();
         assert!(!read.contains("Marcar «Em curso»"));
         assert!(!read.contains("Atribuir"));
+    }
+
+    /// O detalhe de um dataset mostra a sua governança e as suas versões, e
+    /// liga de volta ao ambiente — deixou de ser uma linha morta na lista (F-13).
+    #[test]
+    fn o_detalhe_de_um_dataset_mostra_governanca_e_versoes() {
+        let dataset = json!({
+            "id": "44444444-4444-4444-8444-444444444444",
+            "workspace_id": "w7",
+            "code": "DS-001",
+            "title": "Leituras de campo",
+            "description": "Séries temporais.",
+            "origin": "measured",
+            "licence": "CC-BY-4.0",
+            "usage_restrictions": "Uso interno",
+            "keywords": ["clima", "sensor"],
+            "classification": "INTERNAL",
+            "state": "active",
+        });
+        let versions = json!([
+            {"id": "v1", "label": "v1", "status": "published", "provenance": "Recolha inicial",
+             "file_count": 3, "total_size_bytes": 2048, "published_at": "2026-09-01"}
+        ]);
+        let html = dataset_detail(&dataset, &versions).to_html();
+        assert!(html.contains("DS-001"), "falta o código");
+        assert!(html.contains("CC-BY-4.0"), "falta a licença");
+        assert!(html.contains("clima · sensor"), "faltam as palavras-chave");
+        assert!(html.contains("Versões"), "falta a secção de versões");
+        assert!(
+            html.contains("3 ficheiro(s) · 2.0 kB"),
+            "falta o material da versão"
+        );
+        assert!(html.contains("Recolha inicial"), "falta a proveniência");
+        assert!(
+            html.contains(r#"href="/workspaces/w7""#),
+            "falta a ligação de volta ao ambiente"
+        );
+
+        // Sem versões, o dataset explica o que uma versão é em vez de ficar vazio.
+        let vazio = dataset_detail(&dataset, &json!([])).to_html();
+        assert!(vazio.contains("ainda não tem versões"));
     }
 
     /// Helper: render an idea workspace with a given state, transitions and

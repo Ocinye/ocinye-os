@@ -31,6 +31,7 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/activity", get(list_activity))
         .route("/datasets", get(list_datasets))
+        .route("/datasets/{dataset_id}", get(get_dataset))
         .route("/workspaces/{workspace_id}/datasets", post(create_dataset))
         .route(
             "/datasets/{dataset_id}/versions",
@@ -435,6 +436,15 @@ async fn list_datasets(
         page,
         total,
     )))
+}
+
+async fn get_dataset(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(dataset_id): Path<Uuid>,
+) -> Result<Json<DatasetView>, ApiError> {
+    let dataset = data::get_dataset(&state.pool, &principal, dataset_id).await?;
+    Ok(Json(DatasetView::from(dataset)))
 }
 
 #[derive(Deserialize)]
