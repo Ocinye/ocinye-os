@@ -976,8 +976,9 @@ pub fn agents(viewer: &Viewer, payload: &Value) -> impl IntoView {
                     .and_then(Value::as_str)
                     .unwrap_or(&state)
                     .to_owned();
+                let id = text(row, "id");
                 (
-                    None,
+                    Some(format!("/ai/agents/{id}")),
                     vec![
                         Cell::Primary(text(row, "name")),
                         Cell::Text(text(row, "purpose")),

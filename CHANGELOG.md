@@ -7,6 +7,25 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Agentes ganham página de detalhe (certificação final pré-IA) — 2026-09-17
+
+Um agente é definível e persistido **sem nó de IA**, mas na lista era uma linha
+morta: não ligava a lado nenhum (`F-15`, P3).
+
+- **Detalhe de agente.** As linhas da lista de Agentes ligam a `/ai/agents/{id}`
+  — uma página com a **definição** (capacidade, âmbito, tecto de classificação,
+  fontes de conhecimento, instruções, autor) e o **estado real derivado** da
+  disponibilidade: sem nó, o agente está *configurado*, e a página explica que
+  correrá assim que existir uma capacidade que o sirva (§9 — a definição não
+  depende de haver modelo, e nunca se inventa um).
+- **Rota nova no Core:** `GET /api/v1/ai/agents/{id}`. A visibilidade é decidida
+  no mesmo SQL da lista, pelo que um agente que o membro não pode ver dá 404 em
+  vez de viajar para fora da base.
+- **E2E `agent_detail_e2e`**: cria um agente pelo produto, prova que a linha da
+  lista liga ao detalhe, e abre a sua definição. Registo vivo em
+  [`DEFECT_REGISTER.md`](docs/audits/pre-ai-final/DEFECT_REGISTER.md) — com isto
+  **todos os defeitos da certificação final pré-IA estão fechados**.
+
 ### Datasets ganham página de detalhe (certificação final pré-IA) — 2026-09-17
 
 Um dataset é uma entidade de domínio (§14), não um upload — mas na lista era uma

@@ -8,8 +8,8 @@ use leptos::prelude::*;
 use serde_json::Value;
 
 use crate::ui::components::{
-    button, card, empty_state, named_checkbox, radio_group, section_head, select, text_field,
-    textarea, Button, EmptyState, RadioOption, Variant,
+    badge, button, card, classification_badge, empty_state, named_checkbox, pill, radio_group,
+    section_head, select, text_field, textarea, Button, EmptyState, RadioOption, Tone, Variant,
 };
 use crate::ui::components::{context_tabs, Tab};
 use crate::ui::icon::{icon, Icon};
@@ -312,6 +312,124 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
     }
 }
 
+fn campo(agent: &Value, key: &str) -> String {
+    agent
+        .get(key)
+        .and_then(Value::as_str)
+        .unwrap_or("—")
+        .to_owned()
+}
+
+/// O rótulo em português de uma fonte de conhecimento que o agente usa.
+fn fonte(agent: &Value, key: &str, rotulo: &str) -> Option<String> {
+    agent
+        .get(key)
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        .then(|| rotulo.to_owned())
+}
+
+/// O detalhe de um agente: a sua definição, e o seu estado real.
+///
+/// Um agente é definível e persistido **sem nó de IA**; o seu estado é derivado
+/// da disponibilidade real (§9). Aqui vê-se o que ele é — capacidade, âmbito,
+/// tecto de classificação, fontes de conhecimento — e porque ainda não corre,
+/// quando não há capacidade que o sirva. Deixou de ser uma linha morta na lista
+/// (F-15).
+pub fn agent_detail(agent: &Value) -> impl IntoView {
+    let state = campo(agent, "state");
+    let state_label = agent
+        .get("state_label")
+        .and_then(Value::as_str)
+        .unwrap_or(&state)
+        .to_owned();
+    let scope = campo(agent, "scope");
+    let classification = campo(agent, "max_classification");
+    let execution_available = agent
+        .get("execution_available")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let fontes: Vec<String> = [
+        fonte(agent, "uses_bibliography", "Bibliografia"),
+        fonte(agent, "uses_documents", "Documentos"),
+        fonte(agent, "uses_datasets", "Datasets"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let fontes_texto = if fontes.is_empty() {
+        "Nenhuma".to_owned()
+    } else {
+        fontes.join(" · ")
+    };
+
+    let purpose = campo(agent, "purpose");
+    let instructions = campo(agent, "instructions");
+
+    view! {
+        <div class="oc-band">
+            <div class="oc-row oc-row--wrap oc-gap-6 oc-mb-2">
+                {pill("AGENTE")}
+                <h1 class="oc-t-screen">{campo(agent, "name")}</h1>
+                {badge(state_label, Tone::of(&state))}
+            </div>
+            <div class="oc-mono oc-mb-5">
+                <a href="/ai/agents">"← Voltar aos agentes"</a>
+            </div>
+        </div>
+
+        <div class="oc-page">
+            <div class="oc-grid oc-grid--detail">
+                <section class="oc-card">
+                    {section_head("Definição", None, None)}
+                    <div class="oc-card__body">
+                        <p class="oc-t-body">{purpose}</p>
+                        <div class="oc-split oc-split--2 oc-mt-5">
+                            {metric("Capacidade", &campo(agent, "capability"))}
+                            {metric("Âmbito", &scope)}
+                            {metric("Tecto de classificação", &classification)}
+                            {metric("Fontes de conhecimento", &fontes_texto)}
+                            {metric("Criado por", &campo(agent, "created_by_name"))}
+                        </div>
+                        <div class="oc-field__label oc-mt-6">"Instruções"</div>
+                        <p class="oc-t-note">{instructions}</p>
+                    </div>
+                </section>
+
+                <section class="oc-card">
+                    {section_head("Execução", None, None)}
+                    <div class="oc-card__body">
+                        <div class="oc-row oc-row--wrap oc-gap-6">
+                            {classification_badge(&classification)}
+                        </div>
+                        <p class="oc-t-note oc-mt-5">
+                            {if execution_available {
+                                "Existe capacidade de inferência que pode servir este agente."
+                            } else {
+                                "Nenhum nó de IA da Ocinye está disponível: o agente está \
+                                 definido e configurado, e correrá assim que existir uma \
+                                 capacidade que o sirva. A definição não depende de haver modelo."
+                            }}
+                        </p>
+                    </div>
+                </section>
+            </div>
+        </div>
+    }
+}
+
+/// Uma métrica rotulada, no padrão dos ecrãs de detalhe.
+fn metric(label: &'static str, value: &str) -> impl IntoView {
+    let value = value.to_owned();
+    view! {
+        <div class="oc-split__cell">
+            <div class="oc-t-cell-2">{value}</div>
+            <div class="oc-t-hint oc-mt-1">{label}</div>
+        </div>
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -328,6 +446,44 @@ mod tests {
         assert!(html.contains("Nenhum nó de IA Ocinye está actualmente disponível"));
         for invented in ["Qwen", "DeepSeek", "GPT", "Claude"] {
             assert!(!html.contains(invented), "o hub não deve nomear {invented}");
+        }
+    }
+
+    #[test]
+    fn o_detalhe_de_um_agente_mostra_a_definicao_e_o_estado_real() {
+        let agent = json!({
+            "id": "55555555-5555-4555-8555-555555555555",
+            "name": "Assistente de Metodologia",
+            "purpose": "Ajudar a redigir metodologias.",
+            "instructions": "Responde em português; nunca inventa fontes.",
+            "capability": "REASONING",
+            "scope": "personal",
+            "max_classification": "INTERNAL",
+            "uses_bibliography": true,
+            "uses_documents": false,
+            "uses_datasets": true,
+            "state": "configured",
+            "state_label": "Configurado — sem capacidade disponível",
+            "created_by_name": "Ana Fernandes",
+            "execution_available": false,
+        });
+        let html = agent_detail(&agent).to_html();
+        assert!(html.contains("Assistente de Metodologia"));
+        assert!(html.contains("REASONING"), "falta a capacidade");
+        assert!(html.contains("Configurado — sem capacidade disponível"));
+        assert!(html.contains("Bibliografia · Datasets"), "faltam as fontes");
+        assert!(html.contains("Ana Fernandes"));
+        assert!(
+            html.contains("correrá assim que existir uma"),
+            "falta a explicação de porque não corre"
+        );
+        assert!(
+            html.contains(r#"href="/ai/agents""#),
+            "falta a ligação de volta"
+        );
+        // Nunca inventa um modelo nem um nó.
+        for invented in ["Qwen", "DeepSeek", "GPT"] {
+            assert!(!html.contains(invented));
         }
     }
 

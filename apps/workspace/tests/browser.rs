@@ -11502,6 +11502,58 @@ async fn dataset_detail_e2e() {
     esperar_por(&detalhe, &codigo.to_uppercase()).await;
 }
 
+/// Um agente deixou de ser uma linha morta na lista: abre no seu detalhe (F-15).
+///
+/// Cria-se um agente pelo produto (pessoal, capacidade por omissão), prova-se
+/// que a linha da lista liga ao detalhe, abre-se `/ai/agents/{id}` e vê-se a sua
+/// definição e o estado real — configurado, porque não há nó de IA.
+#[tokio::test]
+async fn agent_detail_e2e() {
+    let harness = harness!();
+    let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // ── Criar o agente pelo ecrã ────────────────────────────────────────
+    let nome = unique_title("Assistente de Metodologia");
+    let pagina = harness.open("/ai/agents/new").await;
+    esperar_por(&pagina, "Criar Agente").await;
+    set_field(&pagina, "input[name=name]", &nome).await;
+    submit(&pagina, "form[action$='/ai/agents/new']").await;
+    esperar_por(&pagina, &nome).await; // aparece na lista de agentes
+
+    // O agente é uma entidade real: procura-se o seu id.
+    let agent_id: Uuid = {
+        let limite = std::time::Instant::now();
+        loop {
+            let found: Option<Uuid> =
+                sqlx::query_scalar("SELECT id FROM ai_agents WHERE name = $1")
+                    .bind(&nome)
+                    .fetch_optional(&harness.pool)
+                    .await
+                    .expect("procura do agente");
+            if let Some(id) = found {
+                break id;
+            }
+            assert!(limite.elapsed() < DEADLINE, "o agente não foi criado");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    };
+
+    // ── A linha da lista liga ao detalhe ────────────────────────────────
+    let lista = harness.open("/ai/agents").await;
+    let html = lista.content().await.unwrap_or_default();
+    assert!(
+        html.contains(&format!("/ai/agents/{agent_id}")),
+        "a linha do agente não liga ao detalhe"
+    );
+
+    // ── Abrir o detalhe ─────────────────────────────────────────────────
+    let detalhe = harness.open(&format!("/ai/agents/{agent_id}")).await;
+    esperar_por(&detalhe, "Definição").await;
+    esperar_por(&detalhe, &nome).await;
+    // Sem nó de IA, o agente está configurado e a página di-lo.
+    esperar_por(&detalhe, "correrá assim que existir uma").await;
+}
+
 /// Uma pessoa cria uma referência bibliográfica pelo produto.
 ///
 /// A bibliografia é conhecimento institucional; criar uma referência era

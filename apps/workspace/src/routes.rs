@@ -176,6 +176,7 @@ pub const ROUTES: &[&str] = &[
     "/ai",
     "/ai/agents",
     "/ai/agents/new",
+    "/ai/agents/{agent_id}",
     "/ai/prompt",
     "/compute",
     "/activity",
@@ -511,6 +512,7 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/ai", get(ai_hub))
         .route("/ai/agents", get(agents))
         .route("/ai/agents/new", get(new_agent).post(create_agent))
+        .route("/ai/agents/{agent_id}", get(agent_detail))
         .route("/ai/prompt", get(prompt).post(submit_prompt))
         .route("/compute", get(compute))
         // Institucional
@@ -5955,6 +5957,41 @@ async fn new_agent(State(state): State<WorkspaceState>, headers: HeaderMap) -> R
 
 fn agent_trail() -> Vec<Crumb> {
     vec![Crumb::to(Screen::Agents)]
+}
+
+/// `GET /ai/agents/{id}` — o detalhe de um agente: a sua definição.
+///
+/// Um agente é definível e persistido sem nó de IA; o detalhe mostra o que ele
+/// é (capacidade, âmbito, tecto de classificação, fontes) e o seu estado real,
+/// derivado da disponibilidade. Abrir por identificador reautoriza pela
+/// visibilidade no Core — um agente que não se pode ver dá 404 (F-15).
+async fn agent_detail(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(agent_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+
+    let agent = match api::get::<Value>(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/ai/agents/{agent_id}"),
+    )
+    .await
+    {
+        Ok(agent) => agent,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    let viewer = viewer(&state, &member).await;
+    shell_page(
+        "Agente IA",
+        &viewer,
+        Screen::Agents,
+        agent_trail(),
+        ui::screens::ai::agent_detail(&agent),
+    )
 }
 
 /// Campos do construtor de agentes.
