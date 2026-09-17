@@ -18,10 +18,11 @@ use ocinye_contracts::agentic::{
     ResourceKind as AgenticKind, ResourceRef,
 };
 use ocinye_contracts::{
-    Classification, SystemCapabilities, SystemCapability, SystemCapabilityReport,
+    Classification, PageRequest, SystemCapabilities, SystemCapability, SystemCapabilityReport,
     SystemCapabilityState,
 };
 use ocinye_core::modules::agentic::{self, resolver, runtime};
+use ocinye_core::modules::collaboration;
 use ocinye_core::modules::intelligence::fixture::FixtureProvider;
 use ocinye_core::modules::intelligence::provider::InferenceProvider;
 use ocinye_core::realtime::Realtime;
@@ -4369,5 +4370,77 @@ async fn um_tipo_desconhecido_nao_e_um_recurso() {
     assert!(
         inventado.is_err(),
         "a operação aceitou tipos que não existem no domínio"
+    );
+}
+
+/// O feed de actividade institucional não rebenta com actividade owner-scoped,
+/// e não a mostra.
+///
+/// Regressão de um 500 em produção: clicar em «Actividade» dava 502 (o Core
+/// devolvia 500 em 3 ms — um erro de descodificação, não uma consulta lenta). A
+/// `activity_entries` passou a ter linhas **owner-scoped** (nota pessoal:
+/// `workspace_id IS NULL`, migração 0031/0038), mas o feed lia `workspace_id`
+/// para um `Uuid` não-opcional — e `NULL`→`Uuid` falha. Além disso, essa
+/// actividade é privada ao dono (tem o seu próprio painel) e não pertence ao
+/// feed institucional partilhado, onde um `PlatformAdmin` de visibilidade larga
+/// a veria. A correcção: `workspace_id` opcional **e** só ambiente no feed geral.
+#[tokio::test]
+async fn o_feed_de_actividade_ignora_actividade_owner_scoped_e_nao_rebenta() {
+    let Some(pool) = pool().await else {
+        return;
+    };
+    let world = world(&pool).await;
+
+    // Actividade de ambiente (workspace-scoped, INTERNAL): pertence ao feed.
+    let de_ambiente: Uuid = sqlx::query_scalar(
+        "INSERT INTO activity_entries
+             (organisation_id, unit_id, workspace_id, actor_person_id, kind,
+              subject_type, subject_id, summary, classification)
+         VALUES ($1, $2, $3, $4, 'created', 'idea', $4, 'criou uma ideia', 'INTERNAL')
+         RETURNING id",
+    )
+    .bind(world.organisation_id)
+    .bind(world.unit_a)
+    .bind(world.workspace_a)
+    .bind(world.insider.person_id)
+    .fetch_one(&pool)
+    .await
+    .expect("inserir actividade de ambiente");
+
+    // Actividade owner-scoped (nota pessoal): sem workspace nem unidade, com dono.
+    // É a linha que fazia o feed rebentar na descodificação `NULL`→`Uuid`.
+    let owner_scoped: Uuid = sqlx::query_scalar(
+        "INSERT INTO activity_entries
+             (organisation_id, owner_id, actor_person_id, kind,
+              subject_type, subject_id, summary, classification)
+         VALUES ($1, $2, $2, 'created', 'note', $2, 'criou uma nota', 'INTERNAL')
+         RETURNING id",
+    )
+    .bind(world.organisation_id)
+    .bind(world.insider.person_id)
+    .fetch_one(&pool)
+    .await
+    .expect("inserir actividade owner-scoped");
+
+    let entries = collaboration::list_activity(
+        &pool,
+        &world.insider,
+        None,
+        PageRequest {
+            page: 1,
+            page_size: 100,
+        },
+    )
+    .await
+    .expect("o feed não pode rebentar com uma linha owner-scoped");
+
+    let ids: Vec<Uuid> = entries.iter().map(|e| e.id).collect();
+    assert!(
+        ids.contains(&de_ambiente),
+        "a actividade de ambiente sumiu do feed"
+    );
+    assert!(
+        !ids.contains(&owner_scoped),
+        "a actividade owner-scoped (privada) apareceu no feed institucional"
     );
 }

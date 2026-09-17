@@ -328,6 +328,11 @@ pub async fn list_activity<'e>(
            FROM activity_entries a
            LEFT JOIN people p ON p.id = a.actor_person_id
           WHERE a.organisation_id = $1
+            -- Só actividade de ambiente. A actividade owner-scoped (nota pessoal,
+            -- `workspace_id IS NULL` desde a migração 0031/0038) é privada ao dono
+            -- e vive no seu próprio painel — não entra no feed institucional
+            -- partilhado, e um `PlatformAdmin` de visibilidade larga não a vê aqui.
+            AND a.workspace_id IS NOT NULL
             AND ($2::uuid IS NULL OR a.workspace_id = $2)
             AND {predicate}
           ORDER BY a.created_at DESC
