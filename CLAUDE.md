@@ -34,11 +34,16 @@ descrevem o mesmo sistema: quando divergirem, é defeito, e corrige-se nas duas.
 
 **Verificado em 2026-08-28**; o estado de deploy e de MFA re-verificado em
 2026-09-09, contra a produção a correr; o **módulo de Notas** e as contagens
-desta secção re-verificados em **2026-09-10** no repositório, e a **2026-09-11**
-em produção — o Workspace, o Core e o Worker correm o release `90b9d0d728de`
-(o `main @ 90b9d0d`), com o módulo de Notas incluído e a correcção de
-experiência do editor. Cada afirmação abaixo é verificável correndo
-`./scripts/verify.sh` no repositório — e as de produção, contra o servidor.
+desta secção re-verificados em **2026-09-10** no repositório (as contagens saem
+sempre da árvore, por `./scripts/repository-facts.sh`, e não se escrevem à mão).
+O **deploy** foi re-verificado em **2026-09-17**: o Workspace, o Core e o Worker
+correm o release `fa8e01e75246` (o `main @ fa8e01e`) — com o módulo de Notas, a
+gestão de Unidades e o Global Create, e as páginas de detalhe de Tarefa, Dataset
+e Agente da certificação final pré-IA —, com o Core a reportar-se saudável e o
+health externo (`api.ocinye.com`, `os.ocinye.com`) a responder. A aceitação
+autenticada em produção, essa, é do humano. Cada afirmação abaixo é verificável
+correndo `./scripts/verify.sh` no repositório — e as de produção, contra o
+servidor.
 
 **Portão `OCINYE_STABLE_PRE_AI_READY` — declarado a 2026-09-11.** Todos os
 pré-requisitos da sequência canónica estão provados por evidência própria:
