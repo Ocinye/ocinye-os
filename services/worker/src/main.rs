@@ -101,10 +101,17 @@ async fn main() -> anyhow::Result<()> {
 
     // O correio novo deixa de esperar que alguém carregue em sincronizar.
     //
-    // O adaptador vem do mesmo construtor que o Core usa: uma instalação sem
-    // correio configurado recebe o fornecedor que recusa tudo, e a passagem
-    // regista a razão em cada caixa em vez de as deixar vazias sem explicação.
-    let correio = ocinye_core::modules::mail::from_config(&config);
+    // O **registo** — e não o adaptador institucional sozinho — porque cada caixa
+    // ligada tem a sua credencial (a do próprio membro, ADR-0409), e a ingestão
+    // periódica tem de a usar, exactamente como o sincronizar manual do Core. Um
+    // adaptador único com a credencial do transporte dava «credenciais recusadas»
+    // a cada passagem, mesmo com a caixa ligada e o refresh manual a funcionar.
+    let correio_institucional = ocinye_core::modules::mail::from_config(&config);
+    let correio = ocinye_core::modules::mail::ProviderRegistry::new(
+        correio_institucional,
+        config.mail.clone(),
+        config.sealing_key.clone(),
+    );
     let mut ingestao =
         tokio::time::interval(ocinye_core::modules::mail::service::INGESTION_INTERVAL);
     ingestao.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -153,7 +160,7 @@ async fn main() -> anyhow::Result<()> {
                 let ids = ocinye_observability::CorrelationIds::from_headers(None, None);
                 match ocinye_core::modules::mail::service::ingest_all(
                     &pool,
-                    correio.as_ref(),
+                    &correio,
                     &ids,
                 )
                 .await

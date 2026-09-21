@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use super::policy::{SendDecision, SendPolicy};
 use super::provider::{
-    InlineImage, MailProvider, OutgoingAttachment, OutgoingMessage, ProviderAddress, ProviderError,
+    InlineImage, OutgoingAttachment, OutgoingMessage, ProviderAddress, ProviderError,
 };
 use super::repository as repo;
 use super::signature::{self, LogoRef, Projections, SignatureFacts, LOGO_CONTENT_ID};
@@ -167,6 +167,16 @@ pub struct SyncOutcome {
 /// thousand messages would hold a connection open for minutes and write the
 /// whole archive into an index that is deliberately not an archive (ADR-0407).
 const SYNC_BATCH: u32 = 200;
+
+/// The folders the periodic ingestion keeps indexed, per mailbox.
+///
+/// Não é só a Inbox: o correio **enviado** (`Sent`) e o **guardado** (`Archive`)
+/// são correio da caixa como qualquer outro, e sem os sincronizar aqui as pastas
+/// «Enviados» e «Arquivados» só se enchiam com um refresh manual, pasta a pasta.
+/// `Drafts` é do Core (o ciclo de rascunho do compositor, não a pasta IMAP) e
+/// `Starred` é uma flag, não uma pasta; nenhum se ingere. `Spam`/`Trash` ficam a
+/// pedido — é quarentena e lixo do fornecedor, não correio a indexar por rotina.
+const INGESTED_FOLDERS: &[MailFolder] = &[MailFolder::Inbox, MailFolder::Sent, MailFolder::Archive];
 
 /// Refresh the index for one folder of one mailbox.
 ///
@@ -1798,7 +1808,7 @@ pub struct IngestionOutcome {
 /// isto é, quando não há sequer por onde começar.
 pub async fn ingest_all(
     pool: &PgPool,
-    provider: &dyn MailProvider,
+    registry: &super::ProviderRegistry,
     ids: &CorrelationIds,
 ) -> CoreResult<IngestionOutcome> {
     let caixas = repo::connected_mailboxes(pool).await?;
@@ -1808,37 +1818,81 @@ pub async fn ingest_all(
     };
 
     for (mailbox_id, address) in caixas {
-        match provider
-            .list_messages(&address, MailFolder::Inbox, None, SYNC_BATCH)
-            .await
-        {
-            Ok(page) => {
-                let mut indexados = 0_usize;
-                for header in &page.messages {
-                    match repo::upsert_message(pool, mailbox_id, header).await {
-                        Ok(_) => indexados += 1,
-                        // Uma linha que não se escreve não abandona a página. A
-                        // falha aparece na contagem, e não como caixa vazia.
-                        Err(error) => tracing::warn!(
-                            correlation_id = %ids.correlation_id,
-                            cause = %error,
-                            "a message header could not be indexed"
-                        ),
-                    }
-                }
-                repo::record_sync(pool, mailbox_id, None).await?;
-                resultado.indexed += indexados;
-            }
+        // A credencial é a **da caixa**, resolvida pelo registo como no
+        // sincronizar manual — não uma credencial institucional única aplicada a
+        // todas. Uma caixa ligada com a senha do próprio membro tem de ser
+        // sincronizada com essa senha; usar aqui a do transporte da instalação
+        // dava «credenciais recusadas» a cada passagem, mesmo com o refresh
+        // manual (que passa pelo registo) a funcionar.
+        let provider = match registry.for_mailbox(pool, mailbox_id).await {
+            Ok(provider) => provider,
             Err(error) => {
-                let traduzido = from_provider(error);
-                // Registada na caixa antes de continuar: é lá que quem a abre vê
-                // a razão, em vez de encontrar uma lista vazia sem explicação.
-                repo::record_sync(pool, mailbox_id, Some(&traduzido.to_string())).await?;
+                repo::record_sync(pool, mailbox_id, Some(&error.to_string())).await?;
                 resultado.failed += 1;
                 tracing::warn!(
                     correlation_id = %ids.correlation_id,
                     mailbox = %address,
-                    cause = %traduzido,
+                    cause = %error,
+                    "a mailbox credential could not be resolved"
+                );
+                continue;
+            }
+        };
+
+        // A Inbox não é o único correio de uma caixa: o correio enviado vive no
+        // `Sent` e o correio guardado no `Archive`. Sincronizar só a Inbox
+        // deixava as pastas «Enviados» e «Arquivados» eternamente vazias — à
+        // espera de um refresh manual pasta a pasta —, mesmo com credenciais
+        // válidas. Rascunhos são do Core (não do IMAP) e Favoritos é uma flag;
+        // nenhum se ingere aqui.
+        let mut indexados = 0_usize;
+        let mut erro_da_caixa: Option<String> = None;
+        for folder in INGESTED_FOLDERS.iter().copied() {
+            match provider
+                .list_messages(&address, folder, None, SYNC_BATCH)
+                .await
+            {
+                Ok(page) => {
+                    for header in &page.messages {
+                        match repo::upsert_message(pool, mailbox_id, header).await {
+                            Ok(_) => indexados += 1,
+                            // Uma linha que não se escreve não abandona a página. A
+                            // falha aparece na contagem, e não como caixa vazia.
+                            Err(error) => tracing::warn!(
+                                correlation_id = %ids.correlation_id,
+                                cause = %error,
+                                "a message header could not be indexed"
+                            ),
+                        }
+                    }
+                }
+                // Uma pasta que o servidor não tem não é uma falha da caixa: nem
+                // toda a caixa tem `Archive`, e a sua ausência não impede
+                // sincronizar as outras.
+                Err(ProviderError::NotFound) => continue,
+                // Auth ou ligação: a caixa inteira falhou, e não vale tentar as
+                // pastas seguintes com a mesma credencial recusada.
+                Err(error) => {
+                    erro_da_caixa = Some(from_provider(error).to_string());
+                    break;
+                }
+            }
+        }
+
+        match erro_da_caixa {
+            None => {
+                repo::record_sync(pool, mailbox_id, None).await?;
+                resultado.indexed += indexados;
+            }
+            Some(razao) => {
+                // Registada na caixa antes de continuar: é lá que quem a abre vê
+                // a razão, em vez de encontrar uma lista vazia sem explicação.
+                repo::record_sync(pool, mailbox_id, Some(&razao)).await?;
+                resultado.failed += 1;
+                tracing::warn!(
+                    correlation_id = %ids.correlation_id,
+                    mailbox = %address,
+                    cause = %razao,
                     "a mailbox could not be refreshed"
                 );
             }
