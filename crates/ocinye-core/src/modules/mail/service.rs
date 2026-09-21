@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use super::policy::{SendDecision, SendPolicy};
 use super::provider::{
-    InlineImage, MailProvider, OutgoingAttachment, OutgoingMessage, ProviderAddress, ProviderError,
+    InlineImage, OutgoingAttachment, OutgoingMessage, ProviderAddress, ProviderError,
 };
 use super::repository as repo;
 use super::signature::{self, LogoRef, Projections, SignatureFacts, LOGO_CONTENT_ID};
@@ -1808,7 +1808,7 @@ pub struct IngestionOutcome {
 /// isto é, quando não há sequer por onde começar.
 pub async fn ingest_all(
     pool: &PgPool,
-    provider: &dyn MailProvider,
+    registry: &super::ProviderRegistry,
     ids: &CorrelationIds,
 ) -> CoreResult<IngestionOutcome> {
     let caixas = repo::connected_mailboxes(pool).await?;
@@ -1818,6 +1818,27 @@ pub async fn ingest_all(
     };
 
     for (mailbox_id, address) in caixas {
+        // A credencial é a **da caixa**, resolvida pelo registo como no
+        // sincronizar manual — não uma credencial institucional única aplicada a
+        // todas. Uma caixa ligada com a senha do próprio membro tem de ser
+        // sincronizada com essa senha; usar aqui a do transporte da instalação
+        // dava «credenciais recusadas» a cada passagem, mesmo com o refresh
+        // manual (que passa pelo registo) a funcionar.
+        let provider = match registry.for_mailbox(pool, mailbox_id).await {
+            Ok(provider) => provider,
+            Err(error) => {
+                repo::record_sync(pool, mailbox_id, Some(&error.to_string())).await?;
+                resultado.failed += 1;
+                tracing::warn!(
+                    correlation_id = %ids.correlation_id,
+                    mailbox = %address,
+                    cause = %error,
+                    "a mailbox credential could not be resolved"
+                );
+                continue;
+            }
+        };
+
         // A Inbox não é o único correio de uma caixa: o correio enviado vive no
         // `Sent` e o correio guardado no `Archive`. Sincronizar só a Inbox
         // deixava as pastas «Enviados» e «Arquivados» eternamente vazias — à

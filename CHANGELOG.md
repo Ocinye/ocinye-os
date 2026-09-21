@@ -7,27 +7,35 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
-### O correio enviado passa a ser indexado automaticamente — 2026-09-22
+### A ingestão de correio usa a credencial de cada caixa, e cobre o enviado — 2026-09-22
 
-A pasta **Enviados** (e **Arquivados**) aparecia sempre vazia: a ingestão
-periódica de correio (`ingest_all`, no worker) só sincronizava a **Inbox**. O
-correio enviado vive no `Sent` do servidor e nunca era indexado — só apareceria
-com um *refresh* manual, pasta a pasta.
+Dois defeitos na ingestão periódica de correio (`ingest_all`, corrida pelo
+worker), diagnosticados nos logs de produção:
 
-- **Correcção.** A ingestão periódica passa a cobrir um conjunto de pastas —
-  `Inbox`, `Sent`, `Archive` — por caixa. Uma pasta que o servidor não tem
-  (`Archive` → `NotFound`) é ignorada sem falhar a caixa; uma recusa de
-  credencial ou falha de ligação continua a marcar a caixa (é lá que quem a abre
-  vê a razão). `Rascunhos` são do Core (o ciclo de rascunho do compositor, não a
-  pasta IMAP) e `Favoritos` é uma flag; nenhum se ingere por rotina, e `Spam`/`Lixo`
-  ficam a pedido.
+1. **Credencial errada.** O worker usava **um único adaptador institucional** (a
+   credencial do transporte da instalação) para **todas** as caixas, em vez da
+   credencial **de cada caixa** — a do próprio membro (ADR-0409). Resultado:
+   `AuthenticationFailed` a cada passagem (~5 min), a marcar a caixa com
+   «credenciais recusadas» — mesmo com a caixa ligada e o *refresh manual* (que
+   passa pelo registo) a funcionar. Era por isso que a mensagem de erro voltava
+   sempre a aparecer e só desaparecia ao actualizar à mão.
+2. **Só a Inbox.** Mesmo com a credencial certa, só a `Inbox` era sincronizada; o
+   correio enviado (`Sent`) e o guardado (`Archive`) nunca eram indexados.
+
+- **Correcção.** `ingest_all` passa a resolver o fornecedor pelo **registo**
+  (`ProviderRegistry::for_mailbox`), como o sincronizar manual — a credencial é a
+  da caixa. E cobre um conjunto de pastas por caixa (`Inbox`, `Sent`, `Archive`):
+  uma pasta que o servidor não tem (`Archive` → `NotFound`) é ignorada sem falhar
+  a caixa; uma credencial que não resolve marca a caixa com a razão. `Rascunhos`
+  são do Core (não a pasta IMAP) e `Favoritos` é uma flag; `Spam`/`Lixo` ficam a
+  pedido.
 - **Prova.** Teste com base `a_ingestao_periodica_indexa_o_correio_enviado`
-  (o correio do `Sent` fica indexado; uma pasta ausente não falha a caixa),
-  verificado por reversão.
+  (a passagem resolve o fornecedor pelo registo, indexa o `Sent`, e uma pasta
+  ausente não falha a caixa), verificado por reversão.
 
-> Nota operacional: para o correio (enviado ou recebido) voltar a sincronizar, a
-> caixa tem de ter credenciais aceites pelo servidor — uma caixa com a senha
-> recusada não sincroniza nenhuma pasta até ser religada.
+> Nota operacional: uma caixa cuja senha o **servidor** recusa continua sem
+> sincronizar até ser religada — isto corrige o caso em que a senha guardada é
+> boa mas a ingestão a ignorava.
 
 ### «Actividade» deixa de dar 502 (o Core devolvia 500) — 2026-09-17
 

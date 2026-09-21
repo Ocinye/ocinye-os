@@ -226,6 +226,29 @@ fn registo_com(
     )
 }
 
+/// Um registo **sem chave** à volta de um fornecedor de teste: `for_mailbox`
+/// devolve este fornecedor para qualquer caixa (o caminho institucional). Serve
+/// aos testes de ingestão, que medem o que a passagem faz com o fornecedor que o
+/// registo lhe dá — não a selecção de credencial, que é contrato do `for_mailbox`.
+fn registo_institucional(provider: std::sync::Arc<dyn MailProvider>) -> mail::ProviderRegistry {
+    mail::ProviderRegistry::new(
+        provider,
+        ocinye_core::config::MailConfig {
+            institutional_domains: vec!["ocinye.com".to_owned()],
+            imap_host: "imap.exemplo.invalid".to_owned(),
+            imap_port: 993,
+            imap_security: ocinye_core::config::MailSecurity::ImplicitTls,
+            smtp_host: "smtp.exemplo.invalid".to_owned(),
+            smtp_port: 587,
+            smtp_security: ocinye_core::config::MailSecurity::StartTls,
+            username: String::new(),
+            password: String::new(),
+            max_message_bytes: 25 * 1024 * 1024,
+        },
+        None,
+    )
+}
+
 /// Uma sonda que aceita, e conta quantas vezes foi consultada.
 ///
 /// Declara o que este harness assume: que a credencial abre. Assumi-lo é
@@ -1756,12 +1779,12 @@ async fn uma_caixa_que_falha_nao_leva_as_outras() {
         .await
         .expect("endereço");
 
-    let provider = ProviderParcial {
+    let registo = registo_institucional(std::sync::Arc::new(ProviderParcial {
         recusa: endereco_mau,
-    };
+    }));
     let passagem = ocinye_core::modules::mail::service::ingest_all(
         &pool,
-        &provider,
+        &registo,
         &CorrelationIds::generate(),
     )
     .await
@@ -1958,13 +1981,10 @@ async fn a_ingestao_periodica_indexa_o_correio_enviado() {
     let alice = person(&pool, org, &["research_member"]).await;
     let caixa = personal_mailbox(&pool, org, alice.person_id).await;
 
-    ocinye_core::modules::mail::service::ingest_all(
-        &pool,
-        &ProviderPorPasta,
-        &CorrelationIds::generate(),
-    )
-    .await
-    .expect("a ingestão não pode falhar");
+    let registo = registo_institucional(std::sync::Arc::new(ProviderPorPasta));
+    ocinye_core::modules::mail::service::ingest_all(&pool, &registo, &CorrelationIds::generate())
+        .await
+        .expect("a ingestão não pode falhar");
 
     // O correio enviado ficou indexado nesta caixa — o que faltava.
     let enviados: i64 = sqlx::query_scalar(
