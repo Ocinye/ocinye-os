@@ -1823,3 +1823,171 @@ async fn uma_caixa_que_falha_nao_leva_as_outras() {
         "a caixa que recusou não apareceu na contagem de falhas da batida"
     );
 }
+
+/// Um fornecedor com uma mensagem na Inbox e no `Sent`, e sem pasta `Archive`.
+///
+/// Serve para provar que a ingestão periódica indexa o correio **enviado**, não
+/// só a Inbox, e que uma pasta que o servidor não tem não faz a caixa falhar.
+struct ProviderPorPasta;
+
+#[async_trait]
+impl MailProvider for ProviderPorPasta {
+    fn adapter_name(&self) -> &'static str {
+        "por-pasta"
+    }
+
+    async fn health(&self) -> ProviderHealth {
+        ProviderHealth {
+            endpoints: vec!["por-pasta:0".to_owned()],
+            can_read: true,
+            can_send: true,
+            rejected_credential: false,
+            detail: "Fornecedor de teste.".to_owned(),
+        }
+    }
+
+    async fn list_messages(
+        &self,
+        _mailbox_address: &str,
+        folder: MailFolder,
+        _cursor: Option<&str>,
+        _limit: u32,
+    ) -> ProviderResult<MessagePage> {
+        let uma = |folder: MailFolder, provider_id: &str| MessagePage {
+            messages: vec![MessageHeader {
+                provider_id: provider_id.to_owned(),
+                message_id: None,
+                thread_key: None,
+                folder,
+                from: ProviderAddress {
+                    address: "quem@exemplo.com".to_owned(),
+                    display_name: None,
+                },
+                to: Vec::new(),
+                cc: Vec::new(),
+                subject: Some(format!("mensagem em {}", folder.as_str())),
+                snippet: None,
+                sent_at: chrono::Utc::now(),
+                is_read: false,
+                is_starred: false,
+                has_attachments: false,
+                size_bytes: None,
+            }],
+            next_cursor: None,
+        };
+        match folder {
+            MailFolder::Inbox => Ok(uma(MailFolder::Inbox, "inbox-1")),
+            MailFolder::Sent => Ok(uma(MailFolder::Sent, "sent-1")),
+            // O servidor não tem pasta de Arquivo.
+            MailFolder::Archive => Err(ocinye_core::modules::mail::ProviderError::NotFound),
+            _ => Ok(MessagePage {
+                messages: Vec::new(),
+                next_cursor: None,
+            }),
+        }
+    }
+
+    async fn fetch_message(
+        &self,
+        _mailbox_address: &str,
+        _folder: MailFolder,
+        _provider_id: &str,
+    ) -> ProviderResult<FetchedMessage> {
+        Err(indisponivel())
+    }
+
+    async fn fetch_attachment(
+        &self,
+        _mailbox_address: &str,
+        _folder: MailFolder,
+        _provider_id: &str,
+        _part_id: &str,
+    ) -> ProviderResult<Vec<u8>> {
+        Err(indisponivel())
+    }
+
+    async fn send_message(
+        &self,
+        _mailbox_address: &str,
+        _message: &OutgoingMessage,
+    ) -> ProviderResult<Option<String>> {
+        Err(indisponivel())
+    }
+
+    async fn move_message(
+        &self,
+        _mailbox_address: &str,
+        _folder: MailFolder,
+        _provider_id: &str,
+        _destination: MailFolder,
+    ) -> ProviderResult<()> {
+        Ok(())
+    }
+
+    async fn set_read(
+        &self,
+        _mailbox_address: &str,
+        _folder: MailFolder,
+        _provider_id: &str,
+        _read: bool,
+    ) -> ProviderResult<()> {
+        Ok(())
+    }
+
+    async fn set_starred(
+        &self,
+        _mailbox_address: &str,
+        _folder: MailFolder,
+        _provider_id: &str,
+        _starred: bool,
+    ) -> ProviderResult<()> {
+        Ok(())
+    }
+}
+
+/// A ingestão periódica indexa o correio enviado, não só a Inbox.
+///
+/// Regressão de produção: a pasta «Enviados» aparecia sempre vazia porque
+/// `ingest_all` só sincronizava a Inbox. Aqui prova-se que o correio do `Sent`
+/// fica indexado, e que uma pasta que o servidor não tem (`Archive` →
+/// `NotFound`) não faz a caixa inteira falhar.
+#[tokio::test]
+async fn a_ingestao_periodica_indexa_o_correio_enviado() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let alice = person(&pool, org, &["research_member"]).await;
+    let caixa = personal_mailbox(&pool, org, alice.person_id).await;
+
+    ocinye_core::modules::mail::service::ingest_all(
+        &pool,
+        &ProviderPorPasta,
+        &CorrelationIds::generate(),
+    )
+    .await
+    .expect("a ingestão não pode falhar");
+
+    // O correio enviado ficou indexado nesta caixa — o que faltava.
+    let enviados: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM mail_messages WHERE mailbox_id = $1 AND folder = 'sent'",
+    )
+    .bind(caixa)
+    .fetch_one(&pool)
+    .await
+    .expect("contar enviados");
+    assert!(
+        enviados >= 1,
+        "o correio enviado não foi indexado pela ingestão periódica"
+    );
+
+    // A ausência de `Archive` não marcou a caixa como falhada.
+    let erro: Option<String> =
+        sqlx::query_scalar("SELECT last_sync_error FROM mailboxes WHERE id = $1")
+            .bind(caixa)
+            .fetch_one(&pool)
+            .await
+            .expect("estado da caixa");
+    assert!(
+        erro.is_none(),
+        "uma pasta ausente marcou a caixa como falhada: {erro:?}"
+    );
+}

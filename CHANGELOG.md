@@ -7,6 +7,28 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### O correio enviado passa a ser indexado automaticamente — 2026-09-22
+
+A pasta **Enviados** (e **Arquivados**) aparecia sempre vazia: a ingestão
+periódica de correio (`ingest_all`, no worker) só sincronizava a **Inbox**. O
+correio enviado vive no `Sent` do servidor e nunca era indexado — só apareceria
+com um *refresh* manual, pasta a pasta.
+
+- **Correcção.** A ingestão periódica passa a cobrir um conjunto de pastas —
+  `Inbox`, `Sent`, `Archive` — por caixa. Uma pasta que o servidor não tem
+  (`Archive` → `NotFound`) é ignorada sem falhar a caixa; uma recusa de
+  credencial ou falha de ligação continua a marcar a caixa (é lá que quem a abre
+  vê a razão). `Rascunhos` são do Core (o ciclo de rascunho do compositor, não a
+  pasta IMAP) e `Favoritos` é uma flag; nenhum se ingere por rotina, e `Spam`/`Lixo`
+  ficam a pedido.
+- **Prova.** Teste com base `a_ingestao_periodica_indexa_o_correio_enviado`
+  (o correio do `Sent` fica indexado; uma pasta ausente não falha a caixa),
+  verificado por reversão.
+
+> Nota operacional: para o correio (enviado ou recebido) voltar a sincronizar, a
+> caixa tem de ter credenciais aceites pelo servidor — uma caixa com a senha
+> recusada não sincroniza nenhuma pasta até ser religada.
+
 ### «Actividade» deixa de dar 502 (o Core devolvia 500) — 2026-09-17
 
 Abrir **Actividade** (`/activity`) dava 502; o Core devolvia **500** em 3 ms — um
