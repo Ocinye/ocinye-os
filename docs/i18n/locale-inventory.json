@@ -7,7 +7,7 @@
     "fr"
   ],
   "fallback": "pt",
-  "slice": 7,
+  "slice": 8,
   "namespaces": [
     {
       "prefix": "nav",
@@ -87,6 +87,11 @@
     {
       "prefix": "mail",
       "surface": "Mail: list, reader, composer, settings (fully migrated)",
+      "status": "translated"
+    },
+    {
+      "prefix": "files",
+      "surface": "Files: personal, environments, upload, versions, preview (fully migrated)",
       "status": "translated"
     }
   ],

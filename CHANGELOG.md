@@ -7,6 +7,15 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização (fatia 8): os Ficheiros — 2026-09-23
+
+Os Ficheiros passam a pt/en/fr: cabeçalho e separadores (Favoritos/Recentes/
+Lixo), «Meus ficheiros» e os ambientes de investigação, o carregamento (largar,
+destino, nova versão), as acções por ficheiro (mudar nome, mover, eliminar,
+favorito), a pré-visualização e a classificação, o histórico de versões e os
+estados vazios. Os nomes de ficheiro e de pasta, e o conteúdo, são do membro e
+não se traduzem. Guarda de pureza `os_ficheiros_nao_misturam_linguas`.
+
 ### Internacionalização (fatia 7): o Correio — 2026-09-23
 
 O Correio passa a pt/en/fr por inteiro: cabeçalho, pastas (Caixa de

@@ -10655,7 +10655,7 @@ async fn files_browse(
             notice: aviso_de(query.ok.as_deref(), query.erro.as_deref()),
         });
         return shell_page(
-            "Ficheiros",
+            crate::i18n::t("files.title"),
             &viewer,
             Screen::Files,
             vec![Crumb::to(Screen::Files)],
@@ -10714,7 +10714,7 @@ async fn files_browse(
     });
 
     shell_page(
-        "Ficheiros",
+        crate::i18n::t("files.title"),
         &viewer,
         Screen::Files,
         vec![Crumb::to(Screen::Files)],
