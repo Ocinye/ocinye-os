@@ -92,7 +92,7 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
             </div>
 
             {assist(Assist {
-                here: t("knowledge.here"),
+                here: "knowledge.here",
                 workspace_id: None,
                 resource: None,
                 suggestions: KNOWLEDGE_SUGGESTIONS,

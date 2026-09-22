@@ -8023,7 +8023,7 @@ async fn notes_list(
     // ainda serve, sem barra de pastas.
     let folders = optional(&state, &member, "/api/v1/me/folders").await;
     shell_page(
-        "Notas",
+        crate::i18n::t("nav.notes"),
         &viewer,
         Screen::Notes,
         Vec::new(),
@@ -8123,7 +8123,7 @@ async fn note_editor(
     };
     let trail = vec![Crumb::to(Screen::Notes)];
     shell_page(
-        "Nota",
+        crate::i18n::t("notes.editor.title"),
         &viewer,
         Screen::Notes,
         trail,
@@ -8217,7 +8217,7 @@ async fn shared_notes_page(State(state): State<WorkspaceState>, headers: HeaderM
     };
     let trail = vec![Crumb::to(Screen::Notes)];
     shell_page(
-        "Partilhadas comigo",
+        crate::i18n::t("notes.shared_with_me"),
         &viewer,
         Screen::Notes,
         trail,
@@ -8235,7 +8235,7 @@ async fn notes_trash_page(State(state): State<WorkspaceState>, headers: HeaderMa
     };
     let trail = vec![Crumb::to(Screen::Notes)];
     shell_page(
-        "Lixo",
+        crate::i18n::t("notes.trash"),
         &viewer,
         Screen::Notes,
         trail,
