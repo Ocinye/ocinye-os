@@ -7,6 +7,17 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização (fatia 7): o Correio — 2026-09-23
+
+O Correio passa a pt/en/fr por inteiro: cabeçalho, pastas (Caixa de
+entrada/Enviados/Rascunhos/Arquivo/Spam/Lixo — traduzidas pela chave da pasta,
+não pelo rótulo do servidor), a lista e a leitura, o compositor (De/Para/Cc/Bcc,
+Assunto, a barra de formatação, anexos, o diálogo de descartar), a assistência de
+escrita, e as Definições de correio (estado do serviço, caixas, assinatura,
+conteúdo remoto). O conteúdo das mensagens (assunto, corpo, remetentes,
+endereços) fica marcado como conteúdo e nunca se traduz. Guarda de pureza
+`o_correio_nao_mistura_linguas`.
+
 ### Internacionalização (fatia 6): datas com locale — 2026-09-22
 
 Os nomes de mês e de dia e os moldes de data passam a seguir o idioma corrente,

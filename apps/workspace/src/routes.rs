@@ -1751,7 +1751,7 @@ async fn mail_screen(
     };
 
     shell_page(
-        "Correio",
+        crate::i18n::t("mail.title"),
         &viewer,
         Screen::Mail,
         Vec::new(),
@@ -2551,7 +2551,7 @@ async fn mail_settings(State(state): State<WorkspaceState>, headers: HeaderMap) 
     );
 
     shell_page(
-        "Definições de correio",
+        crate::i18n::t("mail.settings.title"),
         &viewer,
         Screen::Mail,
         vec![Crumb::to(Screen::Mail)],

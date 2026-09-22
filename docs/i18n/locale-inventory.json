@@ -7,7 +7,7 @@
     "fr"
   ],
   "fallback": "pt",
-  "slice": 6,
+  "slice": 7,
   "namespaces": [
     {
       "prefix": "nav",
@@ -82,6 +82,11 @@
     {
       "prefix": "date",
       "surface": "month/weekday names + locale-aware date templates",
+      "status": "translated"
+    },
+    {
+      "prefix": "mail",
+      "surface": "Mail: list, reader, composer, settings (fully migrated)",
       "status": "translated"
     }
   ],
