@@ -1925,17 +1925,32 @@
       });
     }
 
-    /* Carregar: escolher um ficheiro submete logo. */
+    /* Carregar: escolher ficheiros carrega-os com uma janela de progresso.
+     *
+     * Cada ficheiro segue no seu próprio `XMLHttpRequest` para `/files/upload`
+     * (o mesmo destino do formulário), com `Accept: application/json` para o
+     * servidor responder com estado e não com uma navegação. Vários ao mesmo
+     * tempo, cada um com a sua barra; cancelar é abortar o pedido. Sem isto — ou
+     * sem JavaScript — o formulário continua a submeter-se por inteiro. */
     const campo = fs.querySelector('[data-oc="fs-carregar"]');
-    if (campo) {
+    const forma = campo && campo.closest('[data-oc="fs-carregar-form"]');
+    if (campo && forma && window.XMLHttpRequest && window.FormData) {
+      const janela = criarJanelaDeCarregamento();
       campo.addEventListener('change', () => {
-        if (campo.files && campo.files.length) {
-          const form = campo.closest('[data-oc="fs-carregar-form"]');
-          if (form) {
-            if (form.requestSubmit) form.requestSubmit();
-            else form.submit();
-          }
-        }
+        const ficheiros = campo.files ? Array.from(campo.files) : [];
+        if (!ficheiros.length) return;
+        const destino = forma.getAttribute('action') || '/files/upload';
+        const regressoCampo = forma.querySelector('[name="return_to"]');
+        const wsCampo = forma.querySelector('[name="workspace_id"]');
+        ficheiros.forEach((ficheiro) => {
+          janela.carregar(ficheiro, destino, {
+            workspace_id: wsCampo ? wsCampo.value : '',
+            return_to: regressoCampo ? regressoCampo.value : '',
+          });
+        });
+        /* Limpar a selecção: escolher o mesmo ficheiro outra vez volta a disparar
+           o `change`, e o campo não fica a segurar o que já partiu. */
+        campo.value = '';
       });
     }
 
@@ -2182,6 +2197,233 @@
   }
 
   /* ── Arranque ─────────────────────────────────────────────────────── */
+
+  /* A janela de progresso dos carregamentos pessoais.
+   *
+   * O padrão do Google Drive: um cartão fixo no canto que lista cada ficheiro
+   * com a sua barra, e some quando o trabalho assenta. Cada ficheiro sobe no
+   * seu próprio pedido, em paralelo; cancelar é abortá-lo. Só se cria quando o
+   * primeiro ficheiro parte, e nunca guarda nada institucional — é só o estado
+   * visível de um envio. */
+  function criarJanelaDeCarregamento() {
+    let painel = null;
+    let corpo = null;
+    let tituloEl = null;
+    let fechado = false;
+    let activos = 0;
+    let ok = 0;
+    let falhas = 0;
+
+    function montar() {
+      if (painel) return;
+      fechado = false;
+      painel = document.createElement('section');
+      painel.className = 'oc-up';
+      painel.setAttribute('role', 'status');
+      painel.setAttribute('aria-live', 'polite');
+
+      const cabeca = document.createElement('header');
+      cabeca.className = 'oc-up__head';
+      tituloEl = document.createElement('span');
+      tituloEl.className = 'oc-up__title';
+      cabeca.appendChild(tituloEl);
+
+      const controlos = document.createElement('span');
+      controlos.className = 'oc-up__controls';
+
+      const dobrar = document.createElement('button');
+      dobrar.type = 'button';
+      dobrar.className = 'oc-up__icon';
+      dobrar.setAttribute('aria-label', 'Reduzir');
+      dobrar.textContent = '⌄';
+      dobrar.addEventListener('click', () => {
+        const reduzido = painel.classList.toggle('oc-up--reduzido');
+        dobrar.textContent = reduzido ? '⌃' : '⌄';
+        dobrar.setAttribute('aria-label', reduzido ? 'Expandir' : 'Reduzir');
+      });
+
+      const fechar = document.createElement('button');
+      fechar.type = 'button';
+      fechar.className = 'oc-up__icon';
+      fechar.setAttribute('aria-label', 'Fechar');
+      fechar.textContent = '×';
+      fechar.addEventListener('click', () => {
+        fechado = true;
+        // Fechar cancela o que ainda estiver a subir.
+        corpo.querySelectorAll('[data-abortar]').forEach((b) => b.click());
+        remover();
+      });
+
+      controlos.appendChild(dobrar);
+      controlos.appendChild(fechar);
+      cabeca.appendChild(controlos);
+
+      corpo = document.createElement('div');
+      corpo.className = 'oc-up__body';
+
+      painel.appendChild(cabeca);
+      painel.appendChild(corpo);
+      document.body.appendChild(painel);
+    }
+
+    function remover() {
+      if (painel && painel.parentNode) painel.parentNode.removeChild(painel);
+      painel = null;
+      corpo = null;
+      tituloEl = null;
+      activos = 0;
+      ok = 0;
+      falhas = 0;
+    }
+
+    function resumir() {
+      if (!tituloEl) return;
+      if (activos > 0) {
+        tituloEl.textContent =
+          'A carregar ' + activos + (activos === 1 ? ' ficheiro…' : ' ficheiros…');
+      } else if (falhas > 0) {
+        tituloEl.textContent =
+          ok + ' carregado' + (ok === 1 ? '' : 's') + ' · ' + falhas + ' por carregar';
+      } else {
+        tituloEl.textContent = ok + (ok === 1 ? ' ficheiro carregado' : ' ficheiros carregados');
+      }
+    }
+
+    /* Quando tudo parou e algo entrou, recarregar a lista para o mostrar — a não
+       ser que a janela já tenha sido fechada à mão. */
+    function assentar() {
+      if (fechado || !painel || activos > 0) return;
+      if (ok > 0) setTimeout(() => window.location.reload(), 1000);
+    }
+
+    function linha(nome) {
+      const el = document.createElement('div');
+      el.className = 'oc-up__line';
+
+      const info = document.createElement('div');
+      info.className = 'oc-up__info';
+      const titulo = document.createElement('b');
+      /* `textContent`: o nome do ficheiro vem de fora e não é marcação. */
+      titulo.textContent = nome;
+      const estado = document.createElement('span');
+      estado.className = 'oc-up__state';
+      estado.textContent = 'A preparar…';
+      info.appendChild(titulo);
+      info.appendChild(estado);
+
+      const barra = document.createElement('span');
+      barra.className = 'oc-progress';
+      const carril = document.createElement('span');
+      carril.className = 'oc-progress__track';
+      const cheio = document.createElement('span');
+      cheio.className = 'oc-progress__fill oc-progress__fill--var';
+      carril.appendChild(cheio);
+      barra.appendChild(carril);
+
+      const accao = document.createElement('button');
+      accao.type = 'button';
+      accao.className = 'oc-up__icon oc-up__cancelar';
+      accao.setAttribute('aria-label', 'Cancelar');
+      accao.setAttribute('data-abortar', '1');
+      accao.textContent = '×';
+
+      el.appendChild(info);
+      el.appendChild(barra);
+      el.appendChild(accao);
+      corpo.appendChild(el);
+
+      return {
+        progresso: (pct) => cheio.style.setProperty('--oc-progresso', pct + '%'),
+        diz: (texto, mau) => {
+          estado.textContent = texto;
+          estado.className = 'oc-up__state' + (mau ? ' oc-up__state--bad' : '');
+        },
+        aoCancelar: (fn) => accao.addEventListener('click', fn),
+        marca: (glifo, classe) => {
+          const m = document.createElement('span');
+          m.className = 'oc-up__mark' + (classe ? ' ' + classe : '');
+          m.setAttribute('aria-hidden', 'true');
+          m.textContent = glifo;
+          if (accao.parentNode) accao.parentNode.replaceChild(m, accao);
+        },
+      };
+    }
+
+    function carregar(ficheiro, destino, extras) {
+      montar();
+      activos += 1;
+      resumir();
+      const ui = linha(ficheiro.name);
+
+      const fd = new FormData();
+      fd.append('file', ficheiro, ficheiro.name);
+      if (extras) {
+        Object.keys(extras).forEach((chave) => {
+          if (extras[chave]) fd.append(chave, extras[chave]);
+        });
+      }
+
+      const xhr = new XMLHttpRequest();
+      let terminado = false;
+      const terminar = (bom, texto) => {
+        if (terminado) return;
+        terminado = true;
+        activos -= 1;
+        if (bom) {
+          ok += 1;
+          ui.progresso(100);
+          ui.diz('Concluído');
+          ui.marca('✓', 'oc-up__mark--ok');
+        } else {
+          falhas += 1;
+          ui.diz(texto || 'Falhou', true);
+          ui.marca('!', 'oc-up__mark--bad');
+        }
+        resumir();
+        assentar();
+      };
+
+      xhr.open('POST', destino, true);
+      xhr.setRequestHeader('Accept', 'application/json');
+      if (xhr.upload) {
+        xhr.upload.addEventListener('progress', (evento) => {
+          if (evento.lengthComputable) {
+            const pct = Math.round((evento.loaded / evento.total) * 100);
+            ui.progresso(pct);
+            ui.diz(pct < 100 ? pct + '%' : 'A finalizar…');
+          }
+        });
+      }
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          terminar(true);
+          return;
+        }
+        let texto = 'Falhou';
+        if (xhr.status === 507) texto = 'Sem espaço';
+        else if (xhr.status === 401) texto = 'Sessão expirada';
+        else {
+          try {
+            const corpoErro = JSON.parse(xhr.responseText);
+            if (corpoErro && corpoErro.erro === 'armazenamento') texto = 'Sem espaço';
+          } catch (erro) {
+            /* corpo não-JSON: fica a mensagem genérica. */
+          }
+        }
+        terminar(false, texto);
+      });
+      xhr.addEventListener('error', () => terminar(false, 'Erro de rede'));
+      xhr.addEventListener('abort', () => terminar(false, 'Cancelado'));
+
+      ui.aoCancelar(() => {
+        if (!terminado) xhr.abort();
+      });
+      ui.diz('A carregar…');
+      xhr.send(fd);
+    }
+
+    return { carregar };
+  }
 
   const start = () => {
     initSidebar();

@@ -10888,20 +10888,45 @@ fn encaminhar(resultado: Result<Value, ApiFailure>) -> Response {
     }
 }
 
+/// O pedido pede a resposta em JSON (o carregador com barra de progresso), e não
+/// uma navegação de página inteira?
+///
+/// O carregador do browser envia cada ficheiro por `XMLHttpRequest` com
+/// `Accept: application/json` para poder ler o progresso e o resultado de cada
+/// um. Sem JavaScript, o mesmo formulário submete-se por inteiro e volta com um
+/// redireccionamento — e é essa a razão de negociar aqui, e não impor um só
+/// comportamento aos dois caminhos.
+fn aceita_json(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.contains("application/json"))
+}
+
 async fn files_upload(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
     multipart: Multipart,
 ) -> Response {
-    let member = member_or_login!(state, headers);
+    let quer_json = aceita_json(&headers);
+    // Um `fetch`/XHR segue redireccionamentos: mandá-lo para `/login` dar-lhe-ia
+    // `200` com a página de entrada, que ele tentaria ler como JSON. `401` diz a
+    // verdade. Sem JS, o redireccionamento é o comportamento certo.
+    let member = match membro_ou_recusa(&state, &headers) {
+        Some(member) => member,
+        None if quer_json => return nao_autenticado(),
+        None => return Redirect::to("/login").into_response(),
+    };
     let (ficheiro, campos) = ler_carregamento(multipart).await;
 
     let Some((nome, tipo, dados)) = ficheiro else {
-        return regresso(&campos, "erro=vazio");
+        return recusa_de_carregamento(quer_json, &campos, "vazio", StatusCode::BAD_REQUEST);
     };
     if dados.is_empty() {
-        return regresso(&campos, "erro=vazio");
+        return recusa_de_carregamento(quer_json, &campos, "vazio", StatusCode::BAD_REQUEST);
     }
+    // O nome viaja para a resposta em JSON, antes de `nome` ser consumido no envio.
+    let nome_resposta = nome.clone();
 
     // Sem ambiente indicado, o destino é o espaço pessoal: «Meus ficheiros»
     // existe para todo o membro activo, sem exigir ambiente nenhum. Com
@@ -10945,10 +10970,39 @@ async fn files_upload(
     };
 
     match resultado {
+        Ok(_) if quer_json => (
+            StatusCode::OK,
+            axum::Json(serde_json::json!({ "ok": true, "filename": nome_resposta })),
+        )
+            .into_response(),
         Ok(_) => regresso(&campos, "ok=carregado"),
+        Err(ApiFailure::Unauthorised) if quer_json => nao_autenticado(),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(ApiFailure::Unavailable(_)) => regresso(&campos, "erro=armazenamento"),
-        Err(_) => regresso(&campos, "erro=recusado"),
+        Err(ApiFailure::Unavailable(_)) => recusa_de_carregamento(
+            quer_json,
+            &campos,
+            "armazenamento",
+            StatusCode::INSUFFICIENT_STORAGE,
+        ),
+        Err(_) => recusa_de_carregamento(quer_json, &campos, "recusado", StatusCode::BAD_GATEWAY),
+    }
+}
+
+/// A recusa de um carregamento, na língua que o pedido entende.
+///
+/// Com JavaScript, um estado HTTP verdadeiro e um `erro` legível por ficheiro;
+/// sem ele, o redireccionamento de sempre com a mensagem no sufixo. O mesmo
+/// motivo em ambos, dito de duas maneiras.
+fn recusa_de_carregamento(
+    quer_json: bool,
+    campos: &std::collections::HashMap<String, String>,
+    erro: &str,
+    estado: StatusCode,
+) -> Response {
+    if quer_json {
+        (estado, axum::Json(serde_json::json!({ "erro": erro }))).into_response()
+    } else {
+        regresso(campos, &format!("erro={erro}"))
     }
 }
 
@@ -12146,5 +12200,35 @@ mod corpo_de_rascunho_tests {
         assert_eq!(corpo["mailbox_id"], id);
         assert_eq!(corpo["in_reply_to"], reply);
         assert_eq!(corpo["to"], json!(["a@b.com"]));
+    }
+}
+
+#[cfg(test)]
+mod carregamento_tests {
+    use super::aceita_json;
+    use axum::http::{header, HeaderMap, HeaderValue};
+
+    /// O carregador com barra de progresso pede JSON; a navegação sem JS não.
+    ///
+    /// É esta distinção que deixa o mesmo `/files/upload` responder com estado
+    /// (para o XHR ler o progresso e o resultado) ou com um redireccionamento
+    /// (para o formulário voltar à página) — sem impor um comportamento aos dois.
+    #[test]
+    fn so_pede_json_quem_o_aceita() {
+        let mut com = HeaderMap::new();
+        com.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
+        assert!(aceita_json(&com), "Accept: application/json pede JSON");
+
+        let mut html = HeaderMap::new();
+        html.insert(
+            header::ACCEPT,
+            HeaderValue::from_static("text/html,application/xhtml+xml"),
+        );
+        assert!(!aceita_json(&html), "um browser a navegar não pede JSON");
+
+        assert!(
+            !aceita_json(&HeaderMap::new()),
+            "sem Accept, não se assume JSON"
+        );
     }
 }

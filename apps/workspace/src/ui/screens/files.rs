@@ -434,7 +434,7 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                         <label class="oc-btn oc-btn--primary oc-fs__carregar-btn">
                             {icon(Icon::Attach, 14)}
                             <span>"Carregar"</span>
-                            <input class="oc-sr" type="file" name="file" data-oc="fs-carregar" />
+                            <input class="oc-sr" type="file" name="file" multiple data-oc="fs-carregar" />
                         </label>
                     </form>
                 </div>

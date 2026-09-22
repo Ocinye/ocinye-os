@@ -6064,6 +6064,72 @@ select.oc-entrada {
 .oc-drop__state { color: var(--oc-text-muted); flex-shrink: 0; }
 .oc-drop__state--bad { color: var(--oc-error-text); }
 
+/* Janela de progresso dos carregamentos pessoais (o padrão do Google Drive):
+   um cartão fixo no canto, por cima do conteúdo mas abaixo de um modal. Reusa as
+   fichas de progresso já existentes (`.oc-progress`). */
+.oc-up {
+  position: fixed;
+  right: var(--oc-space-6, 16px);
+  bottom: var(--oc-space-6, 16px);
+  z-index: var(--oc-z-popover);
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  background: var(--oc-surface);
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-r-md);
+  box-shadow: var(--oc-shadow-menu);
+  overflow: hidden;
+}
+.oc-up__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--oc-space-3);
+  padding: var(--oc-space-3) var(--oc-space-4);
+  background: var(--oc-navy); color: var(--oc-on-navy);
+}
+.oc-up__title {
+  font: 500 13px var(--oc-font-sans);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.oc-up__controls { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.oc-up__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0;
+  border: 0; background: transparent; cursor: pointer;
+  color: inherit; font-size: 16px; line-height: 1; border-radius: var(--oc-r-sm);
+}
+.oc-up__head .oc-up__icon:hover { background: var(--oc-on-navy-hover); }
+.oc-up__body {
+  max-height: 320px; overflow-y: auto;
+  display: flex; flex-direction: column;
+}
+.oc-up--reduzido .oc-up__body { display: none; }
+.oc-up__line {
+  display: flex; align-items: center; gap: var(--oc-space-3);
+  padding: var(--oc-space-3) var(--oc-space-4);
+  border-top: 1px solid var(--oc-border-soft);
+}
+.oc-up__info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.oc-up__info b {
+  font: 500 12.5px var(--oc-font-sans); color: var(--oc-text-body);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.oc-up__state { font: 400 11px var(--oc-font-sans); color: var(--oc-text-muted); }
+.oc-up__state--bad { color: var(--oc-error-text); }
+.oc-up__line .oc-progress { width: 84px; flex-shrink: 0; }
+.oc-up__cancelar { color: var(--oc-text-muted); flex-shrink: 0; }
+.oc-up__cancelar:hover { background: var(--oc-surface-muted); color: var(--oc-text-body); }
+.oc-up__mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; flex-shrink: 0;
+  font-size: 14px; line-height: 1; font-weight: 600;
+}
+.oc-up__mark--ok { color: var(--oc-success-text); }
+.oc-up__mark--bad { color: var(--oc-error-text); }
+
+@media (max-width: 640px) {
+  .oc-up { right: 8px; left: 8px; bottom: 8px; width: auto; }
+}
+
 .oc-files__folder .oc-card__body {
   display: flex; flex-direction: column; gap: var(--oc-space-3);
 }
