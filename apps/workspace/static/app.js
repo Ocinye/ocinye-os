@@ -1205,6 +1205,34 @@
         sugestoes.textContent = '';
       }
 
+      /* Um destinatário é uma sugestão escolhida ou um endereço escrito por
+         inteiro — nunca um fragmento de pesquisa. «fidel» é o que se escreve
+         para encontrar fidel.monteiro@…, e não um destino em si. */
+      function pareceEndereco(texto) {
+        return /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test((texto || '').trim());
+      }
+
+      /* Aceitar o que ficou por confirmar, sem inventar destinatários. Com
+         `preferirSugestao` (Enter e vírgula, gestos explícitos), a sugestão em
+         foco completa o que se escrevia. Sem ele (perder o foco, submeter), só
+         um endereço completo conta: um fragmento fica no campo, à espera de ser
+         terminado, e não vira ficha só porque o foco mudou. */
+      function aceitarPendente(preferirSugestao) {
+        const texto = entrada.value.trim();
+        if (!texto) return;
+        const primeira = sugestoes.querySelector('.oc-sugestao em');
+        if (
+          preferirSugestao &&
+          !sugestoes.hasAttribute('hidden') &&
+          primeira &&
+          primeira.textContent
+        ) {
+          aceitar(primeira.textContent);
+        } else if (pareceEndereco(texto)) {
+          aceitar(texto);
+        }
+      }
+
       function desenhar(pessoas) {
         sugestoes.textContent = '';
         if (!pessoas.length) {
@@ -1250,12 +1278,7 @@
           /* Enter aceita o destinatário; **nunca** envia a mensagem. Enviar
              por engano ao confirmar um nome é o erro que não se desfaz. */
           evento.preventDefault();
-          const primeira = sugestoes.querySelector('.oc-sugestao em');
-          if (!sugestoes.hasAttribute('hidden') && primeira) {
-            aceitar(primeira.textContent);
-          } else {
-            aceitar(entrada.value);
-          }
+          aceitarPendente(true);
         } else if (evento.key === 'Backspace' && !entrada.value && aceites.length) {
           aceites.pop();
           sincronizar();
@@ -1264,19 +1287,20 @@
         }
       });
 
-      /* Sair do campo aceita o que lá estiver: quem escreveu um endereço e
-         carregou em Enviar espera que ele conte. */
+      /* Sair do campo aceita um endereço já completo — quem o escreveu e mudou
+         de campo espera que conte. Um fragmento por resolver não vira ficha só
+         por o foco mudar: fica escrito, para se terminar. */
       entrada.addEventListener('blur', () => {
         setTimeout(() => {
-          if (entrada.value.trim()) aceitar(entrada.value);
+          aceitarPendente(false);
           esconderSugestoes();
         }, 160);
       });
 
-      /* No envio, aceitar sincronamente o que ficou por confirmar. O `blur`
-         acima faz o mesmo, mas diferido: contra o `submit` chega tarde. */
+      /* No envio, aceitar sincronamente o endereço que ficou por confirmar. O
+         `blur` acima faz o mesmo, mas diferido: contra o `submit` chega tarde. */
       escoar.push(() => {
-        if (entrada.value.trim()) aceitar(entrada.value);
+        aceitarPendente(false);
       });
 
       sincronizar();
