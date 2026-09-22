@@ -210,9 +210,9 @@ pub fn mail(
         <div class="oc-page oc-page--mail">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Correio"</h1>
+                    <h1>{crate::i18n::t("mail.title")}</h1>
                     <p>
-                        "O correio institucional da Ocinye, dentro do Ocinye Workspace."
+                        {crate::i18n::t("mail.header_subtitle")}
                     </p>
                 </div>
                 // A hierarquia que a acção merece.
@@ -229,9 +229,9 @@ pub fn mail(
                     <a
                         class="oc-icon-btn"
                         href="/mail/settings"
-                        title="Definições de correio"
+                        title=crate::i18n::t("mail.settings")
                     >
-                        <span class="oc-sr">"Definições de correio"</span>
+                        <span class="oc-sr">{crate::i18n::t("mail.settings")}</span>
                         {icon(Icon::Settings, 15)}
                     </a>
                     {sync_action(&current_id, view.can_read(), &folder)}
@@ -258,9 +258,9 @@ pub fn mail(
             // arrasta.
             <div class="oc-mail" data-oc="mail">
                 {rail(&boxes, &current_id, &folder, &ja_dito)}
-                {separador("pastas", "Ajustar a largura das pastas")}
+                {separador("pastas", crate::i18n::t("mail.adjust_folders_width"))}
                 {list(&current_id, &folder, &query, messages, open, view.can_read())}
-                {separador("lista", "Ajustar a largura da lista")}
+                {separador("lista", crate::i18n::t("mail.adjust_list_width"))}
                 {open.map_or_else(
                     || reading_placeholder().into_any(),
                     |message| reading(viewer, view, message).into_any(),
@@ -360,9 +360,9 @@ fn comandos_de_disposicao() -> impl IntoView {
                 class="oc-icon-btn"
                 data-oc="alternar-pastas"
                 aria-pressed="false"
-                title="Recolher as pastas"
+                title=crate::i18n::t("mail.collapse_folders")
             >
-                <span class="oc-sr">"Recolher as pastas"</span>
+                <span class="oc-sr">{crate::i18n::t("mail.collapse_folders")}</span>
                 {icon(Icon::SidebarCollapse, 15)}
             </button>
             <button
@@ -370,9 +370,9 @@ fn comandos_de_disposicao() -> impl IntoView {
                 class="oc-icon-btn"
                 data-oc="focar-leitura"
                 aria-pressed="false"
-                title="Dar o ecrã à leitura"
+                title=crate::i18n::t("mail.give_screen_to_reading")
             >
-                <span class="oc-sr">"Dar o ecrã à leitura"</span>
+                <span class="oc-sr">{crate::i18n::t("mail.give_screen_to_reading")}</span>
                 {icon(Icon::Filter, 15)}
             </button>
         </div>
@@ -389,8 +389,8 @@ fn sync_action(mailbox_id: &str, service_up: bool, folder: &str) -> impl IntoVie
     if !service_up || mailbox_id.is_empty() {
         return view! {
             <span class="oc-btn oc-btn--secondary oc-unavailable" aria-disabled="true"
-                  title="O serviço de correio não está disponível.">
-                "Actualizar"
+                  title=crate::i18n::t("mail.service_unavailable")>
+                {crate::i18n::t("mail.refresh")}
             </span>
         }
         .into_any();
@@ -404,7 +404,7 @@ fn sync_action(mailbox_id: &str, service_up: bool, folder: &str) -> impl IntoVie
             <input type="hidden" name="folder" value=folder.to_owned() />
             <button type="submit" class="oc-btn oc-btn--secondary">
                 {icon(Icon::Restart, 13)}
-                "Actualizar"
+                {crate::i18n::t("mail.refresh")}
             </button>
         </form>
     }
@@ -415,7 +415,7 @@ fn sync_action(mailbox_id: &str, service_up: bool, folder: &str) -> impl IntoVie
 fn compose_action(can_compose: bool, mailbox_id: &str, service_up: bool) -> impl IntoView {
     if can_compose {
         button(
-            Button::new("Escrever", Variant::Primary)
+            Button::new(crate::i18n::t("mail.compose"), Variant::Primary)
                 .href(format!("/mail/compose?mailbox={mailbox_id}")),
         )
         .into_any()
@@ -423,13 +423,13 @@ fn compose_action(can_compose: bool, mailbox_id: &str, service_up: bool) -> impl
         // Visível e declarado, não escondido: quem não vê o botão conclui que a
         // funcionalidade não existe (briefing §53).
         let reason = if service_up {
-            "Não possui autorização para enviar a partir desta caixa."
+            crate::i18n::t("mail.no_send_permission")
         } else {
-            "O serviço de envio não está disponível."
+            crate::i18n::t("mail.send_unavailable")
         };
         view! {
             <span class="oc-btn oc-btn--primary oc-unavailable" aria-disabled="true" title=reason>
-                "Escrever"
+                {crate::i18n::t("mail.compose")}
             </span>
         }
         .into_any()
@@ -454,7 +454,7 @@ fn service_notice(detail: &str, ligada: bool) -> impl IntoView {
             {icon(Icon::Shield, 15)}
             <p>{detail}</p>
             {por_ligar.then(|| button(
-                Button::new("Ligar a minha caixa", Variant::Secondary).href("/mail/settings"),
+                Button::new(crate::i18n::t("mail.link_my_mailbox"), Variant::Secondary).href("/mail/settings"),
             ))}
         </div>
     }
@@ -485,30 +485,31 @@ fn unavailable_screen(detail: &str, ligada: bool, configurado: bool) -> impl Int
 
     let (titulo, corpo, accao) = if !configurado {
         (
-            "O correio institucional não está configurado",
+            crate::i18n::t("mail.not_configured"),
             format!(
                 "{detail} É uma questão de configuração da instalação, e não do seu \
                  acesso. Quem administra o Ocinye OS pode activá-lo."
             ),
-            Button::new("Administração", Variant::Secondary).href("/admin"),
+            Button::new(crate::i18n::t("nav.admin"), Variant::Secondary).href("/admin"),
         )
     } else if ligada {
         (
-            "O serviço de correio não está a responder",
+            crate::i18n::t("mail.service_down"),
             format!(
                 "{detail} A sua caixa continua ligada, e nada se perdeu — as mensagens \
                  estão no servidor e aparecem quando ele voltar."
             ),
-            Button::new("Definições de correio", Variant::Secondary).href("/mail/settings"),
+            Button::new(crate::i18n::t("mail.settings"), Variant::Secondary).href("/mail/settings"),
         )
     } else {
         (
-            "A sua caixa ainda não está ligada",
+            crate::i18n::t("mail.not_linked.title"),
             format!(
                 "{detail} O Ocinye OS sabe onde é o servidor; falta a sua credencial. \
                  Ela é experimentada antes de ser guardada, e fica cifrada."
             ),
-            Button::new("Ligar a minha caixa", Variant::Primary).href("/mail/settings"),
+            Button::new(crate::i18n::t("mail.link_my_mailbox"), Variant::Primary)
+                .href("/mail/settings"),
         )
     };
 
@@ -516,8 +517,8 @@ fn unavailable_screen(detail: &str, ligada: bool, configurado: bool) -> impl Int
         <div class="oc-page">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Correio"</h1>
-                    <p>"Correio institucional da Ocinye."</p>
+                    <h1>{crate::i18n::t("mail.title")}</h1>
+                    <p>{crate::i18n::t("mail.subtitle")}</p>
                 </div>
             </div>
 
@@ -552,7 +553,7 @@ fn rail(boxes: &[Value], current_id: &str, folder: &str, ja_dito: &str) -> impl 
     let ja_dito = ja_dito.trim().to_owned();
 
     view! {
-        <nav class="oc-mail__rail" aria-label="Caixas de correio">
+        <nav class="oc-mail__rail" aria-label=crate::i18n::t("mail.mailboxes")>
             {boxes
                 .into_iter()
                 .map(|mailbox| {
@@ -582,7 +583,7 @@ fn rail(boxes: &[Value], current_id: &str, folder: &str, ja_dito: &str) -> impl 
                         <div class="oc-mail__box" data-active=active.to_string()>
                             <div class="oc-mail__box-head">
                                 <span class="oc-mail__box-name">{name}</span>
-                                {shared.then(|| badge("Partilhada", Tone::Gray))}
+                                {shared.then(|| badge(crate::i18n::t("mail.shared"), Tone::Gray))}
                             </div>
                             <span class="oc-mail__box-address oc-mono">{address}</span>
 
@@ -598,7 +599,16 @@ fn rail(boxes: &[Value], current_id: &str, folder: &str, ja_dito: &str) -> impl 
                                     .into_iter()
                                     .map(|entry| {
                                         let key = text(&entry, "folder", "inbox").to_owned();
-                                        let label = text(&entry, "label", "").to_owned();
+                                        // O rótulo da pasta traduz-se pela chave
+                                        // (`inbox`, `sent`, …); se for uma pasta
+                                        // que o catálogo não conhece, fica o nome
+                                        // que o servidor deu.
+                                        let chave_pasta = format!("mail.folder.{key}");
+                                        let label = if crate::i18n::has(&chave_pasta) {
+                                            crate::i18n::t(&chave_pasta).to_owned()
+                                        } else {
+                                            text(&entry, "label", "").to_owned()
+                                        };
                                         let unread = entry
                                             .get("unread")
                                             .and_then(Value::as_i64)
@@ -674,7 +684,7 @@ fn list(
             // correio alheio (`CLAUDE.md` §28).
             <form class="oc-mail__search" method="get" action=action role="search">
                 <input type="hidden" name="folder" value=folder.clone() />
-                <label class="oc-sr" for="mail-q">"Pesquisar nesta caixa"</label>
+                <label class="oc-sr" for="mail-q">{crate::i18n::t("mail.search_this_box")}</label>
                 <span class="oc-mail__search-icon">{icon(Icon::Search, 14)}</span>
                 <input
                     class="oc-input"
@@ -682,9 +692,9 @@ fn list(
                     name="q"
                     type="search"
                     value=query.to_owned()
-                    placeholder="Pesquisar nesta caixa…"
+                    placeholder=crate::i18n::t("mail.search_this_box.placeholder")
                 />
-                <button type="submit" class="oc-btn oc-btn--secondary">"Pesquisar"</button>
+                <button type="submit" class="oc-btn oc-btn--secondary">{crate::i18n::t("mail.search_submit")}</button>
             </form>
 
             {searching.then(|| view! {
@@ -697,11 +707,11 @@ fn list(
                 empty_state(EmptyState {
                     icon: Icon::Mail,
                     title: if !pode_ler {
-                        "Ainda não há correio para mostrar".to_owned()
+                        crate::i18n::t("mail.list.empty.none").to_owned()
                     } else if searching {
-                        "Nenhuma mensagem corresponde".to_owned()
+                        crate::i18n::t("mail.list.empty.search").to_owned()
                     } else {
-                        "Nenhuma mensagem nesta pasta".to_owned()
+                        crate::i18n::t("mail.list.empty.folder").to_owned()
                     },
                     body: if !pode_ler {
                         "Esta caixa não está a ser lida — a razão está indicada em cima. \
@@ -711,7 +721,7 @@ fn list(
                         "Nenhuma mensagem desta caixa corresponde ao termo pesquisado."
                             .to_owned()
                     } else {
-                        "Esta pasta não tem mensagens indexadas no Ocinye OS.".to_owned()
+                        crate::i18n::t("mail.list.empty.folder.body").to_owned()
                     },
                     actions: Vec::new(),
                     small: true,
@@ -778,15 +788,15 @@ fn row(message: &Value, open_id: &str) -> impl IntoView {
                 <div class="oc-mail__item-mid">
                     // Não-lida marcada por peso e por marca, nunca só por cor
                     // (`CLAUDE.md` §51).
-                    {unread.then(|| view! { <span class="oc-mail__dot" aria-label="Não lida"></span> })}
+                    {unread.then(|| view! { <span class="oc-mail__dot" aria-label=crate::i18n::t("mail.unread_badge")></span> })}
                     <span class="oc-mail__subject">{subject}</span>
                     {starred.then(|| view! {
-                        <span class="oc-mail__star" aria-label="Assinalada">
+                        <span class="oc-mail__star" aria-label=crate::i18n::t("mail.starred_label")>
                             {icon(Icon::Star, 12)}
                         </span>
                     })}
                     {has_attachments.then(|| view! {
-                        <span class="oc-mail__clip" aria-label="Tem anexos">
+                        <span class="oc-mail__clip" aria-label=crate::i18n::t("mail.has_attachments")>
                             {icon(Icon::Attach, 12)}
                         </span>
                     })}
@@ -876,37 +886,37 @@ fn reading(viewer: &Viewer, view: &MailView, payload: &Value) -> impl IntoView {
                     <span class="oc-mono oc-mail__when">{when}</span>
                 </div>
                 {(!recipients.is_empty()).then(|| view! {
-                    <p class="oc-mail__recipients">"Para: "<span class="oc-mono">{recipients}</span></p>
+                    <p class="oc-mail__recipients">{crate::i18n::t("mail.reader.to")}<span class="oc-mono" data-oc-content="1">{recipients}</span></p>
                 })}
                 {(!copies.is_empty()).then(|| view! {
-                    <p class="oc-mail__recipients">"Cc: "<span class="oc-mono">{copies}</span></p>
+                    <p class="oc-mail__recipients">{crate::i18n::t("mail.reader.cc")}<span class="oc-mono" data-oc-content="1">{copies}</span></p>
                 })}
 
                 <div class="oc-mail__actions">
                     {if can_reply {
-                        button(Button::new("Responder", Variant::Primary).href(reply_href)).into_any()
+                        button(Button::new(crate::i18n::t("mail.reply"), Variant::Primary).href(reply_href)).into_any()
                     } else {
                         view! {
                             <span
                                 class="oc-btn oc-btn--primary oc-unavailable"
                                 aria-disabled="true"
-                                title="O serviço de envio não está disponível."
-                            >"Responder"</span>
+                                title=crate::i18n::t("mail.send_unavailable")
+                            >{crate::i18n::t("mail.reply")}</span>
                         }
                         .into_any()
                     }}
                     {flag_form(&id, "starred", !starred, if starred {
-                        "Retirar destaque"
+                        crate::i18n::t("mail.unstar")
                     } else {
-                        "Assinalar"
+                        crate::i18n::t("mail.star")
                     }, Icon::Star)}
                     // A acção reflecte o estado: uma mensagem lida oferece
                     // marcá-la como não lida, e uma não lida o inverso. Um botão
                     // que dissesse sempre o mesmo mentiria sobre o que faz.
                     {if unread {
-                        flag_form(&id, "read", true, "Marcar como lida", Icon::Mail)
+                        flag_form(&id, "read", true, crate::i18n::t("mail.mark_read"), Icon::Mail)
                     } else {
-                        flag_form(&id, "read", false, "Marcar como não lida", Icon::Mail)
+                        flag_form(&id, "read", false, crate::i18n::t("mail.mark_unread"), Icon::Mail)
                     }}
                 </div>
             </header>
@@ -923,7 +933,7 @@ fn reading(viewer: &Viewer, view: &MailView, payload: &Value) -> impl IntoView {
 
             {(!domains.is_empty()).then(|| view! {
                 <p class="oc-mail__domains">
-                    "Esta mensagem liga para: "
+                    {crate::i18n::t("mail.links_to")}
                     <span class="oc-mono">{domains.join(", ")}</span>
                 </p>
             })}
@@ -1013,7 +1023,7 @@ fn attachment_list(attachments: &[Value]) -> impl IntoView {
     let attachments = attachments.to_vec();
     view! {
         <section class="oc-mail__attachments">
-            <h3>"Anexos"</h3>
+            <h3>{crate::i18n::t("mail.attachments")}</h3>
             <ul>
                 {attachments
                     .into_iter()
@@ -1032,8 +1042,8 @@ fn attachment_list(attachments: &[Value]) -> impl IntoView {
                                     {format!("{kind} · {}", human_size(size))}
                                 </span>
                                 <span class="oc-unavailable" aria-disabled="true"
-                                      title="A descarga de anexos ainda não está disponível.">
-                                    "Descarregar"
+                                      title=crate::i18n::t("mail.attachment.unavailable")>
+                                    {crate::i18n::t("mail.attachment.download")}
                                 </span>
                             </li>
                         }
@@ -1177,9 +1187,9 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
     let sem_identidade = de.is_empty();
     let responde = draft.reply_to.is_some();
     let titulo = if responde {
-        "Responder"
+        crate::i18n::t("mail.reply")
     } else {
-        "Nova mensagem"
+        crate::i18n::t("mail.compose.new")
     };
 
     // O `mailbox_id` do URL manda; se vier vazio, usa-se a caixa do «De».
@@ -1226,9 +1236,9 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                         class="oc-icon-btn"
                         data-oc="compositor-expandir"
                         aria-pressed="false"
-                        title="Expandir"
+                        title=crate::i18n::t("mail.compose.expand_short")
                     >
-                        <span class="oc-sr">"Expandir o compositor"</span>
+                        <span class="oc-sr">{crate::i18n::t("mail.compose.expand")}</span>
                         {icon(Icon::Filter, 14)}
                     </button>
                     // Fechar continua a ser uma ligação — fechar sem script tem
@@ -1238,10 +1248,10 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                     <a
                         class="oc-icon-btn"
                         href="/mail"
-                        title="Fechar"
+                        title=crate::i18n::t("mail.compose.close_short")
                         data-oc="compositor-fechar"
                     >
-                        <span class="oc-sr">"Fechar o compositor"</span>
+                        <span class="oc-sr">{crate::i18n::t("mail.compose.close")}</span>
                         {icon(Icon::Close, 14)}
                     </a>
                 </div>
@@ -1276,11 +1286,11 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                 // O remetente é um facto, e não uma escolha: o Core resolve-o
                 // a partir de quem está autenticado e recusa qualquer outro.
                 <div class="oc-comp__linha oc-comp__linha--de">
-                    <span class="oc-comp__rotulo">"De"</span>
+                    <span class="oc-comp__rotulo">{crate::i18n::t("mail.compose.from")}</span>
                     {if sem_identidade {
                         view! {
                             <span class="oc-comp__sem-identidade">
-                                "Não tem nenhuma caixa a partir da qual possa enviar."
+                                {crate::i18n::t("mail.no_mailbox_to_send")}
                             </span>
                         }
                         .into_any()
@@ -1308,8 +1318,8 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                     type="text"
                     name="subject"
                     value=subject
-                    placeholder="Assunto"
-                    aria-label="Assunto"
+                    placeholder=crate::i18n::t("mail.compose.subject")
+                    aria-label=crate::i18n::t("mail.compose.subject")
                 />
 
                 // A formatação e o editor de corpo rico (ADR-0415). Progressivo:
@@ -1340,7 +1350,7 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                             contenteditable="true"
                             role="textbox"
                             aria-multiline="true"
-                            aria-label="Mensagem"
+                            aria-label=crate::i18n::t("mail.message")
                             inner_html=html
                             hidden
                         ></div>
@@ -1353,7 +1363,7 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                             contenteditable="true"
                             role="textbox"
                             aria-multiline="true"
-                            aria-label="Mensagem"
+                            aria-label=crate::i18n::t("mail.message")
                             hidden
                         >{corpo.clone()}</div>
                     }
@@ -1364,8 +1374,8 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                     class="oc-comp__corpo"
                     name="body"
                     data-oc="compositor-corpo"
-                    placeholder="Escreva a mensagem…"
-                    aria-label="Mensagem"
+                    placeholder=crate::i18n::t("mail.compose.body_placeholder")
+                    aria-label=crate::i18n::t("mail.message")
                 >{corpo}</textarea>
 
                 <input
@@ -1387,7 +1397,7 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                 {assinatura.map(|html| view! {
                     <details class="oc-comp__assinatura" data-oc="assinatura">
                         <summary class="oc-comp__assinatura-rotulo">
-                            "Assinatura institucional — acrescentada ao enviar"
+                            {crate::i18n::t("mail.settings.signature_added")}
                         </summary>
                         <div class="oc-comp__assinatura-corpo" inner_html=html></div>
                     </details>
@@ -1423,7 +1433,7 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                             disabled=sem_identidade
                         >
                             {icon(Icon::Send, 14)}
-                            "Enviar"
+                            {crate::i18n::t("mail.compose.send")}
                         </button>
                     </div>
                 </footer>
@@ -1442,10 +1452,10 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
             >
                 <div class="oc-comp__descartar-caixa">
                     <h3 id="oc-descartar-titulo" class="oc-comp__descartar-titulo">
-                        "Guardar esta mensagem como rascunho?"
+                        {crate::i18n::t("mail.compose.save_as_draft_q")}
                     </h3>
                     <p class="oc-comp__descartar-corpo">
-                        "Esta mensagem ainda não foi enviada e contém alterações."
+                        {crate::i18n::t("mail.compose.unsent_changes")}
                     </p>
                     <div class="oc-comp__descartar-accoes">
                         <button
@@ -1453,21 +1463,21 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                             class="oc-btn oc-btn--primary"
                             data-oc="descartar-guardar"
                         >
-                            "Guardar rascunho"
+                            {crate::i18n::t("mail.compose.save_draft")}
                         </button>
                         <button
                             type="button"
                             class="oc-btn oc-btn--danger"
                             data-oc="descartar-descartar"
                         >
-                            "Descartar"
+                            {crate::i18n::t("mail.compose.discard")}
                         </button>
                         <button
                             type="button"
                             class="oc-btn"
                             data-oc="descartar-cancelar"
                         >
-                            "Cancelar"
+                            {crate::i18n::t("mail.compose.cancel")}
                         </button>
                     </div>
                 </div>
@@ -1495,7 +1505,7 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
 /// O botão leva `data-oc` (contrato de comportamento) e o `data-oc-id` que o JS
 /// usa para chamar a remoção no Core.
 fn ficha_de_anexo(id: &str, filename: &str, size: &str) -> impl IntoView {
-    let rotulo = format!("Retirar {filename}");
+    let rotulo = crate::i18n::tf("mail.remove_attachment_named", &[("file", filename)]);
     view! {
         <li class="oc-comp__anexo" data-oc="anexo" data-oc-id=id.to_owned()>
             {icon(Icon::Attach, 12)}
@@ -1521,22 +1531,22 @@ fn ficha_de_anexo(id: &str, filename: &str, size: &str) -> impl IntoView {
 fn barra_de_formatacao() -> impl IntoView {
     // (comando, argumento, rótulo, glifo, classe do glifo)
     let botoes: [(&str, &str, &str, &str, &str); 9] = [
-        ("bold", "", "Negrito", "B", "oc-ff__b"),
-        ("italic", "", "Itálico", "I", "oc-ff__i"),
-        ("underline", "", "Sublinhado", "U", "oc-ff__u"),
-        ("strikeThrough", "", "Rasurado", "S", "oc-ff__s"),
-        ("insertUnorderedList", "", "Lista", "•", ""),
-        ("insertOrderedList", "", "Lista numerada", "1.", ""),
-        ("formatBlock", "blockquote", "Citação", "❝", ""),
-        ("link", "", "Ligação", "↗", ""),
-        ("removeFormat", "", "Limpar formatação", "⌫", ""),
+        ("bold", "", "mail.fmt.bold", "B", "oc-ff__b"),
+        ("italic", "", "mail.fmt.italic", "I", "oc-ff__i"),
+        ("underline", "", "mail.fmt.underline", "U", "oc-ff__u"),
+        ("strikeThrough", "", "mail.fmt.strike", "S", "oc-ff__s"),
+        ("insertUnorderedList", "", "mail.fmt.list", "•", ""),
+        ("insertOrderedList", "", "mail.fmt.numbered", "1.", ""),
+        ("formatBlock", "blockquote", "mail.fmt.quote", "❝", ""),
+        ("link", "", "mail.fmt.link", "↗", ""),
+        ("removeFormat", "", "mail.fmt.clear", "⌫", ""),
     ];
     view! {
         <div
             class="oc-comp__ferramentas"
             data-oc="compositor-ferramentas"
             role="toolbar"
-            aria-label="Formatação"
+            aria-label=crate::i18n::t("mail.fmt.toolbar")
             hidden
         >
             {botoes
@@ -1549,8 +1559,8 @@ fn barra_de_formatacao() -> impl IntoView {
                             data-oc="ferramenta"
                             data-oc-cmd=cmd
                             data-oc-arg=arg
-                            title=rotulo
-                            aria-label=rotulo
+                            title=crate::i18n::t(rotulo)
+                            aria-label=crate::i18n::t(rotulo)
                         >
                             <span class=classe aria-hidden="true">{glifo}</span>
                         </button>
@@ -1565,14 +1575,14 @@ fn barra_de_formatacao() -> impl IntoView {
             // `label` abre o selector; largar ficheiros sobre a janela também
             // anexa (o JS liga isso). Só o clipe: o gesto é universal, e o nome
             // acessível fica no `title` e no `aria-label` do campo.
-            <label class="oc-comp__ferramenta oc-comp__anexar" title="Anexar ficheiro" aria-label="Anexar ficheiro">
+            <label class="oc-comp__ferramenta oc-comp__anexar" title=crate::i18n::t("mail.compose.attach") aria-label=crate::i18n::t("mail.compose.attach")>
                 {icon(Icon::Attach, 15)}
                 <input
                     type="file"
                     multiple
                     data-oc="compositor-ficheiro"
                     class="oc-sr"
-                    aria-label="Anexar ficheiro"
+                    aria-label=crate::i18n::t("mail.compose.attach")
                 />
             </label>
         </div>
@@ -1598,7 +1608,7 @@ fn campo_de_destinatarios(
                     id=id
                     name=nome
                     value=valor
-                    placeholder="Nome ou endereço"
+                    placeholder=crate::i18n::t("mail.compose.recipient_placeholder")
                     autocomplete="off"
                     data-oc="destino-entrada"
                 />
@@ -1636,9 +1646,9 @@ fn assistencia_na_barra(view: &MailView) -> impl IntoView {
         return view! {
             <div class="oc-comp__ia">
                 <span class="oc-comp__ia-nota">
-                    "A assistência de escrita não está disponível nesta instalação."
+                    {crate::i18n::t("mail.ai.unavailable")}
                 </span>
-                <a class="oc-comp__ia-link" href="/ai">"Porquê"</a>
+                <a class="oc-comp__ia-link" href="/ai">{crate::i18n::t("mail.ai.why")}</a>
             </div>
         }
         .into_any();
@@ -1647,11 +1657,11 @@ fn assistencia_na_barra(view: &MailView) -> impl IntoView {
     view! {
         <div class="oc-comp__ia" data-oc="assistencia">
             {[
-                (ComposeAction::Proofread, "Corrigir"),
-                (ComposeAction::Clarify, "Mais claro"),
-                (ComposeAction::MoreFormal, "Mais formal"),
-                (ComposeAction::Shorter, "Mais curto"),
-                (ComposeAction::Translate, "Traduzir"),
+                (ComposeAction::Proofread, crate::i18n::t("mail.ai.proofread")),
+                (ComposeAction::Clarify, crate::i18n::t("mail.ai.clarify")),
+                (ComposeAction::MoreFormal, crate::i18n::t("mail.ai.formal")),
+                (ComposeAction::Shorter, crate::i18n::t("mail.ai.shorter")),
+                (ComposeAction::Translate, crate::i18n::t("mail.ai.translate")),
             ]
             .into_iter()
             .map(|(accao, rotulo)| view! {
@@ -1705,14 +1715,14 @@ fn ligar_caixa_nova(member_email: &str, endpoints: &[String]) -> impl IntoView {
     view! {
         <div class="oc-mail__ligacao" data-oc="ligar-caixa-nova">
             <p class="oc-muted oc-mail__ligacao-caixa">
-                "Ainda não tem uma caixa institucional ligada."
+                {crate::i18n::t("mail.no_institutional.body")}
             </p>
             <form class="oc-mail__conectar" method="post" action="/mail/connect">
                 <dl class="oc-facts oc-mail__conectar-factos">
-                    <dt>"E-mail institucional"</dt>
+                    <dt>{crate::i18n::t("mail.settings.institutional_email")}</dt>
                     <dd class="oc-mono">{email}</dd>
                     {tem_servidores.then(|| view! {
-                        <dt>"Servidores"</dt>
+                        <dt>{crate::i18n::t("mail.settings.servers")}</dt>
                         <dd class="oc-mono">{servidores.clone()}</dd>
                     })}
                 </dl>
@@ -1720,7 +1730,7 @@ fn ligar_caixa_nova(member_email: &str, endpoints: &[String]) -> impl IntoView {
                 // servidor: não há de onde a ler de volta.
                 <div class="oc-mail__conectar-campo">
                     <label class="oc-field__label" for="mail-nova-senha">
-                        "Palavra-passe da caixa (ou App Password)"
+                        {crate::i18n::t("mail.settings.password_app")}
                     </label>
                     <input
                         class="oc-input"
@@ -1736,7 +1746,7 @@ fn ligar_caixa_nova(member_email: &str, endpoints: &[String]) -> impl IntoView {
                      a ser mostrada."
                 </p>
                 <div>
-                    <button type="submit" class="oc-btn oc-btn--primary">"Guardar e ligar"</button>
+                    <button type="submit" class="oc-btn oc-btn--primary">{crate::i18n::t("mail.settings.save_and_link")}</button>
                 </div>
             </form>
         </div>
@@ -1758,9 +1768,9 @@ fn ligacao_da_caixa(caixa: &Value) -> impl IntoView {
                 <strong>{endereco}</strong>
                 " "
                 {if ligada {
-                    view! { <span class="oc-badge oc-badge--ok">"Ligada"</span> }.into_any()
+                    view! { <span class="oc-badge oc-badge--ok">{crate::i18n::t("mail.settings.linked")}</span> }.into_any()
                 } else {
-                    view! { <span class="oc-badge">"Por ligar"</span> }.into_any()
+                    view! { <span class="oc-badge">{crate::i18n::t("mail.by_linking")}</span> }.into_any()
                 }}
             </p>
 
@@ -1772,7 +1782,7 @@ fn ligacao_da_caixa(caixa: &Value) -> impl IntoView {
                         action=format!("/mail/{id}/disconnect")
                     >
                         <button type="submit" class="oc-btn oc-btn--secondary">
-                            "Desligar e esquecer a senha"
+                            {crate::i18n::t("mail.settings.disconnect")}
                         </button>
                     </form>
                 }
@@ -1811,7 +1821,7 @@ fn ligacao_da_caixa(caixa: &Value) -> impl IntoView {
                             class="oc-sr"
                         />
                         <label class="oc-campo">
-                            <span class="oc-campo__rotulo">"Senha da caixa"</span>
+                            <span class="oc-campo__rotulo">{crate::i18n::t("mail.settings.password")}</span>
                             // A senha do correio, e não a do Ocinye. São coisas
                             // distintas, e nenhuma serve para obter a outra.
                             <input
@@ -1822,7 +1832,7 @@ fn ligacao_da_caixa(caixa: &Value) -> impl IntoView {
                                 required=true
                             />
                         </label>
-                        <button type="submit" class="oc-btn oc-btn--primary">"Ligar caixa"</button>
+                        <button type="submit" class="oc-btn oc-btn--primary">{crate::i18n::t("mail.link_mailbox")}</button>
                     </form>
                 }
                 .into_any()
@@ -1884,19 +1894,19 @@ pub fn settings(
         <div class="oc-page">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Definições de correio"</h1>
-                    <p>"As suas preferências e o estado do serviço."</p>
+                    <h1>{crate::i18n::t("mail.settings")}</h1>
+                    <p>{crate::i18n::t("mail.settings.subtitle")}</p>
                 </div>
                 <div class="oc-head__actions">
-                    {button(Button::new("Voltar ao correio", Variant::Secondary).href("/mail"))}
+                    {button(Button::new(crate::i18n::t("mail.back_to_mail"), Variant::Secondary).href("/mail"))}
                 </div>
             </div>
 
             {card(
-                section_head("As suas caixas", None, None),
+                section_head(crate::i18n::t("mail.settings.your_mailboxes"), None, None),
                 view! {
                     <p class="oc-muted oc-mail__ligacao-nota">
-                        "A senha de cada caixa é sua, fica cifrada, e nunca volta a ser mostrada."
+                        {crate::i18n::t("mail.settings.password_note")}
                     </p>
                     {view.boxes().iter().map(ligacao_da_caixa).collect_view()}
                     {view.boxes().is_empty().then(|| ligar_caixa_nova(&member_email, &endpoints))}
@@ -1904,7 +1914,7 @@ pub fn settings(
             )}
 
             {card(
-                section_head("Disposição do Correio", None, None),
+                section_head(crate::i18n::t("mail.layout"), None, None),
                 view! {
                     <p class="oc-muted">
                         "As larguras dos painéis e as pastas recolhidas ficam guardadas neste
@@ -1916,21 +1926,21 @@ pub fn settings(
                         class="oc-btn oc-btn--secondary"
                         data-oc="repor-disposicao"
                     >
-                        "Repor disposição"
+                        {crate::i18n::t("mail.settings.reset_layout")}
                     </button>
                     <p class="oc-muted oc-mail__reposto" data-oc="disposicao-reposta" hidden>
-                        "Reposta. Volte ao Correio para a ver."
+                        {crate::i18n::t("mail.settings.reset_done")}
                     </p>
                 },
             )}
 
             <div class="oc-grid oc-grid--2">
                 {card(
-                    section_head("Preferências", None, None),
+                    section_head(crate::i18n::t("mail.settings.preferences"), None, None),
                     view! {
                         <form method="post" action="/mail/settings">
                             <div class="oc-mail__sig">
-                                <h3 class="oc-mail__sig-title">"Assinatura institucional"</h3>
+                                <h3 class="oc-mail__sig-title">{crate::i18n::t("mail.settings.signature")}</h3>
                                 <p class="oc-muted oc-mail__sig-note">
                                     "A Ocinye acrescenta esta assinatura às mensagens que
                                      enviar. É gerada dos seus dados; um campo em falta é
@@ -1943,38 +1953,38 @@ pub fn settings(
                                 {named_checkbox(
                                     "mail-official",
                                     "official_signature",
-                                    "Utilizar a assinatura institucional oficial",
+                                    crate::i18n::t("mail.settings.use_official_signature"),
                                     official,
                                 )}
                             </div>
 
                             {textarea_with_value(
                                 "mail-signature",
-                                "Linha pessoal (opcional)",
+                                crate::i18n::t("mail.settings.personal_line"),
                                 "signature",
-                                "Uma linha sua, acrescentada acima da assinatura oficial.",
+                                crate::i18n::t("mail.settings.personal_line_hint"),
                                 80,
                                 personal_line,
                             )}
 
                             {select_labelled(
                                 "mail-remote",
-                                "Conteúdo remoto",
+                                crate::i18n::t("mail.settings.remote_content"),
                                 "remote_content_policy",
                                 vec![
                                     SelectOption::new(
                                         RemoteContentPolicy::Block.as_str(),
-                                        "Nunca carregar",
+                                        {crate::i18n::t("mail.settings.remote.never")}
                                     )
                                     .selected(remote_policy == RemoteContentPolicy::Block),
                                     SelectOption::new(
                                         RemoteContentPolicy::AllowOnce.as_str(),
-                                        "Perguntar em cada mensagem",
+                                        {crate::i18n::t("mail.settings.remote.ask")}
                                     )
                                     .selected(remote_policy == RemoteContentPolicy::AllowOnce),
                                     SelectOption::new(
                                         RemoteContentPolicy::AllowKnownSenders.as_str(),
-                                        "Carregar de remetentes que eu permitir",
+                                        {crate::i18n::t("mail.settings.remote_content.allowlist")}
                                     )
                                     .selected(
                                         remote_policy == RemoteContentPolicy::AllowKnownSenders,
@@ -1987,29 +1997,29 @@ pub fn settings(
                                  ela foi aberta. O Ocinye OS não o carrega por omissão."
                             </p>
 
-                            <button type="submit" class="oc-btn oc-btn--primary">"Guardar"</button>
+                            <button type="submit" class="oc-btn oc-btn--primary">{crate::i18n::t("mail.settings.save")}</button>
                         </form>
                     },
                 )}
 
                 {card(
-                    section_head("Estado do serviço", None, None),
+                    section_head(crate::i18n::t("mail.settings.service_status"), None, None),
                     view! {
                         <ul class="oc-mail__status">
                             <li>
-                                <span>"Leitura"</span>
+                                <span>{crate::i18n::t("mail.settings.reading")}</span>
                                 {state_badge(can_read)}
                             </li>
                             <li>
-                                <span>"Envio"</span>
+                                <span>{crate::i18n::t("mail.settings.sending")}</span>
                                 {state_badge(can_send)}
                             </li>
                             <li>
-                                <span>"Assistência de escrita"</span>
+                                <span>{crate::i18n::t("mail.ai.title")}</span>
                                 {state_badge(ai)}
                             </li>
                             <li>
-                                <span>"Adaptador"</span>
+                                <span>{crate::i18n::t("mail.settings.adapter")}</span>
                                 <span class="oc-mono">{adapter}</span>
                             </li>
                         </ul>
@@ -2030,9 +2040,9 @@ pub fn settings(
 
 fn state_badge(ok: bool) -> impl IntoView {
     if ok {
-        badge("Disponível", Tone::Ok).into_any()
+        badge(crate::i18n::t("mail.settings.available"), Tone::Ok).into_any()
     } else {
-        badge("Indisponível", Tone::Gray).into_any()
+        badge(crate::i18n::t("mail.settings.unavailable"), Tone::Gray).into_any()
     }
 }
 
@@ -2097,7 +2107,7 @@ mod integridade {
             "apareceu uma lista de caixas sem haver serviço"
         );
         assert!(
-            !html.contains("Não tem mensagens"),
+            !html.contains(crate::i18n::t("mail.no_messages")),
             "a ausência de serviço foi apresentada como caixa vazia"
         );
     }
@@ -2165,7 +2175,7 @@ mod uma_explicacao_so {
     #[test]
     fn uma_razao_diferente_continua_a_aparecer() {
         let html = html_de(&com_erro_de_caixa(
-            "O serviço de correio não está a responder nesta instalação.",
+            crate::i18n::t("mail.service_down.body"),
             "O serviço de correio recusou as credenciais desta caixa.",
         ));
 
@@ -2215,11 +2225,9 @@ mod tres_ausencias {
     /// pedir a outra pessoa o que só ele podia fazer.
     #[test]
     fn quem_nao_ligou_a_caixa_tem_o_caminho_para_a_ligar() {
-        let html = html_de(&vista(
-            true,
-            false,
-            "A sua caixa de correio ainda não está ligada.",
-        ));
+        let html = html_de(&vista(true, false, {
+            crate::i18n::t("mail.not_linked.body")
+        }));
 
         assert!(
             html.contains("ainda não está ligada"),
@@ -2238,11 +2246,9 @@ mod tres_ausencias {
     /// Um serviço em baixo não pede uma acção a quem lê.
     #[test]
     fn servico_em_baixo_diz_que_nada_se_perdeu() {
-        let html = html_de(&vista(
-            true,
-            true,
-            "O serviço de correio não está a responder nesta instalação.",
-        ));
+        let html = html_de(&vista(true, true, {
+            crate::i18n::t("mail.service_down.body")
+        }));
 
         assert!(html.contains("não está a responder"));
         assert!(
@@ -2258,11 +2264,9 @@ mod tres_ausencias {
     /// Sem transporte, continua a ser uma questão de configuração.
     #[test]
     fn sem_transporte_e_configuracao() {
-        let html = html_de(&vista(
-            false,
-            false,
-            "O correio institucional não está configurado nesta instalação.",
-        ));
+        let html = html_de(&vista(false, false, {
+            crate::i18n::t("mail.not_configured.body")
+        }));
 
         assert!(html.contains("não está configurado"));
         assert!(
@@ -2270,7 +2274,7 @@ mod tres_ausencias {
             "quem administra é quem resolve, e o ecrã não o leva lá"
         );
         assert!(
-            !html.contains("Ligar a minha caixa"),
+            !html.contains(crate::i18n::t("mail.link_my_mailbox")),
             "ofereceu ligar uma caixa a um servidor que não existe"
         );
     }
@@ -2289,9 +2293,9 @@ mod uma_pagina_coerente {
                 "transport_configured": true,
                 "mailbox_linked": ligada,
                 "detail": if ligada {
-                    "O serviço de correio não está a responder nesta instalação."
+                    crate::i18n::t("mail.service_down.body")
                 } else {
-                    "A sua caixa de correio ainda não está ligada."
+                    crate::i18n::t("mail.not_linked.body")
                 },
             }),
             sync_notice: None,
@@ -2349,7 +2353,7 @@ mod uma_pagina_coerente {
             html.contains("action=\"/mail/connect\""),
             "o estado vazio não oferece uma acção de ligar a caixa:\n{html}"
         );
-        assert!(html.contains("Guardar e ligar"));
+        assert!(html.contains(crate::i18n::t("mail.settings.save_and_link")));
         assert!(
             html.contains("fidel.monteiro@ocinye.com"),
             "o e-mail institucional não aparece"
@@ -2365,7 +2369,7 @@ mod uma_pagina_coerente {
             "a senha não pode vir pré-preenchida"
         );
         // O texto morto do estado vazio antigo não regressa.
-        assert!(!html.contains("Ainda não há nenhuma caixa institucional associada a si"));
+        assert!(!html.contains(crate::i18n::t("mail.no_institutional.title")));
     }
 
     /// Uma pasta que não está a ser lida não se declara vazia.
@@ -2381,7 +2385,7 @@ mod uma_pagina_coerente {
         let html = html_de(&vista(false, false));
 
         assert!(
-            !html.contains("Nenhuma mensagem nesta pasta"),
+            !html.contains(crate::i18n::t("mail.list.empty.folder")),
             "a coluna declarou a pasta vazia enquanto o aviso dizia outra coisa:\n{html}"
         );
         assert!(
@@ -2399,13 +2403,13 @@ mod uma_pagina_coerente {
     fn a_accao_aparece_so_quando_e_de_quem_le() {
         let por_ligar = html_de(&vista(false, false));
         assert!(
-            por_ligar.contains("Ligar a minha caixa"),
+            por_ligar.contains(crate::i18n::t("mail.link_my_mailbox")),
             "quem tem de ligar a caixa não tem o caminho para o fazer"
         );
 
         let servico_em_baixo = html_de(&vista(true, false));
         assert!(
-            !servico_em_baixo.contains("Ligar a minha caixa"),
+            !servico_em_baixo.contains(crate::i18n::t("mail.link_my_mailbox")),
             "ofereceu ligar uma caixa que já está ligada, para um problema que \
              não é dela"
         );
@@ -2473,9 +2477,9 @@ mod compositor_com_rascunho {
             out.contains(r#"data-oc="compositor-descartar""#),
             "falta o diálogo de descartar"
         );
-        assert!(out.contains("Guardar rascunho"));
-        assert!(out.contains("Descartar"));
-        assert!(out.contains("Cancelar"));
+        assert!(out.contains(crate::i18n::t("mail.compose.save_draft")));
+        assert!(out.contains(crate::i18n::t("mail.compose.discard")));
+        assert!(out.contains(crate::i18n::t("mail.compose.cancel")));
     }
 
     /// Sem caixa no rascunho, o compositor liga-se à caixa do «De».
@@ -2629,7 +2633,7 @@ mod compositor_com_rascunho {
         )
         .to_html();
         assert!(
-            html_lida.contains("Marcar como não lida"),
+            html_lida.contains(crate::i18n::t("mail.mark_unread")),
             "uma mensagem lida deve oferecer marcá-la como não lida"
         );
 
@@ -2643,7 +2647,8 @@ mod compositor_com_rascunho {
         )
         .to_html();
         assert!(
-            html_nao.contains("Marcar como lida") && !html_nao.contains("Marcar como não lida"),
+            html_nao.contains(crate::i18n::t("mail.mark_read"))
+                && !html_nao.contains(crate::i18n::t("mail.mark_unread")),
             "uma mensagem não lida deve oferecer marcá-la como lida"
         );
     }
@@ -2677,5 +2682,48 @@ mod compositor_com_rascunho {
             out.contains(id),
             "o id do rascunho não chegou ao campo escondido"
         );
+    }
+}
+
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+    use serde_json::json;
+
+    fn vista() -> MailView {
+        MailView {
+            status: json!({"can_read": true, "can_send": true, "transport_configured": true, "mailbox_linked": true, "detail": ""}),
+            sync_notice: None,
+            mailboxes: json!([{"id": "11111111-1111-4111-8111-111111111111", "address": "a@ocinye.com", "kind": "personal", "may_send": true, "unread": []}]),
+            active_mailbox: None,
+            folder: "inbox".to_owned(),
+            query: String::new(),
+        }
+    }
+
+    /// Um ecrã, um idioma: o Correio em francês, sem marcas portuguesas.
+    #[tokio::test]
+    async fn o_correio_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+        let fr = with_locale(Locale::Fr, async {
+            mail(
+                &super::integridade::viewer(),
+                &vista(),
+                &json!({"items": []}),
+                None,
+                None,
+            )
+            .to_html()
+        })
+        .await;
+        for francesa in ["Courrier", "\u{c9}crire", "Actualiser"] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+        for portuguesa in ["Escrever", "Actualizar", "Caixa de correio"] {
+            assert!(
+                !fr.contains(portuguesa),
+                "fr: chrome português «{portuguesa}»"
+            );
+        }
     }
 }
