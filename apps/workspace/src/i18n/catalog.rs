@@ -184,6 +184,80 @@ const TASK_STATE: &[Entry] = catalogo! {
     "task.state.in_review": { pt: "Em revisão", en: "In review", fr: "En revue" },
     "task.state.done": { pt: "Concluída", en: "Done", fr: "Terminée" },
     "task.state.cancelled": { pt: "Cancelada", en: "Cancelled", fr: "Annulée" },
+    "task.priority.high": { pt: "Alta", en: "High", fr: "Haute" },
+    "task.priority.normal": { pt: "Normal", en: "Normal", fr: "Normale" },
+    "task.priority.low": { pt: "Baixa", en: "Low", fr: "Basse" },
+};
+
+/// O ecrã «O Meu Trabalho».
+const MY_WORK: &[Entry] = catalogo! {
+    "my_work.title": { pt: "O Meu Trabalho", en: "My Work", fr: "Mon travail" },
+    "my_work.subtitle": {
+        pt: "Tudo o que lhe está atribuído ou que segue de perto.",
+        en: "Everything assigned to you or that you follow closely.",
+        fr: "Tout ce qui vous est attribué ou que vous suivez de près."
+    },
+    "my_work.tabs.aria": { pt: "Secções do meu trabalho", en: "My work sections", fr: "Sections de mon travail" },
+    "my_work.tab.tasks": { pt: "Tarefas", en: "Tasks", fr: "Tâches" },
+    "my_work.tab.activity": { pt: "Actividade", en: "Activity", fr: "Activité" },
+    "my_work.tab.ideas": { pt: "Ideias", en: "Ideas", fr: "Idées" },
+    "my_work.tab.projects": { pt: "Projectos", en: "Projects", fr: "Projets" },
+    "my_work.tab.documents": { pt: "Documentos", en: "Documents", fr: "Documents" },
+    "my_work.tab.datasets": { pt: "Datasets", en: "Datasets", fr: "Jeux de données" },
+    "my_work.tab.favourites": { pt: "Favoritos", en: "Favourites", fr: "Favoris" },
+    "my_work.tab.notes": { pt: "Notas", en: "Notes", fr: "Notes" },
+    "my_work.tasks.title": { pt: "Tarefas atribuídas", en: "Assigned tasks", fr: "Tâches attribuées" },
+    "my_work.tasks.empty": { pt: "Não tem tarefas atribuídas.", en: "You have no assigned tasks.", fr: "Aucune tâche ne vous est attribuée." },
+    "my_work.no_due": { pt: "sem prazo", en: "no due date", fr: "sans échéance" },
+    "my_work.research.title": { pt: "Investigação que sigo", en: "Research I follow", fr: "Recherche que je suis" },
+    "my_work.research.empty": {
+        pt: "Ainda não pertence a nenhum Research Workspace.",
+        en: "You do not belong to any Research Workspace yet.",
+        fr: "Vous n’appartenez encore à aucun Research Workspace."
+    },
+    "my_work.documents.title": { pt: "Documentos recentes", en: "Recent documents", fr: "Documents récents" },
+    "my_work.unavailable": { pt: "indisponível", en: "unavailable", fr: "indisponible" },
+    "my_work.documents.body": {
+        pt: "O Ocinye Core ainda não serve os documentos abertos recentemente por uma pessoa. Os documentos existem e estão acessíveis a partir de cada Research Workspace.",
+        en: "Ocinye Core does not yet serve the documents a person opened recently. The documents exist and are reachable from each Research Workspace.",
+        fr: "Ocinye Core ne fournit pas encore les documents récemment ouverts par une personne. Les documents existent et sont accessibles depuis chaque Research Workspace."
+    },
+    "my_work.units.title": { pt: "Unidades seguidas", en: "Followed units", fr: "Unités suivies" },
+    "my_work.units.body": {
+        pt: "Seguir uma unidade ainda não existe no Ocinye Core. As unidades a que pertence estão em Unidades.",
+        en: "Following a unit does not exist yet in Ocinye Core. The units you belong to are in Units.",
+        fr: "Suivre une unité n’existe pas encore dans Ocinye Core. Les unités auxquelles vous appartenez sont dans Unités."
+    },
+    "my_work.my_activity.title": { pt: "A minha actividade", en: "My activity", fr: "Mon activité" },
+    "my_work.my_activity.empty": { pt: "Sem actividade recente.", en: "No recent activity.", fr: "Aucune activité récente." },
+};
+
+/// O Knowledge Hub («Conhecimento»).
+const KNOWLEDGE: &[Entry] = catalogo! {
+    "knowledge.title": { pt: "Conhecimento", en: "Knowledge", fr: "Connaissance" },
+    "knowledge.subtitle": { pt: "A memória institucional da Ocinye.", en: "Ocinye’s institutional memory.", fr: "La mémoire institutionnelle d’Ocinye." },
+    "knowledge.tabs.aria": { pt: "Secções do conhecimento", en: "Knowledge sections", fr: "Sections de la connaissance" },
+    "knowledge.tab.all": { pt: "Tudo", en: "All", fr: "Tout" },
+    "knowledge.tab.bibliography": { pt: "Bibliografia", en: "Bibliography", fr: "Bibliographie" },
+    "knowledge.tab.sources": { pt: "Fontes", en: "Sources", fr: "Sources" },
+    "knowledge.tab.notes": { pt: "Notas", en: "Notes", fr: "Notes" },
+    "knowledge.tab.documents": { pt: "Documentos", en: "Documents", fr: "Documents" },
+    "knowledge.tab.results": { pt: "Resultados", en: "Results", fr: "Résultats" },
+    "knowledge.tab.publications": { pt: "Publicações", en: "Publications", fr: "Publications" },
+    "knowledge.counter.bibliography": { pt: "Bibliografia", en: "Bibliography", fr: "Bibliographie" },
+    "knowledge.counter.documents": { pt: "Documentos", en: "Documents", fr: "Documents" },
+    "knowledge.counter.datasets": { pt: "Datasets", en: "Datasets", fr: "Jeux de données" },
+    "knowledge.counter.results": { pt: "Resultados", en: "Results", fr: "Résultats" },
+    "knowledge.here": { pt: "o acervo institucional", en: "the institutional collection", fr: "le fonds institutionnel" },
+    "knowledge.recent.title": { pt: "Adicionado recentemente", en: "Recently added", fr: "Ajouté récemment" },
+    "knowledge.recent.empty": {
+        pt: "Ainda não há conhecimento registado a que tenha acesso.",
+        en: "There is no recorded knowledge you can access yet.",
+        fr: "Aucune connaissance enregistrée n’est encore accessible."
+    },
+    "knowledge.no_screen": { pt: "Este acervo ainda não tem um ecrã próprio.", en: "This collection has no screen of its own yet.", fr: "Ce fonds n’a pas encore d’écran propre." },
+    "knowledge.not_in_core": { pt: "Esta entidade ainda não existe no Ocinye Core.", en: "This entity does not exist in Ocinye Core yet.", fr: "Cette entité n’existe pas encore dans Ocinye Core." },
+    "knowledge.not_implemented": { pt: "Não implementado", en: "Not implemented", fr: "Non implémenté" },
 };
 
 /// Estados de erro e de página cheia — nenhum ecrã fica em língua trocada.
@@ -273,6 +347,8 @@ pub const GROUPS: &[&[Entry]] = &[
     ACTIONS,
     CREATE,
     HOME,
+    MY_WORK,
+    KNOWLEDGE,
     CLASSIFICATION,
     TASK_STATE,
     ERRORS,

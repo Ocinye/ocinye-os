@@ -16,7 +16,7 @@ pub mod tabs;
 
 pub use assist::{assist, Assist, IDEA_SUGGESTIONS, KNOWLEDGE_SUGGESTIONS, PROJECT_SUGGESTIONS};
 pub use avatar::{avatar, AvatarSize};
-pub use badge::{badge, classification_badge, pill, task_state_badge, Tone};
+pub use badge::{badge, classification_badge, pill, task_priority_badge, task_state_badge, Tone};
 pub use button::{button, Button, Variant};
 pub use card::{card, kpi_card, section_head, Kpi};
 pub use empty::{empty_state, EmptyState};

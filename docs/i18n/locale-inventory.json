@@ -7,7 +7,7 @@
     "fr"
   ],
   "fallback": "pt",
-  "slice": 2,
+  "slice": 3,
   "namespaces": [
     {
       "prefix": "nav",
@@ -52,6 +52,21 @@
     {
       "prefix": "task.state",
       "surface": "task status badges",
+      "status": "translated"
+    },
+    {
+      "prefix": "my_work",
+      "surface": "O Meu Trabalho (fully migrated)",
+      "status": "translated"
+    },
+    {
+      "prefix": "knowledge",
+      "surface": "Knowledge hub (fully migrated)",
+      "status": "translated"
+    },
+    {
+      "prefix": "task.priority",
+      "surface": "task priority badges",
       "status": "translated"
     }
   ],

@@ -1566,7 +1566,7 @@ async fn my_work(State(state): State<WorkspaceState>, headers: HeaderMap) -> Res
 
     let content = ui::screens::my_work::my_work(&tasks, &workspaces, &activity);
     shell_page(
-        "O Meu Trabalho",
+        crate::i18n::t("nav.my_work"),
         &viewer,
         Screen::MyWork,
         Vec::new(),
@@ -5978,7 +5978,7 @@ async fn knowledge(State(state): State<WorkspaceState>, headers: HeaderMap) -> R
     });
 
     shell_page(
-        "Conhecimento",
+        crate::i18n::t("nav.knowledge"),
         &viewer,
         Screen::Knowledge,
         Vec::new(),

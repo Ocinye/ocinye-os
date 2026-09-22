@@ -7,6 +7,20 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização (fatia 3): «O Meu Trabalho» e «Conhecimento» — 2026-09-22
+
+Continuação da migração dos corpos dos módulos para o catálogo, cada ecrã com a
+sua guarda de pureza.
+
+- **O Meu Trabalho**: cabeçalho, separadores, «Tarefas atribuídas» (com badges de
+  estado e de prioridade traduzidos, mantendo o enum), «Investigação que sigo»,
+  os painéis não-implementados e a actividade — tudo pelo catálogo.
+- **Conhecimento**: cabeçalho, separadores, contadores, «Adicionado
+  recentemente» e os estados vazios.
+- Novo `task_priority_badge` (enum → rótulo, como o de estado).
+- Guardas de pureza `o_meu_trabalho_nao_mistura_linguas` e
+  `o_conhecimento_nao_mistura_linguas`.
+
 ### Internacionalização (fatia 2): Home sem idioma misto, e a guarda de pureza — 2026-09-22
 
 A fatia 1 traduziu a navegação; o corpo dos ecrãs continuava em português, e uma
