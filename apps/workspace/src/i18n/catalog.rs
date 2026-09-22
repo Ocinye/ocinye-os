@@ -459,6 +459,45 @@ const RESOURCES: &[Entry] = catalogo! {
     },
 };
 
+/// Nomes de mês e de dia, e os moldes de data. A ordem das palavras e os
+/// conectores mudam por língua («26 de Agosto de 2026» / «26 August 2026» /
+/// «26 août 2026»), por isso o molde é por locale, não uma concatenação fixa
+/// (i18n §22, §25).
+const DATE: &[Entry] = catalogo! {
+    "date.month.1": { pt: "Janeiro", en: "January", fr: "janvier" },
+    "date.month.2": { pt: "Fevereiro", en: "February", fr: "février" },
+    "date.month.3": { pt: "Março", en: "March", fr: "mars" },
+    "date.month.4": { pt: "Abril", en: "April", fr: "avril" },
+    "date.month.5": { pt: "Maio", en: "May", fr: "mai" },
+    "date.month.6": { pt: "Junho", en: "June", fr: "juin" },
+    "date.month.7": { pt: "Julho", en: "July", fr: "juillet" },
+    "date.month.8": { pt: "Agosto", en: "August", fr: "août" },
+    "date.month.9": { pt: "Setembro", en: "September", fr: "septembre" },
+    "date.month.10": { pt: "Outubro", en: "October", fr: "octobre" },
+    "date.month.11": { pt: "Novembro", en: "November", fr: "novembre" },
+    "date.month.12": { pt: "Dezembro", en: "December", fr: "décembre" },
+    "date.weekday.1": { pt: "Segunda-feira", en: "Monday", fr: "lundi" },
+    "date.weekday.2": { pt: "Terça-feira", en: "Tuesday", fr: "mardi" },
+    "date.weekday.3": { pt: "Quarta-feira", en: "Wednesday", fr: "mercredi" },
+    "date.weekday.4": { pt: "Quinta-feira", en: "Thursday", fr: "jeudi" },
+    "date.weekday.5": { pt: "Sexta-feira", en: "Friday", fr: "vendredi" },
+    "date.weekday.6": { pt: "Sábado", en: "Saturday", fr: "samedi" },
+    "date.weekday.7": { pt: "Domingo", en: "Sunday", fr: "dimanche" },
+    "date.weekday_short.1": { pt: "Seg", en: "Mon", fr: "lun" },
+    "date.weekday_short.2": { pt: "Ter", en: "Tue", fr: "mar" },
+    "date.weekday_short.3": { pt: "Qua", en: "Wed", fr: "mer" },
+    "date.weekday_short.4": { pt: "Qui", en: "Thu", fr: "jeu" },
+    "date.weekday_short.5": { pt: "Sex", en: "Fri", fr: "ven" },
+    "date.weekday_short.6": { pt: "Sáb", en: "Sat", fr: "sam" },
+    "date.weekday_short.7": { pt: "Dom", en: "Sun", fr: "dim" },
+    "date.month_year": { pt: "{m} {y}", en: "{m} {y}", fr: "{m} {y}" },
+    "date.long": { pt: "{d} de {m} de {y}", en: "{d} {m} {y}", fr: "{d} {m} {y}" },
+    "date.weekday_long": { pt: "{w}, {d} de {m}", en: "{w}, {d} {m}", fr: "{w} {d} {m}" },
+    "date.range.same_month": { pt: "{d1} – {d2} de {m} de {y}", en: "{d1}–{d2} {m} {y}", fr: "{d1} – {d2} {m} {y}" },
+    "date.range.same_year": { pt: "{d1} de {m1} – {d2} de {m2} de {y}", en: "{d1} {m1} – {d2} {m2} {y}", fr: "{d1} {m1} – {d2} {m2} {y}" },
+    "date.range.cross_year": { pt: "{d1} de {m1} de {y1} – {d2} de {m2} de {y2}", en: "{d1} {m1} {y1} – {d2} {m2} {y2}", fr: "{d1} {m1} {y1} – {d2} {m2} {y2}" },
+};
+
 /// Estados de erro e de página cheia — nenhum ecrã fica em língua trocada.
 const ERRORS: &[Entry] = catalogo! {
     "error.not_found.title": { pt: "Página não encontrada", en: "Page not found", fr: "Page introuvable" },
@@ -542,6 +581,7 @@ const SETTINGS: &[Entry] = catalogo! {
 /// Não inclui grupos de teste: uma chave só-`pt` de teste (para provar a queda)
 /// não é um buraco de produção, e não deve fazer o portão soar.
 pub const GROUPS: &[&[Entry]] = &[
+    DATE,
     NAV,
     ACTIONS,
     CREATE,

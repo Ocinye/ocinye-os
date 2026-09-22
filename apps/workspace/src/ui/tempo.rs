@@ -22,115 +22,105 @@
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, Utc};
 use ocinye_contracts::temporal::TimeZoneName;
 
-/// Os meses, de Janeiro a Dezembro.
-const MESES: [&str; 12] = [
-    "Janeiro",
-    "Fevereiro",
-    "Março",
-    "Abril",
-    "Maio",
-    "Junho",
-    "Julho",
-    "Agosto",
-    "Setembro",
-    "Outubro",
-    "Novembro",
-    "Dezembro",
-];
+/// O índice 1..=7 do dia da semana, de segunda (1) a domingo (7).
+fn indice_do_dia(data: NaiveDate) -> u32 {
+    data.weekday().num_days_from_monday() + 1
+}
 
-/// Os dias da semana, de segunda a domingo — a ordem em que a grelha os mostra.
-const DIAS: [&str; 7] = [
-    "Segunda-feira",
-    "Terça-feira",
-    "Quarta-feira",
-    "Quinta-feira",
-    "Sexta-feira",
-    "Sábado",
-    "Domingo",
-];
-
-/// A abreviatura de cada dia, na mesma ordem.
-///
-/// Três letras porque a grelha tem sete colunas e o cabeçalho não pode ser mais
-/// largo do que a coluna que encima.
-const DIAS_CURTOS: [&str; 7] = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-
-/// O nome do mês desta data.
+/// O nome do mês desta data, no idioma corrente.
 #[must_use]
 pub fn mes(data: NaiveDate) -> &'static str {
-    // `month()` devolve 1..=12 por contrato do `chrono`; o `saturating_sub`
-    // existe para que um valor impossível não faça pânico numa página.
-    MESES[(data.month() as usize).saturating_sub(1).min(11)]
+    crate::i18n::t(&format!("date.month.{}", data.month()))
 }
 
-/// O nome do dia da semana desta data.
+/// O nome do dia da semana desta data, no idioma corrente.
 #[must_use]
 pub fn dia_da_semana(data: NaiveDate) -> &'static str {
-    DIAS[data.weekday().num_days_from_monday() as usize]
+    crate::i18n::t(&format!("date.weekday.{}", indice_do_dia(data)))
 }
 
-/// A abreviatura do dia da semana desta data.
+/// A abreviatura do dia da semana desta data, no idioma corrente.
 #[must_use]
 pub fn dia_da_semana_curto(data: NaiveDate) -> &'static str {
-    DIAS_CURTOS[data.weekday().num_days_from_monday() as usize]
+    crate::i18n::t(&format!("date.weekday_short.{}", indice_do_dia(data)))
 }
 
-/// Os sete cabeçalhos da grelha, de segunda a domingo.
+/// Os sete cabeçalhos da grelha, de segunda a domingo, no idioma corrente.
 #[must_use]
-pub const fn cabecalhos_da_semana() -> [&'static str; 7] {
-    DIAS_CURTOS
+pub fn cabecalhos_da_semana() -> [&'static str; 7] {
+    [
+        crate::i18n::t("date.weekday_short.1"),
+        crate::i18n::t("date.weekday_short.2"),
+        crate::i18n::t("date.weekday_short.3"),
+        crate::i18n::t("date.weekday_short.4"),
+        crate::i18n::t("date.weekday_short.5"),
+        crate::i18n::t("date.weekday_short.6"),
+        crate::i18n::t("date.weekday_short.7"),
+    ]
 }
 
-/// `Agosto 2026` — o título de um mês.
-///
-/// Sem «de» no meio: é um rótulo, não uma frase.
+/// `Agosto 2026` — o título de um mês, no molde do idioma corrente.
 #[must_use]
 pub fn mes_e_ano(data: NaiveDate) -> String {
-    format!("{} {}", mes(data), data.year())
+    let ano = data.year().to_string();
+    crate::i18n::tf("date.month_year", &[("m", mes(data)), ("y", &ano)])
 }
 
-/// `26 de Agosto de 2026` — uma data por extenso.
+/// `26 de Agosto de 2026` — uma data por extenso, no molde do idioma corrente.
 #[must_use]
 pub fn data_por_extenso(data: NaiveDate) -> String {
-    format!("{} de {} de {}", data.day(), mes(data), data.year())
+    let dia = data.day().to_string();
+    let ano = data.year().to_string();
+    crate::i18n::tf("date.long", &[("d", &dia), ("m", mes(data)), ("y", &ano)])
 }
 
-/// `Quarta-feira, 26 de Agosto` — uma data com o dia da semana à frente.
+/// `Quarta-feira, 26 de Agosto` — uma data com o dia da semana, no molde do idioma.
 #[must_use]
 pub fn dia_por_extenso(data: NaiveDate) -> String {
-    format!("{}, {} de {}", dia_da_semana(data), data.day(), mes(data))
+    let dia = data.day().to_string();
+    crate::i18n::tf(
+        "date.weekday_long",
+        &[("w", dia_da_semana(data)), ("d", &dia), ("m", mes(data))],
+    )
 }
 
-/// `24 – 30 de Agosto de 2026`, ou com os dois meses quando a semana os
-/// atravessa.
+/// `24 – 30 de Agosto de 2026`, ou com os dois meses/anos quando a semana os
+/// atravessa — no molde do idioma corrente.
 #[must_use]
 pub fn intervalo_da_semana(inicio: NaiveDate, fim: NaiveDate) -> String {
+    let d1 = inicio.day().to_string();
+    let d2 = fim.day().to_string();
     if inicio.month() == fim.month() && inicio.year() == fim.year() {
-        format!(
-            "{} – {} de {} de {}",
-            inicio.day(),
-            fim.day(),
-            mes(fim),
-            fim.year()
+        let ano = fim.year().to_string();
+        crate::i18n::tf(
+            "date.range.same_month",
+            &[("d1", &d1), ("d2", &d2), ("m", mes(fim)), ("y", &ano)],
         )
     } else if inicio.year() == fim.year() {
-        format!(
-            "{} de {} – {} de {} de {}",
-            inicio.day(),
-            mes(inicio),
-            fim.day(),
-            mes(fim),
-            fim.year()
+        let ano = fim.year().to_string();
+        crate::i18n::tf(
+            "date.range.same_year",
+            &[
+                ("d1", &d1),
+                ("m1", mes(inicio)),
+                ("d2", &d2),
+                ("m2", mes(fim)),
+                ("y", &ano),
+            ],
         )
     } else {
-        format!(
-            "{} de {} de {} – {} de {} de {}",
-            inicio.day(),
-            mes(inicio),
-            inicio.year(),
-            fim.day(),
-            mes(fim),
-            fim.year()
+        let y1 = inicio.year().to_string();
+        let y2 = fim.year().to_string();
+        crate::i18n::tf(
+            "date.range.cross_year",
+            &[
+                ("d1", &d1),
+                ("m1", mes(inicio)),
+                ("y1", &y1),
+                ("d2", &d2),
+                ("m2", mes(fim)),
+                ("y2", &y2),
+            ],
         )
     }
 }
@@ -171,7 +161,8 @@ mod tests {
     fn os_dias_seguem_a_ordem_da_grelha() {
         // 24/08/2026 é uma segunda-feira.
         let segunda = dia(2026, 8, 24);
-        for (offset, esperado) in DIAS_CURTOS.iter().enumerate() {
+        let curtos = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+        for (offset, esperado) in curtos.iter().enumerate() {
             let data = segunda + chrono::Duration::days(offset as i64);
             assert_eq!(
                 dia_da_semana_curto(data),
@@ -582,5 +573,33 @@ mod dia_civil_e_da_zona {
             NaiveDate::from_ymd_opt(2026, 8, 27).unwrap(),
             "«Hoje» respondeu com o dia de Greenwich a quem está em Lisboa"
         );
+    }
+
+    /// A data fala o idioma corrente, e o molde muda com ele.
+    ///
+    /// 26 de Agosto de 2026 (uma quarta-feira): em francês «26 août 2026», sem o
+    /// «de … de» português e com o mês em minúscula, como manda a língua.
+    #[tokio::test]
+    async fn a_data_segue_o_idioma() {
+        use crate::i18n::{with_locale, Locale};
+        let d = NaiveDate::from_ymd_opt(2026, 8, 26).expect("data válida");
+
+        assert_eq!(data_por_extenso(d), "26 de Agosto de 2026");
+
+        let fr = with_locale(Locale::Fr, async {
+            (mes(d), dia_da_semana(d), data_por_extenso(d), mes_e_ano(d))
+        })
+        .await;
+        assert_eq!(fr.0, "août");
+        assert_eq!(fr.1, "mercredi");
+        assert_eq!(fr.2, "26 août 2026");
+        assert_eq!(fr.3, "août 2026");
+
+        let en = with_locale(Locale::En, async {
+            (data_por_extenso(d), dia_da_semana_curto(d))
+        })
+        .await;
+        assert_eq!(en.0, "26 August 2026");
+        assert_eq!(en.1, "Wed");
     }
 }
