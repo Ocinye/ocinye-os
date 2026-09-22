@@ -7,6 +7,32 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização (fatia 2): Home sem idioma misto, e a guarda de pureza — 2026-09-22
+
+A fatia 1 traduziu a navegação; o corpo dos ecrãs continuava em português, e uma
+página em francês mostrava a barra em francês com o corpo português. **Não era
+fragmentação de idioma** — a barra e o corpo renderizam no mesmo pedido, sob o
+mesmo idioma; o corpo saía em português por não passar por `t()`.
+
+- **Home traduzido por inteiro**: saudação (interpola o nome), subtítulo (com
+  plurais), KPIs (rótulo e legenda), «Continuar trabalho», «Tarefas pendentes»,
+  «Actividade recente», «Acesso rápido», o painel de IA, os botões e todos os
+  estados vazios.
+- **Enum → rótulo**: o `classification_badge` («INTERNAL») e um novo
+  `task_state_badge` passam a mostrar o rótulo traduzido (INTERNO / INTERNAL /
+  INTERNE), mantendo o valor persistido (o enum) e o tom derivado dele — a língua
+  nunca muda a semântica (i18n §12, §24).
+- **Guarda de pureza de idioma** (`o_home_nao_mistura_linguas`): rende o Home em
+  francês e falha se qualquer marca de chrome português ficar por traduzir. É a
+  peça que torna o idioma misto **detectável em CI** — a arquitectura que faltava
+  para o defeito não poder voltar em silêncio (i18n §41, §61).
+
+> Prosa vinda do Core (resumos do feed de Actividade, mensagem de estado da IA)
+> fica marcada como conteúdo (`data-oc-content`) e será localizada numa fatia
+> própria que toca o Core (evento semântico em vez de frase gravada, i18n §11).
+> Os restantes ~30 ecrãs (listas, administração, correio, ficheiros, calendário,
+> …) seguem em fatias próprias — ~2 900 strings ao todo. F-22 no registo.
+
 ### Internacionalização: arquitectura de idioma pt/en/fr (fatia 1) — 2026-09-22
 
 O Ocinye passa a ter uma arquitectura de idioma permanente, com o **português de

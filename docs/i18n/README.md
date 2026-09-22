@@ -43,6 +43,21 @@ Todo o texto de produto passa por `t(chave)` (uma mensagem), `tf(chave, args)`
 (com interpolação) ou `tp(chave, n)` (plural). **Não há `if locale == "fr"`
 espalhado pelos ecrãs, nem catálogos por página.**
 
+## Um ecrã, um idioma — e a guarda que o garante
+
+Para um idioma activo, **todo o chrome de produto no ecrã fala esse idioma**. A
+barra em francês com o corpo em português é uma falha de certificação (i18n §2).
+
+A guarda de pureza (`o_home_nao_mistura_linguas`, e as suas irmãs por ecrã) rende
+a página num idioma e falha se uma marca de chrome de outra língua ficar — o que
+torna o idioma misto **detectável em CI**, e não só à vista.
+
+Prosa que vem do Core já composta (resumos do feed de Actividade, mensagens de
+estado) marca-se com `data-oc-content="1"` e fica fora da guarda de pureza: é
+dado, não chrome. Localiza-se onde nasce — de preferência como evento semântico
+(`kind` + `subject_type` + título) renderizado no idioma de quem lê (i18n §11,
+§44), e não como frase gravada numa língua.
+
 ## Conteúdo não é interface
 
 O Ocinye traduz a **interface**. Não traduz o **conteúdo** que os membros

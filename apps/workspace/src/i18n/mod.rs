@@ -70,6 +70,16 @@ pub fn t_in(locale: Locale, key: &str) -> &'static str {
     resolve(locale, key)
 }
 
+/// Se uma chave existe no catálogo.
+///
+/// Para quem constrói a chave a partir de um valor de domínio (um estado, um
+/// tipo) e precisa de saber se há tradução antes de a pedir, em vez de receber a
+/// chave crua de volta.
+#[must_use]
+pub fn has(key: &str) -> bool {
+    catalog::entry(key).is_some()
+}
+
 /// Uma mensagem com valores interpolados: `tf("greeting.evening", &[("name", n)])`.
 ///
 /// A interpolação é textual e segura: os valores entram como texto, e a árvore

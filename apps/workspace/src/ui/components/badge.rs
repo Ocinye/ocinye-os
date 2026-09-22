@@ -103,21 +103,51 @@ pub fn badge(label: impl Into<String>, tone: Tone) -> impl IntoView {
 /// no contexto de IA (`design/README.md` §7.3). O `title` diz o que a sigla
 /// significa, para quem a vê pela primeira vez.
 pub fn classification_badge(classification: &str) -> impl IntoView {
-    let label = classification.trim().to_ascii_uppercase();
-    let explanation = match label.as_str() {
-        "PUBLIC" => "Publicável fora da instituição",
-        "INTERNAL" => "Legível por qualquer membro activo",
-        "CONFIDENTIAL" => "Requer pertença à unidade ou ao workspace",
-        "RESTRICTED" => "Requer pertença explícita ao workspace",
-        _ => "Classificação",
+    let enum_value = classification.trim().to_ascii_uppercase();
+    // O valor persistido é o enum; o que se mostra é o rótulo traduzido. O tom
+    // deriva do enum, para não depender da língua.
+    let (rotulo_key, ajuda_key) = match enum_value.as_str() {
+        "PUBLIC" => ("classification.public", "classification.public.help"),
+        "INTERNAL" => ("classification.internal", "classification.internal.help"),
+        "CONFIDENTIAL" => (
+            "classification.confidential",
+            "classification.confidential.help",
+        ),
+        "RESTRICTED" => (
+            "classification.restricted",
+            "classification.restricted.help",
+        ),
+        _ => ("classification.unknown", "classification.unknown"),
     };
-    let tone = Tone::of(&label);
-    let title = format!("{label} — {explanation}");
+    let tone = Tone::of(&enum_value);
+    let rotulo = crate::i18n::t(rotulo_key);
+    let title = format!("{rotulo} — {}", crate::i18n::t(ajuda_key));
 
     view! {
         <span class=tone.class() title=title>
             <i></i>
-            {label}
+            {rotulo}
+        </span>
+    }
+}
+
+/// Um badge de estado de tarefa: o enum decide o tom, o idioma decide o rótulo.
+///
+/// O valor persistido (`in_progress`, `done`, …) nunca aparece cru; mostra-se o
+/// rótulo traduzido. Um estado desconhecido cai no valor recebido, para não
+/// desaparecer — mas os estados do domínio estão todos no catálogo.
+pub fn task_state_badge(state: &str) -> impl IntoView {
+    let chave = format!("task.state.{}", state.trim().to_ascii_lowercase());
+    let rotulo = if crate::i18n::has(&chave) {
+        crate::i18n::t(&chave).to_owned()
+    } else {
+        state.to_owned()
+    };
+    let tone = Tone::of(state);
+    view! {
+        <span class=tone.class()>
+            <i></i>
+            {rotulo}
         </span>
     }
 }
@@ -170,7 +200,7 @@ mod tests {
     #[test]
     fn a_classificacao_e_sempre_maiuscula() {
         let html = classification_badge("restricted").to_html();
-        assert!(html.contains("RESTRICTED"));
+        assert!(html.contains("RESTRITO"));
         assert!(!html.contains(">restricted<"));
     }
 }

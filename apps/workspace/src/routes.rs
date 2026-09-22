@@ -1442,17 +1442,37 @@ async fn home(State(state): State<WorkspaceState>, headers: HeaderMap) -> Respon
     );
 
     let kpis: Vec<ui::components::Kpi> = [
-        kpi("UNIDADES", count_of(&units), "activas", "/units"),
-        kpi("IDEIAS", count_of(&ideas), "em investigação", "/ideas"),
-        kpi("PROJECTOS", count_of(&projects), "em execução", "/projects"),
-        kpi("DATASETS", count_of(&datasets), "catalogados", "/datasets"),
+        kpi(
+            crate::i18n::t("home.kpi.units"),
+            count_of(&units),
+            crate::i18n::t("home.kpi.units.hint"),
+            "/units",
+        ),
+        kpi(
+            crate::i18n::t("home.kpi.ideas"),
+            count_of(&ideas),
+            crate::i18n::t("home.kpi.ideas.hint"),
+            "/ideas",
+        ),
+        kpi(
+            crate::i18n::t("home.kpi.projects"),
+            count_of(&projects),
+            crate::i18n::t("home.kpi.projects.hint"),
+            "/projects",
+        ),
+        kpi(
+            crate::i18n::t("home.kpi.datasets"),
+            count_of(&datasets),
+            crate::i18n::t("home.kpi.datasets.hint"),
+            "/datasets",
+        ),
     ]
     .into_iter()
     .flatten()
     .collect();
 
     let content = ui::screens::home::home(ui::screens::home::Dashboard {
-        greeting: ui::screens::home::greeting_for(local_hour()).to_owned(),
+        greeting_key: ui::screens::home::greeting_for(local_hour()),
         name: viewer.name.clone(),
         can_create_idea: viewer.can(ocinye_contracts::Permission::IdeasCreate),
         kpis,
@@ -1462,7 +1482,13 @@ async fn home(State(state): State<WorkspaceState>, headers: HeaderMap) -> Respon
         intelligence,
     });
 
-    shell_page("Home", &viewer, Screen::Home, Vec::new(), content)
+    shell_page(
+        crate::i18n::t("nav.home"),
+        &viewer,
+        Screen::Home,
+        Vec::new(),
+        content,
+    )
 }
 
 /// A hora local, para a saudação.

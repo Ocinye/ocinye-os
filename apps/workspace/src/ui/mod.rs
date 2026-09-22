@@ -334,7 +334,7 @@ mod render_tests {
             (
                 "Home",
                 screens::home::home(screens::home::Dashboard {
-                    greeting: "Bom dia".to_owned(),
+                    greeting_key: "home.greeting.morning",
                     name: "Teste".to_owned(),
                     kpis: Vec::new(),
                     workspaces: vazio.clone(),
@@ -346,7 +346,7 @@ mod render_tests {
                 .to_html(),
                 vec![
                     "Continuar trabalho",
-                    "RESEARCH WORKSPACES",
+                    "Research Workspaces",
                     "Actividade recente",
                     "Acesso rápido",
                 ],
@@ -516,7 +516,7 @@ mod render_tests {
             "total": 1
         }), screens::lists::Slice::default())
         .to_html();
-        assert!(ideas.contains("RESTRICTED"));
+        assert!(ideas.contains("RESTRITO"));
 
         let datasets = screens::lists::datasets(
             &viewer(),
@@ -526,7 +526,7 @@ mod render_tests {
             }),
         )
         .to_html();
-        assert!(datasets.contains("CONFIDENTIAL"));
+        assert!(datasets.contains("CONFIDENCIAL"));
     }
 
     /// Sem infraestrutura, os ecrãs de IA e computação dizem-no.
@@ -800,7 +800,7 @@ pub(crate) mod link_tests {
         }
 
         let dashboard = screens::home::Dashboard {
-            greeting: "Bom dia".to_owned(),
+            greeting_key: "home.greeting.morning",
             name: "João".to_owned(),
             kpis: Vec::new(),
             workspaces: empty.clone(),

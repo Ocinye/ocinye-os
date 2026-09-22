@@ -1589,6 +1589,6 @@ pub(crate) mod tests {
         })
         .to_html();
 
-        assert!(html.contains("RESTRICTED"));
+        assert!(html.contains("RESTRITO"));
     }
 }
