@@ -103,36 +103,45 @@ impl Screen {
         }
     }
 
-    /// O rótulo do ecrã, tal como aparece na navegação e no breadcrumb.
+    /// A chave i18n do rótulo do ecrã.
+    ///
+    /// O rótulo em si resolve-se no idioma corrente por [`Screen::label`]; a chave
+    /// fica à parte para os poucos sítios que precisam dela sem o texto.
     #[must_use]
-    pub const fn label(self) -> &'static str {
+    pub const fn label_key(self) -> &'static str {
         match self {
-            Self::Help => "Ajuda",
-            Self::Settings => "Definições",
-            Self::Home => "Home",
-            Self::MyWork => "O Meu Trabalho",
-            Self::Notes => "Notas",
-            Self::Mail => "Correio",
-            Self::Messaging => "Mensagens",
-            Self::Resources => "Meus Recursos",
-            Self::Units => "Unidades",
-            Self::Ideas => "Ideias",
-            Self::Projects => "Projectos",
-            Self::Knowledge => "Conhecimento",
-            Self::Bibliography => "Bibliografia",
-            Self::Datasets => "Dados",
-            Self::Files => "Ficheiros",
-            Self::Ai => "Ocinye AI",
-            Self::Agents => "Agentes",
-            Self::Compute => "Computação",
-            Self::Calendar => "Calendário",
-            Self::Activity => "Actividade",
-            Self::Admin => "Administração",
-            Self::Audit => "Audit Log",
-            Self::Prompt => "Prompt Ocinye",
-            Self::Search => "Pesquisar",
-            Self::Ask => "Pesquisar, perguntar ou executar",
+            Self::Help => "nav.help",
+            Self::Settings => "nav.settings",
+            Self::Home => "nav.home",
+            Self::MyWork => "nav.my_work",
+            Self::Notes => "nav.notes",
+            Self::Mail => "nav.mail",
+            Self::Messaging => "nav.messages",
+            Self::Resources => "nav.resources",
+            Self::Units => "nav.units",
+            Self::Ideas => "nav.ideas",
+            Self::Projects => "nav.projects",
+            Self::Knowledge => "nav.knowledge",
+            Self::Bibliography => "nav.bibliography",
+            Self::Datasets => "nav.data",
+            Self::Files => "nav.files",
+            Self::Ai => "nav.ai",
+            Self::Agents => "nav.agents",
+            Self::Compute => "nav.compute",
+            Self::Calendar => "nav.calendar",
+            Self::Activity => "nav.activity",
+            Self::Admin => "nav.admin",
+            Self::Audit => "nav.audit",
+            Self::Prompt => "nav.prompt",
+            Self::Search => "nav.search",
+            Self::Ask => "nav.ask",
         }
+    }
+
+    /// O rótulo do ecrã no idioma corrente, para navegação, breadcrumb e título.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        crate::i18n::t(self.label_key())
     }
 
     const fn icon(self) -> Icon {
@@ -172,7 +181,7 @@ const GROUPS: [(&str, &[Screen]); 5] = [
     // entrada rápida — mas uma entrada que só existe num canto é uma entrada que
     // metade das pessoas não encontra.
     (
-        "PESSOAL",
+        "nav.section.personal",
         &[
             Screen::Home,
             Screen::MyWork,
@@ -184,11 +193,11 @@ const GROUPS: [(&str, &[Screen]); 5] = [
         ],
     ),
     (
-        "INVESTIGAÇÃO",
+        "nav.section.research",
         &[Screen::Units, Screen::Ideas, Screen::Projects],
     ),
     (
-        "CONHECIMENTO",
+        "nav.section.knowledge",
         &[
             Screen::Knowledge,
             Screen::Files,
@@ -197,11 +206,11 @@ const GROUPS: [(&str, &[Screen]); 5] = [
         ],
     ),
     (
-        "INTELIGÊNCIA",
+        "nav.section.intelligence",
         &[Screen::Ai, Screen::Agents, Screen::Compute],
     ),
     (
-        "INSTITUCIONAL",
+        "nav.section.institutional",
         &[Screen::Activity, Screen::Admin, Screen::Audit],
     ),
 ];
@@ -681,7 +690,7 @@ fn sidebar(viewer: &Viewer, avatar: &str, active: Screen) -> impl IntoView {
                         }
 
                         Some(view! {
-                            <div class="oc-side__group">{*group}</div>
+                            <div class="oc-side__group">{crate::i18n::t(group)}</div>
                             {itens
                                 .into_iter()
                                 .map(|(screen, permitido)| {
@@ -958,14 +967,14 @@ fn topbar(
             <form class="oc-search" method="get" action="/ask" role="search">
                 {icon(Icon::Search, 14)}
                 <label class="oc-sr" for="oc-command">
-                    "Pesquisar, perguntar ou executar no Ocinye"
+                    {crate::i18n::t("nav.ask")}
                 </label>
                 <input
                     class="oc-search__input"
                     id="oc-command"
                     name="q"
                     type="search"
-                    placeholder="Pesquisar, perguntar ou executar no Ocinye…"
+                    placeholder=crate::i18n::t("nav.search.placeholder")
                     autocomplete="off"
                 />
                 <kbd class="oc-kbd" data-oc="palette-open" title="Command palette">"⌘K"</kbd>
@@ -1187,12 +1196,12 @@ struct CreateAction {
 
 const CREATE_ITEMS: [CreateAction; 7] = [
     CreateAction {
-        label: "Nova Ideia",
+        label: "create.idea",
         via: CreateVia::Open("/ideas/new"),
         key: "I",
     },
     CreateAction {
-        label: "Novo Projecto",
+        label: "create.project",
         via: CreateVia::Open("/projects/new"),
         key: "P",
     },
@@ -1200,27 +1209,27 @@ const CREATE_ITEMS: [CreateAction; 7] = [
     // Caminho próprio (`/notes/new`) para não colidir, no DOM, com o formulário
     // de criação da lista de Notas — os dois criam a mesma nota pessoal.
     CreateAction {
-        label: "Nova Nota",
+        label: "create.note",
         via: CreateVia::Create("/notes/new"),
         key: "N",
     },
     CreateAction {
-        label: "Nova Referência",
+        label: "create.reference",
         via: CreateVia::Open("/bibliography/new"),
         key: "R",
     },
     CreateAction {
-        label: "Novo Dataset",
+        label: "create.dataset",
         via: CreateVia::Open("/datasets/new"),
         key: "D",
     },
     CreateAction {
-        label: "Nova Tarefa",
+        label: "create.task",
         via: CreateVia::Open("/tasks/new"),
         key: "T",
     },
     CreateAction {
-        label: "Novo Agente IA",
+        label: "create.agent",
         via: CreateVia::Open("/ai/agents/new"),
         key: "A",
     },
@@ -1237,7 +1246,7 @@ fn create_menu() -> impl IntoView {
                 aria-expanded="false"
             >
                 {icon(Icon::Plus, 12)}
-                "Criar"
+                {crate::i18n::t("nav.create")}
             </button>
 
             <div class="oc-create__menu" data-oc="create-menu" role="menu" hidden>
@@ -1261,7 +1270,7 @@ fn create_menu_item(action: &CreateAction) -> impl IntoView {
     match via {
         CreateVia::Open(href) => view! {
             <a class="oc-create__item" role="menuitem" href=href data-oc-key=key>
-                {label}
+                {crate::i18n::t(label)}
                 <kbd class="oc-kbd">{key}</kbd>
             </a>
         }
@@ -1277,7 +1286,7 @@ fn create_menu_item(action: &CreateAction) -> impl IntoView {
                     role="menuitem"
                     data-oc-key=key
                 >
-                    {label}
+                    {crate::i18n::t(label)}
                     <kbd class="oc-kbd">{key}</kbd>
                 </button>
             </form>
@@ -1587,6 +1596,36 @@ mod tests {
         .to_html()
     }
 
+    /// A navegação muda de língua com o idioma corrente, e nada mais.
+    ///
+    /// A prova do interruptor ao nível da renderização: a mesma barra, os mesmos
+    /// destinos, os mesmos ids — só as palavras da interface mudam. Corre dentro
+    /// de um escopo de idioma, como um pedido faria.
+    #[tokio::test]
+    async fn a_navegacao_fala_o_idioma_corrente() {
+        use ocinye_contracts::Locale;
+        let viewer = viewer_de_investigacao(&[Permission::IdeasView]);
+
+        // Português canónico (o predefinido, mesmo sem escopo).
+        let pt = render(&viewer);
+        assert!(pt.contains("Ficheiros"), "pt: Ficheiros");
+        assert!(pt.contains("Investigação"), "pt: secção Investigação");
+
+        // Francês: a mesma barra, outra língua — e os destinos não mudam.
+        let fr = crate::i18n::with_locale(Locale::Fr, async { render(&viewer) }).await;
+        assert!(fr.contains("Fichiers"), "fr: Fichiers");
+        assert!(fr.contains("Accueil"), "fr: Accueil (Home)");
+        assert!(fr.contains("Recherche"), "fr: secção Recherche");
+        assert!(!fr.contains("Ficheiros"), "fr não deve trazer 'Ficheiros'");
+        assert!(fr.contains(r#"href="/ideas""#), "o destino /ideas não muda");
+
+        // Inglês.
+        let en = crate::i18n::with_locale(Locale::En, async { render(&viewer) }).await;
+        assert!(en.contains(">Files<") || en.contains("Files"), "en: Files");
+        assert!(en.contains("Research"), "en: secção Research");
+        assert!(en.contains(r#"href="/ideas""#), "o destino /ideas não muda");
+    }
+
     /// O «Criar» leva cada acção determinista ao seu fluxo real.
     ///
     /// O defeito (F-07 / GLOBAL_CREATE): acções apareciam como «Ainda não
@@ -1705,7 +1744,7 @@ mod tests {
         let member = viewer_de_investigacao(&[Permission::IdeasView]);
         let html = render(&member);
 
-        for grupo in ["PESSOAL", "INVESTIGAÇÃO", "CONHECIMENTO", "INSTITUCIONAL"] {
+        for grupo in ["Pessoal", "Investigação", "Conhecimento", "Institucional"] {
             assert!(html.contains(grupo), "o grupo {grupo} desapareceu da barra");
         }
 
@@ -1730,10 +1769,10 @@ mod tests {
         let html = render(&sem_core);
 
         assert!(
-            html.contains("PESSOAL"),
+            html.contains("Pessoal"),
             "Home e O Meu Trabalho não dependem do Core"
         );
-        for grupo in ["INVESTIGAÇÃO", "CONHECIMENTO", "INSTITUCIONAL"] {
+        for grupo in ["Investigação", "Conhecimento", "Institucional"] {
             assert!(
                 !html.contains(grupo),
                 "{grupo} aparece sem que as permissões tenham sido confirmadas"

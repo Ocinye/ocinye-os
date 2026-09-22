@@ -52,6 +52,7 @@
 pub mod api;
 pub mod boot;
 pub mod config;
+pub mod i18n;
 pub mod routes;
 pub mod session;
 pub mod ui;

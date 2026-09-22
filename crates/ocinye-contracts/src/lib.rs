@@ -29,6 +29,7 @@ pub mod compute;
 pub mod error;
 pub mod ids;
 pub mod intelligence;
+pub mod locale;
 pub mod mail;
 pub mod page;
 pub mod provenance;
@@ -51,6 +52,7 @@ pub use intelligence::{
     AiCapability, AiInteractionResponse, AiReasonCode, CapabilityStatus, IntelligenceStatus,
     InteractionOrigin, InteractionStatus, ModelStatus, RagScope,
 };
+pub use locale::{Locale, UnsupportedLocale};
 pub use mail::{
     ComposeAction, DraftOrigin, MailAddress, MailFolder, MailboxKind, OutboxState, RecipientScope,
     RemoteContentPolicy, SharedMailboxRole,

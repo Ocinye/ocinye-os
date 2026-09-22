@@ -405,6 +405,7 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
   background: rgba(255,255,255,.18);
 }
 .oc-side__group { font: 500 9.5px var(--oc-font-mono); letter-spacing: .16em;
+  text-transform: uppercase;
   color: var(--oc-on-navy-32); padding: 12px 8px 5px; white-space: nowrap; }
 
 .oc-nav {
@@ -6125,6 +6126,20 @@ select.oc-entrada {
 }
 .oc-up__mark--ok { color: var(--oc-success-text); }
 .oc-up__mark--bad { color: var(--oc-error-text); }
+
+/* Definições → Idioma e região: o selector de língua. Cada opção é uma linha
+   clicável; a seleccionada realça-se com a borda e o fundo da marca. */
+.oc-lang__set { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--oc-space-3); }
+.oc-lang__opt {
+  display: flex; align-items: center; gap: var(--oc-space-4);
+  padding: var(--oc-space-4) var(--oc-space-5);
+  border: 1px solid var(--oc-border); border-radius: var(--oc-r-md);
+  cursor: pointer; background: var(--oc-surface);
+}
+.oc-lang__opt:hover { background: var(--oc-surface-hover); }
+.oc-lang__opt:has(input:checked) { border-color: var(--oc-navy); background: var(--oc-surface-tint); }
+.oc-lang__opt input { accent-color: var(--oc-navy); width: 16px; height: 16px; flex-shrink: 0; }
+.oc-lang__name { font: 500 14px var(--oc-font-sans); color: var(--oc-text-body); }
 
 @media (max-width: 640px) {
   .oc-up { right: 8px; left: 8px; bottom: 8px; width: auto; }

@@ -7,6 +7,38 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização: arquitectura de idioma pt/en/fr (fatia 1) — 2026-09-22
+
+O Ocinye passa a ter uma arquitectura de idioma permanente, com o **português de
+Portugal como língua canónica** e inglês e francês como projecções fiéis. Esta
+fatia entrega a fundação e a navegação; os corpos dos módulos seguem em fatias
+próprias.
+
+- **Contrato de locale** (`ocinye_contracts::Locale`): exactamente `pt`/`en`/`fr`,
+  com normalização de variantes externas (`pt-PT`, `en-US`, `fr-FR` → os três) e
+  recusa dessas variantes na persistência. Tipo partilhado, sem I/O.
+- **Resolução por pedido** sem fiar parâmetros: um middleware resolve o idioma
+  (cookie `oc_locale` → `Accept-Language` → canónico) para um `task_local`, e
+  `t(chave)` lê-o em toda a renderização SSR. O `<html lang>` passa a acompanhar.
+- **Catálogo em repositório** (uma linha por chave, `pt` canónico + `en` + `fr`),
+  com interpolação, plural (o francês conta o 0 como singular) e queda ao `pt`.
+  Portão de completude em CI: paridade das três línguas e dos marcadores de
+  interpolação; nunca se mostra uma chave crua.
+- **Navegação traduzida**: barra lateral, secções, «+ Criar», pesquisa,
+  migalhas, títulos e as páginas de erro (404 / sem acesso / erro genérico).
+- **Definições → Idioma e região**: escolher Português / English / Français
+  (cada língua pelo seu próprio nome, sem bandeiras) muda a interface e persiste
+  no browser (cookie `oc_locale`), sobrevivendo a recarga e a sair/entrar.
+
+> Limites honestos desta fatia: a persistência **entre dispositivos** (preferência
+> no Core) e o **ecrã de primeira entrada** dependem de uma coluna
+> `preferred_locale`/`locale_chosen` no Core, que vem na fatia seguinte — sem ela,
+> a escolha segue o browser. Os corpos dos módulos (Home, Correio, Administração,
+> …), a formatação de datas/números e a matriz WebKit/Firefox seguem nas fatias
+> próprias (o harness actual é só-Chromium). Guardas: contrato de locale, motor
+> i18n, portão de completude, e a prova de que a navegação muda de língua sem
+> mudar destinos.
+
 ### Ficheiros: carregar vários com progresso, e o «disponível» honesto — 2026-09-22
 
 Três defeitos no ecrã de Ficheiros, encontrados na aceitação em produção.
