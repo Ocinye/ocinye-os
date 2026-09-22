@@ -1089,7 +1089,7 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 }
 .oc-card__head h2, .oc-card__head h3 { font: 600 13px var(--oc-font-sans); color: var(--oc-text); }
 .oc-card__action { font: 500 11.5px var(--oc-font-sans); color: var(--oc-navy); }
-.oc-card__meta { font: 400 11px var(--oc-font-mono); color: var(--oc-text-faint); }
+.oc-card__meta { font: 400 11px var(--oc-font-mono); color: var(--oc-text-faint); text-transform: uppercase; }
 .oc-card__body { padding: 15px; }
 
 .oc-grid { display: grid; gap: 12px; align-items: start; }
@@ -2068,7 +2068,7 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 .oc-t-caption--muted { font: 400 11.5px/1.65 var(--oc-font-sans); color: var(--oc-text-muted); }
 .oc-t-hint { font: 400 11px var(--oc-font-sans); color: var(--oc-text-faint); }
 .oc-t-ghost { font: 400 10.5px var(--oc-font-sans); color: var(--oc-text-ghost); }
-.oc-t-meta { font: 500 11px var(--oc-font-mono); letter-spacing: .1em; color: var(--oc-text-meta); }
+.oc-t-meta { font: 500 11px var(--oc-font-mono); letter-spacing: .1em; color: var(--oc-text-meta); text-transform: uppercase; }
 .oc-t-group { font: 500 9.5px var(--oc-font-mono); letter-spacing: .16em; color: var(--oc-text-meta); }
 .oc-t-group--gold { color: var(--oc-gold); }
 

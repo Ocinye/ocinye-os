@@ -398,7 +398,7 @@ mod tests {
         )
         .to_html();
 
-        assert!(html.contains("RESTRICTED"));
+        assert!(html.contains("RESTRITO"));
         assert!(html.contains("Hidrogénio verde"));
         assert!(html.contains("1 resultado"));
         assert!(html.contains("/workspaces/11111111-1111-1111-1111-111111111111"));

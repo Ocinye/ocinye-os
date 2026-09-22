@@ -6,14 +6,15 @@
 use leptos::prelude::*;
 use serde_json::Value;
 
-use crate::ui::components::{
-    badge, button, card, kpi_card, pill, section_head, Button, Kpi, Tone, Variant,
-};
+use crate::ui::components::{button, card, kpi_card, pill, section_head, Button, Kpi, Variant};
 
 /// Tudo o que o painel mostra, já autorizado pelo Core.
 pub struct Dashboard {
-    /// Saudação, dependente da hora.
-    pub greeting: String,
+    /// A chave i18n da saudação, dependente da hora (`home.greeting.*`).
+    ///
+    /// Uma chave, e não a frase já feita: a saudação é a mesma verdade — a hora —
+    /// dita na língua de quem olha, e resolve-se aqui, no idioma corrente.
+    pub greeting_key: &'static str,
     /// Nome do membro.
     pub name: String,
     /// Contadores institucionais.
@@ -53,7 +54,7 @@ fn items(payload: &Value) -> Vec<Value> {
 /// O painel.
 pub fn home(data: Dashboard) -> impl IntoView {
     let Dashboard {
-        greeting,
+        greeting_key,
         name,
         kpis,
         workspaces,
@@ -62,6 +63,8 @@ pub fn home(data: Dashboard) -> impl IntoView {
         intelligence,
         can_create_idea,
     } = data;
+    use crate::i18n::{t, tf};
+    let saudacao = tf(greeting_key, &[("name", &name)]);
 
     let open_tasks = items(&tasks).len();
     let in_review = items(&workspaces)
@@ -75,23 +78,23 @@ pub fn home(data: Dashboard) -> impl IntoView {
         <div class="oc-page oc-page--home">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1 class="oc-head--lg">{format!("{greeting}, {name}")}</h1>
+                    <h1 class="oc-head--lg">{saudacao}</h1>
                     <p>{subtitle}</p>
                 </div>
                 <div class="oc-head__actions">
                     // Visível sempre, e declarada quando não se pode usar.
                     {button(if can_create_idea {
-                        Button::new("Nova Ideia", Variant::Secondary).href("/ideas/new")
+                        Button::new(t("home.new_idea"), Variant::Secondary).href("/ideas/new")
                     } else {
-                        Button::new("Nova Ideia", Variant::Secondary)
-                            .unavailable_because("Não tem autorização para criar ideias.")
+                        Button::new(t("home.new_idea"), Variant::Secondary)
+                            .unavailable_because(t("home.no_permission.idea"))
                     })}
                     // O projecto cria-se em contexto (promove-se uma ideia); o
                     // botão leva à lista de projectos, em vez de se declarar
                     // «indisponível» quando existe (F-07).
-                    {button(Button::new("Novo Projecto", Variant::Secondary).href("/projects"))}
+                    {button(Button::new(t("home.new_project"), Variant::Secondary).href("/projects"))}
                     {button(
-                        Button::new("Prompt Ocinye", Variant::Primary).href("/ai/prompt").with_dot(),
+                        Button::new(t("home.prompt_ocinye"), Variant::Primary).href("/ai/prompt").with_dot(),
                     )}
                 </div>
             </div>
@@ -115,15 +118,34 @@ pub fn home(data: Dashboard) -> impl IntoView {
     }
 }
 
-/// O subtítulo do painel, construído a partir do que existe.
+/// O subtítulo do painel, construído a partir do que existe, no idioma corrente.
+///
+/// Duas cláusulas independentes (tarefas, investigação), cada uma com o seu
+/// plural, juntas por «e». Contar por partes traduz-se bem nas três línguas; uma
+/// frase única com todas as combinações não (i18n §49).
 fn summary(tasks: usize, ideas: usize) -> String {
+    use crate::i18n::{t, tp};
+    let tarefas = i64::try_from(tasks).unwrap_or(i64::MAX);
+    let investigacao = i64::try_from(ideas).unwrap_or(i64::MAX);
     match (tasks, ideas) {
-        (0, 0) => "Nada precisa da sua atenção neste momento.".to_owned(),
-        (0, i) => format!("Tem {i} itens de investigação a que tem acesso."),
-        (1, 0) => "Tem 1 tarefa atribuída.".to_owned(),
-        (t, 0) => format!("Tem {t} tarefas atribuídas."),
-        (1, i) => format!("Tem 1 tarefa atribuída e {i} itens de investigação em curso."),
-        (t, i) => format!("Tem {t} tarefas atribuídas e {i} itens de investigação em curso."),
+        (0, 0) => t("home.summary.empty").to_owned(),
+        (_, 0) => format!(
+            "{}{}",
+            tp("home.summary.tasks", tarefas),
+            t("home.summary.suffix")
+        ),
+        (0, _) => format!(
+            "{}{}",
+            tp("home.summary.research", investigacao),
+            t("home.summary.suffix")
+        ),
+        (_, _) => format!(
+            "{} {} {}{}",
+            tp("home.summary.tasks", tarefas),
+            t("home.summary.join"),
+            tp("home.summary.research", investigacao),
+            t("home.summary.suffix")
+        ),
     }
 }
 
@@ -136,10 +158,7 @@ fn continue_work(payload: &Value) -> impl IntoView {
         // vazio não tem tiles, por isso precisa do seu.
         view! {
             <div class="oc-card__body">
-                <p class="oc-muted">
-                    "Ainda não há trabalho de investigação a que tenha acesso. Crie uma ideia para
-                     começar."
-                </p>
+                <p class="oc-muted">{crate::i18n::t("home.continue.empty")}</p>
             </div>
         }
         .into_any()
@@ -164,7 +183,7 @@ fn continue_work(payload: &Value) -> impl IntoView {
                                         {text(row, "code")}
                                     </span>
                                 </div>
-                                <div class="oc-fill oc-t-item" >
+                                <div class="oc-fill oc-t-item" data-oc-content="1">
                                     {text(row, "title")}
                                 </div>
                                 <div class="oc-row oc-gap-5" >
@@ -184,9 +203,9 @@ fn continue_work(payload: &Value) -> impl IntoView {
             // A etiqueta é a do dossier (§6.2); o «Ver tudo» é nosso, e fica:
             // o cartão mostra três, e há mais para lá deles.
             {section_head(
-                "Continuar trabalho",
-                Some(("Ver tudo".into(), "/my-work".into())),
-                Some("RESEARCH WORKSPACES".to_owned()),
+                crate::i18n::t("home.continue.title"),
+                Some((crate::i18n::t("home.view_all").into(), "/my-work".into())),
+                Some(crate::i18n::t("home.continue.aside").to_owned()),
             )}
             {body}
         </section>
@@ -197,7 +216,7 @@ fn pending_tasks(payload: &Value) -> impl IntoView {
     let rows = items(payload);
 
     let body = if rows.is_empty() {
-        view! { <p class="oc-muted">"Não tem tarefas abertas."</p> }.into_any()
+        view! { <p class="oc-muted">{crate::i18n::t("home.tasks.empty")}</p> }.into_any()
     } else {
         view! {
             <div>
@@ -213,12 +232,15 @@ fn pending_tasks(payload: &Value) -> impl IntoView {
                                 href=format!("/workspaces/{workspace}")
                                 class="oc-list__row"
                             >
-                                <span class="oc-fill oc-truncate oc-t-cell" >
+                                <span class="oc-fill oc-truncate oc-t-cell" data-oc-content="1">
                                     {text(row, "title")}
                                 </span>
-                                {badge(state.clone(), Tone::of(&state))}
+                                {crate::ui::components::task_state_badge(&state)}
                                 <span class="oc-mono oc-list__meta" >
-                                    {due.unwrap_or("sem prazo").to_owned()}
+                                    {due.map_or_else(
+                                        || crate::i18n::t("home.tasks.no_due").to_owned(),
+                                        ToOwned::to_owned,
+                                    )}
                                 </span>
                             </a>
                         }
@@ -231,8 +253,8 @@ fn pending_tasks(payload: &Value) -> impl IntoView {
 
     card(
         section_head(
-            "Tarefas pendentes",
-            Some(("Ver tudo".into(), "/my-work".into())),
+            crate::i18n::t("home.tasks.title"),
+            Some((crate::i18n::t("home.view_all").into(), "/my-work".into())),
             None,
         ),
         body,
@@ -243,7 +265,7 @@ fn recent_activity(payload: &Value) -> impl IntoView {
     let rows = items(payload);
 
     let body = if rows.is_empty() {
-        view! { <p class="oc-muted">"Ainda não há actividade."</p> }.into_any()
+        view! { <p class="oc-muted">{crate::i18n::t("home.activity.empty")}</p> }.into_any()
     } else {
         view! {
             <div class="oc-col oc-gap-8" >
@@ -258,10 +280,13 @@ fn recent_activity(payload: &Value) -> impl IntoView {
                                     class="oc-dot"
                                 ></i>
                                 <div class="oc-fill" >
-                                    <div class="oc-t-note" >
+                                    // A frase da actividade vem do Core (verbo +
+                                    // título); marca-se como conteúdo até o feed
+                                    // passar a evento semântico (i18n §11, §44).
+                                    <div class="oc-t-note" data-oc-content="1">
                                         {text(row, "summary")}
                                     </div>
-                                    <div class="oc-mono oc-t-ghost" >
+                                    <div class="oc-mono oc-t-ghost" data-oc-content="1">
                                         {text(row, "actor_name")}
                                     </div>
                                 </div>
@@ -276,7 +301,11 @@ fn recent_activity(payload: &Value) -> impl IntoView {
 
     view! {
         <section class="oc-card oc-mb-5" >
-            {section_head("Actividade recente", Some(("Ver tudo".into(), "/activity".into())), None)}
+            {section_head(
+                crate::i18n::t("home.activity.title"),
+                Some((crate::i18n::t("home.view_all").into(), "/activity".into())),
+                None,
+            )}
             <div class="oc-card__body">{body}</div>
         </section>
     }
@@ -291,16 +320,21 @@ fn ai_card(status: &Value) -> impl IntoView {
         .get("available")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let message = status
+    // A mensagem do Core é prosa e vem já composta; até passar a código de razão
+    // (i18n §31, §51), o que se localiza é o texto por omissão, e a mensagem do
+    // Core marca-se como conteúdo. O título é nosso, e traduz-se.
+    let mensagem_do_core = status
         .get("message")
         .and_then(Value::as_str)
-        .unwrap_or("Nenhum nó de IA Ocinye está actualmente disponível.")
-        .to_owned();
+        .map(ToOwned::to_owned);
+    let e_conteudo = mensagem_do_core.is_some().then_some("1");
+    let mensagem =
+        mensagem_do_core.unwrap_or_else(|| crate::i18n::t("home.ai.default_message").to_owned());
 
     let title = if available {
-        "Inteligência disponível"
+        crate::i18n::t("home.ai.available")
     } else {
-        "Inteligência ainda não disponível"
+        crate::i18n::t("home.ai.unavailable")
     };
 
     view! {
@@ -313,17 +347,17 @@ fn ai_card(status: &Value) -> impl IntoView {
             ></span>
 
             <div class="oc-t-group oc-t-group--gold" >
-                "OCINYE AI"
+                {crate::i18n::t("home.ai.eyebrow")}
             </div>
             <h2>
                 {title}
             </h2>
-            <p>
-                {message}
+            <p data-oc-content=e_conteudo>
+                {mensagem}
             </p>
             <div class="oc-row oc-gap-5" >
-                {button(Button::new("Abrir Prompt", Variant::Gold).href("/ai/prompt"))}
-                {button(Button::new("Hub de IA", Variant::OnNavy).href("/ai"))}
+                {button(Button::new(crate::i18n::t("home.ai.open_prompt"), Variant::Gold).href("/ai/prompt"))}
+                {button(Button::new(crate::i18n::t("home.ai.hub"), Variant::OnNavy).href("/ai"))}
             </div>
         </section>
     }
@@ -335,21 +369,21 @@ fn quick_access(can_create_idea: bool) -> impl IntoView {
     // lá em vez de se declararem «indisponíveis», que dizia que não existiam
     // quando existem (F-07). Só a falta de **permissão** desactiva um item, e aí
     // a razão é essa, não a do vizinho.
-    const SEM_PERMISSAO: &str = "Não tem autorização para criar ideias.";
+    let sem_permissao = crate::i18n::t("home.no_permission.idea");
 
     let actions: [(&str, Option<&str>, &str); 4] = [
         (
-            "Nova Ideia",
+            crate::i18n::t("home.new_idea"),
             can_create_idea.then_some("/ideas/new"),
-            SEM_PERMISSAO,
+            sem_permissao,
         ),
-        ("Novo Projecto", Some("/projects"), ""),
-        ("Novo Dataset", Some("/datasets"), ""),
-        ("Prompt IA", Some("/ai/prompt"), ""),
+        (crate::i18n::t("home.new_project"), Some("/projects"), ""),
+        (crate::i18n::t("home.new_dataset"), Some("/datasets"), ""),
+        (crate::i18n::t("home.quick.prompt"), Some("/ai/prompt"), ""),
     ];
 
     card(
-        section_head("Acesso rápido", None, None),
+        section_head(crate::i18n::t("home.quick.title"), None, None),
         view! {
             <div class="oc-grid oc-grid--2 oc-grid--tight" >
                 {actions
@@ -389,13 +423,16 @@ fn quick_access(can_create_idea: bool) -> impl IntoView {
     )
 }
 
-/// A saudação correspondente à hora local.
+/// A chave i18n da saudação correspondente à hora local.
+///
+/// Devolve a chave (`home.greeting.*`), não a frase: a frase resolve-se no idioma
+/// corrente, com o nome interpolado.
 #[must_use]
 pub fn greeting_for(hour: u32) -> &'static str {
     match hour {
-        5..=12 => "Bom dia",
-        13..=19 => "Boa tarde",
-        _ => "Boa noite",
+        5..=12 => "home.greeting.morning",
+        13..=19 => "home.greeting.afternoon",
+        _ => "home.greeting.evening",
     }
 }
 
@@ -406,10 +443,10 @@ mod tests {
 
     #[test]
     fn a_saudacao_segue_a_hora() {
-        assert_eq!(greeting_for(9), "Bom dia");
-        assert_eq!(greeting_for(15), "Boa tarde");
-        assert_eq!(greeting_for(23), "Boa noite");
-        assert_eq!(greeting_for(3), "Boa noite");
+        assert_eq!(greeting_for(9), "home.greeting.morning");
+        assert_eq!(greeting_for(15), "home.greeting.afternoon");
+        assert_eq!(greeting_for(23), "home.greeting.evening");
+        assert_eq!(greeting_for(3), "home.greeting.evening");
     }
 
     #[test]
@@ -421,7 +458,7 @@ mod tests {
 
     fn painel(can_create_idea: bool) -> Dashboard {
         Dashboard {
-            greeting: "Boa noite".to_owned(),
+            greeting_key: "home.greeting.evening",
             name: "Fidel Monteiro".to_owned(),
             kpis: Vec::new(),
             workspaces: json!({"items": []}),
@@ -449,6 +486,47 @@ mod tests {
         // Continua listada, mas dizendo a verdade sobre porquê.
         assert!(html.contains("Não tem autorização para criar ideias."));
         assert!(html.contains("Nova Ideia"));
+    }
+
+    /// Pureza de idioma: uma língua activa, um só idioma no chrome (i18n §2, §41).
+    ///
+    /// Rende o Home em francês e exige que o chrome seja francês por inteiro —
+    /// não a barra em francês e o corpo em português, que é o defeito que motivou
+    /// esta pass. Prova por marcas: as frases francesas têm de aparecer, e
+    /// nenhuma marca portuguesa de chrome pode ficar.
+    #[tokio::test]
+    async fn o_home_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+
+        let fr = with_locale(Locale::Fr, async { home(painel(true)).to_html() }).await;
+        for francesa in [
+            "Continuer le travail",
+            "Tâches en attente",
+            "Activité récente",
+            "Accès rapide",
+            "Bonsoir, Fidel Monteiro",
+            "Nouveau projet",
+        ] {
+            assert!(fr.contains(francesa), "fr: falta o chrome «{francesa}»");
+        }
+        for portuguesa in [
+            "Continuar trabalho",
+            "Tarefas pendentes",
+            "Actividade recente",
+            "Acesso rápido",
+            "Boa noite",
+            "Novo Projecto",
+        ] {
+            assert!(
+                !fr.contains(portuguesa),
+                "fr: chrome português por traduzir «{portuguesa}»"
+            );
+        }
+
+        // E o inglês, pela mesma medida.
+        let en = with_locale(Locale::En, async { home(painel(true)).to_html() }).await;
+        assert!(en.contains("Continue work") && en.contains("Pending tasks"));
+        assert!(!en.contains("Continuar trabalho"));
     }
 
     /// Com a permissão, os dois caminhos voltam.
@@ -483,7 +561,7 @@ mod integridade {
 
     fn painel(kpis: Vec<crate::ui::components::Kpi>) -> Dashboard {
         Dashboard {
-            greeting: "Bom dia".to_owned(),
+            greeting_key: "home.greeting.morning",
             name: "Fidel".to_owned(),
             kpis,
             workspaces: json!({"items": []}),

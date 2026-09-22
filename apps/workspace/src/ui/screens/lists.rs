@@ -2479,7 +2479,7 @@ mod tests {
         let html = audit(&viewer(), &payload).to_html();
         assert!(html.contains("dataset.read"));
         assert!(html.contains("NEGADO"));
-        assert!(html.contains("RESTRICTED"));
+        assert!(html.contains("RESTRITO"));
     }
 
     #[test]

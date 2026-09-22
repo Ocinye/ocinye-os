@@ -73,7 +73,7 @@ pub fn kpi_card(kpi: Kpi) -> impl IntoView {
             class:oc-unavailable=indisponivel
             href=href
             title=indisponivel
-                .then(|| "O Ocinye Core não respondeu a esta contagem.".to_owned())
+                .then(|| crate::i18n::t("home.kpi.no_answer").to_owned())
         >
             <div class="oc-row--between oc-gap-5" >
                 <span class="oc-t-meta" >
@@ -85,7 +85,7 @@ pub fn kpi_card(kpi: Kpi) -> impl IntoView {
                 {value.unwrap_or_else(|| "—".to_owned())}
             </div>
             <div class="oc-t-caption" >
-                {if indisponivel { "indisponível".to_owned() } else { hint }}
+                {if indisponivel { crate::i18n::t("home.kpi.unavailable").to_owned() } else { hint }}
             </div>
         </a>
     }

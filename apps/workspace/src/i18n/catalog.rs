@@ -96,6 +96,96 @@ const CREATE: &[Entry] = catalogo! {
     "create.agent": { pt: "Novo Agente IA", en: "New AI Agent", fr: "Nouvel agent IA" },
 };
 
+/// O painel inicial (Home). A saudação interpola `{name}`; o subtítulo conta.
+const HOME: &[Entry] = catalogo! {
+    "home.greeting.morning": { pt: "Bom dia, {name}", en: "Good morning, {name}", fr: "Bonjour, {name}" },
+    "home.greeting.afternoon": { pt: "Boa tarde, {name}", en: "Good afternoon, {name}", fr: "Bonjour, {name}" },
+    "home.greeting.evening": { pt: "Boa noite, {name}", en: "Good evening, {name}", fr: "Bonsoir, {name}" },
+    "home.summary.empty": {
+        pt: "Nada precisa da sua atenção neste momento.",
+        en: "Nothing needs your attention right now.",
+        fr: "Rien ne requiert votre attention pour le moment."
+    },
+    "home.summary.tasks.one": { pt: "Tem 1 tarefa atribuída", en: "You have 1 assigned task", fr: "Vous avez 1 tâche attribuée" },
+    "home.summary.tasks.other": { pt: "Tem {count} tarefas atribuídas", en: "You have {count} assigned tasks", fr: "Vous avez {count} tâches attribuées" },
+    "home.summary.research.one": { pt: "1 item de investigação a que tem acesso", en: "1 research item you can access", fr: "1 élément de recherche accessible" },
+    "home.summary.research.other": { pt: "{count} itens de investigação a que tem acesso", en: "{count} research items you can access", fr: "{count} éléments de recherche accessibles" },
+    "home.summary.join": { pt: "e", en: "and", fr: "et" },
+    "home.summary.suffix": { pt: ".", en: ".", fr: "." },
+    "home.kpi.units": { pt: "Unidades", en: "Units", fr: "Unités" },
+    "home.kpi.units.hint": { pt: "activas", en: "active", fr: "actives" },
+    "home.kpi.ideas": { pt: "Ideias", en: "Ideas", fr: "Idées" },
+    "home.kpi.ideas.hint": { pt: "em investigação", en: "in research", fr: "en recherche" },
+    "home.kpi.projects": { pt: "Projectos", en: "Projects", fr: "Projets" },
+    "home.kpi.projects.hint": { pt: "em execução", en: "in progress", fr: "en cours" },
+    "home.kpi.datasets": { pt: "Datasets", en: "Datasets", fr: "Jeux de données" },
+    "home.kpi.datasets.hint": { pt: "catalogados", en: "catalogued", fr: "catalogués" },
+    "home.kpi.unavailable": { pt: "indisponível", en: "unavailable", fr: "indisponible" },
+    "home.kpi.no_answer": {
+        pt: "O Ocinye Core não respondeu a esta contagem.",
+        en: "Ocinye Core did not answer this count.",
+        fr: "Ocinye Core n’a pas répondu à ce décompte."
+    },
+    "home.continue.title": { pt: "Continuar trabalho", en: "Continue work", fr: "Continuer le travail" },
+    "home.continue.aside": { pt: "Research Workspaces", en: "Research Workspaces", fr: "Research Workspaces" },
+    "home.continue.empty": {
+        pt: "Ainda não há trabalho de investigação a que tenha acesso. Crie uma ideia para começar.",
+        en: "There is no research work you can access yet. Create an idea to begin.",
+        fr: "Aucun travail de recherche accessible pour l’instant. Créez une idée pour commencer."
+    },
+    "home.view_all": { pt: "Ver tudo", en: "View all", fr: "Tout voir" },
+    "home.tasks.title": { pt: "Tarefas pendentes", en: "Pending tasks", fr: "Tâches en attente" },
+    "home.tasks.empty": { pt: "Não tem tarefas abertas.", en: "You have no open tasks.", fr: "Vous n’avez aucune tâche ouverte." },
+    "home.tasks.no_due": { pt: "sem prazo", en: "no due date", fr: "sans échéance" },
+    "home.activity.title": { pt: "Actividade recente", en: "Recent activity", fr: "Activité récente" },
+    "home.activity.empty": { pt: "Ainda não há actividade.", en: "No activity yet.", fr: "Aucune activité pour l’instant." },
+    "home.ai.eyebrow": { pt: "OCINYE AI", en: "OCINYE AI", fr: "OCINYE AI" },
+    "home.ai.available": { pt: "Inteligência disponível", en: "Intelligence available", fr: "Intelligence disponible" },
+    "home.ai.unavailable": { pt: "Inteligência ainda não disponível", en: "Intelligence not yet available", fr: "Intelligence pas encore disponible" },
+    "home.ai.default_message": {
+        pt: "Nenhum nó de IA Ocinye está actualmente disponível.",
+        en: "No Ocinye AI node is currently available.",
+        fr: "Aucun nœud d’IA Ocinye n’est actuellement disponible."
+    },
+    "home.ai.open_prompt": { pt: "Abrir Prompt", en: "Open Prompt", fr: "Ouvrir Prompt" },
+    "home.ai.hub": { pt: "Hub de IA", en: "AI Hub", fr: "Hub IA" },
+    "home.quick.title": { pt: "Acesso rápido", en: "Quick access", fr: "Accès rapide" },
+    "home.quick.prompt": { pt: "Prompt IA", en: "AI Prompt", fr: "Prompt IA" },
+    "home.new_idea": { pt: "Nova Ideia", en: "New Idea", fr: "Nouvelle idée" },
+    "home.new_project": { pt: "Novo Projecto", en: "New Project", fr: "Nouveau projet" },
+    "home.new_dataset": { pt: "Novo Dataset", en: "New Dataset", fr: "Nouveau jeu de données" },
+    "home.prompt_ocinye": { pt: "Prompt Ocinye", en: "Ocinye Prompt", fr: "Prompt Ocinye" },
+    "home.no_permission.idea": {
+        pt: "Não tem autorização para criar ideias.",
+        en: "You are not authorised to create ideas.",
+        fr: "Vous n’êtes pas autorisé à créer des idées."
+    },
+};
+
+/// As classificações institucionais. O valor persistido é o enum (`INTERNAL`); o
+/// rótulo mostra-se traduzido, em maiúsculas por convenção de código (i18n §12).
+const CLASSIFICATION: &[Entry] = catalogo! {
+    "classification.public": { pt: "PÚBLICO", en: "PUBLIC", fr: "PUBLIC" },
+    "classification.internal": { pt: "INTERNO", en: "INTERNAL", fr: "INTERNE" },
+    "classification.confidential": { pt: "CONFIDENCIAL", en: "CONFIDENTIAL", fr: "CONFIDENTIEL" },
+    "classification.restricted": { pt: "RESTRITO", en: "RESTRICTED", fr: "RESTREINT" },
+    "classification.public.help": { pt: "Publicável fora da instituição", en: "Publishable outside the institution", fr: "Publiable hors de l’institution" },
+    "classification.internal.help": { pt: "Legível por qualquer membro activo", en: "Readable by any active member", fr: "Lisible par tout membre actif" },
+    "classification.confidential.help": { pt: "Requer pertença à unidade ou ao workspace", en: "Requires unit or workspace membership", fr: "Nécessite l’appartenance à l’unité ou à l’espace" },
+    "classification.restricted.help": { pt: "Requer pertença explícita ao workspace", en: "Requires explicit workspace membership", fr: "Nécessite une appartenance explicite à l’espace" },
+    "classification.unknown": { pt: "Classificação", en: "Classification", fr: "Classification" },
+};
+
+/// Os estados de uma tarefa. O valor persistido é o enum; o rótulo traduz-se.
+const TASK_STATE: &[Entry] = catalogo! {
+    "task.state.todo": { pt: "Por fazer", en: "To do", fr: "À faire" },
+    "task.state.in_progress": { pt: "Em curso", en: "In progress", fr: "En cours" },
+    "task.state.blocked": { pt: "Bloqueada", en: "Blocked", fr: "Bloquée" },
+    "task.state.in_review": { pt: "Em revisão", en: "In review", fr: "En revue" },
+    "task.state.done": { pt: "Concluída", en: "Done", fr: "Terminée" },
+    "task.state.cancelled": { pt: "Cancelada", en: "Cancelled", fr: "Annulée" },
+};
+
 /// Estados de erro e de página cheia — nenhum ecrã fica em língua trocada.
 const ERRORS: &[Entry] = catalogo! {
     "error.not_found.title": { pt: "Página não encontrada", en: "Page not found", fr: "Page introuvable" },
@@ -178,7 +268,17 @@ const SETTINGS: &[Entry] = catalogo! {
 ///
 /// Não inclui grupos de teste: uma chave só-`pt` de teste (para provar a queda)
 /// não é um buraco de produção, e não deve fazer o portão soar.
-pub const GROUPS: &[&[Entry]] = &[NAV, ACTIONS, CREATE, ERRORS, FIRST_ENTRY, SETTINGS];
+pub const GROUPS: &[&[Entry]] = &[
+    NAV,
+    ACTIONS,
+    CREATE,
+    HOME,
+    CLASSIFICATION,
+    TASK_STATE,
+    ERRORS,
+    FIRST_ENTRY,
+    SETTINGS,
+];
 
 /// Um grupo só de teste, para exercitar a queda ao canónico (briefing i18n §77).
 #[cfg(test)]
