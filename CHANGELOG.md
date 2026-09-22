@@ -7,6 +7,26 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### O correio enviado passa a ser guardado em «Enviados» — 2026-09-22
+
+Enviar pelo Ocinye entregava a mensagem por SMTP mas **não guardava uma cópia**
+na pasta Enviados do servidor (IMAP `APPEND`) — o buraco clássico SMTP-vs-IMAP.
+Resultado: a pasta «Enviados» ficava vazia mesmo depois de a ingestão passar a
+cobri-la, porque a mensagem nunca lá estava para ser indexada.
+
+- **Correcção.** Depois de um envio SMTP bem-sucedido, o adaptador faz `APPEND`
+  da mensagem à pasta Enviados do servidor (nome resolvido do servidor: `Sent`,
+  `INBOX.Sent`, `Enviados`, …), marcada `\Seen`. Uma falha do `APPEND` **não**
+  falha o envio — a mensagem já partiu; o que se perde é a cópia, e fica no log.
+- **Privacidade (ADR-0403).** A cópia guardada **não** revela o `Bcc`: os bytes
+  são os mesmos do envio, e o `lettre` deixa cair o `Bcc` por omissão. Guardado
+  pelo teste `a_copia_em_enviados_nao_revela_o_bcc`.
+
+> Limite honesto: o `APPEND` corre contra um servidor IMAP real; o harness de
+> testes não tem um, por isso o comportamento de guardar-ao-enviar verifica-se em
+> produção (enviar → ver em «Enviados»). O que é testável — que a cópia não revela
+> o `Bcc` — está coberto.
+
 ### A ingestão de correio usa a credencial de cada caixa, e cobre o enviado — 2026-09-22
 
 Dois defeitos na ingestão periódica de correio (`ingest_all`, corrida pelo

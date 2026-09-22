@@ -521,6 +521,29 @@ impl ImapSmtpProvider {
     /// ela viaja numa `multipart/alternative`, e a sua parte HTML leva as
     /// imagens embutidas (o logótipo) numa `multipart/related` — por `cid:`, sem
     /// pedido remoto. Anexos, se existirem, envolvem tudo numa `multipart/mixed`.
+    /// Guarda uma cópia da mensagem enviada na pasta «Enviados» do servidor.
+    ///
+    /// O SMTP entrega a mensagem mas não a guarda em lado nenhum; sem este APPEND
+    /// a pasta Enviados fica sempre vazia. O nome da pasta resolve-se do servidor
+    /// (`Sent`, `INBOX.Sent`, `Enviados`, … consoante o servidor). A cópia fica
+    /// marcada `\Seen` — foi o próprio a enviá-la, não é correio por ler —, e os
+    /// bytes já vêm sem `Bcc`.
+    async fn save_to_sent(&self, raw: &[u8]) -> ProviderResult<()> {
+        let mut session = self.session().await?;
+        let available = Self::folders(&mut session).await.unwrap_or_default();
+        let sent = Self::resolve_folder(&available, MailFolder::Sent);
+        let outcome = tokio::time::timeout(
+            IMAP_TIMEOUT,
+            session.append(&sent, Some("(\\Seen)"), None, raw),
+        )
+        .await;
+        Self::release(session).await;
+        outcome
+            .map_err(|_| ProviderError::Unavailable)?
+            .map_err(|_| ProviderError::Unavailable)?;
+        Ok(())
+    }
+
     /// Um cliente que recuse HTML lê a mensagem inteira no texto simples
     /// (ADR-0414).
     ///
@@ -834,6 +857,11 @@ impl MailProvider for ImapSmtpProvider {
         }
 
         let built = Self::construir_mime(message)?;
+        // Os bytes crus da mensagem, para guardar uma cópia em «Enviados» a
+        // seguir. Formatados **antes** do envio (o `send` consome a `Message`), e
+        // sem o `Bcc` — o `lettre` deixa-o cair por omissão (ADR-0403), pelo que a
+        // cópia guardada não revela os destinatários ocultos.
+        let raw = built.formatted();
 
         match self.smtp.send(built).await {
             Ok(response) => {
@@ -844,6 +872,17 @@ impl MailProvider for ImapSmtpProvider {
                     accepted = response.is_positive(),
                     "message handed to the mail service"
                 );
+                // Guardar uma cópia na pasta «Enviados» do servidor. O SMTP
+                // entrega a mensagem mas não a guarda em lado nenhum — sem este
+                // APPEND, a pasta Enviados fica sempre vazia. Uma falha aqui não
+                // falha o envio: a mensagem já partiu, e o que se perde é a cópia.
+                if let Err(error) = self.save_to_sent(&raw).await {
+                    tracing::warn!(
+                        adapter = self.adapter_name(),
+                        cause = %error,
+                        "a mensagem foi enviada mas não pôde ser guardada em «Enviados»"
+                    );
+                }
                 Ok(None)
             }
             Err(error) if error.is_transient() => Err(ProviderError::Unavailable),
@@ -1115,6 +1154,32 @@ mod tests {
         let texto = String::from_utf8_lossy(&mime.formatted()).into_owned();
         assert!(texto.contains("text/plain"));
         assert!(!texto.contains("multipart/alternative"));
+    }
+
+    /// A cópia guardada em «Enviados» não revela o `Bcc`.
+    ///
+    /// O `save_to_sent` guarda exactamente estes bytes (`formatted()`); se o `Bcc`
+    /// aparecesse aqui, o próprio a abrir a pasta Enviados veria os destinatários
+    /// ocultos gravados no servidor — e é a mesma invariante do envio (ADR-0403).
+    /// O `Cc`, esse, é visível de propósito.
+    #[test]
+    fn a_copia_em_enviados_nao_revela_o_bcc() {
+        let mut msg = mensagem();
+        msg.cc = vec![endereco("visivel@exemplo.com")];
+        msg.bcc = vec![endereco("oculto@exemplo.com")];
+
+        let bytes = ImapSmtpProvider::construir_mime(&msg)
+            .expect("mime")
+            .formatted();
+        let texto = String::from_utf8_lossy(&bytes).to_lowercase();
+
+        assert!(
+            !texto.contains("oculto@exemplo.com"),
+            "o Bcc apareceu na cópia guardada em «Enviados»"
+        );
+        assert!(!texto.contains("bcc:"), "o cabeçalho Bcc apareceu na cópia");
+        // O Cc é para ver.
+        assert!(texto.contains("visivel@exemplo.com"), "o Cc devia aparecer");
     }
 
     /// Um anexo envolve tudo numa `multipart/mixed`, mantendo a alternativa.
