@@ -7,6 +7,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização (fatia 6): datas com locale — 2026-09-22
+
+Os nomes de mês e de dia e os moldes de data passam a seguir o idioma corrente,
+numa fonte só (`ui/tempo.rs`): «26 de Agosto de 2026» em português, «26 August
+2026» em inglês, «26 août 2026» em francês — com a ordem das palavras, os
+conectores e a caixa (o mês em minúscula em francês) de cada língua. Os moldes
+são por locale, e não uma concatenação fixa (i18n §22, §25). O relógio da barra,
+o Calendário e qualquer data por extenso bebem desta fonte. Guardado por
+`a_data_segue_o_idioma`.
+
 ### Internacionalização (fatia 5): assistência e Notas — 2026-09-22
 
 - **Componente de assistência** (partilhado por Conhecimento/Ideias/Projectos):

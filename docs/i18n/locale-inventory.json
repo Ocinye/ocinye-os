@@ -7,7 +7,7 @@
     "fr"
   ],
   "fallback": "pt",
-  "slice": 5,
+  "slice": 6,
   "namespaces": [
     {
       "prefix": "nav",
@@ -80,13 +80,8 @@
       "status": "translated"
     },
     {
-      "prefix": "assist",
-      "surface": "Assist component (shared): chrome + suggestions",
-      "status": "translated"
-    },
-    {
-      "prefix": "notes",
-      "surface": "Notes: list, editor, history, share, trash (fully migrated)",
+      "prefix": "date",
+      "surface": "month/weekday names + locale-aware date templates",
       "status": "translated"
     }
   ],
