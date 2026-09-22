@@ -7,6 +7,24 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### O destinatário do correio já não é confirmado antes de o terminar — 2026-09-22
+
+Ao escrever um destinatário no compositor («Para»), o texto por resolver era
+transformado em ficha assim que o campo perdia o foco — um fragmento de pesquisa
+como `fidel` virava destinatário `fidel`, que não é um endereço entregável. Quem
+escrevia o nome para escolher a sugestão via o fragmento «fechar» antes de a
+morada estar completa.
+
+- **Correcção.** Um destinatário passa a ser **só** uma sugestão escolhida ou um
+  endereço escrito por inteiro. Perder o foco ou submeter aceita apenas o que já
+  parece uma morada (`local@domínio.tld`); um fragmento fica no campo, à espera
+  de ser terminado, e não vira ficha só porque o foco mudou. Enter e vírgula
+  (gestos explícitos) continuam a completar pela sugestão em foco.
+
+> Camada de melhoria progressiva (`static/app.js`); sem base de dados a testar. A
+> verificação é a aceitação em produção (escrever `fidel`, mudar de campo, e a
+> ficha não aparecer sozinha).
+
 ### O correio enviado passa a ser guardado em «Enviados» — 2026-09-22
 
 Enviar pelo Ocinye entregava a mensagem por SMTP mas **não guardava uma cópia**
