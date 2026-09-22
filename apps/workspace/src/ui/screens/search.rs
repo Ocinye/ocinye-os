@@ -17,6 +17,7 @@
 use leptos::prelude::*;
 use serde_json::Value;
 
+use crate::i18n::t;
 use crate::ui::components::{classification_badge, empty_state, EmptyState};
 use crate::ui::icon::{icon, Icon};
 
@@ -30,14 +31,14 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
 /// esconder resultados que o Core devolveu seria filtrar depois.
 fn entity_label(entity_type: &str) -> &str {
     match entity_type {
-        "idea" => "Ideia",
-        "project" => "Projecto",
-        "source" => "Referência",
-        "note" => "Nota",
-        "document" => "Documento",
-        "dataset" => "Dataset",
-        "unit" => "Unidade",
-        other => other,
+        "idea" => t("entity.idea"),
+        "project" => t("entity.project"),
+        "source" => t("entity.source"),
+        "note" => t("entity.note"),
+        "document" => t("entity.document"),
+        "dataset" => t("entity.dataset"),
+        "unit" => t("entity.unit"),
+        _ => entity_type,
     }
 }
 
@@ -87,14 +88,10 @@ pub fn search(query: &str, results: &Value, bodies: &Value, semantic: &Value) ->
         .get("available")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let semantic_message = semantic
-        .get("message")
-        .and_then(Value::as_str)
-        .unwrap_or(
-            "A pesquisa semântica depende de uma capacidade de embeddings, que não está \
-             actualmente disponível.",
-        )
-        .to_owned();
+    let semantic_message = semantic.get("message").and_then(Value::as_str).map_or_else(
+        || t("search.semantic.default_message").to_owned(),
+        ToOwned::to_owned,
+    );
 
     let corpos: Vec<Value> = bodies
         .get("items")
@@ -103,148 +100,142 @@ pub fn search(query: &str, results: &Value, bodies: &Value, semantic: &Value) ->
         .unwrap_or_default();
 
     let count_label = match total {
-        0 => "Nenhum resultado".to_owned(),
-        1 => "1 resultado".to_owned(),
-        n => format!("{n} resultados"),
+        0 => t("search.count.none").to_owned(),
+        n => crate::i18n::tp("search.count", n),
     };
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>"Pesquisar no Ocinye"</h1>
-                    <p>
-                        "A pesquisa devolve apenas aquilo a que tem acesso. Um artefacto que não
-                         possa consultar não aparece, nem nas contagens."
-                    </p>
+            <div class="oc-page">
+                <div class="oc-head">
+                    <div class="oc-head__text">
+                        <h1>{t("search.title")}</h1>
+                        <p>
+    {t("search.subtitle")}
+                        </p>
+                    </div>
                 </div>
-            </div>
 
-            <form method="get" action="/search" class="oc-search-form">
-                <div class="oc-table__search oc-search-form__field">
-                    {icon(Icon::Search, 14)}
-                    <label class="oc-sr" for="search-q">"Pesquisar"</label>
-                    <input
-                        id="search-q"
-                        name="q"
-                        type="search"
-                        value=query.clone()
-                        placeholder="Ideias, projectos, bibliografia, documentos, datasets…"
-                        autofocus
-                    />
+                <form method="get" action="/search" class="oc-search-form">
+                    <div class="oc-table__search oc-search-form__field">
+                        {icon(Icon::Search, 14)}
+                        <label class="oc-sr" for="search-q">{t("search.field.label")}</label>
+                        <input
+                            id="search-q"
+                            name="q"
+                            type="search"
+                            value=query.clone()
+                            placeholder=t("search.field.placeholder")
+                            autofocus
+                        />
+                    </div>
+                    <button type="submit" class="oc-btn oc-btn--primary">{t("search.submit")}</button>
+                </form>
+
+                // O modo semântico é declarado, não escondido: faz parte da
+                // arquitectura e o seu estado é informação útil (briefing §32).
+                <div class="oc-search-modes" role="group" aria-label=t("search.mode.aria")>
+                    <span class="oc-tab" aria-selected="true">{t("search.mode.textual")}</span>
+                    {if semantic_available {
+                        view! {
+                            <span class="oc-tab" aria-selected="false">{t("search.mode.semantic")}</span>
+                        }
+                            .into_any()
+                    } else {
+                        view! {
+                            <span
+                                class="oc-tab oc-unavailable"
+                                aria-disabled="true"
+                                title=semantic_message.clone()
+                            >
+                                {t("search.mode.semantic_unavailable")}
+                            </span>
+                        }
+                            .into_any()
+                    }}
                 </div>
-                <button type="submit" class="oc-btn oc-btn--primary">"Pesquisar"</button>
-            </form>
 
-            // O modo semântico é declarado, não escondido: faz parte da
-            // arquitectura e o seu estado é informação útil (briefing §32).
-            <div class="oc-search-modes" role="group" aria-label="Modo de pesquisa">
-                <span class="oc-tab" aria-selected="true">"Textual"</span>
-                {if semantic_available {
+                {if has_query {
                     view! {
-                        <span class="oc-tab" aria-selected="false">"Semântica"</span>
+                        <p class="oc-muted oc-mt-6">{count_label}</p>
                     }
                         .into_any()
                 } else {
                     view! {
-                        <span
-                            class="oc-tab oc-unavailable"
-                            aria-disabled="true"
-                            title=semantic_message.clone()
-                        >
-                            "Semântica — ainda não disponível"
-                        </span>
+                        <div class="oc-vspace"></div>
                     }
                         .into_any()
                 }}
+
+                {if !has_query {
+                    empty_state(EmptyState {
+                        icon: Icon::Search,
+                        title: t("search.empty.title").to_owned(),
+                        body: t("search.empty.body").to_owned(),
+                        actions: Vec::new(),
+                        small: false,
+                    })
+                    .into_any()
+                } else if hits.is_empty() {
+                    empty_state(EmptyState {
+                        icon: Icon::Search,
+                        title: t("search.no_results.title").to_owned(),
+                        // Diz as duas razões possíveis, porque a interface não sabe
+                        // qual é — e não deve sugerir que sabe.
+                        body: crate::i18n::tf("search.no_results.body", &[("query", &query)]),
+                        actions: Vec::new(),
+                        small: false,
+                    })
+                    .into_any()
+                } else {
+                    view! {
+                        <div class="oc-results">
+                            {hits
+                                .iter()
+                                .map(|hit| {
+                                    let classification = text(hit, "classification").to_owned();
+                                    let kind = entity_label(text(hit, "entity_type")).to_owned();
+                                    let title = text(hit, "title").to_owned();
+                                    let excerpt = hit
+                                        .get("excerpt")
+                                        .and_then(Value::as_str)
+                                        .unwrap_or("")
+                                        .to_owned();
+
+                                    // A vista constrói-se dentro de cada ramo: uma
+                                    // vista Leptos consome-se uma só vez.
+                                    let body = move || {
+                                        view! {
+                                            <div class="oc-row oc-gap-5 oc-mb-2">
+                                                <span class="oc-pill">{kind}</span>
+                                                {classification_badge(&classification)}
+                                            </div>
+                                            <div class="oc-t-item" data-oc-content="1">{title}</div>
+                                            {(!excerpt.is_empty())
+                                                .then(|| {
+                                                    view! { <p class="oc-muted">{excerpt}</p> }
+                                                })}
+                                        }
+                                    };
+
+                                    match destination(hit) {
+                                        Some(href) => {
+                                            view! { <a class="oc-result" href=href>{body()}</a> }
+                                                .into_any()
+                                        }
+                                        None => {
+                                            view! { <div class="oc-result">{body()}</div> }.into_any()
+                                        }
+                                    }
+                                })
+                                .collect_view()}
+                        </div>
+                    }
+                    .into_any()
+                }}
+
+                {(has_query && !corpos.is_empty()).then(|| resultados_do_corpo(&corpos))}
             </div>
-
-            {if has_query {
-                view! {
-                    <p class="oc-muted oc-mt-6">{count_label}</p>
-                }
-                    .into_any()
-            } else {
-                view! {
-                    <div class="oc-vspace"></div>
-                }
-                    .into_any()
-            }}
-
-            {if !has_query {
-                empty_state(EmptyState {
-                    icon: Icon::Search,
-                    title: "Pesquisar no Ocinye".to_owned(),
-                    body: "Escreva um termo para procurar em ideias, projectos, bibliografia, \
-                           notas, documentos e datasets."
-                        .to_owned(),
-                    actions: Vec::new(),
-                    small: false,
-                })
-                .into_any()
-            } else if hits.is_empty() {
-                empty_state(EmptyState {
-                    icon: Icon::Search,
-                    title: "Nenhum resultado".to_owned(),
-                    // Diz as duas razões possíveis, porque a interface não sabe
-                    // qual é — e não deve sugerir que sabe.
-                    body: format!(
-                        "Nada corresponde a «{query}» entre os artefactos a que tem acesso."
-                    ),
-                    actions: Vec::new(),
-                    small: false,
-                })
-                .into_any()
-            } else {
-                view! {
-                    <div class="oc-results">
-                        {hits
-                            .iter()
-                            .map(|hit| {
-                                let classification = text(hit, "classification").to_owned();
-                                let kind = entity_label(text(hit, "entity_type")).to_owned();
-                                let title = text(hit, "title").to_owned();
-                                let excerpt = hit
-                                    .get("excerpt")
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("")
-                                    .to_owned();
-
-                                // A vista constrói-se dentro de cada ramo: uma
-                                // vista Leptos consome-se uma só vez.
-                                let body = move || {
-                                    view! {
-                                        <div class="oc-row oc-gap-5 oc-mb-2">
-                                            <span class="oc-pill">{kind}</span>
-                                            {classification_badge(&classification)}
-                                        </div>
-                                        <div class="oc-t-item">{title}</div>
-                                        {(!excerpt.is_empty())
-                                            .then(|| {
-                                                view! { <p class="oc-muted">{excerpt}</p> }
-                                            })}
-                                    }
-                                };
-
-                                match destination(hit) {
-                                    Some(href) => {
-                                        view! { <a class="oc-result" href=href>{body()}</a> }
-                                            .into_any()
-                                    }
-                                    None => {
-                                        view! { <div class="oc-result">{body()}</div> }.into_any()
-                                    }
-                                }
-                            })
-                            .collect_view()}
-                    </div>
-                }
-                .into_any()
-            }}
-
-            {(has_query && !corpos.is_empty()).then(|| resultados_do_corpo(&corpos))}
-        </div>
-    }
+        }
 }
 
 /// Os resultados que vieram do **corpo** dos ficheiros.
@@ -293,11 +284,11 @@ fn resultados_do_corpo(corpos: &[Value]) -> impl IntoView {
             view! {
                 <a class="oc-result" href=destino>
                     <div class="oc-row oc-gap-5 oc-mb-2">
-                        <span class="oc-pill">"FICHEIRO"</span>
+                        <span class="oc-pill">{t("search.file")}</span>
                         {classification_badge(&classification)}
                         <span class="oc-t-caption--muted">{citacao}</span>
                     </div>
-                    <div class="oc-t-item">{nome}</div>
+                    <div class="oc-t-item" data-oc-content="1">{nome}</div>
                     // O excerto vem com os termos realçados pelo PostgreSQL, e
                     // é escapado como texto: o realce é uma marca do motor de
                     // pesquisa, não HTML que esta página deva executar.
@@ -309,7 +300,7 @@ fn resultados_do_corpo(corpos: &[Value]) -> impl IntoView {
 
     view! {
         <section class="oc-mt-6">
-            <h2 class="oc-t-strong oc-mb-5">"No conteúdo dos ficheiros"</h2>
+            <h2 class="oc-t-strong oc-mb-5">{t("search.in_file_content")}</h2>
             <div class="oc-results">{linhas}</div>
         </section>
     }
@@ -482,5 +473,31 @@ mod tests {
         )
         .to_html();
         assert!(!html.contains("<script>alert(1)</script>"));
+    }
+}
+
+#[cfg(test)]
+mod pureza {
+    use super::*;
+    use serde_json::json;
+
+    /// Um ecrã, um idioma: a pesquisa em francês, sem marcas portuguesas.
+    #[tokio::test]
+    async fn a_pesquisa_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+        let fr = with_locale(Locale::Fr, async {
+            search(
+                "x",
+                &json!({"items": [], "total": 0}),
+                &Value::Null,
+                &json!({"available": false, "message": ""}),
+            )
+            .to_html()
+        })
+        .await;
+        for francesa in ["Rechercher dans Ocinye", "Textuelle", "Aucun résultat"] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+        assert!(!fr.contains("Pesquisar no Ocinye"), "fr: chrome português");
     }
 }

@@ -260,6 +260,103 @@ const KNOWLEDGE: &[Entry] = catalogo! {
     "knowledge.not_implemented": { pt: "Não implementado", en: "Not implemented", fr: "Non implémenté" },
 };
 
+/// A pesquisa institucional e os rótulos de tipo de entidade.
+const SEARCH: &[Entry] = catalogo! {
+    "search.title": { pt: "Pesquisar no Ocinye", en: "Search in Ocinye", fr: "Rechercher dans Ocinye" },
+    "search.subtitle": {
+        pt: "A pesquisa devolve apenas aquilo a que tem acesso. Um artefacto que não possa consultar não aparece, nem nas contagens.",
+        en: "Search returns only what you can access. An artefact you cannot see does not appear, not even in the counts.",
+        fr: "La recherche ne renvoie que ce à quoi vous avez accès. Un artefact que vous ne pouvez pas consulter n’apparaît pas, ni dans les décomptes."
+    },
+    "search.field.label": { pt: "Pesquisar", en: "Search", fr: "Rechercher" },
+    "search.field.placeholder": {
+        pt: "Ideias, projectos, bibliografia, documentos, datasets…",
+        en: "Ideas, projects, bibliography, documents, datasets…",
+        fr: "Idées, projets, bibliographie, documents, jeux de données…"
+    },
+    "search.submit": { pt: "Pesquisar", en: "Search", fr: "Rechercher" },
+    "search.mode.aria": { pt: "Modo de pesquisa", en: "Search mode", fr: "Mode de recherche" },
+    "search.mode.textual": { pt: "Textual", en: "Textual", fr: "Textuelle" },
+    "search.mode.semantic": { pt: "Semântica", en: "Semantic", fr: "Sémantique" },
+    "search.mode.semantic_unavailable": {
+        pt: "Semântica — ainda não disponível",
+        en: "Semantic — not yet available",
+        fr: "Sémantique — pas encore disponible"
+    },
+    "search.semantic.default_message": {
+        pt: "A pesquisa semântica depende de uma capacidade de embeddings, que não está actualmente disponível.",
+        en: "Semantic search depends on an embeddings capability, which is not currently available.",
+        fr: "La recherche sémantique dépend d’une capacité d’embeddings, qui n’est pas disponible actuellement."
+    },
+    "search.count.none": { pt: "Nenhum resultado", en: "No results", fr: "Aucun résultat" },
+    "search.count.one": { pt: "{count} resultado", en: "{count} result", fr: "{count} résultat" },
+    "search.count.other": { pt: "{count} resultados", en: "{count} results", fr: "{count} résultats" },
+    "search.empty.title": { pt: "Pesquisar no Ocinye", en: "Search in Ocinye", fr: "Rechercher dans Ocinye" },
+    "search.empty.body": {
+        pt: "Escreva um termo para procurar em ideias, projectos, bibliografia, notas, documentos e datasets.",
+        en: "Type a term to search ideas, projects, bibliography, notes, documents and datasets.",
+        fr: "Saisissez un terme pour chercher dans les idées, projets, bibliographie, notes, documents et jeux de données."
+    },
+    "search.no_results.title": { pt: "Nenhum resultado", en: "No results", fr: "Aucun résultat" },
+    "search.no_results.body": {
+        pt: "Nada corresponde a «{query}» entre os artefactos a que tem acesso.",
+        en: "Nothing matches “{query}” among the artefacts you can access.",
+        fr: "Rien ne correspond à « {query} » parmi les artefacts auxquels vous avez accès."
+    },
+    "search.in_file_content": { pt: "No conteúdo dos ficheiros", en: "In file content", fr: "Dans le contenu des fichiers" },
+    "search.file": { pt: "FICHEIRO", en: "FILE", fr: "FICHIER" },
+    "entity.idea": { pt: "Ideia", en: "Idea", fr: "Idée" },
+    "entity.project": { pt: "Projecto", en: "Project", fr: "Projet" },
+    "entity.source": { pt: "Referência", en: "Reference", fr: "Référence" },
+    "entity.note": { pt: "Nota", en: "Note", fr: "Note" },
+    "entity.document": { pt: "Documento", en: "Document", fr: "Document" },
+    "entity.dataset": { pt: "Dataset", en: "Dataset", fr: "Jeu de données" },
+    "entity.unit": { pt: "Unidade", en: "Unit", fr: "Unité" },
+};
+
+/// «Meus Recursos» — governança de recursos do membro.
+const RESOURCES: &[Entry] = catalogo! {
+    "resources.title": { pt: "Meus Recursos", en: "My Resources", fr: "Mes ressources" },
+    "resources.intro": {
+        pt: "Quanto de capacidade institucional pode consumir, e quanto já consumiu. Ter direito a um recurso não é ter acesso a dados — são sistemas separados.",
+        en: "How much institutional capacity you may consume, and how much you already have. A right to a resource is not access to data — they are separate systems.",
+        fr: "Quelle capacité institutionnelle vous pouvez consommer, et combien vous en avez déjà. Un droit à une ressource n’est pas un accès aux données — ce sont des systèmes distincts."
+    },
+    "resources.origin.help": {
+        pt: "O limite não é um número mágico: soma-se de um perfil de alocação e das concessões que lhe foram feitas por cima.",
+        en: "The limit is not a magic number: it sums from an allocation profile and the grants made on top of it.",
+        fr: "La limite n’est pas un nombre magique : elle s’additionne d’un profil d’allocation et des attributions faites par-dessus."
+    },
+    "resources.storage.title": { pt: "Armazenamento pessoal", en: "Personal storage", fr: "Stockage personnel" },
+    "resources.storage.subtitle": {
+        pt: "Os ficheiros, imagens de notas e anexos de correio que lhe pertencem.",
+        en: "The files, note images and mail attachments that belong to you.",
+        fr: "Les fichiers, images de notes et pièces jointes de courrier qui vous appartiennent."
+    },
+    "resources.no_limit_assigned": { pt: "Sem limite de armazenamento atribuído.", en: "No storage limit assigned.", fr: "Aucune limite de stockage attribuée." },
+    "resources.in_use": { pt: "Em uso", en: "In use", fr: "Utilisé" },
+    "resources.limit": { pt: "Limite", en: "Limit", fr: "Limite" },
+    "resources.available": { pt: "Disponível", en: "Available", fr: "Disponible" },
+    "resources.no_limit": { pt: "sem limite", en: "no limit", fr: "sans limite" },
+    "resources.origin.title": { pt: "Como se chega a este limite", en: "How this limit is reached", fr: "Comment cette limite est atteinte" },
+    "resources.no_allocation": { pt: "Ainda não tem nenhuma alocação de armazenamento atribuída.", en: "You have no storage allocation assigned yet.", fr: "Aucune allocation de stockage ne vous est encore attribuée." },
+    "resources.expires": { pt: "expira {date}", en: "expires {date}", fr: "expire le {date}" },
+    "resources.state.normal": { pt: "Normal", en: "Normal", fr: "Normale" },
+    "resources.state.warning": { pt: "Aviso", en: "Warning", fr: "Alerte" },
+    "resources.state.critical": { pt: "Crítico", en: "Critical", fr: "Critique" },
+    "resources.state.over_quota": { pt: "Acima da quota", en: "Over quota", fr: "Quota dépassé" },
+    "resources.state.unknown": { pt: "Desconhecido", en: "Unknown", fr: "Inconnu" },
+    "resources.source.profile": { pt: "Perfil", en: "Profile", fr: "Profil" },
+    "resources.source.override": { pt: "Substituição", en: "Override", fr: "Dérogation" },
+    "resources.source.temporary": { pt: "Concessão temporária", en: "Temporary grant", fr: "Attribution temporaire" },
+    "resources.source.other": { pt: "Origem", en: "Source", fr: "Origine" },
+    "resources.footnote": {
+        pt: "O armazenamento é, para já, o único recurso medido e imposto. Computação, GPU e outros recursos governam-se pela mesma fundação e aparecerão aqui à medida que forem ligados.",
+        en: "Storage is, for now, the only metered and enforced resource. Compute, GPU and other resources are governed by the same foundation and will appear here as they are switched on.",
+        fr: "Le stockage est, pour l’instant, la seule ressource mesurée et imposée. Le calcul, le GPU et les autres ressources relèvent de la même fondation et apparaîtront ici à mesure qu’ils seront activés."
+    },
+};
+
 /// Estados de erro e de página cheia — nenhum ecrã fica em língua trocada.
 const ERRORS: &[Entry] = catalogo! {
     "error.not_found.title": { pt: "Página não encontrada", en: "Page not found", fr: "Page introuvable" },
@@ -349,6 +446,8 @@ pub const GROUPS: &[&[Entry]] = &[
     HOME,
     MY_WORK,
     KNOWLEDGE,
+    RESOURCES,
+    SEARCH,
     CLASSIFICATION,
     TASK_STATE,
     ERRORS,

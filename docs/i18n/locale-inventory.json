@@ -7,7 +7,7 @@
     "fr"
   ],
   "fallback": "pt",
-  "slice": 3,
+  "slice": 4,
   "namespaces": [
     {
       "prefix": "nav",
@@ -67,6 +67,16 @@
     {
       "prefix": "task.priority",
       "surface": "task priority badges",
+      "status": "translated"
+    },
+    {
+      "prefix": "resources",
+      "surface": "Meus Recursos (fully migrated)",
+      "status": "translated"
+    },
+    {
+      "prefix": "search / entity",
+      "surface": "Search + entity-type labels (fully migrated)",
       "status": "translated"
     }
   ],
