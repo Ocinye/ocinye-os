@@ -612,35 +612,29 @@ pub fn router(state: WorkspaceState) -> Router {
 
 /// Resolve o idioma do pedido e corre o resto dentro do seu escopo.
 ///
-/// A ordem é a de menos a mais autoridade que se pode confiar sem custo: o
-/// cookie `oc_locale` (a cópia da preferência do membro, escrita à entrada e na
-/// mudança) primeiro; depois o `Accept-Language` do browser, que é conveniência
-/// e não autoridade (i18n §15); e por fim o canónico. Nenhuma destas vias
-/// consulta o Core — a preferência já foi espelhada no cookie no momento certo,
-/// para que uma navegação não pague uma ida ao Core só para saber a língua
-/// (i18n §67).
+/// A língua ambiente vem **só** de uma escolha explícita — o cookie `oc_locale`,
+/// a cópia da preferência escrita na primeira entrada e na mudança. Sem escolha,
+/// o canónico: o português. O `Accept-Language` do browser **não** decide a
+/// língua da página, de propósito — deixar que decidisse mudava a língua de quem
+/// nunca a escolheu, só por abrir o Ocinye de outro browser ou país (i18n §15,
+/// §62). O que ele declara serve, na fatia seguinte, para pré-seleccionar a
+/// opção no ecrã de primeira entrada — não para impor.
+///
+/// Nenhuma via consulta o Core: a preferência já foi espelhada no cookie no
+/// momento certo, para que uma navegação não pague uma ida ao Core só para saber
+/// a língua (i18n §67).
 async fn locale_layer(request: axum::extract::Request, next: axum::middleware::Next) -> Response {
     let locale = locale_do_pedido(request.headers());
     crate::i18n::with_locale(locale, next.run(request)).await
 }
 
-/// A língua que este pedido deve falar.
+/// A língua que este pedido deve falar: a escolhida, ou o canónico.
 fn locale_do_pedido(headers: &HeaderMap) -> ocinye_contracts::Locale {
     let cookie = headers.get(header::COOKIE).and_then(|v| v.to_str().ok());
-    if let Some(bruto) = session::locale_from_cookies(cookie) {
-        if let Some(locale) = ocinye_contracts::Locale::normalize(&bruto) {
-            return locale;
-        }
-    }
-    if let Some(aceites) = headers
-        .get(header::ACCEPT_LANGUAGE)
-        .and_then(|v| v.to_str().ok())
-    {
-        if let Some(locale) = ocinye_contracts::Locale::from_accept_language(aceites) {
-            return locale;
-        }
-    }
-    ocinye_contracts::locale::CANONICAL
+    session::locale_from_cookies(cookie)
+        .as_deref()
+        .and_then(ocinye_contracts::Locale::normalize)
+        .unwrap_or(ocinye_contracts::locale::CANONICAL)
 }
 
 /// O portão de arranque.
@@ -12299,6 +12293,55 @@ mod corpo_de_rascunho_tests {
         assert_eq!(corpo["mailbox_id"], id);
         assert_eq!(corpo["in_reply_to"], reply);
         assert_eq!(corpo["to"], json!(["a@b.com"]));
+    }
+}
+
+#[cfg(test)]
+mod locale_tests {
+    use super::locale_do_pedido;
+    use axum::http::{header, HeaderMap, HeaderValue};
+    use ocinye_contracts::Locale;
+
+    fn com(nome: axum::http::HeaderName, valor: &str) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert(nome, HeaderValue::from_str(valor).unwrap());
+        h
+    }
+
+    #[test]
+    fn sem_escolha_a_lingua_e_o_canonico() {
+        // Sem cookie, é português — o predefinido não é uma adivinha.
+        assert_eq!(locale_do_pedido(&HeaderMap::new()), Locale::Pt);
+    }
+
+    #[test]
+    fn o_accept_language_do_browser_nao_decide_a_lingua() {
+        // Um browser em inglês, sem escolha explícita, continua a ver português:
+        // a língua não muda só por se abrir o Ocinye de outro browser (i18n §15,
+        // §62). É também o que os testes de browser assumem.
+        let so_accept = com(header::ACCEPT_LANGUAGE, "en-US,en;q=0.9,fr;q=0.8");
+        assert_eq!(locale_do_pedido(&so_accept), Locale::Pt);
+    }
+
+    #[test]
+    fn o_cookie_escolhido_decide() {
+        assert_eq!(
+            locale_do_pedido(&com(header::COOKIE, "oc_locale=fr")),
+            Locale::Fr
+        );
+        assert_eq!(
+            locale_do_pedido(&com(header::COOKIE, "oc_locale=en")),
+            Locale::En
+        );
+        // Uma variante regional no cookie normaliza; uma língua inválida cai no pt.
+        assert_eq!(
+            locale_do_pedido(&com(header::COOKIE, "oc_locale=fr-FR")),
+            Locale::Fr
+        );
+        assert_eq!(
+            locale_do_pedido(&com(header::COOKIE, "oc_locale=de")),
+            Locale::Pt
+        );
     }
 }
 
