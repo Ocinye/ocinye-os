@@ -6,6 +6,7 @@
 use leptos::prelude::*;
 use serde_json::Value;
 
+use crate::i18n::t;
 use crate::ui::components::{assist, pill_tabs, Assist, Tab, KNOWLEDGE_SUGGESTIONS};
 
 fn count(payload: &Value) -> i64 {
@@ -55,13 +56,13 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
     } = counts;
 
     let tabs = vec![
-        Tab::link("Tudo", "/knowledge", true),
-        Tab::link("Bibliografia", "/bibliography", false),
-        Tab::inert("Fontes"),
-        Tab::inert("Notas"),
-        Tab::inert("Documentos"),
-        Tab::inert("Resultados"),
-        Tab::inert("Publicações"),
+        Tab::link(t("knowledge.tab.all"), "/knowledge", true),
+        Tab::link(t("knowledge.tab.bibliography"), "/bibliography", false),
+        Tab::inert(t("knowledge.tab.sources")),
+        Tab::inert(t("knowledge.tab.notes")),
+        Tab::inert(t("knowledge.tab.documents")),
+        Tab::inert(t("knowledge.tab.results")),
+        Tab::inert(t("knowledge.tab.publications")),
     ];
 
     let recent_rows = recent
@@ -74,24 +75,24 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
         <div class="oc-page">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Conhecimento"</h1>
-                    <p>"A memória institucional da Ocinye."</p>
+                    <h1>{t("knowledge.title")}</h1>
+                    <p>{t("knowledge.subtitle")}</p>
                 </div>
             </div>
 
             <div class="oc-tabs oc-tabs--under oc-card__head--flush" >
-                {pill_tabs(tabs, "Secções do conhecimento")}
+                {pill_tabs(tabs, t("knowledge.tabs.aria"))}
             </div>
 
             <div class="oc-grid oc-grid--4 oc-mb-5" >
-                {counter("Bibliografia", count(&bibliography), Some("/bibliography"))}
-                {counter("Documentos", count(&documents), None)}
-                {counter("Datasets", count(&datasets), Some("/datasets"))}
-                {counter_not_implemented("Resultados")}
+                {counter(t("knowledge.counter.bibliography"), count(&bibliography), Some("/bibliography"))}
+                {counter(t("knowledge.counter.documents"), count(&documents), None)}
+                {counter(t("knowledge.counter.datasets"), count(&datasets), Some("/datasets"))}
+                {counter_not_implemented(t("knowledge.counter.results"))}
             </div>
 
             {assist(Assist {
-                here: "o acervo institucional",
+                here: t("knowledge.here"),
                 workspace_id: None,
                 resource: None,
                 suggestions: KNOWLEDGE_SUGGESTIONS,
@@ -101,13 +102,13 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
 
             <section class="oc-card">
                 <div class="oc-card__head">
-                    <h2>"Adicionado recentemente"</h2>
+                    <h2>{t("knowledge.recent.title")}</h2>
                 </div>
                 <div class="oc-card__body">
                     {if recent_rows.is_empty() {
                         view! {
                             <p class="oc-muted">
-                                "Ainda não há conhecimento registado a que tenha acesso."
+                                {t("knowledge.recent.empty")}
                             </p>
                         }
                             .into_any()
@@ -122,7 +123,7 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
                                         view! {
                                             <div class="oc-list__row" >
                                                 <span class="oc-pill">{kind}</span>
-                                                <span class="oc-fill oc-truncate oc-t-cell" >
+                                                <span class="oc-fill oc-truncate oc-t-cell" data-oc-content="1">
                                                     {text(row, "title")}
                                                 </span>
                                                 {crate::ui::components::classification_badge(
@@ -167,7 +168,7 @@ fn counter(label: &'static str, value: i64, href: Option<&'static str>) -> impl 
             view! {
                 <div
                     class="oc-card oc-card__body oc-card__body--block"
-                    title="Este acervo ainda não tem um ecrã próprio."
+                    title=t("knowledge.no_screen")
                 >
                     {interior}
                 </div>
@@ -213,7 +214,7 @@ fn counter_not_implemented(label: &'static str) -> impl IntoView {
         <div
             class="oc-card oc-card__body oc-card__body--block oc-unavailable"
             aria-disabled="true"
-            title="Esta entidade ainda não existe no Ocinye Core."
+            title=t("knowledge.not_in_core")
         >
             <div class="oc-t-meta" >
                 {label.to_uppercase()}
@@ -222,8 +223,45 @@ fn counter_not_implemented(label: &'static str) -> impl IntoView {
                 "—"
             </div>
             <div class="oc-t-caption--muted" >
-                "Não implementado"
+                {t("knowledge.not_implemented")}
             </div>
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn contagens() -> KnowledgeCounts {
+        KnowledgeCounts {
+            bibliography: json!({"total": 0}),
+            documents: json!({"total": 0}),
+            datasets: json!({"total": 0}),
+            recent: json!({"items": []}),
+            inference_available: false,
+            may_use_assistance: false,
+        }
+    }
+
+    /// Um ecrã, um idioma: «Conhecimento» em francês, sem marcas portuguesas.
+    #[tokio::test]
+    async fn o_conhecimento_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+        let fr = with_locale(Locale::Fr, async { knowledge(contagens()).to_html() }).await;
+        for francesa in [
+            "Connaissance",
+            "mémoire institutionnelle",
+            "Ajouté récemment",
+        ] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+        for portuguesa in ["Adicionado recentemente", "memória institucional"] {
+            assert!(
+                !fr.contains(portuguesa),
+                "fr: chrome português «{portuguesa}»"
+            );
+        }
     }
 }

@@ -152,6 +152,23 @@ pub fn task_state_badge(state: &str) -> impl IntoView {
     }
 }
 
+/// Um badge de prioridade de tarefa: o enum decide o tom, o idioma o rótulo.
+pub fn task_priority_badge(priority: &str) -> impl IntoView {
+    let chave = format!("task.priority.{}", priority.trim().to_ascii_lowercase());
+    let rotulo = if crate::i18n::has(&chave) {
+        crate::i18n::t(&chave).to_owned()
+    } else {
+        priority.to_owned()
+    };
+    let tone = Tone::of(priority);
+    view! {
+        <span class=tone.class()>
+            <i></i>
+            {rotulo}
+        </span>
+    }
+}
+
 /// Uma pill neutra de tipo ou código.
 pub fn pill(label: impl Into<String>) -> impl IntoView {
     let label = label.into();
