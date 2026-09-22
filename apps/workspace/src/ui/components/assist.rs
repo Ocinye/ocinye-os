@@ -78,14 +78,15 @@ pub fn assist(spec: Assist) -> impl IntoView {
         }
     });
 
-    let placeholder = format!("Perguntar ou pedir algo sobre {here}…");
+    let here_texto = crate::i18n::t(here);
+    let placeholder = crate::i18n::tf("assist.placeholder", &[("here", here_texto)]);
 
     view! {
         <section class="oc-assist" aria-labelledby="assist-title">
             <div class="oc-assist__head">
                 {icon(Icon::Ai, 15)}
-                <h2 class="oc-assist__title" id="assist-title">"Assistência do Ocinye"</h2>
-                <span class="oc-assist__scope">{here}</span>
+                <h2 class="oc-assist__title" id="assist-title">{crate::i18n::t("assist.title")}</h2>
+                <span class="oc-assist__scope">{here_texto}</span>
             </div>
 
             <form class="oc-assist__form" method="get" action="/ask">
@@ -100,7 +101,7 @@ pub fn assist(spec: Assist) -> impl IntoView {
                     placeholder=placeholder
                     autocomplete="off"
                 />
-                <button type="submit" class="oc-btn oc-btn--primary">"Pedir"</button>
+                <button type="submit" class="oc-btn oc-btn--primary">{crate::i18n::t("assist.submit")}</button>
             </form>
 
             // As sugestões são ligações, não botões: cada uma leva à mesma
@@ -109,11 +110,14 @@ pub fn assist(spec: Assist) -> impl IntoView {
             <ul class="oc-assist__suggestions">
                 {suggestions
                     .iter()
-                    .map(|phrase| {
+                    .map(|key| {
+                        // A chave resolve-se no idioma corrente para o texto e para
+                        // a frase que viaja na query — a mesma frase que se vê.
+                        let phrase = crate::i18n::t(key);
                         let href = format!("/ask?q={}", urlencode(phrase));
                         view! {
                             <li>
-                                <a class="oc-chip" href=href>{*phrase}</a>
+                                <a class="oc-chip" href=href>{phrase}</a>
                             </li>
                         }
                     })
@@ -124,9 +128,7 @@ pub fn assist(spec: Assist) -> impl IntoView {
                 .then(|| {
                     view! {
                         <p class="oc-assist__state" role="status">
-                            "Nenhum nó de IA está disponível nesta instalação, por isso perguntar
-                             e executar ainda não podem ser servidos. A pesquisa funciona, e todas
-                             as acções deste ecrã continuam disponíveis."
+                            {crate::i18n::t("assist.no_inference")}
                         </p>
                     }
                 })}
@@ -154,25 +156,25 @@ fn urlencode(value: &str) -> String {
     out
 }
 
-/// Sugestões para uma Ideia.
+/// Sugestões para uma Ideia (chaves i18n, resolvidas na renderização).
 pub const IDEA_SUGGESTIONS: &[&str] = &[
-    "Resume o estado desta Ideia",
-    "Que fontes estão relacionadas com esta Ideia?",
-    "O que falta antes de passar a revisão?",
-    "Cria uma tarefa para rever a bibliografia",
+    "assist.suggest.idea.1",
+    "assist.suggest.idea.2",
+    "assist.suggest.idea.3",
+    "assist.suggest.idea.4",
 ];
 
 /// Sugestões para um Projecto.
 pub const PROJECT_SUGGESTIONS: &[&str] = &[
-    "Resume o estado deste Projecto",
-    "Que tarefas continuam abertas?",
-    "Que documentos estão ligados a este Projecto?",
-    "Cria uma nota de decisão",
+    "assist.suggest.project.1",
+    "assist.suggest.project.2",
+    "assist.suggest.project.3",
+    "assist.suggest.project.4",
 ];
 
 /// Sugestões no acervo de conhecimento.
 pub const KNOWLEDGE_SUGGESTIONS: &[&str] = &[
-    "Encontra fontes sobre armazenamento",
-    "Que notas existem sobre este tema?",
-    "Resume as notas deste ambiente",
+    "assist.suggest.knowledge.1",
+    "assist.suggest.knowledge.2",
+    "assist.suggest.knowledge.3",
 ];

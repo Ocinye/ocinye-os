@@ -7,7 +7,7 @@
     "fr"
   ],
   "fallback": "pt",
-  "slice": 4,
+  "slice": 5,
   "namespaces": [
     {
       "prefix": "nav",
@@ -77,6 +77,16 @@
     {
       "prefix": "search / entity",
       "surface": "Search + entity-type labels (fully migrated)",
+      "status": "translated"
+    },
+    {
+      "prefix": "assist",
+      "surface": "Assist component (shared): chrome + suggestions",
+      "status": "translated"
+    },
+    {
+      "prefix": "notes",
+      "surface": "Notes: list, editor, history, share, trash (fully migrated)",
       "status": "translated"
     }
   ],

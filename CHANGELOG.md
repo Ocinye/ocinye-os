@@ -7,6 +7,18 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização (fatia 5): assistência e Notas — 2026-09-22
+
+- **Componente de assistência** (partilhado por Conhecimento/Ideias/Projectos):
+  título, campo, botão, estado sem-inferência e as frases sugeridas (que passam a
+  chaves resolvidas na renderização — a mesma frase que se vê é a que viaja na
+  query).
+- **Notas**: lista, pastas e filtros, o editor (cabeçalho, pasta, etiquetas,
+  barra), o histórico e a actividade, a pré-visualização de revisão, a vista de
+  leitura partilhada, o painel de partilha e o Lixo. O conteúdo das notas (título,
+  corpo, etiquetas, nomes) fica marcado como conteúdo e não se traduz.
+- Guarda de pureza `as_notas_nao_misturam_linguas`.
+
 ### Internacionalização (fatia 4): «Meus Recursos» e a Pesquisa — 2026-09-22
 
 - **Meus Recursos**: cabeçalho, armazenamento pessoal, os três indicadores (Em
