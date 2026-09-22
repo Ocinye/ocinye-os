@@ -1584,7 +1584,7 @@ async fn meus_recursos(State(state): State<WorkspaceState>, headers: HeaderMap) 
 
     let content = ui::screens::resources::resources(&me);
     shell_page(
-        "Meus Recursos",
+        crate::i18n::t("nav.resources"),
         &viewer,
         Screen::Resources,
         Vec::new(),
@@ -6361,7 +6361,7 @@ async fn search(
     let semantic = optional(&state, &member, "/api/v1/search/semantic-availability").await;
 
     shell_page(
-        "Pesquisar",
+        crate::i18n::t("nav.search"),
         &viewer,
         Screen::Search,
         Vec::new(),

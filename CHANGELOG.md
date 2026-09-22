@@ -7,6 +7,18 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização (fatia 4): «Meus Recursos» e a Pesquisa — 2026-09-22
+
+- **Meus Recursos**: cabeçalho, armazenamento pessoal, os três indicadores (Em
+  uso / Limite / Disponível), a origem do limite, os rótulos de estado
+  (Normal/Aviso/Crítico/Acima da quota) e de origem (Perfil/Substituição/…), e a
+  nota de rodapé.
+- **Pesquisar no Ocinye**: cabeçalho, campo e botão, modos (Textual/Semântica), a
+  contagem de resultados (com plural), estados vazios, os resultados no conteúdo
+  dos ficheiros, e os rótulos de tipo de entidade (Ideia/Projecto/Referência/…).
+- Guardas de pureza `os_recursos_nao_misturam_linguas` e
+  `a_pesquisa_nao_mistura_linguas`.
+
 ### Internacionalização (fatia 3): «O Meu Trabalho» e «Conhecimento» — 2026-09-22
 
 Continuação da migração dos corpos dos módulos para o catálogo, cada ecrã com a
