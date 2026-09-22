@@ -7,6 +7,30 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros: carregar vários com progresso, e o «disponível» honesto — 2026-09-22
+
+Três defeitos no ecrã de Ficheiros, encontrados na aceitação em produção.
+
+- **Carregar não mostrava nada.** Escolher um ficheiro submetia a página inteira,
+  sem sinal do que subia. Agora uma janela de progresso no canto (como o Google
+  Drive) lista cada ficheiro com a sua barra, percentagem e estado, e some quando
+  o trabalho assenta. Cada ficheiro sobe no seu próprio pedido (`XMLHttpRequest`
+  para `/files/upload`, que passa a responder em JSON quando o pedido o aceita);
+  sem JavaScript, o formulário continua a submeter-se por inteiro.
+- **Só se carregava um de cada vez.** O campo pessoal passa a `multiple`, e a
+  janela sobe todos os escolhidos em paralelo, cada um cancelável.
+- **«Disponível» lia-se igual ao limite.** Com 35 MiB usados num limite de 10 GiB,
+  o disponível (9,9655 GiB) arredondava a uma casa para «10,0 GiB» — e então «em
+  uso 35 MiB» convivia com «disponível 10 GiB». A conta no Core sempre esteve
+  certa (`disponível = limite − uso`); o que enganava era o arredondamento. Agora
+  o disponível arredonda **para baixo** (9,9 GiB) e o uso **para cima**, para que
+  nunca se colapsem no mesmo número. Guardado por
+  `o_disponivel_nunca_arredonda_para_o_limite_inteiro` (com prova por reversão).
+
+> Limite honesto: a janela de progresso é camada de melhoria progressiva sem base
+> a testar; verifica-se na aceitação (carregar vários e ver as barras). O que é
+> testável — a negociação JSON do servidor e o arredondamento — está coberto.
+
 ### O destinatário do correio já não é confirmado antes de o terminar — 2026-09-22
 
 Ao escrever um destinatário no compositor («Para»), o texto por resolver era

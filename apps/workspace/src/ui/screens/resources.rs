@@ -15,7 +15,29 @@ use serde_json::Value;
 use crate::ui::components::{badge, progress_bar, Tone};
 
 /// Human-readable bytes. Binary units, because a quota is a binary quantity.
+/// Como arredondar o último dígito de um tamanho legível.
+///
+/// A uma casa decimal, `10 GiB − 35 MiB` (9,9655 GiB) arredonda para `10,0 GiB` —
+/// e então «em uso 35 MiB» convive com «disponível 10 GiB», que se lê como uma
+/// contradição. A cura não é mais precisão em todo o lado, é a direcção certa: o
+/// espaço livre nunca se arredonda **para cima** (não se promete espaço que não
+/// há), e o usado nunca **para baixo** (não se esconde consumo). Assim os dois
+/// números deixam de colidir no mesmo `10,0`.
+#[derive(Clone, Copy)]
+enum Arredonda {
+    /// Para o valor mais próximo — para grandezas exactas (o limite).
+    Perto,
+    /// Para baixo — o que sobra (disponível): honesto por defeito.
+    Baixo,
+    /// Para cima — o que se gasta (em uso): honesto por defeito.
+    Cima,
+}
+
 fn human_bytes(value: i64) -> String {
+    human_bytes_com(value, Arredonda::Perto)
+}
+
+fn human_bytes_com(value: i64, arredonda: Arredonda) -> String {
     if value <= 0 {
         return "0 B".to_owned();
     }
@@ -27,10 +49,18 @@ fn human_bytes(value: i64) -> String {
         unit += 1;
     }
     if unit == 0 {
-        format!("{value} B")
-    } else {
-        format!("{size:.1} {}", UNITS[unit])
+        return format!("{value} B");
     }
+    // Arredondar a uma casa decimal na direcção pedida, com o valor já na sua
+    // unidade. `Perto` é o `{:.1}` de sempre; `Baixo`/`Cima` usam `floor`/`ceil`
+    // sobre o valor multiplicado por dez.
+    let escalado = size * 10.0;
+    let uma_casa = match arredonda {
+        Arredonda::Perto => escalado.round(),
+        Arredonda::Baixo => escalado.floor(),
+        Arredonda::Cima => escalado.ceil(),
+    } / 10.0;
+    format!("{uma_casa:.1} {}", UNITS[unit])
 }
 
 /// The state's Portuguese label and badge tone.
@@ -88,14 +118,17 @@ pub fn resources(me: &Value) -> impl IntoView {
     };
     let (state_text, state_tone) = state_badge(&state);
 
-    let used_h = human_bytes(used);
+    // O usado arredonda para cima e o disponível para baixo, para que nunca se
+    // colapsem no mesmo valor do limite: 35 MiB em uso deixam de conviver com
+    // 10,0 GiB livres num limite de 10,0 GiB.
+    let used_h = human_bytes_com(used, Arredonda::Cima);
     let limit_h = if has_limit {
         human_bytes(limit)
     } else {
         "sem limite".to_owned()
     };
     let available_h = if has_limit {
-        human_bytes(available)
+        human_bytes_com(available, Arredonda::Baixo)
     } else {
         "—".to_owned()
     };
@@ -263,6 +296,39 @@ mod tests {
             html.contains(r#"aria-valuenow="50""#),
             "a barra reflecte o uso"
         );
+    }
+
+    #[test]
+    fn o_disponivel_nunca_arredonda_para_o_limite_inteiro() {
+        // O caso relatado: 10 GiB de limite, ~35 MiB usados. O disponível é
+        // 9,9655 GiB — que a uma casa arredondava para «10,0 GiB», igual ao
+        // limite, e então «em uso 35 MiB» convive com «disponível 10 GiB».
+        let used = 37_000_000_i64; // ~35,3 MiB
+        let limit = 10_i64 * 1024 * 1024 * 1024; // 10 GiB
+        let available = limit - used;
+
+        // Disponível para baixo: 9,9 GiB, e nunca o limite inteiro.
+        assert_eq!(human_bytes_com(available, Arredonda::Baixo), "9.9 GiB");
+        assert_ne!(
+            human_bytes_com(available, Arredonda::Baixo),
+            human_bytes(limit),
+            "o disponível não pode ler-se igual ao limite quando há uso"
+        );
+        // Em uso para cima: 35 MiB não desaparecem no arredondamento.
+        assert_eq!(human_bytes_com(used, Arredonda::Cima), "35.3 MiB");
+
+        // E no ecrã: a métrica «Disponível» mostra 9,9 GiB, o limite 10,0 GiB.
+        let me = json!({
+            "storage": {
+                "used_bytes": used,
+                "limit_bytes": limit,
+                "available_bytes": available,
+                "state": "normal"
+            },
+            "storage_entitlement": {"quantity": limit, "parts": []}
+        });
+        let html = resources(&me).to_html();
+        assert!(html.contains("9.9 GiB"), "disponível legível e honesto");
     }
 
     #[test]
