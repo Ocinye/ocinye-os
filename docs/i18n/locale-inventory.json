@@ -1,0 +1,23 @@
+{
+  "note": "Inventário legível por máquina do catálogo i18n. A fonte autoritativa é o catálogo Rust em apps/workspace/src/i18n/catalog.rs, verificado pelo portão de completude (apps/workspace/src/i18n/completeness.rs). Este ficheiro documenta a cobertura por fatia; cresce a cada fatia do milestone.",
+  "canonical_locale": "pt",
+  "supported_locales": ["pt", "en", "fr"],
+  "fallback": "pt",
+  "slice": 1,
+  "namespaces": [
+    { "prefix": "nav", "surface": "navigation (sidebar, sections, topbar, breadcrumbs)", "status": "translated" },
+    { "prefix": "action", "surface": "common verbs and labels", "status": "translated" },
+    { "prefix": "create", "surface": "Global Create menu", "status": "translated" },
+    { "prefix": "error", "surface": "404 / access denied / generic error screens", "status": "translated" },
+    { "prefix": "first_entry", "surface": "first-entry language selection (screen deferred to slice 2)", "status": "translated" },
+    { "prefix": "settings", "surface": "Settings → Language & region", "status": "translated" }
+  ],
+  "pending_slices": [
+    "Home, Search, Global Create bodies",
+    "Ideas / Projects / Tasks",
+    "Notes / Files / Datasets / Bibliography",
+    "Mail / Messages / Calendar",
+    "Administration / Resources / AI",
+    "Transactional emails; date/number formatting; first-entry interstitial + Core cross-device persistence"
+  ]
+}

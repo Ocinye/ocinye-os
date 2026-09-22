@@ -22,8 +22,9 @@ use leptos::prelude::*;
 
 /// Renderiza uma árvore de componentes num documento HTML completo.
 ///
-/// `lang="pt"` porque a interface é em português europeu e os leitores de ecrã
-/// precisam de o saber para a pronunciarem correctamente.
+/// O `lang` do documento é o idioma corrente do pedido (`pt-PT`, `en`, `fr-FR`):
+/// os leitores de ecrã precisam de o saber para pronunciarem a interface, e ele
+/// muda com a língua escolhida, não fica preso a português.
 pub fn document(title: &str, body: impl IntoView + 'static) -> String {
     document_com_cabeca(title, body, None)
 }
@@ -41,11 +42,13 @@ pub fn document_com_cabeca(
     cabeca: Option<String>,
 ) -> String {
     let rendered = body.to_html();
+    let lang = crate::i18n::current().bcp47();
 
     let mut out = String::with_capacity(rendered.len() + 1024);
+    out.push_str("<!doctype html>\n<html lang=\"");
+    out.push_str(lang);
     out.push_str(
-        "<!doctype html>\n\
-         <html lang=\"pt\">\n\
+        "\">\n\
          <head>\n\
          <meta charset=\"utf-8\">\n\
          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
@@ -132,7 +135,7 @@ mod tests {
         let html = document("Teste", leptos::prelude::view! { <p>"olá"</p> });
         assert!(html.contains("/static/ocinye.css"));
         assert!(html.contains("/static/app.js"));
-        assert!(html.contains("lang=\"pt\""));
+        assert!(html.contains("lang=\"pt-PT\""));
         assert!(html.contains("IBM+Plex+Sans"));
     }
 }
@@ -389,11 +392,13 @@ mod render_tests {
         for expected in [
             "oc-shell",
             "OCINYE OS",
-            "PESSOAL",
-            "INVESTIGAÇÃO",
-            "CONHECIMENTO",
-            "INTELIGÊNCIA",
-            "INSTITUCIONAL",
+            // As secções carregam agora a palavra real (a maiúscula é do CSS):
+            // o idioma corrente fora de um pedido é o canónico, o português.
+            "Pessoal",
+            "Investigação",
+            "Conhecimento",
+            "Inteligência",
+            "Institucional",
             // A Universal Command Surface substituiu a barra de pesquisa: uma
             // barra, três intenções (briefing §29).
             "Pesquisar, perguntar ou executar no Ocinye…",

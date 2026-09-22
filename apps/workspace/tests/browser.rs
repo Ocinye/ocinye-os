@@ -9409,7 +9409,7 @@ async fn quem_pertence_a_um_ambiente_alcanca_conhecimento_pela_navegacao() {
     let _workspace = harness.owns_a_workspace(person_id).await;
 
     let pagina = harness.open("/").await;
-    esperar_por(&pagina, "CONHECIMENTO").await;
+    esperar_por(&pagina, "Conhecimento").await;
     let html = pagina.content().await.expect("conteúdo");
 
     for entrada in ["Ficheiros", "Conhecimento", "Bibliografia", "Dados"] {
@@ -9507,7 +9507,7 @@ async fn uma_conta_de_investigacao_sem_pertencas_ve_os_modulos_de_investigacao()
     let (_, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
 
     let pagina = harness.open("/").await;
-    esperar_por(&pagina, "CONHECIMENTO").await;
+    esperar_por(&pagina, "Conhecimento").await;
     let html = pagina.content().await.expect("conteúdo");
 
     for entrada in ["Ficheiros", "Conhecimento", "Bibliografia", "Dados"] {

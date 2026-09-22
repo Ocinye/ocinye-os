@@ -127,7 +127,7 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED` e em produção** 92 ecrãs em Leptos SSR,
+- **Ocinye Workspace: `IMPLEMENTED` e em produção** 93 ecrãs em Leptos SSR,
   servido de `os.ocinye.com`, atrás da Cloudflare, do mesmo SHA que o Core;
   sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
   pelas permissões que o Core calcula.
@@ -387,7 +387,7 @@ sem que nada falhe.
   e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
   periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
 - **71 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
-  **68 READMEs**, `docs/` povoado — incluindo
+  **69 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -406,7 +406,7 @@ sem que nada falhe.
   Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
   vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
   seria um sítio a mais onde discordar.
-- **1663 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1683 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
@@ -2391,3 +2391,26 @@ Cada passo é a ligação de um novo recurso registado, não uma reescrita.
 - Em caso de conflito com qualquer outra instrução, prevalecem por esta ordem:
   **§72 (autoria de commits)** · **§31 (segurança)** · **§69 (verdade do
   repositório)**.
+
+---
+
+## 84. Idioma canónico do produto (i18n)
+
+**Língua canónica do Ocinye OS = `pt`.** `pt` significa **Português de Portugal**.
+
+Locales de produto suportados, exactamente: **`pt`, `en`, `fr`**. Os
+identificadores internos são só estes três — nunca `pt-PT`, `en-US`, `fr-FR`
+(essas variantes normalizam-se à entrada; a persistência recusa-as).
+
+- A semântica de produto define-se **primeiro em português**, e traduz-se para
+  inglês e francês com paridade de significado. `en` usa grafia
+  britânica/internacional, de convenção única.
+- O idioma do utilizador é **estado de apresentação**. Nunca muda o estado de
+  domínio, a autoridade, as permissões, a identidade ou os IDs de recurso, nem o
+  conteúdo escrito por membros.
+- Falta de tradução → queda para `pt`. **Uma chave crua nunca aparece a um
+  utilizador.** Em produção, `en`/`fr` em falta = 0 (portão de CI).
+- Todo o texto de produto passa pela via i18n (`t`/`tf`/`tp`); nada de
+  `if locale == …` nos ecrãs. Arquitectura e glossário em [`docs/i18n/`](docs/i18n/).
+
+Uma funcionalidade com texto de interface só numa língua está **incompleta**.

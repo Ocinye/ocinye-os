@@ -25,14 +25,11 @@ pub fn not_found() -> impl IntoView {
     view! {
         <div class="oc-notice">
             <span class="oc-notice__tile">{icon(Icon::EmptyState, 26)}</span>
-            <h1>"Página não encontrada"</h1>
-            <p>
-                "Este endereço não corresponde a nenhum ecrã do Ocinye Workspace. Pode ter sido
-                 movido, ou o endereço pode estar incompleto."
-            </p>
+            <h1>{crate::i18n::t("error.not_found.title")}</h1>
+            <p>{crate::i18n::t("error.not_found.body")}</p>
             <div class="oc-row oc-gap-5">
-                {button(Button::new("Ir para a Home", Variant::Primary).href("/"))}
-                {button(Button::new("O Meu Trabalho", Variant::Secondary).href("/my-work"))}
+                {button(Button::new(crate::i18n::t("error.go_home"), Variant::Primary).href("/"))}
+                {button(Button::new(crate::i18n::t("nav.my_work"), Variant::Secondary).href("/my-work"))}
             </div>
         </div>
     }
@@ -45,14 +42,11 @@ pub fn failure(correlation_id: &str) -> impl IntoView {
     view! {
         <div class="oc-notice">
             <span class="oc-notice__tile">{icon(Icon::Shield, 26)}</span>
-            <h1>"Ocorreu um erro inesperado"</h1>
-            <p>
-                "A operação não foi concluída. Nada foi alterado. Se o problema persistir,
-                 indique a referência abaixo a quem opera o Ocinye OS."
-            </p>
-            <p class="oc-mono oc-notice__reference">"Referência: "{reference}</p>
+            <h1>{crate::i18n::t("error.generic.title")}</h1>
+            <p>{crate::i18n::t("error.generic.body")}</p>
+            <p class="oc-mono oc-notice__reference">{crate::i18n::t("error.reference")}{reference}</p>
             <div class="oc-row oc-gap-5">
-                {button(Button::new("Ir para a Home", Variant::Primary).href("/"))}
+                {button(Button::new(crate::i18n::t("error.go_home"), Variant::Primary).href("/"))}
             </div>
         </div>
     }
@@ -66,14 +60,10 @@ pub fn access_denied() -> impl IntoView {
     view! {
         <div class="oc-notice">
             <span class="oc-notice__tile">{icon(Icon::Shield, 26)}</span>
-            <h1>"Não possui acesso a este recurso"</h1>
-            <p>
-                "O seu acesso é definido pelas unidades e Research Workspaces de que faz parte.
-                 Se precisa deste recurso para o seu trabalho, peça acesso a quem administra a
-                 sua unidade."
-            </p>
+            <h1>{crate::i18n::t("error.forbidden.title")}</h1>
+            <p>{crate::i18n::t("error.forbidden.body")}</p>
             <div class="oc-row oc-gap-5">
-                {button(Button::new("O Meu Trabalho", Variant::Primary).href("/my-work"))}
+                {button(Button::new(crate::i18n::t("nav.my_work"), Variant::Primary).href("/my-work"))}
             </div>
         </div>
     }

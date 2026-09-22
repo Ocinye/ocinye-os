@@ -32,6 +32,32 @@ use serde_json::Value;
 
 use crate::ui::components::{button, card, section_head, text_field, Button, Variant};
 use crate::ui::components::{pill_tabs, Tab};
+use ocinye_contracts::Locale;
+
+/// Os três separadores das definições, com o rótulo no idioma corrente.
+///
+/// `activo` é o caminho do separador em que se está. Reunir os três num só sítio
+/// impede que uma secção nova acrescente um separador e esqueça outra — a barra
+/// é a mesma em toda a página de definições.
+fn seccoes_das_definicoes(activo: &str) -> Vec<Tab> {
+    vec![
+        Tab::link(
+            crate::i18n::t("settings.tab.account"),
+            "/settings",
+            activo == "/settings",
+        ),
+        Tab::link(
+            crate::i18n::t("settings.tab.security"),
+            "/settings/security",
+            activo == "/settings/security",
+        ),
+        Tab::link(
+            crate::i18n::t("settings.tab.language"),
+            "/settings/language",
+            activo == "/settings/language",
+        ),
+    ]
+}
 
 fn text(payload: &Value, key: &str) -> String {
     payload
@@ -72,18 +98,15 @@ pub fn account(
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Definições"</h1>
-                    <p>"A sua conta e as suas credenciais no Ocinye OS."</p>
+                    <h1>{crate::i18n::t("settings.title")}</h1>
+                    <p>{crate::i18n::t("settings.subtitle")}</p>
                 </div>
             </div>
 
             <div class="oc-tabs oc-tabs--under oc-card__head--flush">
                 {pill_tabs(
-                    vec![
-                        Tab::link("Conta", "/settings", true),
-                        Tab::link("Segurança", "/settings/security", false),
-                    ],
-                    "Secções das definições",
+                    seccoes_das_definicoes("/settings"),
+                    crate::i18n::t("settings.tabs.aria"),
                 )}
             </div>
 
@@ -107,7 +130,76 @@ pub fn account(
     }
 }
 
-/// `Definições → Segurança`.
+/// `Definições → Idioma e região`.
+///
+/// O idioma é uma preferência de apresentação: cada língua diz-se pelo seu
+/// próprio nome, sem bandeiras (i18n §57, §58), e escolher uma não muda o
+/// significado de nada — só a língua em que o Ocinye se mostra. Funciona sem
+/// JavaScript: é um formulário que submete e volta com a interface na língua
+/// escolhida.
+pub fn language(saved: bool) -> impl IntoView {
+    let actual = crate::i18n::current();
+    view! {
+        <div class="oc-page oc-page--narrow">
+            <div class="oc-head">
+                <div class="oc-head__text">
+                    <h1>{crate::i18n::t("settings.title")}</h1>
+                    <p>{crate::i18n::t("settings.subtitle")}</p>
+                </div>
+            </div>
+
+            <div class="oc-tabs oc-tabs--under oc-card__head--flush">
+                {pill_tabs(
+                    seccoes_das_definicoes("/settings/language"),
+                    crate::i18n::t("settings.tabs.aria"),
+                )}
+            </div>
+
+            {saved.then(|| view! {
+                <div class="oc-callout" role="status">
+                    {crate::i18n::t("settings.language.saved")}
+                </div>
+            })}
+
+            {card(
+                section_head(crate::i18n::t("settings.language_region.title"), None, None),
+                view! {
+                    <form method="post" action="/settings/language" class="oc-lang">
+                        <p class="oc-t-caption--muted oc-mb-5">
+                            {crate::i18n::t("settings.language.help")}
+                        </p>
+                        <fieldset class="oc-lang__set">
+                            <legend class="oc-sr">{crate::i18n::t("settings.language.label")}</legend>
+                            {Locale::ALL
+                                .into_iter()
+                                .map(|loc| {
+                                    let escolhido = loc == actual;
+                                    view! {
+                                        <label class="oc-lang__opt">
+                                            <input
+                                                type="radio"
+                                                name="locale"
+                                                value=loc.as_str()
+                                                checked=escolhido
+                                            />
+                                            <span class="oc-lang__name">{loc.native_name()}</span>
+                                        </label>
+                                    }
+                                })
+                                .collect_view()}
+                        </fieldset>
+                        <div class="oc-mt-5">
+                            <button class="oc-btn oc-btn--primary" type="submit">
+                                {crate::i18n::t("settings.language.save")}
+                            </button>
+                        </div>
+                    </form>
+                },
+            )}
+        </div>
+    }
+}
+
 /// `Definições → Segurança`.
 ///
 /// `sessions` é `None` quando a lista não pôde ser lida. Não é o mesmo que uma
@@ -129,18 +221,15 @@ pub fn security(
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Definições"</h1>
-                    <p>"A sua conta e as suas credenciais no Ocinye OS."</p>
+                    <h1>{crate::i18n::t("settings.title")}</h1>
+                    <p>{crate::i18n::t("settings.subtitle")}</p>
                 </div>
             </div>
 
             <div class="oc-tabs oc-tabs--under oc-card__head--flush">
                 {pill_tabs(
-                    vec![
-                        Tab::link("Conta", "/settings", false),
-                        Tab::link("Segurança", "/settings/security", true),
-                    ],
-                    "Secções das definições",
+                    seccoes_das_definicoes("/settings/security"),
+                    crate::i18n::t("settings.tabs.aria"),
                 )}
             </div>
 

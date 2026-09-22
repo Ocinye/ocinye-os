@@ -244,6 +244,42 @@ pub fn zone_from_cookies(header: Option<&str>) -> Option<String> {
     Some(descodificar(&bruto)).filter(|valor| !valor.is_empty())
 }
 
+/// O cookie onde o browser guarda o idioma escolhido.
+///
+/// É a cópia por browser da preferência que vive no Core: escrita à entrada
+/// (login) e quando o membro muda de idioma, lida a cada pedido para não obrigar
+/// o Core a responder à pergunta «em que língua» a cada navegação (briefing i18n
+/// §16, §67). `HttpOnly` porque só o servidor a lê — a tradução é do servidor.
+pub const LOCALE_COOKIE: &str = "oc_locale";
+
+/// Constrói o `Set-Cookie` do idioma. Um ano: é preferência, não sessão.
+///
+/// `locale` é já um dos três códigos canónicos (`pt`/`en`/`fr`); quem chama
+/// valida-o pelo tipo antes de aqui chegar.
+#[must_use]
+pub fn locale_cookie_header(locale: &str, secure: bool) -> String {
+    let mut cookie =
+        format!("{LOCALE_COOKIE}={locale}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000");
+    if secure {
+        cookie.push_str("; Secure");
+    }
+    cookie
+}
+
+/// O idioma que o browser declarou no cookie, se declarou.
+///
+/// Devolve o valor cru; a normalização para um dos três é de quem o lê, porque é
+/// aí que uma variante inesperada deve cair no canónico em vez de contaminar.
+#[must_use]
+pub fn locale_from_cookies(header: Option<&str>) -> Option<String> {
+    header?
+        .split(';')
+        .filter_map(|pair| pair.trim().split_once('='))
+        .find(|(name, _)| *name == LOCALE_COOKIE)
+        .map(|(_, value)| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
 /// Descodifica os `%XX` que o browser escreve.
 ///
 /// # Porque isto é preciso

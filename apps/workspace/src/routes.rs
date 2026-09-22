@@ -115,6 +115,7 @@ pub const ROUTES: &[&str] = &[
     "/help",
     "/settings",
     "/settings/security",
+    "/settings/language",
     "/settings/mfa",
     "/settings/mfa/regenerate",
     "/settings/password",
@@ -383,6 +384,10 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/help", get(help))
         .route("/settings", get(settings_account))
         .route("/settings/security", get(settings_security))
+        .route(
+            "/settings/language",
+            get(settings_language).post(set_language),
+        )
         .route("/settings/mfa", get(settings_mfa))
         .route("/settings/mfa/regenerate", post(settings_mfa_regenerate))
         .route("/settings/password", post(change_password))
@@ -590,6 +595,10 @@ pub fn router(state: WorkspaceState) -> Router {
         // construída. Uma pessoa que abra o Ocinye OS vê o arranque, e não o
         // Workspace a ser escondido depois.
         .layer(axum::middleware::from_fn(boot_gate))
+        // O idioma do pedido entra no escopo antes de qualquer página se
+        // construir: assim `t(...)` lê a língua certa em toda a renderização, sem
+        // ser fiado por centenas de assinaturas (i18n §5).
+        .layer(axum::middleware::from_fn(locale_layer))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             same_origin_only,
@@ -599,6 +608,33 @@ pub fn router(state: WorkspaceState) -> Router {
             security_headers,
         ))
         .with_state(state)
+}
+
+/// Resolve o idioma do pedido e corre o resto dentro do seu escopo.
+///
+/// A língua ambiente vem **só** de uma escolha explícita — o cookie `oc_locale`,
+/// a cópia da preferência escrita na primeira entrada e na mudança. Sem escolha,
+/// o canónico: o português. O `Accept-Language` do browser **não** decide a
+/// língua da página, de propósito — deixar que decidisse mudava a língua de quem
+/// nunca a escolheu, só por abrir o Ocinye de outro browser ou país (i18n §15,
+/// §62). O que ele declara serve, na fatia seguinte, para pré-seleccionar a
+/// opção no ecrã de primeira entrada — não para impor.
+///
+/// Nenhuma via consulta o Core: a preferência já foi espelhada no cookie no
+/// momento certo, para que uma navegação não pague uma ida ao Core só para saber
+/// a língua (i18n §67).
+async fn locale_layer(request: axum::extract::Request, next: axum::middleware::Next) -> Response {
+    let locale = locale_do_pedido(request.headers());
+    crate::i18n::with_locale(locale, next.run(request)).await
+}
+
+/// A língua que este pedido deve falar: a escolhida, ou o canónico.
+fn locale_do_pedido(headers: &HeaderMap) -> ocinye_contracts::Locale {
+    let cookie = headers.get(header::COOKIE).and_then(|v| v.to_str().ok());
+    session::locale_from_cookies(cookie)
+        .as_deref()
+        .and_then(ocinye_contracts::Locale::normalize)
+        .unwrap_or(ocinye_contracts::locale::CANONICAL)
 }
 
 /// O portão de arranque.
@@ -1282,7 +1318,10 @@ fn failure_response(failure: &ApiFailure) -> Response {
 async fn not_found() -> Response {
     (
         StatusCode::NOT_FOUND,
-        page("Página não encontrada", ui::screens::notice::not_found()),
+        page(
+            crate::i18n::t("error.not_found.title"),
+            ui::screens::notice::not_found(),
+        ),
     )
         .into_response()
 }
@@ -6965,6 +7004,60 @@ async fn settings_account(
     )
 }
 
+/// O que a página de idioma recebe de volta de uma gravação.
+#[derive(Deserialize)]
+struct LanguageOutcome {
+    #[serde(default)]
+    ok: Option<String>,
+}
+
+/// `Definições → Idioma e região`.
+async fn settings_language(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(outcome): Query<LanguageOutcome>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    shell_page(
+        crate::i18n::t("settings.title"),
+        &viewer,
+        Screen::Settings,
+        Vec::new(),
+        ui::screens::settings::language(outcome.ok.as_deref() == Some("1")),
+    )
+}
+
+/// A escolha de idioma submetida.
+#[derive(Deserialize)]
+struct LanguageForm {
+    locale: String,
+}
+
+/// Grava o idioma escolhido.
+///
+/// O idioma valida-se contra a lista fechada (`pt`/`en`/`fr`): um valor fora dos
+/// três não escreve cookie nenhum — entrada não confiável não vira preferência
+/// (i18n §68). O cookie é a cópia por browser da preferência; a redirecção volta
+/// à mesma página, que a renderiza já na língua nova porque o middleware relê o
+/// cookie acabado de escrever.
+async fn set_language(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<LanguageForm>,
+) -> Response {
+    let _member = member_or_login!(state, headers);
+    let Ok(locale) = form.locale.parse::<ocinye_contracts::Locale>() else {
+        return Redirect::to("/settings/language").into_response();
+    };
+    let cookie = session::locale_cookie_header(locale.as_str(), state.config.cookie_secure);
+    let mut resposta = Redirect::to("/settings/language?ok=1").into_response();
+    if let Ok(valor) = HeaderValue::from_str(&cookie) {
+        resposta.headers_mut().insert(header::SET_COOKIE, valor);
+    }
+    resposta
+}
+
 /// A ajuda do Workspace.
 ///
 /// Conteúdo, não consulta: não chama o Core, e por isso não pode falhar por
@@ -12200,6 +12293,55 @@ mod corpo_de_rascunho_tests {
         assert_eq!(corpo["mailbox_id"], id);
         assert_eq!(corpo["in_reply_to"], reply);
         assert_eq!(corpo["to"], json!(["a@b.com"]));
+    }
+}
+
+#[cfg(test)]
+mod locale_tests {
+    use super::locale_do_pedido;
+    use axum::http::{header, HeaderMap, HeaderValue};
+    use ocinye_contracts::Locale;
+
+    fn com(nome: axum::http::HeaderName, valor: &str) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert(nome, HeaderValue::from_str(valor).unwrap());
+        h
+    }
+
+    #[test]
+    fn sem_escolha_a_lingua_e_o_canonico() {
+        // Sem cookie, é português — o predefinido não é uma adivinha.
+        assert_eq!(locale_do_pedido(&HeaderMap::new()), Locale::Pt);
+    }
+
+    #[test]
+    fn o_accept_language_do_browser_nao_decide_a_lingua() {
+        // Um browser em inglês, sem escolha explícita, continua a ver português:
+        // a língua não muda só por se abrir o Ocinye de outro browser (i18n §15,
+        // §62). É também o que os testes de browser assumem.
+        let so_accept = com(header::ACCEPT_LANGUAGE, "en-US,en;q=0.9,fr;q=0.8");
+        assert_eq!(locale_do_pedido(&so_accept), Locale::Pt);
+    }
+
+    #[test]
+    fn o_cookie_escolhido_decide() {
+        assert_eq!(
+            locale_do_pedido(&com(header::COOKIE, "oc_locale=fr")),
+            Locale::Fr
+        );
+        assert_eq!(
+            locale_do_pedido(&com(header::COOKIE, "oc_locale=en")),
+            Locale::En
+        );
+        // Uma variante regional no cookie normaliza; uma língua inválida cai no pt.
+        assert_eq!(
+            locale_do_pedido(&com(header::COOKIE, "oc_locale=fr-FR")),
+            Locale::Fr
+        );
+        assert_eq!(
+            locale_do_pedido(&com(header::COOKIE, "oc_locale=de")),
+            Locale::Pt
+        );
     }
 }
 
