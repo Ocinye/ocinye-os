@@ -1481,6 +1481,547 @@ const ADMIN: &[Entry] = catalogo! {
     "admin.action.apply": { pt: "Aplicar", en: "Apply", fr: "Appliquer" },
 };
 
+/// Os oito ecrãs de lista (Unidades, Ideias, Projectos, Bibliografia, Dados,
+/// Agentes, Membros, Audit Log) e os seus formulários de criação. Os valores de
+/// domínio das linhas vêm do Core e não se traduzem; o que aqui vive é o chrome —
+/// cabeçalhos de coluna, separadores, estados vazios, rótulos e placeholders.
+const LISTS: &[Entry] = catalogo! {
+    // O filtro partilhado da tabela institucional (interpola o nome plural).
+    "table.filter": { pt: "Filtrar {noun}…", en: "Filter {noun}…", fr: "Filtrer {noun}…" },
+    "table.filter_page": {
+        pt: "Filtrar {noun} nesta página…",
+        en: "Filter {noun} on this page…",
+        fr: "Filtrer {noun} sur cette page…"
+    },
+    // Cabeçalhos de coluna (mono, sem transformação de caixa na folha de estilos).
+    "lists.col.unit": { pt: "UNIDADE", en: "UNIT", fr: "UNITÉ" },
+    "lists.col.code": { pt: "CÓDIGO", en: "CODE", fr: "CODE" },
+    "lists.col.lead": { pt: "RESPONSÁVEL", en: "LEAD", fr: "RESPONSABLE" },
+    "lists.col.members": { pt: "MEMBROS", en: "MEMBERS", fr: "MEMBRES" },
+    "lists.col.ideas": { pt: "IDEIAS", en: "IDEAS", fr: "IDÉES" },
+    "lists.col.projects": { pt: "PROJECTOS", en: "PROJECTS", fr: "PROJETS" },
+    "lists.col.state": { pt: "ESTADO", en: "STATE", fr: "ÉTAT" },
+    "lists.col.title": { pt: "TÍTULO", en: "TITLE", fr: "TITRE" },
+    "lists.col.priority": { pt: "PRIORIDADE", en: "PRIORITY", fr: "PRIORITÉ" },
+    "lists.col.classification": { pt: "CLASSIFICAÇÃO", en: "CLASSIFICATION", fr: "CLASSIFICATION" },
+    "lists.col.updated": { pt: "ACTUALIZADA", en: "UPDATED", fr: "MISE À JOUR" },
+    "lists.col.project": { pt: "PROJECTO", en: "PROJECT", fr: "PROJET" },
+    "lists.col.progress": { pt: "PROGRESSO", en: "PROGRESS", fr: "PROGRÈS" },
+    "lists.col.start": { pt: "INÍCIO", en: "START", fr: "DÉBUT" },
+    "lists.col.end": { pt: "FIM", en: "END", fr: "FIN" },
+    "lists.col.authors": { pt: "AUTORES", en: "AUTHORS", fr: "AUTEURS" },
+    "lists.col.year": { pt: "ANO", en: "YEAR", fr: "ANNÉE" },
+    "lists.col.origin": { pt: "ORIGEM", en: "SOURCE", fr: "ORIGINE" },
+    "lists.col.type": { pt: "TIPO", en: "TYPE", fr: "TYPE" },
+    "lists.col.citations": { pt: "CITAÇÕES", en: "CITATIONS", fr: "CITATIONS" },
+    "lists.col.name": { pt: "NOME", en: "NAME", fr: "NOM" },
+    "lists.col.registered": { pt: "REGISTO", en: "REGISTERED", fr: "INSCRIPTION" },
+    "lists.col.version": { pt: "VERSÃO", en: "VERSION", fr: "VERSION" },
+    "lists.col.size": { pt: "TAMANHO", en: "SIZE", fr: "TAILLE" },
+    "lists.col.access": { pt: "ACESSO", en: "ACCESS", fr: "ACCÈS" },
+    "lists.col.agent": { pt: "AGENTE", en: "AGENT", fr: "AGENT" },
+    "lists.col.purpose": { pt: "PROPÓSITO", en: "PURPOSE", fr: "OBJET" },
+    "lists.col.scope": { pt: "ÂMBITO", en: "SCOPE", fr: "PORTÉE" },
+    "lists.col.capability": { pt: "CAPACIDADE", en: "CAPABILITY", fr: "CAPACITÉ" },
+    "lists.col.created": { pt: "CRIADO", en: "CREATED", fr: "CRÉÉ" },
+    "lists.col.email": { pt: "E-MAIL", en: "EMAIL", fr: "E-MAIL" },
+    "lists.col.position": { pt: "POSIÇÃO", en: "POSITION", fr: "POSITION" },
+    "lists.col.activity": { pt: "ACTIVIDADE", en: "ACTIVITY", fr: "ACTIVITÉ" },
+    "lists.col.date": { pt: "DATA", en: "DATE", fr: "DATE" },
+    "lists.col.user": { pt: "UTILIZADOR", en: "USER", fr: "UTILISATEUR" },
+    "lists.col.action": { pt: "ACÇÃO", en: "ACTION", fr: "ACTION" },
+    "lists.col.resource": { pt: "RECURSO", en: "RESOURCE", fr: "RESSOURCE" },
+    "lists.col.context": { pt: "CONTEXTO", en: "CONTEXT", fr: "CONTEXTE" },
+    "lists.col.outcome": { pt: "RESULTADO", en: "OUTCOME", fr: "RÉSULTAT" },
+    "lists.col.correlation_id": { pt: "CORRELATION ID", en: "CORRELATION ID", fr: "ID DE CORRÉLATION" },
+    // Nomes plurais para o campo de filtro da tabela.
+    "lists.noun.units": { pt: "unidades", en: "units", fr: "unités" },
+    "lists.noun.ideas": { pt: "ideias", en: "ideas", fr: "idées" },
+    "lists.noun.projects": { pt: "projectos", en: "projects", fr: "projets" },
+    "lists.noun.sources": { pt: "referências", en: "references", fr: "références" },
+    "lists.noun.datasets": { pt: "datasets", en: "datasets", fr: "jeux de données" },
+    "lists.noun.agents": { pt: "agentes", en: "agents", fr: "agents" },
+    "lists.noun.members": { pt: "membros", en: "members", fr: "membres" },
+    "lists.noun.events": { pt: "eventos", en: "events", fr: "événements" },
+    "lists.noun.tasks": { pt: "tarefas", en: "tasks", fr: "tâches" },
+    // Separadores partilhados dos recortes.
+    "lists.tab.all_f": { pt: "Todas", en: "All", fr: "Toutes" },
+    "lists.tab.all_m": { pt: "Todos", en: "All", fr: "Tous" },
+    "lists.tab.mine_f": { pt: "Minhas", en: "Mine", fr: "Les miennes" },
+    "lists.tab.mine_m": { pt: "Meus", en: "Mine", fr: "Les miens" },
+    "lists.tab.followed_f": { pt: "Seguidas", en: "Followed", fr: "Suivies" },
+    "lists.tab.archived_f": { pt: "Arquivadas", en: "Archived", fr: "Archivées" },
+    "lists.tab.completed_m": { pt: "Concluídos", en: "Completed", fr: "Terminés" },
+    "lists.tab.favourites_f": { pt: "Favoritas", en: "Favourites", fr: "Favoris" },
+    "lists.tab.favourites_m": { pt: "Favoritos", en: "Favourites", fr: "Favoris" },
+    "lists.slice.unit": { pt: "Da Unidade", en: "By Unit", fr: "De l’unité" },
+    "lists.slice.unit.none": {
+        pt: "Não pertence a nenhuma unidade que possa usar como recorte.",
+        en: "You do not belong to any unit you can use as a view.",
+        fr: "Vous n’appartenez à aucune unité utilisable comme vue."
+    },
+    "lists.slice.state_not_query": {
+        pt: "Recortar por estado ainda não é uma consulta do Core.",
+        en: "Slicing by state is not yet a Core query.",
+        fr: "Découper par état n’est pas encore une requête du Core."
+    },
+    "lists.slice.followed_ideas": {
+        pt: "Seguir ideias ainda não existe no Ocinye OS.",
+        en: "Following ideas does not exist yet in Ocinye OS.",
+        fr: "Suivre des idées n’existe pas encore dans Ocinye OS."
+    },
+    "lists.favourites_none": {
+        pt: "Marcar favoritos ainda não existe no Ocinye OS.",
+        en: "Marking favourites does not exist yet in Ocinye OS.",
+        fr: "Marquer des favoris n’existe pas encore dans Ocinye OS."
+    },
+    // Selector de unidade.
+    "lists.unit_pick.label": { pt: "UNIDADE", en: "UNIT", fr: "UNITÉ" },
+    "lists.unit_pick.placeholder": { pt: "Escolha uma unidade…", en: "Choose a unit…", fr: "Choisissez une unité…" },
+    "lists.unit_pick.apply": { pt: "Aplicar", en: "Apply", fr: "Appliquer" },
+    "lists.choose_unit_prompt": {
+        pt: "Escolha a unidade cujo trabalho quer ver.",
+        en: "Choose the unit whose work you want to see.",
+        fr: "Choisissez l’unité dont vous voulez voir le travail."
+    },
+    "lists.no_unit_chosen.title": { pt: "Nenhuma unidade escolhida", en: "No unit chosen", fr: "Aucune unité choisie" },
+    "lists.no_unit_chosen.body": {
+        pt: "O Ocinye OS não escolhe uma unidade por si. Escolha acima qual delas quer ver.",
+        en: "Ocinye OS does not choose a unit for you. Choose above which one you want to see.",
+        fr: "Ocinye OS ne choisit pas d’unité à votre place. Choisissez ci-dessus celle que vous voulez voir."
+    },
+    "lists.subtitle.unit": { pt: "Unidade: {unit}.", en: "Unit: {unit}.", fr: "Unité : {unit}." },
+    // Botões de criação e navegação partilhados.
+    "lists.action.unauthorised": {
+        pt: "Não tem autorização para esta acção.",
+        en: "You are not authorised for this action.",
+        fr: "Vous n’êtes pas autorisé pour cette action."
+    },
+    "lists.new.unit": { pt: "Nova Unidade", en: "New Unit", fr: "Nouvelle unité" },
+    "lists.new.agent": { pt: "Novo Agente", en: "New Agent", fr: "Nouvel agent" },
+    "lists.new.member": { pt: "Adicionar Utilizador", en: "Add User", fr: "Ajouter un utilisateur" },
+    "lists.edit.unit": { pt: "Editar Unidade", en: "Edit Unit", fr: "Modifier l’unité" },
+    "lists.see_units": { pt: "Ver Unidades", en: "View Units", fr: "Voir les unités" },
+    "lists.see_units_lc": { pt: "Ver unidades", en: "View units", fr: "Voir les unités" },
+    "lists.see_ideas": { pt: "Ver Ideias", en: "View Ideas", fr: "Voir les idées" },
+    // Subtítulos e estados vazios de cada lista.
+    "lists.units.subtitle": {
+        pt: "Todas as unidades institucionais da Ocinye.",
+        en: "All of Ocinye’s institutional units.",
+        fr: "Toutes les unités institutionnelles d’Ocinye."
+    },
+    "lists.units.empty": {
+        pt: "Ainda não existem unidades. Uma unidade é criada por um administrador da organização.",
+        en: "There are no units yet. A unit is created by an organisation administrator.",
+        fr: "Il n’existe pas encore d’unités. Une unité est créée par un administrateur de l’organisation."
+    },
+    "lists.units.mine_none": {
+        pt: "As unidades a que pertence ainda não são um recorte desta lista.",
+        en: "The units you belong to are not yet a view of this list.",
+        fr: "Les unités auxquelles vous appartenez ne sont pas encore une vue de cette liste."
+    },
+    "lists.units.followed_none": {
+        pt: "Seguir unidades ainda não existe no Ocinye OS.",
+        en: "Following units does not exist yet in Ocinye OS.",
+        fr: "Suivre des unités n’existe pas encore dans Ocinye OS."
+    },
+    "lists.units.archived_none": {
+        pt: "Ver apenas as unidades arquivadas ainda não é um recorte desta lista.",
+        en: "Seeing only archived units is not yet a view of this list.",
+        fr: "Voir uniquement les unités archivées n’est pas encore une vue de cette liste."
+    },
+    "lists.ideas.subtitle": {
+        pt: "Uma ideia é explorada antes de se tornar projecto.",
+        en: "An idea is explored before it becomes a project.",
+        fr: "Une idée est explorée avant de devenir un projet."
+    },
+    "lists.ideas.empty": {
+        pt: "Ainda não existem ideias. Uma ideia pertence a uma unidade e é o ponto de partida da investigação.",
+        en: "There are no ideas yet. An idea belongs to a unit and is the starting point of research.",
+        fr: "Il n’existe pas encore d’idées. Une idée appartient à une unité et est le point de départ de la recherche."
+    },
+    "lists.projects.subtitle": {
+        pt: "Projectos institucionais em execução e planeamento.",
+        en: "Institutional projects in progress and planning.",
+        fr: "Projets institutionnels en cours et en planification."
+    },
+    "lists.projects.empty": {
+        pt: "Ainda não existem projectos. Um projecto nasce da promoção de uma ideia.",
+        en: "There are no projects yet. A project is born from promoting an idea.",
+        fr: "Il n’existe pas encore de projets. Un projet naît de la promotion d’une idée."
+    },
+    "lists.biblio.subtitle": {
+        pt: "Referências ligadas a ideias, projectos e unidades.",
+        en: "References linked to ideas, projects and units.",
+        fr: "Références liées aux idées, projets et unités."
+    },
+    "lists.biblio.empty": {
+        pt: "Ainda não há referências. A bibliografia é acrescentada dentro de um Research Workspace.",
+        en: "There are no references yet. Bibliography is added inside a Research Workspace.",
+        fr: "Il n’y a pas encore de références. La bibliographie s’ajoute au sein d’un Research Workspace."
+    },
+    "lists.biblio.mine_none": {
+        pt: "As referências que criou ainda não são um recorte desta lista.",
+        en: "The references you created are not yet a view of this list.",
+        fr: "Les références que vous avez créées ne sont pas encore une vue de cette liste."
+    },
+    "lists.biblio.unit_none": {
+        pt: "Filtrar a bibliografia por unidade ainda não é um recorte desta lista.",
+        en: "Filtering the bibliography by unit is not yet a view of this list.",
+        fr: "Filtrer la bibliographie par unité n’est pas encore une vue de cette liste."
+    },
+    "lists.tools.link": { pt: "Ferramentas", en: "Tools", fr: "Outils" },
+    "lists.datasets.subtitle": {
+        pt: "Datasets institucionais com versão, proveniência e classificação.",
+        en: "Institutional datasets with version, provenance and classification.",
+        fr: "Jeux de données institutionnels avec version, provenance et classification."
+    },
+    "lists.datasets.empty": {
+        pt: "Ainda não há datasets catalogados. Um dataset é catalogado dentro de um Research Workspace.",
+        en: "There are no catalogued datasets yet. A dataset is catalogued inside a Research Workspace.",
+        fr: "Il n’y a pas encore de jeux de données catalogués. Un jeu de données est catalogué au sein d’un Research Workspace."
+    },
+    "lists.datasets.mine_none": {
+        pt: "Os datasets que criou ainda não são um recorte desta lista.",
+        en: "The datasets you created are not yet a view of this list.",
+        fr: "Les jeux de données que vous avez créés ne sont pas encore une vue de cette liste."
+    },
+    "lists.datasets.unit_none": {
+        pt: "Filtrar datasets por unidade ainda não é um recorte desta lista.",
+        en: "Filtering datasets by unit is not yet a view of this list.",
+        fr: "Filtrer les jeux de données par unité n’est pas encore une vue de cette liste."
+    },
+    "lists.agents.subtitle": {
+        pt: "Agentes de IA criados e configurados pelos membros.",
+        en: "AI agents created and configured by members.",
+        fr: "Agents IA créés et configurés par les membres."
+    },
+    "lists.agents.empty": {
+        pt: "Ainda não existem agentes. Um agente é definido por capacidade; só responderá quando existir um nó de IA da Ocinye.",
+        en: "There are no agents yet. An agent is defined by capability; it will only answer once an Ocinye AI node exists.",
+        fr: "Il n’existe pas encore d’agents. Un agent est défini par capacité ; il ne répondra que lorsqu’un nœud d’IA Ocinye existera."
+    },
+    "lists.agents.mine_none": {
+        pt: "Os agentes que criou ainda não são um recorte desta lista.",
+        en: "The agents you created are not yet a view of this list.",
+        fr: "Les agents que vous avez créés ne sont pas encore une vue de cette liste."
+    },
+    "lists.agents.unit_none": {
+        pt: "Filtrar agentes por unidade ainda não é um recorte desta lista.",
+        en: "Filtering agents by unit is not yet a view of this list.",
+        fr: "Filtrer les agents par unité n’est pas encore une vue de cette liste."
+    },
+    "lists.agents.tab_institutional": { pt: "Institucionais", en: "Institutional", fr: "Institutionnels" },
+    "lists.agents.institutional_none": {
+        pt: "Distinguir agentes institucionais dos pessoais ainda não é um recorte desta lista.",
+        en: "Telling institutional agents from personal ones is not yet a view of this list.",
+        fr: "Distinguer les agents institutionnels des agents personnels n’est pas encore une vue de cette liste."
+    },
+    // Membros.
+    "lists.members.tab": { pt: "Membros", en: "Members", fr: "Membres" },
+    "lists.members.subtitle": {
+        pt: "Administração · membros da instituição.",
+        en: "Administration · members of the institution.",
+        fr: "Administration · membres de l’institution."
+    },
+    "lists.members.empty": {
+        pt: "Ainda não há membros registados.",
+        en: "There are no registered members yet.",
+        fr: "Il n’y a pas encore de membres enregistrés."
+    },
+    "lists.members.tab_roles": { pt: "Funções", en: "Roles", fr: "Rôles" },
+    "lists.members.roles_none": {
+        pt: "Gerir funções por ecrã próprio ainda não existe.",
+        en: "Managing roles from a screen of their own does not exist yet.",
+        fr: "Gérer les rôles depuis un écran dédié n’existe pas encore."
+    },
+    "lists.members.tab_access": { pt: "Acessos", en: "Access", fr: "Accès" },
+    "lists.members.access_none": {
+        pt: "O acesso de cada membro gere-se no seu separador «Segurança». Não há convite por email; uma vista de todos os acessos num só ecrã ainda não existe.",
+        en: "Each member’s access is managed in their «Security» tab. There is no email invitation; a view of all access on one screen does not exist yet.",
+        fr: "L’accès de chaque membre se gère dans son onglet « Sécurité ». Il n’y a pas d’invitation par courriel ; une vue de tous les accès sur un seul écran n’existe pas encore."
+    },
+    "lists.members.tab_services": { pt: "Serviços", en: "Services", fr: "Services" },
+    "lists.members.services_none": {
+        pt: "A administração de serviços ainda não existe.",
+        en: "Service administration does not exist yet.",
+        fr: "L’administration des services n’existe pas encore."
+    },
+    // Audit Log.
+    "lists.audit.subtitle": {
+        pt: "Registo técnico e imutável de operações do Ocinye OS.",
+        en: "Technical, immutable record of Ocinye OS operations.",
+        fr: "Registre technique et immuable des opérations d’Ocinye OS."
+    },
+    "lists.audit.empty": {
+        pt: "Sem eventos de auditoria para os filtros aplicados.",
+        en: "No audit events for the filters applied.",
+        fr: "Aucun événement d’audit pour les filtres appliqués."
+    },
+    "lists.audit.tab_auth": { pt: "Autenticação", en: "Authentication", fr: "Authentification" },
+    "lists.audit.tab_permissions": { pt: "Permissões", en: "Permissions", fr: "Permissions" },
+    "lists.audit.tab_ai": { pt: "IA", en: "AI", fr: "IA" },
+    "lists.audit.category_none": {
+        pt: "Recortar o registo por categoria ainda não é uma consulta do Core.",
+        en: "Slicing the record by category is not yet a Core query.",
+        fr: "Découper le registre par catégorie n’est pas encore une requête du Core."
+    },
+    "lists.audit.denied": { pt: "NEGADO", en: "DENIED", fr: "REFUSÉ" },
+    "lists.audit.warn": { pt: "AVISO", en: "WARNING", fr: "AVERTISSEMENT" },
+    // Selector de destino de criação.
+    "lists.research_workspace": { pt: "Research Workspace", en: "Research Workspace", fr: "Research Workspace" },
+    "lists.destination.hint": {
+        pt: "Só aparecem ambientes onde tem autorização para criar.",
+        en: "Only environments where you are authorised to create appear.",
+        fr: "Seuls apparaissent les environnements où vous êtes autorisé à créer."
+    },
+    "lists.no_destination.title": {
+        pt: "Não tem onde criar {what}",
+        en: "You have nowhere to create {what}",
+        fr: "Vous n’avez nulle part où créer {what}"
+    },
+    "lists.no_destination.body": {
+        pt: "Estes artefactos pertencem a um Research Workspace, e não pertence a nenhum onde possa criar. A filiação é concedida por quem gere a unidade.",
+        en: "These artefacts belong to a Research Workspace, and you belong to none where you can create. Membership is granted by whoever manages the unit.",
+        fr: "Ces artefacts appartiennent à un Research Workspace, et vous n’appartenez à aucun où vous pouvez créer. L’appartenance est accordée par celui qui gère l’unité."
+    },
+    // Campos de formulário (rótulos e placeholders).
+    "lists.field.title": { pt: "Título", en: "Title", fr: "Titre" },
+    "lists.field.authors": { pt: "Autores", en: "Authors", fr: "Auteurs" },
+    "lists.field.year": { pt: "Ano", en: "Year", fr: "Année" },
+    "lists.field.publication": { pt: "Publicação", en: "Publication", fr: "Publication" },
+    "lists.field.abstract": { pt: "Resumo", en: "Abstract", fr: "Résumé" },
+    "lists.field.summary": { pt: "Resumo", en: "Summary", fr: "Résumé" },
+    "lists.field.classification": { pt: "Classificação", en: "Classification", fr: "Classification" },
+    "lists.field.code": { pt: "Código", en: "Code", fr: "Code" },
+    "lists.field.description": { pt: "Descrição", en: "Description", fr: "Description" },
+    "lists.field.keywords": { pt: "Palavras-chave", en: "Keywords", fr: "Mots-clés" },
+    "lists.field.usage_restrictions": { pt: "Restrições de uso", en: "Usage restrictions", fr: "Restrictions d’usage" },
+    "lists.field.priority": { pt: "Prioridade", en: "Priority", fr: "Priorité" },
+    "lists.field.due": { pt: "Prazo", en: "Due date", fr: "Échéance" },
+    "lists.field.project_code": { pt: "Código do projecto", en: "Project code", fr: "Code du projet" },
+    "lists.field.objectives": { pt: "Objectivos", en: "Objectives", fr: "Objectifs" },
+    "lists.field.name": { pt: "Nome", en: "Name", fr: "Nom" },
+    "lists.field.research_areas": { pt: "Áreas de investigação", en: "Research areas", fr: "Domaines de recherche" },
+    "lists.field.research_question": { pt: "Pergunta de investigação", en: "Research question", fr: "Question de recherche" },
+    "lists.field.hypothesis": { pt: "Hipótese", en: "Hypothesis", fr: "Hypothèse" },
+    "lists.field.motivation": { pt: "Motivação", en: "Motivation", fr: "Motivation" },
+    "lists.field.unit": { pt: "Unidade", en: "Unit", fr: "Unité" },
+    "lists.priority.critical": { pt: "Crítica", en: "Critical", fr: "Critique" },
+    "lists.ph.work_title": { pt: "Título da obra", en: "Title of the work", fr: "Titre de l’œuvre" },
+    "lists.ph.semicolon": {
+        pt: "separados por ponto e vírgula",
+        en: "separated by semicolons",
+        fr: "séparés par des points-virgules"
+    },
+    "lists.ph.year": { pt: "Ex.: 2024", en: "e.g. 2024", fr: "p. ex. 2024" },
+    "lists.ph.venue": {
+        pt: "Revista, conferência ou colecção",
+        en: "Journal, conference or collection",
+        fr: "Revue, conférence ou collection"
+    },
+    "lists.ph.doi": { pt: "10.xxxx/xxxxx", en: "10.xxxx/xxxxx", fr: "10.xxxx/xxxxx" },
+    "lists.ph.abstract_work": { pt: "Resumo da obra", en: "Abstract of the work", fr: "Résumé de l’œuvre" },
+    "lists.ph.dataset_code": { pt: "Ex.: DS-0001", en: "e.g. DS-0001", fr: "p. ex. DS-0001" },
+    "lists.ph.dataset_name": { pt: "Nome do conjunto", en: "Name of the set", fr: "Nom de l’ensemble" },
+    "lists.ph.dataset_desc": {
+        pt: "O que o conjunto contém e como foi obtido",
+        en: "What the set contains and how it was obtained",
+        fr: "Ce que l’ensemble contient et comment il a été obtenu"
+    },
+    "lists.ph.comma_separated": {
+        pt: "separadas por vírgulas",
+        en: "comma-separated",
+        fr: "séparées par des virgules"
+    },
+    "lists.ph.usage_limits": {
+        pt: "Limites de utilização, quando existam",
+        en: "Usage limits, where they exist",
+        fr: "Limites d’utilisation, lorsqu’elles existent"
+    },
+    "lists.ph.task_title": { pt: "O que precisa de ser feito", en: "What needs to be done", fr: "Ce qui doit être fait" },
+    "lists.ph.task_desc": { pt: "Detalhes, quando ajudam", en: "Details, when they help", fr: "Détails, lorsqu’ils aident" },
+    "lists.ph.project_code": { pt: "Ex.: PPEC-2026-001", en: "e.g. PPEC-2026-001", fr: "p. ex. PPEC-2026-001" },
+    "lists.ph.project_title": {
+        pt: "Deixe vazio para manter o título da ideia",
+        en: "Leave empty to keep the idea’s title",
+        fr: "Laissez vide pour garder le titre de l’idée"
+    },
+    "lists.ph.objectives": {
+        pt: "O que o projecto se propõe alcançar",
+        en: "What the project aims to achieve",
+        fr: "Ce que le projet se propose d’atteindre"
+    },
+    "lists.ph.unit_name": {
+        pt: "Ex.: Unidade de Energias Renováveis",
+        en: "e.g. Renewable Energy Unit",
+        fr: "p. ex. Unité d’énergies renouvelables"
+    },
+    "lists.ph.unit_investigates": {
+        pt: "O que esta unidade investiga",
+        en: "What this unit investigates",
+        fr: "Ce que cette unité étudie"
+    },
+    "lists.ph.idea_title": { pt: "O que se quer investigar", en: "What you want to investigate", fr: "Ce que vous voulez étudier" },
+    "lists.ph.research_question": {
+        pt: "Que pergunta é que isto responde",
+        en: "What question this answers",
+        fr: "À quelle question cela répond"
+    },
+    "lists.ph.hypothesis": {
+        pt: "A hipótese, quando já existe uma",
+        en: "The hypothesis, when there is one",
+        fr: "L’hypothèse, lorsqu’il en existe une"
+    },
+    "lists.ph.motivation": {
+        pt: "Porque é que isto importa à instituição",
+        en: "Why this matters to the institution",
+        fr: "Pourquoi cela importe à l’institution"
+    },
+    "lists.ph.idea_summary": { pt: "Resumo da ideia", en: "Summary of the idea", fr: "Résumé de l’idée" },
+    "lists.ph.bibtex": {
+        pt: "@article{chave, title = {…}, author = {…}, year = {…}}",
+        en: "@article{chave, title = {…}, author = {…}, year = {…}}",
+        fr: "@article{chave, title = {…}, author = {…}, year = {…}}"
+    },
+    // Cabeçalhos de secção dos formulários.
+    "lists.new_source.section": { pt: "A REFERÊNCIA", en: "THE REFERENCE", fr: "LA RÉFÉRENCE" },
+    "lists.new_source.intro": {
+        pt: "Uma referência pertence ao Research Workspace onde a investigação que a cita acontece.",
+        en: "A reference belongs to the Research Workspace where the research that cites it happens.",
+        fr: "Une référence appartient au Research Workspace où se déroule la recherche qui la cite."
+    },
+    "lists.new_dataset.section": { pt: "O DATASET", en: "THE DATASET", fr: "LE JEU DE DONNÉES" },
+    "lists.new_dataset.intro": {
+        pt: "Um dataset pertence ao Research Workspace que o produz ou o usa, e herda dele o contexto institucional.",
+        en: "A dataset belongs to the Research Workspace that produces or uses it, and inherits its institutional context.",
+        fr: "Un jeu de données appartient au Research Workspace qui le produit ou l’utilise, et en hérite le contexte institutionnel."
+    },
+    "lists.new_dataset.class_note": {
+        pt: "A classificação do dataset pode ser mais restrita do que a do ambiente, e governa quem o alcança.",
+        en: "The dataset’s classification can be more restrictive than the environment’s, and governs who reaches it.",
+        fr: "La classification du jeu de données peut être plus restrictive que celle de l’environnement, et gouverne qui y accède."
+    },
+    "lists.new_task.section": { pt: "A TAREFA", en: "THE TASK", fr: "LA TÂCHE" },
+    "lists.new_task.intro": {
+        pt: "Uma tarefa é uma unidade de trabalho dentro de um Research Workspace — a ideia ou o projecto a que pertence.",
+        en: "A task is a unit of work inside a Research Workspace — the idea or project it belongs to.",
+        fr: "Une tâche est une unité de travail au sein d’un Research Workspace — l’idée ou le projet auquel elle appartient."
+    },
+    "lists.new_task.responsible_note": {
+        pt: "O responsável escolhe-se no detalhe da tarefa: quem pode ser atribuído depende do ambiente.",
+        en: "The assignee is chosen in the task detail: who can be assigned depends on the environment.",
+        fr: "Le responsable se choisit dans le détail de la tâche : qui peut être assigné dépend de l’environnement."
+    },
+    "lists.new_project.section": { pt: "A IDEIA A PROMOVER", en: "THE IDEA TO PROMOTE", fr: "L’IDÉE À PROMOUVOIR" },
+    "lists.new_project.intro": {
+        pt: "Um projecto nasce da promoção de uma ideia. O Research Workspace acompanha-a, com tudo o que foi reunido enquanto se explorava.",
+        en: "A project is born from promoting an idea. The Research Workspace comes with it, with everything gathered while exploring.",
+        fr: "Un projet naît de la promotion d’une idée. Le Research Workspace l’accompagne, avec tout ce qui a été réuni pendant l’exploration."
+    },
+    "lists.new_project.eligible_idea": { pt: "Ideia elegível", en: "Eligible idea", fr: "Idée éligible" },
+    "lists.new_project.eligible_hint": {
+        pt: "Só aparecem ideias em estado de candidatura a projecto, dentro do que lhe está acessível.",
+        en: "Only ideas in project-candidate state appear, within what is accessible to you.",
+        fr: "Seules apparaissent les idées à l’état de candidature à projet, parmi ce qui vous est accessible."
+    },
+    "lists.new_project.none_title": {
+        pt: "Não existem ideias elegíveis para promoção",
+        en: "There are no ideas eligible for promotion",
+        fr: "Il n’existe pas d’idées éligibles à la promotion"
+    },
+    "lists.new_project.none_body": {
+        pt: "Um projecto nasce de uma ideia que chegou a candidatura. Nenhuma das ideias a que tem acesso está nesse estado.",
+        en: "A project is born from an idea that reached candidature. None of the ideas you can access is in that state.",
+        fr: "Un projet naît d’une idée parvenue à candidature. Aucune des idées auxquelles vous avez accès n’est dans cet état."
+    },
+    "lists.new_unit.section": { pt: "A UNIDADE", en: "THE UNIT", fr: "L’UNITÉ" },
+    "lists.new_unit.intro": {
+        pt: "Uma unidade é o âmbito institucional onde a investigação acontece. As ideias, os projectos e as filiações vivem dentro de uma.",
+        en: "A unit is the institutional scope where research happens. Ideas, projects and memberships live inside one.",
+        fr: "Une unité est le cadre institutionnel où se déroule la recherche. Les idées, les projets et les appartenances vivent au sein d’une unité."
+    },
+    "lists.new_unit.code_generated": {
+        pt: "Gerado automaticamente a partir do nome, no formato U<SIGLA>-NNN.",
+        en: "Generated automatically from the name, in the format U<CODE>-NNN.",
+        fr: "Généré automatiquement à partir du nom, au format U<SIGLE>-NNN."
+    },
+    "lists.edit_unit.subtitle": {
+        pt: "O nome, a descrição e as áreas mudam. O código não — é a identidade da unidade.",
+        en: "The name, description and areas change. The code does not — it is the unit’s identity.",
+        fr: "Le nom, la description et les domaines changent. Le code, non — c’est l’identité de l’unité."
+    },
+    "lists.edit_unit.code_note": {
+        pt: "O código é a identidade da unidade e não muda.",
+        en: "The code is the unit’s identity and does not change.",
+        fr: "Le code est l’identité de l’unité et ne change pas."
+    },
+    "lists.new_idea.section": { pt: "A IDEIA", en: "THE IDEA", fr: "L’IDÉE" },
+    "lists.new_idea.intro": {
+        pt: "Uma ideia é exploratória. Nem todas se tornam projectos, e isso é um desfecho legítimo.",
+        en: "An idea is exploratory. Not all become projects, and that is a legitimate outcome.",
+        fr: "Une idée est exploratoire. Toutes ne deviennent pas des projets, et c’est une issue légitime."
+    },
+    "lists.new_idea.class_note": {
+        pt: "A classificação governa tudo o que for acrescentado a este Research Workspace.",
+        en: "The classification governs everything added to this Research Workspace.",
+        fr: "La classification gouverne tout ce qui est ajouté à ce Research Workspace."
+    },
+    "lists.new_idea.no_units_title": {
+        pt: "Ainda não existem unidades",
+        en: "There are no units yet",
+        fr: "Il n’existe pas encore d’unités"
+    },
+    "lists.new_idea.no_units_body": {
+        pt: "Uma ideia pertence sempre a uma unidade científica. Peça a um administrador que crie a primeira.",
+        en: "An idea always belongs to a scientific unit. Ask an administrator to create the first one.",
+        fr: "Une idée appartient toujours à une unité scientifique. Demandez à un administrateur d’en créer la première."
+    },
+    // Botões «Criar …» dos formulários.
+    "lists.create.reference_btn": { pt: "Criar Referência", en: "Create Reference", fr: "Créer la référence" },
+    "lists.create.dataset_btn": { pt: "Criar Dataset", en: "Create Dataset", fr: "Créer le jeu de données" },
+    "lists.create.task_btn": { pt: "Criar Tarefa", en: "Create Task", fr: "Créer la tâche" },
+    "lists.promote_btn": { pt: "Promover a Projecto", en: "Promote to Project", fr: "Promouvoir en projet" },
+    "lists.create.unit_btn": { pt: "Criar Unidade", en: "Create Unit", fr: "Créer l’unité" },
+    "lists.create.idea_btn": { pt: "Criar Ideia", en: "Create Idea", fr: "Créer l’idée" },
+    // Ferramentas bibliográficas.
+    "lists.tools.title": { pt: "Ferramentas bibliográficas", en: "Bibliographic tools", fr: "Outils bibliographiques" },
+    "lists.tools.intro": {
+        pt: "Valida a estrutura de referências BibTeX e produz uma versão normalizada. A leitura acontece no Ocinye OS, sem consultar serviços externos: nenhum DOI é verificado e nenhuma referência é confirmada.",
+        en: "It validates the structure of BibTeX references and produces a normalised version. Reading happens in Ocinye OS, without consulting external services: no DOI is verified and no reference is confirmed.",
+        fr: "Il valide la structure des références BibTeX et produit une version normalisée. La lecture se fait dans Ocinye OS, sans consulter de services externes : aucun DOI n’est vérifié et aucune référence n’est confirmée."
+    },
+    "lists.tools.section": { pt: "BIBLIOGRAFIA", en: "BIBLIOGRAPHY", fr: "BIBLIOGRAPHIE" },
+    "lists.tools.validate": { pt: "Validar e normalizar", en: "Validate and normalise", fr: "Valider et normaliser" },
+    "lists.tools.none_title": {
+        pt: "Sem Research Workspace onde trabalhar",
+        en: "No Research Workspace to work in",
+        fr: "Aucun Research Workspace où travailler"
+    },
+    "lists.tools.none_body": {
+        pt: "Rever bibliografia acontece dentro de um ambiente de investigação onde possa acrescentar referências.",
+        en: "Reviewing bibliography happens inside a research environment where you can add references.",
+        fr: "Réviser la bibliographie se fait au sein d’un environnement de recherche où vous pouvez ajouter des références."
+    },
+    // Resultado da revisão BibTeX.
+    "lists.review.section": { pt: "RESULTADO", en: "RESULT", fr: "RÉSULTAT" },
+    "lists.review.readable": { pt: "Legível", en: "Readable", fr: "Lisible" },
+    "lists.review.problems": { pt: "Com problemas", en: "With problems", fr: "Avec des problèmes" },
+    "lists.review.all_readable": {
+        pt: "{count} referência(s) lidas, todas legíveis.",
+        en: "{count} reference(s) read, all readable.",
+        fr: "{count} référence(s) lues, toutes lisibles."
+    },
+    "lists.review.some_unread": {
+        pt: "{read} referência(s) lidas · {unread} por ler.",
+        en: "{read} reference(s) read · {unread} to read.",
+        fr: "{read} référence(s) lues · {unread} à lire."
+    },
+    "lists.review.unreadable_head": { pt: "Não foi possível ler:", en: "Could not read:", fr: "Impossible de lire :" },
+    "lists.review.read_head": { pt: "Referências lidas:", en: "References read:", fr: "Références lues :" },
+    "lists.review.normalised": { pt: "BibTeX normalizado", en: "Normalised BibTeX", fr: "BibTeX normalisé" },
+};
+
 /// Todos os grupos de produção. O portão de paridade corre sobre isto.
 ///
 /// Não inclui grupos de teste: uma chave só-`pt` de teste (para provar a queda)
@@ -1511,6 +2052,7 @@ pub const GROUPS: &[&[Entry]] = &[
     SETTINGS,
     AI,
     ADMIN,
+    LISTS,
 ];
 
 /// Um grupo só de teste, para exercitar a queda ao canónico (briefing i18n §77).

@@ -57,8 +57,12 @@ pub struct ListScreen {
 }
 
 /// Renderiza um ecrã de lista.
-/// A razão dada quando a acção existe e é a pessoa que não lhe chega.
-const SEM_AUTORIZACAO: &str = "Não tem autorização para esta acção.";
+/// A razão dada quando a acção existe e é a pessoa que não lhe chega. É uma
+/// função, e não uma `const`: uma `const` não pode chamar `crate::i18n::t`, que
+/// resolve o idioma no momento da renderização.
+fn sem_autorizacao() -> &'static str {
+    crate::i18n::t("lists.action.unauthorised")
+}
 
 pub fn list_screen(viewer: &Viewer, screen: ListScreen) -> impl IntoView {
     let ListScreen {
@@ -90,7 +94,7 @@ pub fn list_screen(viewer: &Viewer, screen: ListScreen) -> impl IntoView {
                             Button::new(label, Variant::Secondary).href(href)
                         } else {
                             Button::new(label, Variant::Secondary)
-                                .unavailable_because(SEM_AUTORIZACAO)
+                                .unavailable_because(sem_autorizacao())
                         })
                     })}
                     {action.map(|label| {
@@ -101,7 +105,7 @@ pub fn list_screen(viewer: &Viewer, screen: ListScreen) -> impl IntoView {
                             )
                         } else {
                             Button::new(label, Variant::Primary)
-                                .unavailable_because(SEM_AUTORIZACAO)
+                                .unavailable_because(sem_autorizacao())
                         })
                     })}
                 </div>
@@ -219,11 +223,16 @@ impl Slice {
     fn unit_tab(&self, base: &str) -> ListTab {
         match self.units.len() {
             0 => ListTab::missing(
-                "Da Unidade",
-                "Não pertence a nenhuma unidade que possa usar como recorte.",
+                crate::i18n::t("lists.slice.unit"),
+                crate::i18n::t("lists.slice.unit.none"),
             ),
-            _ if self.unit_id.is_some() || self.awaiting_unit => ListTab::current("Da Unidade"),
-            _ => ListTab::to("Da Unidade", format!("{base}?unit=true")),
+            _ if self.unit_id.is_some() || self.awaiting_unit => {
+                ListTab::current(crate::i18n::t("lists.slice.unit"))
+            }
+            _ => ListTab::to(
+                crate::i18n::t("lists.slice.unit"),
+                format!("{base}?unit=true"),
+            ),
         }
     }
 
@@ -262,14 +271,14 @@ fn unit_selector(slice: &Slice, base: &str) -> impl IntoView {
         // Um `GET` normal: a escolha vai para o URL, e um endereço de unidade
         // continua a ser essa unidade quando alguém o guarda ou partilha.
         <form class="oc-unit-pick" method="get" action=base>
-            <label class="oc-field__label" for="unit_id">"UNIDADE"</label>
+            <label class="oc-field__label" for="unit_id">{crate::i18n::t("lists.unit_pick.label")}</label>
             <select class="oc-select" id="unit_id" name="unit_id">
                 <option value="" disabled=true selected=escolhida.is_none()>
-                    "Escolha uma unidade…"
+                    {crate::i18n::t("lists.unit_pick.placeholder")}
                 </option>
                 {opcoes}
             </select>
-            {button(Button::new("Aplicar", Variant::Secondary))}
+            {button(Button::new(crate::i18n::t("lists.unit_pick.apply"), Variant::Secondary))}
         </form>
     }
     .into_any()
@@ -293,20 +302,23 @@ fn ideas_tabs(slice: &Slice) -> Vec<ListTab> {
     let noutro = slice.mine || slice.unit_id.is_some() || slice.awaiting_unit;
     vec![
         if noutro {
-            ListTab::to("Todas", "/ideas")
+            ListTab::to(crate::i18n::t("lists.tab.all_f"), "/ideas")
         } else {
-            ListTab::current("Todas")
+            ListTab::current(crate::i18n::t("lists.tab.all_f"))
         },
         if slice.mine {
-            ListTab::current("Minhas")
+            ListTab::current(crate::i18n::t("lists.tab.mine_f"))
         } else {
-            ListTab::to("Minhas", "/ideas?mine=true")
+            ListTab::to(crate::i18n::t("lists.tab.mine_f"), "/ideas?mine=true")
         },
         slice.unit_tab("/ideas"),
-        ListTab::missing("Seguidas", "Seguir ideias ainda não existe no Ocinye OS."),
         ListTab::missing(
-            "Arquivadas",
-            "Recortar por estado ainda não é uma consulta do Core.",
+            crate::i18n::t("lists.tab.followed_f"),
+            crate::i18n::t("lists.slice.followed_ideas"),
+        ),
+        ListTab::missing(
+            crate::i18n::t("lists.tab.archived_f"),
+            crate::i18n::t("lists.slice.state_not_query"),
         ),
     ]
 }
@@ -316,19 +328,19 @@ fn projects_tabs(slice: &Slice) -> Vec<ListTab> {
     let noutro = slice.mine || slice.unit_id.is_some() || slice.awaiting_unit;
     vec![
         if noutro {
-            ListTab::to("Todos", "/projects")
+            ListTab::to(crate::i18n::t("lists.tab.all_m"), "/projects")
         } else {
-            ListTab::current("Todos")
+            ListTab::current(crate::i18n::t("lists.tab.all_m"))
         },
         if slice.mine {
-            ListTab::current("Meus")
+            ListTab::current(crate::i18n::t("lists.tab.mine_m"))
         } else {
-            ListTab::to("Meus", "/projects?mine=true")
+            ListTab::to(crate::i18n::t("lists.tab.mine_m"), "/projects?mine=true")
         },
         slice.unit_tab("/projects"),
         ListTab::missing(
-            "Concluídos",
-            "Recortar por estado ainda não é uma consulta do Core.",
+            crate::i18n::t("lists.tab.completed_m"),
+            crate::i18n::t("lists.slice.state_not_query"),
         ),
     ]
 }
@@ -452,28 +464,31 @@ pub fn units(viewer: &Viewer, payload: &Value) -> impl IntoView {
 
     let table = Table {
         tabs: vec![
-            ListTab::current("Todas"),
+            ListTab::current(crate::i18n::t("lists.tab.all_f")),
             ListTab::missing(
-                "Minhas",
-                "As unidades a que pertence ainda não são um recorte desta lista.",
+                crate::i18n::t("lists.tab.mine_f"),
+                crate::i18n::t("lists.units.mine_none"),
             ),
-            ListTab::missing("Seguidas", "Seguir unidades ainda não existe no Ocinye OS."),
             ListTab::missing(
-                "Arquivadas",
-                "Ver apenas as unidades arquivadas ainda não é um recorte desta lista.",
+                crate::i18n::t("lists.tab.followed_f"),
+                crate::i18n::t("lists.units.followed_none"),
+            ),
+            ListTab::missing(
+                crate::i18n::t("lists.tab.archived_f"),
+                crate::i18n::t("lists.units.archived_none"),
             ),
         ],
-        search: "unidades",
+        search: crate::i18n::t("lists.noun.units"),
         truncated: truncated(payload, shown),
         shape: "units",
         columns: vec![
-            Column::new("UNIDADE"),
-            Column::new("CÓDIGO"),
-            Column::new("RESPONSÁVEL"),
-            Column::right("MEMBROS"),
-            Column::right("IDEIAS"),
-            Column::right("PROJECTOS"),
-            Column::new("ESTADO"),
+            Column::new(crate::i18n::t("lists.col.unit")),
+            Column::new(crate::i18n::t("lists.col.code")),
+            Column::new(crate::i18n::t("lists.col.lead")),
+            Column::right(crate::i18n::t("lists.col.members")),
+            Column::right(crate::i18n::t("lists.col.ideas")),
+            Column::right(crate::i18n::t("lists.col.projects")),
+            Column::new(crate::i18n::t("lists.col.state")),
         ],
         rows: rows
             .iter()
@@ -498,16 +513,15 @@ pub fn units(viewer: &Viewer, payload: &Value) -> impl IntoView {
         // O Core devolve estas inteiras: não há segunda página para onde ir.
         previous: None,
         next: None,
-        empty:
-            "Ainda não existem unidades. Uma unidade é criada por um administrador da organização.",
+        empty: crate::i18n::t("lists.units.empty"),
     };
 
     list_screen(
         viewer,
         ListScreen {
-            title: "Unidades",
-            subtitle: "Todas as unidades institucionais da Ocinye.".to_owned(),
-            action: Some("Nova Unidade"),
+            title: crate::i18n::t("nav.units"),
+            subtitle: crate::i18n::t("lists.units.subtitle").to_owned(),
+            action: Some(crate::i18n::t("lists.new.unit")),
             action_href: Some("/units/new"),
             action_permission: Permission::UnitsCreate,
             secondary: None,
@@ -546,17 +560,15 @@ pub fn ideas(viewer: &Viewer, payload: &Value, slice: Slice) -> impl IntoView {
             <div class="oc-page">
                 <div class="oc-head">
                     <div class="oc-head__text">
-                        <h1>"Ideias"</h1>
-                        <p>"Escolha a unidade cujo trabalho quer ver."</p>
+                        <h1>{crate::i18n::t("nav.ideas")}</h1>
+                        <p>{crate::i18n::t("lists.choose_unit_prompt")}</p>
                     </div>
                 </div>
                 {unit_selector(&slice, "/ideas")}
                 {crate::ui::components::empty_state(crate::ui::components::EmptyState {
                     icon: crate::ui::icon::Icon::Units,
-                    title: "Nenhuma unidade escolhida".to_owned(),
-                    body: "O Ocinye OS não escolhe uma unidade por si. Escolha acima qual delas \
-                           quer ver."
-                        .to_owned(),
+                    title: crate::i18n::t("lists.no_unit_chosen.title").to_owned(),
+                    body: crate::i18n::t("lists.no_unit_chosen.body").to_owned(),
                     actions: Vec::new(),
                     small: false,
                 })}
@@ -567,17 +579,17 @@ pub fn ideas(viewer: &Viewer, payload: &Value, slice: Slice) -> impl IntoView {
 
     let table = Table {
         tabs: ideas_tabs(&slice),
-        search: "ideias",
+        search: crate::i18n::t("lists.noun.ideas"),
         truncated: truncated(payload, shown),
         shape: "ideas",
         columns: vec![
-            Column::new("TÍTULO"),
-            Column::new("UNIDADE"),
-            Column::new("RESPONSÁVEL"),
-            Column::new("ESTADO"),
-            Column::new("PRIORIDADE"),
-            Column::new("CLASSIFICAÇÃO"),
-            Column::right("ACTUALIZADA"),
+            Column::new(crate::i18n::t("lists.col.title")),
+            Column::new(crate::i18n::t("lists.col.unit")),
+            Column::new(crate::i18n::t("lists.col.lead")),
+            Column::new(crate::i18n::t("lists.col.state")),
+            Column::new(crate::i18n::t("lists.col.priority")),
+            Column::new(crate::i18n::t("lists.col.classification")),
+            Column::right(crate::i18n::t("lists.col.updated")),
         ],
         rows: rows
             .iter()
@@ -613,20 +625,20 @@ pub fn ideas(viewer: &Viewer, payload: &Value, slice: Slice) -> impl IntoView {
         next: seguinte,
         // O subtítulo do ecrã já diz o que é uma ideia; repeti-lo aqui não
         // acrescenta nada. O que falta ao ecrã vazio é de onde parte uma.
-        empty: "Ainda não existem ideias. Uma ideia pertence a uma unidade e é o ponto de partida da investigação.",
+        empty: crate::i18n::t("lists.ideas.empty"),
     };
 
     list_screen(
         viewer,
         ListScreen {
-            title: "Ideias",
+            title: crate::i18n::t("nav.ideas"),
             // Quem filtra por uma unidade deve ver qual: o subtítulo genérico
             // descreve a lista inteira, e a lista deixou de ser inteira.
             subtitle: slice.unit_name().map_or_else(
-                || "Uma ideia é explorada antes de se tornar projecto.".to_owned(),
-                |unidade| format!("Unidade: {unidade}."),
+                || crate::i18n::t("lists.ideas.subtitle").to_owned(),
+                |unidade| crate::i18n::tf("lists.subtitle.unit", &[("unit", unidade)]),
             ),
-            action: Some("Nova Ideia"),
+            action: Some(crate::i18n::t("create.idea")),
             action_href: Some("/ideas/new"),
             action_permission: Permission::IdeasCreate,
             secondary: None,
@@ -666,17 +678,15 @@ pub fn projects(viewer: &Viewer, payload: &Value, slice: Slice) -> impl IntoView
             <div class="oc-page">
                 <div class="oc-head">
                     <div class="oc-head__text">
-                        <h1>"Projectos"</h1>
-                        <p>"Escolha a unidade cujo trabalho quer ver."</p>
+                        <h1>{crate::i18n::t("nav.projects")}</h1>
+                        <p>{crate::i18n::t("lists.choose_unit_prompt")}</p>
                     </div>
                 </div>
                 {unit_selector(&slice, "/projects")}
                 {crate::ui::components::empty_state(crate::ui::components::EmptyState {
                     icon: crate::ui::icon::Icon::Units,
-                    title: "Nenhuma unidade escolhida".to_owned(),
-                    body: "O Ocinye OS não escolhe uma unidade por si. Escolha acima qual delas \
-                           quer ver."
-                        .to_owned(),
+                    title: crate::i18n::t("lists.no_unit_chosen.title").to_owned(),
+                    body: crate::i18n::t("lists.no_unit_chosen.body").to_owned(),
                     actions: Vec::new(),
                     small: false,
                 })}
@@ -687,18 +697,18 @@ pub fn projects(viewer: &Viewer, payload: &Value, slice: Slice) -> impl IntoView
 
     let table = Table {
         tabs: projects_tabs(&slice),
-        search: "projectos",
+        search: crate::i18n::t("lists.noun.projects"),
         truncated: truncated(payload, shown),
         shape: "projects",
         columns: vec![
-            Column::new("CÓDIGO"),
-            Column::new("PROJECTO"),
-            Column::new("UNIDADE"),
-            Column::new("RESPONSÁVEL"),
-            Column::new("ESTADO"),
-            Column::new("PROGRESSO"),
-            Column::new("INÍCIO"),
-            Column::new("FIM"),
+            Column::new(crate::i18n::t("lists.col.code")),
+            Column::new(crate::i18n::t("lists.col.project")),
+            Column::new(crate::i18n::t("lists.col.unit")),
+            Column::new(crate::i18n::t("lists.col.lead")),
+            Column::new(crate::i18n::t("lists.col.state")),
+            Column::new(crate::i18n::t("lists.col.progress")),
+            Column::new(crate::i18n::t("lists.col.start")),
+            Column::new(crate::i18n::t("lists.col.end")),
         ],
         rows: rows
             .iter()
@@ -731,20 +741,20 @@ pub fn projects(viewer: &Viewer, payload: &Value, slice: Slice) -> impl IntoView
         footer: footer_paginado(payload, shown, "projecto", "projectos"),
         previous: anterior,
         next: seguinte,
-        empty: "Ainda não existem projectos. Um projecto nasce da promoção de uma ideia.",
+        empty: crate::i18n::t("lists.projects.empty"),
     };
 
     list_screen(
         viewer,
         ListScreen {
-            title: "Projectos",
+            title: crate::i18n::t("nav.projects"),
             // Quem filtra por uma unidade deve ver qual: o subtítulo genérico
             // descreve a lista inteira, e a lista deixou de ser inteira.
             subtitle: slice.unit_name().map_or_else(
-                || "Projectos institucionais em execução e planeamento.".to_owned(),
-                |unidade| format!("Unidade: {unidade}."),
+                || crate::i18n::t("lists.projects.subtitle").to_owned(),
+                |unidade| crate::i18n::tf("lists.subtitle.unit", &[("unit", unidade)]),
             ),
-            action: Some("Novo Projecto"),
+            action: Some(crate::i18n::t("create.project")),
             action_href: Some("/projects/new"),
             action_permission: Permission::ProjectsCreate,
             secondary: None,
@@ -765,28 +775,31 @@ pub fn bibliography(viewer: &Viewer, payload: &Value) -> impl IntoView {
 
     let table = Table {
         tabs: vec![
-            ListTab::current("Todas"),
+            ListTab::current(crate::i18n::t("lists.tab.all_f")),
             ListTab::missing(
-                "Minhas",
-                "As referências que criou ainda não são um recorte desta lista.",
+                crate::i18n::t("lists.tab.mine_f"),
+                crate::i18n::t("lists.biblio.mine_none"),
             ),
             ListTab::missing(
-                "Da Unidade",
-                "Filtrar a bibliografia por unidade ainda não é um recorte desta lista.",
+                crate::i18n::t("lists.slice.unit"),
+                crate::i18n::t("lists.biblio.unit_none"),
             ),
-            ListTab::missing("Favoritas", "Marcar favoritos ainda não existe no Ocinye OS."),
+            ListTab::missing(
+                crate::i18n::t("lists.tab.favourites_f"),
+                crate::i18n::t("lists.favourites_none"),
+            ),
         ],
-        search: "referências",
+        search: crate::i18n::t("lists.noun.sources"),
         truncated: truncated(payload, shown),
         shape: "bibliography",
         columns: vec![
-            Column::new("TÍTULO"),
-            Column::new("AUTORES"),
-            Column::new("ANO"),
-            Column::new("ORIGEM"),
-            Column::new("TIPO"),
+            Column::new(crate::i18n::t("lists.col.title")),
+            Column::new(crate::i18n::t("lists.col.authors")),
+            Column::new(crate::i18n::t("lists.col.year")),
+            Column::new(crate::i18n::t("lists.col.origin")),
+            Column::new(crate::i18n::t("lists.col.type")),
             Column::new("DOI"),
-            Column::right("CITAÇÕES"),
+            Column::right(crate::i18n::t("lists.col.citations")),
         ],
         rows: rows
             .iter()
@@ -820,18 +833,18 @@ pub fn bibliography(viewer: &Viewer, payload: &Value) -> impl IntoView {
         footer: footer_paginado(payload, shown, "referência", "referências"),
         previous: anterior,
         next: seguinte,
-        empty: "Ainda não há referências. A bibliografia é acrescentada dentro de um Research Workspace.",
+        empty: crate::i18n::t("lists.biblio.empty"),
     };
 
     list_screen(
         viewer,
         ListScreen {
-            title: "Bibliografia",
-            subtitle: "Referências ligadas a ideias, projectos e unidades.".to_owned(),
-            action: Some("Nova Referência"),
+            title: crate::i18n::t("nav.bibliography"),
+            subtitle: crate::i18n::t("lists.biblio.subtitle").to_owned(),
+            action: Some(crate::i18n::t("create.reference")),
             action_href: Some("/bibliography/new"),
             action_permission: Permission::BibliographyCreate,
-            secondary: Some(("Ferramentas", "/bibliography/tools")),
+            secondary: Some((crate::i18n::t("lists.tools.link"), "/bibliography/tools")),
             table,
         },
     )
@@ -869,29 +882,32 @@ pub fn datasets(viewer: &Viewer, payload: &Value) -> impl IntoView {
 
     let table = Table {
         tabs: vec![
-            ListTab::current("Todos"),
+            ListTab::current(crate::i18n::t("lists.tab.all_m")),
             ListTab::missing(
-                "Meus",
-                "Os datasets que criou ainda não são um recorte desta lista.",
+                crate::i18n::t("lists.tab.mine_m"),
+                crate::i18n::t("lists.datasets.mine_none"),
             ),
             ListTab::missing(
-                "Da Unidade",
-                "Filtrar datasets por unidade ainda não é um recorte desta lista.",
+                crate::i18n::t("lists.slice.unit"),
+                crate::i18n::t("lists.datasets.unit_none"),
             ),
-            ListTab::missing("Favoritos", "Marcar favoritos ainda não existe no Ocinye OS."),
+            ListTab::missing(
+                crate::i18n::t("lists.tab.favourites_m"),
+                crate::i18n::t("lists.favourites_none"),
+            ),
         ],
-        search: "datasets",
+        search: crate::i18n::t("lists.noun.datasets"),
         truncated: truncated(payload, shown),
         shape: "datasets",
         columns: vec![
-            Column::new("NOME"),
-            Column::new("RESPONSÁVEL"),
-            Column::new("REGISTO"),
-            Column::new("VERSÃO"),
-            Column::right("TAMANHO"),
-            Column::new("TIPO"),
-            Column::new("CLASSIFICAÇÃO"),
-            Column::new("ACESSO"),
+            Column::new(crate::i18n::t("lists.col.name")),
+            Column::new(crate::i18n::t("lists.col.lead")),
+            Column::new(crate::i18n::t("lists.col.registered")),
+            Column::new(crate::i18n::t("lists.col.version")),
+            Column::right(crate::i18n::t("lists.col.size")),
+            Column::new(crate::i18n::t("lists.col.type")),
+            Column::new(crate::i18n::t("lists.col.classification")),
+            Column::new(crate::i18n::t("lists.col.access")),
         ],
         rows: rows
             .iter()
@@ -916,16 +932,15 @@ pub fn datasets(viewer: &Viewer, payload: &Value) -> impl IntoView {
         footer: footer_paginado(payload, shown, "dataset", "datasets"),
         previous: anterior,
         next: seguinte,
-        empty: "Ainda não há datasets catalogados. Um dataset é catalogado dentro de um Research Workspace.",
+        empty: crate::i18n::t("lists.datasets.empty"),
     };
 
     list_screen(
         viewer,
         ListScreen {
-            title: "Dados",
-            subtitle: "Datasets institucionais com versão, proveniência e classificação."
-                .to_owned(),
-            action: Some("Novo Dataset"),
+            title: crate::i18n::t("nav.data"),
+            subtitle: crate::i18n::t("lists.datasets.subtitle").to_owned(),
+            action: Some(crate::i18n::t("create.dataset")),
             action_href: Some("/datasets/new"),
             action_permission: Permission::DatasetsCreate,
             secondary: None,
@@ -946,32 +961,32 @@ pub fn agents(viewer: &Viewer, payload: &Value) -> impl IntoView {
 
     let table = Table {
         tabs: vec![
-            ListTab::current("Todos"),
+            ListTab::current(crate::i18n::t("lists.tab.all_m")),
             ListTab::missing(
-                "Meus",
-                "Os agentes que criou ainda não são um recorte desta lista.",
+                crate::i18n::t("lists.tab.mine_m"),
+                crate::i18n::t("lists.agents.mine_none"),
             ),
             ListTab::missing(
-                "Da Unidade",
-                "Filtrar agentes por unidade ainda não é um recorte desta lista.",
+                crate::i18n::t("lists.slice.unit"),
+                crate::i18n::t("lists.agents.unit_none"),
             ),
             ListTab::missing(
-                "Institucionais",
-                "Distinguir agentes institucionais dos pessoais ainda não é um recorte desta lista.",
+                crate::i18n::t("lists.agents.tab_institutional"),
+                crate::i18n::t("lists.agents.institutional_none"),
             ),
         ],
-        search: "agentes",
+        search: crate::i18n::t("lists.noun.agents"),
         truncated: truncated(payload, shown),
         // «UTILIZAÇÃO» foi retirada: não existe contagem de utilizações no
         // Core, e uma coluna sem fonte é uma estatística inventada (§60).
         shape: "agents",
         columns: vec![
-            Column::new("AGENTE"),
-            Column::new("PROPÓSITO"),
-            Column::new("ESTADO"),
-            Column::new("ÂMBITO"),
-            Column::new("CAPACIDADE"),
-            Column::right("CRIADO"),
+            Column::new(crate::i18n::t("lists.col.agent")),
+            Column::new(crate::i18n::t("lists.col.purpose")),
+            Column::new(crate::i18n::t("lists.col.state")),
+            Column::new(crate::i18n::t("lists.col.scope")),
+            Column::new(crate::i18n::t("lists.col.capability")),
+            Column::right(crate::i18n::t("lists.col.created")),
         ],
         rows: rows
             .iter()
@@ -1006,15 +1021,15 @@ pub fn agents(viewer: &Viewer, payload: &Value) -> impl IntoView {
         // §41: um agente é definido por capacidade, não por modelo — por isso
         // «Novo Agente» está activo mesmo sem nó. O que falta é onde correr,
         // e é isso que a frase diz, sem contradizer o botão ao lado.
-        empty: "Ainda não existem agentes. Um agente é definido por capacidade; só responderá quando existir um nó de IA da Ocinye.",
+        empty: crate::i18n::t("lists.agents.empty"),
     };
 
     list_screen(
         viewer,
         ListScreen {
-            title: "Agentes",
-            subtitle: "Agentes de IA criados e configurados pelos membros.".to_owned(),
-            action: Some("Novo Agente"),
+            title: crate::i18n::t("nav.agents"),
+            subtitle: crate::i18n::t("lists.agents.subtitle").to_owned(),
+            action: Some(crate::i18n::t("lists.new.agent")),
             action_href: Some("/ai/agents/new"),
             action_permission: Permission::AgentsCreatePersonal,
             secondary: None,
@@ -1034,39 +1049,40 @@ pub fn members(viewer: &Viewer, payload: &Value) -> impl IntoView {
 
     let table = Table {
         tabs: vec![
-            ListTab::current("Membros"),
+            ListTab::current(crate::i18n::t("lists.members.tab")),
             ListTab::missing(
-                "Funções",
-                "Gerir funções por ecrã próprio ainda não existe.",
+                crate::i18n::t("lists.members.tab_roles"),
+                crate::i18n::t("lists.members.roles_none"),
             ),
-            ListTab::to("Unidades", "/units"),
+            ListTab::to(crate::i18n::t("nav.units"), "/units"),
             // «Acessos», e não «Convites»: no Ocinye não há convite por email
             // (ADR-0103). O acesso provisiona-se com uma credencial temporária,
             // e isso gere-se hoje no separador «Segurança» de cada membro — dar
             // acesso, reemitir uma credencial expirada. Uma vista de todos os
             // acessos num só ecrã ainda não existe.
             ListTab::missing(
-                "Acessos",
-                "O acesso de cada membro gere-se no seu separador «Segurança». \
-                 Não há convite por email; uma vista de todos os acessos num só \
-                 ecrã ainda não existe.",
+                crate::i18n::t("lists.members.tab_access"),
+                crate::i18n::t("lists.members.access_none"),
             ),
-            ListTab::missing("Serviços", "A administração de serviços ainda não existe."),
+            ListTab::missing(
+                crate::i18n::t("lists.members.tab_services"),
+                crate::i18n::t("lists.members.services_none"),
+            ),
         ],
-        search: "membros",
+        search: crate::i18n::t("lists.noun.members"),
         truncated: truncated(payload, shown),
         shape: "members",
         columns: vec![
-            Column::new("NOME"),
-            Column::new("E-MAIL"),
-            Column::new("UNIDADE"),
+            Column::new(crate::i18n::t("lists.col.name")),
+            Column::new(crate::i18n::t("lists.col.email")),
+            Column::new(crate::i18n::t("lists.col.unit")),
             // «Posição», e não «Função»: a coluna mostra a posição institucional
             // (Fundador, Director), que não concede acesso. Chamá-la «Função»
             // sugeria o papel técnico, que é outra dimensão (ADR-0100).
-            Column::new("POSIÇÃO"),
-            Column::new("REGISTO"),
-            Column::new("ESTADO"),
-            Column::right("ACTIVIDADE"),
+            Column::new(crate::i18n::t("lists.col.position")),
+            Column::new(crate::i18n::t("lists.col.registered")),
+            Column::new(crate::i18n::t("lists.col.state")),
+            Column::right(crate::i18n::t("lists.col.activity")),
         ],
         rows: rows
             .iter()
@@ -1109,17 +1125,17 @@ pub fn members(viewer: &Viewer, payload: &Value) -> impl IntoView {
         next: seguinte,
         // O estado vazio só aparece com zero linhas, e o rodapé diz «0 membros»
         // ao lado. «para além de si» afirmaria uma adesão que a contagem nega.
-        empty: "Ainda não há membros registados.",
+        empty: crate::i18n::t("lists.members.empty"),
     };
 
     list_screen(
         viewer,
         ListScreen {
-            title: "Membros",
-            subtitle: "Administração · membros da instituição.".to_owned(),
+            title: crate::i18n::t("lists.members.tab"),
+            subtitle: crate::i18n::t("lists.members.subtitle").to_owned(),
             // «Adicionar», não «Convidar»: sob o ADR-0103 não há convite por email —
             // o administrador cria a conta e entrega uma credencial temporária.
-            action: Some("Adicionar Utilizador"),
+            action: Some(crate::i18n::t("lists.new.member")),
             action_href: Some("/admin/members/new"),
             action_permission: Permission::MembersCreate,
             secondary: None,
@@ -1142,35 +1158,35 @@ pub fn audit(viewer: &Viewer, payload: &Value) -> impl IntoView {
 
     let table = Table {
         tabs: vec![
-            ListTab::current("Tudo"),
+            ListTab::current(crate::i18n::t("knowledge.tab.all")),
             ListTab::missing(
-                "Autenticação",
-                "Recortar o registo por categoria ainda não é uma consulta do Core.",
+                crate::i18n::t("lists.audit.tab_auth"),
+                crate::i18n::t("lists.audit.category_none"),
             ),
             ListTab::missing(
-                "Dados",
-                "Recortar o registo por categoria ainda não é uma consulta do Core.",
+                crate::i18n::t("nav.data"),
+                crate::i18n::t("lists.audit.category_none"),
             ),
             ListTab::missing(
-                "Permissões",
-                "Recortar o registo por categoria ainda não é uma consulta do Core.",
+                crate::i18n::t("lists.audit.tab_permissions"),
+                crate::i18n::t("lists.audit.category_none"),
             ),
             ListTab::missing(
-                "IA",
-                "Recortar o registo por categoria ainda não é uma consulta do Core.",
+                crate::i18n::t("lists.audit.tab_ai"),
+                crate::i18n::t("lists.audit.category_none"),
             ),
         ],
-        search: "eventos",
+        search: crate::i18n::t("lists.noun.events"),
         truncated: truncated(payload, shown),
         shape: "audit",
         columns: vec![
-            Column::new("DATA"),
-            Column::new("UTILIZADOR"),
-            Column::new("ACÇÃO"),
-            Column::new("RECURSO"),
-            Column::new("CONTEXTO"),
-            Column::new("RESULTADO"),
-            Column::new("CORRELATION ID"),
+            Column::new(crate::i18n::t("lists.col.date")),
+            Column::new(crate::i18n::t("lists.col.user")),
+            Column::new(crate::i18n::t("lists.col.action")),
+            Column::new(crate::i18n::t("lists.col.resource")),
+            Column::new(crate::i18n::t("lists.col.context")),
+            Column::new(crate::i18n::t("lists.col.outcome")),
+            Column::new(crate::i18n::t("lists.col.correlation_id")),
         ],
         rows: rows
             .iter()
@@ -1180,8 +1196,8 @@ pub fn audit(viewer: &Viewer, payload: &Value) -> impl IntoView {
                 let action = format!("{}.{}", text(row, "resource_type"), text(row, "action"));
                 let outcome = match text(row, "outcome").as_str() {
                     "success" => ("OK", Tone::Ok),
-                    "denied" => ("NEGADO", Tone::Err),
-                    _ => ("AVISO", Tone::Warn),
+                    "denied" => (crate::i18n::t("lists.audit.denied"), Tone::Err),
+                    _ => (crate::i18n::t("lists.audit.warn"), Tone::Warn),
                 };
                 let correlation: String = text(row, "correlation_id").chars().take(18).collect();
 
@@ -1207,14 +1223,14 @@ pub fn audit(viewer: &Viewer, payload: &Value) -> impl IntoView {
         footer: footer_paginado(payload, shown, "evento", "eventos"),
         previous: anterior,
         next: seguinte,
-        empty: "Sem eventos de auditoria para os filtros aplicados.",
+        empty: crate::i18n::t("lists.audit.empty"),
     };
 
     list_screen(
         viewer,
         ListScreen {
-            title: "Audit Log",
-            subtitle: "Registo técnico e imutável de operações do Ocinye OS.".to_owned(),
+            title: crate::i18n::t("nav.audit"),
+            subtitle: crate::i18n::t("lists.audit.subtitle").to_owned(),
             // Sem acção: o Core não expõe exportação do registo de auditoria.
             action: None,
             action_href: None,
@@ -1261,7 +1277,7 @@ fn workspace_destination(workspaces: &Value) -> impl IntoView {
 
     view! {
         <div class="oc-field">
-            <label class="oc-field__label" for="destino">"Research Workspace"</label>
+            <label class="oc-field__label" for="destino">{crate::i18n::t("lists.research_workspace")}</label>
             <select class="oc-select" id="destino" name="workspace_id" required>
                 {opcoes
                     .into_iter()
@@ -1269,7 +1285,7 @@ fn workspace_destination(workspaces: &Value) -> impl IntoView {
                     .collect_view()}
             </select>
             <p class="oc-field__hint">
-                "Só aparecem ambientes onde tem autorização para criar."
+                {crate::i18n::t("lists.destination.hint")}
             </p>
         </div>
     }
@@ -1292,11 +1308,11 @@ fn no_destination(o_que: &'static str) -> impl IntoView {
     view! {
         {crate::ui::components::empty_state(crate::ui::components::EmptyState {
             icon: crate::ui::icon::Icon::EmptyState,
-            title: format!("Não tem onde criar {o_que}"),
-            body: "Estes artefactos pertencem a um Research Workspace, e não pertence a \
-                   nenhum onde possa criar. A filiação é concedida por quem gere a unidade."
-                .to_owned(),
-            actions: vec![Button::new("Ver Unidades", Variant::Secondary).href("/units")],
+            title: crate::i18n::tf("lists.no_destination.title", &[("what", o_que)]),
+            body: crate::i18n::t("lists.no_destination.body").to_owned(),
+            actions: vec![
+                Button::new(crate::i18n::t("lists.see_units"), Variant::Secondary).href("/units"),
+            ],
             small: false,
         })}
     }
@@ -1312,10 +1328,9 @@ pub fn new_source(workspaces: &Value, error: Option<String>) -> impl IntoView {
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Nova Referência"</h1>
+                    <h1>{crate::i18n::t("create.reference")}</h1>
                     <p>
-                        "Uma referência pertence ao Research Workspace onde a investigação
-                         que a cita acontece."
+                        {crate::i18n::t("lists.new_source.intro")}
                     </p>
                 </div>
             </div>
@@ -1329,42 +1344,42 @@ pub fn new_source(workspaces: &Value, error: Option<String>) -> impl IntoView {
                 view! {
                     <form method="post" action="/bibliography/new">
                         {card(
-                            section_head("A REFERÊNCIA", None, None),
+                            section_head(crate::i18n::t("lists.new_source.section"), None, None),
                             view! {
                                 {workspace_destination(workspaces)}
                                 {text_field(
                                     "src-title",
-                                    "Título",
+                                    crate::i18n::t("lists.field.title"),
                                     "title",
-                                    "Título da obra",
+                                    crate::i18n::t("lists.ph.work_title"),
                                     "text",
                                 )}
                                 {text_field(
                                     "src-authors",
-                                    "Autores",
+                                    crate::i18n::t("lists.field.authors"),
                                     "authors",
-                                    "separados por ponto e vírgula",
+                                    crate::i18n::t("lists.ph.semicolon"),
                                     "text",
                                 )}
-                                {text_field("src-year", "Ano", "year", "Ex.: 2024", "text")}
+                                {text_field("src-year", crate::i18n::t("lists.field.year"), "year", crate::i18n::t("lists.ph.year"), "text")}
                                 {text_field(
                                     "src-container",
-                                    "Publicação",
+                                    crate::i18n::t("lists.field.publication"),
                                     "container_title",
-                                    "Revista, conferência ou colecção",
+                                    crate::i18n::t("lists.ph.venue"),
                                     "text",
                                 )}
-                                {text_field("src-doi", "DOI", "doi", "10.xxxx/xxxxx", "text")}
+                                {text_field("src-doi", "DOI", "doi", crate::i18n::t("lists.ph.doi"), "text")}
                                 {textarea(
                                     "src-abstract",
-                                    "Resumo",
+                                    crate::i18n::t("lists.field.abstract"),
                                     "abstract_text",
-                                    "Resumo da obra",
+                                    crate::i18n::t("lists.ph.abstract_work"),
                                     92,
                                 )}
                                 {select(
                                     "src-classification",
-                                    "Classificação",
+                                    crate::i18n::t("lists.field.classification"),
                                     "classification",
                                     vec![
                                         ("INTERNAL".to_owned(), true),
@@ -1377,15 +1392,16 @@ pub fn new_source(workspaces: &Value, error: Option<String>) -> impl IntoView {
 
                         <div class="oc-row--end oc-gap-5 oc-mt-8">
                             {button(
-                                Button::new("Cancelar", Variant::Secondary).href("/bibliography"),
+                                Button::new(crate::i18n::t("action.cancel"), Variant::Secondary)
+                                    .href("/bibliography"),
                             )}
-                            {button(Button::new("Criar Referência", Variant::Gold))}
+                            {button(Button::new(crate::i18n::t("lists.create.reference_btn"), Variant::Gold))}
                         </div>
                     </form>
                 }
                     .into_any()
             } else {
-                no_destination("referências").into_any()
+                no_destination(crate::i18n::t("lists.noun.sources")).into_any()
             }}
         </div>
     }
@@ -1401,10 +1417,9 @@ pub fn new_dataset(workspaces: &Value, error: Option<String>) -> impl IntoView {
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Novo Dataset"</h1>
+                    <h1>{crate::i18n::t("create.dataset")}</h1>
                     <p>
-                        "Um dataset pertence ao Research Workspace que o produz ou o usa,
-                         e herda dele o contexto institucional."
+                        {crate::i18n::t("lists.new_dataset.intro")}
                     </p>
                 </div>
             </div>
@@ -1418,41 +1433,41 @@ pub fn new_dataset(workspaces: &Value, error: Option<String>) -> impl IntoView {
                 view! {
                     <form method="post" action="/datasets/new">
                         {card(
-                            section_head("O DATASET", None, None),
+                            section_head(crate::i18n::t("lists.new_dataset.section"), None, None),
                             view! {
                                 {workspace_destination(workspaces)}
                                 {text_field(
                                     "ds-code",
-                                    "Código",
+                                    crate::i18n::t("lists.field.code"),
                                     "code",
-                                    "Ex.: DS-0001",
+                                    crate::i18n::t("lists.ph.dataset_code"),
                                     "text",
                                 )}
-                                {text_field("ds-title", "Título", "title", "Nome do conjunto", "text")}
+                                {text_field("ds-title", crate::i18n::t("lists.field.title"), "title", crate::i18n::t("lists.ph.dataset_name"), "text")}
                                 {textarea(
                                     "ds-description",
-                                    "Descrição",
+                                    crate::i18n::t("lists.field.description"),
                                     "description",
-                                    "O que o conjunto contém e como foi obtido",
+                                    crate::i18n::t("lists.ph.dataset_desc"),
                                     92,
                                 )}
                                 {text_field(
                                     "ds-keywords",
-                                    "Palavras-chave",
+                                    crate::i18n::t("lists.field.keywords"),
                                     "keywords",
-                                    "separadas por vírgulas",
+                                    crate::i18n::t("lists.ph.comma_separated"),
                                     "text",
                                 )}
                                 {text_field(
                                     "ds-restrictions",
-                                    "Restrições de uso",
+                                    crate::i18n::t("lists.field.usage_restrictions"),
                                     "usage_restrictions",
-                                    "Limites de utilização, quando existam",
+                                    crate::i18n::t("lists.ph.usage_limits"),
                                     "text",
                                 )}
                                 {select(
                                     "ds-classification",
-                                    "Classificação",
+                                    crate::i18n::t("lists.field.classification"),
                                     "classification",
                                     vec![
                                         ("INTERNAL".to_owned(), true),
@@ -1461,21 +1476,20 @@ pub fn new_dataset(workspaces: &Value, error: Option<String>) -> impl IntoView {
                                     ],
                                 )}
                                 <p class="oc-muted oc-t-caption--muted">
-                                    "A classificação do dataset pode ser mais restrita do que a
-                                     do ambiente, e governa quem o alcança."
+                                    {crate::i18n::t("lists.new_dataset.class_note")}
                                 </p>
                             },
                         )}
 
                         <div class="oc-row--end oc-gap-5 oc-mt-8">
-                            {button(Button::new("Cancelar", Variant::Secondary).href("/datasets"))}
-                            {button(Button::new("Criar Dataset", Variant::Gold))}
+                            {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/datasets"))}
+                            {button(Button::new(crate::i18n::t("lists.create.dataset_btn"), Variant::Gold))}
                         </div>
                     </form>
                 }
                     .into_any()
             } else {
-                no_destination("datasets").into_any()
+                no_destination(crate::i18n::t("lists.noun.datasets")).into_any()
             }}
         </div>
     }
@@ -1501,10 +1515,9 @@ pub fn new_task(workspaces: &Value, error: Option<String>) -> impl IntoView {
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Nova Tarefa"</h1>
+                    <h1>{crate::i18n::t("create.task")}</h1>
                     <p>
-                        "Uma tarefa é uma unidade de trabalho dentro de um Research Workspace —
-                         a ideia ou o projecto a que pertence."
+                        {crate::i18n::t("lists.new_task.intro")}
                     </p>
                 </div>
             </div>
@@ -1518,51 +1531,50 @@ pub fn new_task(workspaces: &Value, error: Option<String>) -> impl IntoView {
                 view! {
                     <form method="post" action="/tasks/new">
                         {card(
-                            section_head("A TAREFA", None, None),
+                            section_head(crate::i18n::t("lists.new_task.section"), None, None),
                             view! {
                                 {workspace_destination(workspaces)}
                                 {text_field(
                                     "task-title",
-                                    "Título",
+                                    crate::i18n::t("lists.field.title"),
                                     "title",
-                                    "O que precisa de ser feito",
+                                    crate::i18n::t("lists.ph.task_title"),
                                     "text",
                                 )}
                                 {textarea(
                                     "task-description",
-                                    "Descrição",
+                                    crate::i18n::t("lists.field.description"),
                                     "description",
-                                    "Detalhes, quando ajudam",
+                                    crate::i18n::t("lists.ph.task_desc"),
                                     92,
                                 )}
                                 {select_labelled(
                                     "task-priority",
-                                    "Prioridade",
+                                    crate::i18n::t("lists.field.priority"),
                                     "priority",
                                     vec![
-                                        SelectOption::new("normal", "Normal").selected(true),
-                                        SelectOption::new("low", "Baixa"),
-                                        SelectOption::new("high", "Alta"),
-                                        SelectOption::new("critical", "Crítica"),
+                                        SelectOption::new("normal", crate::i18n::t("task.priority.normal")).selected(true),
+                                        SelectOption::new("low", crate::i18n::t("task.priority.low")),
+                                        SelectOption::new("high", crate::i18n::t("task.priority.high")),
+                                        SelectOption::new("critical", crate::i18n::t("lists.priority.critical")),
                                     ],
                                 )}
-                                {text_field("task-due", "Prazo", "due_on", "", "date")}
+                                {text_field("task-due", crate::i18n::t("lists.field.due"), "due_on", "", "date")}
                                 <p class="oc-muted oc-t-caption--muted">
-                                    "O responsável escolhe-se no detalhe da tarefa: quem pode
-                                     ser atribuído depende do ambiente."
+                                    {crate::i18n::t("lists.new_task.responsible_note")}
                                 </p>
                             },
                         )}
 
                         <div class="oc-row--end oc-gap-5 oc-mt-8">
-                            {button(Button::new("Cancelar", Variant::Secondary).href("/my-work"))}
-                            {button(Button::new("Criar Tarefa", Variant::Gold))}
+                            {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/my-work"))}
+                            {button(Button::new(crate::i18n::t("lists.create.task_btn"), Variant::Gold))}
                         </div>
                     </form>
                 }
                     .into_any()
             } else {
-                no_destination("tarefas").into_any()
+                no_destination(crate::i18n::t("lists.noun.tasks")).into_any()
             }}
         </div>
     }
@@ -1596,10 +1608,9 @@ pub fn new_project(
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Novo Projecto"</h1>
+                    <h1>{crate::i18n::t("create.project")}</h1>
                     <p>
-                        "Um projecto nasce da promoção de uma ideia. O Research Workspace
-                         acompanha-a, com tudo o que foi reunido enquanto se explorava."
+                        {crate::i18n::t("lists.new_project.intro")}
                     </p>
                 </div>
             </div>
@@ -1624,11 +1635,11 @@ pub fn new_project(
                 view! {
                     <form method="post" action="/projects/new">
                         {card(
-                            section_head("A IDEIA A PROMOVER", None, None),
+                            section_head(crate::i18n::t("lists.new_project.section"), None, None),
                             view! {
                                 <div class="oc-field">
                                     <label class="oc-field__label" for="promote-idea">
-                                        "Ideia elegível"
+                                        {crate::i18n::t("lists.new_project.eligible_idea")}
                                     </label>
                                     <select
                                         class="oc-select"
@@ -1648,38 +1659,37 @@ pub fn new_project(
                                             .collect_view()}
                                     </select>
                                     <p class="oc-field__hint">
-                                        "Só aparecem ideias em estado de candidatura a projecto,
-                                         dentro do que lhe está acessível."
+                                        {crate::i18n::t("lists.new_project.eligible_hint")}
                                     </p>
                                 </div>
 
                                 {text_field(
                                     "project-code",
-                                    "Código do projecto",
+                                    crate::i18n::t("lists.field.project_code"),
                                     "code",
-                                    "Ex.: PPEC-2026-001",
+                                    crate::i18n::t("lists.ph.project_code"),
                                     "text",
                                 )}
                                 {text_field(
                                     "project-title",
-                                    "Título",
+                                    crate::i18n::t("lists.field.title"),
                                     "title",
-                                    "Deixe vazio para manter o título da ideia",
+                                    crate::i18n::t("lists.ph.project_title"),
                                     "text",
                                 )}
                                 {textarea(
                                     "project-objectives",
-                                    "Objectivos",
+                                    crate::i18n::t("lists.field.objectives"),
                                     "objectives",
-                                    "O que o projecto se propõe alcançar",
+                                    crate::i18n::t("lists.ph.objectives"),
                                     92,
                                 )}
                             },
                         )}
 
                         <div class="oc-row--end oc-gap-5 oc-mt-8">
-                            {button(Button::new("Cancelar", Variant::Secondary).href("/projects"))}
-                            {button(Button::new("Promover a Projecto", Variant::Gold))}
+                            {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/projects"))}
+                            {button(Button::new(crate::i18n::t("lists.promote_btn"), Variant::Gold))}
                         </div>
                     </form>
                 }
@@ -1690,11 +1700,12 @@ pub fn new_project(
                 view! {
                     {crate::ui::components::empty_state(crate::ui::components::EmptyState {
                         icon: crate::ui::icon::Icon::EmptyState,
-                        title: "Não existem ideias elegíveis para promoção".to_owned(),
-                        body: "Um projecto nasce de uma ideia que chegou a candidatura. \
-                               Nenhuma das ideias a que tem acesso está nesse estado."
-                            .to_owned(),
-                        actions: vec![Button::new("Ver Ideias", Variant::Secondary).href("/ideas")],
+                        title: crate::i18n::t("lists.new_project.none_title").to_owned(),
+                        body: crate::i18n::t("lists.new_project.none_body").to_owned(),
+                        actions: vec![
+                            Button::new(crate::i18n::t("lists.see_ideas"), Variant::Secondary)
+                                .href("/ideas"),
+                        ],
                         small: false,
                     })}
                 }
@@ -1717,10 +1728,9 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Nova Unidade"</h1>
+                    <h1>{crate::i18n::t("lists.new.unit")}</h1>
                     <p>
-                        "Uma unidade é o âmbito institucional onde a investigação acontece.
-                         As ideias, os projectos e as filiações vivem dentro de uma."
+                        {crate::i18n::t("lists.new_unit.intro")}
                     </p>
                 </div>
             </div>
@@ -1734,16 +1744,16 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
             // uma unidade dá-lhe um nome; o Ocinye atribui o identificador.
             <form method="post" action="/units/new">
                 {card(
-                    section_head("A UNIDADE", None, None),
+                    section_head(crate::i18n::t("lists.new_unit.section"), None, None),
                     view! {
                         <div class="oc-field">
-                            <label class="oc-field__label" for="unit-name">"Nome"</label>
+                            <label class="oc-field__label" for="unit-name">{crate::i18n::t("lists.field.name")}</label>
                             <input
                                 class="oc-input"
                                 id="unit-name"
                                 name="name"
                                 type="text"
-                                placeholder="Ex.: Unidade de Energias Renováveis"
+                                placeholder=crate::i18n::t("lists.ph.unit_name")
                                 autocomplete="off"
                                 data-oc-code-source
                             />
@@ -1753,22 +1763,22 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
                         // fica a explicação; com JavaScript, o código previsto
                         // aparece aqui à medida que o nome é escrito.
                         <div class="oc-field">
-                            <label class="oc-field__label" for="unit-code-preview">"Código"</label>
+                            <label class="oc-field__label" for="unit-code-preview">{crate::i18n::t("lists.field.code")}</label>
                             <output
                                 class="oc-code-preview"
                                 id="unit-code-preview"
                                 data-oc-code-preview
                                 data-oc-code-endpoint="/units/code-suggestion"
                             >
-                                "Gerado automaticamente a partir do nome, no formato U<SIGLA>-NNN."
+                                {crate::i18n::t("lists.new_unit.code_generated")}
                             </output>
                         </div>
 
                         {textarea(
                             "unit-description",
-                            "Descrição",
+                            crate::i18n::t("lists.field.description"),
                             "description",
-                            "O que esta unidade investiga",
+                            crate::i18n::t("lists.ph.unit_investigates"),
                             92,
                         )}
 
@@ -1777,14 +1787,14 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
                         // JavaScript. Com JavaScript, o app.js promove-o a fichas.
                         <div class="oc-field">
                             <label class="oc-field__label" for="unit-areas">
-                                "Áreas de investigação"
+                                {crate::i18n::t("lists.field.research_areas")}
                             </label>
                             <input
                                 class="oc-input"
                                 id="unit-areas"
                                 name="research_areas"
                                 type="text"
-                                placeholder="separadas por vírgulas"
+                                placeholder=crate::i18n::t("lists.ph.comma_separated")
                                 autocomplete="off"
                                 data-oc-chips
                                 data-oc-chips-hint="Escreva uma área e prima Enter."
@@ -1794,8 +1804,8 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
                 )}
 
                 <div class="oc-row--end oc-gap-5 oc-mt-8">
-                    {button(Button::new("Cancelar", Variant::Secondary).href("/units"))}
-                    {button(Button::new("Criar Unidade", Variant::Gold))}
+                    {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/units"))}
+                    {button(Button::new(crate::i18n::t("lists.create.unit_btn"), Variant::Gold))}
                 </div>
             </form>
         </div>
@@ -1822,8 +1832,8 @@ pub fn edit_unit(unit: &Value, error: Option<String>) -> impl IntoView {
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Editar Unidade"</h1>
-                    <p>"O nome, a descrição e as áreas mudam. O código não — é a identidade da unidade."</p>
+                    <h1>{crate::i18n::t("lists.edit.unit")}</h1>
+                    <p>{crate::i18n::t("lists.edit_unit.subtitle")}</p>
                 </div>
             </div>
 
@@ -1834,10 +1844,10 @@ pub fn edit_unit(unit: &Value, error: Option<String>) -> impl IntoView {
 
             <form method="post" action=action>
                 {card(
-                    section_head("A UNIDADE", None, None),
+                    section_head(crate::i18n::t("lists.new_unit.section"), None, None),
                     view! {
                         <div class="oc-field">
-                            <label class="oc-field__label" for="unit-code-fixed">"Código"</label>
+                            <label class="oc-field__label" for="unit-code-fixed">{crate::i18n::t("lists.field.code")}</label>
                             <input
                                 class="oc-input oc-input--readonly"
                                 id="unit-code-fixed"
@@ -1849,30 +1859,30 @@ pub fn edit_unit(unit: &Value, error: Option<String>) -> impl IntoView {
                             // Round-trip do código para o re-render de erro; nunca vai ao Core.
                             <input type="hidden" name="code" value=code_hidden />
                             <p class="oc-field__note" id="unit-code-note">
-                                "O código é a identidade da unidade e não muda."
+                                {crate::i18n::t("lists.edit_unit.code_note")}
                             </p>
                         </div>
 
                         {field_with_value(
                             "unit-name",
-                            "Nome",
+                            crate::i18n::t("lists.field.name"),
                             "name",
-                            "Ex.: Unidade de Energias Renováveis",
+                            crate::i18n::t("lists.ph.unit_name"),
                             "text",
                             name,
                         )}
                         {textarea_with_value(
                             "unit-description",
-                            "Descrição",
+                            crate::i18n::t("lists.field.description"),
                             "description",
-                            "O que esta unidade investiga",
+                            crate::i18n::t("lists.ph.unit_investigates"),
                             92,
                             description,
                         )}
 
                         <div class="oc-field">
                             <label class="oc-field__label" for="unit-areas">
-                                "Áreas de investigação"
+                                {crate::i18n::t("lists.field.research_areas")}
                             </label>
                             <input
                                 class="oc-input"
@@ -1880,7 +1890,7 @@ pub fn edit_unit(unit: &Value, error: Option<String>) -> impl IntoView {
                                 name="research_areas"
                                 type="text"
                                 value=areas
-                                placeholder="separadas por vírgulas"
+                                placeholder=crate::i18n::t("lists.ph.comma_separated")
                                 autocomplete="off"
                                 data-oc-chips
                                 data-oc-chips-hint="Escreva uma área e prima Enter."
@@ -1890,8 +1900,8 @@ pub fn edit_unit(unit: &Value, error: Option<String>) -> impl IntoView {
                 )}
 
                 <div class="oc-row--end oc-gap-5 oc-mt-8">
-                    {button(Button::new("Cancelar", Variant::Secondary).href(format!("/units/{id}")))}
-                    {button(Button::new("Guardar", Variant::Gold))}
+                    {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href(format!("/units/{id}")))}
+                    {button(Button::new(crate::i18n::t("action.save"), Variant::Gold))}
                 </div>
             </form>
         </div>
@@ -1913,10 +1923,9 @@ pub fn new_idea(units: &Value, error: Option<String>) -> impl IntoView {
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Nova Ideia"</h1>
+                    <h1>{crate::i18n::t("create.idea")}</h1>
                     <p>
-                        "Uma ideia é exploratória. Nem todas se tornam projectos, e isso é um
-                         desfecho legítimo."
+                        {crate::i18n::t("lists.new_idea.intro")}
                     </p>
                 </div>
             </div>
@@ -1937,44 +1946,44 @@ pub fn new_idea(units: &Value, error: Option<String>) -> impl IntoView {
                 view! {
                     <form method="post" action="/ideas/new">
                         {card(
-                            section_head("A IDEIA", None, None),
+                            section_head(crate::i18n::t("lists.new_idea.section"), None, None),
                             view! {
                                 // O selector usa o mesmo rótulo composto que a
                                 // lista de unidades; o valor submetido é o id.
                                 {units_select(&unit_rows)}
-                                {text_field("idea-title", "Título", "title", "O que se quer investigar", "text")}
+                                {text_field("idea-title", crate::i18n::t("lists.field.title"), "title", crate::i18n::t("lists.ph.idea_title"), "text")}
                                 {textarea(
                                     "idea-question",
-                                    "Pergunta de investigação",
+                                    crate::i18n::t("lists.field.research_question"),
                                     "research_question",
-                                    "Que pergunta é que isto responde",
+                                    crate::i18n::t("lists.ph.research_question"),
                                     64,
                                 )}
                                 {textarea(
                                     "idea-hypothesis",
-                                    "Hipótese",
+                                    crate::i18n::t("lists.field.hypothesis"),
                                     "hypothesis",
-                                    "A hipótese, quando já existe uma",
+                                    crate::i18n::t("lists.ph.hypothesis"),
                                     64,
                                 )}
                                 {textarea(
                                     "idea-motivation",
-                                    "Motivação",
+                                    crate::i18n::t("lists.field.motivation"),
                                     "motivation",
-                                    "Porque é que isto importa à instituição",
+                                    crate::i18n::t("lists.ph.motivation"),
                                     64,
                                 )}
-                                {textarea("idea-summary", "Resumo", "summary", "Resumo da ideia", 92)}
+                                {textarea("idea-summary", crate::i18n::t("lists.field.summary"), "summary", crate::i18n::t("lists.ph.idea_summary"), 92)}
                                 {text_field(
                                     "idea-keywords",
-                                    "Palavras-chave",
+                                    crate::i18n::t("lists.field.keywords"),
                                     "keywords",
-                                    "separadas por vírgulas",
+                                    crate::i18n::t("lists.ph.comma_separated"),
                                     "text",
                                 )}
                                 {select(
                                     "idea-classification",
-                                    "Classificação",
+                                    crate::i18n::t("lists.field.classification"),
                                     "classification",
                                     vec![
                                         ("INTERNAL".to_owned(), true),
@@ -1983,15 +1992,14 @@ pub fn new_idea(units: &Value, error: Option<String>) -> impl IntoView {
                                     ],
                                 )}
                                 <p class="oc-muted oc-t-caption--muted" >
-                                    "A classificação governa tudo o que for acrescentado a este
-                                     Research Workspace."
+                                    {crate::i18n::t("lists.new_idea.class_note")}
                                 </p>
                             },
                         )}
 
                         <div class="oc-row--end oc-gap-5 oc-mt-8" >
-                            {button(Button::new("Cancelar", Variant::Secondary).href("/ideas"))}
-                            {button(Button::new("Criar Ideia", Variant::Gold))}
+                            {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/ideas"))}
+                            {button(Button::new(crate::i18n::t("lists.create.idea_btn"), Variant::Gold))}
                         </div>
                     </form>
                 }
@@ -2002,13 +2010,12 @@ pub fn new_idea(units: &Value, error: Option<String>) -> impl IntoView {
                 view! {
                     <section class="oc-card">
                         <div class="oc-empty">
-                            <h3>"Ainda não existem unidades"</h3>
+                            <h3>{crate::i18n::t("lists.new_idea.no_units_title")}</h3>
                             <p>
-                                "Uma ideia pertence sempre a uma unidade científica. Peça a um
-                                 administrador que crie a primeira."
+                                {crate::i18n::t("lists.new_idea.no_units_body")}
                             </p>
                             <div class="oc-empty__actions">
-                                {button(Button::new("Ver unidades", Variant::Secondary).href("/units"))}
+                                {button(Button::new(crate::i18n::t("lists.see_units_lc"), Variant::Secondary).href("/units"))}
                             </div>
                         </div>
                     </section>
@@ -2033,7 +2040,7 @@ fn units_select(units: &[Value]) -> impl IntoView {
 
     view! {
         <div class="oc-field">
-            <label class="oc-field__label" for="idea-unit">"Unidade"</label>
+            <label class="oc-field__label" for="idea-unit">{crate::i18n::t("lists.field.unit")}</label>
             <select class="oc-select" id="idea-unit" name="unit_id" required>
                 {options
                     .into_iter()
@@ -2072,12 +2079,9 @@ pub fn bibliography_tools(
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Ferramentas bibliográficas"</h1>
+                    <h1>{crate::i18n::t("lists.tools.title")}</h1>
                     <p>
-                        "Valida a estrutura de referências BibTeX e produz uma versão
-                         normalizada. A leitura acontece no Ocinye OS, sem consultar
-                         serviços externos: nenhum DOI é verificado e nenhuma referência
-                         é confirmada."
+                        {crate::i18n::t("lists.tools.intro")}
                     </p>
                 </div>
             </div>
@@ -2091,7 +2095,7 @@ pub fn bibliography_tools(
                 view! {
                     <form class="oc-form" method="post" action="/bibliography/tools">
                         {card(
-                            section_head("BIBLIOGRAFIA", None, None),
+                            section_head(crate::i18n::t("lists.tools.section"), None, None),
                             view! {
                                 {workspace_destination(workspaces)}
                                 <div class="oc-field">
@@ -2101,12 +2105,12 @@ pub fn bibliography_tools(
                                         id="bibtex"
                                         name="bibtex"
                                         rows="12"
-                                        placeholder="@article{chave, title = {…}, author = {…}, year = {…}}"
+                                        placeholder=crate::i18n::t("lists.ph.bibtex")
                                     >{escrito}</textarea>
                                 </div>
                                 <div class="oc-actions">
                                     <button type="submit" class="oc-btn oc-btn--navy">
-                                        "Validar e normalizar"
+                                        {crate::i18n::t("lists.tools.validate")}
                                     </button>
                                 </div>
                             },
@@ -2118,10 +2122,8 @@ pub fn bibliography_tools(
                 view! {
                     <div class="oc-card">
                         {empty_state(EmptyState {
-                            title: "Sem Research Workspace onde trabalhar".to_owned(),
-                            body: "Rever bibliografia acontece dentro de um ambiente de \
-                                   investigação onde possa acrescentar referências."
-                                .to_owned(),
+                            title: crate::i18n::t("lists.tools.none_title").to_owned(),
+                            body: crate::i18n::t("lists.tools.none_body").to_owned(),
                             actions: Vec::new(),
                             small: false,
                             icon: crate::ui::icon::Icon::EmptyState,
@@ -2145,9 +2147,18 @@ fn resultado_da_revisao(revisao: &BibliographyReview) -> impl IntoView {
     let completa = revisao.is_complete();
 
     let resumo = if completa {
-        format!("{lidas} referência(s) lidas, todas legíveis.")
+        crate::i18n::tf(
+            "lists.review.all_readable",
+            &[("count", &lidas.to_string())],
+        )
     } else {
-        format!("{lidas} referência(s) lidas · {por_ler} por ler.")
+        crate::i18n::tf(
+            "lists.review.some_unread",
+            &[
+                ("read", &lidas.to_string()),
+                ("unread", &por_ler.to_string()),
+            ],
+        )
     };
 
     let ilegiveis: Vec<String> = revisao.unreadable.clone();
@@ -2167,11 +2178,15 @@ fn resultado_da_revisao(revisao: &BibliographyReview) -> impl IntoView {
     view! {
         <div class="oc-mt-6" data-oc="revisao">
             {card(
-                section_head("RESULTADO", None, None),
+                section_head(crate::i18n::t("lists.review.section"), None, None),
                 view! {
                     <p class="oc-t-body">
                         {badge(
-                            if completa { "Legível" } else { "Com problemas" },
+                            if completa {
+                                crate::i18n::t("lists.review.readable")
+                            } else {
+                                crate::i18n::t("lists.review.problems")
+                            },
                             if completa { Tone::Ok } else { Tone::Gold },
                         )}
                         " "
@@ -2182,7 +2197,7 @@ fn resultado_da_revisao(revisao: &BibliographyReview) -> impl IntoView {
                         .then(|| {
                             view! {
                                 <div class="oc-mt-4">
-                                    <p class="oc-t-strong">"Não foi possível ler:"</p>
+                                    <p class="oc-t-strong">{crate::i18n::t("lists.review.unreadable_head")}</p>
                                     <ul class="oc-list">
                                         {ilegiveis
                                             .into_iter()
@@ -2197,7 +2212,7 @@ fn resultado_da_revisao(revisao: &BibliographyReview) -> impl IntoView {
                         .then(|| {
                             view! {
                                 <div class="oc-mt-4">
-                                    <p class="oc-t-strong">"Referências lidas:"</p>
+                                    <p class="oc-t-strong">{crate::i18n::t("lists.review.read_head")}</p>
                                     <ul class="oc-list">
                                         {entradas
                                             .into_iter()
@@ -2217,7 +2232,7 @@ fn resultado_da_revisao(revisao: &BibliographyReview) -> impl IntoView {
 
                     <div class="oc-mt-5">
                         <label class="oc-field__label" for="normalizado">
-                            "BibTeX normalizado"
+                            {crate::i18n::t("lists.review.normalised")}
                         </label>
                         <textarea
                             class="oc-textarea"
@@ -2239,7 +2254,7 @@ mod tests {
 
     /// Um membro que pode tudo, para os testes que verificam a tabela e não a
     /// filtragem por permissão.
-    fn viewer() -> Viewer {
+    pub(super) fn viewer() -> Viewer {
         Viewer {
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
@@ -2312,7 +2327,7 @@ mod tests {
                 "{ecra}: a acção aparece sem estar marcada como indisponível"
             );
             assert!(
-                html.contains(SEM_AUTORIZACAO),
+                html.contains(sem_autorizacao()),
                 "{ecra}: a acção não diz porque está indisponível"
             );
             assert!(
@@ -2552,5 +2567,139 @@ mod tests {
         assert!(html.contains("Sistemas distribuídos, Engenharia de software"));
         // O formulário aponta para a rota de edição.
         assert!(html.contains("/units/11111111-1111-1111-1111-111111111111/edit"));
+    }
+}
+
+/// Um ecrã, uma língua: os ecrãs de lista e um formulário de criação em francês,
+/// com marcas francesas presentes e o chrome português ausente. A prova segue o
+/// mesmo molde das outras migrações (ai.rs, settings.rs): renderiza dentro de
+/// `with_locale(Locale::Fr, …)` e afirma sobre o HTML resultante.
+#[cfg(test)]
+mod pureza_i18n {
+    use super::tests::viewer;
+    use super::*;
+    use crate::i18n::{with_locale, Locale};
+    use serde_json::json;
+
+    /// Confirma que todas as marcas francesas aparecem e nenhuma portuguesa.
+    fn so_frances(html: &str, francesas: &[&str], portuguesas: &[&str]) {
+        for fr in francesas {
+            assert!(html.contains(fr), "fr: falta «{fr}»");
+        }
+        for pt in portuguesas {
+            assert!(!html.contains(pt), "fr: chrome português «{pt}»");
+        }
+    }
+
+    #[tokio::test]
+    async fn as_unidades_nao_misturam_linguas() {
+        let payload = json!({"items": [], "total": 0});
+        let fr = with_locale(Locale::Fr, async { units(&viewer(), &payload).to_html() }).await;
+        so_frances(
+            &fr,
+            &[
+                "Nouvelle unité",
+                "Toutes les unités institutionnelles",
+                "RESPONSABLE",
+                "MEMBRES",
+            ],
+            &[
+                "Nova Unidade",
+                "Todas as unidades institucionais",
+                "RESPONSÁVEL",
+                "MEMBROS",
+            ],
+        );
+    }
+
+    #[tokio::test]
+    async fn as_ideias_nao_misturam_linguas() {
+        let payload = json!({"items": [], "total": 0});
+        let fr = with_locale(Locale::Fr, async {
+            ideas(&viewer(), &payload, Slice::default()).to_html()
+        })
+        .await;
+        so_frances(
+            &fr,
+            &["Nouvelle idée", "TITRE", "Toutes", "De l’unité"],
+            &["Nova Ideia", "TÍTULO", "Todas", "Da Unidade"],
+        );
+    }
+
+    #[tokio::test]
+    async fn os_datasets_nao_misturam_linguas() {
+        let payload = json!({"items": [], "total": 0});
+        let fr = with_locale(Locale::Fr, async {
+            datasets(&viewer(), &payload).to_html()
+        })
+        .await;
+        so_frances(
+            &fr,
+            &["Nouveau jeu de données", "TAILLE", "VERSION"],
+            &["Novo Dataset", "TAMANHO"],
+        );
+    }
+
+    #[tokio::test]
+    async fn os_membros_nao_misturam_linguas() {
+        let payload = json!({"items": [], "total": 0});
+        let fr = with_locale(Locale::Fr, async { members(&viewer(), &payload).to_html() }).await;
+        so_frances(
+            &fr,
+            &["Ajouter un utilisateur", "Rôles", "Services"],
+            &["Adicionar Utilizador", "Funções", "Membros"],
+        );
+    }
+
+    #[tokio::test]
+    async fn o_audit_nao_mistura_linguas() {
+        let payload = json!({
+            "items": [{
+                "occurred_at": "2026-08-22T03:14:00Z",
+                "actor_name": "João Manuel",
+                "action": "read",
+                "resource_type": "dataset",
+                "outcome": "denied",
+                "classification": "RESTRICTED",
+                "correlation_id": "9c1f4b2a-77de-4c11"
+            }],
+            "total": 1
+        });
+        let fr = with_locale(Locale::Fr, async { audit(&viewer(), &payload).to_html() }).await;
+        so_frances(
+            &fr,
+            &[
+                "Journal d’audit",
+                "Authentification",
+                "REFUSÉ",
+                "ID DE CORRÉLATION",
+            ],
+            &["Audit Log", "Autenticação", "NEGADO", "CORRELATION ID"],
+        );
+    }
+
+    #[tokio::test]
+    async fn o_formulario_de_ideia_nao_mistura_linguas() {
+        let units = json!({
+            "items": [
+                {"id": "11111111-1111-1111-1111-111111111111", "code": "UCS-001", "name": "Unité"}
+            ]
+        });
+        let fr = with_locale(Locale::Fr, async { new_idea(&units, None).to_html() }).await;
+        so_frances(
+            &fr,
+            &[
+                "Nouvelle idée",
+                "Question de recherche",
+                "Créer l’idée",
+                "Annuler",
+            ],
+            &[
+                "Nova Ideia",
+                "Pergunta de investigação",
+                "Criar Ideia",
+                "Cancelar",
+            ],
+        );
     }
 }

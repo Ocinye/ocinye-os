@@ -198,9 +198,9 @@ pub fn data_table(table: Table) -> impl IntoView {
     // pesquisar duzentas, e quem não encontrar o que procura merece saber
     // porquê.
     let rotulo = if truncated {
-        format!("Filtrar {search} nesta página…")
+        crate::i18n::tf("table.filter_page", &[("noun", search)])
     } else {
-        format!("Filtrar {search}…")
+        crate::i18n::tf("table.filter", &[("noun", search)])
     };
 
     let column_count = columns.len();

@@ -86,6 +86,11 @@ def is_chrome(s: str) -> bool:
         return False
     if "://" in core or core.count("/") >= 2:
         return False
+    # A URL query fragment (`?unit=true`, `&sort=asc`) assembled onto a base with
+    # `format!`. After the `{…}` holes are stripped it can read as words, but it
+    # is machinery, not chrome: no spaces, and it is `?`/`&` key=value pairs.
+    if re.fullmatch(r"[?&][\w=&%.+-]*", core):
+        return False
     # A single snake_case / kebab token, or a class list, or an enum key.
     tokens = core.split()
     if all(re.fullmatch(r"[A-Za-z0-9:_-]+", t) for t in tokens):
