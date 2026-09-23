@@ -43,7 +43,7 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
             <div class="oc-login__bar">
                 <span class="oc-login__state">
                     <i aria-hidden="true"></i>
-                    <span>"OCINYE CORE · PRIMEIRO ACESSO"</span>
+                    <span>{crate::i18n::t("first_access.eyebrow")}</span>
                 </span>
                 <span class="oc-login__clock" data-oc="clock"></span>
             </div>
@@ -54,7 +54,7 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
                         <img src="/static/ocinye_logo.png" alt="Ocinye" />
                     </span>
                     <span class="oc-login__wordmark">"OCINYE OS"</span>
-                    <span class="oc-login__sub">"PRIMEIRO ACESSO"</span>
+                    <span class="oc-login__sub">{crate::i18n::t("first_access.wordmark_sub")}</span>
                 </div>
 
                 {message
@@ -64,7 +64,7 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
                     <div class="oc-login__who">
                         <span class="oc-login__avatar" aria-hidden="true">{initials}</span>
                         <span class="oc-login__name">{name}</span>
-                        <span class="oc-login__mail">"Defina a sua palavra-passe"</span>
+                        <span class="oc-login__mail">{crate::i18n::t("first_access.set_password")}</span>
                     </div>
 
                     <p class="oc-first__lead">
@@ -102,7 +102,7 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
 
                         <div class="oc-login__field">
                             {icon(Icon::Lock, 13)}
-                            <label class="oc-sr" for="new-pass">"Nova palavra-passe"</label>
+                            <label class="oc-sr" for="new-pass">{crate::i18n::t("first_access.new_password")}</label>
                             <input
                                 id="new-pass"
                                 name="password"
@@ -110,7 +110,7 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
                                 autocomplete="new-password"
                                 required
                                 minlength=MIN_LENGTH.to_string()
-                                placeholder="Nova palavra-passe"
+                                placeholder=crate::i18n::t("first_access.new_password")
                             />
                             <button
                                 type="button"
@@ -126,7 +126,7 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
                         <div class="oc-login__field">
                             {icon(Icon::Lock, 13)}
                             <label class="oc-sr" for="confirm-pass">
-                                "Confirmar nova palavra-passe"
+                                {crate::i18n::t("first_access.confirm_password")}
                             </label>
                             <input
                                 id="confirm-pass"
@@ -135,7 +135,7 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
                                 autocomplete="new-password"
                                 required
                                 minlength=MIN_LENGTH.to_string()
-                                placeholder="Confirmar nova palavra-passe"
+                                placeholder=crate::i18n::t("first_access.confirm_password")
                             />
                             // Também aqui, e pela mesma razão que no campo de
                             // cima: quem não consegue ler o que escreveu só
@@ -154,14 +154,14 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
                         </div>
 
                         <ul class="oc-first__rules">
-                            <li>{format!("Mínimo de {MIN_LENGTH} caracteres.")}</li>
-                            <li>"Frases longas são aceites, com espaços e acentos."</li>
-                            <li>"Não são exigidos símbolos nem maiúsculas."</li>
-                            <li>"Palavras-passe comuns ou previsíveis são recusadas."</li>
+                            <li>{crate::i18n::tf("first_access.min_length_dot", &[("min", &MIN_LENGTH.to_string())])}</li>
+                            <li>{crate::i18n::t("first_access.long_phrases")}</li>
+                            <li>{crate::i18n::t("first_access.no_symbols_required")}</li>
+                            <li>{crate::i18n::t("first_access.common_rejected")}</li>
                         </ul>
 
                         <button type="submit" class="oc-login__submit">
-                            "Definir palavra-passe"
+                            {crate::i18n::t("first_access.set_password_button")}
                             {icon(Icon::ArrowRight, 14)}
                         </button>
                     </form>
@@ -169,10 +169,10 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
                     <div class="oc-login__row">
                         <form method="post" action="/logout">
                             <button type="submit" class="oc-login__alt oc-login__alt--button">
-                                "Terminar sessão"
+                                {crate::i18n::t("auth.sign_out")}
                             </button>
                         </form>
-                        <span class="oc-login__lang">"PT · pt-PT"</span>
+                        <span class="oc-login__lang">{format!("{} · {}", crate::i18n::current().as_str().to_uppercase(), crate::i18n::current().bcp47())}</span>
                     </div>
                 </div>
             </div>
@@ -242,8 +242,8 @@ mod tests {
 
     #[test]
     fn a_recusa_do_core_e_mostrada_tal_como_veio() {
-        let html = render(Some("Esta palavra-passe é demasiado comum.".to_owned()));
-        assert!(html.contains("Esta palavra-passe é demasiado comum."));
+        let html = render(Some(crate::i18n::t("first_access.too_common").to_owned()));
+        assert!(html.contains(crate::i18n::t("first_access.too_common")));
         assert!(html.contains(r#"role="alert""#));
     }
 

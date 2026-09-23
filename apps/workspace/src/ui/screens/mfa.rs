@@ -66,7 +66,7 @@ fn frame(rotulo: &'static str, message: Option<String>, corpo: AnyView) -> impl 
                         <img src="/static/ocinye_logo.png" alt="Ocinye" />
                     </span>
                     <span class="oc-login__wordmark">"OCINYE OS"</span>
-                    <span class="oc-login__sub">"SEGUNDO FACTOR"</span>
+                    <span class="oc-login__sub">{crate::i18n::t("mfa.wordmark_sub")}</span>
                 </div>
 
                 {message
@@ -77,10 +77,10 @@ fn frame(rotulo: &'static str, message: Option<String>, corpo: AnyView) -> impl 
                 <div class="oc-login__row">
                     <form method="post" action="/logout">
                         <button type="submit" class="oc-login__alt oc-login__alt--button">
-                            "Terminar sessão"
+                            {crate::i18n::t("auth.sign_out")}
                         </button>
                     </form>
-                    <span class="oc-login__lang">"PT · pt-PT"</span>
+                    <span class="oc-login__lang">{format!("{} · {}", crate::i18n::current().as_str().to_uppercase(), crate::i18n::current().bcp47())}</span>
                 </div>
             </div>
 
@@ -111,7 +111,7 @@ pub fn enrollment(
     let corpo = view! {
         <div class="oc-login__who">
             <span class="oc-login__name">{nome}</span>
-            <span class="oc-login__mail">"Configurar o segundo factor"</span>
+            <span class="oc-login__mail">{crate::i18n::t("mfa.setup")}</span>
         </div>
 
         <p class="oc-mfa__lead">
@@ -122,13 +122,13 @@ pub fn enrollment(
         <figure class="oc-mfa__qr">
             <div class="oc-mfa__qr-img" inner_html=svg
                 role="img"
-                aria-label="Código QR de configuração do segundo factor"></div>
+                aria-label=crate::i18n::t("mfa.qr_alt")></div>
         </figure>
 
         {match manual {
             None => view! {
                 <p class="oc-mfa__manual">
-                    <a class="oc-link" href="/mfa?show_key=1">"Mostrar chave manual"</a>
+                    <a class="oc-link" href="/mfa?show_key=1">{crate::i18n::t("mfa.show_manual_key")}</a>
                     " — se não puder ler o QR."
                 </p>
             }
@@ -137,7 +137,7 @@ pub fn enrollment(
                 let mostrar = chave.clone();
                 view! {
                 <div class="oc-mfa__key">
-                    <span class="oc-mfa__key-label">"Chave manual"</span>
+                    <span class="oc-mfa__key-label">{crate::i18n::t("mfa.manual_key")}</span>
                     <code class="oc-mono" data-oc="secret" data-oc-value=chave>{mostrar}</code>
                     <button
                         type="button"
@@ -159,7 +159,7 @@ pub fn enrollment(
         <form method="post" action="/mfa/confirm" class="oc-mt-6">
             <div class="oc-login__field">
                 {icon(Icon::Lock, 13)}
-                <label class="oc-sr" for="mfa-code">"Código de seis dígitos"</label>
+                <label class="oc-sr" for="mfa-code">{crate::i18n::t("mfa.six_digit_code")}</label>
                 <input
                     id="mfa-code"
                     name="code"
@@ -168,7 +168,7 @@ pub fn enrollment(
                     autocomplete="one-time-code"
                     pattern="[0-9 ]*"
                     required
-                    placeholder="Código de seis dígitos"
+                    placeholder=crate::i18n::t("mfa.six_digit_code")
                 />
             </div>
             <button type="submit" class="oc-login__submit">
@@ -192,8 +192,8 @@ pub fn recovery_codes(codes: &[String]) -> impl IntoView {
 
     let corpo = view! {
         <div class="oc-login__who">
-            <span class="oc-login__name">"Guardar códigos de recuperação"</span>
-            <span class="oc-login__mail">"Mostrados uma única vez"</span>
+            <span class="oc-login__name">{crate::i18n::t("mfa.recovery_codes")}</span>
+            <span class="oc-login__mail">{crate::i18n::t("mfa.shown_once")}</span>
         </div>
 
         <p class="oc-mfa__lead">
@@ -206,17 +206,17 @@ pub fn recovery_codes(codes: &[String]) -> impl IntoView {
 
         <div class="oc-row oc-gap-3 oc-mt-3">
             <button type="button" class="oc-btn oc-btn--sm" data-oc="recovery-copy">
-                "Copiar códigos"
+                {crate::i18n::t("mfa.copy_codes")}
             </button>
             <button type="button" class="oc-btn oc-btn--sm" data-oc="recovery-download">
-                "Guardar ficheiro"
+                {crate::i18n::t("mfa.save_file")}
             </button>
         </div>
 
         <form method="post" action="/mfa/acknowledge" class="oc-mt-6">
             <label class="oc-check">
                 <input type="checkbox" name="acknowledged" value="1" required />
-                <span>"Guardei os códigos de recuperação num local seguro."</span>
+                <span>{crate::i18n::t("mfa.saved_confirm")}</span>
             </label>
             <button type="submit" class="oc-login__submit oc-mt-3">
                 "Concluir"
@@ -239,13 +239,13 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
     let corpo = view! {
         <div class="oc-login__who">
             <span class="oc-login__name">{nome}</span>
-            <span class="oc-login__mail">"Confirme o segundo factor"</span>
+            <span class="oc-login__mail">{crate::i18n::t("mfa.confirm")}</span>
         </div>
 
         <form method="post" action="/mfa/challenge" class="oc-mt-3">
             <div class="oc-login__field">
                 {icon(Icon::Lock, 13)}
-                <label class="oc-sr" for="mfa-code">"Código do autenticador"</label>
+                <label class="oc-sr" for="mfa-code">{crate::i18n::t("mfa.authenticator_code")}</label>
                 <input
                     id="mfa-code"
                     name="code"
@@ -254,7 +254,7 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
                     autocomplete="one-time-code"
                     pattern="[0-9 ]*"
                     required
-                    placeholder="Código do autenticador"
+                    placeholder=crate::i18n::t("mfa.authenticator_code")
                 />
             </div>
             <button type="submit" class="oc-login__submit">
@@ -264,7 +264,7 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
         </form>
 
         <details class="oc-mfa__fallback oc-mt-6">
-            <summary>"Não tenho o autenticador à mão"</summary>
+            <summary>{crate::i18n::t("mfa.no_authenticator")}</summary>
             <p class="oc-muted oc-mt-3">
                 "Use um dos códigos de recuperação que guardou ao configurar o MFA.
                  Cada código serve uma única vez."
@@ -272,18 +272,18 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
             <form method="post" action="/mfa/recovery" class="oc-mt-3">
                 <div class="oc-login__field">
                     {icon(Icon::Lock, 13)}
-                    <label class="oc-sr" for="mfa-recovery">"Código de recuperação"</label>
+                    <label class="oc-sr" for="mfa-recovery">{crate::i18n::t("mfa.recovery_code")}</label>
                     <input
                         id="mfa-recovery"
                         name="code"
                         type="text"
                         autocomplete="off"
                         required
-                        placeholder="Código de recuperação"
+                        placeholder=crate::i18n::t("mfa.recovery_code")
                     />
                 </div>
                 <button type="submit" class="oc-btn oc-btn--secondary">
-                    "Entrar com código de recuperação"
+                    {crate::i18n::t("mfa.enter_with_recovery")}
                 </button>
             </form>
         </details>
@@ -315,7 +315,7 @@ mod tests {
         );
         // Mas há como pedi-la.
         assert!(html.contains("/mfa?show_key=1"));
-        assert!(html.contains("Mostrar chave manual"));
+        assert!(html.contains(crate::i18n::t("mfa.show_manual_key")));
         // E não há Workspace nenhum.
         for fuga in ["oc-side", "oc-topbar", "/administration", "SUPER ADMIN"] {
             assert!(!html.contains(fuga), "o ecrã expõe «{fuga}»");
@@ -363,7 +363,7 @@ mod tests {
         let html = challenge("Fidel Admin", None).to_html();
         assert!(html.contains("action=\"/mfa/challenge\""));
         assert!(html.contains("action=\"/mfa/recovery\""));
-        assert!(html.contains("Não tenho o autenticador à mão"));
+        assert!(html.contains(crate::i18n::t("mfa.no_authenticator")));
         // Nada do Workspace.
         for fuga in ["oc-side", "oc-topbar", "SUPER ADMIN"] {
             assert!(!html.contains(fuga), "o desafio expõe «{fuga}»");

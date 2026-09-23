@@ -7,7 +7,7 @@
     "fr"
   ],
   "fallback": "pt",
-  "slice": 10,
+  "slice": 11,
   "namespaces": [
     {
       "prefix": "nav",
@@ -107,6 +107,11 @@
     {
       "prefix": "messaging",
       "surface": "Messages: conversations, composer, new conversation (fully migrated)",
+      "status": "translated"
+    },
+    {
+      "prefix": "auth / login / boot / first_access / mfa",
+      "surface": "Pre-auth: boot, login, first access, MFA (fully migrated)",
       "status": "translated"
     }
   ],

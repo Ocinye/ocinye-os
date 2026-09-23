@@ -7,6 +7,15 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização (fatia 11): arranque, login, primeiro acesso e MFA — 2026-09-23
+
+As superfícies anteriores à sessão passam a pt/en/fr: o arranque («A perguntar ao
+Ocinye Core», tentar novamente), o login (sessão institucional, endereço, criar
+conta), o primeiro acesso (definir palavra-passe e as regras) e o segundo factor
+(configurar, chave manual, códigos de recuperação). O selector de idioma do
+canto passa a mostrar o locale corrente. Guarda de pureza
+`o_login_nao_mistura_linguas`.
+
 ### Internacionalização (fatia 10): as Mensagens — 2026-09-23
 
 As Mensagens internas passam a pt/en/fr: a lista de conversas e a conversa
