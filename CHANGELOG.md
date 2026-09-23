@@ -7,6 +7,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização (Inteligência): o hub de IA e a criação de agentes — 2026-09-23
+
+O ecrã `Ocinye AI` passa a pt/en/fr: a visão geral e os separadores, os
+contadores, o estado de indisponibilidade, o formulário de criação de agente
+(nome, propósito, instruções, capacidade principal, âmbito, fontes de
+conhecimento, segurança) e a página de detalhe do agente. Primeiro ecrã migrado
+com o portão a verificar — a leitura sem agulhas confirma o ficheiro a zero.
+Cabeçalhos de secção passam a caixa de frase, na convenção dos ecrãs já
+migrados. Guarda de pureza `mod pureza_i18n` em `ai.rs`.
+
 ### Internacionalização: portão de mistura de línguas (i18n chrome guard) — 2026-09-23
 
 Um portão de CI que lê o **código-fonte** à procura de literais de interface que

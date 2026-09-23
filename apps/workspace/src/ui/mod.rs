@@ -354,7 +354,7 @@ mod render_tests {
             (
                 "Criar Agente IA",
                 screens::ai::new_agent(&json!({}), None).to_html(),
-                vec!["IDENTIDADE", "ÂMBITO DE ACESSO", "CONHECIMENTO"],
+                vec!["Identidade", "Âmbito de acesso", "Conhecimento"],
             ),
         ];
 
