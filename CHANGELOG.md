@@ -7,6 +7,15 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização: o ecrã de Actividade (chrome) — 2026-09-23
+
+O ecrã de Actividade passa a pt/en/fr no seu chrome — título, subtítulo e estado
+vazio. A **linha de cada acontecimento** (`summary`) é composta pelo Ocinye Core
+e é **conteúdo**, não chrome do Workspace: fica marcada como tal
+(`data-oc-content`) e a sua localização é uma mudança no Core — emitir o evento
+como `kind` + sujeito estruturado, em vez de uma frase já feita —, registada
+como o passo seguinte (§11, §44). Guarda de pureza `mod pureza_i18n`.
+
 ### Internacionalização: o Prompt e os stragglers de correio, calendário, mensagens e ficheiros — 2026-09-23
 
 O ecrã **Prompt** passa a pt/en/fr (novo namespace `PROMPT`): rótulos de autor e

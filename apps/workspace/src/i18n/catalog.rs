@@ -1003,6 +1003,19 @@ const AUTH: &[Entry] = catalogo! {
 };
 
 /// Ecrãs de aviso do sistema — indisponível, recusado, conflito.
+/// O feed de actividade. A linha de cada acontecimento — o `summary` — é
+/// composta pelo Core e é conteúdo, não chrome do Workspace; aqui vive só o
+/// chrome do ecrã. A localização da própria linha é uma mudança no Core (emitir
+/// eventos estruturados/localizados), não neste ecrã (§11, §44).
+const ACTIVITY: &[Entry] = catalogo! {
+    "activity.subtitle": {
+        pt: "O que mudou no trabalho a que tem acesso. Distinto do registo de auditoria, que existe para segurança e evidência.",
+        en: "What changed in the work you have access to. Distinct from the audit log, which exists for security and evidence.",
+        fr: "Ce qui a changé dans le travail auquel vous avez accès. Distinct du journal d’audit, qui existe pour la sécurité et la preuve."
+    },
+    "activity.empty": { pt: "Ainda não há actividade.", en: "There is no activity yet.", fr: "Il n’y a pas encore d’activité." },
+};
+
 const NOTICE: &[Entry] = catalogo! {
     "notice.unavailable.title": { pt: "Esta operação não está disponível agora", en: "This operation is not available right now", fr: "Cette opération n’est pas disponible pour l’instant" },
     "notice.unavailable.default": { pt: "Um serviço de que esta operação depende não está a responder nesta instalação — quem administra o sistema saberá qual.", en: "A service this operation depends on is not responding on this installation — whoever administers the system will know which.", fr: "Un service dont dépend cette opération ne répond pas sur cette installation — l’équipe qui administre le système saura lequel." },
@@ -2643,6 +2656,7 @@ const WORKSPACES: &[Entry] = catalogo! {
 /// Não inclui grupos de teste: uma chave só-`pt` de teste (para provar a queda)
 /// não é um buraco de produção, e não deve fazer o portão soar.
 pub const GROUPS: &[&[Entry]] = &[
+    ACTIVITY,
     NOTICE,
     MISC_A,
     AUTH,
