@@ -29,20 +29,29 @@ fn day(value: &Value, key: &str) -> String {
 // lista, que o seletor de criação, o de atribuição e os crachás de acesso
 // partilham. Aqui usam-se `roles::OFERECIDOS` e `roles::label_do_codigo`.
 
-/// Posições institucionais. **Não concedem acesso** (ADR-0100).
+/// Posições institucionais: código do domínio → chave do rótulo no catálogo.
+/// **Não concedem acesso** (ADR-0100). A chave resolve-se pela via i18n no
+/// idioma corrente — uma `const` não pode chamar `t()`, mas pode guardar a chave.
 const POSITIONS: [(&str, &str); 9] = [
-    ("researcher", "Investigador"),
-    ("engineer", "Engenheiro"),
-    ("principal_investigator", "Investigador principal"),
-    ("unit_lead", "Responsável de unidade"),
-    ("fellow", "Bolseiro"),
-    ("student", "Estudante"),
-    ("director", "Director"),
-    ("founder", "Fundador"),
-    ("external_collaborator", "Colaborador externo"),
+    ("researcher", "admin.position.researcher"),
+    ("engineer", "admin.position.engineer"),
+    (
+        "principal_investigator",
+        "admin.position.principal_investigator",
+    ),
+    ("unit_lead", "admin.position.unit_lead"),
+    ("fellow", "admin.position.fellow"),
+    ("student", "admin.position.student"),
+    ("director", "admin.position.director"),
+    ("founder", "admin.position.founder"),
+    (
+        "external_collaborator",
+        "admin.position.external_collaborator",
+    ),
 ];
 
-/// O rótulo em português de uma posição institucional, pelo código do domínio.
+/// O rótulo de uma posição institucional, no idioma corrente, pelo código do
+/// domínio.
 ///
 /// Uma só tradução, partilhada pelo formulário de criação, pelo detalhe do
 /// membro e pela lista — para que «founder» nunca apareça cru num sítio e
@@ -53,10 +62,10 @@ pub fn position_label(code: &str) -> String {
     if code.is_empty() {
         return "—".to_owned();
     }
-    POSITIONS
-        .iter()
-        .find(|(c, _)| *c == code)
-        .map_or_else(|| code.to_owned(), |(_, label)| (*label).to_owned())
+    POSITIONS.iter().find(|(c, _)| *c == code).map_or_else(
+        || code.to_owned(),
+        |(_, key)| crate::i18n::t(key).to_owned(),
+    )
 }
 
 /// Ecrã «Adicionar utilizador».
@@ -84,11 +93,8 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
         <div class="oc-page">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Adicionar membro"</h1>
-                    <p>
-                        "O Ocinye Core gera uma palavra-passe temporária. O membro terá de
-                         definir a sua no primeiro acesso."
-                    </p>
+                    <h1>{crate::i18n::t("admin.new.title")}</h1>
+                    <p>{crate::i18n::t("admin.new.subtitle")}</p>
                 </div>
             </div>
 
@@ -99,12 +105,12 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
 
             <form method="post" action="/admin/members/new" class="oc-split oc-split--2">
                 <section class="oc-card">
-                    <div class="oc-card__head"><h2>"IDENTIDADE"</h2></div>
+                    <div class="oc-card__head"><h2>{crate::i18n::t("admin.new.identity")}</h2></div>
                     <div class="oc-card__body">
                         <div class="oc-field">
-                            <label class="oc-field__label" for="m-name">"Nome completo"</label>
+                            <label class="oc-field__label" for="m-name">{crate::i18n::t("admin.new.full_name")}</label>
                             <input class="oc-input" id="m-name" name="full_name" required
-                                   placeholder="Ex.: Ana Maria Fernandes" />
+                                   placeholder=crate::i18n::t("admin.new.full_name_ph") />
                         </div>
                         // Um campo, e não dois.
                         //
@@ -120,14 +126,13 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                         // ninguém conseguia criar um membro por este ecrã.
                         <div class="oc-field">
                             <label class="oc-field__label" for="m-email">
-                                "Endereço institucional"
+                                {crate::i18n::t("login.institutional_address")}
                             </label>
                             <input class="oc-input" id="m-email" name="email" type="email" required
                                    autocapitalize="none" spellcheck="false"
-                                   placeholder="ana.fernandes@ocinye.com" />
+                                   placeholder=crate::i18n::t("admin.new.email_ph") />
                             <p class="oc-field__hint">
-                                "É a identidade e a credencial de entrada. A convenção da
-                                 instituição é primeiro.ultimo@ocinye.com, em minúsculas."
+                                {crate::i18n::t("admin.new.email_hint")}
                             </p>
                         </div>
                     </div>
@@ -135,29 +140,29 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
 
                 <div>
                     <section class="oc-card oc-mb-5">
-                        <div class="oc-card__head"><h2>"ORGANIZAÇÃO"</h2></div>
+                        <div class="oc-card__head"><h2>{crate::i18n::t("admin.new.organisation")}</h2></div>
                         <div class="oc-card__body">
                             <div class="oc-field">
                                 <label class="oc-field__label" for="m-position">
-                                    "Posição institucional"
+                                    {crate::i18n::t("admin.position.label")}
                                 </label>
                                 <select class="oc-select" id="m-position" name="position">
                                     <option value="">"—"</option>
                                     {POSITIONS
                                         .iter()
-                                        .map(|(value, label)| {
-                                            view! { <option value=*value>{*label}</option> }
+                                        .map(|(value, key)| {
+                                            view! { <option value=*value>{crate::i18n::t(key)}</option> }
                                         })
                                         .collect_view()}
                                 </select>
                                 <p class="oc-field__hint">
-                                    "Verdade organizacional. "
-                                    <strong>"Não concede acesso a nada."</strong>
+                                    {crate::i18n::t("admin.new.position_truth")}
+                                    <strong>{crate::i18n::t("admin.new.position_no_access")}</strong>
                                 </p>
                             </div>
 
                             <div class="oc-field">
-                                <label class="oc-field__label" for="m-unit">"Unidade inicial"</label>
+                                <label class="oc-field__label" for="m-unit">{crate::i18n::t("admin.new.initial_unit")}</label>
                                 <select
                                     class="oc-select"
                                     id="m-unit"
@@ -166,12 +171,12 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                                 >
                                     {if !has_units {
                                         view! {
-                                            <option value="">"Ainda não existem unidades"</option>
+                                            <option value="">{crate::i18n::t("admin.new.no_units")}</option>
                                         }
                                             .into_any()
                                     } else {
                                         view! {
-                                            <option value="">"Sem unidade"</option>
+                                            <option value="">{crate::i18n::t("admin.new.no_unit_option")}</option>
                                             {unit_rows
                                                 .into_iter()
                                                 .map(|(id, name)| {
@@ -187,10 +192,10 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                     </section>
 
                     <section class="oc-card oc-mb-5">
-                        <div class="oc-card__head"><h2>"ACESSO"</h2></div>
+                        <div class="oc-card__head"><h2>{crate::i18n::t("admin.new.access")}</h2></div>
                         <div class="oc-card__body">
                             <div class="oc-field">
-                                <label class="oc-field__label" for="m-role">"Papel técnico"</label>
+                                <label class="oc-field__label" for="m-role">{crate::i18n::t("admin.role.technical")}</label>
                                 <select class="oc-select" id="m-role" name="role" required>
                                     {roles::OFERECIDOS
                                         .into_iter()
@@ -204,8 +209,7 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                                         .collect_view()}
                                 </select>
                                 <p class="oc-field__hint">
-                                    "Na dúvida, escolha o mais estreito. Alargar depois é um
-                                     pedido; estreitar é uma conversa."
+                                    {crate::i18n::t("admin.new.role_hint")}
                                 </p>
                             </div>
                         </div>
@@ -215,19 +219,17 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                         <div class="oc-card__body oc-card__body--subtle">
                             <div class="oc-row oc-gap-5">
                                 {icon(Icon::Shield, 14)}
-                                <strong>"O que acontece a seguir"</strong>
+                                <strong>{crate::i18n::t("admin.new.whats_next")}</strong>
                             </div>
                             <p class="oc-muted">
-                                "É gerada uma palavra-passe temporária, válida 24 horas e
-                                 apresentada uma única vez. Entregue-a por canal seguro. O membro
-                                 não entra no Workspace com ela: serve só para definir a sua."
+                                {crate::i18n::t("admin.new.whats_next_body")}
                             </p>
                         </div>
                     </section>
 
                     <div class="oc-row oc-gap-5 oc-justify-end">
-                        {button(Button::new("Cancelar", Variant::Secondary).href("/admin"))}
-                        <button type="submit" class="oc-btn oc-btn--primary">"Criar membro"</button>
+                        {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/admin"))}
+                        <button type="submit" class="oc-btn oc-btn--primary">{crate::i18n::t("admin.new.submit")}</button>
                     </div>
                 </div>
             </form>
@@ -248,20 +250,20 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
         <div class="oc-page">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Utilizador criado"</h1>
-                    <p>"A conta existe. Falta entregar o acesso."</p>
+                    <h1>{crate::i18n::t("admin.issued.title")}</h1>
+                    <p>{crate::i18n::t("admin.issued.subtitle")}</p>
                 </div>
             </div>
 
             <section class="oc-card oc-credential">
                 <div class="oc-card__body">
                     <div class="oc-field">
-                        <span class="oc-field__label">"Endereço institucional"</span>
+                        <span class="oc-field__label">{crate::i18n::t("login.institutional_address")}</span>
                         <div class="oc-credential__value oc-mono">{email}</div>
                     </div>
 
                     <div class="oc-field">
-                        <span class="oc-field__label">"Palavra-passe temporária"</span>
+                        <span class="oc-field__label">{crate::i18n::t("admin.issued.temp_password")}</span>
                         <div class="oc-credential__value oc-mono">
                             // Coberta por omissão: uma credencial não deve ficar
                             // visível num ecrã que alguém pode estar a partilhar.
@@ -279,35 +281,33 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
                                     data-oc="secret-toggle"
                                     aria-pressed="false"
                                 >
-                                    "Mostrar"
+                                    {crate::i18n::t("first_access.show")}
                                 </button>
                                 <button
                                     type="button"
                                     class="oc-btn oc-btn--secondary"
                                     data-oc="secret-copy"
                                 >
-                                    "Copiar"
+                                    {crate::i18n::t("mfa.copy_short")}
                                 </button>
                             </span>
                         </div>
                     </div>
 
                     <div class="oc-field">
-                        <span class="oc-field__label">"Válida até"</span>
+                        <span class="oc-field__label">{crate::i18n::t("admin.issued.valid_until")}</span>
                         <div class="oc-credential__value oc-mono">{expires}" UTC"</div>
                     </div>
 
                     <div class="oc-callout oc-callout--warning" role="alert">
-                        <strong>"Esta palavra-passe só é apresentada uma vez."</strong>
-                        " Transmita-a ao membro através de um canal seguro — presencialmente,
-                         por voz, ou por mensagem efémera cifrada. Nunca por email, SMS ou chat.
-                         Depois de fechar esta página, ninguém a consegue recuperar."
+                        <strong>{crate::i18n::t("admin.issued.shown_once")}</strong>
+                        {crate::i18n::t("admin.issued.transmit_note")}
                     </div>
                 </div>
             </section>
 
             <div class="oc-row oc-gap-5">
-                {button(Button::new("Concluído", Variant::Primary).href("/admin"))}
+                {button(Button::new(crate::i18n::t("admin.issued.done"), Variant::Primary).href("/admin"))}
             </div>
         </div>
     }
@@ -351,9 +351,9 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
     // a acção é a mesma no Core, mas o nome tem de dizer o que aconteceu.
     let reemitir = pode_provisionar && temporary_expired;
     let rotulo_acesso = if reemitir {
-        "Reemitir acesso"
+        crate::i18n::t("admin.access.reissue")
     } else {
-        "Dar acesso"
+        crate::i18n::t("admin.access.give")
     };
 
     let sessions: Vec<Value> = overview
@@ -373,45 +373,52 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
     view! {
         <div class="oc-split oc-split--2">
             {card(
-                section_head("Credencial", None, None),
+                section_head(crate::i18n::t("admin.security.credential"), None, None),
                 view! {
                     <dl class="oc-facts">
-                        <dt>"Estado da conta"</dt>
+                        <dt>{crate::i18n::t("admin.account.status")}</dt>
                         <dd>{badge(status.clone(), Tone::of(&status))}</dd>
 
-                        <dt>"Palavra-passe definitiva"</dt>
+                        <dt>{crate::i18n::t("admin.password.permanent")}</dt>
                         <dd>
                             {if has_permanent {
-                                "Definida pelo próprio"
+                                crate::i18n::t("admin.password.self_set")
                             } else {
-                                "Ainda não definida"
+                                crate::i18n::t("admin.password.not_yet_set")
                             }}
                         </dd>
 
-                        <dt>"Definida em"</dt>
+                        <dt>{crate::i18n::t("admin.password.set_at")}</dt>
                         <dd class="oc-mono">{changed}</dd>
 
-                        <dt>"Credencial temporária"</dt>
+                        <dt>{crate::i18n::t("admin.credential.temporary")}</dt>
                         <dd>
                             {if !tem_temporaria {
                                 view! { <span class="oc-mono">"—"</span> }.into_any()
                             } else if temporary_expired {
-                                badge(format!("Expirada em {temporary_expiry}"), Tone::Err)
+                                badge(
+                                    crate::i18n::tf(
+                                        "admin.credential.expired_on",
+                                        &[("date", &temporary_expiry)],
+                                    ),
+                                    Tone::Err,
+                                )
                                     .into_any()
                             } else {
                                 view! {
                                     <span class="oc-mono">
-                                        "Expira em "{temporary_expiry.clone()}
+                                        {crate::i18n::t("admin.credential.expires_prefix")}
+                                        {temporary_expiry.clone()}
                                     </span>
                                 }
                                     .into_any()
                             }}
                         </dd>
 
-                        <dt>"Último acesso"</dt>
+                        <dt>{crate::i18n::t("admin.last_sign_in")}</dt>
                         <dd class="oc-mono">{last_sign_in}</dd>
 
-                        <dt>"Falhas recentes (7 dias)"</dt>
+                        <dt>{crate::i18n::t("admin.recent_failures")}</dt>
                         <dd class="oc-mono">{failures.to_string()}</dd>
                     </dl>
                 },
@@ -419,12 +426,12 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
 
             {card(
                 section_head(
-                    "Sessões activas",
+                    crate::i18n::t("admin.sessions.active"),
                     None,
                     Some(session_count.to_string()),
                 ),
                 if sessions.is_empty() {
-                    view! { <p class="oc-muted">"Sem sessões activas."</p> }.into_any()
+                    view! { <p class="oc-muted">{crate::i18n::t("admin.sessions.none")}</p> }.into_any()
                 } else {
                     view! {
                         <div>
@@ -452,7 +459,7 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                                                         class="oc-btn oc-btn--sm oc-btn--danger"
                                                         type="submit"
                                                     >
-                                                        "Revogar"
+                                                        {crate::i18n::t("admin.action.revoke")}
                                                     </button>
                                                 </form>
                                             })}
@@ -477,9 +484,9 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                                 <div>
                                     <p class="oc-muted">
                                         {if reemitir {
-                                            "A credencial temporária anterior expirou e esta pessoa ficou sem como entrar. Reemitir invalida a credencial expirada e emite uma nova; não lhe altera papéis, unidades nem autoridade, e a palavra-passe definitiva continua a ser definida pelo próprio no primeiro acesso."
+                                            crate::i18n::t("admin.access.reissue_note")
                                         } else {
-                                            "Esta pessoa existe na instituição e ainda não tem como entrar. Dar-lhe acesso emite uma credencial temporária e não lhe altera papéis, unidades nem autoridade. A palavra-passe definitiva é definida pelo próprio no primeiro acesso — nunca por quem administra."
+                                            crate::i18n::t("admin.access.give_note")
                                         }}
                                     </p>
                                     {recusa
@@ -553,9 +560,9 @@ pub fn access_tab(access: &Value) -> impl IntoView {
     view! {
         <div class="oc-split oc-split--2">
             {card(
-                section_head("Papéis técnicos", None, None),
+                section_head(crate::i18n::t("admin.roles.technical"), None, None),
                 if roles.is_empty() {
-                    view! { <p class="oc-muted">"Sem papéis atribuídos."</p> }.into_any()
+                    view! { <p class="oc-muted">{crate::i18n::t("admin.roles.none_assigned")}</p> }.into_any()
                 } else {
                     view! {
                         <div class="oc-row oc-gap-5 oc-wrap">
@@ -576,11 +583,11 @@ pub fn access_tab(access: &Value) -> impl IntoView {
             )}
 
             {card(
-                section_head("Grants explícitos", None, Some(grant_count.to_string())),
+                section_head(crate::i18n::t("admin.grants.explicit"), None, Some(grant_count.to_string())),
                 if grants.is_empty() {
                     view! {
                         <p class="oc-muted">
-                            "Nenhum. O acesso deste membro vem apenas de papéis e memberships."
+                            {crate::i18n::t("admin.grants.none")}
                         </p>
                     }
                         .into_any()
@@ -600,7 +607,12 @@ pub fn access_tab(access: &Value) -> impl IntoView {
                                                 {text(grant, "scope").to_owned()}
                                             </span>
                                             {badge(
-                                                if revoked { "revogado" } else { "activo" }.to_owned(),
+                                                if revoked {
+                                                    crate::i18n::t("admin.state.revoked")
+                                                } else {
+                                                    crate::i18n::t("admin.state.active")
+                                                }
+                                                .to_owned(),
                                                 if revoked { Tone::Gray } else { Tone::Ok },
                                             )}
                                         </div>
@@ -615,7 +627,7 @@ pub fn access_tab(access: &Value) -> impl IntoView {
 
             <section class="oc-card oc-span-2">
                 {section_head(
-                    "Permissões institucionais",
+                    crate::i18n::t("admin.permissions.institutional"),
                     None,
                     Some(permission_count.to_string()),
                 )}
@@ -623,9 +635,7 @@ pub fn access_tab(access: &Value) -> impl IntoView {
                     {if permissions.is_empty() {
                         view! {
                             <p class="oc-muted">
-                                "Nenhuma permissão de âmbito institucional. Não significa nenhum
-                                 acesso: pode ter permissões dentro de unidades ou de research
-                                 workspaces."
+                                {crate::i18n::t("admin.permissions.none")}
                             </p>
                         }
                             .into_any()
@@ -654,13 +664,13 @@ pub fn access_tab(access: &Value) -> impl IntoView {
 /// Traduz a origem de um acesso, tal como o Core a nomeou.
 fn source_label(source: &str) -> &'static str {
     match source {
-        "technical_role" => "papel técnico",
-        "unit_membership" => "membership de unidade",
-        "workspace_membership" => "membership de research workspace",
-        "explicit_grant" => "grant explícito",
+        "technical_role" => crate::i18n::t("admin.source.technical_role"),
+        "unit_membership" => crate::i18n::t("admin.source.unit_membership"),
+        "workspace_membership" => crate::i18n::t("admin.source.workspace_membership"),
+        "explicit_grant" => crate::i18n::t("admin.source.explicit_grant"),
         // Vocabulário que este build não conhece: dizê-lo é melhor do que
         // inventar uma tradução.
-        _ => "origem desconhecida",
+        _ => crate::i18n::t("admin.source.unknown"),
     }
 }
 
@@ -681,11 +691,11 @@ fn overview_tab(position: &str, status: &str, security: &Value, access: &Value) 
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let (mfa_texto, mfa_tone) = if !mfa_required {
-        ("Não exigido", Tone::Gray)
+        (crate::i18n::t("admin.mfa.not_required"), Tone::Gray)
     } else if mfa_enrolled {
-        ("Exigido e enrolado", Tone::Ok)
+        (crate::i18n::t("admin.mfa.required_enrolled"), Tone::Ok)
     } else {
-        ("Exigido, por enrolar", Tone::Warn)
+        (crate::i18n::t("admin.mfa.required_pending"), Tone::Warn)
     };
 
     let has_permanent = security
@@ -708,7 +718,7 @@ fn overview_tab(position: &str, status: &str, security: &Value, access: &Value) 
         })
         .unwrap_or_default();
     let papeis_texto = if papeis.is_empty() {
-        "Nenhum".to_owned()
+        crate::i18n::t("admin.roles.none_short").to_owned()
     } else {
         papeis.join(", ")
     };
@@ -717,31 +727,31 @@ fn overview_tab(position: &str, status: &str, security: &Value, access: &Value) 
     let position = position.to_owned();
 
     card(
-        section_head("Em resumo", None, None),
+        section_head(crate::i18n::t("admin.overview.summary"), None, None),
         view! {
             <dl class="oc-facts">
-                <dt>"Posição institucional"</dt>
-                <dd>{position}" — não concede acesso."</dd>
+                <dt>{crate::i18n::t("admin.position.label")}</dt>
+                <dd>{position}{crate::i18n::t("admin.position.no_access_suffix")}</dd>
 
-                <dt>"Estado da conta"</dt>
+                <dt>{crate::i18n::t("admin.account.status")}</dt>
                 <dd>{badge(status.clone(), Tone::of(&status))}</dd>
 
-                <dt>"Segundo factor"</dt>
+                <dt>{crate::i18n::t("settings.recovery.section")}</dt>
                 <dd>{badge(mfa_texto.to_owned(), mfa_tone)}</dd>
 
-                <dt>"Palavra-passe definitiva"</dt>
+                <dt>{crate::i18n::t("admin.password.permanent")}</dt>
                 <dd>
                     {if has_permanent {
-                        "Definida pelo próprio"
+                        crate::i18n::t("admin.password.self_set")
                     } else {
-                        "Ainda não definida"
+                        crate::i18n::t("admin.password.not_yet_set")
                     }}
                 </dd>
 
-                <dt>"Papéis técnicos"</dt>
+                <dt>{crate::i18n::t("admin.roles.technical")}</dt>
                 <dd>{papeis_texto}</dd>
 
-                <dt>"Sessões activas"</dt>
+                <dt>{crate::i18n::t("admin.sessions.active")}</dt>
                 <dd class="oc-mono">{sessoes.to_string()}</dd>
             </dl>
         },
@@ -801,14 +811,14 @@ pub fn member_detail(
             <div class="oc-row--top oc-gap-11 oc-mb-3">
                 <div class="oc-fill">
                     <div class="oc-row oc-row--wrap oc-gap-6">
-                        <span class="oc-pill">"MEMBRO"</span>
+                        <span class="oc-pill">{crate::i18n::t("admin.member.pill")}</span>
                         <h1 class="oc-t-screen">{name}</h1>
                         {badge(status.clone(), Tone::of(&status))}
                     </div>
                     <div class="oc-mono oc-mt-3">{email}</div>
                     <div class="oc-muted oc-mt-3">
-                        "Posição institucional: "{position.clone()}
-                        " — não concede acesso."
+                        {crate::i18n::t("admin.member.position_prefix")}{position.clone()}
+                        {crate::i18n::t("admin.position.no_access_suffix")}
                     </div>
                 </div>
             </div>
@@ -817,29 +827,21 @@ pub fn member_detail(
             // âncora e pelo scroll. O servidor marca «Overview» activa por
             // omissão (`aria-current="location"`) — funciona sem JavaScript, e
             // um deep-link para outra secção é corrigido no carregamento.
-            <nav class="oc-tabs oc-tabs--ctx" aria-label="Secções do membro" data-oc-section-nav="">
-                <a class="oc-tab" href="#membro-overview" aria-current="location">"Overview"</a>
-                <a class="oc-tab" href="#membro-acesso">"Acesso"</a>
-                <a class="oc-tab" href="#membro-seguranca">"Segurança"</a>
-                <a class="oc-tab" href="#membro-unidades">"Unidades"</a>
-                <a class="oc-tab" href="#membro-research-workspaces">"Research Workspaces"</a>
+            <nav class="oc-tabs oc-tabs--ctx" aria-label=crate::i18n::t("admin.member.sections_aria") data-oc-section-nav="">
+                <a class="oc-tab" href="#membro-overview" aria-current="location">{crate::i18n::t("admin.tab.overview")}</a>
+                <a class="oc-tab" href="#membro-acesso">{crate::i18n::t("admin.tab.access")}</a>
+                <a class="oc-tab" href="#membro-seguranca">{crate::i18n::t("settings.tab.security")}</a>
+                <a class="oc-tab" href="#membro-unidades">{crate::i18n::t("nav.units")}</a>
+                <a class="oc-tab" href="#membro-research-workspaces">{crate::i18n::t("home.continue.aside")}</a>
                 {[
-                    (
-                        "Actividade",
-                        "A actividade por membro ainda não é uma consulta do Core. \
-                         A actividade institucional está em «Actividade».",
-                    ),
-                    (
-                        "Audit",
-                        "A auditoria por membro ainda não é uma consulta do Core. \
-                         O registo institucional está em «Audit».",
-                    ),
+                    ("nav.activity", "admin.tab.activity_unavailable"),
+                    ("admin.tab.audit", "admin.tab.audit_unavailable"),
                 ]
                     .iter()
-                    .map(|(label, porque)| {
+                    .map(|(label_key, porque_key)| {
                         view! {
-                            <span class="oc-tab oc-unavailable" aria-disabled="true" title=*porque>
-                                {*label}
+                            <span class="oc-tab oc-unavailable" aria-disabled="true" title=crate::i18n::t(porque_key)>
+                                {crate::i18n::t(label_key)}
                             </span>
                         }
                     })
@@ -849,30 +851,30 @@ pub fn member_detail(
 
         <div class="oc-page">
             <section id="membro-overview">
-                {section_head("Overview", None, None)}
+                {section_head(crate::i18n::t("admin.tab.overview"), None, None)}
                 {overview_tab(&position, &status, &security, &access)}
             </section>
             <div class="oc-vspace"></div>
             <section id="membro-acesso">
-                {section_head("Acesso", None, None)}
+                {section_head(crate::i18n::t("admin.tab.access"), None, None)}
                 {access_tab(&access)}
                 {roles_admin(&person_id, &access)}
                 {grants_admin(&person_id, &access, &permissions_catalog)}
             </section>
             <div class="oc-vspace"></div>
             <section id="membro-seguranca">
-                {section_head("Segurança", None, None)}
+                {section_head(crate::i18n::t("settings.tab.security"), None, None)}
                 {security_tab(&person_id, &security, recusa.as_deref())}
                 {account_admin(&person_id, &security)}
             </section>
             <div class="oc-vspace"></div>
             <section id="membro-unidades">
-                {section_head("Unidades", None, None)}
+                {section_head(crate::i18n::t("nav.units"), None, None)}
                 {units_admin(&person_id, &access, &units_catalog)}
             </section>
             <div class="oc-vspace"></div>
             <section id="membro-research-workspaces">
-                {section_head("Research Workspaces", None, None)}
+                {section_head(crate::i18n::t("home.continue.aside"), None, None)}
                 {workspaces_admin(&person_id, &access, &workspaces_catalog)}
             </section>
         </div>
@@ -970,10 +972,10 @@ pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl Int
                     <td>
                         <form method="post" action=accao_papel class="oc-row oc-gap-3">
                             <select class="oc-select oc-select--sm" name="role">
-                                <option value="member" selected=!is_manager>"Membro"</option>
-                                <option value="manager" selected=is_manager>"Gestor"</option>
+                                <option value="member" selected=!is_manager>{crate::i18n::t("admin.role.member")}</option>
+                                <option value="manager" selected=is_manager>{crate::i18n::t("admin.role.manager")}</option>
                             </select>
-                            <button class="oc-btn oc-btn--sm" type="submit">"Guardar"</button>
+                            <button class="oc-btn oc-btn--sm" type="submit">{crate::i18n::t("action.save")}</button>
                         </form>
                     </td>
                     <td class="oc-td--actions">
@@ -982,7 +984,7 @@ pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl Int
                                 class="oc-btn oc-btn--sm oc-btn--danger"
                                 type="submit"
                             >
-                                "Remover"
+                                {crate::i18n::t("action.remove")}
                             </button>
                         </form>
                     </td>
@@ -995,11 +997,11 @@ pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl Int
 
     view! {
         {card(
-            section_head("Pertenças a unidades", None, None),
+            section_head(crate::i18n::t("admin.units.memberships"), None, None),
             view! {
                 {if sem_pertencas {
                     view! {
-                        <p class="oc-muted">"Nenhuma unidade atribuída."</p>
+                        <p class="oc-muted">{crate::i18n::t("admin.units.none_assigned")}</p>
                     }
                     .into_any()
                 } else {
@@ -1007,9 +1009,9 @@ pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl Int
                         <table class="oc-table oc-table--dense">
                             <thead>
                                 <tr>
-                                    <th>"Unidade"</th>
-                                    <th>"Papel"</th>
-                                    <th class="oc-td--actions">"Acções"</th>
+                                    <th>{crate::i18n::t("entity.unit")}</th>
+                                    <th>{crate::i18n::t("admin.col.role")}</th>
+                                    <th class="oc-td--actions">{crate::i18n::t("admin.col.actions")}</th>
                                 </tr>
                             </thead>
                             <tbody>{linhas}</tbody>
@@ -1022,20 +1024,20 @@ pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl Int
 
         <div class="oc-mt-6">
             {card(
-                section_head("Atribuir unidade", None, None),
+                section_head(crate::i18n::t("admin.units.assign"), None, None),
                 if sem_unidades_na_org {
                     view! {
                         <p class="oc-muted">
-                            "Ainda não existem unidades. Crie uma em "
-                            <a class="oc-link" href="/units/new">"Unidades"</a>
-                            " antes de atribuir."
+                            {crate::i18n::t("admin.units.none_org")}
+                            <a class="oc-link" href="/units/new">{crate::i18n::t("nav.units")}</a>
+                            {crate::i18n::t("admin.units.before_assign")}
                         </p>
                     }
                     .into_any()
                 } else if elegiveis.is_empty() {
                     view! {
                         <p class="oc-muted">
-                            "Este membro já pertence a todas as unidades existentes."
+                            {crate::i18n::t("admin.units.all_assigned")}
                         </p>
                     }
                     .into_any()
@@ -1043,7 +1045,7 @@ pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl Int
                     view! {
                         <form method="post" action=accao_atribuir class="oc-row oc-row--wrap oc-gap-3">
                             <select class="oc-select" name="unit_id" required>
-                                <option value="">"Escolher unidade…"</option>
+                                <option value="">{crate::i18n::t("admin.units.choose")}</option>
                                 {elegiveis
                                     .into_iter()
                                     .map(|(id, nome)| view! {
@@ -1052,11 +1054,11 @@ pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl Int
                                     .collect_view()}
                             </select>
                             <select class="oc-select" name="role">
-                                <option value="member">"Membro"</option>
-                                <option value="manager">"Gestor"</option>
+                                <option value="member">{crate::i18n::t("admin.role.member")}</option>
+                                <option value="manager">{crate::i18n::t("admin.role.manager")}</option>
                             </select>
                             <button class="oc-btn oc-btn--primary" type="submit">
-                                "Atribuir"
+                                {crate::i18n::t("admin.action.assign")}
                             </button>
                         </form>
                     }
@@ -1141,9 +1143,9 @@ pub fn workspaces_admin(person_id: &str, access: &Value, catalog: &Value) -> imp
         let is_member = actual == "member";
         let is_lead = actual == "lead";
         view! {
-            <option value="viewer" selected=is_viewer>"Leitor"</option>
-            <option value="member" selected=is_member>"Membro"</option>
-            <option value="lead" selected=is_lead>"Lead"</option>
+            <option value="viewer" selected=is_viewer>{crate::i18n::t("admin.ws_role.viewer")}</option>
+            <option value="member" selected=is_member>{crate::i18n::t("admin.role.member")}</option>
+            <option value="lead" selected=is_lead>{crate::i18n::t("admin.ws_role.lead")}</option>
         }
     };
 
@@ -1160,13 +1162,13 @@ pub fn workspaces_admin(person_id: &str, access: &Value, catalog: &Value) -> imp
                     <td>
                         <form method="post" action=accao_papel class="oc-row oc-gap-3">
                             <select class="oc-select oc-select--sm" name="role">{opts}</select>
-                            <button class="oc-btn oc-btn--sm" type="submit">"Guardar"</button>
+                            <button class="oc-btn oc-btn--sm" type="submit">{crate::i18n::t("action.save")}</button>
                         </form>
                     </td>
                     <td class="oc-td--actions">
                         <form method="post" action=accao_remover>
                             <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">
-                                "Remover"
+                                {crate::i18n::t("action.remove")}
                             </button>
                         </form>
                     </td>
@@ -1179,19 +1181,19 @@ pub fn workspaces_admin(person_id: &str, access: &Value, catalog: &Value) -> imp
 
     view! {
         {card(
-            section_head("Pertenças a research workspaces", None, None),
+            section_head(crate::i18n::t("admin.ws.memberships"), None, None),
             view! {
                 {if sem_pertencas {
-                    view! { <p class="oc-muted">"Nenhum research workspace atribuído."</p> }
+                    view! { <p class="oc-muted">{crate::i18n::t("admin.ws.none_assigned")}</p> }
                         .into_any()
                 } else {
                     view! {
                         <table class="oc-table oc-table--dense">
                             <thead>
                                 <tr>
-                                    <th>"Workspace"</th>
-                                    <th>"Papel"</th>
-                                    <th class="oc-td--actions">"Acções"</th>
+                                    <th>{crate::i18n::t("admin.col.workspace")}</th>
+                                    <th>{crate::i18n::t("admin.col.role")}</th>
+                                    <th class="oc-td--actions">{crate::i18n::t("admin.col.actions")}</th>
                                 </tr>
                             </thead>
                             <tbody>{linhas}</tbody>
@@ -1204,19 +1206,18 @@ pub fn workspaces_admin(person_id: &str, access: &Value, catalog: &Value) -> imp
 
         <div class="oc-mt-6">
             {card(
-                section_head("Atribuir research workspace", None, None),
+                section_head(crate::i18n::t("admin.ws.assign"), None, None),
                 if sem_workspaces {
                     view! {
                         <p class="oc-muted">
-                            "Ainda não existem research workspaces. Criam-se dentro de uma ideia \
-                             ou projecto, não aqui."
+                            {crate::i18n::t("admin.ws.none_org")}
                         </p>
                     }
                     .into_any()
                 } else if elegiveis.is_empty() {
                     view! {
                         <p class="oc-muted">
-                            "Este membro já pertence a todos os research workspaces visíveis."
+                            {crate::i18n::t("admin.ws.all_assigned")}
                         </p>
                     }
                     .into_any()
@@ -1228,14 +1229,14 @@ pub fn workspaces_admin(person_id: &str, access: &Value, catalog: &Value) -> imp
                             class="oc-row oc-row--wrap oc-gap-3"
                         >
                             <select class="oc-select" name="workspace_id" required>
-                                <option value="">"Escolher workspace…"</option>
+                                <option value="">{crate::i18n::t("admin.ws.choose")}</option>
                                 {elegiveis
                                     .into_iter()
                                     .map(|(id, nome)| view! { <option value=id>{nome}</option> })
                                     .collect_view()}
                             </select>
                             <select class="oc-select" name="role">{papel_options("member")}</select>
-                            <button class="oc-btn oc-btn--primary" type="submit">"Atribuir"</button>
+                            <button class="oc-btn oc-btn--primary" type="submit">{crate::i18n::t("admin.action.assign")}</button>
                         </form>
                     }
                     .into_any()
@@ -1294,7 +1295,7 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
                     <td class="oc-td--actions">
                         <form method="post" action=accao>
                             <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">
-                                "Revogar"
+                                {crate::i18n::t("admin.action.revoke")}
                             </button>
                         </form>
                     </td>
@@ -1311,18 +1312,18 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
             {if pode_gerir {
                 view! {
                 {card(
-                    section_head("Gerir papéis técnicos", None, None),
+                    section_head(crate::i18n::t("admin.roles.manage"), None, None),
                     view! {
                         {if sem_papeis {
-                            view! { <p class="oc-muted">"Sem papéis técnicos atribuídos."</p> }
+                            view! { <p class="oc-muted">{crate::i18n::t("admin.roles.none_assigned_technical")}</p> }
                                 .into_any()
                         } else {
                             view! {
                                 <table class="oc-table oc-table--dense">
                                     <thead>
                                         <tr>
-                                            <th>"Papel"</th>
-                                            <th class="oc-td--actions">"Acções"</th>
+                                            <th>{crate::i18n::t("admin.col.role")}</th>
+                                            <th class="oc-td--actions">{crate::i18n::t("admin.col.actions")}</th>
                                         </tr>
                                     </thead>
                                     <tbody>{linhas}</tbody>
@@ -1334,7 +1335,7 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
                         {if elegiveis.is_empty() {
                             view! {
                                 <p class="oc-muted oc-mt-3">
-                                    "Este membro já tem todos os papéis do catálogo."
+                                    {crate::i18n::t("admin.roles.all_assigned")}
                                 </p>
                             }
                                 .into_any()
@@ -1346,7 +1347,7 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
                                     class="oc-row oc-row--wrap oc-gap-3 oc-mt-3"
                                 >
                                     <select class="oc-select" name="role" required>
-                                        <option value="">"Escolher papel…"</option>
+                                        <option value="">{crate::i18n::t("admin.roles.choose")}</option>
                                         {elegiveis
                                             .clone()
                                             .into_iter()
@@ -1361,10 +1362,10 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
                                         name="reason"
                                         required
                                         minlength="4"
-                                        placeholder="Razão (fica no registo de auditoria)"
+                                        placeholder=crate::i18n::t("admin.reason.audit_ph")
                                     />
                                     <button class="oc-btn oc-btn--primary" type="submit">
-                                        "Conceder"
+                                        {crate::i18n::t("admin.action.grant")}
                                     </button>
                                 </form>
                             }
@@ -1381,13 +1382,10 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
                 // vazio — o mesmo princípio do «Criar» (autoridade explicada, §3).
                 view! {
                 {card(
-                    section_head("Papéis técnicos", None, None),
+                    section_head(crate::i18n::t("admin.roles.technical"), None, None),
                     view! {
                         <p class="oc-muted">
-                            "Conceder ou revogar papéis técnicos — incluindo tornar um \
-                             membro administrador da plataforma ou da organização — exige \
-                             uma sessão de administrador da plataforma com segundo factor \
-                             activo. Os papéis actuais deste membro estão acima."
+                            {crate::i18n::t("admin.roles.manage_requires")}
                         </p>
                     },
                 )}
@@ -1464,10 +1462,10 @@ pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value
                                 name="reason"
                                 required
                                 minlength="4"
-                                placeholder="Razão"
+                                placeholder=crate::i18n::t("admin.reason.ph")
                             />
                             <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">
-                                "Revogar"
+                                {crate::i18n::t("admin.action.revoke")}
                             </button>
                         </form>
                     </td>
@@ -1484,13 +1482,12 @@ pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value
         {pode_gerir.then(|| view! {
             <div class="oc-mt-6">
                 {card(
-                    section_head("Gerir grants institucionais", None, None),
+                    section_head(crate::i18n::t("admin.grants.manage"), None, None),
                     view! {
                         {if sem_grants {
                             view! {
                                 <p class="oc-muted">
-                                    "Sem grants institucionais activos. O acesso deste membro vem
-                                     apenas de papéis e memberships."
+                                    {crate::i18n::t("admin.grants.none_active")}
                                 </p>
                             }
                                 .into_any()
@@ -1499,9 +1496,9 @@ pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value
                                 <table class="oc-table oc-table--dense">
                                     <thead>
                                         <tr>
-                                            <th>"Permissão"</th>
-                                            <th>"Âmbito"</th>
-                                            <th class="oc-td--actions">"Acções"</th>
+                                            <th>{crate::i18n::t("admin.col.permission")}</th>
+                                            <th>{crate::i18n::t("admin.col.scope")}</th>
+                                            <th class="oc-td--actions">{crate::i18n::t("admin.col.actions")}</th>
                                         </tr>
                                     </thead>
                                     <tbody>{linhas}</tbody>
@@ -1513,7 +1510,7 @@ pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value
                         {if sem_catalogo {
                             view! {
                                 <p class="oc-muted oc-mt-3">
-                                    "Catálogo de permissões indisponível."
+                                    {crate::i18n::t("admin.grants.catalog_unavailable")}
                                 </p>
                             }
                                 .into_any()
@@ -1528,7 +1525,7 @@ pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value
                                     // workspaces vive nos separadores próprios.
                                     <input type="hidden" name="scope" value="institution" />
                                     <select class="oc-select" name="permission" required>
-                                        <option value="">"Escolher permissão…"</option>
+                                        <option value="">{crate::i18n::t("admin.grants.choose")}</option>
                                         {catalogo
                                             .clone()
                                             .into_iter()
@@ -1544,10 +1541,10 @@ pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value
                                         name="reason"
                                         required
                                         minlength="4"
-                                        placeholder="Razão (fica no registo de auditoria)"
+                                        placeholder=crate::i18n::t("admin.reason.audit_ph")
                                     />
                                     <button class="oc-btn oc-btn--primary" type="submit">
-                                        "Conceder grant"
+                                        {crate::i18n::t("admin.grants.grant_submit")}
                                     </button>
                                 </form>
                             }
@@ -1567,20 +1564,14 @@ pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value
 fn account_transitions(current: &str) -> Vec<(&'static str, &'static str)> {
     match current {
         "active" | "invited" => vec![
-            (
-                "suspended",
-                "Suspender — barra o acesso, preserva a autoria",
-            ),
-            (
-                "disabled",
-                "Desactivar — barra permanentemente, mantém o histórico",
-            ),
+            ("suspended", crate::i18n::t("admin.transition.suspend")),
+            ("disabled", crate::i18n::t("admin.transition.disable")),
         ],
         "suspended" => vec![
-            ("active", "Reactivar — devolve o acesso"),
-            ("disabled", "Desactivar — barra permanentemente"),
+            ("active", crate::i18n::t("admin.transition.reactivate")),
+            ("disabled", crate::i18n::t("admin.transition.disable_short")),
         ],
-        "disabled" => vec![("active", "Reactivar — devolve o acesso")],
+        "disabled" => vec![("active", crate::i18n::t("admin.transition.reactivate"))],
         _ => Vec::new(),
     }
 }
@@ -1611,18 +1602,16 @@ pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
         {pode_gerir.then(|| view! {
             <div class="oc-mt-6">
                 {card(
-                    section_head("Gerir credencial e estado", None, None),
+                    section_head(crate::i18n::t("admin.account.manage"), None, None),
                     view! {
                         <div>
                             <div>
                                 <p class="oc-muted">
-                                    "Repor a palavra-passe emite uma credencial temporária nova,
-                                     invalida a definitiva e termina todas as sessões abertas. A
-                                     palavra-passe nova é mostrada uma única vez, no ecrã seguinte."
+                                    {crate::i18n::t("admin.account.reset_note")}
                                 </p>
                                 <form method="post" action=accao_reset.clone() class="oc-mt-3">
                                     <button class="oc-btn oc-btn--danger" type="submit">
-                                        "Repor palavra-passe"
+                                        {crate::i18n::t("admin.account.reset_submit")}
                                     </button>
                                 </form>
                             </div>
@@ -1631,8 +1620,7 @@ pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
                             {if sem_transicoes {
                                 view! {
                                     <p class="oc-muted">
-                                        "Não há transições de estado disponíveis a partir do estado
-                                         actual."
+                                        {crate::i18n::t("admin.account.no_transitions")}
                                     </p>
                                 }
                                     .into_any()
@@ -1644,7 +1632,7 @@ pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
                                         class="oc-row oc-row--wrap oc-gap-3"
                                     >
                                         <select class="oc-select" name="status" required>
-                                            <option value="">"Alterar estado para…"</option>
+                                            <option value="">{crate::i18n::t("admin.account.change_state")}</option>
                                             {transicoes
                                                 .clone()
                                                 .into_iter()
@@ -1659,10 +1647,10 @@ pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
                                             name="reason"
                                             required
                                             minlength="4"
-                                            placeholder="Razão (fica no registo de auditoria)"
+                                            placeholder=crate::i18n::t("admin.reason.audit_ph")
                                         />
                                         <button class="oc-btn oc-btn--primary" type="submit">
-                                            "Aplicar"
+                                            {crate::i18n::t("admin.action.apply")}
                                         </button>
                                     </form>
                                 }
@@ -2400,5 +2388,119 @@ mod tests {
         .to_html();
         assert!(!sem.contains("Gerir credencial e estado"));
         assert!(!sem.contains("reset-password"));
+    }
+}
+
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+    use serde_json::json;
+
+    /// Um ecrã, um idioma: a Administração de membros em francês, sem chrome
+    /// português.
+    ///
+    /// Cobre a criação (`new_member`), a credencial emitida (`issued_credential`)
+    /// e o detalhe do membro (`member_detail`) — que reúne o resumo, o acesso, a
+    /// segurança, as unidades e os research workspaces, incluindo as secções de
+    /// gestão. A prosa sensível à segurança tem de sair em francês: se sobrevive
+    /// em português, o membro que escolheu francês lê a garantia na língua errada.
+    #[tokio::test]
+    async fn a_administracao_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+
+        let person = json!({
+            "id": "11111111-1111-1111-1111-111111111111",
+            "full_name": "Ana Fernandes",
+            "email": "ana@ocinye.com",
+            "status": "active",
+            "institutional_position": "founder"
+        });
+        let security = json!({
+            "account_status": "active",
+            "has_permanent_password": true,
+            "mfa_required": true,
+            "mfa_enrolled": false,
+            "password_changed_at": "2026-08-22T09:14:00Z",
+            "last_successful_sign_in": "2026-08-22T10:31:00Z",
+            "recent_failed_attempts": 0,
+            "may_manage_account": true,
+            "live_sessions": [{
+                "id": "aaaaaaaa-1111-2222-3333-444444444444",
+                "state": "active",
+                "user_agent": "Firefox",
+                "ip_prefix": "10.0.0.0/24"
+            }]
+        });
+        let access = json!({
+            "roles": ["research_member"],
+            "grants": [],
+            "may_manage_roles": true,
+            "may_manage_grants": true,
+            "institution_permissions": [
+                {"permission": "ideas.view", "source": "technical_role"}
+            ],
+            "units": [],
+            "workspaces": []
+        });
+
+        let fr = with_locale(Locale::Fr, async {
+            let criar = new_member(&json!({ "items": [] }), None).to_html();
+            let credencial =
+                issued_credential("ana@ocinye.com", "AAAA-BBBB-CCCC", "2026-08-23T10:00:00Z")
+                    .to_html();
+            let detalhe = member_detail(
+                &person,
+                &security,
+                &access,
+                &json!({ "items": [] }),
+                &json!({ "items": [] }),
+                &json!([]),
+                None,
+            )
+            .to_html();
+            format!("{criar}{credencial}{detalhe}")
+        })
+        .await;
+
+        for francesa in [
+            "Ajouter un membre",
+            "Créer le membre",
+            "Ne donne accès à rien.",
+            "Rôle technique",
+            "Utilisateur créé",
+            "Ce mot de passe n’est affiché qu’une seule fois.",
+            "MEMBRE",
+            "État du compte",
+            "Rôles techniques",
+            "Sessions actives",
+            "Sections du membre",
+            "Appartenances aux unités",
+            "Gérer les rôles techniques",
+            "Réinitialiser le mot de passe",
+        ] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+
+        for portuguesa in [
+            "Adicionar membro",
+            "Criar membro",
+            "Não concede acesso a nada.",
+            "Papel técnico",
+            "Utilizador criado",
+            "só é apresentada uma vez",
+            "Estado da conta",
+            "Papéis técnicos",
+            "Sessões activas",
+            "Secções do membro",
+            "Gerir papéis técnicos",
+            "Repor palavra-passe",
+            "Em resumo",
+            "Posição institucional",
+        ] {
+            assert!(
+                !fr.contains(portuguesa),
+                "fr: chrome português «{portuguesa}» sobreviveu"
+            );
+        }
     }
 }

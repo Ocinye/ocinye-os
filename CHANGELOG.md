@@ -7,6 +7,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização: a Administração de membros — 2026-09-23
+
+Os ecrãs de Administração passam a pt/en/fr: adicionar membro, emitir e reemitir
+acesso, a credencial temporária, os papéis, as pertenças a unidades e a research
+workspaces, a posição institucional e a explicação de acesso. A prosa sensível à
+segurança — «não concede acesso a nada», «só é apresentada uma vez», a nota de
+que papéis e autoridade não mudam aqui — traduz-se com o mesmo significado
+exacto nas três línguas, sem suavizar. Os nomes dos papéis técnicos continuam a
+vir de `ui::roles`, já localizado. Guarda de pureza `mod pureza_i18n`.
+
 ### Internacionalização: o card de IA da Home deixa de misturar línguas — 2026-09-23
 
 O card «Ocinye AI» da Home mostrava o título traduzido mas o corpo em
