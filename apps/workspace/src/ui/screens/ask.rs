@@ -50,11 +50,8 @@ pub fn ask(view: &AskView) -> impl IntoView {
         <div class="oc-page">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Pesquisar, perguntar ou executar"</h1>
-                    <p>
-                        "Escreva o que procura, o que quer saber, ou o que pretende que seja
-                         feito. Nada é executado sem a sua confirmação."
-                    </p>
+                    <h1>{crate::i18n::t("ask.title")}</h1>
+                    <p>{crate::i18n::t("ask.subtitle")}</p>
                 </div>
             </div>
 
@@ -65,10 +62,8 @@ pub fn ask(view: &AskView) -> impl IntoView {
             } else {
                 empty_state(EmptyState {
                     icon: Icon::Search,
-                    title: "Escreva o que procura".to_owned(),
-                    body: "Pesquisar funciona sempre. Perguntar e executar dependem de uma \
-                           capacidade de IA do Ocinye OS."
-                        .to_owned(),
+                    title: crate::i18n::t("ask.write_what").to_owned(),
+                    body: crate::i18n::t("ask.empty_body").to_owned(),
                     actions: Vec::new(),
                     small: false,
                 })
@@ -104,17 +99,17 @@ fn command_form(query: &str, intent: &str) -> impl IntoView {
         <form class="oc-ask" method="get" action="/ask" role="search">
             <div class="oc-ask__field">
                 {icon(Icon::Search, 15)}
-                <label class="oc-sr" for="ask-q">"O que procura ou pretende"</label>
+                <label class="oc-sr" for="ask-q">{crate::i18n::t("ask.field_label")}</label>
                 <input
                     class="oc-input"
                     id="ask-q"
                     name="q"
                     type="search"
                     value=query
-                    placeholder="Pesquisar, perguntar ou executar no Ocinye…"
+                    placeholder=crate::i18n::t("ask.placeholder")
                     autocomplete="off"
                 />
-                <button type="submit" class="oc-btn oc-btn--primary">"Executar"</button>
+                <button type="submit" class="oc-btn oc-btn--primary">{crate::i18n::t("ask.submit")}</button>
             </div>
 
             // Escreva naturalmente: a superfície lê a frase. Os três modos
@@ -123,11 +118,11 @@ fn command_form(query: &str, intent: &str) -> impl IntoView {
             // (briefing §31, §189).
             <fieldset class="oc-ask__intents">
                 <legend class="oc-ask__legend">
-                    "Escreva naturalmente. Pode também escolher o que pretende:"
+                    {crate::i18n::t("ask.write_naturally")}
                 </legend>
-                {option("search", "Pesquisar", "Encontrar. Funciona sempre.")}
-                {option("ask", "Perguntar", "Sobre o trabalho da instituição.")}
-                {option("act", "Executar", "Pedir que algo seja feito.")}
+                {option("search", crate::i18n::t("ask.mode.search"), crate::i18n::t("ask.find_always"))}
+                {option("ask", crate::i18n::t("ask.mode.ask"), crate::i18n::t("ask.ask_something"))}
+                {option("act", crate::i18n::t("ask.mode.act"), crate::i18n::t("ask.do_something"))}
             </fieldset>
         </form>
     }
@@ -144,8 +139,8 @@ fn result(outcome: &Value, may_use_ai: bool) -> impl IntoView {
         // que renderizar um vazio que parece «não há nada».
         _ => empty_state(EmptyState {
             icon: Icon::Shield,
-            title: "O Ocinye Core não respondeu".to_owned(),
-            body: "O pedido não foi concluído. Nada foi alterado.".to_owned(),
+            title: crate::i18n::t("ask.core_no_answer").to_owned(),
+            body: crate::i18n::t("ask.not_done").to_owned(),
             actions: Vec::new(),
             small: true,
         })
@@ -175,10 +170,7 @@ fn results(outcome: &Value) -> impl IntoView {
             <div class="oc-callout oc-ask__note" role="status">
                 {icon(Icon::Shield, 15)}
                 <p>
-                    {format!(
-                        "{withheld} resultado(s) que pode consultar não podem ser \
-                         processados por um modelo, pela sua classificação."
-                    )}
+                    {crate::i18n::tf("ask.withheld", &[("count", &withheld.to_string())])}
                 </p>
             </div>
         })}
@@ -186,10 +178,8 @@ fn results(outcome: &Value) -> impl IntoView {
         {if sources.is_empty() {
             empty_state(EmptyState {
                 icon: Icon::EmptyState,
-                title: "Nenhum resultado".to_owned(),
-                body: "Nada no acervo institucional a que tenha acesso corresponde a \
-                       este termo."
-                    .to_owned(),
+                title: crate::i18n::t("ask.no_results").to_owned(),
+                body: crate::i18n::t("ask.no_results_body").to_owned(),
                 actions: Vec::new(),
                 small: true,
             })
@@ -200,7 +190,7 @@ fn results(outcome: &Value) -> impl IntoView {
                     {sources
                         .into_iter()
                         .map(|source| {
-                            let title = text(&source, "title", "(sem título)").to_owned();
+                            let title = text(&source, "title", crate::i18n::t("ask.untitled")).to_owned();
                             let kind = text(&source, "entity_type", "").to_owned();
                             let excerpt = text(&source, "excerpt", "").to_owned();
                             let classification = text(&source, "classification", "").to_owned();
@@ -220,7 +210,7 @@ fn results(outcome: &Value) -> impl IntoView {
                         })
                         .collect_view()}
                 </ul>
-                <p class="oc-ask__count">{format!("{count} resultado(s).")}</p>
+                <p class="oc-ask__count">{crate::i18n::tf("ask.count", &[("count", &count.to_string())])}</p>
             }
             .into_any()
         }}
@@ -246,7 +236,7 @@ fn planned(outcome: &Value) -> impl IntoView {
 
     card(
         section_head(
-            format!("O Ocinye vai realizar {count} acção(ões)"),
+            crate::i18n::tf("ask.will_do", &[("count", &count.to_string())]),
             None,
             None,
         ),
@@ -269,11 +259,11 @@ fn planned(outcome: &Value) -> impl IntoView {
                             _ => Tone::Gray,
                         };
                         let label = match risk.as_str() {
-                            "read_only" => "Consulta",
-                            "low_impact" => "Alteração menor",
-                            "material_mutation" => "Alteração institucional",
-                            "external_effect" => "Efeito externo",
-                            _ => "Privilegiada",
+                            "read_only" => crate::i18n::t("ask.risk.read_only"),
+                            "low_impact" => crate::i18n::t("ask.kind.minor"),
+                            "material_mutation" => crate::i18n::t("ask.kind.institutional"),
+                            "external_effect" => crate::i18n::t("ask.kind.external"),
+                            _ => crate::i18n::t("ask.risk.privileged"),
                         };
 
                         view! {
@@ -287,18 +277,15 @@ fn planned(outcome: &Value) -> impl IntoView {
             </ol>
 
             {requires_approval.then(|| view! {
-                <p class="oc-ask__note-text">
-                    "Uma ou mais destas acções têm efeito externo ou alteram estado
-                     institucional. Nada acontece sem a sua confirmação."
-                </p>
+                <p class="oc-ask__note-text">{crate::i18n::t("ask.approval_note")}</p>
             })}
 
             <div class="oc-plan__actions">
                 <form method="post" action=format!("/ask/plans/{plan_id}/execute")>
-                    <button type="submit" class="oc-btn oc-btn--primary">"Confirmar"</button>
+                    <button type="submit" class="oc-btn oc-btn--primary">{crate::i18n::t("ask.confirm")}</button>
                 </form>
                 <form method="post" action=format!("/ask/plans/{plan_id}/reject")>
-                    <button type="submit" class="oc-btn oc-btn--secondary">"Cancelar"</button>
+                    <button type="submit" class="oc-btn oc-btn--secondary">{crate::i18n::t("ask.cancel")}</button>
                 </form>
             </div>
         },
@@ -316,7 +303,7 @@ fn executed(outcome: &Value) -> impl IntoView {
         .unwrap_or_default();
 
     card(
-        section_head("Resultado", None, None),
+        section_head(crate::i18n::t("ask.result_title"), None, None),
         view! {
             // Factual, sempre. Nunca «tudo feito» quando não foi (§56, §184).
             <p class="oc-ask__summary">{summary}</p>
@@ -331,13 +318,13 @@ fn executed(outcome: &Value) -> impl IntoView {
                         let detail = text(&result, "detail", "").to_owned();
 
                         let (tone, label) = match status.as_str() {
-                            "succeeded" => (Tone::Ok, "Concluída"),
-                            "dry_run" => (Tone::Blue, "Simulação"),
-                            "permission_denied" => (Tone::Err, "Sem acesso"),
-                            "capability_unavailable" => (Tone::Warn, "Indisponível"),
-                            "not_attempted" => (Tone::Gray, "Não executada"),
-                            "approval_required" => (Tone::Warn, "Aguarda confirmação"),
-                            _ => (Tone::Err, "Falhou"),
+                            "succeeded" => (Tone::Ok, crate::i18n::t("ask.status.done")),
+                            "dry_run" => (Tone::Blue, crate::i18n::t("ask.kind.simulation")),
+                            "permission_denied" => (Tone::Err, crate::i18n::t("ask.no_access")),
+                            "capability_unavailable" => (Tone::Warn, crate::i18n::t("ask.status.unavailable")),
+                            "not_attempted" => (Tone::Gray, crate::i18n::t("ask.status.not_run")),
+                            "approval_required" => (Tone::Warn, crate::i18n::t("ask.status.awaiting")),
+                            _ => (Tone::Err, crate::i18n::t("ask.status.failed")),
                         };
 
                         view! {
@@ -366,18 +353,41 @@ fn unavailable(outcome: &Value, may_use_ai: bool) -> impl IntoView {
     empty_state(EmptyState {
         icon: if may_use_ai { Icon::Ai } else { Icon::Shield },
         title: if may_use_ai {
-            "Ainda não disponível".to_owned()
+            crate::i18n::t("ask.status.not_available").to_owned()
         } else {
-            "Não possui acesso à assistência".to_owned()
+            crate::i18n::t("ask.no_assist_access").to_owned()
         },
         // Não «Oops». A razão que o Core deu, e o que continua a funcionar
         // (§188).
         body: format!("{reason} {alternative}"),
         actions: if may_use_ai {
-            vec![Button::new("Ver o estado da inteligência", Variant::Secondary).href("/ai")]
+            vec![Button::new(crate::i18n::t("ask.see_ai_status"), Variant::Secondary).href("/ai")]
         } else {
             Vec::new()
         },
         small: false,
     })
+}
+
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+
+    /// Um ecrã, um idioma: a superfície de comando em francês, sem português.
+    #[tokio::test]
+    async fn a_superficie_de_comando_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+        let view = AskView {
+            query: String::new(),
+            intent: "search".to_owned(),
+            outcome: Value::Null,
+            may_use_ai: true,
+        };
+        let fr = with_locale(Locale::Fr, async { ask(&view).to_html() }).await;
+        for francesa in ["Rechercher, demander ou exécuter", "Demander", "Exécuter"] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+        assert!(!fr.contains("Perguntar"), "fr: chrome português");
+        assert!(!fr.contains("Escreva"), "fr: chrome português");
+    }
 }

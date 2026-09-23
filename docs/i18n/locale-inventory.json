@@ -113,6 +113,11 @@
       "prefix": "auth / login / boot / first_access / mfa",
       "surface": "Pre-auth: boot, login, first access, MFA (fully migrated)",
       "status": "translated"
+    },
+    {
+      "prefix": "help / ask / compute / roles",
+      "surface": "Help (full prose), Universal Command Surface (Ask), Compute registry, technical-role labels (fully migrated)",
+      "status": "translated"
     }
   ],
   "pending_slices": [

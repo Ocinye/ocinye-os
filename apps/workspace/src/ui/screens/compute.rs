@@ -11,16 +11,20 @@ use crate::ui::components::{badge, button, empty_state, Button, EmptyState, Tone
 use crate::ui::components::{context_tabs, Tab};
 use crate::ui::icon::Icon;
 
-const COLUMNS: [&str; 8] = [
-    "NÓ",
-    "ESTADO",
-    "LOCALIZAÇÃO",
-    "CPU",
-    "RAM",
-    "GPU",
-    "ARMAZENAMENTO",
-    "SAÚDE",
-];
+/// Os cabeçalhos da tabela, no idioma corrente. CPU, RAM e GPU são acrónimos
+/// universais e não se traduzem; os restantes seguem o catálogo (§84).
+fn columns() -> [&'static str; 8] {
+    [
+        crate::i18n::t("compute.col.node"),
+        crate::i18n::t("compute.col.state"),
+        crate::i18n::t("compute.col.location"),
+        "CPU",
+        "RAM",
+        "GPU",
+        crate::i18n::t("compute.col.storage"),
+        crate::i18n::t("compute.col.health"),
+    ]
+}
 
 fn items(payload: &Value) -> Vec<Value> {
     payload
@@ -71,31 +75,28 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
     let message = status
         .get("message")
         .and_then(Value::as_str)
-        .unwrap_or(
-            "Nenhum nó de computação Ocinye está actualmente disponível. A plataforma funciona \
-             integralmente sem nenhum.",
-        )
+        .unwrap_or(crate::i18n::t("compute.none_available_full"))
         .to_owned();
 
     let tabs = vec![
-        Tab::link("Nós", "/compute", true),
-        Tab::inert("Trabalhos"),
-        Tab::inert("Recursos"),
-        Tab::inert("Ambientes"),
+        Tab::link(crate::i18n::t("compute.tab.nodes"), "/compute", true),
+        Tab::inert(crate::i18n::t("compute.tab.jobs")),
+        Tab::inert(crate::i18n::t("compute.tab.resources")),
+        Tab::inert(crate::i18n::t("compute.tab.environments")),
     ];
 
     view! {
         <div class="oc-band" >
             <div class="oc-head oc-mb-7" >
                 <div class="oc-head__text">
-                    <h1>"Computação"</h1>
-                    <p>"O registo de nós computacionais da Ocinye. Zero nós é um estado válido."</p>
+                    <h1>{crate::i18n::t("nav.compute")}</h1>
+                    <p>{crate::i18n::t("compute.subtitle")}</p>
                 </div>
                 <div class="oc-head__actions">
-                    {button(Button::new("Adicionar Nó", Variant::Gold).not_yet_available())}
+                    {button(Button::new(crate::i18n::t("compute.add_node"), Variant::Gold).not_yet_available())}
                 </div>
             </div>
-            {context_tabs(tabs, "Secções de Computação")}
+            {context_tabs(tabs, crate::i18n::t("compute.sections"))}
         </div>
 
         <div class="oc-page">
@@ -104,7 +105,7 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
                     // O header de colunas do estado futuro fica visível mesmo
                     // sem nós: mostra a forma que os dados terão.
                     <div class="oc-table__head" role="row">
-                        {COLUMNS
+                        {columns()
                             .iter()
                             .map(|label| view! { <span role="columnheader">{*label}</span> })
                             .collect_view()}
@@ -113,10 +114,13 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
                     {if rows.is_empty() {
                         empty_state(EmptyState {
                                 icon: Icon::ComputeLg,
-                                title: format!("{registered} nós registados"),
+                                title: crate::i18n::tf(
+                                    "compute.registered_count",
+                                    &[("count", &registered.to_string())],
+                                ),
                                 body: message.clone(),
                                 actions: vec![
-                                    Button::new("Adicionar Nó", Variant::Gold).not_yet_available(),
+                                    Button::new(crate::i18n::t("compute.add_node"), Variant::Gold).not_yet_available(),
                                 ],
                                 small: true,
                             })
@@ -163,10 +167,10 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
 
             // Métricas a zero, porque zero é o valor verdadeiro.
             <div class="oc-grid oc-grid--4">
-                {metric("TRABALHOS ACTIVOS", "0")}
-                {metric("GPU DISPONÍVEL", "0")}
-                {metric("CPU DISPONÍVEL", &online.to_string())}
-                {metric("ARMAZENAMENTO", "0 B")}
+                {metric(crate::i18n::t("compute.metric.active_jobs"), "0")}
+                {metric(crate::i18n::t("compute.metric.gpu_available"), "0")}
+                {metric(crate::i18n::t("compute.metric.cpu_available"), &online.to_string())}
+                {metric(crate::i18n::t("compute.metric.storage"), "0 B")}
             </div>
         </div>
     }
@@ -206,8 +210,33 @@ mod tests {
     #[test]
     fn o_header_do_estado_futuro_fica_visivel_mesmo_sem_nos() {
         let html = compute(&json!({}), &json!({"items": []})).to_html();
-        for column in COLUMNS {
+        for column in columns() {
             assert!(html.contains(column), "falta a coluna {column}");
         }
+    }
+}
+
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+    use serde_json::json;
+
+    /// Um ecrã, um idioma: a Computação em francês, sem português de interface.
+    #[tokio::test]
+    async fn a_computacao_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+        let fr = with_locale(Locale::Fr, async {
+            compute(
+                &json!({"registered_nodes": 0, "online_nodes": 0}),
+                &json!({"items": []}),
+            )
+            .to_html()
+        })
+        .await;
+        for francesa in ["Nœud", "Emplacement", "Ajouter un nœud", "Tâches actives"] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+        assert!(!fr.contains("Localização"), "fr: chrome português");
+        assert!(!fr.contains("registados"), "fr: chrome português");
     }
 }
