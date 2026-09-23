@@ -178,9 +178,9 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
             </div>
 
             <div class="oc-login__foot">
-                <span>{icon(Icon::Power, 13)}"Desligar"</span>
-                <span>{icon(Icon::Restart, 13)}"Reiniciar"</span>
-                <a href="/health">{icon(Icon::SystemStatus, 13)}"Estado do Sistema"</a>
+                <span>{icon(Icon::Power, 13)}{crate::i18n::t("login.foot.shut_down")}</span>
+                <span>{icon(Icon::Restart, 13)}{crate::i18n::t("login.foot.restart")}</span>
+                <a href="/health">{icon(Icon::SystemStatus, 13)}{crate::i18n::t("login.foot.system_status")}</a>
             </div>
         </div>
     }
