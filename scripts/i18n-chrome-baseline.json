@@ -5,7 +5,6 @@
     "apps/workspace/src/ui/screens/files.rs": 41,
     "apps/workspace/src/ui/screens/mail.rs": 9,
     "apps/workspace/src/ui/screens/messaging.rs": 20,
-    "apps/workspace/src/ui/screens/prompt.rs": 27,
-    "apps/workspace/src/ui/screens/workspaces.rs": 113
+    "apps/workspace/src/ui/screens/prompt.rs": 27
   }
 }

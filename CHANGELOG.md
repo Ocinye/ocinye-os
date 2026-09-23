@@ -7,6 +7,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização: os Research Workspaces — 2026-09-23
+
+O ambiente contextual de uma ideia ou projecto passa a pt/en/fr: os separadores,
+a visão geral, membros, bibliografia, dados, notas, documentos, código,
+experiências, modelos, resultados, tarefas, actividade e financiamento, e as
+páginas de detalhe de tarefa, dataset e unidade. Os rótulos dos separadores, que
+também são a identidade de roteamento, passam a chaves i18n resolvidas na
+construção; os títulos e códigos dos artefactos (dados do Core) não se traduzem.
+Guarda de pureza `mod pureza_i18n`.
+
 ### Internacionalização: o ciclo de vida científico — 2026-09-23
 
 Os ecrãs do ciclo de vida científico passam a pt/en/fr: hipóteses, metodologias
