@@ -43,31 +43,25 @@ pub fn boot(outcome: &BootOutcome, destino: &str) -> impl IntoView {
 
     let (titulo, explicacao) = match estado {
         BootState::Ready => (
-            "SISTEMA OPERACIONAL",
-            "O Ocinye Core está operacional. As capacidades assinaladas abaixo, \
-             quando as houver, aguardam disponibilidade — a IA e a computação \
-             aguardam a ligação do primeiro nó computacional da Ocinye — e não \
-             são avaria: o trabalho institucional segue por inteiro.",
+            crate::i18n::t("boot.ready.title"),
+            crate::i18n::t("boot.ready.body"),
         ),
         BootState::Degraded => (
-            "SISTEMA OPERACIONAL COM UMA AVARIA",
-            "O Ocinye Core respondeu. Uma capacidade que está configurada e devia \
-             responder não está a responder; o trabalho institucional segue, mas \
-             há uma avaria assinalada abaixo para resolver.",
+            crate::i18n::t("boot.degraded.title"),
+            crate::i18n::t("boot.degraded.body"),
         ),
         BootState::Blocked => (
-            "NÃO FOI POSSÍVEL INICIAR O OCINYE OS",
-            "O Ocinye Core respondeu que não está em condições de operar. \
-             Uma dependência essencial não está disponível.",
+            crate::i18n::t("boot.blocked.title"),
+            crate::i18n::t("boot.blocked.body"),
         ),
         BootState::Unreachable => (
-            "NÃO FOI POSSÍVEL CONTACTAR O OCINYE CORE",
-            "Não houve resposta do Ocinye Core. Isto é diferente de o Core ter \
-             dito que não está pronto: aqui não chegámos a saber.",
+            crate::i18n::t("boot.unreachable.title"),
+            crate::i18n::t("boot.unreachable.body"),
         ),
-        BootState::Uninitialized | BootState::Checking => {
-            ("A VERIFICAR O SISTEMA", crate::i18n::t("boot.asking_core"))
-        }
+        BootState::Uninitialized | BootState::Checking => (
+            crate::i18n::t("boot.checking.title"),
+            crate::i18n::t("boot.asking_core"),
+        ),
     };
 
     let limitacoes = outcome.limitations();
@@ -298,5 +292,34 @@ mod tests {
         let r = resultado(ReadinessOverall::Degraded);
         assert_eq!(r.limitations().len(), 1);
         assert!(r.blockers().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+
+    /// Um ecrã, um idioma: cada estado de arranque em francês, sem português.
+    #[tokio::test]
+    async fn o_arranque_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+        let casos = [
+            (BootState::Blocked, "IMPOSSIBLE DE DÉMARRER OCINYE OS"),
+            (
+                BootState::Unreachable,
+                "IMPOSSIBLE DE CONTACTER OCINYE CORE",
+            ),
+            (BootState::Ready, "SYSTÈME OPÉRATIONNEL"),
+        ];
+        for (state, francesa) in casos {
+            let outcome = BootOutcome {
+                state,
+                readiness: None,
+            };
+            let fr = with_locale(Locale::Fr, async { boot(&outcome, "/").to_html() }).await;
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+            assert!(!fr.contains("SISTEMA OPERACIONAL"), "fr: título português");
+            assert!(!fr.contains("Estado do Sistema"), "fr: rodapé português");
+        }
     }
 }

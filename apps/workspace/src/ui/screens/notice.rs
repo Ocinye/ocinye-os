@@ -90,22 +90,18 @@ pub fn access_denied() -> impl IntoView {
 pub fn unavailable(razao: Option<String>) -> impl IntoView {
     // A frase do Core substitui a genérica, e não se acumula com ela: duas
     // explicações da mesma coisa lêem-se como se fossem duas coisas.
-    let explicacao = razao.unwrap_or_else(|| {
-        "Um serviço de que esta operação depende não está a responder nesta \
-         instalação — quem administra o sistema saberá qual."
-            .to_owned()
-    });
+    let explicacao =
+        razao.unwrap_or_else(|| crate::i18n::t("notice.unavailable.default").to_owned());
     view! {
         <div class="oc-notice">
             <span class="oc-notice__tile">{icon(Icon::SystemStatus, 26)}</span>
-            <h1>"Esta operação não está disponível agora"</h1>
+            <h1>{crate::i18n::t("notice.unavailable.title")}</h1>
             <p>{explicacao}</p>
             <p class="oc-notice__aside">
-                "A capacidade existe no Ocinye OS. Não é um problema com o que fez nem
-                 com o seu acesso."
+                {crate::i18n::t("notice.unavailable.aside")}
             </p>
             <div class="oc-row oc-gap-5">
-                {button(Button::new("O Meu Trabalho", Variant::Primary).href("/my-work"))}
+                {button(Button::new(crate::i18n::t("notice.go_my_work"), Variant::Primary).href("/my-work"))}
             </div>
         </div>
     }
@@ -124,14 +120,13 @@ pub fn rejected(razao: &str) -> impl IntoView {
     view! {
         <div class="oc-notice">
             <span class="oc-notice__tile">{icon(Icon::SystemStatus, 26)}</span>
-            <h1>"O pedido não foi aceite"</h1>
+            <h1>{crate::i18n::t("notice.rejected.title")}</h1>
             <p>{razao}</p>
             <p class="oc-notice__aside">
-                "Nada correu mal. O Ocinye OS percebeu o pedido e não o pode registar
-                 tal como foi feito."
+                {crate::i18n::t("notice.rejected.aside")}
             </p>
             <div class="oc-row oc-gap-5">
-                {button(Button::new("O Meu Trabalho", Variant::Primary).href("/my-work"))}
+                {button(Button::new(crate::i18n::t("notice.go_my_work"), Variant::Primary).href("/my-work"))}
             </div>
         </div>
     }
@@ -147,11 +142,10 @@ pub fn conflict(razao: &str) -> impl IntoView {
     view! {
         <div class="oc-notice">
             <span class="oc-notice__tile">{icon(Icon::SystemStatus, 26)}</span>
-            <h1>"Isto foi alterado noutra sessão"</h1>
+            <h1>{crate::i18n::t("notice.conflict.title")}</h1>
             <p>{razao}</p>
             <p class="oc-notice__aside">
-                "Nada se perdeu. Recarregue para ver a versão actual antes de voltar
-                 a gravar."
+                {crate::i18n::t("notice.conflict.aside")}
             </p>
         </div>
     }
@@ -228,5 +222,33 @@ mod tests {
     fn texto_interpolado_nao_injecta_markup() {
         let html = failure("<script>alert(1)</script>").to_html();
         assert!(!html.contains("<script>alert(1)</script>"));
+    }
+}
+
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+
+    /// Um ecrã, um idioma: os avisos do sistema em francês, sem português.
+    #[tokio::test]
+    async fn os_avisos_nao_misturam_linguas() {
+        use crate::i18n::{with_locale, Locale};
+        let fr = with_locale(Locale::Fr, async {
+            let u = unavailable(None).to_html();
+            let r = rejected("").to_html();
+            let c = conflict("").to_html();
+            format!("{u}{r}{c}")
+        })
+        .await;
+        for francesa in [
+            "n’est pas disponible pour l’instant",
+            "La demande n’a pas été acceptée",
+            "modifié dans une autre session",
+            "Mon travail",
+        ] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+        assert!(!fr.contains("O Meu Trabalho"), "fr: chrome português");
+        assert!(!fr.contains("não foi aceite"), "fr: chrome português");
     }
 }

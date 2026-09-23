@@ -119,7 +119,7 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
                                 data-oc-target="new-pass"
                                 aria-pressed="false"
                             >
-                                "Mostrar"
+                                {crate::i18n::t("first_access.show")}
                             </button>
                         </div>
 
@@ -149,7 +149,7 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
                                 data-oc-target="confirm-pass"
                                 aria-pressed="false"
                             >
-                                "Mostrar"
+                                {crate::i18n::t("first_access.show")}
                             </button>
                         </div>
 

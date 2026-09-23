@@ -856,6 +856,10 @@ const AUTH: &[Entry] = catalogo! {
     "login.create_account": { pt: "Criar conta", en: "Create account", fr: "Créer un compte" },
     "login.granted_by_admin": { pt: "Acesso concedido pela Administração da Ocinye", en: "Access granted by Ocinye Administration", fr: "Accès accordé par l’administration d’Ocinye" },
     "login.unavailable": { pt: "não está acessível", en: "is not reachable", fr: "n’est pas accessible" },
+    "login.core_down_note": { pt: "O Ocinye Core não está acessível neste momento. A autenticação não é possível até que esteja.", en: "Ocinye Core is not reachable right now. Authentication is not possible until it is.", fr: "Ocinye Core n’est pas accessible pour l’instant. L’authentification n’est pas possible tant qu’il ne l’est pas." },
+    "login.foot.shut_down": { pt: "Desligar", en: "Shut down", fr: "Éteindre" },
+    "login.foot.restart": { pt: "Reiniciar", en: "Restart", fr: "Redémarrer" },
+    "login.foot.system_status": { pt: "Estado do Sistema", en: "System status", fr: "État du système" },
     // Boot
     "boot.asking_core": { pt: "A perguntar ao Ocinye Core.", en: "Asking Ocinye Core.", fr: "Interrogation d’Ocinye Core." },
     "boot.retry": { pt: "Tentar novamente", en: "Try again", fr: "Réessayer" },
@@ -890,6 +894,44 @@ const AUTH: &[Entry] = catalogo! {
     "first_access.eyebrow": { pt: "OCINYE CORE · PRIMEIRO ACESSO", en: "OCINYE CORE · FIRST ACCESS", fr: "OCINYE CORE · PREMIER ACCÈS" },
     "first_access.wordmark_sub": { pt: "PRIMEIRO ACESSO", en: "FIRST ACCESS", fr: "PREMIER ACCÈS" },
     "mfa.wordmark_sub": { pt: "SEGUNDO FACTOR", en: "SECOND FACTOR", fr: "SECOND FACTEUR" },
+    // «Mostrar»: revelar a palavra-passe que se está a definir.
+    "first_access.show": { pt: "Mostrar", en: "Show", fr: "Afficher" },
+    "mfa.confirm_button": { pt: "Confirmar", en: "Confirm", fr: "Confirmer" },
+    "mfa.copy_short": { pt: "Copiar", en: "Copy", fr: "Copier" },
+    "mfa.finish": { pt: "Concluir", en: "Finish", fr: "Terminer" },
+    "mfa.sign_in": { pt: "Entrar", en: "Sign in", fr: "Se connecter" },
+    "mfa.frame.challenge": { pt: "OCINYE CORE · SEGUNDO FACTOR", en: "OCINYE CORE · SECOND FACTOR", fr: "OCINYE CORE · SECOND FACTEUR" },
+    "mfa.enroll_lead": { pt: "Abra a sua aplicação autenticadora e leia o código. Depois escreva o código de seis dígitos que ela mostrar.", en: "Open your authenticator app and scan the code. Then type the six-digit code it shows.", fr: "Ouvrez votre application d’authentification et scannez le code. Saisissez ensuite le code à six chiffres qu’elle affiche." },
+    "mfa.manual_key_note": { pt: "Introduza esta chave na aplicação autenticadora, com o tipo «baseada em tempo» (TOTP).", en: "Enter this key into the authenticator app, with the “time-based” type (TOTP).", fr: "Saisissez cette clé dans l’application d’authentification, avec le type « basé sur le temps » (TOTP)." },
+    "mfa.if_cannot_read_qr": { pt: " — se não puder ler o QR.", en: " — if you cannot read the QR.", fr: " — si vous ne pouvez pas lire le QR." },
+    // Barra de estado do Core no login (aspecto de terminal, em maiúsculas).
+    "login.core.operational": { pt: "OCINYE CORE · OPERACIONAL", en: "OCINYE CORE · OPERATIONAL", fr: "OCINYE CORE · OPÉRATIONNEL" },
+    "login.core.unavailable": { pt: "OCINYE CORE · INDISPONÍVEL", en: "OCINYE CORE · UNAVAILABLE", fr: "OCINYE CORE · INDISPONIBLE" },
+    // Molduras dos ecrãs de MFA (mesmo aspecto de terminal do «eyebrow»).
+    "mfa.frame.setup": { pt: "OCINYE CORE · CONFIGURAR MFA", en: "OCINYE CORE · SET UP MFA", fr: "OCINYE CORE · CONFIGURER LE MFA" },
+    "mfa.frame.recovery": { pt: "OCINYE CORE · CÓDIGOS DE RECUPERAÇÃO", en: "OCINYE CORE · RECOVERY CODES", fr: "OCINYE CORE · CODES DE RÉCUPÉRATION" },
+    // Ecrã de arranque: cada estado do Core, título e explicação.
+    "boot.ready.title": { pt: "SISTEMA OPERACIONAL", en: "SYSTEM OPERATIONAL", fr: "SYSTÈME OPÉRATIONNEL" },
+    "boot.ready.body": { pt: "O Ocinye Core está operacional. As capacidades assinaladas abaixo, quando as houver, aguardam disponibilidade — a IA e a computação aguardam a ligação do primeiro nó computacional da Ocinye — e não são avaria: o trabalho institucional segue por inteiro.", en: "Ocinye Core is operational. The capabilities flagged below, when there are any, await availability — AI and compute await the connection of Ocinye’s first compute node — and are not a fault: institutional work carries on in full.", fr: "Ocinye Core est opérationnel. Les capacités signalées ci-dessous, s’il y en a, attendent leur disponibilité — l’IA et le calcul attendent la connexion du premier nœud de calcul d’Ocinye — et ne sont pas une panne : le travail institutionnel se poursuit pleinement." },
+    "boot.degraded.title": { pt: "SISTEMA OPERACIONAL COM UMA AVARIA", en: "SYSTEM OPERATIONAL WITH A FAULT", fr: "SYSTÈME OPÉRATIONNEL AVEC UNE PANNE" },
+    "boot.degraded.body": { pt: "O Ocinye Core respondeu. Uma capacidade que está configurada e devia responder não está a responder; o trabalho institucional segue, mas há uma avaria assinalada abaixo para resolver.", en: "Ocinye Core responded. A capability that is configured and should respond is not responding; institutional work carries on, but there is a fault flagged below to resolve.", fr: "Ocinye Core a répondu. Une capacité configurée et censée répondre ne répond pas ; le travail institutionnel se poursuit, mais une panne est signalée ci-dessous à résoudre." },
+    "boot.blocked.title": { pt: "NÃO FOI POSSÍVEL INICIAR O OCINYE OS", en: "COULD NOT START OCINYE OS", fr: "IMPOSSIBLE DE DÉMARRER OCINYE OS" },
+    "boot.blocked.body": { pt: "O Ocinye Core respondeu que não está em condições de operar. Uma dependência essencial não está disponível.", en: "Ocinye Core responded that it is not fit to operate. An essential dependency is unavailable.", fr: "Ocinye Core a répondu qu’il n’est pas en mesure de fonctionner. Une dépendance essentielle est indisponible." },
+    "boot.unreachable.title": { pt: "NÃO FOI POSSÍVEL CONTACTAR O OCINYE CORE", en: "COULD NOT CONTACT OCINYE CORE", fr: "IMPOSSIBLE DE CONTACTER OCINYE CORE" },
+    "boot.unreachable.body": { pt: "Não houve resposta do Ocinye Core. Isto é diferente de o Core ter dito que não está pronto: aqui não chegámos a saber.", en: "There was no response from Ocinye Core. This is different from the Core saying it is not ready: here we never got to know.", fr: "Il n’y a eu aucune réponse d’Ocinye Core. C’est différent du Core disant qu’il n’est pas prêt : ici, nous n’avons pas pu savoir." },
+    "boot.checking.title": { pt: "A VERIFICAR O SISTEMA", en: "CHECKING THE SYSTEM", fr: "VÉRIFICATION DU SYSTÈME" },
+};
+
+/// Ecrãs de aviso do sistema — indisponível, recusado, conflito.
+const NOTICE: &[Entry] = catalogo! {
+    "notice.unavailable.title": { pt: "Esta operação não está disponível agora", en: "This operation is not available right now", fr: "Cette opération n’est pas disponible pour l’instant" },
+    "notice.unavailable.default": { pt: "Um serviço de que esta operação depende não está a responder nesta instalação — quem administra o sistema saberá qual.", en: "A service this operation depends on is not responding on this installation — whoever administers the system will know which.", fr: "Un service dont dépend cette opération ne répond pas sur cette installation — l’équipe qui administre le système saura lequel." },
+    "notice.unavailable.aside": { pt: "A capacidade existe no Ocinye OS. Não é um problema com o que fez nem com o seu acesso.", en: "The capability exists in Ocinye OS. It is not a problem with what you did or with your access.", fr: "La capacité existe dans Ocinye OS. Ce n’est pas un problème lié à ce que vous avez fait ni à votre accès." },
+    "notice.rejected.title": { pt: "O pedido não foi aceite", en: "The request was not accepted", fr: "La demande n’a pas été acceptée" },
+    "notice.rejected.aside": { pt: "Nada correu mal. O Ocinye OS percebeu o pedido e não o pode registar tal como foi feito.", en: "Nothing went wrong. Ocinye OS understood the request and cannot record it as it was made.", fr: "Rien ne s’est mal passé. Ocinye OS a compris la demande et ne peut pas l’enregistrer telle qu’elle a été faite." },
+    "notice.conflict.title": { pt: "Isto foi alterado noutra sessão", en: "This was changed in another session", fr: "Ceci a été modifié dans une autre session" },
+    "notice.conflict.aside": { pt: "Nada se perdeu. Recarregue para ver a versão actual antes de voltar a gravar.", en: "Nothing was lost. Reload to see the current version before saving again.", fr: "Rien n’a été perdu. Rechargez pour voir la version actuelle avant d’enregistrer de nouveau." },
+    "notice.go_my_work": { pt: "O Meu Trabalho", en: "My Work", fr: "Mon travail" },
 };
 
 /// A Ajuda, a superfície universal (Ask), a Computação e os papéis.
@@ -1109,6 +1151,57 @@ const SETTINGS: &[Entry] = catalogo! {
     },
     "settings.language.save": { pt: "Guardar idioma", en: "Save language", fr: "Enregistrer la langue" },
     "settings.language.saved": { pt: "Idioma guardado.", en: "Language saved.", fr: "Langue enregistrée." },
+    // Conta
+    "settings.account.section": { pt: "A sua conta", en: "Your account", fr: "Votre compte" },
+    "settings.field.name": { pt: "Nome", en: "Name", fr: "Nom" },
+    "settings.field.email": { pt: "Correio institucional", en: "Institutional address", fr: "Adresse institutionnelle" },
+    "settings.field.status": { pt: "Estado", en: "Status", fr: "Statut" },
+    "settings.field.institution": { pt: "Instituição", en: "Institution", fr: "Institution" },
+    "settings.account.managed_note": { pt: "Estes dados são geridos pela Administração da Ocinye. Papéis, filiações e acessos não se alteram aqui — são concedidos por quem tem autoridade para isso, e ficam registados.", en: "These details are managed by Ocinye Administration. Roles, memberships and access are not changed here — they are granted by those with the authority to do so, and are recorded.", fr: "Ces données sont gérées par l’Administration d’Ocinye. Les rôles, appartenances et accès ne se modifient pas ici — ils sont accordés par ceux qui en ont l’autorité, et sont consignés." },
+    // Segurança — palavra-passe
+    "settings.password.section": { pt: "Palavra-passe", en: "Password", fr: "Mot de passe" },
+    "settings.password.current": { pt: "Palavra-passe actual", en: "Current password", fr: "Mot de passe actuel" },
+    "settings.password.current_hint": { pt: "A que usa hoje", en: "The one you use today", fr: "Celui que vous utilisez aujourd’hui" },
+    "settings.password.new": { pt: "Nova palavra-passe", en: "New password", fr: "Nouveau mot de passe" },
+    "settings.password.new_hint": { pt: "Mínimo de 15 caracteres", en: "At least 15 characters", fr: "15 caractères minimum" },
+    "settings.password.confirm": { pt: "Confirmar", en: "Confirm", fr: "Confirmer" },
+    "settings.password.confirm_hint": { pt: "Repita a nova palavra-passe", en: "Repeat the new password", fr: "Répétez le nouveau mot de passe" },
+    "settings.password.note": { pt: "Ao mudar a palavra-passe, todas as suas sessões terminam e esta é substituída por uma nova. Continua a trabalhar sem voltar a entrar.", en: "When you change your password, all your sessions end and this one is replaced by a new one. You keep working without signing in again.", fr: "Lorsque vous changez votre mot de passe, toutes vos sessions prennent fin et celle-ci est remplacée par une nouvelle. Vous continuez à travailler sans vous reconnecter." },
+    "settings.password.change": { pt: "Mudar palavra-passe", en: "Change password", fr: "Changer le mot de passe" },
+    // Segurança — sessões
+    "settings.sessions.section": { pt: "As minhas sessões", en: "My sessions", fr: "Mes sessions" },
+    "settings.sessions.unreadable": { pt: "A lista de sessões não pôde ser lida. Isto não quer dizer que não existam outras sessões — quer dizer que não sabemos quais são.", en: "The list of sessions could not be read. This does not mean there are no other sessions — it means we do not know which they are.", fr: "La liste des sessions n’a pas pu être lue. Cela ne signifie pas qu’il n’existe pas d’autres sessions — cela signifie que nous ne savons pas lesquelles." },
+    "settings.sessions.none": { pt: "Não há sessões activas para além desta.", en: "There are no active sessions besides this one.", fr: "Il n’y a aucune session active hormis celle-ci." },
+    "settings.sessions.current": { pt: "Sessão actual", en: "Current session", fr: "Session actuelle" },
+    "settings.sessions.end_this": { pt: "Terminar esta", en: "End this one", fr: "Mettre fin à celle-ci" },
+    "settings.sessions.end": { pt: "Terminar", en: "End", fr: "Mettre fin" },
+    "settings.sessions.note": { pt: "Terminar a sessão actual encerra este acesso e volta ao início de sessão.", en: "Ending the current session closes this access and returns to sign-in.", fr: "Mettre fin à la session actuelle ferme cet accès et ramène à la connexion." },
+    // Segurança — códigos de recuperação
+    "settings.recovery.title": { pt: "Códigos de recuperação", en: "Recovery codes", fr: "Codes de récupération" },
+    "settings.recovery.section": { pt: "Segundo factor", en: "Second factor", fr: "Second facteur" },
+    "settings.recovery.new_saved": { pt: "Guardou-os? Estes são os códigos novos. Os anteriores deixaram de valer. Não voltarão a ser mostrados.", en: "Saved them? These are the new codes. The previous ones no longer work. They will not be shown again.", fr: "Enregistrés ? Voici les nouveaux codes. Les précédents ne fonctionnent plus. Ils ne seront plus affichés." },
+    "settings.recovery.copy": { pt: "Copiar códigos", en: "Copy codes", fr: "Copier les codes" },
+    "settings.recovery.download": { pt: "Guardar ficheiro", en: "Save file", fr: "Enregistrer le fichier" },
+    "settings.recovery.regen_intro": { pt: "Regenerar emite dez códigos novos e invalida os que tem. Confirme com a palavra-passe e um código do autenticador.", en: "Regenerating issues ten new codes and invalidates the ones you have. Confirm with your password and an authenticator code.", fr: "La régénération émet dix nouveaux codes et invalide ceux que vous avez. Confirmez avec votre mot de passe et un code de l’authentificateur." },
+    "settings.recovery.code_ph": { pt: "Código do autenticador", en: "Authenticator code", fr: "Code de l’authentificateur" },
+    "settings.recovery.regen_button": { pt: "Regenerar códigos de recuperação", en: "Regenerate recovery codes", fr: "Régénérer les codes de récupération" },
+    "settings.recovery.no_mfa": { pt: "Esta conta não tem um segundo factor activo, por isso não há códigos de recuperação para regenerar.", en: "This account has no active second factor, so there are no recovery codes to regenerate.", fr: "Ce compte n’a pas de second facteur actif, il n’y a donc pas de codes de récupération à régénérer." },
+    // Imagem de perfil
+    "settings.avatar.section": { pt: "Imagem de perfil", en: "Profile picture", fr: "Photo de profil" },
+    "settings.avatar.updated": { pt: "Imagem de perfil actualizada.", en: "Profile picture updated.", fr: "Photo de profil mise à jour." },
+    "settings.avatar.initials_note": { pt: "As iniciais são sempre o recurso: se a imagem não carregar, é o seu nome que aparece.", en: "Initials are always the fallback: if the image does not load, it is your name that appears.", fr: "Les initiales sont toujours le recours : si l’image ne se charge pas, c’est votre nom qui apparaît." },
+    "settings.avatar.presets_label": { pt: "Avatares Ocinye", en: "Ocinye avatars", fr: "Avatars Ocinye" },
+    "settings.avatar.preset_alt": { pt: "Avatar Ocinye {name}", en: "Ocinye avatar {name}", fr: "Avatar Ocinye {name}" },
+    "settings.avatar.use_initials": { pt: "Usar iniciais", en: "Use initials", fr: "Utiliser les initiales" },
+    "settings.avatar.photo_label": { pt: "Fotografia", en: "Photograph", fr: "Photographie" },
+    "settings.avatar.replace": { pt: "Substituir fotografia", en: "Replace photograph", fr: "Remplacer la photographie" },
+    "settings.avatar.upload": { pt: "Carregar fotografia", en: "Upload photograph", fr: "Téléverser la photographie" },
+    "settings.avatar.photo_note": { pt: "JPEG, PNG ou WebP, até 8 MiB. A fotografia é recortada num quadrado ao centro e guardada pela Ocinye — não é enviada para nenhum serviço externo, e a informação de câmara e localização que a acompanhe não é conservada.", en: "JPEG, PNG or WebP, up to 8 MiB. The photograph is cropped to a centred square and kept by Ocinye — it is not sent to any external service, and any camera and location information it carries is not retained.", fr: "JPEG, PNG ou WebP, jusqu’à 8 Mio. La photographie est recadrée en un carré centré et conservée par Ocinye — elle n’est envoyée à aucun service externe, et les informations d’appareil et de localisation qu’elle contient ne sont pas conservées." },
+    // Componentes partilhados
+    "action.not_yet_available": { pt: "Ainda não disponível", en: "Not yet available", fr: "Pas encore disponible" },
+    "table.previous": { pt: "← Anterior", en: "← Previous", fr: "← Précédent" },
+    "table.next": { pt: "Seguinte →", en: "Next →", fr: "Suivant →" },
+    "table.toggle_density": { pt: "Alternar densidade das linhas", en: "Toggle row density", fr: "Basculer la densité des lignes" },
 };
 
 /// Todos os grupos de produção. O portão de paridade corre sobre isto.
@@ -1116,6 +1209,7 @@ const SETTINGS: &[Entry] = catalogo! {
 /// Não inclui grupos de teste: uma chave só-`pt` de teste (para provar a queda)
 /// não é um buraco de produção, e não deve fazer o portão soar.
 pub const GROUPS: &[&[Entry]] = &[
+    NOTICE,
     MISC_A,
     AUTH,
     MESSAGING,

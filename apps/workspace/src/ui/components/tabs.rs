@@ -74,7 +74,7 @@ fn render(
                                         role="tab"
                                         aria-selected="false"
                                         aria-disabled="true"
-                                        title="Ainda não disponível"
+                                        title=crate::i18n::t("action.not_yet_available")
                                     >
                                         {tab.label.clone()}
                                     </span>
