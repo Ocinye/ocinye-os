@@ -20,48 +20,52 @@
 
 use ocinye_contracts::TechnicalRole;
 
-/// Um papel técnico como uma pessoa o lê: o rótulo canónico e, quando ajuda, uma
-/// descrição curta do que o papel é. A descrição fica vazia quando o rótulo se
-/// explica sozinho — um «Administrador da plataforma» não precisa de glosa.
+/// Um papel técnico como uma pessoa o lê: a **chave** do rótulo canónico e, quando
+/// ajuda, a chave de uma descrição curta do que o papel é. A descrição fica vazia
+/// (`""`) quando o rótulo se explica sozinho — um «Administrador da plataforma» não
+/// precisa de glosa. As chaves resolvem-se pela via i18n no idioma corrente, pelo
+/// que o rótulo é português, inglês ou francês conforme quem lê (§84).
 struct Rotulo {
-    label: &'static str,
-    description: &'static str,
+    label_key: &'static str,
+    description_key: &'static str,
 }
 
-/// A tradução canónica de um papel. É a **única** no Workspace.
+/// A chave da tradução canónica de um papel. É a **única** no Workspace. O `match`
+/// mapeia o conjunto fechado do contrato para chaves do catálogo; a tradução
+/// própria acontece em [`label`] e [`label_com_descricao`], já com o idioma.
 const fn rotulo(role: TechnicalRole) -> Rotulo {
     match role {
         TechnicalRole::ResearchMember => Rotulo {
-            label: "Investigador",
-            description: "acesso científico comum",
+            label_key: "roles.researcher",
+            description_key: "roles.scope.common",
         },
         TechnicalRole::ResearchLead => Rotulo {
-            label: "Líder de investigação",
-            description: "lidera ideias e projectos",
+            label_key: "roles.research_lead",
+            description_key: "roles.lead_desc",
         },
         TechnicalRole::Collaborator => Rotulo {
-            label: "Colaborador",
-            description: "âmbito estreito",
+            label_key: "roles.collaborator",
+            description_key: "roles.scope.narrow",
         },
         TechnicalRole::ExternalCollaborator => Rotulo {
-            label: "Colaborador externo",
-            description: "só o que for atribuído",
+            label_key: "roles.external",
+            description_key: "roles.scope.assigned_only",
         },
         TechnicalRole::UnitManager => Rotulo {
-            label: "Gestor de unidade",
-            description: "",
+            label_key: "roles.unit_manager",
+            description_key: "",
         },
         TechnicalRole::Auditor => Rotulo {
-            label: "Auditor",
-            description: "evidência, sem conteúdo",
+            label_key: "roles.auditor",
+            description_key: "roles.scope.evidence",
         },
         TechnicalRole::OrganisationAdmin => Rotulo {
-            label: "Administrador da organização",
-            description: "",
+            label_key: "roles.org_admin",
+            description_key: "",
         },
         TechnicalRole::PlatformAdmin => Rotulo {
-            label: "Administrador da plataforma",
-            description: "",
+            label_key: "roles.platform_admin",
+            description_key: "",
         },
     }
 }
@@ -82,10 +86,10 @@ pub const OFERECIDOS: [TechnicalRole; 8] = [
     TechnicalRole::PlatformAdmin,
 ];
 
-/// O rótulo canónico de um papel.
+/// O rótulo canónico de um papel, no idioma corrente.
 #[must_use]
 pub fn label(role: TechnicalRole) -> &'static str {
-    rotulo(role).label
+    crate::i18n::t(rotulo(role).label_key)
 }
 
 /// O rótulo canónico a partir do código estável do papel. Um código que este
@@ -99,11 +103,15 @@ pub fn label_do_codigo(code: &str) -> String {
 /// descrição, só o rótulo quando não há.
 #[must_use]
 pub fn label_com_descricao(role: TechnicalRole) -> String {
-    let Rotulo { label, description } = rotulo(role);
-    if description.is_empty() {
+    let Rotulo {
+        label_key,
+        description_key,
+    } = rotulo(role);
+    let label = crate::i18n::t(label_key);
+    if description_key.is_empty() {
         label.to_owned()
     } else {
-        format!("{label} — {description}")
+        format!("{label} — {}", crate::i18n::t(description_key))
     }
 }
 
@@ -113,8 +121,31 @@ mod tests {
 
     #[test]
     fn research_lead_le_se_lider_de_investigacao() {
-        assert_eq!(label(TechnicalRole::ResearchLead), "Líder de investigação");
-        assert_eq!(label_do_codigo("research_lead"), "Líder de investigação");
+        assert_eq!(
+            label(TechnicalRole::ResearchLead),
+            crate::i18n::t("roles.research_lead")
+        );
+        assert_eq!(
+            label_do_codigo("research_lead"),
+            crate::i18n::t("roles.research_lead")
+        );
+    }
+
+    #[tokio::test]
+    async fn o_rotulo_segue_o_idioma_corrente() {
+        use crate::i18n::{with_locale, Locale};
+        // O mesmo papel, três línguas: o rótulo é apresentação, não contrato.
+        let fr = with_locale(Locale::Fr, async {
+            label(TechnicalRole::ResearchLead).to_owned()
+        })
+        .await;
+        let en = with_locale(Locale::En, async {
+            label(TechnicalRole::ResearchLead).to_owned()
+        })
+        .await;
+        assert_eq!(fr, crate::i18n::t_in(Locale::Fr, "roles.research_lead"));
+        assert_eq!(en, crate::i18n::t_in(Locale::En, "roles.research_lead"));
+        assert_ne!(fr, en, "o rótulo não mudou com o idioma");
     }
 
     #[test]
@@ -142,13 +173,19 @@ mod tests {
 
     #[test]
     fn o_seletor_junta_rotulo_e_descricao() {
+        // Com descrição: «Rótulo — descrição», ambos do catálogo, no idioma corrente.
         assert_eq!(
             label_com_descricao(TechnicalRole::ResearchMember),
-            "Investigador — acesso científico comum"
+            format!(
+                "{} — {}",
+                crate::i18n::t("roles.researcher"),
+                crate::i18n::t("roles.scope.common")
+            )
         );
+        // Sem descrição: só o rótulo, sem o travessão pendurado.
         assert_eq!(
             label_com_descricao(TechnicalRole::PlatformAdmin),
-            "Administrador da plataforma"
+            crate::i18n::t("roles.platform_admin")
         );
     }
 }

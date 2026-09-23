@@ -7,6 +7,21 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização (fatia 12): Ajuda, superfície de comando, Computação e papéis — 2026-09-23
+
+Quatro superfícies passam a pt/en/fr. A **Ajuda** — toda prosa de produto —
+traduz as suas nove secções e todos os parágrafos, os rótulos dos estados do
+sistema e as ligações internas. A **superfície de comando** (Pesquisar ·
+Perguntar · Executar) traduz o título, o formulário, os três modos, os
+resultados, o plano e as suas confirmações, o executado e o indisponível. A
+**Computação** traduz os cabeçalhos da tabela (CPU/RAM/GPU ficam, por serem
+acrónimos universais), os separadores, as métricas e o estado vazio. Os
+**rótulos dos papéis técnicos** (`ui::roles`) passam a resolver-se pela via
+i18n: o papel é contrato, o rótulo é apresentação e segue o idioma de quem lê.
+Guardas de pureza `a_ajuda_nao_mistura_linguas`,
+`a_superficie_de_comando_nao_mistura_linguas`,
+`a_computacao_nao_mistura_linguas` e `o_rotulo_segue_o_idioma_corrente`.
+
 ### Internacionalização (fatia 11): arranque, login, primeiro acesso e MFA — 2026-09-23
 
 As superfícies anteriores à sessão passam a pt/en/fr: o arranque («A perguntar ao

@@ -58,256 +58,174 @@ pub fn help() -> impl IntoView {
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Ajuda"</h1>
-                    <p>"Ajuda do Ocinye Workspace · estado actual do produto."</p>
+                    <h1>{crate::i18n::t("help.title")}</h1>
+                    <p>{crate::i18n::t("help.subtitle")}</p>
                 </div>
             </div>
 
-            <nav class="oc-card oc-card__body oc-mb-5" aria-label="Nesta página">
-                <div class="oc-t-meta oc-mb-5">"NESTA PÁGINA"</div>
+            <nav class="oc-card oc-card__body oc-mb-5" aria-label=crate::i18n::t("help.on_this_page")>
+                <div class="oc-t-meta oc-mb-5">{crate::i18n::t("help.on_this_page")}</div>
                 <div class="oc-col oc-gap-2">
-                    <a href="#comecar">"Começar"</a>
-                    <a href="#investigacao">"Investigação"</a>
-                    <a href="#conhecimento">"Conhecimento e Dados"</a>
-                    <a href="#tempo">"Tempo e Calendário"</a>
-                    <a href="#correio">"Correio"</a>
-                    <a href="#inteligencia">"Ocinye AI, Agentes e Computação"</a>
-                    <a href="#institucional">"Institucional"</a>
-                    <a href="#conta">"Conta e Segurança"</a>
-                    <a href="#estados">"Estados do sistema"</a>
+                    <a href="#comecar">{crate::i18n::t("help.start")}</a>
+                    <a href="#investigacao">{crate::i18n::t("nav.section.research")}</a>
+                    <a href="#conhecimento">{crate::i18n::t("help.section.knowledge_data")}</a>
+                    <a href="#tempo">{crate::i18n::t("help.section.time_calendar")}</a>
+                    <a href="#correio">{crate::i18n::t("nav.mail")}</a>
+                    <a href="#inteligencia">{crate::i18n::t("help.section.ai_agents_compute")}</a>
+                    <a href="#institucional">{crate::i18n::t("nav.section.institutional")}</a>
+                    <a href="#conta">{crate::i18n::t("help.section.account_security")}</a>
+                    <a href="#estados">{crate::i18n::t("help.section.system_states")}</a>
                 </div>
             </nav>
 
             {seccao(
                 "comecar",
-                "COMEÇAR",
+                crate::i18n::t("help.start"),
                 view! {
-                    {p("O Ocinye Workspace é onde o trabalho da instituição acontece: \
-                        unidades, ideias, projectos, conhecimento, dados e correio. \
-                        A barra da esquerda mostra a instituição inteira — os ecrãs a que \
-                        não tem acesso aparecem esbatidos, para que saiba que existem.")}
-                    {p("A Home reúne o que precisa da sua atenção. O Meu Trabalho mostra o \
-                        que lhe está atribuído e a investigação em que participa — não tudo \
-                        o que consegue ver, que é outra coisa e mais.")}
-                    {p("A barra de pesquisa no topo procura em toda a instituição, dentro \
-                        do que lhe é acessível. Abre também com ⌘K.")}
+                    {p(crate::i18n::t("help.start.p1"))}
+                    {p(crate::i18n::t("help.start.p2"))}
+                    {p(crate::i18n::t("help.start.p3"))}
                     <p class="oc-t-prose">
-                        "Ir para "<a href="/">"Home"</a>" · "
-                        <a href="/my-work">"O Meu Trabalho"</a>
+                        {crate::i18n::t("help.go_to")}<a href="/">{crate::i18n::t("help.link.home")}</a>" · "
+                        <a href="/my-work">{crate::i18n::t("nav.my_work")}</a>
                     </p>
                 },
             )}
 
             {seccao(
                 "investigacao",
-                "INVESTIGAÇÃO",
+                crate::i18n::t("nav.section.research"),
                 view! {
-                    {p("Uma Unidade é o âmbito institucional onde a investigação acontece. \
-                        As ideias e os projectos nascem dentro de uma, e a filiação numa \
-                        unidade é o que dá acesso ao trabalho que lá vive.")}
-                    {p("Uma Ideia é exploratória. Nem todas se tornam projectos, e isso é um \
-                        desfecho legítimo. Quando uma ideia amadurece até candidatura, pode \
-                        ser promovida a Projecto — e o Research Workspace acompanha-a, com \
-                        tudo o que foi reunido enquanto se explorava.")}
-                    {p("Por isso não existe «criar projecto do zero»: um projecto nasce de \
-                        uma ideia, e essa origem fica registada.")}
+                    {p(crate::i18n::t("help.research.p1"))}
+                    {p(crate::i18n::t("help.research.p2"))}
+                    {p(crate::i18n::t("help.research.p3"))}
                     <p class="oc-t-prose">
-                        "Ir para "<a href="/units">"Unidades"</a>" · "
-                        <a href="/ideas">"Ideias"</a>" · "
-                        <a href="/projects">"Projectos"</a>
+                        {crate::i18n::t("help.go_to")}<a href="/units">{crate::i18n::t("nav.units")}</a>" · "
+                        <a href="/ideas">{crate::i18n::t("nav.ideas")}</a>" · "
+                        <a href="/projects">{crate::i18n::t("nav.projects")}</a>
                     </p>
                 },
             )}
 
             {seccao(
                 "conhecimento",
-                "CONHECIMENTO E DADOS",
+                crate::i18n::t("help.section.knowledge_data"),
                 view! {
-                    {p("Referências, notas, documentos e datasets pertencem ao Research \
-                        Workspace onde a investigação que os usa acontece. As páginas \
-                        Conhecimento, Bibliografia e Dados reúnem o que alcança em todos \
-                        eles — reúnem apenas, não mudam a quem pertencem.")}
-                    {p("Por isso, ao criar uma referência ou um dataset a partir dessas \
-                        páginas, escolhe primeiro o ambiente de destino. Só aparecem os \
-                        ambientes onde tem autorização para criar.")}
-                    {p("Cada recurso tem uma classificação — PUBLIC, INTERNAL, CONFIDENTIAL \
-                        ou RESTRICTED — e ela pode ser mais restrita do que a do ambiente que \
-                        o contém. Se um recurso não aparece, é porque a sua classificação ou \
-                        a filiação necessária não o alcançam; nunca porque desapareceu.")}
-                    {p("Resultados ainda não existe no Ocinye OS. Aparece no ecrã de \
-                        Conhecimento como não implementado, e não como zero — zero diria que \
-                        a consulta correu e não encontrou nada.")}
+                    {p(crate::i18n::t("help.knowledge.p1"))}
+                    {p(crate::i18n::t("help.knowledge.p2"))}
+                    {p(crate::i18n::t("help.knowledge.p3"))}
+                    {p(crate::i18n::t("help.knowledge.p4"))}
                     <p class="oc-t-prose">
-                        "Ir para "<a href="/knowledge">"Conhecimento"</a>" · "
-                        <a href="/bibliography">"Bibliografia"</a>" · "
-                        <a href="/datasets">"Dados"</a>
+                        {crate::i18n::t("help.go_to")}<a href="/knowledge">{crate::i18n::t("nav.knowledge")}</a>" · "
+                        <a href="/bibliography">{crate::i18n::t("nav.bibliography")}</a>" · "
+                        <a href="/datasets">{crate::i18n::t("nav.data")}</a>
                     </p>
                 },
             )}
 
             {seccao(
                 "arranque",
-                "QUANDO O SISTEMA ARRANCA",
+                crate::i18n::t("help.section.boot"),
                 view! {
-                    {p("Ao abrir o Ocinye OS, a primeira coisa que aparece é o estado do \
-                        sistema. Não é um ecrã de espera: é o Ocinye Core a dizer se está em \
-                        condições de operar, antes de lhe pedir a palavra-passe.")}
-                    {p("«Sistema operacional» significa que o núcleo está a operar. Pode \
-                        haver capacidades futuras ainda por chegar — a IA e a computação \
-                        aguardam o primeiro nó computacional da Ocinye —, e isso não é \
-                        avaria: são ausências esperadas, e o arranque diz quais. \
-                        «Sistema operacional com uma avaria» é diferente: uma capacidade \
-                        que está configurada e devia responder não está a responder — o \
-                        correio, por exemplo. O trabalho institucional segue nos dois casos.")}
-                    {p("«Não foi possível iniciar» significa que uma dependência essencial \
-                        não está disponível, e por isso não há como entrar. «Sem resposta» é \
-                        outra coisa: não chegámos a saber o que o Core diria. A diferença \
-                        importa — numa sabe-se o que se passa, na outra não.")}
-                    {p("Nos dois casos há um botão para tentar de novo, e ele volta mesmo a \
-                        perguntar. Se o sistema entretanto ficou em condições, segue.")}
-                    {p("Depois de entrar, a barra superior continua a mostrar o mesmo \
-                        estado. O arranque não volta a aparecer a cada passo: é a porta de \
-                        entrada, e não um vigilante.")}
-                    {p("Se seguiu uma ligação para um sítio concreto, é para lá que vai \
-                        depois de o sistema arrancar e de a sua sessão ser verificada — e \
-                        não para a página inicial.")}
+                    {p(crate::i18n::t("help.boot.p1"))}
+                    {p(crate::i18n::t("help.boot.p2"))}
+                    {p(crate::i18n::t("help.boot.p3"))}
+                    {p(crate::i18n::t("help.boot.p4"))}
+                    {p(crate::i18n::t("help.boot.p5"))}
+                    {p(crate::i18n::t("help.boot.p6"))}
                 },
             )}
 
             {seccao(
                 "tempo",
-                "TEMPO E CALENDÁRIO",
+                crate::i18n::t("help.section.time_calendar"),
                 view! {
-                    {p("A hora na barra superior abre o Centro Temporal: o que tem hoje, o \
-                        que vem a seguir, e os lembretes por ver. É um relance e um sítio \
-                        de onde agir — as vistas completas vivem no Calendário.")}
-                    {p("O Calendário tem quatro vistas da mesma agenda: Hoje, Semana, Mês \
-                        e Agenda. Todas mostram exactamente o que tem acesso a ver; o que \
-                        muda entre elas é a forma, nunca o conteúdo.")}
-                    {p("Um evento pode ter hora ou ser de dia inteiro. Com hora, indica \
-                        também a zona horária — «14:00 em Paris» continua a ser 14:00 em \
-                        Paris para quem estiver em Luanda, e o Ocinye Core guarda as duas \
-                        coisas. Se escolher uma hora que não existe nesse dia, por causa da \
-                        mudança para o horário de Verão, o sistema di-lo e pede outra em vez \
-                        de escolher por si.")}
-                    {p("Uma actividade pode ser pessoal, de uma unidade, de um Research \
-                        Workspace ou da instituição. A agenda pessoal é sua e de mais \
-                        ninguém — nem a administração a vê.")}
-                    {p("Cancelar uma actividade não a apaga: ela fica visível como \
-                        cancelada, porque quem a esperava precisa de saber que não vai \
-                        acontecer.")}
-                    {p("Os prazos das suas tarefas aparecem no Calendário sem deixarem de \
-                        ser tarefas. Mudar o prazo na tarefa muda o que o Calendário mostra; \
-                        não há duas datas para manter.")}
-                    {p("Um lembrete não é uma actividade: é um pedido para ser avisado. O \
-                        Ocinye OS entrega-o mesmo com o Workspace fechado, e o aviso aparece \
-                        no sino. Uma notificação informa — quando a abre, o Ocinye Core \
-                        volta a verificar se ainda pode ver aquilo.")}
+                    {p(crate::i18n::t("help.time.p1"))}
+                    {p(crate::i18n::t("help.time.p2"))}
+                    {p(crate::i18n::t("help.time.p3"))}
+                    {p(crate::i18n::t("help.time.p4"))}
+                    {p(crate::i18n::t("help.time.p5"))}
+                    {p(crate::i18n::t("help.time.p6"))}
+                    {p(crate::i18n::t("help.time.p7"))}
                 },
             )}
 
             {seccao(
                 "correio",
-                "CORREIO",
+                crate::i18n::t("nav.mail"),
                 view! {
-                    {p("O Ocinye Mail é o correio institucional, dentro do Workspace. \
-                        Ler e enviar são serviços distintos e podem falhar em separado.")}
-                    {p("Uma caixa vazia e um serviço não configurado são coisas diferentes, e \
-                        o ecrã distingue-as. Se o correio ainda não foi configurado nesta \
-                        instalação, a página di-lo — não mostra uma caixa vazia como se \
-                        ninguém lhe tivesse escrito. Configurar é tarefa de quem administra.")}
-                    <p class="oc-t-prose">"Ir para "<a href="/mail">"Correio"</a></p>
+                    {p(crate::i18n::t("help.mail.p1"))}
+                    {p(crate::i18n::t("help.mail.p2"))}
+                    <p class="oc-t-prose">{crate::i18n::t("help.go_to")}<a href="/mail">{crate::i18n::t("nav.mail")}</a></p>
                 },
             )}
 
             {seccao(
                 "inteligencia",
-                "OCINYE AI, AGENTES E COMPUTAÇÃO",
+                crate::i18n::t("help.section.ai_agents_compute"),
                 view! {
-                    {p("O Ocinye OS é operado com IA e governado pelo Core: um agente propõe \
-                        e orquestra, e o Core autoriza e executa. Um agente nunca alcança \
-                        mais do que a pessoa que o usa.")}
-                    {p("Existir e estar disponível são coisas diferentes. As capacidades \
-                        estão implementadas; a inferência precisa de um nó de IA da Ocinye \
-                        registado. Enquanto não houver nenhum, a plataforma declara a IA \
-                        indisponível — e não recorre a um fornecedor externo em silêncio.")}
-                    {p("Zero nós de computação e zero agentes são estados válidos, não erros. \
-                        Todo o restante Workspace funciona sem IA nenhuma.")}
+                    {p(crate::i18n::t("help.ai.p1"))}
+                    {p(crate::i18n::t("help.ai.p2"))}
+                    {p(crate::i18n::t("help.ai.p3"))}
                     <p class="oc-t-prose">
-                        "Ir para "<a href="/ai">"Ocinye AI"</a>" · "
-                        <a href="/ai/agents">"Agentes"</a>" · "
-                        <a href="/compute">"Computação"</a>
+                        {crate::i18n::t("help.go_to")}<a href="/ai">{crate::i18n::t("nav.ai")}</a>" · "
+                        <a href="/ai/agents">{crate::i18n::t("nav.agents")}</a>" · "
+                        <a href="/compute">{crate::i18n::t("nav.compute")}</a>
                     </p>
                 },
             )}
 
             {seccao(
                 "institucional",
-                "INSTITUCIONAL",
+                crate::i18n::t("nav.section.institutional"),
                 view! {
-                    {p("Actividade e Audit Log parecem-se e servem para coisas diferentes. \
-                        A Actividade conta o que aconteceu no trabalho — quem actualizou uma \
-                        ideia, quem juntou uma nota. O Audit Log é o registo técnico e \
-                        imutável das operações, para controlo institucional.")}
-                    {p("A Administração gere pessoas, papéis e filiações. Quem administra a \
-                        plataforma não ganha, por isso, acesso ao conteúdo científico: ler \
-                        investigação vem da filiação, não do papel.")}
+                    {p(crate::i18n::t("help.inst.p1"))}
+                    {p(crate::i18n::t("help.inst.p2"))}
                     <p class="oc-t-prose">
-                        "Ir para "<a href="/activity">"Actividade"</a>" · "
-                        <a href="/admin">"Administração"</a>" · "
-                        <a href="/audit">"Audit Log"</a>
+                        {crate::i18n::t("help.go_to")}<a href="/activity">{crate::i18n::t("nav.activity")}</a>" · "
+                        <a href="/admin">{crate::i18n::t("nav.admin")}</a>" · "
+                        <a href="/audit">{crate::i18n::t("nav.audit")}</a>
                     </p>
                 },
             )}
 
             {seccao(
                 "conta",
-                "CONTA E SEGURANÇA",
+                crate::i18n::t("help.section.account_security"),
                 view! {
-                    {p("Em Definições encontra a sua conta e as suas credenciais. Pode mudar \
-                        a palavra-passe e ver as sessões abertas em seu nome, terminando \
-                        qualquer uma delas.")}
-                    {p("Mudar a palavra-passe exige a actual — uma sessão aberta não é prova \
-                        suficiente de quem está a escrever. Ao mudá-la, todas as suas sessões \
-                        terminam e esta é substituída por uma nova, sem ter de voltar a entrar.")}
-                    {p("Papéis, filiações e acessos não se alteram aqui. São concedidos por \
-                        quem tem autoridade para isso, e ficam registados com autor — é o que \
-                        torna o acesso auditável em vez de acidental.")}
-                    <p class="oc-t-prose">"Ir para "<a href="/settings">"Definições"</a></p>
+                    {p(crate::i18n::t("help.account.p1"))}
+                    {p(crate::i18n::t("help.account.p2"))}
+                    {p(crate::i18n::t("help.account.p3"))}
+                    <p class="oc-t-prose">{crate::i18n::t("help.go_to")}<a href="/settings">{crate::i18n::t("nav.settings")}</a></p>
                 },
             )}
 
             {seccao(
                 "estados",
-                "ESTADOS DO SISTEMA",
+                crate::i18n::t("help.section.system_states"),
                 view! {
-                    {p("O Workspace distingue cinco situações que se parecem no ecrã e \
-                        significam coisas diferentes. Saber qual está a ver poupa-lhe tempo.")}
+                    {p(crate::i18n::t("help.states.intro"))}
                     {estado(
-                        "SEM DADOS",
-                        "A funcionalidade existe e a consulta devolveu zero resultados.",
+                        crate::i18n::t("help.state_label.no_data"),
+                        crate::i18n::t("help.state.no_data_meaning"),
                     )}
                     {estado(
-                        "SEM PERMISSÃO",
-                        "O recurso existe, mas o seu acesso não permite utilizá-lo.",
+                        crate::i18n::t("help.state_label.no_permission"),
+                        crate::i18n::t("help.state.no_access"),
                     )}
                     {estado(
-                        "NÃO CONFIGURADO",
-                        "A capacidade existe no Ocinye OS, mas esta instalação ainda não tem \
-                         o serviço necessário configurado.",
+                        crate::i18n::t("help.state_label.not_configured"),
+                        crate::i18n::t("help.state.not_configured_meaning"),
                     )}
                     {estado(
-                        "NÃO IMPLEMENTADO",
-                        "A capacidade ainda não existe no produto actual.",
+                        crate::i18n::t("help.state_label.not_implemented"),
+                        crate::i18n::t("help.state.not_in_product"),
                     )}
                     {estado(
-                        "INDISPONÍVEL",
-                        "A operação existe, mas não pode ser executada no estado actual.",
+                        crate::i18n::t("help.state_label.unavailable"),
+                        crate::i18n::t("help.state.not_in_state"),
                     )}
-                    <p class="oc-t-prose oc-mt-5">
-                        "Um controlo esbatido nunca é um erro da sua parte. Passe o rato por \
-                         cima e ele diz qual destes estados o explica."
-                    </p>
+                    <p class="oc-t-prose oc-mt-5">{crate::i18n::t("help.states.footer")}</p>
                 },
             )}
         </div>
@@ -364,16 +282,47 @@ mod tests {
     #[test]
     fn a_ajuda_explica_os_estados_do_sistema() {
         let html = help().to_html();
-        for estado in [
-            "SEM DADOS",
-            "SEM PERMISSÃO",
-            "NÃO CONFIGURADO",
-            "NÃO IMPLEMENTADO",
-            "INDISPONÍVEL",
+        for chave in [
+            "help.state_label.no_data",
+            "help.state_label.no_permission",
+            "help.state_label.not_configured",
+            "help.state_label.not_implemented",
+            "help.state_label.unavailable",
         ] {
+            let estado = crate::i18n::t(chave);
             assert!(
                 html.contains(estado),
                 "a ajuda deixou de explicar o estado «{estado}»"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+
+    /// Um ecrã, um idioma: a Ajuda em francês, sem chrome em português.
+    ///
+    /// A Ajuda é toda prosa de produto, e é onde uma língua trocada mais se nota:
+    /// um parágrafo em português no meio do francês lê-se como um erro grosseiro.
+    #[tokio::test]
+    async fn a_ajuda_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+        let fr = with_locale(Locale::Fr, async { help().to_html() }).await;
+        for francesa in [
+            "Aide",
+            "Au démarrage du système",
+            "États du système",
+            "Aucune donnée",
+        ] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+        // Frases inteiras de chrome português que não podem sobreviver em francês.
+        for portuguesa in ["A Home reúne", "Um lembrete não é", "Sem permissão"] {
+            assert!(
+                !fr.contains(portuguesa),
+                "fr: chrome português «{portuguesa}» sobreviveu"
             );
         }
     }
