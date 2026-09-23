@@ -269,18 +269,18 @@ pub fn messaging(page: &MessagingPage<'_>) -> impl IntoView {
     view! {
         <div class="oc-page oc-page--messaging" data-oc="mensagens">
             <div class="oc-msg" data-oc-aberta=aberta.map(|a| a.to_string())>
-                <aside class="oc-msg__lista" aria-label="Conversas">
+                <aside class="oc-msg__lista" aria-label=crate::i18n::t("messaging.conversations_aria")>
                     <header class="oc-msg__lista-topo">
-                        <h1 class="oc-msg__titulo">"Mensagens"</h1>
+                        <h1 class="oc-msg__titulo">{crate::i18n::t("messaging.title")}</h1>
                         <div class="oc-msg__lista-accoes">
                             <button
                                 type="button"
                                 class="oc-btn oc-btn--icone"
                                 data-oc="nova-conversa"
                                 aria-haspopup="dialog"
-                                title="Nova conversa"
+                                title=crate::i18n::t("messaging.new_conversation")
                             >
-                                <span class="oc-sr">"Nova conversa"</span>
+                                <span class="oc-sr">{crate::i18n::t("messaging.new_conversation")}</span>
                                 {icon(Icon::Plus, 15)}
                             </button>
                         </div>
@@ -301,7 +301,7 @@ pub fn messaging(page: &MessagingPage<'_>) -> impl IntoView {
                         {if conversations.is_empty() {
                             view! {
                                 <p class="oc-msg__sem-conversas">
-                                    "Ainda não falou com ninguém por aqui."
+                                    {crate::i18n::t("messaging.none_yet")}
                                 </p>
                             }
                                 .into_any()
@@ -317,7 +317,7 @@ pub fn messaging(page: &MessagingPage<'_>) -> impl IntoView {
 
                 {nova_conversa()}
 
-                <section class="oc-msg__conversa" aria-label="Conversa">
+                <section class="oc-msg__conversa" aria-label=crate::i18n::t("messaging.conversation_aria")>
                     {match (failure.as_deref(), open) {
                         (Some(razao), _) => aviso(razao).into_any(),
                         (None, None) => sem_conversa(conversations.is_empty()).into_any(),
@@ -355,21 +355,21 @@ fn nova_conversa() -> impl IntoView {
                 aria-labelledby="oc-nova-titulo"
             >
                 <header class="oc-msg__nova-topo">
-                    <h2 class="oc-msg__nova-titulo" id="oc-nova-titulo">"Nova conversa"</h2>
+                    <h2 class="oc-msg__nova-titulo" id="oc-nova-titulo">{crate::i18n::t("messaging.new_conversation")}</h2>
                     <button
                         type="button"
                         class="oc-msg__accao"
                         data-oc="fechar-nova"
-                        title="Fechar"
+                        title=crate::i18n::t("messaging.close")
                     >
-                        <span class="oc-sr">"Fechar"</span>
+                        <span class="oc-sr">{crate::i18n::t("messaging.close")}</span>
                         <span aria-hidden="true">"×"</span>
                     </button>
                 </header>
 
                 // Directa ou grupo. A escolha muda o que o formulário pede: um
                 // grupo precisa de nome, uma directa é com uma pessoa.
-                <div class="oc-msg__nova-modo" role="tablist" aria-label="Tipo de conversa">
+                <div class="oc-msg__nova-modo" role="tablist" aria-label=crate::i18n::t("messaging.conversation_type")>
                     <button
                         type="button"
                         class="oc-msg__modo oc-msg__modo--activo"
@@ -378,7 +378,7 @@ fn nova_conversa() -> impl IntoView {
                         data-oc="modo"
                         data-oc-modo="directa"
                     >
-                        "Com uma pessoa"
+                        {crate::i18n::t("messaging.with_one_person")}
                     </button>
                     <button
                         type="button"
@@ -394,7 +394,7 @@ fn nova_conversa() -> impl IntoView {
 
                 <div class="oc-msg__nova-grupo" data-oc="campo-nome" hidden>
                     <label class="oc-campo">
-                        <span class="oc-campo__rotulo">"Nome do grupo"</span>
+                        <span class="oc-campo__rotulo">{crate::i18n::t("messaging.group_name")}</span>
                         <input
                             class="oc-entrada"
                             type="text"
@@ -406,12 +406,12 @@ fn nova_conversa() -> impl IntoView {
                 </div>
 
                 <label class="oc-campo">
-                    <span class="oc-campo__rotulo">"Procurar uma pessoa"</span>
+                    <span class="oc-campo__rotulo">{crate::i18n::t("messaging.search_person")}</span>
                     <input
                         class="oc-entrada"
                         type="search"
                         data-oc="procurar-pessoa"
-                        placeholder="Nome ou endereço institucional…"
+                        placeholder=crate::i18n::t("messaging.person_placeholder")
                         autocomplete="off"
                         role="combobox"
                         aria-expanded="false"
@@ -427,11 +427,11 @@ fn nova_conversa() -> impl IntoView {
                     id="oc-nova-resultados"
                     data-oc="resultados"
                     role="listbox"
-                    aria-label="Pessoas"
+                    aria-label=crate::i18n::t("messaging.people_aria")
                 ></div>
 
                 <p class="oc-msg__nova-estado" data-oc="estado-da-procura">
-                    "Escreva pelo menos duas letras."
+                    {crate::i18n::t("messaging.min_two_letters")}
                 </p>
 
                 <footer class="oc-msg__nova-accoes">
@@ -448,7 +448,7 @@ fn nova_conversa() -> impl IntoView {
                         data-oc="criar-conversa"
                         disabled
                     >
-                        "Começar"
+                        {crate::i18n::t("messaging.start")}
                     </button>
                 </footer>
             </div>
@@ -467,7 +467,7 @@ fn aviso(razao: &str) -> impl IntoView {
         <div class="oc-msg__vazio" data-oc="erro">
             {empty_state(EmptyState {
                 icon: Icon::Messaging,
-                title: "Não foi possível ler as conversas".to_owned(),
+                title: crate::i18n::t("messaging.unreadable").to_owned(),
                 body: razao,
                 actions: Vec::new(),
                 small: false,
@@ -480,13 +480,13 @@ fn aviso(razao: &str) -> impl IntoView {
 fn sem_conversa(primeira_vez: bool) -> impl IntoView {
     let (titulo, corpo) = if primeira_vez {
         (
-            "Comece uma conversa",
+            crate::i18n::t("messaging.start_conversation"),
             "As Mensagens são o sítio onde se fala com colegas sem sair do \
              Workspace. Procure alguém e escreva.",
         )
     } else {
         (
-            "Escolha uma conversa",
+            crate::i18n::t("messaging.choose_conversation"),
             "As suas conversas estão à esquerda. Abra uma para continuar, ou \
              comece outra.",
         )
@@ -499,7 +499,7 @@ fn sem_conversa(primeira_vez: bool) -> impl IntoView {
                 title: titulo.to_owned(),
                 body: corpo.to_owned(),
                 actions: vec![
-                    Button::new("Nova conversa", crate::ui::components::button::Variant::Primary)
+                    Button::new(crate::i18n::t("messaging.new_conversation"), crate::ui::components::button::Variant::Primary)
                         .with_action("nova-conversa"),
                 ],
                 small: false,
@@ -544,7 +544,7 @@ fn aberta_view(
                 {if mensagens.is_empty() {
                     view! {
                         <p class="oc-msg__primeira">
-                            "Ainda não há mensagens. Escreva a primeira."
+                            {crate::i18n::t("messaging.no_messages_yet")}
                         </p>
                     }
                         .into_any()
@@ -643,7 +643,7 @@ fn detalhes_do_grupo(id: &str, participantes: &[Value], governa: bool) -> impl I
 
     view! {
         <aside class="oc-msg__detalhes" id=format!("detalhes-{id}") data-oc="detalhes" hidden>
-            <h3 class="oc-msg__detalhes-titulo">"Participantes"</h3>
+            <h3 class="oc-msg__detalhes-titulo">{crate::i18n::t("messaging.participants")}</h3>
             <ul class="oc-msg__participantes">
                 {linhas
                     .into_iter()
@@ -688,12 +688,12 @@ fn detalhes_do_grupo(id: &str, participantes: &[Value], governa: bool) -> impl I
                                 class="oc-btn oc-btn--secondary oc-btn--sm"
                                 data-oc="acrescentar-membro"
                             >
-                                "Acrescentar alguém"
+                                {crate::i18n::t("messaging.add_someone")}
                             </button>
                         }
                     })}
                 <button type="button" class="oc-btn oc-btn--ghost oc-btn--sm" data-oc="sair">
-                    "Sair do grupo"
+                    {crate::i18n::t("messaging.leave_group")}
                 </button>
             </div>
         </aside>
@@ -747,7 +747,7 @@ fn fluxo(
                     blocos.push(
                         view! {
                             <div class="oc-msg__novas" role="separator" data-oc="novas">
-                                <span>"Novas mensagens"</span>
+                                <span>{crate::i18n::t("messaging.new_messages")}</span>
                             </div>
                         }
                         .into_any(),
@@ -896,23 +896,23 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
                     type="button"
                     class="oc-msg__accao"
                     data-oc="responder"
-                    title="Responder"
+                    title=crate::i18n::t("messaging.reply")
                 >
-                    <span class="oc-sr">"Responder"</span>
+                    <span class="oc-sr">{crate::i18n::t("messaging.reply")}</span>
                     {icon(Icon::Reply, 14)}
                 </button>
                 <button
                     type="button"
                     class="oc-msg__accao"
                     data-oc="abrir-reaccoes"
-                    title="Reagir"
+                    title=crate::i18n::t("messaging.react")
                     aria-haspopup="menu"
                 >
-                    <span class="oc-sr">"Reagir"</span>
+                    <span class="oc-sr">{crate::i18n::t("messaging.react")}</span>
                     <span aria-hidden="true">"☺"</span>
                 </button>
                 <button type="button" class="oc-msg__accao" data-oc="copiar" title="Copiar">
-                    <span class="oc-sr">"Copiar o texto"</span>
+                    <span class="oc-sr">{crate::i18n::t("messaging.copy_text")}</span>
                     {icon(Icon::Archive, 14)}
                 </button>
             </div>
@@ -961,9 +961,9 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                     type="button"
                     class="oc-msg__accao"
                     data-oc="cancelar-resposta"
-                    title="Deixar de responder"
+                    title=crate::i18n::t("messaging.stop_replying")
                 >
-                    <span class="oc-sr">"Deixar de responder"</span>
+                    <span class="oc-sr">{crate::i18n::t("messaging.stop_replying")}</span>
                     <span aria-hidden="true">"×"</span>
                 </button>
             </div>
@@ -973,7 +973,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
             <div class="oc-msg__sugestao" data-oc="sugestao" hidden>
                 <p class="oc-msg__sugestao-topo">
                     <span class="oc-msg__sugestao-marca" aria-hidden="true">"✦"</span>
-                    <span data-oc="sugestao-titulo">"Sugestão"</span>
+                    <span data-oc="sugestao-titulo">{crate::i18n::t("messaging.suggestion")}</span>
                 </p>
                 <p class="oc-msg__sugestao-texto" data-oc="sugestao-texto"></p>
                 <div class="oc-msg__sugestao-accoes">
@@ -982,26 +982,26 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                         class="oc-btn oc-btn--primary oc-btn--sm"
                         data-oc="usar-sugestao"
                     >
-                        "Usar sugestão"
+                        {crate::i18n::t("messaging.use_suggestion")}
                     </button>
                     <button
                         type="button"
                         class="oc-btn oc-btn--ghost oc-btn--sm"
                         data-oc="manter-original"
                     >
-                        "Manter o original"
+                        {crate::i18n::t("messaging.keep_original")}
                     </button>
                 </div>
             </div>
 
             <div class="oc-msg__caixa">
-                <label class="oc-sr" for="oc-msg-texto">"Escrever mensagem"</label>
+                <label class="oc-sr" for="oc-msg-texto">{crate::i18n::t("messaging.write")}</label>
                 <textarea
                     id="oc-msg-texto"
                     class="oc-msg__entrada"
                     data-oc="texto"
                     rows="1"
-                    placeholder="Escrever mensagem…"
+                    placeholder=crate::i18n::t("messaging.write_placeholder")
                     aria-describedby="oc-msg-ajuda"
                 ></textarea>
 
@@ -1012,9 +1012,9 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                         data-oc="abrir-emoji"
                         aria-haspopup="dialog"
                         aria-expanded="false"
-                        title="Emoji"
+                        title=crate::i18n::t("messaging.emoji_aria")
                     >
-                        <span class="oc-sr">"Escolher um emoji"</span>
+                        <span class="oc-sr">{crate::i18n::t("messaging.choose_emoji")}</span>
                         <span aria-hidden="true">"☺"</span>
                     </button>
 
@@ -1031,7 +1031,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                                         title="Ocinye"
                                     >
                                         <span class="oc-sr">
-                                            "Pedir ajuda ao Ocinye"
+                                            {crate::i18n::t("messaging.ask_ocinye")}
                                         </span>
                                         <span aria-hidden="true">"✦"</span>
                                     </button>
@@ -1039,9 +1039,9 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                                         {[
                                             ("corrigir", "Corrigir"),
                                             ("melhorar", "Melhorar"),
-                                            ("formal", "Mais formal"),
-                                            ("curto", "Mais curto"),
-                                            ("claro", "Mais claro"),
+                                            ("formal", crate::i18n::t("messaging.ai.formal")),
+                                            ("curto", crate::i18n::t("messaging.ai.shorter")),
+                                            ("claro", crate::i18n::t("messaging.ai.clarify")),
                                             ("traduzir", "Traduzir"),
                                         ]
                                             .map(|(chave, rotulo)| {
@@ -1088,7 +1088,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                 class="oc-msg__emoji"
                 data-oc="emoji"
                 role="dialog"
-                aria-label="Emoji"
+                aria-label=crate::i18n::t("messaging.emoji_aria")
                 hidden
             >
                 {EMOJI
@@ -1450,10 +1450,46 @@ mod tests {
             Some(lido),
         )
         .to_html();
-        assert_eq!(html.matches("Novas mensagens").count(), 1);
+        assert_eq!(
+            html.matches(crate::i18n::t("messaging.new_messages"))
+                .count(),
+            1
+        );
         // Antes da que está por ler, e não no fim.
-        let marca = html.find("Novas mensagens").expect("marca");
+        let marca = html
+            .find(crate::i18n::t("messaging.new_messages"))
+            .expect("marca");
         let por_ler = html.find("por ler").expect("mensagem");
         assert!(marca < por_ler);
+    }
+}
+
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+
+    /// Um ecrã, um idioma: as Mensagens em francês, sem português.
+    #[tokio::test]
+    async fn as_mensagens_nao_misturam_linguas() {
+        use crate::i18n::{with_locale, Locale};
+        let vaz: Vec<Value> = vec![];
+        let fr = with_locale(Locale::Fr, async {
+            messaging(&MessagingPage {
+                conversations: &vaz,
+                open: None,
+                messages: &vaz,
+                me: Uuid::from_u128(1),
+                zona: "UTC".to_owned().try_into().expect("fuso"),
+                ai: false,
+                realtime: true,
+                failure: None,
+            })
+            .to_html()
+        })
+        .await;
+        for francesa in ["Nouvelle conversation", "Messages"] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+        assert!(!fr.contains("Nova conversa"), "fr: chrome português");
     }
 }

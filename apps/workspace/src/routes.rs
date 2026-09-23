@@ -2660,7 +2660,13 @@ async fn render_messaging(
     });
 
     let trilho = vec![Crumb::to(Screen::Messaging)];
-    shell_page("Mensagens", &viewer, Screen::Messaging, trilho, pagina)
+    shell_page(
+        crate::i18n::t("messaging.title"),
+        &viewer,
+        Screen::Messaging,
+        trilho,
+        pagina,
+    )
 }
 
 #[derive(Deserialize)]

@@ -7,7 +7,7 @@
     "fr"
   ],
   "fallback": "pt",
-  "slice": 9,
+  "slice": 10,
   "namespaces": [
     {
       "prefix": "nav",
@@ -102,6 +102,11 @@
     {
       "prefix": "notifications",
       "surface": "Notifications panel",
+      "status": "translated"
+    },
+    {
+      "prefix": "messaging",
+      "surface": "Messages: conversations, composer, new conversation (fully migrated)",
       "status": "translated"
     }
   ],
