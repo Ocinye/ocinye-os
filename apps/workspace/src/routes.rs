@@ -9936,7 +9936,7 @@ async fn calendar_page(
 
     let trail = vec![Crumb::to(Screen::Calendar)];
     shell_page(
-        "Calendário",
+        crate::i18n::t("calendar.title"),
         &viewer,
         Screen::Calendar,
         trail,

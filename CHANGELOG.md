@@ -7,6 +7,14 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização (fatia 9): o Calendário e as notificações — 2026-09-23
+
+O Calendário passa a pt/en/fr: a grelha e as vistas, o editor de actividade
+(título, quando, participantes, âmbito, classificação, zona horária), os estados
+vazios e a agenda por período; e o painel de notificações (por ler, marcar como
+lida, estados vazios). As datas já falavam o idioma corrente desde a fatia 6.
+Guarda de pureza `o_calendario_nao_mistura_linguas`.
+
 ### Internacionalização (fatia 8): os Ficheiros — 2026-09-23
 
 Os Ficheiros passam a pt/en/fr: cabeçalho e separadores (Favoritos/Recentes/

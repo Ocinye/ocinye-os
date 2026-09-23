@@ -222,9 +222,9 @@ impl Item {
                 .map(|(inicio, fim)| (fim - inicio).num_days())
                 .unwrap_or(1);
             if dias <= 1 {
-                "Dia inteiro".to_owned()
+                crate::i18n::t("calendar.all_day").to_owned()
             } else {
-                format!("Dia inteiro · {dias} dias")
+                crate::i18n::tf("calendar.all_day_days", &[("days", &dias.to_string())])
             }
         } else {
             let inicio = self.clock(zona).unwrap_or_else(|| "—".to_owned());
@@ -331,7 +331,7 @@ pub fn calendar(page: &CalendarPage<'_>) -> impl IntoView {
         <div class="oc-page oc-page--calendar">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Calendário"</h1>
+                    <h1>{crate::i18n::t("calendar.title")}</h1>
                     <p>
                         "Os compromissos, prazos e lembretes a que tem acesso. Os prazos
                          vêm das tarefas e continuam a pertencer-lhes."
@@ -351,7 +351,7 @@ pub fn calendar(page: &CalendarPage<'_>) -> impl IntoView {
                 // falhou faria alguém faltar a uma reunião por acreditar no ecrã.
                 Some(motivo) => view! {
                     <div class="oc-alert oc-alert--error" role="alert">
-                        <strong>"Não foi possível ler a agenda."</strong>
+                        <strong>{crate::i18n::t("calendar.unreadable")}</strong>
                         <span>{motivo.clone()}</span>
                     </div>
                 }.into_any(),
@@ -439,7 +439,7 @@ fn toolbar(current: CalendarView, anchor: NaiveDate) -> impl IntoView {
                 </a>
             </div>
 
-            <nav class="oc-cal-vistas" aria-label="Vistas do calendário">
+            <nav class="oc-cal-vistas" aria-label=crate::i18n::t("calendar.views")>
                 {CalendarView::all().into_iter().map(|vista| {
                     let activa = vista == current;
                     view! {
@@ -470,7 +470,7 @@ pub fn period_text(view: CalendarView, anchor: NaiveDate) -> String {
         }
         CalendarView::Month => tempo::mes_e_ano(anchor),
         CalendarView::Year => anchor.year().to_string(),
-        CalendarView::Agenda => "Próximos 90 dias".to_owned(),
+        CalendarView::Agenda => crate::i18n::t("calendar.next_90_days").to_owned(),
     }
 }
 
@@ -788,7 +788,7 @@ fn faixa_de_dia_inteiro(dias: &[(NaiveDate, Vec<Item>)]) -> Option<impl IntoView
         let dias = dias.to_vec();
         view! {
             <div class="oc-cal-diainteiro">
-                <span class="oc-cal-diainteiro__rotulo">"Dia inteiro"</span>
+                <span class="oc-cal-diainteiro__rotulo">{crate::i18n::t("calendar.all_day")}</span>
                 <div class="oc-cal-diainteiro__dias">
                     {dias.into_iter().map(|(_, items)| view! {
                         <div class="oc-cal-diainteiro__dia">
@@ -861,7 +861,7 @@ fn agenda_view(items: &[Item], zona: TimeZoneName) -> AnyView {
     if items.is_empty() {
         return view! {
             <div class="oc-cal-agenda oc-cal-agenda--vazia">
-                <p>"Nenhuma actividade para este período."</p>
+                <p>{crate::i18n::t("calendar.empty.period.dot")}</p>
             </div>
         }
         .into_any();
@@ -907,7 +907,7 @@ fn agenda_view(items: &[Item], zona: TimeZoneName) -> AnyView {
                                         data-kind=item.kind.clone()
                                     >
                                         <span class="oc-cal-linha__hora">
-                                            {item.clock(zona).unwrap_or_else(|| "Dia inteiro".to_owned())}
+                                            {item.clock(zona).unwrap_or_else(|| crate::i18n::t("calendar.all_day").to_owned())}
                                         </span>
                                         <span class="oc-cal-linha__titulo">
                                             {item.title.clone()}
@@ -960,7 +960,7 @@ fn week_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Into
                         <a
                             class=classe
                             href=format!("/calendar?view=day&on={dia}")
-                            aria-label=format!("Ver {}", crate::ui::tempo::data_por_extenso(dia))
+                            aria-label=crate::i18n::tf("calendar.view_more", &[("n", &crate::ui::tempo::data_por_extenso(dia))])
                         >
                             <span class="oc-cal-cabeca__dia">
                                 {crate::ui::tempo::dia_da_semana_curto(dia)}
@@ -1058,7 +1058,7 @@ fn month_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
     let hoje = crate::ui::tempo::hoje_civil(Utc::now(), zona);
 
     view! {
-        <div class="oc-cal-month" role="table" aria-label="Mês">
+        <div class="oc-cal-month" role="table" aria-label=crate::i18n::t("calendar.grid_aria")>
             <div class="oc-cal-month__weekdays" role="row">
                 {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].into_iter()
                     .map(|nome| view! { <span role="columnheader">{nome}</span> })
@@ -1100,7 +1100,7 @@ fn month_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
                         <a
                             class="oc-cal-month__date"
                             href=format!("/calendar?view=today&on={dia}")
-                            aria-label=format!("Ver {}", crate::ui::tempo::data_por_extenso(dia))
+                            aria-label=crate::i18n::tf("calendar.view_more", &[("n", &crate::ui::tempo::data_por_extenso(dia))])
                         >
                             {dia.day().to_string()}
                         </a>
@@ -1178,7 +1178,7 @@ pub fn system_calendar(hoje: NaiveDate) -> impl IntoView {
             id="oc-temporal-centre"
             data-oc="temporal-centre"
             role="dialog"
-            aria-label="Calendário do sistema"
+            aria-label=crate::i18n::t("calendar.system")
             hidden
         >
             <header class="oc-datepop__cabeca">
@@ -1212,7 +1212,7 @@ pub fn system_calendar(hoje: NaiveDate) -> impl IntoView {
             </div>
 
             <footer class="oc-datepop__accoes">
-                <a class="oc-datepop__abrir" href=CALENDAR_ROUTE>"Abrir Calendário"</a>
+                <a class="oc-datepop__abrir" href=CALENDAR_ROUTE>{crate::i18n::t("calendar.open")}</a>
             </footer>
         </div>
     }
@@ -1392,47 +1392,47 @@ pub fn event_form(
             <form class="oc-editor__form" method="post" action=accao data-oc="editor">
                 <section class="oc-editor__bloco">
                     <label class="oc-campo oc-campo--principal">
-                        <span class="oc-campo__rotulo">"Título"</span>
+                        <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.title")}</span>
                         <input
                             class="oc-entrada oc-entrada--titulo"
                             name="title"
                             required=true
                             value=titulo
                             maxlength="255"
-                            placeholder="Reunião do conselho"
+                            placeholder=crate::i18n::t("calendar.field.title_placeholder")
                             autocomplete="off"
                         />
                     </label>
 
                     <label class="oc-campo">
-                        <span class="oc-campo__rotulo">"Descrição"</span>
+                        <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.description")}</span>
                         <textarea class="oc-entrada oc-entrada--texto" name="description" rows="3">
                         </textarea>
                     </label>
 
                     <label class="oc-campo">
-                        <span class="oc-campo__rotulo">"Localização"</span>
+                        <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.location")}</span>
                         <input
                             class="oc-entrada"
                             name="location"
                             maxlength="255"
-                            placeholder="Sala, edifício ou ligação"
+                            placeholder=crate::i18n::t("calendar.field.location_placeholder")
                         />
                     </label>
                 </section>
 
                 <section class="oc-editor__bloco">
-                    <h2 class="oc-editor__seccao">"Quando"</h2>
+                    <h2 class="oc-editor__seccao">{crate::i18n::t("calendar.section.when")}</h2>
 
                     <label class="oc-interruptor">
                         <input type="checkbox" name="all_day" value="1" data-oc="all-day" />
                         <span class="oc-interruptor__marca" aria-hidden="true"></span>
-                        <span class="oc-interruptor__texto">"Dia inteiro"</span>
+                        <span class="oc-interruptor__texto">{crate::i18n::t("calendar.all_day")}</span>
                     </label>
 
                     <div class="oc-quando" data-oc="timed-fields">
                         <label class="oc-campo">
-                            <span class="oc-campo__rotulo">"Início"</span>
+                            <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.start")}</span>
                             <input
                                 class="oc-entrada"
                                 type="datetime-local"
@@ -1442,7 +1442,7 @@ pub fn event_form(
                             />
                         </label>
                         <label class="oc-campo">
-                            <span class="oc-campo__rotulo">"Fim"</span>
+                            <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.end")}</span>
                             <input
                                 class="oc-entrada"
                                 type="datetime-local"
@@ -1455,7 +1455,7 @@ pub fn event_form(
 
                     <div class="oc-quando" data-oc="allday-fields" hidden>
                         <label class="oc-campo">
-                            <span class="oc-campo__rotulo">"Primeiro dia"</span>
+                            <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.first_day")}</span>
                             <input
                                 class="oc-entrada"
                                 type="date"
@@ -1464,7 +1464,7 @@ pub fn event_form(
                             />
                         </label>
                         <label class="oc-campo">
-                            <span class="oc-campo__rotulo">"Último dia"</span>
+                            <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.last_day")}</span>
                             // Inclusivo aqui, exclusivo na base. A pessoa escreve o
                             // último dia do evento; a conversão é nossa.
                             <input
@@ -1485,7 +1485,7 @@ pub fn event_form(
                     // continua a ser o Core a validá-lo; o que muda é que deixa
                     // de se pedir a alguém que o escreva.
                     <p class="oc-zona">
-                        <span class="oc-zona__rotulo">"Zona horária"</span>
+                        <span class="oc-zona__rotulo">{crate::i18n::t("calendar.field.timezone")}</span>
                         <span class="oc-zona__valor" data-oc="timezone-label">"UTC"</span>
                         <input type="hidden" name="timezone" data-oc="timezone" value="UTC" />
                     </p>
@@ -1493,15 +1493,15 @@ pub fn event_form(
 
                 {(!a_alterar && !participaveis.is_empty()).then(|| view! {
                     <section class="oc-editor__bloco" data-oc="participantes">
-                        <h2 class="oc-editor__seccao">"Participantes"</h2>
+                        <h2 class="oc-editor__seccao">{crate::i18n::t("calendar.section.participants")}</h2>
 
                         <label class="oc-campo oc-campo--estreito">
-                            <span class="oc-campo__rotulo">"Procurar uma pessoa"</span>
+                            <span class="oc-campo__rotulo">{crate::i18n::t("calendar.search_person")}</span>
                             <input
                                 class="oc-entrada"
                                 type="search"
                                 data-oc="procura-pessoa"
-                                placeholder="Nome ou endereço institucional"
+                                placeholder=crate::i18n::t("calendar.person_placeholder")
                                 autocomplete="off"
                                 aria-controls="oc-pessoas"
                             />
@@ -1530,7 +1530,7 @@ pub fn event_form(
                         </ul>
 
                         <p class="oc-pessoas__nada" data-oc="sem-pessoas" hidden>
-                            "Ninguém corresponde a essa procura."
+                            {crate::i18n::t("calendar.no_person_match.dot")}
                         </p>
 
                         <div class="oc-escolhidos" data-oc="escolhidos"></div>
@@ -1539,27 +1539,27 @@ pub fn event_form(
 
                 {(!a_alterar).then(|| view! {
                     <section class="oc-editor__bloco">
-                        <h2 class="oc-editor__seccao">"Pertence a"</h2>
+                        <h2 class="oc-editor__seccao">{crate::i18n::t("calendar.belongs_to")}</h2>
 
                         <label class="oc-campo oc-campo--estreito">
-                            <span class="oc-campo__rotulo">"Âmbito"</span>
+                            <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.scope")}</span>
                             <select class="oc-entrada" name="scope" data-oc="scope">
-                                <option value="personal">"Pessoal"</option>
+                                <option value="personal">{crate::i18n::t("calendar.scope.personal")}</option>
                                 {ha_unidades.then(|| view! {
-                                    <option value="unit">"Unidade"</option>
+                                    <option value="unit">{crate::i18n::t("calendar.scope.unit")}</option>
                                 })}
                                 {ha_ambientes.then(|| view! {
                                     <option value="research_workspace">
-                                        "Ambiente de investigação"
+                                        {crate::i18n::t("calendar.belongs.environment")}
                                     </option>
                                 })}
-                                <option value="institution">"Instituição"</option>
+                                <option value="institution">{crate::i18n::t("calendar.belongs.institution")}</option>
                             </select>
                         </label>
 
                         {ha_unidades.then(|| view! {
                             <label class="oc-campo oc-campo--estreito" data-oc="unit-field" hidden>
-                                <span class="oc-campo__rotulo">"Unidade"</span>
+                                <span class="oc-campo__rotulo">{crate::i18n::t("calendar.scope.unit")}</span>
                                 <select class="oc-entrada" name="unit_id">
                                     {unidades.into_iter().map(|(id, nome)| view! {
                                         <option value=id>{nome}</option>
@@ -1574,7 +1574,7 @@ pub fn event_form(
                                 data-oc="workspace-field"
                                 hidden
                             >
-                                <span class="oc-campo__rotulo">"Ambiente de investigação"</span>
+                                <span class="oc-campo__rotulo">{crate::i18n::t("calendar.belongs.environment")}</span>
                                 <select class="oc-entrada" name="workspace_id">
                                     {ambientes.into_iter().map(|(id, nome)| view! {
                                         <option value=id>{nome}</option>
@@ -1586,7 +1586,7 @@ pub fn event_form(
                 })}
 
                 <footer class="oc-editor__accoes">
-                    <a class="oc-btn oc-btn--ghost" href=CALENDAR_ROUTE>"Cancelar"</a>
+                    <a class="oc-btn oc-btn--ghost" href=CALENDAR_ROUTE>{crate::i18n::t("calendar.cancel")}</a>
                     <button type="submit" class="oc-btn oc-btn--primary" data-oc="submeter">
                         {if a_alterar { "Guardar alterações" } else { "Criar actividade" }}
                     </button>
@@ -1629,9 +1629,9 @@ pub fn event_detail(event: &Value, may_change: bool, zona: TimeZoneName) -> impl
                 </div>
                 {(may_change && !cancelado).then(|| view! {
                     <div class="oc-head__actions">
-                        <a class="oc-btn" href=format!("/calendar/events/{id}/edit")>"Alterar"</a>
+                        <a class="oc-btn" href=format!("/calendar/events/{id}/edit")>{crate::i18n::t("calendar.edit")}</a>
                         <form method="post" action=format!("/calendar/events/{id}/cancel")>
-                            <button type="submit" class="oc-btn oc-btn--danger">"Cancelar"</button>
+                            <button type="submit" class="oc-btn oc-btn--danger">{crate::i18n::t("calendar.cancel")}</button>
                         </form>
                     </div>
                 })}
@@ -1641,32 +1641,32 @@ pub fn event_detail(event: &Value, may_change: bool, zona: TimeZoneName) -> impl
                 // Cancelado continua visível. Um evento que desaparece não avisa
                 // quem o esperava.
                 <div class="oc-alert oc-alert--warning" role="status">
-                    "Esta actividade foi cancelada. Fica visível para quem a esperava."
+                    {crate::i18n::t("calendar.cancelled_note")}
                 </div>
             })}
 
             <dl class="oc-detail">
-                <dt>"Quando"</dt>
+                <dt>{crate::i18n::t("calendar.section.when")}</dt>
                 <dd>{item.as_ref().map(|i| i.when(zona)).unwrap_or_default()}</dd>
                 {(!campo("timezone").is_empty()).then(|| view! {
                     <>
-                        <dt>"Zona horária"</dt>
+                        <dt>{crate::i18n::t("calendar.field.timezone")}</dt>
                         <dd>{campo("timezone")}</dd>
                     </>
                 })}
                 {(!campo("location").is_empty()).then(|| view! {
                     <>
-                        <dt>"Local"</dt>
+                        <dt>{crate::i18n::t("calendar.field.local")}</dt>
                         <dd>{campo("location")}</dd>
                     </>
                 })}
                 {(!campo("description").is_empty()).then(|| view! {
                     <>
-                        <dt>"Descrição"</dt>
+                        <dt>{crate::i18n::t("calendar.field.description")}</dt>
                         <dd>{campo("description")}</dd>
                     </>
                 })}
-                <dt>"Classificação"</dt>
+                <dt>{crate::i18n::t("calendar.field.classification")}</dt>
                 <dd>{classification_badge(&campo("classification"))}</dd>
             </dl>
         </div>
@@ -1695,12 +1695,12 @@ pub fn notifications(payload: &Value, failure: Option<String>) -> impl IntoView 
         <div class="oc-page oc-page--feed">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Notificações"</h1>
+                    <h1>{crate::i18n::t("notifications.title")}</h1>
                     <p>
                         {if por_ler > 0 {
                             format!("{por_ler} por ler.")
                         } else {
-                            "Nada por ler.".to_owned()
+                            crate::i18n::t("notifications.nothing_unread").to_owned()
                         }}
                     </p>
                 </div>
@@ -1709,12 +1709,12 @@ pub fn notifications(payload: &Value, failure: Option<String>) -> impl IntoView 
             {match failure {
                 Some(motivo) => view! {
                     <div class="oc-alert oc-alert--error" role="alert">
-                        <strong>"Não foi possível ler as notificações."</strong>
+                        <strong>{crate::i18n::t("notifications.unreadable")}</strong>
                         <span>{motivo}</span>
                     </div>
                 }.into_any(),
                 None if vazio => view! {
-                    <div class="oc-empty"><p>"Ainda não há notificações."</p></div>
+                    <div class="oc-empty"><p>{crate::i18n::t("notifications.empty")}</p></div>
                 }.into_any(),
                 None => view! {
                     <ul class="oc-notifications">
@@ -1743,16 +1743,16 @@ pub fn notifications(payload: &Value, failure: Option<String>) -> impl IntoView 
                                 }>
                                     <span class="oc-notification__title">{campo("title")}</span>
                                     {(!lida).then(|| view! {
-                                        <span class="oc-notification__dot" aria-label="Por ler"></span>
+                                        <span class="oc-notification__dot" aria-label=crate::i18n::t("notifications.unread")></span>
                                     })}
                                     <span class="oc-notification__actions">
                                         {destino.map(|href| view! {
-                                            <a class="oc-btn oc-btn--ghost" href=href>"Abrir"</a>
+                                            <a class="oc-btn oc-btn--ghost" href=href>{crate::i18n::t("calendar.open_item")}</a>
                                         })}
                                         {(!lida).then(|| view! {
                                             <form method="post" action=format!("/notifications/{id}/read")>
                                                 <button type="submit" class="oc-btn oc-btn--ghost">
-                                                    "Marcar como lida"
+                                                    {crate::i18n::t("notifications.mark_read")}
                                                 </button>
                                             </form>
                                         })}
@@ -1844,7 +1844,7 @@ mod grelha_do_mes {
             );
         }
         assert!(
-            !html.contains("Nenhuma actividade"),
+            !html.contains(crate::i18n::t("calendar.empty")),
             "o mês vazio voltou a substituir a grelha por uma frase"
         );
     }
@@ -1867,7 +1867,11 @@ mod grelha_do_mes {
     fn os_eventos_caem_no_dia_certo() {
         let anchor = dia(2026, 8, 26);
         let items = [
-            evento("Reunião do conselho", dia(2026, 8, 26), 9),
+            evento(
+                crate::i18n::t("calendar.field.title_placeholder"),
+                dia(2026, 8, 26),
+                9,
+            ),
             evento("Defesa de projecto", dia(2026, 8, 29), 10),
         ];
         let html = pagina(&items, anchor);
@@ -1883,7 +1887,10 @@ mod grelha_do_mes {
         );
 
         for (titulo, esperado) in [
-            ("Reunião do conselho", "2026-08-26"),
+            (
+                crate::i18n::t("calendar.field.title_placeholder"),
+                "2026-08-26",
+            ),
             ("Defesa de projecto", "2026-08-29"),
         ] {
             let onde: Vec<&str> = celulas
@@ -2241,13 +2248,13 @@ mod vistas_temporais {
     #[test]
     fn a_agenda_vazia_diz_que_esta_vazia() {
         let html = render(CalendarView::Agenda, &[], dia(2026, 8, 26));
-        assert!(html.contains("Nenhuma actividade para este período"));
+        assert!(html.contains(crate::i18n::t("calendar.empty.period")));
 
         // E as outras não o dizem: desenham-se.
         for vista in [CalendarView::Month, CalendarView::Week, CalendarView::Day] {
             let html = render(vista, &[], dia(2026, 8, 26));
             assert!(
-                !html.contains("Nenhuma actividade para este período"),
+                !html.contains(crate::i18n::t("calendar.empty.period")),
                 "{vista:?} substituiu a estrutura por uma frase"
             );
         }
@@ -2262,7 +2269,10 @@ mod vistas_temporais {
         assert!(html.contains("Agosto 2026"), "não diz em que mês estamos");
         assert!(html.contains("Quarta-feira"), "não diz que dia da semana é");
         assert!(html.contains("oc-datepop__dia-cel--hoje"), "não marca hoje");
-        assert!(html.contains("Abrir Calendário"), "não abre o Calendário");
+        assert!(
+            html.contains(crate::i18n::t("calendar.open")),
+            "não abre o Calendário"
+        );
 
         // E abre-o por um endereço que o catálogo de rotas declara.
         //
@@ -2314,7 +2324,16 @@ mod vistas_temporais {
     #[test]
     fn o_selector_tem_as_cinco_vistas() {
         let rotulos: Vec<&str> = CalendarView::all().iter().map(|v| v.label()).collect();
-        assert_eq!(rotulos, vec!["Dia", "Semana", "Mês", "Ano", "Agenda"]);
+        assert_eq!(
+            rotulos,
+            vec![
+                "Dia",
+                "Semana",
+                crate::i18n::t("calendar.grid_aria"),
+                "Ano",
+                "Agenda"
+            ]
+        );
         assert!(!rotulos.contains(&"Hoje"));
     }
 }
@@ -2445,11 +2464,14 @@ mod editor_de_actividade {
         let vazio = serde_json::json!([]);
         let html = render(&vazio, &vazio);
         assert!(
-            html.contains("Criar actividade"),
+            html.contains(crate::i18n::t("calendar.create_activity")),
             "a acção não diz o que faz"
         );
         assert!(!html.contains(">Marcar<"), "«Marcar» voltou");
-        assert!(html.contains("Cancelar"), "não há como desistir");
+        assert!(
+            html.contains(crate::i18n::t("calendar.cancel")),
+            "não há como desistir"
+        );
     }
 
     /// O conteúdo que a pessoa escreve é texto, e nunca marcação.
@@ -2523,6 +2545,23 @@ mod horario_e_participantes {
         event_form(None, &vazio, &vazio, None, proposto, gente, zona_de_teste()).to_html()
     }
 
+    /// Um ecrã, um idioma: o editor do Calendário em francês, sem português.
+    #[tokio::test]
+    async fn o_calendario_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+        let gente = pessoas();
+        let fr = with_locale(Locale::Fr, async { editor(None, &gente) }).await;
+        for francesa in ["Titre", "Quand", "Participants"] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+        for portuguesa in ["Título", "Quando", "Participantes"] {
+            assert!(
+                !fr.contains(portuguesa),
+                "fr: chrome português «{portuguesa}»"
+            );
+        }
+    }
+
     /// O editor abre com um horário que se aceita sem pensar.
     ///
     /// # O que isto substitui
@@ -2574,14 +2613,17 @@ mod horario_e_participantes {
     fn os_participantes_vem_do_universo_autorizado() {
         let html = editor(None, &pessoas());
 
-        assert!(html.contains("Participantes"), "falta a secção");
+        assert!(
+            html.contains(crate::i18n::t("calendar.section.participants")),
+            "falta a secção"
+        );
         assert!(html.contains("Ana Mucai") && html.contains("Carlos Neto"));
         assert!(
             html.contains(r#"data-oc="procura-pessoa""#),
             "não há como procurar uma pessoa"
         );
         assert!(
-            html.contains("Ninguém corresponde a essa procura"),
+            html.contains(crate::i18n::t("calendar.no_person_match")),
             "uma procura sem resultados não diz nada"
         );
     }
