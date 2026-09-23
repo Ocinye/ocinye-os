@@ -1330,6 +1330,157 @@ const AI: &[Entry] = catalogo! {
     },
 };
 
+/// A Administração de membros: criar, credencial, acesso, segurança, unidades,
+/// research workspaces, papéis, grants e estado da conta. A prosa sensível à
+/// segurança traduz-se com o mesmo significado exacto — `en` e `fr` dizem o que
+/// o `pt` diz, sem suavizar nem omitir (briefing §73, §84).
+const ADMIN: &[Entry] = catalogo! {
+    // Posições institucionais — verdade organizacional, não concedem acesso (ADR-0100).
+    "admin.position.researcher": { pt: "Investigador", en: "Researcher", fr: "Chercheur" },
+    "admin.position.engineer": { pt: "Engenheiro", en: "Engineer", fr: "Ingénieur" },
+    "admin.position.principal_investigator": { pt: "Investigador principal", en: "Principal investigator", fr: "Chercheur principal" },
+    "admin.position.unit_lead": { pt: "Responsável de unidade", en: "Unit lead", fr: "Responsable d’unité" },
+    "admin.position.fellow": { pt: "Bolseiro", en: "Fellow", fr: "Boursier" },
+    "admin.position.student": { pt: "Estudante", en: "Student", fr: "Étudiant" },
+    "admin.position.director": { pt: "Director", en: "Director", fr: "Directeur" },
+    "admin.position.founder": { pt: "Fundador", en: "Founder", fr: "Fondateur" },
+    "admin.position.external_collaborator": { pt: "Colaborador externo", en: "External collaborator", fr: "Collaborateur externe" },
+    "admin.position.label": { pt: "Posição institucional", en: "Institutional position", fr: "Position institutionnelle" },
+    "admin.position.no_access_suffix": { pt: " — não concede acesso.", en: " — grants no access.", fr: " — ne donne aucun accès." },
+    // Adicionar membro
+    "admin.new.title": { pt: "Adicionar membro", en: "Add member", fr: "Ajouter un membre" },
+    "admin.new.subtitle": { pt: "O Ocinye Core gera uma palavra-passe temporária. O membro terá de definir a sua no primeiro acesso.", en: "Ocinye Core generates a temporary password. The member will have to set their own on first access.", fr: "Ocinye Core génère un mot de passe temporaire. Le membre devra définir le sien au premier accès." },
+    "admin.new.identity": { pt: "Identidade", en: "Identity", fr: "Identité" },
+    "admin.new.organisation": { pt: "Organização", en: "Organisation", fr: "Organisation" },
+    "admin.new.access": { pt: "Acesso", en: "Access", fr: "Accès" },
+    "admin.new.full_name": { pt: "Nome completo", en: "Full name", fr: "Nom complet" },
+    "admin.new.full_name_ph": { pt: "Ex.: Ana Maria Fernandes", en: "e.g. Ana Maria Fernandes", fr: "Ex. : Ana Maria Fernandes" },
+    "admin.new.email_ph": { pt: "ana.fernandes@ocinye.com", en: "ana.fernandes@ocinye.com", fr: "ana.fernandes@ocinye.com" },
+    "admin.new.email_hint": { pt: "É a identidade e a credencial de entrada. A convenção da instituição é primeiro.ultimo@ocinye.com, em minúsculas.", en: "It is the identity and the sign-in credential. The institution’s convention is first.last@ocinye.com, in lower case.", fr: "C’est l’identité et l’identifiant de connexion. La convention de l’institution est prenom.nom@ocinye.com, en minuscules." },
+    "admin.new.position_truth": { pt: "Verdade organizacional. ", en: "Organisational truth. ", fr: "Vérité organisationnelle. " },
+    "admin.new.position_no_access": { pt: "Não concede acesso a nada.", en: "Grants access to nothing.", fr: "Ne donne accès à rien." },
+    "admin.new.initial_unit": { pt: "Unidade inicial", en: "Initial unit", fr: "Unité initiale" },
+    "admin.new.no_units": { pt: "Ainda não existem unidades", en: "There are no units yet", fr: "Il n’existe pas encore d’unités" },
+    "admin.new.no_unit_option": { pt: "Sem unidade", en: "No unit", fr: "Aucune unité" },
+    "admin.new.role_hint": { pt: "Na dúvida, escolha o mais estreito. Alargar depois é um pedido; estreitar é uma conversa.", en: "When in doubt, choose the narrowest. Widening later is a request; narrowing is a conversation.", fr: "En cas de doute, choisissez le plus étroit. Élargir ensuite est une demande ; restreindre est une conversation." },
+    "admin.new.whats_next": { pt: "O que acontece a seguir", en: "What happens next", fr: "Ce qui se passe ensuite" },
+    "admin.new.whats_next_body": { pt: "É gerada uma palavra-passe temporária, válida 24 horas e apresentada uma única vez. Entregue-a por canal seguro. O membro não entra no Workspace com ela: serve só para definir a sua.", en: "A temporary password is generated, valid for 24 hours and shown only once. Hand it over through a secure channel. The member does not enter the Workspace with it: it serves only to set their own.", fr: "Un mot de passe temporaire est généré, valable 24 heures et affiché une seule fois. Remettez-le par un canal sûr. Le membre n’entre pas dans l’espace de travail avec : il sert uniquement à définir le sien." },
+    "admin.new.submit": { pt: "Criar membro", en: "Create member", fr: "Créer le membre" },
+    // Credencial emitida — apresentada uma única vez
+    "admin.issued.title": { pt: "Utilizador criado", en: "User created", fr: "Utilisateur créé" },
+    "admin.issued.subtitle": { pt: "A conta existe. Falta entregar o acesso.", en: "The account exists. Access is still to be handed over.", fr: "Le compte existe. L’accès reste à remettre." },
+    "admin.issued.temp_password": { pt: "Palavra-passe temporária", en: "Temporary password", fr: "Mot de passe temporaire" },
+    "admin.issued.valid_until": { pt: "Válida até", en: "Valid until", fr: "Valable jusqu’au" },
+    "admin.issued.shown_once": { pt: "Esta palavra-passe só é apresentada uma vez.", en: "This password is shown only once.", fr: "Ce mot de passe n’est affiché qu’une seule fois." },
+    "admin.issued.transmit_note": { pt: " Transmita-a ao membro através de um canal seguro — presencialmente, por voz, ou por mensagem efémera cifrada. Nunca por email, SMS ou chat. Depois de fechar esta página, ninguém a consegue recuperar.", en: " Transmit it to the member through a secure channel — in person, by voice, or by an encrypted ephemeral message. Never by email, SMS or chat. Once you close this page, no one can recover it.", fr: " Transmettez-le au membre par un canal sûr — en personne, de vive voix, ou par un message éphémère chiffré. Jamais par courriel, SMS ou messagerie. Une fois cette page fermée, personne ne peut le récupérer." },
+    "admin.issued.done": { pt: "Concluído", en: "Done", fr: "Terminé" },
+    // Estado da credencial e da conta
+    "admin.security.credential": { pt: "Credencial", en: "Credential", fr: "Identifiant" },
+    "admin.account.status": { pt: "Estado da conta", en: "Account status", fr: "État du compte" },
+    "admin.password.permanent": { pt: "Palavra-passe definitiva", en: "Permanent password", fr: "Mot de passe définitif" },
+    "admin.password.self_set": { pt: "Definida pelo próprio", en: "Set by the member", fr: "Défini par le membre" },
+    "admin.password.not_yet_set": { pt: "Ainda não definida", en: "Not set yet", fr: "Pas encore défini" },
+    "admin.password.set_at": { pt: "Definida em", en: "Set on", fr: "Défini le" },
+    "admin.credential.temporary": { pt: "Credencial temporária", en: "Temporary credential", fr: "Identifiant temporaire" },
+    "admin.credential.expired_on": { pt: "Expirada em {date}", en: "Expired on {date}", fr: "Expiré le {date}" },
+    "admin.credential.expires_prefix": { pt: "Expira em ", en: "Expires on ", fr: "Expire le " },
+    "admin.last_sign_in": { pt: "Último acesso", en: "Last sign-in", fr: "Dernière connexion" },
+    "admin.recent_failures": { pt: "Falhas recentes (7 dias)", en: "Recent failures (7 days)", fr: "Échecs récents (7 jours)" },
+    "admin.sessions.active": { pt: "Sessões activas", en: "Active sessions", fr: "Sessions actives" },
+    "admin.sessions.none": { pt: "Sem sessões activas.", en: "No active sessions.", fr: "Aucune session active." },
+    "admin.action.revoke": { pt: "Revogar", en: "Revoke", fr: "Révoquer" },
+    // Dar / reemitir acesso — prosa sensível à segurança
+    "admin.access.give": { pt: "Dar acesso", en: "Give access", fr: "Donner l’accès" },
+    "admin.access.reissue": { pt: "Reemitir acesso", en: "Reissue access", fr: "Réémettre l’accès" },
+    "admin.access.give_note": { pt: "Esta pessoa existe na instituição e ainda não tem como entrar. Dar-lhe acesso emite uma credencial temporária e não lhe altera papéis, unidades nem autoridade. A palavra-passe definitiva é definida pelo próprio no primeiro acesso — nunca por quem administra.", en: "This person exists in the institution and still has no way to sign in. Giving them access issues a temporary credential and does not change their roles, units or authority. The permanent password is set by them on first access — never by whoever administers.", fr: "Cette personne existe dans l’institution et n’a encore aucun moyen de se connecter. Lui donner accès émet un identifiant temporaire et ne modifie ni ses rôles, ni ses unités, ni son autorité. Le mot de passe définitif est défini par elle-même au premier accès — jamais par qui administre." },
+    "admin.access.reissue_note": { pt: "A credencial temporária anterior expirou e esta pessoa ficou sem como entrar. Reemitir invalida a credencial expirada e emite uma nova; não lhe altera papéis, unidades nem autoridade, e a palavra-passe definitiva continua a ser definida pelo próprio no primeiro acesso.", en: "The previous temporary credential expired and this person was left with no way to sign in. Reissuing invalidates the expired credential and issues a new one; it does not change their roles, units or authority, and the permanent password is still set by them on first access.", fr: "L’identifiant temporaire précédent a expiré et cette personne s’est retrouvée sans moyen de se connecter. Le réémettre invalide l’identifiant expiré et en émet un nouveau ; il ne modifie ni ses rôles, ni ses unités, ni son autorité, et le mot de passe définitif reste défini par elle-même au premier accès." },
+    // Acesso — papéis, grants, permissões
+    "admin.roles.technical": { pt: "Papéis técnicos", en: "Technical roles", fr: "Rôles techniques" },
+    "admin.role.technical": { pt: "Papel técnico", en: "Technical role", fr: "Rôle technique" },
+    "admin.roles.none_assigned": { pt: "Sem papéis atribuídos.", en: "No roles assigned.", fr: "Aucun rôle attribué." },
+    "admin.grants.explicit": { pt: "Grants explícitos", en: "Explicit grants", fr: "Attributions explicites" },
+    "admin.grants.none": { pt: "Nenhum. O acesso deste membro vem apenas de papéis e memberships.", en: "None. This member’s access comes only from roles and memberships.", fr: "Aucune. L’accès de ce membre provient uniquement des rôles et des appartenances." },
+    "admin.state.active": { pt: "activo", en: "active", fr: "actif" },
+    "admin.state.revoked": { pt: "revogado", en: "revoked", fr: "révoqué" },
+    "admin.permissions.institutional": { pt: "Permissões institucionais", en: "Institutional permissions", fr: "Autorisations institutionnelles" },
+    "admin.permissions.none": { pt: "Nenhuma permissão de âmbito institucional. Não significa nenhum acesso: pode ter permissões dentro de unidades ou de research workspaces.", en: "No institution-scoped permission. It does not mean no access: they may have permissions within units or research workspaces.", fr: "Aucune autorisation de portée institutionnelle. Cela ne signifie aucun accès : le membre peut avoir des autorisations au sein d’unités ou de research workspaces." },
+    // Origem de um acesso (source_label)
+    "admin.source.technical_role": { pt: "papel técnico", en: "technical role", fr: "rôle technique" },
+    "admin.source.unit_membership": { pt: "membership de unidade", en: "unit membership", fr: "appartenance à une unité" },
+    "admin.source.workspace_membership": { pt: "membership de research workspace", en: "research workspace membership", fr: "appartenance à un research workspace" },
+    "admin.source.explicit_grant": { pt: "grant explícito", en: "explicit grant", fr: "attribution explicite" },
+    "admin.source.unknown": { pt: "origem desconhecida", en: "unknown source", fr: "origine inconnue" },
+    // Overview / resumo
+    "admin.overview.summary": { pt: "Em resumo", en: "In summary", fr: "En résumé" },
+    "admin.mfa.not_required": { pt: "Não exigido", en: "Not required", fr: "Non exigé" },
+    "admin.mfa.required_enrolled": { pt: "Exigido e enrolado", en: "Required and enrolled", fr: "Exigé et configuré" },
+    "admin.mfa.required_pending": { pt: "Exigido, por enrolar", en: "Required, not yet enrolled", fr: "Exigé, à configurer" },
+    "admin.roles.none_short": { pt: "Nenhum", en: "None", fr: "Aucun" },
+    // Detalhe do membro
+    "admin.member.pill": { pt: "MEMBRO", en: "MEMBER", fr: "MEMBRE" },
+    "admin.member.position_prefix": { pt: "Posição institucional: ", en: "Institutional position: ", fr: "Position institutionnelle : " },
+    "admin.member.sections_aria": { pt: "Secções do membro", en: "Member sections", fr: "Sections du membre" },
+    "admin.tab.overview": { pt: "Overview", en: "Overview", fr: "Vue d’ensemble" },
+    "admin.tab.access": { pt: "Acesso", en: "Access", fr: "Accès" },
+    "admin.tab.audit": { pt: "Audit", en: "Audit", fr: "Audit" },
+    "admin.tab.activity_unavailable": { pt: "A actividade por membro ainda não é uma consulta do Core. A actividade institucional está em «Actividade».", en: "Per-member activity is not a Core query yet. Institutional activity is in “Activity”.", fr: "L’activité par membre n’est pas encore une requête du Core. L’activité institutionnelle est dans « Activité »." },
+    "admin.tab.audit_unavailable": { pt: "A auditoria por membro ainda não é uma consulta do Core. O registo institucional está em «Audit».", en: "Per-member auditing is not a Core query yet. The institutional record is in “Audit”.", fr: "L’audit par membre n’est pas encore une requête du Core. Le registre institutionnel est dans « Audit »." },
+    // Unidades
+    "admin.units.memberships": { pt: "Pertenças a unidades", en: "Unit memberships", fr: "Appartenances aux unités" },
+    "admin.units.none_assigned": { pt: "Nenhuma unidade atribuída.", en: "No unit assigned.", fr: "Aucune unité attribuée." },
+    "admin.units.assign": { pt: "Atribuir unidade", en: "Assign unit", fr: "Attribuer une unité" },
+    "admin.units.none_org": { pt: "Ainda não existem unidades. Crie uma em ", en: "There are no units yet. Create one in ", fr: "Il n’existe pas encore d’unités. Créez-en une dans " },
+    "admin.units.before_assign": { pt: " antes de atribuir.", en: " before assigning.", fr: " avant d’attribuer." },
+    "admin.units.all_assigned": { pt: "Este membro já pertence a todas as unidades existentes.", en: "This member already belongs to all existing units.", fr: "Ce membre appartient déjà à toutes les unités existantes." },
+    "admin.units.choose": { pt: "Escolher unidade…", en: "Choose a unit…", fr: "Choisir une unité…" },
+    // Papéis de pertença (unidade e workspace)
+    "admin.role.member": { pt: "Membro", en: "Member", fr: "Membre" },
+    "admin.role.manager": { pt: "Gestor", en: "Manager", fr: "Gestionnaire" },
+    "admin.ws_role.viewer": { pt: "Leitor", en: "Viewer", fr: "Lecteur" },
+    "admin.ws_role.lead": { pt: "Lead", en: "Lead", fr: "Responsable" },
+    // Colunas de tabela
+    "admin.col.role": { pt: "Papel", en: "Role", fr: "Rôle" },
+    "admin.col.actions": { pt: "Acções", en: "Actions", fr: "Actions" },
+    "admin.col.workspace": { pt: "Workspace", en: "Workspace", fr: "Espace" },
+    "admin.col.permission": { pt: "Permissão", en: "Permission", fr: "Autorisation" },
+    "admin.col.scope": { pt: "Âmbito", en: "Scope", fr: "Portée" },
+    "admin.action.assign": { pt: "Atribuir", en: "Assign", fr: "Attribuer" },
+    // Research workspaces
+    "admin.ws.memberships": { pt: "Pertenças a research workspaces", en: "Research workspace memberships", fr: "Appartenances aux research workspaces" },
+    "admin.ws.none_assigned": { pt: "Nenhum research workspace atribuído.", en: "No research workspace assigned.", fr: "Aucun research workspace attribué." },
+    "admin.ws.assign": { pt: "Atribuir research workspace", en: "Assign research workspace", fr: "Attribuer un research workspace" },
+    "admin.ws.none_org": { pt: "Ainda não existem research workspaces. Criam-se dentro de uma ideia ou projecto, não aqui.", en: "There are no research workspaces yet. They are created inside an idea or project, not here.", fr: "Il n’existe pas encore de research workspaces. Ils se créent au sein d’une idée ou d’un projet, pas ici." },
+    "admin.ws.all_assigned": { pt: "Este membro já pertence a todos os research workspaces visíveis.", en: "This member already belongs to all visible research workspaces.", fr: "Ce membre appartient déjà à tous les research workspaces visibles." },
+    "admin.ws.choose": { pt: "Escolher workspace…", en: "Choose a workspace…", fr: "Choisir un espace…" },
+    // Gerir papéis técnicos
+    "admin.roles.manage": { pt: "Gerir papéis técnicos", en: "Manage technical roles", fr: "Gérer les rôles techniques" },
+    "admin.roles.none_assigned_technical": { pt: "Sem papéis técnicos atribuídos.", en: "No technical roles assigned.", fr: "Aucun rôle technique attribué." },
+    "admin.roles.all_assigned": { pt: "Este membro já tem todos os papéis do catálogo.", en: "This member already has every role in the catalogue.", fr: "Ce membre a déjà tous les rôles du catalogue." },
+    "admin.roles.choose": { pt: "Escolher papel…", en: "Choose a role…", fr: "Choisir un rôle…" },
+    "admin.roles.manage_requires": { pt: "Conceder ou revogar papéis técnicos — incluindo tornar um membro administrador da plataforma ou da organização — exige uma sessão de administrador da plataforma com segundo factor activo. Os papéis actuais deste membro estão acima.", en: "Granting or revoking technical roles — including making a member a platform or organisation administrator — requires a platform administrator session with an active second factor. This member’s current roles are above.", fr: "Accorder ou révoquer des rôles techniques — y compris faire d’un membre un administrateur de la plateforme ou de l’organisation — exige une session d’administrateur de la plateforme avec un second facteur actif. Les rôles actuels de ce membre figurent ci-dessus." },
+    "admin.action.grant": { pt: "Conceder", en: "Grant", fr: "Accorder" },
+    "admin.reason.audit_ph": { pt: "Razão (fica no registo de auditoria)", en: "Reason (kept in the audit log)", fr: "Motif (conservé dans le journal d’audit)" },
+    "admin.reason.ph": { pt: "Razão", en: "Reason", fr: "Motif" },
+    // Gerir grants institucionais
+    "admin.grants.manage": { pt: "Gerir grants institucionais", en: "Manage institutional grants", fr: "Gérer les attributions institutionnelles" },
+    "admin.grants.none_active": { pt: "Sem grants institucionais activos. O acesso deste membro vem apenas de papéis e memberships.", en: "No active institutional grants. This member’s access comes only from roles and memberships.", fr: "Aucune attribution institutionnelle active. L’accès de ce membre provient uniquement des rôles et des appartenances." },
+    "admin.grants.catalog_unavailable": { pt: "Catálogo de permissões indisponível.", en: "Permissions catalogue unavailable.", fr: "Catalogue des autorisations indisponible." },
+    "admin.grants.choose": { pt: "Escolher permissão…", en: "Choose a permission…", fr: "Choisir une autorisation…" },
+    "admin.grants.grant_submit": { pt: "Conceder grant", en: "Grant", fr: "Accorder l’attribution" },
+    // Transições de estado da conta
+    "admin.transition.suspend": { pt: "Suspender — barra o acesso, preserva a autoria", en: "Suspend — bars access, preserves authorship", fr: "Suspendre — bloque l’accès, préserve la paternité" },
+    "admin.transition.disable": { pt: "Desactivar — barra permanentemente, mantém o histórico", en: "Disable — bars permanently, keeps the history", fr: "Désactiver — bloque définitivement, conserve l’historique" },
+    "admin.transition.disable_short": { pt: "Desactivar — barra permanentemente", en: "Disable — bars permanently", fr: "Désactiver — bloque définitivement" },
+    "admin.transition.reactivate": { pt: "Reactivar — devolve o acesso", en: "Reactivate — restores access", fr: "Réactiver — rétablit l’accès" },
+    // Gerir credencial e estado
+    "admin.account.manage": { pt: "Gerir credencial e estado", en: "Manage credential and status", fr: "Gérer l’identifiant et l’état" },
+    "admin.account.reset_note": { pt: "Repor a palavra-passe emite uma credencial temporária nova, invalida a definitiva e termina todas as sessões abertas. A palavra-passe nova é mostrada uma única vez, no ecrã seguinte.", en: "Resetting the password issues a new temporary credential, invalidates the permanent one and ends all open sessions. The new password is shown only once, on the next screen.", fr: "Réinitialiser le mot de passe émet un nouvel identifiant temporaire, invalide le mot de passe définitif et met fin à toutes les sessions ouvertes. Le nouveau mot de passe est affiché une seule fois, à l’écran suivant." },
+    "admin.account.reset_submit": { pt: "Repor palavra-passe", en: "Reset password", fr: "Réinitialiser le mot de passe" },
+    "admin.account.no_transitions": { pt: "Não há transições de estado disponíveis a partir do estado actual.", en: "There are no state transitions available from the current state.", fr: "Aucune transition d’état n’est disponible à partir de l’état actuel." },
+    "admin.account.change_state": { pt: "Alterar estado para…", en: "Change status to…", fr: "Changer l’état pour…" },
+    "admin.action.apply": { pt: "Aplicar", en: "Apply", fr: "Appliquer" },
+};
+
 /// Todos os grupos de produção. O portão de paridade corre sobre isto.
 ///
 /// Não inclui grupos de teste: uma chave só-`pt` de teste (para provar a queda)
@@ -1359,6 +1510,7 @@ pub const GROUPS: &[&[Entry]] = &[
     FIRST_ENTRY,
     SETTINGS,
     AI,
+    ADMIN,
 ];
 
 /// Um grupo só de teste, para exercitar a queda ao canónico (briefing i18n §77).
