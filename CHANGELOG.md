@@ -7,6 +7,17 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização: os ecrãs de lista e o filtro da tabela — 2026-09-23
+
+Os oito ecrãs de lista (Ideias, Projectos, Datasets, Bibliografia, Unidades,
+Membros, Audit) e os seus formulários de criação passam a pt/en/fr: cabeçalhos
+de coluna, recortes e separadores, subtítulos, estados vazios, os selectores de
+destino e de unidade, e a revisão de importação BibTeX. O **filtro da tabela**
+partilhada deixa de ser «Filtrar {x}…» em português com o substantivo colado: o
+molde e o substantivo passam ambos pela via i18n (`table.filter`), pelo que
+«Filtrar unidades…» se torna «Filter units…» / «Filtrer les unités…» conforme o
+idioma. Seis guardas de pureza em `lists.rs`. O maior ecrã do sistema.
+
 ### Internacionalização: a Administração de membros — 2026-09-23
 
 Os ecrãs de Administração passam a pt/en/fr: adicionar membro, emitir e reemitir
