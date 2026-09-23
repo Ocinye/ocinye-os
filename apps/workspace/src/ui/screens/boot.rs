@@ -66,7 +66,7 @@ pub fn boot(outcome: &BootOutcome, destino: &str) -> impl IntoView {
              dito que não está pronto: aqui não chegámos a saber.",
         ),
         BootState::Uninitialized | BootState::Checking => {
-            ("A VERIFICAR O SISTEMA", "A perguntar ao Ocinye Core.")
+            ("A VERIFICAR O SISTEMA", crate::i18n::t("boot.asking_core"))
         }
     };
 
@@ -121,7 +121,7 @@ pub fn boot(outcome: &BootOutcome, destino: &str) -> impl IntoView {
                             <form method="get" action="/boot" class="oc-boot__actions">
                                 <input type="hidden" name="return_to" value=destino.clone() />
                                 <button type="submit" class="oc-btn oc-btn--gold oc-boot__retry">
-                                    "Tentar novamente"
+                                    {crate::i18n::t("boot.retry")}
                                 </button>
                             </form>
                         })}
