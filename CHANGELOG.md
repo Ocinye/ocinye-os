@@ -7,6 +7,30 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização: portão de mistura de línguas (i18n chrome guard) — 2026-09-23
+
+Um portão de CI que lê o **código-fonte** à procura de literais de interface que
+não passam pela via i18n (`crate::i18n::t/tf/tp`) — a mistura de línguas passa a
+ser detectável, e não dependente de agulhas escolhidas à mão. Foi o que faltava:
+as fatias anteriores eram dirigidas por agulha, e os testes de pureza só
+verificavam as frases que a migração enumerou, pelo que ramos condicionais,
+botões secundários e rodapés ficavam em português sem nada soar.
+
+`scripts/i18n-chrome-guard.py` distingue chrome (linguagem natural, uma palavra
+capitalizada, uma faixa em maiúsculas) de maquinaria (classes CSS, URLs, chaves
+de dados, valores de enum, acrónimos, marca) e **não tem falsos positivos nos
+ecrãs já migrados**. Uma baseline (`scripts/i18n-chrome-baseline.json`) regista
+os stragglers conhecidos por ficheiro: o portão falha se um ficheiro subir acima
+da sua baseline ou se um ecrã limpo regredir, e a baseline só pode encolher até
+zero. Corre no job «Formatação, lint e segredos».
+
+Ao construí-lo, apanhou stragglers que as agulhas tinham deixado em ecrãs dados
+como migrados: o rodapé do primeiro acesso (Desligar/Reiniciar/Estado do
+Sistema), a densidade e o rótulo dos recortes da tabela, e o «As minhas notas»
+do Lixo — todos corrigidos aqui. Baseline inicial: 784 stragglers em 12
+ficheiros (os ecrãs por migrar: listas, administração, ciência, ambientes de
+investigação, IA, prompt, e o resto de mail/calendário/mensagens/ficheiros).
+
 ### Internacionalização (varredura A): Definições, pré-sessão, avisos e componentes — 2026-09-23
 
 Uma varredura de consistência que fecha frases que ficaram em português nas

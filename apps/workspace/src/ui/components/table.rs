@@ -215,7 +215,7 @@ pub fn data_table(table: Table) -> impl IntoView {
                 // recortes — «Minhas», «Da Unidade», «Arquivadas» — como
                 // parâmetros de consulta, por isso são declarados indisponíveis
                 // em vez de fingirem uma escolha (briefing §2C, §95).
-                <div class="oc-tabs" role="tablist" aria-label="Recortes da lista">
+                <div class="oc-tabs" role="tablist" aria-label=crate::i18n::t("table.slices_aria")>
                     {tabs
                         .into_iter()
                         .map(|tab| match tab.state {
@@ -291,7 +291,7 @@ pub fn data_table(table: Table) -> impl IntoView {
                     aria-pressed="false"
                     title=crate::i18n::t("table.toggle_density")
                 >
-                    "Densidade"
+                    {crate::i18n::t("table.density")}
                 </button>
             </div>
 

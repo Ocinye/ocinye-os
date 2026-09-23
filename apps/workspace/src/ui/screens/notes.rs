@@ -283,7 +283,7 @@ pub fn notes_trash(_viewer: &Viewer, payload: &Value) -> impl IntoView {
                     <p>{t("notes.trash.subtitle")}</p>
                 </div>
                 <div class="oc-head__actions">
-                    {button(Button::new("As minhas notas", Variant::Secondary).href("/notes"))}
+                    {button(Button::new(crate::i18n::t("notes.my_notes"), Variant::Secondary).href("/notes"))}
                 </div>
             </div>
 

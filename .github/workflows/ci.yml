@@ -161,6 +161,13 @@ jobs:
       - name: Biblioteca de ADRs
         run: python3 scripts/check-adrs.py
 
+      # Chrome de interface fora da via i18n (mistura de línguas). Lê o
+      # código-fonte, não uma lista de agulhas: um literal de interface novo que
+      # não passe por crate::i18n::t/tf/tp falha aqui, e a baseline de stragglers
+      # conhecidos só pode encolher.
+      - name: Mistura de línguas (i18n chrome)
+        run: python3 scripts/i18n-chrome-guard.py
+
       # Cada serviço do Compose nomeia o stage do Dockerfile que constrói. A CI
       # não constrói imagens, por isso um build do stage errado só apareceria no
       # deploy — como já apareceu, com produção em baixo.

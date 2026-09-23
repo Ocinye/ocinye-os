@@ -347,6 +347,7 @@ const NOTES: &[Entry] = catalogo! {
     "notes.title": { pt: "Notas", en: "Notes", fr: "Notes" },
     "notes.subtitle": { pt: "As suas notas. Cada nota é sua, e guarda a sua própria história.", en: "Your notes. Each note is yours, and keeps its own history.", fr: "Vos notes. Chaque note est la vôtre et garde son propre historique." },
     "notes.trash": { pt: "Lixo", en: "Trash", fr: "Corbeille" },
+    "notes.my_notes": { pt: "As minhas notas", en: "My notes", fr: "Mes notes" },
     "notes.shared_with_me": { pt: "Partilhadas comigo", en: "Shared with me", fr: "Partagées avec moi" },
     "notes.new": { pt: "Nova nota", en: "New note", fr: "Nouvelle note" },
     "notes.folder.all": { pt: "Todas", en: "All", fr: "Toutes" },
@@ -1202,6 +1203,8 @@ const SETTINGS: &[Entry] = catalogo! {
     "table.previous": { pt: "← Anterior", en: "← Previous", fr: "← Précédent" },
     "table.next": { pt: "Seguinte →", en: "Next →", fr: "Suivant →" },
     "table.toggle_density": { pt: "Alternar densidade das linhas", en: "Toggle row density", fr: "Basculer la densité des lignes" },
+    "table.density": { pt: "Densidade", en: "Density", fr: "Densité" },
+    "table.slices_aria": { pt: "Recortes da lista", en: "List views", fr: "Vues de la liste" },
 };
 
 /// Todos os grupos de produção. O portão de paridade corre sobre isto.
