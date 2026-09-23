@@ -289,7 +289,7 @@ pub fn data_table(table: Table) -> impl IntoView {
                     class="oc-table__filter"
                     data-oc="density"
                     aria-pressed="false"
-                    title="Alternar densidade das linhas"
+                    title=crate::i18n::t("table.toggle_density")
                 >
                     "Densidade"
                 </button>
@@ -378,7 +378,7 @@ pub fn data_table(table: Table) -> impl IntoView {
                     .map(|href| {
                         view! {
                             <a class="oc-page-link" href=href rel="prev">
-                                "← Anterior"
+                                {crate::i18n::t("table.previous")}
                             </a>
                         }
                     })}
@@ -387,7 +387,7 @@ pub fn data_table(table: Table) -> impl IntoView {
                     .map(|href| {
                         view! {
                             <a class="oc-page-link" href=href rel="next">
-                                "Seguinte →"
+                                {crate::i18n::t("table.next")}
                             </a>
                         }
                     })}

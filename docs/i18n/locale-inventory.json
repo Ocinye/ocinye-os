@@ -7,7 +7,7 @@
     "fr"
   ],
   "fallback": "pt",
-  "slice": 11,
+  "slice": 13,
   "namespaces": [
     {
       "prefix": "nav",
@@ -36,7 +36,7 @@
     },
     {
       "prefix": "settings",
-      "surface": "Settings → Language & region",
+      "surface": "Settings: account, security (password, sessions, recovery codes), profile picture, language & region (fully migrated in sweep A)",
       "status": "translated"
     },
     {
@@ -86,18 +86,18 @@
     },
     {
       "prefix": "mail",
-      "surface": "Mail: list, reader, composer, settings (fully migrated)",
-      "status": "translated"
+      "surface": "Mail: list, reader, composer, settings. Primary strings translated; a conditional-branch straggler audit is pending (search-result empty states, '(sem assunto)', 'Seleccione uma mensagem').",
+      "status": "partial"
     },
     {
       "prefix": "files",
-      "surface": "Files: personal, environments, upload, versions, preview (fully migrated)",
-      "status": "translated"
+      "surface": "Files: personal, environments, upload, versions, preview. Primary strings translated; straggler audit pending.",
+      "status": "partial"
     },
     {
       "prefix": "calendar",
-      "surface": "Calendar: grid, editor, empty states (fully migrated)",
-      "status": "translated"
+      "surface": "Calendar: grid, editor, empty states. Primary strings translated; stragglers pending (create button, editor titles 'Nova/Alterar actividade', 'Guardar alterações').",
+      "status": "partial"
     },
     {
       "prefix": "notifications",
@@ -106,26 +106,39 @@
     },
     {
       "prefix": "messaging",
-      "surface": "Messages: conversations, composer, new conversation (fully migrated)",
-      "status": "translated"
+      "surface": "Messages: conversations, composer, new conversation. Primary strings translated; stragglers pending (unread count aria, 'Cancelar', reaction emoji labels in const context).",
+      "status": "partial"
     },
     {
       "prefix": "auth / login / boot / first_access / mfa",
-      "surface": "Pre-auth: boot, login, first access, MFA (fully migrated)",
+      "surface": "Pre-auth: boot (all Core states), login (core status, footer, note, lang tag), MFA (frames, buttons, lead, TOTP note, footer), first access. Completed exhaustively in sweep A.",
+      "status": "translated"
+    },
+    {
+      "prefix": "notice",
+      "surface": "System notice screens: unavailable / rejected / conflict (fully migrated in sweep A)",
       "status": "translated"
     },
     {
       "prefix": "help / ask / compute / roles",
       "surface": "Help (full prose), Universal Command Surface (Ask), Compute registry, technical-role labels (fully migrated)",
       "status": "translated"
+    },
+    {
+      "prefix": "components (button, tabs, table)",
+      "surface": "Shared components: 'not yet available' tooltip (button, tabs), table pagination and density toggle. Table filter placeholder + tab labels depend on caller nouns and migrate with the list screens.",
+      "status": "partial"
     }
   ],
+  "coverage_note": "IMPORTANT: slices 1-11 were needle-driven — the author migrated the strings they enumerated, and each per-screen purity test asserted only those same needles. Marker-based scans have since shown that several screens marked 'fully migrated' retained Portuguese in conditional branches, secondary buttons, footers and all-caps banners that the needles missed. Sweep A re-audited and completed the pre-auth, settings and notice screens exhaustively (marker-free scan clean). Screens still marked 'partial' above await the same exhaustive pass. A source-level CI guard that scans for chrome string literals not routed through i18n (making mixed-language detectable, not needle-dependent) is the intended permanent gate and is not yet in place.",
   "pending_slices": [
-    "Home, Search, Global Create bodies",
-    "Ideas / Projects / Tasks",
-    "Notes / Files / Datasets / Bibliography",
-    "Mail / Messages / Calendar",
-    "Administration / Resources / AI",
-    "Transactional emails; date/number formatting; first-entry interstitial + Core cross-device persistence"
+    "AI + Prompt + Agents (Intelligence plane)",
+    "Lists (Ideas / Projects / Datasets / Bibliography / Units / Members / Audit) + the shared table component's caller nouns",
+    "Research Workspaces + scientific lifecycle (workspaces.rs, science.rs)",
+    "Administration (large; includes security-sensitive prose)",
+    "Exhaustive straggler pass over mail / calendar / messaging / files",
+    "Source-level i18n chrome CI guard",
+    "Core Activity-feed semantic events (localized from kind+subject, not stored prose)",
+    "Transactional emails; number formatting; first-entry interstitial + Core cross-device locale persistence"
   ]
 }

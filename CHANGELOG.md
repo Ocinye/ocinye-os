@@ -7,6 +7,33 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização (varredura A): Definições, pré-sessão, avisos e componentes — 2026-09-23
+
+Uma varredura de consistência que fecha frases que ficaram em português nas
+fatias anteriores, dirigidas por agulha: um teste de pureza que só verifica as
+frases que a migração enumerou passa a verde deixando para trás ramos
+condicionais, botões secundários, rodapés e faixas em maiúsculas. Uma leitura
+sem agulhas (`grep` por literais de interface fora da via i18n) revelou-os.
+
+Migrados por inteiro, agora com leitura sem agulhas limpa: **Definições**
+(conta, segurança — palavra-passe, sessões, códigos de recuperação —, imagem de
+perfil), o **arranque** (todos os estados do Core, não só o de verificação), o
+**login** (estado do Core, rodapé Desligar/Reiniciar/Estado do Sistema, aviso de
+Core em baixo, etiqueta de idioma que agora segue o locale), o **MFA** (molduras,
+botões Confirmar/Concluir/Entrar/Copiar, introdução do enrolamento, nota da chave
+manual, rodapé), o **primeiro acesso** («Mostrar»), os **avisos do sistema**
+(indisponível, recusado, conflito) e os **componentes partilhados** (dica «ainda
+não disponível» de botões e tabs, paginação e densidade da tabela). Guardas de
+pureza `as_definicoes_nao_misturam_linguas`, `o_arranque_nao_mistura_linguas`,
+`o_mfa_nao_mistura_linguas`, `os_avisos_nao_misturam_linguas`.
+
+O `docs/i18n/locale-inventory.json` foi corrigido: `mail`, `calendar`,
+`messaging` e `files` estavam marcados «fully migrated» e passam a `partial`,
+com os stragglers conhecidos listados. Fica registada a lacuna de fundo — falta
+um portão de CI que leia o código-fonte à procura de literais de interface fora
+da via i18n, para que a mistura de línguas seja detectável e não dependente de
+agulhas.
+
 ### Internacionalização (fatia 12): Ajuda, superfície de comando, Computação e papéis — 2026-09-23
 
 Quatro superfícies passam a pt/en/fr. A **Ajuda** — toda prosa de produto —

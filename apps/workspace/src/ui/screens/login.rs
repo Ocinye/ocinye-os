@@ -38,7 +38,11 @@ pub fn login(core_ready: bool, message: Option<String>) -> impl IntoView {
                 <span class="oc-login__state">
                     <i aria-hidden="true"></i>
                     <span>
-                        {if core_ready { "OCINYE CORE · OPERACIONAL" } else { "OCINYE CORE · INDISPONÍVEL" }}
+                        {if core_ready {
+                            crate::i18n::t("login.core.operational")
+                        } else {
+                            crate::i18n::t("login.core.unavailable")
+                        }}
                     </span>
                 </span>
                 <span class="oc-login__clock" data-oc="clock"></span>
@@ -60,8 +64,7 @@ pub fn login(core_ready: bool, message: Option<String>) -> impl IntoView {
                     .then(|| {
                         view! {
                             <div class="oc-login__note" role="alert">
-                                "O Ocinye Core não está acessível neste momento. A autenticação não é
-                                 possível até que esteja."
+                                {crate::i18n::t("login.core_down_note")}
                             </div>
                         }
                     })}
@@ -147,26 +150,23 @@ pub fn login(core_ready: bool, message: Option<String>) -> impl IntoView {
                         <span class="oc-login__alt">
                             {crate::i18n::t("login.granted_by_admin")}
                         </span>
-                        // `pt-PT` uma vez, e não «PT · pt-PT».
-                        //
-                        // O dossier escreve as duas metades, mas dizem a mesma
-                        // coisa — a língua e a região são as mesmas — e nesta
-                        // largura a linha partia-se ao meio do código: lia-se
-                        // «PT · pt-» numa linha e «PT» na seguinte, como se
-                        // fossem três coisas.
-                        //
-                        // Não é um selector: o Workspace não tem escolha de
-                        // idioma, e anunciar uma seria prometê-la. É a
-                        // declaração de em que língua a interface está.
-                        <span class="oc-login__lang" lang="pt-PT">"pt-PT"</span>
+                        // A etiqueta BCP-47 do idioma corrente (`pt-PT`, `en`,
+                        // `fr`), e não um selector: a escolha de idioma vive nas
+                        // Definições, e o login apenas declara em que língua a
+                        // interface se está a mostrar. Segue o locale corrente
+                        // para não mentir quando alguém entra já em inglês ou
+                        // francês.
+                        <span class="oc-login__lang" lang=crate::i18n::current().bcp47()>
+                            {crate::i18n::current().bcp47()}
+                        </span>
                     </div>
                 </div>
             </div>
 
             <div class="oc-login__foot">
-                <span>{icon(Icon::Power, 13)}"Desligar"</span>
-                <span>{icon(Icon::Restart, 13)}"Reiniciar"</span>
-                <a href="/health">{icon(Icon::SystemStatus, 13)}"Estado do Sistema"</a>
+                <span>{icon(Icon::Power, 13)}{crate::i18n::t("login.foot.shut_down")}</span>
+                <span>{icon(Icon::Restart, 13)}{crate::i18n::t("login.foot.restart")}</span>
+                <a href="/health">{icon(Icon::SystemStatus, 13)}{crate::i18n::t("login.foot.system_status")}</a>
             </div>
         </div>
     }

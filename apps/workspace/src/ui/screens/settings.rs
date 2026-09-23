@@ -113,16 +113,14 @@ pub fn account(
             {imagem_de_perfil(escolha, &nome, error, done)}
 
             {card(
-                section_head("A SUA CONTA", None, None),
+                section_head(crate::i18n::t("settings.account.section"), None, None),
                 view! {
-                    {facto("NOME", nome)}
-                    {facto("CORREIO INSTITUCIONAL", correio)}
-                    {facto("ESTADO", estado)}
-                    {facto("INSTITUIÇÃO", instituicao)}
+                    {facto(crate::i18n::t("settings.field.name"), nome)}
+                    {facto(crate::i18n::t("settings.field.email"), correio)}
+                    {facto(crate::i18n::t("settings.field.status"), estado)}
+                    {facto(crate::i18n::t("settings.field.institution"), instituicao)}
                     <p class="oc-muted oc-t-caption--muted oc-mt-5">
-                        "Estes dados são geridos pela Administração da Ocinye. Papéis, filiações
-                         e acessos não se alteram aqui — são concedidos por quem tem autoridade
-                         para isso, e ficam registados."
+                        {crate::i18n::t("settings.account.managed_note")}
                     </p>
                 },
             )}
@@ -237,38 +235,37 @@ pub fn security(
             {done.map(|m| view! { <div class="oc-callout" role="status">{m}</div> })}
 
             {card(
-                section_head("PALAVRA-PASSE", None, None),
+                section_head(crate::i18n::t("settings.password.section"), None, None),
                 view! {
                     <form method="post" action="/settings/password">
                         // A palavra-passe actual é obrigatória: uma sessão
                         // aberta não é prova suficiente de quem está a escrever.
                         {text_field(
                             "pw-current",
-                            "Palavra-passe actual",
+                            crate::i18n::t("settings.password.current"),
                             "current",
-                            "A que usa hoje",
+                            crate::i18n::t("settings.password.current_hint"),
                             "password",
                         )}
                         {text_field(
                             "pw-new",
-                            "Nova palavra-passe",
+                            crate::i18n::t("settings.password.new"),
                             "password",
-                            "Mínimo de 15 caracteres",
+                            crate::i18n::t("settings.password.new_hint"),
                             "password",
                         )}
                         {text_field(
                             "pw-confirm",
-                            "Confirmar",
+                            crate::i18n::t("settings.password.confirm"),
                             "confirmation",
-                            "Repita a nova palavra-passe",
+                            crate::i18n::t("settings.password.confirm_hint"),
                             "password",
                         )}
                         <p class="oc-field__hint">
-                            "Ao mudar a palavra-passe, todas as suas sessões terminam e esta é
-                             substituída por uma nova. Continua a trabalhar sem voltar a entrar."
+                            {crate::i18n::t("settings.password.note")}
                         </p>
                         <div class="oc-row--end oc-gap-5 oc-mt-5">
-                            {button(Button::new("Mudar palavra-passe", Variant::Primary))}
+                            {button(Button::new(crate::i18n::t("settings.password.change"), Variant::Primary))}
                         </div>
                     </form>
                 },
@@ -277,21 +274,19 @@ pub fn security(
             <div class="oc-mt-5"></div>
 
             {card(
-                section_head("AS MINHAS SESSÕES", None, None),
+                section_head(crate::i18n::t("settings.sessions.section"), None, None),
                 view! {
                     {if !carregou {
                         view! {
                             <div class="oc-card oc-alert" role="alert">
-                                "A lista de sessões não pôde ser lida. Isto não quer dizer
-                                 que não existam outras sessões — quer dizer que não
-                                 sabemos quais são."
+                                {crate::i18n::t("settings.sessions.unreadable")}
                             </div>
                         }
                             .into_any()
                     } else if linhas.is_empty() {
                         view! {
                             <p class="oc-muted">
-                                "Não há sessões activas para além desta."
+                                {crate::i18n::t("settings.sessions.none")}
                             </p>
                         }
                             .into_any()
@@ -329,7 +324,7 @@ pub fn security(
                                                 {if actual {
                                                     view! {
                                                         <span class="oc-badge oc-badge--ok">
-                                                            "SESSÃO ACTUAL"
+                                                            {crate::i18n::t("settings.sessions.current")}
                                                         </span>
                                                     }
                                                         .into_any()
@@ -342,7 +337,11 @@ pub fn security(
                                                 >
                                                     {button(
                                                         Button::new(
-                                                            if actual { "Terminar esta" } else { "Terminar" },
+                                                            if actual {
+                                                                crate::i18n::t("settings.sessions.end_this")
+                                                            } else {
+                                                                crate::i18n::t("settings.sessions.end")
+                                                            },
                                                             Variant::Secondary,
                                                         ),
                                                     )}
@@ -356,7 +355,7 @@ pub fn security(
                             .into_any()
                     }}
                     <p class="oc-muted oc-t-caption--muted oc-mt-5">
-                        "Terminar a sessão actual encerra este acesso e volta ao início de sessão."
+                        {crate::i18n::t("settings.sessions.note")}
                     </p>
                 },
             )}
@@ -379,16 +378,15 @@ pub fn mfa_recovery(
         let linhas = codigos.join("\n");
         view! {
             <p class="oc-muted">
-                "Guardou-os? Estes são os códigos novos. Os anteriores deixaram de
-                 valer. Não voltarão a ser mostrados."
+                {crate::i18n::t("settings.recovery.new_saved")}
             </p>
             <pre class="oc-mfa__codes oc-mono" data-oc="recovery-codes">{linhas}</pre>
             <div class="oc-row oc-gap-3 oc-mt-3">
                 <button type="button" class="oc-btn oc-btn--sm" data-oc="recovery-copy">
-                    "Copiar códigos"
+                    {crate::i18n::t("settings.recovery.copy")}
                 </button>
                 <button type="button" class="oc-btn oc-btn--sm" data-oc="recovery-download">
-                    "Guardar ficheiro"
+                    {crate::i18n::t("settings.recovery.download")}
                 </button>
             </div>
         }
@@ -396,8 +394,7 @@ pub fn mfa_recovery(
     } else if mfa_active {
         view! {
             <p class="oc-muted">
-                "Regenerar emite dez códigos novos e invalida os que tem. Confirme
-                 com a palavra-passe e um código do autenticador."
+                {crate::i18n::t("settings.recovery.regen_intro")}
             </p>
             {error.map(|text| view! {
                 <div class="oc-callout oc-callout--error oc-mt-3" role="alert">{text}</div>
@@ -409,7 +406,7 @@ pub fn mfa_recovery(
                     name="password"
                     autocomplete="current-password"
                     required
-                    placeholder="Palavra-passe actual"
+                    placeholder=crate::i18n::t("settings.password.current")
                 />
                 <input
                     class="oc-input oc-mt-3"
@@ -418,10 +415,10 @@ pub fn mfa_recovery(
                     inputmode="numeric"
                     autocomplete="one-time-code"
                     required
-                    placeholder="Código do autenticador"
+                    placeholder=crate::i18n::t("settings.recovery.code_ph")
                 />
                 <button class="oc-btn oc-btn--danger oc-mt-3" type="submit">
-                    "Regenerar códigos de recuperação"
+                    {crate::i18n::t("settings.recovery.regen_button")}
                 </button>
             </form>
         }
@@ -429,8 +426,7 @@ pub fn mfa_recovery(
     } else {
         view! {
             <p class="oc-muted">
-                "Esta conta não tem um segundo factor activo, por isso não há
-                 códigos de recuperação para regenerar."
+                {crate::i18n::t("settings.recovery.no_mfa")}
             </p>
         }
         .into_any()
@@ -439,9 +435,9 @@ pub fn mfa_recovery(
     view! {
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
-                <h1 class="oc-t-screen">"Códigos de recuperação"</h1>
+                <h1 class="oc-t-screen">{crate::i18n::t("settings.recovery.title")}</h1>
             </div>
-            {card(section_head("Segundo factor", None, None), corpo)}
+            {card(section_head(crate::i18n::t("settings.recovery.section"), None, None), corpo)}
         </div>
     }
 }
@@ -494,7 +490,7 @@ fn imagem_de_perfil(
                         class:oc-avatars__pick--on=escolhido
                         aria-pressed=if escolhido { "true" } else { "false" }
                         title=id.clone()
-                        aria-label=format!("Avatar Ocinye {id}")
+                        aria-label=crate::i18n::tf("settings.avatar.preset_alt", &[("name", &id)])
                     >
                         <img src=format!("/static/avatars/{ficheiro}") alt="" />
                     </button>
@@ -504,7 +500,7 @@ fn imagem_de_perfil(
         .collect();
 
     card(
-        section_head("IMAGEM DE PERFIL", None, None),
+        section_head(crate::i18n::t("settings.avatar.section"), None, None),
         view! {
             // `oc-alert`, e não `oc-notice`: a segunda é a classe dos ecrãs de
             // excepção — 404, recusa, falha — que vivem sozinhos numa página,
@@ -519,7 +515,7 @@ fn imagem_de_perfil(
                 .then(|| {
                     view! {
                         <div class="oc-card oc-alert oc-alert--ok" role="status">
-                            "Imagem de perfil actualizada."
+                            {crate::i18n::t("settings.avatar.updated")}
                         </div>
                     }
                 })}
@@ -527,21 +523,20 @@ fn imagem_de_perfil(
             <div class="oc-avatar-edit">
                 {avatar(&actual, &iniciais, AvatarSize::Large)}
                 <p class="oc-muted oc-t-caption--muted">
-                    "As iniciais são sempre o recurso: se a imagem não carregar, é
-                     o seu nome que aparece."
+                    {crate::i18n::t("settings.avatar.initials_note")}
                 </p>
             </div>
 
-            <p class="oc-field__label oc-mt-8">"AVATARES OCINYE"</p>
+            <p class="oc-field__label oc-mt-8">{crate::i18n::t("settings.avatar.presets_label")}</p>
             <div class="oc-avatars">{presets}</div>
 
             <div class="oc-row--end oc-gap-5 oc-mt-8">
                 <form method="post" action="/settings/avatar/initials">
-                    {button(Button::new("Usar iniciais", Variant::Secondary))}
+                    {button(Button::new(crate::i18n::t("settings.avatar.use_initials"), Variant::Secondary))}
                 </form>
             </div>
 
-            <p class="oc-field__label oc-mt-8">"FOTOGRAFIA"</p>
+            <p class="oc-field__label oc-mt-8">{crate::i18n::t("settings.avatar.photo_label")}</p>
             <form
                 method="post"
                 action="/settings/avatar/photo"
@@ -558,17 +553,53 @@ fn imagem_de_perfil(
                 />
                 {button(
                     Button::new(
-                        if tem_fotografia { "Substituir fotografia" } else { "Carregar fotografia" },
+                        if tem_fotografia {
+                            crate::i18n::t("settings.avatar.replace")
+                        } else {
+                            crate::i18n::t("settings.avatar.upload")
+                        },
                         Variant::Primary,
                     ),
                 )}
             </form>
             <p class="oc-muted oc-t-caption--muted oc-mt-5">
-                "JPEG, PNG ou WebP, até 8 MiB. A fotografia é recortada num quadrado
-                 ao centro e guardada pela Ocinye — não é enviada para nenhum serviço
-                 externo, e a informação de câmara e localização que a acompanhe não é
-                 conservada."
+                {crate::i18n::t("settings.avatar.photo_note")}
             </p>
         },
     )
+}
+
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+    use serde_json::json;
+
+    /// Um ecrã, um idioma: as Definições em francês, sem chrome português.
+    ///
+    /// Cobre a Segurança (palavra-passe e sessões) e o Idioma — as superfícies
+    /// que uma migração parcial deixara meio em português.
+    #[tokio::test]
+    async fn as_definicoes_nao_misturam_linguas() {
+        use crate::i18n::{with_locale, Locale};
+        let fr = with_locale(Locale::Fr, async {
+            let seguranca = security(Some(&json!([])), None, None).to_html();
+            let idioma = language(false).to_html();
+            format!("{seguranca}{idioma}")
+        })
+        .await;
+        for francesa in [
+            "Mot de passe",
+            "Changer le mot de passe",
+            "Mes sessions",
+            "Langue et région",
+        ] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+        for portuguesa in ["Palavra-passe", "As minhas sessões", "Mudar palavra-passe"] {
+            assert!(
+                !fr.contains(portuguesa),
+                "fr: chrome português «{portuguesa}» sobreviveu"
+            );
+        }
+    }
 }

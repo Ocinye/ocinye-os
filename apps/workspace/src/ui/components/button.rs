@@ -103,7 +103,7 @@ impl Button {
     /// design. Fica visível e declarada, tal como as tabs sem ecrã.
     #[must_use]
     pub fn not_yet_available(mut self) -> Self {
-        self.unavailable = Some("Ainda não disponível".to_owned());
+        self.unavailable = Some(crate::i18n::t("action.not_yet_available").to_owned());
         self
     }
 

@@ -85,9 +85,9 @@ fn frame(rotulo: &'static str, message: Option<String>, corpo: AnyView) -> impl 
             </div>
 
             <div class="oc-login__foot">
-                <span>{icon(Icon::Power, 13)}"Desligar"</span>
-                <span>{icon(Icon::Restart, 13)}"Reiniciar"</span>
-                <a href="/health">{icon(Icon::SystemStatus, 13)}"Estado do Sistema"</a>
+                <span>{icon(Icon::Power, 13)}{crate::i18n::t("login.foot.shut_down")}</span>
+                <span>{icon(Icon::Restart, 13)}{crate::i18n::t("login.foot.restart")}</span>
+                <a href="/health">{icon(Icon::SystemStatus, 13)}{crate::i18n::t("login.foot.system_status")}</a>
             </div>
         </div>
     }
@@ -115,8 +115,7 @@ pub fn enrollment(
         </div>
 
         <p class="oc-mfa__lead">
-            "Abra a sua aplicação autenticadora e leia o código. Depois escreva o
-             código de seis dígitos que ela mostrar."
+            {crate::i18n::t("mfa.enroll_lead")}
         </p>
 
         <figure class="oc-mfa__qr">
@@ -129,7 +128,7 @@ pub fn enrollment(
             None => view! {
                 <p class="oc-mfa__manual">
                     <a class="oc-link" href="/mfa?show_key=1">{crate::i18n::t("mfa.show_manual_key")}</a>
-                    " — se não puder ler o QR."
+                    {crate::i18n::t("mfa.if_cannot_read_qr")}
                 </p>
             }
             .into_any(),
@@ -144,11 +143,10 @@ pub fn enrollment(
                         class="oc-btn oc-btn--sm"
                         data-oc="secret-copy"
                     >
-                        "Copiar"
+                        {crate::i18n::t("mfa.copy_short")}
                     </button>
                     <p class="oc-muted oc-mt-3">
-                        "Introduza esta chave na aplicação autenticadora, com o tipo
-                         «baseada em tempo» (TOTP)."
+                        {crate::i18n::t("mfa.manual_key_note")}
                     </p>
                 </div>
                 }
@@ -172,14 +170,14 @@ pub fn enrollment(
                 />
             </div>
             <button type="submit" class="oc-login__submit">
-                "Confirmar"
+                {crate::i18n::t("mfa.confirm_button")}
                 {icon(Icon::ArrowRight, 14)}
             </button>
         </form>
     }
     .into_any();
 
-    frame("OCINYE CORE · CONFIGURAR MFA", message, corpo)
+    frame(crate::i18n::t("mfa.frame.setup"), message, corpo)
 }
 
 /// Ecrã dos códigos de recuperação: mostrados uma única vez.
@@ -219,14 +217,14 @@ pub fn recovery_codes(codes: &[String]) -> impl IntoView {
                 <span>{crate::i18n::t("mfa.saved_confirm")}</span>
             </label>
             <button type="submit" class="oc-login__submit oc-mt-3">
-                "Concluir"
+                {crate::i18n::t("mfa.finish")}
                 {icon(Icon::ArrowRight, 14)}
             </button>
         </form>
     }
     .into_any();
 
-    frame("OCINYE CORE · CÓDIGOS DE RECUPERAÇÃO", None, corpo)
+    frame(crate::i18n::t("mfa.frame.recovery"), None, corpo)
 }
 
 /// Ecrã de desafio: o login corrente de uma identidade já enrolada.
@@ -258,7 +256,7 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
                 />
             </div>
             <button type="submit" class="oc-login__submit">
-                "Entrar"
+                {crate::i18n::t("mfa.sign_in")}
                 {icon(Icon::ArrowRight, 14)}
             </button>
         </form>
@@ -290,7 +288,7 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
     }
     .into_any();
 
-    frame("OCINYE CORE · SEGUNDO FACTOR", message, corpo)
+    frame(crate::i18n::t("mfa.frame.challenge"), message, corpo)
 }
 
 #[cfg(test)]
@@ -368,5 +366,36 @@ mod tests {
         for fuga in ["oc-side", "oc-topbar", "SUPER ADMIN"] {
             assert!(!html.contains(fuga), "o desafio expõe «{fuga}»");
         }
+    }
+}
+
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+
+    /// Um ecrã, um idioma: o enrolamento do segundo factor em francês.
+    #[tokio::test]
+    async fn o_mfa_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+        let fr = with_locale(Locale::Fr, async {
+            enrollment(
+                "Fidel",
+                "otpauth://totp/Ocinye:fidel?secret=JBSWY3DPEHPK3PXP&issuer=Ocinye",
+                None,
+                None,
+            )
+            .to_html()
+        })
+        .await;
+        for francesa in [
+            "OCINYE CORE · CONFIGURER LE MFA",
+            "Confirmer",
+            "Ouvrez votre application",
+            "État du système",
+        ] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+        assert!(!fr.contains("CONFIGURAR MFA"), "fr: moldura portuguesa");
+        assert!(!fr.contains("Estado do Sistema"), "fr: rodapé português");
     }
 }
