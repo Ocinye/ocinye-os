@@ -2324,6 +2324,185 @@ const SCIENCE: &[Entry] = catalogo! {
     },
 };
 
+/// O Research Workspace (detalhe de Ideia/Projecto), o detalhe de tarefa e de
+/// dataset, e o detalhe de unidade. As chaves `workspaces.tab.*` são também os
+/// identificadores de routing dos separadores (`tab_destination`): estáveis por
+/// idioma, é o seu papel, e é por isso que o separador não os traduz para
+/// decidir o destino — só para os mostrar.
+const WORKSPACES: &[Entry] = catalogo! {
+    // Separadores do Research Workspace e da unidade.
+    "workspaces.tab.overview": { pt: "Visão geral", en: "Overview", fr: "Vue d’ensemble" },
+    "workspaces.tab.members": { pt: "Membros", en: "Members", fr: "Membres" },
+    "workspaces.tab.bibliography": { pt: "Bibliografia", en: "Bibliography", fr: "Bibliographie" },
+    "workspaces.tab.sources": { pt: "Fontes", en: "Sources", fr: "Sources" },
+    "workspaces.tab.notes": { pt: "Notas", en: "Notes", fr: "Notes" },
+    "workspaces.tab.documents": { pt: "Documentos", en: "Documents", fr: "Documents" },
+    "workspaces.tab.datasets": { pt: "Datasets", en: "Datasets", fr: "Jeux de données" },
+    "workspaces.tab.data": { pt: "Dados", en: "Data", fr: "Données" },
+    "workspaces.tab.code": { pt: "Código", en: "Code", fr: "Code" },
+    "workspaces.tab.experiments": { pt: "Experiências", en: "Experiments", fr: "Expériences" },
+    "workspaces.tab.results": { pt: "Resultados", en: "Results", fr: "Résultats" },
+    "workspaces.tab.tasks": { pt: "Tarefas", en: "Tasks", fr: "Tâches" },
+    "workspaces.tab.planning": { pt: "Planeamento", en: "Planning", fr: "Planification" },
+    "workspaces.tab.funding": { pt: "Financiamento", en: "Funding", fr: "Financement" },
+    "workspaces.tab.ai": { pt: "IA", en: "AI", fr: "IA" },
+    "workspaces.tab.activity": { pt: "Actividade", en: "Activity", fr: "Activité" },
+    "workspaces.tab.history": { pt: "Histórico", en: "History", fr: "Historique" },
+    "workspaces.tab.ideas": { pt: "Ideias", en: "Ideas", fr: "Idées" },
+    "workspaces.tab.projects": { pt: "Projectos", en: "Projects", fr: "Projets" },
+    "workspaces.tab.config": { pt: "Configuração", en: "Configuration", fr: "Configuration" },
+    "workspaces.tabs.aria": {
+        pt: "Secções do Research Workspace",
+        en: "Research Workspace sections",
+        fr: "Sections du Research Workspace"
+    },
+    "workspaces.unit.tabs.aria": { pt: "Secções da unidade", en: "Unit sections", fr: "Sections de l’unité" },
+
+    // Crachás de tipo (pill) — em maiúsculas por convenção, sem transformação CSS.
+    "workspaces.kind.idea": { pt: "IDEIA", en: "IDEA", fr: "IDÉE" },
+    "workspaces.kind.project": { pt: "PROJECTO", en: "PROJECT", fr: "PROJET" },
+    "workspaces.kind.task": { pt: "TAREFA", en: "TASK", fr: "TÂCHE" },
+    "workspaces.kind.dataset": { pt: "DATASET", en: "DATASET", fr: "JEU DE DONNÉES" },
+
+    // Botões e ligações comuns dos ecrãs.
+    "workspaces.ai_here": { pt: "IA neste workspace", en: "AI in this workspace", fr: "IA dans cet espace" },
+    "workspaces.view_all": { pt: "Ver tudo", en: "View all", fr: "Tout voir" },
+    "workspaces.back_to_env": { pt: "← Voltar ao ambiente", en: "← Back to the environment", fr: "← Retour à l’environnement" },
+    "workspaces.add": { pt: "Adicionar", en: "Add", fr: "Ajouter" },
+    "workspaces.assign": { pt: "Atribuir", en: "Assign", fr: "Attribuer" },
+
+    // Rótulos de campo e de métrica.
+    "workspaces.field.description": { pt: "Descrição", en: "Description", fr: "Description" },
+    "workspaces.field.state": { pt: "Estado", en: "State", fr: "État" },
+    "workspaces.field.priority": { pt: "Prioridade", en: "Priority", fr: "Priorité" },
+    "workspaces.field.due": { pt: "Prazo", en: "Due date", fr: "Échéance" },
+    "workspaces.field.assignee": { pt: "Responsável", en: "Assignee", fr: "Responsable" },
+    "workspaces.field.person": { pt: "Pessoa", en: "Person", fr: "Personne" },
+    "workspaces.field.role": { pt: "Papel", en: "Role", fr: "Rôle" },
+    "workspaces.field.keywords": { pt: "Palavras-chave", en: "Keywords", fr: "Mots-clés" },
+    "workspaces.field.code": { pt: "Código", en: "Code", fr: "Code" },
+    "workspaces.field.classification": { pt: "Classificação", en: "Classification", fr: "Classification" },
+    "workspaces.no_assignee": { pt: "Sem responsável", en: "No assignee", fr: "Sans responsable" },
+
+    // Cabeçalhos em maiúsculas (oc-t-group, sem transformação CSS).
+    "workspaces.overview.keywords": { pt: "PALAVRAS-CHAVE", en: "KEYWORDS", fr: "MOTS-CLÉS" },
+    "workspaces.overview.objectives": { pt: "OBJECTIVOS", en: "OBJECTIVES", fr: "OBJECTIFS" },
+    "workspaces.overview.team": { pt: "EQUIPA", en: "TEAM", fr: "ÉQUIPE" },
+
+    // Títulos de secção e de cartão, e métricas.
+    "workspaces.references": { pt: "Referências", en: "References", fr: "Références" },
+    "workspaces.datasets": { pt: "Datasets", en: "Datasets", fr: "Jeux de données" },
+    "workspaces.experiments": { pt: "Experiências", en: "Experiments", fr: "Expériences" },
+    "workspaces.bibliography": { pt: "Bibliografia", en: "Bibliography", fr: "Bibliographie" },
+    "workspaces.notes": { pt: "Notas", en: "Notes", fr: "Notes" },
+    "workspaces.documents": { pt: "Documentos", en: "Documents", fr: "Documents" },
+    "workspaces.tasks": { pt: "Tarefas", en: "Tasks", fr: "Tâches" },
+    "workspaces.members": { pt: "Membros", en: "Members", fr: "Membres" },
+    "workspaces.people": { pt: "Pessoas", en: "People", fr: "Personnes" },
+    "workspaces.ideas": { pt: "Ideias", en: "Ideas", fr: "Idées" },
+    "workspaces.projects": { pt: "Projectos", en: "Projects", fr: "Projets" },
+    "workspaces.areas": { pt: "Áreas", en: "Areas", fr: "Domaines" },
+    "workspaces.recent_activity": { pt: "Actividade recente", en: "Recent activity", fr: "Activité récente" },
+
+    // Estados vazios.
+    "workspaces.empty.activity": { pt: "Sem actividade.", en: "No activity.", fr: "Aucune activité." },
+    "workspaces.empty.tasks": { pt: "Sem tarefas.", en: "No tasks.", fr: "Aucune tâche." },
+    "workspaces.empty.records": { pt: "Sem registos.", en: "No records.", fr: "Aucun enregistrement." },
+    "workspaces.empty.members": { pt: "Sem membros.", en: "No members.", fr: "Aucun membre." },
+    "workspaces.empty.people": { pt: "Sem pessoas.", en: "No people.", fr: "Aucune personne." },
+
+    // Assistência contextual: sobre o quê.
+    "workspaces.assist.project": { pt: "este Projecto", en: "this Project", fr: "ce projet" },
+    "workspaces.assist.idea": { pt: "esta Ideia", en: "this Idea", fr: "cette idée" },
+
+    // Ciclo de vida de uma ideia.
+    "workspaces.idea.lifecycle_aria": { pt: "Ciclo de vida da ideia", en: "Idea lifecycle", fr: "Cycle de vie de l’idée" },
+    "workspaces.idea.lifecycle": { pt: "Ciclo de vida", en: "Lifecycle", fr: "Cycle de vie" },
+    "workspaces.idea.promote": { pt: "Promover a Projecto", en: "Promote to Project", fr: "Promouvoir en projet" },
+    "workspaces.idea.reason_placeholder": {
+        pt: "Razão (fica no registo)",
+        en: "Reason (kept on record)",
+        fr: "Raison (conservée au registre)"
+    },
+    "workspaces.idea.reject": { pt: "Rejeitar", en: "Reject", fr: "Rejeter" },
+    "workspaces.idea.archive": { pt: "Arquivar", en: "Archive", fr: "Archiver" },
+    "workspaces.idea.reopen": { pt: "Reabrir", en: "Reopen", fr: "Rouvrir" },
+    "workspaces.idea.mark_candidate": {
+        pt: "Marcar como candidata a projecto",
+        en: "Mark as project candidate",
+        fr: "Marquer comme candidate à un projet"
+    },
+    "workspaces.idea.advance_to": { pt: "Avançar para {state}", en: "Advance to {state}", fr: "Passer à {state}" },
+    "workspaces.idea.state.discovery": { pt: "Descoberta", en: "Discovery", fr: "Découverte" },
+    "workspaces.idea.state.exploration": { pt: "Exploração", en: "Exploration", fr: "Exploration" },
+    "workspaces.idea.state.concept": { pt: "Conceito", en: "Concept", fr: "Concept" },
+    "workspaces.idea.state.review": { pt: "Revisão", en: "Review", fr: "Revue" },
+    "workspaces.idea.state.project_candidate": { pt: "Candidata a Projecto", en: "Project Candidate", fr: "Candidate à un projet" },
+    "workspaces.idea.state.promoted": { pt: "Promovida", en: "Promoted", fr: "Promue" },
+    "workspaces.idea.state.rejected": { pt: "Rejeitada", en: "Rejected", fr: "Rejetée" },
+    "workspaces.idea.state.archived": { pt: "Arquivada", en: "Archived", fr: "Archivée" },
+
+    // Visão geral do projecto.
+    "workspaces.project.from_idea": {
+        pt: "Este projecto teve origem numa ideia desta unidade. A linhagem está preservada e não é reescrita.",
+        en: "This project originated from an idea of this unit. The lineage is preserved and never rewritten.",
+        fr: "Ce projet est issu d’une idée de cette unité. La filiation est préservée et jamais réécrite."
+    },
+
+    // Detalhe de tarefa.
+    "workspaces.task.about": { pt: "Sobre a tarefa", en: "About the task", fr: "À propos de la tâche" },
+    "workspaces.task.actions": { pt: "Acções", en: "Actions", fr: "Actions" },
+    "workspaces.task.change_state": { pt: "Mudar estado", en: "Change state", fr: "Changer d’état" },
+    "workspaces.task.no_transitions": {
+        pt: "Esta tarefa não tem mais movimentos.",
+        en: "This task has no further moves.",
+        fr: "Cette tâche n’a plus de transitions."
+    },
+    "workspaces.task.mark_as": { pt: "Marcar «{state}»", en: "Mark «{state}»", fr: "Marquer «{state}»" },
+
+    // Detalhe de dataset.
+    "workspaces.dataset.about": { pt: "Sobre o dataset", en: "About the dataset", fr: "À propos du jeu de données" },
+    "workspaces.dataset.origin": { pt: "Origem", en: "Origin", fr: "Origine" },
+    "workspaces.dataset.licence": { pt: "Licença", en: "Licence", fr: "Licence" },
+    "workspaces.dataset.usage_restrictions": { pt: "Restrições de uso", en: "Usage restrictions", fr: "Restrictions d’usage" },
+    "workspaces.dataset.versions": { pt: "Versões", en: "Versions", fr: "Versions" },
+    "workspaces.dataset.no_versions": {
+        pt: "Este dataset ainda não tem versões. Uma versão agrupa os ficheiros materiais de um estado do dataset.",
+        en: "This dataset has no versions yet. A version groups the material files of a state of the dataset.",
+        fr: "Ce jeu de données n’a pas encore de versions. Une version regroupe les fichiers matériels d’un état du jeu de données."
+    },
+    "workspaces.dataset.files.one": { pt: "{count} ficheiro", en: "{count} file", fr: "{count} fichier" },
+    "workspaces.dataset.files.other": { pt: "{count} ficheiros", en: "{count} files", fr: "{count} fichiers" },
+    "workspaces.dataset.published": { pt: "publicada {date}", en: "published {date}", fr: "publiée le {date}" },
+
+    // Detalhe de unidade.
+    "workspaces.unit.about": { pt: "Sobre a unidade", en: "About the unit", fr: "À propos de l’unité" },
+    "workspaces.unit.research_areas": { pt: "Áreas de investigação", en: "Research areas", fr: "Domaines de recherche" },
+    "workspaces.unit.counts": {
+        pt: "{members} membros · {ideas} ideias · {projects} projectos",
+        en: "{members} members · {ideas} ideas · {projects} projects",
+        fr: "{members} membres · {ideas} idées · {projects} projets"
+    },
+    "workspaces.unit.all_belong": {
+        pt: "Todas as pessoas da organização já pertencem a esta unidade.",
+        en: "Everyone in the organisation already belongs to this unit.",
+        fr: "Toutes les personnes de l’organisation appartiennent déjà à cette unité."
+    },
+    "workspaces.env.all_belong": {
+        pt: "Todas as pessoas da organização já participam neste ambiente.",
+        en: "Everyone in the organisation already takes part in this environment.",
+        fr: "Toutes les personnes de l’organisation participent déjà à cet environnement."
+    },
+
+    // Papéis de pertença (ambiente e unidade) e transições.
+    "workspaces.role.member": { pt: "Membro", en: "Member", fr: "Membre" },
+    "workspaces.role.manager": { pt: "Gestor", en: "Manager", fr: "Gestionnaire" },
+    "workspaces.role.lead": { pt: "Líder", en: "Lead", fr: "Responsable" },
+    "workspaces.role.viewer": { pt: "Observador", en: "Viewer", fr: "Observateur" },
+    "workspaces.make_manager": { pt: "Tornar gestor", en: "Make manager", fr: "Rendre gestionnaire" },
+    "workspaces.make_member": { pt: "Tornar membro", en: "Make member", fr: "Rendre membre" },
+};
+
 /// Todos os grupos de produção. O portão de paridade corre sobre isto.
 ///
 /// Não inclui grupos de teste: uma chave só-`pt` de teste (para provar a queda)
@@ -2356,6 +2535,7 @@ pub const GROUPS: &[&[Entry]] = &[
     ADMIN,
     LISTS,
     SCIENCE,
+    WORKSPACES,
 ];
 
 /// Um grupo só de teste, para exercitar a queda ao canónico (briefing i18n §77).

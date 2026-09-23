@@ -34,38 +34,39 @@ fn items(payload: &Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-/// As 13 tabs de uma Ideia.
+/// As 13 tabs de uma Ideia. Cada entrada é a chave i18n do separador, que serve
+/// de identidade estável ao routing (`tab_destination`) e de rótulo ao mostrá-la.
 const IDEA_TABS: [&str; 13] = [
-    "Visão geral",
-    "Bibliografia",
-    "Fontes",
-    "Notas",
-    "Documentos",
-    "Datasets",
-    "Código",
-    "Experiências",
-    "Resultados",
-    "Tarefas",
-    "IA",
-    "Actividade",
-    "Histórico",
+    "workspaces.tab.overview",
+    "workspaces.tab.bibliography",
+    "workspaces.tab.sources",
+    "workspaces.tab.notes",
+    "workspaces.tab.documents",
+    "workspaces.tab.datasets",
+    "workspaces.tab.code",
+    "workspaces.tab.experiments",
+    "workspaces.tab.results",
+    "workspaces.tab.tasks",
+    "workspaces.tab.ai",
+    "workspaces.tab.activity",
+    "workspaces.tab.history",
 ];
 
 /// As 13 tabs de um Projecto.
 const PROJECT_TABS: [&str; 13] = [
-    "Visão geral",
-    "Membros",
-    "Planeamento",
-    "Bibliografia",
-    "Documentos",
-    "Dados",
-    "Código",
-    "Experiências",
-    "Resultados",
-    "Tarefas",
-    "Financiamento",
-    "IA",
-    "Histórico",
+    "workspaces.tab.overview",
+    "workspaces.tab.members",
+    "workspaces.tab.planning",
+    "workspaces.tab.bibliography",
+    "workspaces.tab.documents",
+    "workspaces.tab.data",
+    "workspaces.tab.code",
+    "workspaces.tab.experiments",
+    "workspaces.tab.results",
+    "workspaces.tab.tasks",
+    "workspaces.tab.funding",
+    "workspaces.tab.ai",
+    "workspaces.tab.history",
 ];
 
 /// Tudo o que o Research Workspace mostra.
@@ -98,24 +99,26 @@ pub struct WorkspaceView {
 /// já está renderizado por baixo), ou leva a outro ecrã (cadeia científica, IA),
 /// ou **não existe ainda** — e nesse caso não é um separador. Um separador
 /// inerte que não navega é um controlo morto, e era o defeito (F-11).
-fn tab_destination(label: &str, workspace_id: &str) -> Option<String> {
-    Some(match label {
+fn tab_destination(key: &str, workspace_id: &str) -> Option<String> {
+    Some(match key {
         // Secções deste ecrã — âncora para o conteúdo já renderizado.
-        "Visão geral" => "#ws-visao-geral".to_owned(),
-        "Membros" => "#ws-membros".to_owned(),
+        "workspaces.tab.overview" => "#ws-visao-geral".to_owned(),
+        "workspaces.tab.members" => "#ws-membros".to_owned(),
         // «Fontes» e «Bibliografia» são a mesma coisa: as referências do ambiente.
-        "Bibliografia" | "Fontes" => "#ws-bibliografia".to_owned(),
-        "Notas" => "#ws-notas".to_owned(),
-        "Documentos" => "#ws-documentos".to_owned(),
-        "Datasets" | "Dados" => "#ws-datasets".to_owned(),
-        "Tarefas" => "#ws-tarefas".to_owned(),
+        "workspaces.tab.bibliography" | "workspaces.tab.sources" => "#ws-bibliografia".to_owned(),
+        "workspaces.tab.notes" => "#ws-notas".to_owned(),
+        "workspaces.tab.documents" => "#ws-documentos".to_owned(),
+        "workspaces.tab.datasets" | "workspaces.tab.data" => "#ws-datasets".to_owned(),
+        "workspaces.tab.tasks" => "#ws-tarefas".to_owned(),
         // A actividade é a história do ambiente.
-        "Actividade" | "Histórico" => "#ws-actividade".to_owned(),
+        "workspaces.tab.activity" | "workspaces.tab.history" => "#ws-actividade".to_owned(),
         // Outros ecrãs.
-        "IA" => format!("/ai/prompt?workspace={workspace_id}"),
+        "workspaces.tab.ai" => format!("/ai/prompt?workspace={workspace_id}"),
         // Experiências e Resultados são duas leituras da mesma cadeia
         // científica, e por isso levam ao mesmo ecrã.
-        "Experiências" | "Resultados" => format!("/workspaces/{workspace_id}/science"),
+        "workspaces.tab.experiments" | "workspaces.tab.results" => {
+            format!("/workspaces/{workspace_id}/science")
+        }
         // «Código», «Planeamento», «Financiamento» ainda não existem como ecrã;
         // não se mostram como separador morto.
         _ => return None,
@@ -124,39 +127,41 @@ fn tab_destination(label: &str, workspace_id: &str) -> Option<String> {
 
 /// Constrói os separadores: só os que têm destino real. Os que não têm ficam de
 /// fora, em vez de aparecerem inertes.
-fn tabs(labels: &[&'static str], workspace_id: &str) -> Vec<Tab> {
-    labels
-        .iter()
-        .filter_map(|label| {
-            tab_destination(label, workspace_id)
-                .map(|href| Tab::link(*label, href, *label == "Visão geral"))
+fn tabs(keys: &[&'static str], workspace_id: &str) -> Vec<Tab> {
+    keys.iter()
+        .filter_map(|key| {
+            tab_destination(key, workspace_id)
+                .map(|href| Tab::link(crate::i18n::t(key), href, *key == "workspaces.tab.overview"))
         })
         .collect()
 }
 
-/// O rótulo em português de um estado de ideia.
+/// O rótulo de um estado de ideia, no idioma corrente.
 fn idea_state_label(code: &str) -> &'static str {
     match code {
-        "discovery" => "Descoberta",
-        "exploration" => "Exploração",
-        "concept" => "Conceito",
-        "review" => "Revisão",
-        "project_candidate" => "Candidata a Projecto",
-        "promoted" => "Promovida",
-        "rejected" => "Rejeitada",
-        "archived" => "Arquivada",
-        _ => "Estado",
+        "discovery" => crate::i18n::t("workspaces.idea.state.discovery"),
+        "exploration" => crate::i18n::t("workspaces.idea.state.exploration"),
+        "concept" => crate::i18n::t("workspaces.idea.state.concept"),
+        "review" => crate::i18n::t("workspaces.idea.state.review"),
+        "project_candidate" => crate::i18n::t("workspaces.idea.state.project_candidate"),
+        "promoted" => crate::i18n::t("workspaces.idea.state.promoted"),
+        "rejected" => crate::i18n::t("workspaces.idea.state.rejected"),
+        "archived" => crate::i18n::t("workspaces.idea.state.archived"),
+        _ => crate::i18n::t("workspaces.field.state"),
     }
 }
 
 /// O verbo do botão que move a ideia para um estado.
 fn idea_transition_verb(code: &str) -> String {
     match code {
-        "rejected" => "Rejeitar".to_owned(),
-        "archived" => "Arquivar".to_owned(),
-        "discovery" => "Reabrir".to_owned(),
-        "project_candidate" => "Marcar como candidata a projecto".to_owned(),
-        other => format!("Avançar para {}", idea_state_label(other)),
+        "rejected" => crate::i18n::t("workspaces.idea.reject").to_owned(),
+        "archived" => crate::i18n::t("workspaces.idea.archive").to_owned(),
+        "discovery" => crate::i18n::t("workspaces.idea.reopen").to_owned(),
+        "project_candidate" => crate::i18n::t("workspaces.idea.mark_candidate").to_owned(),
+        other => crate::i18n::tf(
+            "workspaces.idea.advance_to",
+            &[("state", idea_state_label(other))],
+        ),
     }
 }
 
@@ -205,11 +210,11 @@ fn idea_lifecycle_actions(id: &str, idea: &Value, workspace: &Value) -> impl Int
     let promote_href = format!("/projects/new?workspace={id}");
 
     view! {
-        <div class="oc-lifecycle" role="group" aria-label="Ciclo de vida da ideia">
-            <span class="oc-lifecycle__label">"Ciclo de vida"</span>
+        <div class="oc-lifecycle" role="group" aria-label=crate::i18n::t("workspaces.idea.lifecycle_aria")>
+            <span class="oc-lifecycle__label">{crate::i18n::t("workspaces.idea.lifecycle")}</span>
 
             {promotable.then(|| {
-                button(Button::new("Promover a Projecto", Variant::Gold).href(promote_href.clone()))
+                button(Button::new(crate::i18n::t("workspaces.idea.promote"), Variant::Gold).href(promote_href.clone()))
             })}
 
             {may_transition.then(|| {
@@ -237,13 +242,13 @@ fn idea_lifecycle_actions(id: &str, idea: &Value, workspace: &Value) -> impl Int
                                             name="outcome_note"
                                             required
                                             minlength="3"
-                                            placeholder="Razão (fica no registo)"
+                                            placeholder=crate::i18n::t("workspaces.idea.reason_placeholder")
                                         />
                                         <button
                                             class="oc-btn oc-btn--sm oc-btn--danger"
                                             type="submit"
                                         >
-                                            "Confirmar"
+                                            {crate::i18n::t("action.confirm")}
                                         </button>
                                     </form>
                                 </details>
@@ -308,7 +313,11 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
     } else {
         text(&idea, "state")
     };
-    let kind_label = if is_project { "PROJECTO" } else { "IDEIA" };
+    let kind_label = if is_project {
+        crate::i18n::t("workspaces.kind.project")
+    } else {
+        crate::i18n::t("workspaces.kind.idea")
+    };
     let tab_labels: &[&'static str] = if is_project {
         &PROJECT_TABS
     } else {
@@ -335,7 +344,7 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
 
                 <div class="oc-head__actions">
                     {button(
-                        Button::new("IA neste workspace", Variant::Primary)
+                        Button::new(crate::i18n::t("workspaces.ai_here"), Variant::Primary)
                             .href(format!("/ai/prompt?workspace={id}"))
                             .with_dot(),
                     )}
@@ -348,7 +357,7 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
             // ideia poder chegar a projecto pelo produto (F-10).
             {(!is_project).then(|| idea_lifecycle_actions(&id, &idea, &workspace))}
 
-            {context_tabs(tabs(tab_labels, &id), "Secções do Research Workspace")}
+            {context_tabs(tabs(tab_labels, &id), crate::i18n::t("workspaces.tabs.aria"))}
         </div>
 
         <div class="oc-page oc-page" id="ws-visao-geral" >
@@ -362,7 +371,11 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                 <div id="ws-membros">{pessoas_do_ambiente(&id, &members, &gestao)}</div>
 
                 {assist(Assist {
-                    here: if is_project { "este Projecto" } else { "esta Ideia" },
+                    here: if is_project {
+                        crate::i18n::t("workspaces.assist.project")
+                    } else {
+                        crate::i18n::t("workspaces.assist.idea")
+                    },
                     workspace_id: Some(id.clone()),
                     resource: if is_project {
                         Some(("project", text(&project, "id")))
@@ -379,31 +392,31 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                 })}
 
                 <section class="oc-card" id="ws-actividade">
-                    {section_head("Actividade recente", None, None)}
+                    {section_head(crate::i18n::t("workspaces.recent_activity"), None, None)}
                     <div class="oc-card__body">{activity_list(&activity)}</div>
                 </section>
 
                 <section class="oc-card" id="ws-tarefas">
-                    {section_head("Tarefas", None, None)}
+                    {section_head(crate::i18n::t("workspaces.tasks"), None, None)}
                     <div class="oc-card__body">{task_list(&tasks)}</div>
                 </section>
             </div>
 
             <div class="oc-grid oc-grid--detail oc-mt-7" >
                 <div id="ws-bibliografia">
-                    {artefact_card("Bibliografia", &sources, "title", "/bibliography")}
+                    {artefact_card(crate::i18n::t("workspaces.bibliography"), &sources, "title", "/bibliography")}
                 </div>
                 <div id="ws-notas">
-                    {artefact_card("Notas", &notes, "title", "/knowledge")}
+                    {artefact_card(crate::i18n::t("workspaces.notes"), &notes, "title", "/knowledge")}
                 </div>
             </div>
 
             <div class="oc-grid oc-grid--detail oc-mt-7" >
                 <div id="ws-documentos">
-                    {artefact_card("Documentos", &documents, "title", "/knowledge")}
+                    {artefact_card(crate::i18n::t("workspaces.documents"), &documents, "title", "/knowledge")}
                 </div>
                 <div id="ws-datasets">
-                    {artefact_card("Datasets", &datasets, "title", "/datasets")}
+                    {artefact_card(crate::i18n::t("workspaces.datasets"), &datasets, "title", "/datasets")}
                 </div>
             </div>
         </div>
@@ -422,14 +435,14 @@ fn idea_overview(idea: &Value, sources: &Value, datasets: &Value) -> impl IntoVi
 
     view! {
         <section class="oc-card">
-            {section_head("Descrição", None, None)}
+            {section_head(crate::i18n::t("workspaces.field.description"), None, None)}
             <div class="oc-card__body">
                 <p class="oc-t-body" >
                     {text(idea, "summary")}
                 </p>
 
                 <h3 class="oc-t-group oc-mt-9 oc-mb-3" >
-                    "PALAVRAS-CHAVE"
+                    {crate::i18n::t("workspaces.overview.keywords")}
                 </h3>
                 {if keywords.is_empty() {
                     view! { <span class="oc-muted" >"—"</span> }.into_any()
@@ -453,9 +466,9 @@ fn idea_overview(idea: &Value, sources: &Value, datasets: &Value) -> impl IntoVi
                 }}
 
                 <div class="oc-split oc-split--3" >
-                    {metric("Referências", source_count)}
-                    {metric("Datasets", dataset_count)}
-                    {metric("Experiências", 0)}
+                    {metric(crate::i18n::t("workspaces.references"), source_count)}
+                    {metric(crate::i18n::t("workspaces.datasets"), dataset_count)}
+                    {metric(crate::i18n::t("workspaces.experiments"), 0)}
                 </div>
             </div>
         </section>
@@ -477,14 +490,14 @@ fn project_overview(project: &Value, members: &[Value]) -> impl IntoView {
 
     view! {
         <section class="oc-card">
-            {section_head("Descrição", None, None)}
+            {section_head(crate::i18n::t("workspaces.field.description"), None, None)}
             <div class="oc-card__body">
                 <p class="oc-t-body" >
                     {text(project, "summary")}
                 </p>
 
                 <h3 class="oc-t-group oc-mt-9 oc-mb-3" >
-                    "OBJECTIVOS"
+                    {crate::i18n::t("workspaces.overview.objectives")}
                 </h3>
                 <p class="oc-t-body" >
                     {text(project, "objectives")}
@@ -500,8 +513,7 @@ fn project_overview(project: &Value, members: &[Value]) -> impl IntoView {
                             .then(|| {
                                 view! {
                                     <p class="oc-t-caption--muted oc-mt-4" >
-                                        "Este projecto teve origem numa ideia desta unidade. A
-                                         linhagem está preservada e não é reescrita."
+                                        {crate::i18n::t("workspaces.project.from_idea")}
                                     </p>
                                 }
                             })}
@@ -512,7 +524,7 @@ fn project_overview(project: &Value, members: &[Value]) -> impl IntoView {
                     .then(|| {
                         view! {
                             <h3 class="oc-t-group oc-mt-10 oc-mb-3" >
-                                "EQUIPA"
+                                {crate::i18n::t("workspaces.overview.team")}
                             </h3>
                             <div class="oc-col oc-gap-5" >
                                 {members
@@ -568,7 +580,8 @@ fn metric_text(label: &'static str, value: &str) -> impl IntoView {
 fn activity_list(payload: &Value) -> AnyView {
     let rows = items(payload);
     if rows.is_empty() {
-        return view! { <p class="oc-muted">"Sem actividade."</p> }.into_any();
+        return view! { <p class="oc-muted">{crate::i18n::t("workspaces.empty.activity")}</p> }
+            .into_any();
     }
 
     view! {
@@ -597,7 +610,8 @@ fn activity_list(payload: &Value) -> AnyView {
 fn task_list(payload: &Value) -> AnyView {
     let rows = items(payload);
     if rows.is_empty() {
-        return view! { <p class="oc-muted">"Sem tarefas."</p> }.into_any();
+        return view! { <p class="oc-muted">{crate::i18n::t("workspaces.empty.tasks")}</p> }
+            .into_any();
     }
 
     view! {
@@ -632,16 +646,17 @@ fn task_list(payload: &Value) -> AnyView {
     .into_any()
 }
 
-/// O rótulo em português de um estado de tarefa.
+/// O rótulo de um estado de tarefa, no idioma corrente. Reutiliza o vocabulário
+/// partilhado `task.state.*`.
 fn task_state_label(code: &str) -> &'static str {
     match code {
-        "todo" => "A fazer",
-        "in_progress" => "Em curso",
-        "blocked" => "Bloqueada",
-        "in_review" => "Em revisão",
-        "done" => "Concluída",
-        "cancelled" => "Cancelada",
-        _ => "Estado",
+        "todo" => crate::i18n::t("task.state.todo"),
+        "in_progress" => crate::i18n::t("task.state.in_progress"),
+        "blocked" => crate::i18n::t("task.state.blocked"),
+        "in_review" => crate::i18n::t("task.state.in_review"),
+        "done" => crate::i18n::t("task.state.done"),
+        "cancelled" => crate::i18n::t("task.state.cancelled"),
+        _ => crate::i18n::t("workspaces.field.state"),
     }
 }
 
@@ -675,7 +690,10 @@ pub fn task_detail(
     let assignee_name = members
         .iter()
         .find(|m| m.get("person_id").and_then(Value::as_str) == Some(assignee_id))
-        .map_or_else(|| "Sem responsável".to_owned(), |m| text(m, "full_name"));
+        .map_or_else(
+            || crate::i18n::t("workspaces.no_assignee").to_owned(),
+            |m| text(m, "full_name"),
+        );
 
     let transitions: Vec<String> = task
         .get("available_transitions")
@@ -693,13 +711,13 @@ pub fn task_detail(
     view! {
         <div class="oc-band">
             <div class="oc-row oc-row--wrap oc-gap-6 oc-mb-2">
-                {pill("TAREFA")}
+                {pill(crate::i18n::t("workspaces.kind.task"))}
                 <h1 class="oc-t-screen">{text(task, "title")}</h1>
                 {badge(task_state_label(&state).to_owned(), Tone::of(&state))}
                 {badge(priority.clone(), Tone::of(&priority))}
             </div>
             <div class="oc-mono oc-mb-5">
-                <a href=format!("/workspaces/{workspace_id}")>"← Voltar ao ambiente"</a>
+                <a href=format!("/workspaces/{workspace_id}")>{crate::i18n::t("workspaces.back_to_env")}</a>
             </div>
         </div>
 
@@ -713,34 +731,37 @@ pub fn task_detail(
 
             <div class="oc-grid oc-grid--detail">
                 <section class="oc-card">
-                    {section_head("Sobre a tarefa", None, None)}
+                    {section_head(crate::i18n::t("workspaces.task.about"), None, None)}
                     <div class="oc-card__body">
                         <p class="oc-t-body">{text(task, "description")}</p>
                         <div class="oc-split oc-split--2 oc-mt-5">
-                            {metric_text("Estado", task_state_label(&state))}
-                            {metric_text("Prioridade", &priority)}
-                            {metric_text("Prazo", &text(task, "due_on"))}
-                            {metric_text("Responsável", &assignee_name)}
+                            {metric_text(crate::i18n::t("workspaces.field.state"), task_state_label(&state))}
+                            {metric_text(crate::i18n::t("workspaces.field.priority"), &priority)}
+                            {metric_text(crate::i18n::t("workspaces.field.due"), &text(task, "due_on"))}
+                            {metric_text(crate::i18n::t("workspaces.field.assignee"), &assignee_name)}
                         </div>
                     </div>
                 </section>
 
                 {may_act.then(|| view! {
                     <section class="oc-card">
-                        {section_head("Acções", None, None)}
+                        {section_head(crate::i18n::t("workspaces.task.actions"), None, None)}
                         <div class="oc-card__body">
-                            <div class="oc-field__label">"Mudar estado"</div>
+                            <div class="oc-field__label">{crate::i18n::t("workspaces.task.change_state")}</div>
                             <div class="oc-lifecycle">
                                 {if transitions.is_empty() {
                                     view! {
                                         <span class="oc-muted">
-                                            "Esta tarefa não tem mais movimentos."
+                                            {crate::i18n::t("workspaces.task.no_transitions")}
                                         </span>
                                     }.into_any()
                                 } else {
                                     transitions.clone().into_iter().map(|estado| {
                                         let accao = transition_action.clone();
-                                        let rotulo = format!("Marcar «{}»", task_state_label(&estado));
+                                        let rotulo = crate::i18n::tf(
+                                            "workspaces.task.mark_as",
+                                            &[("state", task_state_label(&estado))],
+                                        );
                                         view! {
                                             <form method="post" action=accao class="oc-lifecycle__step">
                                                 <input type="hidden" name="state" value=estado />
@@ -753,10 +774,10 @@ pub fn task_detail(
                                 }}
                             </div>
 
-                            <div class="oc-field__label oc-mt-6">"Responsável"</div>
+                            <div class="oc-field__label oc-mt-6">{crate::i18n::t("workspaces.field.assignee")}</div>
                             <form method="post" action=assign_action class="oc-row oc-row--wrap oc-gap-3">
                                 <select class="oc-select" name="assignee_id">
-                                    <option value="">"Sem responsável"</option>
+                                    <option value="">{crate::i18n::t("workspaces.no_assignee")}</option>
                                     {members.iter().map(|m| {
                                         let pid = text(m, "person_id");
                                         let nome = text(m, "full_name");
@@ -765,7 +786,7 @@ pub fn task_detail(
                                     }).collect_view()}
                                 </select>
                                 <button class="oc-btn oc-btn--sm oc-btn--primary" type="submit">
-                                    "Atribuir"
+                                    {crate::i18n::t("workspaces.assign")}
                                 </button>
                             </form>
                         </div>
@@ -820,43 +841,42 @@ pub fn dataset_detail(dataset: &Value, versions: &Value) -> AnyView {
     view! {
         <div class="oc-band">
             <div class="oc-row oc-row--wrap oc-gap-6 oc-mb-2">
-                {pill("DATASET")}
+                {pill(crate::i18n::t("workspaces.kind.dataset"))}
                 <h1 class="oc-t-screen">{text(dataset, "title")}</h1>
                 {classification_badge(&classification)}
                 {badge(state.clone(), Tone::of(&state))}
             </div>
             <div class="oc-mono oc-mb-5">
-                <a href=format!("/workspaces/{workspace_id}")>"← Voltar ao ambiente"</a>
+                <a href=format!("/workspaces/{workspace_id}")>{crate::i18n::t("workspaces.back_to_env")}</a>
             </div>
         </div>
 
         <div class="oc-page">
             <div class="oc-grid oc-grid--detail">
                 <section class="oc-card">
-                    {section_head("Sobre o dataset", None, None)}
+                    {section_head(crate::i18n::t("workspaces.dataset.about"), None, None)}
                     <div class="oc-card__body">
                         <p class="oc-t-body">{text(dataset, "description")}</p>
                         <div class="oc-split oc-split--2 oc-mt-5">
-                            {metric_text("Código", &text(dataset, "code"))}
-                            {metric_text("Classificação", &classification)}
-                            {metric_text("Estado", &state)}
-                            {metric_text("Origem", &text(dataset, "origin"))}
-                            {metric_text("Licença", &text(dataset, "licence"))}
-                            {metric_text("Restrições de uso", &text(dataset, "usage_restrictions"))}
+                            {metric_text(crate::i18n::t("workspaces.field.code"), &text(dataset, "code"))}
+                            {metric_text(crate::i18n::t("workspaces.field.classification"), &classification)}
+                            {metric_text(crate::i18n::t("workspaces.field.state"), &state)}
+                            {metric_text(crate::i18n::t("workspaces.dataset.origin"), &text(dataset, "origin"))}
+                            {metric_text(crate::i18n::t("workspaces.dataset.licence"), &text(dataset, "licence"))}
+                            {metric_text(crate::i18n::t("workspaces.dataset.usage_restrictions"), &text(dataset, "usage_restrictions"))}
                         </div>
-                        <div class="oc-field__label oc-mt-6">"Palavras-chave"</div>
+                        <div class="oc-field__label oc-mt-6">{crate::i18n::t("workspaces.field.keywords")}</div>
                         <p class="oc-t-note">{keywords}</p>
                     </div>
                 </section>
 
                 <section class="oc-card">
-                    {section_head("Versões", None, None)}
+                    {section_head(crate::i18n::t("workspaces.dataset.versions"), None, None)}
                     <div class="oc-card__body">
                         {if versoes.is_empty() {
                             view! {
                                 <p class="oc-muted">
-                                    "Este dataset ainda não tem versões. Uma versão \
-                                     agrupa os ficheiros materiais de um estado do dataset."
+                                    {crate::i18n::t("workspaces.dataset.no_versions")}
                                 </p>
                             }.into_any()
                         } else {
@@ -880,9 +900,17 @@ pub fn dataset_detail(dataset: &Value, versions: &Value) -> AnyView {
                                                     {badge(status.clone(), Tone::of(&status))}
                                                 </div>
                                                 <div class="oc-mono oc-t-ghost">
-                                                    {format!("{ficheiros} ficheiro(s) · {tamanho}")}
-                                                    {(!publicada.is_empty()).then(
-                                                        || format!(" · publicada {publicada}"))}
+                                                    {format!(
+                                                        "{} · {tamanho}",
+                                                        crate::i18n::tp("workspaces.dataset.files", ficheiros),
+                                                    )}
+                                                    {(!publicada.is_empty()).then(|| format!(
+                                                        " · {}",
+                                                        crate::i18n::tf(
+                                                            "workspaces.dataset.published",
+                                                            &[("date", &publicada)],
+                                                        ),
+                                                    ))}
                                                 </div>
                                                 {(!text(v, "provenance").is_empty()).then(|| view! {
                                                     <div class="oc-t-note">{text(v, "provenance")}</div>
@@ -918,7 +946,7 @@ fn artefact_card(
             </div>
             <div class="oc-card__body">
                 {if rows.is_empty() {
-                    view! { <p class="oc-muted">"Sem registos."</p> }.into_any()
+                    view! { <p class="oc-muted">{crate::i18n::t("workspaces.empty.records")}</p> }.into_any()
                 } else {
                     view! {
                         <div>
@@ -937,7 +965,7 @@ fn artefact_card(
                                 })
                                 .collect_view()}
                             <a class="oc-card__action oc-mt-5 oc-inline-block" href=href>
-                                "Ver tudo"
+                                {crate::i18n::t("workspaces.view_all")}
                             </a>
                         </div>
                     }
@@ -950,17 +978,18 @@ fn artefact_card(
 
 // ── Detalhe da Unidade ───────────────────────────────────────────────────
 
-/// As 9 tabs de uma unidade.
+/// As 9 tabs de uma unidade. Cada entrada é a chave i18n do separador (rótulo e
+/// identidade de routing, como nos separadores do Research Workspace).
 const UNIT_TABS: [&str; 9] = [
-    "Visão geral",
-    "Membros",
-    "Ideias",
-    "Projectos",
-    "Bibliografia",
-    "Dados",
-    "Documentos",
-    "Actividade",
-    "Configuração",
+    "workspaces.tab.overview",
+    "workspaces.tab.members",
+    "workspaces.tab.ideas",
+    "workspaces.tab.projects",
+    "workspaces.tab.bibliography",
+    "workspaces.tab.data",
+    "workspaces.tab.documents",
+    "workspaces.tab.activity",
+    "workspaces.tab.config",
 ];
 
 /// Detalhe de uma unidade.
@@ -1006,13 +1035,15 @@ pub fn unit_detail(
     let unit_tabs: Vec<Tab> = UNIT_TABS
         .iter()
         .enumerate()
-        .map(|(i, label)| match *label {
-            "Visão geral" => Tab::link(*label, format!("/units/{id}"), i == 0),
-            "Ideias" => Tab::link(*label, "/ideas", false),
-            "Projectos" => Tab::link(*label, "/projects", false),
-            "Bibliografia" => Tab::link(*label, "/bibliography", false),
-            "Dados" => Tab::link(*label, "/datasets", false),
-            other => Tab::inert(other),
+        .map(|(i, key)| match *key {
+            "workspaces.tab.overview" => {
+                Tab::link(crate::i18n::t(key), format!("/units/{id}"), i == 0)
+            }
+            "workspaces.tab.ideas" => Tab::link(crate::i18n::t(key), "/ideas", false),
+            "workspaces.tab.projects" => Tab::link(crate::i18n::t(key), "/projects", false),
+            "workspaces.tab.bibliography" => Tab::link(crate::i18n::t(key), "/bibliography", false),
+            "workspaces.tab.data" => Tab::link(crate::i18n::t(key), "/datasets", false),
+            other => Tab::inert(crate::i18n::t(other)),
         })
         .collect();
 
@@ -1043,27 +1074,34 @@ pub fn unit_detail(
                     let href = format!("/units/{id}/edit");
                     view! {
                         <span class="oc-row__spacer" ></span>
-                        {button(Button::new("Editar", Variant::Secondary).href(href))}
+                        {button(Button::new(crate::i18n::t("action.edit"), Variant::Secondary).href(href))}
                     }
                 })}
             </div>
             <div class="oc-mono oc-mb-5" >
-                {format!("{} membros · {ideas} ideias · {projects} projectos", member_rows.len())}
+                {crate::i18n::tf(
+                    "workspaces.unit.counts",
+                    &[
+                        ("members", &member_rows.len().to_string()),
+                        ("ideas", &ideas.to_string()),
+                        ("projects", &projects.to_string()),
+                    ],
+                )}
             </div>
-            {context_tabs(unit_tabs, "Secções da unidade")}
+            {context_tabs(unit_tabs, crate::i18n::t("workspaces.unit.tabs.aria"))}
         </div>
 
         <div class="oc-page oc-page" >
             <div class="oc-grid oc-grid--detail">
                 <section class="oc-card">
-                    {section_head("Sobre a unidade", None, None)}
+                    {section_head(crate::i18n::t("workspaces.unit.about"), None, None)}
                     <div class="oc-card__body">
                         <p class="oc-t-body" >
                             {text(unit, "description")}
                         </p>
                         {(!research_areas.is_empty()).then(|| {
                             view! {
-                                <div class="oc-field__label oc-mt-5" >"Áreas de investigação"</div>
+                                <div class="oc-field__label oc-mt-5" >{crate::i18n::t("workspaces.unit.research_areas")}</div>
                                 <div class="oc-chips oc-chips--static" >
                                     {research_areas
                                         .iter()
@@ -1075,22 +1113,22 @@ pub fn unit_detail(
                             }
                         })}
                         <div class="oc-split oc-split--2 oc-mt-5" >
-                            {metric("Membros", member_rows.len())}
-                            {metric("Ideias", ideas)}
-                            {metric("Projectos", projects)}
-                            {metric("Áreas", research_areas.len())}
+                            {metric(crate::i18n::t("workspaces.members"), member_rows.len())}
+                            {metric(crate::i18n::t("workspaces.ideas"), ideas)}
+                            {metric(crate::i18n::t("workspaces.projects"), projects)}
+                            {metric(crate::i18n::t("workspaces.areas"), research_areas.len())}
                         </div>
                     </div>
                 </section>
 
                 <section class="oc-card">
                     <div class="oc-card__head">
-                        <h2>"Membros"</h2>
+                        <h2>{crate::i18n::t("workspaces.members")}</h2>
                         <span class="oc-card__meta">{member_rows.len().to_string()}</span>
                     </div>
                     <div class="oc-card__body">
                         {if member_rows.is_empty() {
-                            view! { <p class="oc-muted">"Sem membros."</p> }.into_any()
+                            view! { <p class="oc-muted">{crate::i18n::t("workspaces.empty.members")}</p> }.into_any()
                         } else {
                             view! {
                                 <div class="oc-col oc-gap-6" >
@@ -1146,9 +1184,9 @@ fn gerir_pessoa(unit_id: &str, person_id: &str, role: &str) -> impl IntoView {
     let promover = role != "manager";
     let novo = if promover { "manager" } else { "member" };
     let rotulo = if promover {
-        "Tornar gestor"
+        crate::i18n::t("workspaces.make_manager")
     } else {
-        "Tornar membro"
+        crate::i18n::t("workspaces.make_member")
     };
 
     view! {
@@ -1160,7 +1198,7 @@ fn gerir_pessoa(unit_id: &str, person_id: &str, role: &str) -> impl IntoView {
             </form>
             <form method="post" action=format!("/units/{unit_id}/members/remove")>
                 <input type="hidden" name="person_id" value=person_id.to_owned() />
-                <button class="oc-btn oc-btn--ghost" type="submit">"Remover"</button>
+                <button class="oc-btn oc-btn--ghost" type="submit">{crate::i18n::t("action.remove")}</button>
             </form>
         </span>
     }
@@ -1174,7 +1212,7 @@ fn acrescentar_pessoa(unit_id: &str, candidatos: &[(String, String)]) -> impl In
     if candidatos.is_empty() {
         return view! {
             <p class="oc-t-caption--muted oc-mt-5">
-                "Todas as pessoas da organização já pertencem a esta unidade."
+                {crate::i18n::t("workspaces.unit.all_belong")}
             </p>
         }
         .into_any();
@@ -1193,16 +1231,16 @@ fn acrescentar_pessoa(unit_id: &str, candidatos: &[(String, String)]) -> impl In
             method="post"
             action=format!("/units/{unit_id}/members")
         >
-            <label class="oc-sr" for="oc-unit-person">"Pessoa"</label>
+            <label class="oc-sr" for="oc-unit-person">{crate::i18n::t("workspaces.field.person")}</label>
             <select class="oc-select" id="oc-unit-person" name="person_id" required>
                 {opcoes}
             </select>
-            <label class="oc-sr" for="oc-unit-role">"Papel"</label>
+            <label class="oc-sr" for="oc-unit-role">{crate::i18n::t("workspaces.field.role")}</label>
             <select class="oc-select" id="oc-unit-role" name="role">
-                <option value="member">"Membro"</option>
-                <option value="manager">"Gestor"</option>
+                <option value="member">{crate::i18n::t("workspaces.role.member")}</option>
+                <option value="manager">{crate::i18n::t("workspaces.role.manager")}</option>
             </select>
-            <button class="oc-btn oc-btn--primary" type="submit">"Adicionar"</button>
+            <button class="oc-btn oc-btn--primary" type="submit">{crate::i18n::t("workspaces.add")}</button>
         </form>
     }
     .into_any()
@@ -1231,12 +1269,12 @@ fn pessoas_do_ambiente(
     view! {
         <section class="oc-card">
             <div class="oc-card__head">
-                <h2>"Pessoas"</h2>
+                <h2>{crate::i18n::t("workspaces.people")}</h2>
                 <span class="oc-card__meta">{linhas.len().to_string()}</span>
             </div>
             <div class="oc-card__body">
                 {if linhas.is_empty() {
-                    view! { <p class="oc-muted">"Sem pessoas."</p> }.into_any()
+                    view! { <p class="oc-muted">{crate::i18n::t("workspaces.empty.people")}</p> }.into_any()
                 } else {
                     view! {
                         <div class="oc-col oc-gap-6">
@@ -1286,7 +1324,7 @@ fn remover_do_ambiente(workspace_id: &str, person_id: &str) -> impl IntoView {
         <span class="oc-pessoa__accoes">
             <form method="post" action=format!("/workspaces/{workspace_id}/members/remove")>
                 <input type="hidden" name="person_id" value=person_id.to_owned() />
-                <button class="oc-btn oc-btn--ghost" type="submit">"Remover"</button>
+                <button class="oc-btn oc-btn--ghost" type="submit">{crate::i18n::t("action.remove")}</button>
             </form>
         </span>
     }
@@ -1301,7 +1339,7 @@ fn acrescentar_ao_ambiente(workspace_id: &str, candidatos: &[(String, String)]) 
     if candidatos.is_empty() {
         return view! {
             <p class="oc-t-caption--muted oc-mt-5">
-                "Todas as pessoas da organização já participam neste ambiente."
+                {crate::i18n::t("workspaces.env.all_belong")}
             </p>
         }
         .into_any();
@@ -1320,17 +1358,17 @@ fn acrescentar_ao_ambiente(workspace_id: &str, candidatos: &[(String, String)]) 
             method="post"
             action=format!("/workspaces/{workspace_id}/members")
         >
-            <label class="oc-sr" for="oc-ws-person">"Pessoa"</label>
+            <label class="oc-sr" for="oc-ws-person">{crate::i18n::t("workspaces.field.person")}</label>
             <select class="oc-select" id="oc-ws-person" name="person_id" required>
                 {opcoes}
             </select>
-            <label class="oc-sr" for="oc-ws-role">"Papel"</label>
+            <label class="oc-sr" for="oc-ws-role">{crate::i18n::t("workspaces.field.role")}</label>
             <select class="oc-select" id="oc-ws-role" name="role">
-                <option value="member">"Membro"</option>
-                <option value="lead">"Líder"</option>
-                <option value="viewer">"Observador"</option>
+                <option value="member">{crate::i18n::t("workspaces.role.member")}</option>
+                <option value="lead">{crate::i18n::t("workspaces.role.lead")}</option>
+                <option value="viewer">{crate::i18n::t("workspaces.role.viewer")}</option>
             </select>
-            <button class="oc-btn oc-btn--primary" type="submit">"Adicionar"</button>
+            <button class="oc-btn oc-btn--primary" type="submit">{crate::i18n::t("workspaces.add")}</button>
         </form>
     }
     .into_any()
@@ -1445,7 +1483,7 @@ pub(crate) mod tests {
             "members": [{"person_id": "p1", "full_name": "Ana"}]
         });
         let html = task_detail(&task, &overview, None, None).to_html();
-        assert!(html.contains("A fazer"), "falta o rótulo do estado");
+        assert!(html.contains("Por fazer"), "falta o rótulo do estado");
         assert!(
             html.contains("Marcar «Em curso»"),
             "falta o botão de transição"
@@ -1489,7 +1527,7 @@ pub(crate) mod tests {
         assert!(html.contains("clima · sensor"), "faltam as palavras-chave");
         assert!(html.contains("Versões"), "falta a secção de versões");
         assert!(
-            html.contains("3 ficheiro(s) · 2.0 kB"),
+            html.contains("3 ficheiros · 2.0 kB"),
             "falta o material da versão"
         );
         assert!(html.contains("Recolha inicial"), "falta a proveniência");
@@ -1590,5 +1628,150 @@ pub(crate) mod tests {
         .to_html();
 
         assert!(html.contains("RESTRITO"));
+    }
+}
+
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+    use serde_json::json;
+
+    /// Um ecrã, um idioma: o Research Workspace (Ideia e Projecto), o detalhe de
+    /// tarefa, o de dataset e o de unidade, todos em francês, sem chrome
+    /// português. Cobre separadores, cabeçalhos, botões, estados de ciclo de
+    /// vida, formulários e estados vazios — as superfícies deste ficheiro.
+    #[tokio::test]
+    async fn os_ecras_de_workspace_nao_misturam_linguas() {
+        use crate::i18n::{with_locale, Locale};
+
+        let fr = with_locale(Locale::Fr, async {
+            let idea = research_workspace(WorkspaceView {
+                overview: json!({
+                    "workspace": {"id": "w1", "code": "AI-IDEA-001",
+                                   "classification": "INTERNAL", "may_transition": true},
+                    "idea": {"id": "i1", "title": "Idée", "state": "project_candidate",
+                              "summary": "Résumé", "keywords": ["a"], "promotable": true,
+                              "available_transitions": [
+                                  {"state": "review", "requires_note": false},
+                                  {"state": "rejected", "requires_note": true}
+                              ]},
+                    "project": null,
+                    "members": []
+                }),
+                sources: json!({"items": []}),
+                notes: json!([]),
+                documents: json!([]),
+                datasets: json!({"items": []}),
+                tasks: json!([]),
+                activity: json!([]),
+                inference_available: false,
+                may_use_assistance: true,
+                gestao: super::tests::gestao_de_prova(),
+            })
+            .to_html();
+
+            let project = research_workspace(WorkspaceView {
+                overview: json!({
+                    "workspace": {"id": "w2", "code": "AI-PROJ-001", "classification": "INTERNAL"},
+                    "idea": null,
+                    "project": {"id": "p1", "title": "Projet", "state": "active",
+                                 "summary": "Résumé", "objectives": "Objectifs",
+                                 "progress": 40, "origin_idea_id": "i1"},
+                    "members": [{"full_name": "Ana", "role": "lead"}]
+                }),
+                sources: json!({"items": []}),
+                notes: json!([]),
+                documents: json!([]),
+                datasets: json!({"items": []}),
+                tasks: json!([]),
+                activity: json!([]),
+                inference_available: false,
+                may_use_assistance: true,
+                gestao: super::tests::gestao_de_prova(),
+            })
+            .to_html();
+
+            let task = task_detail(
+                &json!({
+                    "id": "t1", "workspace_id": "w1", "title": "Calibrer",
+                    "description": "Détail", "state": "todo", "priority": "normal",
+                    "assignee_id": null, "available_transitions": ["in_progress"]
+                }),
+                &json!({"workspace": {"id": "w1", "may_create": true},
+                         "members": [{"person_id": "p1", "full_name": "Ana"}]}),
+                None,
+                None,
+            )
+            .to_html();
+
+            let dataset = dataset_detail(
+                &json!({
+                    "id": "d1", "workspace_id": "w1", "code": "DS-1", "title": "Données",
+                    "description": "Séries", "origin": "measured", "licence": "CC-BY",
+                    "usage_restrictions": "Interne", "keywords": ["x"],
+                    "classification": "INTERNAL", "state": "active"
+                }),
+                &json!([]),
+            )
+            .to_html();
+
+            let unit = unit_detail(
+                &json!({"id": "u1", "name": "Unité", "code": "U-1", "status": "active",
+                         "description": "Desc", "research_areas": ["IA"]}),
+                &json!([{"person_id": "p1", "full_name": "Ana", "role": "manager",
+                          "email": "a@o.com"}]),
+                &json!([]),
+                &super::tests::gestao_de_prova(),
+            )
+            .to_html();
+
+            format!("{idea}{project}{task}{dataset}{unit}")
+        })
+        .await;
+
+        for francesa in [
+            "Vue d’ensemble",
+            "Bibliographie",
+            "IA dans cet espace",
+            "Sections du Research Workspace",
+            "cette idée",
+            "Activité récente",
+            "MOTS-CLÉS",
+            "Cycle de vie",
+            "Promouvoir en projet",
+            "Rejeter",
+            "OBJECTIFS",
+            "ÉQUIPE",
+            "issu d’une idée",
+            "À propos de la tâche",
+            "Changer d’état",
+            "Attribuer",
+            "Sans responsable",
+            "À propos du jeu de données",
+            "Restrictions d’usage",
+            "À propos de l’unité",
+            "Domaines de recherche",
+            "Sections de l’unité",
+        ] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+
+        for portuguesa in [
+            "Visão geral",
+            "Secções do Research Workspace",
+            "Descrição",
+            "Ciclo de vida",
+            "Sobre a tarefa",
+            "Sobre o dataset",
+            "Sobre a unidade",
+            "Voltar ao ambiente",
+            "Áreas de investigação",
+            "Adicionar",
+        ] {
+            assert!(
+                !fr.contains(portuguesa),
+                "fr: chrome português «{portuguesa}» sobreviveu"
+            );
+        }
     }
 }
