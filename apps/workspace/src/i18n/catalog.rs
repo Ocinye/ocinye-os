@@ -2022,6 +2022,308 @@ const LISTS: &[Entry] = catalogo! {
     "lists.review.normalised": { pt: "BibTeX normalizado", en: "Normalised BibTeX", fr: "BibTeX normalisé" },
 };
 
+/// O ciclo de vida científico: hipóteses, metodologias e versões, estudos,
+/// execuções, resultados, e a proveniência que os liga. O `pt` é o vocabulário
+/// europeu exacto do ecrã; `en` britânico/internacional e `fr` europeu dizem o
+/// mesmo, com paridade de significado (briefing §84).
+const SCIENCE: &[Entry] = catalogo! {
+    // Cabeçalhos e acções da cadeia.
+    "science.title": { pt: "Ciência", en: "Science", fr: "Science" },
+    "science.new_hypothesis": { pt: "Nova hipótese", en: "New hypothesis", fr: "Nouvelle hypothèse" },
+    "science.new_methodology": { pt: "Nova metodologia", en: "New methodology", fr: "Nouvelle méthodologie" },
+    "science.new_study": { pt: "Novo estudo", en: "New study", fr: "Nouvelle étude" },
+    "science.new_version": { pt: "Nova versão", en: "New version", fr: "Nouvelle version" },
+    "science.back_to_workspace": { pt: "Voltar ao ambiente", en: "Back to workspace", fr: "Retour à l’espace" },
+    "science.back_to_science": { pt: "Voltar à ciência", en: "Back to science", fr: "Retour à la science" },
+    "science.validate_result": { pt: "Validar resultado", en: "Validate result", fr: "Valider le résultat" },
+    "science.record_execution": { pt: "Registar execução", en: "Record execution", fr: "Enregistrer l’exécution" },
+    "science.record_result": { pt: "Registar resultado", en: "Record result", fr: "Enregistrer le résultat" },
+    "science.action.record": { pt: "Registar", en: "Record", fr: "Enregistrer" },
+    "science.option.none": { pt: "Nenhuma", en: "None", fr: "Aucune" },
+    // Estado vazio da cadeia.
+    "science.empty.title": {
+        pt: "Ainda não há trabalho científico registado",
+        en: "No scientific work has been recorded yet",
+        fr: "Aucun travail scientifique n’a encore été enregistré"
+    },
+    "science.empty.body_creator": {
+        pt: "A cadeia começa por uma hipótese: o que se quer testar, e porquê. Depois vêm a metodologia, o estudo, a execução e o resultado — e cada um deles guarda de onde veio.",
+        en: "The chain begins with a hypothesis: what you want to test, and why. Then come the methodology, the study, the execution and the result — and each of them keeps a record of where it came from.",
+        fr: "La chaîne commence par une hypothèse : ce que l’on veut tester, et pourquoi. Viennent ensuite la méthodologie, l’étude, l’exécution et le résultat — et chacun d’eux garde la trace de son origine."
+    },
+    "science.empty.body_viewer": {
+        pt: "Quando alguém enunciar uma hipótese neste ambiente, a cadeia aparece aqui.",
+        en: "When someone states a hypothesis in this workspace, the chain will appear here.",
+        fr: "Lorsqu’une personne énoncera une hypothèse dans cet espace, la chaîne apparaîtra ici."
+    },
+    "science.empty.first_hypothesis": {
+        pt: "Enunciar a primeira hipótese",
+        en: "State the first hypothesis",
+        fr: "Énoncer la première hypothèse"
+    },
+    // As etapas da cadeia.
+    "science.stage.hypotheses": { pt: "Hipóteses", en: "Hypotheses", fr: "Hypothèses" },
+    "science.stage.methodologies": { pt: "Metodologias", en: "Methodologies", fr: "Méthodologies" },
+    "science.stage.studies": { pt: "Estudos", en: "Studies", fr: "Études" },
+    "science.stage.results": { pt: "Resultados", en: "Results", fr: "Résultats" },
+    "science.stage.empty": { pt: "Ainda nada.", en: "Nothing yet.", fr: "Rien pour l’instant." },
+    // Detalhe de um resultado e a sua proveniência.
+    "science.result.summary_head": { pt: "O que este resultado diz", en: "What this result says", fr: "Ce que dit ce résultat" },
+    "science.result.validations_head": { pt: "Validações e reproduções", en: "Validations and reproductions", fr: "Validations et reproductions" },
+    "science.result.no_validations": {
+        pt: "Ninguém validou nem reproduziu este resultado.",
+        en: "No one has validated or reproduced this result.",
+        fr: "Personne n’a validé ni reproduit ce résultat."
+    },
+    "science.result.provenance_head": { pt: "Proveniência", en: "Provenance", fr: "Provenance" },
+    "science.lineage.upstream": { pt: "Montante", en: "Upstream", fr: "En amont" },
+    "science.lineage.downstream": { pt: "Jusante", en: "Downstream", fr: "En aval" },
+    "science.lineage.aria": { pt: "Sentido da linhagem", en: "Lineage direction", fr: "Sens de la lignée" },
+    "science.lineage.empty_upstream": {
+        pt: "Nada aponta para a origem deste resultado.",
+        en: "Nothing points to the origin of this result.",
+        fr: "Rien ne pointe vers l’origine de ce résultat."
+    },
+    "science.lineage.empty_downstream": {
+        pt: "Nada depende deste resultado.",
+        en: "Nothing depends on this result.",
+        fr: "Rien ne dépend de ce résultat."
+    },
+    "science.provenance.observed": { pt: "Observada", en: "Observed", fr: "Observée" },
+    "science.provenance.declared": { pt: "Declarada", en: "Declared", fr: "Déclarée" },
+    "science.lineage.truncated": {
+        pt: "A travessia atingiu o limite de profundidade. Abre um dos recursos acima para continuar a partir dele.",
+        en: "The traversal reached the depth limit. Open one of the resources above to continue from it.",
+        fr: "Le parcours a atteint la limite de profondeur. Ouvrez l’une des ressources ci-dessus pour continuer à partir d’elle."
+    },
+    // Formulário de validação.
+    "science.validate.no_execution": {
+        pt: "Este resultado não tem nenhuma execução registada que sirva de prova. Regista a execução que o reproduziu antes de o dar por reproduzido.",
+        en: "This result has no recorded execution to serve as proof. Record the execution that reproduced it before marking it as reproduced.",
+        fr: "Ce résultat n’a aucune exécution enregistrée pouvant servir de preuve. Enregistrez l’exécution qui l’a reproduit avant de le déclarer reproduit."
+    },
+    "science.validate.subtitle": { pt: "Sobre «{title}».", en: "About “{title}”.", fr: "À propos de « {title} »." },
+    "science.validate.callout_title": {
+        pt: "Isto fica em seu nome",
+        en: "This is recorded in your name",
+        fr: "Ceci est enregistré en votre nom"
+    },
+    "science.validate.callout_body": {
+        pt: "Uma validação é uma afirmação institucional sobre o que a Ocinye sabe. O registo guarda quem a fez, e é por isso que nenhum agente a pode fazer por si.",
+        en: "A validation is an institutional assertion about what Ocinye knows. The record keeps who made it, and that is why no agent can make it for you.",
+        fr: "Une validation est une affirmation institutionnelle sur ce que sait Ocinye. Le registre conserve qui l’a faite, et c’est pourquoi aucun agent ne peut la faire à votre place."
+    },
+    "science.claim_head": { pt: "A afirmação", en: "The assertion", fr: "L’affirmation" },
+    "science.validate.kind_label": { pt: "O que está a registar", en: "What you are recording", fr: "Ce que vous enregistrez" },
+    "science.validate.kind.validation": { pt: "Validação", en: "Validation", fr: "Validation" },
+    "science.validate.kind.reproduction": { pt: "Reprodução", en: "Reproduction", fr: "Reproduction" },
+    "science.validate.outcome_label": { pt: "Desfecho", en: "Outcome", fr: "Issue" },
+    "science.validate.outcome.confirmed": { pt: "Confirmou", en: "Confirmed", fr: "A confirmé" },
+    "science.validate.outcome.contradicted": { pt: "Contradisse", en: "Contradicted", fr: "A contredit" },
+    "science.validate.outcome.inconclusive": { pt: "Foi inconclusiva", en: "Was inconclusive", fr: "A été non concluante" },
+    "science.validate.execution_label": {
+        pt: "A execução que serviu de prova",
+        en: "The execution that served as proof",
+        fr: "L’exécution qui a servi de preuve"
+    },
+    "science.validate.note_label": { pt: "O que observou", en: "What you observed", fr: "Ce que vous avez observé" },
+    "science.validate.note_placeholder": {
+        pt: "O que viu, e em que condições",
+        en: "What you saw, and under what conditions",
+        fr: "Ce que vous avez vu, et dans quelles conditions"
+    },
+    // As classificações num selector (femininas, a concordar com «classificação»).
+    "science.class.internal": { pt: "Interna", en: "Internal", fr: "Interne" },
+    "science.class.public": { pt: "Pública", en: "Public", fr: "Publique" },
+    "science.class.confidential": { pt: "Confidencial", en: "Confidential", fr: "Confidentielle" },
+    "science.class.restricted": { pt: "Restrita", en: "Restricted", fr: "Restreinte" },
+    // Campos partilhados por vários formulários.
+    "science.field.name_label": { pt: "Como se chama", en: "What it is called", fr: "Comment cela s’appelle" },
+    // Formulário de hipótese.
+    "science.hypothesis.subtitle": {
+        pt: "Uma afirmação que se pode testar. Enunciá-la é o princípio da cadeia — e uma hipótese que não se sustenta é um desfecho científico, não um erro.",
+        en: "An assertion that can be tested. Stating it is the start of the chain — and a hypothesis that does not hold up is a scientific outcome, not an error.",
+        fr: "Une affirmation que l’on peut tester. L’énoncer est le début de la chaîne — et une hypothèse qui ne tient pas est un résultat scientifique, non une erreur."
+    },
+    "science.hypothesis.statement_label": { pt: "O que se afirma", en: "What is asserted", fr: "Ce qui est affirmé" },
+    "science.hypothesis.statement_placeholder": {
+        pt: "Ex.: a dopagem reduz a resistência de contacto",
+        en: "E.g. doping reduces contact resistance",
+        fr: "Ex. : le dopage réduit la résistance de contact"
+    },
+    "science.hypothesis.rationale_label": { pt: "Porque vale a pena testar", en: "Why it is worth testing", fr: "Pourquoi cela vaut la peine d’être testé" },
+    "science.hypothesis.rationale_placeholder": {
+        pt: "O que se sabe hoje, e o que falta saber",
+        en: "What is known today, and what remains to be known",
+        fr: "Ce que l’on sait aujourd’hui, et ce qu’il reste à savoir"
+    },
+    "science.hypothesis.submit": { pt: "Enunciar", en: "State", fr: "Énoncer" },
+    // Formulário de metodologia.
+    "science.methodology.subtitle": {
+        pt: "A metodologia é a identidade durável do método: o nome pelo qual a instituição o conhece daqui a cinco anos. O que ela diz hoje vive numa versão, e publica-se a seguir.",
+        en: "The methodology is the durable identity of the method: the name by which the institution will know it five years from now. What it says today lives in a version, published next.",
+        fr: "La méthodologie est l’identité durable de la méthode : le nom sous lequel l’institution la connaîtra dans cinq ans. Ce qu’elle dit aujourd’hui vit dans une version, publiée ensuite."
+    },
+    "science.methodology.method_head": { pt: "O método", en: "The method", fr: "La méthode" },
+    "science.methodology.title_placeholder": {
+        pt: "Ex.: medição a quatro pontas",
+        en: "E.g. four-point measurement",
+        fr: "Ex. : mesure à quatre pointes"
+    },
+    "science.methodology.purpose_label": { pt: "Para que serve", en: "What it is for", fr: "À quoi elle sert" },
+    "science.methodology.purpose_placeholder": {
+        pt: "Que pergunta este método responde",
+        en: "What question this method answers",
+        fr: "À quelle question cette méthode répond"
+    },
+    // Detalhe de metodologia e versões.
+    "science.versions_head": { pt: "Versões", en: "Versions", fr: "Versions" },
+    "science.methodology.no_versions": {
+        pt: "Ainda nenhuma versão. Um estudo só pode seguir uma versão publicada, porque é a versão que a proveniência cita.",
+        en: "No version yet. A study can only follow a published version, because it is the version that provenance cites.",
+        fr: "Aucune version pour l’instant. Une étude ne peut suivre qu’une version publiée, car c’est la version que cite la provenance."
+    },
+    // Formulário de versão.
+    "science.version.subtitle": { pt: "De «{title}».", en: "Of “{title}”.", fr: "De « {title} »." },
+    "science.version.in_force": { pt: "Em vigor: {label}", en: "In force: {label}", fr: "En vigueur : {label}" },
+    "science.version.in_force_body": {
+        pt: "Publicar substitui-a. A anterior fica no histórico e continua a valer para tudo o que já a citou — um resultado produzido com ela continua a dizer que foi com ela.",
+        en: "Publishing replaces it. The previous one stays in the history and remains valid for everything that already cited it — a result produced with it still says it was produced with it.",
+        fr: "Publier la remplace. La précédente reste dans l’historique et continue de valoir pour tout ce qui l’a déjà citée — un résultat produit avec elle continue de dire qu’il l’a été avec elle."
+    },
+    "science.version.version_head": { pt: "A versão", en: "The version", fr: "La version" },
+    "science.version.label_placeholder": { pt: "Ex.: v2, 2026-rev-b", en: "E.g. v2, 2026-rev-b", fr: "Ex. : v2, 2026-rev-b" },
+    "science.version.summary_label": { pt: "O que esta versão diz", en: "What this version says", fr: "Ce que dit cette version" },
+    "science.version.summary_placeholder": {
+        pt: "O que muda em relação à anterior, ou o que o método faz",
+        en: "What changes from the previous one, or what the method does",
+        fr: "Ce qui change par rapport à la précédente, ou ce que fait la méthode"
+    },
+    "science.version.submit": { pt: "Publicar", en: "Publish", fr: "Publier" },
+    // Formulário de estudo.
+    "science.study.subtitle": {
+        pt: "Um estudo põe uma hipótese à prova por um método. O que ele seguiu fica registado com a versão exacta — porque o método melhora, e o que se fez não muda por isso.",
+        en: "A study puts a hypothesis to the test through a method. What it followed is recorded with the exact version — because the method improves, and what was done does not change for that.",
+        fr: "Une étude met une hypothèse à l’épreuve par une méthode. Ce qu’elle a suivi est enregistré avec la version exacte — car la méthode s’améliore, et ce qui a été fait n’en change pas pour autant."
+    },
+    "science.study.study_head": { pt: "O estudo", en: "The study", fr: "L’étude" },
+    "science.study.title_placeholder": {
+        pt: "Ex.: ensaio de carga em contactos dopados",
+        en: "E.g. load test on doped contacts",
+        fr: "Ex. : essai de charge sur contacts dopés"
+    },
+    "science.study.kind_label": { pt: "Género", en: "Kind", fr: "Type" },
+    "science.study.kind.physical": { pt: "Experiência física", en: "Physical experiment", fr: "Expérience physique" },
+    "science.study.kind.simulation": { pt: "Simulação", en: "Simulation", fr: "Simulation" },
+    "science.study.kind.analysis": { pt: "Análise", en: "Analysis", fr: "Analyse" },
+    "science.study.objective_label": { pt: "O que se propõe descobrir", en: "What it sets out to discover", fr: "Ce qu’elle se propose de découvrir" },
+    "science.study.objective_placeholder": {
+        pt: "O que este estudo tem de mostrar para responder à pergunta",
+        en: "What this study must show to answer the question",
+        fr: "Ce que cette étude doit montrer pour répondre à la question"
+    },
+    "science.study.chain_head": { pt: "A cadeia", en: "The chain", fr: "La chaîne" },
+    "science.study.hypothesis_label": { pt: "Hipótese que testa", en: "Hypothesis it tests", fr: "Hypothèse qu’elle teste" },
+    "science.study.methodology_label": {
+        pt: "Versão de metodologia que segue",
+        en: "Methodology version it follows",
+        fr: "Version de méthodologie qu’elle suit"
+    },
+    "science.study.no_methodology_hint": {
+        pt: "Nenhuma metodologia deste ambiente tem versão publicada. Um estudo pode ficar sem ela, e a linhagem dirá que método seguiu quando alguém publicar uma.",
+        en: "No methodology in this workspace has a published version. A study can go without one, and the lineage will say which method it followed when someone publishes one.",
+        fr: "Aucune méthodologie de cet espace n’a de version publiée. Une étude peut s’en passer, et la lignée dira quelle méthode elle a suivie lorsqu’une personne en publiera une."
+    },
+    "science.study.submit": { pt: "Desenhar", en: "Design", fr: "Concevoir" },
+    "science.no_published_methodology": {
+        pt: "Nenhuma metodologia publicada neste ambiente",
+        en: "No methodology published in this workspace",
+        fr: "Aucune méthodologie publiée dans cet espace"
+    },
+    // Detalhe de estudo e execuções.
+    "science.executions_head": { pt: "Execuções", en: "Executions", fr: "Exécutions" },
+    "science.study.no_executions": {
+        pt: "Ainda nenhuma corrida. É a execução, e não o estudo, que produz um resultado — e são duas execuções, e não dois estudos, que se comparam quando se reproduz.",
+        en: "No run yet. It is the execution, not the study, that produces a result — and it is two executions, not two studies, that are compared when reproducing.",
+        fr: "Aucune exécution pour l’instant. C’est l’exécution, et non l’étude, qui produit un résultat — et ce sont deux exécutions, et non deux études, que l’on compare lorsqu’on reproduit."
+    },
+    "science.execution.numbered": { pt: "Execução {sequence}", en: "Execution {sequence}", fr: "Exécution {sequence}" },
+    "science.execution.lower_numbered": { pt: "execução {sequence}", en: "execution {sequence}", fr: "exécution {sequence}" },
+    // Formulário de execução.
+    "science.execution.subtitle": {
+        pt: "Uma corrida de «{title}». É aqui que a reprodutibilidade mora: o mesmo estudo corre duas vezes e dá duas execuções, e são elas que se comparam.",
+        en: "A run of “{title}”. This is where reproducibility lives: the same study runs twice and yields two executions, and it is they that are compared.",
+        fr: "Une exécution de « {title} ». C’est ici que réside la reproductibilité : la même étude s’exécute deux fois et donne deux exécutions, et ce sont elles que l’on compare."
+    },
+    "science.run_head": { pt: "A corrida", en: "The run", fr: "L’exécution" },
+    "science.execution.status_label": { pt: "Estado", en: "State", fr: "État" },
+    "science.execution.status.succeeded": { pt: "Correu bem", en: "Succeeded", fr: "Réussie" },
+    "science.execution.status.running": { pt: "A correr", en: "Running", fr: "En cours" },
+    "science.execution.status.failed": { pt: "Falhou", en: "Failed", fr: "Échouée" },
+    "science.execution.status.aborted": { pt: "Interrompida", en: "Aborted", fr: "Interrompue" },
+    "science.execution.status.recorded": { pt: "Só registada", en: "Recorded only", fr: "Seulement enregistrée" },
+    "science.execution.environment": { pt: "Onde correu", en: "Where it ran", fr: "Où elle s’est exécutée" },
+    "science.execution.environment_placeholder": {
+        pt: "A máquina, o laboratório, o serviço",
+        en: "The machine, the laboratory, the service",
+        fr: "La machine, le laboratoire, le service"
+    },
+    "science.execution.software_label": { pt: "Que software", en: "What software", fr: "Quel logiciel" },
+    "science.execution.software_placeholder": { pt: "Ex.: OpenFOAM", en: "E.g. OpenFOAM", fr: "Ex. : OpenFOAM" },
+    "science.execution.software_version_label": { pt: "Que versão do software", en: "What software version", fr: "Quelle version du logiciel" },
+    "science.execution.software_version_placeholder": { pt: "Ex.: 11", en: "E.g. 11", fr: "Ex. : 11" },
+    "science.execution.notes_label": { pt: "O que houve a registar", en: "What there was to record", fr: "Ce qu’il y avait à consigner" },
+    "science.execution.notes_placeholder": {
+        pt: "Condições, desvios, o que correu mal",
+        en: "Conditions, deviations, what went wrong",
+        fr: "Conditions, écarts, ce qui a mal tourné"
+    },
+    "science.execution.used_head": { pt: "O que esta corrida usou", en: "What this run used", fr: "Ce que cette exécution a utilisé" },
+    "science.execution.methodology_version_label": { pt: "Versão de metodologia", en: "Methodology version", fr: "Version de méthodologie" },
+    "science.execution.dataset_version_label": { pt: "Versão de dataset", en: "Dataset version", fr: "Version de jeu de données" },
+    "science.execution.no_dataset_version": {
+        pt: "Nenhum dataset com versão neste ambiente",
+        en: "No dataset with a version in this workspace",
+        fr: "Aucun jeu de données versionné dans cet espace"
+    },
+    "science.execution.provenance_hint": {
+        pt: "O que escolher aqui fica na proveniência como observado por esta operação — não como algo que alguém afirmou depois.",
+        en: "What you choose here is kept in the provenance as observed by this operation — not as something someone asserted afterwards.",
+        fr: "Ce que vous choisissez ici est conservé dans la provenance comme observé par cette opération — non comme quelque chose que quelqu’un a affirmé après coup."
+    },
+    // Ficha de uma execução.
+    "science.execution.software": { pt: "Software", en: "Software", fr: "Logiciel" },
+    "science.execution.version": { pt: "Versão", en: "Version", fr: "Version" },
+    "science.execution.commit": { pt: "Commit", en: "Commit", fr: "Commit" },
+    "science.execution.notes": { pt: "Notas", en: "Notes", fr: "Notes" },
+    "science.execution.produced_head": { pt: "O que produziu", en: "What it produced", fr: "Ce qu’elle a produit" },
+    "science.execution.no_results": { pt: "Ainda nenhum resultado.", en: "No result yet.", fr: "Aucun résultat pour l’instant." },
+    // Formulário de resultado.
+    "science.result.subtitle": {
+        pt: "O que esta corrida mostrou — incluindo quando mostrou que a hipótese não se sustenta, que é um resultado como outro qualquer.",
+        en: "What this run showed — including when it showed that the hypothesis does not hold up, which is a result like any other.",
+        fr: "Ce que cette exécution a montré — y compris lorsqu’elle a montré que l’hypothèse ne tient pas, ce qui est un résultat comme un autre."
+    },
+    "science.result.origin_callout_title": {
+        pt: "A origem fica registada sozinha",
+        en: "The origin is recorded on its own",
+        fr: "L’origine est enregistrée d’elle-même"
+    },
+    "science.result.origin_callout_body": {
+        pt: "Este resultado nasce da execução {sequence}, e o Ocinye OS escreve essa ligação no mesmo acto. Não há um passo a seguir para indicar de onde veio.",
+        en: "This result comes from execution {sequence}, and Ocinye OS writes that link in the same act. There is no next step to indicate where it came from.",
+        fr: "Ce résultat naît de l’exécution {sequence}, et Ocinye OS écrit ce lien dans le même acte. Il n’y a pas d’étape suivante pour indiquer d’où il vient."
+    },
+    "science.result.result_head": { pt: "O resultado", en: "The result", fr: "Le résultat" },
+    "science.result.title_placeholder": { pt: "O que se pode dizer numa linha", en: "What can be said in one line", fr: "Ce que l’on peut dire en une ligne" },
+    "science.result.summary_label": { pt: "O que diz", en: "What it says", fr: "Ce qu’il dit" },
+    "science.result.summary_placeholder": {
+        pt: "O que se observou, e em que condições",
+        en: "What was observed, and under what conditions",
+        fr: "Ce qui a été observé, et dans quelles conditions"
+    },
+};
+
 /// Todos os grupos de produção. O portão de paridade corre sobre isto.
 ///
 /// Não inclui grupos de teste: uma chave só-`pt` de teste (para provar a queda)
@@ -2053,6 +2355,7 @@ pub const GROUPS: &[&[Entry]] = &[
     AI,
     ADMIN,
     LISTS,
+    SCIENCE,
 ];
 
 /// Um grupo só de teste, para exercitar a queda ao canónico (briefing i18n §77).

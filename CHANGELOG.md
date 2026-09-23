@@ -7,6 +7,14 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização: o ciclo de vida científico — 2026-09-23
+
+Os ecrãs do ciclo de vida científico passam a pt/en/fr: hipóteses, metodologias
+e suas versões, estudos, execuções, resultados, e a validação/reprodução, com a
+proveniência e a linhagem. Os quinze verbos de `research_links` e os estados do
+ciclo lêem-se no idioma de quem olha; os títulos e identificadores dos artefactos
+(dados do Core) não se traduzem. Guarda de pureza `mod pureza_i18n`.
+
 ### Internacionalização: os ecrãs de lista e o filtro da tabela — 2026-09-23
 
 Os oito ecrãs de lista (Ideias, Projectos, Datasets, Bibliografia, Unidades,

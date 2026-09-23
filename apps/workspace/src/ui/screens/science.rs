@@ -101,7 +101,7 @@ pub fn scientific_chain(view: ChainView) -> impl IntoView {
                 <div class="oc-fill">
                     <div class="oc-row oc-row--wrap oc-gap-6">
                         {icon(Icon::Science, 22)}
-                        <h1 class="oc-t-screen">"Ciência"</h1>
+                        <h1 class="oc-t-screen">{crate::i18n::t("science.title")}</h1>
                     </div>
                     <div class="oc-mono oc-mt-3">{contexto}</div>
                 </div>
@@ -110,25 +110,25 @@ pub fn scientific_chain(view: ChainView) -> impl IntoView {
                         .then(|| {
                             view! {
                                 {button(
-                                    Button::new("Nova hipótese", Variant::Primary)
+                                    Button::new(crate::i18n::t("science.new_hypothesis"), Variant::Primary)
                                         .href(
                                             format!("/workspaces/{id}/science/hypotheses/new"),
                                         ),
                                 )}
                                 {button(
-                                    Button::new("Nova metodologia", Variant::Secondary)
+                                    Button::new(crate::i18n::t("science.new_methodology"), Variant::Secondary)
                                         .href(
                                             format!("/workspaces/{id}/science/methodologies/new"),
                                         ),
                                 )}
                                 {button(
-                                    Button::new("Novo estudo", Variant::Secondary)
+                                    Button::new(crate::i18n::t("science.new_study"), Variant::Secondary)
                                         .href(format!("/workspaces/{id}/science/studies/new")),
                                 )}
                             }
                         })}
                     {button(
-                        Button::new("Voltar ao ambiente", Variant::Secondary)
+                        Button::new(crate::i18n::t("science.back_to_workspace"), Variant::Secondary)
                             .href(format!("/workspaces/{id}")),
                     )}
                 </div>
@@ -139,20 +139,18 @@ pub fn scientific_chain(view: ChainView) -> impl IntoView {
             {if vazia {
                 empty_state(EmptyState {
                     icon: Icon::Science,
-                    title: "Ainda não há trabalho científico registado".to_owned(),
+                    title: crate::i18n::t("science.empty.title").to_owned(),
                     body: if may_create {
-                        "A cadeia começa por uma hipótese: o que se quer testar, e porquê. \
-                         Depois vêm a metodologia, o estudo, a execução e o resultado — e \
-                         cada um deles guarda de onde veio."
-                            .to_owned()
+                        crate::i18n::t("science.empty.body_creator").to_owned()
                     } else {
-                        "Quando alguém enunciar uma hipótese neste ambiente, a cadeia \
-                         aparece aqui."
-                            .to_owned()
+                        crate::i18n::t("science.empty.body_viewer").to_owned()
                     },
                     actions: if may_create {
                         vec![
-                            Button::new("Enunciar a primeira hipótese", Variant::Primary)
+                            Button::new(
+                                crate::i18n::t("science.empty.first_hypothesis"),
+                                Variant::Primary,
+                            )
                                 .href(format!("/workspaces/{id}/science/hypotheses/new")),
                         ]
                     } else {
@@ -164,12 +162,12 @@ pub fn scientific_chain(view: ChainView) -> impl IntoView {
             } else {
                 view! {
                     <div class="oc-grid oc-grid--pares">
-                        {etapa("Hipóteses", &hypotheses, "statement", None)}
-                        {etapa("Metodologias", &methodologies, "title", Some("/methodologies"))}
+                        {etapa(crate::i18n::t("science.stage.hypotheses"), &hypotheses, "statement", None)}
+                        {etapa(crate::i18n::t("science.stage.methodologies"), &methodologies, "title", Some("/methodologies"))}
                     </div>
                     <div class="oc-grid oc-grid--pares oc-mt-7">
-                        {etapa("Estudos", &studies, "title", Some("/studies"))}
-                        {etapa("Resultados", &results, "title", Some("/results"))}
+                        {etapa(crate::i18n::t("science.stage.studies"), &studies, "title", Some("/studies"))}
+                        {etapa(crate::i18n::t("science.stage.results"), &results, "title", Some("/results"))}
                     </div>
                 }
                     .into_any()
@@ -196,7 +194,7 @@ fn etapa(
             </div>
             <div class="oc-card__body">
                 {if linhas.is_empty() {
-                    view! { <p class="oc-muted">"Ainda nada."</p> }.into_any()
+                    view! { <p class="oc-muted">{crate::i18n::t("science.stage.empty")}</p> }.into_any()
                 } else {
                     view! {
                         <div>
@@ -304,7 +302,7 @@ pub fn result_detail(view: ResultView) -> impl IntoView {
                     {may_validate
                         .then(|| {
                             button(
-                                Button::new("Validar resultado", Variant::Primary)
+                                Button::new(crate::i18n::t("science.validate_result"), Variant::Primary)
                                     .href(format!("/results/{id}/validate")),
                             )
                         })}
@@ -315,19 +313,19 @@ pub fn result_detail(view: ResultView) -> impl IntoView {
         <div class="oc-page">
             <div class="oc-grid oc-grid--ws">
                 <section class="oc-card">
-                    {section_head("O que este resultado diz", None, None)}
+                    {section_head(crate::i18n::t("science.result.summary_head"), None, None)}
                     <div class="oc-card__body">
                         <p>{summary}</p>
                     </div>
                 </section>
 
                 <section class="oc-card">
-                    {section_head("Validações e reproduções", None, None)}
+                    {section_head(crate::i18n::t("science.result.validations_head"), None, None)}
                     <div class="oc-card__body">
                         {if validations.is_empty() {
                             view! {
                                 <p class="oc-muted">
-                                    "Ninguém validou nem reproduziu este resultado."
+                                    {crate::i18n::t("science.result.no_validations")}
                                 </p>
                             }
                                 .into_any()
@@ -359,18 +357,18 @@ pub fn result_detail(view: ResultView) -> impl IntoView {
             </div>
 
             <section class="oc-card oc-mt-7">
-                {section_head("Proveniência", None, None)}
+                {section_head(crate::i18n::t("science.result.provenance_head"), None, None)}
                 <div class="oc-card__body">
                     {pill_tabs(
                         vec![
-                            Tab::link("Montante", format!("/results/{id}?direction=upstream"), a_montante),
+                            Tab::link(crate::i18n::t("science.lineage.upstream"), format!("/results/{id}?direction=upstream"), a_montante),
                             Tab::link(
-                                "Jusante",
+                                crate::i18n::t("science.lineage.downstream"),
                                 format!("/results/{id}?direction=downstream"),
                                 !a_montante,
                             ),
                         ],
-                        "Sentido da linhagem",
+                        crate::i18n::t("science.lineage.aria"),
                     )}
                     {passos(linhagem, a_montante)}
                 </div>
@@ -392,9 +390,9 @@ fn passos(linhagem: &Value, a_montante: bool) -> impl IntoView {
         .unwrap_or(false);
 
     let vazio = if a_montante {
-        "Nada aponta para a origem deste resultado."
+        crate::i18n::t("science.lineage.empty_upstream")
     } else {
-        "Nada depende deste resultado."
+        crate::i18n::t("science.lineage.empty_downstream")
     };
 
     view! {
@@ -420,9 +418,9 @@ fn passos(linhagem: &Value, a_montante: bool) -> impl IntoView {
                             // é um facto que o sistema viu acontecer.
                             let origem = text(passo, "origem");
                             let (tom, etiqueta) = if origem == "operation" {
-                                (Tone::Navy, "Observada")
+                                (Tone::Navy, crate::i18n::t("science.provenance.observed"))
                             } else {
-                                (Tone::Gray, "Declarada")
+                                (Tone::Gray, crate::i18n::t("science.provenance.declared"))
                             };
                             view! {
                                 <div class="oc-list__row">
@@ -445,8 +443,7 @@ fn passos(linhagem: &Value, a_montante: bool) -> impl IntoView {
             .then(|| {
                 view! {
                     <p class="oc-muted oc-mt-3">
-                        "A travessia atingiu o limite de profundidade. Abre um dos recursos \
-                         acima para continuar a partir dele."
+                        {crate::i18n::t("science.lineage.truncated")}
                     </p>
                 }
             })}
@@ -496,15 +493,12 @@ pub fn validate_result(view: ValidateView) -> impl IntoView {
     // Sem execução conhecida não há reprodução possível, e o controlo diz
     // porquê em vez de recusar depois de a pessoa preencher tudo.
     let sem_execucao = execucoes.is_empty();
-    let porque_nao = sem_execucao.then(|| {
-        "Este resultado não tem nenhuma execução registada que sirva de prova. \
-         Regista a execução que o reproduziu antes de o dar por reproduzido."
-            .to_owned()
-    });
+    let porque_nao =
+        sem_execucao.then(|| crate::i18n::t("science.validate.no_execution").to_owned());
 
     let opcoes_de_execucao: Vec<SelectOption> = std::iter::once(SelectOption {
         value: String::new(),
-        label: "Nenhuma".to_owned(),
+        label: crate::i18n::t("science.option.none").to_owned(),
         available: true,
         selected: true,
     })
@@ -512,7 +506,14 @@ pub fn validate_result(view: ValidateView) -> impl IntoView {
         let sequencia = e.get("sequence").and_then(Value::as_i64).unwrap_or(0);
         SelectOption {
             value: text(e, "id"),
-            label: format!("Execução {sequencia} · {}", text(e, "status")),
+            label: format!(
+                "{} · {}",
+                crate::i18n::tf(
+                    "science.execution.numbered",
+                    &[("sequence", &sequencia.to_string())],
+                ),
+                text(e, "status"),
+            ),
             available: true,
             selected: false,
         }
@@ -523,8 +524,8 @@ pub fn validate_result(view: ValidateView) -> impl IntoView {
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Validar resultado"</h1>
-                    <p>{format!("Sobre «{title}».")}</p>
+                    <h1>{crate::i18n::t("science.validate_result")}</h1>
+                    <p>{crate::i18n::tf("science.validate.subtitle", &[("title", &title)])}</p>
                 </div>
             </div>
 
@@ -534,26 +535,24 @@ pub fn validate_result(view: ValidateView) -> impl IntoView {
                 })}
 
             <div class="oc-callout" role="note">
-                <strong>"Isto fica em seu nome"</strong>
+                <strong>{crate::i18n::t("science.validate.callout_title")}</strong>
                 <p>
-                    "Uma validação é uma afirmação institucional sobre o que a Ocinye sabe. \
-                     O registo guarda quem a fez, e é por isso que nenhum agente a pode \
-                     fazer por si."
+                    {crate::i18n::t("science.validate.callout_body")}
                 </p>
             </div>
 
             <form method="post" action=format!("/results/{id}/validate")>
                 {card(
-                    section_head("A AFIRMAÇÃO", None, None),
+                    section_head(crate::i18n::t("science.claim_head"), None, None),
                     view! {
                         {radio_group(
                             "kind",
-                            "O que está a registar",
+                            crate::i18n::t("science.validate.kind_label"),
                             vec![
-                                RadioOption::new("validation", "Validação", true),
+                                RadioOption::new("validation", crate::i18n::t("science.validate.kind.validation"), true),
                                 RadioOption {
                                     value: "reproduction",
-                                    label: "Reprodução",
+                                    label: crate::i18n::t("science.validate.kind.reproduction"),
                                     selected: false,
                                     unavailable_reason: porque_nao,
                                 },
@@ -561,33 +560,33 @@ pub fn validate_result(view: ValidateView) -> impl IntoView {
                         )}
                         {radio_group(
                             "outcome",
-                            "Desfecho",
+                            crate::i18n::t("science.validate.outcome_label"),
                             vec![
-                                RadioOption::new("confirmed", "Confirmou", true),
-                                RadioOption::new("contradicted", "Contradisse", false),
-                                RadioOption::new("inconclusive", "Foi inconclusiva", false),
+                                RadioOption::new("confirmed", crate::i18n::t("science.validate.outcome.confirmed"), true),
+                                RadioOption::new("contradicted", crate::i18n::t("science.validate.outcome.contradicted"), false),
+                                RadioOption::new("inconclusive", crate::i18n::t("science.validate.outcome.inconclusive"), false),
                             ],
                         )}
                         {select_labelled(
                             "validation-execution",
-                            "A execução que serviu de prova",
+                            crate::i18n::t("science.validate.execution_label"),
                             "execution_id",
                             opcoes_de_execucao,
                         )}
                         {textarea(
                             "validation-note",
-                            "O que observou",
+                            crate::i18n::t("science.validate.note_label"),
                             "note",
-                            "O que viu, e em que condições",
+                            crate::i18n::t("science.validate.note_placeholder"),
                             64,
                         )}
                     },
                 )}
 
                 <div class="oc-row oc-gap-6 oc-mt-7">
-                    {button(Button::new("Registar", Variant::Primary))}
+                    {button(Button::new(crate::i18n::t("science.action.record"), Variant::Primary))}
                     {button(
-                        Button::new("Cancelar", Variant::Secondary).href(format!("/results/{id}")),
+                        Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href(format!("/results/{id}")),
                     )}
                 </div>
             </form>
@@ -655,30 +654,30 @@ fn recusa(message: Option<String>) -> impl IntoView {
 fn classificacoes() -> impl IntoView {
     select_labelled(
         "classificacao",
-        "Classificação",
+        crate::i18n::t("classification.unknown"),
         "classification",
         vec![
             SelectOption {
                 value: "INTERNAL".to_owned(),
-                label: "Interna".to_owned(),
+                label: crate::i18n::t("science.class.internal").to_owned(),
                 available: true,
                 selected: true,
             },
             SelectOption {
                 value: "PUBLIC".to_owned(),
-                label: "Pública".to_owned(),
+                label: crate::i18n::t("science.class.public").to_owned(),
                 available: true,
                 selected: false,
             },
             SelectOption {
                 value: "CONFIDENTIAL".to_owned(),
-                label: "Confidencial".to_owned(),
+                label: crate::i18n::t("science.class.confidential").to_owned(),
                 available: true,
                 selected: false,
             },
             SelectOption {
                 value: "RESTRICTED".to_owned(),
-                label: "Restrita".to_owned(),
+                label: crate::i18n::t("science.class.restricted").to_owned(),
                 available: true,
                 selected: false,
             },
@@ -694,35 +693,34 @@ pub fn nova_hipotese(contexto: Contexto) -> impl IntoView {
     view! {
         <div class="oc-page oc-page--narrow">
             {cabecalho(
-                "Nova hipótese",
-                "Uma afirmação que se pode testar. Enunciá-la é o princípio da cadeia — \
-                 e uma hipótese que não se sustenta é um desfecho científico, não um erro.",
+                crate::i18n::t("science.new_hypothesis"),
+                crate::i18n::t("science.hypothesis.subtitle"),
                 &workspace,
             )}
             {recusa(message)}
 
             <form method="post" action=format!("/workspaces/{id}/science/hypotheses/new")>
                 {card(
-                    section_head("A AFIRMAÇÃO", None, None),
+                    section_head(crate::i18n::t("science.claim_head"), None, None),
                     view! {
                         {textarea(
                             "hipotese-afirmacao",
-                            "O que se afirma",
+                            crate::i18n::t("science.hypothesis.statement_label"),
                             "statement",
-                            "Ex.: a dopagem reduz a resistência de contacto",
+                            crate::i18n::t("science.hypothesis.statement_placeholder"),
                             64,
                         )}
                         {textarea(
                             "hipotese-razao",
-                            "Porque vale a pena testar",
+                            crate::i18n::t("science.hypothesis.rationale_label"),
                             "rationale",
-                            "O que se sabe hoje, e o que falta saber",
+                            crate::i18n::t("science.hypothesis.rationale_placeholder"),
                             64,
                         )}
                         {classificacoes()}
                     },
                 )}
-                {accoes(&format!("/workspaces/{id}/science"), "Enunciar")}
+                {accoes(&format!("/workspaces/{id}/science"), crate::i18n::t("science.hypothesis.submit"))}
             </form>
         </div>
     }
@@ -734,7 +732,7 @@ fn accoes(voltar: &str, confirmar: &'static str) -> impl IntoView {
     view! {
         <div class="oc-row oc-gap-6 oc-mt-7">
             {button(Button::new(confirmar, Variant::Primary))}
-            {button(Button::new("Cancelar", Variant::Secondary).href(voltar))}
+            {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href(voltar))}
         </div>
     }
 }
@@ -747,36 +745,34 @@ pub fn nova_metodologia(contexto: Contexto) -> impl IntoView {
     view! {
         <div class="oc-page oc-page--narrow">
             {cabecalho(
-                "Nova metodologia",
-                "A metodologia é a identidade durável do método: o nome pelo qual a \
-                 instituição o conhece daqui a cinco anos. O que ela diz hoje vive numa \
-                 versão, e publica-se a seguir.",
+                crate::i18n::t("science.new_methodology"),
+                crate::i18n::t("science.methodology.subtitle"),
                 &workspace,
             )}
             {recusa(message)}
 
             <form method="post" action=format!("/workspaces/{id}/science/methodologies/new")>
                 {card(
-                    section_head("O MÉTODO", None, None),
+                    section_head(crate::i18n::t("science.methodology.method_head"), None, None),
                     view! {
                         {text_field(
                             "metodologia-titulo",
-                            "Como se chama",
+                            crate::i18n::t("science.field.name_label"),
                             "title",
-                            "Ex.: medição a quatro pontas",
+                            crate::i18n::t("science.methodology.title_placeholder"),
                             "text",
                         )}
                         {textarea(
                             "metodologia-proposito",
-                            "Para que serve",
+                            crate::i18n::t("science.methodology.purpose_label"),
                             "purpose",
-                            "Que pergunta este método responde",
+                            crate::i18n::t("science.methodology.purpose_placeholder"),
                             64,
                         )}
                         {classificacoes()}
                     },
                 )}
-                {accoes(&format!("/workspaces/{id}/science"), "Criar")}
+                {accoes(&format!("/workspaces/{id}/science"), crate::i18n::t("action.create"))}
             </form>
         </div>
     }
@@ -829,12 +825,12 @@ pub fn metodologia(view: MetodologiaView) -> impl IntoView {
                     {may_create
                         .then(|| {
                             button(
-                                Button::new("Nova versão", Variant::Primary)
+                                Button::new(crate::i18n::t("science.new_version"), Variant::Primary)
                                     .href(format!("/methodologies/{id}/versions/new")),
                             )
                         })}
                     {button(
-                        Button::new("Voltar à ciência", Variant::Secondary)
+                        Button::new(crate::i18n::t("science.back_to_science"), Variant::Secondary)
                             .href(format!("/workspaces/{workspace_id}/science")),
                     )}
                 </div>
@@ -843,13 +839,12 @@ pub fn metodologia(view: MetodologiaView) -> impl IntoView {
 
         <div class="oc-page">
             <section class="oc-card">
-                {section_head("Versões", None, None)}
+                {section_head(crate::i18n::t("science.versions_head"), None, None)}
                 <div class="oc-card__body">
                     {if versoes.is_empty() {
                         view! {
                             <p class="oc-muted">
-                                "Ainda nenhuma versão. Um estudo só pode seguir uma versão \
-                                 publicada, porque é a versão que a proveniência cita."
+                                {crate::i18n::t("science.methodology.no_versions")}
                             </p>
                         }
                             .into_any()
@@ -908,8 +903,8 @@ pub fn nova_versao(view: NovaVersaoView) -> impl IntoView {
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Nova versão"</h1>
-                    <p>{format!("De «{title}».")}</p>
+                    <h1>{crate::i18n::t("science.new_version")}</h1>
+                    <p>{crate::i18n::tf("science.version.subtitle", &[("title", &title)])}</p>
                 </div>
             </div>
             {recusa(message)}
@@ -923,11 +918,9 @@ pub fn nova_versao(view: NovaVersaoView) -> impl IntoView {
                     let etiqueta = text(&v, "label");
                     view! {
                         <div class="oc-callout" role="note">
-                            <strong>{format!("Em vigor: {etiqueta}")}</strong>
+                            <strong>{crate::i18n::tf("science.version.in_force", &[("label", &etiqueta)])}</strong>
                             <p>
-                                "Publicar substitui-a. A anterior fica no histórico e continua \
-                                 a valer para tudo o que já a citou — um resultado produzido \
-                                 com ela continua a dizer que foi com ela."
+                                {crate::i18n::t("science.version.in_force_body")}
                             </p>
                         </div>
                     }
@@ -935,25 +928,25 @@ pub fn nova_versao(view: NovaVersaoView) -> impl IntoView {
 
             <form method="post" action=format!("/methodologies/{id}/versions/new")>
                 {card(
-                    section_head("A VERSÃO", None, None),
+                    section_head(crate::i18n::t("science.version.version_head"), None, None),
                     view! {
                         {text_field(
                             "versao-etiqueta",
-                            "Como se chama",
+                            crate::i18n::t("science.field.name_label"),
                             "label",
-                            "Ex.: v2, 2026-rev-b",
+                            crate::i18n::t("science.version.label_placeholder"),
                             "text",
                         )}
                         {textarea(
                             "versao-resumo",
-                            "O que esta versão diz",
+                            crate::i18n::t("science.version.summary_label"),
                             "summary",
-                            "O que muda em relação à anterior, ou o que o método faz",
+                            crate::i18n::t("science.version.summary_placeholder"),
                             80,
                         )}
                     },
                 )}
-                {accoes(&format!("/methodologies/{id}"), "Publicar")}
+                {accoes(&format!("/methodologies/{id}"), crate::i18n::t("science.version.submit"))}
             </form>
         </div>
     }
@@ -988,7 +981,7 @@ pub fn novo_estudo(view: NovoEstudoView) -> impl IntoView {
 
     let hipoteses: Vec<SelectOption> = std::iter::once(SelectOption {
         value: String::new(),
-        label: "Nenhuma".to_owned(),
+        label: crate::i18n::t("science.option.none").to_owned(),
         available: true,
         selected: true,
     })
@@ -1004,9 +997,9 @@ pub fn novo_estudo(view: NovoEstudoView) -> impl IntoView {
     let versoes: Vec<SelectOption> = std::iter::once(SelectOption {
         value: String::new(),
         label: if sem_versoes {
-            "Nenhuma metodologia publicada neste ambiente".to_owned()
+            crate::i18n::t("science.no_published_methodology").to_owned()
         } else {
-            "Nenhuma".to_owned()
+            crate::i18n::t("science.option.none").to_owned()
         },
         available: true,
         selected: true,
@@ -1026,23 +1019,21 @@ pub fn novo_estudo(view: NovoEstudoView) -> impl IntoView {
     view! {
         <div class="oc-page oc-page--narrow">
             {cabecalho(
-                "Novo estudo",
-                "Um estudo põe uma hipótese à prova por um método. O que ele seguiu fica \
-                 registado com a versão exacta — porque o método melhora, e o que se fez \
-                 não muda por isso.",
+                crate::i18n::t("science.new_study"),
+                crate::i18n::t("science.study.subtitle"),
                 &workspace,
             )}
             {recusa(message)}
 
             <form method="post" action=format!("/workspaces/{id}/science/studies/new")>
                 {card(
-                    section_head("O ESTUDO", None, None),
+                    section_head(crate::i18n::t("science.study.study_head"), None, None),
                     view! {
                         {text_field(
                             "estudo-titulo",
-                            "Como se chama",
+                            crate::i18n::t("science.field.name_label"),
                             "title",
-                            "Ex.: ensaio de carga em contactos dopados",
+                            crate::i18n::t("science.study.title_placeholder"),
                             "text",
                         )}
                         // Género fechado: o vocabulário é do Core, e um campo
@@ -1050,18 +1041,18 @@ pub fn novo_estudo(view: NovoEstudoView) -> impl IntoView {
                         // chegar a um `CHECK` da base.
                         {radio_group(
                             "kind",
-                            "Género",
+                            crate::i18n::t("science.study.kind_label"),
                             vec![
-                                RadioOption::new("physical_experiment", "Experiência física", true),
-                                RadioOption::new("simulation", "Simulação", false),
-                                RadioOption::new("analysis", "Análise", false),
+                                RadioOption::new("physical_experiment", crate::i18n::t("science.study.kind.physical"), true),
+                                RadioOption::new("simulation", crate::i18n::t("science.study.kind.simulation"), false),
+                                RadioOption::new("analysis", crate::i18n::t("science.study.kind.analysis"), false),
                             ],
                         )}
                         {textarea(
                             "estudo-objectivo",
-                            "O que se propõe descobrir",
+                            crate::i18n::t("science.study.objective_label"),
                             "objective",
-                            "O que este estudo tem de mostrar para responder à pergunta",
+                            crate::i18n::t("science.study.objective_placeholder"),
                             64,
                         )}
                         {classificacoes()}
@@ -1069,17 +1060,17 @@ pub fn novo_estudo(view: NovoEstudoView) -> impl IntoView {
                 )}
 
                 {card(
-                    section_head("A CADEIA", None, None),
+                    section_head(crate::i18n::t("science.study.chain_head"), None, None),
                     view! {
                         {select_labelled(
                             "estudo-hipotese",
-                            "Hipótese que testa",
+                            crate::i18n::t("science.study.hypothesis_label"),
                             "hypothesis_id",
                             hipoteses,
                         )}
                         {select_labelled(
                             "estudo-metodologia",
-                            "Versão de metodologia que segue",
+                            crate::i18n::t("science.study.methodology_label"),
                             "methodology_version_id",
                             versoes,
                         )}
@@ -1087,15 +1078,13 @@ pub fn novo_estudo(view: NovoEstudoView) -> impl IntoView {
                             .then(|| {
                                 view! {
                                     <p class="oc-muted">
-                                        "Nenhuma metodologia deste ambiente tem versão publicada. \
-                                         Um estudo pode ficar sem ela, e a linhagem dirá que \
-                                         método seguiu quando alguém publicar uma."
+                                        {crate::i18n::t("science.study.no_methodology_hint")}
                                     </p>
                                 }
                             })}
                     },
                 )}
-                {accoes(&format!("/workspaces/{id}/science"), "Desenhar")}
+                {accoes(&format!("/workspaces/{id}/science"), crate::i18n::t("science.study.submit"))}
             </form>
         </div>
     }
@@ -1144,12 +1133,12 @@ pub fn estudo(view: EstudoView) -> impl IntoView {
                     {may_create
                         .then(|| {
                             button(
-                                Button::new("Registar execução", Variant::Primary)
+                                Button::new(crate::i18n::t("science.record_execution"), Variant::Primary)
                                     .href(format!("/studies/{id}/executions/new")),
                             )
                         })}
                     {button(
-                        Button::new("Voltar à ciência", Variant::Secondary)
+                        Button::new(crate::i18n::t("science.back_to_science"), Variant::Secondary)
                             .href(format!("/workspaces/{workspace_id}/science")),
                     )}
                 </div>
@@ -1158,14 +1147,12 @@ pub fn estudo(view: EstudoView) -> impl IntoView {
 
         <div class="oc-page">
             <section class="oc-card">
-                {section_head("Execuções", None, None)}
+                {section_head(crate::i18n::t("science.executions_head"), None, None)}
                 <div class="oc-card__body">
                     {if corridas.is_empty() {
                         view! {
                             <p class="oc-muted">
-                                "Ainda nenhuma corrida. É a execução, e não o estudo, que \
-                                 produz um resultado — e são duas execuções, e não dois \
-                                 estudos, que se comparam quando se reproduz."
+                                {crate::i18n::t("science.study.no_executions")}
                             </p>
                         }
                             .into_any()
@@ -1189,7 +1176,7 @@ pub fn estudo(view: EstudoView) -> impl IntoView {
                                                     class="oc-mono"
                                                     href=format!("/executions/{execucao_id}")
                                                 >
-                                                    {format!("Execução {sequencia}")}
+                                                    {crate::i18n::tf("science.execution.numbered", &[("sequence", &sequencia.to_string())])}
                                                 </a>
                                                 <span class="oc-fill oc-truncate oc-muted">
                                                     {onde.unwrap_or_default()}
@@ -1243,7 +1230,7 @@ pub fn nova_execucao(view: NovaExecucaoView) -> impl IntoView {
             label: if sem {
                 vazio.to_owned()
             } else {
-                "Nenhuma".to_owned()
+                crate::i18n::t("science.option.none").to_owned()
             },
             available: true,
             selected: true,
@@ -1261,13 +1248,9 @@ pub fn nova_execucao(view: NovaExecucaoView) -> impl IntoView {
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Registar execução"</h1>
+                    <h1>{crate::i18n::t("science.record_execution")}</h1>
                     <p>
-                        {format!(
-                            "Uma corrida de «{title}». É aqui que a reprodutibilidade mora: \
-                             o mesmo estudo corre duas vezes e dá duas execuções, e são elas \
-                             que se comparam.",
-                        )}
+                        {crate::i18n::tf("science.execution.subtitle", &[("title", &title)])}
                     </p>
                 </div>
             </div>
@@ -1275,75 +1258,74 @@ pub fn nova_execucao(view: NovaExecucaoView) -> impl IntoView {
 
             <form method="post" action=format!("/studies/{id}/executions/new")>
                 {card(
-                    section_head("A CORRIDA", None, None),
+                    section_head(crate::i18n::t("science.run_head"), None, None),
                     view! {
                         {radio_group(
                             "status",
-                            "Estado",
+                            crate::i18n::t("science.execution.status_label"),
                             vec![
-                                RadioOption::new("succeeded", "Correu bem", true),
-                                RadioOption::new("running", "A correr", false),
-                                RadioOption::new("failed", "Falhou", false),
-                                RadioOption::new("aborted", "Interrompida", false),
-                                RadioOption::new("recorded", "Só registada", false),
+                                RadioOption::new("succeeded", crate::i18n::t("science.execution.status.succeeded"), true),
+                                RadioOption::new("running", crate::i18n::t("science.execution.status.running"), false),
+                                RadioOption::new("failed", crate::i18n::t("science.execution.status.failed"), false),
+                                RadioOption::new("aborted", crate::i18n::t("science.execution.status.aborted"), false),
+                                RadioOption::new("recorded", crate::i18n::t("science.execution.status.recorded"), false),
                             ],
                         )}
                         {text_field(
                             "execucao-ambiente",
-                            "Onde correu",
+                            crate::i18n::t("science.execution.environment"),
                             "environment",
-                            "A máquina, o laboratório, o serviço",
+                            crate::i18n::t("science.execution.environment_placeholder"),
                             "text",
                         )}
                         {text_field(
                             "execucao-software",
-                            "Que software",
+                            crate::i18n::t("science.execution.software_label"),
                             "software_name",
-                            "Ex.: OpenFOAM",
+                            crate::i18n::t("science.execution.software_placeholder"),
                             "text",
                         )}
                         {text_field(
                             "execucao-versao",
-                            "Que versão do software",
+                            crate::i18n::t("science.execution.software_version_label"),
                             "software_version",
-                            "Ex.: 11",
+                            crate::i18n::t("science.execution.software_version_placeholder"),
                             "text",
                         )}
                         {textarea(
                             "execucao-notas",
-                            "O que houve a registar",
+                            crate::i18n::t("science.execution.notes_label"),
                             "notes",
-                            "Condições, desvios, o que correu mal",
+                            crate::i18n::t("science.execution.notes_placeholder"),
                             64,
                         )}
                     },
                 )}
 
                 {card(
-                    section_head("O QUE ESTA CORRIDA USOU", None, None),
+                    section_head(crate::i18n::t("science.execution.used_head"), None, None),
                     view! {
                         {select_labelled(
                             "execucao-metodologia",
-                            "Versão de metodologia",
+                            crate::i18n::t("science.execution.methodology_version_label"),
                             "methodology_version_id",
                             opcoes(
                                 methodology_versions,
-                                "Nenhuma metodologia publicada neste ambiente",
+                                crate::i18n::t("science.no_published_methodology"),
                             ),
                         )}
                         {select_labelled(
                             "execucao-dataset",
-                            "Versão de dataset",
+                            crate::i18n::t("science.execution.dataset_version_label"),
                             "dataset_version_id",
-                            opcoes(dataset_versions, "Nenhum dataset com versão neste ambiente"),
+                            opcoes(dataset_versions, crate::i18n::t("science.execution.no_dataset_version")),
                         )}
                         <p class="oc-muted">
-                            "O que escolher aqui fica na proveniência como observado por esta \
-                             operação — não como algo que alguém afirmou depois."
+                            {crate::i18n::t("science.execution.provenance_hint")}
                         </p>
                     },
                 )}
-                {accoes(&format!("/studies/{id}"), "Registar")}
+                {accoes(&format!("/studies/{id}"), crate::i18n::t("science.action.record"))}
             </form>
         </div>
     }
@@ -1381,11 +1363,26 @@ pub fn execucao(view: ExecucaoView) -> impl IntoView {
     let saidos = items(&results);
 
     let ficha = [
-        ("Onde correu", maybe(&execution, "environment")),
-        ("Software", maybe(&execution, "software_name")),
-        ("Versão", maybe(&execution, "software_version")),
-        ("Commit", maybe(&execution, "software_commit")),
-        ("Notas", maybe(&execution, "notes")),
+        (
+            crate::i18n::t("science.execution.environment"),
+            maybe(&execution, "environment"),
+        ),
+        (
+            crate::i18n::t("science.execution.software"),
+            maybe(&execution, "software_name"),
+        ),
+        (
+            crate::i18n::t("science.execution.version"),
+            maybe(&execution, "software_version"),
+        ),
+        (
+            crate::i18n::t("science.execution.commit"),
+            maybe(&execution, "software_commit"),
+        ),
+        (
+            crate::i18n::t("science.execution.notes"),
+            maybe(&execution, "notes"),
+        ),
     ];
 
     view! {
@@ -1393,7 +1390,7 @@ pub fn execucao(view: ExecucaoView) -> impl IntoView {
             <div class="oc-row--top oc-gap-11 oc-mb-3">
                 <div class="oc-fill">
                     <div class="oc-row oc-row--wrap oc-gap-6">
-                        <h1 class="oc-t-screen">{format!("Execução {sequencia}")}</h1>
+                        <h1 class="oc-t-screen">{crate::i18n::tf("science.execution.numbered", &[("sequence", &sequencia.to_string())])}</h1>
                         {badge(estado.clone(), Tone::of(&estado))}
                     </div>
                     <div class="oc-mono oc-mt-3">
@@ -1408,7 +1405,7 @@ pub fn execucao(view: ExecucaoView) -> impl IntoView {
                     {may_create
                         .then(|| {
                             button(
-                                Button::new("Registar resultado", Variant::Primary)
+                                Button::new(crate::i18n::t("science.record_result"), Variant::Primary)
                                     .href(format!("/executions/{id}/results/new")),
                             )
                         })}
@@ -1419,7 +1416,7 @@ pub fn execucao(view: ExecucaoView) -> impl IntoView {
         <div class="oc-page">
             <div class="oc-grid oc-grid--pares">
                 <section class="oc-card">
-                    {section_head("A corrida", None, None)}
+                    {section_head(crate::i18n::t("science.run_head"), None, None)}
                     <div class="oc-card__body">
                         {ficha
                             .into_iter()
@@ -1439,10 +1436,10 @@ pub fn execucao(view: ExecucaoView) -> impl IntoView {
                 </section>
 
                 <section class="oc-card">
-                    {section_head("O que produziu", None, None)}
+                    {section_head(crate::i18n::t("science.execution.produced_head"), None, None)}
                     <div class="oc-card__body">
                         {if saidos.is_empty() {
-                            view! { <p class="oc-muted">"Ainda nenhum resultado."</p> }.into_any()
+                            view! { <p class="oc-muted">{crate::i18n::t("science.execution.no_results")}</p> }.into_any()
                         } else {
                             view! {
                                 <div>
@@ -1513,51 +1510,55 @@ pub fn novo_resultado(view: NovoResultadoView) -> impl IntoView {
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Registar resultado"</h1>
+                    <h1>{crate::i18n::t("science.record_result")}</h1>
                     <p>
-                        "O que esta corrida mostrou — incluindo quando mostrou que a hipótese \
-                         não se sustenta, que é um resultado como outro qualquer."
+                        {crate::i18n::t("science.result.subtitle")}
                     </p>
                 </div>
                 <div class="oc-mono">
-                    {format!("{study_title} · execução {sequencia}")}
+                    {format!(
+                        "{study_title} · {}",
+                        crate::i18n::tf(
+                            "science.execution.lower_numbered",
+                            &[("sequence", &sequencia.to_string())],
+                        ),
+                    )}
                 </div>
             </div>
             {recusa(message)}
 
             <div class="oc-callout" role="note">
-                <strong>"A origem fica registada sozinha"</strong>
+                <strong>{crate::i18n::t("science.result.origin_callout_title")}</strong>
                 <p>
-                    {format!(
-                        "Este resultado nasce da execução {sequencia}, e o Ocinye OS escreve \
-                         essa ligação no mesmo acto. Não há um passo a seguir para indicar \
-                         de onde veio.",
+                    {crate::i18n::tf(
+                        "science.result.origin_callout_body",
+                        &[("sequence", &sequencia.to_string())],
                     )}
                 </p>
             </div>
 
             <form method="post" action=format!("/executions/{id}/results/new")>
                 {card(
-                    section_head("O RESULTADO", None, None),
+                    section_head(crate::i18n::t("science.result.result_head"), None, None),
                     view! {
                         {text_field(
                             "resultado-titulo",
-                            "Como se chama",
+                            crate::i18n::t("science.field.name_label"),
                             "title",
-                            "O que se pode dizer numa linha",
+                            crate::i18n::t("science.result.title_placeholder"),
                             "text",
                         )}
                         {textarea(
                             "resultado-resumo",
-                            "O que diz",
+                            crate::i18n::t("science.result.summary_label"),
                             "summary",
-                            "O que se observou, e em que condições",
+                            crate::i18n::t("science.result.summary_placeholder"),
                             80,
                         )}
                         {classificacoes()}
                     },
                 )}
-                {accoes(&format!("/executions/{id}"), "Registar")}
+                {accoes(&format!("/executions/{id}"), crate::i18n::t("science.action.record"))}
             </form>
         </div>
     }
@@ -1802,5 +1803,223 @@ mod tests {
             saida.contains("/methodologies/1/versions/new"),
             "não há caminho para substituir a versão em vigor"
         );
+    }
+}
+
+/// Um ecrã, um idioma: a cadeia científica inteira renderizada em francês não
+/// deixa passar chrome português. Cobre as três superfícies do ficheiro — a
+/// cadeia e o seu estado vazio, o detalhe de um resultado com proveniência dos
+/// dois lados, os formulários de hipótese/metodologia/versão/estudo/execução/
+/// resultado, e o de validação — porque uma língua misturada esconde-se sempre
+/// no ramo que o teste de agulhas não visitou (i18n §84, guarda de chrome).
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+    use serde_json::json;
+
+    fn ambiente() -> Value {
+        json!({"id": "55555555-5555-5555-5555-555555555555", "code": "AI-P", "unit_code": "AI"})
+    }
+
+    #[tokio::test]
+    async fn a_ciencia_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+
+        let fr = with_locale(Locale::Fr, async {
+            let cadeia = scientific_chain(ChainView {
+                overview: json!({"workspace": ambiente()}),
+                hypotheses: json!([{
+                    "id": "1", "statement": "Hypothèse A",
+                    "status_label": "Ouverte", "classification": "INTERNAL"
+                }]),
+                methodologies: json!([]),
+                studies: json!([]),
+                results: json!([]),
+                may_create: true,
+            })
+            .to_html();
+
+            let vazia = scientific_chain(ChainView {
+                overview: json!({"workspace": ambiente()}),
+                hypotheses: json!([]),
+                methodologies: json!([]),
+                studies: json!([]),
+                results: json!([]),
+                may_create: true,
+            })
+            .to_html();
+
+            let resultado = result_detail(ResultView {
+                result: json!({
+                    "id": "9", "title": "Titre du résultat", "summary": "Résumé.",
+                    "status_label": "Confirmé", "classification": "INTERNAL"
+                }),
+                validations: json!([]),
+                upstream: json!({"passos": [
+                    {
+                        "de": {"kind": "study_execution", "label": "Essai · exécution 3"},
+                        "para": {"kind": "result", "label": "Titre du résultat"},
+                        "relacao_legivel": "a produit", "origem": "operation"
+                    },
+                    {
+                        "de": {"kind": "dataset_version", "label": "SCADA · v4"},
+                        "para": {"kind": "study_execution", "label": "Essai · exécution 3"},
+                        "relacao_legivel": "a utilisé", "origem": "declared"
+                    }
+                ], "truncada": true}),
+                downstream: json!({"passos": [], "truncada": false}),
+                direction: "upstream",
+                may_validate: true,
+            })
+            .to_html();
+
+            let validar = validate_result(ValidateView {
+                result: json!({"id": "9", "title": "Titre du résultat"}),
+                executions: json!([{"id": "e1", "sequence": 3, "status": "succeeded"}]),
+                message: None,
+            })
+            .to_html();
+
+            let hipotese = nova_hipotese(Contexto {
+                workspace: ambiente(),
+                message: None,
+            })
+            .to_html();
+
+            let metodologia_nova = nova_metodologia(Contexto {
+                workspace: ambiente(),
+                message: None,
+            })
+            .to_html();
+
+            let metodologia_detalhe = metodologia(MetodologiaView {
+                methodology: json!({
+                    "id": "1", "workspace_id": "2", "title": "Méthode",
+                    "classification": "INTERNAL"
+                }),
+                versions: json!([]),
+                may_create: true,
+            })
+            .to_html();
+
+            let versao = nova_versao(NovaVersaoView {
+                methodology: json!({"id": "1", "title": "Méthode"}),
+                em_vigor: Some(json!({"label": "v1"})),
+                message: None,
+            })
+            .to_html();
+
+            let estudo_novo = novo_estudo(NovoEstudoView {
+                workspace: ambiente(),
+                hypotheses: json!([]),
+                methodology_versions: Vec::new(),
+                message: None,
+            })
+            .to_html();
+
+            let estudo_detalhe = estudo(EstudoView {
+                study: json!({
+                    "id": "1", "workspace_id": "2", "title": "Essai",
+                    "kind_label": "Analyse", "status_label": "Ouvert",
+                    "classification": "INTERNAL"
+                }),
+                executions: json!([]),
+                may_create: true,
+            })
+            .to_html();
+
+            let execucao_nova = nova_execucao(NovaExecucaoView {
+                study: json!({"id": "1", "title": "Essai"}),
+                methodology_versions: Vec::new(),
+                dataset_versions: Vec::new(),
+                message: None,
+            })
+            .to_html();
+
+            let execucao_detalhe = execucao(ExecucaoView {
+                execution: json!({
+                    "id": "1", "sequence": 3, "status": "succeeded",
+                    "environment": "Labo", "notes": "RAS"
+                }),
+                study: json!({"id": "1", "title": "Essai"}),
+                results: json!([]),
+                may_create: true,
+            })
+            .to_html();
+
+            let resultado_novo = novo_resultado(NovoResultadoView {
+                execution: json!({"id": "1", "sequence": 3}),
+                study: json!({"title": "Essai"}),
+                message: None,
+            })
+            .to_html();
+
+            [
+                cadeia,
+                vazia,
+                resultado,
+                validar,
+                hipotese,
+                metodologia_nova,
+                metodologia_detalhe,
+                versao,
+                estudo_novo,
+                estudo_detalhe,
+                execucao_nova,
+                execucao_detalhe,
+                resultado_novo,
+            ]
+            .join("")
+        })
+        .await;
+
+        for francesa in [
+            "Nouvelle hypothèse",
+            "Nouvelle méthodologie",
+            "Nouvelle étude",
+            "Retour à l’espace",
+            "Hypothèses",
+            "Provenance",
+            "En amont",
+            "En aval",
+            "Observée",
+            "Déclarée",
+            "Sens de la lignée",
+            "Valider le résultat",
+            "Ce que vous enregistrez",
+            "L’affirmation",
+            "La méthode",
+            "La chaîne",
+            "Ce que cette exécution a utilisé",
+            "Le résultat",
+            "Concevoir",
+            "Publier",
+            "Énoncer",
+            "Aucune",
+        ] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+
+        for portuguesa in [
+            "Ciência",
+            "Nova hipótese",
+            "Voltar ao ambiente",
+            "Proveniência",
+            "Montante",
+            "Jusante",
+            "Observada",
+            "Declarada",
+            "Validar resultado",
+            "A afirmação",
+            "O que esta corrida usou",
+            "Desenhar",
+            "Enunciar a primeira hipótese",
+            "Nenhuma",
+        ] {
+            assert!(
+                !fr.contains(portuguesa),
+                "fr: chrome português «{portuguesa}» sobreviveu"
+            );
+        }
     }
 }
