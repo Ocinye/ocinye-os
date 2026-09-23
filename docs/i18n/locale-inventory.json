@@ -7,7 +7,7 @@
     "fr"
   ],
   "fallback": "pt",
-  "slice": 8,
+  "slice": 9,
   "namespaces": [
     {
       "prefix": "nav",
@@ -92,6 +92,16 @@
     {
       "prefix": "files",
       "surface": "Files: personal, environments, upload, versions, preview (fully migrated)",
+      "status": "translated"
+    },
+    {
+      "prefix": "calendar",
+      "surface": "Calendar: grid, editor, empty states (fully migrated)",
+      "status": "translated"
+    },
+    {
+      "prefix": "notifications",
+      "surface": "Notifications panel",
       "status": "translated"
     }
   ],
