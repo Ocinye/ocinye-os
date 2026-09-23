@@ -7,6 +7,17 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização: o Prompt e os stragglers de correio, calendário, mensagens e ficheiros — 2026-09-23
+
+O ecrã **Prompt** passa a pt/en/fr (novo namespace `PROMPT`): rótulos de autor e
+de capacidade, o estado vazio e as sugestões, o input e o dock, e a meta de cada
+turno. E fecham-se os **stragglers** dirigidos por agulha que ficaram em quatro
+ecrãs dados como migrados — o Correio (contagem de resultados, remetente/assunto
+em falta), o Calendário (vistas, tipos, navegação, «hoje», nova actividade), as
+Mensagens (separadores de data, contagem por ler, dock de IA, atalhos) e os
+Ficheiros (cabeçalhos, tipos, quota, exemplos) —, todos confirmados pelo portão
+sem agulhas. Guarda de pureza do Prompt `mod pureza_i18n`.
+
 ### Internacionalização: os Research Workspaces — 2026-09-23
 
 O ambiente contextual de uma ideia ou projecto passa a pt/en/fr: os separadores,

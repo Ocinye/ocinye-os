@@ -76,7 +76,7 @@ fn quando_curto(quando: DateTime<Utc>, hoje: NaiveDate, zona: TimeZoneName) -> S
     let diferenca = (hoje - dia).num_days();
     match diferenca {
         0 => hora(quando, zona),
-        1 => "Ontem".to_owned(),
+        1 => crate::i18n::t("messaging.yesterday").to_owned(),
         2..=6 => crate::ui::tempo::dia_da_semana_curto(dia).to_owned(),
         _ => dia.format("%d/%m/%Y").to_string(),
     }
@@ -85,8 +85,8 @@ fn quando_curto(quando: DateTime<Utc>, hoje: NaiveDate, zona: TimeZoneName) -> S
 /// O separador de um dia, dentro da conversa.
 fn separador_do_dia(dia: NaiveDate, hoje: NaiveDate) -> String {
     match (hoje - dia).num_days() {
-        0 => "Hoje".to_owned(),
-        1 => "Ontem".to_owned(),
+        0 => crate::i18n::t("messaging.today").to_owned(),
+        1 => crate::i18n::t("messaging.yesterday").to_owned(),
         2..=6 => crate::ui::tempo::dia_da_semana(dia).to_owned(),
         _ => crate::ui::tempo::data_por_extenso(dia),
     }
@@ -192,9 +192,9 @@ fn linha_da_conversa(
                     {(por_ler > 0)
                         .then(|| {
                             let etiqueta = if mencoes > 0 {
-                                format!("{por_ler} por ler, com menção")
+                                crate::i18n::tp("messaging.unread_count_mention", por_ler)
                             } else {
-                                format!("{por_ler} por ler")
+                                crate::i18n::tp("messaging.unread_count", por_ler)
                             };
                             let classe = if mencoes > 0 {
                                 "oc-conversa__contagem oc-conversa__contagem--mencao"
@@ -388,7 +388,7 @@ fn nova_conversa() -> impl IntoView {
                         data-oc="modo"
                         data-oc-modo="grupo"
                     >
-                        "Grupo"
+                        {crate::i18n::t("messaging.group")}
                     </button>
                 </div>
 
@@ -399,7 +399,7 @@ fn nova_conversa() -> impl IntoView {
                             class="oc-entrada"
                             type="text"
                             data-oc="nome-do-grupo"
-                            placeholder="Projecto Energia"
+                            placeholder=crate::i18n::t("messaging.group_name_placeholder")
                             maxlength="120"
                         />
                     </label>
@@ -440,7 +440,7 @@ fn nova_conversa() -> impl IntoView {
                         class="oc-btn oc-btn--secondary oc-btn--sm"
                         data-oc="fechar-nova"
                     >
-                        "Cancelar"
+                        {crate::i18n::t("action.cancel")}
                     </button>
                     <button
                         type="button"
@@ -620,7 +620,7 @@ fn cabecalho(
                             aria-expanded="false"
                             aria-controls=format!("detalhes-{id}")
                         >
-                            "Detalhes"
+                            {crate::i18n::t("messaging.details")}
                         </button>
                     }
                 })}
@@ -667,9 +667,9 @@ fn detalhes_do_grupo(id: &str, participantes: &[Value], governa: bool) -> impl I
                                                 class="oc-btn oc-btn--ghost oc-btn--sm"
                                                 data-oc="retirar"
                                                 data-oc-quem=quem
-                                                title=format!("Retirar {}", nome.clone())
+                                                title=crate::i18n::tf("messaging.remove_named", &[("name", nome.as_str())])
                                             >
-                                                "Retirar"
+                                                {crate::i18n::t("messaging.remove")}
                                             </button>
                                         }
                                     })}
@@ -911,7 +911,7 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
                     <span class="oc-sr">{crate::i18n::t("messaging.react")}</span>
                     <span aria-hidden="true">"☺"</span>
                 </button>
-                <button type="button" class="oc-msg__accao" data-oc="copiar" title="Copiar">
+                <button type="button" class="oc-msg__accao" data-oc="copiar" title=crate::i18n::t("messaging.copy_text")>
                     <span class="oc-sr">{crate::i18n::t("messaging.copy_text")}</span>
                     {icon(Icon::Archive, 14)}
                 </button>
@@ -1037,12 +1037,12 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                                     </button>
                                     <div class="oc-msg__assist-menu" data-oc="assist-menu" hidden>
                                         {[
-                                            ("corrigir", "Corrigir"),
-                                            ("melhorar", "Melhorar"),
+                                            ("corrigir", crate::i18n::t("messaging.ai.proofread")),
+                                            ("melhorar", crate::i18n::t("messaging.ai.improve")),
                                             ("formal", crate::i18n::t("messaging.ai.formal")),
                                             ("curto", crate::i18n::t("messaging.ai.shorter")),
                                             ("claro", crate::i18n::t("messaging.ai.clarify")),
-                                            ("traduzir", "Traduzir"),
+                                            ("traduzir", crate::i18n::t("messaging.ai.translate")),
                                         ]
                                             .map(|(chave, rotulo)| {
                                                 view! {
@@ -1067,20 +1067,20 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                         class="oc-btn oc-btn--primary oc-btn--sm oc-msg__enviar"
                         data-oc="enviar"
                     >
-                        "Enviar"
+                        {crate::i18n::t("messaging.send")}
                     </button>
                 </div>
             </div>
 
             <p class="oc-msg__ajuda" id="oc-msg-ajuda">
-                <kbd class="oc-kbd">"Enter"</kbd>
-                " envia · "
-                <kbd class="oc-kbd">"Shift"</kbd>
+                <kbd class="oc-kbd">{crate::i18n::t("messaging.kbd.enter")}</kbd>
+                {crate::i18n::t("messaging.hint.sends")}
+                <kbd class="oc-kbd">{crate::i18n::t("messaging.kbd.shift")}</kbd>
                 "+"
-                <kbd class="oc-kbd">"Enter"</kbd>
-                " muda de linha · "
+                <kbd class="oc-kbd">{crate::i18n::t("messaging.kbd.enter")}</kbd>
+                {crate::i18n::t("messaging.hint.newline")}
                 <kbd class="oc-kbd">"@"</kbd>
-                " menciona"
+                {crate::i18n::t("messaging.hint.mentions")}
             </p>
 
             // A paleta de emoji, ancorada ao composer.

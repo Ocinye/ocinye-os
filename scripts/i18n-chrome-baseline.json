@@ -1,10 +1,5 @@
 {
   "counts": {
-    "apps/workspace/src/ui/screens/activity.rs": 2,
-    "apps/workspace/src/ui/screens/calendar.rs": 24,
-    "apps/workspace/src/ui/screens/files.rs": 41,
-    "apps/workspace/src/ui/screens/mail.rs": 9,
-    "apps/workspace/src/ui/screens/messaging.rs": 20,
-    "apps/workspace/src/ui/screens/prompt.rs": 27
+    "apps/workspace/src/ui/screens/activity.rs": 2
   }
 }
