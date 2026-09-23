@@ -147,6 +147,16 @@ const HOME: &[Entry] = catalogo! {
         en: "No Ocinye AI node is currently available.",
         fr: "Aucun nœud d’IA Ocinye n’est actuellement disponible."
     },
+    "home.ai.unavailable_body": {
+        pt: "O Prompt Ocinye está operacional. Não existe neste momento nenhum nó de IA Ocinye activo. Pode continuar a usar o Prompt; os pedidos que precisem de inferência recebem uma resposta de estado até existir capacidade que os sirva. Nenhum fornecedor externo é usado em substituição.",
+        en: "The Ocinye Prompt is operational. There is no active Ocinye AI node at the moment. You can keep using the Prompt; requests that need inference receive a status response until a capability that serves them exists. No external provider is used as a substitute.",
+        fr: "Le Prompt Ocinye est opérationnel. Il n’y a pour l’instant aucun nœud d’IA Ocinye actif. Vous pouvez continuer à utiliser le Prompt ; les demandes nécessitant une inférence reçoivent une réponse d’état jusqu’à ce qu’une capacité les serve. Aucun fournisseur externe n’est utilisé en remplacement."
+    },
+    "home.ai.available_body": {
+        pt: "A inteligência está disponível. Abra o Prompt para a usar.",
+        en: "Intelligence is available. Open the Prompt to use it.",
+        fr: "L’intelligence est disponible. Ouvrez le Prompt pour l’utiliser."
+    },
     "home.ai.open_prompt": { pt: "Abrir Prompt", en: "Open Prompt", fr: "Ouvrir Prompt" },
     "home.ai.hub": { pt: "Hub de IA", en: "AI Hub", fr: "Hub IA" },
     "home.quick.title": { pt: "Acesso rápido", en: "Quick access", fr: "Accès rapide" },

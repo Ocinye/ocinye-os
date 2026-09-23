@@ -7,6 +7,19 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização: o card de IA da Home deixa de misturar línguas — 2026-09-23
+
+O card «Ocinye AI» da Home mostrava o título traduzido mas o corpo em
+português — porque renderizava a **prosa do Core** (o campo `message`, já
+composto em português) em vez de a derivar do estado. Passa a mostrar um texto
+localizado a partir de `available`: o Core continua a decidir o estado, e é
+desse estado, não da sua prosa, que o corpo se deriva, no idioma de quem lê
+(§84). A prosa detalhada do Core deixa de ser injectada no resumo; a razão
+específica de uma indisponibilidade vive no Hub de IA. O guarda de pureza da
+Home passa a provar isto **com** uma mensagem do Core no fixture — a lacuna que
+o deixava passar era o fixture de teste não trazer `message`, ao contrário da
+produção.
+
 ### Internacionalização (Inteligência): o hub de IA e a criação de agentes — 2026-09-23
 
 O ecrã `Ocinye AI` passa a pt/en/fr: a visão geral e os separadores, os

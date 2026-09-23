@@ -320,16 +320,18 @@ fn ai_card(status: &Value) -> impl IntoView {
         .get("available")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    // A mensagem do Core é prosa e vem já composta; até passar a código de razão
-    // (i18n §31, §51), o que se localiza é o texto por omissão, e a mensagem do
-    // Core marca-se como conteúdo. O título é nosso, e traduz-se.
-    let mensagem_do_core = status
-        .get("message")
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned);
-    let e_conteudo = mensagem_do_core.is_some().then_some("1");
-    let mensagem =
-        mensagem_do_core.unwrap_or_else(|| crate::i18n::t("home.ai.default_message").to_owned());
+    // A explicação é chrome do produto, e traduz-se: descreve o estado da
+    // plataforma, não é conteúdo de ninguém. Antes vinha a prosa do Core, já
+    // composta em português, e aparecia em português no meio de uma interface
+    // francesa. O Core continua a decidir o estado — `available` —, e é desse
+    // estado, e não da sua prosa, que o texto se deriva, no idioma de quem lê
+    // (i18n §31, §51, §84). A razão detalhada de uma indisponibilidade
+    // específica vive no Hub de IA, não neste resumo.
+    let mensagem = if available {
+        crate::i18n::t("home.ai.available_body")
+    } else {
+        crate::i18n::t("home.ai.unavailable_body")
+    };
 
     let title = if available {
         crate::i18n::t("home.ai.available")
@@ -352,7 +354,7 @@ fn ai_card(status: &Value) -> impl IntoView {
             <h2>
                 {title}
             </h2>
-            <p data-oc-content=e_conteudo>
+            <p>
                 {mensagem}
             </p>
             <div class="oc-row oc-gap-5" >
@@ -527,6 +529,27 @@ mod tests {
         let en = with_locale(Locale::En, async { home(painel(true)).to_html() }).await;
         assert!(en.contains("Continue work") && en.contains("Pending tasks"));
         assert!(!en.contains("Continuar trabalho"));
+
+        // O card de IA deriva o corpo do estado, não da prosa do Core. Mesmo
+        // que o Core mande uma mensagem já composta em português — como manda em
+        // produção —, o card mostra-a no idioma de quem lê. Este é o defeito
+        // exacto que o ecrã tinha: título francês, corpo português.
+        let com_prosa = Dashboard {
+            intelligence: json!({
+                "available": false,
+                "message": "O Prompt Ocinye está operacional em português."
+            }),
+            ..painel(true)
+        };
+        let fr_ia = with_locale(Locale::Fr, async { home(com_prosa).to_html() }).await;
+        assert!(
+            fr_ia.contains("Le Prompt Ocinye est opérationnel"),
+            "fr: o corpo do card de IA não foi traduzido"
+        );
+        assert!(
+            !fr_ia.contains("está operacional"),
+            "fr: a prosa do Core em português apareceu no card de IA"
+        );
     }
 
     /// Com a permissão, os dois caminhos voltam.
