@@ -1207,6 +1207,119 @@ const SETTINGS: &[Entry] = catalogo! {
     "table.slices_aria": { pt: "Recortes da lista", en: "List views", fr: "Vues de la liste" },
 };
 
+/// O hub de Ocinye AI e a criação/detalhe de agentes. Os valores de enum
+/// (`GENERAL`, `personal`, `INTERNAL`) e as rotas são maquinaria e ficam
+/// literais; só o texto de chrome passa por aqui (§84).
+const AI: &[Entry] = catalogo! {
+    "ai.subtitle": {
+        pt: "A inteligência artificial é uma capacidade transversal da Ocinye.",
+        en: "Artificial intelligence is a cross-cutting capability of Ocinye.",
+        fr: "L’intelligence artificielle est une capacité transversale d’Ocinye."
+    },
+    "ai.tab.overview": { pt: "Visão geral", en: "Overview", fr: "Vue d’ensemble" },
+    "ai.tab.architecture": { pt: "Arquitectura", en: "Architecture", fr: "Architecture" },
+    "ai.tab.capabilities": { pt: "Capacidades", en: "Capabilities", fr: "Capacités" },
+    "ai.tab.models": { pt: "Modelos", en: "Models", fr: "Modèles" },
+    "ai.sections": { pt: "Secções de Ocinye AI", en: "Ocinye AI sections", fr: "Sections d’Ocinye AI" },
+    "ai.create_agent": { pt: "Criar Agente", en: "Create Agent", fr: "Créer un agent" },
+    "ai.create_agent_title": { pt: "Criar Agente IA", en: "Create AI Agent", fr: "Créer un agent IA" },
+    "ai.open_prompt": { pt: "Abrir Prompt", en: "Open Prompt", fr: "Ouvrir Prompt" },
+    "ai.none_available_full": {
+        pt: "Nenhum nó de IA Ocinye está actualmente disponível. A plataforma funciona integralmente sem um, e nenhum fornecedor externo é usado em substituição.",
+        en: "No Ocinye AI node is currently available. The platform works fully without one, and no external provider is used in its place.",
+        fr: "Aucun nœud d’IA Ocinye n’est actuellement disponible. La plateforme fonctionne pleinement sans lui, et aucun fournisseur externe n’est utilisé à sa place."
+    },
+    "ai.unavailable_title": { pt: "Inteligência ainda não disponível", en: "Intelligence not yet available", fr: "Intelligence pas encore disponible" },
+    "ai.configure": { pt: "Configurar IA", en: "Configure AI", fr: "Configurer l’IA" },
+    "ai.view_compute": { pt: "Ver computação", en: "View compute", fr: "Voir le calcul" },
+    "ai.counter.agents": { pt: "Agentes IA", en: "AI agents", fr: "Agents IA" },
+    "ai.counter.models": { pt: "Modelos", en: "Models", fr: "Modèles" },
+    "ai.counter.conversations": { pt: "Conversas", en: "Conversations", fr: "Conversations" },
+    "ai.counter.resources": { pt: "Recursos", en: "Resources", fr: "Ressources" },
+    "ai.view_agents": { pt: "Ver agentes", en: "View agents", fr: "Voir les agents" },
+    "ai.view_models": { pt: "Ver modelos", en: "View models", fr: "Voir les modèles" },
+    "ai.open_prompt_action": { pt: "Abrir prompt", en: "Open prompt", fr: "Ouvrir le prompt" },
+    "ai.no_capability": {
+        pt: "Nenhum nó de IA Ocinye está registado. O agente será guardado e ficará executável quando uma capacidade compatível estiver activa.",
+        en: "No Ocinye AI node is registered. The agent will be saved and will become runnable when a compatible capability is active.",
+        fr: "Aucun nœud d’IA Ocinye n’est enregistré. L’agent sera enregistré et deviendra exécutable dès qu’une capacité compatible sera active."
+    },
+    "ai.new.subtitle": {
+        pt: "Um agente actua dentro do âmbito e da classificação que lhe forem dados.",
+        en: "An agent acts within the scope and classification it is given.",
+        fr: "Un agent agit dans le périmètre et la classification qui lui sont attribués."
+    },
+    "ai.no_capability_title": { pt: "Sem capacidade de execução", en: "No execution capability", fr: "Aucune capacité d’exécution" },
+    "ai.no_capability_body": {
+        pt: "Nenhum nó de IA Ocinye está actualmente registado. O agente será guardado e ficará disponível para execução quando uma capacidade de IA compatível estiver activa.",
+        en: "No Ocinye AI node is currently registered. The agent will be saved and will become available to run when a compatible AI capability is active.",
+        fr: "Aucun nœud d’IA Ocinye n’est actuellement enregistré. L’agent sera enregistré et deviendra disponible à l’exécution dès qu’une capacité d’IA compatible sera active."
+    },
+    "ai.section.identity": { pt: "Identidade", en: "Identity", fr: "Identité" },
+    "ai.agent.name": { pt: "Nome do agente", en: "Agent name", fr: "Nom de l’agent" },
+    "ai.agent.name_placeholder": { pt: "Ex.: Assistente de Pesquisa", en: "E.g. Research Assistant", fr: "Ex. : Assistant de recherche" },
+    "ai.agent.purpose": { pt: "Propósito", en: "Purpose", fr: "Objet" },
+    "ai.agent.purpose_placeholder": { pt: "Para que serve este agente", en: "What this agent is for", fr: "À quoi sert cet agent" },
+    "ai.agent.instructions": { pt: "Instruções gerais", en: "General instructions", fr: "Instructions générales" },
+    "ai.agent.instructions_placeholder": {
+        pt: "Como deve responder e a que se deve limitar",
+        en: "How it should respond and what it should limit itself to",
+        fr: "Comment il doit répondre et à quoi il doit se limiter"
+    },
+    "ai.agent.capability": { pt: "Capacidade principal", en: "Primary capability", fr: "Capacité principale" },
+    "ai.capability_hint": {
+        pt: "O agente pede uma capacidade. O Ocinye AI Gateway escolhe o modelo que a serve, como configuração.",
+        en: "The agent requests a capability. The Ocinye AI Gateway chooses the model that serves it, as configuration.",
+        fr: "L’agent demande une capacité. L’Ocinye AI Gateway choisit le modèle qui la sert, comme configuration."
+    },
+    "ai.section.scope": { pt: "Âmbito de acesso", en: "Access scope", fr: "Périmètre d’accès" },
+    "ai.scope.legend": { pt: "Âmbito do agente", en: "Agent scope", fr: "Périmètre de l’agent" },
+    "ai.scope.personal": { pt: "Pessoal", en: "Personal", fr: "Personnel" },
+    "ai.scope.unit": { pt: "Unidade", en: "Unit", fr: "Unité" },
+    "ai.scope.institutional": { pt: "Institucional", en: "Institutional", fr: "Institutionnel" },
+    "ai.scope.help": {
+        pt: "O âmbito de Research Workspace fica disponível ao criar o agente dentro de um workspace. O Ocinye Core recusa um âmbito para o qual não possua a permissão correspondente.",
+        en: "The Research Workspace scope becomes available when creating the agent inside a workspace. Ocinye Core refuses a scope for which you do not hold the corresponding permission.",
+        fr: "Le périmètre Research Workspace devient disponible en créant l’agent au sein d’un workspace. Ocinye Core refuse un périmètre pour lequel vous ne détenez pas la permission correspondante."
+    },
+    "ai.section.knowledge": { pt: "Conhecimento", en: "Knowledge", fr: "Connaissance" },
+    "ai.knowledge.documents": { pt: "Documentos institucionais", en: "Institutional documents", fr: "Documents institutionnels" },
+    "ai.source.datasets": { pt: "Datasets", en: "Datasets", fr: "Jeux de données" },
+    "ai.security.title": { pt: "Segurança", en: "Security", fr: "Sécurité" },
+    "ai.security.body": {
+        pt: "O agente lê apenas até INTERNAL, e nunca mais do que quem o cria. Material CONFIDENTIAL e RESTRICTED fica inacessível, independentemente do que for pedido. Cada acesso a dados classificados é registado no Audit Log.",
+        en: "The agent reads only up to INTERNAL, and never more than whoever creates it. CONFIDENTIAL and RESTRICTED material stays inaccessible, regardless of what is asked. Every access to classified data is recorded in the Audit Log.",
+        fr: "L’agent ne lit que jusqu’à INTERNAL, et jamais plus que celui qui le crée. Le matériel CONFIDENTIAL et RESTRICTED reste inaccessible, quelle que soit la demande. Chaque accès à des données classifiées est consigné dans l’Audit Log."
+    },
+    "ai.available_when_created": {
+        pt: "O agente fica disponível para execução assim que for criado.",
+        en: "The agent becomes available to run as soon as it is created.",
+        fr: "L’agent devient disponible à l’exécution dès sa création."
+    },
+    "ai.source.documents": { pt: "Documentos", en: "Documents", fr: "Documents" },
+    "ai.sources.none": { pt: "Nenhuma", en: "None", fr: "Aucune" },
+    "ai.detail.pill": { pt: "AGENTE", en: "AGENT", fr: "AGENT" },
+    "ai.back_to_agents": { pt: "← Voltar aos agentes", en: "← Back to agents", fr: "← Retour aux agents" },
+    "ai.detail.definition": { pt: "Definição", en: "Definition", fr: "Définition" },
+    "ai.metric.capability": { pt: "Capacidade", en: "Capability", fr: "Capacité" },
+    "ai.metric.scope": { pt: "Âmbito", en: "Scope", fr: "Périmètre" },
+    "ai.metric.classification_ceiling": { pt: "Tecto de classificação", en: "Classification ceiling", fr: "Plafond de classification" },
+    "ai.metric.knowledge_sources": { pt: "Fontes de conhecimento", en: "Knowledge sources", fr: "Sources de connaissance" },
+    "ai.metric.created_by": { pt: "Criado por", en: "Created by", fr: "Créé par" },
+    "ai.detail.instructions": { pt: "Instruções", en: "Instructions", fr: "Instructions" },
+    "ai.detail.execution": { pt: "Execução", en: "Execution", fr: "Exécution" },
+    "ai.execution.available": {
+        pt: "Existe capacidade de inferência que pode servir este agente.",
+        en: "There is inference capability that can serve this agent.",
+        fr: "Il existe une capacité d’inférence pouvant servir cet agent."
+    },
+    "ai.execution.unavailable": {
+        pt: "Nenhum nó de IA da Ocinye está disponível: o agente está definido e configurado, e correrá assim que existir uma capacidade que o sirva. A definição não depende de haver modelo.",
+        en: "No Ocinye AI node is available: the agent is defined and configured, and will run as soon as a capability that serves it exists. The definition does not depend on a model existing.",
+        fr: "Aucun nœud d’IA d’Ocinye n’est disponible : l’agent est défini et configuré, et s’exécutera dès qu’une capacité pouvant le servir existera. La définition ne dépend pas de l’existence d’un modèle."
+    },
+};
+
 /// Todos os grupos de produção. O portão de paridade corre sobre isto.
 ///
 /// Não inclui grupos de teste: uma chave só-`pt` de teste (para provar a queda)
@@ -1235,6 +1348,7 @@ pub const GROUPS: &[&[Entry]] = &[
     ERRORS,
     FIRST_ENTRY,
     SETTINGS,
+    AI,
 ];
 
 /// Um grupo só de teste, para exercitar a queda ao canónico (briefing i18n §77).

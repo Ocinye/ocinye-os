@@ -33,33 +33,30 @@ pub fn hub(status: &Value, models: &Value) -> impl IntoView {
     let message = status
         .get("message")
         .and_then(Value::as_str)
-        .unwrap_or(
-            "Nenhum nó de IA Ocinye está actualmente disponível. A plataforma funciona \
-             integralmente sem um, e nenhum fornecedor externo é usado em substituição.",
-        )
+        .unwrap_or(crate::i18n::t("ai.none_available_full"))
         .to_owned();
     let model_count = items(models).len();
 
     let tabs = vec![
-        Tab::link("Visão geral", "/ai", true),
-        Tab::inert("Arquitectura"),
-        Tab::inert("Capacidades"),
-        Tab::inert("Modelos"),
+        Tab::link(crate::i18n::t("ai.tab.overview"), "/ai", true),
+        Tab::inert(crate::i18n::t("ai.tab.architecture")),
+        Tab::inert(crate::i18n::t("ai.tab.capabilities")),
+        Tab::inert(crate::i18n::t("ai.tab.models")),
     ];
 
     view! {
         <div class="oc-band" >
             <div class="oc-head oc-mb-7" >
                 <div class="oc-head__text">
-                    <h1>"Ocinye AI"</h1>
-                    <p>"A inteligência artificial é uma capacidade transversal da Ocinye."</p>
+                    <h1>{crate::i18n::t("nav.ai")}</h1>
+                    <p>{crate::i18n::t("ai.subtitle")}</p>
                 </div>
                 <div class="oc-head__actions">
-                    {button(Button::new("Criar Agente", Variant::Secondary).href("/ai/agents/new"))}
-                    {button(Button::new("Abrir Prompt", Variant::Primary).href("/ai/prompt").with_dot())}
+                    {button(Button::new(crate::i18n::t("ai.create_agent"), Variant::Secondary).href("/ai/agents/new"))}
+                    {button(Button::new(crate::i18n::t("ai.open_prompt"), Variant::Primary).href("/ai/prompt").with_dot())}
                 </div>
             </div>
-            {context_tabs(tabs, "Secções de Ocinye AI")}
+            {context_tabs(tabs, crate::i18n::t("ai.sections"))}
         </div>
 
         <div class="oc-page">
@@ -76,11 +73,11 @@ pub fn hub(status: &Value, models: &Value) -> impl IntoView {
                             icon: Icon::AiHexLg,
                             // O corpo já traz a frase do Core sobre o estado; o
                             // título nomeia-o, em vez de a repetir à letra.
-                            title: "Inteligência ainda não disponível".to_owned(),
+                            title: crate::i18n::t("ai.unavailable_title").to_owned(),
                             body: message.clone(),
                             actions: vec![
-                                Button::new("Configurar IA", Variant::Gold).href("/ai/agents/new"),
-                                Button::new("Ver computação", Variant::Secondary).href("/compute"),
+                                Button::new(crate::i18n::t("ai.configure"), Variant::Gold).href("/ai/agents/new"),
+                                Button::new(crate::i18n::t("ai.view_compute"), Variant::Secondary).href("/compute"),
                             ],
                             small: false,
                         })
@@ -89,13 +86,13 @@ pub fn hub(status: &Value, models: &Value) -> impl IntoView {
             </section>
 
             <div class="oc-grid oc-grid--4">
-                {counter("AGENTES IA", items(&Value::Null).len(), "Ver agentes", "/ai/agents")}
-                {counter("MODELOS", model_count, "Ver modelos", "/ai")}
-                {counter("CONVERSAS", 0, "Abrir prompt", "/ai/prompt")}
+                {counter(crate::i18n::t("ai.counter.agents"), items(&Value::Null).len(), crate::i18n::t("ai.view_agents"), "/ai/agents")}
+                {counter(crate::i18n::t("ai.counter.models"), model_count, crate::i18n::t("ai.view_models"), "/ai")}
+                {counter(crate::i18n::t("ai.counter.conversations"), 0, crate::i18n::t("ai.open_prompt_action"), "/ai/prompt")}
                 {counter(
-                    "RECURSOS",
+                    crate::i18n::t("ai.counter.resources"),
                     usize::try_from(providers).unwrap_or(0),
-                    "Ver computação",
+                    crate::i18n::t("ai.view_compute"),
                     "/compute",
                 )}
             </div>
@@ -142,15 +139,14 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
 
     // A razão pela qual a execução não está disponível, dita uma vez e reusada:
     // um controlo desactivado sem explicação é opaco (briefing §53).
-    let no_capability = "Nenhum nó de IA Ocinye está registado. O agente será guardado e \
-                         ficará executável quando uma capacidade compatível estiver activa.";
+    let no_capability = crate::i18n::t("ai.no_capability");
 
     view! {
         <div class="oc-page oc-page--narrow">
             <div class="oc-head">
                 <div class="oc-head__text">
-                    <h1>"Criar Agente IA"</h1>
-                    <p>"Um agente actua dentro do âmbito e da classificação que lhe forem dados."</p>
+                    <h1>{crate::i18n::t("ai.create_agent_title")}</h1>
+                    <p>{crate::i18n::t("ai.new.subtitle")}</p>
                 </div>
             </div>
 
@@ -163,11 +159,9 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                 .then(|| {
                     view! {
                         <div class="oc-callout oc-callout--warning" role="status">
-                            <strong>"Sem capacidade de execução"</strong>
+                            <strong>{crate::i18n::t("ai.no_capability_title")}</strong>
                             <p>
-                                "Nenhum nó de IA Ocinye está actualmente registado. O agente será
-                                 guardado e ficará disponível para execução quando uma capacidade
-                                 de IA compatível estiver activa."
+                                {crate::i18n::t("ai.no_capability_body")}
                             </p>
                         </div>
                     }
@@ -177,27 +171,27 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                 <div class="oc-grid oc-grid--form">
                     <div>
                         {card(
-                            section_head("IDENTIDADE", None, None),
+                            section_head(crate::i18n::t("ai.section.identity"), None, None),
                             view! {
                                 {text_field(
                                     "agent-name",
-                                    "Nome do agente",
+                                    crate::i18n::t("ai.agent.name"),
                                     "name",
-                                    "Ex.: Assistente de Pesquisa",
+                                    crate::i18n::t("ai.agent.name_placeholder"),
                                     "text",
                                 )}
                                 {textarea(
                                     "agent-purpose",
-                                    "Propósito",
+                                    crate::i18n::t("ai.agent.purpose"),
                                     "purpose",
-                                    "Para que serve este agente",
+                                    crate::i18n::t("ai.agent.purpose_placeholder"),
                                     64,
                                 )}
                                 {textarea(
                                     "agent-instructions",
-                                    "Instruções gerais",
+                                    crate::i18n::t("ai.agent.instructions"),
                                     "instructions",
-                                    "Como deve responder e a que se deve limitar",
+                                    crate::i18n::t("ai.agent.instructions_placeholder"),
                                     92,
                                 )}
                                 // Capacidade, e não modelo. O campo «Modelo
@@ -205,7 +199,7 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                                 // modelo, contra o §41 do `CLAUDE.md`.
                                 {select(
                                     "agent-capability",
-                                    "Capacidade principal",
+                                    crate::i18n::t("ai.agent.capability"),
                                     "capability",
                                     // Maiúsculas: é a representação de
                                     // `AiCapability` no contrato.
@@ -217,8 +211,7 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                                     ],
                                 )}
                                 <p class="oc-field__hint">
-                                    "O agente pede uma capacidade. O Ocinye AI Gateway escolhe o
-                                     modelo que a serve, como configuração."
+                                    {crate::i18n::t("ai.capability_hint")}
                                 </p>
                             },
                         )}
@@ -226,25 +219,23 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
 
                     <div>
                         {card(
-                            section_head("ÂMBITO DE ACESSO", None, None),
+                            section_head(crate::i18n::t("ai.section.scope"), None, None),
                             view! {
                                 {radio_group(
                                     "scope",
-                                    "Âmbito do agente",
+                                    crate::i18n::t("ai.scope.legend"),
                                     vec![
-                                        RadioOption::new("personal", "Pessoal", true),
-                                        RadioOption::new("unit", "Unidade", false),
+                                        RadioOption::new("personal", crate::i18n::t("ai.scope.personal"), true),
+                                        RadioOption::new("unit", crate::i18n::t("ai.scope.unit"), false),
                                         RadioOption::new(
                                             "institutional",
-                                            "Institucional",
+                                            crate::i18n::t("ai.scope.institutional"),
                                             false,
                                         ),
                                     ],
                                 )}
                                 <p class="oc-muted oc-t-caption--muted oc-mt-6" >
-                                    "O âmbito de Research Workspace fica disponível ao criar o
-                                     agente dentro de um workspace. O Ocinye Core recusa um âmbito
-                                     para o qual não possua a permissão correspondente."
+                                    {crate::i18n::t("ai.scope.help")}
                                 </p>
                             },
                         )}
@@ -252,21 +243,21 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                         <div class="oc-vspace" ></div>
 
                         {card(
-                            section_head("CONHECIMENTO", None, None),
+                            section_head(crate::i18n::t("ai.section.knowledge"), None, None),
                             view! {
                                 {named_checkbox(
                                     "k-bib",
                                     "uses_bibliography",
-                                    "Bibliografia",
+                                    crate::i18n::t("nav.bibliography"),
                                     true,
                                 )}
                                 {named_checkbox(
                                     "k-docs",
                                     "uses_documents",
-                                    "Documentos institucionais",
+                                    crate::i18n::t("ai.knowledge.documents"),
                                     false,
                                 )}
-                                {named_checkbox("k-data", "uses_datasets", "Datasets", false)}
+                                {named_checkbox("k-data", "uses_datasets", crate::i18n::t("ai.source.datasets"), false)}
                             },
                         )}
 
@@ -279,22 +270,19 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                                 <span class="oc-ink">{icon(Icon::Shield, 16)}</span>
                                 <div>
                                     <div class="oc-t-strong oc-mb-2" >
-                                        "Segurança"
+                                        {crate::i18n::t("ai.security.title")}
                                     </div>
                                     <p class="oc-t-caption--muted" >
-                                        "O agente lê apenas até INTERNAL, e nunca mais do que quem
-                                         o cria. Material CONFIDENTIAL e RESTRICTED fica
-                                         inacessível, independentemente do que for pedido. Cada
-                                         acesso a dados classificados é registado no Audit Log."
+                                        {crate::i18n::t("ai.security.body")}
                                     </p>
                                 </div>
                             </div>
                         </section>
 
                         <div class="oc-row--end oc-gap-5 oc-mt-8" >
-                            {button(Button::new("Cancelar", Variant::Secondary).href("/ai/agents"))}
+                            {button(Button::new(crate::i18n::t("ask.cancel"), Variant::Secondary).href("/ai/agents"))}
                             <button type="submit" class="oc-btn oc-btn--gold">
-                                "Criar Agente"
+                                {crate::i18n::t("ai.create_agent")}
                             </button>
                         </div>
                     </div>
@@ -303,7 +291,7 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
 
             <p class="oc-muted oc-t-caption--muted oc-mt-6">
                 {if has_models {
-                    "O agente fica disponível para execução assim que for criado."
+                    crate::i18n::t("ai.available_when_created")
                 } else {
                     no_capability
                 }}
@@ -351,15 +339,23 @@ pub fn agent_detail(agent: &Value) -> impl IntoView {
         .unwrap_or(false);
 
     let fontes: Vec<String> = [
-        fonte(agent, "uses_bibliography", "Bibliografia"),
-        fonte(agent, "uses_documents", "Documentos"),
-        fonte(agent, "uses_datasets", "Datasets"),
+        fonte(
+            agent,
+            "uses_bibliography",
+            crate::i18n::t("nav.bibliography"),
+        ),
+        fonte(
+            agent,
+            "uses_documents",
+            crate::i18n::t("ai.source.documents"),
+        ),
+        fonte(agent, "uses_datasets", crate::i18n::t("ai.source.datasets")),
     ]
     .into_iter()
     .flatten()
     .collect();
     let fontes_texto = if fontes.is_empty() {
-        "Nenhuma".to_owned()
+        crate::i18n::t("ai.sources.none").to_owned()
     } else {
         fontes.join(" · ")
     };
@@ -370,46 +366,44 @@ pub fn agent_detail(agent: &Value) -> impl IntoView {
     view! {
         <div class="oc-band">
             <div class="oc-row oc-row--wrap oc-gap-6 oc-mb-2">
-                {pill("AGENTE")}
+                {pill(crate::i18n::t("ai.detail.pill"))}
                 <h1 class="oc-t-screen">{campo(agent, "name")}</h1>
                 {badge(state_label, Tone::of(&state))}
             </div>
             <div class="oc-mono oc-mb-5">
-                <a href="/ai/agents">"← Voltar aos agentes"</a>
+                <a href="/ai/agents">{crate::i18n::t("ai.back_to_agents")}</a>
             </div>
         </div>
 
         <div class="oc-page">
             <div class="oc-grid oc-grid--detail">
                 <section class="oc-card">
-                    {section_head("Definição", None, None)}
+                    {section_head(crate::i18n::t("ai.detail.definition"), None, None)}
                     <div class="oc-card__body">
                         <p class="oc-t-body">{purpose}</p>
                         <div class="oc-split oc-split--2 oc-mt-5">
-                            {metric("Capacidade", &campo(agent, "capability"))}
-                            {metric("Âmbito", &scope)}
-                            {metric("Tecto de classificação", &classification)}
-                            {metric("Fontes de conhecimento", &fontes_texto)}
-                            {metric("Criado por", &campo(agent, "created_by_name"))}
+                            {metric(crate::i18n::t("ai.metric.capability"), &campo(agent, "capability"))}
+                            {metric(crate::i18n::t("ai.metric.scope"), &scope)}
+                            {metric(crate::i18n::t("ai.metric.classification_ceiling"), &classification)}
+                            {metric(crate::i18n::t("ai.metric.knowledge_sources"), &fontes_texto)}
+                            {metric(crate::i18n::t("ai.metric.created_by"), &campo(agent, "created_by_name"))}
                         </div>
-                        <div class="oc-field__label oc-mt-6">"Instruções"</div>
+                        <div class="oc-field__label oc-mt-6">{crate::i18n::t("ai.detail.instructions")}</div>
                         <p class="oc-t-note">{instructions}</p>
                     </div>
                 </section>
 
                 <section class="oc-card">
-                    {section_head("Execução", None, None)}
+                    {section_head(crate::i18n::t("ai.detail.execution"), None, None)}
                     <div class="oc-card__body">
                         <div class="oc-row oc-row--wrap oc-gap-6">
                             {classification_badge(&classification)}
                         </div>
                         <p class="oc-t-note oc-mt-5">
                             {if execution_available {
-                                "Existe capacidade de inferência que pode servir este agente."
+                                crate::i18n::t("ai.execution.available")
                             } else {
-                                "Nenhum nó de IA da Ocinye está disponível: o agente está \
-                                 definido e configurado, e correrá assim que existir uma \
-                                 capacidade que o sirva. A definição não depende de haver modelo."
+                                crate::i18n::t("ai.execution.unavailable")
                             }}
                         </p>
                     </div>
@@ -575,5 +569,66 @@ mod tests {
         let html = new_agent(&json!({"items": []}), None).to_html();
         assert!(html.contains("apenas até INTERNAL"));
         assert!(html.contains("Audit Log"));
+    }
+}
+
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+    use serde_json::json;
+
+    /// Um ecrã, um idioma: o hub, a criação e o detalhe de um agente em francês,
+    /// sem chrome português. Cobre o cabeçalho, o formulário e o detalhe — as
+    /// três superfícies deste ficheiro.
+    #[tokio::test]
+    async fn o_ai_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+        let fr = with_locale(Locale::Fr, async {
+            let hub_html = hub(
+                &json!({"available": false, "providers": 0}),
+                &json!({"items": []}),
+            )
+            .to_html();
+            let novo = new_agent(&json!({"items": []}), None).to_html();
+            let detalhe = agent_detail(&json!({
+                "name": "Agent",
+                "capability": "REASONING",
+                "scope": "personal",
+                "max_classification": "INTERNAL",
+                "uses_bibliography": true,
+                "uses_datasets": true,
+                "state": "configured",
+                "state_label": "Configuré",
+                "created_by_name": "Ana",
+                "execution_available": false,
+            }))
+            .to_html();
+            format!("{hub_html}{novo}{detalhe}")
+        })
+        .await;
+
+        for francesa in [
+            "Vue d’ensemble",
+            "Créer un agent",
+            "Périmètre d’accès",
+            "Nom de l’agent",
+            "Sécurité",
+            "Retour aux agents",
+            "Sources de connaissance",
+        ] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+        for portuguesa in [
+            "Visão geral",
+            "Nome do agente",
+            "Âmbito de acesso",
+            "Voltar aos agentes",
+            "Segurança",
+        ] {
+            assert!(
+                !fr.contains(portuguesa),
+                "fr: chrome português «{portuguesa}» sobreviveu"
+            );
+        }
     }
 }
