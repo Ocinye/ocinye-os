@@ -845,6 +845,53 @@ const MESSAGING: &[Entry] = catalogo! {
     "messaging.emoji_aria": { pt: "Emoji", en: "Emoji", fr: "Emoji" },
 };
 
+/// As superfícies anteriores à sessão: arranque, login, primeiro acesso, MFA.
+const AUTH: &[Entry] = catalogo! {
+    "auth.system_status": { pt: "Estado do Sistema", en: "System status", fr: "État du système" },
+    "auth.sign_out": { pt: "Terminar sessão", en: "Sign out", fr: "Se déconnecter" },
+    // Login
+    "login.institutional_session": { pt: "Sessão institucional", en: "Institutional session", fr: "Session institutionnelle" },
+    "login.sign_in": { pt: "Iniciar sessão", en: "Sign in", fr: "Se connecter" },
+    "login.institutional_address": { pt: "Endereço institucional", en: "Institutional address", fr: "Adresse institutionnelle" },
+    "login.create_account": { pt: "Criar conta", en: "Create account", fr: "Créer un compte" },
+    "login.granted_by_admin": { pt: "Acesso concedido pela Administração da Ocinye", en: "Access granted by Ocinye Administration", fr: "Accès accordé par l’administration d’Ocinye" },
+    "login.unavailable": { pt: "não está acessível", en: "is not reachable", fr: "n’est pas accessible" },
+    // Boot
+    "boot.asking_core": { pt: "A perguntar ao Ocinye Core.", en: "Asking Ocinye Core.", fr: "Interrogation d’Ocinye Core." },
+    "boot.retry": { pt: "Tentar novamente", en: "Try again", fr: "Réessayer" },
+    // First access
+    "first_access.set_password": { pt: "Defina a sua palavra-passe", en: "Set your password", fr: "Définissez votre mot de passe" },
+    "first_access.set_password_button": { pt: "Definir palavra-passe", en: "Set password", fr: "Définir le mot de passe" },
+    "first_access.new_password": { pt: "Nova palavra-passe", en: "New password", fr: "Nouveau mot de passe" },
+    "first_access.confirm_password": { pt: "Confirmar nova palavra-passe", en: "Confirm new password", fr: "Confirmer le nouveau mot de passe" },
+    "first_access.min_length": { pt: "Mínimo de {min} caracteres", en: "At least {min} characters", fr: "Au moins {min} caractères" },
+    "first_access.min_length_dot": { pt: "Mínimo de {min} caracteres.", en: "At least {min} characters.", fr: "Au moins {min} caractères." },
+    "first_access.too_common": { pt: "Esta palavra-passe é demasiado comum.", en: "This password is too common.", fr: "Ce mot de passe est trop courant." },
+    "first_access.long_phrases": { pt: "Frases longas são aceites, com espaços e acentos.", en: "Long phrases are accepted, with spaces and accents.", fr: "Les phrases longues sont acceptées, avec espaces et accents." },
+    "first_access.no_symbols_required": { pt: "Não são exigidos símbolos nem maiúsculas.", en: "No symbols or capitals are required.", fr: "Aucun symbole ni majuscule n’est exigé." },
+    "first_access.common_rejected": { pt: "Palavras-passe comuns ou previsíveis são recusadas.", en: "Common or predictable passwords are rejected.", fr: "Les mots de passe courants ou prévisibles sont refusés." },
+    // MFA
+    "mfa.setup": { pt: "Configurar o segundo factor", en: "Set up two-factor", fr: "Configurer la double authentification" },
+    "mfa.confirm": { pt: "Confirme o segundo factor", en: "Confirm two-factor", fr: "Confirmez la double authentification" },
+    "mfa.qr_alt": { pt: "Código QR de configuração do segundo factor", en: "Two-factor setup QR code", fr: "QR code de configuration de la double authentification" },
+    "mfa.manual_key": { pt: "Chave manual", en: "Manual key", fr: "Clé manuelle" },
+    "mfa.show_manual_key": { pt: "Mostrar chave manual", en: "Show manual key", fr: "Afficher la clé manuelle" },
+    "mfa.authenticator_code": { pt: "Código do autenticador", en: "Authenticator code", fr: "Code de l’authentificateur" },
+    "mfa.six_digit_code": { pt: "Código de seis dígitos", en: "Six-digit code", fr: "Code à six chiffres" },
+    "mfa.recovery_code": { pt: "Código de recuperação", en: "Recovery code", fr: "Code de récupération" },
+    "mfa.enter_with_recovery": { pt: "Entrar com código de recuperação", en: "Sign in with a recovery code", fr: "Se connecter avec un code de récupération" },
+    "mfa.no_authenticator": { pt: "Não tenho o autenticador à mão", en: "I don’t have my authenticator", fr: "Je n’ai pas mon authentificateur" },
+    "mfa.recovery_codes": { pt: "Guardar códigos de recuperação", en: "Save recovery codes", fr: "Enregistrer les codes de récupération" },
+    "mfa.copy_codes": { pt: "Copiar códigos", en: "Copy codes", fr: "Copier les codes" },
+    "mfa.save_file": { pt: "Guardar ficheiro", en: "Save file", fr: "Enregistrer le fichier" },
+    "mfa.shown_once": { pt: "Mostrados uma única vez", en: "Shown only once", fr: "Affichés une seule fois" },
+    "mfa.saved_confirm": { pt: "Guardei os códigos de recuperação num local seguro.", en: "I have saved the recovery codes in a safe place.", fr: "J’ai enregistré les codes de récupération en lieu sûr." },
+    "auth.password": { pt: "Palavra-passe", en: "Password", fr: "Mot de passe" },
+    "first_access.eyebrow": { pt: "OCINYE CORE · PRIMEIRO ACESSO", en: "OCINYE CORE · FIRST ACCESS", fr: "OCINYE CORE · PREMIER ACCÈS" },
+    "first_access.wordmark_sub": { pt: "PRIMEIRO ACESSO", en: "FIRST ACCESS", fr: "PREMIER ACCÈS" },
+    "mfa.wordmark_sub": { pt: "SEGUNDO FACTOR", en: "SECOND FACTOR", fr: "SECOND FACTEUR" },
+};
+
 /// Estados de erro e de página cheia — nenhum ecrã fica em língua trocada.
 const ERRORS: &[Entry] = catalogo! {
     "error.not_found.title": { pt: "Página não encontrada", en: "Page not found", fr: "Page introuvable" },
@@ -928,6 +975,7 @@ const SETTINGS: &[Entry] = catalogo! {
 /// Não inclui grupos de teste: uma chave só-`pt` de teste (para provar a queda)
 /// não é um buraco de produção, e não deve fazer o portão soar.
 pub const GROUPS: &[&[Entry]] = &[
+    AUTH,
     MESSAGING,
     CALENDAR,
     FILES,

@@ -81,7 +81,7 @@ pub fn login(core_ready: bool, message: Option<String>) -> impl IntoView {
                         <span class="oc-login__avatar" aria-hidden="true">
                             <img src="/static/avatars/ocinye.png" alt="" />
                         </span>
-                        <span class="oc-login__name">"Sessão institucional"</span>
+                        <span class="oc-login__name">{crate::i18n::t("login.institutional_session")}</span>
                         <span class="oc-login__mail">"ocinye.com"</span>
                     </div>
 
@@ -89,7 +89,7 @@ pub fn login(core_ready: bool, message: Option<String>) -> impl IntoView {
                         <div class="oc-login__field">
                             {icon(Icon::Mail, 13)}
                             <label class="oc-sr" for="login-user">
-                                "Endereço institucional"
+                                {crate::i18n::t("login.institutional_address")}
                             </label>
                             // `type="email"` e `autocomplete="username"`.
                             //
@@ -105,16 +105,15 @@ pub fn login(core_ready: bool, message: Option<String>) -> impl IntoView {
                                 inputmode="email"
                                 autocomplete="username"
                                 autocapitalize="none"
-                                autocorrect="off"
                                 spellcheck="false"
                                 required
-                                placeholder="Endereço institucional"
+                                placeholder=crate::i18n::t("login.institutional_address")
                             />
                         </div>
 
                         <div class="oc-login__field">
                             {icon(Icon::Lock, 13)}
-                            <label class="oc-sr" for="login-pass">"Palavra-passe"</label>
+                            <label class="oc-sr" for="login-pass">{crate::i18n::t("auth.password")}</label>
                             // Sem `maxlength`: truncar silenciosamente uma
                             // passphrase longa faria a autenticação falhar sem
                             // que o membro percebesse porquê (briefing §34).
@@ -124,7 +123,7 @@ pub fn login(core_ready: bool, message: Option<String>) -> impl IntoView {
                                 type="password"
                                 autocomplete="current-password"
                                 required
-                                placeholder="Palavra-passe"
+                                placeholder=crate::i18n::t("auth.password")
                             />
                             // Gestores de palavras-passe e colar funcionam:
                             // nada aqui os bloqueia (briefing §9).
@@ -139,14 +138,14 @@ pub fn login(core_ready: bool, message: Option<String>) -> impl IntoView {
                         </div>
 
                         <button type="submit" class="oc-login__submit" disabled=!core_ready>
-                            "Iniciar sessão"
+                            {crate::i18n::t("login.sign_in")}
                             {icon(Icon::ArrowRight, 14)}
                         </button>
                     </form>
 
                     <div class="oc-login__row">
                         <span class="oc-login__alt">
-                            "Acesso concedido pela Administração da Ocinye"
+                            {crate::i18n::t("login.granted_by_admin")}
                         </span>
                         // `pt-PT` uma vez, e não «PT · pt-PT».
                         //
@@ -180,7 +179,13 @@ mod tests {
     #[test]
     fn o_login_nao_pede_mfa_nem_oferece_registo() {
         let html = login(true, None).to_html();
-        for forbidden in ["MFA", "Criar conta", "Registar", "Google", "Microsoft"] {
+        for forbidden in [
+            "MFA",
+            crate::i18n::t("login.create_account"),
+            "Registar",
+            "Google",
+            "Microsoft",
+        ] {
             assert!(
                 !html.contains(forbidden),
                 "o login não deve conter {forbidden}"
@@ -247,5 +252,21 @@ mod tests {
         let html = login(true, None).to_html();
         assert!(html.contains("for=\"login-user\""));
         assert!(html.contains("for=\"login-pass\""));
+    }
+}
+
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+
+    /// Um ecrã, um idioma: o login em francês, sem português.
+    #[tokio::test]
+    async fn o_login_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+        let fr = with_locale(Locale::Fr, async { login(true, None).to_html() }).await;
+        for francesa in ["Se connecter", "Adresse institutionnelle", "Mot de passe"] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+        assert!(!fr.contains("Iniciar sessão"), "fr: chrome português");
     }
 }
