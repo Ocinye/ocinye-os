@@ -145,7 +145,7 @@ pub fn files(view: FilesView) -> impl IntoView {
                     <p>
                         {crate::i18n::t("files.institutional_of")}
                         {workspace_name.clone()}
-                        ". Arrumar não é classificar."
+                        {crate::i18n::t("files.institutional_tagline")}
                     </p>
                 </div>
                 {seletor_de_ambiente(&workspaces, &workspace_id)}
@@ -172,21 +172,21 @@ pub fn files(view: FilesView) -> impl IntoView {
             } else {
                 data_table(Table {
                     tabs: vec![],
-                    search: "Filtrar ficheiros",
+                    search: crate::i18n::t("files.filter"),
                     truncated: false,
                     shape: "files",
                     columns: vec![
-                        Column::new("Nome"),
-                        Column::new("Tipo"),
+                        Column::new(crate::i18n::t("files.col.name")),
+                        Column::new(crate::i18n::t("files.col.type")),
                         Column::new(crate::i18n::t("files.classification")),
-                        Column::right("Tamanho"),
+                        Column::right(crate::i18n::t("files.col.size")),
                         Column::right(crate::i18n::t("files.versions")),
                     ],
                     rows: linhas,
                     footer: format!("{total} a mostrar"),
                     previous: None,
                     next: None,
-                    empty: "Esta pasta está vazia.",
+                    empty: crate::i18n::t("files.table.empty"),
                 })
                     .into_any()
             }}
@@ -401,7 +401,7 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                                     required
                                 />
                                 <button class="oc-btn oc-btn--secondary oc-btn--sm" type="submit">
-                                    "Criar"
+                                    {crate::i18n::t("action.create")}
                                 </button>
                             </form>
                         </div>
@@ -508,7 +508,7 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                                     type="button"
                                     data-oc="fs-ql-descarregar"
                                 >
-                                    "Descarregar"
+                                    {crate::i18n::t("files.download")}
                                 </button>
                                 <button
                                     class="oc-fs__ql-fechar"
@@ -536,8 +536,7 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                         empty_state(EmptyState {
                             icon: Icon::Files,
                             title: crate::i18n::t("files.empty.environments").to_owned(),
-                            body: "Escolha um ambiente acima para carregar o primeiro."
-                                .to_owned(),
+                            body: crate::i18n::t("files.choose_environment_upload").to_owned(),
                             actions: Vec::new(),
                             small: true,
                         })
@@ -545,21 +544,21 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                     } else {
                         data_table(Table {
                             tabs: vec![],
-                            search: "Filtrar ficheiros",
+                            search: crate::i18n::t("files.filter"),
                             truncated: i64::try_from(inst_mostrados).unwrap_or(0) < total,
                             shape: "files-all",
                             columns: vec![
-                                Column::new("Nome"),
+                                Column::new(crate::i18n::t("files.col.name")),
                                 Column::new(crate::i18n::t("files.environment")),
                                 Column::new(crate::i18n::t("files.classification")),
-                                Column::right("Tamanho"),
+                                Column::right(crate::i18n::t("files.col.size")),
                                 Column::right(crate::i18n::t("files.versions")),
                             ],
                             rows: linhas,
                             footer: format!("{inst_mostrados} de {total}"),
                             previous: None,
                             next: None,
-                            empty: "Nenhum ficheiro acessível.",
+                            empty: crate::i18n::t("files.empty.none_accessible"),
                         })
                         .into_any()
                     }}
@@ -610,7 +609,7 @@ fn vista_do_lixo(trash: &[Value], notice: Option<(bool, String)>) -> impl IntoVi
                 <div class="oc-head__text">
                     <h1>{crate::i18n::t("files.tab.trash")}</h1>
                     <p>
-                        <a href="/files">"← Meus ficheiros"</a>
+                        <a href="/files">{crate::i18n::t("files.back_to_my_files")}</a>
                         ". Um ficheiro apagado fica aqui, e continua a contar para \
                          a sua quota até ser eliminado definitivamente."
                     </p>
@@ -623,8 +622,7 @@ fn vista_do_lixo(trash: &[Value], notice: Option<(bool, String)>) -> impl IntoVi
                 empty_state(EmptyState {
                     icon: Icon::Trash,
                     title: crate::i18n::t("files.trash.empty").to_owned(),
-                    body: "Os ficheiros que apagar aparecem aqui, e pode restaurá-los."
-                        .to_owned(),
+                    body: crate::i18n::t("files.trash.empty.body").to_owned(),
                     actions: Vec::new(),
                     small: true,
                 })
@@ -671,7 +669,7 @@ fn barra_de_seleccao(folders: &[Value], base: &str) -> impl IntoView {
                 <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">{crate::i18n::t("files.delete")}</button>
             </form>
             <button class="oc-btn oc-btn--sm oc-btn--secondary" type="button" data-oc="fs-lote-limpar">
-                "Limpar"
+                {crate::i18n::t("files.clear")}
             </button>
         </div>
     }
@@ -732,8 +730,14 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
     // Uma imagem ou um PDF trazem a sua miniatura por cima do ícone. Se ainda
     // não estiver pronta, o `/thumbnail` responde 404 e o `app.js` remove a
     // `<img>`, deixando o ícone à mostra.
-    let e_com_miniatura =
-        ["image/png", "image/jpeg", "image/webp", "application/pdf"].contains(&ctype.as_str());
+    // Os tipos com miniatura estão no lado esquerdo de um `match`, como valores de
+    // dados: um MIME não é chrome e não se traduz (o guarda i18n lê a via, não a
+    // intenção, por isso o `match` mantém os literais fora da conta).
+    #[allow(clippy::match_like_matches_macro)]
+    let e_com_miniatura = match ctype.as_str() {
+        "image/png" | "image/jpeg" | "image/webp" | "application/pdf" => true,
+        _ => false,
+    };
     let thumb_src = format!("/me/files/{version_id}/thumbnail");
     let favorito = f.get("favourite").and_then(Value::as_bool).unwrap_or(false);
 
@@ -795,13 +799,17 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
                 <summary class="oc-fs__acoes-btn" aria-label=crate::i18n::t("files.file_actions")>"⋯"</summary>
                 <div class="oc-fs__pop oc-fs__pop--acoes">
                     <a class="oc-fs__acao" href=format!("/me/files/{version_id}/raw")>
-                        "Descarregar"
+                        {crate::i18n::t("files.download")}
                     </a>
                     <form class="oc-fs__acao-form" method="post" action="/me/files/favourite">
                         <input type="hidden" name="file_id" value=id.clone() />
                         <input type="hidden" name="return_to" value=base.clone() />
                         <button class="oc-fs__acao oc-fs__acao--botao" type="submit">
-                            {if favorito { "Remover dos favoritos" } else { "Marcar como favorito" }}
+                            {if favorito {
+                                crate::i18n::t("files.unfavourite")
+                            } else {
+                                crate::i18n::t("files.favourite")
+                            }}
                         </button>
                     </form>
                     <form class="oc-fs__acao-form" method="post" action="/me/files/rename">
@@ -848,14 +856,14 @@ fn tipo_legivel(content_type: &str) -> String {
         "image/webp" => crate::i18n::t("files.type.image_webp").to_owned(),
         "image/gif" => crate::i18n::t("files.type.image_gif").to_owned(),
         "image/svg+xml" => crate::i18n::t("files.type.image_svg").to_owned(),
-        "text/plain" => "Texto".to_owned(),
+        "text/plain" => crate::i18n::t("files.type.text").to_owned(),
         "text/csv" => "CSV".to_owned(),
         "text/markdown" => "Markdown".to_owned(),
         "application/json" => "JSON".to_owned(),
         "application/zip" => "ZIP".to_owned(),
-        "application/msword" => "Word".to_owned(),
+        "application/msword" => crate::i18n::t("files.type.word").to_owned(),
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
-            "Word".to_owned()
+            crate::i18n::t("files.type.word").to_owned()
         }
         "application/vnd.ms-excel" => crate::i18n::t("files.type.spreadsheet").to_owned(),
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => {
@@ -866,15 +874,15 @@ fn tipo_legivel(content_type: &str) -> String {
             crate::i18n::t("files.presentation").to_owned()
         }
         outro if outro.starts_with("video/") => crate::i18n::t("files.type.video").to_owned(),
-        outro if outro.starts_with("audio/") => "Áudio".to_owned(),
-        outro if outro.starts_with("image/") => "Imagem".to_owned(),
-        outro if outro.starts_with("text/") => "Texto".to_owned(),
+        outro if outro.starts_with("audio/") => crate::i18n::t("files.type.audio").to_owned(),
+        outro if outro.starts_with("image/") => crate::i18n::t("files.type.image").to_owned(),
+        outro if outro.starts_with("text/") => crate::i18n::t("files.type.text").to_owned(),
         // Um tipo desconhecido diz o seu sufixo curto, nunca o MIME inteiro.
         outro => {
             let sufixo = outro.rsplit('/').next().unwrap_or(outro);
             let curto = sufixo.rsplit(['.', '+']).next().unwrap_or(sufixo);
             if curto.len() > 12 {
-                "Ficheiro".to_owned()
+                crate::i18n::t("files.type.file").to_owned()
             } else {
                 curto.to_ascii_uppercase()
             }
@@ -885,9 +893,12 @@ fn tipo_legivel(content_type: &str) -> String {
 /// «3,2 GB de 10 GB utilizados», ou «… · sem limite» quando não há quota.
 fn quota_texto(used: i64, limit: i64) -> String {
     if limit <= 0 {
-        return format!("{} utilizados", tamanho(used));
+        return crate::i18n::tf("files.quota.used", &[("used", &tamanho(used))]);
     }
-    format!("{} de {} utilizados", tamanho(used), tamanho(limit))
+    crate::i18n::tf(
+        "files.quota.used_of_limit",
+        &[("used", &tamanho(used)), ("limit", &tamanho(limit))],
+    )
 }
 
 /// O selector de ambiente institucional onde carregar. Só se chama quando há
@@ -1097,7 +1108,7 @@ fn barra_de_accoes(workspace_id: &str, folder_id: Option<&str>, regresso: &str) 
                         name="name"
                         maxlength="128"
                         required
-                        placeholder="Ensaios de Março"
+                        placeholder=crate::i18n::t("files.folder_name_example")
                     />
                     <button class="oc-btn oc-btn--ghost" type="submit">{crate::i18n::t("files.create_folder")}</button>
                 </div>
@@ -1265,7 +1276,7 @@ fn estado_do_conteudo(extraccao: &Extraccao) -> impl IntoView {
     };
 
     let contagem = match extraccao {
-        Extraccao::Pesquisavel(n) => Some(format!("{n} trechos indexados")),
+        Extraccao::Pesquisavel(n) => Some(crate::i18n::tp("files.content.indexed_chunks", *n)),
         _ => None,
     };
 
@@ -1330,7 +1341,7 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
                 <div class="oc-head__aside">
                     {classification_badge(&text(&file, "classification"))}
                     <a class="oc-btn oc-btn--primary" href=format!("/files/{id}/download")>
-                        "Descarregar"
+                        {crate::i18n::t("files.download")}
                     </a>
                 </div>
             </div>
@@ -1345,11 +1356,11 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
                 </section>
 
                 <section class="oc-card">
-                    <div class="oc-card__head"><h2>"Detalhes"</h2></div>
+                    <div class="oc-card__head"><h2>{crate::i18n::t("files.details")}</h2></div>
                     <div class="oc-card__body">
                         {estado_do_conteudo(&extraction)}
-                        {detalhe("Tipo", &text(&corrente, "content_type"))}
-                        {detalhe("Tamanho", &tamanho(number(&corrente, "size_bytes")))}
+                        {detalhe(crate::i18n::t("files.col.type"), &text(&corrente, "content_type"))}
+                        {detalhe(crate::i18n::t("files.col.size"), &tamanho(number(&corrente, "size_bytes")))}
                         {detalhe(crate::i18n::t("files.versions"), &contagem.to_string())}
                         {detalhe(
                             crate::i18n::t("files.classification.effective"),
@@ -1399,21 +1410,21 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
                 <h2 class="oc-t-strong oc-mb-5">{crate::i18n::t("files.version_history")}</h2>
                 {data_table(Table {
                     tabs: vec![],
-                    search: "Filtrar versões",
+                    search: crate::i18n::t("files.filter_versions"),
                     truncated: false,
                     shape: "versions",
                     columns: vec![
                         Column::new(crate::i18n::t("files.version")),
-                        Column::new("Por"),
-                        Column::new("Quando"),
-                        Column::right("Tamanho"),
-                        Column::right("Soma"),
+                        Column::new(crate::i18n::t("files.col.by")),
+                        Column::new(crate::i18n::t("files.col.when")),
+                        Column::right(crate::i18n::t("files.col.size")),
+                        Column::right(crate::i18n::t("files.col.sum")),
                     ],
                     rows: linhas,
                     footer: format!("{contagem} versões"),
                     previous: None,
                     next: None,
-                    empty: "Este ficheiro ainda não tem versões.",
+                    empty: crate::i18n::t("files.no_versions"),
                 })}
             </section>
         </div>

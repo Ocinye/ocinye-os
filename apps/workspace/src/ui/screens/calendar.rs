@@ -76,14 +76,17 @@ impl CalendarView {
     }
 
     /// Como se diz a uma pessoa.
+    ///
+    /// Deixou de ser `const fn`: resolve o rótulo pela via i18n, sensível ao
+    /// idioma do pedido, e um `const fn` não pode chamar `crate::i18n::t()`.
     #[must_use]
-    pub const fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
-            Self::Day => "Dia",
-            Self::Week => "Semana",
-            Self::Month => "Mês",
-            Self::Year => "Ano",
-            Self::Agenda => "Agenda",
+            Self::Day => crate::i18n::t("calendar.view.day"),
+            Self::Week => crate::i18n::t("calendar.view.week"),
+            Self::Month => crate::i18n::t("calendar.view.month"),
+            Self::Year => crate::i18n::t("calendar.view.year"),
+            Self::Agenda => crate::i18n::t("calendar.view.agenda"),
         }
     }
 
@@ -248,12 +251,15 @@ impl Item {
     }
 
     /// Como se chama o que isto é.
+    ///
+    /// Deixou de ser `const fn`: o rótulo resolve-se pela via i18n, e um
+    /// `const fn` não pode chamar `crate::i18n::t()`.
     #[must_use]
-    pub const fn kind_label(&self) -> &'static str {
+    pub fn kind_label(&self) -> &'static str {
         match self.kind.as_bytes() {
-            b"task_due" => "Prazo",
-            b"reminder" => "Lembrete",
-            _ => "Evento",
+            b"task_due" => crate::i18n::t("calendar.kind.task_due"),
+            b"reminder" => crate::i18n::t("calendar.kind.reminder"),
+            _ => crate::i18n::t("calendar.kind.event"),
         }
     }
 
@@ -339,7 +345,7 @@ pub fn calendar(page: &CalendarPage<'_>) -> impl IntoView {
                 </div>
                 {may_create.then(|| view! {
                     <a class="oc-btn oc-btn--primary" href="/calendar/events/new">
-                        "+ Nova actividade"
+                        {crate::i18n::t("calendar.new_activity_cta")}
                     </a>
                 })}
             </div>
@@ -410,7 +416,7 @@ fn toolbar(current: CalendarView, anchor: NaiveDate) -> impl IntoView {
                 <a
                     class="oc-cal-nav"
                     href=format!("/calendar?view={}&on={anterior}", current.as_str())
-                    aria-label=format!("{}, período anterior", current.label())
+                    aria-label=crate::i18n::tf("calendar.nav.prev", &[("label", current.label())])
                     rel="prev"
                 >
                     // O mesmo galo do sistema, virado. Acrescentar duas setas ao
@@ -424,7 +430,7 @@ fn toolbar(current: CalendarView, anchor: NaiveDate) -> impl IntoView {
                 <a
                     class="oc-cal-nav"
                     href=format!("/calendar?view={}&on={seguinte}", current.as_str())
-                    aria-label=format!("{}, período seguinte", current.label())
+                    aria-label=crate::i18n::tf("calendar.nav.next", &[("label", current.label())])
                     rel="next"
                 >
                     <span class="oc-cal-nav__glifo oc-cal-nav__glifo--seguinte">
@@ -435,7 +441,7 @@ fn toolbar(current: CalendarView, anchor: NaiveDate) -> impl IntoView {
                     class="oc-cal-hoje"
                     href=format!("/calendar?view={}", current.as_str())
                 >
-                    "Hoje"
+                    {crate::i18n::t("calendar.today")}
                 </a>
             </div>
 
@@ -1060,9 +1066,18 @@ fn month_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
     view! {
         <div class="oc-cal-month" role="table" aria-label=crate::i18n::t("calendar.grid_aria")>
             <div class="oc-cal-month__weekdays" role="row">
-                {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].into_iter()
-                    .map(|nome| view! { <span role="columnheader">{nome}</span> })
-                    .collect_view()}
+                {[
+                    "date.weekday_short.1",
+                    "date.weekday_short.2",
+                    "date.weekday_short.3",
+                    "date.weekday_short.4",
+                    "date.weekday_short.5",
+                    "date.weekday_short.6",
+                    "date.weekday_short.7",
+                ]
+                .into_iter()
+                .map(|chave| view! { <span role="columnheader">{crate::i18n::t(chave)}</span> })
+                .collect_view()}
             </div>
             {(0..42).map(|offset| {
                 let dia = inicio + Duration::days(offset);
@@ -1382,7 +1397,13 @@ pub fn event_form(
     view! {
         <div class="oc-page oc-editor">
             <header class="oc-editor__cabeca">
-                <h1>{if a_alterar { "Alterar actividade" } else { "Nova actividade" }}</h1>
+                <h1>
+                    {if a_alterar {
+                        crate::i18n::t("calendar.edit_activity")
+                    } else {
+                        crate::i18n::t("calendar.new_activity")
+                    }}
+                </h1>
             </header>
 
             {error.map(|motivo| view! {
@@ -1588,7 +1609,11 @@ pub fn event_form(
                 <footer class="oc-editor__accoes">
                     <a class="oc-btn oc-btn--ghost" href=CALENDAR_ROUTE>{crate::i18n::t("calendar.cancel")}</a>
                     <button type="submit" class="oc-btn oc-btn--primary" data-oc="submeter">
-                        {if a_alterar { "Guardar alterações" } else { "Criar actividade" }}
+                        {if a_alterar {
+                            crate::i18n::t("calendar.save_changes")
+                        } else {
+                            crate::i18n::t("calendar.create_activity")
+                        }}
                     </button>
                 </footer>
             </form>
@@ -1698,7 +1723,7 @@ pub fn notifications(payload: &Value, failure: Option<String>) -> impl IntoView 
                     <h1>{crate::i18n::t("notifications.title")}</h1>
                     <p>
                         {if por_ler > 0 {
-                            format!("{por_ler} por ler.")
+                            crate::i18n::tp("notifications.unread_count", por_ler)
                         } else {
                             crate::i18n::t("notifications.nothing_unread").to_owned()
                         }}

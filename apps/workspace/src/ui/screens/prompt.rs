@@ -67,12 +67,12 @@ impl PromptExchange {
     pub fn author(&self) -> String {
         match self.origin.as_str() {
             "MODEL" => match &self.model {
-                Some(model) => format!("Ocinye AI · {model}"),
-                None => "Ocinye AI".to_owned(),
+                Some(model) => crate::i18n::tf("prompt.author.model", &[("model", model)]),
+                None => crate::i18n::t("prompt.author.model_generic").to_owned(),
             },
-            "TOOL" => "Ocinye · Ferramenta".to_owned(),
-            "AGENT" => "Ocinye · Agente".to_owned(),
-            _ => "Ocinye · Sistema".to_owned(),
+            "TOOL" => crate::i18n::t("prompt.author.tool").to_owned(),
+            "AGENT" => crate::i18n::t("prompt.author.agent").to_owned(),
+            _ => crate::i18n::t("prompt.author.system").to_owned(),
         }
     }
 
@@ -120,10 +120,10 @@ pub fn context_from(status: &Value, workspace: Option<(String, String)>) -> Prom
                         .and_then(Value::as_str)
                         .unwrap_or("GENERAL");
                     let label = match code {
-                        "REASONING" => "Raciocínio",
-                        "CODING" => "Código",
-                        "EMBEDDING" => "Dados",
-                        _ => "Geral",
+                        "REASONING" => crate::i18n::t("prompt.cap.reasoning"),
+                        "CODING" => crate::i18n::t("prompt.cap.coding"),
+                        "EMBEDDING" => crate::i18n::t("prompt.cap.data"),
+                        _ => crate::i18n::t("prompt.cap.general"),
                     };
                     let ready = entry
                         .get("available")
@@ -148,20 +148,21 @@ pub fn context_from(status: &Value, workspace: Option<(String, String)>) -> Prom
         message: status
             .get("message")
             .and_then(Value::as_str)
-            .unwrap_or(
-                "Nenhum nó de IA Ocinye está actualmente disponível. Nenhum fornecedor externo é \
-                 usado em substituição.",
-            )
-            .to_owned(),
+            .map(str::to_owned)
+            .unwrap_or_else(|| crate::i18n::t("prompt.no_node_default").to_owned()),
     }
 }
 
-/// As sugestões do design.
-const SUGGESTIONS: [&str; 4] = [
-    "Resumir investigação sobre hidrogénio verde",
-    "Comparar bibliografia de armazenamento",
-    "Analisar dataset climático de 2010–2024",
-    "Criar estrutura de relatório",
+/// As sugestões do design, como chaves i18n resolvidas no render.
+///
+/// Um `const` não pode chamar `crate::i18n::t()`; guarda-se a chave, e a
+/// resolução — sensível ao idioma do pedido — acontece ao materializar cada
+/// sugestão.
+const SUGGESTION_KEYS: [&str; 4] = [
+    "prompt.suggestion.hydrogen",
+    "prompt.suggestion.storage",
+    "prompt.suggestion.climate",
+    "prompt.suggestion.report",
 ];
 
 /// O ecrã do Prompt Ocinye.
@@ -179,7 +180,7 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
         available: _available,
         message,
     } = ctx;
-    let agent_label = agent.unwrap_or_else(|| "Sem agente seleccionado".to_owned());
+    let agent_label = agent.unwrap_or_else(|| crate::i18n::t("prompt.no_agent").to_owned());
     // Viaja com o formulário para que a submissão preserve o contexto: sem
     // isto, submeter dentro de um Research Workspace devolveria o ecrã
     // institucional e o membro perderia o contexto sem perceber porquê.
@@ -211,7 +212,8 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                 />
                 <label class="oc-cap" for=id>
                     {label}
-                    {(!available).then(|| view! { <small>"sem modelo activo"</small> })}
+                    {(!available)
+                        .then(|| view! { <small>{crate::i18n::t("prompt.no_active_model")}</small> })}
                 </label>
             }
         })
@@ -236,7 +238,7 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                     .map(|(code, unit)| {
                         view! {
                             <span class="oc-prompt__context">
-                                <i>"CONTEXTO"</i>
+                                <i>{crate::i18n::t("prompt.context_eyebrow")}</i>
                                 <b>{format!("{code} · {unit}")}</b>
                             </span>
                         }
@@ -280,11 +282,10 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                                     <span class="oc-empty__tile oc-empty__tile--prompt">
                                         {icon(Icon::AiHexMd, 26)}
                                     </span>
-                                    <h1>"Interagir com Ocinye"</h1>
+                                    <h1>{crate::i18n::t("prompt.hero.title")}</h1>
                                     <p class="oc-t-caption--muted">{message}</p>
                                     <p class="oc-t-soft">
-                                        "As respostas respeitarão sempre aquilo a que tem acesso: um
-                                         modelo nunca recebe um artefacto que não conseguiria abrir."
+                                        {crate::i18n::t("prompt.hero.access_note")}
                                     </p>
                                 </div>
 
@@ -293,14 +294,15 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                                 // uma superfície de comando, não um widget de LLM
                                 // (M5 §12).
                                 <div class="oc-prompt__suggestions">
-                                    {SUGGESTIONS
+                                    {SUGGESTION_KEYS
                                         .iter()
-                                        .map(|text| {
+                                        .map(|key| {
+                                            let text = crate::i18n::t(key);
                                             view! {
                                                 <form method="post" action="/ai/prompt">
-                                                    <input type="hidden" name="prompt" value=*text />
+                                                    <input type="hidden" name="prompt" value=text />
                                                     <button type="submit" class="oc-suggestion">
-                                                        {*text}
+                                                        {text}
                                                     </button>
                                                 </form>
                                             }
@@ -328,17 +330,23 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                     {workspace_id
                         .map(|id| view! { <input type="hidden" name="workspace" value=id /> })}
 
-                    <div class="oc-caps oc-caps--dock" role="radiogroup" aria-label="Capacidade">
+                    <div
+                        class="oc-caps oc-caps--dock"
+                        role="radiogroup"
+                        aria-label=crate::i18n::t("prompt.cap.legend")
+                    >
                         {caps_view}
                     </div>
 
-                    <label class="oc-sr" for="prompt-input">"Escreva o seu pedido"</label>
+                    <label class="oc-sr" for="prompt-input">
+                        {crate::i18n::t("prompt.input.label")}
+                    </label>
                     <textarea
                         id="prompt-input"
                         name="prompt"
                         class="oc-prompt__textarea"
                         rows="1"
-                        placeholder="Escreva o seu pedido…"
+                        placeholder=crate::i18n::t("prompt.input.placeholder")
                         data-oc="prompt-textarea"
                     ></textarea>
 
@@ -347,17 +355,17 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                         // declarado indisponível com a razão: eram controlos sem
                         // handler nem endpoint, e um que não faz nada é pior do
                         // que um que diz porque ainda não faz (briefing §2C, §53).
-                        {action_chip(Icon::Attach, "Anexar")}
-                        {action_chip(Icon::Dataset, "Dataset")}
-                        {action_chip(Icon::Document, "Documento")}
-                        {action_chip(Icon::Tools, "Ferramentas")}
+                        {action_chip(Icon::Attach, crate::i18n::t("prompt.attach"))}
+                        {action_chip(Icon::Dataset, crate::i18n::t("prompt.attach.dataset"))}
+                        {action_chip(Icon::Document, crate::i18n::t("prompt.attach.document"))}
+                        {action_chip(Icon::Tools, crate::i18n::t("prompt.attach.tools"))}
 
                         <div class="oc-spacer"></div>
 
                         <button
                             type="submit"
-                            aria-label="Enviar"
-                            title="Enviar"
+                            aria-label=crate::i18n::t("prompt.send")
+                            title=crate::i18n::t("prompt.send")
                             class="oc-prompt__send"
                             data-oc="prompt-send"
                         >
@@ -367,8 +375,7 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                 </form>
 
                 <p class="oc-prompt__note">
-                    "O Ocinye AI pode cometer erros. Verifique informação crítica e consulte as
-                     fontes citadas."
+                    {crate::i18n::t("prompt.errors_note")}
                 </p>
             </div>
         </div>
@@ -384,7 +391,7 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
 fn member_turn(prompt: String) -> impl IntoView {
     view! {
         <div class="oc-turn oc-turn--member">
-            <span class="oc-turn__who">"Você"</span>
+            <span class="oc-turn__who">{crate::i18n::t("prompt.you")}</span>
             <div class="oc-turn__said">{prompt}</div>
         </div>
     }
@@ -419,22 +426,28 @@ fn ocinye_turn(
 
             <div class="oc-turn__bar">
                 <button type="button" class="oc-turn__act" data-oc="copiar-resposta">
-                    "Copiar"
+                    {crate::i18n::t("prompt.copy_response")}
                 </button>
                 {has_meta.then(|| {
                     view! {
                         <details class="oc-turn__meta">
-                            <summary>"Detalhes"</summary>
+                            <summary>{crate::i18n::t("prompt.meta.details")}</summary>
                             <dl>
                                 <div>
-                                    <dt>"Origem"</dt>
+                                    <dt>{crate::i18n::t("prompt.meta.origin")}</dt>
                                     <dd>{origin.to_owned()}</dd>
                                 </div>
                                 {model.map(|m| view! {
-                                    <div><dt>"Modelo"</dt><dd>{m}</dd></div>
+                                    <div>
+                                        <dt>{crate::i18n::t("prompt.meta.model")}</dt>
+                                        <dd>{m}</dd>
+                                    </div>
                                 })}
                                 {reason_code.map(|code| view! {
-                                    <div><dt>"Razão"</dt><dd class="oc-mono">{code}</dd></div>
+                                    <div>
+                                        <dt>{crate::i18n::t("prompt.meta.reason")}</dt>
+                                        <dd class="oc-mono">{code}</dd>
+                                    </div>
                                 })}
                             </dl>
                         </details>
@@ -456,7 +469,7 @@ fn action_chip(kind: Icon, label: &'static str) -> impl IntoView {
         <span
             class="oc-chip oc-unavailable"
             aria-disabled="true"
-            title="Anexar contexto a um pedido ainda não está disponível nesta instalação."
+            title=crate::i18n::t("prompt.attach.unavailable")
         >
             {icon(kind, 12)}
             {label}
@@ -580,5 +593,89 @@ mod tests {
         assert!(html.contains("Ocinye AI · Qwen Coder"));
         // A acção de copiar a resposta está presente e é discreta.
         assert!(html.contains("data-oc=\"copiar-resposta\""));
+    }
+}
+
+#[cfg(test)]
+mod pureza_i18n {
+    use super::*;
+    use serde_json::json;
+
+    /// Um ecrã, um idioma: o Prompt inteiro em francês, sem chrome português.
+    /// Cobre o estado vazio (herói, sugestões, capacidades, dock) e um turno
+    /// concluído (contexto, autoria de sistema, metadata) — as superfícies deste
+    /// ficheiro.
+    #[tokio::test]
+    async fn o_prompt_nao_mistura_linguas() {
+        use crate::i18n::{with_locale, Locale};
+
+        let unavailable = json!({
+            "available": false,
+            "capabilities": [
+                {"capability": "GENERAL", "available": false},
+                {"capability": "REASONING", "available": false},
+                {"capability": "CODING", "available": false},
+                {"capability": "EMBEDDING", "available": false}
+            ]
+        });
+        let degraded = PromptExchange {
+            prompt: "Cria uma função Rust.".to_owned(),
+            origin: "SYSTEM".to_owned(),
+            status: "DEGRADED".to_owned(),
+            reason_code: Some("AI_NO_PROVIDER_AVAILABLE".to_owned()),
+            model: None,
+            content: "Nenhuma capacidade de inferência está disponível.".to_owned(),
+        };
+
+        let fr = with_locale(Locale::Fr, async {
+            let vazio = prompt(context_from(&unavailable, None), None).to_html();
+            let turno = prompt(
+                context_from(
+                    &unavailable,
+                    Some(("IDE-0142".to_owned(), "UENR-001".to_owned())),
+                ),
+                Some(degraded),
+            )
+            .to_html();
+            format!("{vazio}{turno}")
+        })
+        .await;
+
+        for francesa in [
+            "Interagir avec Ocinye",
+            "Aucun agent sélectionné",
+            "Général",
+            "Raisonnement",
+            "Données",
+            "aucun modèle actif",
+            "Rédigez votre demande",
+            "Joindre",
+            "Envoyer",
+            "Résumer la recherche sur l’hydrogène vert",
+            "CONTEXTE",
+            "Vous",
+            "Copier",
+            "Détails",
+            "Origine",
+            "Raison",
+            "Ocinye · Système",
+        ] {
+            assert!(fr.contains(francesa), "fr: falta «{francesa}»");
+        }
+        for portuguesa in [
+            "Interagir com Ocinye",
+            "Sem agente seleccionado",
+            "Escreva o seu pedido",
+            "sem modelo activo",
+            "Você",
+            "Detalhes",
+            "Razão",
+            "Ocinye · Sistema",
+        ] {
+            assert!(
+                !fr.contains(portuguesa),
+                "fr: chrome português «{portuguesa}» sobreviveu"
+            );
+        }
     }
 }

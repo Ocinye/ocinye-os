@@ -651,6 +651,9 @@ const MAIL: &[Entry] = catalogo! {
     "mail.settings.reading": { pt: "Leitura", en: "Reading", fr: "Lecture" },
     "mail.settings.sending": { pt: "Envio", en: "Sending", fr: "Envoi" },
     "mail.search_submit": { pt: "Pesquisar", en: "Search", fr: "Rechercher" },
+    "mail.search.result_count": { pt: "{count} resultado(s) para a pesquisa.", en: "{count} result(s) for the search.", fr: "{count} résultat(s) pour la recherche." },
+    "mail.unknown_sender": { pt: "(remetente desconhecido)", en: "(unknown sender)", fr: "(expéditeur inconnu)" },
+    "mail.no_subject": { pt: "(sem assunto)", en: "(no subject)", fr: "(sans objet)" },
 };
 
 /// Os Ficheiros. Nomes de ficheiro e de pasta, e o conteúdo, são do membro e não
@@ -754,6 +757,32 @@ const FILES: &[Entry] = catalogo! {
     "files.class_option.internal": { pt: "Interno", en: "Internal", fr: "Interne" },
     "files.class_option.confidential": { pt: "Confidencial", en: "Confidential", fr: "Confidentiel" },
     "files.class_option.restricted": { pt: "Restrito", en: "Restricted", fr: "Restreint" },
+    // Cabeçalho e tabela institucional.
+    "files.institutional_tagline": { pt: ". Arrumar não é classificar.", en: ". Filing is not classifying.", fr: ". Ranger n’est pas classer." },
+    "files.table.empty": { pt: "Esta pasta está vazia.", en: "This folder is empty.", fr: "Ce dossier est vide." },
+    "files.back_to_my_files": { pt: "← Meus ficheiros", en: "← My files", fr: "← Mes fichiers" },
+    // Colunas de tabela e detalhes.
+    "files.col.name": { pt: "Nome", en: "Name", fr: "Nom" },
+    "files.col.type": { pt: "Tipo", en: "Type", fr: "Type" },
+    "files.col.size": { pt: "Tamanho", en: "Size", fr: "Taille" },
+    "files.col.by": { pt: "Por", en: "By", fr: "Par" },
+    "files.col.when": { pt: "Quando", en: "When", fr: "Quand" },
+    "files.col.sum": { pt: "Soma", en: "Checksum", fr: "Somme" },
+    "files.details": { pt: "Detalhes", en: "Details", fr: "Détails" },
+    "files.download": { pt: "Descarregar", en: "Download", fr: "Télécharger" },
+    "files.clear": { pt: "Limpar", en: "Clear", fr: "Effacer" },
+    // Rótulos de tipo de ficheiro (rótulos legíveis de MIME).
+    "files.type.word": { pt: "Word", en: "Word", fr: "Word" },
+    "files.type.audio": { pt: "Áudio", en: "Audio", fr: "Audio" },
+    "files.type.image": { pt: "Imagem", en: "Image", fr: "Image" },
+    "files.type.text": { pt: "Texto", en: "Text", fr: "Texte" },
+    "files.type.file": { pt: "Ficheiro", en: "File", fr: "Fichier" },
+    // Quota, exemplos de placeholder e conteúdo indexado.
+    "files.quota.used": { pt: "{used} utilizados", en: "{used} used", fr: "{used} utilisés" },
+    "files.quota.used_of_limit": { pt: "{used} de {limit} utilizados", en: "{used} of {limit} used", fr: "{used} sur {limit} utilisés" },
+    "files.folder_name_example": { pt: "Ensaios de Março", en: "March trials", fr: "Essais de mars" },
+    "files.content.indexed_chunks.one": { pt: "{count} trecho indexado", en: "{count} indexed passage", fr: "{count} extrait indexé" },
+    "files.content.indexed_chunks.other": { pt: "{count} trechos indexados", en: "{count} indexed passages", fr: "{count} extraits indexés" },
 };
 
 /// O Calendário e o painel de notificações.
@@ -803,12 +832,28 @@ const CALENDAR: &[Entry] = catalogo! {
     "calendar.field.local": { pt: "Local", en: "Location", fr: "Lieu" },
     "calendar.cancel": { pt: "Cancelar", en: "Cancel", fr: "Annuler" },
     "calendar.open_item": { pt: "Abrir", en: "Open", fr: "Ouvrir" },
+    // Rótulos das vistas (a barra de vistas e os aria-labels de navegação).
+    "calendar.view.day": { pt: "Dia", en: "Day", fr: "Jour" },
+    "calendar.view.week": { pt: "Semana", en: "Week", fr: "Semaine" },
+    "calendar.view.month": { pt: "Mês", en: "Month", fr: "Mois" },
+    "calendar.view.year": { pt: "Ano", en: "Year", fr: "Année" },
+    "calendar.view.agenda": { pt: "Agenda", en: "Agenda", fr: "Agenda" },
+    // Tipo de actividade, derivado do estado.
+    "calendar.kind.task_due": { pt: "Prazo", en: "Deadline", fr: "Échéance" },
+    "calendar.kind.reminder": { pt: "Lembrete", en: "Reminder", fr: "Rappel" },
+    "calendar.kind.event": { pt: "Evento", en: "Event", fr: "Événement" },
+    "calendar.new_activity_cta": { pt: "+ Nova actividade", en: "+ New activity", fr: "+ Nouvelle activité" },
+    "calendar.nav.prev": { pt: "{label}, período anterior", en: "{label}, previous period", fr: "{label}, période précédente" },
+    "calendar.nav.next": { pt: "{label}, período seguinte", en: "{label}, next period", fr: "{label}, période suivante" },
+    "calendar.today": { pt: "Hoje", en: "Today", fr: "Aujourd’hui" },
     "notifications.title": { pt: "Notificações", en: "Notifications", fr: "Notifications" },
     "notifications.unread": { pt: "Por ler", en: "Unread", fr: "Non lues" },
     "notifications.nothing_unread": { pt: "Nada por ler.", en: "Nothing unread.", fr: "Rien à lire." },
     "notifications.mark_read": { pt: "Marcar como lida", en: "Mark as read", fr: "Marquer comme lue" },
     "notifications.empty": { pt: "Ainda não há notificações.", en: "No notifications yet.", fr: "Aucune notification pour l’instant." },
     "notifications.unreadable": { pt: "Não foi possível ler as notificações.", en: "Notifications could not be read.", fr: "Les notifications n’ont pas pu être lues." },
+    "notifications.unread_count.one": { pt: "{count} por ler.", en: "{count} unread.", fr: "{count} non lue." },
+    "notifications.unread_count.other": { pt: "{count} por ler.", en: "{count} unread.", fr: "{count} non lues." },
 };
 
 /// As Mensagens internas. O texto das mensagens é do membro e não se traduz.
@@ -854,6 +899,30 @@ const MESSAGING: &[Entry] = catalogo! {
     "messaging.reply": { pt: "Responder", en: "Reply", fr: "Répondre" },
     "messaging.react": { pt: "Reagir", en: "React", fr: "Réagir" },
     "messaging.emoji_aria": { pt: "Emoji", en: "Emoji", fr: "Emoji" },
+    // Separadores de data na conversa.
+    "messaging.today": { pt: "Hoje", en: "Today", fr: "Aujourd’hui" },
+    "messaging.yesterday": { pt: "Ontem", en: "Yesterday", fr: "Hier" },
+    // Contagem de mensagens por ler (numa etiqueta e num tooltip).
+    "messaging.unread_count.one": { pt: "{count} por ler", en: "{count} unread", fr: "{count} non lue" },
+    "messaging.unread_count.other": { pt: "{count} por ler", en: "{count} unread", fr: "{count} non lues" },
+    "messaging.unread_count_mention.one": { pt: "{count} por ler, com menção", en: "{count} unread, with a mention", fr: "{count} non lue, avec mention" },
+    "messaging.unread_count_mention.other": { pt: "{count} por ler, com menção", en: "{count} unread, with a mention", fr: "{count} non lues, avec mention" },
+    // Nova conversa e detalhes.
+    "messaging.group": { pt: "Grupo", en: "Group", fr: "Groupe" },
+    "messaging.group_name_placeholder": { pt: "Projecto Energia", en: "Energy Project", fr: "Projet Énergie" },
+    "messaging.details": { pt: "Detalhes", en: "Details", fr: "Détails" },
+    "messaging.remove": { pt: "Retirar", en: "Remove", fr: "Retirer" },
+    "messaging.send": { pt: "Enviar", en: "Send", fr: "Envoyer" },
+    // Assistência de escrita.
+    "messaging.ai.proofread": { pt: "Corrigir", en: "Proofread", fr: "Corriger" },
+    "messaging.ai.improve": { pt: "Melhorar", en: "Improve", fr: "Améliorer" },
+    "messaging.ai.translate": { pt: "Traduzir", en: "Translate", fr: "Traduire" },
+    // A dica de teclado do compositor (teclas e conectores da frase).
+    "messaging.kbd.enter": { pt: "Enter", en: "Enter", fr: "Entrée" },
+    "messaging.kbd.shift": { pt: "Shift", en: "Shift", fr: "Maj" },
+    "messaging.hint.sends": { pt: " envia · ", en: " sends · ", fr: " envoie · " },
+    "messaging.hint.newline": { pt: " muda de linha · ", en: " for a new line · ", fr: " pour un saut de ligne · " },
+    "messaging.hint.mentions": { pt: " menciona", en: " mentions", fr: " mentionne" },
 };
 
 /// As superfícies anteriores à sessão: arranque, login, primeiro acesso, MFA.
@@ -1327,6 +1396,72 @@ const AI: &[Entry] = catalogo! {
         pt: "Nenhum nó de IA da Ocinye está disponível: o agente está definido e configurado, e correrá assim que existir uma capacidade que o sirva. A definição não depende de haver modelo.",
         en: "No Ocinye AI node is available: the agent is defined and configured, and will run as soon as a capability that serves it exists. The definition does not depend on a model existing.",
         fr: "Aucun nœud d’IA d’Ocinye n’est disponible : l’agent est défini et configuré, et s’exécutera dès qu’une capacité pouvant le servir existera. La définition ne dépend pas de l’existence d’un modèle."
+    },
+};
+
+/// O Prompt Ocinye: a superfície de comando. A proveniência da resposta —
+/// «Ocinye · Sistema», «Ocinye AI · {model}» — é chrome tipado, não conteúdo do
+/// modelo; o texto da conversa é do membro e do Core, e não se traduz aqui.
+const PROMPT: &[Entry] = catalogo! {
+    // Autoria da resposta, derivada da origem tipada (M5 §8, §15).
+    "prompt.author.model": { pt: "Ocinye AI · {model}", en: "Ocinye AI · {model}", fr: "Ocinye AI · {model}" },
+    "prompt.author.model_generic": { pt: "Ocinye AI", en: "Ocinye AI", fr: "Ocinye AI" },
+    "prompt.author.tool": { pt: "Ocinye · Ferramenta", en: "Ocinye · Tool", fr: "Ocinye · Outil" },
+    "prompt.author.agent": { pt: "Ocinye · Agente", en: "Ocinye · Agent", fr: "Ocinye · Agent" },
+    "prompt.author.system": { pt: "Ocinye · Sistema", en: "Ocinye · System", fr: "Ocinye · Système" },
+    // Capacidades oferecidas na barra, seleccionáveis independentemente do estado.
+    "prompt.cap.general": { pt: "Geral", en: "General", fr: "Général" },
+    "prompt.cap.reasoning": { pt: "Raciocínio", en: "Reasoning", fr: "Raisonnement" },
+    "prompt.cap.coding": { pt: "Código", en: "Code", fr: "Code" },
+    "prompt.cap.data": { pt: "Dados", en: "Data", fr: "Données" },
+    "prompt.cap.legend": { pt: "Capacidade", en: "Capability", fr: "Capacité" },
+    "prompt.no_active_model": { pt: "sem modelo activo", en: "no active model", fr: "aucun modèle actif" },
+    // Estado e contexto.
+    "prompt.no_node_default": {
+        pt: "Nenhum nó de IA Ocinye está actualmente disponível. Nenhum fornecedor externo é usado em substituição.",
+        en: "No Ocinye AI node is currently available. No external provider is used as a substitute.",
+        fr: "Aucun nœud d’IA Ocinye n’est actuellement disponible. Aucun fournisseur externe n’est utilisé en remplacement."
+    },
+    "prompt.no_agent": { pt: "Sem agente seleccionado", en: "No agent selected", fr: "Aucun agent sélectionné" },
+    "prompt.context_eyebrow": { pt: "CONTEXTO", en: "CONTEXT", fr: "CONTEXTE" },
+    // Estado vazio: cabeçalho e nota de acesso.
+    "prompt.hero.title": { pt: "Interagir com Ocinye", en: "Interact with Ocinye", fr: "Interagir avec Ocinye" },
+    "prompt.hero.access_note": {
+        pt: "As respostas respeitarão sempre aquilo a que tem acesso: um modelo nunca recebe um artefacto que não conseguiria abrir.",
+        en: "Answers will always respect what you have access to: a model never receives an artefact you could not open.",
+        fr: "Les réponses respecteront toujours ce à quoi vous avez accès : un modèle ne reçoit jamais un artefact que vous ne pourriez pas ouvrir."
+    },
+    // Sugestões de arranque (exemplos fornecidos pelo produto).
+    "prompt.suggestion.hydrogen": { pt: "Resumir investigação sobre hidrogénio verde", en: "Summarise research on green hydrogen", fr: "Résumer la recherche sur l’hydrogène vert" },
+    "prompt.suggestion.storage": { pt: "Comparar bibliografia de armazenamento", en: "Compare storage bibliography", fr: "Comparer la bibliographie du stockage" },
+    "prompt.suggestion.climate": { pt: "Analisar dataset climático de 2010–2024", en: "Analyse the 2010–2024 climate dataset", fr: "Analyser le jeu de données climatiques de 2010–2024" },
+    "prompt.suggestion.report": { pt: "Criar estrutura de relatório", en: "Create a report outline", fr: "Créer une structure de rapport" },
+    // Input.
+    "prompt.input.label": { pt: "Escreva o seu pedido", en: "Write your request", fr: "Rédigez votre demande" },
+    "prompt.input.placeholder": { pt: "Escreva o seu pedido…", en: "Write your request…", fr: "Rédigez votre demande…" },
+    // Chips de contexto do dock (declarados indisponíveis, com a razão).
+    "prompt.attach": { pt: "Anexar", en: "Attach", fr: "Joindre" },
+    "prompt.attach.dataset": { pt: "Dataset", en: "Dataset", fr: "Jeu de données" },
+    "prompt.attach.document": { pt: "Documento", en: "Document", fr: "Document" },
+    "prompt.attach.tools": { pt: "Ferramentas", en: "Tools", fr: "Outils" },
+    "prompt.attach.unavailable": {
+        pt: "Anexar contexto a um pedido ainda não está disponível nesta instalação.",
+        en: "Attaching context to a request is not yet available in this installation.",
+        fr: "Joindre du contexte à une demande n’est pas encore disponible dans cette installation."
+    },
+    "prompt.send": { pt: "Enviar", en: "Send", fr: "Envoyer" },
+    // Turnos da conversa.
+    "prompt.you": { pt: "Você", en: "You", fr: "Vous" },
+    "prompt.copy_response": { pt: "Copiar", en: "Copy", fr: "Copier" },
+    "prompt.meta.details": { pt: "Detalhes", en: "Details", fr: "Détails" },
+    "prompt.meta.origin": { pt: "Origem", en: "Origin", fr: "Origine" },
+    "prompt.meta.model": { pt: "Modelo", en: "Model", fr: "Modèle" },
+    "prompt.meta.reason": { pt: "Razão", en: "Reason", fr: "Raison" },
+    // Aviso permanente do dock.
+    "prompt.errors_note": {
+        pt: "O Ocinye AI pode cometer erros. Verifique informação crítica e consulte as fontes citadas.",
+        en: "Ocinye AI can make mistakes. Check critical information and consult the cited sources.",
+        fr: "L’Ocinye AI peut commettre des erreurs. Vérifiez les informations critiques et consultez les sources citées."
     },
 };
 
@@ -2532,6 +2667,7 @@ pub const GROUPS: &[&[Entry]] = &[
     FIRST_ENTRY,
     SETTINGS,
     AI,
+    PROMPT,
     ADMIN,
     LISTS,
     SCIENCE,

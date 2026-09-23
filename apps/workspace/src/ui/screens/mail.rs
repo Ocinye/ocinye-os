@@ -699,7 +699,7 @@ fn list(
 
             {searching.then(|| view! {
                 <p class="oc-mail__result-count" role="status">
-                    {format!("{count} resultado(s) para a pesquisa.")}
+                    {crate::i18n::tf("mail.search.result_count", &[("count", &count.to_string())])}
                 </p>
             })}
 
@@ -718,8 +718,7 @@ fn list(
                          Uma pasta vazia aqui não quer dizer que não tenha recebido nada."
                             .to_owned()
                     } else if searching {
-                        "Nenhuma mensagem desta caixa corresponde ao termo pesquisado."
-                            .to_owned()
+                        crate::i18n::t("mail.list.empty.search.body").to_owned()
                     } else {
                         crate::i18n::t("mail.list.empty.folder.body").to_owned()
                     },
@@ -757,13 +756,18 @@ fn row(message: &Value, open_id: &str) -> impl IntoView {
     // vez dele: um remetente que se apresenta como «Ocinye Suporte» a partir
     // de um domínio qualquer não deve poder esconder o domínio (briefing §14).
     let from = text(message, "from_display_name", "").to_owned();
-    let address = text(message, "from_address", "(remetente desconhecido)").to_owned();
+    let address = text(
+        message,
+        "from_address",
+        crate::i18n::t("mail.unknown_sender"),
+    )
+    .to_owned();
     let from = if from.is_empty() {
         address.clone()
     } else {
         from
     };
-    let subject = text(message, "subject", "(sem assunto)").to_owned();
+    let subject = text(message, "subject", crate::i18n::t("mail.no_subject")).to_owned();
     let preview = text(message, "snippet", "").to_owned();
     let when = short_date(text(message, "sent_at", ""));
     let has_attachments = message
@@ -813,7 +817,7 @@ fn reading_placeholder() -> impl IntoView {
         <div class="oc-mail__pane oc-mail__pane--empty">
             {empty_state(EmptyState {
                 icon: Icon::Mail,
-                title: "Seleccione uma mensagem".to_owned(),
+                title: crate::i18n::t("mail.select_message").to_owned(),
                 body: "O conteúdo aparece aqui. Imagens e conteúdo remoto não são \
                        carregados automaticamente."
                     .to_owned(),
@@ -829,7 +833,7 @@ fn reading_placeholder() -> impl IntoView {
 fn reading(viewer: &Viewer, view: &MailView, payload: &Value) -> impl IntoView {
     let message = payload.get("message").cloned().unwrap_or(Value::Null);
     let id = text(&message, "id", "").to_owned();
-    let subject = text(&message, "subject", "(sem assunto)").to_owned();
+    let subject = text(&message, "subject", crate::i18n::t("mail.no_subject")).to_owned();
     let from_display = text(&message, "from_display_name", "").to_owned();
     let from_address = text(&message, "from_address", "").to_owned();
     let when = short_date(text(&message, "sent_at", ""));
@@ -1303,14 +1307,14 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                     }}
                 </div>
 
-                {campo_de_destinatarios("to", "Para", &to, true)}
+                {campo_de_destinatarios("to", crate::i18n::t("mail.compose.to"), &to, true)}
 
                 <div class="oc-comp__linha oc-comp__linha--cc" data-oc="linha-cc" hidden=!cc_aberto>
-                    {campo_de_destinatarios("cc", "Cc", &cc, false)}
+                    {campo_de_destinatarios("cc", crate::i18n::t("mail.compose.cc"), &cc, false)}
                 </div>
 
                 <div class="oc-comp__linha oc-comp__linha--cc" data-oc="linha-bcc" hidden=!bcc_aberto>
-                    {campo_de_destinatarios("bcc", "Bcc", &bcc, false)}
+                    {campo_de_destinatarios("bcc", crate::i18n::t("mail.compose.bcc"), &bcc, false)}
                 </div>
 
                 <input
@@ -1620,8 +1624,12 @@ fn campo_de_destinatarios(
                 // que quase nunca se usa a ocupar uma linha é ruído em todas as
                 // outras. Abrir um não muda destinatários — só revela a linha.
                 <span class="oc-comp__ccbcc">
-                    <button type="button" class="oc-comp__cc" data-oc="mostrar-cc">"Cc"</button>
-                    <button type="button" class="oc-comp__cc" data-oc="mostrar-bcc">"Bcc"</button>
+                    <button type="button" class="oc-comp__cc" data-oc="mostrar-cc">
+                        {crate::i18n::t("mail.compose.cc")}
+                    </button>
+                    <button type="button" class="oc-comp__cc" data-oc="mostrar-bcc">
+                        {crate::i18n::t("mail.compose.bcc")}
+                    </button>
                 </span>
             })}
         </div>
