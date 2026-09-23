@@ -443,7 +443,11 @@ const fn screen_permission(screen: Screen) -> Option<Permission> {
         Screen::Agents => Some(Permission::AgentsView),
         Screen::Compute => Some(Permission::ComputeView),
         Screen::Activity => Some(Permission::OrganisationView),
-        Screen::Admin => Some(Permission::MembersView),
+        // `MembersManage`, e não `MembersView`: ver colegas para lhes escrever é
+        // um direito de qualquer membro (o directório `/people`), mas a consola
+        // de Administração — o roster com o estado de cada conta — é de quem
+        // administra pessoas. Um investigador com `MembersView` deixa de a abrir.
+        Screen::Admin => Some(Permission::MembersManage),
         Screen::Audit => Some(Permission::AuditView),
         // O Prompt não está na navegação lateral; o `AiUse` que o guarda é
         // verificado no ecrã que lá chega.

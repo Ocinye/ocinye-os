@@ -29,9 +29,9 @@ mod service;
 
 pub use accounts::{
     bootstrap_platform_admin, bootstrap_privileged_identity, change_own_password, create_member,
-    provision_existing_person, reset_password, revoke_member_session, set_account_status,
-    set_permanent_password, validate_email, HumanOwner, NewMember, TemporaryCredential,
-    DEFAULT_TEMPORARY_CREDENTIAL_HOURS,
+    delete_member, provision_existing_person, reset_password, revoke_member_session,
+    set_account_status, set_permanent_password, set_position, validate_email, HumanOwner,
+    NewMember, TemporaryCredential, DEFAULT_TEMPORARY_CREDENTIAL_HOURS,
 };
 pub use authentication::{
     AttemptContext, Authenticator, IssuedSession, Throttle, PASSWORD_CHANGE_SESSION_MINUTES,

@@ -98,6 +98,20 @@ pub mod action {
     /// esconderia que a anterior foi retirada; «reposta» diria que havia acesso
     /// utilizável, e não havia.
     pub const ACCOUNT_ACCESS_REISSUED: &str = "account_access_reissued";
+    /// A member's institutional position was set, changed or cleared.
+    ///
+    /// The position carries no authorization (ADR-0100); the record exists for
+    /// organisational truth, so a later reader can see who a person was said to
+    /// be, and when that changed.
+    pub const POSITION_CHANGED: &str = "position_changed";
+    /// A member account was deleted outright.
+    ///
+    /// Only ever a never-activated invitation — an account that could hold no
+    /// authored history (the database's own `RESTRICT` keys guarantee it). For
+    /// anyone who has acted, the operation is `account_disabled`, which keeps the
+    /// history. The person row is gone, but this line, keyed to their identifier,
+    /// is not: the audit trail is append-only, and it remembers that they were.
+    pub const ACCOUNT_DELETED: &str = "account_deleted";
     /// A member's resource allocation profile was assigned or changed.
     pub const RESOURCE_PROFILE_ASSIGNED: &str = "resource_profile_assigned";
     /// An explicit access grant was created.

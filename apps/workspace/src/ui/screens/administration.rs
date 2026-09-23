@@ -794,12 +794,12 @@ pub fn member_detail(
     let status = text(person, "status").to_owned();
     // A posição em português. Vinha crua — «founder» em vez de «Fundador» — por
     // não passar pela mesma tradução que o formulário de criação usa.
-    let position = position_label(
-        person
-            .get("institutional_position")
-            .and_then(Value::as_str)
-            .unwrap_or(""),
-    );
+    let position_code = person
+        .get("institutional_position")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
+    let position = position_label(&position_code);
 
     let security = security.clone();
     let access = access.clone();
@@ -853,6 +853,7 @@ pub fn member_detail(
             <section id="membro-overview">
                 {section_head(crate::i18n::t("admin.tab.overview"), None, None)}
                 {overview_tab(&position, &status, &security, &access)}
+                {position_admin(&person_id, &position_code, &security)}
             </section>
             <div class="oc-vspace"></div>
             <section id="membro-acesso">
@@ -1576,6 +1577,71 @@ fn account_transitions(current: &str) -> Vec<(&'static str, &'static str)> {
     }
 }
 
+/// Administração da **posição institucional** de um membro.
+///
+/// # O que esta secção nunca é
+///
+/// Uma concessão de acesso. A posição é o que uma pessoa **é** na instituição —
+/// Fundador, Director, Investigador — e não o que **pode** (ADR-0100): a política
+/// nunca lê esta coluna. Mudá-la muda o registo, e não a autoridade. O texto
+/// di-lo, para que ninguém a confunda com o papel técnico, que é a outra
+/// dimensão e vive no separador «Acesso».
+///
+/// # Autoridade
+///
+/// Renderiza-se apenas quando o Core diz que o **actor** pode mudar a posição
+/// (`security.may_change_position`, a mesma `MembersManage` que gere a conta).
+/// Sem esse sinal, a secção não aparece.
+pub fn position_admin(person_id: &str, current_code: &str, security: &Value) -> impl IntoView {
+    let pode_mudar = security
+        .get("may_change_position")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let current = current_code.to_owned();
+    let accao = format!("/admin/members/{person_id}/position");
+
+    view! {
+        {pode_mudar.then(|| view! {
+            <div class="oc-mt-6">
+                {card(
+                    section_head(crate::i18n::t("admin.position.manage"), None, None),
+                    view! {
+                        <div>
+                            <p class="oc-muted">
+                                {crate::i18n::t("admin.new.position_truth")}
+                                <strong>{crate::i18n::t("admin.new.position_no_access")}</strong>
+                            </p>
+                            <form
+                                method="post"
+                                action=accao.clone()
+                                class="oc-row oc-row--wrap oc-gap-3 oc-mt-3"
+                            >
+                                <select class="oc-select" name="position">
+                                    <option value="" selected=current.is_empty()>"—"</option>
+                                    {POSITIONS
+                                        .iter()
+                                        .map(|(value, key)| {
+                                            let is = *value == current;
+                                            view! {
+                                                <option value=*value selected=is>
+                                                    {crate::i18n::t(key)}
+                                                </option>
+                                            }
+                                        })
+                                        .collect_view()}
+                                </select>
+                                <button class="oc-btn oc-btn--primary" type="submit">
+                                    {crate::i18n::t("action.save")}
+                                </button>
+                            </form>
+                        </div>
+                    },
+                )}
+            </div>
+        })}
+    }
+}
+
 /// Administração da **credencial e do estado** de uma conta: repor
 /// palavra-passe e transitar o estado.
 ///
@@ -1597,6 +1663,14 @@ pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
     let sem_transicoes = transicoes.is_empty();
     let accao_estado = format!("/admin/members/{person_id}/status");
     let accao_reset = format!("/admin/members/{person_id}/reset-password");
+    let accao_apagar = format!("/admin/members/{person_id}/delete");
+    // Apagar é a excepção estreita — só um convite por aceitar e nunca usado. É o
+    // Core que responde se esta conta o é; o ecrã não adivinha a partir do
+    // estado, para não oferecer um apagar que vai ser recusado.
+    let pode_apagar = overview
+        .get("may_be_deleted")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
 
     view! {
         {pode_gerir.then(|| view! {
@@ -1657,6 +1731,26 @@ pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
                                     .into_any()
                             }}
                             </div>
+
+                            // Apagar, e só para um convite por aceitar. Diz, antes
+                            // do botão, o que a distingue de desactivar: aqui não há
+                            // histórico a preservar, porque a conta nunca foi usada.
+                            {pode_apagar.then(|| view! {
+                                <div class="oc-mt-6">
+                                    <p class="oc-muted">
+                                        {crate::i18n::t("admin.account.delete_note")}
+                                    </p>
+                                    <form
+                                        method="post"
+                                        action=accao_apagar.clone()
+                                        class="oc-mt-3"
+                                    >
+                                        <button class="oc-btn oc-btn--danger" type="submit">
+                                            {crate::i18n::t("admin.account.delete_submit")}
+                                        </button>
+                                    </form>
+                                </div>
+                            })}
                         </div>
                     },
                 )}
@@ -2389,6 +2483,50 @@ mod tests {
         assert!(!sem.contains("Gerir credencial e estado"));
         assert!(!sem.contains("reset-password"));
     }
+
+    /// A posição edita-se quando o Core diz que o actor pode, com o valor actual
+    /// pré-seleccionado e a acção certa — e a secção diz que não concede acesso.
+    #[test]
+    fn a_posicao_edita_se_quando_o_core_deixa() {
+        let com = position_admin(PID, "founder", &json!({ "may_change_position": true })).to_html();
+        assert!(com.contains(&format!("action=\"/admin/members/{PID}/position\"")));
+        // O valor actual vem seleccionado, e lê-se em português.
+        assert!(com.contains("value=\"founder\" selected"));
+        assert!(com.contains(">Fundador<"));
+        // Diz, ali mesmo, que a posição não concede acesso.
+        assert!(com.contains("Não concede acesso a nada"));
+
+        // Sem o sinal do Core, a secção não aparece — não um botão que ele recusa.
+        let sem = position_admin(PID, "founder", &json!({})).to_html();
+        assert!(!sem.contains("/position"));
+    }
+
+    /// Apagar só aparece quando o Core marca a conta como apagável — um convite
+    /// por aceitar e nunca usado —, aponta para a rota certa e diz que uma conta
+    /// usada se desactiva, não se apaga.
+    #[test]
+    fn apagar_aparece_so_para_um_convite_que_o_core_marca() {
+        let com = account_admin(
+            PID,
+            &json!({ "account_status": "invited", "may_manage_account": true, "may_be_deleted": true }),
+        )
+        .to_html();
+        assert!(com.contains(&format!("action=\"/admin/members/{PID}/delete\"")));
+        assert!(com.contains(">Apagar convite<"));
+        // A distinção de desactivar está à vista, antes do botão.
+        assert!(com.contains("desactive-a"));
+
+        // Uma conta que já foi usada: o Core não a marca, e o apagar não aparece —
+        // continua a haver desactivar (transições de estado).
+        let usada = account_admin(
+            PID,
+            &json!({ "account_status": "active", "may_manage_account": true, "may_be_deleted": false }),
+        )
+        .to_html();
+        assert!(!usada.contains("/delete"));
+        assert!(!usada.contains("Apagar convite"));
+        assert!(usada.contains("Gerir credencial e estado"));
+    }
 }
 
 #[cfg(test)]
@@ -2424,6 +2562,8 @@ mod pureza_i18n {
             "last_successful_sign_in": "2026-08-22T10:31:00Z",
             "recent_failed_attempts": 0,
             "may_manage_account": true,
+            "may_change_position": true,
+            "may_be_deleted": true,
             "live_sessions": [{
                 "id": "aaaaaaaa-1111-2222-3333-444444444444",
                 "state": "active",
@@ -2477,6 +2617,7 @@ mod pureza_i18n {
             "Appartenances aux unités",
             "Gérer les rôles techniques",
             "Réinitialiser le mot de passe",
+            "Supprimer l’invitation",
         ] {
             assert!(fr.contains(francesa), "fr: falta «{francesa}»");
         }
@@ -2496,6 +2637,7 @@ mod pureza_i18n {
             "Repor palavra-passe",
             "Em resumo",
             "Posição institucional",
+            "Apagar convite",
         ] {
             assert!(
                 !fr.contains(portuguesa),

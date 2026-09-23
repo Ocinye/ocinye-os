@@ -705,6 +705,147 @@ pub async fn set_account_status(
     Ok(())
 }
 
+/// Set, change or clear a member's institutional position.
+///
+/// The position is what a person *is* in the institution — Founder, Director,
+/// Researcher — and it grants nothing (ADR-0100): the policy never reads this
+/// column. Changing it is therefore a change of organisational record, not of
+/// access, and that is exactly what the audit line says. `None` clears it.
+///
+/// Authority is the actor's, re-established at the boundary that calls this with
+/// the same permission the operation requires (`MembersManage`).
+///
+/// # Errors
+///
+/// Returns a database error.
+pub async fn set_position(
+    pool: &PgPool,
+    actor: &Principal,
+    person: &Person,
+    position: Option<InstitutionalPosition>,
+    ids: &CorrelationIds,
+) -> CoreResult<()> {
+    // Nothing to record when nothing changes: writing the same value would add a
+    // line to the trail that says a change happened when none did.
+    if person.position() == position {
+        return Ok(());
+    }
+
+    let mut tx = pool.begin().await?;
+    repo::set_institutional_position(
+        &mut *tx,
+        person.id,
+        position.map(InstitutionalPosition::as_str),
+    )
+    .await?;
+
+    audit::record(
+        &mut tx,
+        Some(actor),
+        ids,
+        AuditEntry::new(action::POSITION_CHANGED, "person")
+            .resource(person.id)
+            .detail(
+                "position",
+                position.map_or("—", InstitutionalPosition::as_str),
+            )
+            .detail(
+                "previous_position",
+                person.position().map_or("—", InstitutionalPosition::as_str),
+            ),
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Delete a member who never became one — an unaccepted, never-activated
+/// invitation.
+///
+/// # Why deletion is the narrow case, and disabling the general one
+///
+/// A member who has ever acted is woven into the institution's memory: they are
+/// the author of ideas, the reviser of notes, the actor on audit lines. The
+/// database says so with seventy-odd `RESTRICT` keys, and it is right to: erasing
+/// them would tear holes in a record that exists to be trustworthy. For them the
+/// operation is [`set_account_status`] to `disabled`, which ends access and keeps
+/// authorship.
+///
+/// Deletion is for the other case, and only it: an invitation created by
+/// mistake — wrong address, wrong person — that no one ever accepted. Such an
+/// account has authored nothing (an `invited` account cannot act), so removing it
+/// loses no history. What it does remove is a name sitting in the roster forever
+/// as a mistake nobody can undo.
+///
+/// The guard is threefold: never the actor's own account, never anything past
+/// the `invited` state, and never the last platform administrator who can still
+/// sign in. The status predicate is re-checked inside the delete statement, so a
+/// sign-in that lands between the check and the write cannot be overtaken.
+///
+/// # Errors
+///
+/// Returns [`CoreError::Validation`] when the account is not a bare invitation or
+/// is the actor's own, and a database error otherwise — including the
+/// foreign-key violation that would fire if, against the invariant, some row
+/// still referenced the person.
+pub async fn delete_member(
+    pool: &PgPool,
+    actor: &Principal,
+    person: &Person,
+    ids: &CorrelationIds,
+) -> CoreResult<()> {
+    if person.id == actor.person_id {
+        return Err(CoreError::Validation(
+            "Não pode apagar a sua própria conta.".to_owned(),
+        ));
+    }
+
+    if !person.never_activated() {
+        return Err(CoreError::Validation(
+            "Só um convite que ninguém aceitou se apaga. Uma conta que já foi usada \
+             desactiva-se — barra o acesso e preserva a autoria e o histórico."
+                .to_owned(),
+        ));
+    }
+
+    let mut tx = pool.begin().await?;
+
+    // An invitation should never be the sole administrator, but the guard costs a
+    // query and buys certainty: deleting the last admin who can sign in locks the
+    // institution out just as surely as suspending them would.
+    ensure_not_sole_platform_admin(&mut tx, person).await?;
+
+    // Recorded before the row is gone, and it outlives the row: the actor is the
+    // administrator (a valid person), and `resource_id` carries no foreign key,
+    // so the append-only trail keeps this line after the person is deleted.
+    audit::record(
+        &mut tx,
+        Some(actor),
+        ids,
+        AuditEntry::new(action::ACCOUNT_DELETED, "person")
+            .resource(person.id)
+            .detail("email", person.email.clone())
+            .detail("full_name", person.full_name.clone()),
+    )
+    .await?;
+
+    let removed = repo::delete_invited_person(&mut *tx, person.id, person.organisation_id).await?;
+    if removed != 1 {
+        // The status changed under us — the person signed in between the guard
+        // and the write. Roll back, including the audit line, and refuse.
+        tx.rollback().await?;
+        return Err(CoreError::Conflict(
+            "A conta deixou de ser um convite por aceitar. Actualize e reveja o estado \
+             antes de a apagar."
+                .to_owned(),
+        ));
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
 /// Revoke **one** session of a member, as an administrator.
 ///
 /// A governed operation, not a side effect (ADR-0107): the case «perdi um

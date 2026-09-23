@@ -620,6 +620,68 @@ pub async fn set_status<'e>(
     Ok(())
 }
 
+/// Set, change or clear a person's institutional position.
+///
+/// The position is organisational truth, not authorization (ADR-0100): the
+/// policy never reads this column, so writing it changes what a person *is
+/// said to be*, never what they may do. `None` clears it.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+pub async fn set_institutional_position<'e>(
+    executor: impl PgExecutor<'e>,
+    person_id: Uuid,
+    position: Option<&str>,
+) -> CoreResult<()> {
+    sqlx::query(
+        "UPDATE people
+            SET institutional_position = $2,
+                updated_at = now()
+          WHERE id = $1",
+    )
+    .bind(person_id)
+    .bind(position)
+    .execute(executor)
+    .await?;
+    Ok(())
+}
+
+/// Delete a member who is still an unaccepted invitation.
+///
+/// The `status = 'invited'` predicate is part of the statement, not just a guard
+/// the caller checked a moment ago: it is what makes the delete safe under a
+/// race, so a person who signed in between the check and here is not deleted.
+///
+/// The person's provisioning artifacts — credential, roles, memberships, grants,
+/// recovery codes — fall away with them by `ON DELETE CASCADE`. Anything an
+/// *actor* touched keys back with `RESTRICT`, but a never-activated invitation
+/// has acted on nothing, so nothing restricts. Returns the number of rows
+/// removed: zero means the account was no longer a bare invitation.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails — including a foreign-key violation
+/// when, against expectation, some row still references the person.
+pub async fn delete_invited_person<'e>(
+    executor: impl PgExecutor<'e>,
+    person_id: Uuid,
+    organisation_id: Uuid,
+) -> CoreResult<u64> {
+    let result = sqlx::query(
+        "DELETE FROM people
+          WHERE id = $1
+            AND organisation_id = $2
+            AND status = 'invited'
+            AND last_seen_at IS NULL",
+    )
+    .bind(person_id)
+    .bind(organisation_id)
+    .execute(executor)
+    .await?;
+    Ok(result.rows_affected())
+}
+
 /// Whether the organisation already has a live platform administrator.
 ///
 /// The one-shot guard on bootstrap (briefing §12). Two choices are deliberate.

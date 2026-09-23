@@ -7,6 +7,33 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Administração de membros: posição, apagar convites e roster só para admin — 2026-09-24
+
+O detalhe de um membro passa a permitir **mudar a posição institucional** depois
+da criação (Fundador, Director, Investigador…). A posição é registo, não acesso
+(ADR-0100): a política nunca lê a coluna, e a operação regista-se como
+`position_changed` sem tocar em papéis nem permissões.
+
+Um **convite que ninguém aceitou** — endereço errado, pessoa errada — pode agora
+ser **apagado**. Só esse: uma conta que já foi usada tem autoria, e apaga-la
+rasgaria o registo, por isso o Core recusa e o caminho é desactivar
+(`account_disabled`), que preserva o histórico. A própria conta do actor e o
+último administrador capaz de entrar nunca se apagam. O que a base garante por si
+— setenta-e-tal chaves `RESTRICT` prendem quem já agiu, e as artefactos de
+provisionamento caem por `CASCADE` — a operação diz por palavras, e a linha
+`account_deleted` fica no rasto append-only mesmo depois de a pessoa desaparecer.
+
+A **consola de Administração** deixa de ler o directório partilhado `/people`
+(que basta o `MembersView` de qualquer membro real, para mensagens e correio) e
+passa a ler um **roster próprio**, `GET /administration/members`, que exige
+`MembersManage`. Um investigador com `MembersView` já não abre a consola nem vê o
+roster dos colegas; o directório para escolher destinatários continua a
+funcionar. A coluna «Registo» do roster deixa de vir vazia — o novo endpoint traz
+`created_at` e `last_seen_at`, que o `PersonView` do directório não carregava.
+Guardas de pureza e novos testes de UI, mais quatro provas de base de dados para
+apagar (convite apagável, conta usada recusada, própria conta recusada) e posição
+(registada, não concede papel, no-op quando igual).
+
 ### Internacionalização: o ecrã de Actividade (chrome) — 2026-09-23
 
 O ecrã de Actividade passa a pt/en/fr no seu chrome — título, subtítulo e estado
