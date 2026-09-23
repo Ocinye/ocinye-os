@@ -800,6 +800,51 @@ const CALENDAR: &[Entry] = catalogo! {
     "notifications.unreadable": { pt: "Não foi possível ler as notificações.", en: "Notifications could not be read.", fr: "Les notifications n’ont pas pu être lues." },
 };
 
+/// As Mensagens internas. O texto das mensagens é do membro e não se traduz.
+const MESSAGING: &[Entry] = catalogo! {
+    "messaging.title": { pt: "Mensagens", en: "Messages", fr: "Messages" },
+    "messaging.new_conversation": { pt: "Nova conversa", en: "New conversation", fr: "Nouvelle conversation" },
+    "messaging.start_conversation": { pt: "Comece uma conversa", en: "Start a conversation", fr: "Démarrez une conversation" },
+    "messaging.start": { pt: "Começar", en: "Start", fr: "Démarrer" },
+    "messaging.choose_conversation": { pt: "Escolha uma conversa", en: "Choose a conversation", fr: "Choisissez une conversation" },
+    "messaging.none_yet": { pt: "Ainda não falou com ninguém por aqui.", en: "You have not talked to anyone here yet.", fr: "Vous n’avez encore parlé à personne ici." },
+    "messaging.no_messages_yet": { pt: "Ainda não há mensagens. Escreva a primeira.", en: "No messages yet. Write the first one.", fr: "Aucun message pour l’instant. Écrivez le premier." },
+    "messaging.unreadable": { pt: "Não foi possível ler as conversas", en: "Conversations could not be read", fr: "Les conversations n’ont pas pu être lues" },
+    "messaging.write": { pt: "Escrever mensagem", en: "Write a message", fr: "Écrire un message" },
+    "messaging.write_placeholder": { pt: "Escrever mensagem…", en: "Write a message…", fr: "Écrire un message…" },
+    "messaging.new_messages": { pt: "Novas mensagens", en: "New messages", fr: "Nouveaux messages" },
+    "messaging.conversation_type": { pt: "Tipo de conversa", en: "Conversation type", fr: "Type de conversation" },
+    "messaging.with_one_person": { pt: "Com uma pessoa", en: "With one person", fr: "Avec une personne" },
+    "messaging.group_name": { pt: "Nome do grupo", en: "Group name", fr: "Nom du groupe" },
+    "messaging.add_someone": { pt: "Acrescentar alguém", en: "Add someone", fr: "Ajouter quelqu’un" },
+    "messaging.leave_group": { pt: "Sair do grupo", en: "Leave group", fr: "Quitter le groupe" },
+    "messaging.stop_replying": { pt: "Deixar de responder", en: "Stop replying", fr: "Ne plus répondre" },
+    "messaging.search_person": { pt: "Procurar uma pessoa", en: "Search for a person", fr: "Rechercher une personne" },
+    "messaging.person_placeholder": { pt: "Nome ou endereço institucional…", en: "Name or institutional address…", fr: "Nom ou adresse institutionnelle…" },
+    "messaging.min_two_letters": { pt: "Escreva pelo menos duas letras.", en: "Type at least two letters.", fr: "Saisissez au moins deux lettres." },
+    "messaging.copy_text": { pt: "Copiar o texto", en: "Copy the text", fr: "Copier le texte" },
+    "messaging.choose_emoji": { pt: "Escolher um emoji", en: "Choose an emoji", fr: "Choisir un emoji" },
+    "messaging.ask_ocinye": { pt: "Pedir ajuda ao Ocinye", en: "Ask Ocinye for help", fr: "Demander de l’aide à Ocinye" },
+    "messaging.suggestion": { pt: "Sugestão", en: "Suggestion", fr: "Suggestion" },
+    "messaging.use_suggestion": { pt: "Usar sugestão", en: "Use suggestion", fr: "Utiliser la suggestion" },
+    "messaging.keep_original": { pt: "Manter o original", en: "Keep the original", fr: "Garder l’original" },
+    "messaging.ai.clarify": { pt: "Mais claro", en: "Clearer", fr: "Plus clair" },
+    "messaging.ai.shorter": { pt: "Mais curto", en: "Shorter", fr: "Plus court" },
+    "messaging.ai.formal": { pt: "Mais formal", en: "More formal", fr: "Plus formel" },
+    "messaging.remove_named": { pt: "Retirar {name}", en: "Remove {name}", fr: "Retirer {name}" },
+    "messaging.emoji.attention": { pt: "atenção", en: "attention", fr: "attention" },
+    "messaging.emoji.heart": { pt: "coração", en: "heart", fr: "cœur" },
+    "messaging.someone": { pt: "Alguém", en: "Someone", fr: "Quelqu’un" },
+    "messaging.conversations_aria": { pt: "Conversas", en: "Conversations", fr: "Conversations" },
+    "messaging.conversation_aria": { pt: "Conversa", en: "Conversation", fr: "Conversation" },
+    "messaging.close": { pt: "Fechar", en: "Close", fr: "Fermer" },
+    "messaging.people_aria": { pt: "Pessoas", en: "People", fr: "Personnes" },
+    "messaging.participants": { pt: "Participantes", en: "Participants", fr: "Participants" },
+    "messaging.reply": { pt: "Responder", en: "Reply", fr: "Répondre" },
+    "messaging.react": { pt: "Reagir", en: "React", fr: "Réagir" },
+    "messaging.emoji_aria": { pt: "Emoji", en: "Emoji", fr: "Emoji" },
+};
+
 /// Estados de erro e de página cheia — nenhum ecrã fica em língua trocada.
 const ERRORS: &[Entry] = catalogo! {
     "error.not_found.title": { pt: "Página não encontrada", en: "Page not found", fr: "Page introuvable" },
@@ -883,6 +928,7 @@ const SETTINGS: &[Entry] = catalogo! {
 /// Não inclui grupos de teste: uma chave só-`pt` de teste (para provar a queda)
 /// não é um buraco de produção, e não deve fazer o portão soar.
 pub const GROUPS: &[&[Entry]] = &[
+    MESSAGING,
     CALENDAR,
     FILES,
     MAIL,

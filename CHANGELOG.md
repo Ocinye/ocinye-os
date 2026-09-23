@@ -7,6 +7,14 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Internacionalização (fatia 10): as Mensagens — 2026-09-23
+
+As Mensagens internas passam a pt/en/fr: a lista de conversas e a conversa
+aberta, o compositor (escrever, emoji, assistência do Ocinye), começar uma
+conversa (com uma pessoa ou grupo), os detalhes e os estados vazios. O texto das
+mensagens é do membro e não se traduz. Guarda de pureza
+`as_mensagens_nao_misturam_linguas`.
+
 ### Internacionalização (fatia 9): o Calendário e as notificações — 2026-09-23
 
 O Calendário passa a pt/en/fr: a grelha e as vistas, o editor de actividade
