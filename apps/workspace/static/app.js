@@ -2205,6 +2205,16 @@
    * seu próprio pedido, em paralelo; cancelar é abortá-lo. Só se cria quando o
    * primeiro ficheiro parte, e nunca guarda nada institucional — é só o estado
    * visível de um envio. */
+  /* O maior ficheiro que sobe num só pedido, igual ao que o proxy aceita
+     (`client_max_body_size`, 640 MB) e ao limite lógico do Workspace
+     (`FILE_BODY_LIMIT_BYTES`). Recusar aqui um ficheiro maior é dizer a verdade
+     cedo, em vez de deixar a subida parar a meio sem explicação. */
+  const LIMITE_CARREGAMENTO_BYTES = 640 * 1024 * 1024;
+  const LIMITE_CARREGAMENTO_LEGIVEL = '640 MB';
+  /* Sem avanço durante este tempo, a barra deixa de ser progresso e passa a ser
+     um número parado — e é isso que se diz a quem espera. */
+  const PARAGEM_CARREGAMENTO_MS = 20000;
+
   function criarJanelaDeCarregamento() {
     let painel = null;
     let corpo = null;
@@ -2363,11 +2373,18 @@
         });
       }
 
-      const xhr = new XMLHttpRequest();
       let terminado = false;
+      let vigia = null;
+      const pararVigia = () => {
+        if (vigia) {
+          clearInterval(vigia);
+          vigia = null;
+        }
+      };
       const terminar = (bom, texto) => {
         if (terminado) return;
         terminado = true;
+        pararVigia();
         activos -= 1;
         if (bom) {
           ok += 1;
@@ -2383,17 +2400,50 @@
         assentar();
       };
 
+      /* Recusar já o que o proxy recusaria a meio.
+
+         Um ficheiro acima do limite não sobe: a ligação parava perto de zero e a
+         barra congelava sem dizer porquê — o defeito que se via. Dizê-lo agora, e
+         antes de gastar a subida, é a diferença entre «não sei o que se passa» e
+         «este ficheiro é grande de mais». O número é o mesmo que o proxy aceita. */
+      if (ficheiro.size > LIMITE_CARREGAMENTO_BYTES) {
+        terminar(false, 'Demasiado grande (máx. ' + LIMITE_CARREGAMENTO_LEGIVEL + ')');
+        return;
+      }
+
+      const xhr = new XMLHttpRequest();
+      let ultimoAvanco = Date.now();
+
       xhr.open('POST', destino, true);
       xhr.setRequestHeader('Accept', 'application/json');
       if (xhr.upload) {
         xhr.upload.addEventListener('progress', (evento) => {
           if (evento.lengthComputable) {
+            ultimoAvanco = Date.now();
             const pct = Math.round((evento.loaded / evento.total) * 100);
             ui.progresso(pct);
-            ui.diz(pct < 100 ? pct + '%' : 'A finalizar…');
+            /* Duas etapas, e não uma percentagem que chega a 100 e fica lá: os
+               bytes sobem, depois o servidor guarda-os. Dizer «A finalizar no
+               servidor…» quando a subida acaba diz em que passo está — a pergunta
+               que a barra congelada deixava sem resposta. */
+            ui.diz(pct < 100 ? pct + '%' : 'A finalizar no servidor…');
           }
         });
       }
+
+      /* Uma barra que não anda há muito é uma barra que mente. Sem inventar um
+         fim que não houve, dizê-lo: a ligação parou, e quem espera fica a saber
+         em vez de olhar para um número fixo sem saber se ainda sobe. */
+      vigia = setInterval(() => {
+        if (terminado) {
+          pararVigia();
+          return;
+        }
+        if (Date.now() - ultimoAvanco > PARAGEM_CARREGAMENTO_MS) {
+          ui.diz('A ligação parece parada — verifique a rede ou tente de novo.', true);
+        }
+      }, 4000);
+
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           terminar(true);

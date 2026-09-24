@@ -1727,6 +1727,42 @@ pub async fn purge_personal_file(
     Ok(())
 }
 
+/// Esvazia o Lixo pessoal: apaga definitivamente **tudo** o que lá está.
+///
+/// Cada ficheiro passa pelo mesmo [`purge_personal_file`] — mesma autoridade,
+/// mesma ordem (metadados na transacção, bytes depois), mesma linha de auditoria
+/// por ficheiro. Não há um caminho paralelo que apague em massa por baixo das
+/// invariantes; há só este, a repetir a operação de um, para que esvaziar nunca
+/// signifique menos garantias do que apagar um.
+///
+/// Devolve quantos ficheiros foram apagados. Um Lixo vazio devolve zero sem
+/// tocar em nada. A operação é best-effort no seu todo: se um ficheiro falhar a
+/// meio, os que já saíram ficaram saídos e o erro sobe — o Lixo não fica num
+/// estado que ninguém pediu, só menos cheio.
+///
+/// # Errors
+///
+/// Propaga o erro de listar o Lixo, ou o de apagar um dos ficheiros.
+pub async fn purge_all_personal_trash(
+    pool: &sqlx::PgPool,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    store: &ObjectStore,
+) -> CoreResult<u64> {
+    // Sem teto artificial: quem esvazia o Lixo quer o Lixo todo, e uma página a
+    // menos deixaria ficheiros para trás sem o dizer. O Lixo pessoal é do próprio
+    // e é limitado pela sua quota, não por este número.
+    let no_lixo = repo::list_personal_trash(pool, principal.person_id, i64::MAX).await?;
+
+    let mut apagados: u64 = 0;
+    for ficheiro in &no_lixo {
+        purge_personal_file(pool, principal, ids, store, ficheiro.id).await?;
+        apagados += 1;
+    }
+
+    Ok(apagados)
+}
+
 /// Uma ligação assinada de curta duração para a versão de um ficheiro pessoal.
 ///
 /// A autoridade é a posse: `owns_personal_file_version` recusa a versão que não

@@ -168,6 +168,7 @@ pub const ROUTES: &[&str] = &[
     "/me/files/delete",
     "/me/files/restore",
     "/me/files/purge",
+    "/files/trash/empty",
     "/me/folders",
     "/me/folders/rename",
     "/me/folders/delete",
@@ -512,6 +513,7 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/me/files/delete", post(me_file_delete))
         .route("/me/files/restore", post(me_file_restore))
         .route("/me/files/purge", post(me_file_purge))
+        .route("/files/trash/empty", post(me_files_purge_all))
         .route("/me/folders", post(me_folder_new))
         .route("/me/folders/rename", post(me_folder_rename))
         .route("/me/folders/delete", post(me_folder_delete))
@@ -10812,6 +10814,7 @@ async fn files_browse(
 /// código que esta função conhece.
 fn aviso_de(ok: Option<&str>, erro: Option<&str>) -> Option<(bool, String)> {
     match (ok, erro) {
+        (Some("lixo_vazio"), _) => Some((true, crate::i18n::t("files.trash.emptied").to_owned())),
         (Some("carregado"), _) => Some((true, "Ficheiro carregado.".to_owned())),
         (Some("pasta"), _) => Some((true, "Pasta criada.".to_owned())),
         (Some("versao"), _) => Some((true, "Nova versão carregada.".to_owned())),
@@ -11671,6 +11674,28 @@ async fn me_file_purge(
         "ok=apagado",
     )
     .await
+}
+
+/// `POST /files/trash/empty` — esvazia o Lixo pessoal de uma vez.
+///
+/// Um só pedido ao Core, que apaga tudo o que é do próprio e devolve quantos. A
+/// confirmação vive no ecrã (um passo deliberado antes deste botão); a autoridade
+/// é reavaliada no Core, ficheiro a ficheiro.
+async fn me_files_purge_all(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/me/files/purge-all",
+        &serde_json::json!({}),
+    )
+    .await
+    {
+        Ok(_) => regresso_ficheiros("/files?trash=1", "ok=lixo_vazio"),
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(_) => regresso_ficheiros("/files?trash=1", "erro=recusado"),
+    }
 }
 
 /// A página de um ficheiro.

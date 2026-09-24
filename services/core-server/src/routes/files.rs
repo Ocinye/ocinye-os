@@ -113,6 +113,7 @@ pub fn routes() -> Router<AppState> {
         .route("/me/files/delete", post(trash_my_file))
         .route("/me/files/restore", post(restore_my_file))
         .route("/me/files/purge", post(purge_my_file))
+        .route("/me/files/purge-all", post(purge_all_my_files))
         .route("/me/files/{version_id}/download", get(download_my_file))
         .route("/me/files/{version_id}/raw", get(raw_my_file))
         .route("/me/files/{version_id}/inline", get(inline_my_file))
@@ -856,6 +857,21 @@ async fn purge_my_file(
     let store = state.store()?;
     files::purge_personal_file(&state.pool, &principal, &ids, store, request.file_id).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// `POST /me/files/purge-all` — esvazia o Lixo pessoal de uma vez.
+///
+/// A mesma autoridade e a mesma ordem que apagar um: só toca no que é do próprio,
+/// e cada ficheiro deixa a sua linha de auditoria. Devolve quantos foram apagados
+/// para o ecrã o poder dizer.
+async fn purge_all_my_files(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let store = state.store()?;
+    let purged = files::purge_all_personal_trash(&state.pool, &principal, &ids, store).await?;
+    Ok(Json(serde_json::json!({ "purged": purged })))
 }
 
 #[derive(Deserialize)]
