@@ -1352,7 +1352,12 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 .oc-progress__track {
   flex: 1; height: 5px; border-radius: 3px; background: var(--oc-border-soft); overflow: hidden;
 }
-.oc-progress__fill { height: 100%; border-radius: 3px; background: var(--oc-navy); }
+/* `display: block` não é decoração: o fill é um `<span>`, e um `<span>` é inline.
+   Um elemento inline ignora `width` e `height` — a largura da percentagem era
+   calculada e descartada, e a barra ficava a zero por mais que a percentagem
+   subisse (confirmado: `getComputedStyle` dava «60%», a caixa media 0px). Como
+   bloco, a largura passa a valer. */
+.oc-progress__fill { display: block; height: 100%; border-radius: 3px; background: var(--oc-navy); }
 .oc-progress__pct { font: 500 11px var(--oc-font-mono); color: var(--oc-text-muted); }
 
 /* A largura que o JavaScript escreve, por variável e não por atributo `style`:
