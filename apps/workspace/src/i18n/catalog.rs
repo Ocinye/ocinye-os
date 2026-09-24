@@ -1627,6 +1627,9 @@ const ADMIN: &[Entry] = catalogo! {
     "admin.account.no_transitions": { pt: "Não há transições de estado disponíveis a partir do estado actual.", en: "There are no state transitions available from the current state.", fr: "Aucune transition d’état n’est disponible à partir de l’état actuel." },
     "admin.account.change_state": { pt: "Alterar estado para…", en: "Change status to…", fr: "Changer l’état pour…" },
     "admin.action.apply": { pt: "Aplicar", en: "Apply", fr: "Appliquer" },
+    "admin.position.manage": { pt: "Posição institucional", en: "Institutional position", fr: "Position institutionnelle" },
+    "admin.account.delete_note": { pt: "Este convite nunca foi aceite nem usado, por isso pode ser apagado sem perder histórico. Uma conta que já foi usada não se apaga — desactive-a, que barra o acesso e preserva a autoria.", en: "This invitation was never accepted or used, so it can be deleted without losing any history. An account that has been used is not deleted — disable it, which bars access and preserves authorship.", fr: "Cette invitation n’a jamais été acceptée ni utilisée : elle peut donc être supprimée sans perte d’historique. Un compte déjà utilisé ne se supprime pas — désactivez-le, ce qui bloque l’accès et préserve la paternité." },
+    "admin.account.delete_submit": { pt: "Apagar convite", en: "Delete invitation", fr: "Supprimer l’invitation" },
 };
 
 /// Os oito ecrãs de lista (Unidades, Ideias, Projectos, Bibliografia, Dados,

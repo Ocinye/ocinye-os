@@ -8,9 +8,12 @@ use axum::extract::{Path, Query, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
-use ocinye_contracts::{AccountStatus, InstitutionalPosition, Permission, Scope, TechnicalRole};
+use ocinye_contracts::{
+    AccountStatus, InstitutionalPosition, Page, PageRequest, Permission, Scope, TechnicalRole,
+};
 use ocinye_core::modules::governance::grants;
 use ocinye_core::modules::identity::{self, NewMember, TemporaryCredential};
+use ocinye_core::modules::organisation;
 use ocinye_core::CoreError;
 use ocinye_domain::{can, explain, ResourceContext, ResourceKind};
 use serde::{Deserialize, Serialize};
@@ -26,7 +29,29 @@ use crate::state::AppState;
 /// Administration routes.
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/administration/members", post(create_member))
+        // A lista administrativa dos membros. Distinta de `/people`, que é o
+        // directório partilhado (mensagens, correio, participantes) e basta o
+        // `MembersView` de qualquer membro real. Este roster é a consola, e
+        // exige `MembersManage`: quem só pode ver colegas para lhes escrever não
+        // é quem administra a instituição.
+        .route(
+            "/administration/members",
+            post(create_member).get(list_members),
+        )
+        // Apagar é a excepção estreita — só um convite que ninguém aceitou —, e
+        // o `DELETE` di-lo pela forma. Para uma conta que já foi usada, a
+        // operação é `set_status(disabled)`, que preserva a autoria.
+        .route(
+            "/administration/members/{person_id}",
+            axum::routing::delete(delete_member),
+        )
+        // A posição institucional é registo, não acesso (ADR-0100): mudá-la não
+        // toca em papéis nem em permissões. Fica com a mesma autoridade que gere
+        // a conta, porque é a mesma pessoa a fazê-lo.
+        .route(
+            "/administration/members/{person_id}/position",
+            post(set_position),
+        )
         // Dar acesso a quem já existe é outra operação, e não a mesma com um
         // ramo dentro. `create_member` cria; isto provisiona — e o registo tem
         // de dizer qual das duas aconteceu.
@@ -194,6 +219,132 @@ async fn create_member(
     }))
 }
 
+// ── Member roster (administrative) ──────────────────────────────────────
+
+/// One member, as the administration console lists them.
+///
+/// The columns the roster shows and nothing more. `created_at` and
+/// `last_seen_at` are here where the directory's `PersonView` omits them: the
+/// console's "Registo" column read empty for everyone until this carried them.
+#[derive(Serialize)]
+struct MemberRow {
+    id: Uuid,
+    full_name: String,
+    email: String,
+    /// Institutional position. Shown for the roster; grants nothing.
+    institutional_position: Option<String>,
+    status: String,
+    /// Units the person belongs to now, each `{code, name}`.
+    units: Vec<organisation::PersonUnit>,
+    created_at: DateTime<Utc>,
+    last_seen_at: Option<DateTime<Utc>>,
+}
+
+/// `GET /administration/members`
+///
+/// The roster that the administration screen reads. Gated on `MembersManage`,
+/// not `MembersView`: seeing colleagues to address a message is a right every
+/// member has, but the administrative roster — with each account's state — is
+/// for whoever administers people. The shared directory stays at `/people`.
+async fn list_members(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    Authorised { principal, .. }: Authorised<NeedsMembersManage>,
+    Query(page): Query<PageRequest>,
+) -> Result<Json<Page<MemberRow>>, ApiError> {
+    let (people, total) = identity::list_people(&state.pool, &principal, page)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+
+    let person_ids: Vec<Uuid> = people.iter().map(|p| p.id).collect();
+    let mut units = organisation::units_for_people(&state.pool, &principal, &person_ids)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+
+    let rows = people
+        .into_iter()
+        .map(|person| MemberRow {
+            units: units.remove(&person.id).unwrap_or_default(),
+            id: person.id,
+            full_name: person.full_name,
+            email: person.email,
+            institutional_position: person.institutional_position,
+            status: person.status,
+            created_at: person.created_at,
+            last_seen_at: person.last_seen_at,
+        })
+        .collect();
+
+    Ok(Json(Page::new(rows, page, total)))
+}
+
+// ── Institutional position ──────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct PositionRequest {
+    /// The stable position code, or empty/absent to clear it.
+    #[serde(default)]
+    position: String,
+}
+
+/// `POST /administration/members/{person_id}/position`
+///
+/// Sets, changes or clears the member's institutional position. The position is
+/// organisational truth and grants nothing (ADR-0100), so this never touches
+/// access — only what the record says a person is.
+async fn set_position(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    Authorised { principal, .. }: Authorised<NeedsMembersManage>,
+    Path(person_id): Path<Uuid>,
+    Json(request): Json<PositionRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // Empty clears; a non-empty value that this build does not know is refused
+    // rather than stored, so the column never holds a code nothing can render.
+    let trimmed = request.position.trim();
+    let position = if trimmed.is_empty() {
+        None
+    } else {
+        Some(InstitutionalPosition::parse(trimmed).ok_or_else(|| {
+            ApiError::new(
+                CoreError::Validation("Posição institucional desconhecida.".to_owned()),
+                &ids,
+            )
+        })?)
+    };
+
+    let person = scoped_person(&state, &principal, person_id, &ids).await?;
+
+    identity::set_position(&state.pool, &principal, &person, position, &ids)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+
+    Ok(Json(serde_json::json!({
+        "position": position.map(InstitutionalPosition::as_str),
+    })))
+}
+
+// ── Member deletion ─────────────────────────────────────────────────────
+
+/// `DELETE /administration/members/{person_id}`
+///
+/// Deletes a never-activated invitation. Refuses anything that has ever been a
+/// working account — that is `set_status(disabled)`, which keeps the history.
+async fn delete_member(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    Authorised { principal, .. }: Authorised<NeedsMembersManage>,
+    Path(person_id): Path<Uuid>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    let person = scoped_person(&state, &principal, person_id, &ids).await?;
+
+    identity::delete_member(&state.pool, &principal, &person, &ids)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
 /// `POST /administration/members/{person_id}/provision`
 /// Dá acesso a uma pessoa que já existe.
 ///
@@ -345,6 +496,17 @@ struct SecurityOverview {
     /// controlos que o Core recusaria — fazendo o administrador julgar-se sem
     /// autoridade que na verdade tem, ou o contrário.
     may_manage_account: bool,
+    /// Se o **actor** pode mudar a posição institucional desta pessoa. Mesma
+    /// autoridade que gerir a conta (`MembersManage`): a posição é registo, não
+    /// acesso, mas é o mesmo administrador que a mantém.
+    may_change_position: bool,
+    /// Se esta conta pode ser **apagada** — e não apenas desactivada.
+    ///
+    /// Só um convite que ninguém aceitou e que nunca foi usado: uma conta que já
+    /// agiu tem autoria, e apagá-la rasgaria o registo. É o Core que decide, com
+    /// a mesma verdade que a operação exige, para o ecrã não oferecer um apagar
+    /// que vai ser recusado. Nunca a própria conta do actor.
+    may_be_deleted: bool,
     /// Se o segundo factor é **exigido** a esta pessoa: identidade privilegiada
     /// ou `PlatformAdmin` efectivo (ADR-0107). É o Core que decide a regra; o
     /// ecrã não a conhece.
@@ -436,6 +598,14 @@ async fn security_overview(
         recent_failed_attempts: failures,
         may_be_provisioned: person.identity_kind == "human" && !ja_tem_acesso,
         may_manage_account,
+        // A posição é registo, não acesso: quem gere a conta mantém-na.
+        may_change_position: may_manage_account,
+        // Apagar é só para um convite por aceitar e nunca usado, e nunca a
+        // própria conta de quem administra. A regra que impede esvaziar a
+        // instituição de administradores vive na operação, não neste sinal.
+        may_be_deleted: may_manage_account
+            && person.id != principal.person_id
+            && person.never_activated(),
         mfa_required,
         mfa_enrolled,
         live_sessions: sessions

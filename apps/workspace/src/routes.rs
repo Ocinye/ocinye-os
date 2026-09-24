@@ -184,6 +184,8 @@ pub const ROUTES: &[&str] = &[
     "/admin",
     "/admin/members/new",
     "/admin/members/{person_id}",
+    "/admin/members/{person_id}/position",
+    "/admin/members/{person_id}/delete",
     "/admin/members/{person_id}/provision",
     "/admin/members/{person_id}/units",
     "/admin/members/{person_id}/units/{unit_id}/role",
@@ -525,6 +527,11 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/admin", get(admin))
         .route("/admin/members/new", get(new_member).post(create_member))
         .route("/admin/members/{person_id}", get(member_detail))
+        .route(
+            "/admin/members/{person_id}/position",
+            post(member_set_position),
+        )
+        .route("/admin/members/{person_id}/delete", post(member_delete))
         .route(
             "/admin/members/{person_id}/provision",
             post(provision_member),
@@ -3537,7 +3544,11 @@ list_route!(
     admin,
     Screen::Admin,
     "Administração",
-    "/api/v1/people?page_size=50",
+    // A consola lê o roster administrativo, e não o directório `/people`: aquele
+    // exige `MembersManage` no Core, este basta o `MembersView` de qualquer
+    // membro. Um investigador que abrisse `/admin` recebe a recusa do Core (que
+    // o `list_route!` mostra como recusa), e não a lista inteira dos colegas.
+    "/api/v1/administration/members?page_size=50",
     ui::screens::lists::members
 );
 list_route!(
@@ -3905,6 +3916,71 @@ async fn member_set_status(
     .await
     {
         Ok(_) => Redirect::to(&destino).into_response(),
+        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+    }
+}
+
+/// Corpo do formulário de posição institucional.
+#[derive(serde::Deserialize)]
+struct PosicaoForm {
+    /// Código da posição, ou vazio para limpar.
+    #[serde(default)]
+    position: String,
+}
+
+/// `POST /admin/members/{person_id}/position` — define, muda ou limpa a posição
+/// institucional.
+///
+/// A posição é registo, não acesso (ADR-0100): esta operação não toca em papéis
+/// nem permissões. A autoridade é reautorizada no Core; a recusa volta ao
+/// detalhe, com a razão à vista.
+async fn member_set_position(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+    axum::extract::Form(form): axum::extract::Form<PosicaoForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let destino = format!("/admin/members/{person_id}");
+    let path = format!("/api/v1/administration/members/{person_id}/position");
+    let body = serde_json::json!({ "position": form.position });
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &path,
+        &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&destino).into_response(),
+        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+    }
+}
+
+/// `POST /admin/members/{person_id}/delete` — apaga um convite por aceitar.
+///
+/// Um formulário HTML não fala `DELETE`; o Core, sim — e o verbo certo viaja
+/// daqui para lá. Só um convite que ninguém aceitou e que nunca foi usado se
+/// apaga; para uma conta já usada o Core recusa, e a razão («desactive, que
+/// preserva a autoria») volta ao detalhe. No sucesso, o membro deixou de
+/// existir: reencaminha-se para a lista, e não para um detalhe que seria 404.
+async fn member_delete(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let path = format!("/api/v1/administration/members/{person_id}");
+    match api::delete(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &path,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to("/admin").into_response(),
         Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
     }
 }

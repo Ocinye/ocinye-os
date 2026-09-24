@@ -11,7 +11,9 @@
 //! > created for them.
 
 use chrono::{Duration, Utc};
-use ocinye_contracts::{AccountStatus, CredentialKind, SessionState, TechnicalRole};
+use ocinye_contracts::{
+    AccountStatus, CredentialKind, InstitutionalPosition, SessionState, TechnicalRole,
+};
 use ocinye_core::modules::identity::{self, AttemptContext, Authenticator, NewMember, Throttle};
 use ocinye_core::password::{Hasher, HashingParams, Secret};
 use ocinye_core::CoreError;
@@ -1947,4 +1949,215 @@ async fn as_tentativas_falhadas_contam_por_endereco() {
         contadas >= 3,
         "as tentativas contra este endereço não ficaram registadas: {contadas}"
     );
+}
+
+// ── Position and deletion (administration) ───────────────────────────────
+
+/// Sign an invited member in and set their password, returning them `active`.
+///
+/// The realistic path to a working account: an invitation becomes a member only
+/// when its holder uses the temporary credential and sets a permanent one.
+async fn activate(
+    pool: &PgPool,
+    person: &ocinye_core::modules::identity::Person,
+    secret: &Secret,
+    name: &str,
+) -> ocinye_core::modules::identity::Person {
+    let auth = authenticator();
+    let context = AttemptContext::default();
+    let ids = CorrelationIds::generate();
+    let issued = auth
+        .sign_in(pool, name, secret, &context, &ids)
+        .await
+        .expect("sign in with the temporary credential");
+    assert_eq!(issued.state, SessionState::PasswordChangeRequired);
+    identity::set_permanent_password(
+        pool,
+        &auth,
+        person,
+        &Secret::new(GOOD_PASSWORD),
+        &context,
+        &ids,
+    )
+    .await
+    .expect("set permanent password");
+    identity::person_by_id(pool, person.id)
+        .await
+        .expect("query")
+        .expect("person")
+}
+
+/// A never-activated invitation is deleted outright, and its provisioning
+/// artifacts fall away with it — while the audit trail keeps the fact.
+#[tokio::test]
+async fn a_never_activated_invitation_is_deleted_with_its_artifacts() {
+    let pool = skip_without_database!();
+    let org = organisation(&pool).await;
+    let admin = admin(&pool, org).await;
+    let (person, _secret, _name) = member(&pool, &admin, TechnicalRole::ResearchMember).await;
+    let ids = CorrelationIds::generate();
+
+    assert!(
+        person.never_activated(),
+        "a fresh member is a bare invitation"
+    );
+
+    identity::delete_member(&pool, &admin, &person, &ids)
+        .await
+        .expect("a never-activated invitation is deletable");
+
+    // The person is gone…
+    assert!(
+        identity::person_by_id(&pool, person.id)
+            .await
+            .expect("query")
+            .is_none(),
+        "the person row was not removed"
+    );
+    // …and so, by CASCADE, are their credential and role.
+    for (table, column) in [("credentials", "person_id"), ("person_roles", "person_id")] {
+        let remaining: i64 =
+            sqlx::query_scalar(&format!("SELECT count(*) FROM {table} WHERE {column} = $1"))
+                .bind(person.id)
+                .fetch_one(&pool)
+                .await
+                .expect("count");
+        assert_eq!(remaining, 0, "{table} still references the deleted person");
+    }
+    // The append-only trail remembers, keyed to the identifier that no longer
+    // resolves: resource_id carries no foreign key, so the line survives.
+    let recorded: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_events WHERE action = 'account_deleted' AND resource_id = $1",
+    )
+    .bind(person.id)
+    .fetch_one(&pool)
+    .await
+    .expect("count");
+    assert_eq!(recorded, 1, "the deletion left no audit line");
+}
+
+/// A member who has ever worked is not deleted — they are disabled, which keeps
+/// the authorship. The refusal says so.
+#[tokio::test]
+async fn an_active_member_is_not_deleted_but_disabled() {
+    let pool = skip_without_database!();
+    let org = organisation(&pool).await;
+    let admin = admin(&pool, org).await;
+    let (person, secret, name) = member(&pool, &admin, TechnicalRole::ResearchMember).await;
+    let ids = CorrelationIds::generate();
+
+    let active = activate(&pool, &person, &secret, &name).await;
+    assert_eq!(active.account_status(), AccountStatus::Active);
+    assert!(!active.never_activated());
+
+    let refused = identity::delete_member(&pool, &admin, &active, &ids)
+        .await
+        .expect_err("an account that has been used must not be deleted");
+    assert!(matches!(refused, CoreError::Validation(_)));
+
+    // The account is still there, and disabling it works instead.
+    assert!(identity::person_by_id(&pool, active.id)
+        .await
+        .expect("query")
+        .is_some());
+    identity::set_account_status(
+        &pool,
+        &admin,
+        &active,
+        AccountStatus::Disabled,
+        "left the institution",
+        &ids,
+    )
+    .await
+    .expect("disabling keeps the history");
+}
+
+/// Deleting your own account is refused, even for a never-activated privileged
+/// identity: the lockout that emptying the administration would cause is not
+/// something an accidental click should be able to do.
+#[tokio::test]
+async fn deleting_your_own_account_is_refused() {
+    let pool = skip_without_database!();
+    let org = organisation(&pool).await;
+    let admin = admin(&pool, org).await;
+    let ids = CorrelationIds::generate();
+
+    let self_person = identity::person_by_id(&pool, admin.person_id)
+        .await
+        .expect("query")
+        .expect("the actor's own person");
+
+    let refused = identity::delete_member(&pool, &admin, &self_person, &ids)
+        .await
+        .expect_err("you cannot delete your own account");
+    assert!(matches!(refused, CoreError::Validation(_)));
+}
+
+/// Setting a position is recorded and grants nothing: the policy never reads the
+/// column, so the member's permissions are exactly what they were.
+#[tokio::test]
+async fn setting_a_position_records_it_and_grants_nothing() {
+    let pool = skip_without_database!();
+    let org = organisation(&pool).await;
+    let admin = admin(&pool, org).await;
+    let (person, _secret, _name) = member(&pool, &admin, TechnicalRole::ResearchMember).await;
+    let ids = CorrelationIds::generate();
+
+    let before = identity::principal_for_person(&pool, &person)
+        .await
+        .expect("principal before");
+
+    identity::set_position(
+        &pool,
+        &admin,
+        &person,
+        Some(InstitutionalPosition::Founder),
+        &ids,
+    )
+    .await
+    .expect("set position");
+
+    let updated = identity::person_by_id(&pool, person.id)
+        .await
+        .expect("query")
+        .expect("person");
+    assert_eq!(updated.institutional_position.as_deref(), Some("founder"));
+
+    // «Founder» is a fact, not a key: the permission set is unchanged.
+    let after = identity::principal_for_person(&pool, &updated)
+        .await
+        .expect("principal after");
+    assert_eq!(
+        before.roles, after.roles,
+        "a position must not grant a role"
+    );
+
+    // It was recorded.
+    let recorded: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_events WHERE action = 'position_changed' AND resource_id = $1",
+    )
+    .bind(person.id)
+    .fetch_one(&pool)
+    .await
+    .expect("count");
+    assert_eq!(recorded, 1, "the position change left no audit line");
+
+    // Setting the same value again writes nothing new.
+    identity::set_position(
+        &pool,
+        &admin,
+        &updated,
+        Some(InstitutionalPosition::Founder),
+        &ids,
+    )
+    .await
+    .expect("no-op set");
+    let still: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_events WHERE action = 'position_changed' AND resource_id = $1",
+    )
+    .bind(person.id)
+    .fetch_one(&pool)
+    .await
+    .expect("count");
+    assert_eq!(still, 1, "an unchanged position must not add a line");
 }

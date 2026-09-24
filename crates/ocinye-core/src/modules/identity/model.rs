@@ -70,6 +70,19 @@ impl Person {
         self.account_status() == AccountStatus::Active
     }
 
+    /// Whether this account is a still-unaccepted, never-used invitation.
+    ///
+    /// The one state in which a person can be deleted rather than disabled: an
+    /// `invited` account becomes `active` only when its holder first signs in and
+    /// sets a password, so one that is still `invited` and was never seen has
+    /// authored nothing. Both facts are required — a row that is `invited` yet
+    /// carries a `last_seen_at` is inconsistent, and the safe reading of an
+    /// inconsistency is *not deletable*.
+    #[must_use]
+    pub fn never_activated(&self) -> bool {
+        self.account_status() == AccountStatus::Invited && self.last_seen_at.is_none()
+    }
+
     /// Parsed institutional position.
     #[must_use]
     pub fn position(&self) -> Option<InstitutionalPosition> {
@@ -82,6 +95,46 @@ impl Person {
     #[must_use]
     pub fn preferred_name(&self) -> &str {
         self.display_name.as_deref().unwrap_or(&self.full_name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn person_with(status: &str, last_seen_at: Option<DateTime<Utc>>) -> Person {
+        Person {
+            id: Uuid::nil(),
+            organisation_id: Uuid::nil(),
+            oidc_subject: None,
+            email: "a@b.c".to_owned(),
+            full_name: "A".to_owned(),
+            display_name: None,
+            institutional_position: None,
+            orcid: None,
+            biography: None,
+            status: status.to_owned(),
+            identity_kind: "human".to_owned(),
+            belongs_to_person_id: None,
+            last_seen_at,
+            deactivated_at: None,
+            created_at: Utc::now(),
+        }
+    }
+
+    /// Deletable is the narrow case: `invited` and never seen, and nothing else.
+    ///
+    /// An active account is woven into the record and only ever disabled; an
+    /// `invited` row that somehow carries a `last_seen_at` is inconsistent, and
+    /// the safe reading of an inconsistency is *not deletable*.
+    #[test]
+    fn never_activated_is_invited_and_unseen_only() {
+        assert!(person_with("invited", None).never_activated());
+        assert!(!person_with("active", None).never_activated());
+        assert!(!person_with("suspended", None).never_activated());
+        assert!(!person_with("disabled", None).never_activated());
+        // Invited but seen: inconsistent, so not deletable.
+        assert!(!person_with("invited", Some(Utc::now())).never_activated());
     }
 }
 
