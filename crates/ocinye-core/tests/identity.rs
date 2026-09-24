@@ -2036,6 +2036,48 @@ async fn a_never_activated_invitation_is_deleted_with_its_artifacts() {
     assert_eq!(recorded, 1, "the deletion left no audit line");
 }
 
+/// An invitation whose holder merely opened the first-access page — so it carries
+/// a `last_seen_at` but never became active — is still deletable. This is the
+/// case the production roster hit: `Apagar convite` was hidden for an invite that
+/// had been seen once.
+#[tokio::test]
+async fn an_opened_but_unaccepted_invitation_is_still_deletable() {
+    let pool = skip_without_database!();
+    let org = organisation(&pool).await;
+    let admin = admin(&pool, org).await;
+    let (person, _secret, _name) = member(&pool, &admin, TechnicalRole::ResearchMember).await;
+    let ids = CorrelationIds::generate();
+
+    // The session middleware stamps `last_seen_at` the moment an invited person
+    // resolves a principal — before they set a password. Simulate that: the
+    // account is still `invited`, but has been seen.
+    sqlx::query("UPDATE people SET last_seen_at = now() WHERE id = $1")
+        .bind(person.id)
+        .execute(&pool)
+        .await
+        .expect("stamp last_seen_at");
+    let seen = identity::person_by_id(&pool, person.id)
+        .await
+        .expect("query")
+        .expect("person");
+    assert_eq!(seen.account_status(), AccountStatus::Invited);
+    assert!(
+        seen.never_activated(),
+        "an opened invitation is still just an invitation"
+    );
+
+    identity::delete_member(&pool, &admin, &seen, &ids)
+        .await
+        .expect("an opened but unaccepted invitation is deletable");
+    assert!(
+        identity::person_by_id(&pool, person.id)
+            .await
+            .expect("query")
+            .is_none(),
+        "the invitation was not removed"
+    );
+}
+
 /// A member who has ever worked is not deleted — they are disabled, which keeps
 /// the authorship. The refusal says so.
 #[tokio::test]

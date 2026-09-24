@@ -651,13 +651,17 @@ pub async fn set_institutional_position<'e>(
 ///
 /// The `status = 'invited'` predicate is part of the statement, not just a guard
 /// the caller checked a moment ago: it is what makes the delete safe under a
-/// race, so a person who signed in between the check and here is not deleted.
+/// race, so a person who set a password (becoming `active`) between the check and
+/// here is not deleted. It keys on the state and nothing else — `last_seen_at` is
+/// set the moment an invited person opens their first-access page, so gating on
+/// it would spare a genuine invite the instant its holder clicked the link.
 ///
 /// The person's provisioning artifacts — credential, roles, memberships, grants,
-/// recovery codes — fall away with them by `ON DELETE CASCADE`. Anything an
-/// *actor* touched keys back with `RESTRICT`, but a never-activated invitation
-/// has acted on nothing, so nothing restricts. Returns the number of rows
-/// removed: zero means the account was no longer a bare invitation.
+/// recovery codes, the restricted session of an opened invite — fall away with
+/// them by `ON DELETE CASCADE`. Anything an *actor* touched keys back with
+/// `RESTRICT`, but an invitation has acted on nothing (only an active account
+/// can act), so nothing restricts. Returns the number of rows removed: zero
+/// means the account was no longer an invitation.
 ///
 /// # Errors
 ///
@@ -672,8 +676,7 @@ pub async fn delete_invited_person<'e>(
         "DELETE FROM people
           WHERE id = $1
             AND organisation_id = $2
-            AND status = 'invited'
-            AND last_seen_at IS NULL",
+            AND status = 'invited'",
     )
     .bind(person_id)
     .bind(organisation_id)

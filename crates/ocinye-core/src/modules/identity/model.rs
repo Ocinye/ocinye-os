@@ -70,17 +70,23 @@ impl Person {
         self.account_status() == AccountStatus::Active
     }
 
-    /// Whether this account is a still-unaccepted, never-used invitation.
+    /// Whether this account is a still-unaccepted invitation.
     ///
-    /// The one state in which a person can be deleted rather than disabled: an
-    /// `invited` account becomes `active` only when its holder first signs in and
-    /// sets a password, so one that is still `invited` and was never seen has
-    /// authored nothing. Both facts are required — a row that is `invited` yet
-    /// carries a `last_seen_at` is inconsistent, and the safe reading of an
-    /// inconsistency is *not deletable*.
+    /// The one state in which a person can be deleted rather than disabled. It is
+    /// exactly `invited`, and nothing more: an account becomes `active` only when
+    /// its holder sets a permanent password, and only an active account can act
+    /// ([`Self::can_act`]). So an `invited` account has authored nothing, whatever
+    /// else is true of it — deleting it loses no history.
+    ///
+    /// `last_seen_at` is deliberately **not** consulted. It is set the moment an
+    /// invited person opens their first-access page — before they set a password,
+    /// while the account is still just an invitation — so requiring it to be null
+    /// would refuse to delete a genuine unaccepted invite the instant its holder
+    /// clicked the link once. The account state is the truth here; the activity
+    /// timestamp is not.
     #[must_use]
     pub fn never_activated(&self) -> bool {
-        self.account_status() == AccountStatus::Invited && self.last_seen_at.is_none()
+        self.account_status() == AccountStatus::Invited
     }
 
     /// Parsed institutional position.
@@ -122,19 +128,21 @@ mod tests {
         }
     }
 
-    /// Deletable is the narrow case: `invited` and never seen, and nothing else.
+    /// Deletable is exactly `invited`, and nothing else.
     ///
-    /// An active account is woven into the record and only ever disabled; an
-    /// `invited` row that somehow carries a `last_seen_at` is inconsistent, and
-    /// the safe reading of an inconsistency is *not deletable*.
+    /// An active, suspended or disabled account is woven into the record and only
+    /// ever disabled. An invitation has authored nothing — only an active account
+    /// can act — so it is deletable whether or not its holder ever opened the
+    /// first-access page (which is what sets `last_seen_at` before activation).
     #[test]
-    fn never_activated_is_invited_and_unseen_only() {
+    fn never_activated_is_exactly_invited() {
         assert!(person_with("invited", None).never_activated());
         assert!(!person_with("active", None).never_activated());
         assert!(!person_with("suspended", None).never_activated());
         assert!(!person_with("disabled", None).never_activated());
-        // Invited but seen: inconsistent, so not deletable.
-        assert!(!person_with("invited", Some(Utc::now())).never_activated());
+        // An opened but unaccepted invite carries a `last_seen_at` and is still
+        // just an invitation — deletable. This is the case the roster hit.
+        assert!(person_with("invited", Some(Utc::now())).never_activated());
     }
 }
 

@@ -7,6 +7,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Correção: apagar um convite que foi aberto uma vez — 2026-09-24
+
+`Apagar convite` não aparecia para um convite cujo destinatário tinha aberto a
+página de primeiro acesso: o `last_seen_at` fica carimbado nesse momento — antes
+de a pessoa definir palavra-passe, com a conta ainda `invited` — e a regra exigia
+`last_seen_at IS NULL` a mais. Uma conta `invited` nunca autorizou nada (só uma
+conta activa age), por isso o estado é a verdade e o carimbo de actividade não:
+apagável passa a ser **exactamente `invited`**. Prova nova que reproduz o caso do
+roster (convite visto uma vez → continua apagável).
+
 ### Administração de membros: posição, apagar convites e roster só para admin — 2026-09-24
 
 O detalhe de um membro passa a permitir **mudar a posição institucional** depois
