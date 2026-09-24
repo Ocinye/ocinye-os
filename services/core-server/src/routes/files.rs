@@ -114,6 +114,11 @@ pub fn routes() -> Router<AppState> {
         .route("/me/files/restore", post(restore_my_file))
         .route("/me/files/purge", post(purge_my_file))
         .route("/me/files/purge-all", post(purge_all_my_files))
+        // Abrir uma sessão de carregamento por partes para o espaço pessoal. As
+        // partes, o estado, o fecho e o cancelamento passam pelas mesmas rotas de
+        // sessão (`/uploads/{id}/...`) que os ficheiros de ambiente usam — a
+        // sessão sabe que o seu destino é o dono, e o `finalise` faz o resto.
+        .route("/me/files/uploads/sessions", post(begin_my_upload))
         .route("/me/files/{version_id}/download", get(download_my_file))
         .route("/me/files/{version_id}/raw", get(raw_my_file))
         .route("/me/files/{version_id}/inline", get(inline_my_file))
@@ -857,6 +862,50 @@ async fn purge_my_file(
     let store = state.store()?;
     files::purge_personal_file(&state.pool, &principal, &ids, store, request.file_id).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+struct BeginPersonalUploadRequest {
+    filename: String,
+    content_type: String,
+    size_bytes: i64,
+}
+
+/// `POST /me/files/uploads/sessions` — abre uma sessão pessoal por partes.
+///
+/// O gémeo pessoal de `begin_upload`. Não recebe ambiente: um ficheiro pessoal é
+/// do próprio. Devolve o mesmo envelope de sessão, para o carregador não ter de
+/// distinguir os dois caminhos depois de a sessão existir.
+async fn begin_my_upload(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+    Json(request): Json<BeginPersonalUploadRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let store = state.store()?;
+    let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
+    let sessao = files::upload::begin_personal(
+        &mut tx,
+        &principal,
+        &ids,
+        store,
+        &state.config.organisation_slug,
+        files::upload::NewPersonalUpload {
+            filename: request.filename,
+            content_type: request.content_type,
+            size_bytes: request.size_bytes,
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(CoreError::from)?;
+
+    Ok(Json(serde_json::json!({
+        "session_id": sessao.id,
+        "chunk_size_bytes": sessao.chunk_size_bytes,
+        "total_parts": sessao.total_parts,
+        "expires_at": sessao.expires_at,
+        "received_parts": sessao.received_parts,
+    })))
 }
 
 /// `POST /me/files/purge-all` — esvazia o Lixo pessoal de uma vez.
