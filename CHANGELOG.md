@@ -7,6 +7,27 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros: esvaziar o Lixo, e um carregamento que diz a verdade — 2026-09-24
+
+O **Lixo pessoal** ganha um botão **Esvaziar** que apaga tudo de uma vez — nunca
+num só clique: abre uma confirmação (o mesmo disclosure dos outros menus de
+Ficheiros) e é o segundo botão que apaga. Só aparece com o Lixo cheio, e a
+autoridade é reavaliada no Core ficheiro a ficheiro, cada um com a sua linha de
+auditoria (`POST /me/files/purge-all`).
+
+O **carregamento** deixa de mentir. Um ficheiro pessoal sobe num único `POST`, e
+o proxy limitava o corpo a 80 MB enquanto o Workspace já aceita até 640 MB — um
+ficheiro maior parava a meio e a barra congelava perto de zero **sem dizer
+porquê**. Três correcções: o proxy passa a aceitar 640 MB (alinhado com o limite
+que a aplicação promete, e recarregado no deploy); o carregador recusa **já** um
+ficheiro acima do limite, em vez de o deixar parar sem explicação; e a barra diz
+em que etapa está — «X%» enquanto sobe, «A finalizar no servidor…» quando os
+bytes acabam, e «A ligação parece parada…» quando deixa de avançar.
+
+Corrige-se ainda uma **mistura de línguas** na mesma página: a descrição do Lixo
+estava em português cru e passa pela via i18n (pt/en/fr), com a guarda de pureza
+a cobri-la.
+
 ### Correção: apagar um convite que foi aberto uma vez — 2026-09-24
 
 `Apagar convite` não aparecia para um convite cujo destinatário tinha aberto a

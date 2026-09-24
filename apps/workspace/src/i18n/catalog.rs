@@ -727,6 +727,11 @@ const FILES: &[Entry] = catalogo! {
     "files.empty.none_accessible": { pt: "Nenhum ficheiro acessível.", en: "No accessible file.", fr: "Aucun fichier accessible." },
     "files.trash.empty": { pt: "O Lixo está vazio", en: "The Trash is empty", fr: "La corbeille est vide" },
     "files.trash.empty.body": { pt: "Os ficheiros que apagar aparecem aqui, e pode restaurá-los.", en: "Files you delete appear here, and you can restore them.", fr: "Les fichiers que vous supprimez apparaissent ici, et vous pouvez les restaurer." },
+    "files.trash.description": { pt: ". Um ficheiro apagado fica aqui, e continua a contar para a sua quota até ser eliminado definitivamente.", en: ". A deleted file stays here, and keeps counting toward your quota until it is permanently removed.", fr: ". Un fichier supprimé reste ici, et continue de compter dans votre quota jusqu’à sa suppression définitive." },
+    "files.trash.empty_all": { pt: "Esvaziar", en: "Empty", fr: "Vider" },
+    "files.trash.empty_confirm": { pt: "Apagar {count} ficheiro(s) definitivamente? Não há como recuperar.", en: "Permanently delete {count} file(s)? This cannot be undone.", fr: "Supprimer définitivement {count} fichier(s) ? Cette action est irréversible." },
+    "files.trash.empty_confirm_action": { pt: "Apagar tudo", en: "Delete all", fr: "Tout supprimer" },
+    "files.trash.emptied": { pt: "Lixo esvaziado.", en: "Trash emptied.", fr: "Corbeille vidée." },
     // Tipos de ficheiro (rótulos de MIME)
     "files.type.public": { pt: "Público", en: "Public", fr: "Public" },
     "files.type.spreadsheet": { pt: "Folha de cálculo", en: "Spreadsheet", fr: "Feuille de calcul" },

@@ -603,6 +603,8 @@ fn vista_do_lixo(trash: &[Value], notice: Option<(bool, String)>) -> impl IntoVi
         })
         .collect_view();
 
+    let quantos = trash.len();
+
     view! {
         <div class="oc-page">
             <div class="oc-head">
@@ -610,10 +612,34 @@ fn vista_do_lixo(trash: &[Value], notice: Option<(bool, String)>) -> impl IntoVi
                     <h1>{crate::i18n::t("files.tab.trash")}</h1>
                     <p>
                         <a href="/files">{crate::i18n::t("files.back_to_my_files")}</a>
-                        ". Um ficheiro apagado fica aqui, e continua a contar para \
-                         a sua quota até ser eliminado definitivamente."
+                        {crate::i18n::t("files.trash.description")}
                     </p>
                 </div>
+
+                // Esvaziar tudo de uma vez, mas nunca num só clique: o botão abre
+                // uma confirmação (o mesmo disclosure dos outros menus de
+                // Ficheiros), e é o segundo botão que apaga. Sem selecção, sem
+                // ficheiros — só aparece com o Lixo cheio.
+                {(!trash.is_empty()).then(|| view! {
+                    <details class="oc-fs__menu oc-fs__acoes--abre-esquerda">
+                        <summary class="oc-btn oc-btn--danger">
+                            {crate::i18n::t("files.trash.empty_all")}
+                        </summary>
+                        <div class="oc-fs__pop">
+                            <p class="oc-t-caption--muted oc-mb-3">
+                                {crate::i18n::tf(
+                                    "files.trash.empty_confirm",
+                                    &[("count", &quantos.to_string())],
+                                )}
+                            </p>
+                            <form method="post" action="/files/trash/empty">
+                                <button class="oc-btn oc-btn--danger" type="submit">
+                                    {crate::i18n::t("files.trash.empty_confirm_action")}
+                                </button>
+                            </form>
+                        </div>
+                    </details>
+                })}
             </div>
 
             {notice.map(|(ok, mensagem)| aviso(ok, &mensagem))}
@@ -1746,6 +1772,44 @@ mod tests {
             "falta apagar definitivamente"
         );
     }
+
+    /// Esvaziar o Lixo existe, mas nunca num só clique: o botão abre uma
+    /// confirmação, e é o segundo botão que aponta para a rota que apaga tudo. E
+    /// não aparece com o Lixo vazio — não há nada para esvaziar.
+    #[test]
+    fn a_vista_do_lixo_oferece_esvaziar_com_confirmacao() {
+        let mut v = membro_sem_ambiente(vec![]);
+        v.viewing_trash = true;
+        v.trash_files = vec![json!({
+            "id": "t1", "version_id": "v", "name": "velho.txt",
+            "content_type": "text/plain", "size_bytes": 5, "versions": 1
+        })];
+        let html = all_files(v).to_html();
+        // O disclosure (o mesmo padrão dos outros menus) é o primeiro passo…
+        assert!(
+            html.contains("<details"),
+            "esvaziar devia ser um passo, não um clique"
+        );
+        assert!(html.contains(">Esvaziar<"), "falta o botão de esvaziar");
+        // …e é o segundo botão, dentro dele, que aponta para a rota que apaga.
+        assert!(
+            html.contains("action=\"/files/trash/empty\""),
+            "o confirmar não aponta para a rota de esvaziar"
+        );
+        assert!(
+            html.contains("Apagar tudo"),
+            "falta o confirmar do esvaziar"
+        );
+
+        // Com o Lixo vazio não há esvaziar — não há nada para apagar.
+        let mut vazio = membro_sem_ambiente(vec![]);
+        vazio.viewing_trash = true;
+        let html_vazio = all_files(vazio).to_html();
+        assert!(
+            !html_vazio.contains("action=\"/files/trash/empty\""),
+            "esvaziar apareceu com o Lixo vazio"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1784,6 +1848,25 @@ mod pureza_i18n {
             assert!(
                 !fr.contains(portuguesa),
                 "fr: chrome português «{portuguesa}»"
+            );
+        }
+
+        // A vista do Lixo tinha uma descrição em português cru e ganha o botão de
+        // esvaziar: os dois têm de sair em francês, ou o defeito volta.
+        let mut lixo = vista();
+        lixo.viewing_trash = true;
+        lixo.trash_files = vec![json!({
+            "id": "t1", "version_id": "v", "name": "vieux.txt",
+            "content_type": "text/plain", "size_bytes": 5, "versions": 1
+        })];
+        let fr_lixo = with_locale(Locale::Fr, async { all_files(lixo).to_html() }).await;
+        for francesa in ["Vider", "Tout supprimer", "continue de compter"] {
+            assert!(fr_lixo.contains(francesa), "fr (lixo): falta «{francesa}»");
+        }
+        for portuguesa in ["Esvaziar", "Apagar tudo", "continua a contar"] {
+            assert!(
+                !fr_lixo.contains(portuguesa),
+                "fr (lixo): chrome português «{portuguesa}»"
             );
         }
     }

@@ -93,6 +93,22 @@ ssh_ "sudo install -m 640 -o root -g ocinye \
         '$RAIZ/releases/$CURTO'/infra/nginx/*.conf /etc/ocinye/nginx/"
 echo "  $(ls infra/nginx/*.conf | wc -l | tr -d ' ') ficheiro(s) instalado(s)"
 
+# Instalar a config não a activa: o nginx a correr só a lê no arranque, e um
+# `up -d` não recria o proxy quando a imagem não muda. Sem este passo, uma
+# alteração como o `client_max_body_size` ficava no disco sem efeito até o
+# próximo reinício do contentor — a discordância silenciosa que o passo 4 existe
+# para não deixar acontecer. Testar antes de recarregar: uma config inválida
+# aborta o deploy aqui, e não deixa o proxy a servir com metade das regras.
+passo "Recarregar o proxy"
+if ssh_ "cd '$RAIZ/current' && docker compose -f '$COMPOSE' ps proxy --status running -q | grep -q ." 2>/dev/null; then
+    ssh_ "cd '$RAIZ/current' \
+          && docker compose -f '$COMPOSE' exec -T proxy nginx -t \
+          && docker compose -f '$COMPOSE' exec -T proxy nginx -s reload"
+    echo "  proxy recarregado"
+else
+    echo "  proxy ainda não corre; a config entra no arranque do passo 7"
+fi
+
 # ── 5. Construir ────────────────────────────────────────────────────────
 #
 # `--profile build` inclui a imagem do conversor descartável, que não corre como

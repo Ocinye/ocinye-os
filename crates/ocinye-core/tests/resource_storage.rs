@@ -785,3 +785,99 @@ async fn apagar_definitivamente_exige_o_lixo_e_liberta_a_quota() {
         "apagar definitivamente não libertou a quota"
     );
 }
+
+/// Esvaziar o Lixo apaga tudo o que lá está de uma vez, e nada do que não está.
+/// Contra armazenamento real; saltado sem `OCINYE_TEST_STORAGE_ENDPOINT`.
+#[tokio::test]
+async fn esvaziar_o_lixo_apaga_tudo_o_que_la_esta_e_so_isso() {
+    let Some(pool) = pool().await else { return };
+    let Some(store) = test_store() else {
+        eprintln!("saltado: OCINYE_TEST_STORAGE_ENDPOINT não está definida");
+        return;
+    };
+    backend_por_omissao(&pool).await;
+    let org = organisation(&pool).await;
+    let slug: String = sqlx::query_scalar("SELECT slug FROM organisations WHERE id = $1")
+        .bind(org)
+        .fetch_one(&pool)
+        .await
+        .expect("slug");
+    let a = member(&pool, org).await;
+    let ids = CorrelationIds::generate();
+
+    async fn criar(
+        pool: &PgPool,
+        a: &Principal,
+        ids: &CorrelationIds,
+        store: &ocinye_core::storage::ObjectStore,
+        slug: &str,
+        nome: &str,
+    ) -> Uuid {
+        let mut tx = pool.begin().await.expect("tx");
+        let v = files::create_personal(
+            &mut tx,
+            a,
+            ids,
+            store,
+            slug,
+            files::NewFile {
+                filename: nome.to_owned(),
+                content_type: "text/plain".to_owned(),
+                data: vec![7u8; 2048],
+                classification: None,
+            },
+        )
+        .await
+        .expect("criar");
+        tx.commit().await.expect("commit");
+        v.file_id
+    }
+
+    // Três ficheiros: dois vão para o Lixo, um fica vivo.
+    let f1 = criar(&pool, &a, &ids, &store, &slug, "um.txt").await;
+    let f2 = criar(&pool, &a, &ids, &store, &slug, "dois.txt").await;
+    let vivo = criar(&pool, &a, &ids, &store, &slug, "vivo.txt").await;
+    {
+        let mut tx = pool.begin().await.expect("tx");
+        files::trash_personal_file(&mut tx, &a, &ids, f1)
+            .await
+            .expect("trash 1");
+        files::trash_personal_file(&mut tx, &a, &ids, f2)
+            .await
+            .expect("trash 2");
+        tx.commit().await.expect("commit");
+    }
+
+    let apagados = files::purge_all_personal_trash(&pool, &a, &ids, &store)
+        .await
+        .expect("esvaziar");
+    assert_eq!(
+        apagados, 2,
+        "esvaziar não apagou os dois que estavam no Lixo"
+    );
+
+    assert!(
+        files::list_personal_trash(&pool, &a, 100)
+            .await
+            .expect("lixo")
+            .is_empty(),
+        "o Lixo não ficou vazio"
+    );
+    // O ficheiro vivo não foi tocado: esvaziar o Lixo é o Lixo, não a conta.
+    assert_eq!(
+        files::list_personal(&pool, &a, None, 100)
+            .await
+            .expect("vivos")
+            .files
+            .len(),
+        1,
+        "esvaziar o Lixo apagou um ficheiro que não estava no Lixo"
+    );
+    let _ = vivo;
+
+    // Esvaziar um Lixo já vazio não apaga nada e não falha.
+    let nada = files::purge_all_personal_trash(&pool, &a, &ids, &store)
+        .await
+        .expect("esvaziar vazio");
+    assert_eq!(nada, 0, "esvaziar um Lixo vazio não devia apagar nada");
+}
