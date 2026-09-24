@@ -308,6 +308,132 @@ async fn um_ficheiro_maior_do_que_um_pedaco_atravessa_em_partes() {
     assert_eq!(soma, soma_final, "a soma guardada não é a do ficheiro");
 }
 
+/// O mesmo percurso, mas para o **espaço pessoal**: abrir sem ambiente, mandar as
+/// partes, fechar, e ter um ficheiro pessoal — do dono, sem workspace — com a
+/// quota consumida.
+///
+/// É o caminho que faz um bundle de plugins grande chegar inteiro apesar do tecto
+/// da borda, sem existir para research workspace nenhum.
+#[tokio::test]
+async fn um_ficheiro_pessoal_grande_atravessa_em_partes() {
+    use ocinye_core::modules::files::upload::NewPersonalUpload;
+    let Some(c) = cenario().await else { return };
+
+    // Dar quota pessoal ao membro: sem perfil, o limite é zero e a abertura recusa.
+    let org = c.quem_carrega.organisation_id;
+    let profile_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO resource_profiles (organisation_id, code, name, is_default)
+         VALUES ($1, 'MEMBER_STANDARD', 'Padrão', TRUE) RETURNING id",
+    )
+    .bind(org)
+    .fetch_one(&c.pool)
+    .await
+    .expect("perfil");
+    sqlx::query(
+        "INSERT INTO resource_profile_rules (profile_id, resource_type, quantity, unit)
+         VALUES ($1, 'persistent_storage', $2, 'bytes')",
+    )
+    .bind(profile_id)
+    .bind(1024_i64 * 1024 * 1024)
+    .execute(&c.pool)
+    .await
+    .expect("regra");
+
+    let pedaco = upload::CHUNK_SIZE_BYTES as usize;
+    let tamanho = pedaco * 2 + 512;
+    let ficheiro = bytes(tamanho, 19);
+    let soma_final = sha256_hex(&ficheiro);
+
+    let mut tx = c.pool.begin().await.expect("tx");
+    let sessao = upload::begin_personal(
+        &mut tx,
+        &c.quem_carrega,
+        &c.ids,
+        &c.store,
+        "teste",
+        NewPersonalUpload {
+            filename: "ValhallaDSP-bundle.zip".to_owned(),
+            content_type: "application/zip".to_owned(),
+            size_bytes: tamanho as i64,
+        },
+    )
+    .await
+    .expect("abrir pessoal");
+    tx.commit().await.expect("commit");
+    assert_eq!(sessao.total_parts, 3);
+
+    for parte in 1..=sessao.total_parts {
+        let inicio = (parte as usize - 1) * pedaco;
+        let fim = (inicio + pedaco).min(tamanho);
+        let troco = &ficheiro[inicio..fim];
+        let mut tx = c.pool.begin().await.expect("tx");
+        upload::accept_part(
+            &mut tx,
+            &c.quem_carrega,
+            &c.store,
+            sessao.id,
+            parte,
+            &sha256_hex(troco),
+            troco.to_vec(),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("parte {parte}: {e}"));
+        tx.commit().await.expect("commit");
+    }
+
+    let mut tx = c.pool.begin().await.expect("tx");
+    let versao = upload::finalise(
+        &mut tx,
+        &c.quem_carrega,
+        &c.ids,
+        &c.store,
+        sessao.id,
+        &soma_final,
+    )
+    .await
+    .expect("fechar pessoal");
+    tx.commit().await.expect("commit");
+
+    // É um ficheiro pessoal: do dono, sem ambiente.
+    let (owner, ws): (Option<Uuid>, Option<Uuid>) = sqlx::query_as(
+        "SELECT f.owner_id, f.workspace_id
+           FROM file_versions fv JOIN files f ON f.id = fv.file_id
+          WHERE fv.id = $1",
+    )
+    .bind(versao.version_id)
+    .fetch_one(&c.pool)
+    .await
+    .expect("ficheiro");
+    assert_eq!(
+        owner,
+        Some(c.quem_carrega.person_id),
+        "o ficheiro não é do dono"
+    );
+    assert_eq!(ws, None, "um ficheiro pessoal não pertence a um ambiente");
+
+    // Os bytes montados são os que saíram, e a quota reflecte-os.
+    let (tam, soma): (i64, String) = sqlx::query_as(
+        "SELECT so.size_bytes, so.checksum_sha256
+           FROM file_versions fv JOIN storage_objects so ON so.id = fv.storage_object_id
+          WHERE fv.id = $1",
+    )
+    .bind(versao.version_id)
+    .fetch_one(&c.pool)
+    .await
+    .expect("objecto");
+    assert_eq!(tam, tamanho as i64);
+    assert_eq!(soma, soma_final);
+
+    let usado =
+        ocinye_core::modules::resource::personal_usage_bytes(&c.pool, c.quem_carrega.person_id)
+            .await
+            .expect("uso");
+    assert_eq!(
+        usado, tamanho as i64,
+        "a quota pessoal não reflecte o ficheiro"
+    );
+}
+
 /// Um conjunto incompleto não produz versão.
 ///
 /// # A soma declarada é a do que foi enviado, e não a do ficheiro

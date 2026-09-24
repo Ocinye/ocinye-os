@@ -91,9 +91,15 @@ pub struct UploadSession {
 }
 
 /// A linha da sessão, como vive na base.
+///
+/// Exactamente um de `workspace_id` / `owner_id` está preenchido — a base impõe-o
+/// (`ck_upload_sessions_target`). Aqui basta o `workspace_id`: quando é nulo, a
+/// sessão é pessoal, e o dono é `created_by_id` (que `sessao_de` já confronta com
+/// quem pede). Ler `owner_id` seria repetir uma verdade que a própria linha
+/// garante.
 #[derive(sqlx::FromRow)]
 struct SessionRow {
-    workspace_id: Uuid,
+    workspace_id: Option<Uuid>,
     file_id: Option<Uuid>,
     folder_id: Option<Uuid>,
     filename: String,
@@ -208,6 +214,128 @@ pub async fn begin(
             .resource(id)
             .context(&super::service::file_context(&workspace, classification))
             .classified(classification)
+            .detail("declared_size_bytes", request.size_bytes.to_string())
+            .detail("total_parts", total_parts.to_string()),
+    )
+    .await?;
+
+    Ok(UploadSession {
+        id,
+        chunk_size_bytes: chunk,
+        total_parts,
+        expires_at,
+        received_parts: Vec::new(),
+    })
+}
+
+/// O que se pede para abrir uma sessão pessoal.
+pub struct NewPersonalUpload {
+    /// O nome com que o ficheiro entra no espaço pessoal.
+    pub filename: String,
+    /// O tipo declarado, validado na abertura.
+    pub content_type: String,
+    /// O tamanho total declarado. Fixa o número de partes.
+    pub size_bytes: i64,
+}
+
+/// Abre uma sessão de carregamento para o **espaço pessoal** de quem carrega.
+///
+/// O gémeo pessoal de [`begin`]. A diferença é o destino: aqui não há ambiente a
+/// autorizar — um ficheiro pessoal é sempre do próprio, sempre `INTERNAL` — e a
+/// porta é a **quota**, não a pertença. Verifica-se cedo (antes do primeiro byte)
+/// que o tamanho declarado cabe no que resta da quota; a admissão autoritativa,
+/// com o lock por membro, acontece no `finalise`, quando os bytes existem.
+///
+/// # Errors
+///
+/// Recusa quando o tamanho é inválido, excede o limite da instalação ou não cabe
+/// na quota, ou quando o nome ou o tipo não são aceitáveis.
+pub async fn begin_personal(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    store: &ObjectStore,
+    organisation_slug: &str,
+    request: NewPersonalUpload,
+) -> CoreResult<UploadSession> {
+    if request.size_bytes <= 0 {
+        return Err(CoreError::Validation(
+            "Um ficheiro vazio não é um carregamento.".to_owned(),
+        ));
+    }
+    let tamanho = u64::try_from(request.size_bytes)
+        .map_err(|_| CoreError::Validation("Tamanho inválido.".to_owned()))?;
+    if tamanho > store.max_upload_bytes() {
+        return Err(CoreError::Validation(
+            "O ficheiro excede o tamanho máximo permitido.".to_owned(),
+        ));
+    }
+
+    // A quota, cedo. A admissão a sério — com o lock — é no `finalise`; aqui é só
+    // recusar o que já se sabe que não cabe, para não gastar a rede e o disco de
+    // um carregamento que ia ser recusado no fim.
+    let usado =
+        crate::modules::resource::personal_usage_bytes(&mut **tx, principal.person_id).await?;
+    let limite = crate::modules::resource::storage::personal_storage_limit_bytes(
+        &mut **tx,
+        principal.person_id,
+    )
+    .await?;
+    if usado.saturating_add(request.size_bytes) > limite {
+        return Err(CoreError::Validation(
+            "O ficheiro não cabe no que resta da sua quota pessoal.".to_owned(),
+        ));
+    }
+
+    let content_type = crate::storage::validate_content_type(&request.content_type)?;
+    let filename = crate::storage::normalise_filename(&request.filename)?;
+
+    let chunk = CHUNK_SIZE_BYTES;
+    let total_parts = i32::try_from((request.size_bytes + i64::from(chunk) - 1) / i64::from(chunk))
+        .map_err(|_| CoreError::Validation("Ficheiro grande de mais.".to_owned()))?;
+
+    let object_id = Uuid::new_v4();
+    let object_key = crate::storage::build_object_key_personal(
+        organisation_slug,
+        principal.person_id,
+        object_id,
+    );
+    let upload_id = store.begin_multipart(&object_key, &content_type).await?;
+
+    let expires_at = chrono::Utc::now() + chrono::Duration::hours(SESSION_TTL_HOURS);
+
+    let id: Uuid = sqlx::query_scalar(
+        "INSERT INTO upload_sessions
+             (organisation_id, owner_id, filename, content_type, classification,
+              declared_size_bytes, chunk_size_bytes, total_parts,
+              storage_object_id, storage_key, storage_upload_id, created_by_id, expires_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         RETURNING id",
+    )
+    .bind(principal.organisation_id)
+    .bind(principal.person_id)
+    .bind(&filename)
+    .bind(&content_type)
+    .bind(Classification::Internal.as_str())
+    .bind(request.size_bytes)
+    .bind(chunk)
+    .bind(total_parts)
+    .bind(object_id)
+    .bind(&object_key)
+    .bind(&upload_id)
+    .bind(principal.person_id)
+    .bind(expires_at)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::CREATE, "upload_session")
+            .resource(id)
+            .classified(Classification::Internal)
+            .detail("owner_id", principal.person_id.to_string())
             .detail("declared_size_bytes", request.size_bytes.to_string())
             .detail("total_parts", total_parts.to_string()),
     )
@@ -432,6 +560,22 @@ pub async fn accept_part(
     })
 }
 
+/// O destino de uma sessão, resolvido e reautorizado no `finalise`.
+///
+/// Exactamente um dos caminhos, decidido pela sessão: um ambiente (com a
+/// classificação efectiva já calculada e a autoridade já confirmada) ou o espaço
+/// pessoal de quem carregou.
+enum AlvoFinal {
+    /// Um ambiente de investigação. `Box` porque o `ResearchWorkspace` é largo e
+    /// só um dos ramos o carrega — não vale inchar a variante pessoal com ele.
+    Ambiente {
+        workspace: Box<crate::modules::research::ResearchWorkspace>,
+        efectiva: Classification,
+    },
+    /// O espaço pessoal do dono da sessão.
+    Pessoal,
+}
+
 /// Fecha o carregamento e produz a versão.
 ///
 /// # A autoridade é reavaliada **agora**
@@ -482,21 +626,36 @@ pub async fn finalise(
 ) -> CoreResult<super::service::FileVersionRecord> {
     let sessao = sessao_de(tx, principal, session_id).await?;
 
-    // ── A autoridade, outra vez ─────────────────────────────────────────
-    let workspace =
-        crate::modules::research::get_workspace(&mut **tx, principal, sessao.workspace_id).await?;
-    let classification = sessao
-        .classification
-        .as_deref()
-        .and_then(Classification::parse)
-        .unwrap_or(Classification::DEFAULT);
-    let efectiva = workspace.classification().most_restrictive(classification);
-    authorize(
-        principal,
-        Action::Create,
-        &super::service::file_context(&workspace, efectiva),
-    )
-    .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+    // ── A autoridade, outra vez — conforme o destino ────────────────────
+    //
+    // Uma sessão de ambiente reautoriza contra o ambiente: entre abrir e fechar,
+    // a pertença pode ter sido revogada ou a classificação ter mudado. Uma sessão
+    // pessoal já foi ligada ao dono em `sessao_de`, e o poder de agir da conta é o
+    // que a sessão estabeleceu — não há um ambiente a reautorizar. `alvo` guarda o
+    // que a escrita, mais abaixo, precisa de saber.
+    let alvo = match sessao.workspace_id {
+        Some(workspace_id) => {
+            let workspace =
+                crate::modules::research::get_workspace(&mut **tx, principal, workspace_id).await?;
+            let classification = sessao
+                .classification
+                .as_deref()
+                .and_then(Classification::parse)
+                .unwrap_or(Classification::DEFAULT);
+            let efectiva = workspace.classification().most_restrictive(classification);
+            authorize(
+                principal,
+                Action::Create,
+                &super::service::file_context(&workspace, efectiva),
+            )
+            .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+            AlvoFinal::Ambiente {
+                workspace: Box::new(workspace),
+                efectiva,
+            }
+        }
+        None => AlvoFinal::Pessoal,
+    };
 
     // ── As partes, todas e por ordem ────────────────────────────────────
     let partes: Vec<(i32, String, i64)> = sqlx::query_as(
@@ -579,87 +738,120 @@ pub async fn finalise(
         ));
     }
 
-    // ── O objecto institucional ─────────────────────────────────────────
-    sqlx::query(
-        "INSERT INTO storage_objects
-             (id, backend_id, organisation_id, unit_id, workspace_id, object_key,
-              original_filename, content_type, size_bytes, checksum_sha256,
-              classification, status, created_by_id)
-         SELECT $1, b.id, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'stored', $11
-           FROM storage_backends b
-          WHERE b.is_default AND b.is_active",
-    )
-    .bind(sessao.storage_object_id)
-    .bind(principal.organisation_id)
-    .bind(workspace.unit_id)
-    .bind(workspace.id)
-    .bind(&sessao.storage_key)
-    .bind(&sessao.filename)
-    .bind(&sessao.content_type)
-    .bind(montado)
-    .bind(&soma)
-    .bind(efectiva.as_str())
-    .bind(principal.person_id)
-    .execute(&mut **tx)
-    .await?;
-
-    let versao = match sessao.file_id {
-        // Nova versão de um ficheiro que já existe.
-        Some(file_id) => {
-            super::service::add_version(
-                tx,
-                ids,
-                file_id,
-                sessao.storage_object_id,
-                None,
-                principal.person_id,
+    // ── O objecto institucional, conforme o destino ─────────────────────
+    //
+    // Os bytes estão montados e verificados; o que muda entre um ambiente e o
+    // espaço pessoal é o registo autoritativo — onde o objecto vive, que ficheiro
+    // o refere, e contra que se admite a quota. O caminho pessoal admite a quota
+    // do dono (o de ambiente não a tem) e cria um ficheiro pessoal; o de ambiente
+    // é o que sempre foi.
+    let versao = match alvo {
+        AlvoFinal::Ambiente {
+            workspace,
+            efectiva,
+        } => {
+            sqlx::query(
+                "INSERT INTO storage_objects
+                     (id, backend_id, organisation_id, unit_id, workspace_id, object_key,
+                      original_filename, content_type, size_bytes, checksum_sha256,
+                      classification, status, created_by_id)
+                 SELECT $1, b.id, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'stored', $11
+                   FROM storage_backends b
+                  WHERE b.is_default AND b.is_active",
             )
-            .await?
-        }
-        None => {
-            let ficheiro = super::service::create_with_first_version(
+            .bind(sessao.storage_object_id)
+            .bind(principal.organisation_id)
+            .bind(workspace.unit_id)
+            .bind(workspace.id)
+            .bind(&sessao.storage_key)
+            .bind(&sessao.filename)
+            .bind(&sessao.content_type)
+            .bind(montado)
+            .bind(&soma)
+            .bind(efectiva.as_str())
+            .bind(principal.person_id)
+            .execute(&mut **tx)
+            .await?;
+
+            let versao = match sessao.file_id {
+                // Nova versão de um ficheiro que já existe.
+                Some(file_id) => {
+                    super::service::add_version(
+                        tx,
+                        ids,
+                        file_id,
+                        sessao.storage_object_id,
+                        None,
+                        principal.person_id,
+                    )
+                    .await?
+                }
+                None => {
+                    let ficheiro = super::service::create_with_first_version(
+                        tx,
+                        ids,
+                        super::service::FileContext {
+                            organisation_id: principal.organisation_id,
+                            unit_id: workspace.unit_id,
+                            workspace_id: workspace.id,
+                            classification: efectiva,
+                        },
+                        &sessao.filename,
+                        sessao.storage_object_id,
+                        principal.person_id,
+                    )
+                    .await?;
+                    if let Some(folder_id) = sessao.folder_id {
+                        super::service::move_to_folder(
+                            tx,
+                            principal,
+                            ids,
+                            ficheiro.file_id,
+                            Some(folder_id),
+                        )
+                        .await?;
+                    }
+                    ficheiro
+                }
+            };
+
+            audit::record(
                 tx,
+                Some(principal),
                 ids,
-                super::service::FileContext {
-                    organisation_id: principal.organisation_id,
-                    unit_id: workspace.unit_id,
-                    workspace_id: workspace.id,
-                    classification: efectiva,
-                },
-                &sessao.filename,
-                sessao.storage_object_id,
-                principal.person_id,
+                AuditEntry::new(action::CREATE, "file")
+                    .resource(versao.file_id)
+                    .context(&super::service::file_context(&workspace, efectiva))
+                    .classified(efectiva)
+                    .detail("size_bytes", montado.to_string())
+                    .detail("parts", sessao.total_parts.to_string())
+                    .detail("upload_session_id", session_id.to_string()),
             )
             .await?;
-            if let Some(folder_id) = sessao.folder_id {
-                super::service::move_to_folder(
-                    tx,
-                    principal,
-                    ids,
-                    ficheiro.file_id,
-                    Some(folder_id),
-                )
-                .await?;
-            }
-            ficheiro
+
+            versao
+        }
+
+        // O espaço pessoal: admite a quota, regista o objecto do dono, e cria o
+        // ficheiro pessoal e a sua primeira versão. A auditoria da criação vive lá
+        // dentro, como no `create_personal` de um único pedido.
+        AlvoFinal::Pessoal => {
+            super::service::finalise_personal_object(
+                tx,
+                principal,
+                ids,
+                sessao.storage_object_id,
+                &sessao.storage_key,
+                &sessao.filename,
+                &sessao.content_type,
+                montado,
+                &soma,
+            )
+            .await?
         }
     };
 
     marcar(tx, session_id, "finalised").await?;
-
-    audit::record(
-        tx,
-        Some(principal),
-        ids,
-        AuditEntry::new(action::CREATE, "file")
-            .resource(versao.file_id)
-            .context(&super::service::file_context(&workspace, efectiva))
-            .classified(efectiva)
-            .detail("size_bytes", montado.to_string())
-            .detail("parts", sessao.total_parts.to_string())
-            .detail("upload_session_id", session_id.to_string()),
-    )
-    .await?;
 
     Ok(versao)
 }

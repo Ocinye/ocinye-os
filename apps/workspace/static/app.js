@@ -2205,17 +2205,16 @@
    * seu próprio pedido, em paralelo; cancelar é abortá-lo. Só se cria quando o
    * primeiro ficheiro parte, e nunca guarda nada institucional — é só o estado
    * visível de um envio. */
-  /* O maior ficheiro que sobe num só pedido.
-
-     O tecto real não é o do Workspace (640 MB) nem o do proxy (que já os aceita):
-     é o da **borda**. O `os.ocinye.com` está atrás da Cloudflare, e o plano
-     limita o corpo de um pedido a 100 MB — um ficheiro maior é recusado por ela,
-     com um `413`, antes sequer de chegar ao servidor. Recusá-lo aqui, com o mesmo
-     número, é dizer a verdade cedo em vez de deixar a subida morrer a meio sem
-     explicação. Ficheiros maiores precisam de subir em pedaços (cada parte abaixo
-     do tecto da borda) — o caminho por partes, ainda não ligado ao espaço pessoal. */
-  const LIMITE_CARREGAMENTO_BYTES = 100 * 1024 * 1024;
-  const LIMITE_CARREGAMENTO_LEGIVEL = '100 MB';
+  /* O maior ficheiro que a instituição guarda, e o limite acima do qual se recusa
+     já em vez de deixar a subida morrer no fim. É o tecto do produto (o do
+     armazenamento), e não o da borda: acima do tecto da borda os ficheiros sobem
+     **em pedaços**, cada parte pequena o suficiente para o atravessar. */
+  const MAXIMO_CARREGAMENTO_BYTES = 512 * 1024 * 1024;
+  const MAXIMO_CARREGAMENTO_LEGIVEL = '512 MB';
+  /* A partir daqui, um único `POST` arrisca-se ao tecto de ~100 MB da Cloudflare
+     e ao seu tempo-limite; acima deste valor sobe-se por partes. Bem abaixo dos
+     100 MB, com folga para o envelope. */
+  const LIMIAR_PARTES_BYTES = 80 * 1024 * 1024;
   /* Sem avanço durante este tempo, a barra deixa de ser progresso e passa a ser
      um número parado — e é isso que se diz a quem espera. */
   const PARAGEM_CARREGAMENTO_MS = 20000;
@@ -2405,14 +2404,20 @@
         assentar();
       };
 
-      /* Recusar já o que o proxy recusaria a meio.
+      /* Recusar já o que nem por partes cabe: acima do tecto do produto não há
+         subida que valha, e dizê-lo antes de a gastar é a diferença entre «não sei
+         o que se passa» e «este ficheiro é grande de mais». */
+      if (ficheiro.size > MAXIMO_CARREGAMENTO_BYTES) {
+        terminar(false, 'Demasiado grande (máx. ' + MAXIMO_CARREGAMENTO_LEGIVEL + ')');
+        return;
+      }
 
-         Um ficheiro acima do limite não sobe: a ligação parava perto de zero e a
-         barra congelava sem dizer porquê — o defeito que se via. Dizê-lo agora, e
-         antes de gastar a subida, é a diferença entre «não sei o que se passa» e
-         «este ficheiro é grande de mais». O número é o mesmo que o proxy aceita. */
-      if (ficheiro.size > LIMITE_CARREGAMENTO_BYTES) {
-        terminar(false, 'Demasiado grande (máx. ' + LIMITE_CARREGAMENTO_LEGIVEL + ')');
+      /* Grande, mas dentro do tecto: sobe por partes. Cada pedaço atravessa a
+         borda que um único envio de cem megabytes não atravessa, e junta-se no
+         servidor. É o único caminho que faz um bundle de plugins chegar inteiro. */
+      if (ficheiro.size > LIMIAR_PARTES_BYTES) {
+        pararVigia();
+        carregarPorPartes(ficheiro, extras, ui, terminar);
         return;
       }
 
@@ -2475,6 +2480,167 @@
       });
       ui.diz('A carregar…');
       xhr.send(fd);
+    }
+
+    /* ── Carregamento por partes ────────────────────────────────────────
+
+       Um ficheiro grande não sobe num pedido: a borda recusa corpos acima de
+       ~100 MB, e mesmo abaixo disso um envio longo esbarra no tempo-limite dela.
+       Sobe em pedaços — o Core abre uma sessão, cada parte segue com a sua soma,
+       e o servidor monta e verifica o conjunto. O browser nunca fala com o
+       armazenamento; fala com o Workspace, como em tudo o resto. */
+
+    function hexDe(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let saida = '';
+      for (let i = 0; i < bytes.length; i += 1) {
+        saida += bytes[i].toString(16).padStart(2, '0');
+      }
+      return saida;
+    }
+
+    async function somaSha256(buffer) {
+      return hexDe(await crypto.subtle.digest('SHA-256', buffer));
+    }
+
+    function mensagemDeFalha(estado) {
+      if (estado === 401) return 'Sessão expirada';
+      if (estado === 413) return 'Demasiado grande';
+      if (estado === 507) return 'Sem espaço';
+      return 'Falhou';
+    }
+
+    function cancelarSessao(id) {
+      return fetch('/files/uploads/' + id, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+      }).catch(() => {});
+    }
+
+    /* Envia uma parte por XHR — e não `fetch` — para haver progresso enquanto ela
+       sobe, e não só um salto quando termina. Resolve com o estado HTTP; rejeita
+       em rede ou aborto. `registarAborto` liga o botão de cancelar à parte em
+       curso. */
+    function enviarParte(url, corpo, aoAvancar, registarAborto) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', url, true);
+        xhr.setRequestHeader('Accept', 'application/json');
+        if (xhr.upload) {
+          xhr.upload.addEventListener('progress', (evento) => {
+            if (evento.lengthComputable) aoAvancar(evento.loaded);
+          });
+        }
+        xhr.addEventListener('load', () => resolve(xhr.status));
+        xhr.addEventListener('error', () => reject(new Error('rede')));
+        xhr.addEventListener('abort', () => reject(new Error('abortado')));
+        registarAborto(() => xhr.abort());
+        xhr.send(corpo);
+      });
+    }
+
+    async function carregarPorPartes(ficheiro, extras, ui, terminar) {
+      let abortarActual = null;
+      let cancelado = false;
+      ui.aoCancelar(() => {
+        cancelado = true;
+        if (abortarActual) abortarActual();
+      });
+
+      const tipo = ficheiro.type || 'application/octet-stream';
+      const ws = extras && extras.workspace_id;
+      const inicioUrl = ws ? '/files/uploads' : '/files/personal-upload';
+      const inicioCorpo = ws
+        ? { workspace_id: ws, filename: ficheiro.name, content_type: tipo, size_bytes: ficheiro.size }
+        : { filename: ficheiro.name, content_type: tipo, size_bytes: ficheiro.size };
+
+      try {
+        ui.diz('A preparar…');
+        const abertura = await fetch(inicioUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(inicioCorpo),
+        });
+        if (!abertura.ok) {
+          terminar(false, mensagemDeFalha(abertura.status));
+          return;
+        }
+        const sessao = await abertura.json();
+        const id = sessao.session_id;
+        const pedaco = sessao.chunk_size_bytes;
+        const total = sessao.total_parts;
+        const recebidas = new Set(sessao.received_parts || []);
+
+        let base = 0; // bytes das partes já concluídas
+        for (let n = 1; n <= total; n += 1) {
+          if (cancelado) {
+            await cancelarSessao(id);
+            terminar(false, 'Cancelado');
+            return;
+          }
+          const inicio = (n - 1) * pedaco;
+          const fim = Math.min(inicio + pedaco, ficheiro.size);
+          const tamanhoParte = fim - inicio;
+
+          // Já lá está (retoma): conta para o progresso e não se reenvia.
+          if (recebidas.has(n)) {
+            base += tamanhoParte;
+            ui.progresso(Math.round((base / ficheiro.size) * 100));
+            continue;
+          }
+
+          const buf = await ficheiro.slice(inicio, fim).arrayBuffer();
+          const soma = await somaSha256(buf);
+          const resultado = await enviarParte(
+            '/files/uploads/' + id + '/parts/' + n + '?sha256=' + soma,
+            buf,
+            (enviados) => {
+              const pct = Math.round(((base + enviados) / ficheiro.size) * 100);
+              ui.progresso(pct);
+              ui.diz(pct < 100 ? pct + '%' : 'A finalizar no servidor…');
+            },
+            (fn) => {
+              abortarActual = fn;
+            },
+          ).catch((erro) => (erro && erro.message === 'abortado' ? 'abort' : 'rede'));
+          abortarActual = null;
+
+          if (resultado === 'abort') {
+            await cancelarSessao(id);
+            terminar(false, 'Cancelado');
+            return;
+          }
+          if (resultado === 'rede') {
+            await cancelarSessao(id);
+            terminar(false, 'Erro de rede');
+            return;
+          }
+          if (typeof resultado === 'number' && (resultado < 200 || resultado >= 300)) {
+            await cancelarSessao(id);
+            terminar(false, mensagemDeFalha(resultado));
+            return;
+          }
+
+          base += tamanhoParte;
+          ui.progresso(Math.round((base / ficheiro.size) * 100));
+        }
+
+        // A soma do ficheiro inteiro, para o servidor confirmar o que montou.
+        ui.diz('A finalizar no servidor…');
+        const somaTotal = await somaSha256(await ficheiro.arrayBuffer());
+        const fecho = await fetch('/files/uploads/' + id + '/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ sha256: somaTotal }),
+        });
+        if (!fecho.ok) {
+          terminar(false, mensagemDeFalha(fecho.status));
+          return;
+        }
+        terminar(true);
+      } catch (erro) {
+        terminar(false, 'Erro de rede');
+      }
     }
 
     return { carregar };

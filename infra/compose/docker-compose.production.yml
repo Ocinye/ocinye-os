@@ -300,7 +300,7 @@ services:
   # Nem a API nem a consola têm porto no host. O browser nunca fala com isto.
   object-store:
     <<: *comum
-    image: quay.io/minio/minio:latest
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
     command: ["server", "/data", "--console-address", ":9001"]
     env_file:
       - /etc/ocinye/object-store.env
@@ -320,7 +320,7 @@ services:
   # conhecimento manual (o bucket teve de ser criado à mão a 2026-09-09); passa a
   # ser do arranque. Corre a cada `up`, faz o seu trabalho e sai. Sem portas.
   object-store-init:
-    image: quay.io/minio/mc:latest
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
     env_file:
       - /etc/ocinye/object-store.env
       - /etc/ocinye/core.env

@@ -7,6 +7,24 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros: carregamento pessoal por partes, e a barra que enche — 2026-09-24
+
+Um ficheiro pessoal grande — um bundle de plugins de 100–200 MB — deixa de morrer
+na borda. A partir de 80 MB, o carregamento sobe **em pedaços**: o browser abre
+uma sessão (`POST /files/personal-upload`), envia cada parte de 32 MB com a sua
+soma, e o Core monta e verifica o conjunto antes de existir ficheiro nenhum. Cada
+parte é pequena o suficiente para atravessar o tecto de ~100 MB da Cloudflare, e
+nada disto entrega credenciais do armazenamento ao browser. É a mesma maquinaria
+que os ficheiros de research workspace já usavam (ADR-0605), agora ligada ao
+espaço pessoal: a sessão sabe que o seu destino é o dono, admite a quota, e cria
+um ficheiro pessoal em vez de um de ambiente. O tecto passa a ser o do produto
+(512 MB), não o da borda.
+
+E a **barra de progresso enche**. Duas regras CSS davam largura à mesma classe por
+variáveis diferentes; a de baixo ganhava, e lia uma variável que o carregador
+nunca escrevia — a percentagem contava e a barra ficava a zero. A regra do
+carregador passa à frente por especificidade, e a barra acompanha a subida.
+
 ### Correção: o tecto do carregamento é a borda, não o servidor — 2026-09-24
 
 Subir o limite do proxy para 640 MB desbloqueou os ficheiros até 100 MB, mas não

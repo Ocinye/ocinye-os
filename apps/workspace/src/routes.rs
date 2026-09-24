@@ -145,6 +145,7 @@ pub const ROUTES: &[&str] = &[
     "/files",
     "/files/upload",
     "/files/uploads",
+    "/files/personal-upload",
     "/files/uploads/{session_id}",
     "/files/uploads/{session_id}/parts/{part_number}",
     "/files/uploads/{session_id}/complete",
@@ -465,6 +466,7 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/datasets", get(datasets))
         .route("/files", get(files_browse))
         .route("/files/uploads", post(upload_begin))
+        .route("/files/personal-upload", post(upload_begin_personal))
         .route(
             "/files/uploads/{session_id}",
             get(upload_status).delete(upload_cancel),
@@ -10965,6 +10967,45 @@ async fn upload_begin(
             &member.correlation_id,
             &format!("/api/v1/workspaces/{}/uploads", pedido.workspace_id),
             &corpo,
+        )
+        .await,
+    )
+}
+
+/// Corpo para abrir uma sessão pessoal por partes.
+#[derive(Deserialize)]
+struct AberturaPessoal {
+    filename: String,
+    content_type: String,
+    size_bytes: i64,
+}
+
+/// `POST /files/personal-upload` — abre uma sessão por partes para o espaço
+/// pessoal.
+///
+/// O gémeo pessoal de [`upload_begin`]: sem ambiente, porque um ficheiro pessoal
+/// é do próprio. As partes, o estado, o fecho e o cancelamento seguem pelas mesmas
+/// rotas de sessão — o browser deixa de precisar de saber qual dos dois destinos
+/// abriu a sessão assim que a tem.
+async fn upload_begin_personal(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    axum::Json(pedido): axum::Json<AberturaPessoal>,
+) -> Response {
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return nao_autenticado();
+    };
+    encaminhar(
+        api::post(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            "/api/v1/me/files/uploads/sessions",
+            &serde_json::json!({
+                "filename": pedido.filename,
+                "content_type": pedido.content_type,
+                "size_bytes": pedido.size_bytes,
+            }),
         )
         .await,
     )

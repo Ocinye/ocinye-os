@@ -416,11 +416,23 @@ jobs:
       - name: Levantar o fixture S3-compatible
         run: |
           set -euo pipefail
+          IMAGEM_MINIO=quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+          # Pull com reententativas: a quay.io limita pulls anónimos por IP, e um
+          # «unauthorized» transitório do registo não é uma falha da suite.
+          for tentativa in $(seq 1 6); do
+            if docker pull "$IMAGEM_MINIO"; then break; fi
+            if [ "$tentativa" -eq 6 ]; then
+              echo "ERRO: pull do MinIO falhou após 6 tentativas" >&2
+              exit 1
+            fi
+            echo "pull falhou (tentativa $tentativa); a esperar…"
+            sleep $((tentativa * 15))
+          done
           docker run -d --name ocinye-ci-minio \
             -p 9000:9000 \
             -e MINIO_ROOT_USER="$OCINYE_TEST_STORAGE_ACCESS_KEY" \
             -e MINIO_ROOT_PASSWORD="$OCINYE_TEST_STORAGE_SECRET_KEY" \
-            quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z \
+            "$IMAGEM_MINIO" \
             server /data
 
           # Esperar que responda, e falhar se não responder. Um teste contra um
@@ -441,9 +453,19 @@ jobs:
       - name: Criar o bucket de teste
         run: |
           set -euo pipefail
+          IMAGEM_MC=quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+          for tentativa in $(seq 1 6); do
+            if docker pull "$IMAGEM_MC"; then break; fi
+            if [ "$tentativa" -eq 6 ]; then
+              echo "ERRO: pull do mc falhou após 6 tentativas" >&2
+              exit 1
+            fi
+            echo "pull falhou (tentativa $tentativa); a esperar…"
+            sleep $((tentativa * 15))
+          done
           docker run --rm --network host \
             --entrypoint sh \
-            quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z -c "
+            "$IMAGEM_MC" -c "
               mc alias set ci http://127.0.0.1:9000 \
                 '$OCINYE_TEST_STORAGE_ACCESS_KEY' '$OCINYE_TEST_STORAGE_SECRET_KEY' &&
               mc mb --ignore-existing ci/$OCINYE_TEST_STORAGE_BUCKET &&
@@ -626,6 +648,24 @@ jobs:
 
       - name: Levantar os serviços de dados
         run: |
+          set -euo pipefail
+          # Puxar as imagens com reententativas antes de as levantar. A quay.io
+          # limita os pulls anónimos por IP, e um runner num pool já limitado
+          # recebe «unauthorized» — uma limitação transitória do registo que, sem
+          # isto, ficava indistinguível de uma falha do código e vermelhava a
+          # suite inteira. Reentar com espera crescente atravessa a janela.
+          for tentativa in $(seq 1 6); do
+            if docker compose -f infra/compose/docker-compose.yml \
+                 pull -q postgres redis minio minio-init; then
+              break
+            fi
+            if [ "$tentativa" -eq 6 ]; then
+              echo "ERRO: pull das imagens de dados falhou após 6 tentativas" >&2
+              exit 1
+            fi
+            echo "pull falhou (tentativa $tentativa); a esperar…"
+            sleep $((tentativa * 15))
+          done
           docker compose -f infra/compose/docker-compose.yml \
             up -d postgres redis minio minio-init
 

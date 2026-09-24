@@ -346,6 +346,104 @@ pub async fn create_personal(
     })
 }
 
+/// Regista um objecto **já montado** no armazenamento como um ficheiro pessoal.
+///
+/// O gémeo de [`create_personal`] para o caminho por partes ([`super::upload`]):
+/// os bytes já foram montados e verificados, por isso aqui não se transporta byte
+/// nenhum — regista-se o objecto, admite-se a quota (a mesma admissão serializada
+/// por membro que `guardar_bytes_personal` usa, e que cobre o `INSERT` que se
+/// segue), e cria-se o ficheiro e a sua primeira versão.
+///
+/// # Errors
+///
+/// Recusa quando a quota não admite os bytes, quando a instalação não tem
+/// armazenamento registado, ou quando a base falha.
+#[allow(clippy::too_many_arguments)]
+pub async fn finalise_personal_object(
+    tx: &mut Tx<'_>,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    storage_object_id: Uuid,
+    object_key: &str,
+    filename: &str,
+    content_type: &str,
+    size_bytes: i64,
+    checksum_sha256: &str,
+) -> CoreResult<FileVersionRecord> {
+    // Um ficheiro pessoal é sempre INTERNAL — como em `create_personal`.
+    let classification = Classification::Internal;
+
+    crate::modules::resource::admit_personal_bytes(tx, principal.person_id, size_bytes).await?;
+
+    let registo = sqlx::query(
+        "INSERT INTO storage_objects
+             (id, backend_id, organisation_id, owner_id, object_key,
+              original_filename, content_type, size_bytes, checksum_sha256,
+              classification, status, created_by_id)
+         SELECT $1, b.id, $2, $3, $4, $5, $6, $7, $8, $9, 'stored', $3
+           FROM storage_backends b
+          WHERE b.is_default AND b.is_active",
+    )
+    .bind(storage_object_id)
+    .bind(principal.organisation_id)
+    .bind(principal.person_id)
+    .bind(object_key)
+    .bind(filename)
+    .bind(content_type)
+    .bind(size_bytes)
+    .bind(checksum_sha256)
+    .bind(classification.as_str())
+    .execute(&mut **tx)
+    .await?;
+    if registo.rows_affected() == 0 {
+        return Err(CoreError::StorageUnavailable(
+            "Esta instalação não tem armazenamento registado.".to_owned(),
+        ));
+    }
+
+    let file_id = repo::insert_personal_file(
+        &mut **tx,
+        principal.organisation_id,
+        principal.person_id,
+        filename,
+        classification,
+    )
+    .await?;
+    let version_id = repo::insert_version(
+        &mut **tx,
+        file_id,
+        1,
+        storage_object_id,
+        None,
+        principal.person_id,
+    )
+    .await?;
+
+    if super::thumbnail::is_thumbnailable(content_type) {
+        super::thumbnail::queue(tx, version_id, ids).await?;
+    }
+
+    audit::record(
+        tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::CREATE, "file")
+            .resource(file_id)
+            .classified(classification)
+            .detail("owner_id", principal.person_id.to_string())
+            .detail("size_bytes", size_bytes.to_string())
+            .detail("via", "chunked_upload"),
+    )
+    .await?;
+
+    Ok(FileVersionRecord {
+        file_id,
+        version_id,
+        sequence: 1,
+        storage_object_id,
+    })
+}
+
 /// Acrescenta uma versão a um ficheiro que já existe, com bytes novos.
 ///
 /// # Errors
