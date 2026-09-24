@@ -7,6 +7,22 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Correção: o tecto do carregamento é a borda, não o servidor — 2026-09-24
+
+Subir o limite do proxy para 640 MB desbloqueou os ficheiros até 100 MB, mas não
+os maiores: o `os.ocinye.com` está atrás da Cloudflare, e o plano recusa um corpo
+acima de ~100 MB **na borda**, com um `413`, antes de chegar ao servidor —
+verificado (90 MB passa, 114 MB é recusado pela Cloudflare). O carregador recusava
+a partir de 640 MB, o número errado: um ficheiro de 114 MB passava a verificação
+do browser e morria na borda a meio da subida. Passa a recusar a partir de **100
+MB**, o tecto real, e diz porquê. Ficheiros maiores precisam de subir em pedaços
+(cada parte abaixo do tecto), não de um limite maior num sítio que a borda ignora.
+
+Corrige-se também a detecção do passo «Recarregar o proxy» no deploy: verificava o
+estado do contentor com um comando que devolvia vazio e saltava o reload, deixando
+o nginx a correr com a config antiga. Passa a `docker inspect` do próprio
+contentor.
+
 ### Ficheiros: esvaziar o Lixo, e um carregamento que diz a verdade — 2026-09-24
 
 O **Lixo pessoal** ganha um botão **Esvaziar** que apaga tudo de uma vez — nunca

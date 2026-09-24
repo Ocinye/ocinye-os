@@ -100,10 +100,9 @@ echo "  $(ls infra/nginx/*.conf | wc -l | tr -d ' ') ficheiro(s) instalado(s)"
 # para não deixar acontecer. Testar antes de recarregar: uma config inválida
 # aborta o deploy aqui, e não deixa o proxy a servir com metade das regras.
 passo "Recarregar o proxy"
-if ssh_ "cd '$RAIZ/current' && docker compose -f '$COMPOSE' ps proxy --status running -q | grep -q ." 2>/dev/null; then
-    ssh_ "cd '$RAIZ/current' \
-          && docker compose -f '$COMPOSE' exec -T proxy nginx -t \
-          && docker compose -f '$COMPOSE' exec -T proxy nginx -s reload"
+if [ "$(ssh_ "docker inspect -f '{{.State.Running}}' ocinye-proxy-1 2>/dev/null || true")" = "true" ]; then
+    ssh_ "docker exec ocinye-proxy-1 nginx -t \
+          && docker exec ocinye-proxy-1 nginx -s reload"
     echo "  proxy recarregado"
 else
     echo "  proxy ainda não corre; a config entra no arranque do passo 7"

@@ -2205,12 +2205,17 @@
    * seu próprio pedido, em paralelo; cancelar é abortá-lo. Só se cria quando o
    * primeiro ficheiro parte, e nunca guarda nada institucional — é só o estado
    * visível de um envio. */
-  /* O maior ficheiro que sobe num só pedido, igual ao que o proxy aceita
-     (`client_max_body_size`, 640 MB) e ao limite lógico do Workspace
-     (`FILE_BODY_LIMIT_BYTES`). Recusar aqui um ficheiro maior é dizer a verdade
-     cedo, em vez de deixar a subida parar a meio sem explicação. */
-  const LIMITE_CARREGAMENTO_BYTES = 640 * 1024 * 1024;
-  const LIMITE_CARREGAMENTO_LEGIVEL = '640 MB';
+  /* O maior ficheiro que sobe num só pedido.
+
+     O tecto real não é o do Workspace (640 MB) nem o do proxy (que já os aceita):
+     é o da **borda**. O `os.ocinye.com` está atrás da Cloudflare, e o plano
+     limita o corpo de um pedido a 100 MB — um ficheiro maior é recusado por ela,
+     com um `413`, antes sequer de chegar ao servidor. Recusá-lo aqui, com o mesmo
+     número, é dizer a verdade cedo em vez de deixar a subida morrer a meio sem
+     explicação. Ficheiros maiores precisam de subir em pedaços (cada parte abaixo
+     do tecto da borda) — o caminho por partes, ainda não ligado ao espaço pessoal. */
+  const LIMITE_CARREGAMENTO_BYTES = 100 * 1024 * 1024;
+  const LIMITE_CARREGAMENTO_LEGIVEL = '100 MB';
   /* Sem avanço durante este tempo, a barra deixa de ser progresso e passa a ser
      um número parado — e é isso que se diz a quem espera. */
   const PARAGEM_CARREGAMENTO_MS = 20000;
