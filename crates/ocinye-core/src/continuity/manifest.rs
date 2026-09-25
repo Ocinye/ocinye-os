@@ -414,6 +414,13 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
         Comparacao::Fora("linha-filha sem identidade própria; viaja com a caixa"),
     ),
     (
+        "member_app_pins",
+        Comparacao::Fora(
+            "preferência de apresentação, chaveada pela pessoa e sem identidade \
+             própria; viaja com o membro",
+        ),
+    ),
+    (
         "action_approvals",
         Comparacao::Fora("linha-filha sem identidade própria; viaja com o plano"),
     ),

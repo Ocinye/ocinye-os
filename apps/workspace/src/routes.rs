@@ -147,6 +147,7 @@ pub const ROUTES: &[&str] = &[
     "/files/uploads",
     "/files/personal-upload",
     "/files/upload-preflight",
+    "/apps/pins",
     "/files/uploads/{session_id}",
     "/files/uploads/{session_id}/parts/{part_number}",
     "/files/uploads/{session_id}/complete",
@@ -469,6 +470,7 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/files/uploads", post(upload_begin))
         .route("/files/personal-upload", post(upload_begin_personal))
         .route("/files/upload-preflight", post(upload_preflight))
+        .route("/apps/pins", put(apps_set_pins))
         .route(
             "/files/uploads/{session_id}",
             get(upload_status).delete(upload_cancel),
@@ -1060,7 +1062,7 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
     // As outras consultas alimentam a barra e degradam-se para vazio sem
     // consequência; a identidade não: uma falha técnica ao resolvê-la não é
     // prova de que a sessão é normal, e por isso é classificada, não perdida.
-    let (me_result, organisation, temporal, notificacoes) = tokio::join!(
+    let (me_result, organisation, temporal, notificacoes, pins) = tokio::join!(
         api::get::<Value>(
             state,
             &member.session.access_token,
@@ -1075,6 +1077,7 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
             agora + chrono::Duration::days(14),
         ),
         optional(state, member, "/api/v1/notifications"),
+        optional(state, member, "/api/v1/me/apps/pins"),
     );
     let resolucao = resolucao_de(&me_result);
     // Uma identidade indeterminada é o estado que o fail-closed existe para
@@ -1158,8 +1161,25 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
         })
         .unwrap_or_default();
 
+    // As aplicações fixadas na barra lateral. `pinned: null` (ou sem resposta)
+    // quer dizer que o membro nunca escolheu — aplica-se o conjunto por omissão
+    // do registo; uma lista (mesmo vazia) é a escolha do membro, respeitada tal
+    // como veio. A filtragem por visibilidade acontece ao desenhar a barra.
+    let pinned = pins
+        .get("pinned")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(ui::apps::default_pins);
+
     Viewer {
         resolucao,
+        pinned,
         zona: member.zona,
         name: member.session.display_name.clone(),
         // As duas verdades, ambas do Core.
@@ -11005,6 +11025,45 @@ async fn upload_preflight(
             &member.correlation_id,
             "/api/v1/me/files/uploads/preflight",
             &serde_json::json!({ "size_bytes": size }),
+        )
+        .await,
+    )
+}
+
+#[derive(Deserialize)]
+struct AppPinsForm {
+    pinned: Vec<String>,
+}
+
+/// `PUT /apps/pins` — substitui a lista de aplicações fixadas na barra lateral.
+///
+/// Fixar, desafixar e reordenar são todos «passa a ser esta a lista». O Workspace
+/// é o dono do registo, por isso valida aqui: cada id tem de ser uma aplicação
+/// **real e fixável** (as estruturais, Home e O Meu Trabalho, não se fixam), e os
+/// desconhecidos caem em silêncio em vez de recusarem a escrita inteira. O Core
+/// guarda a lista limpa; a autorização de cada ecrã continua a ser dele.
+async fn apps_set_pins(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    axum::Json(pedido): axum::Json<AppPinsForm>,
+) -> Response {
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return nao_autenticado();
+    };
+    // Filtra pelo registo e retira repetições, mantendo a ordem do pedido.
+    let mut vistos = std::collections::BTreeSet::new();
+    let limpos: Vec<String> = pedido
+        .pinned
+        .into_iter()
+        .filter(|id| ui::apps::is_pinnable(id) && vistos.insert(id.clone()))
+        .collect();
+    encaminhar(
+        api::put(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            "/api/v1/me/apps/pins",
+            &serde_json::json!({ "pinned": limpos }),
         )
         .await,
     )

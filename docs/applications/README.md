@@ -1,9 +1,10 @@
 # Aplicações do Ocinye OS
 
-> Estado: **`CURRENT` (fatia A)** — o registo autoritativo e o Gestor de
-> Aplicações (lançador) existem e estão em produção. A **fixação na barra
-> lateral** (persistência por membro) é a fatia seguinte e ainda **não** existe;
-> a barra lateral continua, nesta fatia, a mostrar a navegação completa.
+> Estado: **`CURRENT` (fatias A+B)** — o registo autoritativo, o Gestor de
+> Aplicações (lançador) e a **fixação na barra lateral** (persistida por membro
+> no Core) existem. A barra lateral é agora **navegação essencial + aplicações
+> fixadas**; deixou de ser o catálogo completo. Falta a fatia C (E2E de browser,
+> matriz, capturas, integração em Definições e a invariante no CLAUDE.md).
 
 O Ocinye OS trata as aplicações como **entidades de primeira classe**: são
 descobertas, pesquisadas e lançadas através de uma camada de aplicações
@@ -79,10 +80,27 @@ ficha do Prompt por não haver fornecedor (briefing §54).
 - Completude `pt`/`en`/`fr` de todas as chaves pelo portão de completude do
   catálogo.
 
-## O que ainda não existe (fatias seguintes)
+## Fixação na barra lateral (fatia B)
 
-- **Fixação de aplicações na barra lateral**, persistida por membro no Core
-  (tabela + módulo + rotas), com ordem e conjunto por omissão, e o
-  refactor da barra lateral para «navegação essencial + fixadas».
-- Integração em Definições (repor fixações), E2E de browser, matriz de browsers e
-  capturas de ecrã comparadas com a direcção visual aprovada.
+- A barra lateral é **navegação essencial** (Home, O Meu Trabalho) mais as
+  **aplicações fixadas** pelo membro, pela ordem dele. Deixou de ser o catálogo.
+- A fixação é uma **preferência do membro, persistida no Core** —
+  `member_app_pins` (migração 0051), lida/escrita por `GET`/`PUT
+  /api/v1/me/apps/pins`, resolvida pelo dono da sessão. Segue o membro entre
+  browsers e máquinas. **Não altera autorização** (`CLAUDE.md` §4).
+- **Sem escolha, o conjunto por omissão** do registo (`notes`, `files`,
+  `projects`); uma lista vazia é uma escolha explícita, distinta de nunca ter
+  escolhido. Um membro existente sem preferência recebe o padrão sem perder
+  acesso — tudo continua descobrível no lançador.
+- **`Desafixar ≠ desinstalar`**: tirar uma aplicação da barra tira só o atalho; a
+  aplicação continua no lançador e a rota continua a funcionar.
+- Fixar/desafixar acontece no lançador (o botão de cada ficha), persiste no Core
+  e **actualiza a barra ao vivo**, sem recarregar. A barra nunca oferece uma
+  ficha para um ecrã sem autorização — as fixadas são filtradas pela mesma
+  visibilidade do lançador.
+
+## O que ainda não existe (fatia C)
+
+- Reordenar por arrastar; integração em Definições (repor fixações); E2E de
+  browser, matriz de browsers e capturas comparadas com a direcção visual
+  aprovada; a invariante permanente no `CLAUDE.md`.

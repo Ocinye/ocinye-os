@@ -525,6 +525,8 @@
       panel,
     ).filter((el) => el.offsetParent !== null);
 
+    const celula = (card) => card.closest('[data-oc="launcher-cell"]') || card;
+
     const aplicar = () => {
       const agulha = (input ? input.value : '').trim().toLowerCase();
       let visiveis = 0;
@@ -532,7 +534,7 @@
         const naCategoria = categoria === 'all' || card.dataset.cat === categoria;
         const naPesquisa = agulha === '' || (card.dataset.search || '').includes(agulha);
         const mostra = naCategoria && naPesquisa;
-        card.hidden = !mostra;
+        celula(card).hidden = !mostra;
         if (mostra) visiveis += 1;
       });
       if (vazio) vazio.hidden = visiveis !== 0;
@@ -596,7 +598,7 @@
         return;
       }
       // Setas: mover o foco pela grelha de fichas visíveis.
-      const visiveis = cards.filter((c) => !c.hidden);
+      const visiveis = cards.filter((c) => !celula(c).hidden);
       const at = visiveis.indexOf(document.activeElement);
       if (['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft'].includes(evento.key) && visiveis.length) {
         evento.preventDefault();
@@ -619,6 +621,82 @@
     });
 
     window.ocCloseLauncher = () => { if (!launcher.hidden) fechar(); };
+
+    /* ── Fixar / desafixar ─────────────────────────────────────────────
+     *
+     * Fixar é uma preferência do membro, guardada no Core (a lista inteira, por
+     * ordem). O botão de cada ficha alterna, e a barra lateral reflecte a
+     * mudança **ao vivo** — a ficha entra ou sai sem recarregar. Se a escrita
+     * falhar, nada muda: o estado do botão só avança quando o Core confirma. */
+    const barra = $('[data-oc="side-pinned"]');
+    const etiquetaFixadas = $('[data-oc="side-pinned-label"]');
+    const pins = $$('[data-oc="launcher-pin"]', launcher);
+
+    const idsFixados = () => (barra
+      ? $$('[data-app-id]', barra).map((a) => a.dataset.appId)
+      : []);
+
+    const guardar = async (lista) => {
+      try {
+        const r = await fetch('/apps/pins', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ pinned: lista }),
+        });
+        return r.ok;
+      } catch (e) {
+        return false;
+      }
+    };
+
+    const desenharNaBarra = (id, fixar, botao) => {
+      if (!barra) return;
+      const existente = $(`[data-app-id="${id}"]`, barra);
+      if (fixar) {
+        if (existente) return;
+        // Constrói a âncora da barra a partir da própria ficha: o mesmo ícone,
+        // o mesmo rótulo, a mesma rota — sem uma segunda tabela no cliente.
+        const ficha = botao.closest('[data-oc="launcher-cell"]');
+        const carta = $('[data-oc="launcher-item"]', ficha);
+        const rota = carta.getAttribute('href');
+        const nome = ($('.oc-apps__nome', carta) || {}).textContent || '';
+        const svg = $('.oc-apps__icone svg', carta);
+        const a = document.createElement('a');
+        a.className = 'oc-nav';
+        a.href = rota;
+        a.title = nome;
+        a.setAttribute('aria-label', nome);
+        a.dataset.appId = id;
+        if (svg) a.appendChild(svg.cloneNode(true));
+        const span = document.createElement('span');
+        span.textContent = nome;
+        a.appendChild(span);
+        barra.appendChild(a);
+      } else if (existente) {
+        existente.remove();
+      }
+      if (etiquetaFixadas) etiquetaFixadas.hidden = idsFixados().length === 0;
+    };
+
+    pins.forEach((botao) => {
+      botao.addEventListener('click', async (evento) => {
+        evento.preventDefault();
+        evento.stopPropagation();
+        const id = botao.dataset.appId;
+        const fixar = botao.getAttribute('aria-pressed') !== 'true';
+        const atual = idsFixados();
+        const nova = fixar
+          ? (atual.includes(id) ? atual : atual.concat(id))
+          : atual.filter((x) => x !== id);
+        const ok = await guardar(nova);
+        if (!ok) return;
+        botao.setAttribute('aria-pressed', String(fixar));
+        // O rótulo do botão passa a oferecer a acção inversa.
+        const novoRotulo = botao.getAttribute(fixar ? 'data-label-unpin' : 'data-label-pin');
+        if (novoRotulo) { botao.title = novoRotulo; botao.setAttribute('aria-label', novoRotulo); }
+        desenharNaBarra(id, fixar, botao);
+      });
+    });
   }
 
   /* ── Tabs locais ──────────────────────────────────────────────────── */

@@ -2256,6 +2256,7 @@ mod tests {
     /// filtragem por permissão.
     pub(super) fn viewer() -> Viewer {
         Viewer {
+            pinned: crate::ui::apps::default_pins(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,
@@ -2280,6 +2281,7 @@ mod tests {
     /// Um membro sem permissão nenhuma.
     fn viewer_sem_permissoes() -> Viewer {
         Viewer {
+            pinned: crate::ui::apps::default_pins(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,

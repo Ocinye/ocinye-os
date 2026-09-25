@@ -26,6 +26,9 @@ pub fn routes() -> Router<AppState> {
             post(set_photograph).layer(DefaultBodyLimit::max(AVATAR_BODY_LIMIT_BYTES)),
         )
         .route("/me/avatar/{version}", get(read_own_avatar))
+        // As aplicações que o membro fixou na barra lateral — a sua preferência,
+        // resolvida pela sessão. Ler e substituir; nunca uma pessoa no caminho.
+        .route("/me/apps/pins", get(list_app_pins).put(set_app_pins))
         .route("/people", get(list_people))
         .route("/people/{person_id}", get(get_person))
         .route("/invitations", post(create_invitation))
@@ -214,6 +217,34 @@ impl From<identity::Person> for PersonView {
             units: Vec::new(),
         }
     }
+}
+
+/// `GET /me/apps/pins` — as aplicações que o membro fixou, pela ordem da barra.
+///
+/// `pinned` é `null` quando o membro nunca escolheu — o Workspace aplica então o
+/// conjunto por omissão; um array (mesmo vazio) é a escolha do membro.
+async fn list_app_pins(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let pins = identity::list_app_pins(&state.pool, &principal).await?;
+    Ok(Json(serde_json::json!({ "pinned": pins })))
+}
+
+#[derive(Deserialize)]
+struct SetAppPins {
+    pinned: Vec<String>,
+}
+
+/// `PUT /me/apps/pins` — substitui a lista fixada. Fixar, desafixar e reordenar
+/// são todos «passa a ser esta a lista».
+async fn set_app_pins(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Json(request): Json<SetAppPins>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    identity::set_app_pins(&state.pool, &principal, &request.pinned).await?;
+    Ok(Json(serde_json::json!({ "pinned": request.pinned })))
 }
 
 async fn list_people(
