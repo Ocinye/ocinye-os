@@ -930,6 +930,9 @@ struct BeginPersonalUploadRequest {
     filename: String,
     content_type: String,
     size_bytes: i64,
+    /// A pasta pessoal em que o carregamento começou. Ausente é a raiz.
+    #[serde(default)]
+    folder_id: Option<Uuid>,
 }
 
 /// `POST /me/files/uploads/sessions` — abre uma sessão pessoal por partes.
@@ -955,6 +958,7 @@ async fn begin_my_upload(
             filename: request.filename,
             content_type: request.content_type,
             size_bytes: request.size_bytes,
+            folder_id: request.folder_id,
         },
     )
     .await?;
@@ -1019,6 +1023,17 @@ async fn upload_my_file(
     multipart: Multipart,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let upload = super::knowledge::read_upload_public(multipart).await?;
+    // A pasta de destino viaja como campo do multipart (`folder_id`), a par do
+    // ficheiro. Um valor vazio ou ausente é a raiz; um mal formado é recusado, e
+    // não silenciosamente tratado como raiz — mandaria o ficheiro para fora da
+    // pasta que o membro tinha aberto, que é exactamente o defeito a corrigir.
+    let folder_id = match upload.fields.get("folder_id") {
+        Some(bruto) if !bruto.is_empty() => Some(
+            Uuid::parse_str(bruto)
+                .map_err(|_| CoreError::Validation("Pasta inválida.".to_owned()))?,
+        ),
+        _ => None,
+    };
     let store = state.store()?;
     let mut tx = state.pool.begin().await.map_err(CoreError::from)?;
     let version = files::create_personal(
@@ -1035,6 +1050,12 @@ async fn upload_my_file(
         },
     )
     .await?;
+    // Nascido na raiz, movido para a pasta que o membro tinha aberto. O move
+    // valida a pertença da pasta e recusa a de outra pessoa.
+    if let Some(folder_id) = folder_id {
+        files::move_personal_file(&mut tx, &principal, &ids, version.file_id, Some(folder_id))
+            .await?;
+    }
     tx.commit().await.map_err(CoreError::from)?;
     Ok(Json(serde_json::json!({
         "file_id": version.file_id,

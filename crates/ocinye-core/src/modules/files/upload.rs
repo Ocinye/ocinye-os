@@ -236,6 +236,10 @@ pub struct NewPersonalUpload {
     pub content_type: String,
     /// O tamanho total declarado. Fixa o número de partes.
     pub size_bytes: i64,
+    /// A pasta pessoal de destino, quando o carregamento começa dentro de uma. A
+    /// pertença é validada aqui (falha cedo, antes do primeiro byte) e o ficheiro
+    /// é lá colocado no `finalise`. `None` é a raiz.
+    pub folder_id: Option<Uuid>,
 }
 
 /// Abre uma sessão de carregamento para o **espaço pessoal** de quem carrega.
@@ -286,6 +290,15 @@ pub async fn begin_personal(
     crate::modules::resource::reserve_personal_bytes(tx, principal.person_id, request.size_bytes)
         .await?;
 
+    // O destino, se houver, é do próprio: uma pasta de outra pessoa responde «não
+    // encontrada», e não se começa a subir 2 GB para a pasta errada. A colocação
+    // acontece no `finalise`, que revalida a pertença.
+    if let Some(folder_id) = request.folder_id {
+        if !super::service::owns_personal_folder(&mut *tx, principal, folder_id).await? {
+            return Err(CoreError::NotFound("Pasta não encontrada.".to_owned()));
+        }
+    }
+
     let content_type = crate::storage::validate_content_type(&request.content_type)?;
     let filename = crate::storage::normalise_filename(&request.filename)?;
 
@@ -305,14 +318,15 @@ pub async fn begin_personal(
 
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO upload_sessions
-             (organisation_id, owner_id, filename, content_type, classification,
+             (organisation_id, owner_id, folder_id, filename, content_type, classification,
               declared_size_bytes, chunk_size_bytes, total_parts,
               storage_object_id, storage_key, storage_upload_id, created_by_id, expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
          RETURNING id",
     )
     .bind(principal.organisation_id)
     .bind(principal.person_id)
+    .bind(request.folder_id)
     .bind(&filename)
     .bind(&content_type)
     .bind(Classification::Internal.as_str())
@@ -835,7 +849,7 @@ pub async fn finalise(
         // ficheiro pessoal e a sua primeira versão. A auditoria da criação vive lá
         // dentro, como no `create_personal` de um único pedido.
         AlvoFinal::Pessoal => {
-            super::service::finalise_personal_object(
+            let versao = super::service::finalise_personal_object(
                 tx,
                 principal,
                 ids,
@@ -846,7 +860,21 @@ pub async fn finalise(
                 montado,
                 &soma,
             )
-            .await?
+            .await?;
+            // Começou dentro de uma pasta: coloca-o lá, como o caminho de ambiente
+            // faz com `move_to_folder`. A pertença é revalidada — a pasta pode ter
+            // desaparecido durante um carregamento longo.
+            if let Some(folder_id) = sessao.folder_id {
+                super::service::move_personal_file(
+                    tx,
+                    principal,
+                    ids,
+                    versao.file_id,
+                    Some(folder_id),
+                )
+                .await?;
+            }
+            versao
         }
     };
 

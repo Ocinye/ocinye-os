@@ -355,6 +355,7 @@ async fn um_ficheiro_pessoal_grande_atravessa_em_partes() {
             filename: "ValhallaDSP-bundle.zip".to_owned(),
             content_type: "application/zip".to_owned(),
             size_bytes: tamanho as i64,
+            folder_id: None,
         },
     )
     .await
@@ -431,6 +432,181 @@ async fn um_ficheiro_pessoal_grande_atravessa_em_partes() {
     assert_eq!(
         usado, tamanho as i64,
         "a quota pessoal não reflecte o ficheiro"
+    );
+}
+
+/// Um carregamento pessoal por partes iniciado **dentro de uma pasta** termina
+/// dentro dela — e não na raiz.
+///
+/// É o defeito do Dossier: criava-se uma pasta, largavam-se lá ficheiros, e eles
+/// apareciam na raiz. A pasta viaja na abertura da sessão (`folder_id`) e a
+/// colocação acontece no `finalise`, como o caminho de ambiente já fazia.
+#[tokio::test]
+async fn um_ficheiro_pessoal_por_partes_fica_na_pasta_de_origem() {
+    use ocinye_core::modules::files::upload::NewPersonalUpload;
+    let Some(c) = cenario().await else { return };
+
+    // Quota pessoal, sem a qual a abertura recusa.
+    let org = c.quem_carrega.organisation_id;
+    let profile_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO resource_profiles (organisation_id, code, name, is_default)
+         VALUES ($1, 'MEMBER_STANDARD', 'Padrão', TRUE) RETURNING id",
+    )
+    .bind(org)
+    .fetch_one(&c.pool)
+    .await
+    .expect("perfil");
+    sqlx::query(
+        "INSERT INTO resource_profile_rules (profile_id, resource_type, quantity, unit)
+         VALUES ($1, 'persistent_storage', $2, 'bytes')",
+    )
+    .bind(profile_id)
+    .bind(1024_i64 * 1024 * 1024)
+    .execute(&c.pool)
+    .await
+    .expect("regra");
+
+    // A pasta pessoal de destino — o «Dossier».
+    let mut tx = c.pool.begin().await.expect("tx");
+    let pasta = ocinye_core::modules::files::create_personal_folder(
+        &mut tx,
+        &c.quem_carrega,
+        &c.ids,
+        "TESTES",
+    )
+    .await
+    .expect("pasta");
+    tx.commit().await.expect("commit");
+
+    let pedaco = upload::CHUNK_SIZE_BYTES as usize;
+    let tamanho = pedaco * 2 + 128;
+    let ficheiro = bytes(tamanho, 23);
+    let soma_final = sha256_hex(&ficheiro);
+
+    let mut tx = c.pool.begin().await.expect("tx");
+    let sessao = upload::begin_personal(
+        &mut tx,
+        &c.quem_carrega,
+        &c.ids,
+        &c.store,
+        "teste",
+        NewPersonalUpload {
+            filename: "Ableton-Live-Suite.zip".to_owned(),
+            content_type: "application/zip".to_owned(),
+            size_bytes: tamanho as i64,
+            folder_id: Some(pasta.id),
+        },
+    )
+    .await
+    .expect("abrir pessoal na pasta");
+    tx.commit().await.expect("commit");
+
+    for parte in 1..=sessao.total_parts {
+        let inicio = (parte as usize - 1) * pedaco;
+        let fim = (inicio + pedaco).min(tamanho);
+        let troco = &ficheiro[inicio..fim];
+        let mut tx = c.pool.begin().await.expect("tx");
+        upload::accept_part(
+            &mut tx,
+            &c.quem_carrega,
+            &c.store,
+            sessao.id,
+            parte,
+            &sha256_hex(troco),
+            troco.to_vec(),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("parte {parte}: {e}"));
+        tx.commit().await.expect("commit");
+    }
+
+    let mut tx = c.pool.begin().await.expect("tx");
+    let versao = upload::finalise(
+        &mut tx,
+        &c.quem_carrega,
+        &c.ids,
+        &c.store,
+        sessao.id,
+        &soma_final,
+    )
+    .await
+    .expect("fechar pessoal");
+    tx.commit().await.expect("commit");
+
+    // A prova: o ficheiro pessoal está na pasta de origem, não na raiz.
+    let (owner, folder): (Option<Uuid>, Option<Uuid>) = sqlx::query_as(
+        "SELECT f.owner_id, f.folder_id
+           FROM file_versions fv JOIN files f ON f.id = fv.file_id
+          WHERE fv.id = $1",
+    )
+    .bind(versao.version_id)
+    .fetch_one(&c.pool)
+    .await
+    .expect("ficheiro");
+    assert_eq!(
+        owner,
+        Some(c.quem_carrega.person_id),
+        "o ficheiro não é do dono"
+    );
+    assert_eq!(
+        folder,
+        Some(pasta.id),
+        "o ficheiro caiu fora do Dossier em que foi criado"
+    );
+}
+
+/// Uma pasta de **outra pessoa** recusa a abertura, e não se sobe byte nenhum.
+#[tokio::test]
+async fn uma_pasta_de_outrem_recusa_a_abertura_pessoal() {
+    use ocinye_core::modules::files::upload::NewPersonalUpload;
+    let Some(c) = cenario().await else { return };
+
+    let org = c.quem_carrega.organisation_id;
+    let profile_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO resource_profiles (organisation_id, code, name, is_default)
+         VALUES ($1, 'MEMBER_STANDARD', 'Padrão', TRUE) RETURNING id",
+    )
+    .bind(org)
+    .fetch_one(&c.pool)
+    .await
+    .expect("perfil");
+    sqlx::query(
+        "INSERT INTO resource_profile_rules (profile_id, resource_type, quantity, unit)
+         VALUES ($1, 'persistent_storage', $2, 'bytes')",
+    )
+    .bind(profile_id)
+    .bind(1024_i64 * 1024 * 1024)
+    .execute(&c.pool)
+    .await
+    .expect("regra");
+
+    // A pasta é de outra pessoa do mesmo ambiente.
+    let outrem = pessoa_do_ambiente(&c.pool, org, c.workspace_id, "member").await;
+    let mut tx = c.pool.begin().await.expect("tx");
+    let pasta_alheia =
+        ocinye_core::modules::files::create_personal_folder(&mut tx, &outrem, &c.ids, "Privado")
+            .await
+            .expect("pasta alheia");
+    tx.commit().await.expect("commit");
+
+    let mut tx = c.pool.begin().await.expect("tx");
+    let resultado = upload::begin_personal(
+        &mut tx,
+        &c.quem_carrega,
+        &c.ids,
+        &c.store,
+        "teste",
+        NewPersonalUpload {
+            filename: "intruso.zip".to_owned(),
+            content_type: "application/zip".to_owned(),
+            size_bytes: 4096,
+            folder_id: Some(pasta_alheia.id),
+        },
+    )
+    .await;
+    assert!(
+        matches!(resultado, Err(ocinye_core::CoreError::NotFound(_))),
+        "abrir para a pasta de outrem devia responder «não encontrada», deu {resultado:?}"
     );
 }
 
