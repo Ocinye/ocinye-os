@@ -452,6 +452,44 @@ pub fn by_id(id: &str) -> Option<&'static Application> {
     APPLICATIONS.iter().find(|app| app.id() == id)
 }
 
+/// O conjunto de aplicações fixadas por omissão, na ordem do registo.
+///
+/// O que um membro novo (ou um que nunca escolheu) vê na barra lateral, antes de
+/// fixar ou desafixar o que quer que seja.
+#[must_use]
+pub fn default_pins() -> Vec<String> {
+    APPLICATIONS
+        .iter()
+        .filter(|a| a.default_pin)
+        .map(|a| a.id().to_owned())
+        .collect()
+}
+
+/// Se uma aplicação existe **e** é fixável — o que o Workspace valida antes de
+/// pedir ao Core para guardar a lista.
+#[must_use]
+pub fn is_pinnable(id: &str) -> bool {
+    by_id(id).is_some_and(|a| a.can_pin)
+}
+
+/// As aplicações fixadas visíveis a este membro, na ordem em que fixou.
+///
+/// Resolve os identificadores fixados contra o registo, deixando cair os que já
+/// não existem ou que o membro não pode abrir — a barra nunca oferece uma ficha
+/// para um ecrã sem autorização, nem para um id que o registo já não conhece.
+#[must_use]
+pub fn pinned_visible<'a>(
+    pinned: &'a [String],
+    viewer: &'a Viewer,
+    core: CoreStatus,
+) -> Vec<&'static Application> {
+    pinned
+        .iter()
+        .filter_map(|id| by_id(id))
+        .filter(|app| app.visible_to(viewer, core))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

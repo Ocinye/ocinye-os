@@ -1176,6 +1176,29 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 .oc-apps__vazio { padding: 30px 16px 40px; text-align: center; }
 .oc-apps__vazio[hidden] { display: none; }
 
+/* A célula embrulha a ficha e o botão de fixar, para o segundo poder ficar no
+ * canto sem ser filho da âncora (um botão dentro de um link é HTML inválido). */
+.oc-apps__cell { position: relative; display: flex; }
+.oc-apps__cell[hidden] { display: none; }
+.oc-apps__cell .oc-apps__card { flex: 1; }
+.oc-apps__pin {
+  position: absolute; top: 8px; right: 8px;
+  width: 26px; height: 26px; border-radius: var(--oc-r-sm);
+  display: grid; place-items: center;
+  color: var(--oc-text-faint); background: var(--oc-surface);
+  opacity: 0; transition: opacity var(--oc-duration-fast) ease;
+}
+/* Aparece ao passar o rato ou ao focar, como o «…» do mockup; e fica sempre
+ * visível quando está fixada, para se saber que está. */
+.oc-apps__cell:hover .oc-apps__pin,
+.oc-apps__pin:focus-visible,
+.oc-apps__pin[aria-pressed="true"] { opacity: 1; }
+.oc-apps__pin:hover { background: var(--oc-surface-muted); color: var(--oc-navy); }
+.oc-apps__pin[aria-pressed="true"] { color: var(--oc-gold); }
+.oc-apps__pin[aria-pressed="true"] svg { fill: var(--oc-gold); }
+/* Sem rato (toque), o botão está sempre disponível. */
+@media (hover: none) { .oc-apps__pin { opacity: 1; } }
+
 @media (max-width: 560px) {
   .oc-apps { padding: 4vh 10px 10px; }
   .oc-apps__painel { max-height: 92vh; }

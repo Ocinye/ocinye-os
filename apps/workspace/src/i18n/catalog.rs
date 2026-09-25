@@ -51,6 +51,7 @@ const NAV: &[Entry] = catalogo! {
     },
     "nav.section.intelligence": { pt: "Inteligência", en: "Intelligence", fr: "Intelligence" },
     "nav.section.institutional": { pt: "Institucional", en: "Institutional", fr: "Institutionnel" },
+    "nav.section.pinned": { pt: "Fixadas", en: "Pinned", fr: "Épinglées" },
     "nav.settings": { pt: "Definições", en: "Settings", fr: "Paramètres" },
     "nav.help": { pt: "Ajuda", en: "Help", fr: "Aide" },
     "nav.search.placeholder": {
@@ -92,6 +93,16 @@ const APPS: &[Entry] = catalogo! {
     },
     "apps.close": { pt: "Fechar o lançador", en: "Close the launcher", fr: "Fermer le lanceur" },
     "apps.esc_hint": { pt: "ESC", en: "ESC", fr: "ÉCHAP" },
+    "apps.pin": {
+        pt: "Fixar na barra lateral",
+        en: "Pin to sidebar",
+        fr: "Épingler à la barre latérale"
+    },
+    "apps.unpin": {
+        pt: "Remover da barra lateral",
+        en: "Remove from sidebar",
+        fr: "Retirer de la barre latérale"
+    },
     // As descrições, uma por aplicação. Uma frase que diz o que a aplicação faz.
     "apps.desc.home": {
         pt: "O painel de início do seu trabalho.",

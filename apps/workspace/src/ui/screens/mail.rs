@@ -2076,6 +2076,7 @@ mod integridade {
 
     pub(super) fn viewer() -> Viewer {
         Viewer {
+            pinned: crate::ui::apps::default_pins(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,

@@ -151,6 +151,7 @@ mod render_tests {
     /// shell em vez da filtragem por permissão.
     fn viewer() -> Viewer {
         Viewer {
+            pinned: crate::ui::apps::default_pins(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,
@@ -393,13 +394,12 @@ mod render_tests {
         for expected in [
             "oc-shell",
             "OCINYE OS",
-            // As secções carregam agora a palavra real (a maiúscula é do CSS):
-            // o idioma corrente fora de um pedido é o canónico, o português.
-            "Pessoal",
-            "Investigação",
-            "Conhecimento",
-            "Inteligência",
-            "Institucional",
+            // A barra é agora navegação essencial mais as fixadas, e o Gestor de
+            // Aplicações é a porta para o resto.
+            "data-oc=\"launcher-open\"",
+            "data-oc=\"launcher\"",
+            "Fixadas",
+            r#"href="/my-work""#,
             // A Universal Command Surface substituiu a barra de pesquisa: uma
             // barra, três intenções (briefing §29).
             "Pesquisar, perguntar ou executar no Ocinye…",
@@ -440,16 +440,17 @@ mod render_tests {
         }
     }
 
-    /// O ecrã activo é marcado, e apenas um.
+    /// O ecrã activo é marcado, e apenas um. As Notas estão no conjunto fixado
+    /// por omissão do `viewer()` de teste, por isso o item existe e marca-se.
     #[test]
     fn apenas_um_item_de_navegacao_esta_activo() {
         let html = document(
             "Teste",
             shell::shell(
                 &viewer(),
-                Screen::Ideas,
+                Screen::Notes,
                 Vec::new(),
-                Screen::Ideas.label(),
+                Screen::Notes.label(),
                 leptos::prelude::view! { <p></p> },
             ),
         );
@@ -561,6 +562,7 @@ pub(crate) mod link_tests {
     /// shell em vez da filtragem por permissão.
     fn viewer() -> Viewer {
         Viewer {
+            pinned: crate::ui::apps::default_pins(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,

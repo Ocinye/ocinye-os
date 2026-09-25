@@ -9,6 +9,7 @@ use ocinye_contracts::AvatarChoice;
 use crate::ui::components::AvatarSize;
 use ocinye_contracts::Permission;
 
+use crate::ui::apps;
 use crate::ui::icon::{icon, Icon};
 use crate::ui::initials;
 
@@ -216,47 +217,6 @@ impl Screen {
     }
 }
 
-/// Os cinco grupos da sidebar, na ordem do design.
-const GROUPS: [(&str, &[Screen]); 5] = [
-    // O Calendário fica em PESSOAL, ao lado do Correio: são os dois sítios onde
-    // uma pessoa vê o que a espera. O relógio da barra superior continua a ser a
-    // entrada rápida — mas uma entrada que só existe num canto é uma entrada que
-    // metade das pessoas não encontra.
-    (
-        "nav.section.personal",
-        &[
-            Screen::Home,
-            Screen::MyWork,
-            Screen::Notes,
-            Screen::Calendar,
-            Screen::Messaging,
-            Screen::Mail,
-            Screen::Resources,
-        ],
-    ),
-    (
-        "nav.section.research",
-        &[Screen::Units, Screen::Ideas, Screen::Projects],
-    ),
-    (
-        "nav.section.knowledge",
-        &[
-            Screen::Knowledge,
-            Screen::Files,
-            Screen::Bibliography,
-            Screen::Datasets,
-        ],
-    ),
-    (
-        "nav.section.intelligence",
-        &[Screen::Ai, Screen::Agents, Screen::Compute],
-    ),
-    (
-        "nav.section.institutional",
-        &[Screen::Activity, Screen::Admin, Screen::Audit],
-    ),
-];
-
 /// O que a topbar diz sobre o Core.
 ///
 /// # A mesma verdade do arranque, num momento diferente
@@ -413,6 +373,13 @@ pub struct Viewer {
     /// caminho à mão continua a bater na recusa do Core, que é onde a decisão
     /// vive (`CLAUDE.md` §4).
     pub capabilities: Vec<String>,
+    /// As aplicações que o membro fixou na barra lateral, pela sua ordem.
+    ///
+    /// Os identificadores técnicos do registo, vindos do Core (`/me/apps/pins`).
+    /// Quando o membro nunca escolheu, o Workspace resolve isto para o conjunto
+    /// por omissão do registo antes de construir a barra — por isso aqui já é a
+    /// lista efectiva, e a barra desenha-a filtrada pela visibilidade.
+    pub pinned: Vec<String>,
 }
 
 impl Viewer {
@@ -656,6 +623,42 @@ fn faixa_privilegiada(viewer: &Viewer) -> impl IntoView {
     .into_any()
 }
 
+/// Um item da barra lateral: a âncora azul de sempre, marcada activa quando é o
+/// ecrã corrente.
+fn item_de_navegacao(screen: Screen, on: bool) -> impl IntoView {
+    view! {
+        <a
+            class="oc-nav"
+            href=screen.path()
+            title=screen.label()
+            aria-label=screen.label()
+            aria-current=on.then_some("page")
+        >
+            {icon(screen.icon(), 15)}
+            <span>{screen.label()}</span>
+        </a>
+    }
+}
+
+/// Uma aplicação fixada: como um item de navegação, mas com o `data-app-id` que
+/// o cliente usa para a acrescentar ou remover ao vivo quando o membro fixa ou
+/// desafixa no lançador, sem recarregar a página.
+fn item_fixado(screen: Screen, on: bool) -> impl IntoView {
+    view! {
+        <a
+            class="oc-nav"
+            href=screen.path()
+            title=screen.label()
+            aria-label=screen.label()
+            aria-current=on.then_some("page")
+            data-app-id=screen.id()
+        >
+            {icon(screen.icon(), 15)}
+            <span>{screen.label()}</span>
+        </a>
+    }
+}
+
 fn sidebar(viewer: &Viewer, avatar: &str, active: Screen) -> impl IntoView {
     // O dossier põe no rodapé o estado do sistema, e não o nome da organização
     // (`design/README.md` §5.2). Reflecte a mesma sonda ao Core que a pílula da
@@ -703,98 +706,43 @@ fn sidebar(viewer: &Viewer, avatar: &str, active: Screen) -> impl IntoView {
             </button>
 
             <nav class="oc-side__nav" aria-label="Navegação principal">
-                // A navegação mostra a instituição inteira.
-                //
-                // «Não tem acesso» e «não sabemos o que tem» são coisas
-                // diferentes, e a barra trata-as em separado:
-                //
-                // - **Sabemos, e não tem.** O item aparece, esbatido, sem
-                //   destino, e diz porquê. Esconder fazia a barra mudar de
-                //   forma consoante quem olha, e quem não via um ecrã não
-                //   ficava a saber que ele existe nem o que lhe falta para lá
-                //   chegar.
-                // - **Não sabemos.** Sem resposta do Core não há permissões
-                //   confirmadas, e mostrar tudo seria afirmar um acesso que não
-                //   se conseguiu verificar (`CLAUDE.md` §31). Aí a barra encolhe
-                //   ao que não exige permissão nenhuma, e a topbar já diz
-                //   «CORE OFF».
-                {GROUPS
-                    .iter()
-                    .filter_map(|(group, screens)| {
-                        let itens: Vec<(Screen, bool)> = screens
-                            .iter()
-                            .copied()
-                            .filter_map(|screen| match screen_module(screen) {
-                                // Módulo governado dentro de um contentor: a
-                                // presença é relevância, e a autorização
-                                // acontece no ecrã. Continua a encolher quando o
-                                // Core não confirmou nada — não saber o que
-                                // alguém pode não é razão para lhe mostrar tudo.
-                                Some(m) if core_status.operational() => viewer
-                                    .modules
-                                    .iter()
-                                    .any(|relevante| relevante == m)
-                                    .then_some((screen, true)),
-                                Some(_) => None,
-                                None => match screen_permission(screen) {
-                                    None => Some((screen, true)),
-                                    Some(_) if !core_status.operational() => None,
-                                    Some(p) => Some((screen, viewer.can(p))),
-                                },
-                            })
-                            .collect();
+                // A barra deixou de ser o catálogo inteiro: é **navegação
+                // essencial** mais as **aplicações que o membro fixou**. Tudo o
+                // resto descobre-se no Gestor de Aplicações, acima. A barra fica
+                // elegante mesmo quando o sistema tiver dezenas de aplicações,
+                // porque a descoberta já não depende do tamanho dela.
 
-                        // Um grupo sem itens nenhuns desaparece com eles: um
-                        // cabeçalho «INSTITUCIONAL» sozinho não diria nada.
-                        if itens.is_empty() {
-                            return None;
-                        }
-
-                        Some(view! {
-                            <div class="oc-side__group">{crate::i18n::t(group)}</div>
-                            {itens
-                                .into_iter()
-                                .map(|(screen, permitido)| {
-                                    let on = screen == active;
-                                    if permitido {
-                                        view! {
-                                            <a
-                                                class="oc-nav"
-                                                href=screen.path()
-                                                title=screen.label()
-                                                aria-label=screen.label()
-                                                aria-current=on.then_some("page")
-                                            >
-                                                {icon(screen.icon(), 15)}
-                                                <span>{screen.label()}</span>
-                                            </a>
-                                        }
-                                            .into_any()
-                                    } else {
-                                        view! {
-                                            <span
-                                                class="oc-nav oc-nav--unavailable"
-                                                aria-disabled="true"
-                                                aria-label=format!(
-                                                    "{} — não tem autorização para este ecrã.",
-                                                    screen.label(),
-                                                )
-                                                title=format!(
-                                                    "{} — não tem autorização para este ecrã.",
-                                                    screen.label(),
-                                                )
-                                            >
-                                                {icon(screen.icon(), 15)}
-                                                <span>{screen.label()}</span>
-                                            </span>
-                                        }
-                                            .into_any()
-                                    }
-                                })
-                                .collect_view()}
-                        })
-                    })
+                // O essencial: a Home e O Meu Trabalho, de qualquer membro
+                // autenticado, sempre presentes e nunca fixáveis.
+                {[Screen::Home, Screen::MyWork]
+                    .into_iter()
+                    .map(|screen| item_de_navegacao(screen, screen == active))
                     .collect_view()}
+
+                // As fixadas, pela ordem do membro, filtradas pela visibilidade:
+                // a barra nunca oferece uma ficha para um ecrã sem autorização. O
+                // cabeçalho e o contentor existem sempre (o cabeçalho esconde-se
+                // quando nada está fixado), para o cliente ter um alvo estável
+                // onde acrescentar ou remover uma ficha ao vivo, sem recarregar.
+                {
+                    let fixadas = apps::pinned_visible(&viewer.pinned, viewer, core_status);
+                    let vazio = fixadas.is_empty();
+                    view! {
+                        <div
+                            class="oc-side__group"
+                            data-oc="side-pinned-label"
+                            hidden=vazio
+                        >
+                            {crate::i18n::t("nav.section.pinned")}
+                        </div>
+                        <div data-oc="side-pinned">
+                            {fixadas
+                                .into_iter()
+                                .map(|app| item_fixado(app.screen, app.screen == active))
+                                .collect_view()}
+                        </div>
+                    }
+                }
             </nav>
 
             <div class="oc-side__foot">
@@ -1612,6 +1560,10 @@ fn launcher(viewer: &Viewer) -> impl IntoView {
         })
         .collect_view();
 
+    // O conjunto fixado, para marcar cada ficha fixável com o seu estado inicial.
+    let fixadas: std::collections::BTreeSet<&str> =
+        viewer.pinned.iter().map(String::as_str).collect();
+
     let cards = apps
         .into_iter()
         .map(|app| {
@@ -1627,19 +1579,42 @@ fn launcher(viewer: &Viewer) -> impl IntoView {
                 descricao.to_lowercase(),
                 app.keywords.join(" ")
             );
+            let fixada = fixadas.contains(app.id());
+            // Só as fixáveis trazem o botão de fixar; as estruturais (Home, O Meu
+            // Trabalho) já são navegação e não se fixam.
+            let botao_fixar = app.can_pin.then(|| {
+                view! {
+                    <button
+                        type="button"
+                        class="oc-apps__pin"
+                        data-oc="launcher-pin"
+                        data-app-id=app.id()
+                        data-label-pin=crate::i18n::t("apps.pin")
+                        data-label-unpin=crate::i18n::t("apps.unpin")
+                        aria-pressed=if fixada { "true" } else { "false" }
+                        title=crate::i18n::t(if fixada { "apps.unpin" } else { "apps.pin" })
+                        aria-label=crate::i18n::t(if fixada { "apps.unpin" } else { "apps.pin" })
+                    >
+                        {icon(Icon::Star, 14)}
+                    </button>
+                }
+            });
             view! {
-                <a
-                    class="oc-apps__card"
-                    href=app.route()
-                    data-oc="launcher-item"
-                    data-cat=app.category.id()
-                    data-search=procura
-                    aria-label=label
-                >
-                    <span class="oc-apps__icone">{icon(app.icon(), 22)}</span>
-                    <span class="oc-apps__nome">{label}</span>
-                    <span class="oc-apps__desc">{descricao}</span>
-                </a>
+                <div class="oc-apps__cell" data-oc="launcher-cell">
+                    <a
+                        class="oc-apps__card"
+                        href=app.route()
+                        data-oc="launcher-item"
+                        data-cat=app.category.id()
+                        data-search=procura
+                        aria-label=label
+                    >
+                        <span class="oc-apps__icone">{icon(app.icon(), 22)}</span>
+                        <span class="oc-apps__nome">{label}</span>
+                        <span class="oc-apps__desc">{descricao}</span>
+                    </a>
+                    {botao_fixar}
+                </div>
             }
         })
         .collect_view();
@@ -1733,6 +1708,7 @@ mod tests {
     /// Um membro com as permissões indicadas e os módulos de investigação.
     fn viewer_de_investigacao(permissions: &[Permission]) -> Viewer {
         Viewer {
+            pinned: crate::ui::apps::default_pins(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             modules: todos_os_modulos(),
             ..viewer_with(permissions)
@@ -1743,6 +1719,7 @@ mod tests {
     /// investigação relevante.
     fn viewer_with(permissions: &[Permission]) -> Viewer {
         Viewer {
+            pinned: crate::ui::apps::default_pins(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
             avatar: ocinye_contracts::AvatarChoice::Initials,
@@ -1900,6 +1877,44 @@ mod tests {
         }
     }
 
+    /// A barra desenha as aplicações fixadas, e o lançador reflecte o estado de
+    /// fixação de cada ficha — fixada com `aria-pressed="true"`, por fixar com
+    /// `false`. As estruturais (Home, O Meu Trabalho) não trazem botão de fixar.
+    #[test]
+    fn o_lancador_reflecte_o_estado_de_fixacao() {
+        let mut viewer = viewer_de_investigacao(&Permission::all());
+        viewer.pinned = vec!["notes".to_owned(), "files".to_owned()];
+        let html = render(&viewer);
+        let l = lancador(&html);
+
+        // A ficha das Notas (fixada) traz o botão pressionado.
+        assert!(
+            l.contains(r#"data-app-id="notes""#) && l.contains(r#"aria-pressed="true""#),
+            "a ficha fixada devia trazer o botão pressionado"
+        );
+        // A ficha do Calendário (não fixada) traz o botão por pressionar.
+        assert!(
+            l.contains(r#"data-app-id="calendar""#),
+            "falta o botão de fixar do Calendário"
+        );
+        // Home não é fixável: não tem botão de fixar.
+        assert!(
+            !l.contains(r#"data-oc="launcher-pin" data-app-id="home""#),
+            "Home não devia ter botão de fixar"
+        );
+
+        // E a barra mostra as duas fixadas, na ordem.
+        let barra = barra_nav(&html);
+        assert!(
+            barra.contains(r#"data-app-id="notes""#),
+            "Notas não está na barra"
+        );
+        assert!(
+            barra.contains(r#"data-app-id="files""#),
+            "Ficheiros não está na barra"
+        );
+    }
+
     /// A descoberta não contorna a autorização: um membro sem `MembersManage`
     /// não vê a ficha da Administração no lançador — e um que a tem, vê.
     #[test]
@@ -2044,46 +2059,67 @@ mod tests {
         assert!(!html.contains(r#"href="/units""#));
     }
 
-    #[test]
-    fn a_navegacao_mostra_a_instituicao_inteira_e_declara_o_que_nao_se_pode_abrir() {
-        // A barra deixou de encolher consoante quem olha: mostra os ecrãs que a
-        // instituição tem, e marca os que esta pessoa não pode abrir. Quem não
-        // via um ecrã não ficava a saber que ele existe.
-        let member = viewer_de_investigacao(&[Permission::IdeasView]);
-        let html = render(&member);
-
-        for grupo in ["Pessoal", "Investigação", "Conhecimento", "Institucional"] {
-            assert!(html.contains(grupo), "o grupo {grupo} desapareceu da barra");
-        }
-
-        // O que tem, navega.
-        assert!(html.contains(r#"href="/ideas""#));
-        // O que não tem, aparece sem destino e declarado.
-        assert!(
-            !html.contains(r#"href="/audit""#),
-            "Audit Log navega sem a permissão que exige"
-        );
-        assert!(html.contains("Audit Log"), "Audit Log desapareceu da barra");
-        assert!(html.contains("oc-nav--unavailable"));
+    /// A barra lateral, isolada — de `oc-side__nav` até ao seu `</nav>`.
+    fn barra_nav(html: &str) -> String {
+        let inicio = html.find(r#"class="oc-side__nav""#).expect("a barra sumiu");
+        let fim = html[inicio..]
+            .find("</nav>")
+            .map_or(html.len(), |o| inicio + o);
+        html[inicio..fim].to_owned()
     }
 
     #[test]
-    fn sem_resposta_do_core_a_navegacao_encolhe_em_vez_de_afirmar_acesso() {
+    fn a_barra_mostra_essencial_mais_fixadas_e_nao_o_catalogo_inteiro() {
+        // A barra deixou de ser o catálogo: é navegação essencial (Home, O Meu
+        // Trabalho) mais as aplicações fixadas. Tudo o resto descobre-se no
+        // Gestor de Aplicações. O membro pode tudo e fixa o conjunto por omissão
+        // (notas, ficheiros, projectos), todas visíveis.
+        let member = viewer_de_investigacao(&Permission::all());
+        let barra = barra_nav(&render(&member));
+
+        // O essencial e as fixadas visíveis estão lá.
+        for rota in [
+            r#"href="/""#,
+            r#"href="/my-work""#,
+            r#"href="/notes""#,
+            r#"href="/files""#,
+            r#"href="/projects""#,
+        ] {
+            assert!(barra.contains(rota), "a barra devia mostrar {rota}");
+        }
+        assert!(barra.contains("Fixadas"), "falta o cabeçalho das fixadas");
+        // O que **não** está fixado não está na barra — mesmo que exista. A
+        // descoberta é no lançador, e a barra não volta a ser o catálogo.
+        for rota in [
+            r#"href="/audit""#,
+            r#"href="/calendar""#,
+            r#"href="/units""#,
+        ] {
+            assert!(!barra.contains(rota), "a barra não devia listar {rota}");
+        }
+    }
+
+    #[test]
+    fn sem_resposta_do_core_a_barra_nao_afirma_acesso_por_confirmar() {
         // «Não tem acesso» e «não sabemos» são coisas diferentes. Sem o Core não
-        // há permissões confirmadas, e mostrar a instituição inteira afirmaria
-        // um acesso que não se conseguiu verificar (`CLAUDE.md` §31).
+        // há permissões nem módulos confirmados, e uma aplicação fixada mas
+        // governada por direito **não** aparece — afirmá-la seria dar por
+        // verificado um acesso que não se conseguiu confirmar (`CLAUDE.md` §31).
         let mut sem_core = viewer_with(&[]);
         sem_core.core_status = CoreStatus::Silent;
-        let html = render(&sem_core);
+        let barra = barra_nav(&render(&sem_core));
 
+        // O essencial não depende do Core.
         assert!(
-            html.contains("Pessoal"),
-            "Home e O Meu Trabalho não dependem do Core"
+            barra.contains(r#"href="/my-work""#),
+            "O Meu Trabalho depende do Core"
         );
-        for grupo in ["Investigação", "Conhecimento", "Institucional"] {
+        // Ficheiros e Projectos estão no conjunto por omissão, mas são governados
+        // e não aparecem sem confirmação. As Notas (sem direito) podem aparecer.
+        for rota in [r#"href="/files""#, r#"href="/projects""#] {
             assert!(
-                !html.contains(grupo),
-                "{grupo} aparece sem que as permissões tenham sido confirmadas"
+                !barra.contains(rota),
+                "{rota} apareceu sem confirmação do Core"
             );
         }
     }
@@ -2172,10 +2208,24 @@ mod tests {
         assert_eq!(paths.len(), count, "dois ecrãs partilham o mesmo caminho");
     }
 
+    /// O registo de aplicações cobre todos os ecrãs navegáveis.
+    ///
+    /// A barra lateral deixou de ser o catálogo (é essencial + fixadas); o
+    /// catálogo autoritativo é agora o registo de aplicações. Cada destino da
+    /// palette é uma aplicação registada **ou** a superfície de comando
+    /// (`Search`/`Ask`), que não é uma aplicação.
     #[test]
-    fn a_sidebar_cobre_todos_os_ecras_de_navegacao() {
-        let in_groups: usize = GROUPS.iter().map(|(_, screens)| screens.len()).sum();
-        assert_eq!(in_groups, PALETTE_NAV.len());
+    fn o_registo_cobre_todos_os_ecras_de_navegacao() {
+        let orfaos: Vec<&str> = PALETTE_NAV
+            .iter()
+            .filter(|s| !matches!(s, Screen::Search | Screen::Ask))
+            .filter(|s| apps::by_id(s.id()).is_none())
+            .map(|s| s.id())
+            .collect();
+        assert!(
+            orfaos.is_empty(),
+            "ecrãs navegáveis sem entrada no registo de aplicações: {orfaos:?}"
+        );
     }
 
     /// O cartão do membro abre a sua superfície de conta e sessão.
@@ -2502,11 +2552,35 @@ mod tests {
     /// Nem zero — que deixa a barra muda sobre onde se está — nem dois, que a
     /// deixa a mentir. `aria-current="page"` é o que o leitor de ecrã anuncia,
     /// e o CSS pinta a partir dele: uma só fonte para as duas coisas.
-    #[test]
-    fn cada_ecra_marca_um_e_um_so_item_activo() {
-        let viewer = viewer_de_investigacao(&ocinye_contracts::Permission::all());
+    /// Um membro com tudo fixável na barra, para as provas de item activo.
+    fn viewer_tudo_fixado() -> Viewer {
+        let mut v = viewer_de_investigacao(&ocinye_contracts::Permission::all());
+        v.pinned = apps::APPLICATIONS
+            .iter()
+            .filter(|a| a.can_pin)
+            .map(|a| a.id().to_owned())
+            .collect();
+        v
+    }
 
-        for screen in PALETTE_NAV {
+    /// Os ecrãs que a barra desenha: o essencial mais tudo o que é fixável.
+    fn ecras_da_barra() -> Vec<Screen> {
+        std::iter::once(Screen::Home)
+            .chain(std::iter::once(Screen::MyWork))
+            .chain(
+                apps::APPLICATIONS
+                    .iter()
+                    .filter(|a| a.can_pin)
+                    .map(|a| a.screen),
+            )
+            .collect()
+    }
+
+    #[test]
+    fn cada_ecra_da_barra_marca_um_e_um_so_item_activo() {
+        let viewer = viewer_tudo_fixado();
+
+        for screen in ecras_da_barra() {
             let html = shell(
                 &viewer,
                 screen,
@@ -2515,18 +2589,19 @@ mod tests {
                 view! { <p>"x"</p> },
             )
             .to_html();
-            let marcados = html.matches(r#"aria-current="page""#).count();
+            let barra = barra_nav(&html);
+            let marcados = barra.matches(r#"aria-current="page""#).count();
             assert_eq!(
                 marcados,
                 1,
-                "{} marcou {marcados} itens activos, e devia marcar um",
+                "{} marcou {marcados} itens activos na barra, e devia marcar um",
                 screen.label(),
             );
 
-            let fim = html
+            let fim = barra
                 .find(r#"aria-current="page""#)
                 .expect("nenhum item marcado");
-            let tag = &html[html[..fim].rfind('<').expect("etiqueta mal formada")..fim];
+            let tag = &barra[barra[..fim].rfind('<').expect("etiqueta mal formada")..fim];
             assert!(
                 tag.contains(&format!(r#"href="{}""#, screen.path())),
                 "{} marcou o item errado: {tag}",
@@ -2535,13 +2610,34 @@ mod tests {
         }
     }
 
+    /// Um ecrã que não está na barra (não fixado, não essencial) não marca nada —
+    /// e nunca mais do que um. É o caso §82: a app activa que não está fixada não
+    /// obriga a barra a inventar uma fixação temporária.
+    #[test]
+    fn um_ecra_fora_da_barra_nao_marca_nenhum_item() {
+        // O membro fixou só o conjunto por omissão; o Calendário não está lá.
+        let viewer = viewer_de_investigacao(&ocinye_contracts::Permission::all());
+        let barra = barra_nav(
+            &shell(
+                &viewer,
+                Screen::Calendar,
+                Vec::new(),
+                Screen::Calendar.label(),
+                view! { <p></p> },
+            )
+            .to_html(),
+        );
+        assert_eq!(barra.matches(r#"aria-current="page""#).count(), 0);
+    }
+
     /// Um ecrã de detalhe marca o ecrã-pai, e não deixa a barra em branco.
     ///
     /// É o caso que a igualdade literal falha e que este passo existe para
     /// cobrir: `/units/{id}` não é `/units`, mas é ali que se está.
     #[test]
     fn um_ecra_filho_marca_o_pai_na_navegacao() {
-        let viewer = viewer_de_investigacao(&ocinye_contracts::Permission::all());
+        // Com os pais fixados, um caminho-filho marca o pai na barra.
+        let viewer = viewer_tudo_fixado();
 
         for caminho in [
             "/units/33333333-3333-3333-3333-333333333333",
@@ -2550,23 +2646,25 @@ mod tests {
             "/bibliography/new",
         ] {
             let dono = Screen::owning(caminho).expect("caminho sem dono");
-            let html = shell(
-                &viewer,
-                dono,
-                Vec::new(),
-                dono.label(),
-                view! { <p>"x"</p> },
-            )
-            .to_html();
+            let barra = barra_nav(
+                &shell(
+                    &viewer,
+                    dono,
+                    Vec::new(),
+                    dono.label(),
+                    view! { <p>"x"</p> },
+                )
+                .to_html(),
+            );
             assert_eq!(
-                html.matches(r#"aria-current="page""#).count(),
+                barra.matches(r#"aria-current="page""#).count(),
                 1,
                 "{caminho} não marcou exactamente um item"
             );
-            let fim = html
+            let fim = barra
                 .find(r#"aria-current="page""#)
                 .expect("nenhum item marcado");
-            let tag = &html[html[..fim].rfind('<').expect("etiqueta mal formada")..fim];
+            let tag = &barra[barra[..fim].rfind('<').expect("etiqueta mal formada")..fim];
             assert!(
                 tag.contains(&format!(r#"href="{}""#, dono.path())),
                 "{caminho} devia marcar {}, e marcou: {tag}",
@@ -2800,6 +2898,7 @@ mod tests {
     /// Uma sessão privilegiada com autoridade: faixa e rótulo.
     fn privilegiada_com_autoridade() -> Viewer {
         Viewer {
+            pinned: crate::ui::apps::default_pins(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: true,
             administra: true,
