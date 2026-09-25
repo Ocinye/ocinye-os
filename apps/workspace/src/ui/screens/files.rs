@@ -282,9 +282,11 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
         |(id, _)| format!("/files?folder={id}"),
     );
     let _ = &managed_file; // o painel permanente deu lugar aos menus por ficha.
-                           // Numa vista plana (favoritos/recentes) só contam os ficheiros; as pastas não
-                           // aparecem, e por isso não pesam no «vazio».
-    let meu_vazio = personal_files.is_empty() && (em_vista || personal_folders.is_empty());
+                           // Numa vista plana (favoritos/recentes) ou dentro de uma pasta, só contam os
+                           // ficheiros; as fichas de pasta não aparecem, e por isso não pesam no «vazio» —
+                           // uma pasta sem ficheiros lê-se «vazia», e não uma grelha muda.
+    let meu_vazio = personal_files.is_empty()
+        && (em_vista || open_folder.is_some() || personal_folders.is_empty());
 
     // ── Institucional ───────────────────────────────────────────────────
     let inst_vazio = files.is_empty();
@@ -476,8 +478,13 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                     }
                     .into_any()
                 } else {
-                    // Nas vistas planas não há fichas de pasta — a lista atravessa-as.
-                    let pastas = (!em_vista)
+                    // Fichas de pasta só na raiz de «Meus ficheiros»: as pastas
+                    // pessoais são planas (não aninham), por isso dentro de uma não
+                    // há subpastas — mostrá-las repetiria a própria pasta lá dentro.
+                    // Nas vistas planas (favoritos/recentes) a lista também as
+                    // atravessa. A lista completa continua a servir o menu «mover
+                    // para» de cada ficha; só os cartões é que não aparecem aqui.
+                    let pastas = (!em_vista && open_folder.is_none())
                         .then(|| personal_folders.iter().map(ficha_de_pasta).collect_view());
                     let fich = personal_files
                         .iter()
@@ -1562,6 +1569,57 @@ mod tests {
         assert!(html.contains("prova.pdf"), "falta o nome do ficheiro");
         // E a forma da tabela institucional nunca traz o seu próprio prefixo.
         assert!(!html.contains("oc-table--oc-table--"));
+    }
+
+    #[test]
+    fn a_raiz_mostra_as_fichas_de_pasta() {
+        // Na raiz de «Meus ficheiros», as pastas aparecem como fichas.
+        let mut v = membro_sem_ambiente(vec![]);
+        v.personal_folders = vec![json!({ "id": "f1", "name": "TESTES" })];
+        let html = all_files(v).to_html();
+        assert!(
+            html.contains("oc-fs__item--pasta"),
+            "a raiz devia mostrar a ficha da pasta"
+        );
+    }
+
+    #[test]
+    fn dentro_de_uma_pasta_nao_aparece_a_propria_pasta() {
+        // O defeito: dentro de «TESTES» aparecia um cartão «TESTES». As pastas
+        // pessoais são planas — dentro de uma não há subpastas —, por isso nenhuma
+        // ficha de pasta se mostra aqui, mesmo que a lista completa (que alimenta o
+        // menu «mover para») continue a contê-la.
+        let mut v = membro_sem_ambiente(vec![json!({
+            "id": "1", "version_id": "a", "name": "prova.pdf",
+            "content_type": "application/pdf", "size_bytes": 2048, "versions": 1
+        })]);
+        v.personal_folders = vec![json!({ "id": "f1", "name": "TESTES" })];
+        v.open_folder = Some(("f1".to_owned(), "TESTES".to_owned()));
+        let html = all_files(v).to_html();
+        assert!(
+            !html.contains("oc-fs__item--pasta"),
+            "dentro de uma pasta não pode aparecer nenhuma ficha de pasta"
+        );
+        // O ficheiro que lá está continua a mostrar-se.
+        assert!(
+            html.contains("prova.pdf"),
+            "o ficheiro da pasta devia aparecer"
+        );
+    }
+
+    #[test]
+    fn uma_pasta_vazia_diz_que_esta_vazia() {
+        // Sem ficheiros dentro, a pasta lê-se «vazia» — e não uma grelha muda,
+        // que era o efeito de a contagem de vazio olhar para a lista global de
+        // pastas em vez de olhar só para os ficheiros da pasta aberta.
+        let mut v = membro_sem_ambiente(vec![]);
+        v.personal_folders = vec![json!({ "id": "f1", "name": "TESTES" })];
+        v.open_folder = Some(("f1".to_owned(), "TESTES".to_owned()));
+        let html = all_files(v).to_html();
+        assert!(
+            html.contains("oc-fs__vazio"),
+            "uma pasta sem ficheiros devia mostrar o estado vazio"
+        );
     }
 
     #[test]
