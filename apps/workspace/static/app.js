@@ -500,6 +500,127 @@
     });
   }
 
+  /* ── O Gestor de Aplicações (lançador) ────────────────────────────────
+   *
+   * A grelha já veio renderizada do servidor, filtrada pela autorização do
+   * membro. Aqui só se abre/fecha o lançador e se filtra o que já lá está —
+   * pesquisa e categoria, no cliente, imediato, sem pedido nenhum. Lançar é
+   * seguir a âncora da ficha; abrir a aplicação já aberta fecha o lançador sem
+   * recarregar. O atalho é Cmd/Ctrl+Shift+A, para não colidir com o ⌘K da
+   * superfície de comando. */
+  function initLauncher() {
+    const launcher = $('[data-oc="launcher"]');
+    if (!launcher) return;
+
+    const input = $('[data-oc="launcher-input"]', launcher);
+    const cards = $$('[data-oc="launcher-item"]', launcher);
+    const chips = $$('[data-oc="launcher-chip"]', launcher);
+    const vazio = $('[data-oc="launcher-vazio"]', launcher);
+    const panel = $('.oc-apps__painel', launcher);
+    let restoreFocusTo = null;
+    let categoria = 'all';
+
+    const foco = () => $$(
+      'a[href], button:not([disabled]), input, [tabindex]:not([tabindex="-1"])',
+      panel,
+    ).filter((el) => el.offsetParent !== null);
+
+    const aplicar = () => {
+      const agulha = (input ? input.value : '').trim().toLowerCase();
+      let visiveis = 0;
+      cards.forEach((card) => {
+        const naCategoria = categoria === 'all' || card.dataset.cat === categoria;
+        const naPesquisa = agulha === '' || (card.dataset.search || '').includes(agulha);
+        const mostra = naCategoria && naPesquisa;
+        card.hidden = !mostra;
+        if (mostra) visiveis += 1;
+      });
+      if (vazio) vazio.hidden = visiveis !== 0;
+    };
+
+    const abrir = () => {
+      restoreFocusTo = document.activeElement;
+      launcher.hidden = false;
+      categoria = 'all';
+      chips.forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.cat === 'all')));
+      if (input) { input.value = ''; }
+      aplicar();
+      if (input) input.focus();
+    };
+
+    const fechar = () => {
+      launcher.hidden = true;
+      if (restoreFocusTo && restoreFocusTo.focus) restoreFocusTo.focus();
+      restoreFocusTo = null;
+    };
+
+    if (input) input.addEventListener('input', aplicar);
+
+    chips.forEach((chip) => {
+      chip.addEventListener('click', () => {
+        categoria = chip.dataset.cat || 'all';
+        chips.forEach((c) => c.setAttribute('aria-pressed', String(c === chip)));
+        aplicar();
+      });
+    });
+
+    // Fundo e botão de fechar.
+    $$('[data-oc="launcher-fechar"]', launcher).forEach((el) => {
+      el.addEventListener('click', fechar);
+    });
+
+    // Abrir a aplicação já aberta não recarrega: fecha e fica-se onde se está.
+    cards.forEach((card) => {
+      card.addEventListener('click', (evento) => {
+        const destino = card.getAttribute('href');
+        if (destino && destino === window.location.pathname) {
+          evento.preventDefault();
+          fechar();
+        }
+      });
+    });
+
+    launcher.addEventListener('keydown', (evento) => {
+      if (evento.key === 'Escape') { evento.preventDefault(); fechar(); return; }
+      // Trap de foco: o Tab não sai do painel enquanto o lançador está aberto.
+      if (evento.key === 'Tab') {
+        const f = foco();
+        if (f.length === 0) return;
+        const primeiro = f[0];
+        const ultimo = f[f.length - 1];
+        if (evento.shiftKey && document.activeElement === primeiro) {
+          evento.preventDefault(); ultimo.focus();
+        } else if (!evento.shiftKey && document.activeElement === ultimo) {
+          evento.preventDefault(); primeiro.focus();
+        }
+        return;
+      }
+      // Setas: mover o foco pela grelha de fichas visíveis.
+      const visiveis = cards.filter((c) => !c.hidden);
+      const at = visiveis.indexOf(document.activeElement);
+      if (['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft'].includes(evento.key) && visiveis.length) {
+        evento.preventDefault();
+        const passo = (evento.key === 'ArrowRight' || evento.key === 'ArrowDown') ? 1 : -1;
+        const proximo = at < 0 ? 0 : Math.min(Math.max(at + passo, 0), visiveis.length - 1);
+        visiveis[proximo].focus();
+      }
+    });
+
+    $$('[data-oc="launcher-open"]').forEach((trigger) => {
+      trigger.addEventListener('click', abrir);
+    });
+
+    window.addEventListener('keydown', (evento) => {
+      const key = evento.key.toLowerCase();
+      if ((evento.metaKey || evento.ctrlKey) && evento.shiftKey && key === 'a') {
+        evento.preventDefault();
+        launcher.hidden ? abrir() : fechar();
+      }
+    });
+
+    window.ocCloseLauncher = () => { if (!launcher.hidden) fechar(); };
+  }
+
   /* ── Tabs locais ──────────────────────────────────────────────────── */
 
   /*
@@ -2821,6 +2942,7 @@
     initCreateMenu();
     initAccountMenu();
     initPalette();
+    initLauncher();
     initLocalTabs();
     initTemporalCentre();
     initDensity();

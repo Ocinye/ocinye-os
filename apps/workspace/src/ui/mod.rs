@@ -10,6 +10,7 @@
 //! nenhuma regra institucional: uma vista decide o que *mostrar*, nunca o que é
 //! *permitido* (ADR-0602).
 
+pub mod apps;
 pub mod components;
 pub mod icon;
 pub mod markdown;

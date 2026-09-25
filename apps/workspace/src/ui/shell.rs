@@ -71,6 +71,42 @@ pub enum Screen {
 }
 
 impl Screen {
+    /// O identificador técnico estável do ecrã.
+    ///
+    /// Nunca é o rótulo traduzido: o registo de aplicações e as preferências do
+    /// membro (as fixações) referem-se a um ecrã por este `id`, que não muda com
+    /// o idioma nem com o texto visível. `files`, nunca `Ficheiros`.
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Home => "home",
+            Self::MyWork => "work",
+            Self::Notes => "notes",
+            Self::Mail => "mail",
+            Self::Messaging => "messages",
+            Self::Resources => "resources",
+            Self::Units => "units",
+            Self::Ideas => "ideas",
+            Self::Projects => "projects",
+            Self::Knowledge => "knowledge",
+            Self::Bibliography => "bibliography",
+            Self::Datasets => "datasets",
+            Self::Files => "files",
+            Self::Ai => "ai",
+            Self::Agents => "agents",
+            Self::Compute => "compute",
+            Self::Calendar => "calendar",
+            Self::Activity => "activity",
+            Self::Admin => "administration",
+            Self::Audit => "audit",
+            Self::Prompt => "prompt",
+            Self::Search => "search",
+            Self::Ask => "ask",
+            Self::Settings => "settings",
+            Self::Help => "help",
+        }
+    }
+
     /// O caminho do ecrã.
     #[must_use]
     pub const fn path(self) -> &'static str {
@@ -144,7 +180,13 @@ impl Screen {
         crate::i18n::t(self.label_key())
     }
 
-    const fn icon(self) -> Icon {
+    /// O ícone do ecrã, para navegação e para a ficha no lançador.
+    #[must_use]
+    pub const fn icon(self) -> Icon {
+        self.icon_kind()
+    }
+
+    const fn icon_kind(self) -> Icon {
         match self {
             Self::Help => Icon::Help,
             Self::Settings => Icon::Settings,
@@ -226,7 +268,7 @@ const GROUPS: [(&str, &[Screen]); 5] = [
 /// altura em que era: `!organisation.is_null()`, ou seja, «se o pedido de
 /// organização respondeu, o Core está bem». Um pedido de domínio responde por
 /// razões suas, e uma delas não é a prontidão institucional.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoreStatus {
     /// Pronto.
     ///
@@ -391,7 +433,7 @@ impl Viewer {
 ///
 /// `None` para os ecrãs cuja presença não é uma questão de relevância — os que
 /// são de toda a gente, e os que um direito institucional já resolve.
-const fn screen_module(screen: Screen) -> Option<&'static str> {
+pub(crate) const fn screen_module(screen: Screen) -> Option<&'static str> {
     match screen {
         // Os quatro que se governam dentro de um contentor. A navegação
         // apresenta-os por relevância; a autorização acontece lá dentro.
@@ -403,7 +445,7 @@ const fn screen_module(screen: Screen) -> Option<&'static str> {
     }
 }
 
-const fn screen_permission(screen: Screen) -> Option<Permission> {
+pub(crate) const fn screen_permission(screen: Screen) -> Option<Permission> {
     match screen {
         // Definições são do próprio membro: não exigem permissão
         // institucional nenhuma, e cada pessoa vê apenas a sua conta.
@@ -504,7 +546,7 @@ pub fn shell(
     content: impl IntoView + 'static,
 ) -> impl IntoView {
     let avatar = initials(&viewer.name);
-    let core_status = viewer.core_status.clone();
+    let core_status = viewer.core_status;
 
     view! {
         <a class="oc-skip" href="#conteudo">"Saltar para o conteúdo"</a>
@@ -523,6 +565,7 @@ pub fn shell(
         </div>
 
         {palette(viewer)}
+        {launcher(viewer)}
     }
 }
 
@@ -620,7 +663,7 @@ fn sidebar(viewer: &Viewer, avatar: &str, active: Screen) -> impl IntoView {
     // bonito em vez do estado.
     //
     // Tem linha própria, fora do cartão do membro: quem está OK é o Core.
-    let core_status = viewer.core_status.clone();
+    let core_status = viewer.core_status;
     let avatar = avatar.to_owned();
 
     view! {
@@ -644,6 +687,20 @@ fn sidebar(viewer: &Viewer, avatar: &str, active: Screen) -> impl IntoView {
                     {icon(Icon::SidebarCollapse, 14)}
                 </button>
             </div>
+
+            // O Gestor de Aplicações: a porta para a descoberta de todas as
+            // aplicações. Fica sempre à vista de um membro autenticado (§8), e
+            // abre o lançador centrado sem sair do ecrã.
+            <button
+                type="button"
+                class="oc-side__apps"
+                data-oc="launcher-open"
+                aria-haspopup="dialog"
+                title=crate::i18n::t("apps.open")
+            >
+                {icon(Icon::Apps, 16)}
+                <span>{crate::i18n::t("apps.title")}</span>
+            </button>
 
             <nav class="oc-side__nav" aria-label="Navegação principal">
                 // A navegação mostra a instituição inteira.
@@ -1516,6 +1573,137 @@ fn palette(viewer: &Viewer) -> impl IntoView {
     }
 }
 
+/// O Gestor de Aplicações — o lançador centrado.
+///
+/// A superfície autoritativa de descoberta: a grelha de todas as aplicações que
+/// o membro pode abrir, lida do [`crate::ui::apps`] e filtrada pela mesma
+/// política da barra lateral. Pesquisa e filtro por categoria acontecem no
+/// cliente, sobre o que já foi renderizado — imediato, sem um pedido ao Core só
+/// para mostrar nomes e ícones (§57). Lançar é navegar para a rota canónica; a
+/// barra lateral e o menu «Criar» são superfícies distintas (§35, §60).
+fn launcher(viewer: &Viewer) -> impl IntoView {
+    use crate::ui::apps::{self, Category};
+
+    let apps = apps::visible_to(viewer, viewer.core_status);
+
+    // Só se mostra o filtro de uma categoria que tenha ao menos uma aplicação
+    // visível: um filtro que abre no vazio não é um filtro. Com o Core em baixo,
+    // sobram as categorias das aplicações que não exigem direito nenhum.
+    let chips = std::iter::once(("apps.category.all", "all"))
+        .chain(
+            Category::all()
+                .into_iter()
+                .filter(|c| apps.iter().any(|app| app.category == *c))
+                .map(|c| (c.label_key(), c.id())),
+        )
+        .map(|(label_key, id)| {
+            let activo = id == "all";
+            view! {
+                <button
+                    type="button"
+                    class="oc-apps__chip"
+                    data-oc="launcher-chip"
+                    data-cat=id
+                    aria-pressed=if activo { "true" } else { "false" }
+                >
+                    {crate::i18n::t(label_key)}
+                </button>
+            }
+        })
+        .collect_view();
+
+    let cards = apps
+        .into_iter()
+        .map(|app| {
+            let label = app.label();
+            let descricao = app.description();
+            // O que a pesquisa do cliente compara: o rótulo e a descrição já
+            // traduzidos, mais as palavras-chave estáveis entre línguas, tudo em
+            // minúsculas. Assim «file», «fichier» e «ficheiro» encontram os
+            // Ficheiros seja qual for o idioma do membro.
+            let procura = format!(
+                "{} {} {}",
+                label.to_lowercase(),
+                descricao.to_lowercase(),
+                app.keywords.join(" ")
+            );
+            view! {
+                <a
+                    class="oc-apps__card"
+                    href=app.route()
+                    data-oc="launcher-item"
+                    data-cat=app.category.id()
+                    data-search=procura
+                    aria-label=label
+                >
+                    <span class="oc-apps__icone">{icon(app.icon(), 22)}</span>
+                    <span class="oc-apps__nome">{label}</span>
+                    <span class="oc-apps__desc">{descricao}</span>
+                </a>
+            }
+        })
+        .collect_view();
+
+    view! {
+        <div
+            class="oc-apps"
+            data-oc="launcher"
+            role="dialog"
+            aria-modal="true"
+            aria-label=crate::i18n::t("apps.title")
+            hidden
+        >
+            <div class="oc-apps__fundo" data-oc="launcher-fechar"></div>
+            <div class="oc-apps__painel">
+                <header class="oc-apps__cab">
+                    <span class="oc-apps__marca">
+                        {icon(Icon::Apps, 20)}
+                        <b>{crate::i18n::t("apps.title")}</b>
+                    </span>
+                    <span class="oc-apps__cab-fim">
+                        <kbd class="oc-kbd">{crate::i18n::t("apps.esc_hint")}</kbd>
+                        <button
+                            type="button"
+                            class="oc-apps__fechar"
+                            data-oc="launcher-fechar"
+                            aria-label=crate::i18n::t("apps.close")
+                        >
+                            {icon(Icon::Close, 12)}
+                        </button>
+                    </span>
+                </header>
+
+                <div class="oc-apps__campo">
+                    {icon(Icon::Search, 16)}
+                    <label class="oc-sr" for="launcher-input">
+                        {crate::i18n::t("apps.search_placeholder")}
+                    </label>
+                    <input
+                        id="launcher-input"
+                        type="text"
+                        data-oc="launcher-input"
+                        autocomplete="off"
+                        placeholder=crate::i18n::t("apps.search_placeholder")
+                    />
+                </div>
+
+                <div class="oc-apps__chips" role="group" aria-label=crate::i18n::t("apps.title")>
+                    {chips}
+                </div>
+
+                <div class="oc-apps__grelha" data-oc="launcher-grelha">
+                    {cards}
+                </div>
+
+                <div class="oc-apps__vazio" data-oc="launcher-vazio" hidden>
+                    <p class="oc-t-strong">{crate::i18n::t("apps.empty")}</p>
+                    <p class="oc-t-caption--muted">{crate::i18n::t("apps.empty.hint")}</p>
+                </div>
+            </div>
+        </div>
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1628,6 +1816,122 @@ mod tests {
         assert!(en.contains(">Files<") || en.contains("Files"), "en: Files");
         assert!(en.contains("Research"), "en: secção Research");
         assert!(en.contains(r#"href="/ideas""#), "o destino /ideas não muda");
+    }
+
+    /// Despeja o lançador aberto, num ficheiro autónomo, para inspecção visual.
+    ///
+    ///     cargo test -p ocinye-workspace despejar_lancador -- --ignored --nocapture
+    #[test]
+    #[ignore = "arnês de verificação visual; corre-se de propósito"]
+    fn despejar_lancador_para_verificacao_visual() {
+        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let css = std::fs::read_to_string(manifest.join("static/ocinye.css")).expect("css");
+        let sprite = std::fs::read_to_string(manifest.join("static/icons.svg")).expect("sprite");
+
+        let corpo = shell(
+            &viewer_de_investigacao(&Permission::all()),
+            Screen::Home,
+            Vec::new(),
+            Screen::Home.label(),
+            view! { <p>"conteúdo"</p> },
+        )
+        .to_html();
+
+        // Sem JavaScript, força-se o lançador visível por CSS, para o ver aberto.
+        let pagina = format!(
+            "<!doctype html><html lang=\"pt-PT\"><head><meta charset=\"utf-8\">\
+             <style>{css}</style>\
+             <style>.oc-apps[hidden]{{display:flex!important}}</style></head>\
+             <body>{sprite}{corpo}</body></html>"
+        );
+        let destino = manifest.join("../../target/verify");
+        std::fs::create_dir_all(&destino).expect("destino");
+        let caminho = destino.join("lancador.html");
+        std::fs::write(&caminho, pagina).expect("escrever");
+        println!("escrito: {}", caminho.display());
+    }
+
+    /// O lançador é o último elemento da shell; isola-se do resto por corte.
+    fn lancador(html: &str) -> String {
+        let inicio = html
+            .find(r#"data-oc="launcher""#)
+            .expect("o lançador desapareceu da shell");
+        html[inicio..].to_owned()
+    }
+
+    /// A shell traz sempre o Gestor de Aplicações, e o gatilho para o abrir.
+    #[test]
+    fn a_shell_traz_o_gestor_de_aplicacoes() {
+        let html = render(&viewer_de_investigacao(&Permission::all()));
+        // O gatilho na barra lateral.
+        assert!(
+            html.contains(r#"data-oc="launcher-open""#),
+            "falta o gatilho do lançador"
+        );
+        let l = lancador(&html);
+        // O lançador tem título, campo de pesquisa, filtros de categoria e grelha.
+        assert!(l.contains("Aplicações"), "falta o título");
+        assert!(
+            l.contains(r#"data-oc="launcher-input""#),
+            "falta a pesquisa"
+        );
+        assert!(
+            l.contains(r#"data-oc="launcher-chip""#),
+            "faltam os filtros de categoria"
+        );
+        assert!(l.contains(r#"data-oc="launcher-grelha""#), "falta a grelha");
+        // «Todos» começa activo; as cinco categorias existem.
+        assert!(l.contains(r#"data-cat="all""#), "falta o filtro Todos");
+        for cat in [
+            "productivity",
+            "research",
+            "knowledge",
+            "communication",
+            "administration",
+        ] {
+            assert!(
+                l.contains(&format!(r#"data-cat="{cat}""#)),
+                "falta a categoria {cat}"
+            );
+        }
+        // Fichas de aplicações que qualquer membro autorizado vê.
+        for app in ["Notas", "Ficheiros", "Projectos"] {
+            assert!(l.contains(app), "falta a ficha de {app}");
+        }
+    }
+
+    /// A descoberta não contorna a autorização: um membro sem `MembersManage`
+    /// não vê a ficha da Administração no lançador — e um que a tem, vê.
+    #[test]
+    fn o_lancador_esconde_o_que_o_membro_nao_pode_abrir() {
+        // Sem MembersManage: sem consola de administração.
+        let sem = render(&viewer_with(&[Permission::IdeasView]));
+        let l_sem = lancador(&sem);
+        assert!(
+            !l_sem.contains(r#"href="/admin""#),
+            "o lançador não pode oferecer a Administração a quem não a tem"
+        );
+
+        // Com MembersManage: a ficha aparece.
+        let com = render(&viewer_with(&[Permission::MembersManage]));
+        let l_com = lancador(&com);
+        assert!(
+            l_com.contains(r#"href="/admin""#),
+            "a Administração devia aparecer a quem a pode abrir"
+        );
+    }
+
+    /// O Prompt é uma aplicação para quem tem `ai.use`, e o lançador não o
+    /// desactiva por não haver GPU: a disponibilidade da aplicação é um eixo
+    /// distinto da do fornecedor (§54). O lançador só olha para a autorização.
+    #[test]
+    fn o_prompt_e_uma_aplicacao_mesmo_sem_gpu() {
+        let html = render(&viewer_with(&[Permission::AiUse]));
+        let l = lancador(&html);
+        assert!(
+            l.contains(r#"href="/ai/prompt""#),
+            "o Prompt devia estar no lançador para quem tem ai.use"
+        );
     }
 
     /// O «Criar» leva cada acção determinista ao seu fluxo real.

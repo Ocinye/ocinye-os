@@ -67,6 +67,149 @@ const NAV: &[Entry] = catalogo! {
     "nav.sign_out": { pt: "Terminar sessão", en: "Sign out", fr: "Se déconnecter" },
 };
 
+/// O Gestor de Aplicações — o lançador, os filtros de categoria e a descrição
+/// curta de cada aplicação. A identidade é semântica (`files`); só o texto muda
+/// de língua (i18n §7). Cada descrição é uma frase, não um parágrafo.
+const APPS: &[Entry] = catalogo! {
+    "apps.title": { pt: "Aplicações", en: "Applications", fr: "Applications" },
+    "apps.open": { pt: "Abrir Aplicações", en: "Open Applications", fr: "Ouvrir les applications" },
+    "apps.search_placeholder": {
+        pt: "Pesquisar aplicações do Ocinye…",
+        en: "Search Ocinye applications…",
+        fr: "Rechercher des applications Ocinye…"
+    },
+    "apps.category.all": { pt: "Todos", en: "All", fr: "Tous" },
+    "apps.category.productivity": { pt: "Produtividade", en: "Productivity", fr: "Productivité" },
+    "apps.category.research": { pt: "Investigação", en: "Research", fr: "Recherche" },
+    "apps.category.knowledge": { pt: "Conhecimento", en: "Knowledge", fr: "Connaissance" },
+    "apps.category.communication": { pt: "Comunicação", en: "Communication", fr: "Communication" },
+    "apps.category.administration": { pt: "Administração", en: "Administration", fr: "Administration" },
+    "apps.empty": { pt: "Nenhuma aplicação encontrada", en: "No applications found", fr: "Aucune application trouvée" },
+    "apps.empty.hint": {
+        pt: "Experimente outro termo de pesquisa.",
+        en: "Try another search term.",
+        fr: "Essayez un autre terme de recherche."
+    },
+    "apps.close": { pt: "Fechar o lançador", en: "Close the launcher", fr: "Fermer le lanceur" },
+    "apps.esc_hint": { pt: "ESC", en: "ESC", fr: "ÉCHAP" },
+    // As descrições, uma por aplicação. Uma frase que diz o que a aplicação faz.
+    "apps.desc.home": {
+        pt: "O painel de início do seu trabalho.",
+        en: "The starting panel for your work.",
+        fr: "Le tableau de bord de votre travail."
+    },
+    "apps.desc.work": {
+        pt: "As tarefas e o trabalho que lhe estão atribuídos.",
+        en: "The tasks and work assigned to you.",
+        fr: "Les tâches et le travail qui vous sont attribués."
+    },
+    "apps.desc.notes": {
+        pt: "Capture e organize as suas notas.",
+        en: "Capture and organise your notes.",
+        fr: "Capturez et organisez vos notes."
+    },
+    "apps.desc.calendar": {
+        pt: "Planeie reuniões e eventos.",
+        en: "Plan meetings and events.",
+        fr: "Planifiez réunions et événements."
+    },
+    "apps.desc.mail": {
+        pt: "Gestão do correio institucional.",
+        en: "Institutional mail management.",
+        fr: "Gestion du courrier institutionnel."
+    },
+    "apps.desc.messages": {
+        pt: "Comunicação com a sua equipa.",
+        en: "Communication with your team.",
+        fr: "Communication avec votre équipe."
+    },
+    "apps.desc.files": {
+        pt: "Aceda e gira os seus ficheiros.",
+        en: "Access and manage your files.",
+        fr: "Accédez à vos fichiers et gérez-les."
+    },
+    "apps.desc.knowledge": {
+        pt: "Aceda à base de conhecimento.",
+        en: "Access the knowledge base.",
+        fr: "Accédez à la base de connaissances."
+    },
+    "apps.desc.bibliography": {
+        pt: "Gira referências bibliográficas.",
+        en: "Manage bibliographic references.",
+        fr: "Gérez les références bibliographiques."
+    },
+    "apps.desc.units": {
+        pt: "Explore as suas unidades de investigação.",
+        en: "Explore your research units.",
+        fr: "Explorez vos unités de recherche."
+    },
+    "apps.desc.ideas": {
+        pt: "Registe e desenvolva novas ideias.",
+        en: "Record and develop new ideas.",
+        fr: "Enregistrez et développez de nouvelles idées."
+    },
+    "apps.desc.projects": {
+        pt: "Gira projectos de investigação.",
+        en: "Manage research projects.",
+        fr: "Gérez les projets de recherche."
+    },
+    "apps.desc.datasets": {
+        pt: "Explore e gira datasets.",
+        en: "Explore and manage datasets.",
+        fr: "Explorez et gérez les jeux de données."
+    },
+    "apps.desc.prompt": {
+        pt: "Interaja com a inteligência do Ocinye.",
+        en: "Interact with Ocinye's intelligence.",
+        fr: "Interagissez avec l'intelligence d'Ocinye."
+    },
+    "apps.desc.ai": {
+        pt: "O estado da inteligência do Ocinye OS.",
+        en: "The state of Ocinye OS intelligence.",
+        fr: "L'état de l'intelligence d'Ocinye OS."
+    },
+    "apps.desc.agents": {
+        pt: "Defina e gira agentes de IA.",
+        en: "Define and manage AI agents.",
+        fr: "Définissez et gérez des agents IA."
+    },
+    "apps.desc.compute": {
+        pt: "Os nós de computação da plataforma.",
+        en: "The platform's compute nodes.",
+        fr: "Les nœuds de calcul de la plateforme."
+    },
+    "apps.desc.resources": {
+        pt: "Consulte os recursos que lhe estão atribuídos.",
+        en: "Review the resources assigned to you.",
+        fr: "Consultez les ressources qui vous sont attribuées."
+    },
+    "apps.desc.activity": {
+        pt: "O registo de actividade da instituição.",
+        en: "The institution's activity feed.",
+        fr: "Le journal d'activité de l'institution."
+    },
+    "apps.desc.administration": {
+        pt: "A consola de administração da plataforma.",
+        en: "The platform administration console.",
+        fr: "La console d'administration de la plateforme."
+    },
+    "apps.desc.audit": {
+        pt: "O registo de auditoria da plataforma.",
+        en: "The platform audit log.",
+        fr: "Le journal d'audit de la plateforme."
+    },
+    "apps.desc.settings": {
+        pt: "Personalize o seu ambiente.",
+        en: "Personalise your environment.",
+        fr: "Personnalisez votre environnement."
+    },
+    "apps.desc.help": {
+        pt: "Consulte ajuda e suporte do Ocinye OS.",
+        en: "Get Ocinye OS help and support.",
+        fr: "Obtenez aide et assistance pour Ocinye OS."
+    },
+};
+
 /// Verbos e rótulos comuns, partilhados por muitas superfícies.
 const ACTIONS: &[Entry] = catalogo! {
     "action.save": { pt: "Guardar", en: "Save", fr: "Enregistrer" },
@@ -2674,6 +2817,7 @@ pub const GROUPS: &[&[Entry]] = &[
     MAIL,
     DATE,
     NAV,
+    APPS,
     ACTIONS,
     CREATE,
     HOME,
