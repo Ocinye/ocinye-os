@@ -1385,6 +1385,38 @@ const SETTINGS: &[Entry] = catalogo! {
     "settings.tab.account": { pt: "Conta", en: "Account", fr: "Compte" },
     "settings.tab.security": { pt: "Segurança", en: "Security", fr: "Sécurité" },
     "settings.tab.language": { pt: "Idioma e região", en: "Language & region", fr: "Langue et région" },
+    "settings.tab.apps": { pt: "Aplicações", en: "Applications", fr: "Applications" },
+    "settings.apps.title": { pt: "Aplicações fixadas", en: "Pinned applications", fr: "Applications épinglées" },
+    "settings.apps.help": {
+        pt: "Escolha as aplicações que aparecem na barra lateral. As outras \
+             continuam sempre disponíveis no Gestor de Aplicações. A ordem \
+             muda-se arrastando na própria barra.",
+        en: "Choose which applications appear in the sidebar. The rest stay \
+             available in the Application Manager. Reorder them by dragging in \
+             the sidebar itself.",
+        fr: "Choisissez les applications qui apparaissent dans la barre latérale. \
+             Les autres restent disponibles dans le gestionnaire d'applications. \
+             Réordonnez-les en les faisant glisser dans la barre."
+    },
+    "settings.apps.saved": {
+        pt: "Aplicações fixadas actualizadas.",
+        en: "Pinned applications updated.",
+        fr: "Applications épinglées mises à jour."
+    },
+    "settings.apps.save": { pt: "Guardar", en: "Save", fr: "Enregistrer" },
+    "settings.apps.reset": { pt: "Repor predefinições", en: "Reset to defaults", fr: "Rétablir par défaut" },
+    "settings.apps.reset_note": {
+        pt: "Repor deixa a barra com o conjunto inicial (Notas, Ficheiros, \
+             Projectos).",
+        en: "Reset returns the sidebar to the initial set (Notes, Files, \
+             Projects).",
+        fr: "Rétablir remet la barre au jeu initial (Notes, Fichiers, Projets)."
+    },
+    "settings.apps.empty": {
+        pt: "Não há aplicações fixáveis disponíveis.",
+        en: "There are no pinnable applications available.",
+        fr: "Aucune application épinglable n'est disponible."
+    },
     "settings.tabs.aria": {
         pt: "Secções das definições",
         en: "Settings sections",

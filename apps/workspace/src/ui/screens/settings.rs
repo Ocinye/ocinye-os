@@ -15,16 +15,15 @@
 //! de auditoria com autor. Um campo aqui que os alterasse seria uma escalada de
 //! privilégio com aspecto de preferência.
 //!
-//! # Porque só há duas secções
+//! # As secções
 //!
-//! `Conta` e `Segurança`. Não há `Aparência` nem `Preferências` porque hoje não
-//! existe preferência do membro com persistência e consumidor reais: a
-//! densidade das tabelas é estado do browser, e `mail_preferences` pertence ao
-//! Correio, não à pessoa.
-//!
-//! Criar uma tabela de preferências para a página ter mais um separador seria
-//! inventar infraestrutura para preencher espaço. Uma terceira secção nasce
-//! quando existir a primeira preferência que a justifique.
+//! `Conta`, `Segurança`, `Idioma e região` e `Aplicações`. A última nasceu com a
+//! primeira preferência do membro com persistência e consumidor reais: as
+//! **aplicações fixadas** na barra lateral, guardadas no Core (`member_app_pins`)
+//! e resolvidas pela sessão. Aqui gere-se o **conjunto** — a ordem muda-se
+//! arrastando na própria barra. Continua a valer a fronteira: o self-service
+//! altera preferências e credenciais do próprio, nunca a autorização — e as
+//! aplicações que aparecem para fixar são as que o membro já pode abrir.
 
 use leptos::prelude::*;
 use ocinye_contracts::AvatarChoice;
@@ -55,6 +54,11 @@ fn seccoes_das_definicoes(activo: &str) -> Vec<Tab> {
             crate::i18n::t("settings.tab.language"),
             "/settings/language",
             activo == "/settings/language",
+        ),
+        Tab::link(
+            crate::i18n::t("settings.tab.apps"),
+            "/settings/apps",
+            activo == "/settings/apps",
         ),
     ]
 }
@@ -192,6 +196,113 @@ pub fn language(saved: bool) -> impl IntoView {
                             </button>
                         </div>
                     </form>
+                },
+            )}
+        </div>
+    }
+}
+
+/// `Definições → Aplicações`.
+///
+/// Gerir o **conjunto** de aplicações fixadas na barra lateral: uma caixa por
+/// aplicação fixável que o membro pode abrir, marcada se está fixada. Guardar
+/// substitui a lista pela escolha; «Repor» devolve o conjunto por omissão. A
+/// **ordem** muda-se arrastando na própria barra — aqui decide-se o que entra,
+/// não a ordem. Funciona sem JavaScript: é um formulário que submete.
+///
+/// Só aparecem aplicações que o membro pode abrir: fixar não é autorização, e
+/// oferecer aqui um ecrã que o Core recusaria seria prometer o que não se cumpre.
+pub fn apps(viewer: &crate::ui::shell::Viewer, saved: bool) -> impl IntoView {
+    use crate::ui::apps as registo;
+
+    let fixadas: std::collections::BTreeSet<&str> =
+        viewer.pinned.iter().map(String::as_str).collect();
+    let fixaveis: Vec<&'static registo::Application> =
+        registo::visible_to(viewer, viewer.core_status)
+            .into_iter()
+            .filter(|app| app.can_pin)
+            .collect();
+    let vazio = fixaveis.is_empty();
+
+    view! {
+        <div class="oc-page oc-page--narrow">
+            <div class="oc-head">
+                <div class="oc-head__text">
+                    <h1>{crate::i18n::t("settings.title")}</h1>
+                    <p>{crate::i18n::t("settings.subtitle")}</p>
+                </div>
+            </div>
+
+            <div class="oc-tabs oc-tabs--under oc-card__head--flush">
+                {pill_tabs(
+                    seccoes_das_definicoes("/settings/apps"),
+                    crate::i18n::t("settings.tabs.aria"),
+                )}
+            </div>
+
+            {saved.then(|| view! {
+                <div class="oc-callout" role="status">
+                    {crate::i18n::t("settings.apps.saved")}
+                </div>
+            })}
+
+            {card(
+                section_head(crate::i18n::t("settings.apps.title"), None, None),
+                view! {
+                    <p class="oc-t-caption--muted oc-mb-5">
+                        {crate::i18n::t("settings.apps.help")}
+                    </p>
+                    {if vazio {
+                        view! {
+                            <p class="oc-muted oc-t-caption--muted">
+                                {crate::i18n::t("settings.apps.empty")}
+                            </p>
+                        }
+                        .into_any()
+                    } else {
+                        view! {
+                            <form method="post" action="/settings/apps" class="oc-applist">
+                                <fieldset class="oc-applist__set">
+                                    <legend class="oc-sr">{crate::i18n::t("settings.apps.title")}</legend>
+                                    {fixaveis
+                                        .into_iter()
+                                        .map(|app| {
+                                            let marcada = fixadas.contains(app.id());
+                                            view! {
+                                                <label class="oc-applist__opt">
+                                                    <input
+                                                        type="checkbox"
+                                                        name="pinned"
+                                                        value=app.id()
+                                                        checked=marcada
+                                                    />
+                                                    <span class="oc-applist__nome">{app.label()}</span>
+                                                    <span class="oc-applist__desc">{app.description()}</span>
+                                                </label>
+                                            }
+                                        })
+                                        .collect_view()}
+                                </fieldset>
+                                <div class="oc-row oc-gap-5 oc-mt-5">
+                                    <button class="oc-btn oc-btn--primary" type="submit">
+                                        {crate::i18n::t("settings.apps.save")}
+                                    </button>
+                                    <button
+                                        class="oc-btn oc-btn--secondary"
+                                        type="submit"
+                                        name="action"
+                                        value="reset"
+                                    >
+                                        {crate::i18n::t("settings.apps.reset")}
+                                    </button>
+                                </div>
+                                <p class="oc-t-caption--muted oc-mt-5">
+                                    {crate::i18n::t("settings.apps.reset_note")}
+                                </p>
+                            </form>
+                        }
+                        .into_any()
+                    }}
                 },
             )}
         </div>
@@ -601,5 +712,91 @@ mod pureza_i18n {
                 "fr: chrome português «{portuguesa}» sobreviveu"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_apps {
+    use super::*;
+    use crate::ui::shell::{CoreStatus, ResolucaoSessao, Viewer};
+
+    fn viewer(pinned: &[&str]) -> Viewer {
+        Viewer {
+            resolucao: ResolucaoSessao::Resolvida,
+            zona: "UTC".to_owned().try_into().expect("fuso"),
+            name: "Ana".to_owned(),
+            sessao_privilegiada: false,
+            administra: false,
+            organisation: "Ocinye".to_owned(),
+            email: Some("ana@ocinye.com".to_owned()),
+            session_expires_in: None,
+            avatar: AvatarChoice::Initials,
+            core_status: CoreStatus::Ok,
+            temporal: Vec::new(),
+            temporal_failure: None,
+            unread: 0,
+            capabilities: ocinye_contracts::Permission::all()
+                .into_iter()
+                .map(|p| p.as_str().to_owned())
+                .collect(),
+            modules: [
+                "units",
+                "ideas",
+                "projects",
+                "knowledge",
+                "files",
+                "bibliography",
+                "datasets",
+            ]
+            .into_iter()
+            .map(ToOwned::to_owned)
+            .collect(),
+            pinned: pinned.iter().map(|s| (*s).to_owned()).collect(),
+        }
+    }
+
+    /// A página lista as aplicações fixáveis, marca as fixadas, e oferece guardar
+    /// e repor. As Notas estão fixadas; os Ficheiros não.
+    #[test]
+    fn a_pagina_de_aplicacoes_gere_o_conjunto_fixado() {
+        let html = apps(&viewer(&["notes"]), false).to_html();
+        // O separador novo existe.
+        assert!(
+            html.contains(r#"href="/settings/apps""#),
+            "falta o separador Aplicações"
+        );
+        // Uma caixa por aplicação fixável, com o id no valor.
+        assert!(
+            html.contains(r#"name="pinned" value="notes""#),
+            "falta a caixa das Notas"
+        );
+        assert!(
+            html.contains(r#"name="pinned" value="files""#),
+            "falta a caixa dos Ficheiros"
+        );
+        // A das Notas está marcada; a dos Ficheiros não.
+        let notes = html.find(r#"value="notes""#).expect("notes");
+        let tag_notes = &html[html[..notes].rfind("<input").expect("input")..notes + 40];
+        assert!(
+            tag_notes.contains("checked"),
+            "as Notas deviam estar marcadas"
+        );
+        let files = html.find(r#"value="files""#).expect("files");
+        let tag_files = &html[html[..files].rfind("<input").expect("input")..files + 40];
+        assert!(
+            !tag_files.contains("checked"),
+            "os Ficheiros não deviam estar marcados"
+        );
+        // Guardar e repor.
+        assert!(html.contains(r#"value="reset""#), "falta o botão de repor");
+        assert!(
+            html.contains(r#"action="/settings/apps""#),
+            "falta o destino do formulário"
+        );
+        // Home não é fixável: não tem caixa.
+        assert!(
+            !html.contains(r#"name="pinned" value="home""#),
+            "Home não é fixável"
+        );
     }
 }

@@ -116,6 +116,7 @@ pub const ROUTES: &[&str] = &[
     "/settings",
     "/settings/security",
     "/settings/language",
+    "/settings/apps",
     "/settings/mfa",
     "/settings/mfa/regenerate",
     "/settings/password",
@@ -394,6 +395,7 @@ pub fn router(state: WorkspaceState) -> Router {
             "/settings/language",
             get(settings_language).post(set_language),
         )
+        .route("/settings/apps", get(settings_apps).post(save_apps))
         .route("/settings/mfa", get(settings_mfa))
         .route("/settings/mfa/regenerate", post(settings_mfa_regenerate))
         .route("/settings/password", post(change_password))
@@ -7190,6 +7192,99 @@ async fn set_language(
         resposta.headers_mut().insert(header::SET_COOKIE, valor);
     }
     resposta
+}
+
+/// `Definições → Aplicações`: gerir o conjunto de aplicações fixadas.
+async fn settings_apps(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(outcome): Query<LanguageOutcome>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    shell_page(
+        crate::i18n::t("settings.title"),
+        &viewer,
+        Screen::Settings,
+        Vec::new(),
+        ui::screens::settings::apps(&viewer, outcome.ok.as_deref() == Some("1")),
+    )
+}
+
+/// Grava o conjunto de aplicações fixadas, ou repõe as predefinições.
+///
+/// O corpo traz uma `pinned` por caixa marcada (`x-www-form-urlencoded` com
+/// chaves repetidas, que o `Form` não desserializa para `Vec`; lê-se o corpo em
+/// bruto). Guardar **preserva a ordem** que o membro tinha para as que ficam, e
+/// junta as novas ao fim — a ordem fina muda-se arrastando na barra. «Repor»
+/// (`action=reset`) devolve o conjunto por omissão. Só se guardam ids de
+/// aplicações reais e fixáveis; o resto cai em silêncio.
+async fn save_apps(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    corpo: axum::body::Bytes,
+) -> Response {
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return Redirect::to("/login").into_response();
+    };
+
+    let mut marcadas: Vec<String> = Vec::new();
+    let mut repor = false;
+    for (chave, valor) in url::form_urlencoded::parse(&corpo) {
+        match chave.as_ref() {
+            "pinned" if ui::apps::is_pinnable(&valor) => marcadas.push(valor.into_owned()),
+            "action" if valor == "reset" => repor = true,
+            _ => {}
+        }
+    }
+
+    let nova = if repor {
+        ui::apps::default_pins()
+    } else {
+        // Preserva a ordem actual para as que ficam, e junta as novas ao fim.
+        let atuais: Vec<String> = api::get::<Value>(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            "/api/v1/me/apps/pins",
+        )
+        .await
+        .ok()
+        .and_then(|v| {
+            v.get("pinned").and_then(Value::as_array).map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+        })
+        .unwrap_or_default();
+
+        let marcadas_set: std::collections::BTreeSet<&str> =
+            marcadas.iter().map(String::as_str).collect();
+        let mut ordenada: Vec<String> = atuais
+            .iter()
+            .filter(|id| marcadas_set.contains(id.as_str()))
+            .cloned()
+            .collect();
+        for id in &marcadas {
+            if !ordenada.contains(id) {
+                ordenada.push(id.clone());
+            }
+        }
+        ordenada
+    };
+
+    let _ = api::put(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/me/apps/pins",
+        &serde_json::json!({ "pinned": nova }),
+    )
+    .await;
+
+    Redirect::to("/settings/apps?ok=1").into_response()
 }
 
 /// A ajuda do Workspace.
