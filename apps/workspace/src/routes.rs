@@ -146,6 +146,7 @@ pub const ROUTES: &[&str] = &[
     "/files/upload",
     "/files/uploads",
     "/files/personal-upload",
+    "/files/upload-preflight",
     "/files/uploads/{session_id}",
     "/files/uploads/{session_id}/parts/{part_number}",
     "/files/uploads/{session_id}/complete",
@@ -467,6 +468,7 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/files", get(files_browse))
         .route("/files/uploads", post(upload_begin))
         .route("/files/personal-upload", post(upload_begin_personal))
+        .route("/files/upload-preflight", post(upload_preflight))
         .route(
             "/files/uploads/{session_id}",
             get(upload_status).delete(upload_cancel),
@@ -10980,6 +10982,32 @@ struct AberturaPessoal {
     size_bytes: i64,
 }
 
+/// `POST /files/upload-preflight` — «cabe este ficheiro?», respondido pelo Core.
+///
+/// Encaminha para o preflight do Core, que decide por capacidade (quota, o que
+/// está reservado, o tecto do backend). O browser não é autoridade da quota; isto
+/// é a cortesia de recusar cedo, com os números.
+async fn upload_preflight(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    axum::Json(pedido): axum::Json<serde_json::Value>,
+) -> Response {
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return nao_autenticado();
+    };
+    let size = pedido.get("size_bytes").cloned().unwrap_or(Value::Null);
+    encaminhar(
+        api::post(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            "/api/v1/me/files/uploads/preflight",
+            &serde_json::json!({ "size_bytes": size }),
+        )
+        .await,
+    )
+}
+
 /// `POST /files/personal-upload` — abre uma sessão por partes para o espaço
 /// pessoal.
 ///
@@ -11123,6 +11151,15 @@ fn encaminhar(resultado: Result<Value, ApiFailure>) -> Response {
         Err(ApiFailure::Forbidden) | Err(ApiFailure::Denied) => (
             StatusCode::FORBIDDEN,
             axum::Json(serde_json::json!({ "recusado": true })),
+        )
+            .into_response(),
+        // A recusa pelo conteúdo — 422 — traz a mensagem escrita para o membro,
+        // e é por aqui que o código tipado de capacidade (`STORAGE_*`) chega ao
+        // browser. Achatá-la num 502 genérico perderia o motivo, e o carregador
+        // não teria como dizer «sem espaço» em vez de «falhou».
+        Err(ApiFailure::Rejected(mensagem)) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            axum::Json(serde_json::json!({ "message": mensagem })),
         )
             .into_response(),
         Err(falha) => (

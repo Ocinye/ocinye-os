@@ -522,9 +522,18 @@ impl CoreConfig {
                 location_label: or_default("OCINYE_STORAGE_LOCATION_LABEL", "local-development"),
                 residency: Residency::parse(&or_default("OCINYE_STORAGE_RESIDENCY", "UNDECLARED"))
                     .unwrap_or_default(),
+                // O limite **duro do backend** por objecto, e não um nível de
+                // produto. O que decide se um ficheiro entra é a **quota** do
+                // membro (ADR-0108); este número é a fronteira real da
+                // infraestrutura — um objecto multipart de S3/MinIO vai até 5 TiB
+                // —, e só existe para apanhar tamanhos absurdos. O default de 512
+                // MiB era o antigo tecto de produto (o defeito que este modelo
+                // corrige); passa a 5 TiB, extremamente alto face ao uso normal.
+                // Renomear a variável partiria instalações que a definem; o que
+                // muda é o significado, documentado aqui.
                 max_upload_bytes: parse_number(
                     "OCINYE_STORAGE_MAX_UPLOAD_BYTES",
-                    512 * 1024 * 1024,
+                    5 * 1024 * 1024 * 1024 * 1024,
                 ),
             },
             ai: AiConfig {

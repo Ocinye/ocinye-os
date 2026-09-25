@@ -24,12 +24,18 @@ use crate::Tx;
 /// A member's personal storage picture, for the member and for administration.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct PersonalStorageStatus {
-    /// Bytes currently occupied by the member's own objects.
+    /// Bytes currently occupied by the member's own **stored** objects.
     pub used_bytes: i64,
+    /// Bytes **reserved** by uploads in flight — open upload sessions that have
+    /// not finalised. Counted against the limit so a second large upload cannot
+    /// be admitted over space the first has already claimed.
+    pub reserved_bytes: i64,
     /// The effective limit in bytes, from the entitlement. Zero means no limit
     /// has resolved yet, which reads as unlimited here.
     pub limit_bytes: i64,
-    /// Bytes still writable before the limit. Zero once at or over the limit.
+    /// Bytes still admissible before the limit, after used **and** reserved. Zero
+    /// once at or over the limit. This is the number a new upload is measured
+    /// against, and the one the interface shows as «available».
     pub available_bytes: i64,
     /// The state derived from usage against the limit.
     pub state: StorageState,
@@ -60,6 +66,36 @@ pub async fn personal_usage_bytes<'e>(
     .fetch_one(executor)
     .await?;
     Ok(used)
+}
+
+/// The bytes a member has **reserved** through uploads still in flight.
+///
+/// An open upload session *is* a reservation: it declared its size before the
+/// first byte, and it holds that space until it finalises, is cancelled, or
+/// expires. Summing the declared size of a member's open, unexpired sessions
+/// gives the space that is spoken for but not yet stored — the difference between
+/// «what is used» and «what a new upload may still claim».
+///
+/// There is no separate reservation table to keep in step: releasing a
+/// reservation is the session leaving the `open` state, which cancellation,
+/// finalisation and the expiry sweep already do.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn reserved_personal_bytes<'e>(
+    executor: impl PgExecutor<'e>,
+    person_id: Uuid,
+) -> CoreResult<i64> {
+    let reserved: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(declared_size_bytes), 0)::bigint
+           FROM upload_sessions
+          WHERE owner_id = $1 AND state = 'open' AND expires_at > now()",
+    )
+    .bind(person_id)
+    .fetch_one(executor)
+    .await?;
+    Ok(reserved)
 }
 
 /// The effective personal storage limit of a member, in bytes.
@@ -160,6 +196,47 @@ pub async fn admit_personal_bytes(
     Ok(())
 }
 
+/// Admit — and **reserve** — space for an upload that is about to begin.
+///
+/// The counterpart of [`admit_personal_bytes`] for the chunked path, where the
+/// bytes do not exist yet. It measures `used + reserved + incoming` against the
+/// limit under the same per-member lock, so two large uploads starting at once
+/// cannot each see the whole free space and both be admitted. The reservation
+/// itself is the `open` upload session the caller writes next, inside the same
+/// transaction and therefore the same lock.
+///
+/// A limit of zero (none resolved) admits everything.
+///
+/// # Errors
+///
+/// [`CoreError::Rejected`] with the code `STORAGE_MEMBER_QUOTA_EXCEEDED` when the
+/// upload would not fit in what is left after usage and reservations.
+pub async fn reserve_personal_bytes(
+    tx: &mut Tx<'_>,
+    person_id: Uuid,
+    incoming_bytes: i64,
+) -> CoreResult<()> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(person_id.to_string())
+        .execute(&mut **tx)
+        .await?;
+
+    let used = personal_usage_bytes(&mut **tx, person_id).await?;
+    let reserved = reserved_personal_bytes(&mut **tx, person_id).await?;
+    let limit = personal_storage_limit_bytes(&mut **tx, person_id).await?;
+
+    if limit > 0 && used + reserved + incoming_bytes > limit {
+        let disponivel = (limit - used - reserved).max(0);
+        // O código tipado viaja no início da mensagem (§11): o Workspace lê-o e
+        // traduz-o, e distingue «sem quota» de «grande de mais para o backend».
+        // Os números vão em bytes, para a Experience formatar na unidade certa.
+        return Err(CoreError::Validation(format!(
+            "STORAGE_MEMBER_QUOTA_EXCEEDED needed={incoming_bytes} available={disponivel}"
+        )));
+    }
+    Ok(())
+}
+
 /// A member's personal storage status, for display.
 ///
 /// A member always sees their own; seeing another member's takes
@@ -184,6 +261,7 @@ pub async fn personal_storage_status(
     }
 
     let used = personal_usage_bytes(pool, person_id).await?;
+    let reserved = reserved_personal_bytes(pool, person_id).await?;
     // The limit resolves through the shared entitlement resolver, so display and
     // enforcement cannot disagree about the number.
     let entitlement = super::resolve_entitlement(
@@ -195,10 +273,18 @@ pub async fn personal_storage_status(
     )
     .await?;
     let limit = entitlement.quantity;
-    let available = if limit > 0 { (limit - used).max(0) } else { 0 };
+    // Available is what a new upload may still claim: the limit less what is
+    // stored **and** what in-flight uploads have reserved. The admission measures
+    // against this same number.
+    let available = if limit > 0 {
+        (limit - used - reserved).max(0)
+    } else {
+        0
+    };
 
     Ok(PersonalStorageStatus {
         used_bytes: used,
+        reserved_bytes: reserved,
         limit_bytes: limit,
         available_bytes: available,
         state: StorageState::from_usage(used, limit),

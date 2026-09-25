@@ -28,5 +28,6 @@ pub use service::{
     resolve_entitlement, DEFAULT_STORAGE_QUOTA_BYTES,
 };
 pub use storage::{
-    admit_personal_bytes, personal_storage_status, personal_usage_bytes, PersonalStorageStatus,
+    admit_personal_bytes, personal_storage_limit_bytes, personal_storage_status,
+    personal_usage_bytes, reserve_personal_bytes, reserved_personal_bytes, PersonalStorageStatus,
 };

@@ -881,3 +881,88 @@ async fn esvaziar_o_lixo_apaga_tudo_o_que_la_esta_e_so_isso() {
         .expect("esvaziar vazio");
     assert_eq!(nada, 0, "esvaziar um Lixo vazio não devia apagar nada");
 }
+
+// ── Modelo de capacidade: sem tecto de produto, com reserva ──────────────
+
+/// Insere uma sessão de carregamento aberta (uma reserva) do tamanho declarado.
+async fn reserva_aberta(pool: &PgPool, org: Uuid, owner: Uuid, tamanho: i64) {
+    sqlx::query(
+        "INSERT INTO upload_sessions
+             (organisation_id, owner_id, filename, content_type, classification,
+              declared_size_bytes, chunk_size_bytes, total_parts,
+              storage_object_id, storage_key, storage_upload_id, created_by_id, expires_at)
+         VALUES ($1, $2, 'grande.bin', 'application/octet-stream', 'INTERNAL',
+                 $3, 33554432, 1, gen_random_uuid(), 'k/x', 'u/x', $2, now() + interval '1 hour')",
+    )
+    .bind(org)
+    .bind(owner)
+    .bind(tamanho)
+    .execute(pool)
+    .await
+    .expect("sessão aberta");
+}
+
+/// A regressão: um ficheiro **acima** do antigo tecto de produto de 512 MiB é
+/// admitido quando a quota chega. Sem base de dados, salta.
+#[tokio::test]
+async fn um_ficheiro_acima_de_512_mib_e_admitido_com_quota() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    default_profile(&pool, org, 4 * GIB).await;
+    let quem = member(&pool, org).await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    // 700 MiB — bem acima dos 512 MiB que o modelo antigo recusava.
+    resource::reserve_personal_bytes(&mut tx, quem.person_id, 700 * 1024 * 1024)
+        .await
+        .expect("700 MiB deviam ser admitidos com 4 GiB de quota — o tecto de 512 MiB caiu");
+    tx.commit().await.expect("commit");
+}
+
+/// A admissão é por capacidade: acima do disponível, recusa — com o código
+/// tipado, não um «demasiado grande» genérico.
+#[tokio::test]
+async fn a_reserva_recusa_acima_do_disponivel_com_codigo_tipado() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    default_profile(&pool, org, GIB).await; // 1 GiB
+    let quem = member(&pool, org).await;
+
+    let mut tx = pool.begin().await.expect("tx");
+    let erro = resource::reserve_personal_bytes(&mut tx, quem.person_id, 2 * GIB)
+        .await
+        .expect_err("2 GiB não cabem em 1 GiB");
+    assert!(
+        erro.to_string().contains("STORAGE_MEMBER_QUOTA_EXCEEDED"),
+        "a recusa devia trazer o código tipado: {erro}"
+    );
+}
+
+/// A reserva conta os uploads **em curso**: um segundo upload grande não é
+/// admitido sobre o espaço que o primeiro já reservou. É isto que impede dois
+/// browsers de verem ambos o espaço todo livre.
+#[tokio::test]
+async fn a_reserva_conta_uploads_em_curso() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    default_profile(&pool, org, 3 * GIB).await;
+    let quem = member(&pool, org).await;
+
+    // Um upload de 2 GiB já em curso (sessão aberta = reserva).
+    reserva_aberta(&pool, org, quem.person_id, 2 * GIB).await;
+
+    // Um segundo de 2 GiB não cabe: 3 − 2 reservado = 1 disponível.
+    let mut tx = pool.begin().await.expect("tx");
+    let erro = resource::reserve_personal_bytes(&mut tx, quem.person_id, 2 * GIB)
+        .await
+        .expect_err("o segundo 2 GiB não devia caber com 2 GiB reservado");
+    assert!(erro.to_string().contains("STORAGE_MEMBER_QUOTA_EXCEEDED"));
+    drop(tx);
+
+    // Mas um de 1 GiB cabe exactamente no que resta.
+    let mut tx = pool.begin().await.expect("tx");
+    resource::reserve_personal_bytes(&mut tx, quem.person_id, GIB)
+        .await
+        .expect("1 GiB devia caber no que resta depois da reserva de 2 GiB");
+    tx.commit().await.expect("commit");
+}
