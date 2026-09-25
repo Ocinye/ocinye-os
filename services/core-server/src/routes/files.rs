@@ -20,6 +20,7 @@ use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use ocinye_contracts::Classification;
 use ocinye_core::modules::files;
+use ocinye_core::modules::resource as files_resource;
 use ocinye_core::CoreError;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -119,6 +120,10 @@ pub fn routes() -> Router<AppState> {
         // sessão (`/uploads/{id}/...`) que os ficheiros de ambiente usam — a
         // sessão sabe que o seu destino é o dono, e o `finalise` faz o resto.
         .route("/me/files/uploads/sessions", post(begin_my_upload))
+        // A pergunta antes de gastar gigabytes: cabe? O Core responde, com os
+        // números reais (quota, reservado, disponível), para a Experience recusar
+        // cedo e explicar — em vez de deixar a subida morrer no fim.
+        .route("/me/files/uploads/preflight", post(preflight_my_upload))
         .route("/me/files/{version_id}/download", get(download_my_file))
         .route("/me/files/{version_id}/raw", get(raw_my_file))
         .route("/me/files/{version_id}/inline", get(inline_my_file))
@@ -862,6 +867,62 @@ async fn purge_my_file(
     let store = state.store()?;
     files::purge_personal_file(&state.pool, &principal, &ids, store, request.file_id).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+struct PreflightRequest {
+    size_bytes: i64,
+}
+
+/// `POST /me/files/uploads/preflight` — «cabe este ficheiro?», decidido no Core.
+///
+/// A autoridade da quota é do Core, nunca do browser (§3). Isto é a verificação
+/// **antes** de gastar a rede: mede o tamanho contra a capacidade real do membro
+/// — o que está guardado, o que uploads em curso já reservaram, o limite — e
+/// contra o tecto duro do backend. Devolve os números para a Experience mostrar
+/// «precisa de X, tem Y», e um código tipado quando recusa. Não reserva nada: a
+/// reserva autoritativa acontece ao abrir a sessão.
+async fn preflight_my_upload(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Json(request): Json<PreflightRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let status =
+        files_resource::personal_storage_status(&state.pool, &principal, principal.person_id)
+            .await?;
+    let backend_hard = state
+        .store()
+        .map(|s| i64::try_from(s.max_upload_bytes()).unwrap_or(i64::MAX))
+        .unwrap_or(i64::MAX);
+
+    // Sem limite resolvido, a quota não trava — só o tecto do backend.
+    let disponivel = if status.limit_bytes > 0 {
+        status.available_bytes
+    } else {
+        backend_hard
+    };
+    let efectivo = disponivel.min(backend_hard);
+
+    let (allowed, reason) = if request.size_bytes <= 0 {
+        (false, Some("STORAGE_FILE_EMPTY"))
+    } else if request.size_bytes > backend_hard {
+        (false, Some("STORAGE_FILE_TOO_LARGE_FOR_BACKEND"))
+    } else if status.limit_bytes > 0 && request.size_bytes > status.available_bytes {
+        (false, Some("STORAGE_MEMBER_QUOTA_EXCEEDED"))
+    } else {
+        (true, None)
+    };
+
+    Ok(Json(serde_json::json!({
+        "allowed": allowed,
+        "used_bytes": status.used_bytes,
+        "reserved_bytes": status.reserved_bytes,
+        "limit_bytes": status.limit_bytes,
+        "available_bytes": disponivel,
+        "effective_max_uploadable_bytes": efectivo,
+        "backend_hard_object_bytes": backend_hard,
+        "reason_code": reason,
+    })))
 }
 
 #[derive(Deserialize)]

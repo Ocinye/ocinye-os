@@ -7,6 +7,41 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Ficheiros: capacidade em vez de um tecto de produto — 2026-09-25
+
+O carregamento deixa de ter um tecto de produto por ficheiro. O antigo default de
+512 MiB (`OCINYE_STORAGE_MAX_UPLOAD_BYTES`) recusava um ficheiro de 2 GiB mesmo
+com quota de sobra — um defeito de modelo. A regra passa a ser:
+
+> **A Ocinye não impõe um limite de produto pequeno e arbitrário por ficheiro. A
+> admissão é governada por: autorização; quota do membro; capacidade alocável;
+> limites duros reais do backend. As transferências grandes são por partes,
+> retomáveis, em streaming, verificadas na integridade, e de memória limitada.**
+
+O que muda:
+- **Admissão por capacidade, no Core.** A abertura de uma sessão mede o tamanho
+  contra a quota do membro, com **reserva**: as sessões abertas contam como
+  espaço reservado, sob um lock por membro, para dois uploads grandes concorrentes
+  não verem ambos o espaço todo livre. Um endpoint de **preflight**
+  (`/me/files/uploads/preflight`) responde «cabe?» com os números reais antes de
+  se gastar a rede.
+- **O 512 MiB passa a ser o limite duro do backend**, não um nível de produto:
+  redefinido para 5 TiB (o máximo de um objecto multipart de S3/MinIO), documentado
+  como fronteira de infraestrutura. A constante mágica de 512 MiB no cliente saiu.
+- **Hash incremental no browser.** O SHA-256 do ficheiro completo é construído à
+  medida que se lê cada pedaço, e não a partir do ficheiro todo em memória — um
+  ficheiro de 2 GiB deixa de custar 2 GiB de RAM ao separador. O pico é o de um
+  pedaço. Verificado contra os vetores FIPS 180-4 e o `crypto.subtle`.
+- **A memória do servidor já era limitada** no caminho por partes (`checksum_of`
+  faz o digest por blocos); auditado e mantido.
+- **Códigos de recusa tipados** (`STORAGE_MEMBER_QUOTA_EXCEEDED`,
+  `STORAGE_FILE_TOO_LARGE_FOR_BACKEND`) que a Experience traduz em «Espaço
+  insuficiente — tem X disponíveis», com o número, e não um «demasiado grande»
+  que confunde falta de quota com ficheiro enorme.
+
+Provas de base de dados: 700 MiB admitido com quota (o tecto de 512 MiB caiu),
+recusa por capacidade com código tipado, e a reserva a contar uploads em curso.
+
 ### Ficheiros: carregamento pessoal por partes, e a barra que enche — 2026-09-24
 
 Um ficheiro pessoal grande — um bundle de plugins de 100–200 MB — deixa de morrer

@@ -47,14 +47,16 @@ use crate::state::AppState;
 /// plan step, bounded at sixteen kilobytes by the planner.
 const BODY_LIMIT_BYTES: usize = 1024 * 1024;
 
-/// Largest body accepted on the routes that carry a file.
+/// Largest body accepted on the **single-request** routes that carry a file.
 ///
-/// Above [`crate::state::AppState::store`]'s own upload ceiling
-/// (`OCINYE_STORAGE_MAX_UPLOAD_BYTES`, 512 MiB by default) so the service can
-/// answer with a clear validation error rather than dropping the connection.
+/// This is a transport ceiling for a file uploaded in one `POST`, not a limit on
+/// how large a file may be: a file larger than this goes up **in parts**
+/// (`files::upload`), each part well under it, and the logical size is governed
+/// by the member's storage quota (ADR-0108), not by this number. The store's own
+/// per-object hard limit (`OCINYE_STORAGE_MAX_UPLOAD_BYTES`) is far above this and
+/// is the backend boundary, not a product tier.
 ///
-/// Applied **per route**, and only to the three that take a `multipart` body.
-/// Adding a fourth is a deliberate act, which is the point.
+/// Applied **per route**, and only to the ones that take a `multipart` body.
 pub(crate) const UPLOAD_BODY_LIMIT_BYTES: usize = 640 * 1024 * 1024;
 
 /// Build the application router.

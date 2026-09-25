@@ -2205,15 +2205,12 @@
    * seu próprio pedido, em paralelo; cancelar é abortá-lo. Só se cria quando o
    * primeiro ficheiro parte, e nunca guarda nada institucional — é só o estado
    * visível de um envio. */
-  /* O maior ficheiro que a instituição guarda, e o limite acima do qual se recusa
-     já em vez de deixar a subida morrer no fim. É o tecto do produto (o do
-     armazenamento), e não o da borda: acima do tecto da borda os ficheiros sobem
-     **em pedaços**, cada parte pequena o suficiente para o atravessar. */
-  const MAXIMO_CARREGAMENTO_BYTES = 512 * 1024 * 1024;
-  const MAXIMO_CARREGAMENTO_LEGIVEL = '512 MB';
-  /* A partir daqui, um único `POST` arrisca-se ao tecto de ~100 MB da Cloudflare
-     e ao seu tempo-limite; acima deste valor sobe-se por partes. Bem abaixo dos
-     100 MB, com folga para o envelope. */
+  /* Não há tecto de produto no cliente: a admissibilidade é a capacidade do
+     membro, e quem a decide é o Core (preflight/abertura de sessão). O único
+     limiar aqui é de **transporte**: a partir deste tamanho, um único `POST`
+     arrisca-se ao tecto de ~100 MB da Cloudflare e ao seu tempo-limite, por isso
+     sobe-se **por partes**. Bem abaixo dos 100 MB, com folga para o envelope.
+     É uma decisão de *como* subir, não de *se* se pode. */
   const LIMIAR_PARTES_BYTES = 80 * 1024 * 1024;
   /* Sem avanço durante este tempo, a barra deixa de ser progresso e passa a ser
      um número parado — e é isso que se diz a quem espera. */
@@ -2363,7 +2360,7 @@
       };
     }
 
-    function carregar(ficheiro, destino, extras) {
+    async function carregar(ficheiro, destino, extras) {
       montar();
       activos += 1;
       resumir();
@@ -2404,17 +2401,32 @@
         assentar();
       };
 
-      /* Recusar já o que nem por partes cabe: acima do tecto do produto não há
-         subida que valha, e dizê-lo antes de a gastar é a diferença entre «não sei
-         o que se passa» e «este ficheiro é grande de mais». */
-      if (ficheiro.size > MAXIMO_CARREGAMENTO_BYTES) {
-        terminar(false, 'Demasiado grande (máx. ' + MAXIMO_CARREGAMENTO_LEGIVEL + ')');
-        return;
+      /* A pergunta antes de gastar a rede: cabe? Quem decide é o Core (a quota é
+         dele, nunca do browser). Não há tecto de produto no cliente — só a
+         capacidade real do membro, que o Core responde com números. Se o preflight
+         não responder, segue-se à mesma: a admissão autoritativa é na abertura da
+         sessão / no POST, que reautoriza. */
+      try {
+        ui.diz('A verificar espaço…');
+        const resposta = await fetch('/files/upload-preflight', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ size_bytes: ficheiro.size }),
+        });
+        if (resposta.ok) {
+          const cap = await resposta.json();
+          if (cap && cap.allowed === false) {
+            terminar(false, mensagemDeCapacidade(cap));
+            return;
+          }
+        }
+      } catch (erro) {
+        /* Preflight indisponível: a autoridade é do Core no passo seguinte. */
       }
 
-      /* Grande, mas dentro do tecto: sobe por partes. Cada pedaço atravessa a
-         borda que um único envio de cem megabytes não atravessa, e junta-se no
-         servidor. É o único caminho que faz um bundle de plugins chegar inteiro. */
+      /* Grande, mas dentro da capacidade: sobe **por partes**. Cada pedaço
+         atravessa a borda que um único envio de ~100 MB não atravessa, e junta-se
+         no servidor com a memória do browser limitada a um pedaço. */
       if (ficheiro.size > LIMIAR_PARTES_BYTES) {
         pararVigia();
         carregarPorPartes(ficheiro, extras, ui, terminar);
@@ -2503,11 +2515,124 @@
       return hexDe(await crypto.subtle.digest('SHA-256', buffer));
     }
 
+    /* SHA-256 **incremental** — `update(bytes)` alimenta blocos, `hex()` finaliza.
+
+       O `crypto.subtle` não faz hash em streaming: só aceita o buffer inteiro. Para
+       o hash do ficheiro **completo**, isso obrigaria a carregar o ficheiro todo na
+       memória do separador — 2 GB de RAM para um ficheiro de 2 GB, o defeito que
+       este caminho existe para não ter. Esta implementação guarda só o resto < 64 B
+       entre blocos: o pico de memória é o de um pedaço, não o do ficheiro. Os
+       vetores conhecidos (FIPS 180-4) e o `crypto.subtle` confirmam-na. */
+    function criarSha256() {
+      const K = new Uint32Array([
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
+        0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
+        0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
+        0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
+        0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+        0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
+        0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
+        0xc67178f2,
+      ]);
+      const H = new Uint32Array([
+        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+        0x5be0cd19,
+      ]);
+      const W = new Uint32Array(64);
+      let resto = new Uint8Array(0);
+      let total = 0;
+      const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+
+      function bloco(b, off) {
+        for (let i = 0; i < 16; i += 1) {
+          W[i] = (b[off + 4 * i] << 24) | (b[off + 4 * i + 1] << 16)
+            | (b[off + 4 * i + 2] << 8) | b[off + 4 * i + 3];
+        }
+        for (let i = 16; i < 64; i += 1) {
+          const s0 = rotr(W[i - 15], 7) ^ rotr(W[i - 15], 18) ^ (W[i - 15] >>> 3);
+          const s1 = rotr(W[i - 2], 17) ^ rotr(W[i - 2], 19) ^ (W[i - 2] >>> 10);
+          W[i] = (W[i - 16] + s0 + W[i - 7] + s1) | 0;
+        }
+        let a = H[0], b2 = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+        for (let i = 0; i < 64; i += 1) {
+          const s1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+          const ch = (e & f) ^ (~e & g);
+          const t1 = (h + s1 + ch + K[i] + W[i]) | 0;
+          const s0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+          const maj = (a & b2) ^ (a & c) ^ (b2 & c);
+          const t2 = (s0 + maj) | 0;
+          h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b2; b2 = a; a = (t1 + t2) | 0;
+        }
+        H[0] = (H[0] + a) | 0; H[1] = (H[1] + b2) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;
+        H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+      }
+
+      function update(bytes) {
+        total += bytes.length;
+        let dados;
+        if (resto.length) {
+          dados = new Uint8Array(resto.length + bytes.length);
+          dados.set(resto);
+          dados.set(bytes, resto.length);
+        } else {
+          dados = bytes;
+        }
+        let off = 0;
+        while (dados.length - off >= 64) {
+          bloco(dados, off);
+          off += 64;
+        }
+        resto = dados.slice(off);
+      }
+
+      function hex() {
+        const tamBits = total * 8;
+        const padLen = (resto.length < 56 ? 56 : 120) - resto.length;
+        const fim = new Uint8Array(resto.length + padLen + 8);
+        fim.set(resto);
+        fim[resto.length] = 0x80;
+        const dv = new DataView(fim.buffer);
+        dv.setUint32(fim.length - 4, tamBits >>> 0);
+        dv.setUint32(fim.length - 8, Math.floor(tamBits / 0x100000000));
+        for (let off = 0; off < fim.length; off += 64) bloco(fim, off);
+        let s = '';
+        for (let i = 0; i < 8; i += 1) s += ('00000000' + (H[i] >>> 0).toString(16)).slice(-8);
+        return s;
+      }
+
+      return { update, hex };
+    }
+
     function mensagemDeFalha(estado) {
       if (estado === 401) return 'Sessão expirada';
       if (estado === 413) return 'Demasiado grande';
       if (estado === 507) return 'Sem espaço';
       return 'Falhou';
+    }
+
+    function formatarBytes(n) {
+      const v = Number(n) || 0;
+      const g = 1024 * 1024 * 1024;
+      const m = 1024 * 1024;
+      if (v >= g) return (v / g).toFixed(1) + ' GB';
+      if (v >= m) return Math.round(v / m) + ' MB';
+      if (v >= 1024) return Math.round(v / 1024) + ' KB';
+      return v + ' B';
+    }
+
+    /* A recusa do Core traduzida no que a pessoa precisa de ler — com o número, e
+       não um «demasiado grande» que confunde falta de quota com ficheiro enorme. */
+    function mensagemDeCapacidade(cap) {
+      if (cap.reason_code === 'STORAGE_FILE_TOO_LARGE_FOR_BACKEND') {
+        return 'Demasiado grande para o armazenamento (máx. '
+          + formatarBytes(cap.backend_hard_object_bytes) + ')';
+      }
+      if (cap.reason_code === 'STORAGE_MEMBER_QUOTA_EXCEEDED') {
+        return 'Espaço insuficiente — tem ' + formatarBytes(cap.available_bytes) + ' disponíveis';
+      }
+      return 'Sem espaço';
     }
 
     function cancelarSessao(id) {
@@ -2562,7 +2687,24 @@
           body: JSON.stringify(inicioCorpo),
         });
         if (!abertura.ok) {
-          terminar(false, mensagemDeFalha(abertura.status));
+          // Uma recusa por capacidade (422) traz o código tipado na mensagem: o
+          // preflight já a devia ter apanhado, mas numa corrida a abertura é a
+          // autoridade, e diz «sem espaço» com o número em vez de «falhou».
+          let msg = mensagemDeFalha(abertura.status);
+          try {
+            const corpo = await abertura.json();
+            const texto = (corpo && (corpo.message || corpo.erro)) || '';
+            if (texto.indexOf('STORAGE_MEMBER_QUOTA_EXCEEDED') === 0) {
+              const m = texto.match(/available=(\d+)/);
+              msg = 'Espaço insuficiente — tem ' + formatarBytes(m ? m[1] : 0) + ' disponíveis';
+            } else if (texto.indexOf('STORAGE_FILE_TOO_LARGE_FOR_BACKEND') === 0) {
+              const m = texto.match(/limit=(\d+)/);
+              msg = 'Demasiado grande para o armazenamento (máx. ' + formatarBytes(m ? m[1] : 0) + ')';
+            }
+          } catch (erro) {
+            /* corpo não-JSON: fica a mensagem genérica */
+          }
+          terminar(false, msg);
           return;
         }
         const sessao = await abertura.json();
@@ -2570,6 +2712,11 @@
         const pedaco = sessao.chunk_size_bytes;
         const total = sessao.total_parts;
         const recebidas = new Set(sessao.received_parts || []);
+
+        // O hash do ficheiro inteiro, construído **à medida que se lê cada
+        // pedaço** — nunca a partir do ficheiro todo em memória. Cada bloco entra
+        // no digest e é largado; um ficheiro de 2 GB não custa 2 GB de RAM.
+        const hashTotal = criarSha256();
 
         let base = 0; // bytes das partes já concluídas
         for (let n = 1; n <= total; n += 1) {
@@ -2582,14 +2729,18 @@
           const fim = Math.min(inicio + pedaco, ficheiro.size);
           const tamanhoParte = fim - inicio;
 
-          // Já lá está (retoma): conta para o progresso e não se reenvia.
+          // Ler o pedaço uma vez, e alimentar o hash do todo **sempre** — mesmo
+          // uma parte já recebida (retoma) tem de entrar no hash do ficheiro
+          // completo, só não precisa de voltar a subir.
+          const buf = await ficheiro.slice(inicio, fim).arrayBuffer();
+          hashTotal.update(new Uint8Array(buf));
+
           if (recebidas.has(n)) {
             base += tamanhoParte;
             ui.progresso(Math.round((base / ficheiro.size) * 100));
             continue;
           }
 
-          const buf = await ficheiro.slice(inicio, fim).arrayBuffer();
           const soma = await somaSha256(buf);
           const resultado = await enviarParte(
             '/files/uploads/' + id + '/parts/' + n + '?sha256=' + soma,
@@ -2625,9 +2776,11 @@
           ui.progresso(Math.round((base / ficheiro.size) * 100));
         }
 
-        // A soma do ficheiro inteiro, para o servidor confirmar o que montou.
+        // A soma do ficheiro inteiro, já pronta do streaming acima — sem reler o
+        // ficheiro nem o segurar em memória. O servidor confirma o que montou
+        // contra ela.
         ui.diz('A finalizar no servidor…');
-        const somaTotal = await somaSha256(await ficheiro.arrayBuffer());
+        const somaTotal = hashTotal.hex();
         const fecho = await fetch('/files/uploads/' + id + '/complete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },

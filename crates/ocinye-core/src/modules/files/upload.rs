@@ -265,27 +265,26 @@ pub async fn begin_personal(
     }
     let tamanho = u64::try_from(request.size_bytes)
         .map_err(|_| CoreError::Validation("Tamanho inválido.".to_owned()))?;
+    // O único tecto que **não** é a quota: o limite duro do backend de
+    // armazenamento. Não é um nível de produto — é a fronteira real da
+    // infraestrutura, e só apanha tamanhos absurdos. A admissão que decide é a
+    // quota, logo a seguir. O código tipado viaja na mensagem, para a Experience
+    // o distinguir de «sem espaço».
     if tamanho > store.max_upload_bytes() {
-        return Err(CoreError::Validation(
-            "O ficheiro excede o tamanho máximo permitido.".to_owned(),
-        ));
+        return Err(CoreError::Validation(format!(
+            "STORAGE_FILE_TOO_LARGE_FOR_BACKEND needed={} limit={}",
+            request.size_bytes,
+            store.max_upload_bytes()
+        )));
     }
 
-    // A quota, cedo. A admissão a sério — com o lock — é no `finalise`; aqui é só
-    // recusar o que já se sabe que não cabe, para não gastar a rede e o disco de
-    // um carregamento que ia ser recusado no fim.
-    let usado =
-        crate::modules::resource::personal_usage_bytes(&mut **tx, principal.person_id).await?;
-    let limite = crate::modules::resource::storage::personal_storage_limit_bytes(
-        &mut **tx,
-        principal.person_id,
-    )
-    .await?;
-    if usado.saturating_add(request.size_bytes) > limite {
-        return Err(CoreError::Validation(
-            "O ficheiro não cabe no que resta da sua quota pessoal.".to_owned(),
-        ));
-    }
+    // Admissão por **capacidade, com reserva**, e não por um tecto de produto: o
+    // ficheiro entra se couber no que resta da quota depois do que está guardado
+    // **e** do que outros uploads em curso já reservaram. A sessão que se abre a
+    // seguir, na mesma transacção, é a reserva; o lock por membro serializa dois
+    // uploads grandes a começar ao mesmo tempo.
+    crate::modules::resource::reserve_personal_bytes(tx, principal.person_id, request.size_bytes)
+        .await?;
 
     let content_type = crate::storage::validate_content_type(&request.content_type)?;
     let filename = crate::storage::normalise_filename(&request.filename)?;
