@@ -416,6 +416,12 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                         enctype="multipart/form-data"
                         data-oc="fs-carregar-form"
                     >
+                        // Dentro de uma pasta, o carregamento entra nela: um campo
+                        // escondido leva o destino, e o JS repete-o no caminho por
+                        // partes. Sem isto, o ficheiro caía na raiz, fora do Dossier.
+                        {open_folder.as_ref().map(|(id, _)| view! {
+                            <input type="hidden" name="folder_id" value=id.clone() />
+                        })}
                         {(!destinos.is_empty()).then(|| {
                             let opcoes = destinos
                                 .iter()

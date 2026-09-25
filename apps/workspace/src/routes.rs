@@ -10980,6 +10980,8 @@ struct AberturaPessoal {
     filename: String,
     content_type: String,
     size_bytes: i64,
+    #[serde(default)]
+    folder_id: Option<String>,
 }
 
 /// `POST /files/upload-preflight` — «cabe este ficheiro?», respondido pelo Core.
@@ -11033,6 +11035,11 @@ async fn upload_begin_personal(
                 "filename": pedido.filename,
                 "content_type": pedido.content_type,
                 "size_bytes": pedido.size_bytes,
+                // A pasta em que o carregamento começou. O Core valida a pertença e
+                // recusa uma vazia/mal formada; aqui só se reencaminha o que veio.
+                "folder_id": pedido.folder_id
+                    .as_deref()
+                    .filter(|f| !f.is_empty()),
             }),
         )
         .await,
@@ -11223,7 +11230,13 @@ async fn files_upload(
                 nome,
                 tipo,
                 dados,
-                vec![],
+                // A pasta pessoal de destino viaja com o ficheiro. Sem ela, é a
+                // raiz; com ela, o Core coloca-o lá — que é o que faltava para um
+                // carregamento dentro de um Dossier não cair fora dele.
+                vec![(
+                    "folder_id",
+                    campos.get("folder_id").cloned().unwrap_or_default(),
+                )],
             )
             .await
         }

@@ -1942,9 +1942,18 @@
         const destino = forma.getAttribute('action') || '/files/upload';
         const regressoCampo = forma.querySelector('[name="return_to"]');
         const wsCampo = forma.querySelector('[name="workspace_id"]');
+        /* A pasta aberta, quando o carregamento começa dentro de uma: viaja no
+           `fd` do envio único e no corpo de abertura do envio por partes, para o
+           ficheiro entrar no Dossier em vez de cair na raiz. */
+        const pastaCampo = forma.querySelector('[name="folder_id"]');
+        const wsValor = wsCampo ? wsCampo.value : '';
         ficheiros.forEach((ficheiro) => {
           janela.carregar(ficheiro, destino, {
-            workspace_id: wsCampo ? wsCampo.value : '',
+            workspace_id: wsValor,
+            /* A pasta é pessoal: só vale para o destino pessoal. Escolher um
+               ambiente no seletor leva o ficheiro para a raiz desse ambiente — a
+               pasta pessoal aberta não existe lá. */
+            folder_id: wsValor ? '' : (pastaCampo ? pastaCampo.value : ''),
             return_to: regressoCampo ? regressoCampo.value : '',
           });
         });
@@ -2674,10 +2683,15 @@
 
       const tipo = ficheiro.type || 'application/octet-stream';
       const ws = extras && extras.workspace_id;
+      const pasta = extras && extras.folder_id;
       const inicioUrl = ws ? '/files/uploads' : '/files/personal-upload';
       const inicioCorpo = ws
         ? { workspace_id: ws, filename: ficheiro.name, content_type: tipo, size_bytes: ficheiro.size }
         : { filename: ficheiro.name, content_type: tipo, size_bytes: ficheiro.size };
+      /* A pasta pessoal de destino, quando há uma: o Core coloca lá o ficheiro ao
+         finalizar, como no envio único. (O caminho de ambiente leva a pasta noutro
+         sítio; aqui é só o pessoal.) */
+      if (!ws && pasta) inicioCorpo.folder_id = pasta;
 
       try {
         ui.diz('A preparar…');
