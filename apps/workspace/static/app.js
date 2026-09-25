@@ -667,6 +667,7 @@
         a.title = nome;
         a.setAttribute('aria-label', nome);
         a.dataset.appId = id;
+        a.draggable = true;
         if (svg) a.appendChild(svg.cloneNode(true));
         const span = document.createElement('span');
         span.textContent = nome;
@@ -697,6 +698,58 @@
         desenharNaBarra(id, fixar, botao);
       });
     });
+
+    /* ── Reordenar as fixadas ──────────────────────────────────────────
+     *
+     * Arrastar uma ficha fixada muda-lhe a ordem na barra, e a nova ordem
+     * persiste no Core (a lista inteira). Com teclado, Alt+Setas movem a ficha
+     * focada — o arrastar não pode ser a única forma (acessibilidade, §31 do
+     * briefing). A persistência é a mesma de fixar: «passa a ser esta a lista». */
+    if (barra) {
+      $$('[data-app-id]', barra).forEach((a) => { a.draggable = true; });
+
+      let arrastado = null;
+      barra.addEventListener('dragstart', (evento) => {
+        arrastado = evento.target.closest('[data-app-id]');
+        if (arrastado) {
+          evento.dataTransfer.effectAllowed = 'move';
+          arrastado.classList.add('oc-nav--dragging');
+        }
+      });
+      barra.addEventListener('dragend', () => {
+        if (arrastado) arrastado.classList.remove('oc-nav--dragging');
+        arrastado = null;
+      });
+      barra.addEventListener('dragover', (evento) => {
+        if (!arrastado) return;
+        evento.preventDefault();
+        const alvo = evento.target.closest('[data-app-id]');
+        if (!alvo || alvo === arrastado) return;
+        const caixa = alvo.getBoundingClientRect();
+        const depois = evento.clientY - caixa.top > caixa.height / 2;
+        barra.insertBefore(arrastado, depois ? alvo.nextSibling : alvo);
+      });
+      barra.addEventListener('drop', (evento) => {
+        evento.preventDefault();
+        guardar(idsFixados());
+      });
+      barra.addEventListener('keydown', (evento) => {
+        if (!evento.altKey) return;
+        const item = evento.target.closest('[data-app-id]');
+        if (!item) return;
+        if (evento.key === 'ArrowUp' && item.previousElementSibling) {
+          evento.preventDefault();
+          barra.insertBefore(item, item.previousElementSibling);
+          item.focus();
+          guardar(idsFixados());
+        } else if (evento.key === 'ArrowDown' && item.nextElementSibling) {
+          evento.preventDefault();
+          barra.insertBefore(item.nextElementSibling, item);
+          item.focus();
+          guardar(idsFixados());
+        }
+      });
+    }
   }
 
   /* ── Tabs locais ──────────────────────────────────────────────────── */

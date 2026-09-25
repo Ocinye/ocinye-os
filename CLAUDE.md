@@ -131,6 +131,15 @@ sem que nada falhe.
   servido de `os.ocinye.com`, atrás da Cloudflare, do mesmo SHA que o Core;
   sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
   pelas permissões que o Core calcula.
+- **Gestor de Aplicações: `IMPLEMENTED` e em produção** (§45-A,
+  [docs/applications](docs/applications/README.md)). As aplicações são entidades
+  de primeira classe: um **registo autoritativo** único alimenta o **lançador**
+  centrado — pesquisa imediata `pt`/`en`/`fr` e filtros por categoria — e a barra
+  lateral, que deixou de ser o catálogo e passou a ser **navegação essencial mais
+  as aplicações fixadas** pelo membro. A fixação é preferência do membro,
+  persistida no Core (`member_app_pins`, `GET`/`PUT /api/v1/me/apps/pins`), segue
+  o membro entre dispositivos e **não é autorização**. `Desafixar ≠ desinstalar`,
+  a descoberta não contorna a autorização, e o Prompt lança mesmo sem GPU.
 - **Ocinye Mail: `IMPLEMENTED`, `NOT CONFIGURED`.** Módulo do Core com
   abstracção de fornecedor, higienização de HTML recebido, política de
   classificação no envio, fronteira de privacidade em SQL, e 6 ecrãs no
@@ -1554,6 +1563,45 @@ rota/secção, `aria-selected` para tabs) tem guarda em
 
 ---
 
+## 45-A. As aplicações são entidades de primeira classe
+
+O Ocinye OS não é um website com uma barra lateral que cresce sem fim. É um
+ambiente com uma **camada de aplicações**: as aplicações descobrem-se, pesquisam-se
+e lançam-se, e a barra lateral é um atalho, não o catálogo. As regras que se
+seguem são vinculativas e vivem em [`docs/applications/`](docs/applications/README.md).
+
+> **O registo de aplicações é a fonte autoritativa** da identidade, rota, rótulo,
+> descrição, ícone, categoria, disponibilidade e política de fixação de cada
+> aplicação. A identidade existe **uma vez**; o lançador, a pesquisa e a barra
+> lateral consomem o mesmo registo. Não se duplica metadata de aplicação por
+> várias superfícies.
+
+> **A identidade de uma aplicação é um `id` técnico estável** (`files`), nunca o
+> rótulo traduzido (`Ficheiros`). A categoria é semântica (`RESEARCH`),
+> apresentada por chave i18n.
+
+> **A barra lateral não é o catálogo completo.** É **navegação essencial** mais as
+> **aplicações que o membro fixou**. O Gestor de Aplicações é a superfície
+> autoritativa de descoberta de todas as aplicações autorizadas.
+
+> **`Desafixar ≠ desinstalar`.** Tirar uma aplicação da barra tira só o atalho; a
+> aplicação continua a existir, descobrível no lançador, com a rota a funcionar.
+
+> **A fixação é preferência de apresentação do membro, persistida no Core, e
+> nunca autorização.** Segue o membro entre dispositivos; esconder ou mostrar um
+> atalho não muda o que o membro pode.
+
+> **A descoberta nunca contorna a autorização.** A visibilidade de uma aplicação
+> segue a mesma política de sempre, resolvida pelo Core; o Core recusa quem
+> escrever a rota à mão. Uma ficha no lançador não torna um ecrã utilizável (§4,
+> §59).
+
+> **Disponibilidade de aplicação ≠ disponibilidade de fornecedor.** O Prompt é uma
+> aplicação para quem tem `ai.use` e lança **mesmo sem GPU**; a ausência de
+> inferência degrada a resposta, não desactiva a aplicação.
+
+---
+
 ## 46. Densidade de informação
 
 Um sistema científico pode e deve ter informação densa. **Não resolvas tudo com
@@ -1936,13 +1984,13 @@ desenvolvimento; testes; segurança; deploy; documentação; **estado actual**.
 Estrutura actual — `CURRENT`:
 
 ```
-docs/adrs            docs/agentic        docs/ai             docs/architecture
-docs/authorization   docs/backups        docs/capabilities   docs/compute
-docs/data-model      docs/deployment     docs/development    docs/domain
-docs/feature-status  docs/identity       docs/knowledge      docs/mail
-docs/node-protocol   docs/operations     docs/password-policy docs/runbooks
-docs/search          docs/security       docs/storage        docs/testing
-docs/threat-model    docs/ui-core-contract docs/wasm
+docs/adrs            docs/agentic        docs/ai             docs/applications
+docs/architecture    docs/authorization  docs/backups        docs/capabilities
+docs/compute         docs/data-model     docs/deployment     docs/development
+docs/domain          docs/feature-status docs/identity       docs/knowledge
+docs/mail            docs/node-protocol  docs/operations     docs/password-policy
+docs/runbooks        docs/search         docs/security       docs/storage
+docs/testing         docs/threat-model   docs/ui-core-contract docs/wasm
 ```
 
 Usa **Mermaid** quando um diagrama esclarecer mais do que texto.

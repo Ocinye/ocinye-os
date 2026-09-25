@@ -1088,8 +1088,10 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 
 .oc-apps {
   position: fixed; inset: 0; z-index: var(--oc-z-modal);
-  display: flex; justify-content: center; align-items: flex-start;
-  padding: 9vh 20px 20px;
+  /* Centrado, como o Launchpad: um cartão contido, e não um painel que desce
+   * pela página abaixo. */
+  display: flex; justify-content: center; align-items: center;
+  padding: 20px;
 }
 .oc-apps[hidden] { display: none; }
 .oc-apps__fundo {
@@ -1098,7 +1100,10 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 }
 .oc-apps__painel {
   position: relative; width: 860px; max-width: 94vw;
-  max-height: 82vh; display: flex; flex-direction: column;
+  /* Altura **fixa**, independente do número de aplicações: o cartão tem sempre
+   * a mesma dimensão e a grelha rola por dentro. Encolhe só em ecrãs baixos. */
+  height: min(660px, 88vh);
+  display: flex; flex-direction: column;
   background: var(--oc-surface); border: 1px solid var(--oc-border);
   border-radius: var(--oc-r-2xl);
   box-shadow: var(--oc-shadow-overlay); overflow: hidden;
@@ -1200,10 +1205,14 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 @media (hover: none) { .oc-apps__pin { opacity: 1; } }
 
 @media (max-width: 560px) {
-  .oc-apps { padding: 4vh 10px 10px; }
-  .oc-apps__painel { max-height: 92vh; }
+  .oc-apps { padding: 10px; }
+  .oc-apps__painel { height: 92vh; }
   .oc-apps__grelha { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 }
+
+/* Uma ficha fixada a ser arrastada para reordenar. */
+.oc-nav--dragging { opacity: .45; }
+.oc-side__nav [data-app-id] { cursor: grab; }
 .oc-palette__item .oc-kbd { margin-left: auto; }
 
 /* ─── Cabeçalho de página ────────────────────────────────────────────── */
