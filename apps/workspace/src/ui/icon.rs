@@ -56,6 +56,8 @@ pub enum Icon {
     // Navegação
     Home,
     MyWork,
+    /// O lançador de aplicações — uma grelha 3×3.
+    Apps,
     Units,
     Idea,
     Project,
@@ -117,6 +119,7 @@ impl Icon {
             Self::Help => "oc-help",
             Self::Home => "oc-home",
             Self::MyWork => "oc-my-work",
+            Self::Apps => "oc-apps",
             Self::Units => "oc-units",
             Self::Idea => "oc-idea",
             Self::Project => "oc-project",
@@ -211,7 +214,7 @@ mod tests {
     /// O sprite é a fonte de verdade. Se um símbolo for removido ou renomeado
     /// lá, os dois testes abaixo falham em vez de a interface renderizar um
     /// espaço vazio.
-    const ALL: [Icon; 49] = [
+    const ALL: [Icon; 50] = [
         Icon::User,
         Icon::Lock,
         Icon::ArrowRight,
@@ -230,6 +233,7 @@ mod tests {
         Icon::Help,
         Icon::Home,
         Icon::MyWork,
+        Icon::Apps,
         Icon::Units,
         Icon::Idea,
         Icon::Project,
