@@ -1213,6 +1213,17 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
 /* Uma ficha fixada a ser arrastada para reordenar. */
 .oc-nav--dragging { opacity: .45; }
 .oc-side__nav [data-app-id] { cursor: grab; }
+
+/* Definições → Aplicações: a lista de caixas de fixação. */
+.oc-applist__set { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.oc-applist__opt {
+  display: grid; grid-template-columns: 20px 1fr; align-items: baseline;
+  gap: 4px 10px; padding: 10px 8px; border-radius: var(--oc-r-md);
+}
+.oc-applist__opt:hover { background: var(--oc-surface-muted); }
+.oc-applist__opt input { grid-row: 1 / span 2; align-self: center; }
+.oc-applist__nome { font: 600 13px var(--oc-font-sans); color: var(--oc-text); }
+.oc-applist__desc { grid-column: 2; font: 400 11.5px var(--oc-font-sans); color: var(--oc-text-meta); }
 .oc-palette__item .oc-kbd { margin-left: auto; }
 
 /* ─── Cabeçalho de página ────────────────────────────────────────────── */
