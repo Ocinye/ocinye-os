@@ -166,7 +166,6 @@ async fn membro(pool: &PgPool, organisation_id: Uuid, role: TechnicalRole) -> (U
     (person_id, token)
 }
 
-
 async fn pedido(
     state: &AppState,
     token: Option<&Secret>,
@@ -193,7 +192,10 @@ async fn pedido(
     let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
         .await
         .expect("corpo");
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
 #[tokio::test]
@@ -216,7 +218,11 @@ async fn uma_aplicacao_inactiva_e_recusada_pelo_core_e_o_resto_continua() {
         Some(json!({ "active": false })),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "o administrador desactiva o Correio");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "o administrador desactiva o Correio"
+    );
 
     // A API do Correio recusa, com o código tipado.
     let (recusa, corpo) = pedido(&state, Some(&pessoa), "GET", "/api/v1/mail/status", None).await;
@@ -232,12 +238,28 @@ async fn uma_aplicacao_inactiva_e_recusada_pelo_core_e_o_resto_continua() {
         .is_some_and(|a| a.iter().any(|id| id == "mail")));
     let (pronto, _) = pedido(&state, None, "GET", "/ready", None).await;
     assert_eq!(pronto, StatusCode::OK, "o Core continua pronto");
-    let (config, _) =
-        pedido(&state, Some(&admin), "GET", "/api/v1/instance/applications", None).await;
+    let (config, _) = pedido(
+        &state,
+        Some(&admin),
+        "GET",
+        "/api/v1/instance/applications",
+        None,
+    )
+    .await;
     assert_eq!(config, StatusCode::OK);
-    let (calendario, _) =
-        pedido(&state, Some(&pessoa), "GET", "/api/v1/calendar/agenda", None).await;
-    assert_ne!(calendario, StatusCode::SERVICE_UNAVAILABLE, "o Calendário não é afectado");
+    let (calendario, _) = pedido(
+        &state,
+        Some(&pessoa),
+        "GET",
+        "/api/v1/calendar/agenda",
+        None,
+    )
+    .await;
+    assert_ne!(
+        calendario,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "o Calendário não é afectado"
+    );
 
     // Reactivar (voltar ao perfil) devolve-a.
     let (status, _) = pedido(
@@ -286,7 +308,10 @@ async fn um_membro_nao_configura_a_instancia() {
     let state = nucleo(pool.clone(), org);
     let (_, pessoa) = membro(&pool, org, TechnicalRole::ResearchMember).await;
     for (caminho, corpo) in [
-        ("/api/v1/instance/applications/notes", json!({ "active": false })),
+        (
+            "/api/v1/instance/applications/notes",
+            json!({ "active": false }),
+        ),
         ("/api/v1/instance/profile", json!({ "profile": "personal" })),
     ] {
         let (status, _) = pedido(&state, Some(&pessoa), "PUT", caminho, Some(corpo)).await;
@@ -315,8 +340,21 @@ async fn a_recusa_e_da_instancia_que_a_decidiu() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let (em_b, _) = pedido(&estado_b, Some(&pessoa_b), "GET", "/api/v1/mail/status", None).await;
+    let (em_b, _) = pedido(
+        &estado_b,
+        Some(&pessoa_b),
+        "GET",
+        "/api/v1/mail/status",
+        None,
+    )
+    .await;
     assert_eq!(em_b, StatusCode::OK);
+}
+
+/// Um handler de aplicação com um defeito: entra em pânico com um detalhe
+/// interno que não pode chegar ao cliente.
+async fn avaria() -> &'static str {
+    panic!("detalhe interno que não pode sair")
 }
 
 /// Uma aplicação que falha não derruba o Core: o `panic` de um handler é um
@@ -326,13 +364,18 @@ async fn a_recusa_e_da_instancia_que_a_decidiu() {
 async fn um_panic_numa_aplicacao_e_um_500_e_o_core_continua() {
     use axum::routing::get;
     let router = axum::Router::new()
-        .route("/avaria", get(|| async { panic!("detalhe interno que não pode sair") }))
+        .route("/avaria", get(avaria))
         .route("/vizinha", get(|| async { "ok" }))
         .layer(routes::panic_boundary());
 
     let avaria = router
         .clone()
-        .oneshot(Request::builder().uri("/avaria").body(Body::empty()).expect("pedido"))
+        .oneshot(
+            Request::builder()
+                .uri("/avaria")
+                .body(Body::empty())
+                .expect("pedido"),
+        )
         .await
         .expect("resposta");
     assert_eq!(avaria.status(), StatusCode::INTERNAL_SERVER_ERROR);
@@ -344,7 +387,12 @@ async fn um_panic_numa_aplicacao_e_um_500_e_o_core_continua() {
     assert!(!String::from_utf8_lossy(&bytes).contains("detalhe interno"));
 
     let vizinha = router
-        .oneshot(Request::builder().uri("/vizinha").body(Body::empty()).expect("pedido"))
+        .oneshot(
+            Request::builder()
+                .uri("/vizinha")
+                .body(Body::empty())
+                .expect("pedido"),
+        )
         .await
         .expect("resposta");
     assert_eq!(vizinha.status(), StatusCode::OK);
