@@ -5972,6 +5972,174 @@ async fn a_descoberta_respeita_a_autorizacao() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Linha de base anterior à generalização
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// A Parte 0 do programa de generalização exige uma regressão que cubra, pelo
+// menos, login, Home, Gestor de Aplicações, Ficheiros, Notas, Correio, Ideias,
+// Ideia→Projecto, Tarefas, Datasets, Recursos, Administração, troca de idioma
+// e o estado degradado do Prompt. Quatro destas não tinham viagem própria: a
+// Home só era aberta de passagem, os Recursos só dentro do lançador, e a troca
+// de idioma e o Prompt sem fornecedor não eram exercidos pelo browser.
+//
+// Estas quatro fixam o comportamento **de hoje**. Não afirmam o que ele deve vir
+// a ser: se a generalização o mudar, é aqui que a mudança tem de ser deliberada.
+
+/// A Home abre com a saudação e os indicadores, para um membro comum.
+#[tokio::test]
+async fn a_home_abre_com_saudacao_e_indicadores() {
+    let harness = harness!();
+    let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let page = harness.open("/").await;
+
+    // A saudação depende da hora do servidor; qualquer das três serve.
+    let saudou = esperar_ate_condicao(
+        &page,
+        r#"['Bom dia', 'Boa tarde', 'Boa noite'].some(s => document.body.innerText.includes(s))"#,
+    )
+    .await;
+    assert!(saudou, "a Home não saudou o membro");
+    esperar_por(&page, "Unidades").await;
+
+    // A navegação essencial está lá, e a Home é a localização corrente.
+    assert!(
+        esperar_ate_condicao(
+            &page,
+            r#"!!document.querySelector('a[href="/"][aria-current="page"]')"#,
+        )
+        .await,
+        "a Home devia ser a localização corrente na navegação essencial"
+    );
+}
+
+/// «Meus Recursos» mostra o armazenamento pessoal com uso, limite e disponível.
+#[tokio::test]
+async fn os_meus_recursos_mostram_o_armazenamento_pessoal() {
+    let harness = harness!();
+    let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let page = harness.open("/resources").await;
+
+    esperar_por(&page, "Meus Recursos").await;
+    esperar_por(&page, "Armazenamento pessoal").await;
+    for rotulo in ["Em uso", "Limite", "Disponível"] {
+        esperar_por(&page, rotulo).await;
+    }
+}
+
+/// Trocar de idioma muda a interface, sobrevive à navegação, e volta ao canónico.
+#[tokio::test]
+async fn trocar_de_idioma_muda_a_interface_e_volta_ao_canonico() {
+    let harness = harness!();
+    let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    for (locale, titulo) in [
+        ("en", "My Resources"),
+        ("fr", "Mes ressources"),
+        ("pt", "Meus Recursos"),
+    ] {
+        let page = harness.open("/settings/language").await;
+        clicar(&page, &format!(r#"input[name="locale"][value="{locale}"]"#)).await;
+        submit(&page, r#"form[action="/settings/language"]"#).await;
+        let gravou = esperar_ate_condicao(
+            &page,
+            r#"location.pathname === '/settings/language' && location.search.includes('ok=1')"#,
+        )
+        .await;
+        assert!(gravou, "a escolha de {locale} não foi gravada");
+
+        // Outra página, outro pedido: o idioma veio da preferência, não do
+        // formulário que acabou de ser submetido.
+        let recursos = harness.open("/resources").await;
+        esperar_por(&recursos, titulo).await;
+    }
+}
+
+/// As razões tipadas com que o Model Router conclui «zero candidatos» (ADR-0304).
+const SEM_CANDIDATO: [&str; 2] = ["AI_NO_PROVIDER_AVAILABLE", "AI_NO_COMPATIBLE_MODEL"];
+
+/// Sem fornecedor, o Prompt aceita o pedido e responde com o estado tipado.
+///
+/// O input nunca é desactivado por ausência de IA; o pedido conclui num turno
+/// de sistema degradado, com a razão-máquina, e fica na conversa do membro
+/// sem se disfarçar de resposta de modelo (ADR-0308, ADR-0309).
+#[tokio::test]
+async fn sem_fornecedor_o_prompt_responde_com_o_estado_degradado() {
+    let harness = harness!();
+    let (pessoa, _) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let page = harness.open("/ai/prompt").await;
+
+    let activo = esperar_ate_condicao(
+        &page,
+        r#"(() => { const t = document.querySelector('[data-oc="prompt-textarea"]');
+                    return !!t && !t.disabled && !t.readOnly; })()"#,
+    )
+    .await;
+    assert!(activo, "o Prompt tem de aceitar input mesmo sem IA");
+
+    let pedido = unique_title("resume o estado da instituição");
+    set_field(&page, r#"[data-oc="prompt-textarea"]"#, &pedido).await;
+    clicar(&page, r#"[data-oc="prompt-send"]"#).await;
+
+    let respondeu =
+        esperar_ate_condicao(&page, r#"!!document.querySelector('.oc-turn--ocinye')"#).await;
+    let turno: String = page
+        .evaluate(r#"(document.querySelector('.oc-turn--ocinye') || document.body).innerText"#)
+        .await
+        .ok()
+        .and_then(|v| v.into_value().ok())
+        .unwrap_or_default();
+    assert!(
+        respondeu,
+        "o pedido não produziu turno de resposta: {turno}"
+    );
+
+    // A razão-máquina vive no detalhe do turno, secundária; abre-se como uma
+    // pessoa a abriria.
+    clicar(&page, ".oc-turn--ocinye .oc-turn__meta summary").await;
+    let detalhe: String = page
+        .evaluate(r#"document.querySelector('.oc-turn--ocinye .oc-turn__meta').textContent"#)
+        .await
+        .ok()
+        .and_then(|v| v.into_value().ok())
+        .unwrap_or_default();
+    // Qual das duas razões «sem candidato» depende do inventário que outros
+    // testes deixaram na base partilhada: sem nenhum modelo reportado é
+    // `AI_NO_PROVIDER_AVAILABLE`, com modelos que não servem a capacidade é
+    // `AI_NO_COMPATIBLE_MODEL`. O que esta viagem fixa é a forma: um turno de
+    // sistema, degradado, com razão tipada e sem modelo.
+    let razao_tipada = SEM_CANDIDATO.iter().find(|r| detalhe.contains(*r));
+    assert!(
+        razao_tipada.is_some(),
+        "o detalhe do turno devia nomear a razão-máquina: {detalhe} (turno: {turno})"
+    );
+    assert!(
+        esperar_ate_condicao(
+            &page,
+            r#"!!document.querySelector('.oc-turn--ocinye .oc-turn__badge')"#
+        )
+        .await,
+        "o turno degradado tem de se marcar como estado, não como resposta"
+    );
+
+    let (origem, estado, razao, modelo): (String, Option<String>, Option<String>, Option<String>) =
+        sqlx::query_as(
+            "SELECT t.role, t.status, t.reason_code, t.model
+               FROM ai_conversation_turns t
+               JOIN ai_conversations c ON c.id = t.conversation_id
+              WHERE c.owner_id = $1 AND t.role <> 'member'
+              ORDER BY t.seq DESC LIMIT 1",
+        )
+        .bind(pessoa)
+        .fetch_one(&harness.pool)
+        .await
+        .expect("o turno de resposta ficou na conversa");
+    assert_eq!(origem, "system");
+    assert_eq!(estado.as_deref(), Some("degraded"));
+    assert_eq!(razao.as_deref(), razao_tipada.copied());
+    assert_eq!(modelo, None, "um turno de sistema não nomeia modelo");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Capturas para revisão visual
 // ═══════════════════════════════════════════════════════════════════════════
 //
