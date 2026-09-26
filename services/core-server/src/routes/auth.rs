@@ -465,10 +465,6 @@ async fn assess_password(
 
 // ── O segundo factor (ADR-0107) ─────────────────────────────────────────────
 
-/// O emissor mostrado no autenticador. Sem espaços, para não precisar de
-/// codificação na etiqueta `otpauth`.
-const MFA_ISSUER: &str = "Ocinye";
-
 /// Em que ponto do MFA esta sessão está — para a Experience mostrar o ecrã certo
 /// sem adivinhar (ADR-0107).
 #[derive(Serialize)]
@@ -526,11 +522,17 @@ async fn mfa_enroll(
     RestrictedSession { person, .. }: RestrictedSession,
     Query(query): Query<EnrollQuery>,
 ) -> Result<Json<EnrollResponse>, ApiError> {
+    // O emissor que o autenticador mostra é a instância, e não o produto nem
+    // a primeira organização que o usou (ADR-0013).
+    let issuer =
+        ocinye_core::modules::organisation::instance_name(&state.pool, person.organisation_id)
+            .await
+            .map_err(|error| ApiError::new(error, &ids))?;
     let enrollment = identity::begin_enrollment(
         &state.pool,
         state.config.sealing_key.as_ref(),
         &person,
-        MFA_ISSUER,
+        &issuer,
     )
     .await
     .map_err(|error| ApiError::new(error, &ids))?;

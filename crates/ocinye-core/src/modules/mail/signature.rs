@@ -22,6 +22,9 @@
 pub struct SignatureFacts {
     /// Nome do membro.
     pub full_name: String,
+    /// A instituição que assina: o nome da instância (ADR-0013). Era o literal
+    /// «Ocinye», que punha a primeira organização a assinar por todas.
+    pub institution: String,
     /// Cargo institucional, quando existe e é factual. `None` omite a linha.
     pub role: Option<String>,
     /// O endereço de envio — o que o destinatário vê e a que responde.
@@ -100,8 +103,8 @@ pub fn authored_text_to_html(text: &str) -> String {
 /// ```text
 /// Nome do membro
 /// <cargo, se existir>
-/// Ocinye
-/// email@ocinye.com
+/// <instituição>
+/// email@instituicao
 /// ```
 #[must_use]
 pub fn signature_text(facts: &SignatureFacts) -> String {
@@ -118,7 +121,7 @@ pub fn signature_text(facts: &SignatureFacts) -> String {
             linhas.push(role.to_owned());
         }
     }
-    linhas.push("Ocinye".to_owned());
+    linhas.push(facts.institution.trim().to_owned());
     linhas.push(facts.email.trim().to_owned());
     linhas.join("\n")
 }
@@ -133,6 +136,7 @@ pub fn signature_html(facts: &SignatureFacts, logo: LogoRef) -> String {
         LogoRef::Url(url) => url.to_owned(),
     };
     let nome = escape(facts.full_name.trim());
+    let instituicao = escape(facts.institution.trim());
     let email = escape(facts.email.trim());
 
     let linha_pessoal = facts
@@ -164,14 +168,14 @@ pub fn signature_html(facts: &SignatureFacts, logo: LogoRef) -> String {
              style=\"border-collapse:collapse;border-top:1px solid {BORDER};padding-top:12px;\">\
              <tr>\
                <td style=\"vertical-align:top;padding:12px 14px 0 0;\">\
-                 <img src=\"{logo_src}\" width=\"44\" height=\"44\" alt=\"Ocinye\" \
+                 <img src=\"{logo_src}\" width=\"44\" height=\"44\" alt=\"{instituicao}\" \
                    style=\"display:block;border:0;width:44px;height:44px;\">\
                </td>\
                <td style=\"vertical-align:top;padding-top:12px;border-left:2px solid {NAVY_MID};\
                  padding-left:14px;font-size:13px;line-height:1.55;color:{TEXT_SECONDARY};\">\
                  <div style=\"font-weight:700;font-size:14px;color:{NAVY};\">{nome}</div>\
                  {linha_cargo}\
-                 <div style=\"color:{TEXT_SECONDARY};\">Ocinye</div>\
+                 <div style=\"color:{TEXT_SECONDARY};\">{instituicao}</div>\
                  <div><a href=\"mailto:{email}\" \
                    style=\"color:{NAVY_MID};text-decoration:none;\">{email}</a></div>\
                </td>\
@@ -336,6 +340,7 @@ mod tests {
     fn factos() -> SignatureFacts {
         SignatureFacts {
             full_name: "Fidel Monteiro".to_owned(),
+            institution: "Ocinye".to_owned(),
             role: Some("Fundador".to_owned()),
             email: "fidel.monteiro@ocinye.com".to_owned(),
             personal_line: None,
@@ -382,6 +387,23 @@ mod tests {
         let html = signature_html(&f, LogoRef::Cid(LOGO_CONTENT_ID));
         assert!(html.contains("Fidel Monteiro"));
         assert!(!html.contains("<div style=\"color:#5F7183;\"></div>"));
+    }
+
+    /// A instituição que assina é a instância, e o nome dela é escapado como
+    /// qualquer outro facto (ADR-0013).
+    #[test]
+    fn a_instituicao_que_assina_e_a_instancia() {
+        let factos = SignatureFacts {
+            institution: "Laboratório <A&B>".to_owned(),
+            ..factos()
+        };
+        let texto = signature_text(&factos);
+        assert!(texto.contains("\nLaboratório <A&B>\n"));
+        assert!(!texto.contains("Ocinye\n"));
+        let html = signature_html(&factos, LogoRef::Cid(LOGO_CONTENT_ID));
+        assert!(html.contains("Laboratório &lt;A&amp;B&gt;"));
+        assert!(!html.contains("<A&B>"));
+        assert!(!html.contains(">Ocinye<"));
     }
 
     #[test]

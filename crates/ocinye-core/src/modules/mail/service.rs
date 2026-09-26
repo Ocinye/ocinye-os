@@ -1232,8 +1232,11 @@ async fn signature_facts(
         .as_deref()
         .and_then(InstitutionalPosition::parse)
         .map(|posicao| posicao.label_pt().to_owned());
+    let institution =
+        crate::modules::organisation::instance_name(pool, person.organisation_id).await?;
     Ok(SignatureFacts {
         full_name: person.full_name,
+        institution,
         role,
         email: person.email,
         personal_line,

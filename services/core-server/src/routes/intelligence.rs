@@ -203,6 +203,7 @@ async fn list_agents(
 
     let capabilities = platform::system_capabilities(
         &state.pool,
+        state.organisation_id,
         &state.config,
         state.store.is_some(),
         state.mail_registry.reachability().await,
@@ -246,6 +247,7 @@ async fn get_agent(
 
     let capabilities = platform::system_capabilities(
         &state.pool,
+        state.organisation_id,
         &state.config,
         state.store.is_some(),
         state.mail_registry.reachability().await,
@@ -404,9 +406,14 @@ async fn submit_prompt(
     // the node-reported inventory fresh on every request, so a node that
     // connects or drops changes the answer with no restart — and «zero models»
     // is an ordinary typed result, not an error (M5 §20, §21).
-    let resolution = intelligence::resolve_capability(&state.pool, &state.config.ai, capability)
-        .await
-        .map_err(|error| ApiError::new(error, &ids))?;
+    let resolution = intelligence::resolve_capability(
+        &state.pool,
+        principal.organisation_id,
+        &state.config.ai,
+        capability,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
 
     let model = match resolution {
         ModelResolution::NoCandidate(reason_code) => {
@@ -491,7 +498,15 @@ async fn submit_prompt(
     // context here — permission-aware context assembly is a separate concern —
     // so no classified material leaves the Core (ADR-0300, ADR-0304). The Core
     // enforces its own contract around the provider via `infer_within_deadline`.
-    let inference = InferenceRequest::new(capability, system_instruction(), request.prompt.clone());
+    let instance =
+        ocinye_core::modules::organisation::instance_name(&state.pool, principal.organisation_id)
+            .await
+            .map_err(|error| ApiError::new(error, &ids))?;
+    let inference = InferenceRequest::new(
+        capability,
+        system_instruction(&instance),
+        request.prompt.clone(),
+    );
     match infer_within_deadline(state.inference.as_ref(), &inference).await {
         Ok(response) => {
             // Commit the reservation: record the completed job and the usage in
@@ -614,11 +629,19 @@ async fn degraded(
 /// The Ocinye OS's own instruction to a model.
 ///
 /// Written by the Core, never by a member and never by retrieved content
-/// (ADR-0304). Kept short and deterministic.
-fn system_instruction() -> String {
-    "És o Ocinye AI, ao serviço do sistema operacional institucional da Ocinye. Responde em \
-     português europeu, com rigor, e nunca inventes factos."
-        .to_owned()
+/// (ADR-0304). Kept short and deterministic. The organisation it serves is the
+/// Instance, by name (ADR-0013) — no longer the literal first organisation. The
+/// instance name is data the Instance's own administrators set, not member
+/// input, and it is framed as a name, not as instruction.
+///
+/// The answer language stays the canonical `pt` until the member's locale
+/// reaches the Core (the locale is still a Workspace cookie, F-13).
+fn system_instruction(instance: &str) -> String {
+    format!(
+        "És o assistente do Ocinye OS ao serviço da instância «{}». Responde em português \
+         europeu, com rigor, e nunca inventes factos.",
+        instance.trim()
+    )
 }
 
 /// Map an inference failure to a machine reason for the degraded envelope.
