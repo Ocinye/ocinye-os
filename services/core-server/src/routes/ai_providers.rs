@@ -9,9 +9,11 @@ use axum::http::StatusCode;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use ocinye_contracts::AiCapability;
+use ocinye_contracts::Classification;
 use ocinye_core::modules::intelligence::providers::{
     self, AiProvider, NewProvider, NewProviderModel,
 };
+use ocinye_core::modules::intelligence::routing::{self, AiPolicy};
 use ocinye_core::CoreError;
 use serde::Deserialize;
 use uuid::Uuid;
@@ -26,6 +28,8 @@ pub fn routes() -> Router<AppState> {
         .route("/ai/providers/{provider_id}", axum::routing::delete(remove))
         .route("/ai/providers/{provider_id}/enabled", put(set_enabled))
         .route("/ai/providers/{provider_id}/models", post(register_model))
+        .route("/ai/policy", get(get_policy).put(set_policy))
+        .route("/ai/routing/{capability}", put(set_routing))
 }
 
 #[derive(Deserialize)]
@@ -150,4 +154,83 @@ async fn register_model(
     .await
     .map_err(|error| ApiError::new(error, &ids))?;
     Ok(Json(serde_json::json!({ "id": id })))
+}
+
+#[derive(Deserialize)]
+struct PolicyBody {
+    /// `NONE`, `PUBLIC`, `INTERNAL`, `CONFIDENTIAL` or `RESTRICTED`.
+    external_max_classification: String,
+}
+
+#[derive(Deserialize)]
+struct RoutingBody {
+    #[serde(default)]
+    preferred_provider_id: Option<Uuid>,
+    #[serde(default = "sim")]
+    allow_fallback: bool,
+}
+
+const fn sim() -> bool {
+    true
+}
+
+async fn get_policy(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+) -> Result<Json<AiPolicy>, ApiError> {
+    routing::get_policy(&state.pool, &principal, &state.config.ai)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, &ids))
+}
+
+async fn set_policy(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Json(body): Json<PolicyBody>,
+) -> Result<Json<AiPolicy>, ApiError> {
+    let ceiling = match body.external_max_classification.as_str() {
+        "NONE" => None,
+        value => Some(Classification::parse(value).ok_or_else(|| {
+            ApiError::new(
+                CoreError::Validation(
+                    "Tecto desconhecido: NONE, PUBLIC, INTERNAL, CONFIDENTIAL ou RESTRICTED."
+                        .to_owned(),
+                ),
+                &ids,
+            )
+        })?),
+    };
+    routing::set_external_ceiling(&state.pool, &principal, ceiling, &ids)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    get_policy(State(state), Ids(ids), CurrentPrincipal(principal)).await
+}
+
+async fn set_routing(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(capability): Path<String>,
+    Json(body): Json<RoutingBody>,
+) -> Result<Json<AiPolicy>, ApiError> {
+    let capability = AiCapability::parse(&capability.to_uppercase()).ok_or_else(|| {
+        ApiError::new(
+            CoreError::Validation("Capacidade de IA desconhecida.".to_owned()),
+            &ids,
+        )
+    })?;
+    routing::set_preference(
+        &state.pool,
+        &principal,
+        capability,
+        body.preferred_provider_id,
+        body.allow_fallback,
+        &ids,
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+    get_policy(State(state), Ids(ids), CurrentPrincipal(principal)).await
 }

@@ -241,6 +241,9 @@ pub enum AiReasonCode {
     AiResourceQuotaExceeded,
     /// AI is administratively disabled by policy.
     AiDisabledByPolicy,
+    /// Models serve the capability, and policy excludes every one of them for
+    /// this request's classification (ADR-0311).
+    AiPolicyBlocked,
 }
 
 impl AiReasonCode {
@@ -258,6 +261,7 @@ impl AiReasonCode {
             Self::AiModelNotEntitled => "AI_MODEL_NOT_ENTITLED",
             Self::AiResourceQuotaExceeded => "AI_RESOURCE_QUOTA_EXCEEDED",
             Self::AiDisabledByPolicy => "AI_DISABLED_BY_POLICY",
+            Self::AiPolicyBlocked => "AI_POLICY_BLOCKED",
         }
     }
 
@@ -275,6 +279,7 @@ impl AiReasonCode {
             "AI_MODEL_NOT_ENTITLED" => Self::AiModelNotEntitled,
             "AI_RESOURCE_QUOTA_EXCEEDED" => Self::AiResourceQuotaExceeded,
             "AI_DISABLED_BY_POLICY" => Self::AiDisabledByPolicy,
+            "AI_POLICY_BLOCKED" => Self::AiPolicyBlocked,
             _ => return None,
         })
     }
@@ -360,6 +365,7 @@ mod tests {
             AiReasonCode::AiModelNotEntitled,
             AiReasonCode::AiResourceQuotaExceeded,
             AiReasonCode::AiDisabledByPolicy,
+            AiReasonCode::AiPolicyBlocked,
         ] {
             assert_eq!(
                 serde_json::to_value(code).unwrap(),

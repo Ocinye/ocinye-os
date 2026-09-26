@@ -38,6 +38,7 @@ mod model;
 pub mod provider;
 pub mod providers;
 mod repository;
+pub mod routing;
 mod service;
 
 pub use agents::{Agent, AgentScope, AgentState, NewAgent};

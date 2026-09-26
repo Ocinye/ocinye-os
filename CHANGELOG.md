@@ -7,6 +7,18 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Generalização, Parte 8: política e roteamento de IA — 2026-09-26
+
+- **Política antes da preferência**
+  ([ADR-0311](docs/adrs/0311-ai-policy-and-multi-provider-routing.md)): o tecto do
+  modelo, o interruptor da instalação e o tecto externo da Instância
+  (`instance_ai_policy`, migração 0057, `GET/PUT /api/v1/ai/policy`) contra a
+  classificação que o pedido declara.
+- **Preferência por capacidade** (`ai_routing_preferences`,
+  `PUT /api/v1/ai/routing/{capability}`) e **recurso a outro candidato** quando o
+  preferido não responde e a preferência o permite.
+- Novo código tipado `AI_POLICY_BLOCKED`; `classification` em `POST /ai/prompt`.
+
 ### Generalização, Parte 7: o tecido de IA — 2026-09-26
 
 - **Fornecedores registados pela Instância**
