@@ -1344,6 +1344,17 @@ fn failure_response(failure: &ApiFailure) -> Response {
         )
             .into_response(),
 
+        // A Instância não tem a aplicação activa (ADR-0014, ADR-0015): é
+        // configuração, e não uma peça em falta, e diz-se com o aviso próprio.
+        ApiFailure::ApplicationInactive => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            page(
+                crate::i18n::t("notice.app_inactive.title"),
+                ui::screens::notice::application_inactive(),
+            ),
+        )
+            .into_response(),
+
         // Uma recusa por conteúdo é uma resposta, e não uma avaria. Quem
         // chega aqui vindo de um formulário devia tê-la apanhado antes, para
         // a mostrar ao lado do campo; esta é a rede para quem não o fez.

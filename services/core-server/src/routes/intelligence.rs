@@ -12,7 +12,8 @@ use ocinye_contracts::{
     InteractionOrigin, InteractionStatus, Permission,
 };
 use ocinye_core::modules::intelligence::{
-    self, infer_within_deadline, AgentScope, InferenceRequest, ModelResolution, NewAgent,
+    self, infer_within_deadline, providers, AgentScope, InferenceError, InferenceProvider,
+    InferenceRequest, ModelResolution, NewAgent,
 };
 use ocinye_core::modules::{platform, resource};
 use ocinye_core::CoreError;
@@ -424,10 +425,42 @@ async fn submit_prompt(
         ModelResolution::Resolved(model) => model,
     };
 
-    // A model serves the capability, but only a provider wired into this process
-    // can run it. In production that is `NoProvider`, whose `serves` is always
-    // false, so this degrades cleanly with no model involved.
-    if !state.inference.serves(capability) {
+    // A provider model runs through its own adapter, built for this request
+    // with its credential opened from the Secrets Authority in the Gateway's
+    // scope (ADR-0310). A node model runs through the provider wired into this
+    // process — in production `NoProvider`, whose `serves` is always false, so
+    // that path degrades cleanly with no model involved.
+    let adapter = match model.provider_id {
+        Some(_) => match providers::adapter_for(
+            &state.pool,
+            state.config.sealing_key.as_ref(),
+            principal.organisation_id,
+            &model,
+            &ids,
+        )
+        .await
+        {
+            Ok(adapter) => Some(adapter),
+            Err(_) => {
+                return Ok(Json(
+                    degraded(
+                        &state,
+                        &principal,
+                        capability,
+                        AiReasonCode::AiProviderUnhealthy,
+                        &request.prompt,
+                    )
+                    .await,
+                ));
+            }
+        },
+        None => None,
+    };
+    let provider: &dyn InferenceProvider = match &adapter {
+        Some(adapter) => adapter,
+        None => state.inference.as_ref(),
+    };
+    if !provider.serves(capability) {
         return Ok(Json(
             degraded(
                 &state,
@@ -507,7 +540,16 @@ async fn submit_prompt(
         system_instruction(&instance),
         request.prompt.clone(),
     );
-    match infer_within_deadline(state.inference.as_ref(), &inference).await {
+    let outcome = infer_within_deadline(provider, &inference).await;
+    if let Some(provider_id) = model.provider_id {
+        let health = match &outcome {
+            Ok(_) => "healthy",
+            Err(InferenceError::Refused) => "refused",
+            Err(_) => "unreachable",
+        };
+        providers::record_health(&state.pool, provider_id, health).await;
+    }
+    match outcome {
         Ok(response) => {
             // Commit the reservation: record the completed job and the usage in
             // the admission transaction, so the charge lands with the answer.

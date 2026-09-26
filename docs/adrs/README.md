@@ -57,6 +57,7 @@ flowchart TB
     A0307["ADR-0307<br/>Dual Entry,<br/>Single Authority"]
     A0308["ADR-0308<br/>Envelope de interacção"]
     A0309["ADR-0309<br/>Conversas de IA"]
+    A0310["ADR-0310<br/>Tecido de IA:<br/>fornecedores"]
     A0400["ADR-0400<br/>Ocinye Mail"]
     A0500["ADR-0500<br/>Compute Registry"]
     A0501["ADR-0501<br/>Capability Runtime"]
@@ -82,6 +83,7 @@ flowchart TB
     A0300 --> A0308
     A0301 --> A0308
     A0308 --> A0309
+    A0304 --> A0310
     A0303 --> A0306
     A0302 --> A0306
     A0301 --> A0302
@@ -168,6 +170,7 @@ Como a inteligência opera o sistema sem o governar.
 - [ADR-0307](0307-dual-entry-single-authority.md) — Dual Entry, Single Authority: operabilidade agentic universal por capabilities tipadas
 - [ADR-0308](0308-typed-ai-interaction-envelope.md) — O envelope tipado de interacção de IA: origem, estado e códigos de razão
 - [ADR-0309](0309-ai-conversation-persistence-and-provenance.md) — Persistência e proveniência de conversas de IA
+- [ADR-0310](0310-ai-fabric-provider-registry.md) — O tecido de IA: fornecedores registados pela Instância
 
 ### 0400–0499 · Módulos Institucionais Nativos
 

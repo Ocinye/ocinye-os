@@ -6,18 +6,20 @@ use uuid::Uuid;
 use super::model::RegisteredModel;
 use crate::error::CoreResult;
 
-const MODEL_COLUMNS: &str = "m.id, m.provider_kind, m.provider_name, m.node_id, m.model_name,
+const MODEL_COLUMNS: &str = "m.id, m.provider_kind, m.provider_name, m.node_id, m.provider_id,
+                             m.model_name,
                              m.version, m.capabilities, m.context_limit, m.status,
                              m.max_classification, m.enabled, m.reported_at";
 
 /// List the models registered **in one instance**.
 ///
-/// A model belongs to the instance of the node that reports it: `ai_models`
-/// has no organisation of its own, so the scope comes through
-/// `compute_nodes.organisation_id`. Reading the table whole let a node enrolled
+/// A model belongs to the instance of the node that reports it, or of the
+/// provider that runs it: `ai_models` has no organisation of its own, so the
+/// scope comes through `compute_nodes.organisation_id` or
+/// `ai_providers.organisation_id`. Reading the table whole let a node enrolled
 /// in one instance serve another's prompts in a shared database (F-08 of the
-/// pre-generalization baseline). A model with no node belongs to no instance and
-/// is not listed; no code path writes one today.
+/// pre-generalization baseline). A disabled provider's models are not listed:
+/// disabling it takes it out of routing at once, with no restart (ADR-0310).
 ///
 /// # Errors
 ///
@@ -29,8 +31,10 @@ pub async fn list_models<'e>(
     let models = sqlx::query_as::<_, RegisteredModel>(&format!(
         "SELECT {MODEL_COLUMNS}
            FROM ai_models m
-           JOIN compute_nodes n ON n.id = m.node_id
+           LEFT JOIN compute_nodes n ON n.id = m.node_id
+           LEFT JOIN ai_providers p ON p.id = m.provider_id
           WHERE n.organisation_id = $1
+             OR (p.organisation_id = $1 AND p.enabled)
           ORDER BY m.provider_name, m.model_name, m.version"
     ))
     .bind(organisation_id)

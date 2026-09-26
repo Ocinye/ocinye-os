@@ -26,6 +26,7 @@
 //! Filtering a generated answer afterwards does not correct a context that was
 //! wrongly assembled (ADR-0300).
 
+pub mod adapters;
 pub mod agents;
 #[cfg(feature = "test-fixtures")]
 pub mod conformance;
@@ -35,6 +36,7 @@ pub mod embeddings;
 pub mod fixture;
 mod model;
 pub mod provider;
+pub mod providers;
 mod repository;
 mod service;
 

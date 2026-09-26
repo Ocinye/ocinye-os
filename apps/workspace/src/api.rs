@@ -20,6 +20,19 @@ fn razao(payload: &Value) -> Option<String> {
     (!texto.is_empty()).then(|| texto.to_owned())
 }
 
+/// A `503` do Core, com a aplicação inactiva separada de uma dependência em falta.
+///
+/// A recusa `application_inactive` (ADR-0015) não é uma peça da instalação que
+/// não está de pé: é a Instância a dizer que não tem aquela aplicação activa. O
+/// Workspace mostra-o com o aviso próprio, e não com o de «indisponível».
+fn indisponivel(payload: &Value) -> ApiFailure {
+    if payload.get("code").and_then(Value::as_str) == Some("application_inactive") {
+        ApiFailure::ApplicationInactive
+    } else {
+        ApiFailure::Unavailable(razao(payload))
+    }
+}
+
 /// Reasons a Core call did not return data.
 #[derive(Debug)]
 pub enum ApiFailure {
@@ -47,6 +60,8 @@ pub enum ApiFailure {
     /// falta» — a frase que dizia o que falta era calculada e deitada fora no
     /// caminho. `None` quando o corpo não trouxe nenhuma.
     Unavailable(Option<String>),
+    /// A aplicação a que o pedido pertence não está activa nesta Instância.
+    ApplicationInactive,
     /// O Core percebeu o pedido e recusou-o pelo conteúdo.
     ///
     /// `422`, e só `422`. É a única recusa cuja mensagem foi **escrita para o
@@ -76,6 +91,9 @@ impl std::fmt::Display for ApiFailure {
             Self::Forbidden => f.write_str("you do not have access to this operation"),
             Self::Unavailable(Some(razao)) => f.write_str(razao),
             Self::Unavailable(None) => f.write_str("a dependency of this operation is unavailable"),
+            Self::ApplicationInactive => {
+                f.write_str("this application is not active in this Instance")
+            }
             Self::Conflict(message) | Self::Rejected(message) | Self::Failed(message) => {
                 f.write_str(message)
             }
@@ -114,9 +132,7 @@ pub async fn get<T: DeserializeOwned>(
         // fechado já é informação (ADR-0100). O Core escolhe qual devolve.
         403 => Err(ApiFailure::Forbidden),
         404 => Err(ApiFailure::Denied),
-        503 => Err(ApiFailure::Unavailable(razao(
-            &response.json().await.unwrap_or(Value::Null),
-        ))),
+        503 => Err(indisponivel(&response.json().await.unwrap_or(Value::Null))),
         status => Err(ApiFailure::Failed(format!(
             "the Core returned status {status}"
         ))),
@@ -297,7 +313,7 @@ fn falha_de(status: u16, payload: &Value) -> Option<ApiFailure> {
         401 => Some(ApiFailure::Unauthorised),
         403 => Some(ApiFailure::Forbidden),
         404 => Some(ApiFailure::Denied),
-        503 => Some(ApiFailure::Unavailable(razao(payload))),
+        503 => Some(indisponivel(payload)),
         409 => Some(ApiFailure::Conflict(
             payload
                 .get("message")
@@ -457,9 +473,7 @@ pub async fn bytes(
         401 => Err(ApiFailure::Unauthorised),
         403 => Err(ApiFailure::Forbidden),
         404 => Err(ApiFailure::Denied),
-        503 => Err(ApiFailure::Unavailable(razao(
-            &response.json().await.unwrap_or(Value::Null),
-        ))),
+        503 => Err(indisponivel(&response.json().await.unwrap_or(Value::Null))),
         status => Err(ApiFailure::Failed(format!(
             "the Core returned status {status}"
         ))),

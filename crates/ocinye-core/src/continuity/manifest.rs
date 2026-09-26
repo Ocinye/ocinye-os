@@ -230,6 +230,9 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     ("compute_nodes", Comparacao::Identidades),
     ("node_credentials", Comparacao::Identidades),
     ("ai_agents", Comparacao::Identidades),
+    // Os fornecedores que a Instância ligou (ADR-0310): identidade, endereço,
+    // residência e a referência ao segredo. Configuração institucional estável.
+    ("ai_providers", Comparacao::Identidades),
     (
         "ai_models",
         Comparacao::Fora(
@@ -240,7 +243,10 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
              desaparecer com o nó. Compará-los faria um restore correcto \
              falhar assim que o primeiro nó ligasse. Um modelo que a \
              instituição treine é um artefacto institucional e precisa de \
-             registo próprio, que ainda não existe (ADR-0203)",
+             registo próprio, que ainda não existe (ADR-0203). Os modelos que \
+             a administração regista para um fornecedor (ADR-0310) têm \
+             identificadores estáveis e viajam no mesmo despejo; ficam fora \
+             da comparação só porque partilham a tabela com os dos nós",
         ),
     ),
     ("ai_jobs", Comparacao::Identidades),

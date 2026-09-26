@@ -38,11 +38,47 @@ quereriam IA degradam de forma explícita e informada.
 
 ## Nenhum fornecedor externo automático
 
-O Core **não** contacta OpenAI, Anthropic, Google ou qualquer outro. O tipo
-`ProviderKind::External` existe para representar uma decisão institucional
-futura, mas nunca é seleccionado implicitamente: exige
-`OCINYE_AI_ALLOW_EXTERNAL_PROVIDERS`, registo explícito do fornecedor e um ADR
-próprio que analise confidencialidade e residência de dados.
+O Core **não** contacta OpenAI, Anthropic, Google ou qualquer outro por
+iniciativa própria. Um fornecedor só existe quando a administração o **regista**
+([ADR-0310](../adrs/0310-ai-fabric-provider-registry.md)), e um fornecedor
+`external` só é candidato com `OCINYE_AI_ALLOW_EXTERNAL_PROVIDERS=true`. Sem
+fornecedor registado — que é o estado por omissão —, tudo continua
+`SYSTEM`/`DEGRADED`.
+
+## Fornecedores registados
+
+Uma Instância liga fornecedores em `/api/v1/ai/providers`, com
+`ai.infrastructure.manage`:
+
+| Operação | Rota |
+|---|---|
+| listar | `GET /api/v1/ai/providers` |
+| registar | `POST /api/v1/ai/providers` — `kind`, `label`, `endpoint_url`, `residency`, `secret_id` |
+| activar/desactivar | `PUT /api/v1/ai/providers/{id}/enabled` — `{ "enabled": bool }` |
+| remover (e os seus modelos) | `DELETE /api/v1/ai/providers/{id}` |
+| registar um modelo | `POST /api/v1/ai/providers/{id}/models` — `model_name`, `version`, `capabilities`, `context_limit`, `max_classification` |
+
+- **Tipos:** `openai`, `mistral` e `openai_compatible` (Ollama, vLLM, llama.cpp)
+  falam *chat completions*; `anthropic` fala a Messages API; `google` a Gemini API.
+- **Residência:** `local` (os dados ficam em infraestrutura da Instância) ou
+  `external` (exige `https`, e nasce com o tecto `PUBLIC`).
+- **Credencial:** por referência a um segredo `ai_gateway` da
+  [Autoridade de Segredos](../security/secrets-authority.md). O Gateway abre-o
+  para o pedido que o precisa e larga-o; nenhuma rota o devolve. Revogar o
+  segredo degrada o Prompt com `AI_PROVIDER_UNHEALTHY`, sem chamada.
+- **Hot-plug:** o Router lê o registo a cada pedido. Registar um modelo, ou
+  desactivar o fornecedor, muda a resposta seguinte sem reinício.
+- **Saúde:** o resultado da última chamada (`healthy`, `unreachable`,
+  `refused`) fica visível; é observação, não entrada do roteamento.
+
+Exemplo, para um Ollama no próprio host:
+
+```bash
+curl -X POST https://api.exemplo/api/v1/ai/providers \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"kind":"openai_compatible","label":"Ollama","residency":"local",
+       "endpoint_url":"http://127.0.0.1:11434/v1"}'
+```
 
 ## RAG permission-aware por construção
 
@@ -86,10 +122,11 @@ reescrever a aplicação.
 
 ## Não implementado
 
-- Inferência propriamente dita — não há nada para onde a encaminhar.
-- Geração de embeddings, e portanto pesquisa semântica.
-- Agentes.
-- Adaptadores para fornecedores externos.
+- Inferência numa instalação sem fornecedor registado nem nó — que é o estado
+  por omissão, e o da produção enquanto ninguém registar um.
+- Um fornecedor de embeddings real integrado.
+- Roteamento por custo, latência ou classificação entre vários candidatos (Parte 8).
+- Adaptadores de embeddings para fornecedores registados.
 
 ## Agentes
 

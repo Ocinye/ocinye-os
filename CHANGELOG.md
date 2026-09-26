@@ -7,6 +7,22 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Generalização, Parte 7: o tecido de IA — 2026-09-26
+
+- **Fornecedores registados pela Instância**
+  ([ADR-0310](docs/adrs/0310-ai-fabric-provider-registry.md)): `openai`,
+  `anthropic`, `google`, `mistral` e `openai_compatible`, em
+  `/api/v1/ai/providers` (migração 0056), com a credencial por referência à
+  Autoridade de Segredos e residência `local` ou `external`.
+- **Os modelos de um fornecedor entram no registo comum** e o Model Router
+  escolhe entre eles e os dos nós por capacidade, a cada pedido; o Prompt
+  despacha para o adaptador do fornecedor e responde como modelo.
+- **Três adaptadores HTTP** sobre o contrato canónico: chat completions, a
+  Messages API da Anthropic e a Gemini API, com os três blocos separados,
+  erros reduzidos a razões fechadas, resposta limitada e sem redireccionamentos.
+- Um externo só com `OCINYE_AI_ALLOW_EXTERNAL_PROVIDERS=true`, só por `https`, e
+  com o tecto `PUBLIC` por omissão. `ai_providers` entra na continuidade.
+
 ### Generalização, Parte 6: a Autoridade de Segredos — 2026-09-26
 
 - **Credenciais de fornecedores e integrações** guardadas pelo Core
