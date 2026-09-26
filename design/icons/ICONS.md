@@ -65,3 +65,9 @@ que o dossier e `static/icons.svg` continuem a descrever o mesmo conjunto
 | `oc-reply` | `0 0 16 16` | acção Responder |
 | `oc-archive` | `0 0 16 16` | pasta Arquivados |
 | `oc-trash` | `0 0 16 16` | pasta Lixo |
+
+## Acrescentado com o Gestor de Aplicações
+
+| `id` | `viewBox` | Uso |
+|---|---|---|
+| `oc-apps` | `0 0 16 16` | lançador de aplicações (barra lateral) |
