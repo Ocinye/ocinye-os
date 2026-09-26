@@ -54,9 +54,16 @@ COPY . .
 # máquina com pouca memória para os núcleos passa o tempo a trocar memória;
 # `OCINYE_BUILD_JOBS` limita-os. Não se chama `CARGO_BUILD_JOBS`: um ARG é
 # também variável de ambiente do RUN, e o cargo recusaria o valor vazio.
+#
+# `OCINYE_BUILD_FAST=1` é para **pacotes de prova** (instalação, actualização,
+# restauro): o mesmo código, sem LTO e com 16 unidades de código — minutos em
+# vez de horas numa máquina modesta, e um binário mais lento. Nunca num release
+# de produção; o pacote regista-o em `BUILD`.
 ARG OCINYE_BUILD_JOBS=
+ARG OCINYE_BUILD_FAST=
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,target=/build/target,id=ocinye-target,sharing=locked \
+    --mount=type=cache,target=/build/target,id=ocinye-target${OCINYE_BUILD_FAST:+-fast},sharing=locked \
+    ${OCINYE_BUILD_FAST:+env CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16} \
     cargo build --release --locked ${OCINYE_BUILD_JOBS:+--jobs "$OCINYE_BUILD_JOBS"} \
       --bin ocinye-core-server --bin ocinye-workspace --bin ocinye-worker \
       --bin ocinye-conversion-runner --bin ocinye-convert \

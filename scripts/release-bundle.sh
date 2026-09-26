@@ -19,17 +19,19 @@
 # prova-se com uma assinatura, que é a Parte 17 (release). Até lá, o pacote viaja
 # por um canal em que se confia, e as somas publicam-se à parte.
 #
-# Uso: scripts/release-bundle.sh [--commit SHA] [--platform linux/amd64|linux/arm64] [--out DIR]
+# Uso: scripts/release-bundle.sh [--commit SHA] [--platform linux/amd64|linux/arm64] [--out DIR] [--proof]
 set -euo pipefail
 
 COMMIT="HEAD"
 PLATAFORMA=""
 SAIDA="dist"
+PROVA=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --commit) COMMIT="$2"; shift 2 ;;
         --platform) PLATAFORMA="$2"; shift 2 ;;
         --out) SAIDA="$2"; shift 2 ;;
+        --proof) PROVA=1; shift ;;
         *) echo "opção desconhecida: $1" >&2; exit 2 ;;
     esac
 done
@@ -50,6 +52,9 @@ git archive --format=tar.gz --output="$PACOTE/source.tar.gz" "$SHA_LONGO"
 git show "$SHA_LONGO:install/ocinye" > "$PACOTE/install/ocinye"
 chmod 755 "$PACOTE/install/ocinye"
 printf '%s\n' "$SHA" > "$PACOTE/RELEASE"
+# Um pacote de prova diz que o é: mesmo código, binários sem LTO.
+if [ -n "$PROVA" ]; then echo "proof (sem LTO; nunca para produção)" > "$PACOTE/BUILD"
+else echo "release" > "$PACOTE/BUILD"; fi
 
 # As imagens constroem-se a partir da mesma árvore extraída, e não da pasta de
 # trabalho: o que vai no pacote é o commit.
@@ -60,6 +65,7 @@ construir() {  # imagem  stage  binário
     docker build ${PLATAFORMA:+--platform "$PLATAFORMA"} \
         -f "$TRABALHO/infra/docker/Dockerfile" --target "$2" --build-arg BIN="$3" \
         --build-arg OCINYE_BUILD_JOBS="${OCINYE_BUILD_JOBS:-}" \
+        --build-arg OCINYE_BUILD_FAST="$PROVA" \
         -t "ocinye/ocinye-$1:$SHA" "$TRABALHO"
 }
 construir core-server       runtime           ocinye-core-server
