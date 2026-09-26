@@ -157,8 +157,8 @@ Onde o material da instituição vive, e o que o acompanha.
 - [ADR-0204](0204-institutional-files-and-folders.md) — O ficheiro institucional é a autoridade sobre os bytes
 - [ADR-0205](0205-content-extraction-and-lexical-body-search.md) — Extracção de conteúdo e pesquisa lexical do corpo
 - [ADR-0206](0206-embeddings-and-hybrid-retrieval.md) — Embeddings versionados e recuperação híbrida
-- [ADR-0207](0207-maintained-object-store.md) — Um armazenamento de objectos mantido: Garage
 - [ADR-0207](0207-personal-files-and-storage.md) — Ficheiros pessoais: todo o membro tem um espaço próprio
+- [ADR-0208](0208-maintained-object-store.md) — Um armazenamento de objectos mantido: Garage
 
 ### 0300–0399 · IA, Controlo Agentic e Inferência
 
@@ -273,7 +273,6 @@ preencher.
 | [0204](0204-institutional-files-and-folders.md) | O ficheiro institucional é a autoridade sobre os bytes | Data | `FOUNDATIONAL` | Accepted |
 | [0205](0205-content-extraction-and-lexical-body-search.md) | Extracção de conteúdo e pesquisa lexical do corpo | Knowledge | `FOUNDATIONAL` | Accepted |
 | [0206](0206-embeddings-and-hybrid-retrieval.md) | Embeddings versionados e recuperação híbrida | Knowledge | `FOUNDATIONAL` | Accepted |
-| [0207](0207-maintained-object-store.md) | Um armazenamento de objectos mantido: Garage | Data | `HIGH` | Proposed |
 | [0300](0300-ai-gateway.md) | AI Gateway orientado a capacidades | AI | `HIGH` | Accepted |
 | [0301](0301-agentic-control-plane.md) | O Agentic Control Plane: Main Agent, Runtime, Registry | Agentic | `HIGH` | Accepted |
 | [0302](0302-agent-access-intersection.md) | Effective Agent Access é uma intersecção | Agentic | `HIGH` | Accepted |
