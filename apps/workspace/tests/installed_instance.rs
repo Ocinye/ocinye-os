@@ -164,7 +164,12 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
         .expect("Chrome");
     tokio::spawn(async move { while handler.next().await.is_some() {} });
 
+    // Tempos de cada passo, para a certificação de hardware (Parte 15): quanto
+    // espera uma pessoa, medido no browser, e não um pedido isolado.
+    let mut tempos: Vec<(&str, u128)> = Vec::new();
+
     // ── Entrar com a credencial temporária ──────────────────────────────
+    let t = Instant::now();
     let page = browser
         .new_page(format!("{base}/login"))
         .await
@@ -173,6 +178,7 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
     escrever(&page, "input[name=password]", &credencial).await;
     submeter(&page, "form").await;
     esperar_por(&page, "Defina a sua palavra-passe").await;
+    tempos.push(("entrar", t.elapsed().as_millis()));
 
     let nova = format!("Instalada-{}-2026!", std::process::id());
     escrever(&page, "#new-pass", &nova).await;
@@ -235,8 +241,10 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
     );
 
     // ── Ficheiros ───────────────────────────────────────────────────────
+    let t = Instant::now();
     page.goto(format!("{base}/files")).await.expect("ficheiros");
     esperar_por(&page, "Ficheiros").await;
+    tempos.push(("abrir_ficheiros", t.elapsed().as_millis()));
 
     // ── Um ficheiro, pelo carregamento de «Meus ficheiros» ──────────────
     page.evaluate(
@@ -263,6 +271,7 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
     }
 
     // ── Uma nota, guardada pelo Core ────────────────────────────────────
+    let t = Instant::now();
     page.goto(format!("{base}/notes")).await.expect("notas");
     esperar_por(&page, "Notas").await;
     submeter(&page, "form[action=\"/notes\"]").await;
@@ -272,8 +281,10 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
     );
     escrever(&page, "[data-oc-notes-title]", "Primeira nota da Instância").await;
     esperar_por(&page, "Guardado").await;
+    tempos.push(("criar_e_guardar_nota", t.elapsed().as_millis()));
 
     // ── O Prompt, sem fornecedor ────────────────────────────────────────
+    let t = Instant::now();
     page.goto(format!("{base}/ai/prompt"))
         .await
         .expect("prompt");
@@ -293,6 +304,14 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
         condicao(&page, "!!document.querySelector('.oc-turn--ocinye')").await,
         "o Prompt não respondeu"
     );
+    tempos.push(("prompt_responde", t.elapsed().as_millis()));
+    if let Ok(ficheiro) = std::env::var("OCINYE_INSTALLED_TIMINGS_FILE") {
+        let linhas: String = tempos
+            .iter()
+            .map(|(passo, ms)| format!("{passo} {ms}\n"))
+            .collect();
+        std::fs::write(ficheiro, linhas).expect("guardar os tempos");
+    }
     let turno: String = page
         .evaluate("document.querySelector('.oc-turn--ocinye').innerText")
         .await
