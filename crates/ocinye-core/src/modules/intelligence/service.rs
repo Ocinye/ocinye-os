@@ -69,8 +69,9 @@ pub async fn resolve_capability(
         .filter(|model| model.serves(capability))
         .filter(|model| {
             // An external provider is only ever selected when the institution
-            // has explicitly enabled them (ADR-0300).
-            model.provider_kind == "ocinye_node" || config.allow_external_providers
+            // has explicitly enabled them (ADR-0300). A `local` provider runs on
+            // infrastructure the Instance controls, like a node (ADR-0310).
+            model.provider_kind != "external" || config.allow_external_providers
         })
         .collect();
 

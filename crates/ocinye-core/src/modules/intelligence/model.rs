@@ -18,6 +18,8 @@ pub struct RegisteredModel {
     pub provider_name: String,
     /// Node hosting it, when node-hosted.
     pub node_id: Option<Uuid>,
+    /// The provider that runs it, for a provider model (ADR-0310).
+    pub provider_id: Option<Uuid>,
     /// Model name.
     pub model_name: String,
     /// Version.

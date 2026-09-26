@@ -403,8 +403,9 @@ async fn inference_report(
 ) -> CoreResult<SystemCapabilityReport> {
     let serving: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM ai_models m
-           JOIN compute_nodes n ON n.id = m.node_id
-          WHERE n.organisation_id = $2
+           LEFT JOIN compute_nodes n ON n.id = m.node_id
+           LEFT JOIN ai_providers p ON p.id = m.provider_id
+          WHERE (n.organisation_id = $2 OR (p.organisation_id = $2 AND p.enabled))
             AND m.enabled = true
             AND m.status = 'available'
             AND m.capabilities ? $1",
@@ -428,8 +429,9 @@ async fn inference_report(
     let mapped = config.ai.capability_map.contains_key(&ai_capability);
     let total: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM ai_models m
-           JOIN compute_nodes n ON n.id = m.node_id
-          WHERE n.organisation_id = $1",
+           LEFT JOIN compute_nodes n ON n.id = m.node_id
+           LEFT JOIN ai_providers p ON p.id = m.provider_id
+          WHERE n.organisation_id = $1 OR (p.organisation_id = $1 AND p.enabled)",
     )
     .bind(organisation_id)
     .fetch_one(pool)
