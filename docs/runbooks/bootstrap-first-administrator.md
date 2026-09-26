@@ -16,11 +16,14 @@
 Numa base **sem Instância**, o comando cria-a primeiro — com o nome dado em
 `--instance-name` (ou `OCINYE_INSTANCE_NAME`), e o slug de `OCINYE_INSTANCE_SLUG`
 ou, se não estiver definido, derivado do nome
-([Instância](../instance/README.md)). Numa instalação que já tem Instância, adopta-a:
+([Instância](../instance/README.md)). Criá-la exige escolher o **perfil** —
+`--profile research|business|education|personal`, ou `OCINYE_INSTANCE_PROFILE` —,
+que decide as aplicações activas e se nasce com unidades. Numa instalação que já
+tem Instância, adopta-a:
 
 ```bash
 ocinye-core-server bootstrap-admin \
-  --instance-name "Cooperativa Exemplo" \
+  --instance-name "Cooperativa Exemplo" --profile business \
   --name        "Ana Pereira"           --email       ana@cooperativa.exemplo \
   --admin-name  "Ana Pereira (Admin)"   --admin-email ana.admin@cooperativa.exemplo
 ```

@@ -1,6 +1,6 @@
 //! Organisation application layer.
 
-use ocinye_contracts::{Classification, UnitRole};
+use ocinye_contracts::{Classification, InstanceProfile, UnitRole};
 use ocinye_domain::identifiers::{unit_code_stem, validate_unit_code};
 use ocinye_domain::policy::{authorize, Action, ResourceContext, ResourceKind};
 use ocinye_domain::Principal;
@@ -125,7 +125,8 @@ pub async fn bootstrap_organisation(
 /// The order is fixed, and the Core never guesses:
 ///
 /// 1. an explicit slug → adopt that organisation, or create it (named `name`,
-///    or after its slug) when the database has no Instance yet;
+///    or after its slug, with the given `profile`) when the database has no
+///    Instance yet. Creating needs a profile: there is no default (ADR-0014);
 /// 2. otherwise the Instance recorded in `instance_identity`;
 /// 3. otherwise the only organisation in the database, if there is exactly one;
 /// 4. otherwise refuse — an empty database needs an Instance to be named, and a
@@ -143,6 +144,7 @@ pub async fn resolve_instance(
     pool: &PgPool,
     explicit_slug: Option<&str>,
     name: Option<&str>,
+    profile: Option<InstanceProfile>,
     ids: &CorrelationIds,
 ) -> CoreResult<Organisation> {
     let recorded = repo::recorded_instance(pool).await?;
@@ -156,10 +158,32 @@ pub async fn resolve_instance(
             )));
         }
         (_, Some(recorded)) => recorded,
-        (Some(slug), None) => {
-            let fallback = default_instance_name(slug);
-            bootstrap_organisation(pool, slug, name.unwrap_or(&fallback), ids).await?
-        }
+        (Some(slug), None) => match repo::find_organisation_by_slug(pool, slug).await? {
+            Some(existing) => existing,
+            None => {
+                let Some(profile) = profile else {
+                    return Err(CoreError::Configuration(
+                        "criar uma instância exige um perfil: research, business, \
+                         education ou personal (OCINYE_INSTANCE_PROFILE, ou --profile)."
+                            .to_owned(),
+                    ));
+                };
+                let fallback = default_instance_name(slug);
+                let created =
+                    bootstrap_organisation(pool, slug, name.unwrap_or(&fallback), ids).await?;
+                sqlx::query("UPDATE organisations SET profile = $2 WHERE id = $1")
+                    .bind(created.id)
+                    .bind(profile.as_str())
+                    .execute(pool)
+                    .await?;
+                // A estrutura inicial é do perfil, e nasce com a Instância
+                // (ADR-0014 §7) — venha ela do bootstrap ou do arranque do Core.
+                if profile.seeds_initial_units() {
+                    seed_initial_units(pool, created.id, ids).await?;
+                }
+                created
+            }
+        },
         (None, None) => {
             let mut existing = repo::first_organisations(pool).await?;
             match existing.len() {

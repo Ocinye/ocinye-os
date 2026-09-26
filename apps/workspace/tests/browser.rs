@@ -154,6 +154,7 @@ enum OrigemDaInstancia {
     Nova {
         slug: &'static str,
         nome: &'static str,
+        perfil: ocinye_contracts::InstanceProfile,
     },
 }
 
@@ -316,12 +317,13 @@ impl Harness {
         chrome: &str,
         slug: &'static str,
         nome: &'static str,
+        perfil: ocinye_contracts::InstanceProfile,
     ) -> Option<Self> {
         Self::levantar(
             database_url,
             chrome,
             &format!("{}/static", env!("CARGO_MANIFEST_DIR")),
-            OrigemDaInstancia::Nova { slug, nome },
+            OrigemDaInstancia::Nova { slug, nome, perfil },
         )
         .await
     }
@@ -359,11 +361,12 @@ impl Harness {
             .fetch_one(&pool)
             .await
             .expect("organização"),
-            OrigemDaInstancia::Nova { slug, nome } => {
+            OrigemDaInstancia::Nova { slug, nome, perfil } => {
                 ocinye_core::modules::organisation::resolve_instance(
                     &pool,
                     Some(slug),
                     Some(nome),
+                    Some(perfil),
                     &ocinye_observability::CorrelationIds::generate(),
                 )
                 .await
@@ -6167,6 +6170,7 @@ async fn uma_instancia_nova_abre_com_o_seu_nome_e_as_suas_aplicacoes() {
         &chrome,
         "cooperativa-exemplo",
         "Cooperativa Exemplo",
+        ocinye_contracts::InstanceProfile::Business,
     )
     .await
     .expect("harness");
@@ -6260,6 +6264,129 @@ async fn uma_instancia_nova_abre_com_o_seu_nome_e_as_suas_aplicacoes() {
     // E uma aplicação determinística funciona: as Notas abrem.
     let notas = harness.open("/notes").await;
     esperar_por(&notas, "Notas").await;
+
+    drop(harness);
+    apagar_base_descartavel(&url, &nome_da_base).await;
+}
+
+/// Uma instância de empresa nasce sem os módulos científicos, e desactivar uma
+/// aplicação esconde-a sem a apagar nem tocar no Core (ADR-0014, Parte 2).
+#[tokio::test]
+async fn desactivar_uma_aplicacao_esconde_a_e_reactivar_devolve_a_intacta() {
+    let Ok(url) = std::env::var("OCINYE_TEST_DATABASE_URL") else {
+        eprintln!("skipping: OCINYE_TEST_DATABASE_URL is not set");
+        return;
+    };
+    let Some(chrome) = chrome_path() else {
+        assert!(
+            std::env::var("CI").is_err(),
+            "não há Chrome, e isto é a CI: as viagens de browser não podem ser saltadas aqui"
+        );
+        eprintln!("skipping: no Chrome found; set OCINYE_TEST_CHROME");
+        return;
+    };
+    let (propria, nome_da_base) = base_descartavel(&url).await;
+    let harness = Harness::start_numa_instancia_nova(
+        &propria,
+        &chrome,
+        "empresa-exemplo",
+        "Empresa Exemplo",
+        ocinye_contracts::InstanceProfile::Business,
+    )
+    .await
+    .expect("harness");
+
+    let (_, cred) = harness.criar_privilegiada_enrolada().await;
+    let page = harness.open("/login").await;
+    set_field(&page, "input[name=email]", &cred.email).await;
+    set_field(&page, "input[name=password]", &cred.password).await;
+    submit(&page, "form").await;
+    harness.completar_desafio_mfa(&page).await;
+
+    // ── O perfil de empresa: sem módulos científicos, com Ficheiros ──────
+    let page = harness.open("/").await;
+    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    wait_visible(&page, r#"[data-oc="launcher"]"#).await;
+    // Projectos vem no perfil, mas aparece por relevância de investigação, e um
+    // administrador sem papel de investigação não o tem — os papéis de membro
+    // ainda têm nomes de investigação (arquitectura-alvo, Perfis).
+    for rota in ["/notes", "/files", "/calendar"] {
+        assert!(
+            esperar_ate_condicao(&page, &celula_visivel(rota)).await,
+            "o perfil de empresa devia trazer {rota}"
+        );
+    }
+    for rota in ["/ideas", "/datasets", "/bibliography"] {
+        assert!(
+            esperar_ate_condicao(
+                &page,
+                &format!(r#"!document.querySelector('[data-oc="launcher-item"][href="{rota}"]')"#),
+            )
+            .await,
+            "o perfil de empresa não traz {rota}"
+        );
+    }
+
+    // ── Uma nota, antes de desactivar ────────────────────────────────────
+    let notas = harness.open("/notes").await;
+    esperar_por(&notas, "Notas").await;
+    submit(&notas, "form[action=\"/notes\"]").await;
+    wait_until_left(&notas, "/notes").await;
+    let titulo = unique_title("Plano trimestral");
+    set_field(&notas, "[data-oc-notes-title]", &titulo).await;
+    esperar_por(&notas, "Guardado").await;
+
+    // ── Desactivar Notas em Administração › Instância ───────────────────
+    let admin = harness.open("/admin/instance").await;
+    wait_visible(&admin, r#"[data-oc="instance-admin"]"#).await;
+    escolher(&admin, r#"select[name="app:notes"]"#, "inactive").await;
+    clicar(&admin, r#"[data-oc="instance-save"]"#).await;
+    assert!(
+        esperar_ate_condicao(&admin, "location.search.includes('ok=1')").await,
+        "a configuração da instância não foi guardada"
+    );
+
+    let page = harness.open("/").await;
+    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    wait_visible(&page, r#"[data-oc="launcher"]"#).await;
+    assert!(
+        esperar_ate_condicao(
+            &page,
+            r#"!document.querySelector('[data-oc="launcher-item"][href="/notes"]')"#,
+        )
+        .await,
+        "uma aplicação desactivada não se oferece no lançador"
+    );
+    let rota = harness.open("/notes").await;
+    wait_visible(&rota, r#"[data-oc="app-inactive"]"#).await;
+
+    // O Core continua saudável, e as outras aplicações também.
+    let pronto = reqwest::get(format!("{}/ready", harness.core_url))
+        .await
+        .expect("o Core responde");
+    assert!(
+        pronto.status().is_success(),
+        "o Core devia continuar pronto"
+    );
+    let ficheiros = harness.open("/files").await;
+    assert!(
+        esperar_ate_condicao(
+            &ficheiros,
+            r#"!document.querySelector('[data-oc="app-inactive"]')"#
+        )
+        .await,
+        "desactivar Notas não pode afectar Ficheiros"
+    );
+
+    // ── Reactivar: a nota volta, intacta ────────────────────────────────
+    let admin = harness.open("/admin/instance").await;
+    wait_visible(&admin, r#"[data-oc="instance-admin"]"#).await;
+    escolher(&admin, r#"select[name="app:notes"]"#, "profile").await;
+    clicar(&admin, r#"[data-oc="instance-save"]"#).await;
+    assert!(esperar_ate_condicao(&admin, "location.search.includes('ok=1')").await);
+
+    let notas = harness.open("/notes").await;
+    esperar_por(&notas, &titulo).await;
 
     drop(harness);
     apagar_base_descartavel(&url, &nome_da_base).await;

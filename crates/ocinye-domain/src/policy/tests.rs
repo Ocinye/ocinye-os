@@ -512,3 +512,47 @@ fn criar_nao_depende_do_tipo_de_recurso() {
         }
     }
 }
+
+// ── Relevância de módulo: Ficheiros é do sistema operativo (ADR-0014 §6) ──
+
+/// Todo o membro interno tem os seus ficheiros, com qualquer papel; um
+/// colaborador externo, sozinho, não. Os módulos de investigação continuam
+/// a depender de papéis de investigação.
+#[test]
+fn ficheiros_e_relevante_a_todo_o_membro_interno() {
+    use super::relevance::{is_relevant, Module};
+
+    for role in TechnicalRole::all() {
+        let p = with_role(principal(), role);
+        let esperado = role != TechnicalRole::ExternalCollaborator;
+        assert_eq!(
+            is_relevant(&p, Module::Files),
+            esperado,
+            "Ficheiros para {role:?}"
+        );
+    }
+
+    // Um externo que também tenha um papel interno é um membro interno.
+    let misto = with_role(
+        with_role(principal(), TechnicalRole::ExternalCollaborator),
+        TechnicalRole::Collaborator,
+    );
+    assert!(is_relevant(&misto, Module::Files));
+
+    // Sem papel nenhum não há espaço de trabalho — falha fechado.
+    assert!(!is_relevant(&principal(), Module::Files));
+
+    // Os módulos de investigação não mudaram: um colaborador não os tem.
+    let colaborador = with_role(principal(), TechnicalRole::Collaborator);
+    for module in [
+        Module::Knowledge,
+        Module::Bibliography,
+        Module::Datasets,
+        Module::Ideas,
+    ] {
+        assert!(
+            !is_relevant(&colaborador, module),
+            "{module:?} para um colaborador"
+        );
+    }
+}

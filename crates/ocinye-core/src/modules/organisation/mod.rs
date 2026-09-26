@@ -16,6 +16,12 @@ mod model;
 mod repository;
 mod service;
 
+pub mod applications;
+
+pub use applications::{
+    application_states, inactive_applications, instance_applications, profile_of,
+    set_application_active, set_profile, ApplicationState, InstanceApplications,
+};
 pub use model::{Organisation, Unit, UnitMember, UnitStatus};
 pub use service::{
     add_unit_member, archive_unit, bootstrap_organisation, create_unit, default_instance_name,

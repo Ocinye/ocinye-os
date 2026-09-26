@@ -99,8 +99,30 @@ ficha do Prompt por não haver fornecedor (briefing §54).
   ficha para um ecrã sem autorização — as fixadas são filtradas pela mesma
   visibilidade do lançador.
 
-## O que ainda não existe (fatia C)
+## Activação por Instância e perfis
 
-- Reordenar por arrastar; integração em Definições (repor fixações); E2E de
-  browser, matriz de browsers e capturas comparadas com a direcção visual
-  aprovada; a invariante permanente no `CLAUDE.md`.
+Desde a [ADR-0014](../adrs/0014-instance-profiles-and-application-activation.md),
+uma aplicação também tem de estar **activa na Instância**. A visibilidade é
+`activa ∧ autorizada ∧ relevante`:
+
+- O catálogo de identificadores vive em `ocinye-contracts` (`ApplicationId`), para
+  o Core validar o que guarda; um teste do registo exige que os dois nomeiem as
+  mesmas aplicações.
+- **Essenciais** — Home, O Meu Trabalho, Ficheiros, Meus Recursos, Administração,
+  Definições, Ajuda — estão sempre activas; o Core recusa desactivá-las.
+- **Opcionais** seguem o **perfil** da Instância (`research`, `business`,
+  `education`, `personal`), salvo decisão explícita em `instance_applications`.
+- Uma aplicação inactiva sai do lançador, da barra, da paleta e do «+ Criar», e a
+  sua rota mostra «Esta aplicação não está activa nesta instância». Os dados ficam;
+  reactivar devolve-a tal como estava. `Desactivar ≠ desinstalar`.
+- Governa-se em **Administração › Instância** (`organisation.manage`), e o Core
+  expõe `GET /api/v1/instance/applications`, `PUT /api/v1/instance/profile` e
+  `PUT /api/v1/instance/applications/{id}`. O `GET /api/v1/me` traz
+  `inactive_applications`.
+
+## O que ainda não existe
+
+- A API de uma aplicação inactiva ainda responde: esconder é do Workspace, e a
+  recusa no Core é da fronteira Core/aplicações (Parte 3 do programa).
+- Um **manifesto** de aplicação versionado — capacidades pedidas, recursos,
+  rede, ciclo de vida, saúde — que substitua o registo estático (Parte 4).

@@ -7,6 +7,26 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Generalização, Parte 2: perfis e activação de aplicações — 2026-09-26
+
+A investigação passa a ser configuração, e não a identidade do sistema
+([ADR-0014](docs/adrs/0014-instance-profiles-and-application-activation.md)).
+
+- **Perfis de Instância** — `research`, `business`, `education`, `personal` —
+  decidem que aplicações opcionais começam activas e se a Instância nasce com
+  unidades. Nunca concedem autoridade; mudam-se depois da instalação sem apagar
+  nada. Criar uma Instância exige escolher o perfil (`--profile`,
+  `OCINYE_INSTANCE_PROFILE`). A Ocinye é `research`, com tudo como estava.
+- **Activação de aplicações por Instância** (`instance_applications`, migração
+  0053): as essenciais não se desactivam; uma opcional inactiva sai do lançador,
+  da barra, da paleta e do «+ Criar», e a sua rota diz que não está activa. Os
+  dados ficam; reactivar devolve-a intacta. Governa-se em **Administração ›
+  Instância**.
+- **O catálogo de aplicações passa aos contratos** (`ApplicationId`), partilhado
+  pelo Core e pelo registo do Workspace, com um teste que exige que concordem.
+- **Ficheiros deixa de depender de papéis de investigação**: todo o membro
+  interno o encontra no lançador.
+
 ### Generalização, Parte 1: a Instância — 2026-09-26
 
 O Ocinye OS deixa de assumir que existe para uma organização. Cada instalação

@@ -8,6 +8,7 @@
 
 use std::borrow::Cow;
 
+use ocinye_contracts::InstanceProfile;
 use ocinye_core::modules::organisation;
 use ocinye_core::CoreError;
 use ocinye_observability::CorrelationIds;
@@ -115,7 +116,7 @@ async fn uma_base_vazia_sem_nome_de_instancia_recusa_adivinhar() {
     };
     base.migrar_tudo().await;
 
-    let resultado = organisation::resolve_instance(&base.pool, None, None, &ids()).await;
+    let resultado = organisation::resolve_instance(&base.pool, None, None, None, &ids()).await;
     assert!(
         matches!(resultado, Err(CoreError::Configuration(_))),
         "sem instância e sem configuração, o Core tem de recusar; veio {resultado:?}"
@@ -135,6 +136,7 @@ async fn uma_instalacao_nova_cria_a_sua_instancia_com_o_nome_dado() {
         &base.pool,
         Some("universidade-exemplo"),
         Some("Universidade Exemplo"),
+        Some(InstanceProfile::Education),
         &ids(),
     )
     .await
@@ -144,7 +146,7 @@ async fn uma_instalacao_nova_cria_a_sua_instancia_com_o_nome_dado() {
     assert_eq!(registada(&base.pool).await, Some(criada.id));
 
     // O arranque seguinte, já sem configuração, encontra a mesma.
-    let depois = organisation::resolve_instance(&base.pool, None, None, &ids())
+    let depois = organisation::resolve_instance(&base.pool, None, None, None, &ids())
         .await
         .expect("resolver a registada");
     assert_eq!(depois.id, criada.id);
@@ -158,9 +160,15 @@ async fn so_com_o_slug_o_nome_e_legivel_e_nao_o_slug() {
     };
     base.migrar_tudo().await;
 
-    let criada = organisation::resolve_instance(&base.pool, Some("mondrive-lda"), None, &ids())
-        .await
-        .expect("criar a instância");
+    let criada = organisation::resolve_instance(
+        &base.pool,
+        Some("mondrive-lda"),
+        None,
+        Some(InstanceProfile::Business),
+        &ids(),
+    )
+    .await
+    .expect("criar a instância");
     assert_eq!(criada.name, "Mondrive Lda");
     base.apagar().await;
 }
@@ -171,11 +179,24 @@ async fn a_configuracao_nao_muda_a_instancia_de_uma_instalacao() {
         return;
     };
     base.migrar_tudo().await;
-    let primeira = organisation::resolve_instance(&base.pool, Some("primeira"), None, &ids())
-        .await
-        .expect("primeira");
+    let primeira = organisation::resolve_instance(
+        &base.pool,
+        Some("primeira"),
+        None,
+        Some(InstanceProfile::Personal),
+        &ids(),
+    )
+    .await
+    .expect("primeira");
 
-    let resultado = organisation::resolve_instance(&base.pool, Some("outra"), None, &ids()).await;
+    let resultado = organisation::resolve_instance(
+        &base.pool,
+        Some("outra"),
+        None,
+        Some(InstanceProfile::Personal),
+        &ids(),
+    )
+    .await;
     assert!(
         matches!(resultado, Err(CoreError::Configuration(_))),
         "outro slug numa instalação registada tem de ser recusado; veio {resultado:?}"
@@ -198,7 +219,7 @@ async fn varias_organizacoes_sem_registo_nem_configuracao_recusam() {
     organizacao(&base.pool, "uma").await;
     organizacao(&base.pool, "duas").await;
 
-    let resultado = organisation::resolve_instance(&base.pool, None, None, &ids()).await;
+    let resultado = organisation::resolve_instance(&base.pool, None, None, None, &ids()).await;
     assert!(matches!(resultado, Err(CoreError::Configuration(_))));
     assert_eq!(registada(&base.pool).await, None);
     base.apagar().await;
@@ -293,7 +314,7 @@ async fn a_instalacao_existente_passa_a_primeira_instancia_sem_perdas() {
     assert_eq!(dono, org, "nenhum membro fica órfão");
 
     // E o Core, a arrancar sem configuração, serve essa instância.
-    let resolvida = organisation::resolve_instance(pool, None, None, &ids())
+    let resolvida = organisation::resolve_instance(pool, None, None, None, &ids())
         .await
         .expect("resolver");
     assert_eq!(resolvida.id, org);

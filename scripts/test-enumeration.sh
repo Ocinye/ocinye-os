@@ -239,7 +239,10 @@ suites() {
 # 123 → 124 em 2026-09-26: a instância nova (Parte 1 da generalização) — uma
 # instância que não é a Ocinye, criada de raiz numa base própria pelo caminho do
 # bootstrap, abre a Home com o seu nome e as suas aplicações. Uma viagem, uma marca.
-viagens-de-browser|124|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|124
+# 124 → 125 em 2026-09-26: perfis e activação (Parte 2) — uma instância de empresa
+# nasce sem módulos científicos; desactivar Notas esconde-a sem tocar no Core nem
+# nas outras aplicações, e reactivar devolve a nota escrita antes. Uma viagem.
+viagens-de-browser|125|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|125
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

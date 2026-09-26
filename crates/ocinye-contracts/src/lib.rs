@@ -21,6 +21,7 @@
 
 pub mod access;
 pub mod agentic;
+pub mod application;
 pub mod avatar;
 pub mod bibliography;
 pub mod calendar;
@@ -43,6 +44,9 @@ pub mod temporal;
 
 pub use access::{AccountStatus, CredentialKind, CredentialState, Permission, Scope, SessionState};
 pub use agentic::{AgenticExposure, OperationId, TrustBoundary};
+pub use application::{
+    ApplicationClass, ApplicationId, InstanceProfile, UnknownApplication, UnknownProfile,
+};
 pub use avatar::{AvatarChoice, AVATAR_PRESETS};
 pub use classification::Classification;
 pub use compute::{ComputeNodeStatus, ComputeStatus, InstitutionalControl, JobStatus, NodeKind};

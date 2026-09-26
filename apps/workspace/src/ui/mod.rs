@@ -147,11 +147,17 @@ mod render_tests {
     use crate::ui::shell::{Screen, Viewer};
     use serde_json::json;
 
+    /// O membro que pode tudo, para testes de outros módulos.
+    pub(crate) fn viewer_completo() -> Viewer {
+        viewer()
+    }
+
     /// Um membro que pode tudo, para os testes que verificam a estrutura da
     /// shell em vez da filtragem por permissão.
     fn viewer() -> Viewer {
         Viewer {
             pinned: crate::ui::apps::default_pins(),
+            inactive_apps: Vec::new(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,
@@ -563,6 +569,7 @@ pub(crate) mod link_tests {
     fn viewer() -> Viewer {
         Viewer {
             pinned: crate::ui::apps::default_pins(),
+            inactive_apps: Vec::new(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,

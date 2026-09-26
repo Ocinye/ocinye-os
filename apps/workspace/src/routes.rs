@@ -187,6 +187,7 @@ pub const ROUTES: &[&str] = &[
     "/compute",
     "/activity",
     "/admin",
+    "/admin/instance",
     "/admin/members/new",
     "/admin/members/{person_id}",
     "/admin/members/{person_id}/position",
@@ -535,6 +536,7 @@ pub fn router(state: WorkspaceState) -> Router {
         // Institucional
         .route("/activity", get(activity))
         .route("/admin", get(admin))
+        .route("/admin/instance", get(admin_instance).post(save_instance))
         .route("/admin/members/new", get(new_member).post(create_member))
         .route("/admin/members/{person_id}", get(member_detail))
         .route(
@@ -1179,9 +1181,24 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
         })
         .unwrap_or_else(ui::apps::default_pins);
 
+    // As aplicações que a Instância tem inactivas (ADR-0014), como o Core as
+    // disse. Sem resposta, nenhuma: as outras regras já encolhem a navegação.
+    let inactive_apps = me
+        .get("inactive_applications")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+
     Viewer {
         resolucao,
         pinned,
+        inactive_apps,
         zona: member.zona,
         name: member.session.display_name.clone(),
         // As duas verdades, ambas do Core.
@@ -1261,6 +1278,21 @@ fn shell_page(
     // não se apresenta a shell autenticada — a ausência de resposta não é prova
     // de sessão normal.
     match viewer.resolucao {
+        // Uma aplicação que a Instância desactivou não abre, mesmo por rota
+        // escrita à mão: a shell diz que não está activa, e o conteúdo não se
+        // desenha (ADR-0014). A API da aplicação é da fronteira do Core.
+        ResolucaoSessao::Resolvida if viewer.inactive_apps.iter().any(|id| id == active.id()) => {
+            page(
+                title,
+                ui::shell::shell(
+                    viewer,
+                    active,
+                    trail,
+                    title,
+                    ui::screens::notice::application_inactive(),
+                ),
+            )
+        }
         ResolucaoSessao::Resolvida => page(
             title,
             ui::shell::shell(viewer, active, trail, title, content),
@@ -7211,6 +7243,120 @@ async fn settings_apps(
         Vec::new(),
         ui::screens::settings::apps(&viewer, outcome.ok.as_deref() == Some("1")),
     )
+}
+
+/// `Administração › Instância`: o perfil e as aplicações activas (ADR-0014).
+///
+/// A página é do Core: sem `organisation.view` o Core recusa, e a recusa
+/// mostra-se como recusa.
+async fn admin_instance(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(outcome): Query<LanguageOutcome>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    let payload = match required(&state, &member, "/api/v1/instance/applications").await {
+        Ok(payload) => payload,
+        Err(failure) => return failure_response(&failure),
+    };
+    shell_page(
+        crate::i18n::t("admin.instance.title"),
+        &viewer,
+        Screen::Admin,
+        Vec::new(),
+        ui::screens::administration::instance(&payload, outcome.ok.as_deref() == Some("1")),
+    )
+}
+
+/// Grava o perfil e o estado de cada aplicação opcional que mudou.
+///
+/// O corpo traz `profile` e um `app:<id>` por aplicação opcional, com
+/// `profile`, `active` ou `inactive`. Só se envia ao Core o que mudou; o Core
+/// valida os identificadores, recusa as essenciais e reautoriza tudo.
+async fn save_instance(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    corpo: axum::body::Bytes,
+) -> Response {
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return Redirect::to("/login").into_response();
+    };
+    let actual = match required(&state, &member, "/api/v1/instance/applications").await {
+        Ok(payload) => payload,
+        Err(failure) => return failure_response(&failure),
+    };
+
+    let mut perfil: Option<String> = None;
+    let mut pedidos: Vec<(String, Option<bool>)> = Vec::new();
+    for (chave, valor) in url::form_urlencoded::parse(&corpo) {
+        if chave == "profile" {
+            perfil = Some(valor.into_owned());
+        } else if let Some(id) = chave.strip_prefix("app:") {
+            // O id entra no caminho de um pedido ao Core: só um id que o registo
+            // conhece, nunca o texto do formulário tal como veio (um `../` levaria
+            // o pedido a outra rota).
+            if ui::apps::by_id(id).is_none() {
+                continue;
+            }
+            let pedido = match valor.as_ref() {
+                "active" => Some(true),
+                "inactive" => Some(false),
+                _ => None,
+            };
+            pedidos.push((id.to_owned(), pedido));
+        }
+    }
+
+    // O perfil primeiro: as aplicações «como o perfil» leem o novo.
+    if let Some(perfil) =
+        perfil.filter(|p| actual.get("profile").and_then(Value::as_str) != Some(p))
+    {
+        if let Err(failure) = api::put(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            "/api/v1/instance/profile",
+            &serde_json::json!({ "profile": perfil }),
+        )
+        .await
+        {
+            return failure_response(&failure);
+        }
+    }
+
+    let estado_de = |id: &str| -> Option<Option<bool>> {
+        actual
+            .get("applications")
+            .and_then(Value::as_array)?
+            .iter()
+            .find(|a| a.get("id").and_then(Value::as_str) == Some(id))
+            .map(|a| {
+                if a.get("explicit").and_then(Value::as_bool) == Some(true) {
+                    a.get("active").and_then(Value::as_bool)
+                } else {
+                    None
+                }
+            })
+    };
+    for (id, pedido) in pedidos {
+        if estado_de(&id) == Some(pedido) {
+            continue;
+        }
+        if let Err(failure) = api::put(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            &format!("/api/v1/instance/applications/{id}"),
+            &serde_json::json!({ "active": pedido }),
+        )
+        .await
+        {
+            return failure_response(&failure);
+        }
+    }
+
+    Redirect::to("/admin/instance?ok=1").into_response()
 }
 
 /// Grava o conjunto de aplicações fixadas, ou repõe as predefinições.

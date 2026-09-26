@@ -1759,6 +1759,142 @@ pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
     }
 }
 
+// ── A Instância (ADR-0014) ───────────────────────────────────────────────
+
+/// Administração › Instância: o perfil e as aplicações activas.
+///
+/// Uma forma só, sem JavaScript. Cada aplicação opcional tem três estados —
+/// activa, inactiva, ou «como o perfil» —, e as essenciais dizem que estão
+/// sempre activas em vez de oferecerem um controlo que o Core recusaria. O que
+/// a página mostra vem do Core (`GET /api/v1/instance/applications`); o Core
+/// reautoriza cada gravação com `organisation.manage`.
+pub fn instance(payload: &Value, saved: bool) -> impl IntoView {
+    let perfil = payload
+        .get("profile")
+        .and_then(Value::as_str)
+        .unwrap_or("research")
+        .to_owned();
+    let aplicacoes: Vec<Value> = payload
+        .get("applications")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    view! {
+        <div class="oc-page oc-page--narrow" data-oc="instance-admin">
+            <div class="oc-head">
+                <div class="oc-head__text">
+                    <h1>{crate::i18n::t("admin.instance.title")}</h1>
+                    <p>{crate::i18n::t("admin.instance.subtitle")}</p>
+                </div>
+            </div>
+
+            {saved.then(|| view! {
+                <div class="oc-callout" role="status">
+                    {crate::i18n::t("admin.instance.saved")}
+                </div>
+            })}
+
+            <form method="post" action="/admin/instance">
+                {card(
+                    section_head(crate::i18n::t("admin.instance.profile.title"), None, None),
+                    view! {
+                        <p class="oc-t-caption--muted oc-mb-5">
+                            {crate::i18n::t("admin.instance.profile.help")}
+                        </p>
+                        <label class="oc-sr" for="instance-profile">
+                            {crate::i18n::t("admin.instance.profile.title")}
+                        </label>
+                        <select id="instance-profile" name="profile" class="oc-input">
+                            {["research", "business", "education", "personal"]
+                                .into_iter()
+                                .map(|p| {
+                                    let chave = format!("admin.instance.profile.{p}");
+                                    view! {
+                                        <option value=p selected=perfil == p>
+                                            {crate::i18n::t(&chave)}
+                                        </option>
+                                    }
+                                })
+                                .collect_view()}
+                        </select>
+                    },
+                )}
+
+                {card(
+                    section_head(crate::i18n::t("admin.instance.apps.title"), None, None),
+                    view! {
+                        <p class="oc-t-caption--muted oc-mb-5">
+                            {crate::i18n::t("admin.instance.apps.help")}
+                        </p>
+                        <ul class="oc-applist__set" role="list">
+                            {aplicacoes
+                                .iter()
+                                .filter_map(|estado| {
+                                    let id = estado.get("id").and_then(Value::as_str)?.to_owned();
+                                    let app = crate::ui::apps::by_id(&id)?;
+                                    let essencial = estado.get("class").and_then(Value::as_str)
+                                        == Some("essential");
+                                    let activa = estado.get("active").and_then(Value::as_bool)
+                                        == Some(true);
+                                    let explicita = estado.get("explicit").and_then(Value::as_bool)
+                                        == Some(true);
+                                    let actual = match (explicita, activa) {
+                                        (false, _) => "profile",
+                                        (true, true) => "active",
+                                        (true, false) => "inactive",
+                                    };
+                                    Some(view! {
+                                        <li class="oc-applist__opt" data-oc="instance-app" data-app-id=id.clone()>
+                                            <span class="oc-applist__nome">{app.label()}</span>
+                                            <span class="oc-applist__desc">{app.description()}</span>
+                                            {if essencial {
+                                                badge(crate::i18n::t("admin.instance.apps.essential"), Tone::Gray).into_any()
+                                            } else {
+                                                let campo = format!("app:{id}");
+                                                view! {
+                                                    <select name=campo class="oc-input" aria-label=app.label()>
+                                                        {["profile", "active", "inactive"]
+                                                            .into_iter()
+                                                            .map(|valor| {
+                                                                let chave = format!("admin.instance.apps.state.{valor}");
+                                                                view! {
+                                                                    <option value=valor selected=actual == valor>
+                                                                        {crate::i18n::t(&chave)}
+                                                                    </option>
+                                                                }
+                                                            })
+                                                            .collect_view()}
+                                                    </select>
+                                                    {badge(
+                                                        if activa {
+                                                            crate::i18n::t("admin.instance.apps.is_active")
+                                                        } else {
+                                                            crate::i18n::t("admin.instance.apps.is_inactive")
+                                                        },
+                                                        if activa { Tone::Ok } else { Tone::Gray },
+                                                    )}
+                                                }
+                                                .into_any()
+                                            }}
+                                        </li>
+                                    })
+                                })
+                                .collect_view()}
+                        </ul>
+                    },
+                )}
+
+                <div class="oc-mt-5">
+                    <button class="oc-btn oc-btn--primary" type="submit" data-oc="instance-save">
+                        {crate::i18n::t("admin.instance.save")}
+                    </button>
+                </div>
+            </form>
+        </div>
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

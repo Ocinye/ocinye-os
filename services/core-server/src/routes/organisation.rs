@@ -1,9 +1,9 @@
 //! Unit routes.
 
 use axum::extract::{Path, Query, State};
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use ocinye_contracts::UnitRole;
+use ocinye_contracts::{ApplicationId, InstanceProfile, UnitRole};
 use ocinye_core::modules::organisation;
 use ocinye_core::CoreError;
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,12 @@ use crate::state::AppState;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/organisation", get(get_organisation))
+        .route("/instance/applications", get(get_instance_applications))
+        .route("/instance/profile", put(put_instance_profile))
+        .route(
+            "/instance/applications/{application_id}",
+            put(put_instance_application),
+        )
         .route("/units", get(list_units).post(create_unit))
         .route("/units/code-suggestion", get(suggest_code))
         .route(
@@ -36,6 +42,8 @@ struct OrganisationView {
     slug: String,
     name: String,
     country: Option<String>,
+    /// The Instance's profile (ADR-0014).
+    profile: InstanceProfile,
 }
 
 /// Return the institution.
@@ -48,12 +56,70 @@ async fn get_organisation(
     CurrentPrincipal(_principal): CurrentPrincipal,
 ) -> Result<Json<OrganisationView>, ApiError> {
     let organisation = organisation::get_organisation(&state.pool, state.organisation_id).await?;
+    let profile = organisation::profile_of(&state.pool, state.organisation_id).await?;
     Ok(Json(OrganisationView {
         id: organisation.id,
         slug: organisation.slug,
         name: organisation.name,
         country: organisation.country,
+        profile,
     }))
+}
+
+/// The Instance's profile and the state of every application (ADR-0014).
+async fn get_instance_applications(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+) -> Result<Json<organisation::InstanceApplications>, ApiError> {
+    organisation::instance_applications(&state.pool, &principal)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, &ids))
+}
+
+#[derive(Deserialize)]
+struct ProfileBody {
+    profile: InstanceProfile,
+}
+
+/// Change the Instance's profile. Explicit decisions stay; nothing is deleted.
+async fn put_instance_profile(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Json(body): Json<ProfileBody>,
+) -> Result<Json<organisation::InstanceApplications>, ApiError> {
+    organisation::set_profile(&state.pool, &principal, body.profile, &ids)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, &ids))
+}
+
+#[derive(Deserialize)]
+struct ApplicationBody {
+    /// `true` activates, `false` deactivates, `null` returns to the profile.
+    active: Option<bool>,
+}
+
+/// Activate, deactivate, or return an optional application to its profile.
+async fn put_instance_application(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(application_id): Path<String>,
+    Json(body): Json<ApplicationBody>,
+) -> Result<Json<organisation::InstanceApplications>, ApiError> {
+    let application: ApplicationId = application_id.parse().map_err(|_| {
+        ApiError::new(
+            CoreError::NotFound("Aplicação desconhecida.".to_owned()),
+            &ids,
+        )
+    })?;
+    organisation::set_application_active(&state.pool, &principal, application, body.active, &ids)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, &ids))
 }
 
 #[derive(Serialize)]

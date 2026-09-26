@@ -149,6 +149,13 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     // de uma mudança de servidor. Perdê-la num restauro seria a instalação nova
     // esquecer de quem é.
     ("instance_identity", Comparacao::Identidades),
+    (
+        "instance_applications",
+        Comparacao::Fora(
+            "configuração da Instância, chaveada por organização e aplicação e sem \
+             identidade própria; viaja com a organização",
+        ),
+    ),
     ("people", Comparacao::Identidades),
     ("credentials", Comparacao::Identidades),
     ("person_roles", Comparacao::Identidades),

@@ -99,6 +99,9 @@ struct Me {
     /// apresenta e não autoriza: quem entra sem alcançar nada vê zero recursos,
     /// que é um estado honesto e não uma recusa.
     modules: Vec<ModuleRelevance>,
+    /// The applications this Instance has **inactive** (ADR-0014). The
+    /// Workspace hides them; an empty list means every application is active.
+    inactive_applications: Vec<ocinye_contracts::ApplicationId>,
 }
 
 /// Um módulo, do ponto de vista da apresentação.
@@ -156,6 +159,11 @@ async fn me(
 
     let person = identity::get_own_person(&state.pool, &principal).await?;
     let avatar = identity::own_avatar(&state.pool, &principal).await?;
+    let inactive_applications = ocinye_core::modules::organisation::inactive_applications(
+        &state.pool,
+        principal.organisation_id,
+    )
+    .await?;
 
     Ok(Json(Me {
         person_id: principal.person_id,
@@ -168,6 +176,7 @@ async fn me(
         identity_kind: principal.identity_kind.as_str(),
         capabilities,
         modules,
+        inactive_applications,
         units: principal
             .unit_roles
             .iter()
