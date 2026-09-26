@@ -31,7 +31,8 @@ pub mod internal {
     pub use super::repository::mark_stale_models_unavailable;
 }
 
-pub use model::{ComputeNode, GpuReport, NodeHeartbeat, NodeResources};
+pub use model::{CapacityLine, ComputeNode, GpuReport, NodeCapacity, NodeHeartbeat, NodeResources};
 pub use service::{
-    compute_status, enroll_node, heartbeat, list_nodes, register_node, EnrolledNode, NewNode,
+    compute_status, enroll_node, heartbeat, instance_capacity, list_nodes, register_node,
+    set_reservation, EnrolledNode, InstanceCapacity, NewNode,
 };

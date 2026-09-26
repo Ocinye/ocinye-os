@@ -5,9 +5,9 @@
 //! two authenticate differently — a person by OIDC, a node by its own machine
 //! credential — and never share credentials (ADR-0500).
 
-use axum::extract::State;
-use axum::http::HeaderMap;
-use axum::routing::{get, post};
+use axum::extract::{Path, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use ocinye_contracts::{ComputeStatus, InstitutionalControl, NodeKind, Residency};
 use ocinye_core::modules::compute;
@@ -29,6 +29,8 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/compute/status", get(status))
         .route("/compute/nodes", get(list_nodes).post(register_node))
+        .route("/compute/capacity", get(capacity))
+        .route("/compute/nodes/{node_id}/reservation", put(set_reservation))
         .route("/compute/enroll", post(enroll))
         .route("/compute/heartbeat", post(heartbeat))
 }
@@ -65,6 +67,8 @@ struct NodeView {
     capabilities: serde_json::Value,
     agent_version: Option<String>,
     last_seen_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Physical, reserved, allocatable, allocated and consumed (Part 5).
+    capacity: compute::NodeCapacity,
 }
 
 async fn list_nodes(
@@ -88,11 +92,52 @@ async fn list_nodes(
                 memory_bytes: node.memory_bytes,
                 gpus: node.gpus,
                 capabilities: node.capabilities,
+                capacity: node.capacity(),
                 agent_version: node.agent_version,
                 last_seen_at: node.last_seen_at,
             })
             .collect(),
     ))
+}
+
+/// The Instance's capacity, summed over online nodes (Part 5).
+async fn capacity(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+) -> Result<Json<compute::InstanceCapacity>, ApiError> {
+    Ok(Json(
+        compute::instance_capacity(&state.pool, &principal, &state.config.compute).await?,
+    ))
+}
+
+#[derive(Deserialize)]
+struct ReservationRequest {
+    #[serde(default)]
+    cpu_cores: i64,
+    #[serde(default)]
+    memory_bytes: i64,
+    #[serde(default)]
+    storage_bytes: i64,
+}
+
+/// Set what the operator holds back on a node for the host itself.
+async fn set_reservation(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(node_id): Path<Uuid>,
+    Json(body): Json<ReservationRequest>,
+) -> Result<StatusCode, ApiError> {
+    compute::set_reservation(
+        &state.pool,
+        &principal,
+        &ids,
+        node_id,
+        (body.cpu_cores, body.memory_bytes, body.storage_bytes),
+    )
+    .await
+    .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Deserialize)]

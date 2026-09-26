@@ -13,8 +13,9 @@ use rand::TryRng;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
+use uuid::Uuid;
 
-use super::model::{ComputeNode, NodeHeartbeat};
+use super::model::{CapacityLine, ComputeNode, NodeCapacity, NodeHeartbeat};
 use super::repository as repo;
 use crate::audit::{self, action, AuditEntry};
 use crate::config::ComputeConfig;
@@ -225,6 +226,16 @@ pub async fn heartbeat(
         &gpus,
         &capabilities,
         &report.health,
+        (
+            report
+                .resources
+                .memory_used_bytes
+                .map(|v| i64::try_from(v).unwrap_or(i64::MAX)),
+            report
+                .resources
+                .storage_used_bytes
+                .map(|v| i64::try_from(v).unwrap_or(i64::MAX)),
+        ),
     )
     .await?;
 
@@ -290,6 +301,130 @@ pub async fn list_nodes(
             (node, status)
         })
         .collect())
+}
+
+/// Set what the operator holds back on a node for the host itself — the part of
+/// the physical capacity that is never allocatable (Part 5).
+///
+/// # Errors
+///
+/// [`CoreError::PermissionDenied`] without platform administration;
+/// [`CoreError::NotFound`] for a node of another Instance or none;
+/// [`CoreError::Validation`] for a negative figure.
+pub async fn set_reservation(
+    pool: &PgPool,
+    principal: &Principal,
+    ids: &CorrelationIds,
+    node_id: Uuid,
+    reserved: (i64, i64, i64),
+) -> CoreResult<()> {
+    let ctx = ResourceContext::organisation(ResourceKind::Platform, principal.organisation_id);
+    authorize(principal, Action::Administer, &ctx)
+        .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+    if reserved.0 < 0 || reserved.1 < 0 || reserved.2 < 0 {
+        return Err(CoreError::Validation(
+            "Uma reserva não pode ser negativa.".to_owned(),
+        ));
+    }
+    let cpu = i32::try_from(reserved.0).unwrap_or(i32::MAX);
+    let mut tx = pool.begin().await?;
+    if !repo::set_reservation(
+        &mut *tx,
+        principal.organisation_id,
+        node_id,
+        (cpu, reserved.1, reserved.2),
+    )
+    .await?
+    {
+        return Err(CoreError::NotFound("Nó não encontrado.".to_owned()));
+    }
+    audit::record(
+        &mut tx,
+        Some(principal),
+        ids,
+        AuditEntry::new(action::ADMIN_OPERATION, "compute_node_reservation")
+            .resource(node_id)
+            .detail("cpu_cores", reserved.0)
+            .detail("memory_bytes", reserved.1)
+            .detail("storage_bytes", reserved.2),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// The Instance's capacity: what its online nodes offer, and — for storage — how
+/// much of it the Instance has granted to members and how much they use.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct InstanceCapacity {
+    /// Online nodes counted.
+    pub online_nodes: u32,
+    /// Summed over online nodes.
+    pub cpu_cores: CapacityLine,
+    /// Summed over online nodes.
+    pub memory_bytes: CapacityLine,
+    /// Summed over online nodes.
+    pub storage_bytes: CapacityLine,
+    /// GPUs on online nodes.
+    pub gpus: i64,
+    /// GPU memory on online nodes.
+    pub gpu_memory_bytes: i64,
+    /// Personal storage the Instance's members use today.
+    pub member_storage_used_bytes: i64,
+}
+
+fn somar(linhas: impl Iterator<Item = CapacityLine>) -> CapacityLine {
+    let mut total = CapacityLine::new(None, 0, None);
+    for linha in linhas {
+        let soma = |a: Option<i64>, b: Option<i64>| match (a, b) {
+            (None, None) => None,
+            (x, y) => Some(x.unwrap_or(0).saturating_add(y.unwrap_or(0))),
+        };
+        total.physical = soma(total.physical, linha.physical);
+        total.reserved = total.reserved.saturating_add(linha.reserved);
+        total.allocatable = soma(total.allocatable, linha.allocatable);
+        total.allocated = total.allocated.saturating_add(linha.allocated);
+        total.consumed = soma(total.consumed, linha.consumed);
+    }
+    total
+}
+
+/// The Instance's capacity summary.
+///
+/// # Errors
+///
+/// Returns an error when the caller may not read compute, or a query fails.
+pub async fn instance_capacity(
+    pool: &PgPool,
+    principal: &Principal,
+    config: &ComputeConfig,
+) -> CoreResult<InstanceCapacity> {
+    let nodes = list_nodes(pool, principal, config).await?;
+    let online: Vec<NodeCapacity> = nodes
+        .iter()
+        .filter(|(_, status)| *status == ComputeNodeStatus::Online)
+        .map(|(node, _)| node.capacity())
+        .collect();
+    // A mesma medida que a quota de cada membro usa (ADR-0108): bytes
+    // guardados de que o membro é dono — aqui somados pela Instância.
+    let member_storage_used_bytes: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(o.size_bytes), 0)::bigint
+           FROM storage_objects o
+           JOIN people p ON p.id = o.owner_id
+          WHERE p.organisation_id = $1 AND o.status = 'stored'",
+    )
+    .bind(principal.organisation_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(InstanceCapacity {
+        online_nodes: u32::try_from(online.len()).unwrap_or(u32::MAX),
+        cpu_cores: somar(online.iter().map(|c| c.cpu_cores)),
+        memory_bytes: somar(online.iter().map(|c| c.memory_bytes)),
+        storage_bytes: somar(online.iter().map(|c| c.storage_bytes)),
+        gpus: online.iter().map(|c| c.gpus).sum(),
+        gpu_memory_bytes: online.iter().map(|c| c.gpu_memory_bytes).sum(),
+        member_storage_used_bytes,
+    })
 }
 
 /// Report the state of the Compute Plane.

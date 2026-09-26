@@ -42,6 +42,16 @@ pub struct ComputeNode {
     pub last_seen_at: Option<DateTime<Utc>>,
     /// Registration time.
     pub created_at: DateTime<Utc>,
+    /// CPU cores the operator holds back for the host.
+    pub reserved_cpu_cores: i32,
+    /// Memory the operator holds back for the host.
+    pub reserved_memory_bytes: i64,
+    /// Storage the operator holds back for the host.
+    pub reserved_storage_bytes: i64,
+    /// Memory the node last reported in use.
+    pub memory_used_bytes: Option<i64>,
+    /// Storage the node last reported in use.
+    pub storage_used_bytes: Option<i64>,
 }
 
 impl ComputeNode {
@@ -114,6 +124,13 @@ pub struct NodeResources {
     /// GPUs present.
     #[serde(default)]
     pub gpus: Vec<GpuReport>,
+    /// Memory in use, when the agent reports it. Optional so an older agent
+    /// that does not know the field keeps working.
+    #[serde(default)]
+    pub memory_used_bytes: Option<u64>,
+    /// Storage in use, when the agent reports it.
+    #[serde(default)]
+    pub storage_used_bytes: Option<u64>,
 }
 
 /// A heartbeat from a node agent.
@@ -148,4 +165,95 @@ pub struct ReportedModel {
     /// Context window, when known.
     #[serde(default)]
     pub context_limit: Option<i32>,
+}
+
+/// One resource on one node, in the five quantities an Instance governs
+/// (Part 5 of the generalization programme).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct CapacityLine {
+    /// What the node reports it has. `None` when it has not reported.
+    pub physical: Option<i64>,
+    /// What the operator holds back for the host.
+    pub reserved: i64,
+    /// `physical − reserved`, never below zero.
+    pub allocatable: Option<i64>,
+    /// What jobs hold. Zero by construction: there is no job dispatch yet, and
+    /// the number says so rather than guessing one.
+    pub allocated: i64,
+    /// What the node reports in use. `None` when it does not report it.
+    pub consumed: Option<i64>,
+}
+
+impl CapacityLine {
+    /// The line from a physical figure, a holdback and a consumption report.
+    #[must_use]
+    pub fn new(physical: Option<i64>, reserved: i64, consumed: Option<i64>) -> Self {
+        Self {
+            physical,
+            reserved,
+            allocatable: physical.map(|p| p.saturating_sub(reserved).max(0)),
+            allocated: 0,
+            consumed,
+        }
+    }
+}
+
+/// The capacity of one node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct NodeCapacity {
+    /// CPU cores.
+    pub cpu_cores: CapacityLine,
+    /// Memory, in bytes.
+    pub memory_bytes: CapacityLine,
+    /// Storage, in bytes.
+    pub storage_bytes: CapacityLine,
+    /// GPUs, counted.
+    pub gpus: i64,
+    /// GPU memory, summed, in bytes.
+    pub gpu_memory_bytes: i64,
+}
+
+impl ComputeNode {
+    /// The node's capacity, from what it reported and what the operator
+    /// reserved.
+    #[must_use]
+    pub fn capacity(&self) -> NodeCapacity {
+        let gpus: Vec<GpuReport> = serde_json::from_value(self.gpus.clone()).unwrap_or_default();
+        NodeCapacity {
+            cpu_cores: CapacityLine::new(
+                self.cpu_cores.map(i64::from),
+                i64::from(self.reserved_cpu_cores),
+                None,
+            ),
+            memory_bytes: CapacityLine::new(
+                self.memory_bytes,
+                self.reserved_memory_bytes,
+                self.memory_used_bytes,
+            ),
+            storage_bytes: CapacityLine::new(
+                self.storage_bytes,
+                self.reserved_storage_bytes,
+                self.storage_used_bytes,
+            ),
+            gpus: i64::try_from(gpus.len()).unwrap_or(i64::MAX),
+            gpu_memory_bytes: gpus
+                .iter()
+                .map(|gpu| i64::try_from(gpu.memory_bytes).unwrap_or(i64::MAX))
+                .fold(0_i64, i64::saturating_add),
+        }
+    }
+}
+
+#[cfg(test)]
+mod capacity_tests {
+    use super::*;
+
+    #[test]
+    fn allocatable_e_fisico_menos_reservado_e_nunca_negativo() {
+        let linha = CapacityLine::new(Some(16), 2, None);
+        assert_eq!(linha.allocatable, Some(14));
+        assert_eq!(linha.allocated, 0);
+        assert_eq!(CapacityLine::new(Some(2), 8, None).allocatable, Some(0));
+        assert_eq!(CapacityLine::new(None, 2, None).allocatable, None, "sem relatório não se inventa");
+    }
 }
