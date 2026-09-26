@@ -351,12 +351,17 @@ async fn a_relevancia_deriva_do_papel_e_nao_da_pertenca() {
     for (papel, esperado) in casos {
         let principal = person(&pool, org, &[*papel]).await;
 
-        for modulo in [
-            Module::Files,
-            Module::Knowledge,
-            Module::Bibliography,
-            Module::Datasets,
-        ] {
+        // Ficheiros deixou de ser um módulo de investigação (ADR-0014 §6): é
+        // armazenamento do sistema operativo, relevante a todo o membro interno.
+        // Continua a derivar do papel, e não da pertença — só a regra mudou.
+        assert_eq!(
+            is_relevant(&principal, Module::Files),
+            *papel != TechnicalRole::ExternalCollaborator,
+            "{}: files",
+            papel.as_str()
+        );
+
+        for modulo in [Module::Knowledge, Module::Bibliography, Module::Datasets] {
             assert_eq!(
                 is_relevant(&principal, modulo),
                 *esperado,
@@ -389,8 +394,10 @@ async fn a_relevancia_nao_muda_quando_a_pertenca_muda() {
     // membro de investigação — relevante desde o início — o colapso dos dois
     // eixos passaria despercebido: `true` continuaria `true`.
     let membro = person(&pool, org, &[TechnicalRole::Collaborator]).await;
+    // A testemunha é Conhecimento, e não Ficheiros: desde a ADR-0014 Ficheiros é
+    // relevante a qualquer membro interno, e deixou de ser `false` para ele.
     assert!(
-        !is_relevant(&membro, Module::Files),
+        !is_relevant(&membro, Module::Knowledge),
         "a persona escolhida já era relevante; o teste não conseguiria ver o colapso"
     );
 
