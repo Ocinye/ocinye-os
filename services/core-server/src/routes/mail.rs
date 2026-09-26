@@ -793,6 +793,7 @@ async fn assist(
 
     let capabilities = platform::system_capabilities(
         &state.pool,
+        state.organisation_id,
         &state.config,
         state.store.is_some(),
         state.mail_registry.reachability().await,
@@ -1002,6 +1003,7 @@ async fn status(
 
     let capabilities = platform::system_capabilities(
         &state.pool,
+        state.organisation_id,
         &state.config,
         state.store.is_some(),
         state.mail_registry.reachability().await,

@@ -78,6 +78,7 @@ async fn ready(State(state): State<AppState>, Query(query): Query<ReadinessQuery
     // opcionais ficam indisponíveis, e não disponíveis por omissão.
     let capabilities = platform::system_capabilities(
         &state.pool,
+        state.organisation_id,
         &state.config,
         state.store.is_some(),
         state.mail_registry.reachability().await,

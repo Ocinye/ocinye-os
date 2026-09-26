@@ -6,6 +6,7 @@ use ocinye_contracts::{
     SystemCapabilityState,
 };
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use crate::config::CoreConfig;
 use crate::error::CoreResult;
@@ -32,6 +33,7 @@ use crate::modules::mail::service::INGESTION_INTERVAL;
 /// Returns an error when a count query fails.
 pub async fn system_capabilities(
     pool: &PgPool,
+    organisation_id: Uuid,
     config: &CoreConfig,
     storage_configured: bool,
     correio: MailReachability,
@@ -49,7 +51,9 @@ pub async fn system_capabilities(
         (SystemCapability::AiReasoning, AiCapability::Reasoning),
         (SystemCapability::AiEmbedding, AiCapability::Embedding),
     ] {
-        capabilities.push(inference_report(pool, capability, ai_capability, config).await?);
+        capabilities.push(
+            inference_report(pool, organisation_id, capability, ai_capability, config).await?,
+        );
     }
 
     // ── Agents ──────────────────────────────────────────────────────────
@@ -392,17 +396,21 @@ fn mailsync_report(
 /// State of one inference capability.
 async fn inference_report(
     pool: &PgPool,
+    organisation_id: Uuid,
     capability: SystemCapability,
     ai_capability: AiCapability,
     config: &CoreConfig,
 ) -> CoreResult<SystemCapabilityReport> {
     let serving: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai_models
-          WHERE enabled = true
-            AND status = 'available'
-            AND capabilities ? $1",
+        "SELECT count(*) FROM ai_models m
+           JOIN compute_nodes n ON n.id = m.node_id
+          WHERE n.organisation_id = $2
+            AND m.enabled = true
+            AND m.status = 'available'
+            AND m.capabilities ? $1",
     )
     .bind(ai_capability.as_str())
+    .bind(organisation_id)
     .fetch_one(pool)
     .await?;
 
@@ -418,9 +426,14 @@ async fn inference_report(
     // is a different situation from one nobody ever configured: the first is a
     // node that should be answering, the second is a node that does not exist.
     let mapped = config.ai.capability_map.contains_key(&ai_capability);
-    let total: i64 = sqlx::query_scalar("SELECT count(*) FROM ai_models")
-        .fetch_one(pool)
-        .await?;
+    let total: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM ai_models m
+           JOIN compute_nodes n ON n.id = m.node_id
+          WHERE n.organisation_id = $1",
+    )
+    .bind(organisation_id)
+    .fetch_one(pool)
+    .await?;
 
     Ok(if total == 0 {
         SystemCapabilityReport::new(
