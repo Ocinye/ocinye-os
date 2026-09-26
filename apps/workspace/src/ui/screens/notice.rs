@@ -69,6 +69,24 @@ pub fn access_denied() -> impl IntoView {
     }
 }
 
+/// A aplicação existe no Ocinye OS e esta Instância não a tem activa (ADR-0014).
+///
+/// Não é uma recusa de acesso nem uma falta de serviço: é configuração da
+/// Instância. Os dados que a aplicação tenha continuam guardados, e reactivá-la
+/// devolve-a tal como estava — por isso a frase diz isso, e diz a quem cabe.
+pub fn application_inactive() -> impl IntoView {
+    view! {
+        <div class="oc-notice" data-oc="app-inactive">
+            <span class="oc-notice__tile">{icon(Icon::Settings, 26)}</span>
+            <h1>{crate::i18n::t("notice.app_inactive.title")}</h1>
+            <p>{crate::i18n::t("notice.app_inactive.body")}</p>
+            <div class="oc-row oc-gap-5">
+                {button(Button::new(crate::i18n::t("nav.home"), Variant::Primary).href("/"))}
+            </div>
+        </div>
+    }
+}
+
 /// Uma dependência da operação não está de pé.
 ///
 /// # Porque não é o ecrã de erro

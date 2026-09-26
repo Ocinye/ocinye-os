@@ -121,6 +121,7 @@ O que o Ocinye OS é, onde reside a autoridade, e sobre que runtime assenta.
 - [ADR-0011](0011-redis.md) — Redis para filas e coordenação
 - [ADR-0012](0012-realtime-plane.md) — O plano realtime: uma ligação que dura, sobre uma autoridade que não
 - [ADR-0013](0013-general-purpose-os-instance-and-node.md) — O Ocinye OS como ambiente operativo de uso geral: Instância e Nó
+- [ADR-0014](0014-instance-profiles-and-application-activation.md) — Perfis de Instância e activação de aplicações
 
 ### 0100–0199 · Identidade, Segurança, Autorização e Governação
 
@@ -239,6 +240,7 @@ preencher.
 | [0011](0011-redis.md) | Redis para filas e coordenação | Foundation | `MEDIUM` | Accepted |
 | [0012](0012-realtime-plane.md) | O plano realtime: uma ligação que dura, sobre uma autoridade que não | Foundation | `HIGH` | Accepted |
 | [0013](0013-general-purpose-os-instance-and-node.md) | O Ocinye OS como ambiente operativo de uso geral: Instância e Nó | Foundation | `FOUNDATIONAL` | Accepted |
+| [0014](0014-instance-profiles-and-application-activation.md) | Perfis de Instância e activação de aplicações | Foundation | `HIGH` | Accepted |
 | [0100](0100-authorization-model.md) | RBAC + ABAC contextual, fail closed | Security | `FOUNDATIONAL` | Accepted |
 | [0101](0101-permissions-scopes-and-grants.md) | Permissões nomeadas, âmbitos e grants explícitos | Security | `HIGH` | Accepted |
 | [0102](0102-identity-provider.md) | Identity Provider dedicado (Keycloak) | Identity | `HIGH` | Superseded |

@@ -380,6 +380,12 @@ pub struct Viewer {
     /// por omissão do registo antes de construir a barra — por isso aqui já é a
     /// lista efectiva, e a barra desenha-a filtrada pela visibilidade.
     pub pinned: Vec<String>,
+    /// As aplicações que **esta Instância** tem inactivas (ADR-0014), como o
+    /// Core as disse. Escondem-se do lançador, da barra, da paleta e do «+
+    /// Criar»; a rota diz que a aplicação não está activa. Vazia quando todas
+    /// estão activas — ou quando o Core não respondeu, e aí as outras regras já
+    /// encolhem a navegação.
+    pub inactive_apps: Vec<String>,
 }
 
 impl Viewer {
@@ -996,7 +1002,7 @@ fn topbar(
             // alcance de qualquer membro. O contexto (unidade, ambiente, ideia)
             // resolve-se no formulário de cada acção, com estado vazio accionável
             // quando falta; a autoridade real é sempre do Core (§2, §3, §15).
-            {create_menu()}
+            {create_menu(&viewer.inactive_apps)}
 
             <span class="oc-divider" aria-hidden="true"></span>
 
@@ -1201,6 +1207,9 @@ struct CreateAction {
     via: CreateVia,
     /// A tecla de acesso, activada com o menu aberto.
     key: &'static str,
+    /// A aplicação a que a criação pertence: uma aplicação que a Instância
+    /// desactivou não oferece criações (ADR-0014).
+    app: &'static str,
 }
 
 const CREATE_ITEMS: [CreateAction; 7] = [
@@ -1208,11 +1217,13 @@ const CREATE_ITEMS: [CreateAction; 7] = [
         label: "create.idea",
         via: CreateVia::Open("/ideas/new"),
         key: "I",
+        app: "ideas",
     },
     CreateAction {
         label: "create.project",
         via: CreateVia::Open("/projects/new"),
         key: "P",
+        app: "projects",
     },
     // Uma nota pessoal não precisa de contexto: cria-se e abre-se o editor.
     // Caminho próprio (`/notes/new`) para não colidir, no DOM, com o formulário
@@ -1221,30 +1232,36 @@ const CREATE_ITEMS: [CreateAction; 7] = [
         label: "create.note",
         via: CreateVia::Create("/notes/new"),
         key: "N",
+        app: "notes",
     },
     CreateAction {
         label: "create.reference",
         via: CreateVia::Open("/bibliography/new"),
         key: "R",
+        app: "bibliography",
     },
     CreateAction {
         label: "create.dataset",
         via: CreateVia::Open("/datasets/new"),
         key: "D",
+        app: "datasets",
     },
     CreateAction {
         label: "create.task",
         via: CreateVia::Open("/tasks/new"),
         key: "T",
+        app: "projects",
     },
     CreateAction {
         label: "create.agent",
         via: CreateVia::Open("/ai/agents/new"),
         key: "A",
+        app: "agents",
     },
 ];
 
-fn create_menu() -> impl IntoView {
+fn create_menu(inactive_apps: &[String]) -> impl IntoView {
+    let inactive_apps = inactive_apps.to_vec();
     view! {
         <div class="oc-create" data-oc="create">
             <button
@@ -1261,6 +1278,7 @@ fn create_menu() -> impl IntoView {
             <div class="oc-create__menu" data-oc="create-menu" role="menu" hidden>
                 {CREATE_ITEMS
                     .iter()
+                    .filter(|item| !inactive_apps.iter().any(|id| id == item.app))
                     .map(create_menu_item)
                     .collect_view()}
             </div>
@@ -1274,7 +1292,7 @@ fn create_menu() -> impl IntoView {
 /// ligação; uma criação imediata, um botão que submete. `data-oc-key` leva a
 /// tecla de acesso ao `app.js`, que a activa com o menu aberto.
 fn create_menu_item(action: &CreateAction) -> impl IntoView {
-    let CreateAction { label, via, key } = *action;
+    let CreateAction { label, via, key, .. } = *action;
 
     match via {
         CreateVia::Open(href) => view! {
@@ -1437,11 +1455,25 @@ fn palette(viewer: &Viewer) -> impl IntoView {
         .iter()
         .copied()
         .filter(|screen| screen_permission(*screen).is_none_or(|p| viewer.can(p)))
+        // Uma aplicação que a Instância desactivou não se oferece (ADR-0014).
+        .filter(|screen| !viewer.inactive_apps.iter().any(|id| id == screen.id()))
         .collect();
 
+    // A aplicação de cada acção, pelo caminho: uma acção de uma aplicação
+    // desactivada não se oferece.
+    // A aplicação é a de rota mais longa que prefixa o caminho: `/ai/prompt`
+    // é do Prompt, e não do Ocinye AI (`/ai`).
+    let activa = |href: &str| {
+        crate::ui::apps::APPLICATIONS
+            .iter()
+            .filter(|app| app.screen.path() != "/" && href.starts_with(app.screen.path()))
+            .max_by_key(|app| app.screen.path().len())
+            .is_none_or(|app| !viewer.inactive_apps.iter().any(|id| id == app.id()))
+    };
     let actions: Vec<(&str, &str, &str)> = PALETTE_ACTIONS
         .iter()
         .filter(|(_, _, _, permission)| viewer.can(*permission))
+        .filter(|(_, href, _, _)| activa(href))
         .map(|(label, href, shortcut, _)| (*label, *href, *shortcut))
         .collect();
 
@@ -1709,6 +1741,7 @@ mod tests {
     fn viewer_de_investigacao(permissions: &[Permission]) -> Viewer {
         Viewer {
             pinned: crate::ui::apps::default_pins(),
+            inactive_apps: Vec::new(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             modules: todos_os_modulos(),
             ..viewer_with(permissions)
@@ -1720,6 +1753,7 @@ mod tests {
     fn viewer_with(permissions: &[Permission]) -> Viewer {
         Viewer {
             pinned: crate::ui::apps::default_pins(),
+            inactive_apps: Vec::new(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
             avatar: ocinye_contracts::AvatarChoice::Initials,
@@ -2899,6 +2933,7 @@ mod tests {
     fn privilegiada_com_autoridade() -> Viewer {
         Viewer {
             pinned: crate::ui::apps::default_pins(),
+            inactive_apps: Vec::new(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: true,
             administra: true,

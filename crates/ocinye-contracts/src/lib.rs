@@ -20,6 +20,7 @@
 #![deny(missing_docs)]
 
 pub mod access;
+pub mod application;
 pub mod agentic;
 pub mod avatar;
 pub mod bibliography;
@@ -43,6 +44,9 @@ pub mod temporal;
 
 pub use access::{AccountStatus, CredentialKind, CredentialState, Permission, Scope, SessionState};
 pub use agentic::{AgenticExposure, OperationId, TrustBoundary};
+pub use application::{
+    ApplicationClass, ApplicationId, InstanceProfile, UnknownApplication, UnknownProfile,
+};
 pub use avatar::{AvatarChoice, AVATAR_PRESETS};
 pub use classification::Classification;
 pub use compute::{ComputeNodeStatus, ComputeStatus, InstitutionalControl, JobStatus, NodeKind};

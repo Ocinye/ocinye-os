@@ -149,10 +149,19 @@ pub fn is_relevant(principal: &Principal, module: Module) -> bool {
     });
 
     match module {
+        // O armazenamento é do sistema operativo, e não da investigação
+        // (ADR-0014 §6): todo o membro interno tem os seus ficheiros. Um
+        // colaborador externo não — é quem a instituição não recebe por inteiro.
+        // A relevância continua a não conceder nada: o que se vê dentro é o que
+        // a posse e a autorização decidem.
+        Module::Files => !principal
+            .roles
+            .iter()
+            .all(|role| matches!(role, TechnicalRole::ExternalCollaborator)),
+
         // Quem faz investigação conhece o espaço onde ela acontece, tenha ou
         // não trabalho atribuído hoje.
         Module::Knowledge
-        | Module::Files
         | Module::Bibliography
         | Module::Datasets
         | Module::Ideas

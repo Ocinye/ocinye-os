@@ -153,6 +153,12 @@ impl Application {
     /// administração a quem não a tem seria um oráculo de existência (§25, §59).
     #[must_use]
     pub fn visible_to(&self, viewer: &Viewer, core: CoreStatus) -> bool {
+        // Uma aplicação que a Instância desactivou não se oferece a ninguém
+        // (ADR-0014). Desactivar não é desinstalar: os dados ficam, e a
+        // autorização continua a decidir o resto.
+        if viewer.inactive_apps.iter().any(|id| id == self.id()) {
+            return false;
+        }
         match screen_module(self.screen) {
             // Governado dentro de um contentor: presença por relevância, e só
             // com o Core a confirmar o que o membro alcança.
@@ -614,5 +620,43 @@ mod tests {
                 categoria.id()
             );
         }
+    }
+
+    /// O registo do Workspace e o catálogo que o Core valida nomeiam as mesmas
+    /// aplicações, nos dois sentidos (ADR-0014). Uma aplicação que só um dos dois
+    /// conhecesse seria impossível de activar, ou activável sem ecrã.
+    #[test]
+    fn o_registo_e_o_catalogo_do_core_nomeiam_as_mesmas_aplicacoes() {
+        use ocinye_contracts::ApplicationId;
+        for app in APPLICATIONS {
+            assert!(
+                app.id().parse::<ApplicationId>().is_ok(),
+                "{} está no registo e não no catálogo do Core",
+                app.id()
+            );
+        }
+        for id in ApplicationId::ALL {
+            assert!(
+                by_id(id.as_str()).is_some(),
+                "{id} está no catálogo do Core e não no registo"
+            );
+        }
+    }
+
+    /// Uma aplicação que a Instância desactivou não aparece no lançador, nem
+    /// fixada — e as outras continuam lá.
+    #[test]
+    fn uma_aplicacao_inactiva_nao_se_oferece() {
+        let mut viewer = crate::ui::render_tests::viewer_completo();
+        let antes = visible_to(&viewer, CoreStatus::Ok);
+        assert!(antes.iter().any(|a| a.id() == "notes"));
+
+        viewer.inactive_apps = vec!["notes".to_owned()];
+        let depois = visible_to(&viewer, CoreStatus::Ok);
+        assert!(!depois.iter().any(|a| a.id() == "notes"));
+        assert_eq!(depois.len(), antes.len() - 1, "só a inactiva saiu");
+
+        let fixadas = pinned_visible(&["notes".to_owned(), "files".to_owned()], &viewer, CoreStatus::Ok);
+        assert_eq!(fixadas.iter().map(|a| a.id()).collect::<Vec<_>>(), vec!["files"]);
     }
 }

@@ -1138,7 +1138,10 @@ pub fn members(viewer: &Viewer, payload: &Value) -> impl IntoView {
             action: Some(crate::i18n::t("lists.new.member")),
             action_href: Some("/admin/members/new"),
             action_permission: Permission::MembersCreate,
-            secondary: None,
+            // A configuração da Instância (ADR-0014), para quem a governa.
+            secondary: viewer
+                .can(Permission::OrganisationManage)
+                .then(|| (crate::i18n::t("admin.instance.link"), "/admin/instance")),
             table,
         },
     )
@@ -2257,6 +2260,7 @@ mod tests {
     pub(super) fn viewer() -> Viewer {
         Viewer {
             pinned: crate::ui::apps::default_pins(),
+            inactive_apps: Vec::new(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,
@@ -2282,6 +2286,7 @@ mod tests {
     fn viewer_sem_permissoes() -> Viewer {
         Viewer {
             pinned: crate::ui::apps::default_pins(),
+            inactive_apps: Vec::new(),
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,

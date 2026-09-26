@@ -357,6 +357,9 @@ pub struct CoreConfig {
     /// Name given to the Instance when this installation creates it. Only read
     /// at creation; afterwards the name is the Instance's, not configuration's.
     pub instance_name: Option<String>,
+    /// Profile given to the Instance when this installation creates it
+    /// (ADR-0014). No default: creating an Instance names its profile.
+    pub instance_profile: Option<ocinye_contracts::InstanceProfile>,
     /// PostgreSQL connection string.
     pub database_url: String,
     /// Maximum database connections.
@@ -518,6 +521,16 @@ impl CoreConfig {
                 }
             },
             instance_name: optional("OCINYE_INSTANCE_NAME").map(|name| name.trim().to_owned()),
+            instance_profile: match optional("OCINYE_INSTANCE_PROFILE") {
+                Some(value) => Some(
+                    value
+                        .parse()
+                        .map_err(|error: ocinye_contracts::UnknownProfile| {
+                            CoreError::Validation(error.to_string())
+                        })?,
+                ),
+                None => None,
+            },
             database_url: required("OCINYE_DATABASE_URL")?,
             database_max_connections: parse_number("OCINYE_DATABASE_MAX_CONNECTIONS", 10),
             redis_url: or_default("OCINYE_REDIS_URL", "redis://localhost:6380"),
@@ -736,6 +749,7 @@ mod tests {
             log_format: "json".into(),
             organisation_slug: "instancia-de-teste".into(),
             instance_name: None,
+            instance_profile: None,
             database_url: "postgres://x".into(),
             database_max_connections: 10,
             redis_url: "redis://x".into(),

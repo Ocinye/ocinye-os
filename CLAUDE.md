@@ -135,6 +135,16 @@ sem que nada falhe.
   instrução de sistema da IA e no trilho do Workspace. O inventário de modelos de
   IA é lido **por Instância**, através do nó que o reporta. A instalação
   existente mapeou sem perdas para a primeira Instância.
+- **Perfis e activação de aplicações: `IMPLEMENTED`**
+  ([ADR-0014](docs/adrs/0014-instance-profiles-and-application-activation.md)).
+  Cada Instância tem um perfil — `research`, `business`, `education`,
+  `personal` — que decide as aplicações opcionais activas e se nasce com
+  unidades; criar uma Instância exige escolhê-lo. As aplicações essenciais não
+  se desactivam; as opcionais activam-se e desactivam-se por Instância em
+  Administração › Instância (`instance_applications`, migração 0053), e uma
+  inactiva desaparece do lançador, da barra, da paleta e do «+ Criar» sem perder
+  dados. A Ocinye é `research`, com tudo activo. Ficheiros passou a ser
+  relevante a todo o membro interno, e não só a papéis de investigação.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
@@ -1642,6 +1652,11 @@ seguem são vinculativas e vivem em [`docs/applications/`](docs/applications/REA
 > segue a mesma política de sempre, resolvida pelo Core; o Core recusa quem
 > escrever a rota à mão. Uma ficha no lançador não torna um ecrã utilizável (§4,
 > §59).
+
+> **A Instância decide que aplicações tem activas; o perfil dá a predefinição.**
+> Uma aplicação inactiva não se oferece em lado nenhum e a sua rota diz porquê;
+> os dados ficam. As essenciais não se desactivam. `Desactivar ≠ desinstalar`
+> ([ADR-0014](docs/adrs/0014-instance-profiles-and-application-activation.md)).
 
 > **Disponibilidade de aplicação ≠ disponibilidade de fornecedor.** O Prompt é uma
 > aplicação para quem tem `ai.use` e lança **mesmo sem GPU**; a ausência de

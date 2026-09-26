@@ -23,6 +23,7 @@ use std::sync::Arc;
 use anyhow::{bail, Context};
 use ocinye_core::config::CoreConfig;
 use ocinye_core::modules::identity::{self, Authenticator, Throttle};
+use ocinye_contracts::{InstanceProfile, UnknownProfile};
 use ocinye_core::modules::organisation;
 use ocinye_core::password::{Hasher, HashingParams};
 use ocinye_core::{db, CoreError};
@@ -32,6 +33,7 @@ use ocinye_observability::CorrelationIds;
 #[derive(Debug, Default)]
 struct Args {
     instance_name: Option<String>,
+    profile: Option<String>,
     name: Option<String>,
     email: Option<String>,
     admin_name: Option<String>,
@@ -52,6 +54,10 @@ fn parse_args(argv: &[String]) -> anyhow::Result<Args> {
         match flag.as_str() {
             "--instance-name" => {
                 args.instance_name = Some(value()?);
+                iter.next();
+            }
+            "--profile" => {
+                args.profile = Some(value()?);
                 iter.next();
             }
             "--name" => {
@@ -84,6 +90,7 @@ fn print_usage() {
     eprintln!(
         "Uso: ocinye-core-server bootstrap-admin \\
   [--instance-name \"Nome da Organização\"] \\
+  [--profile research|business|education|personal] \\
   --name        \"Nome Completo\" \\
   --email       pessoa@ocinye.com \\
   --admin-name  \"Nome Completo (Admin)\" \\
@@ -91,7 +98,8 @@ fn print_usage() {
 
 Numa base sem instância, cria-a primeiro: com o nome de --instance-name (ou de
 OCINYE_INSTANCE_NAME), e o slug de OCINYE_INSTANCE_SLUG ou derivado do nome.
-Numa instalação que já tem instância, adopta-a.
+Criar uma instância exige um perfil (--profile ou OCINYE_INSTANCE_PROFILE):
+não há perfil por omissão. Numa instalação que já tem instância, adopta-a.
 
 Depois cria duas coisas ligadas entre si:
 
@@ -215,6 +223,10 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
         .or_else(|| config.instance_name.clone())
         .map(|name| name.trim().to_owned())
         .filter(|name| !name.is_empty());
+    let profile: Option<InstanceProfile> = match args.profile.as_deref() {
+        Some(value) => Some(value.parse().map_err(|error: UnknownProfile| anyhow::anyhow!("{error}"))?),
+        None => config.instance_profile,
+    };
 
     let pool = db::connect(&config)
         .await
@@ -228,14 +240,21 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
     // que a duplicação de uma pessoa provoca, só que ao nível de tudo.
     let organisation = match explicit_slug {
         Some(slug) => {
-            organisation::resolve_instance(&pool, Some(&slug), instance_name.as_deref(), &ids).await
+            organisation::resolve_instance(
+                &pool,
+                Some(&slug),
+                instance_name.as_deref(),
+                profile,
+                &ids,
+            )
+            .await
         }
-        None => match organisation::resolve_instance(&pool, None, None, &ids).await {
+        None => match organisation::resolve_instance(&pool, None, None, None, &ids).await {
             // A base ainda não tem instância e o nome foi dado: nasce aqui.
             Err(CoreError::Configuration(_)) if instance_name.is_some() => {
                 let nome = instance_name.as_deref().unwrap_or_default();
                 let slug = slug_utilizavel(&slug_do_nome(nome))?;
-                organisation::resolve_instance(&pool, Some(&slug), Some(nome), &ids).await
+                organisation::resolve_instance(&pool, Some(&slug), Some(nome), profile, &ids).await
             }
             outro => outro,
         },
@@ -249,12 +268,18 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
         .await
         .context("perfil de recursos por omissão")?;
 
-    // A instituição começa com unidades — defaults sensatos, não uma lista fixa
-    // (§2, §7). Idempotente: adoptar uma organização já semeada não duplica nada.
-    // Uma instalação existente é semeada pela migração; uma nova, aqui.
-    organisation::seed_initial_units(&pool, organisation.id, &ids)
+    // As unidades iniciais são a estrutura de uma instituição de investigação,
+    // e só esse perfil as recebe (ADR-0014 §7). Idempotente: adoptar uma
+    // instância já semeada não duplica nada.
+    if organisation::profile_of(&pool, organisation.id)
         .await
-        .context("unidades iniciais")?;
+        .context("perfil da instância")?
+        .seeds_initial_units()
+    {
+        organisation::seed_initial_units(&pool, organisation.id, &ids)
+            .await
+            .context("unidades iniciais")?;
+    }
 
     let authenticator = Arc::new(Authenticator::new(
         Hasher::new(HashingParams {
