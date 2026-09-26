@@ -48,6 +48,19 @@ pub enum Category {
     Administration,
 }
 
+impl From<ocinye_contracts::ApplicationCategory> for Category {
+    fn from(value: ocinye_contracts::ApplicationCategory) -> Self {
+        use ocinye_contracts::ApplicationCategory as C;
+        match value {
+            C::Productivity => Self::Productivity,
+            C::Research => Self::Research,
+            C::Knowledge => Self::Knowledge,
+            C::Communication => Self::Communication,
+            C::Administration => Self::Administration,
+        }
+    }
+}
+
 impl Category {
     /// O identificador técnico estável da categoria, para o atributo do filtro.
     #[must_use]
@@ -94,23 +107,48 @@ impl Category {
 pub struct Application {
     /// O ecrã que esta aplicação abre — a origem única da identidade e da rota.
     pub screen: Screen,
-    /// A categoria a que pertence, para o filtro do lançador.
-    pub category: Category,
-    /// A chave i18n de uma descrição curta, mostrada na ficha do lançador.
-    pub description_key: &'static str,
     /// Palavras de pesquisa estáveis, independentes do idioma, para além do
     /// rótulo e da descrição já traduzidos — para que «file», «fichier» e
     /// «ficheiro» encontrem todos os Ficheiros.
     pub keywords: &'static [&'static str],
-    /// Se o membro pode fixar esta aplicação na barra lateral. As estruturais
-    /// (Home, O Meu Trabalho) não se fixam — já são navegação essencial.
-    pub can_pin: bool,
-    /// Se entra na barra lateral por omissão, antes de o membro escolher.
-    pub default_pin: bool,
 }
 
 impl Application {
     /// O identificador técnico estável — o do ecrã que abre.
+    /// O manifesto desta aplicação (ADR-0016) — de onde vem tudo o que não é
+    /// apresentação: categoria, descrição, rota, política de fixação.
+    #[must_use]
+    pub fn manifest(&self) -> &'static ocinye_contracts::ApplicationManifest {
+        self.id()
+            .parse::<ocinye_contracts::ApplicationId>()
+            .map(ocinye_contracts::ApplicationId::manifest)
+            .unwrap_or(&ocinye_contracts::application::MANIFESTS[0])
+    }
+
+    /// A família no lançador, do manifesto.
+    #[must_use]
+    pub fn category(&self) -> Category {
+        Category::from(self.manifest().category)
+    }
+
+    /// A chave i18n da descrição, do manifesto.
+    #[must_use]
+    pub fn description_key(&self) -> &'static str {
+        self.manifest().description_key
+    }
+
+    /// Se o membro a pode fixar, do manifesto.
+    #[must_use]
+    pub fn can_pin(&self) -> bool {
+        self.manifest().can_pin
+    }
+
+    /// Se começa fixada para quem nunca escolheu, do manifesto.
+    #[must_use]
+    pub fn default_pin(&self) -> bool {
+        self.manifest().default_pin
+    }
+
     #[must_use]
     pub const fn id(&self) -> &'static str {
         self.screen.id()
@@ -137,7 +175,7 @@ impl Application {
     /// A descrição no idioma corrente.
     #[must_use]
     pub fn description(&self) -> &'static str {
-        crate::i18n::t(self.description_key)
+        crate::i18n::t(self.manifest().description_key)
     }
 
     /// Se esta aplicação é visível a este membro, com o Core no estado dado.
@@ -180,16 +218,10 @@ pub const APPLICATIONS: &[Application] = &[
     // ── Produtividade ────────────────────────────────────────────────────
     Application {
         screen: Screen::Notes,
-        category: Category::Productivity,
-        description_key: "apps.desc.notes",
         keywords: &["note", "notes", "nota", "nota", "notas", "editor"],
-        can_pin: true,
-        default_pin: true,
     },
     Application {
         screen: Screen::Calendar,
-        category: Category::Productivity,
-        description_key: "apps.desc.calendar",
         keywords: &[
             "calendar",
             "calendário",
@@ -198,38 +230,22 @@ pub const APPLICATIONS: &[Application] = &[
             "event",
             "agenda",
         ],
-        can_pin: true,
-        default_pin: false,
     },
     Application {
         screen: Screen::MyWork,
-        category: Category::Productivity,
-        description_key: "apps.desc.work",
         keywords: &["work", "trabalho", "travail", "tarefas", "tasks"],
-        can_pin: false,
-        default_pin: false,
     },
     Application {
         screen: Screen::Home,
-        category: Category::Productivity,
-        description_key: "apps.desc.home",
         keywords: &["home", "início", "accueil", "painel", "dashboard"],
-        can_pin: false,
-        default_pin: false,
     },
     // ── Comunicação ──────────────────────────────────────────────────────
     Application {
         screen: Screen::Mail,
-        category: Category::Communication,
-        description_key: "apps.desc.mail",
         keywords: &["mail", "correio", "courrier", "email", "e-mail"],
-        can_pin: true,
-        default_pin: false,
     },
     Application {
         screen: Screen::Messaging,
-        category: Category::Communication,
-        description_key: "apps.desc.messages",
         keywords: &[
             "message",
             "messages",
@@ -238,14 +254,10 @@ pub const APPLICATIONS: &[Application] = &[
             "chat",
             "equipa",
         ],
-        can_pin: true,
-        default_pin: false,
     },
     // ── Conhecimento ─────────────────────────────────────────────────────
     Application {
         screen: Screen::Files,
-        category: Category::Knowledge,
-        description_key: "apps.desc.files",
         keywords: &[
             "file",
             "files",
@@ -256,13 +268,9 @@ pub const APPLICATIONS: &[Application] = &[
             "dossier",
             "upload",
         ],
-        can_pin: true,
-        default_pin: true,
     },
     Application {
         screen: Screen::Knowledge,
-        category: Category::Knowledge,
-        description_key: "apps.desc.knowledge",
         keywords: &[
             "knowledge",
             "conhecimento",
@@ -270,13 +278,9 @@ pub const APPLICATIONS: &[Application] = &[
             "acervo",
             "base",
         ],
-        can_pin: true,
-        default_pin: false,
     },
     Application {
         screen: Screen::Bibliography,
-        category: Category::Knowledge,
-        description_key: "apps.desc.bibliography",
         keywords: &[
             "bibliography",
             "bibliografia",
@@ -285,30 +289,18 @@ pub const APPLICATIONS: &[Application] = &[
             "reference",
             "source",
         ],
-        can_pin: true,
-        default_pin: false,
     },
     // ── Investigação ─────────────────────────────────────────────────────
     Application {
         screen: Screen::Units,
-        category: Category::Research,
-        description_key: "apps.desc.units",
         keywords: &["unit", "units", "unidade", "unidades", "unité", "unités"],
-        can_pin: true,
-        default_pin: false,
     },
     Application {
         screen: Screen::Ideas,
-        category: Category::Research,
-        description_key: "apps.desc.ideas",
         keywords: &["idea", "ideas", "ideia", "ideias", "idée", "idées"],
-        can_pin: true,
-        default_pin: false,
     },
     Application {
         screen: Screen::Projects,
-        category: Category::Research,
-        description_key: "apps.desc.projects",
         keywords: &[
             "project",
             "projects",
@@ -317,21 +309,13 @@ pub const APPLICATIONS: &[Application] = &[
             "projet",
             "projets",
         ],
-        can_pin: true,
-        default_pin: true,
     },
     Application {
         screen: Screen::Datasets,
-        category: Category::Research,
-        description_key: "apps.desc.datasets",
         keywords: &["dataset", "datasets", "dados", "données", "data"],
-        can_pin: true,
-        default_pin: false,
     },
     Application {
         screen: Screen::Prompt,
-        category: Category::Research,
-        description_key: "apps.desc.prompt",
         keywords: &[
             "prompt",
             "ai",
@@ -340,38 +324,22 @@ pub const APPLICATIONS: &[Application] = &[
             "assistant",
             "inteligência",
         ],
-        can_pin: true,
-        default_pin: false,
     },
     Application {
         screen: Screen::Ai,
-        category: Category::Research,
-        description_key: "apps.desc.ai",
         keywords: &["ai", "ia", "inteligência", "intelligence", "hub"],
-        can_pin: true,
-        default_pin: false,
     },
     Application {
         screen: Screen::Agents,
-        category: Category::Research,
-        description_key: "apps.desc.agents",
         keywords: &["agent", "agents", "agente", "agentes"],
-        can_pin: true,
-        default_pin: false,
     },
     Application {
         screen: Screen::Compute,
-        category: Category::Research,
-        description_key: "apps.desc.compute",
         keywords: &["compute", "computação", "calcul", "gpu", "nó", "node"],
-        can_pin: true,
-        default_pin: false,
     },
     // ── Administração ────────────────────────────────────────────────────
     Application {
         screen: Screen::Resources,
-        category: Category::Administration,
-        description_key: "apps.desc.resources",
         keywords: &[
             "resource",
             "resources",
@@ -380,21 +348,13 @@ pub const APPLICATIONS: &[Application] = &[
             "ressource",
             "quota",
         ],
-        can_pin: true,
-        default_pin: false,
     },
     Application {
         screen: Screen::Activity,
-        category: Category::Administration,
-        description_key: "apps.desc.activity",
         keywords: &["activity", "actividade", "activité", "feed"],
-        can_pin: true,
-        default_pin: false,
     },
     Application {
         screen: Screen::Admin,
-        category: Category::Administration,
-        description_key: "apps.desc.administration",
         keywords: &[
             "admin",
             "administração",
@@ -403,21 +363,13 @@ pub const APPLICATIONS: &[Application] = &[
             "members",
             "consola",
         ],
-        can_pin: true,
-        default_pin: false,
     },
     Application {
         screen: Screen::Audit,
-        category: Category::Administration,
-        description_key: "apps.desc.audit",
         keywords: &["audit", "auditoria", "log", "registo"],
-        can_pin: true,
-        default_pin: false,
     },
     Application {
         screen: Screen::Settings,
-        category: Category::Administration,
-        description_key: "apps.desc.settings",
         keywords: &[
             "settings",
             "definições",
@@ -426,16 +378,10 @@ pub const APPLICATIONS: &[Application] = &[
             "idioma",
             "language",
         ],
-        can_pin: true,
-        default_pin: false,
     },
     Application {
         screen: Screen::Help,
-        category: Category::Administration,
-        description_key: "apps.desc.help",
         keywords: &["help", "ajuda", "aide", "suporte", "support"],
-        can_pin: true,
-        default_pin: false,
     },
 ];
 
@@ -466,7 +412,7 @@ pub fn by_id(id: &str) -> Option<&'static Application> {
 pub fn default_pins() -> Vec<String> {
     APPLICATIONS
         .iter()
-        .filter(|a| a.default_pin)
+        .filter(|a| a.default_pin())
         .map(|a| a.id().to_owned())
         .collect()
 }
@@ -475,7 +421,7 @@ pub fn default_pins() -> Vec<String> {
 /// pedir ao Core para guardar a lista.
 #[must_use]
 pub fn is_pinnable(id: &str) -> bool {
-    by_id(id).is_some_and(|a| a.can_pin)
+    by_id(id).is_some_and(|a| a.can_pin())
 }
 
 /// As aplicações fixadas visíveis a este membro, na ordem em que fixou.
@@ -536,8 +482,8 @@ mod tests {
             if !crate::i18n::has(app.screen.label_key()) {
                 faltam.push(format!("{}: rótulo {}", app.id(), app.screen.label_key()));
             }
-            if !crate::i18n::has(app.description_key) {
-                faltam.push(format!("{}: descrição {}", app.id(), app.description_key));
+            if !crate::i18n::has(app.description_key()) {
+                faltam.push(format!("{}: descrição {}", app.id(), app.description_key()));
             }
         }
         assert!(
@@ -587,23 +533,23 @@ mod tests {
     #[test]
     fn a_politica_de_fixacao_e_coerente() {
         for app in APPLICATIONS {
-            if app.default_pin {
+            if app.default_pin() {
                 assert!(
-                    app.can_pin,
+                    app.can_pin(),
                     "{} entra por omissão mas não é fixável",
                     app.id()
                 );
             }
         }
-        assert!(!by_id("home").expect("home").can_pin, "Home não se fixa");
+        assert!(!by_id("home").expect("home").can_pin(), "Home não se fixa");
         assert!(
-            !by_id("work").expect("work").can_pin,
+            !by_id("work").expect("work").can_pin(),
             "O Meu Trabalho não se fixa"
         );
         // O conjunto por omissão existe e é pequeno.
         let por_omissao: Vec<&str> = APPLICATIONS
             .iter()
-            .filter(|a| a.default_pin)
+            .filter(|a| a.default_pin())
             .map(Application::id)
             .collect();
         assert_eq!(por_omissao, vec!["notes", "files", "projects"]);
@@ -615,7 +561,7 @@ mod tests {
     fn cada_categoria_tem_aplicacoes() {
         for categoria in Category::all() {
             assert!(
-                APPLICATIONS.iter().any(|a| a.category == categoria),
+                APPLICATIONS.iter().any(|a| a.category() == categoria),
                 "a categoria {} não tem nenhuma aplicação",
                 categoria.id()
             );
@@ -640,6 +586,20 @@ mod tests {
                 by_id(id.as_str()).is_some(),
                 "{id} está no catálogo do Core e não no registo"
             );
+        }
+    }
+
+    /// O manifesto e o ecrã tipado dizem o mesmo sobre cada aplicação: a rota e
+    /// a chave do nome (ADR-0016). Um manifesto que apontasse para outra rota
+    /// seria uma aplicação que o lançador abre e o Core não reconhece.
+    #[test]
+    fn cada_manifesto_concorda_com_o_seu_ecra() {
+        for app in APPLICATIONS {
+            let manifesto = app.manifest();
+            assert_eq!(manifesto.id.as_str(), app.id(), "manifesto errado para {}", app.id());
+            assert_eq!(manifesto.route, app.route(), "rota de {}", app.id());
+            assert_eq!(manifesto.name_key, app.screen.label_key(), "nome de {}", app.id());
+            assert!(crate::i18n::has(manifesto.name_key), "{} sem nome traduzido", app.id());
         }
     }
 

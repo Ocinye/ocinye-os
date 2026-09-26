@@ -351,6 +351,34 @@ async fn a_recusa_e_da_instancia_que_a_decidiu() {
     assert_eq!(em_b, StatusCode::OK);
 }
 
+/// Cada prefixo que um manifesto declara leva a uma rota real do Core
+/// (ADR-0016): sem sessão, a resposta é `401`, e nunca o `404` de uma rota
+/// desconhecida. Um manifesto que declarasse um caminho morto recusaria nada —
+/// e esconderia que a aplicação mudou de rotas.
+#[tokio::test]
+async fn cada_prefixo_declarado_e_uma_rota_real() {
+    let pool = pool!();
+    let org = organisation(&pool).await;
+    let state = nucleo(pool.clone(), org);
+    let qualquer = "00000000-0000-0000-0000-000000000001";
+    for manifesto in ocinye_contracts::application::MANIFESTS {
+        for prefixo in manifesto.api_prefixes {
+            let mut respostas = Vec::new();
+            for caminho in [format!("/api/v1{prefixo}"), format!("/api/v1{prefixo}/{qualquer}")] {
+                for metodo in ["GET", "POST"] {
+                    let (status, _) = pedido(&state, None, metodo, &caminho, None).await;
+                    respostas.push(status);
+                }
+            }
+            assert!(
+                respostas.iter().any(|s| *s == StatusCode::UNAUTHORIZED),
+                "{}: o prefixo {prefixo} não leva a nenhuma rota real ({respostas:?})",
+                manifesto.id
+            );
+        }
+    }
+}
+
 /// Um handler de aplicação com um defeito: entra em pânico com um detalhe
 /// interno que não pode chegar ao cliente.
 async fn avaria() -> &'static str {

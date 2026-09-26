@@ -26,35 +26,14 @@ use crate::error::{CoreError, CoreResult};
 
 /// A que aplicação pertence um caminho da API (sem o prefixo `/api/v1`).
 ///
-/// Só os caminhos que servem **uma** aplicação. Os partilhados — ambientes
-/// (`/workspaces`, de Ideias e de Projectos), tarefas, a cadeia científica, a
-/// pesquisa, a identidade, a autenticação, a saúde — devolvem `None` e nunca são
-/// recusados por activação: recusá-los partiria outra aplicação activa. O
-/// enrolamento e o heartbeat dos nós também não: a autoridade sobre os nós é do
-/// Core, e desactivar o ecrã de Computação não desliga máquinas (ADR-0014).
+/// Vem dos manifestos (ADR-0016): cada aplicação declara os prefixos que são
+/// só seus. Os partilhados — ambientes, tarefas, a cadeia científica, a
+/// pesquisa, a identidade, a autenticação, a saúde, a Instância — e a
+/// autoridade sobre nós não são de nenhuma, e nunca se recusam por activação
+/// (ADR-0015).
 #[must_use]
 pub fn application_of_api_path(path: &str) -> Option<ApplicationId> {
-    let segmentos: Vec<&str> = path.trim_start_matches('/').split('/').collect();
-    let primeiro = segmentos.first().copied().unwrap_or_default();
-    let segundo = segmentos.get(1).copied().unwrap_or_default();
-    match (primeiro, segundo) {
-        ("mail", _) => Some(ApplicationId::Mail),
-        ("messaging", _) => Some(ApplicationId::Messages),
-        ("calendar", _) => Some(ApplicationId::Calendar),
-        ("notes", _) | ("me", "notes" | "deleted-notes" | "shared-notes") => {
-            Some(ApplicationId::Notes)
-        }
-        ("ideas", _) => Some(ApplicationId::Ideas),
-        ("projects", _) => Some(ApplicationId::Projects),
-        ("datasets", _) => Some(ApplicationId::Datasets),
-        ("sources", _) => Some(ApplicationId::Bibliography),
-        ("documents", _) => Some(ApplicationId::Knowledge),
-        ("units", _) => Some(ApplicationId::Units),
-        ("ai", "agents") => Some(ApplicationId::Agents),
-        ("ai", "prompt" | "conversations") => Some(ApplicationId::Prompt),
-        ("compute", "nodes" | "status") => Some(ApplicationId::Compute),
-        _ => None,
-    }
+    ocinye_contracts::application::application_of_api_path(path)
 }
 
 /// Recusa uma operação de uma aplicação inactiva nesta Instância.

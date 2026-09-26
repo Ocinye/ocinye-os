@@ -1575,7 +1575,7 @@ fn launcher(viewer: &Viewer) -> impl IntoView {
         .chain(
             Category::all()
                 .into_iter()
-                .filter(|c| apps.iter().any(|app| app.category == *c))
+                .filter(|c| apps.iter().any(|app| app.category() == *c))
                 .map(|c| (c.label_key(), c.id())),
         )
         .map(|(label_key, id)| {
@@ -1616,7 +1616,7 @@ fn launcher(viewer: &Viewer) -> impl IntoView {
             let fixada = fixadas.contains(app.id());
             // Só as fixáveis trazem o botão de fixar; as estruturais (Home, O Meu
             // Trabalho) já são navegação e não se fixam.
-            let botao_fixar = app.can_pin.then(|| {
+            let botao_fixar = app.can_pin().then(|| {
                 view! {
                     <button
                         type="button"
@@ -1639,7 +1639,7 @@ fn launcher(viewer: &Viewer) -> impl IntoView {
                         class="oc-apps__card"
                         href=app.route()
                         data-oc="launcher-item"
-                        data-cat=app.category.id()
+                        data-cat=app.category().id()
                         data-search=procura
                         aria-label=label
                     >
@@ -2593,7 +2593,7 @@ mod tests {
         let mut v = viewer_de_investigacao(&ocinye_contracts::Permission::all());
         v.pinned = apps::APPLICATIONS
             .iter()
-            .filter(|a| a.can_pin)
+            .filter(|a| a.can_pin())
             .map(|a| a.id().to_owned())
             .collect();
         v
@@ -2606,7 +2606,7 @@ mod tests {
             .chain(
                 apps::APPLICATIONS
                     .iter()
-                    .filter(|a| a.can_pin)
+                    .filter(|a| a.can_pin())
                     .map(|a| a.screen),
             )
             .collect()
