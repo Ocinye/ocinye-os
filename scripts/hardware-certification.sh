@@ -37,7 +37,7 @@ for classe in "${CLASSES[@]}"; do
     nome="ocinye-hw-${cpus}c${memoria}"
     trabalho="$(mktemp -d)"
     passo "Classe $cpus vCPU / $memoria"
-    docker rm -f "$nome" >/dev/null 2>&1 || true
+    docker rm -f -v "$nome" >/dev/null 2>&1 || true
     docker run -d --privileged --name "$nome" --cpus "$cpus" --memory "$memoria" \
         -p "127.0.0.1:$PORTO:443" -e DOCKER_TLS_CERTDIR= docker:27-dind >/dev/null
     for _ in $(seq 1 60); do docker exec "$nome" docker info >/dev/null 2>&1 && break; sleep 2; done
@@ -81,7 +81,7 @@ for classe in "${CLASSES[@]}"; do
         [ "$instalacao" -le "$MAX_INSTALACAO_S" ] || { estado="FAIL"; razao="instalação em ${instalacao}s"; }
         [ "$p95_ms" -le "$MAX_P95_MS" ] || { estado="FAIL"; razao="${razao:+$razao; }p95 ${p95_ms} ms"; }
     fi
-    docker rm -f "$nome" >/dev/null 2>&1 || true
+    docker rm -f -v "$nome" >/dev/null 2>&1 || true
     rm -rf "$trabalho"
     echo "  $estado ${razao:+— $razao}"
     linhas+=("| $cpus vCPU · $memoria | $estado | ${instalacao}s | $memoria_repouso | $p50_ms / $p95_ms | $tempos | ${razao:-—} |")

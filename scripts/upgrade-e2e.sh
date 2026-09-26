@@ -26,10 +26,10 @@ release() { no_anfitriao sed -n 's/^OCINYE_RELEASE_SHA=//p' /etc/ocinye/release.
 falha() { printf '\n  FALHOU — %s\n\n' "$1" >&2; exit 1; }
 
 passo "Anfitrião limpo"
-docker rm -f "$NOME" >/dev/null 2>&1 || true
+docker rm -f -v "$NOME" >/dev/null 2>&1 || true
 docker run -d --privileged --name "$NOME" -p "127.0.0.1:$PORTO:443" \
     -e DOCKER_TLS_CERTDIR= docker:27-dind >/dev/null
-trap 'docker rm -f "$NOME" >/dev/null 2>&1 || true' EXIT
+trap 'docker rm -f -v "$NOME" >/dev/null 2>&1 || true' EXIT
 for _ in $(seq 1 60); do no_anfitriao docker info >/dev/null 2>&1 && break; sleep 2; done
 no_anfitriao sh -c 'apk add --no-cache bash curl coreutils >/dev/null'
 for p in A B C; do docker cp "${!p}" "$NOME:/root/$p"; done

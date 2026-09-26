@@ -25,11 +25,11 @@ uma_corrida() {
     credencial="$(mktemp)"
 
     passo "Anfitrião limpo ($perfil)"
-    docker rm -f "$nome" >/dev/null 2>&1 || true
+    docker rm -f -v "$nome" >/dev/null 2>&1 || true
     docker run -d --privileged --name "$nome" \
         -p "127.0.0.1:$PORTO:443" \
         -e DOCKER_TLS_CERTDIR= "$DIND_IMAGEM" >/dev/null
-    trap 'docker rm -f "'"$nome"'" >/dev/null 2>&1 || true' RETURN
+    trap 'docker rm -f -v "'"$nome"'" >/dev/null 2>&1 || true' RETURN
     for _ in $(seq 1 60); do
         docker exec "$nome" docker info >/dev/null 2>&1 && break
         sleep 2

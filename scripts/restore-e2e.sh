@@ -23,11 +23,11 @@ TRABALHO="$(mktemp -d)"
 
 passo() { printf '\n== %s ==\n' "$1"; }
 falha() { printf '\n  FALHOU — %s\n\n' "$1" >&2; exit 1; }
-limpar() { docker rm -f "$ORIGEM" "$DESTINO" >/dev/null 2>&1 || true; rm -rf "$TRABALHO"; }
+limpar() { docker rm -f -v "$ORIGEM" "$DESTINO" >/dev/null 2>&1 || true; rm -rf "$TRABALHO"; }
 trap limpar EXIT
 
 anfitriao() {  # nome
-    docker rm -f "$1" >/dev/null 2>&1 || true
+    docker rm -f -v "$1" >/dev/null 2>&1 || true
     docker run -d --privileged --name "$1" -p "127.0.0.1:$PORTO:443" \
         -e DOCKER_TLS_CERTDIR= docker:27-dind >/dev/null
     for _ in $(seq 1 60); do docker exec "$1" docker info >/dev/null 2>&1 && break; sleep 2; done
@@ -70,7 +70,7 @@ ORIGEM_NOTAS="$(docker exec "$ORIGEM" docker exec ocinye-postgres-1 psql -U ocin
 echo "  conjunto $(basename "$CONJUNTO") · $(find "$TRABALHO/conjunto/objects" -type f | wc -l | tr -d ' ') objecto(s) · $ORIGEM_NOTAS nota(s)"
 
 passo "Origem: destruída"
-docker rm -f "$ORIGEM" >/dev/null
+docker rm -f -v "$ORIGEM" >/dev/null
 
 passo "Destino: instalar a partir do conjunto"
 anfitriao "$DESTINO"
