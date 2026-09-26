@@ -254,6 +254,10 @@ mod capacity_tests {
         assert_eq!(linha.allocatable, Some(14));
         assert_eq!(linha.allocated, 0);
         assert_eq!(CapacityLine::new(Some(2), 8, None).allocatable, Some(0));
-        assert_eq!(CapacityLine::new(None, 2, None).allocatable, None, "sem relatório não se inventa");
+        assert_eq!(
+            CapacityLine::new(None, 2, None).allocatable,
+            None,
+            "sem relatório não se inventa"
+        );
     }
 }

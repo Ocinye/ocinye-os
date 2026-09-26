@@ -79,22 +79,25 @@ async fn list_nodes(
     Ok(Json(
         nodes
             .into_iter()
-            .map(|(node, status)| NodeView {
-                id: node.id,
-                identifier: node.identifier,
-                display_name: node.display_name,
-                kind: node.kind,
-                location_label: node.location_label,
-                institutional_control: node.institutional_control,
-                physical_residency: node.physical_residency,
-                status: status.as_str().to_owned(),
-                cpu_cores: node.cpu_cores,
-                memory_bytes: node.memory_bytes,
-                gpus: node.gpus,
-                capabilities: node.capabilities,
-                capacity: node.capacity(),
-                agent_version: node.agent_version,
-                last_seen_at: node.last_seen_at,
+            .map(|(node, status)| {
+                let capacity = node.capacity();
+                NodeView {
+                    id: node.id,
+                    identifier: node.identifier,
+                    display_name: node.display_name,
+                    kind: node.kind,
+                    location_label: node.location_label,
+                    institutional_control: node.institutional_control,
+                    physical_residency: node.physical_residency,
+                    status: status.as_str().to_owned(),
+                    cpu_cores: node.cpu_cores,
+                    memory_bytes: node.memory_bytes,
+                    gpus: node.gpus,
+                    capabilities: node.capabilities,
+                    capacity,
+                    agent_version: node.agent_version,
+                    last_seen_at: node.last_seen_at,
+                }
             })
             .collect(),
     ))

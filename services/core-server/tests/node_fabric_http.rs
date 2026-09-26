@@ -171,37 +171,6 @@ async fn membro(pool: &PgPool, organisation_id: Uuid, role: TechnicalRole) -> (U
     (person_id, token)
 }
 
-
-async fn pedido(
-    state: &AppState,
-    token: Option<&Secret>,
-    method: &str,
-    path: &str,
-    body: Option<Value>,
-) -> (StatusCode, Value) {
-    let mut builder = Request::builder().method(method).uri(path);
-    if let Some(token) = token {
-        builder = builder.header(header::AUTHORIZATION, format!("Bearer {}", token.expose()));
-    }
-    let request = match body {
-        Some(body) => builder
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(serde_json::to_vec(&body).expect("json"))),
-        None => builder.body(Body::empty()),
-    }
-    .expect("pedido");
-    let response = routes::router(state.clone())
-        .oneshot(request)
-        .await
-        .expect("resposta");
-    let status = response.status();
-    let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
-        .await
-        .expect("corpo");
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
-}
-
-
 async fn pedido(
     state: &AppState,
     token: Option<&Secret>,
@@ -232,7 +201,10 @@ async fn pedido(
     let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
         .await
         .expect("corpo");
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
 fn batimento(modelo: &str) -> Value {
@@ -280,7 +252,10 @@ async fn um_no_entra_reporta_cai_e_volta_sem_o_core_deixar_de_responder() {
     )
     .await;
     assert!(status.is_success(), "registo: {status} {registo}");
-    let enrolamento = registo["enrollment_token"].as_str().expect("token").to_owned();
+    let enrolamento = registo["enrollment_token"]
+        .as_str()
+        .expect("token")
+        .to_owned();
     let node_id = registo["node_id"].as_str().expect("id").to_owned();
 
     let (status, enrolado) = pedido(
@@ -305,10 +280,17 @@ async fn um_no_entra_reporta_cai_e_volta_sem_o_core_deixar_de_responder() {
         Some(json!({ "enrollment_token": enrolamento })),
     )
     .await;
-    assert_eq!(reuso, StatusCode::UNAUTHORIZED, "um token de enrolamento não se reutiliza");
+    assert_eq!(
+        reuso,
+        StatusCode::UNAUTHORIZED,
+        "um token de enrolamento não se reutiliza"
+    );
 
     // B, C — heartbeat e descoberta: recursos, GPU, consumo.
-    assert!(!capacidade_geral(&state, &admin).await, "antes do nó, nada serve GENERAL");
+    assert!(
+        !capacidade_geral(&state, &admin).await,
+        "antes do nó, nada serve GENERAL"
+    );
     let modelo = format!("modelo-{identificador}");
     let (status, _) = pedido(
         &state,
@@ -320,7 +302,15 @@ async fn um_no_entra_reporta_cai_e_volta_sem_o_core_deixar_de_responder() {
     )
     .await;
     assert!(status.is_success(), "heartbeat: {status}");
-    let (_, nos) = pedido(&state, Some(&admin), None, "GET", "/api/v1/compute/nodes", None).await;
+    let (_, nos) = pedido(
+        &state,
+        Some(&admin),
+        None,
+        "GET",
+        "/api/v1/compute/nodes",
+        None,
+    )
+    .await;
     let no = nos
         .as_array()
         .and_then(|n| n.iter().find(|n| n["id"] == node_id.as_str()))
@@ -328,9 +318,15 @@ async fn um_no_entra_reporta_cai_e_volta_sem_o_core_deixar_de_responder() {
     assert_eq!(no["status"], "online");
     assert_eq!(no["capacity"]["cpu_cores"]["physical"], 16);
     assert_eq!(no["capacity"]["gpus"], 1);
-    assert_eq!(no["capacity"]["memory_bytes"]["consumed"], 8_i64 * 1024 * 1024 * 1024);
+    assert_eq!(
+        no["capacity"]["memory_bytes"]["consumed"],
+        8_i64 * 1024 * 1024 * 1024
+    );
     assert_eq!(no["capacity"]["cpu_cores"]["allocated"], 0);
-    assert!(capacidade_geral(&state, &admin).await, "G: o modelo do nó serve GENERAL");
+    assert!(
+        capacidade_geral(&state, &admin).await,
+        "G: o modelo do nó serve GENERAL"
+    );
 
     // A reserva do operador tira capacidade alocável, e nunca a física.
     let (status, _) = pedido(
@@ -343,7 +339,15 @@ async fn um_no_entra_reporta_cai_e_volta_sem_o_core_deixar_de_responder() {
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    let (_, total) = pedido(&state, Some(&admin), None, "GET", "/api/v1/compute/capacity", None).await;
+    let (_, total) = pedido(
+        &state,
+        Some(&admin),
+        None,
+        "GET",
+        "/api/v1/compute/capacity",
+        None,
+    )
+    .await;
     assert_eq!(total["online_nodes"], 1);
     assert_eq!(total["cpu_cores"]["physical"], 16);
     assert_eq!(total["cpu_cores"]["reserved"], 2);
@@ -360,17 +364,38 @@ async fn um_no_entra_reporta_cai_e_volta_sem_o_core_deixar_de_responder() {
     ocinye_core::modules::compute::internal::mark_stale_models_unavailable(&pool, 120)
         .await
         .expect("o worker marca os modelos");
-    let (_, nos) = pedido(&state, Some(&admin), None, "GET", "/api/v1/compute/nodes", None).await;
+    let (_, nos) = pedido(
+        &state,
+        Some(&admin),
+        None,
+        "GET",
+        "/api/v1/compute/nodes",
+        None,
+    )
+    .await;
     assert_eq!(
-        nos.as_array().and_then(|n| n.iter().find(|n| n["id"] == node_id.as_str())).expect("nó")["status"],
+        nos.as_array()
+            .and_then(|n| n.iter().find(|n| n["id"] == node_id.as_str()))
+            .expect("nó")["status"],
         "offline"
     );
-    assert!(!capacidade_geral(&state, &admin).await, "D: offline, o modelo deixa de servir");
+    assert!(
+        !capacidade_geral(&state, &admin).await,
+        "D: offline, o modelo deixa de servir"
+    );
     let (pronto, _) = pedido(&state, None, None, "GET", "/ready", None).await;
     assert_eq!(pronto, StatusCode::OK, "E: o Core continua pronto");
     let (me, _) = pedido(&state, Some(&admin), None, "GET", "/api/v1/me", None).await;
     assert_eq!(me, StatusCode::OK);
-    let (_, total) = pedido(&state, Some(&admin), None, "GET", "/api/v1/compute/capacity", None).await;
+    let (_, total) = pedido(
+        &state,
+        Some(&admin),
+        None,
+        "GET",
+        "/api/v1/compute/capacity",
+        None,
+    )
+    .await;
     assert_eq!(total["online_nodes"], 0);
 
     // F, G — o nó volta, e a capacidade regressa sozinha: sem reinício, sem toggle.
@@ -384,7 +409,10 @@ async fn um_no_entra_reporta_cai_e_volta_sem_o_core_deixar_de_responder() {
     )
     .await;
     assert!(status.is_success());
-    assert!(capacidade_geral(&state, &admin).await, "G: a capacidade volta com o nó");
+    assert!(
+        capacidade_geral(&state, &admin).await,
+        "G: a capacidade volta com o nó"
+    );
 
     // H — um nó falso é recusado.
     let (falso, _) = pedido(
@@ -396,8 +424,20 @@ async fn um_no_entra_reporta_cai_e_volta_sem_o_core_deixar_de_responder() {
         Some(batimento("modelo-falso")),
     )
     .await;
-    assert_eq!(falso, StatusCode::UNAUTHORIZED, "um token que não existe não é um nó");
-    let (sem, _) = pedido(&state, None, None, "POST", "/api/v1/compute/heartbeat", Some(batimento("x"))).await;
+    assert_eq!(
+        falso,
+        StatusCode::UNAUTHORIZED,
+        "um token que não existe não é um nó"
+    );
+    let (sem, _) = pedido(
+        &state,
+        None,
+        None,
+        "POST",
+        "/api/v1/compute/heartbeat",
+        Some(batimento("x")),
+    )
+    .await;
     assert_eq!(sem, StatusCode::UNAUTHORIZED, "sem token não há nó");
     let (inventado, _) = pedido(
         &state,
@@ -430,15 +470,32 @@ async fn a_reserva_e_de_quem_administra_e_nunca_negativa() {
         Some(json!({ "identifier": identificador, "display_name": "Nó" })),
     )
     .await;
-    let caminho = format!("/api/v1/compute/nodes/{}/reservation", registo["node_id"].as_str().expect("id"));
-    let (membro_status, _) =
-        pedido(&state, Some(&pessoa), None, "PUT", &caminho, Some(json!({ "cpu_cores": 1 }))).await;
+    let caminho = format!(
+        "/api/v1/compute/nodes/{}/reservation",
+        registo["node_id"].as_str().expect("id")
+    );
+    let (membro_status, _) = pedido(
+        &state,
+        Some(&pessoa),
+        None,
+        "PUT",
+        &caminho,
+        Some(json!({ "cpu_cores": 1 })),
+    )
+    .await;
     assert!(
         membro_status == StatusCode::FORBIDDEN || membro_status == StatusCode::NOT_FOUND,
         "um membro não reserva: {membro_status}"
     );
-    let (negativa, _) =
-        pedido(&state, Some(&admin), None, "PUT", &caminho, Some(json!({ "cpu_cores": -1 }))).await;
+    let (negativa, _) = pedido(
+        &state,
+        Some(&admin),
+        None,
+        "PUT",
+        &caminho,
+        Some(json!({ "cpu_cores": -1 })),
+    )
+    .await;
     assert_eq!(negativa, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
