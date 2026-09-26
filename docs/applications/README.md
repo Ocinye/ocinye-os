@@ -124,7 +124,18 @@ uma aplicação também tem de estar **activa na Instância**. A visibilidade é
   ([ADR-0015](../adrs/0015-core-and-applications-boundary.md),
   [fronteira](../architecture/CORE_AND_APPLICATIONS.md)).
 
+## O manifesto
+
+Cada aplicação tem um **manifesto** em `ocinye_contracts::application`
+([ADR-0016](../adrs/0016-application-manifest-contract.md)): identidade, classe,
+categoria, rota, chaves do nome e da descrição, os prefixos da API que são só
+seus, o armazenamento, a rede e as capacidades de IA que pede, os recursos que
+consome, de onde vem a sua saúde, e a política de fixação. O registo do Workspace
+guarda só o ecrã tipado e as palavras de pesquisa; o resto lê-o do manifesto.
+**Pedir não é receber**: o Core governa o que cada aplicação recebe.
+
 ## O que ainda não existe
 
-- Um **manifesto** de aplicação versionado — capacidades pedidas, recursos,
-  rede, ciclo de vida, saúde — que substitua o registo estático (Parte 4).
+- Aplicações que não sejam nativas: da organização, conectores, pacotes
+  externos. O manifesto não as impede; não existe instalação, loja nem execução
+  de código de terceiros.

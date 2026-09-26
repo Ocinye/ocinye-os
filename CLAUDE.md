@@ -153,6 +153,13 @@ sem que nada falhe.
   partilhados e autoridade sobre nós nunca se recusam. Um `panic` num handler de
   aplicação é um `500` com o envelope de erro, e o resto do Core continua a
   responder. As aplicações continuam no mesmo processo que o Core.
+- **Manifesto de aplicação: `IMPLEMENTED`**
+  ([ADR-0016](docs/adrs/0016-application-manifest-contract.md)). Cada aplicação
+  declara, em `ocinye_contracts::application`, a sua identidade, rota, categoria,
+  rotas da API, armazenamento, rede, capacidades de IA, recursos, fonte de saúde
+  e política de fixação. O Core e o Workspace lêem o mesmo manifesto; um teste
+  exige que cada prefixo declarado seja uma rota real do Core. Só existem
+  aplicações nativas.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
@@ -1635,9 +1642,11 @@ ambiente com uma **camada de aplicações**: as aplicações descobrem-se, pesqu
 e lançam-se, e a barra lateral é um atalho, não o catálogo. As regras que se
 seguem são vinculativas e vivem em [`docs/applications/`](docs/applications/README.md).
 
-> **O registo de aplicações é a fonte autoritativa** da identidade, rota, rótulo,
-> descrição, ícone, categoria, disponibilidade e política de fixação de cada
-> aplicação. A identidade existe **uma vez**; o lançador, a pesquisa e a barra
+> **O manifesto de aplicação é a fonte autoritativa** da identidade, rota, rótulo,
+> descrição, categoria, rotas da API, pedidos ao Core e política de fixação de
+> cada aplicação ([ADR-0016](docs/adrs/0016-application-manifest-contract.md));
+> vive nos contratos, partilhado pelo Core e pelo Workspace, e o registo do
+> Workspace acrescenta-lhe só apresentação (ecrã, ícone, palavras de pesquisa). A identidade existe **uma vez**; o lançador, a pesquisa e a barra
 > lateral consomem o mesmo registo. Não se duplica metadata de aplicação por
 > várias superfícies.
 
