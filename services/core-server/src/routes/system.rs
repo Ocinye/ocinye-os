@@ -16,7 +16,25 @@ use crate::state::AppState;
 
 /// System routes.
 pub fn routes() -> Router<AppState> {
-    Router::new().route("/system/capabilities", get(capabilities))
+    Router::new()
+        .route("/system/capabilities", get(capabilities))
+        .route("/system/operations", get(operations))
+}
+
+/// `GET /system/operations` — the operator's view (Part 13).
+///
+/// Nodes, AI providers, applications and storage pressure in one read, for
+/// platform administration only. Counts, states and timestamps; no member's
+/// content and no member's name.
+async fn operations(
+    State(state): State<AppState>,
+    Ids(ids): Ids,
+    CurrentPrincipal(principal): CurrentPrincipal,
+) -> Result<Json<platform::operations::OperationsOverview>, ApiError> {
+    platform::operations::overview(&state.pool, &principal, &state.config)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, &ids))
 }
 
 /// `GET /system/capabilities`
