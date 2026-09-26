@@ -157,6 +157,11 @@ fn o_sprite_e_o_catalogo_de_icones_cobrem_se_mutuamente() {
         .filter(|id| id.starts_with("oc-"))
         .collect();
 
+    // Cinquenta desde 2026-09-25: `oc-apps` entrou com o Gestor de Aplicações
+    // — uma grelha de nove, o lançador. Entrou no sprite sem entrar aqui, e
+    // este teste deu vermelho durante cinco merges que ninguém viu, porque o
+    // fixture S3 da CI deixou de descarregar antes de os testes correrem.
+    //
     // Quarenta e nove desde 2026-08-29: `oc-files` e `oc-folder` entraram com o
     // ecrã de Ficheiros. Uma pasta e uma folha, e não um disco ou uma nuvem: o
     // que o ecrã mostra é arrumação institucional, não armazenamento — a pasta
@@ -171,7 +176,7 @@ fn o_sprite_e_o_catalogo_de_icones_cobrem_se_mutuamente() {
     // tinha um glifo de fechar, e o compositor fechava com uma seta — que se
     // lê como «seguinte». O número muda **por decisão**, e é isso que este
     // teste protege: um ícone que desapareça do dossier tem de dar vermelho.
-    assert_eq!(declared.len(), 49, "o dossier declara 49 ícones");
+    assert_eq!(declared.len(), 50, "o dossier declara 50 ícones");
 
     for id in &declared {
         assert!(

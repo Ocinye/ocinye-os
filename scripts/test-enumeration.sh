@@ -232,7 +232,11 @@ suites() {
 # fixação: abrir/Escape com foco, lançar para a rota, pesquisa e estado vazio,
 # filtro de categoria, fixar/persistir/desafixar (desafixar ≠ desinstalar), e a
 # descoberta a respeitar a autorização. Seis viagens, seis marcas.
-viagens-de-browser|119|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|119
+# 119 → 123 em 2026-09-26: a linha de base anterior à generalização (Parte 0) —
+# as quatro áreas da regressão mínima que não tinham viagem própria: a Home, os
+# Meus Recursos, a troca de idioma pt→en→fr→pt, e o Prompt sem fornecedor a
+# concluir num turno de sistema degradado. Quatro viagens, quatro marcas.
+viagens-de-browser|123|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|123
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

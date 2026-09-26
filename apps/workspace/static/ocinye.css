@@ -1165,7 +1165,8 @@ body:has(> .oc-privilegiada) .oc-shell { top: var(--oc-faixa-altura); }
   background: var(--oc-surface-hover); border-color: var(--oc-border);
   color: var(--oc-text); box-shadow: var(--oc-shadow-menu);
 }
-.oc-apps__card:focus-visible { outline: 2px solid var(--oc-gold); outline-offset: 2px; }
+.oc-apps__card:focus-visible { outline: var(--oc-focus-width) solid var(--oc-focus-color);
+  outline-offset: var(--oc-focus-offset-wrap); }
 .oc-apps__card[hidden] { display: none; }
 .oc-apps__icone {
   width: 38px; height: 38px; border-radius: var(--oc-r-md);

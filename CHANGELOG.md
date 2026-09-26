@@ -7,6 +7,31 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Generalização, Parte 0: linha de base provada — 2026-09-26
+
+Antes de generalizar o Ocinye OS para um ambiente operativo auto-alojado de uso
+geral, a verdade do terreno ficou escrita e a linha de base reparada. Nenhum
+comportamento de produto muda.
+
+- **Documentos**: [sistema actual](docs/architecture/CURRENT_SYSTEM.md),
+  [arquitectura-alvo](docs/architecture/TARGET_OCINYE_OS.md) (toda `PLANNED`) e a
+  [evidência da linha de base](docs/audits/pre-generalization-baseline/README.md).
+- **MinIO a partir de um espelho da Ocinye.** O fabricante deixou de distribuir
+  as imagens e o `mc`; a CI deixara de levantar o fixture S3 e o backup nocturno
+  de produção falhava. O Compose, a CI e a imagem de backup consomem agora
+  `ghcr.io/ocinye/third-party/*` por digest, e a imagem de backup copia o `mc`
+  em vez de o descarregar ([registo](docs/deployment/third-party-artifacts.md)).
+  É uma ponte de compatibilidade, não a escolha de store.
+- **Design fidelity de novo verde**: o ícone do lançador entra no dossier e o
+  seu anel de foco passa a vir dos tokens (render idêntico).
+- **Quatro viagens de browser novas** — Home, Meus Recursos, troca de idioma
+  pt→en→fr→pt, e o Prompt sem fornecedor; o contrato de enumeração passa de 119
+  para 123.
+- **Verdade corrigida**: o runbook de rollback já não diz que reverter através de
+  uma migração aditiva é seguro (o Core anterior recusa arrancar); `CLAUDE.md` §1
+  deixa de afirmar a *branch protection* que já não existe e o backup que não
+  estava instalado.
+
 ### Ficheiros: capacidade em vez de um tecto de produto — 2026-09-25
 
 O carregamento deixa de ter um tecto de produto por ficheiro. O antigo default de
