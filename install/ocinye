@@ -1,0 +1,350 @@
+#!/usr/bin/env bash
+# ocinye — instala e governa uma Instância do Ocinye OS num anfitrião Linux.
+#
+# # O que é
+#
+# O instalador de um **release**: vive dentro do pacote que o release produz
+# (`scripts/release-bundle.sh`), ao lado das imagens e da árvore desse commit, e
+# instala exactamente esse commit. Não descarrega código, não segue `main`, e não
+# precisa de `curl | sh` — o pacote traz as somas, e as somas conferem-se antes de
+# qualquer coisa ser escrita no anfitrião.
+#
+# # O que deixa no anfitrião
+#
+# O mesmo layout que a produção da Ocinye usa (docs/deployment):
+#
+#   /srv/ocinye/releases/<sha>   a árvore do release
+#   /srv/ocinye/current          → o release corrente
+#   /etc/ocinye/*.env            configuração e segredos, 0600, nunca no Git
+#   /etc/ocinye/nginx, tls       o proxy, gerado para o domínio desta Instância
+#
+# Uma Instância instalada assim e a produção da Ocinye são o mesmo produto: o
+# mesmo Compose, as mesmas imagens, o mesmo proxy.
+#
+# # O que não exige
+#
+# GPU, chave de fornecedor de IA, fornecedor externo, correio configurado. Uma
+# Instância nova arranca com IA indisponível — que é o estado correcto até alguém
+# ligar um nó ou registar um fornecedor.
+#
+# Subcomandos: install · status · uninstall
+set -euo pipefail
+
+CONFIG="${OCINYE_CONFIG_DIR:-/etc/ocinye}"
+RAIZ="${OCINYE_ROOT:-/srv/ocinye}"
+COMPOSE="infra/compose/docker-compose.production.yml"
+MIN_RAM_MB=3500
+MIN_DISK_GB=15
+
+AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+fatal() { printf '\n  RECUSADO — %s\n\n' "$1" >&2; exit 1; }
+passo() { printf '\n== %s ==\n' "$1"; }
+nota()  { printf '  %s\n' "$1"; }
+
+uso() {
+    cat <<'EOF'
+Uso:
+  ocinye install --domain os.exemplo.org --instance-name "Nome" \
+                 --profile research|business|education|personal \
+                 --name "Pessoa" --email pessoa@exemplo.org \
+                 --admin-name "Pessoa (Admin)" --admin-email admin@exemplo.org \
+                 [--public-url https://os.exemplo.org] \
+                 [--tls self-signed | --tls provided --cert CERT.pem --key KEY.pem] \
+                 [--credential-file FICHEIRO]
+  ocinye status
+  ocinye uninstall --purge
+
+install  verifica o anfitrião, confere o pacote, gera a configuração e os
+         segredos, carrega as imagens do release, cria a Instância e o primeiro
+         administrador, levanta os serviços e confirma a saúde.
+status   mostra o release corrente e o estado dos serviços.
+uninstall --purge
+         pára os serviços e apaga **tudo** — dados, configuração e releases.
+         Não há volta: é para anfitriões descartáveis e para a prova de
+         instalação, não para uma Instância com dados.
+
+A palavra-passe temporária do administrador é impressa uma vez no terminal, ou
+escrita em --credential-file (0600) quando a instalação é automatizada. Não fica
+em mais lado nenhum.
+EOF
+}
+
+# ── Utilitários ──────────────────────────────────────────────────────────
+
+aleatorio() {
+    # 32 bytes do núcleo, em base64 sem caracteres que partam um URL ou um .env.
+    head -c "${1:-32}" /dev/urandom | base64 | tr -d '\n=+/' | head -c "${2:-40}"
+}
+
+chave_de_selagem() {
+    # Exactamente 32 bytes em base64 padrão: é o formato que o Core exige.
+    head -c 32 /dev/urandom | base64 | tr -d '\n'
+}
+
+compose() {
+    # O ambiente de interpolação é o do release, como o systemd o vê.
+    (cd "$RAIZ/current" && set -a && . "$CONFIG/release.env" && set +a \
+        && docker compose -f "$COMPOSE" "$@")
+}
+
+esperar_saudavel() {
+    local servico="$1" limite="${2:-300}" inicio estado
+    inicio=$(date +%s)
+    while :; do
+        estado="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}sem-healthcheck{{end}}' \
+                  "ocinye-$servico-1" 2>/dev/null || echo ausente)"
+        [ "$estado" = healthy ] && return 0
+        if [ $(( $(date +%s) - inicio )) -gt "$limite" ]; then
+            fatal "o serviço $servico não ficou saudável em ${limite}s (estado: $estado).
+  Veja: docker logs ocinye-$servico-1"
+        fi
+        sleep 3
+    done
+}
+
+# ── install ──────────────────────────────────────────────────────────────
+
+install_() {
+    local dominio="" nome_instancia="" perfil="" nome="" email="" admin_nome="" \
+          admin_email="" url_publico="" tls="self-signed" cert="" chave="" \
+          ficheiro_credencial=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --domain) dominio="$2"; shift 2 ;;
+            --instance-name) nome_instancia="$2"; shift 2 ;;
+            --profile) perfil="$2"; shift 2 ;;
+            --name) nome="$2"; shift 2 ;;
+            --email) email="$2"; shift 2 ;;
+            --admin-name) admin_nome="$2"; shift 2 ;;
+            --admin-email) admin_email="$2"; shift 2 ;;
+            --public-url) url_publico="$2"; shift 2 ;;
+            --tls) tls="$2"; shift 2 ;;
+            --cert) cert="$2"; shift 2 ;;
+            --key) chave="$2"; shift 2 ;;
+            --credential-file) ficheiro_credencial="$2"; shift 2 ;;
+            -h|--help) uso; exit 0 ;;
+            *) fatal "opção desconhecida: $1" ;;
+        esac
+    done
+    for obrigatorio in dominio nome_instancia perfil nome email admin_nome admin_email; do
+        [ -n "${!obrigatorio}" ] || { uso; fatal "falta --${obrigatorio//_/-}"; }
+    done
+    case "$perfil" in research|business|education|personal) ;;
+        *) fatal "perfil desconhecido: $perfil (research, business, education, personal)" ;;
+    esac
+    [[ "$dominio" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] \
+        || fatal "o domínio «$dominio» não é um nome de anfitrião"
+    url_publico="${url_publico:-https://$dominio}"
+    [[ "$url_publico" == https://* ]] \
+        || fatal "o endereço público tem de ser https: o Workspace recusa cookies de sessão fora dele"
+    case "$tls" in
+        self-signed) ;;
+        provided) [ -r "$cert" ] && [ -r "$chave" ] \
+                      || fatal "--tls provided exige --cert e --key legíveis" ;;
+        *) fatal "--tls é self-signed ou provided" ;;
+    esac
+
+    # ── 1. O anfitrião ────────────────────────────────────────────────
+    passo "O anfitrião"
+    [ "$(id -u)" = 0 ] || fatal "o instalador escreve em $CONFIG e $RAIZ: corra-o como root"
+    [ "$(uname -s)" = Linux ] || fatal "o Ocinye OS instala-se num anfitrião Linux"
+    command -v docker >/dev/null || fatal "falta o Docker (Engine 24 ou mais recente)"
+    docker info >/dev/null 2>&1 || fatal "o Docker não está a correr"
+    docker compose version >/dev/null 2>&1 || fatal "falta o plugin docker compose (v2)"
+    local ram_mb disco_gb
+    ram_mb=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+    [ "$ram_mb" -ge "$MIN_RAM_MB" ] \
+        || fatal "o anfitrião tem ${ram_mb} MB de memória; o mínimo medido é ${MIN_RAM_MB} MB"
+    mkdir -p "$RAIZ"
+    disco_gb=$(df -Pk "$RAIZ" | awk 'NR==2 {print int($4/1048576)}')
+    [ "$disco_gb" -ge "$MIN_DISK_GB" ] \
+        || fatal "há ${disco_gb} GB livres em $RAIZ; o mínimo é ${MIN_DISK_GB} GB"
+    [ ! -e "$CONFIG/core.env" ] \
+        || fatal "já existe uma Instância neste anfitrião ($CONFIG/core.env).
+  Instalar por cima apagaria a raiz de selagem de dados que existem."
+    nota "Linux · Docker $(docker version -f '{{.Server.Version}}') · ${ram_mb} MB · ${disco_gb} GB livres"
+
+    # ── 2. O pacote ──────────────────────────────────────────────────
+    passo "O pacote"
+    [ -r "$AQUI/RELEASE" ] && [ -r "$AQUI/SHA256SUMS" ] \
+        || fatal "isto não é um pacote de release (faltam RELEASE e SHA256SUMS)"
+    SHA="$(tr -d '[:space:]' < "$AQUI/RELEASE")"
+    [[ "$SHA" =~ ^[0-9a-f]{12}$ ]] || fatal "RELEASE não contém um SHA curto válido"
+    (cd "$AQUI" && sha256sum -c SHA256SUMS >/dev/null) \
+        || fatal "as somas do pacote não conferem: não instalo um pacote alterado"
+    nota "release $SHA · somas conferidas"
+
+    # ── 3. O release no sítio ────────────────────────────────────────
+    passo "O release"
+    install -d -m 755 "$RAIZ/releases/$SHA" "$RAIZ/conversion-spool" "$RAIZ/backups"
+    tar -xzf "$AQUI/source.tar.gz" -C "$RAIZ/releases/$SHA"
+    ln -sfn "$RAIZ/releases/$SHA" "$RAIZ/current"
+    nota "$RAIZ/current → releases/$SHA"
+
+    # ── 4. Configuração e segredos ───────────────────────────────────
+    passo "Configuração"
+    install -d -m 750 "$CONFIG" "$CONFIG/nginx" "$CONFIG/tls"
+    umask 077
+    local pg_senha s3_utilizador s3_senha
+    pg_senha="$(aleatorio 48 40)"
+    s3_utilizador="ocinye$(aleatorio 12 10)"
+    s3_senha="$(aleatorio 48 40)"
+
+    printf 'OCINYE_RELEASE_SHA=%s\nOCINYE_PROXY_HEALTH_HOST=%s\n' "$SHA" "$dominio" \
+        > "$CONFIG/release.env"
+    cat > "$CONFIG/comum.env" <<EOF
+OCINYE_ENVIRONMENT=production
+OCINYE_LOG_FORMAT=json
+OCINYE_LOG_LEVEL=info
+EOF
+    cat > "$CONFIG/postgres.env" <<EOF
+POSTGRES_USER=ocinye
+POSTGRES_DB=ocinye
+POSTGRES_PASSWORD=$pg_senha
+EOF
+    cat > "$CONFIG/object-store.env" <<EOF
+MINIO_ROOT_USER=$s3_utilizador
+MINIO_ROOT_PASSWORD=$s3_senha
+EOF
+    cat > "$CONFIG/core.env" <<EOF
+OCINYE_DATABASE_URL=postgres://ocinye:$pg_senha@postgres:5432/ocinye
+OCINYE_REDIS_URL=redis://redis:6379
+OCINYE_STORAGE_ENDPOINT_URL=http://object-store:9000
+OCINYE_STORAGE_ACCESS_KEY=$s3_utilizador
+OCINYE_STORAGE_SECRET_KEY=$s3_senha
+OCINYE_STORAGE_BUCKET=ocinye-artifacts
+OCINYE_STORAGE_BACKEND_CODE=local-object-store
+OCINYE_STORAGE_LOCATION_LABEL=$dominio
+OCINYE_STORAGE_RESIDENCY=UNDECLARED
+OCINYE_SEALING_KEY=$(chave_de_selagem)
+OCINYE_CORS_ALLOWED_ORIGINS=$url_publico
+OCINYE_INSTANCE_NAME=$nome_instancia
+OCINYE_INSTANCE_PROFILE=$perfil
+EOF
+    cat > "$CONFIG/workspace.env" <<EOF
+OCINYE_WORKSPACE_PUBLIC_URL=$url_publico
+EOF
+    umask 022
+    chmod 600 "$CONFIG"/*.env
+    nota "segredos gerados neste anfitrião: base de dados, armazenamento, raiz de selagem"
+    nota "a raiz de selagem está em $CONFIG/core.env — sem ela, um backup não se lê"
+
+    # O proxy: um anfitrião, o Workspace. O Core não tem porta pública.
+    sed -e "s|{{DOMINIO}}|$dominio|g" \
+        "$RAIZ/current/infra/nginx/instance/30-instance.conf.template" \
+        > "$CONFIG/nginx/30-instance.conf"
+    cp "$RAIZ/current/infra/nginx/instance/00-comum.conf" "$CONFIG/nginx/00-comum.conf"
+    cp "$RAIZ/current/infra/nginx/instance/10-default.conf" "$CONFIG/nginx/10-default.conf"
+    if [ "$tls" = provided ]; then
+        install -m 644 "$cert" "$CONFIG/tls/instance.pem"
+        install -m 600 "$chave" "$CONFIG/tls/instance.key"
+        nota "TLS: certificado fornecido"
+    else
+        docker run --rm -v "$CONFIG/tls:/tls" --entrypoint /bin/sh nginx:1.27-alpine -c \
+            "apk add --no-cache openssl >/dev/null 2>&1 && \
+             openssl req -x509 -newkey rsa:3072 -nodes -days 825 \
+               -subj '/CN=$dominio' -addext 'subjectAltName=DNS:$dominio' \
+               -keyout /tls/instance.key -out /tls/instance.pem 2>/dev/null && \
+             chmod 600 /tls/instance.key"
+        nota "TLS: certificado auto-assinado para $dominio (substitua-o antes de uso real)"
+    fi
+
+    # ── 5. As imagens do release ─────────────────────────────────────
+    passo "Imagens"
+    for imagem in "$AQUI"/images/*.tar; do
+        docker load -q -i "$imagem" | sed 's/^/  /'
+    done
+    for servico in core-server workspace worker conversion-runner converter; do
+        docker image inspect "ocinye/ocinye-$servico:$SHA" >/dev/null 2>&1 \
+            || fatal "o pacote não trouxe ocinye/ocinye-$servico:$SHA"
+    done
+
+    # ── 6. Persistência ──────────────────────────────────────────────
+    passo "Persistência"
+    compose up -d postgres redis object-store >/dev/null
+    esperar_saudavel postgres
+    esperar_saudavel object-store
+    compose up object-store-init >/dev/null
+    nota "base de dados e armazenamento prontos; bucket privado"
+
+    # ── 7. A Instância e o primeiro administrador ────────────────────
+    passo "Instância"
+    local saida
+    saida="$(compose run --rm --no-deps -T core bootstrap-admin \
+        --instance-name "$nome_instancia" --profile "$perfil" \
+        --name "$nome" --email "$email" \
+        --admin-name "$admin_nome" --admin-email "$admin_email" 2>&1)" \
+        || { printf '%s\n' "$saida" | grep -v 'Palavra-passe' >&2
+             fatal "o bootstrap da Instância falhou"; }
+    local credencial
+    credencial="$(printf '%s\n' "$saida" | sed -n 's/^ *Palavra-passe  *//p' | head -1)"
+    [ -n "$credencial" ] || fatal "o bootstrap não devolveu a credencial temporária"
+    nota "Instância «$nome_instancia» criada, perfil $perfil"
+
+    # ── 8. Levantar ──────────────────────────────────────────────────
+    passo "Serviços"
+    compose up -d --remove-orphans >/dev/null
+    esperar_saudavel core
+    esperar_saudavel workspace
+    esperar_saudavel proxy
+
+    # ── 9. Saúde, vista de fora ──────────────────────────────────────
+    passo "Saúde"
+    local codigo
+    codigo="$(curl -ks -o /dev/null -w '%{http_code}' --resolve "$dominio:443:127.0.0.1" \
+              "https://$dominio/")"
+    [ "$codigo" = 303 ] || fatal "o Workspace respondeu $codigo em https://$dominio/ (esperado 303 → /login)"
+    nota "https://$dominio/ → 303 (início de sessão)"
+
+    if command -v systemctl >/dev/null && [ -d /run/systemd/system ]; then
+        install -m 644 "$RAIZ/current/infra/systemd/ocinye.service" /etc/systemd/system/ocinye.service
+        systemctl daemon-reload && systemctl enable ocinye.service >/dev/null 2>&1
+        nota "ocinye.service activo: a Instância volta depois de um reboot"
+    fi
+
+    printf '\n  Ocinye OS %s instalado.\n' "$SHA"
+    printf '  Workspace:        %s\n' "$url_publico"
+    printf '  Administrador:    %s\n' "$admin_email"
+    if [ -n "$ficheiro_credencial" ]; then
+        (umask 077 && printf '%s\n' "$credencial" > "$ficheiro_credencial")
+        printf '  Credencial temporária escrita em %s (0600).\n\n' "$ficheiro_credencial"
+    else
+        printf '  Credencial temporária: %s\n' "$credencial"
+        printf '  (mostrada uma vez; troca-se no primeiro acesso, com segundo factor)\n\n'
+    fi
+}
+
+# ── status ───────────────────────────────────────────────────────────────
+
+status_() {
+    [ -r "$CONFIG/release.env" ] || fatal "não há nenhuma Instância instalada neste anfitrião"
+    SHA="$(sed -n 's/^OCINYE_RELEASE_SHA=//p' "$CONFIG/release.env")"
+    printf '  release %s\n' "$SHA"
+    compose ps --format 'table {{.Service}}\t{{.Status}}'
+}
+
+# ── uninstall ────────────────────────────────────────────────────────────
+
+uninstall_() {
+    [ "${1:-}" = --purge ] || fatal "uninstall apaga dados: confirme com --purge"
+    [ "$(id -u)" = 0 ] || fatal "corra-o como root"
+    if [ -r "$CONFIG/release.env" ] && [ -d "$RAIZ/current" ]; then
+        SHA="$(sed -n 's/^OCINYE_RELEASE_SHA=//p' "$CONFIG/release.env")"
+        compose --profile backup down -v --remove-orphans >/dev/null 2>&1 || true
+    fi
+    if command -v systemctl >/dev/null && [ -f /etc/systemd/system/ocinye.service ]; then
+        systemctl disable ocinye.service >/dev/null 2>&1 || true
+        rm -f /etc/systemd/system/ocinye.service
+    fi
+    rm -rf "$CONFIG" "$RAIZ"
+    nota "Instância removida: dados, configuração e releases"
+}
+
+case "${1:-}" in
+    install) shift; install_ "$@" ;;
+    status) status_ ;;
+    uninstall) shift; uninstall_ "$@" ;;
+    -h|--help|"") uso ;;
+    *) uso; fatal "subcomando desconhecido: $1" ;;
+esac

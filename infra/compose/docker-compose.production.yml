@@ -82,7 +82,9 @@ services:
         - CMD
         - wget
         - -qO-
-        - "--header=Host: ocinye.com"
+        # O anfitrião desta Instância. A produção da Ocinye usa o valor por omissão;
+        # uma Instância instalada por `install/ocinye` declara o seu em release.env.
+        - "--header=Host: ${OCINYE_PROXY_HEALTH_HOST:-ocinye.com}"
         - http://127.0.0.1/nginx-health
       interval: 15s
       timeout: 5s
