@@ -7,7 +7,6 @@
 //! - **activar e desactivar** numa Instância, na base partilhada dos testes: uma
 //!   organização de fixture por prova, que é o que a activação delimita.
 
-
 use ocinye_contracts::{ApplicationId, InstanceProfile, TechnicalRole};
 use ocinye_core::modules::organisation;
 use ocinye_core::CoreError;
@@ -52,7 +51,9 @@ async fn propria() -> Option<(PgPool, String, PgPool)> {
         .execute(&admin)
         .await
         .expect("criar a base");
-    let (base, consulta) = url.split_once('?').map_or((url.as_str(), ""), |(b, q)| (b, q));
+    let (base, consulta) = url
+        .split_once('?')
+        .map_or((url.as_str(), ""), |(b, q)| (b, q));
     let raiz = base.rsplit_once('/').map_or(base, |(raiz, _)| raiz);
     let alvo = if consulta.is_empty() {
         format!("{raiz}/{nome}")
@@ -119,7 +120,9 @@ async fn activa(pool: &PgPool, organisation_id: Uuid, app: ApplicationId) -> boo
 #[tokio::test]
 async fn cada_perfil_nasce_com_as_suas_aplicacoes_e_a_sua_estrutura() {
     for perfil in InstanceProfile::ALL {
-        let Some((admin, nome, pool)) = propria().await else { return };
+        let Some((admin, nome, pool)) = propria().await else {
+            return;
+        };
         let criada = organisation::resolve_instance(
             &pool,
             Some(&format!("instancia-{}", perfil.as_str())),
@@ -130,7 +133,12 @@ async fn cada_perfil_nasce_com_as_suas_aplicacoes_e_a_sua_estrutura() {
         .await
         .expect("criar a instância");
 
-        assert_eq!(organisation::profile_of(&pool, criada.id).await.expect("perfil"), perfil);
+        assert_eq!(
+            organisation::profile_of(&pool, criada.id)
+                .await
+                .expect("perfil"),
+            perfil
+        );
         for app in ApplicationId::ALL {
             assert_eq!(
                 activa(&pool, criada.id, app).await,
@@ -148,7 +156,10 @@ async fn cada_perfil_nasce_com_as_suas_aplicacoes_e_a_sua_estrutura() {
         if perfil.seeds_initial_units() {
             assert!(unidades > 0, "o perfil de investigação nasce com unidades");
         } else {
-            assert_eq!(unidades, 0, "{perfil:?} nasce sem estrutura de investigação");
+            assert_eq!(
+                unidades, 0,
+                "{perfil:?} nasce sem estrutura de investigação"
+            );
         }
         apagar(admin, nome, pool).await;
     }
@@ -156,7 +167,9 @@ async fn cada_perfil_nasce_com_as_suas_aplicacoes_e_a_sua_estrutura() {
 
 #[tokio::test]
 async fn criar_uma_instancia_sem_perfil_e_recusado() {
-    let Some((admin, nome, pool)) = propria().await else { return };
+    let Some((admin, nome, pool)) = propria().await else {
+        return;
+    };
     let resultado =
         organisation::resolve_instance(&pool, Some("sem-perfil"), None, None, &ids()).await;
     assert!(
@@ -177,7 +190,9 @@ async fn criar_uma_instancia_sem_perfil_e_recusado() {
 /// comportamento de antes dos perfis.
 #[tokio::test]
 async fn uma_organizacao_existente_e_investigacao_com_tudo_activo() {
-    let Some(pool) = partilhada().await else { return };
+    let Some(pool) = partilhada().await else {
+        return;
+    };
     let org = organizacao(&pool).await;
     assert_eq!(
         organisation::profile_of(&pool, org).await.expect("perfil"),
@@ -191,7 +206,9 @@ async fn uma_organizacao_existente_e_investigacao_com_tudo_activo() {
 
 #[tokio::test]
 async fn desactivar_esconde_reactivar_devolve_e_repor_segue_o_perfil() {
-    let Some(pool) = partilhada().await else { return };
+    let Some(pool) = partilhada().await else {
+        return;
+    };
     let org = organizacao(&pool).await;
     let admin = pessoa(&pool, org, TechnicalRole::PlatformAdmin).await;
 
@@ -209,7 +226,10 @@ async fn desactivar_esconde_reactivar_devolve_e_repor_segue_o_perfil() {
     organisation::set_profile(&pool, &admin, InstanceProfile::Business, &ids())
         .await
         .expect("mudar de perfil");
-    assert!(!activa(&pool, org, ApplicationId::Ideas).await, "empresa não traz Ideias");
+    assert!(
+        !activa(&pool, org, ApplicationId::Ideas).await,
+        "empresa não traz Ideias"
+    );
     assert!(activa(&pool, org, ApplicationId::Notes).await);
 
     // Uma decisão explícita sobrepõe o perfil, e «repor» volta a ele.
@@ -236,29 +256,47 @@ async fn desactivar_esconde_reactivar_devolve_e_repor_segue_o_perfil() {
 
 #[tokio::test]
 async fn uma_aplicacao_essencial_nao_se_desactiva() {
-    let Some(pool) = partilhada().await else { return };
+    let Some(pool) = partilhada().await else {
+        return;
+    };
     let org = organizacao(&pool).await;
     let admin = pessoa(&pool, org, TechnicalRole::PlatformAdmin).await;
     for app in ApplicationId::ALL.into_iter().filter(|a| !a.is_optional()) {
         let resultado =
             organisation::set_application_active(&pool, &admin, app, Some(false), &ids()).await;
-        assert!(matches!(resultado, Err(CoreError::Conflict(_))), "{app}: {resultado:?}");
+        assert!(
+            matches!(resultado, Err(CoreError::Conflict(_))),
+            "{app}: {resultado:?}"
+        );
         assert!(activa(&pool, org, app).await);
     }
 }
 
 #[tokio::test]
 async fn so_quem_governa_a_instancia_a_configura() {
-    let Some(pool) = partilhada().await else { return };
+    let Some(pool) = partilhada().await else {
+        return;
+    };
     let org = organizacao(&pool).await;
     let membro = pessoa(&pool, org, TechnicalRole::ResearchMember).await;
 
-    let desactivar =
-        organisation::set_application_active(&pool, &membro, ApplicationId::Notes, Some(false), &ids())
-            .await;
-    assert!(matches!(desactivar, Err(CoreError::PermissionDenied(_))), "{desactivar:?}");
+    let desactivar = organisation::set_application_active(
+        &pool,
+        &membro,
+        ApplicationId::Notes,
+        Some(false),
+        &ids(),
+    )
+    .await;
+    assert!(
+        matches!(desactivar, Err(CoreError::PermissionDenied(_))),
+        "{desactivar:?}"
+    );
     let perfil = organisation::set_profile(&pool, &membro, InstanceProfile::Personal, &ids()).await;
-    assert!(matches!(perfil, Err(CoreError::PermissionDenied(_))), "{perfil:?}");
+    assert!(
+        matches!(perfil, Err(CoreError::PermissionDenied(_))),
+        "{perfil:?}"
+    );
     assert!(activa(&pool, org, ApplicationId::Notes).await);
     assert_eq!(
         organisation::profile_of(&pool, org).await.expect("perfil"),
@@ -269,7 +307,9 @@ async fn so_quem_governa_a_instancia_a_configura() {
 /// A decisão de uma Instância não toca noutra.
 #[tokio::test]
 async fn a_activacao_e_de_cada_instancia() {
-    let Some(pool) = partilhada().await else { return };
+    let Some(pool) = partilhada().await else {
+        return;
+    };
     let a = organizacao(&pool).await;
     let b = organizacao(&pool).await;
     let admin_a = pessoa(&pool, a, TechnicalRole::PlatformAdmin).await;
@@ -277,5 +317,8 @@ async fn a_activacao_e_de_cada_instancia() {
         .await
         .expect("desactivar em A");
     assert!(!activa(&pool, a, ApplicationId::Mail).await);
-    assert!(activa(&pool, b, ApplicationId::Mail).await, "B não herda a decisão de A");
+    assert!(
+        activa(&pool, b, ApplicationId::Mail).await,
+        "B não herda a decisão de A"
+    );
 }

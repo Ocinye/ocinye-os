@@ -1281,9 +1281,7 @@ fn shell_page(
         // Uma aplicação que a Instância desactivou não abre, mesmo por rota
         // escrita à mão: a shell diz que não está activa, e o conteúdo não se
         // desenha (ADR-0014). A API da aplicação é da fronteira do Core.
-        ResolucaoSessao::Resolvida
-            if viewer.inactive_apps.iter().any(|id| id == active.id()) =>
-        {
+        ResolucaoSessao::Resolvida if viewer.inactive_apps.iter().any(|id| id == active.id()) => {
             page(
                 title,
                 ui::shell::shell(
@@ -7311,7 +7309,9 @@ async fn save_instance(
     }
 
     // O perfil primeiro: as aplicações «como o perfil» leem o novo.
-    if let Some(perfil) = perfil.filter(|p| actual.get("profile").and_then(Value::as_str) != Some(p)) {
+    if let Some(perfil) =
+        perfil.filter(|p| actual.get("profile").and_then(Value::as_str) != Some(p))
+    {
         if let Err(failure) = api::put(
             &state,
             &member.session.access_token,

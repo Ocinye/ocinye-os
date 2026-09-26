@@ -6307,7 +6307,10 @@ async fn desactivar_uma_aplicacao_esconde_a_e_reactivar_devolve_a_intacta() {
     let page = harness.open("/").await;
     clicar(&page, r#"[data-oc="launcher-open"]"#).await;
     wait_visible(&page, r#"[data-oc="launcher"]"#).await;
-    for rota in ["/notes", "/files", "/projects"] {
+    // Projectos vem no perfil, mas aparece por relevância de investigação, e um
+    // administrador sem papel de investigação não o tem — os papéis de membro
+    // ainda têm nomes de investigação (arquitectura-alvo, Perfis).
+    for rota in ["/notes", "/files", "/calendar"] {
         assert!(
             esperar_ate_condicao(&page, &celula_visivel(rota)).await,
             "o perfil de empresa devia trazer {rota}"
@@ -6361,11 +6364,17 @@ async fn desactivar_uma_aplicacao_esconde_a_e_reactivar_devolve_a_intacta() {
     let pronto = reqwest::get(format!("{}/ready", harness.core_url))
         .await
         .expect("o Core responde");
-    assert!(pronto.status().is_success(), "o Core devia continuar pronto");
+    assert!(
+        pronto.status().is_success(),
+        "o Core devia continuar pronto"
+    );
     let ficheiros = harness.open("/files").await;
     assert!(
-        esperar_ate_condicao(&ficheiros, r#"!document.querySelector('[data-oc="app-inactive"]')"#)
-            .await,
+        esperar_ate_condicao(
+            &ficheiros,
+            r#"!document.querySelector('[data-oc="app-inactive"]')"#
+        )
+        .await,
         "desactivar Notas não pode afectar Ficheiros"
     );
 

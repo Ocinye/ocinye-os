@@ -21,9 +21,9 @@
 use std::sync::Arc;
 
 use anyhow::{bail, Context};
+use ocinye_contracts::{InstanceProfile, UnknownProfile};
 use ocinye_core::config::CoreConfig;
 use ocinye_core::modules::identity::{self, Authenticator, Throttle};
-use ocinye_contracts::{InstanceProfile, UnknownProfile};
 use ocinye_core::modules::organisation;
 use ocinye_core::password::{Hasher, HashingParams};
 use ocinye_core::{db, CoreError};
@@ -224,7 +224,11 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
         .map(|name| name.trim().to_owned())
         .filter(|name| !name.is_empty());
     let profile: Option<InstanceProfile> = match args.profile.as_deref() {
-        Some(value) => Some(value.parse().map_err(|error: UnknownProfile| anyhow::anyhow!("{error}"))?),
+        Some(value) => Some(
+            value
+                .parse()
+                .map_err(|error: UnknownProfile| anyhow::anyhow!("{error}"))?,
+        ),
         None => config.instance_profile,
     };
 

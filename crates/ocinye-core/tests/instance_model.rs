@@ -160,9 +160,15 @@ async fn so_com_o_slug_o_nome_e_legivel_e_nao_o_slug() {
     };
     base.migrar_tudo().await;
 
-    let criada = organisation::resolve_instance(&base.pool, Some("mondrive-lda"), None, Some(InstanceProfile::Business), &ids())
-        .await
-        .expect("criar a instância");
+    let criada = organisation::resolve_instance(
+        &base.pool,
+        Some("mondrive-lda"),
+        None,
+        Some(InstanceProfile::Business),
+        &ids(),
+    )
+    .await
+    .expect("criar a instância");
     assert_eq!(criada.name, "Mondrive Lda");
     base.apagar().await;
 }
@@ -173,11 +179,24 @@ async fn a_configuracao_nao_muda_a_instancia_de_uma_instalacao() {
         return;
     };
     base.migrar_tudo().await;
-    let primeira = organisation::resolve_instance(&base.pool, Some("primeira"), None, Some(InstanceProfile::Personal), &ids())
-        .await
-        .expect("primeira");
+    let primeira = organisation::resolve_instance(
+        &base.pool,
+        Some("primeira"),
+        None,
+        Some(InstanceProfile::Personal),
+        &ids(),
+    )
+    .await
+    .expect("primeira");
 
-    let resultado = organisation::resolve_instance(&base.pool, Some("outra"), None, Some(InstanceProfile::Personal), &ids()).await;
+    let resultado = organisation::resolve_instance(
+        &base.pool,
+        Some("outra"),
+        None,
+        Some(InstanceProfile::Personal),
+        &ids(),
+    )
+    .await;
     assert!(
         matches!(resultado, Err(CoreError::Configuration(_))),
         "outro slug numa instalação registada tem de ser recusado; veio {resultado:?}"

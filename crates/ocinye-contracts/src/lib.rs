@@ -20,8 +20,8 @@
 #![deny(missing_docs)]
 
 pub mod access;
-pub mod application;
 pub mod agentic;
+pub mod application;
 pub mod avatar;
 pub mod bibliography;
 pub mod calendar;

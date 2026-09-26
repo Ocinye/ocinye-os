@@ -522,13 +522,11 @@ impl CoreConfig {
             },
             instance_name: optional("OCINYE_INSTANCE_NAME").map(|name| name.trim().to_owned()),
             instance_profile: match optional("OCINYE_INSTANCE_PROFILE") {
-                Some(value) => Some(
-                    value
-                        .parse()
-                        .map_err(|error: ocinye_contracts::UnknownProfile| {
-                            CoreError::Validation(error.to_string())
-                        })?,
-                ),
+                Some(value) => Some(value.parse().map_err(
+                    |error: ocinye_contracts::UnknownProfile| {
+                        CoreError::Validation(error.to_string())
+                    },
+                )?),
                 None => None,
             },
             database_url: required("OCINYE_DATABASE_URL")?,

@@ -24,28 +24,51 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub enum ApplicationId {
+    /// A página inicial.
     Home,
+    /// O Meu Trabalho.
     Work,
+    /// Notas.
     Notes,
+    /// Calendário.
     Calendar,
+    /// Correio.
     Mail,
+    /// Mensagens.
     Messages,
+    /// Ficheiros.
     Files,
+    /// Conhecimento.
     Knowledge,
+    /// Bibliografia.
     Bibliography,
+    /// Unidades.
     Units,
+    /// Ideias.
     Ideas,
+    /// Projectos (e as suas tarefas).
     Projects,
+    /// Datasets.
     Datasets,
+    /// O Prompt.
     Prompt,
+    /// O estado da IA.
     Ai,
+    /// Agentes.
     Agents,
+    /// Computação.
     Compute,
+    /// Meus Recursos.
     Resources,
+    /// Actividade.
     Activity,
+    /// Administração.
     Administration,
+    /// Audit Log.
     Audit,
+    /// Definições.
     Settings,
+    /// Ajuda.
     Help,
 }
 
@@ -204,8 +227,12 @@ pub enum InstanceProfile {
 
 impl InstanceProfile {
     /// Os quatro, na ordem em que se apresentam.
-    pub const ALL: [InstanceProfile; 4] =
-        [Self::Research, Self::Business, Self::Education, Self::Personal];
+    pub const ALL: [InstanceProfile; 4] = [
+        Self::Research,
+        Self::Business,
+        Self::Education,
+        Self::Personal,
+    ];
 
     /// O identificador persistido.
     #[must_use]
@@ -325,7 +352,10 @@ mod tests {
     fn uma_essencial_esta_activa_em_todos_os_perfis() {
         for profile in InstanceProfile::ALL {
             for app in ApplicationId::ALL.into_iter().filter(|a| !a.is_optional()) {
-                assert!(profile.activates(app), "{app} essencial inactiva em {profile:?}");
+                assert!(
+                    profile.activates(app),
+                    "{app} essencial inactiva em {profile:?}"
+                );
             }
         }
     }
@@ -345,7 +375,11 @@ mod tests {
             InstanceProfile::Education,
             InstanceProfile::Personal,
         ] {
-            for app in [ApplicationId::Ideas, ApplicationId::Datasets, ApplicationId::Compute] {
+            for app in [
+                ApplicationId::Ideas,
+                ApplicationId::Datasets,
+                ApplicationId::Compute,
+            ] {
                 assert!(!profile.activates(app), "{app} activa em {profile:?}");
             }
         }

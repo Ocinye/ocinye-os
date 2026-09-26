@@ -111,7 +111,10 @@ async fn put_instance_application(
     Json(body): Json<ApplicationBody>,
 ) -> Result<Json<organisation::InstanceApplications>, ApiError> {
     let application: ApplicationId = application_id.parse().map_err(|_| {
-        ApiError::new(CoreError::NotFound("Aplicação desconhecida.".to_owned()), &ids)
+        ApiError::new(
+            CoreError::NotFound("Aplicação desconhecida.".to_owned()),
+            &ids,
+        )
     })?;
     organisation::set_application_active(&state.pool, &principal, application, body.active, &ids)
         .await

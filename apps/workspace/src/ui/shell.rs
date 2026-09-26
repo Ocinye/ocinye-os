@@ -1292,7 +1292,9 @@ fn create_menu(inactive_apps: &[String]) -> impl IntoView {
 /// ligação; uma criação imediata, um botão que submete. `data-oc-key` leva a
 /// tecla de acesso ao `app.js`, que a activa com o menu aberto.
 fn create_menu_item(action: &CreateAction) -> impl IntoView {
-    let CreateAction { label, via, key, .. } = *action;
+    let CreateAction {
+        label, via, key, ..
+    } = *action;
 
     match via {
         CreateVia::Open(href) => view! {

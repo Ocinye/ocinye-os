@@ -99,16 +99,15 @@ async fn main() -> anyhow::Result<()> {
     // assumed: configuration names it, or the database records it, or the
     // Core refuses to start and says what to set.
     let explicit_slug = Some(config.organisation_slug.as_str()).filter(|slug| !slug.is_empty());
-    let organisation =
-        organisation::resolve_instance(
-            &pool,
-            explicit_slug,
-            config.instance_name.as_deref(),
-            config.instance_profile,
-            &ids,
-        )
-            .await
-            .context("instance")?;
+    let organisation = organisation::resolve_instance(
+        &pool,
+        explicit_slug,
+        config.instance_name.as_deref(),
+        config.instance_profile,
+        &ids,
+    )
+    .await
+    .context("instance")?;
     config.organisation_slug.clone_from(&organisation.slug);
     tracing::info!(instance = organisation.slug, "instance resolved");
 

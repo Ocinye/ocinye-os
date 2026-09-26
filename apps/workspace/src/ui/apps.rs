@@ -656,7 +656,14 @@ mod tests {
         assert!(!depois.iter().any(|a| a.id() == "notes"));
         assert_eq!(depois.len(), antes.len() - 1, "só a inactiva saiu");
 
-        let fixadas = pinned_visible(&["notes".to_owned(), "files".to_owned()], &viewer, CoreStatus::Ok);
-        assert_eq!(fixadas.iter().map(|a| a.id()).collect::<Vec<_>>(), vec!["files"]);
+        let fixadas = pinned_visible(
+            &["notes".to_owned(), "files".to_owned()],
+            &viewer,
+            CoreStatus::Ok,
+        );
+        assert_eq!(
+            fixadas.iter().map(|a| a.id()).collect::<Vec<_>>(),
+            vec!["files"]
+        );
     }
 }
