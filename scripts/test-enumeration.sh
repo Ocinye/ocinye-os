@@ -254,7 +254,11 @@ linhagem-cientifica|3|-p ocinye-core --test scientific_lineage
 # O carregamento em partes exige armazenamento: é o caminho que atravessa o
 # edge, e sem object store não há nada para atravessar. Em CI a ausência falha,
 # como nas outras suites que dependem de bytes.
-carregamento-em-partes|8|-p ocinye-core --test segmented_upload
+# 8 → 11 em 2026-09-26: #162 e o carregamento pessoal por partes trouxeram
+# `um_ficheiro_pessoal_por_partes_fica_na_pasta_de_origem`,
+# `uma_pasta_de_outrem_recusa_a_abertura_pessoal` e
+# `um_ficheiro_pessoal_grande_atravessa_em_partes`, e a tabela não mudou com eles.
+carregamento-em-partes|11|-p ocinye-core --test segmented_upload
 # A identidade privilegiada ligada. As duas verdades — que tipo de identidade
 # iniciou a sessão, e que autoridade ela tem agora — são independentes, e é isso
 # que estas provas fixam.
