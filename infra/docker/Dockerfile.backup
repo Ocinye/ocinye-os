@@ -17,7 +17,14 @@
 # versão menor recusa-se a ler uma base maior. Sai do repositório oficial do
 # PostgreSQL, não do `bookworm`, que traz o 15.
 ARG OCINYE_RELEASE_SHA
-FROM ocinye/ocinye-core-server:${OCINYE_RELEASE_SHA}
+
+# O cliente `mc` sai do espelho da Ocinye, fixado por digest, e não de
+# `dl.min.io`, que deixou de o servir (410) — e partiu o backup nocturno a cada
+# deploy, porque esta camada se reconstrói com o SHA do release. Um binário Go
+# estático: copia-se, não se instala. Ver docs/deployment/third-party-artifacts.md.
+FROM ghcr.io/ocinye/third-party/minio-mc@sha256:d00c9868670a5e56a1710322cd98f7e4faa7291b23cdf31f59e90d44ec2a0156 AS mc
+
+FROM ocinye/ocinye-core-server:${OCINYE_RELEASE_SHA} AS backup
 
 USER root
 RUN apt-get update \
@@ -29,9 +36,8 @@ RUN apt-get update \
       > /etc/apt/sources.list.d/pgdg.list \
  && apt-get update \
  && apt-get install -y --no-install-recommends postgresql-client-17 \
- && curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc \
- && chmod +x /usr/local/bin/mc \
  && rm -rf /var/lib/apt/lists/*
+COPY --from=mc /usr/bin/mc /usr/local/bin/mc
 
 # Os três scripts juntos: cada um chama os irmãos por `"$(dirname "$0")"`.
 COPY scripts/institutional-backup.sh scripts/backup-remote.sh scripts/backup-objects.sh \

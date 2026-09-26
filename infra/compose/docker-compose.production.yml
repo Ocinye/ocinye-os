@@ -300,7 +300,10 @@ services:
   # Nem a API nem a consola têm porto no host. O browser nunca fala com isto.
   object-store:
     <<: *comum
-    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    # Espelho controlado pela Ocinye, por digest: o MinIO deixou de ser distribuído
+    # pelo fabricante (LEGACY_COMPATIBILITY_DEPENDENCY). Ver
+    # docs/deployment/third-party-artifacts.md.
+    image: ghcr.io/ocinye/third-party/minio-server@sha256:55f2ff7d2834fd5f6c76c1c9f54855a325549b1960e7fa3d1f220c62af447a09
     command: ["server", "/data", "--console-address", ":9001"]
     env_file:
       - /etc/ocinye/object-store.env
@@ -320,7 +323,10 @@ services:
   # conhecimento manual (o bucket teve de ser criado à mão a 2026-09-09); passa a
   # ser do arranque. Corre a cada `up`, faz o seu trabalho e sai. Sem portas.
   object-store-init:
-    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    # Espelho controlado pela Ocinye, por digest: o MinIO deixou de ser distribuído
+    # pelo fabricante (LEGACY_COMPATIBILITY_DEPENDENCY). Ver
+    # docs/deployment/third-party-artifacts.md.
+    image: ghcr.io/ocinye/third-party/minio-mc@sha256:d00c9868670a5e56a1710322cd98f7e4faa7291b23cdf31f59e90d44ec2a0156
     env_file:
       - /etc/ocinye/object-store.env
       - /etc/ocinye/core.env
@@ -358,6 +364,8 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.backup
+      # Multi-stage desde que o `mc` sai do espelho: nomeia-se o stage.
+      target: backup
       args:
         # Parte da imagem do Core deste mesmo release para o binário do manifesto.
         OCINYE_RELEASE_SHA: ${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}

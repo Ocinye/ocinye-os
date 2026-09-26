@@ -67,6 +67,10 @@ servidor. O SHA do commit identifica o release: é o nome da pasta em
 Os segredos vivem em `/etc/ocinye/*.env` (`comum.env`, `core.env`,
 `workspace.env`, `postgres.env`, `object-store.env`), nunca no Git.
 
+## Artefactos de terceiros
+
+O MinIO (servidor e cliente `mc`) deixou de ser distribuído pelo fabricante. O Compose, a CI e a imagem de backup consomem-no de um espelho controlado pela Ocinye, fixado por digest e classificado como dependência de compatibilidade, não como escolha de futuro: [artefactos de terceiros espelhados](third-party-artifacts.md).
+
 ## O que produção exige
 
 O código recusa arrancar mal configurado em produção:
@@ -87,8 +91,8 @@ O código recusa arrancar mal configurado em produção:
 | Terminação TLS | **Cloudflare Full (strict)** com certificado Origin CA no servidor. |
 | Segundo factor (MFA) | **Operacional** para identidades privilegiadas ([ADR-0107](../adrs/0107-mandatory-mfa-sessions-and-recovery.md)). |
 | Procedimento de deploy | **Existe** — `scripts/deploy-production.sh`. |
-| Backups periódicos off-host | **Por fazer.** O mecanismo de continuidade existe e está provado; falta destino externo e um agendador instalado ([backups](../backups/README.md)). |
+| Backups periódicos off-host | **Agendador instalado, a falhar até esta correcção.** O `ocinye-backup.timer` corre diariamente em produção; a imagem de backup descarregava o `mc` de `dl.min.io`, que deixou de o servir, e reconstrói-se a cada release — pelo que cada execução depois de um deploy falhava. O `mc` passa a vir do [espelho da Ocinye](third-party-artifacts.md). A prova de que voltou é a primeira execução **agendada** verde depois do deploy ([backups](../backups/README.md)). |
 | Métricas e alertas | **Não implementados.** Logs estruturados e limitados por rotação existem. |
-| Runbook de rollback | **Por escrever.** O `current` anterior fica em `/srv/ocinye/releases/`, o que torna a reversão possível, mas o procedimento não está documentado. |
+| Runbook de rollback | **Existe** — [`rollback-production.md`](../runbooks/rollback-production.md). Só reverte releases **sem migração nova**: através de uma migração, o Core anterior recusa arrancar. |
 | Ambiente de staging | **Não existe.** |
 | WireGuard / nó de computação | **Não existe** — não há nó. |

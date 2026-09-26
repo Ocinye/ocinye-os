@@ -49,7 +49,10 @@ services:
       retries: 20
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    # Espelho controlado pela Ocinye, por digest: o MinIO deixou de ser distribuído
+    # pelo fabricante (LEGACY_COMPATIBILITY_DEPENDENCY). Ver
+    # docs/deployment/third-party-artifacts.md.
+    image: ghcr.io/ocinye/third-party/minio-server@sha256:55f2ff7d2834fd5f6c76c1c9f54855a325549b1960e7fa3d1f220c62af447a09
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-ocinye_dev}
@@ -71,7 +74,10 @@ services:
   # The bucket stays private: objects are served only through signed URLs
   # issued by the Core after authorization (ADR-0200).
   minio-init:
-    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    # Espelho controlado pela Ocinye, por digest: o MinIO deixou de ser distribuído
+    # pelo fabricante (LEGACY_COMPATIBILITY_DEPENDENCY). Ver
+    # docs/deployment/third-party-artifacts.md.
+    image: ghcr.io/ocinye/third-party/minio-mc@sha256:d00c9868670a5e56a1710322cd98f7e4faa7291b23cdf31f59e90d44ec2a0156
     depends_on:
       minio:
         condition: service_healthy

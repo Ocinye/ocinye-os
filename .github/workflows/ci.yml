@@ -416,9 +416,11 @@ jobs:
       - name: Levantar o fixture S3-compatible
         run: |
           set -euo pipefail
-          IMAGEM_MINIO=quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
-          # Pull com reententativas: a quay.io limita pulls anónimos por IP, e um
-          # «unauthorized» transitório do registo não é uma falha da suite.
+          IMAGEM_MINIO=ghcr.io/ocinye/third-party/minio-server@sha256:55f2ff7d2834fd5f6c76c1c9f54855a325549b1960e7fa3d1f220c62af447a09
+          # O espelho da Ocinye, fixado por digest: o MinIO deixou de ser
+          # distribuído pelo fabricante (docs/deployment/third-party-artifacts.md).
+          # Pull com reentativas: um erro transitório do registo não é uma falha
+          # da suite.
           for tentativa in $(seq 1 6); do
             if docker pull "$IMAGEM_MINIO"; then break; fi
             if [ "$tentativa" -eq 6 ]; then
@@ -453,7 +455,7 @@ jobs:
       - name: Criar o bucket de teste
         run: |
           set -euo pipefail
-          IMAGEM_MC=quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+          IMAGEM_MC=ghcr.io/ocinye/third-party/minio-mc@sha256:d00c9868670a5e56a1710322cd98f7e4faa7291b23cdf31f59e90d44ec2a0156
           for tentativa in $(seq 1 6); do
             if docker pull "$IMAGEM_MC"; then break; fi
             if [ "$tentativa" -eq 6 ]; then
