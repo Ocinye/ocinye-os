@@ -145,6 +145,14 @@ sem que nada falhe.
   inactiva desaparece do lançador, da barra, da paleta e do «+ Criar» sem perder
   dados. A Ocinye é `research`, com tudo activo. Ficheiros passou a ser
   relevante a todo o membro interno, e não só a papéis de investigação.
+- **Fronteira Core/aplicações: `IMPLEMENTED`**
+  ([ADR-0015](docs/adrs/0015-core-and-applications-boundary.md),
+  [fronteira](docs/architecture/CORE_AND_APPLICATIONS.md)). O Core recusa a API de
+  uma aplicação inactiva na Instância com `503 application_inactive`, para
+  qualquer cliente; identidade, saúde, configuração da Instância, contentores
+  partilhados e autoridade sobre nós nunca se recusam. Um `panic` num handler de
+  aplicação é um `500` com o envelope de erro, e o resto do Core continua a
+  responder. As aplicações continuam no mesmo processo que o Core.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**

@@ -119,10 +119,12 @@ uma aplicação também tem de estar **activa na Instância**. A visibilidade é
   expõe `GET /api/v1/instance/applications`, `PUT /api/v1/instance/profile` e
   `PUT /api/v1/instance/applications/{id}`. O `GET /api/v1/me` traz
   `inactive_applications`.
+- **O Core recusa a API de uma aplicação inactiva** com `503
+  application_inactive`, para qualquer cliente
+  ([ADR-0015](../adrs/0015-core-and-applications-boundary.md),
+  [fronteira](../architecture/CORE_AND_APPLICATIONS.md)).
 
 ## O que ainda não existe
 
-- A API de uma aplicação inactiva ainda responde: esconder é do Workspace, e a
-  recusa no Core é da fronteira Core/aplicações (Parte 3 do programa).
 - Um **manifesto** de aplicação versionado — capacidades pedidas, recursos,
   rede, ciclo de vida, saúde — que substitua o registo estático (Parte 4).

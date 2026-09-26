@@ -24,6 +24,65 @@ use uuid::Uuid;
 use crate::audit::{self, action, AuditEntry};
 use crate::error::{CoreError, CoreResult};
 
+/// A que aplicação pertence um caminho da API (sem o prefixo `/api/v1`).
+///
+/// Só os caminhos que servem **uma** aplicação. Os partilhados — ambientes
+/// (`/workspaces`, de Ideias e de Projectos), tarefas, a cadeia científica, a
+/// pesquisa, a identidade, a autenticação, a saúde — devolvem `None` e nunca são
+/// recusados por activação: recusá-los partiria outra aplicação activa. O
+/// enrolamento e o heartbeat dos nós também não: a autoridade sobre os nós é do
+/// Core, e desactivar o ecrã de Computação não desliga máquinas (ADR-0014).
+#[must_use]
+pub fn application_of_api_path(path: &str) -> Option<ApplicationId> {
+    let segmentos: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+    let primeiro = segmentos.first().copied().unwrap_or_default();
+    let segundo = segmentos.get(1).copied().unwrap_or_default();
+    match (primeiro, segundo) {
+        ("mail", _) => Some(ApplicationId::Mail),
+        ("messaging", _) => Some(ApplicationId::Messages),
+        ("calendar", _) => Some(ApplicationId::Calendar),
+        ("notes", _) | ("me", "notes" | "deleted-notes" | "shared-notes") => {
+            Some(ApplicationId::Notes)
+        }
+        ("ideas", _) => Some(ApplicationId::Ideas),
+        ("projects", _) => Some(ApplicationId::Projects),
+        ("datasets", _) => Some(ApplicationId::Datasets),
+        ("sources", _) => Some(ApplicationId::Bibliography),
+        ("documents", _) => Some(ApplicationId::Knowledge),
+        ("units", _) => Some(ApplicationId::Units),
+        ("ai", "agents") => Some(ApplicationId::Agents),
+        ("ai", "prompt" | "conversations") => Some(ApplicationId::Prompt),
+        ("compute", "nodes" | "status") => Some(ApplicationId::Compute),
+        _ => None,
+    }
+}
+
+/// Recusa uma operação de uma aplicação inactiva nesta Instância.
+///
+/// # Errors
+///
+/// [`CoreError::ApplicationInactive`] when it is inactive; database errors.
+pub async fn require_active(
+    pool: &PgPool,
+    organisation_id: Uuid,
+    application: ApplicationId,
+) -> CoreResult<()> {
+    if !application.is_optional() {
+        return Ok(());
+    }
+    if inactive_applications(pool, organisation_id)
+        .await?
+        .contains(&application)
+    {
+        return Err(CoreError::ApplicationInactive(
+            "Esta aplicação não está activa nesta instância. Quem administra a instância \
+             pode activá-la; nada do que ela guardava se perdeu."
+                .to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 /// O estado de uma aplicação nesta Instância.
 #[derive(Debug, Clone, Serialize)]
 pub struct ApplicationState {
@@ -268,4 +327,54 @@ pub async fn set_application_active(
     .await?;
     tx.commit().await?;
     application_states(pool, principal.organisation_id).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cada_caminho_de_uma_aplicacao_e_dela() {
+        for (caminho, app) in [
+            ("/mail/send", ApplicationId::Mail),
+            ("/messaging/conversations", ApplicationId::Messages),
+            ("/calendar/events", ApplicationId::Calendar),
+            ("/notes/0b0", ApplicationId::Notes),
+            ("/me/notes", ApplicationId::Notes),
+            ("/me/deleted-notes", ApplicationId::Notes),
+            ("/ideas", ApplicationId::Ideas),
+            ("/datasets/1", ApplicationId::Datasets),
+            ("/sources", ApplicationId::Bibliography),
+            ("/ai/agents/1", ApplicationId::Agents),
+            ("/ai/prompt", ApplicationId::Prompt),
+            ("/ai/conversations", ApplicationId::Prompt),
+            ("/compute/nodes", ApplicationId::Compute),
+        ] {
+            assert_eq!(application_of_api_path(caminho), Some(app), "{caminho}");
+        }
+    }
+
+    /// Os caminhos partilhados, e os do próprio sistema, nunca se recusam por
+    /// activação.
+    #[test]
+    fn os_caminhos_partilhados_e_do_sistema_nao_sao_de_nenhuma_aplicacao() {
+        for caminho in [
+            "/me",
+            "/me/files",
+            "/me/apps/pins",
+            "/auth/login",
+            "/workspaces",
+            "/tasks",
+            "/results/1",
+            "/search",
+            "/instance/applications",
+            "/organisation",
+            "/compute/enroll",
+            "/compute/heartbeat",
+            "/ai/status",
+            "/files/1",
+        ] {
+            assert_eq!(application_of_api_path(caminho), None, "{caminho}");
+        }
+    }
 }

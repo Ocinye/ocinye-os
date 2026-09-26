@@ -69,7 +69,8 @@ mais.
 barra, da paleta e do «+ Criar»; a sua rota diz que a aplicação não está activa
 nesta Instância. Os dados ficam, e reactivar devolve-a tal como estava.
 `Desactivar ≠ desinstalar`, como `desafixar ≠ desinstalar`. A recusa da API de
-uma aplicação desactivada é da fronteira Core/aplicações (Parte 3).
+uma aplicação desactivada é da fronteira Core/aplicações
+([ADR-0015](0015-core-and-applications-boundary.md)).
 
 **6. Ficheiros é relevante a todo o membro interno.** O armazenamento pessoal é
 uma capacidade do sistema operativo, não da investigação. A relevância continua a

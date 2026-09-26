@@ -248,3 +248,48 @@ mod tests {
         ));
     }
 }
+
+/// Refuse the API of an application this Instance has inactive (ADR-0014).
+///
+/// The Workspace hides an inactive application; hiding is presentation. The
+/// Core is where the refusal has to live, or any client — a script, a stale
+/// tab, an agent — would keep using it. Only paths that belong to exactly one
+/// application are gated ([`organisation::application_of_api_path`]); identity,
+/// authentication, health, shared containers and node authority never are.
+///
+/// It runs before authentication on purpose: whether the application is active
+/// is a fact about the Instance, the same for every caller, and saying so
+/// reveals nothing about anyone's data.
+pub async fn application_gate(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let prefix = format!("/api/{}", ocinye_contracts::API_VERSION);
+    let Some(application) = request
+        .uri()
+        .path()
+        .strip_prefix(&prefix)
+        .and_then(ocinye_core::modules::organisation::application_of_api_path)
+    else {
+        return next.run(request).await;
+    };
+
+    match ocinye_core::modules::organisation::require_active(
+        &state.pool,
+        state.organisation_id,
+        application,
+    )
+    .await
+    {
+        Ok(()) => next.run(request).await,
+        Err(error) => {
+            let ids = request
+                .extensions()
+                .get::<CorrelationIds>()
+                .cloned()
+                .unwrap_or_default();
+            crate::error::ApiError::new(error, &ids).into_response()
+        }
+    }
+}
