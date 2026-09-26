@@ -1,7 +1,7 @@
 # Runbook — Bootstrap do primeiro administrador
 
 **Quando:** instalação nova, sem nenhum `platform_admin` utilizável.
-**O que cria:** a organização, a pessoa institucional e a identidade privilegiada ligada a ela.
+**O que cria:** a Instância (se a base ainda não tiver uma), a pessoa institucional e a identidade privilegiada ligada a ela.
 **Quem:** quem tiver acesso ao host do Ocinye Core.
 **Duração:** minutos.
 
@@ -13,10 +13,16 @@
 
 ## Passos
 
+Numa base **sem Instância**, o comando cria-a primeiro — com o nome dado em
+`--instance-name` (ou `OCINYE_INSTANCE_NAME`), e o slug de `OCINYE_INSTANCE_SLUG`
+ou, se não estiver definido, derivado do nome
+([Instância](../instance/README.md)). Numa instalação que já tem Instância, adopta-a:
+
 ```bash
 ocinye-core-server bootstrap-admin \
-  --name        "Fidel Monteiro"        --email       fidel@ocinye.com \
-  --admin-name  "Fidel Admin"           --admin-email fidel.admin@ocinye.com
+  --instance-name "Cooperativa Exemplo" \
+  --name        "Ana Pereira"           --email       ana@cooperativa.exemplo \
+  --admin-name  "Ana Pereira (Admin)"   --admin-email ana.admin@cooperativa.exemplo
 ```
 
 Saída, **uma única vez**:
@@ -24,7 +30,7 @@ Saída, **uma única vez**:
 ```
   Instituição e administrador criados.
 
-  Organização          ocinye
+  Instância            Cooperativa Exemplo (cooperativa-exemplo)
   Pessoa institucional Fidel Monteiro · fidel@ocinye.com
     (sem acesso — dê-lho pelo Ocinye OS, em Administração)
 

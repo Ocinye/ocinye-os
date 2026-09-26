@@ -15,21 +15,16 @@ Não é uma reescrita, nem um repositório novo, nem um redesenho por gosto. É
 **generalizar** a arquitectura que já funciona, de modo que a instalação da
 Ocinye se torne uma configuração dela.
 
-**A definição canónica muda com a Parte 1, não antes.** A formulação em vigor, em
-[`README.md`](README.md#o-que-é-o-ocinye-os), ainda descreve o sistema como
-infraestrutura de uma instituição. Substituí-la antes de o modelo de Instância
-existir seria escrever `CURRENT` sobre algo `PLANNED`. A Parte 1 substitui-a por
-ADR, no mesmo PR que torna a instância real, e ajusta o guarda
-`scripts/documentation-facts.py`, que protege essa frase.
+**A definição canónica mudou com a Parte 1**
+([ADR-0013](../adrs/0013-general-purpose-os-instance-and-node.md)), no mesmo PR que
+tornou a Instância real; vive em [`README.md`](README.md#o-que-é-o-ocinye-os), e o
+guarda `scripts/documentation-facts.py` protege-a.
 
 ---
 
 ## 1. O produto
 
-> O Ocinye OS é um ambiente operativo auto-alojado para pessoas e organizações
-> que unifica identidade, aplicações, dados, armazenamento, computação,
-> governação de recursos, comunicação, colaboração, automação e inteligência
-> artificial sob um Core autoritativo.
+A definição é a de [`README.md`](README.md#o-que-é-o-ocinye-os).
 
 Corre sobre um Linux mínimo. O Linux continua a ser responsável pelo kernel, os
 drivers, o escalonamento, as primitivas de sistema de ficheiros e de rede. O
@@ -138,8 +133,8 @@ Cada linha diz o que existe, o que falta, e a parte do programa que o entrega.
 | Área | Hoje | Alvo | Parte |
 |---|---|---|---|
 | **Linha de base** | CI vermelha desde 24/Set; backup nocturno a falhar; *branch protection* sem *required checks*; MinIO retirado pelo fabricante | CI verde e observada, backup a correr, dependências mortas substituídas por artefactos controlados | **0** |
-| **Instância** | `organisations` delimita tudo; slug `ocinye` por omissão; nome = slug; marca da Ocinye na assinatura e no TOTP | Instância de primeira classe, criada no bootstrap com nome, slug e identidade próprios; dados actuais mapeados sem perdas | 1 |
-| **Perfis** | estrutura de investigação no núcleo: unidades semeadas sempre, tarefas e datasets presos a ambientes de investigação, Home e «+ Criar» centrados em investigação | quatro perfis sobre o mesmo sistema; `Research` = comportamento actual | 2 |
+| **Instância** | **`CURRENT` desde a Parte 1** ([ADR-0013](../adrs/0013-general-purpose-os-instance-and-node.md), [docs/instance](../instance/README.md)): singleton `instance_identity`, resolução sem slug por omissão, nome da Instância no TOTP, na assinatura e na IA, inventário de IA por Instância, instalação existente mapeada sem perdas | — | 1 ✓ |
+| **Perfis** | estrutura de investigação no núcleo: unidades semeadas sempre, tarefas e datasets presos a ambientes de investigação, Home e «+ Criar» centrados em investigação, e **Ficheiros escondido a quem não tem papel de investigação** (a relevância de módulo decide a sua visibilidade) | quatro perfis sobre o mesmo sistema; `Research` = comportamento actual | 2 |
 | **Fronteira Core/aplicações** | um crate, um binário, um router incondicional | aplicações desactiváveis sem afectar autenticação, pertença, autorização, contas de recursos, lançador, definições ou saúde do Core | 3 |
 | **Manifesto de aplicação** | registo estático no Workspace, sem disponibilidade nem activação | manifesto versionado, activação por instância, capacidades pedidas, portão de consistência | 4 |
 | **Nós** | registo, enrolamento por token, heartbeat; nó sem trabalho; token de portador sem mTLS | identidade criptográfica, capacidade física/alocável/reservada/alocada/consumida, saída e regresso automáticos | 5 |

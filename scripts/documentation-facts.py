@@ -25,10 +25,13 @@ RAIZ = pathlib.Path(__file__).resolve().parent.parent
 # Uma formulação, uma fonte. Três versões ligeiramente diferentes espalhadas
 # pelo repositório é como uma instituição perde a sua própria definição: cada
 # cópia envelhece à sua maneira e ninguém sabe qual é a boa.
+# Desde a Parte 1 da generalização (ADR-0013) a definição é a de uso geral: a
+# Ocinye passou a ser a primeira instância, e o sistema não se define por ela.
 DEFINICAO = (
-    "infraestrutura digital institucional através da qual a Ocinye organiza, "
-    "governa, preserva e transforma conhecimento, dados, investigação e "
-    "engenharia em capacidade tecnológica duradoura"
+    "ambiente operativo auto-alojado para pessoas e organizações que unifica "
+    "identidade, aplicações, dados, armazenamento, computação, governação de "
+    "recursos, comunicação, colaboração, automação e inteligência artificial "
+    "sob um Core autoritativo"
 )
 FONTE_DA_DEFINICAO = "docs/architecture/README.md"
 # O README cita-a, e citar é o comportamento correcto — a proibição é redefinir.
@@ -40,6 +43,11 @@ PODEM_CITAR = {"README.md"}
 # vai na mensagem de erro, porque um guarda que só diz «proibido» obriga a
 # próxima pessoa a ir descobrir porquê.
 OBSOLETAS = [
+    (
+        r"infraestrutura digital institucional através da qual a\s+Ocinye organiza",
+        "A definição mudou com a ADR-0013: o Ocinye OS é de uso geral, e a Ocinye "
+        "é a primeira instância. A frase antiga não volta como definição corrente.",
+    ),
     (
         r"`?Result`?[^.\n]{0,80}\bnão\b[^.\n]{0,40}\b(têm|tem) tabelas?",
         "`Result` tem tabela desde a migration 0019.",

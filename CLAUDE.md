@@ -124,6 +124,17 @@ sem que nada falhe.
   de administração pode deixar a instituição sem um administrador da plataforma
   capaz de entrar: suspender, desactivar ou revogar o papel do último é recusado
   ([docs/authorization](docs/authorization/README.md)).
+- **Instância: `IMPLEMENTED`** ([ADR-0013](docs/adrs/0013-general-purpose-os-instance-and-node.md)).
+  Cada instalação serve uma Instância, registada no singleton
+  `instance_identity` (migração 0052), cujo `id` é a identidade durável que
+  sobrevive a uma mudança de servidor. O Core **resolve-a, e não a presume**:
+  `OCINYE_INSTANCE_SLUG` (ou o nome antigo `OCINYE_ORGANISATION_SLUG`), senão a
+  registada, senão a única organização da base — e recusa arrancar em qualquer
+  outro caso. Deixou de haver um slug por omissão. O nome da Instância, e não o
+  literal «Ocinye», aparece no emissor TOTP, na assinatura de correio, na
+  instrução de sistema da IA e no trilho do Workspace. O inventário de modelos de
+  IA é lido **por Instância**, através do nó que o reporta. A instalação
+  existente mapeou sem perdas para a primeira Instância.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
@@ -209,7 +220,7 @@ sem que nada falhe.
   capacidade, e a superfície de Administração de recursos.
   `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão distinto de `OCINYE_AI_READY`, e
   **não** torna a IA disponível.
-- **51 migrations**, aplicáveis de base vazia; 85 tabelas.
+- **52 migrations**, aplicáveis de base vazia; 86 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -398,8 +409,8 @@ sem que nada falhe.
   ([artefactos de terceiros](docs/deployment/third-party-artifacts.md)). Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **71 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
-  **71 READMEs**, `docs/` povoado — incluindo
+- **72 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
+  **72 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -415,14 +426,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1760 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1771 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **642 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **651 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se
@@ -497,6 +508,41 @@ Todo o restante conteúdo deste ficheiro é **norma** ou **`PLANNED`**.
 ---
 
 # PARTE I — IDENTIDADE DO PRODUTO
+
+## 1-A. O Ocinye OS é de uso geral
+
+> **Revista em 2026-09-26** pela
+> [ADR-0013](docs/adrs/0013-general-purpose-os-instance-and-node.md), no início do
+> programa de generalização ([arquitectura-alvo](docs/architecture/TARGET_OCINYE_OS.md)).
+> Onde as secções seguintes falam «da Ocinye» como se fosse o sistema, lêem-se
+> como descrevendo a **primeira instância**; prevalece esta secção.
+
+Regras duráveis, com a mesma força das outras normas deste ficheiro:
+
+> **O Ocinye OS é um ambiente operativo auto-alojado de uso geral.** A
+> organização Ocinye é uma Instância — e um Perfil, o de investigação — do Ocinye
+> OS, e não o produto.
+
+> **O Ocinye Core governa** identidade, autorização, políticas, invariantes,
+> recursos, segredos, autoridade sobre aplicações e autoridade sobre nós. **As
+> aplicações implementam** a funcionalidade de domínio.
+
+> **O Ocinye OS opera com zero GPU, zero fornecedores de IA e zero dependências
+> de cloud externa**, quando configurado para operação local.
+
+> **A IA é independente de fornecedor, age por capacidades tipadas, e nunca
+> detém autoridade.**
+
+> **`Instância ≠ Nó`. `Perfil ≠ fork`. `Desafixar ≠ desinstalar`.** A
+> configuração precede o fork: «a organização A não quer Bibliografia» resolve-se
+> desactivando a aplicação, «a organização B usa outro fornecedor de IA» por
+> configuração de fornecedor, «a organização C tem GPU» registando um nó — nunca
+> com outro ramo de código.
+
+> **Nada no código assume a organização de ninguém.** O nome, o slug e a marca
+> de uma organização vêm da sua Instância; «Ocinye OS» nomeia o produto.
+
+---
 
 ## 2. Não estamos a construir um website
 
@@ -1988,7 +2034,8 @@ Estrutura actual — `CURRENT`:
 docs/adrs            docs/agentic        docs/ai             docs/applications
 docs/architecture    docs/authorization  docs/backups        docs/capabilities
 docs/compute         docs/data-model     docs/deployment     docs/development
-docs/domain          docs/feature-status docs/identity       docs/knowledge
+docs/domain          docs/feature-status docs/identity       docs/instance
+docs/knowledge
 docs/mail            docs/node-protocol  docs/operations     docs/password-policy
 docs/runbooks        docs/search         docs/security       docs/storage
 docs/testing         docs/threat-model   docs/ui-core-contract docs/wasm
@@ -2413,7 +2460,9 @@ Cada passo é a ligação de um novo recurso registado, não uma reescrita.
 | Termo | Significado |
 |---|---|
 | **Ocinye** | Instituição angolana de investigação aplicada, engenharia e infraestruturas digitais. |
-| **Ocinye OS** | O sistema operacional institucional completo: o produto arquitectural global. |
+| **Ocinye OS** | O ambiente operativo auto-alojado de uso geral: o produto (§1-A, ADR-0013). |
+| **Instância** | Um ambiente Ocinye OS governado de forma independente. Uma por instalação; registada em `instance_identity`. |
+| **Nó** | Uma máquina ou ambiente de computação que contribui recursos a uma Instância. Não é sinónimo de «servidor» nem de Instância. |
 | **Sistema Operacional Institucional** | O que estamos a construir: infraestrutura digital central da instituição, não um website. |
 | **Ocinye Core** | Núcleo institucional do Ocinye OS: domínio, invariantes, políticas, autorização, estado, API, eventos. |
 | **Ocinye Workspace** | Principal interface humana do sistema. Cliente do Core, sem lógica institucional. |
