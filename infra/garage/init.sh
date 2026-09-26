@@ -13,7 +13,9 @@
 # OCINYE_STORAGE_ACCESS_KEY (GK + 24 hex), OCINYE_STORAGE_SECRET_KEY (64 hex),
 # OCINYE_STORAGE_BUCKET, OCINYE_GARAGE_CAPACITY (bytes; por omissão 1 TB — um peso
 # relativo num nó único, não uma quota).
-set -euo pipefail
+# Sem `pipefail`: o `dash` da imagem do Core não o conhece, e nenhum pipe aqui
+# decide o resultado — cada decisão sai de um `grep -q` ou de um código de saída.
+set -eu
 
 URL="${OCINYE_GARAGE_ADMIN_URL:-http://object-store:3903}/v2"
 : "${GARAGE_ADMIN_TOKEN:?falta GARAGE_ADMIN_TOKEN}"
