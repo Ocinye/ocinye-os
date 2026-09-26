@@ -596,10 +596,24 @@ mod tests {
     fn cada_manifesto_concorda_com_o_seu_ecra() {
         for app in APPLICATIONS {
             let manifesto = app.manifest();
-            assert_eq!(manifesto.id.as_str(), app.id(), "manifesto errado para {}", app.id());
+            assert_eq!(
+                manifesto.id.as_str(),
+                app.id(),
+                "manifesto errado para {}",
+                app.id()
+            );
             assert_eq!(manifesto.route, app.route(), "rota de {}", app.id());
-            assert_eq!(manifesto.name_key, app.screen.label_key(), "nome de {}", app.id());
-            assert!(crate::i18n::has(manifesto.name_key), "{} sem nome traduzido", app.id());
+            assert_eq!(
+                manifesto.name_key,
+                app.screen.label_key(),
+                "nome de {}",
+                app.id()
+            );
+            assert!(
+                crate::i18n::has(manifesto.name_key),
+                "{} sem nome traduzido",
+                app.id()
+            );
         }
     }
 
