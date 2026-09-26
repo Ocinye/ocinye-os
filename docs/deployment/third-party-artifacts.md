@@ -73,9 +73,44 @@ ghcr.io/ocinye/third-party/minio-server@sha256:55f2ff7d2834fd5f6c76c1c9f54855a32
 ghcr.io/ocinye/third-party/minio-mc@sha256:d00c9868670a5e56a1710322cd98f7e4faa7291b23cdf31f59e90d44ec2a0156
 ```
 
-**Saída planeada.** Antes de `OCINYE_GENERAL_OS_BASELINE_READY = TRUE`, a fase de
+**Saída — feita (ADR-0208, secção seguinte).** Antes de `OCINYE_GENERAL_OS_BASELINE_READY = TRUE`, a fase de
 Host/Storage do programa de generalização escolhe um store S3-compatible
 mantido, com ADR, testes de compatibilidade, migração dos dados, rollback e E2E
 ([arquitectura-alvo §6](../architecture/TARGET_OCINYE_OS.md#6-itens-obrigatórios-que-nasceram-da-parte-0)).
 Até lá, este espelho **não** recebe actualizações, e nenhuma etiqueta nova se
 acrescenta a ele.
+
+## A saída: Garage, rclone e curl (ADR-0208)
+
+O MinIO deixou de ser o armazenamento do Ocinye OS: o **Garage** substitui-o no
+Compose de produção, no de desenvolvimento, na CI e no instalador, e o **rclone**
+substitui o `mc` no backup, no restauro e na passagem dos dados. O MinIO acima
+fica só como `object-store-legacy`, por perfil, para a transição de Instâncias
+que já o usavam ([`object-store-cutover.sh`](../../scripts/object-store-cutover.sh)),
+e sai do Compose depois de todas as conhecidas terem passado.
+
+Estes três **não** são dependências de compatibilidade: são mantidos por quem os
+faz. Consomem-se da origem, sempre por digest; o espelho na Ocinye é uma reserva,
+com os mesmos digests, para o dia em que a origem deixar de os servir.
+
+| | Garage | rclone | curl |
+|---|---|---|---|
+| Papel | armazenamento S3 da Instância | cliente S3 do backup, do restauro e da transição | imagem mínima do `garage-init` em desenvolvimento e na CI |
+| Versão | `v2.1.0` | `1.75.1` | `8.16.0` |
+| Origem, por digest | `dxflrs/garage@sha256:4c9b34c113e61358466e83fd6e7d66e6d18657ede14b776eb78a93ee8da7cf6a` | `rclone/rclone@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5` | `curlimages/curl@sha256:463eaf6072688fe96ac64fa623fe73e1dbe25d8ad6c34404a669ad3ce1f104b6` |
+| Espelho (reserva) | `ghcr.io/ocinye/third-party/garage:v2.1.0`, mesmo digest | `ghcr.io/ocinye/third-party/rclone:1.75.1`, mesmo digest | — |
+| Licença | GNU AGPL v3 | MIT | curl (MIT/X derivada) |
+| Como se usa | serviço separado, sem modificações; configuração em `infra/garage/garage.toml` | binário copiado para a imagem de backup | só corre o `infra/garage/init.sh` |
+
+**Licença do Garage.** O Garage corre como um componente separado, num
+contentor próprio, a partir da imagem publicada pelos seus autores, e esta
+integração **não modifica** o seu código-fonte. As obrigações de distribuição que
+a AGPL v3 impõe a quem distribui ou modifica o Garage documentam-se aqui e
+avaliam-se à parte; este documento regista factos técnicos, e não é parecer
+jurídico. Quem publicar uma imagem do Garage modificada tem de o reavaliar.
+
+**Espelhos privados.** Os pacotes `third-party/garage` e `third-party/rclone`
+nasceram privados no GHCR, e a API do GitHub não muda a visibilidade de um
+pacote. Por isso o Compose, a CI e a imagem de backup usam a origem por digest;
+tornar os espelhos públicos é um gesto de quem administra a organização, e só
+então passam a ser consumíveis sem autenticação.

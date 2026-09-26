@@ -167,11 +167,11 @@ Duas coisas mudaram, e são precisas as duas:
   saltar, pelo que a ausência do fixture é um defeito do job e não uma condição
   do ambiente.
 
-> **MinIO is the CI implementation of the S3-compatible test fixture; it is not
-> the storage architecture of Ocinye OS.**
+> **Garage is the CI implementation of the S3-compatible test fixture, as it is
+> the storage of an Instance (ADR-0208).**
 
-Os testes falam com o contrato `ObjectStore`. Trocar o fixture não deve exigir
-tocar num teste.
+Os testes falam com o contrato `ObjectStore`. A troca do MinIO pelo Garage não
+tocou num teste — que é a prova de que o contrato é o contrato.
 
 ## Espaço em disco é uma condição da evidência
 
@@ -276,7 +276,7 @@ Declarado, não escondido:
 - **Fluxo OIDC ponta a ponta** contra um IdP a correr. As partes estão testadas
   (PKCE, `state`, sessões, rejeição de token); a ligação completa não foi
   exercitada.
-- **Upload e download reais** contra MinIO através da API HTTP.
+- **Upload e download reais** contra o Garage através da API HTTP.
 - **Drenagem do outbox sob concorrência.**
 - **Property-based testing** dos workflows. Considerado; ainda não escrito.
 - **Fuzzing** do parser BibTeX e do protocolo de nó.

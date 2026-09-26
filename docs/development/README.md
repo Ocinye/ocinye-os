@@ -27,8 +27,9 @@ alterados mesmo em desenvolvimento, para que nunca se tornem hábito.
 docker compose -f infra/compose/docker-compose.yml up -d
 ```
 
-Levanta PostgreSQL 17 com pgvector (porta 5442), Redis (6380), MinIO (9000, consola
-9001). O `minio-init` cria o bucket e deixa-o **privado**.
+Levanta PostgreSQL 17 com pgvector (porta 5442), Redis (6380) e o Garage, com a
+API S3 na porta 9000 (ADR-0208). O `garage-init` aplica o layout, importa a chave
+de desenvolvimento e cria o bucket **privado** (`infra/garage/init.sh`).
 
 Portas fora do habitual de propósito: colidir com outro PostgreSQL local é a
 primeira coisa que acontece a quem já desenvolve noutro projecto.
@@ -36,7 +37,7 @@ primeira coisa que acontece a quem já desenvolve noutro projecto.
 **Ligadas a `127.0.0.1`**, não a todas as interfaces. Estes serviços correm com
 as credenciais que estão no `.env.example`; publicá-los em `0.0.0.0` numa rede
 de que não se é dono é oferecer uma base de dados com password conhecida a quem
-a queira. `POSTGRES_BIND`, `REDIS_BIND` e `MINIO_BIND` mudam isto, e mudá-las
+a queira. `POSTGRES_BIND`, `REDIS_BIND` e `GARAGE_BIND` mudam isto, e mudá-las
 precisa de uma razão (`CLAUDE.md` §56).
 
 ### 3. Migrations

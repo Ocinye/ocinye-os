@@ -15,7 +15,7 @@ flowchart LR
     GW --> CORE["Ocinye Core"]
     WS -->|"rede interna do Compose · sessão BFF"| CORE
     CORE --> PG[("PostgreSQL<br/>pgvector")]
-    CORE --> S3[("Object Storage<br/>MinIO")]
+    CORE --> S3[("Object Storage<br/>Garage")]
     CORE --> RD[("Redis")]
     WK["Worker"] --> PG
     CORE -.->|"WireGuard · PLANNED"| NODE["CAM-01<br/>NÃO EXISTE"]
@@ -69,7 +69,7 @@ Os segredos vivem em `/etc/ocinye/*.env` (`comum.env`, `core.env`,
 
 ## Artefactos de terceiros
 
-O MinIO (servidor e cliente `mc`) deixou de ser distribuído pelo fabricante. O Compose, a CI e a imagem de backup consomem-no de um espelho controlado pela Ocinye, fixado por digest e classificado como dependência de compatibilidade, não como escolha de futuro: [artefactos de terceiros espelhados](third-party-artifacts.md).
+O armazenamento de objectos é o **Garage** (ADR-0208), e o cliente S3 do backup é o **rclone**, ambos fixados por digest. O MinIO, arquivado pelo fabricante, fica só como `object-store-legacy` durante a passagem de uma Instância que já o usava — `scripts/object-store-cutover.sh`, que o deploy corre uma vez, antes da troca de release, com verificação por `verify-objects` e rollback. [Artefactos de terceiros](third-party-artifacts.md).
 
 ## O que produção exige
 

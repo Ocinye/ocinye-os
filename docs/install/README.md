@@ -63,6 +63,43 @@ para identidades privilegiadas.
 - `sudo ./install/ocinye status` mostra o release e o estado dos serviços.
 - Com systemd, `ocinye.service` levanta a Instância depois de um reboot.
 
+## Armazenamento
+
+Os bytes vivem no **Garage** da Instância (ADR-0208), um serviço S3-compatível no
+mesmo anfitrião, sem porta pública. O instalador gera a chave do Core e os
+segredos do Garage, e o `object-store-init` aplica o layout e cria o bucket
+privado a cada arranque, sem mudar o que já existe.
+
+## Actualizar, reverter, backup e restauro
+
+```bash
+sudo ./install/ocinye upgrade
+```
+
+A partir do pacote do release novo: checkpoint da base, instalação do release,
+passagem do armazenamento para o Garage se a Instância ainda estiver no MinIO,
+troca, portão de saúde — e, se falhar, volta sozinha ao release anterior.
+
+```bash
+sudo ./install/ocinye rollback --confirm
+```
+
+Volta ao release anterior à última actualização e à base desse momento.
+
+```bash
+sudo ./install/ocinye backup
+```
+
+Produz um conjunto de continuidade em `/srv/ocinye/backups`. A raiz de selagem
+**não** vai nele: guarde-a à parte.
+
+```bash
+sudo ./install/ocinye install --domain os.exemplo.org --restore CONJUNTO --sealing-key-file FICHEIRO
+```
+
+Instala noutro anfitrião a partir de um conjunto, com a raiz de selagem de
+origem, e só abre a Instância depois das três verificações de continuidade.
+
 ## Desinstalar
 
 `sudo ./install/ocinye uninstall --purge` pára tudo e apaga dados, configuração e
@@ -76,7 +113,5 @@ evidência de que esta página descreve o que acontece.
 
 ## O que ainda não existe
 
-- Actualizar uma Instância instalada (Parte 10) e backup/restauro com o
-  instalador (Parte 11).
 - Instalação sem rede (imagens de terceiros dentro do pacote).
 - Pacote assinado (Parte 17): hoje as somas provam integridade, não origem.
