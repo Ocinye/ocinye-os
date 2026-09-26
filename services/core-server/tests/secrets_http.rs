@@ -176,37 +176,6 @@ async fn membro(pool: &PgPool, organisation_id: Uuid, role: TechnicalRole) -> (U
     (person_id, token)
 }
 
-
-async fn pedido(
-    state: &AppState,
-    token: Option<&Secret>,
-    method: &str,
-    path: &str,
-    body: Option<Value>,
-) -> (StatusCode, Value) {
-    let mut builder = Request::builder().method(method).uri(path);
-    if let Some(token) = token {
-        builder = builder.header(header::AUTHORIZATION, format!("Bearer {}", token.expose()));
-    }
-    let request = match body {
-        Some(body) => builder
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(serde_json::to_vec(&body).expect("json"))),
-        None => builder.body(Body::empty()),
-    }
-    .expect("pedido");
-    let response = routes::router(state.clone())
-        .oneshot(request)
-        .await
-        .expect("resposta");
-    let status = response.status();
-    let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
-        .await
-        .expect("corpo");
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
-}
-
-
 async fn pedido(
     state: &AppState,
     token: Option<&Secret>,
@@ -237,9 +206,11 @@ async fn pedido(
     let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
         .await
         .expect("corpo");
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
-
 
 /// Quantas linhas, em todas as tabelas da base, contêm este texto — a
 /// equivalência de procurar num `pg_dump`.
@@ -293,16 +264,38 @@ async fn um_segredo_de_fornecedor_guarda_se_usa_se_roda_e_revoga_sem_nunca_sair(
     .await;
     assert_eq!(status, StatusCode::OK, "{criado}");
     let id: Uuid = criado["id"].as_str().expect("id").parse().expect("uuid");
-    assert_eq!(criado["hint"], &primeiro[primeiro.len() - 4..], "só os últimos quatro");
-    assert!(!criado.to_string().contains(&primeiro), "a criação não devolve o valor");
+    assert_eq!(
+        criado["hint"],
+        &primeiro[primeiro.len() - 4..],
+        "só os últimos quatro"
+    );
+    assert!(
+        !criado.to_string().contains(&primeiro),
+        "a criação não devolve o valor"
+    );
 
     // Guardado selado: nenhuma linha da base contém o valor em claro.
-    assert_eq!(ocorrencias_na_base(&pool, &primeiro).await, 0, "o valor em claro chegou à base");
+    assert_eq!(
+        ocorrencias_na_base(&pool, &primeiro).await,
+        0,
+        "o valor em claro chegou à base"
+    );
 
     // A API não o devolve: a lista é só metadados, e não há rota de leitura.
-    let (_, lista) = pedido(&state, Some(&admin), None, "GET", "/api/v1/instance/secrets", None).await;
+    let (_, lista) = pedido(
+        &state,
+        Some(&admin),
+        None,
+        "GET",
+        "/api/v1/instance/secrets",
+        None,
+    )
+    .await;
     assert!(!lista.to_string().contains(&primeiro));
-    for caminho in [format!("/api/v1/instance/secrets/{id}"), format!("/api/v1/instance/secrets/{id}/value")] {
+    for caminho in [
+        format!("/api/v1/instance/secrets/{id}"),
+        format!("/api/v1/instance/secrets/{id}/value"),
+    ] {
         let (s, _) = pedido(&state, Some(&admin), None, "GET", &caminho, None).await;
         assert!(
             s == StatusCode::NOT_FOUND || s == StatusCode::METHOD_NOT_ALLOWED,
@@ -311,21 +304,42 @@ async fn um_segredo_de_fornecedor_guarda_se_usa_se_roda_e_revoga_sem_nunca_sair(
     }
 
     // O serviço autorizado usa-o; outro âmbito não.
-    let usado = secrets::use_secret(&pool, state.config.sealing_key.as_ref(), org, id, SecretScope::AiGateway, &ids)
-        .await
-        .expect("o AI Gateway usa o segredo");
+    let usado = secrets::use_secret(
+        &pool,
+        state.config.sealing_key.as_ref(),
+        org,
+        id,
+        SecretScope::AiGateway,
+        &ids,
+    )
+    .await
+    .expect("o AI Gateway usa o segredo");
     assert_eq!(usado.expose(), primeiro);
     assert!(
-        secrets::use_secret(&pool, state.config.sealing_key.as_ref(), org, id, SecretScope::Mail, &ids)
-            .await
-            .is_err(),
+        secrets::use_secret(
+            &pool,
+            state.config.sealing_key.as_ref(),
+            org,
+            id,
+            SecretScope::Mail,
+            &ids
+        )
+        .await
+        .is_err(),
         "fora do âmbito, o segredo não existe"
     );
     let outra_org = organisation(&pool).await;
     assert!(
-        secrets::use_secret(&pool, state.config.sealing_key.as_ref(), outra_org, id, SecretScope::AiGateway, &ids)
-            .await
-            .is_err(),
+        secrets::use_secret(
+            &pool,
+            state.config.sealing_key.as_ref(),
+            outra_org,
+            id,
+            SecretScope::AiGateway,
+            &ids
+        )
+        .await
+        .is_err(),
         "outra instância não o abre"
     );
 
@@ -335,10 +349,20 @@ async fn um_segredo_de_fornecedor_guarda_se_usa_se_roda_e_revoga_sem_nunca_sair(
         (
             "POST",
             "/api/v1/instance/secrets".to_owned(),
-            Some(json!({ "kind": "x", "label": "x", "scope": "ai_gateway", "value": "0123456789abcdef" })),
+            Some(
+                json!({ "kind": "x", "label": "x", "scope": "ai_gateway", "value": "0123456789abcdef" }),
+            ),
         ),
-        ("POST", format!("/api/v1/instance/secrets/{id}/rotate"), Some(json!({ "value": "0123456789abcdef" }))),
-        ("POST", format!("/api/v1/instance/secrets/{id}/revoke"), None),
+        (
+            "POST",
+            format!("/api/v1/instance/secrets/{id}/rotate"),
+            Some(json!({ "value": "0123456789abcdef" })),
+        ),
+        (
+            "POST",
+            format!("/api/v1/instance/secrets/{id}/revoke"),
+            None,
+        ),
     ] {
         let (s, _) = pedido(&state, Some(&pessoa), None, metodo, &caminho, corpo).await;
         assert_eq!(s, StatusCode::FORBIDDEN, "{metodo} {caminho}");
@@ -357,10 +381,21 @@ async fn um_segredo_de_fornecedor_guarda_se_usa_se_roda_e_revoga_sem_nunca_sair(
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(rodado["version"], 2);
-    let usado = secrets::use_secret(&pool, state.config.sealing_key.as_ref(), org, id, SecretScope::AiGateway, &ids)
-        .await
-        .expect("usar depois de rodar");
-    assert_eq!(usado.expose(), segundo, "a credencial antiga deixou de ser a que serve");
+    let usado = secrets::use_secret(
+        &pool,
+        state.config.sealing_key.as_ref(),
+        org,
+        id,
+        SecretScope::AiGateway,
+        &ids,
+    )
+    .await
+    .expect("usar depois de rodar");
+    assert_eq!(
+        usado.expose(),
+        segundo,
+        "a credencial antiga deixou de ser a que serve"
+    );
     assert_ne!(usado.expose(), primeiro);
 
     // Revogar: o criptograma apaga-se, e o uso falha — o fornecedor fica sem ela.
@@ -376,9 +411,16 @@ async fn um_segredo_de_fornecedor_guarda_se_usa_se_roda_e_revoga_sem_nunca_sair(
     assert_eq!(status, StatusCode::OK);
     assert_eq!(revogado["status"], "revoked");
     assert!(
-        secrets::use_secret(&pool, state.config.sealing_key.as_ref(), org, id, SecretScope::AiGateway, &ids)
-            .await
-            .is_err(),
+        secrets::use_secret(
+            &pool,
+            state.config.sealing_key.as_ref(),
+            org,
+            id,
+            SecretScope::AiGateway,
+            &ids
+        )
+        .await
+        .is_err(),
         "um segredo revogado não se usa"
     );
     let criptograma: Option<Vec<u8>> =

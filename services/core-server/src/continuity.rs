@@ -500,12 +500,11 @@ pub async fn verify_keys() -> anyhow::Result<()> {
         .context("contar os seeds TOTP selados")?;
     // Os segredos da Instância, só os activos: um revogado já não tem
     // criptograma (ADR-0110).
-    let seladas_instancia: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM instance_secrets WHERE ciphertext IS NOT NULL",
-    )
-    .fetch_one(&pool)
-    .await
-    .context("contar os segredos da instância selados")?;
+    let seladas_instancia: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM instance_secrets WHERE ciphertext IS NOT NULL")
+            .fetch_one(&pool)
+            .await
+            .context("contar os segredos da instância selados")?;
     let seladas = seladas_mail + seladas_totp + seladas_instancia;
 
     // A leitura das linhas só acontece quando há chave; sem ela não há nada a

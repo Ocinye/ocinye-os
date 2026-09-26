@@ -441,7 +441,10 @@ impl std::fmt::Debug for CoreConfig {
             .field("database_url", &"<redacted>")
             .field("redis_url", &"<redacted>")
             .field("storage", &self.storage)
-            .field("sealing_key", &self.sealing_key.as_ref().map(|_| "<present>"))
+            .field(
+                "sealing_key",
+                &self.sealing_key.as_ref().map(|_| "<present>"),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -782,8 +785,16 @@ mod tests {
         config.storage.access_key = "CHAVE-DE-ACESSO".into();
         config.storage.secret_key = "CHAVE-SECRETA".into();
         let impresso = format!("{config:?}");
-        for segredo in ["SENHA-DA-BASE", "SENHA-DO-REDIS", "CHAVE-DE-ACESSO", "CHAVE-SECRETA"] {
-            assert!(!impresso.contains(segredo), "{segredo} apareceu no Debug: {impresso}");
+        for segredo in [
+            "SENHA-DA-BASE",
+            "SENHA-DO-REDIS",
+            "CHAVE-DE-ACESSO",
+            "CHAVE-SECRETA",
+        ] {
+            assert!(
+                !impresso.contains(segredo),
+                "{segredo} apareceu no Debug: {impresso}"
+            );
         }
     }
 
