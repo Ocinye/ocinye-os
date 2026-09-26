@@ -1227,10 +1227,12 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
             .get("avatar")
             .and_then(|value| serde_json::from_value(value.clone()).ok())
             .unwrap_or(ocinye_contracts::AvatarChoice::Initials),
+        // Sem resposta, o nome do produto — nunca o de uma organização, que
+        // seria afirmar a instância de outra pessoa (ADR-0013).
         organisation: organisation
             .get("name")
             .and_then(Value::as_str)
-            .unwrap_or("Ocinye")
+            .unwrap_or("Ocinye OS")
             .to_owned(),
         core_status,
         temporal: temporal_items,

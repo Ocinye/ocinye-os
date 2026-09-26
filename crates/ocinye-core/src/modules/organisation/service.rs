@@ -120,6 +120,105 @@ pub async fn bootstrap_organisation(
     Ok(organisation)
 }
 
+/// Resolve the one Instance this installation serves (ADR-0013).
+///
+/// The order is fixed, and the Core never guesses:
+///
+/// 1. an explicit slug → adopt that organisation, or create it (named `name`,
+///    or after its slug) when the database has no Instance yet;
+/// 2. otherwise the Instance recorded in `instance_identity`;
+/// 3. otherwise the only organisation in the database, if there is exactly one;
+/// 4. otherwise refuse — an empty database needs an Instance to be named, and a
+///    database with several organisations needs to be told which one.
+///
+/// Whatever is resolved is recorded, so the next start is deterministic. An
+/// explicit slug that names a *different* organisation from the recorded one is
+/// refused: that would be the installation silently changing whose it is.
+///
+/// # Errors
+///
+/// [`CoreError::Configuration`] when the Instance cannot be determined, or
+/// contradicts the recorded one; database errors otherwise.
+pub async fn resolve_instance(
+    pool: &PgPool,
+    explicit_slug: Option<&str>,
+    name: Option<&str>,
+    ids: &CorrelationIds,
+) -> CoreResult<Organisation> {
+    let recorded = repo::recorded_instance(pool).await?;
+
+    let organisation = match (explicit_slug, recorded) {
+        (Some(slug), Some(recorded)) if recorded.slug != slug => {
+            return Err(CoreError::Configuration(format!(
+                "esta instalação serve a instância «{}», e a configuração pede «{slug}». \
+                 Uma instalação não muda de instância por configuração.",
+                recorded.slug
+            )));
+        }
+        (_, Some(recorded)) => recorded,
+        (Some(slug), None) => {
+            let fallback = default_instance_name(slug);
+            bootstrap_organisation(pool, slug, name.unwrap_or(&fallback), ids).await?
+        }
+        (None, None) => {
+            let mut existing = repo::first_organisations(pool).await?;
+            match existing.len() {
+                1 => existing.remove(0),
+                0 => {
+                    return Err(CoreError::Configuration(
+                        "esta instalação ainda não tem instância. Defina \
+                         OCINYE_INSTANCE_SLUG (e OCINYE_INSTANCE_NAME), ou crie-a com \
+                         `ocinye-core-server bootstrap-admin`."
+                            .to_owned(),
+                    ));
+                }
+                _ => {
+                    return Err(CoreError::Configuration(
+                        "a base de dados tem várias organizações e nenhuma instância \
+                         registada. Defina OCINYE_INSTANCE_SLUG com a desta instalação."
+                            .to_owned(),
+                    ));
+                }
+            }
+        }
+    };
+
+    repo::record_instance(pool, organisation.id).await?;
+    Ok(organisation)
+}
+
+/// The name of an Instance, as people read it (ADR-0013).
+///
+/// What used to be the literal «Ocinye» in the TOTP issuer, the mail signature
+/// and the AI's system instruction.
+///
+/// # Errors
+///
+/// Returns an error when the query fails or the organisation does not exist.
+pub async fn instance_name(pool: &PgPool, organisation_id: Uuid) -> CoreResult<String> {
+    let name: String = sqlx::query_scalar("SELECT name FROM organisations WHERE id = $1")
+        .bind(organisation_id)
+        .fetch_one(pool)
+        .await?;
+    Ok(name)
+}
+
+/// The name an Instance gets when only its slug was given: readable, never
+/// the slug itself (`mondrive-lda` → `Mondrive Lda`).
+#[must_use]
+pub fn default_instance_name(slug: &str) -> String {
+    slug.split(['-', '_'])
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            chars.next().map_or_else(String::new, |first| {
+                first.to_uppercase().chain(chars).collect::<String>()
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// The institution's initial units — sensible defaults, not a fixed taxonomy.
 ///
 /// These are **seed data**: rows an installation starts with so «Nova Unidade»

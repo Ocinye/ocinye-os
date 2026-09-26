@@ -7,6 +7,27 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Generalização, Parte 1: a Instância — 2026-09-26
+
+O Ocinye OS deixa de assumir que existe para uma organização. Cada instalação
+serve uma **Instância**, registada e resolvida, e a Ocinye é a primeira
+([ADR-0013](docs/adrs/0013-general-purpose-os-instance-and-node.md),
+[docs/instance](docs/instance/README.md)).
+
+- **`instance_identity`** (migração 0052): singleton com a identidade durável da
+  Instância. A instalação existente mapeia sem perdas; o nome das organizações
+  cujo nome era o slug (defeito do bootstrap) passa a legível.
+- **O Core resolve a Instância e não a presume**: `OCINYE_INSTANCE_SLUG` (ou o nome
+  antigo `OCINYE_ORGANISATION_SLUG`), senão a registada, senão a única da base —
+  e recusa arrancar em qualquer outro caso. Acabou o slug `ocinye` por omissão.
+- **`bootstrap-admin --instance-name`** cria a Instância numa base vazia.
+- **O nome da Instância** substitui o literal «Ocinye» no emissor TOTP (agora
+  codificado, para aceitar espaços e acentos), na assinatura de correio e na
+  instrução de sistema da IA; o Workspace, sem resposta do Core, diz «Ocinye OS».
+- **Isolamento do inventário de IA**: o Model Router, o estado da IA e o relatório
+  de capacidades lêem só os modelos dos nós da própria Instância (F-08).
+- **A definição canónica** passa a ser a de uso geral, e `CLAUDE.md` ganha a §1-A.
+
 ### Generalização, Parte 0: linha de base provada — 2026-09-26
 
 Antes de generalizar o Ocinye OS para um ambiente operativo auto-alojado de uso

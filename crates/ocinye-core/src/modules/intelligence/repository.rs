@@ -6,19 +6,34 @@ use uuid::Uuid;
 use super::model::RegisteredModel;
 use crate::error::CoreResult;
 
-const MODEL_COLUMNS: &str = "id, provider_kind, provider_name, node_id, model_name, version,
-                             capabilities, context_limit, status, max_classification,
-                             enabled, reported_at";
+const MODEL_COLUMNS: &str = "m.id, m.provider_kind, m.provider_name, m.node_id, m.model_name,
+                             m.version, m.capabilities, m.context_limit, m.status,
+                             m.max_classification, m.enabled, m.reported_at";
 
-/// List registered models.
+/// List the models registered **in one instance**.
+///
+/// A model belongs to the instance of the node that reports it: `ai_models`
+/// has no organisation of its own, so the scope comes through
+/// `compute_nodes.organisation_id`. Reading the table whole let a node enrolled
+/// in one instance serve another's prompts in a shared database (F-08 of the
+/// pre-generalization baseline). A model with no node belongs to no instance and
+/// is not listed; no code path writes one today.
 ///
 /// # Errors
 ///
 /// Returns an error when the query fails.
-pub async fn list_models<'e>(executor: impl PgExecutor<'e>) -> CoreResult<Vec<RegisteredModel>> {
+pub async fn list_models<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+) -> CoreResult<Vec<RegisteredModel>> {
     let models = sqlx::query_as::<_, RegisteredModel>(&format!(
-        "SELECT {MODEL_COLUMNS} FROM ai_models ORDER BY provider_name, model_name, version"
+        "SELECT {MODEL_COLUMNS}
+           FROM ai_models m
+           JOIN compute_nodes n ON n.id = m.node_id
+          WHERE n.organisation_id = $1
+          ORDER BY m.provider_name, m.model_name, m.version"
     ))
+    .bind(organisation_id)
     .fetch_all(executor)
     .await?;
     Ok(models)

@@ -146,6 +146,17 @@ struct Credenciais {
     password: String,
 }
 
+/// De onde vem a instância que um harness serve.
+enum OrigemDaInstancia {
+    /// Uma organização de fixture, uma por viagem, na base partilhada.
+    Fixture,
+    /// Uma instância criada de raiz, pelo caminho do produto, numa base própria.
+    Nova {
+        slug: &'static str,
+        nome: &'static str,
+    },
+}
+
 struct Harness {
     /// O fuso que **esta viagem declara**, quando declara um.
     ///
@@ -295,6 +306,32 @@ impl Harness {
         chrome: &str,
         estaticos: &str,
     ) -> Option<Self> {
+        Self::levantar(database_url, chrome, estaticos, OrigemDaInstancia::Fixture).await
+    }
+
+    /// O harness sobre uma **instância nova**, criada pelo mesmo caminho que o
+    /// `bootstrap-admin` usa (ADR-0013), numa base que só ela ocupa.
+    async fn start_numa_instancia_nova(
+        database_url: &str,
+        chrome: &str,
+        slug: &'static str,
+        nome: &'static str,
+    ) -> Option<Self> {
+        Self::levantar(
+            database_url,
+            chrome,
+            &format!("{}/static", env!("CARGO_MANIFEST_DIR")),
+            OrigemDaInstancia::Nova { slug, nome },
+        )
+        .await
+    }
+
+    async fn levantar(
+        database_url: &str,
+        chrome: &str,
+        estaticos: &str,
+        origem: OrigemDaInstancia,
+    ) -> Option<Self> {
         let pool = PgPool::connect(database_url)
             .await
             .expect("OCINYE_TEST_DATABASE_URL is set but the database is unreachable");
@@ -313,14 +350,27 @@ impl Harness {
             .expect("porto para o Core");
         let core_port = core_listener.local_addr().expect("endereço").port();
 
-        let organisation_id: Uuid = sqlx::query_scalar(
-            "INSERT INTO organisations (slug, name) VALUES ($1, $2) RETURNING id",
-        )
-        .bind(format!("e2e-{}", Uuid::new_v4().simple()))
-        .bind("Instituição do harness")
-        .fetch_one(&pool)
-        .await
-        .expect("organização");
+        let organisation_id: Uuid = match origem {
+            OrigemDaInstancia::Fixture => sqlx::query_scalar(
+                "INSERT INTO organisations (slug, name) VALUES ($1, $2) RETURNING id",
+            )
+            .bind(format!("e2e-{}", Uuid::new_v4().simple()))
+            .bind("Instituição do harness")
+            .fetch_one(&pool)
+            .await
+            .expect("organização"),
+            OrigemDaInstancia::Nova { slug, nome } => {
+                ocinye_core::modules::organisation::resolve_instance(
+                    &pool,
+                    Some(slug),
+                    Some(nome),
+                    &ocinye_observability::CorrelationIds::generate(),
+                )
+                .await
+                .expect("a instância nova")
+                .id
+            }
+        };
 
         let core_state = core_state(pool.clone(), organisation_id, database_url);
         let core = tokio::spawn(async move {
@@ -6052,6 +6102,167 @@ async fn trocar_de_idioma_muda_a_interface_e_volta_ao_canonico() {
         let recursos = harness.open("/resources").await;
         esperar_por(&recursos, titulo).await;
     }
+}
+
+/// Uma base de dados só desta viagem: `(url, nome)`. Apaga-se com
+/// [`apagar_base_descartavel`].
+async fn base_descartavel(url: &str) -> (String, String) {
+    let admin = PgPool::connect(url).await.expect("base de teste");
+    // Uma corrida que caiu a meio não chega a apagar a sua base; esta viagem é
+    // a única que usa o prefixo, e limpa o que ficou antes de criar a sua.
+    let restos: Vec<String> = sqlx::query_scalar(
+        "SELECT datname FROM pg_database WHERE datname LIKE 'ocinye\\_e2e\\_instancia\\_%'",
+    )
+    .fetch_all(&admin)
+    .await
+    .unwrap_or_default();
+    for resto in restos {
+        let _ = sqlx::query(&format!("DROP DATABASE IF EXISTS {resto} WITH (FORCE)"))
+            .execute(&admin)
+            .await;
+    }
+    let nome = format!("ocinye_e2e_instancia_{}", Uuid::new_v4().simple());
+    sqlx::query(&format!("CREATE DATABASE {nome}"))
+        .execute(&admin)
+        .await
+        .expect("criar a base da instância nova");
+    admin.close().await;
+    let (base, consulta) = url.split_once('?').map_or((url, ""), |(b, q)| (b, q));
+    let raiz = base.rsplit_once('/').map_or(base, |(raiz, _)| raiz);
+    let propria = if consulta.is_empty() {
+        format!("{raiz}/{nome}")
+    } else {
+        format!("{raiz}/{nome}?{consulta}")
+    };
+    (propria, nome)
+}
+
+async fn apagar_base_descartavel(url: &str, nome: &str) {
+    let admin = PgPool::connect(url).await.expect("base de teste");
+    let _ = sqlx::query(&format!("DROP DATABASE IF EXISTS {nome} WITH (FORCE)"))
+        .execute(&admin)
+        .await;
+}
+
+/// Uma instância criada de raiz — que não é a Ocinye — abre a Home e as
+/// aplicações, com o seu nome, e o seu primeiro administrador nasce pelo
+/// caminho do `bootstrap-admin` (ADR-0013, Parte 1 da generalização).
+#[tokio::test]
+async fn uma_instancia_nova_abre_com_o_seu_nome_e_as_suas_aplicacoes() {
+    let Ok(url) = std::env::var("OCINYE_TEST_DATABASE_URL") else {
+        eprintln!("skipping: OCINYE_TEST_DATABASE_URL is not set");
+        return;
+    };
+    let Some(chrome) = chrome_path() else {
+        assert!(
+            std::env::var("CI").is_err(),
+            "não há Chrome, e isto é a CI: as viagens de browser não podem ser saltadas aqui"
+        );
+        eprintln!("skipping: no Chrome found; set OCINYE_TEST_CHROME");
+        return;
+    };
+    let (propria, nome_da_base) = base_descartavel(&url).await;
+    let harness = Harness::start_numa_instancia_nova(
+        &propria,
+        &chrome,
+        "cooperativa-exemplo",
+        "Cooperativa Exemplo",
+    )
+    .await
+    .expect("harness");
+
+    // A instância ficou registada como a desta instalação.
+    let registada: Uuid = sqlx::query_scalar("SELECT organisation_id FROM instance_identity")
+        .fetch_one(&harness.pool)
+        .await
+        .expect("instância registada");
+    assert_eq!(registada, harness.organisation_id);
+
+    // O primeiro administrador, pelo caminho do `bootstrap-admin`.
+    let authenticator = Authenticator::new(
+        harness_hasher(),
+        Throttle {
+            per_ip: 20,
+            per_email: 10,
+            window_minutes: 15,
+        },
+        24,
+    );
+    let (admin, temporaria) = ocinye_core::modules::identity::bootstrap_privileged_identity(
+        &harness.pool,
+        &authenticator,
+        harness.organisation_id,
+        ocinye_core::modules::identity::HumanOwner {
+            full_name: "Pessoa Fundadora".to_owned(),
+            email: "fundadora@cooperativa.exemplo".to_owned(),
+        },
+        "Pessoa Fundadora (Admin)",
+        "fundadora.admin@cooperativa.exemplo",
+        &ocinye_observability::CorrelationIds::generate(),
+    )
+    .await
+    .expect("o primeiro administrador");
+    assert_eq!(admin.organisation_id, harness.organisation_id);
+    drop(temporaria);
+    let administradores: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM person_roles r JOIN people p ON p.id = r.person_id
+          WHERE p.organisation_id = $1 AND r.role = 'platform_admin'",
+    )
+    .bind(harness.organisation_id)
+    .fetch_one(&harness.pool)
+    .await
+    .expect("administradores");
+    assert_eq!(
+        administradores, 1,
+        "o bootstrap cria exactamente um administrador"
+    );
+
+    // Um administrador enrolado entra, com o segundo factor, pelo fluxo real.
+    let (_, cred) = harness.criar_privilegiada_enrolada().await;
+    let page = harness.open("/login").await;
+    set_field(&page, "input[name=email]", &cred.email).await;
+    set_field(&page, "input[name=password]", &cred.password).await;
+    submit(&page, "form").await;
+    harness.completar_desafio_mfa(&page).await;
+
+    // A Home abre, e o topo diz a instância — não «Ocinye».
+    let page = harness.open("/").await;
+    assert!(
+        esperar_ate_condicao(
+            &page,
+            // O trilho esconde-se em janelas estreitas (a do harness): lê-se o
+            // que o servidor renderizou, e não o que esta largura mostra.
+            r#"(document.querySelector('.oc-crumb') || {textContent: ''}).textContent.includes('COOPERATIVA EXEMPLO')"#,
+        )
+        .await,
+        "o topo do Workspace devia nomear a instância: {}",
+        page.evaluate("location.pathname + ' | ' + (document.querySelector('.oc-crumb') || document.body).textContent.slice(0, 300)")
+            .await
+            .ok()
+            .and_then(|v| v.into_value::<String>().ok())
+            .unwrap_or_default()
+    );
+
+    // O lançador abre e mostra as aplicações, incluindo a Administração.
+    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    wait_visible(&page, r#"[data-oc="launcher"]"#).await;
+    // Ficheiros não entra aqui: hoje a sua visibilidade depende da relevância
+    // de módulo de investigação, e um administrador sem papel de investigação
+    // não o vê. É a estrutura de investigação a funcionar como requisito do
+    // sistema, e resolve-se com os perfis (Parte 2), não nesta viagem.
+    for rota in ["/notes", "/admin", "/settings"] {
+        assert!(
+            esperar_ate_condicao(&page, &celula_visivel(rota)).await,
+            "o lançador devia mostrar {rota} numa instância nova"
+        );
+    }
+
+    // E uma aplicação determinística funciona: as Notas abrem.
+    let notas = harness.open("/notes").await;
+    esperar_por(&notas, "Notas").await;
+
+    drop(harness);
+    apagar_base_descartavel(&url, &nome_da_base).await;
 }
 
 /// As razões tipadas com que o Model Router conclui «zero candidatos» (ADR-0304).

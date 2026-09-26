@@ -30,7 +30,7 @@ pub async fn list_models(pool: &PgPool, principal: &Principal) -> CoreResult<Vec
     authorize(principal, Action::Read, &ctx)
         .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
 
-    repo::list_models(pool).await
+    repo::list_models(pool, principal.organisation_id).await
 }
 
 /// Resolve a capability to a model that can serve it now.
@@ -55,10 +55,11 @@ pub async fn list_models(pool: &PgPool, principal: &Principal) -> CoreResult<Vec
 /// models.
 pub async fn resolve_capability(
     pool: &PgPool,
+    organisation_id: Uuid,
     config: &AiConfig,
     capability: AiCapability,
 ) -> CoreResult<ModelResolution> {
-    let models = repo::list_models(pool).await?;
+    let models = repo::list_models(pool, organisation_id).await?;
     // Kept to distinguish «nothing is reported at all» from «models exist but
     // none serve this capability» — two different machine reasons.
     let reported_any = !models.is_empty();
@@ -113,7 +114,7 @@ pub async fn intelligence_status(
     authorize(principal, Action::Read, &ctx)
         .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
 
-    let models = repo::list_models(pool).await?;
+    let models = repo::list_models(pool, principal.organisation_id).await?;
 
     let capabilities: Vec<CapabilityStatus> = AiCapability::all()
         .into_iter()

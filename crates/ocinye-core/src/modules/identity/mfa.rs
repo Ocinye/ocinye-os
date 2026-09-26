@@ -139,12 +139,14 @@ fn generate_seed() -> String {
 
 /// A URI `otpauth://` que um autenticador lê de um QR.
 ///
-/// `issuer` sem espaços de propósito — evita a codificação percent e o risco de
-/// um leitor a interpretar mal. A conta é o endereço institucional.
+/// O emissor é o nome da instância (ADR-0013) — pode ter espaços e acentos, e
+/// por isso é codificado como a conta, byte a byte em UTF-8, nos dois sítios
+/// onde aparece. A conta é o endereço institucional.
 fn otpauth_uri(issuer: &str, conta: &str, seed_base32: &str) -> String {
     format!(
         "otpauth://totp/{issuer}:{conta}?secret={seed_base32}&issuer={issuer}\
          &algorithm=SHA1&digits={DIGITS}&period={PERIOD}",
+        issuer = percent(issuer),
         conta = percent(conta),
     )
 }
@@ -731,5 +733,15 @@ mod tests {
         assert!(uri.contains("algorithm=SHA1"));
         assert!(uri.contains("digits=6"));
         assert!(uri.contains("period=30"));
+    }
+
+    /// Um emissor com espaços e acentos — o nome de uma instância qualquer —
+    /// não parte a etiqueta nem o parâmetro.
+    #[test]
+    fn um_emissor_com_espacos_e_acentos_e_codificado() {
+        let uri = otpauth_uri("Ciências Aplicadas", "ana@exemplo.org", "ABCDEF");
+        assert!(uri.starts_with("otpauth://totp/Ci%C3%AAncias%20Aplicadas:ana@exemplo.org?"));
+        assert!(uri.contains("&issuer=Ci%C3%AAncias%20Aplicadas&"));
+        assert!(!uri.contains(' '));
     }
 }

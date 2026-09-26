@@ -41,6 +41,7 @@ async fn capabilities(
 ) -> Result<Json<SystemCapabilities>, ApiError> {
     let report = platform::system_capabilities(
         &state.pool,
+        state.organisation_id,
         &state.config,
         state.store.is_some(),
         state.mail_registry.reachability().await,

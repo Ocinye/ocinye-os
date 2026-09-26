@@ -145,6 +145,10 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     // chegar. Um restore que trouxesse a investigação inteira e nenhuma
     // filiação seria um arquivo, e não uma instituição a funcionar.
     ("organisations", Comparacao::Identidades),
+    // A identidade durável da Instância (ADR-0013): o que é igual antes e depois
+    // de uma mudança de servidor. Perdê-la num restauro seria a instalação nova
+    // esquecer de quem é.
+    ("instance_identity", Comparacao::Identidades),
     ("people", Comparacao::Identidades),
     ("credentials", Comparacao::Identidades),
     ("person_roles", Comparacao::Identidades),

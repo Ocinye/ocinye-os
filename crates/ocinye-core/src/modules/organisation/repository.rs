@@ -52,6 +52,65 @@ pub async fn insert_organisation<'e>(
     Ok(organisation)
 }
 
+/// The organisation this installation's Instance is recorded as (ADR-0013).
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn recorded_instance<'e>(
+    executor: impl PgExecutor<'e>,
+) -> CoreResult<Option<Organisation>> {
+    let organisation = sqlx::query_as::<_, Organisation>(
+        "SELECT o.id, o.slug, o.name, o.legal_name, o.country, o.description, o.created_at
+           FROM instance_identity i
+           JOIN organisations o ON o.id = i.organisation_id",
+    )
+    .fetch_optional(executor)
+    .await?;
+    Ok(organisation)
+}
+
+/// Every organisation in the database, oldest first — capped, because only
+/// «none», «exactly one» and «more than one» matter to the caller.
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn first_organisations<'e>(
+    executor: impl PgExecutor<'e>,
+) -> CoreResult<Vec<Organisation>> {
+    let organisations = sqlx::query_as::<_, Organisation>(
+        "SELECT id, slug, name, legal_name, country, description, created_at
+           FROM organisations ORDER BY created_at LIMIT 2",
+    )
+    .fetch_all(executor)
+    .await?;
+    Ok(organisations)
+}
+
+/// Record which organisation this installation's Instance is.
+///
+/// Idempotent for the same organisation. Recording a different one while a
+/// record exists violates the singleton, and the database refuses it.
+///
+/// # Errors
+///
+/// Returns an error when the insert fails.
+pub async fn record_instance<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+) -> CoreResult<Uuid> {
+    let id = sqlx::query_scalar::<_, Uuid>(
+        "INSERT INTO instance_identity (organisation_id) VALUES ($1)
+         ON CONFLICT (organisation_id) DO UPDATE SET organisation_id = EXCLUDED.organisation_id
+         RETURNING id",
+    )
+    .bind(organisation_id)
+    .fetch_one(executor)
+    .await?;
+    Ok(id)
+}
+
 /// Load a unit within an organisation.
 ///
 /// # Errors

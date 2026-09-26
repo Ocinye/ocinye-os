@@ -236,7 +236,10 @@ suites() {
 # as quatro áreas da regressão mínima que não tinham viagem própria: a Home, os
 # Meus Recursos, a troca de idioma pt→en→fr→pt, e o Prompt sem fornecedor a
 # concluir num turno de sistema degradado. Quatro viagens, quatro marcas.
-viagens-de-browser|123|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|123
+# 123 → 124 em 2026-09-26: a instância nova (Parte 1 da generalização) — uma
+# instância que não é a Ocinye, criada de raiz numa base própria pelo caminho do
+# bootstrap, abre a Home com o seu nome e as suas aplicações. Uma viagem, uma marca.
+viagens-de-browser|124|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|124
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

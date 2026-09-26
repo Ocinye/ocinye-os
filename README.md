@@ -1,15 +1,22 @@
 # Ocinye OS
 
-**Sistema operacional institucional AI-native.**
+**Ambiente operativo auto-alojado, AI-native e independente de IA.**
 
-> **O Ocinye OS é a infraestrutura digital institucional através da qual a
-> Ocinye organiza, governa, preserva e transforma conhecimento, dados,
-> investigação e engenharia em capacidade tecnológica duradoura.**
+> **O Ocinye OS é um ambiente operativo auto-alojado para pessoas e
+> organizações que unifica identidade, aplicações, dados, armazenamento,
+> computação, governação de recursos, comunicação, colaboração, automação e
+> inteligência artificial sob um Core autoritativo.**
 
-**A Ocinye** é uma instituição angolana de investigação aplicada, engenharia e
-infraestruturas tecnológicas. **O Ocinye OS** é a sua infraestrutura digital
-institucional. Não se confundem: a instituição tem existência própria, e o
-sistema existe para a suportar.
+Corre sobre um Linux mínimo, que continua dono do kernel, dos drivers e das
+primitivas de sistema; o Ocinye OS é o ambiente que as pessoas e as organizações
+efectivamente operam. Cada instalação serve uma **Instância** — um ambiente
+governado de forma independente —, e usa um ou mais **Nós** que lhe contribuem
+recursos ([ADR-0013](docs/adrs/0013-general-purpose-os-instance-and-node.md)).
+
+**A Ocinye** — instituição angolana de investigação aplicada, engenharia e
+infraestruturas tecnológicas — é a **primeira instância** do Ocinye OS. Não se
+confundem: a instituição tem existência própria, e o sistema não se define por
+ela.
 
 Não é um sistema operativo de hardware, nem uma distribuição de software, nem uma
 colecção de aplicações internas.
