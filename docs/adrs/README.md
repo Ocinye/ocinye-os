@@ -226,6 +226,7 @@ A interface humana.
 Como o sistema sobrevive ao sítio onde corre.
 
 - [ADR-0700](0700-institutional-continuity-and-portability.md) — Continuidade institucional e portabilidade entre servidores
+- [ADR-0701](0701-release-bundle-and-host-installer.md) — O pacote de release e o instalador de anfitrião
 
 Famílias sem ADRs não aparecem. `0800–0899` (integrações externas) e
 `0900–0999` (reservado) estão vazias, e nenhuma ADR será criada apenas para as
@@ -309,6 +310,7 @@ preencher.
 | [0608](0608-same-origin-institutional-downloads.md) | Descarga institucional servida same-origin | Workspace | `MEDIUM` | Accepted |
 | [0609](0609-disposable-conversion-isolation.md) | Conversão de conteúdo não confiável em contentores descartáveis | Workspace | `HIGH` | Accepted |
 | [0700](0700-institutional-continuity-and-portability.md) | Continuidade institucional e portabilidade entre servidores | Operations | `FOUNDATIONAL` | Accepted |
+| [0701](0701-release-bundle-and-host-installer.md) | O pacote de release e o instalador de anfitrião | Operations | `HIGH` | Accepted |
 
 ---
 

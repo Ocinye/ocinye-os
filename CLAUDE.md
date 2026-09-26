@@ -202,6 +202,16 @@ sem que nada falhe.
   recurso a outro candidato quando permitido). Tudo excluído pela política é
   `AI_POLICY_BLOCKED`. Provado por HTTP com dois fornecedores simulados e um
   externo que aceitaria tudo: um pedido confidencial nunca o contacta.
+- **Instalação num anfitrião Linux: `IMPLEMENTED`**
+  ([ADR-0701](docs/adrs/0701-release-bundle-and-host-installer.md),
+  [instalar](docs/install/README.md)). `scripts/release-bundle.sh` produz o pacote
+  de um commit — árvore, imagens, instalador e somas — e `install/ocinye install`
+  instala-o num anfitrião Linux com Docker, sem GPU nem fornecedor de IA:
+  verifica o anfitrião, confere as somas, gera os segredos no anfitrião, cria a
+  Instância com o perfil escolhido e o primeiro administrador, levanta os
+  serviços e confirma de fora que o Workspace responde. O resultado tem o layout
+  da produção da Ocinye. `scripts/install-e2e.sh` prova-o num anfitrião
+  descartável, duas vezes, de raiz.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
@@ -2113,7 +2123,7 @@ docs/adrs            docs/agentic        docs/ai             docs/applications
 docs/architecture    docs/authorization  docs/backups        docs/capabilities
 docs/compute         docs/data-model     docs/deployment     docs/development
 docs/domain          docs/feature-status docs/identity       docs/instance
-docs/knowledge       docs/nodes
+docs/install         docs/knowledge       docs/nodes
 docs/mail            docs/node-protocol  docs/operations     docs/password-policy
 docs/runbooks        docs/search         docs/security       docs/storage
 docs/testing         docs/threat-model   docs/ui-core-contract docs/wasm

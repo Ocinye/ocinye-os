@@ -7,6 +7,21 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Generalização, Parte 9: instalar num anfitrião Linux — 2026-09-26
+
+- **Pacote de release** (`scripts/release-bundle.sh`): a árvore de um commit, as
+  cinco imagens, o instalador e `SHA256SUMS`
+  ([ADR-0701](docs/adrs/0701-release-bundle-and-host-installer.md)).
+- **Instalador** `install/ocinye` (`install`, `status`, `uninstall --purge`): o
+  layout da produção num anfitrião novo, com segredos gerados no anfitrião,
+  Instância e primeiro administrador criados no bootstrap, e saúde confirmada de
+  fora. Proxy genérico de um anfitrião (`infra/nginx/instance/`).
+- **Prova de instalação** (`scripts/install-e2e.sh`): instalar num anfitrião
+  descartável, entrar e trabalhar por um browser, destruir, repetir com outro
+  perfil. [Guia de instalação](docs/install/README.md).
+- O host do healthcheck do proxy passa a ser `OCINYE_PROXY_HEALTH_HOST`, com
+  `ocinye.com` por omissão — a produção não muda.
+
 ### Generalização, Parte 8: política e roteamento de IA — 2026-09-26
 
 - **Política antes da preferência**

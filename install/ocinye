@@ -27,7 +27,7 @@
 # Instância nova arranca com IA indisponível — que é o estado correcto até alguém
 # ligar um nó ou registar um fornecedor.
 #
-# Subcomandos: install · status · uninstall
+# Subcomandos: install · status · upgrade · rollback · uninstall
 set -euo pipefail
 
 CONFIG="${OCINYE_CONFIG_DIR:-/etc/ocinye}"
@@ -53,12 +53,20 @@ Uso:
                  [--tls self-signed | --tls provided --cert CERT.pem --key KEY.pem] \
                  [--credential-file FICHEIRO]
   ocinye status
+  ocinye upgrade                 (a partir do pacote do release novo)
+  ocinye rollback --confirm
   ocinye uninstall --purge
 
 install  verifica o anfitrião, confere o pacote, gera a configuração e os
          segredos, carrega as imagens do release, cria a Instância e o primeiro
          administrador, levanta os serviços e confirma a saúde.
 status   mostra o release corrente e o estado dos serviços.
+upgrade  actualiza para o release deste pacote: checkpoint da base, troca,
+         portão de saúde — e, se falhar, volta sozinho ao release anterior
+         (repondo a base quando o esquema já tinha migrado).
+rollback --confirm
+         volta ao release anterior à última actualização e repõe a base desse
+         momento. O que se escreveu depois perde-se.
 uninstall --purge
          pára os serviços e apaga **tudo** — dados, configuração e releases.
          Não há volta: é para anfitriões descartáveis e para a prova de
@@ -315,6 +323,160 @@ EOF
     fi
 }
 
+# ── upgrade / rollback ───────────────────────────────────────────────────
+#
+# Uma actualização não é `git pull` e esperança. É, por esta ordem:
+#
+#   verificar → checkpoint da base → instalar o release novo → trocar →
+#   portão de saúde → (se falhar) reverter
+#
+# O checkpoint existe porque as migrações não têm volta: o Core anterior recusa
+# arrancar sobre um esquema mais novo (docs/runbooks/rollback-production.md).
+# Reverter uma actualização que já migrou é, por isso, repor a base do
+# checkpoint — e o instalador só o faz quando a versão do esquema mudou.
+#
+# O que o checkpoint **não** cobre: objectos escritos no armazenamento durante a
+# janela de uma actualização falhada. Numa actualização que falha no portão de
+# saúde essa janela é de segundos e sem sessões; ficam como objectos órfãos, que
+# a continuidade distingue (`verify-objects`).
+
+versao_do_esquema() {
+    docker exec ocinye-postgres-1 psql -U ocinye -d ocinye -tAc \
+        "SELECT COALESCE(MAX(version), 0) FROM _sqlx_migrations WHERE success" 2>/dev/null \
+        | tr -d '[:space:]'
+}
+
+portao_de_saude() {
+    local dominio="$1" limite="${2:-300}" inicio codigo
+    inicio=$(date +%s)
+    for servico in core workspace proxy; do
+        while :; do
+            estado="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}sem{{end}}' \
+                      "ocinye-$servico-1" 2>/dev/null || echo ausente)"
+            [ "$estado" = healthy ] && break
+            [ $(( $(date +%s) - inicio )) -gt "$limite" ] && { nota "$servico: $estado"; return 1; }
+            sleep 3
+        done
+    done
+    codigo="$(curl -ks -o /dev/null -w '%{http_code}' --resolve "$dominio:443:127.0.0.1" "https://$dominio/")"
+    [ "$codigo" = 303 ] || { nota "https://$dominio/ respondeu $codigo"; return 1; }
+}
+
+trocar_para() {  # sha
+    local destino="$1" dominio
+    dominio="$(sed -n 's/^OCINYE_PROXY_HEALTH_HOST=//p' "$CONFIG/release.env")"
+    ln -sfn "$RAIZ/releases/$destino" "$RAIZ/current"
+    sed -i "s/^OCINYE_RELEASE_SHA=.*/OCINYE_RELEASE_SHA=$destino/" "$CONFIG/release.env"
+    SHA="$destino"
+    # O proxy vem do release para onde se vai, e não do que lá estava.
+    local nginx="$RAIZ/releases/$destino/infra/nginx/instance"
+    cp "$nginx/00-comum.conf" "$nginx/10-default.conf" "$CONFIG/nginx/"
+    sed -e "s|{{DOMINIO}}|$dominio|g" "$nginx/30-instance.conf.template" \
+        > "$CONFIG/nginx/30-instance.conf"
+    docker exec ocinye-proxy-1 nginx -s reload >/dev/null 2>&1 || true
+}
+
+repor_checkpoint() {  # ficheiro
+    compose stop core worker workspace >/dev/null 2>&1 || true
+    docker exec -i ocinye-postgres-1 pg_restore -U ocinye -d ocinye --clean --if-exists \
+        --single-transaction < "$1"
+}
+
+upgrade_() {
+    [ "$(id -u)" = 0 ] || fatal "corra-o como root"
+    [ -r "$CONFIG/release.env" ] || fatal "não há nenhuma Instância instalada neste anfitrião"
+    local anterior novo dominio antes depois checkpoint
+    anterior="$(sed -n 's/^OCINYE_RELEASE_SHA=//p' "$CONFIG/release.env")"
+    dominio="$(sed -n 's/^OCINYE_PROXY_HEALTH_HOST=//p' "$CONFIG/release.env")"
+    [ -n "$dominio" ] || fatal "release.env não diz o domínio desta Instância"
+
+    passo "Verificação"
+    [ -r "$AQUI/RELEASE" ] && [ -r "$AQUI/SHA256SUMS" ] \
+        || fatal "isto não é um pacote de release (faltam RELEASE e SHA256SUMS)"
+    novo="$(tr -d '[:space:]' < "$AQUI/RELEASE")"
+    [[ "$novo" =~ ^[0-9a-f]{12}$ ]] || fatal "RELEASE não contém um SHA curto válido"
+    [ "$novo" != "$anterior" ] || fatal "o release $novo já é o corrente"
+    (cd "$AQUI" && sha256sum -c SHA256SUMS >/dev/null) \
+        || fatal "as somas do pacote não conferem: não instalo um pacote alterado"
+    SHA="$anterior"
+    portao_de_saude "$dominio" 60 \
+        || fatal "a Instância não está saudável antes da actualização; resolva isso primeiro"
+    nota "$anterior → $novo · somas conferidas · Instância saudável"
+
+    passo "Checkpoint"
+    install -d -m 700 "$RAIZ/checkpoints"
+    checkpoint="$RAIZ/checkpoints/$anterior-para-$novo-$(date -u +%Y%m%dT%H%M%SZ).dump"
+    docker exec ocinye-postgres-1 pg_dump -U ocinye -d ocinye -Fc > "$checkpoint" \
+        || fatal "o checkpoint da base falhou; nada foi alterado"
+    chmod 600 "$checkpoint"
+    antes="$(versao_do_esquema)"
+    nota "base em $checkpoint · esquema $antes"
+
+    passo "Release novo"
+    install -d -m 755 "$RAIZ/releases/$novo"
+    tar -xzf "$AQUI/source.tar.gz" -C "$RAIZ/releases/$novo"
+    for imagem in "$AQUI"/images/*.tar; do
+        docker load -q -i "$imagem" >/dev/null
+    done
+    for servico in core-server workspace worker conversion-runner converter; do
+        docker image inspect "ocinye/ocinye-$servico:$novo" >/dev/null 2>&1 \
+            || fatal "o pacote não trouxe ocinye/ocinye-$servico:$novo; nada foi trocado"
+    done
+    nota "release e imagens de $novo prontos"
+
+    passo "Troca"
+    trocar_para "$novo"
+    compose up -d --remove-orphans >/dev/null 2>&1 || true
+
+    passo "Portão de saúde"
+    if portao_de_saude "$dominio" 300; then
+        depois="$(versao_do_esquema)"
+        nota "Core, Workspace e proxy saudáveis · esquema $antes → $depois"
+        # Só uma actualização que passou fica registada como a que `rollback`
+        # desfaz: uma que falhou e foi revertida não mudou nada a desfazer.
+        printf '%s\n' "$anterior" > "$RAIZ/checkpoints/ultimo-release"
+        printf '%s\n' "$checkpoint" > "$RAIZ/checkpoints/ultimo-checkpoint"
+        printf '\n  Ocinye OS actualizado para %s. Anterior: %s (ocinye rollback).\n\n' "$novo" "$anterior"
+        return 0
+    fi
+
+    passo "Reversão"
+    depois="$(versao_do_esquema)"
+    trocar_para "$anterior"
+    if [ "$depois" != "$antes" ]; then
+        nota "o release $novo migrou o esquema ($antes → $depois): repõe-se o checkpoint"
+        repor_checkpoint "$checkpoint" || fatal "a reposição do checkpoint falhou: $checkpoint"
+    else
+        nota "o esquema não mudou ($antes): basta voltar ao release anterior"
+    fi
+    compose up -d --remove-orphans >/dev/null 2>&1 || true
+    portao_de_saude "$dominio" 300 \
+        || fatal "a reversão para $anterior não ficou saudável — intervenção necessária (checkpoint: $checkpoint)"
+    printf '\n  ACTUALIZAÇÃO RECUSADA — %s não passou o portão de saúde.\n' "$novo" >&2
+    printf '  A Instância voltou a %s, saudável, com o esquema %s.\n\n' "$anterior" "$(versao_do_esquema)" >&2
+    exit 3
+}
+
+rollback_() {
+    [ "$(id -u)" = 0 ] || fatal "corra-o como root"
+    [ -r "$RAIZ/checkpoints/ultimo-release" ] || fatal "não há actualização a reverter"
+    local anterior checkpoint dominio antes
+    anterior="$(cat "$RAIZ/checkpoints/ultimo-release")"
+    checkpoint="$(cat "$RAIZ/checkpoints/ultimo-checkpoint")"
+    dominio="$(sed -n 's/^OCINYE_PROXY_HEALTH_HOST=//p' "$CONFIG/release.env")"
+    SHA="$(sed -n 's/^OCINYE_RELEASE_SHA=//p' "$CONFIG/release.env")"
+    [ "$SHA" != "$anterior" ] || fatal "o release corrente já é $anterior"
+    passo "Reversão manual $SHA → $anterior"
+    nota "a base volta ao checkpoint de antes da actualização: o que se escreveu depois perde-se"
+    [ "${1:-}" = --confirm ] || fatal "confirme com --confirm: dados escritos depois da actualização perdem-se"
+    antes="$(versao_do_esquema)"
+    trocar_para "$anterior"
+    repor_checkpoint "$checkpoint"
+    compose up -d --remove-orphans >/dev/null 2>&1 || true
+    portao_de_saude "$dominio" 300 || fatal "a reversão não ficou saudável (checkpoint: $checkpoint)"
+    printf '\n  Instância em %s, esquema %s → %s.\n\n' "$anterior" "$antes" "$(versao_do_esquema)"
+}
+
 # ── status ───────────────────────────────────────────────────────────────
 
 status_() {
@@ -344,6 +506,8 @@ uninstall_() {
 case "${1:-}" in
     install) shift; install_ "$@" ;;
     status) status_ ;;
+    upgrade) shift; upgrade_ "$@" ;;
+    rollback) shift; rollback_ "$@" ;;
     uninstall) shift; uninstall_ "$@" ;;
     -h|--help|"") uso ;;
     *) uso; fatal "subcomando desconhecido: $1" ;;
