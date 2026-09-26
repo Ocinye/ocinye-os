@@ -27,7 +27,7 @@
 # Instância nova arranca com IA indisponível — que é o estado correcto até alguém
 # ligar um nó ou registar um fornecedor.
 #
-# Subcomandos: install · status · upgrade · rollback · uninstall
+# Subcomandos: install · status · upgrade · rollback · backup · uninstall
 set -euo pipefail
 
 CONFIG="${OCINYE_CONFIG_DIR:-/etc/ocinye}"
@@ -55,6 +55,8 @@ Uso:
   ocinye status
   ocinye upgrade                 (a partir do pacote do release novo)
   ocinye rollback --confirm
+  ocinye backup
+  ocinye install --domain D --restore CONJUNTO --sealing-key-file FICHEIRO [--public-url U]
   ocinye uninstall --purge
 
 install  verifica o anfitrião, confere o pacote, gera a configuração e os
@@ -64,6 +66,12 @@ status   mostra o release corrente e o estado dos serviços.
 upgrade  actualiza para o release deste pacote: checkpoint da base, troca,
          portão de saúde — e, se falhar, volta sozinho ao release anterior
          (repondo a base quando o esquema já tinha migrado).
+backup   produz um conjunto de continuidade em /srv/ocinye/backups (base,
+         objectos, manifesto, somas; nunca a raiz de selagem).
+install --restore
+         instala a partir de um conjunto: a Instância, as pessoas e os dados vêm
+         dele, a raiz de selagem vem de --sealing-key-file, e a Instância só abre
+         depois de as três verificações de continuidade passarem.
 rollback --confirm
          volta ao release anterior à última actualização e repõe a base desse
          momento. O que se escreveu depois perde-se.
@@ -111,12 +119,54 @@ esperar_saudavel() {
     done
 }
 
+# ── backup / restauro ────────────────────────────────────────────────────
+#
+# O mecanismo é o de continuidade institucional (ADR-0700): um conjunto com a
+# base, os objectos, o manifesto e as somas — e **nunca** a raiz de selagem, que
+# viaja por um canal próprio. O instalador só o liga à Instância instalada.
+
+restaurar_conjunto() {  # pasta do conjunto
+    local origem="$1" nome
+    nome="$(basename "$origem")"
+    [ -n "$nome" ] && [ "$nome" != / ] || fatal "conjunto sem nome: $origem"
+    passo "Restauro"
+    install -d -m 700 "$RAIZ/backups"
+    rm -rf "${RAIZ:?}/backups/${nome:?}"
+    cp -a "$origem" "$RAIZ/backups/$nome"
+    # O restauro corre na imagem de backup do release: pg_restore, mc e o
+    # binário do Core para as verificações, e nada do repositório.
+    compose --profile backup build backup >/dev/null
+    compose --profile backup run --rm -T --no-deps \
+        --entrypoint /opt/ocinye/scripts/institutional-restore.sh \
+        -e 'OCINYE_OBJECT_RESTORE_CMD=mc alias set destino http://object-store:9000 "$OCINYE_STORAGE_ACCESS_KEY" "$OCINYE_STORAGE_SECRET_KEY" >/dev/null && mc mirror --quiet --overwrite "$OCINYE_OBJECT_DIR" "destino/$OCINYE_STORAGE_BUCKET"' \
+        backup "$RAIZ/backups/$nome" \
+        || fatal "o restauro falhou; a base de destino pode ter estado parcial — desinstale e repita"
+    passo "Verificação de continuidade"
+    compose --profile backup run --rm -T --no-deps \
+        --entrypoint /opt/ocinye/scripts/institutional-verify.sh \
+        backup "$RAIZ/backups/$nome" \
+        || fatal "a verificação de continuidade não passou: a Instância não abre sobre um restauro não provado"
+}
+
+backup_() {
+    [ "$(id -u)" = 0 ] || fatal "corra-o como root"
+    [ -r "$CONFIG/release.env" ] || fatal "não há nenhuma Instância instalada neste anfitrião"
+    passo "Backup institucional"
+    compose --profile backup build backup >/dev/null
+    compose --profile backup run --rm -T backup || fatal "o backup falhou"
+    local ultimo
+    ultimo="$(ls -1dt "$RAIZ"/backups/ocinye-* 2>/dev/null | grep -v INCOMPLETO | head -1)"
+    [ -n "$ultimo" ] || fatal "o backup não deixou nenhum conjunto em $RAIZ/backups"
+    printf '\n  Conjunto: %s\n' "$ultimo"
+    printf '  A raiz de selagem não está nele: guarde a de %s/core.env à parte.\n\n' "$CONFIG"
+}
+
 # ── install ──────────────────────────────────────────────────────────────
 
 install_() {
     local dominio="" nome_instancia="" perfil="" nome="" email="" admin_nome="" \
           admin_email="" url_publico="" tls="self-signed" cert="" chave="" \
-          ficheiro_credencial=""
+          ficheiro_credencial="" restaurar="" ficheiro_selagem="" destinatario=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --domain) dominio="$2"; shift 2 ;;
@@ -131,16 +181,28 @@ install_() {
             --cert) cert="$2"; shift 2 ;;
             --key) chave="$2"; shift 2 ;;
             --credential-file) ficheiro_credencial="$2"; shift 2 ;;
+            --restore) restaurar="$2"; shift 2 ;;
+            --sealing-key-file) ficheiro_selagem="$2"; shift 2 ;;
+            --backup-recipient) destinatario="$2"; shift 2 ;;
             -h|--help) uso; exit 0 ;;
             *) fatal "opção desconhecida: $1" ;;
         esac
     done
-    for obrigatorio in dominio nome_instancia perfil nome email admin_nome admin_email; do
-        [ -n "${!obrigatorio}" ] || { uso; fatal "falta --${obrigatorio//_/-}"; }
-    done
-    case "$perfil" in research|business|education|personal) ;;
-        *) fatal "perfil desconhecido: $perfil (research, business, education, personal)" ;;
-    esac
+    if [ -n "$restaurar" ]; then
+        # A Instância vem do conjunto: nome, perfil e pessoas já lá estão.
+        [ -n "$dominio" ] || { uso; fatal "falta --domain"; }
+        [ -d "$restaurar" ] || fatal "--restore aponta para «$restaurar», que não é um conjunto"
+        [ -r "$ficheiro_selagem" ] \
+            || fatal "--restore exige --sealing-key-file: sem a raiz de selagem da origem,
+  as credenciais e os segundos factores chegam íntegros e ilegíveis"
+    else
+        for obrigatorio in dominio nome_instancia perfil nome email admin_nome admin_email; do
+            [ -n "${!obrigatorio}" ] || { uso; fatal "falta --${obrigatorio//_/-}"; }
+        done
+        case "$perfil" in research|business|education|personal) ;;
+            *) fatal "perfil desconhecido: $perfil (research, business, education, personal)" ;;
+        esac
+    fi
     [[ "$dominio" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] \
         || fatal "o domínio «$dominio» não é um nome de anfitrião"
     url_publico="${url_publico:-https://$dominio}"
@@ -225,11 +287,17 @@ OCINYE_STORAGE_BUCKET=ocinye-artifacts
 OCINYE_STORAGE_BACKEND_CODE=local-object-store
 OCINYE_STORAGE_LOCATION_LABEL=$dominio
 OCINYE_STORAGE_RESIDENCY=UNDECLARED
-OCINYE_SEALING_KEY=$(chave_de_selagem)
+OCINYE_SEALING_KEY=$(if [ -n "$restaurar" ]; then tr -d '[:space:]' < "$ficheiro_selagem"; else chave_de_selagem; fi)
 OCINYE_CORS_ALLOWED_ORIGINS=$url_publico
-OCINYE_INSTANCE_NAME=$nome_instancia
-OCINYE_INSTANCE_PROFILE=$perfil
 EOF
+    if [ -z "$restaurar" ]; then
+        printf 'OCINYE_INSTANCE_NAME=%s\nOCINYE_INSTANCE_PROFILE=%s\n' \
+            "$nome_instancia" "$perfil" >> "$CONFIG/core.env"
+    fi
+    # O backup institucional desta Instância (ADR-0700). Sem destinatário `age`
+    # o conjunto fica em claro, e por isso nunca sai do anfitrião.
+    printf 'OCINYE_BACKUP_DIR=%s\nOCINYE_BACKUP_BACKEND=none\nOCINYE_BACKUP_KEEP=7\nOCINYE_BACKUP_RECIPIENT=%s\n' \
+        "$RAIZ/backups" "$destinatario" > "$CONFIG/backup.env"
     cat > "$CONFIG/workspace.env" <<EOF
 OCINYE_WORKSPACE_PUBLIC_URL=$url_publico
 EOF
@@ -276,7 +344,23 @@ EOF
     compose up object-store-init >/dev/null
     nota "base de dados e armazenamento prontos; bucket privado"
 
-    # ── 7. A Instância e o primeiro administrador ────────────────────
+    # ── 7. A Instância: criada, ou trazida de um conjunto ────────────
+    if [ -n "$restaurar" ]; then
+        restaurar_conjunto "$restaurar"
+        passo "Serviços"
+        compose up -d --remove-orphans >/dev/null
+        esperar_saudavel core
+        esperar_saudavel workspace
+        esperar_saudavel proxy
+        passo "Saúde"
+        local codigo_r
+        codigo_r="$(curl -ks -o /dev/null -w '%{http_code}' --resolve "$dominio:443:127.0.0.1" \
+                    "https://$dominio/")"
+        [ "$codigo_r" = 303 ] || fatal "o Workspace respondeu $codigo_r em https://$dominio/"
+        printf '\n  Ocinye OS %s restaurado a partir de %s.\n' "$SHA" "$(basename "$restaurar")"
+        printf '  Workspace: %s — as pessoas entram com as credenciais de origem.\n\n' "$url_publico"
+        return 0
+    fi
     passo "Instância"
     local saida
     saida="$(compose run --rm --no-deps -T core bootstrap-admin \
@@ -507,6 +591,7 @@ case "${1:-}" in
     install) shift; install_ "$@" ;;
     status) status_ ;;
     upgrade) shift; upgrade_ "$@" ;;
+    backup) backup_ ;;
     rollback) shift; rollback_ "$@" ;;
     uninstall) shift; uninstall_ "$@" ;;
     -h|--help|"") uso ;;

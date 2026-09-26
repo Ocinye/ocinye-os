@@ -12,8 +12,16 @@
 //!
 //! Variáveis: `OCINYE_INSTALLED_URL` (https://…), `OCINYE_INSTALLED_EMAIL`,
 //! `OCINYE_INSTALLED_CREDENTIAL_FILE`, `OCINYE_INSTALLED_PROFILE`,
-//! `OCINYE_INSTALLED_RESOLVE` (`nome:porto:ip`, para um domínio de teste) e
+//! `OCINYE_INSTALLED_RESOLVE` (`nome ip`, para um domínio de teste),
+//! `OCINYE_INSTALLED_STATE_FILE` (onde guardar a palavra-passe e o seed do
+//! segundo factor, para quem volta a entrar numa Instância restaurada) e
 //! `OCINYE_TEST_CHROME`.
+//!
+//! O segundo teste, [`uma_instancia_restaurada_reconhece_quem_la_estava`], é a
+//! prova de restauro (Parte 11): a mesma pessoa entra na Instância restaurada
+//! noutro anfitrião com a mesma palavra-passe e o mesmo segundo factor — cujo
+//! seed está selado, pelo que entrar prova que a raiz de selagem viajou — e
+//! encontra a nota e o ficheiro que lá deixou.
 
 use std::time::{Duration, Instant};
 
@@ -185,6 +193,9 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
         .expect("seed");
     escrever(&page, "#mfa-code", &totp(&seed)).await;
     submeter(&page, "form[action=\"/mfa/confirm\"]").await;
+    if let Ok(estado) = std::env::var("OCINYE_INSTALLED_STATE_FILE") {
+        std::fs::write(&estado, format!("{nova}\n{seed}\n")).expect("guardar o estado");
+    }
     esperar_por(&page, "Guardar códigos de recuperação").await;
     page.find_element("input[name=acknowledged]")
         .await
@@ -227,6 +238,30 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
     page.goto(format!("{base}/files")).await.expect("ficheiros");
     esperar_por(&page, "Ficheiros").await;
 
+    // ── Um ficheiro, pelo carregamento de «Meus ficheiros» ──────────────
+    page.evaluate(
+        "(() => { const i = document.querySelector('[data-oc=\"fs-carregar\"]'); \
+           const dt = new DataTransfer(); \
+           dt.items.add(new File(['prova de instalação'], 'prova-instalacao.txt', \
+             { type: 'text/plain' })); \
+           i.files = dt.files; \
+           i.dispatchEvent(new Event('change', { bubbles: true })); return true; })()",
+    )
+    .await
+    .expect("carregar");
+    let inicio = Instant::now();
+    loop {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        page.goto(format!("{base}/files")).await.expect("ficheiros");
+        if texto(&page).await.contains("prova-instalacao.txt") {
+            break;
+        }
+        assert!(
+            inicio.elapsed() < PRAZO,
+            "o ficheiro carregado não apareceu em Meus ficheiros"
+        );
+    }
+
     // ── Uma nota, guardada pelo Core ────────────────────────────────────
     page.goto(format!("{base}/notes")).await.expect("notas");
     esperar_por(&page, "Notas").await;
@@ -268,4 +303,49 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
         turno.contains("AI_NO_PROVIDER_AVAILABLE"),
         "sem fornecedor, o Prompt devia concluir degradado com a razão tipada:\n{turno}"
     );
+}
+
+#[tokio::test]
+#[ignore = "conduz uma Instância restaurada; corre por scripts/restore-e2e.sh"]
+async fn uma_instancia_restaurada_reconhece_quem_la_estava() {
+    let base = var("OCINYE_INSTALLED_URL");
+    let email = var("OCINYE_INSTALLED_EMAIL");
+    let estado = std::fs::read_to_string(var("OCINYE_INSTALLED_STATE_FILE")).expect("estado");
+    let mut linhas = estado.lines();
+    let senha = linhas.next().expect("palavra-passe").to_owned();
+    let seed = linhas.next().expect("seed").to_owned();
+
+    let mut config = BrowserConfig::builder()
+        .chrome_executable(chrome())
+        .user_data_dir(std::env::temp_dir().join(format!("ocinye-restore-{}", std::process::id())))
+        .no_sandbox()
+        .arg("--ignore-certificate-errors");
+    if let Ok(regra) = std::env::var("OCINYE_INSTALLED_RESOLVE") {
+        config = config.arg(format!("--host-resolver-rules=MAP {regra}"));
+    }
+    let (browser, mut handler) = Browser::launch(config.build().expect("config"))
+        .await
+        .expect("Chrome");
+    tokio::spawn(async move { while handler.next().await.is_some() {} });
+
+    // A mesma palavra-passe, verificada contra o verificador restaurado.
+    let page = browser
+        .new_page(format!("{base}/login"))
+        .await
+        .expect("login");
+    escrever(&page, "input[name=email]", &email).await;
+    escrever(&page, "input[name=password]", &senha).await;
+    submeter(&page, "form").await;
+    esperar_por(&page, "Confirme o segundo factor").await;
+
+    // O mesmo segundo factor: o seed está selado com a raiz de selagem da origem.
+    // Aceitá-lo aqui é a prova de que ela viajou e abre o que devia.
+    escrever(&page, "#mfa-code", &totp(&seed)).await;
+    submeter(&page, "form[action=\"/mfa/challenge\"]").await;
+    esperar_por(&page, "SESSÃO PRIVILEGIADA").await;
+
+    page.goto(format!("{base}/notes")).await.expect("notas");
+    esperar_por(&page, "Primeira nota da Instância").await;
+    page.goto(format!("{base}/files")).await.expect("ficheiros");
+    esperar_por(&page, "prova-instalacao.txt").await;
 }

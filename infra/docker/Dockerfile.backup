@@ -39,8 +39,11 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=mc /usr/bin/mc /usr/local/bin/mc
 
-# Os três scripts juntos: cada um chama os irmãos por `"$(dirname "$0")"`.
+# Os scripts juntos: cada um chama os irmãos por `"$(dirname "$0")"`. O restauro
+# e a verificação viajam com eles, para que um anfitrião novo restaure a partir
+# desta imagem sem nada do repositório (`install/ocinye install --restore`).
 COPY scripts/institutional-backup.sh scripts/backup-remote.sh scripts/backup-objects.sh \
+     scripts/institutional-restore.sh scripts/institutional-verify.sh \
      /opt/ocinye/scripts/
 RUN chmod +x /opt/ocinye/scripts/*.sh
 
