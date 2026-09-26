@@ -61,7 +61,7 @@ pub struct OidcConfig {
 }
 
 /// Object storage settings.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct StorageConfig {
     /// S3-compatible endpoint.
     pub endpoint_url: String,
@@ -81,6 +81,23 @@ pub struct StorageConfig {
     pub residency: Residency,
     /// Largest accepted upload.
     pub max_upload_bytes: u64,
+}
+
+impl std::fmt::Debug for StorageConfig {
+    /// Never prints the keys. A `derive(Debug)` here was one `{:?}` away from
+    /// putting the object store's credentials in a log (Part 0, F-07 of the
+    /// Secrets Authority review, ADR-0110).
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StorageConfig")
+            .field("endpoint_url", &self.endpoint_url)
+            .field("region", &self.region)
+            .field("access_key", &"<redacted>")
+            .field("secret_key", &"<redacted>")
+            .field("bucket", &self.bucket)
+            .field("backend_code", &self.backend_code)
+            .field("residency", &self.residency)
+            .finish_non_exhaustive()
+    }
 }
 
 impl StorageConfig {
@@ -338,7 +355,7 @@ impl MailConfig {
 }
 
 /// Complete Core configuration.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CoreConfig {
     /// Deployment environment.
     pub environment: Environment,
@@ -409,6 +426,27 @@ pub struct CoreConfig {
     /// operação usa. Isso é decisão do Core: um cliente pede uma operação de
     /// domínio, e nunca escolhe o que se executa.
     pub capability_components_dir: String,
+}
+
+impl std::fmt::Debug for CoreConfig {
+    /// Only operational facts. The database and Redis URLs carry credentials,
+    /// and the mail and sealing material has its own redacted `Debug`; none of
+    /// it is printed here (ADR-0110).
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CoreConfig")
+            .field("environment", &self.environment.as_str())
+            .field("bind_address", &self.bind_address)
+            .field("log_level", &self.log_level)
+            .field("instance_slug", &self.organisation_slug)
+            .field("database_url", &"<redacted>")
+            .field("redis_url", &"<redacted>")
+            .field("storage", &self.storage)
+            .field(
+                "sealing_key",
+                &self.sealing_key.as_ref().map(|_| "<present>"),
+            )
+            .finish_non_exhaustive()
+    }
 }
 
 fn optional(key: &str) -> Option<String> {
@@ -736,6 +774,28 @@ mod tests {
         assert!(parse_capability_map("").is_empty());
         assert!(parse_capability_map("nonsense").is_empty());
         assert!(parse_capability_map("UNKNOWN=x").is_empty());
+    }
+
+    /// Nenhuma credencial da configuração aparece num `{:?}` (ADR-0110).
+    #[test]
+    fn o_debug_da_configuracao_nao_imprime_credenciais() {
+        let mut config = config_fixture(Environment::Production);
+        config.database_url = "postgres://ocinye:SENHA-DA-BASE@db/ocinye".into();
+        config.redis_url = "redis://:SENHA-DO-REDIS@redis:6379".into();
+        config.storage.access_key = "CHAVE-DE-ACESSO".into();
+        config.storage.secret_key = "CHAVE-SECRETA".into();
+        let impresso = format!("{config:?}");
+        for segredo in [
+            "SENHA-DA-BASE",
+            "SENHA-DO-REDIS",
+            "CHAVE-DE-ACESSO",
+            "CHAVE-SECRETA",
+        ] {
+            assert!(
+                !impresso.contains(segredo),
+                "{segredo} apareceu no Debug: {impresso}"
+            );
+        }
     }
 
     /// A complete, valid configuration to vary one field at a time.

@@ -149,6 +149,9 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     // de uma mudança de servidor. Perdê-la num restauro seria a instalação nova
     // esquecer de quem é.
     ("instance_identity", Comparacao::Identidades),
+    // Credenciais seladas da Instância (ADR-0110). Viajam como criptograma; a
+    // raiz de selagem viaja à parte, e `verify-keys` prova que abrem.
+    ("instance_secrets", Comparacao::Identidades),
     (
         "instance_applications",
         Comparacao::Fora(

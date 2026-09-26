@@ -32,3 +32,4 @@ pub mod research;
 pub mod resource;
 pub mod science;
 pub mod search;
+pub mod secrets;

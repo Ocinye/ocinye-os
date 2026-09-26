@@ -498,7 +498,14 @@ pub async fn verify_keys() -> anyhow::Result<()> {
         .fetch_one(&pool)
         .await
         .context("contar os seeds TOTP selados")?;
-    let seladas = seladas_mail + seladas_totp;
+    // Os segredos da Instância, só os activos: um revogado já não tem
+    // criptograma (ADR-0110).
+    let seladas_instancia: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM instance_secrets WHERE ciphertext IS NOT NULL")
+            .fetch_one(&pool)
+            .await
+            .context("contar os segredos da instância selados")?;
+    let seladas = seladas_mail + seladas_totp + seladas_instancia;
 
     // A leitura das linhas só acontece quando há chave; sem ela não há nada a
     // tentar, e a decisão é a mesma.
@@ -517,6 +524,12 @@ pub async fn verify_keys() -> anyhow::Result<()> {
                 .fetch_all(&pool)
                 .await
                 .context("ler os seeds TOTP selados")?;
+        let da_instancia: Vec<(Uuid, Vec<u8>, Vec<u8>)> = sqlx::query_as(
+            "SELECT id, nonce, ciphertext FROM instance_secrets WHERE ciphertext IS NOT NULL",
+        )
+        .fetch_all(&pool)
+        .await
+        .context("ler os segredos da instância selados")?;
 
         // Todas, e não uma amostra. Uma amostra que abrisse diria «legível»
         // sobre o que não se leu, e a linha que não se leu é a que costuma ter
@@ -525,6 +538,7 @@ pub async fn verify_keys() -> anyhow::Result<()> {
         for (dominio, linhas) in [
             (sealed::SealingDomain::Mail, &caixas),
             (sealed::SealingDomain::MfaTotp, &seeds),
+            (sealed::SealingDomain::InstanceSecrets, &da_instancia),
         ] {
             for (dono, nonce, ciphertext) in linhas {
                 let fechado = Sealed {

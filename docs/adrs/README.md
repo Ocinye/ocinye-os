@@ -139,6 +139,7 @@ Quem entra, o que pode, e como fica registado.
 - [ADR-0107](0107-mandatory-mfa-sessions-and-recovery.md) — MFA obrigatório para identidades privilegiadas, sessões e recuperação
 - [ADR-0108](0108-resource-governance-and-compute-control-plane.md) — Governança de recursos e o control-plane de computação
 - [ADR-0109](0109-ai-request-admission-and-immutable-usage-ledger.md) — Admissão de pedidos de IA e o ledger de uso imutável
+- [ADR-0110](0110-instance-secrets-authority.md) — A Autoridade de Segredos da Instância
 
 ### 0200–0299 · Conhecimento, Dados, Armazenamento e Memória Institucional
 
@@ -254,6 +255,7 @@ preencher.
 | [0107](0107-mandatory-mfa-sessions-and-recovery.md) | MFA obrigatório para identidades privilegiadas, sessões e recuperação | Identity | `FOUNDATIONAL` | Accepted |
 | [0108](0108-resource-governance-and-compute-control-plane.md) | Governança de recursos e o control-plane de computação | Identity | `FOUNDATIONAL` | Accepted |
 | [0109](0109-ai-request-admission-and-immutable-usage-ledger.md) | Admissão de pedidos de IA e o ledger de uso imutável | Identity | `HIGH` | Accepted |
+| [0110](0110-instance-secrets-authority.md) | A Autoridade de Segredos da Instância | Security | `HIGH` | Accepted |
 | [0200](0200-object-storage.md) | Object Storage S3-compatible | Data | `HIGH` | Accepted |
 | [0201](0201-data-residency.md) | Residência de dados explícita | Data | `MEDIUM` | Accepted |
 | [0202](0202-search-fts-pgvector.md) | Pesquisa: PostgreSQL FTS agora, pgvector preparado | Knowledge | `MEDIUM` | Accepted |

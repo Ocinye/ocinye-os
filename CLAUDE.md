@@ -168,6 +168,15 @@ sem que nada falhe.
   `GET /api/v1/compute/capacity`, ao lado do armazenamento pessoal que os membros
   usam. O ciclo registo → heartbeat → offline → regresso está provado por HTTP,
   com o Core a continuar a responder e um nó falso recusado.
+- **Autoridade de Segredos: `IMPLEMENTED`**
+  ([ADR-0110](docs/adrs/0110-instance-secrets-authority.md),
+  [segredos](docs/security/secrets-authority.md)). As credenciais de fornecedores
+  e integrações de uma Instância são seladas pelo Core num domínio HKDF próprio
+  (`instance_secrets`, migração 0055), **nunca devolvidas** por nenhuma rota, e
+  abertas só por um serviço do Core no âmbito que o segredo nomeia; rodar
+  substitui o valor, revogar apaga o criptograma, e tudo é auditado sem o valor.
+  Um teste procura os valores em claro em toda a base e não os encontra. A
+  `Debug` das configurações deixou de imprimir credenciais.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
@@ -1516,6 +1525,10 @@ tokens; cookies; credentials; production DSNs.
 - Produção usa estratégia de secrets **claramente documentada**.
 - Se encontrares um secret commitado: **pára e reporta imediatamente**. Não o
   removas silenciosamente nem reescrevas o histórico por iniciativa própria.
+- **As credenciais de fornecedores de uma Instância são do Core**
+  ([ADR-0110](docs/adrs/0110-instance-secrets-authority.md)): seladas, nunca
+  devolvidas, usadas só por um serviço do Core no seu âmbito. Uma aplicação ou um
+  agente recebe o resultado, nunca a credencial.
 
 ---
 

@@ -15,6 +15,9 @@
 *.pfx
 *.token
 secrets/
+# The Secrets Authority's source code is not a secret: it holds no value, only
+# the sealing and the rules around it (ADR-0110).
+!crates/ocinye-core/src/modules/secrets/
 
 # Rust tooling leftovers
 *.rs.bk
