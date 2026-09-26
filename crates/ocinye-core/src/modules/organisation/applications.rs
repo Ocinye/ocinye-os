@@ -75,6 +75,8 @@ pub struct ApplicationState {
     pub explicit: bool,
     /// O que o perfil diria, sem decisão explícita.
     pub profile_default: bool,
+    /// O que a aplicação declara ao Ocinye OS (ADR-0016).
+    pub manifest: &'static ocinye_contracts::ApplicationManifest,
 }
 
 /// A configuração de aplicações de uma Instância.
@@ -157,6 +159,7 @@ pub async fn application_states(
                 active: decided.unwrap_or(profile_default),
                 explicit: decided.is_some(),
                 profile_default,
+                manifest: id.manifest(),
             }
         })
         .collect();
