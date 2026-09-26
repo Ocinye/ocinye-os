@@ -7,6 +7,18 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Generalização, Parte 6: a Autoridade de Segredos — 2026-09-26
+
+- **Credenciais de fornecedores e integrações** guardadas pelo Core
+  ([ADR-0110](docs/adrs/0110-instance-secrets-authority.md)): seladas num domínio
+  HKDF próprio (migração 0055), com metadados e os últimos quatro caracteres,
+  **nunca devolvidas** por nenhuma rota, abertas só por um serviço do Core no
+  âmbito do segredo, rodadas por sobreposição e revogadas por apagamento, tudo
+  auditado sem o valor. Da administração da plataforma, com segundo factor.
+- `verify-keys` passa a contar e abrir os segredos da Instância.
+- A `Debug` das configurações do Core e do armazenamento deixou de imprimir
+  credenciais.
+
 ### Generalização, Parte 5: nós e capacidade — 2026-09-26
 
 - **Capacidade em cinco quantidades** por nó
