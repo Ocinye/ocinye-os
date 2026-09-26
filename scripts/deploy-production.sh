@@ -127,6 +127,15 @@ echo "  /srv/ocinye/conversion-spool"
 # `current` só muda depois de as imagens existirem. Apontar primeiro e construir
 # depois deixaria uma janela em que `current` promete uma coisa que ainda não
 # está pronta — e é nessa janela que um reboot acontece.
+passo "Armazenamento"
+# Uma vez: os bytes passam do MinIO arquivado para o Garage, com verificação e
+# rollback próprios, **antes** de o release corrente mudar (ADR-0208). Com a
+# marca da transição feita, não faz nada. Se falhar, o deploy pára aqui e a
+# produção continua no release e no armazenamento que tinha.
+ssh_ "sudo bash '$RAIZ/releases/$CURTO/scripts/object-store-cutover.sh' '$RAIZ/releases/$CURTO' '$CURTO'" \
+  || fatal "a passagem do armazenamento para o Garage não se completou.
+  A produção continua no release anterior, com o MinIO intacto."
+
 passo "Trocar o release corrente"
 ANTERIOR="$(ssh_ "readlink '$RAIZ/current' 2>/dev/null || true")"
 ssh_ "ln -sfn '$RAIZ/releases/$CURTO' '$RAIZ/current' \

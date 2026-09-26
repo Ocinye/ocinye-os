@@ -170,6 +170,10 @@ services:
         condition: service_healthy
       object-store:
         condition: service_healthy
+      # O bucket e a chave do Core existem antes do Core: sem isto arranca, e o
+      # primeiro carregamento falha.
+      object-store-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
       interval: 15s
@@ -295,20 +299,68 @@ services:
 
   # ── Os bytes institucionais ───────────────────────────────────────────
   #
-  # MinIO é a **implementação** do contrato de armazenamento compatível com S3.
-  # Não é a arquitectura do Ocinye OS: o Core fala S3, e o dia em que estes
-  # bytes viverem noutro fornecedor nada no Core muda.
+  # Garage é a **implementação** do contrato de armazenamento compatível com S3
+  # (ADR-0208). Não é a arquitectura do Ocinye OS: o Core fala S3, e trocar a
+  # implementação não mudou uma linha do Core.
   #
-  # Nem a API nem a consola têm porto no host. O browser nunca fala com isto.
+  # Sem portos no host: a API S3 (3900), o RPC (3901) e a administração (3903)
+  # vivem só na rede interna. O browser nunca fala com isto.
   object-store:
     <<: *comum
-    # Espelho controlado pela Ocinye, por digest: o MinIO deixou de ser distribuído
-    # pelo fabricante (LEGACY_COMPATIBILITY_DEPENDENCY). Ver
-    # docs/deployment/third-party-artifacts.md.
+    # Por digest, da origem (docs/deployment/third-party-artifacts.md).
+    image: dxflrs/garage@sha256:4c9b34c113e61358466e83fd6e7d66e6d18657ede14b776eb78a93ee8da7cf6a
+    env_file:
+      - /etc/ocinye/object-store.env
+    volumes:
+      # A configuração vem do release e não tem segredos; os segredos chegam
+      # por `object-store.env` (GARAGE_RPC_SECRET, GARAGE_ADMIN_TOKEN).
+      - ./../garage/garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # ── Prepara o Garage: layout, chave do Core, bucket privado ───────────
+  #
+  # Idempotente: corre a cada `up`, muda só o que falta, e sai. Corre na imagem
+  # do Core porque a do Garage não tem shell; fala com a API de administração
+  # pela rede interna (infra/garage/init.sh).
+  object-store-init:
+    image: ocinye/ocinye-core-server:${OCINYE_RELEASE_SHA:?defina OCINYE_RELEASE_SHA}
+    env_file:
+      - /etc/ocinye/object-store.env
+      - /etc/ocinye/core.env
+    environment:
+      OCINYE_GARAGE_ADMIN_URL: http://object-store:3903
+    volumes:
+      - ./../garage/init.sh:/opt/ocinye/garage-init.sh:ro
+    depends_on:
+      object-store:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/opt/ocinye/garage-init.sh"]
+    restart: "no"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ── O armazenamento anterior, só durante a transição ──────────────────
+  #
+  # O MinIO arquivado, **intacto**, enquanto os objectos de uma Instância que já
+  # o usava passam para o Garage (scripts/object-store-cutover.sh). Por perfil:
+  # nunca arranca num `up` normal, nem numa instalação nova. Sai do Compose
+  # depois de todas as Instâncias conhecidas terem passado.
+  object-store-legacy:
+    <<: *comum
+    profiles: ["legacy-object-store"]
     image: ghcr.io/ocinye/third-party/minio-server@sha256:55f2ff7d2834fd5f6c76c1c9f54855a325549b1960e7fa3d1f220c62af447a09
     command: ["server", "/data", "--console-address", ":9001"]
     env_file:
-      - /etc/ocinye/object-store.env
+      - /etc/ocinye/object-store-legacy.env
     volumes:
       - object-data:/data
     healthcheck:
@@ -316,38 +368,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 20
-
-  # ── Provisiona o bucket institucional, uma vez ────────────────────────
-  #
-  # Idempotente: cria o bucket **privado** se faltar, e não toca em nada se já
-  # existir. Sem isto, o Core arranca mas o primeiro upload de ficheiro falha —
-  # o bucket não existe — e a cópia de objectos do backup também. Era
-  # conhecimento manual (o bucket teve de ser criado à mão a 2026-09-09); passa a
-  # ser do arranque. Corre a cada `up`, faz o seu trabalho e sai. Sem portas.
-  object-store-init:
-    # Espelho controlado pela Ocinye, por digest: o MinIO deixou de ser distribuído
-    # pelo fabricante (LEGACY_COMPATIBILITY_DEPENDENCY). Ver
-    # docs/deployment/third-party-artifacts.md.
-    image: ghcr.io/ocinye/third-party/minio-mc@sha256:d00c9868670a5e56a1710322cd98f7e4faa7291b23cdf31f59e90d44ec2a0156
-    env_file:
-      - /etc/ocinye/object-store.env
-      - /etc/ocinye/core.env
-    depends_on:
-      object-store:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://object-store:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" &&
-      mc mb --ignore-existing local/\"$$OCINYE_STORAGE_BUCKET\" &&
-      mc anonymous set none local/\"$$OCINYE_STORAGE_BUCKET\" &&
-      echo 'bucket ready and private'
-      "
-    restart: "no"
-    logging:
-      driver: json-file
-      options:
-        max-size: "20m"
-        max-file: "5"
 
   # ── Continuidade: a cópia cifrada para fora do servidor ────────────────
   #
@@ -393,4 +413,7 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  garage-meta:
+  garage-data:
+  # Os dados do MinIO anterior: mantidos até a transição estar verificada.
   object-data:

@@ -37,12 +37,12 @@ anfitriao() {  # nome
 }
 
 browser() {  # teste
-    OCINYE_INSTALLED_URL="https://$DOMINIO:$PORTO" \
-    OCINYE_INSTALLED_EMAIL=admin@instalacao.test \
-    OCINYE_INSTALLED_CREDENTIAL_FILE="$TRABALHO/credencial" \
-    OCINYE_INSTALLED_STATE_FILE="$TRABALHO/estado" \
-    OCINYE_INSTALLED_PROFILE=research \
-    OCINYE_INSTALLED_RESOLVE="$DOMINIO 127.0.0.1" \
+    OCINYE_TEST_INSTALLED_URL="https://$DOMINIO:$PORTO" \
+    OCINYE_TEST_INSTALLED_EMAIL=admin@instalacao.test \
+    OCINYE_TEST_INSTALLED_CREDENTIAL_FILE="$TRABALHO/credencial" \
+    OCINYE_TEST_INSTALLED_STATE_FILE="$TRABALHO/estado" \
+    OCINYE_TEST_INSTALLED_PROFILE=research \
+    OCINYE_TEST_INSTALLED_RESOLVE="$DOMINIO 127.0.0.1" \
         cargo test -q -p ocinye-workspace --test installed_instance -- --ignored --exact "$1"
 }
 

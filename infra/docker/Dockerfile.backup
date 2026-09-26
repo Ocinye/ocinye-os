@@ -22,7 +22,7 @@ ARG OCINYE_RELEASE_SHA
 # `dl.min.io`, que deixou de o servir (410) — e partiu o backup nocturno a cada
 # deploy, porque esta camada se reconstrói com o SHA do release. Um binário Go
 # estático: copia-se, não se instala. Ver docs/deployment/third-party-artifacts.md.
-FROM ghcr.io/ocinye/third-party/minio-mc@sha256:d00c9868670a5e56a1710322cd98f7e4faa7291b23cdf31f59e90d44ec2a0156 AS mc
+FROM rclone/rclone@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5 AS rclone
 
 FROM ocinye/ocinye-core-server:${OCINYE_RELEASE_SHA} AS backup
 
@@ -37,7 +37,7 @@ RUN apt-get update \
  && apt-get update \
  && apt-get install -y --no-install-recommends postgresql-client-17 \
  && rm -rf /var/lib/apt/lists/*
-COPY --from=mc /usr/bin/mc /usr/local/bin/mc
+COPY --from=rclone /usr/local/bin/rclone /usr/local/bin/rclone
 
 # Os scripts juntos: cada um chama os irmãos por `"$(dirname "$0")"`. O restauro
 # e a verificação viajam com eles, para que um anfitrião novo restaure a partir

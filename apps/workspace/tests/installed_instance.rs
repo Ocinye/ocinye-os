@@ -10,10 +10,10 @@
 //! privilegiada → Aplicações do perfil → Ficheiros → uma Nota guardada → o
 //! Prompt a responder, sem fornecedor, com o estado degradado tipado.
 //!
-//! Variáveis: `OCINYE_INSTALLED_URL` (https://…), `OCINYE_INSTALLED_EMAIL`,
-//! `OCINYE_INSTALLED_CREDENTIAL_FILE`, `OCINYE_INSTALLED_PROFILE`,
-//! `OCINYE_INSTALLED_RESOLVE` (`nome ip`, para um domínio de teste),
-//! `OCINYE_INSTALLED_STATE_FILE` (onde guardar a palavra-passe e o seed do
+//! Variáveis: `OCINYE_TEST_INSTALLED_URL` (https://…), `OCINYE_TEST_INSTALLED_EMAIL`,
+//! `OCINYE_TEST_INSTALLED_CREDENTIAL_FILE`, `OCINYE_TEST_INSTALLED_PROFILE`,
+//! `OCINYE_TEST_INSTALLED_RESOLVE` (`nome ip`, para um domínio de teste),
+//! `OCINYE_TEST_INSTALLED_STATE_FILE` (onde guardar a palavra-passe e o seed do
 //! segundo factor, para quem volta a entrar numa Instância restaurada) e
 //! `OCINYE_TEST_CHROME`.
 //!
@@ -141,13 +141,13 @@ fn totp(seed_base32: &str) -> String {
 #[tokio::test]
 #[ignore = "conduz uma Instância instalada; corre por scripts/install-e2e.sh"]
 async fn uma_instancia_instalada_abre_entra_e_trabalha() {
-    let base = var("OCINYE_INSTALLED_URL");
-    let email = var("OCINYE_INSTALLED_EMAIL");
-    let credencial = std::fs::read_to_string(var("OCINYE_INSTALLED_CREDENTIAL_FILE"))
+    let base = var("OCINYE_TEST_INSTALLED_URL");
+    let email = var("OCINYE_TEST_INSTALLED_EMAIL");
+    let credencial = std::fs::read_to_string(var("OCINYE_TEST_INSTALLED_CREDENTIAL_FILE"))
         .expect("credencial")
         .trim()
         .to_owned();
-    let perfil = var("OCINYE_INSTALLED_PROFILE");
+    let perfil = var("OCINYE_TEST_INSTALLED_PROFILE");
 
     let mut config = BrowserConfig::builder()
         .chrome_executable(chrome())
@@ -156,7 +156,7 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
         // O certificado é auto-assinado pelo instalador; o que se prova aqui é a
         // Instância, e não uma autoridade de certificação.
         .arg("--ignore-certificate-errors");
-    if let Ok(regra) = std::env::var("OCINYE_INSTALLED_RESOLVE") {
+    if let Ok(regra) = std::env::var("OCINYE_TEST_INSTALLED_RESOLVE") {
         config = config.arg(format!("--host-resolver-rules=MAP {regra}"));
     }
     let (browser, mut handler) = Browser::launch(config.build().expect("config"))
@@ -199,7 +199,7 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
         .expect("seed");
     escrever(&page, "#mfa-code", &totp(&seed)).await;
     submeter(&page, "form[action=\"/mfa/confirm\"]").await;
-    if let Ok(estado) = std::env::var("OCINYE_INSTALLED_STATE_FILE") {
+    if let Ok(estado) = std::env::var("OCINYE_TEST_INSTALLED_STATE_FILE") {
         std::fs::write(&estado, format!("{nova}\n{seed}\n")).expect("guardar o estado");
     }
     esperar_por(&page, "Guardar códigos de recuperação").await;
@@ -310,7 +310,7 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
         "o Prompt não respondeu"
     );
     tempos.push(("prompt_responde", t.elapsed().as_millis()));
-    if let Ok(ficheiro) = std::env::var("OCINYE_INSTALLED_TIMINGS_FILE") {
+    if let Ok(ficheiro) = std::env::var("OCINYE_TEST_INSTALLED_TIMINGS_FILE") {
         let linhas: String = tempos
             .iter()
             .map(|(passo, ms)| format!("{passo} {ms}\n"))
@@ -332,9 +332,9 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
 #[tokio::test]
 #[ignore = "conduz uma Instância restaurada; corre por scripts/restore-e2e.sh"]
 async fn uma_instancia_restaurada_reconhece_quem_la_estava() {
-    let base = var("OCINYE_INSTALLED_URL");
-    let email = var("OCINYE_INSTALLED_EMAIL");
-    let estado = std::fs::read_to_string(var("OCINYE_INSTALLED_STATE_FILE")).expect("estado");
+    let base = var("OCINYE_TEST_INSTALLED_URL");
+    let email = var("OCINYE_TEST_INSTALLED_EMAIL");
+    let estado = std::fs::read_to_string(var("OCINYE_TEST_INSTALLED_STATE_FILE")).expect("estado");
     let mut linhas = estado.lines();
     let senha = linhas.next().expect("palavra-passe").to_owned();
     let seed = linhas.next().expect("seed").to_owned();
@@ -344,7 +344,7 @@ async fn uma_instancia_restaurada_reconhece_quem_la_estava() {
         .user_data_dir(std::env::temp_dir().join(format!("ocinye-restore-{}", std::process::id())))
         .no_sandbox()
         .arg("--ignore-certificate-errors");
-    if let Ok(regra) = std::env::var("OCINYE_INSTALLED_RESOLVE") {
+    if let Ok(regra) = std::env::var("OCINYE_TEST_INSTALLED_RESOLVE") {
         config = config.arg(format!("--host-resolver-rules=MAP {regra}"));
     }
     let (browser, mut handler) = Browser::launch(config.build().expect("config"))

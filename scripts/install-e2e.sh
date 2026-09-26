@@ -54,11 +54,11 @@ uma_corrida() {
     docker cp "$nome:/root/credencial" "$credencial"
 
     passo "Browser ($perfil)"
-    OCINYE_INSTALLED_URL="https://$DOMINIO:$PORTO" \
-    OCINYE_INSTALLED_EMAIL="admin@instalacao.test" \
-    OCINYE_INSTALLED_CREDENTIAL_FILE="$credencial" \
-    OCINYE_INSTALLED_PROFILE="$perfil" \
-    OCINYE_INSTALLED_RESOLVE="$DOMINIO 127.0.0.1" \
+    OCINYE_TEST_INSTALLED_URL="https://$DOMINIO:$PORTO" \
+    OCINYE_TEST_INSTALLED_EMAIL="admin@instalacao.test" \
+    OCINYE_TEST_INSTALLED_CREDENTIAL_FILE="$credencial" \
+    OCINYE_TEST_INSTALLED_PROFILE="$perfil" \
+    OCINYE_TEST_INSTALLED_RESOLVE="$DOMINIO 127.0.0.1" \
         cargo test -p ocinye-workspace --test installed_instance -- --ignored --nocapture
     rm -f "$credencial"
 

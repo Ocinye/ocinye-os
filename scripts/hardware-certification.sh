@@ -67,9 +67,9 @@ for classe in "${CLASSES[@]}"; do
         done | awk '{printf "%d\n", $1*1000}' > "$trabalho/latencias"
         p50_ms="$(p50 < "$trabalho/latencias")"; p95_ms="$(p95 < "$trabalho/latencias")"
         docker cp "$nome:/root/credencial" "$trabalho/credencial"
-        if OCINYE_INSTALLED_URL="https://$DOMINIO:$PORTO" OCINYE_INSTALLED_EMAIL=admin@instalacao.test \
-           OCINYE_INSTALLED_CREDENTIAL_FILE="$trabalho/credencial" OCINYE_INSTALLED_PROFILE=research \
-           OCINYE_INSTALLED_RESOLVE="$DOMINIO 127.0.0.1" OCINYE_INSTALLED_TIMINGS_FILE="$trabalho/tempos" \
+        if OCINYE_TEST_INSTALLED_URL="https://$DOMINIO:$PORTO" OCINYE_TEST_INSTALLED_EMAIL=admin@instalacao.test \
+           OCINYE_TEST_INSTALLED_CREDENTIAL_FILE="$trabalho/credencial" OCINYE_TEST_INSTALLED_PROFILE=research \
+           OCINYE_TEST_INSTALLED_RESOLVE="$DOMINIO 127.0.0.1" OCINYE_TEST_INSTALLED_TIMINGS_FILE="$trabalho/tempos" \
              cargo test -q -p ocinye-workspace --test installed_instance -- --ignored --exact \
                uma_instancia_instalada_abre_entra_e_trabalha > "$trabalho/viagem.log" 2>&1; then
             tempos="$(tr '\n' ' ' < "$trabalho/tempos")"

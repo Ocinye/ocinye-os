@@ -138,7 +138,7 @@ restaurar_conjunto() {  # pasta do conjunto
     compose --profile backup build backup >/dev/null
     compose --profile backup run --rm -T --no-deps \
         --entrypoint /opt/ocinye/scripts/institutional-restore.sh \
-        -e 'OCINYE_OBJECT_RESTORE_CMD=mc alias set destino http://object-store:9000 "$OCINYE_STORAGE_ACCESS_KEY" "$OCINYE_STORAGE_SECRET_KEY" >/dev/null && mc mirror --quiet --overwrite "$OCINYE_OBJECT_DIR" "destino/$OCINYE_STORAGE_BUCKET"' \
+        -e 'OCINYE_OBJECT_RESTORE_CMD=/opt/ocinye/scripts/backup-objects.sh restore "$OCINYE_OBJECT_DIR"' \
         backup "$RAIZ/backups/$nome" \
         || fatal "o restauro falhou; a base de destino pode ter estado parcial — desinstale e repita"
     passo "Verificação de continuidade"
@@ -256,10 +256,12 @@ install_() {
     passo "Configuração"
     install -d -m 750 "$CONFIG" "$CONFIG/nginx" "$CONFIG/tls"
     umask 077
-    local pg_senha s3_utilizador s3_senha
+    local pg_senha s3_chave s3_segredo
     pg_senha="$(aleatorio 48 40)"
-    s3_utilizador="ocinye$(aleatorio 12 10)"
-    s3_senha="$(aleatorio 48 40)"
+    # O formato que o Garage exige para uma chave importada: `GK` e 24 hexadecimais,
+    # e um segredo de 64 hexadecimais (ADR-0208).
+    s3_chave="GK$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    s3_segredo="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 
     printf 'OCINYE_RELEASE_SHA=%s\nOCINYE_PROXY_HEALTH_HOST=%s\n' "$SHA" "$dominio" \
         > "$CONFIG/release.env"
@@ -274,15 +276,16 @@ POSTGRES_DB=ocinye
 POSTGRES_PASSWORD=$pg_senha
 EOF
     cat > "$CONFIG/object-store.env" <<EOF
-MINIO_ROOT_USER=$s3_utilizador
-MINIO_ROOT_PASSWORD=$s3_senha
+GARAGE_RPC_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+GARAGE_ADMIN_TOKEN=$(aleatorio 48 40)
 EOF
     cat > "$CONFIG/core.env" <<EOF
 OCINYE_DATABASE_URL=postgres://ocinye:$pg_senha@postgres:5432/ocinye
 OCINYE_REDIS_URL=redis://redis:6379
-OCINYE_STORAGE_ENDPOINT_URL=http://object-store:9000
-OCINYE_STORAGE_ACCESS_KEY=$s3_utilizador
-OCINYE_STORAGE_SECRET_KEY=$s3_senha
+OCINYE_STORAGE_ENDPOINT_URL=http://object-store:3900
+OCINYE_STORAGE_REGION=us-east-1
+OCINYE_STORAGE_ACCESS_KEY=$s3_chave
+OCINYE_STORAGE_SECRET_KEY=$s3_segredo
 OCINYE_STORAGE_BUCKET=ocinye-artifacts
 OCINYE_STORAGE_BACKEND_CODE=local-object-store
 OCINYE_STORAGE_LOCATION_LABEL=$dominio
@@ -341,8 +344,11 @@ EOF
     compose up -d postgres redis object-store >/dev/null
     esperar_saudavel postgres
     esperar_saudavel object-store
-    compose up object-store-init >/dev/null
-    nota "base de dados e armazenamento prontos; bucket privado"
+    # `run`, e não `up`: o código de saída do init é o que diz se o bucket e a
+    # chave do Core ficaram como se pediu.
+    compose run --rm -T object-store-init > /tmp/ocinye-object-store-init.log 2>&1 \
+        || { cat /tmp/ocinye-object-store-init.log >&2; fatal "a preparação do armazenamento falhou"; }
+    nota "base de dados e armazenamento (Garage) prontos; bucket privado"
 
     # ── 7. A Instância: criada, ou trazida de um conjunto ────────────
     if [ -n "$restaurar" ]; then
@@ -508,6 +514,13 @@ upgrade_() {
     done
     nota "release e imagens de $novo prontos"
 
+    # Uma Instância que ainda guarda os bytes no MinIO arquivado passa-os para o
+    # Garage **antes** da troca, com verificação e rollback próprios (ADR-0208).
+    # Sem MinIO, não faz nada.
+    passo "Armazenamento"
+    bash "$RAIZ/releases/$novo/scripts/object-store-cutover.sh" "$RAIZ/releases/$novo" "$novo" \
+        || fatal "a passagem do armazenamento para o Garage falhou; a Instância continua em $anterior"
+
     passo "Troca"
     trocar_para "$novo"
     compose up -d --remove-orphans >/dev/null 2>&1 || true
@@ -554,6 +567,17 @@ rollback_() {
     nota "a base volta ao checkpoint de antes da actualização: o que se escreveu depois perde-se"
     [ "${1:-}" = --confirm ] || fatal "confirme com --confirm: dados escritos depois da actualização perdem-se"
     antes="$(versao_do_esquema)"
+    # Voltar a um release anterior ao Garage é voltar também ao MinIO, cujos
+    # dados nunca saíram do volume; o que se escreveu depois fica no Garage, e
+    # perde-se para esta Instância como o resto do que se escreveu depois.
+    if [ -e "$CONFIG/object-store-cutover.done" ] \
+        && grep -q 'minio-server' "$RAIZ/releases/$anterior/infra/compose/docker-compose.production.yml"; then
+        install -m 600 "$CONFIG/core.env.pre-garage" "$CONFIG/core.env"
+        install -m 600 "$CONFIG/object-store-legacy.env" "$CONFIG/object-store.env"
+        rm -f "$CONFIG/object-store-cutover.done"
+        docker rm -f ocinye-object-store-1 >/dev/null 2>&1 || true
+        nota "armazenamento de volta ao MinIO"
+    fi
     trocar_para "$anterior"
     repor_checkpoint "$checkpoint"
     compose up -d --remove-orphans >/dev/null 2>&1 || true

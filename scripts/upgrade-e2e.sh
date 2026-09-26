@@ -42,9 +42,9 @@ no_anfitriao /root/A/install/ocinye install --domain "$DOMINIO" --public-url "ht
 CRED="$(mktemp)"; docker cp "$NOME:/root/credencial" "$CRED"
 
 passo "Dados reais, criados por um browser"
-OCINYE_INSTALLED_URL="https://$DOMINIO:$PORTO" OCINYE_INSTALLED_EMAIL=admin@instalacao.test \
-OCINYE_INSTALLED_CREDENTIAL_FILE="$CRED" OCINYE_INSTALLED_PROFILE=research \
-OCINYE_INSTALLED_RESOLVE="$DOMINIO 127.0.0.1" \
+OCINYE_TEST_INSTALLED_URL="https://$DOMINIO:$PORTO" OCINYE_TEST_INSTALLED_EMAIL=admin@instalacao.test \
+OCINYE_TEST_INSTALLED_CREDENTIAL_FILE="$CRED" OCINYE_TEST_INSTALLED_PROFILE=research \
+OCINYE_TEST_INSTALLED_RESOLVE="$DOMINIO 127.0.0.1" \
     cargo test -q -p ocinye-workspace --test installed_instance -- --ignored
 rm -f "$CRED"
 NOTAS="$(sql "SELECT count(*) FROM notes WHERE title = 'Primeira nota da Instância'")"
