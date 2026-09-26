@@ -228,7 +228,11 @@ suites() {
 # 112 → 113 em 2026-09-17: o estado activo de navegação canónico — o separador
 # activo é azul com texto branco e sem sublinhado dourado, provado pelo estilo
 # computado na página real e com recarregar. Uma viagem, uma marca.
-viagens-de-browser|113|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|113
+# 113 → 119 em 2026-09-26: o Gestor de Aplicações — seis viagens do lançador e da
+# fixação: abrir/Escape com foco, lançar para a rota, pesquisa e estado vazio,
+# filtro de categoria, fixar/persistir/desafixar (desafixar ≠ desinstalar), e a
+# descoberta a respeitar a autorização. Seis viagens, seis marcas.
+viagens-de-browser|119|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|119
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

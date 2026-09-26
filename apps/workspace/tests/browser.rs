@@ -5753,6 +5753,225 @@ fn tempo_mes_e_ano(data: chrono::NaiveDate) -> String {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// O Gestor de Aplicações
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// As viagens do lançador e da fixação. Usam duas aplicações que qualquer membro
+// autenticado vê — Notas e «Meus Recursos», ambas sem direito institucional a
+// exigir — para que a prova seja do lançador e não da carteira de permissões.
+
+/// Se a célula de uma aplicação está visível no lançador (não filtrada).
+fn celula_visivel(rota: &str) -> String {
+    format!(
+        "(() => {{ const a = document.querySelector('[data-oc=\"launcher-item\"][href=\"{rota}\"]'); return !!a && !a.closest('[data-oc=\"launcher-cell\"]').hidden; }})()"
+    )
+}
+
+/// O lançador abre da barra, foca a pesquisa, e o Escape fecha-o sem perder a
+/// página onde se estava (§65).
+#[tokio::test]
+async fn o_lancador_abre_da_barra_e_fecha_com_escape() {
+    let harness = harness!();
+    let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let page = harness.open("/").await;
+
+    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    wait_visible(&page, r#"[data-oc="launcher"]"#).await;
+
+    // O foco entra na pesquisa ao abrir.
+    let focado = esperar_ate_condicao(
+        &page,
+        r#"document.activeElement === document.querySelector('[data-oc="launcher-input"]')"#,
+    )
+    .await;
+    assert!(focado, "o foco não entrou na pesquisa ao abrir o lançador");
+
+    // Escape fecha, e continua-se na Home.
+    page.evaluate(
+        r#"document.querySelector('[data-oc="launcher"]').dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))"#,
+    )
+    .await
+    .expect("escape");
+    let fechado = esperar_ate_condicao(
+        &page,
+        r#"document.querySelector('[data-oc="launcher"]').hidden === true"#,
+    )
+    .await;
+    assert!(fechado, "o Escape não fechou o lançador");
+    assert!(
+        page.url()
+            .await
+            .expect("url")
+            .unwrap_or_default()
+            .ends_with('/'),
+        "fechar o lançador mudou de página"
+    );
+}
+
+/// Lançar uma aplicação leva à sua rota canónica (§66).
+#[tokio::test]
+async fn lancar_uma_aplicacao_navega_para_a_rota() {
+    let harness = harness!();
+    let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let page = harness.open("/").await;
+
+    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    wait_visible(&page, r#"[data-oc="launcher"]"#).await;
+    clicar(&page, r#"[data-oc="launcher-item"][href="/notes"]"#).await;
+
+    let destino = wait_until_left(&page, "/").await;
+    assert!(
+        destino.contains("/notes"),
+        "o cartão não levou às Notas: {destino}"
+    );
+}
+
+/// A pesquisa filtra as fichas, e sem correspondência mostra o estado vazio (§67).
+#[tokio::test]
+async fn a_pesquisa_do_lancador_filtra() {
+    let harness = harness!();
+    let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let page = harness.open("/").await;
+
+    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    wait_visible(&page, r#"[data-oc="launcher"]"#).await;
+
+    // «recurso» encontra «Meus Recursos» e não as Notas.
+    set_field(&page, r#"[data-oc="launcher-input"]"#, "recurso").await;
+    assert!(
+        esperar_ate_condicao(&page, &celula_visivel("/resources")).await,
+        "a pesquisa devia mostrar Meus Recursos"
+    );
+    assert!(
+        esperar_ate_condicao(&page, &format!("!({})", celula_visivel("/notes"))).await,
+        "a pesquisa devia esconder as Notas"
+    );
+
+    // Sem correspondência, o estado vazio.
+    set_field(&page, r#"[data-oc="launcher-input"]"#, "zzznaoexiste").await;
+    assert!(
+        esperar_ate_condicao(
+            &page,
+            r#"document.querySelector('[data-oc="launcher-vazio"]').hidden === false"#,
+        )
+        .await,
+        "sem correspondência devia aparecer «Nenhuma aplicação encontrada»"
+    );
+}
+
+/// O filtro de categoria mostra só a sua categoria (§68).
+#[tokio::test]
+async fn o_filtro_de_categoria_mostra_so_a_categoria() {
+    let harness = harness!();
+    let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let page = harness.open("/").await;
+
+    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    wait_visible(&page, r#"[data-oc="launcher"]"#).await;
+
+    // Produtividade mostra as Notas; «Meus Recursos» (Administração) desaparece.
+    clicar(
+        &page,
+        r#"[data-oc="launcher-chip"][data-cat="productivity"]"#,
+    )
+    .await;
+    assert!(
+        esperar_ate_condicao(&page, &celula_visivel("/notes")).await,
+        "Produtividade devia mostrar as Notas"
+    );
+    assert!(
+        esperar_ate_condicao(&page, &format!("!({})", celula_visivel("/resources"))).await,
+        "Produtividade não devia mostrar Meus Recursos"
+    );
+}
+
+/// Fixar coloca a aplicação na barra e persiste; desafixar tira o atalho mas não
+/// a aplicação, e a rota continua a funcionar (§69, §70, §32).
+#[tokio::test]
+async fn fixar_persiste_e_desafixar_nao_desinstala() {
+    let harness = harness!();
+    let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let page = harness.open("/").await;
+
+    // «Meus Recursos» não está fixado por omissão. Fixa-se pelo lançador.
+    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    wait_visible(&page, r#"[data-oc="launcher"]"#).await;
+    clicar(
+        &page,
+        r#"[data-oc="launcher-pin"][data-app-id="resources"]"#,
+    )
+    .await;
+    let na_barra = esperar_ate_condicao(
+        &page,
+        r#"!!document.querySelector('[data-oc="side-pinned"] [data-app-id="resources"]')"#,
+    )
+    .await;
+    assert!(na_barra, "fixar não colocou a aplicação na barra ao vivo");
+
+    // Persiste através de um recarregamento (a preferência ficou no Core).
+    let page = harness.open("/").await;
+    let persiste = esperar_ate_condicao(
+        &page,
+        r#"!!document.querySelector('[data-oc="side-pinned"] [data-app-id="resources"]')"#,
+    )
+    .await;
+    assert!(persiste, "a fixação não sobreviveu ao recarregamento");
+
+    // Desafixar tira o atalho da barra — mas a ficha continua no lançador.
+    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    wait_visible(&page, r#"[data-oc="launcher"]"#).await;
+    clicar(
+        &page,
+        r#"[data-oc="launcher-pin"][data-app-id="resources"]"#,
+    )
+    .await;
+    let saiu = esperar_ate_condicao(
+        &page,
+        r#"!document.querySelector('[data-oc="side-pinned"] [data-app-id="resources"]')"#,
+    )
+    .await;
+    assert!(saiu, "desafixar não tirou o atalho da barra");
+    assert!(
+        esperar_ate_condicao(&page, &celula_visivel("/resources")).await,
+        "desafixar não pode remover a aplicação do lançador (desafixar ≠ desinstalar)"
+    );
+
+    // E a rota continua a abrir.
+    let recursos = harness.open("/resources").await;
+    esperar_por(&recursos, "Recursos").await;
+}
+
+/// A descoberta respeita a autorização: um membro comum não vê a ficha da
+/// Administração no lançador, e a rota é recusada (§72).
+#[tokio::test]
+async fn a_descoberta_respeita_a_autorizacao() {
+    let harness = harness!();
+    let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let page = harness.open("/").await;
+
+    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    wait_visible(&page, r#"[data-oc="launcher"]"#).await;
+
+    let sem_admin = esperar_ate_condicao(
+        &page,
+        r#"document.querySelector('[data-oc="launcher-item"][href="/admin"]') === null"#,
+    )
+    .await;
+    assert!(
+        sem_admin,
+        "um membro comum não devia ver a Administração no lançador"
+    );
+
+    // E a ficha das Notas — sem direito a exigir — aparece na mesma: esconder é
+    // por autorização, não um catálogo amputado.
+    assert!(
+        esperar_ate_condicao(&page, &celula_visivel("/notes")).await,
+        "as Notas deviam aparecer a qualquer membro"
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Capturas para revisão visual
 // ═══════════════════════════════════════════════════════════════════════════
 //
