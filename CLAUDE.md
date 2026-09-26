@@ -95,7 +95,7 @@ sem que nada falhe.
   4 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`) e 1
   aplicação (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 205 caminhos e 243 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 211 caminhos e 251 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -127,7 +127,7 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED` e em produção** 93 ecrãs em Leptos SSR,
+- **Ocinye Workspace: `IMPLEMENTED` e em produção** 94 ecrãs em Leptos SSR,
   servido de `os.ocinye.com`, atrás da Cloudflare, do mesmo SHA que o Core;
   sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
   pelas permissões que o Core calcula.
@@ -209,7 +209,7 @@ sem que nada falhe.
   capacidade, e a superfície de Administração de recursos.
   `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão distinto de `OCINYE_AI_READY`, e
   **não** torna a IA disponível.
-- **49 migrations**, aplicáveis de base vazia; 84 tabelas.
+- **51 migrations**, aplicáveis de base vazia; 85 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -391,12 +391,15 @@ sem que nada falhe.
   processo e terminou com as três verificações a observar e a passar —
   165 641 recursos, 2 objectos e 83 credenciais seladas que abriram no servidor
   novo —, com o controlo negativo a recusar o mesmo restauro sem a chave.
-  **O que falta não está no repositório: falta um servidor onde o agendador
-  dispare.** As unidades de `launchd` e `systemd` estão em `infra/scheduling/`
-  e não estão instaladas em lado nenhum. Enquanto assim for, **não há backup
-  periódico**, e o RPO é *desde o último conjunto que alguém produziu*.
+  **O agendador está instalado em produção** (`ocinye-backup.timer`, diário às
+  03:00) — **e falhava**: verificado a 2026-09-26, a imagem de backup
+  descarregava o `mc` de `dl.min.io`, que deixou de o servir, e reconstrói-se a
+  cada release. O `mc` passa a vir do espelho da Ocinye
+  ([artefactos de terceiros](docs/deployment/third-party-artifacts.md)). Até à
+  primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
+  conjunto que alguém produziu*.
 - **71 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
-  **69 READMEs**, `docs/` povoado — incluindo
+  **71 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -405,24 +408,21 @@ sem que nada falhe.
   Primeiro commit em 2026-08-23, com identidade humana. A CI corre no GitHub
   Actions contra PostgreSQL efémero, e um passo conta os testes que correram
   para que uma suite saltada não possa passar por verde.
-- **`main` está protegida por regra do GitHub.** *Branch protection* clássica,
-  verificada em 2026-08-27 pela API: alterações entram por Pull Request, com
-  cinco *required status checks* — `Testes`, `Stack local`, `Formatação, lint e
-  segredos`, `Advisories RustSec (cargo audit)`, `Advisories do GitHub
-  (Cargo.lock)` — em modo *strict*, pelo que a branch tem de estar actualizada
-  com `main` antes de entrar. `enforce_admins` está activo, *force push* e
-  eliminação da branch estão bloqueados, e a resolução de conversas é exigida.
-  Nenhuma aprovação humana é exigida por número. Não há *rulesets*: a política
-  vive inteira na *branch protection*, e um segundo mecanismo a dizer o mesmo
-  seria um sítio a mais onde discordar.
-- **1729 funções de teste** escritas na árvore, e **zero falhas** na última
+- **`main` já não está protegida como esta secção dizia.** Em 2026-08-27 a API
+  mostrava cinco *required status checks* em modo *strict* e `enforce_admins`
+  activo. **Re-verificado a 2026-09-26: zero *required checks* e
+  `enforce_admins: false`.** A CI da `main` esteve vermelha de 2026-09-24 a
+  2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
+  `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
+  na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
+- **1760 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **627 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **642 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se
@@ -474,11 +474,12 @@ sem que nada falhe.
   `UnconfiguredProvider` e todas as capacidades de correio reportam
   `not_configured`. `ocinye-core-server mail-check` prova uma configuração sem
   arrancar o Core, e sem imprimir credenciais ou conteúdo.
-- **Nenhum backup periódico existe.** O mecanismo está completo e provado —
-  cifra, destino externo confirmado por leitura de volta, retenção nas duas
-  pontas, restauro verificado nas três dimensões. O que não existe é um
-  **servidor** onde o agendador corra, e por isso não existe cópia da
-  instituição em qualquer momento dado. O RPO é *desde o último conjunto que
+- **Nenhum backup periódico verde está provado.** O mecanismo está completo e
+  provado — cifra, destino externo confirmado por leitura de volta, retenção nas
+  duas pontas, restauro verificado nas três dimensões —, e o agendador está
+  instalado em produção, mas as execuções agendadas falhavam (acima). Enquanto
+  uma não passar, não existe cópia da instituição garantida em qualquer momento
+  dado. O RPO é *desde o último conjunto que
   alguém produziu à mão*, **3-2-1 não existe**, e a rotação da chave de selagem
   não está escrita. O portão de activação está em
   [`docs/backups/`](docs/backups/README.md), e exige uma execução **disparada
@@ -2211,6 +2212,10 @@ branch de trabalho → Pull Request → CI verde → revisão quando houver → 
 
 O primeiro commit foi a excepção natural: `main` ainda não existia.
 
+> **Re-verificado a 2026-09-26: a protecção descrita neste bloco já não está
+> activa** — zero *required checks*, `enforce_admins: false` (§1). O bloco fica
+> como a norma a repor, não como estado.
+>
 > **`main` está tecnicamente protegida.** Já não é só disciplina: o servidor
 > recusa. Verificado pela API em 2026-08-27 e descrito por inteiro na §1 —
 > Pull Request obrigatória, cinco *required checks* em modo *strict*,

@@ -76,6 +76,13 @@ desde o início, não acrescentada anos depois), a autorização (contextual, n�
 evolução (zero ou N nós, sem reconstrução) e a continuidade (identidades que
 sobrevivem à mudança de máquina, e verificação de que sobreviveram).
 
+## Generalização em curso
+
+O Ocinye OS está a ser generalizado de ambiente interno da Ocinye para um ambiente operativo auto-alojado de uso geral, de que a instalação da Ocinye passa a ser a primeira instância. Dois documentos acompanham esse programa, e nenhum substitui esta página enquanto a definição acima não mudar por ADR:
+
+- [Sistema actual](CURRENT_SYSTEM.md) — a verdade do terreno antes de generalizar: serviços, fronteiras, dados, segredos, IA, deploy, backup e os pressupostos de uma só organização.
+- [Arquitectura-alvo](TARGET_OCINYE_OS.md) — os princípios, os conceitos (Instância, Nó, Perfil, Aplicação, Autoridade de Segredos, AI Fabric) e o delta, parte a parte. Todo `PLANNED`.
+
 ## Duas dimensões, dois diagramas
 
 O Ocinye OS lê-se por duas perguntas diferentes, e cada uma tem o seu diagrama.

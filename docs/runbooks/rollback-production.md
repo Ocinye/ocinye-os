@@ -68,10 +68,30 @@ curl -s -o /dev/null -w "%{http_code}\n" https://os.ocinye.com/    # espera 303
 
 ## Nota sobre a próxima migração
 
-Um release anterior tem um esquema anterior. Se o release falhado **aplicou uma
-migração** que o anterior não conhece, reverter o código não reverte o esquema —
-e as migrações da Ocinye são de avanço (não há *down*). Nesse caso, reverter o
-código é seguro enquanto o esquema novo for **retro-compatível** com o código
-anterior (é o caso das migrações aditivas). Uma migração destrutiva exige o plano
-de restauro da base (ver o runbook de restauro), não uma simples reversão de
-symlink.
+> **Corrigido em 2026-09-26** (linha de base da generalização). Esta nota dizia
+> que reverter o código era seguro com migrações aditivas. **O código diz o
+> contrário**, e quem o seguisse punha o Core a reiniciar em ciclo.
+
+Um release anterior tem um esquema anterior, e as migrações da Ocinye são só de
+avanço (não há *down*). O Core aplica as migrações no arranque com
+`sqlx::migrate!`, que por omissão **recusa** arrancar contra uma base onde está
+aplicada uma migração que ele não conhece (`VersionMissing`); o repositório nunca
+activa `ignore_missing`. Por isso:
+
+- **Se o release falhado não trouxe migrações novas**, a reversão por symlink
+  deste runbook é segura.
+- **Se trouxe uma migração nova — aditiva ou não —, a reversão por symlink
+  falha**: o Core anterior não arranca. O caminho é o restauro da base a partir
+  do conjunto de continuidade anterior ao deploy
+  ([migrar para outro servidor](migrate-to-another-server.md)), ou avançar com
+  uma correcção.
+
+Antes de reverter, compare o `migrations/` dos dois releases:
+
+```bash
+diff <(ls /srv/ocinye/releases/<anterior>/migrations) <(ls /srv/ocinye/releases/<falhado>/migrations)
+```
+
+Uma diferença é a resposta. Resolver isto por compatibilidade de esquema é
+trabalho da Parte 10 do programa de generalização
+([arquitectura-alvo](../architecture/TARGET_OCINYE_OS.md#6-itens-obrigatórios-que-nasceram-da-parte-0)).
