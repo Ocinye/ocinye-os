@@ -23,6 +23,7 @@ mod research;
 mod resource;
 mod science;
 mod search;
+mod secrets;
 mod system;
 
 use axum::extract::DefaultBodyLimit;
@@ -79,6 +80,7 @@ pub fn router(state: AppState) -> Router {
         .merge(messaging::routes())
         .merge(realtime::routes())
         .merge(search::routes())
+        .merge(secrets::routes())
         .merge(intelligence::routes())
         .merge(compute::routes())
         .merge(governance::routes())

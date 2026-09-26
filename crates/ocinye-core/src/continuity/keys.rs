@@ -131,6 +131,7 @@ pub const MATERIAL: &[Material] = &[
 const CRIPTOGRAMA_NO_ESQUEMA: &[(&str, &str)] = &[
     ("mailbox_credentials", "OCINYE_SEALING_KEY"),
     ("mfa_totp_secrets", "OCINYE_SEALING_KEY"),
+    ("instance_secrets", "OCINYE_SEALING_KEY"),
 ];
 
 /// O que uma instalação consegue **ler** do estado durável selado que tem.

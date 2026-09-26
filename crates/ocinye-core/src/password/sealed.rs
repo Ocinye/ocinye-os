@@ -54,6 +54,8 @@ pub enum SealingDomain {
     Mail,
     /// Seeds TOTP das identidades com MFA (ADR-0107).
     MfaTotp,
+    /// Credenciais de fornecedores e integrações da Instância (ADR-0110).
+    InstanceSecrets,
 }
 
 impl SealingDomain {
@@ -63,6 +65,7 @@ impl SealingDomain {
         match self {
             Self::Mail => b"ocinye/sealing/mail/v1",
             Self::MfaTotp => b"ocinye/sealing/mfa-totp/v1",
+            Self::InstanceSecrets => b"ocinye/sealing/instance-secrets/v1",
         }
     }
 }
