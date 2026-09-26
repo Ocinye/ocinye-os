@@ -5,6 +5,7 @@
 
 mod administration;
 mod agentic;
+mod ai_providers;
 mod auth;
 mod calendar;
 mod collaboration;
@@ -81,6 +82,7 @@ pub fn router(state: AppState) -> Router {
         .merge(realtime::routes())
         .merge(search::routes())
         .merge(secrets::routes())
+        .merge(ai_providers::routes())
         .merge(intelligence::routes())
         .merge(compute::routes())
         .merge(governance::routes())
