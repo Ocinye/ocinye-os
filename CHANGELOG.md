@@ -7,6 +7,18 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Generalização, Parte 4: o manifesto de aplicação — 2026-09-26
+
+- **Cada aplicação tem um manifesto** nos contratos
+  ([ADR-0016](docs/adrs/0016-application-manifest-contract.md)): identidade,
+  classe, categoria, rota, nome e descrição, as rotas da API que são suas, o
+  armazenamento, a rede e as capacidades de IA que pede, os recursos que consome,
+  a fonte da sua saúde e a política de fixação.
+- **Uma fonte**: a fronteira do Core recusa pelas rotas que o manifesto declara, e
+  o lançador lê categoria, descrição e fixação do manifesto. Testes exigem que
+  manifesto e ecrã concordem e que cada rota declarada exista no Core.
+- `GET /api/v1/instance/applications` devolve o manifesto de cada aplicação.
+
 ### Generalização, Parte 3: a fronteira entre o Core e as aplicações — 2026-09-26
 
 - **O Core recusa a API de uma aplicação inactiva** (`503 application_inactive`),

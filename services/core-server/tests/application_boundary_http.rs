@@ -351,6 +351,53 @@ async fn a_recusa_e_da_instancia_que_a_decidiu() {
     assert_eq!(em_b, StatusCode::OK);
 }
 
+/// Cada prefixo que um manifesto declara é, segmento a segmento, o começo de
+/// uma rota que existe no Core (ADR-0016). Lê as rotas do código do router, o
+/// mesmo que `repository-facts.sh` conta: um manifesto que declarasse um caminho
+/// morto não recusaria nada — e esconderia que a aplicação mudou de rotas.
+#[test]
+fn cada_prefixo_declarado_e_o_comeco_de_uma_rota_real() {
+    let pasta = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/routes");
+    let mut rotas: Vec<String> = Vec::new();
+    for entrada in std::fs::read_dir(&pasta).expect("rotas do Core") {
+        let codigo = std::fs::read_to_string(entrada.expect("ficheiro").path()).expect("ler");
+        for pedaco in codigo.split(".route(").skip(1) {
+            if let Some(rota) = pedaco
+                .trim_start()
+                .strip_prefix('"')
+                .and_then(|r| r.split('"').next())
+            {
+                rotas.push(rota.to_owned());
+            }
+        }
+    }
+    assert!(
+        rotas.len() > 100,
+        "a leitura das rotas encontrou só {}",
+        rotas.len()
+    );
+
+    let segmentos = |c: &str| {
+        c.trim_matches('/')
+            .split('/')
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    };
+    for manifesto in ocinye_contracts::application::MANIFESTS {
+        for prefixo in manifesto.api_prefixes {
+            let p = segmentos(prefixo);
+            assert!(
+                rotas.iter().any(|rota| {
+                    let r = segmentos(rota);
+                    r.len() >= p.len() && r[..p.len()] == p[..]
+                }),
+                "{}: o prefixo {prefixo} não é o começo de nenhuma rota do Core",
+                manifesto.id
+            );
+        }
+    }
+}
+
 /// Um handler de aplicação com um defeito: entra em pânico com um detalhe
 /// interno que não pode chegar ao cliente.
 async fn avaria() -> &'static str {

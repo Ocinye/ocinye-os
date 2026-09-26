@@ -220,7 +220,7 @@ pub fn apps(viewer: &crate::ui::shell::Viewer, saved: bool) -> impl IntoView {
     let fixaveis: Vec<&'static registo::Application> =
         registo::visible_to(viewer, viewer.core_status)
             .into_iter()
-            .filter(|app| app.can_pin)
+            .filter(|app| app.can_pin())
             .collect();
     let vazio = fixaveis.is_empty();
 

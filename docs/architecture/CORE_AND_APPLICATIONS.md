@@ -72,6 +72,5 @@ aplicação (`503`), e não do Core.
 - **Isolamento de processo.** Um erro de memória ou um ciclo infinito numa
   aplicação continua a partilhar o processo do Core. O manifesto de aplicação
   (Parte 4) é onde se decide se alguma aplicação precisa de outro processo.
-- **Rotas declaradas pela aplicação.** O mapa caminho → aplicação vive no Core e
-  é mantido à mão, com um teste que lista também os caminhos que **não** devem
-  ser recusados; o manifesto passará a declará-las.
+- ~~Rotas declaradas pela aplicação~~ — feito: os prefixos vêm do manifesto
+  ([ADR-0016](../adrs/0016-application-manifest-contract.md)).

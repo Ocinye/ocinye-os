@@ -45,7 +45,8 @@ pub mod temporal;
 pub use access::{AccountStatus, CredentialKind, CredentialState, Permission, Scope, SessionState};
 pub use agentic::{AgenticExposure, OperationId, TrustBoundary};
 pub use application::{
-    ApplicationClass, ApplicationId, InstanceProfile, UnknownApplication, UnknownProfile,
+    ApplicationCategory, ApplicationClass, ApplicationId, ApplicationManifest, InstanceProfile,
+    UnknownApplication, UnknownProfile,
 };
 pub use avatar::{AvatarChoice, AVATAR_PRESETS};
 pub use classification::Classification;

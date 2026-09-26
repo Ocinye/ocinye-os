@@ -123,6 +123,7 @@ O que o Ocinye OS é, onde reside a autoridade, e sobre que runtime assenta.
 - [ADR-0013](0013-general-purpose-os-instance-and-node.md) — O Ocinye OS como ambiente operativo de uso geral: Instância e Nó
 - [ADR-0014](0014-instance-profiles-and-application-activation.md) — Perfis de Instância e activação de aplicações
 - [ADR-0015](0015-core-and-applications-boundary.md) — A fronteira entre o Core e as aplicações
+- [ADR-0016](0016-application-manifest-contract.md) — O manifesto de aplicação
 
 ### 0100–0199 · Identidade, Segurança, Autorização e Governação
 
@@ -243,6 +244,7 @@ preencher.
 | [0013](0013-general-purpose-os-instance-and-node.md) | O Ocinye OS como ambiente operativo de uso geral: Instância e Nó | Foundation | `FOUNDATIONAL` | Accepted |
 | [0014](0014-instance-profiles-and-application-activation.md) | Perfis de Instância e activação de aplicações | Foundation | `HIGH` | Accepted |
 | [0015](0015-core-and-applications-boundary.md) | A fronteira entre o Core e as aplicações | Foundation | `HIGH` | Accepted |
+| [0016](0016-application-manifest-contract.md) | O manifesto de aplicação | Foundation | `HIGH` | Accepted |
 | [0100](0100-authorization-model.md) | RBAC + ABAC contextual, fail closed | Security | `FOUNDATIONAL` | Accepted |
 | [0101](0101-permissions-scopes-and-grants.md) | Permissões nomeadas, âmbitos e grants explícitos | Security | `HIGH` | Accepted |
 | [0102](0102-identity-provider.md) | Identity Provider dedicado (Keycloak) | Identity | `HIGH` | Superseded |

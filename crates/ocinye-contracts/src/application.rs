@@ -334,6 +334,548 @@ impl std::fmt::Display for UnknownProfile {
 
 impl std::error::Error for UnknownProfile {}
 
+// ── O manifesto (ADR-0016) ──────────────────────────────────────────────
+
+/// A versão do contrato de manifesto. Muda quando um campo muda de
+/// significado, e não quando uma aplicação muda.
+pub const MANIFEST_VERSION: u32 = 1;
+
+/// A família em que uma aplicação se apresenta no lançador.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApplicationCategory {
+    /// Notas, calendário, trabalho.
+    Productivity,
+    /// Correio e mensagens.
+    Communication,
+    /// Ficheiros, conhecimento, bibliografia.
+    Knowledge,
+    /// Unidades, ideias, projectos, dados, IA.
+    Research,
+    /// Recursos, actividade, administração, definições, ajuda.
+    Administration,
+}
+
+impl ApplicationCategory {
+    /// As cinco, na ordem do lançador.
+    pub const ALL: [ApplicationCategory; 5] = [
+        Self::Productivity,
+        Self::Research,
+        Self::Knowledge,
+        Self::Communication,
+        Self::Administration,
+    ];
+
+    /// O identificador técnico.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Productivity => "productivity",
+            Self::Communication => "communication",
+            Self::Knowledge => "knowledge",
+            Self::Research => "research",
+            Self::Administration => "administration",
+        }
+    }
+}
+
+/// Que armazenamento a aplicação usa — sempre pelas fronteiras governadas do
+/// Core, nunca por caminhos próprios (§40, ADR-0108).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StorageUse {
+    /// Nenhum.
+    None,
+    /// Bytes do membro, contra a sua quota.
+    Personal,
+    /// Bytes de um contentor institucional (ambiente, unidade).
+    Institutional,
+}
+
+/// Que rede a aplicação precisa de alcançar fora da Instância.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NetworkUse {
+    /// Nenhuma: tudo acontece dentro da Instância.
+    None,
+    /// Servidores de correio (IMAP/SMTP) configurados pela Instância.
+    ExternalMail,
+}
+
+/// De onde vem o estado de disponibilidade da aplicação.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HealthSource {
+    /// A saúde do Core basta.
+    Core,
+    /// O estado do correio (`/mail/status`).
+    Mail,
+    /// O estado da IA (`/ai/status`).
+    Intelligence,
+    /// O estado da computação (`/compute/status`).
+    Compute,
+    /// A disponibilidade do armazenamento de objectos.
+    Storage,
+}
+
+/// Como a aplicação chegou à Instância.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Lifecycle {
+    /// Nativa: compilada no Ocinye OS e confiável. A única que existe hoje;
+    /// aplicações da organização, conectores e pacotes externos são classes
+    /// futuras que o manifesto já não impede (ADR-0016).
+    Native,
+}
+
+/// O manifesto de uma aplicação: o contrato do Ocinye OS com ela.
+///
+/// Diz quem é, como se apresenta, que rotas da API são suas, o que pede ao
+/// Core — armazenamento, rede, capacidades de IA, recursos — e de onde vem a
+/// sua saúde. **Pedir não é receber**: uma aplicação declara o que precisa, e o
+/// Core governa o que lhe dá.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ApplicationManifest {
+    /// Identidade estável.
+    pub id: ApplicationId,
+    /// Família no lançador.
+    pub category: ApplicationCategory,
+    /// A rota do ecrã no Workspace.
+    pub route: &'static str,
+    /// Chave i18n do nome.
+    pub name_key: &'static str,
+    /// Chave i18n da descrição.
+    pub description_key: &'static str,
+    /// Os prefixos da API (sem `/api/v1`) que pertencem **só** a esta aplicação.
+    pub api_prefixes: &'static [&'static str],
+    /// Que armazenamento usa.
+    pub storage: StorageUse,
+    /// Que rede externa precisa.
+    pub network: NetworkUse,
+    /// Que capacidades de IA pede — capacidades, nunca modelos.
+    pub ai_capabilities: &'static [crate::AiCapability],
+    /// Que recursos governados consome.
+    pub requested_resources: &'static [crate::ResourceType],
+    /// De onde vem a sua disponibilidade.
+    pub health: HealthSource,
+    /// Se o membro a pode fixar na barra.
+    pub can_pin: bool,
+    /// Se começa fixada para quem nunca escolheu.
+    pub default_pin: bool,
+}
+
+impl ApplicationManifest {
+    /// A classe (essencial ou opcional).
+    #[must_use]
+    pub const fn class(&self) -> ApplicationClass {
+        self.id.class()
+    }
+
+    /// Como chegou à Instância.
+    #[must_use]
+    pub const fn lifecycle(&self) -> Lifecycle {
+        Lifecycle::Native
+    }
+
+    /// A versão do contrato em que está escrito.
+    #[must_use]
+    pub const fn version(&self) -> u32 {
+        MANIFEST_VERSION
+    }
+}
+
+use crate::intelligence::AiCapability;
+use crate::resource::ResourceType;
+
+/// Os manifestos de todas as aplicações nativas, na ordem do registo.
+pub const MANIFESTS: [ApplicationManifest; 23] = [
+    ApplicationManifest {
+        id: ApplicationId::Notes,
+        category: ApplicationCategory::Productivity,
+        route: "/notes",
+        name_key: "nav.notes",
+        description_key: "apps.desc.notes",
+        api_prefixes: &[
+            "/notes",
+            "/me/notes",
+            "/me/deleted-notes",
+            "/me/shared-notes",
+        ],
+        storage: StorageUse::Personal,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[ResourceType::PersistentStorage],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: true,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Calendar,
+        category: ApplicationCategory::Productivity,
+        route: "/calendar",
+        name_key: "nav.calendar",
+        description_key: "apps.desc.calendar",
+        api_prefixes: &["/calendar"],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Work,
+        category: ApplicationCategory::Productivity,
+        route: "/my-work",
+        name_key: "nav.my_work",
+        description_key: "apps.desc.work",
+        api_prefixes: &[],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: false,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Home,
+        category: ApplicationCategory::Productivity,
+        route: "/",
+        name_key: "nav.home",
+        description_key: "apps.desc.home",
+        api_prefixes: &[],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: false,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Mail,
+        category: ApplicationCategory::Communication,
+        route: "/mail",
+        name_key: "nav.mail",
+        description_key: "apps.desc.mail",
+        api_prefixes: &["/mail"],
+        storage: StorageUse::Personal,
+        network: NetworkUse::ExternalMail,
+        ai_capabilities: &[],
+        requested_resources: &[ResourceType::PersistentStorage],
+        health: HealthSource::Mail,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Messages,
+        category: ApplicationCategory::Communication,
+        route: "/messages",
+        name_key: "nav.messages",
+        description_key: "apps.desc.messages",
+        api_prefixes: &["/messaging"],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Files,
+        category: ApplicationCategory::Knowledge,
+        route: "/files",
+        name_key: "nav.files",
+        description_key: "apps.desc.files",
+        api_prefixes: &[],
+        storage: StorageUse::Personal,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[ResourceType::PersistentStorage],
+        health: HealthSource::Storage,
+        can_pin: true,
+        default_pin: true,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Knowledge,
+        category: ApplicationCategory::Knowledge,
+        route: "/knowledge",
+        name_key: "nav.knowledge",
+        description_key: "apps.desc.knowledge",
+        api_prefixes: &["/documents"],
+        storage: StorageUse::Institutional,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Bibliography,
+        category: ApplicationCategory::Knowledge,
+        route: "/bibliography",
+        name_key: "nav.bibliography",
+        description_key: "apps.desc.bibliography",
+        api_prefixes: &["/sources"],
+        storage: StorageUse::Institutional,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Units,
+        category: ApplicationCategory::Research,
+        route: "/units",
+        name_key: "nav.units",
+        description_key: "apps.desc.units",
+        api_prefixes: &["/units"],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Ideas,
+        category: ApplicationCategory::Research,
+        route: "/ideas",
+        name_key: "nav.ideas",
+        description_key: "apps.desc.ideas",
+        api_prefixes: &["/ideas"],
+        storage: StorageUse::Institutional,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Projects,
+        category: ApplicationCategory::Research,
+        route: "/projects",
+        name_key: "nav.projects",
+        description_key: "apps.desc.projects",
+        api_prefixes: &["/projects"],
+        storage: StorageUse::Institutional,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: true,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Datasets,
+        category: ApplicationCategory::Research,
+        route: "/datasets",
+        name_key: "nav.data",
+        description_key: "apps.desc.datasets",
+        api_prefixes: &["/datasets"],
+        storage: StorageUse::Institutional,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Storage,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Prompt,
+        category: ApplicationCategory::Research,
+        route: "/ai/prompt",
+        name_key: "nav.prompt",
+        description_key: "apps.desc.prompt",
+        api_prefixes: &["/ai/prompt", "/ai/conversations"],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[
+            AiCapability::General,
+            AiCapability::Coding,
+            AiCapability::Reasoning,
+        ],
+        requested_resources: &[ResourceType::ModelAccess],
+        health: HealthSource::Intelligence,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Ai,
+        category: ApplicationCategory::Research,
+        route: "/ai",
+        name_key: "nav.ai",
+        description_key: "apps.desc.ai",
+        api_prefixes: &[],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Intelligence,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Agents,
+        category: ApplicationCategory::Research,
+        route: "/ai/agents",
+        name_key: "nav.agents",
+        description_key: "apps.desc.agents",
+        api_prefixes: &["/ai/agents"],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[AiCapability::General],
+        requested_resources: &[ResourceType::ModelAccess],
+        health: HealthSource::Intelligence,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Compute,
+        category: ApplicationCategory::Research,
+        route: "/compute",
+        name_key: "nav.compute",
+        description_key: "apps.desc.compute",
+        api_prefixes: &["/compute/nodes", "/compute/status"],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Compute,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Resources,
+        category: ApplicationCategory::Administration,
+        route: "/resources",
+        name_key: "nav.resources",
+        description_key: "apps.desc.resources",
+        api_prefixes: &[],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Activity,
+        category: ApplicationCategory::Administration,
+        route: "/activity",
+        name_key: "nav.activity",
+        description_key: "apps.desc.activity",
+        api_prefixes: &[],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Administration,
+        category: ApplicationCategory::Administration,
+        route: "/admin",
+        name_key: "nav.admin",
+        description_key: "apps.desc.administration",
+        api_prefixes: &[],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Audit,
+        category: ApplicationCategory::Administration,
+        route: "/audit",
+        name_key: "nav.audit",
+        description_key: "apps.desc.audit",
+        api_prefixes: &[],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Settings,
+        category: ApplicationCategory::Administration,
+        route: "/settings",
+        name_key: "nav.settings",
+        description_key: "apps.desc.settings",
+        api_prefixes: &[],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Help,
+        category: ApplicationCategory::Administration,
+        route: "/help",
+        name_key: "nav.help",
+        description_key: "apps.desc.help",
+        api_prefixes: &[],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+    },
+];
+
+impl ApplicationId {
+    /// O manifesto desta aplicação.
+    #[must_use]
+    pub fn manifest(self) -> &'static ApplicationManifest {
+        MANIFESTS
+            .iter()
+            .find(|manifest| manifest.id == self)
+            .unwrap_or(&MANIFESTS[0])
+    }
+}
+
+/// A que aplicação pertence um caminho da API (sem o prefixo `/api/v1`),
+/// segundo os manifestos: o prefixo declarado mais longo que coincida por
+/// segmentos inteiros. Os caminhos que nenhuma aplicação declara — identidade,
+/// autenticação, saúde, Instância, contentores partilhados, autoridade sobre
+/// nós — não são de nenhuma (ADR-0015).
+#[must_use]
+pub fn application_of_api_path(path: &str) -> Option<ApplicationId> {
+    MANIFESTS
+        .iter()
+        .flat_map(|manifest| manifest.api_prefixes.iter().map(move |p| (manifest.id, *p)))
+        .filter(|(_, prefixo)| {
+            path == *prefixo
+                || path
+                    .strip_prefix(prefixo)
+                    .is_some_and(|resto| resto.starts_with('/') || resto.starts_with('?'))
+        })
+        .max_by_key(|(_, prefixo)| prefixo.len())
+        .map(|(id, _)| id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
