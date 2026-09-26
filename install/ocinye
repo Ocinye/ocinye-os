@@ -467,9 +467,14 @@ trocar_para() {  # sha
 }
 
 repor_checkpoint() {  # ficheiro
+    # A base é recriada e o checkpoint reposto nela vazia. `pg_restore --clean`
+    # só apaga o que está no checkpoint: uma tabela que a migração falhada criou
+    # depois ficava na base — foi o que a prova de actualização apanhou.
     compose stop core worker workspace >/dev/null 2>&1 || true
-    docker exec -i ocinye-postgres-1 pg_restore -U ocinye -d ocinye --clean --if-exists \
-        --single-transaction < "$1"
+    docker exec ocinye-postgres-1 dropdb -U ocinye --force ocinye \
+        && docker exec ocinye-postgres-1 createdb -U ocinye ocinye \
+        && docker exec -i ocinye-postgres-1 pg_restore -U ocinye -d ocinye \
+            --no-owner --single-transaction < "$1"
 }
 
 upgrade_() {
