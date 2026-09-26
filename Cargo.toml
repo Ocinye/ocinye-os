@@ -43,7 +43,7 @@ tower = { version = "0.5", features = ["util"] }
 # superfície de ataque que ninguém pediu. SVG não entra de todo: é um documento
 # com script, não uma imagem.
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
-tower-http = { version = "0.7", features = ["trace", "cors", "limit", "set-header", "fs"] }
+tower-http = { version = "0.7", features = ["trace", "cors", "limit", "set-header", "fs", "catch-panic"] }
 hyper = "1"
 
 # --- persistence ------------------------------------------------------------

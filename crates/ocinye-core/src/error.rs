@@ -38,6 +38,11 @@ pub enum CoreError {
     #[error("{0}")]
     Conflict(String),
 
+    /// The application the operation belongs to is not active in this
+    /// Instance (ADR-0014). Its data is intact; an administrator can activate it.
+    #[error("{0}")]
+    ApplicationInactive(String),
+
     /// No Ocinye node provides the requested capability.
     ///
     /// A legitimate, expected state while the physical layer does not exist
@@ -80,6 +85,7 @@ impl CoreError {
             Self::Unauthenticated(_) => ErrorCode::AuthenticationRequired,
             Self::PermissionDenied(_) => ErrorCode::PermissionDenied,
             Self::Conflict(_) => ErrorCode::Conflict,
+            Self::ApplicationInactive(_) => ErrorCode::ApplicationInactive,
             Self::CapabilityUnavailable(_) => ErrorCode::CapabilityUnavailable,
             Self::StorageUnavailable(_) => ErrorCode::StorageUnavailable,
             Self::RateLimited(_) => ErrorCode::RateLimited,

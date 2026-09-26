@@ -7,6 +7,18 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Generalização, Parte 3: a fronteira entre o Core e as aplicações — 2026-09-26
+
+- **O Core recusa a API de uma aplicação inactiva** (`503 application_inactive`),
+  venha o pedido do Workspace, de um script ou de um agente
+  ([ADR-0015](docs/adrs/0015-core-and-applications-boundary.md)). Identidade,
+  saúde, configuração da Instância, contentores partilhados e a autoridade sobre
+  nós nunca se recusam.
+- **Uma aplicação que falha não derruba o Core**: um `panic` num handler é um
+  `500` com o envelope de erro, a causa fica no log, e as outras rotas continuam.
+- [O Core e as aplicações](docs/architecture/CORE_AND_APPLICATIONS.md): o que cada
+  um governa.
+
 ### Generalização, Parte 2: perfis e activação de aplicações — 2026-09-26
 
 A investigação passa a ser configuração, e não a identidade do sistema

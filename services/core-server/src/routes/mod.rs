@@ -27,6 +27,7 @@ mod system;
 
 use axum::extract::DefaultBodyLimit;
 use axum::http::{header, HeaderValue, Method};
+use axum::response::IntoResponse;
 use axum::Router;
 use ocinye_contracts::API_VERSION;
 use tower_http::cors::CorsLayer;
@@ -95,12 +96,54 @@ pub fn router(state: AppState) -> Router {
         // Depois de `apply`, para que a recusa já carregue os identificadores
         // de correlação — e antes de qualquer handler, porque uma escrita de
         // outra origem não deve chegar a ser encaminhada.
+        // Uma aplicação inactiva nesta Instância não responde, venha o pedido
+        // de onde vier (ADR-0014). Depois de `apply`, para a recusa levar os
+        // identificadores de correlação.
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::middleware::application_gate,
+        ))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             crate::middleware::same_origin_writes,
         ))
         .layer(axum::middleware::from_fn(crate::middleware::apply))
+        .layer(panic_boundary())
         .with_state(state)
+}
+
+/// A falha de uma aplicação não derruba o Core (Parte 3 da generalização).
+///
+/// Todas as aplicações vivem no mesmo binário que o Core. Um `panic` num
+/// handler já não derrubava o servidor — cada ligação corre na sua tarefa —,
+/// mas cortava a ligação sem resposta, e o cliente não distinguia isso de o Core
+/// ter caído. Com esta fronteira, a falha é um `500` com o envelope de sempre,
+/// fica no log com o que a causou, e o resto do Core continua a responder. O que
+/// causou o `panic` nunca chega ao cliente: pode ser estrutura interna.
+pub fn panic_boundary() -> tower_http::catch_panic::CatchPanicLayer<
+    fn(Box<dyn std::any::Any + Send + 'static>) -> axum::response::Response,
+> {
+    fn resposta(causa: Box<dyn std::any::Any + Send + 'static>) -> axum::response::Response {
+        let detalhe = causa
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| causa.downcast_ref::<&str>().copied())
+            .unwrap_or("sem mensagem");
+        tracing::error!(panic = detalhe, "a handler panicked; the Core kept serving");
+        let corpo = ocinye_contracts::ErrorBody {
+            code: ocinye_contracts::ErrorCode::InternalError,
+            message: "An unexpected error occurred.".to_owned(),
+            details: serde_json::Map::new(),
+            request_id: None,
+            correlation_id: None,
+        };
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(corpo),
+        )
+            .into_response()
+    }
+    tower_http::catch_panic::CatchPanicLayer::custom(resposta as fn(_) -> _)
 }
 
 /// CORS policy.

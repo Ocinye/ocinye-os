@@ -90,6 +90,8 @@ sobrevivem à mudança de máquina, e verificação de que sobreviveram).
 O Ocinye OS está a ser generalizado de ambiente interno da Ocinye para um ambiente operativo auto-alojado de uso geral, de que a instalação da Ocinye passa a ser a primeira instância. Dois documentos acompanham esse programa, e nenhum substitui esta página enquanto a definição acima não mudar por ADR:
 
 - [Sistema actual](CURRENT_SYSTEM.md) — a verdade do terreno antes de generalizar: serviços, fronteiras, dados, segredos, IA, deploy, backup e os pressupostos de uma só organização.
+- [O Core e as aplicações](CORE_AND_APPLICATIONS.md) — o que o Core governa, o que as
+  aplicações implementam, e o que acontece quando uma é desactivada ou falha.
 - [Arquitectura-alvo](TARGET_OCINYE_OS.md) — os princípios, os conceitos (Instância, Nó, Perfil, Aplicação, Autoridade de Segredos, AI Fabric) e o delta, parte a parte. Todo `PLANNED`.
 
 ## Duas dimensões, dois diagramas

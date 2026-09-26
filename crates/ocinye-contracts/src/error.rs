@@ -28,6 +28,10 @@ pub enum ErrorCode {
     CapabilityUnavailable,
     /// Object storage is not configured or not reachable.
     StorageUnavailable,
+    /// The application this operation belongs to is not active in this
+    /// Instance (ADR-0014). The same class as an unconfigured capability: it
+    /// exists in Ocinye OS, and this installation does not have it up.
+    ApplicationInactive,
     /// Unexpected failure.
     InternalError,
 }
@@ -43,7 +47,9 @@ impl ErrorCode {
             Self::NotFound => 404,
             Self::Conflict | Self::InvalidWorkflowTransition => 409,
             Self::RateLimited => 429,
-            Self::CapabilityUnavailable | Self::StorageUnavailable => 503,
+            Self::CapabilityUnavailable | Self::StorageUnavailable | Self::ApplicationInactive => {
+                503
+            }
             Self::InternalError => 500,
         }
     }
