@@ -160,6 +160,14 @@ sem que nada falhe.
   e política de fixação. O Core e o Workspace lêem o mesmo manifesto; um teste
   exige que cada prefixo declarado seja uma rota real do Core. Só existem
   aplicações nativas.
+- **Capacidade dos nós: `IMPLEMENTED`**
+  ([ADR-0504](docs/adrs/0504-node-capacity-model.md), [docs/nodes](docs/nodes/README.md)).
+  Cada nó tem capacidade física (reportada), reservada (o operador guarda para o
+  host), alocável (física − reservada), alocada (zero até haver despacho de
+  trabalhos) e consumida (reportada); a Instância soma os nós online em
+  `GET /api/v1/compute/capacity`, ao lado do armazenamento pessoal que os membros
+  usam. O ciclo registo → heartbeat → offline → regresso está provado por HTTP,
+  com o Core a continuar a responder e um nó falso recusado.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
@@ -2067,7 +2075,7 @@ docs/adrs            docs/agentic        docs/ai             docs/applications
 docs/architecture    docs/authorization  docs/backups        docs/capabilities
 docs/compute         docs/data-model     docs/deployment     docs/development
 docs/domain          docs/feature-status docs/identity       docs/instance
-docs/knowledge
+docs/knowledge       docs/nodes
 docs/mail            docs/node-protocol  docs/operations     docs/password-policy
 docs/runbooks        docs/search         docs/security       docs/storage
 docs/testing         docs/threat-model   docs/ui-core-contract docs/wasm

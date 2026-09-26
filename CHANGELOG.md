@@ -7,6 +7,19 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Generalização, Parte 5: nós e capacidade — 2026-09-26
+
+- **Capacidade em cinco quantidades** por nó
+  ([ADR-0504](docs/adrs/0504-node-capacity-model.md)): física (reportada),
+  reservada (o operador guarda para o host, `PUT /compute/nodes/{id}/reservation`,
+  auditado), alocável, alocada (zero até haver despacho) e consumida (o agente
+  passa a reportar a memória em uso). Migração 0054.
+- **Capacidade da Instância** em `GET /api/v1/compute/capacity`: a soma dos nós
+  online, ao lado do armazenamento pessoal que os membros usam.
+- **O ciclo de um nó provado por HTTP**: registo, heartbeat, descoberta, nó que
+  cai sem o Core deixar de responder, regresso com a capacidade de volta sem
+  reinício, e nó falso recusado. [docs/nodes](docs/nodes/README.md).
+
 ### Generalização, Parte 4: o manifesto de aplicação — 2026-09-26
 
 - **Cada aplicação tem um manifesto** nos contratos
