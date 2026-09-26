@@ -4,8 +4,9 @@
 # voltar sozinha, e reverter à mão — num anfitrião Linux limpo e descartável.
 #
 # Três pacotes:
-#   A  o release N, instalado de raiz
-#   B  o release N+1, que se instala por cima de A
+#   A  o release N, instalado de raiz — com o MinIO, como a produção estava
+#   B  o release N+1, que se instala por cima de A — com o Garage: a actualização
+#      é também o ensaio da passagem MinIO → Garage que a produção vai fazer
 #   C  um release que falha de propósito: uma migração que aplica e outra que
 #      rebenta, para que a falha chegue **depois** de o esquema ter mudado — o
 #      caso em que reverter exige repor a base, e não só trocar o release
@@ -59,7 +60,12 @@ no_anfitriao /root/B/install/ocinye upgrade
 [ "$(sql "SELECT count(*) FROM notes WHERE title = 'Primeira nota da Instância'")" = 1 ] || falha "a nota perdeu-se na actualização"
 [ "$(sql "SELECT count(*) FROM people")" = "$PESSOAS" ] || falha "as pessoas mudaram na actualização"
 ESQUEMA_N1="$(sql "SELECT max(version) FROM _sqlx_migrations")"
+no_anfitriao test -e /etc/ocinye/object-store-cutover.done || falha "o armazenamento não passou para o Garage"
+OBJECTOS_GARAGE="$(no_anfitriao sed -n 's/.*objectos=\([0-9]*\).*/\1/p' /etc/ocinye/object-store-cutover.done)"
+[ "${OBJECTOS_GARAGE:-0}" -ge 1 ] || falha "o Garage não recebeu os objectos do MinIO"
+no_anfitriao docker volume inspect ocinye_object-data >/dev/null || falha "o volume do MinIO desapareceu"
 echo "  release $(release) · dados intactos · esquema $ESQUEMA_N → $ESQUEMA_N1"
+echo "  armazenamento: MinIO → Garage, $OBJECTOS_GARAGE objecto(s) verificados; MinIO intacto"
 
 passo "Um release que falha ($(cat "$C/RELEASE"))"
 set +e
@@ -77,6 +83,7 @@ echo "  recusada, revertida para $(release), esquema $ESQUEMA_N1, sem restos, da
 passo "Reversão manual N+1 → N"
 no_anfitriao /root/B/install/ocinye rollback --confirm
 [ "$(release)" = "$(cat "$A/RELEASE")" ] || falha "a reversão não voltou a N"
+no_anfitriao test ! -e /etc/ocinye/object-store-cutover.done || falha "a reversão para N não voltou ao MinIO"
 [ "$(sql "SELECT count(*) FROM notes WHERE title = 'Primeira nota da Instância'")" = 1 ] || falha "a nota perdeu-se na reversão manual"
 echo "  release $(release) · esquema $(sql "SELECT max(version) FROM _sqlx_migrations") · dados intactos"
 
