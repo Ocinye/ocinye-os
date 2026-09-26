@@ -70,7 +70,8 @@ uma_corrida() {
     echo "  anfitrião sem Instância, sem contentores, sem volumes"
 }
 
-uma_corrida research
-uma_corrida business
+for perfil in ${OCINYE_INSTALL_E2E_PROFILES:-research business personal education}; do
+    uma_corrida "$perfil"
+done
 
-printf '\n  Instalação provada duas vezes, de raiz, com dois perfis.\n\n'
+printf '\n  Instalação provada de raiz, uma vez por perfil.\n\n'

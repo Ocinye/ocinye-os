@@ -231,11 +231,16 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
         condicao(&page, &tem("/notes")).await,
         "Notas não está no lançador"
     );
-    // O perfil decide as aplicações opcionais: Ideias é de investigação.
+    // O perfil decide as aplicações opcionais — e é o contrato de perfis que o
+    // diz, e não esta viagem.
+    let perfil_tipado = ocinye_contracts::InstanceProfile::ALL
+        .into_iter()
+        .find(|p| p.as_str() == perfil)
+        .unwrap_or_else(|| panic!("perfil desconhecido: {perfil}"));
     let ideias = condicao(&page, &tem("/ideas")).await;
     assert_eq!(
         ideias,
-        perfil == "research",
+        perfil_tipado.activates(ocinye_contracts::ApplicationId::Ideas),
         "o lançador do perfil {perfil} {} Ideias",
         if ideias { "traz" } else { "não traz" }
     );
