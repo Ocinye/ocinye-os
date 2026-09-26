@@ -47,11 +47,13 @@ ARG BIN
 # partilhá-lo faria uma invalidar os artefactos da outra a cada construção.
 # Processos de compilação: vazio é o que o cargo decide (todos os núcleos).
 # Uma máquina com pouca memória para o número de núcleos — um Docker Desktop de
-# 4 GB com 8 CPUs — passa o tempo a trocar memória; `CARGO_BUILD_JOBS` limita-os.
-ARG CARGO_BUILD_JOBS=
+# 4 GB com 8 CPUs — passa o tempo a trocar memória; `OCINYE_BUILD_JOBS` limita-os.
+# Não se chama `CARGO_BUILD_JOBS`: um ARG é também variável de ambiente do RUN, e o
+# cargo lê essa e recusa-a vazia — o valor por omissão partia todas as construções.
+ARG OCINYE_BUILD_JOBS=
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/build/target,id=ocinye-target-${BIN},sharing=locked \
-    cargo build --release --locked --bin "${BIN}" ${CARGO_BUILD_JOBS:+--jobs "$CARGO_BUILD_JOBS"} \
+    cargo build --release --locked --bin "${BIN}" ${OCINYE_BUILD_JOBS:+--jobs "$OCINYE_BUILD_JOBS"} \
  && cp "target/release/${BIN}" /usr/local/bin/ocinye-binario
 
 # ── A imagem que corre ───────────────────────────────────────────────────

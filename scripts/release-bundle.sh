@@ -59,7 +59,7 @@ tar -xzf "$PACOTE/source.tar.gz" -C "$TRABALHO"
 construir() {  # imagem  stage  binário
     docker build ${PLATAFORMA:+--platform "$PLATAFORMA"} \
         -f "$TRABALHO/infra/docker/Dockerfile" --target "$2" --build-arg BIN="$3" \
-        --build-arg CARGO_BUILD_JOBS="${OCINYE_BUILD_JOBS:-}" \
+        --build-arg OCINYE_BUILD_JOBS="${OCINYE_BUILD_JOBS:-}" \
         -t "ocinye/ocinye-$1:$SHA" "$TRABALHO"
 }
 construir core-server       runtime           ocinye-core-server
