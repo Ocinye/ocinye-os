@@ -30,6 +30,12 @@ pub struct NodeResources {
     pub storage_bytes: u64,
     /// GPUs present.
     pub gpus: Vec<GpuReport>,
+    /// Memory in use now — the «consumed» part of the node's capacity.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_used_bytes: Option<u64>,
+    /// Storage in use now, when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub storage_used_bytes: Option<u64>,
 }
 
 /// A model the node has loaded.
@@ -83,6 +89,11 @@ pub fn collect(agent_version: &str) -> Heartbeat {
             // guessed from an arbitrary mount point.
             storage_bytes: 0,
             gpus: Vec::new(),
+            // O que está em uso agora: a parte «consumida» da capacidade do nó
+            // (Parte 5). Memória, porque o sistema a mede; armazenamento não,
+            // pela mesma razão que o total fica a zero.
+            memory_used_bytes: Some(system.used_memory()),
+            storage_used_bytes: None,
         },
         capabilities: Vec::new(),
         models: Vec::new(),

@@ -12,7 +12,9 @@ use crate::error::CoreResult;
 const NODE_COLUMNS: &str = "id, identifier, display_name, kind, location_label,
                             institutional_control, physical_residency, status,
                             cpu_cores, memory_bytes, storage_bytes, gpus, capabilities,
-                            agent_version, last_seen_at, created_at";
+                            agent_version, last_seen_at, created_at,
+                            reserved_cpu_cores, reserved_memory_bytes,
+                            reserved_storage_bytes, memory_used_bytes, storage_used_bytes";
 
 /// Insert a node in `pending_enrollment`.
 ///
@@ -170,6 +172,7 @@ pub async fn record_heartbeat<'e>(
     gpus: &Value,
     capabilities: &Value,
     health: &Value,
+    used: (Option<i64>, Option<i64>),
 ) -> CoreResult<()> {
     sqlx::query(
         "UPDATE compute_nodes
@@ -181,6 +184,8 @@ pub async fn record_heartbeat<'e>(
                 gpus = $6,
                 capabilities = $7,
                 last_health = $8,
+                memory_used_bytes = $9,
+                storage_used_bytes = $10,
                 last_seen_at = now(),
                 updated_at = now()
           WHERE id = $1 AND status <> 'retired'",
@@ -193,9 +198,40 @@ pub async fn record_heartbeat<'e>(
     .bind(gpus)
     .bind(capabilities)
     .bind(health)
+    .bind(used.0)
+    .bind(used.1)
     .execute(executor)
     .await?;
     Ok(())
+}
+
+/// Set what the operator holds back on a node for the host itself.
+///
+/// # Errors
+///
+/// Returns an error when the update fails.
+pub async fn set_reservation<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    node_id: Uuid,
+    reserved: (i32, i64, i64),
+) -> CoreResult<bool> {
+    let result = sqlx::query(
+        "UPDATE compute_nodes
+            SET reserved_cpu_cores = $3,
+                reserved_memory_bytes = $4,
+                reserved_storage_bytes = $5,
+                updated_at = now()
+          WHERE id = $2 AND organisation_id = $1",
+    )
+    .bind(organisation_id)
+    .bind(node_id)
+    .bind(reserved.0)
+    .bind(reserved.1)
+    .bind(reserved.2)
+    .execute(executor)
+    .await?;
+    Ok(result.rows_affected() == 1)
 }
 
 /// Set a node's stored status.
