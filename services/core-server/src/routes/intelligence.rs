@@ -12,8 +12,9 @@ use ocinye_contracts::{
     InteractionOrigin, InteractionStatus, Permission,
 };
 use ocinye_core::modules::intelligence::{
-    self, infer_within_deadline, providers, AgentScope, InferenceError, InferenceProvider,
-    InferenceRequest, ModelResolution, NewAgent,
+    self, infer_within_deadline, providers,
+    routing::{self, Routing},
+    AgentScope, InferenceError, InferenceProvider, InferenceRequest, NewAgent,
 };
 use ocinye_core::modules::{platform, resource};
 use ocinye_core::CoreError;
@@ -364,6 +365,11 @@ struct PromptRequest {
     prompt: String,
     #[serde(default)]
     capability: Option<String>,
+    /// The classification of what the member wrote, which decides who may
+    /// receive it (ADR-0311). `INTERNAL` when absent: a member's text is
+    /// institutional content until they say otherwise.
+    #[serde(default)]
+    classification: Option<String>,
 }
 
 /// `POST /ai/prompt`
@@ -403,75 +409,33 @@ async fn submit_prompt(
 
     let capability = parse_capability(request.capability.as_deref(), &ids)?;
 
-    // The Model Router is the authority on availability for this path. It reads
-    // the node-reported inventory fresh on every request, so a node that
-    // connects or drops changes the answer with no restart — and «zero models»
-    // is an ordinary typed result, not an error (M5 §20, §21).
-    let resolution = intelligence::resolve_capability(
+    let classification = parse_classification(request.classification.as_deref(), &ids)?;
+
+    // The Model Router is the authority on availability for this path, and on
+    // policy (ADR-0311). It reads the inventory fresh on every request, so a
+    // provider or node that connects or drops changes the answer with no
+    // restart — and «zero models» or «policy excludes them all» are ordinary
+    // typed results, not errors (M5 §20, §21).
+    let (candidates, allow_fallback) = match routing::route(
         &state.pool,
         principal.organisation_id,
         &state.config.ai,
         capability,
+        classification,
     )
     .await
-    .map_err(|error| ApiError::new(error, &ids))?;
-
-    let model = match resolution {
-        ModelResolution::NoCandidate(reason_code) => {
+    .map_err(|error| ApiError::new(error, &ids))?
+    {
+        Routing::NoCandidate(reason_code) => {
             return Ok(Json(
                 degraded(&state, &principal, capability, reason_code, &request.prompt).await,
             ));
         }
-        ModelResolution::Resolved(model) => model,
+        Routing::Candidates {
+            models,
+            allow_fallback,
+        } => (models, allow_fallback),
     };
-
-    // A provider model runs through its own adapter, built for this request
-    // with its credential opened from the Secrets Authority in the Gateway's
-    // scope (ADR-0310). A node model runs through the provider wired into this
-    // process — in production `NoProvider`, whose `serves` is always false, so
-    // that path degrades cleanly with no model involved.
-    let adapter = match model.provider_id {
-        Some(_) => match providers::adapter_for(
-            &state.pool,
-            state.config.sealing_key.as_ref(),
-            principal.organisation_id,
-            &model,
-            &ids,
-        )
-        .await
-        {
-            Ok(adapter) => Some(adapter),
-            Err(_) => {
-                return Ok(Json(
-                    degraded(
-                        &state,
-                        &principal,
-                        capability,
-                        AiReasonCode::AiProviderUnhealthy,
-                        &request.prompt,
-                    )
-                    .await,
-                ));
-            }
-        },
-        None => None,
-    };
-    let provider: &dyn InferenceProvider = match &adapter {
-        Some(adapter) => adapter,
-        None => state.inference.as_ref(),
-    };
-    if !provider.serves(capability) {
-        return Ok(Json(
-            degraded(
-                &state,
-                &principal,
-                capability,
-                AiReasonCode::AiNoProviderAvailable,
-                &request.prompt,
-            )
-            .await,
-        ));
-    }
 
     // ── Resource admission (ADR-0108) ──────────────────────────────────
     //
@@ -540,17 +504,65 @@ async fn submit_prompt(
         system_instruction(&instance),
         request.prompt.clone(),
     );
-    let outcome = infer_within_deadline(provider, &inference).await;
-    if let Some(provider_id) = model.provider_id {
-        let health = match &outcome {
-            Ok(_) => "healthy",
-            Err(InferenceError::Refused) => "refused",
-            Err(_) => "unreachable",
+    // Try the candidates in the Router's order. A provider model runs through
+    // its own adapter, built for this request with its credential opened from
+    // the Secrets Authority in the Gateway's scope (ADR-0310); a node model runs
+    // through the provider wired into this process — in production
+    // `NoProvider`, which serves nothing. Moving to the next candidate is only
+    // allowed when the capability's preference allows it, and is safe here: an
+    // inference request has no effects (ADR-0311).
+    let tentativas = if allow_fallback { candidates.len() } else { 1 };
+    let mut last_reason = AiReasonCode::AiNoProviderAvailable;
+    let mut outcome = Err(last_reason);
+    for model in candidates.into_iter().take(tentativas) {
+        let adapter = match model.provider_id {
+            Some(_) => match providers::adapter_for(
+                &state.pool,
+                state.config.sealing_key.as_ref(),
+                principal.organisation_id,
+                &model,
+                &ids,
+            )
+            .await
+            {
+                Ok(adapter) => Some(adapter),
+                Err(_) => {
+                    last_reason = AiReasonCode::AiProviderUnhealthy;
+                    continue;
+                }
+            },
+            None => None,
         };
-        providers::record_health(&state.pool, provider_id, health).await;
+        let provider: &dyn InferenceProvider = match &adapter {
+            Some(adapter) => adapter,
+            None => state.inference.as_ref(),
+        };
+        if !provider.serves(capability) {
+            last_reason = AiReasonCode::AiNoProviderAvailable;
+            continue;
+        }
+        let result = infer_within_deadline(provider, &inference).await;
+        if let Some(provider_id) = model.provider_id {
+            let health = match &result {
+                Ok(_) => "healthy",
+                Err(InferenceError::Refused) => "refused",
+                Err(_) => "unreachable",
+            };
+            providers::record_health(&state.pool, provider_id, health).await;
+        }
+        match result {
+            Ok(response) => {
+                outcome = Ok((model, response));
+                break;
+            }
+            Err(error) => last_reason = reason_code_for_inference_error(error),
+        }
+    }
+    if outcome.is_err() {
+        outcome = Err(last_reason);
     }
     match outcome {
-        Ok(response) => {
+        Ok((model, response)) => {
             // Commit the reservation: record the completed job and the usage in
             // the admission transaction, so the charge lands with the answer.
             let job_id = intelligence::record_completed_job(
@@ -605,17 +617,10 @@ async fn submit_prompt(
                 content: response.text,
             }))
         }
-        Err(error) => {
+        Err(reason_code) => {
             drop(tx); // release: a failed request charges nothing
             Ok(Json(
-                degraded(
-                    &state,
-                    &principal,
-                    capability,
-                    reason_code_for_inference_error(error),
-                    &request.prompt,
-                )
-                .await,
+                degraded(&state, &principal, capability, reason_code, &request.prompt).await,
             ))
         }
     }
@@ -719,6 +724,21 @@ fn parse_capability(
         Some(raw) => AiCapability::parse(&raw.to_uppercase()).ok_or_else(|| {
             ApiError::new(
                 CoreError::Validation("Capacidade de IA desconhecida.".to_owned()),
+                ids,
+            )
+        }),
+    }
+}
+
+fn parse_classification(
+    value: Option<&str>,
+    ids: &ocinye_observability::CorrelationIds,
+) -> Result<Classification, ApiError> {
+    match value.map(str::trim).filter(|v| !v.is_empty()) {
+        None => Ok(Classification::Internal),
+        Some(raw) => Classification::parse(&raw.to_uppercase()).ok_or_else(|| {
+            ApiError::new(
+                CoreError::Validation("Classificação desconhecida.".to_owned()),
                 ids,
             )
         }),

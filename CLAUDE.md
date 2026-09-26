@@ -95,7 +95,7 @@ sem que nada falhe.
   4 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`) e 1
   aplicação (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 223 caminhos e 265 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 225 caminhos e 268 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -192,6 +192,16 @@ sem que nada falhe.
   contactado. Os três protocolos (chat completions, Messages, Gemini) estão
   provados contra um fornecedor em porta efémera; **nenhum fornecedor real foi
   contactado**.
+- **Política e roteamento de IA: `IMPLEMENTED`**
+  ([ADR-0311](docs/adrs/0311-ai-policy-and-multi-provider-routing.md)). O Router
+  aplica primeiro a política — tecto do modelo, interruptor da instalação e tecto
+  externo da Instância (`instance_ai_policy`, por omissão `INTERNAL`; `NONE` fecha
+  a IA externa), contra a classificação que o pedido declara (por omissão
+  `INTERNAL`) — e só depois a preferência por capacidade
+  (`ai_routing_preferences`: fornecedor preferido, local antes de externo, e
+  recurso a outro candidato quando permitido). Tudo excluído pela política é
+  `AI_POLICY_BLOCKED`. Provado por HTTP com dois fornecedores simulados e um
+  externo que aceitaria tudo: um pedido confidencial nunca o contacta.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
@@ -277,7 +287,7 @@ sem que nada falhe.
   capacidade, e a superfície de Administração de recursos.
   `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão distinto de `OCINYE_AI_READY`, e
   **não** torna a IA disponível.
-- **56 migrations**, aplicáveis de base vazia; 89 tabelas.
+- **57 migrations**, aplicáveis de base vazia; 91 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -466,7 +476,7 @@ sem que nada falhe.
   ([artefactos de terceiros](docs/deployment/third-party-artifacts.md)). Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **78 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
+- **79 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
   **73 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -483,14 +493,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1814 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1819 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **670 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **671 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

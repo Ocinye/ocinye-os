@@ -234,6 +234,20 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     // residência e a referência ao segredo. Configuração institucional estável.
     ("ai_providers", Comparacao::Identidades),
     (
+        "instance_ai_policy",
+        Comparacao::Fora(
+            "configuração da Instância, uma linha por organização e sem identidade \
+             própria; viaja com a organização (ADR-0311)",
+        ),
+    ),
+    (
+        "ai_routing_preferences",
+        Comparacao::Fora(
+            "preferência por capacidade, chaveada por organização e capacidade e \
+             sem identidade própria; viaja com a organização (ADR-0311)",
+        ),
+    ),
+    (
         "ai_models",
         Comparacao::Fora(
             "inventário reportado pelo nó, e não um registo de artefacto. \

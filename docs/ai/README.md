@@ -71,6 +71,27 @@ Uma Instância liga fornecedores em `/api/v1/ai/providers`, com
 - **Saúde:** o resultado da última chamada (`healthy`, `unreachable`,
   `refused`) fica visível; é observação, não entrada do roteamento.
 
+### Política e roteamento
+
+([ADR-0311](../adrs/0311-ai-policy-and-multi-provider-routing.md)) O Router decide
+**quem pode** receber o pedido antes de decidir **quem responde primeiro**:
+
+1. **Política** — um modelo só é candidato se o seu tecto (`max_classification`)
+   cobre a classificação do pedido; um externo, além disso, só com
+   `OCINYE_AI_ALLOW_EXTERNAL_PROVIDERS=true` **e** dentro do tecto externo da
+   Instância (`GET/PUT /api/v1/ai/policy`, `external_max_classification`: `NONE`,
+   `PUBLIC`, `INTERNAL` — o omisso —, `CONFIDENTIAL`, `RESTRICTED`).
+2. **Preferência** — `PUT /api/v1/ai/routing/{capability}` com
+   `preferred_provider_id` e `allow_fallback`: o preferido primeiro, depois o que
+   corre em infraestrutura da Instância, depois o resto.
+3. **Recurso** — se o candidato não responde e `allow_fallback` o permite, o
+   Prompt tenta o seguinte; senão, `AI_PROVIDER_UNHEALTHY`.
+
+O pedido declara a classificação dos dados (`classification` em
+`POST /ai/prompt`, por omissão `INTERNAL`). Se a política exclui todos os modelos
+que servem a capacidade, a resposta é `AI_POLICY_BLOCKED` — nunca um externo
+para «conseguir responder».
+
 Exemplo, para um Ollama no próprio host:
 
 ```bash
