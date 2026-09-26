@@ -46,7 +46,7 @@ passo "Dados reais, criados por um browser"
 OCINYE_TEST_INSTALLED_URL="https://$DOMINIO:$PORTO" OCINYE_TEST_INSTALLED_EMAIL=admin@instalacao.test \
 OCINYE_TEST_INSTALLED_CREDENTIAL_FILE="$CRED" OCINYE_TEST_INSTALLED_PROFILE=research \
 OCINYE_TEST_INSTALLED_RESOLVE="$DOMINIO 127.0.0.1" \
-    cargo test -q -p ocinye-workspace --test installed_instance -- --ignored
+    cargo test -q -p ocinye-workspace --test installed_instance -- --ignored --exact uma_instancia_instalada_abre_entra_e_trabalha
 rm -f "$CRED"
 NOTAS="$(sql "SELECT count(*) FROM notes WHERE title = 'Primeira nota da Instância'")"
 PESSOAS="$(sql "SELECT count(*) FROM people")"

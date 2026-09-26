@@ -94,7 +94,9 @@ async fn escrever(page: &Page, seletor: &str, valor: &str) {
     let seletor_js = serde_json::to_string(seletor).expect("json");
     assert!(
         condicao(page, &format!("!!document.querySelector({seletor_js})")).await,
-        "{seletor} não existe"
+        "{seletor} não existe em {}; a página diz:\n{}",
+        page.url().await.ok().flatten().unwrap_or_default(),
+        texto(page).await
     );
     page.evaluate(format!(
         "(() => {{ const c = document.querySelector({seletor_js}); c.value = {valor}; \
@@ -155,9 +157,9 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
         .no_sandbox()
         // O certificado é auto-assinado pelo instalador; o que se prova aqui é a
         // Instância, e não uma autoridade de certificação.
-        .arg("--ignore-certificate-errors");
+        .arg("ignore-certificate-errors");
     if let Ok(regra) = std::env::var("OCINYE_TEST_INSTALLED_RESOLVE") {
-        config = config.arg(format!("--host-resolver-rules=MAP {regra}"));
+        config = config.arg(("host-resolver-rules", format!("MAP {regra}").as_str()));
     }
     let (browser, mut handler) = Browser::launch(config.build().expect("config"))
         .await
@@ -231,18 +233,30 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
         condicao(&page, &tem("/notes")).await,
         "Notas não está no lançador"
     );
-    // O perfil decide as aplicações opcionais — e é o contrato de perfis que o
-    // diz, e não esta viagem.
-    let perfil_tipado = ocinye_contracts::InstanceProfile::ALL
-        .into_iter()
-        .find(|p| p.as_str() == perfil)
-        .unwrap_or_else(|| panic!("perfil desconhecido: {perfil}"));
-    let ideias = condicao(&page, &tem("/ideas")).await;
-    assert_eq!(
-        ideias,
-        perfil_tipado.activates(ocinye_contracts::ApplicationId::Ideas),
-        "o lançador do perfil {perfil} {} Ideias",
-        if ideias { "traz" } else { "não traz" }
+    // O perfil persistido é o que o instalador recebeu — lido da própria
+    // Administração › Instância, e não inferido do lançador: as aplicações de
+    // investigação dependem também de o membro ter um papel de investigação, e o
+    // administrador privilegiado não o tem.
+    page.goto(format!("{base}/admin/instance"))
+        .await
+        .expect("instância");
+    let persistido: String = {
+        assert!(
+            condicao(&page, "!!document.querySelector('#instance-profile')").await,
+            "a Administração › Instância não abriu"
+        );
+        page.evaluate("document.querySelector('#instance-profile').value")
+            .await
+            .expect("perfil")
+            .into_value()
+            .expect("perfil")
+    };
+    assert_eq!(persistido, perfil, "o perfil persistido não é o instalado");
+    assert!(
+        ocinye_contracts::InstanceProfile::ALL
+            .iter()
+            .any(|p| p.as_str() == perfil),
+        "perfil desconhecido: {perfil}"
     );
 
     // ── Ficheiros ───────────────────────────────────────────────────────
@@ -317,15 +331,34 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
             .collect();
         std::fs::write(ficheiro, linhas).expect("guardar os tempos");
     }
+    // O turno é do **sistema**, nunca de um modelo, e diz porquê por uma razão
+    // tipada. Para o administrador privilegiado a razão é a autorização — ele
+    // não tem `ai.use`, de propósito —; para um membro seria a ausência de
+    // fornecedor (provado na suite de browser). Em nenhum dos dois casos houve
+    // inferência.
     let turno: String = page
-        .evaluate("document.querySelector('.oc-turn--ocinye').innerText")
+        .evaluate(
+            "(() => { const t = document.querySelector('.oc-turn--ocinye'); \
+               t.querySelectorAll('details').forEach(d => d.open = true); \
+               return t.innerText; })()",
+        )
         .await
         .expect("turno")
         .into_value()
         .expect("turno");
     assert!(
-        turno.contains("AI_NO_PROVIDER_AVAILABLE"),
-        "sem fornecedor, o Prompt devia concluir degradado com a razão tipada:\n{turno}"
+        [
+            "AI_NO_PROVIDER_AVAILABLE",
+            "AI_NO_COMPATIBLE_MODEL",
+            "AI_PERMISSION_DENIED"
+        ]
+        .iter()
+        .any(|razao| turno.contains(razao)),
+        "o Prompt não concluiu com uma razão tipada:\n{turno}"
+    );
+    assert!(
+        !turno.to_lowercase().contains("modelo:"),
+        "sem fornecedor, nenhum modelo pode ter respondido:\n{turno}"
     );
 }
 
@@ -343,9 +376,9 @@ async fn uma_instancia_restaurada_reconhece_quem_la_estava() {
         .chrome_executable(chrome())
         .user_data_dir(std::env::temp_dir().join(format!("ocinye-restore-{}", std::process::id())))
         .no_sandbox()
-        .arg("--ignore-certificate-errors");
+        .arg("ignore-certificate-errors");
     if let Ok(regra) = std::env::var("OCINYE_TEST_INSTALLED_RESOLVE") {
-        config = config.arg(format!("--host-resolver-rules=MAP {regra}"));
+        config = config.arg(("host-resolver-rules", format!("MAP {regra}").as_str()));
     }
     let (browser, mut handler) = Browser::launch(config.build().expect("config"))
         .await

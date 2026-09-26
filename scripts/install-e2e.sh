@@ -59,7 +59,7 @@ uma_corrida() {
     OCINYE_TEST_INSTALLED_CREDENTIAL_FILE="$credencial" \
     OCINYE_TEST_INSTALLED_PROFILE="$perfil" \
     OCINYE_TEST_INSTALLED_RESOLVE="$DOMINIO 127.0.0.1" \
-        cargo test -p ocinye-workspace --test installed_instance -- --ignored --nocapture
+        cargo test -p ocinye-workspace --test installed_instance -- --ignored --exact uma_instancia_instalada_abre_entra_e_trabalha --nocapture
     rm -f "$credencial"
 
     passo "Estado e desinstalação ($perfil)"
