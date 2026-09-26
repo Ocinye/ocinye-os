@@ -346,6 +346,30 @@ impl Harness {
         // não é uma guarda, é um relatório de estragos.
         ocinye_core::fixtures::refuse_canonical_organisation(&pool).await;
 
+        // O backend por omissão, como o `main` do Core o regista ao arrancar.
+        // Sem isto as viagens com bytes só passavam numa base onde outra suite
+        // já o tivesse semeado: numa base nova, cada carregamento falhava a
+        // fechar, com o objecto montado e sem registo que o referisse.
+        //
+        // `DO NOTHING` sem alvo: os harnesses arrancam em paralelo, e só pode
+        // haver um backend por omissão. Quem chegar primeiro regista-o; os
+        // outros encontram-no — pelo código ou pela unicidade do «por omissão».
+        if store_de_teste().is_some() {
+            sqlx::query(
+                "INSERT INTO storage_backends
+                     (code, kind, display_name, location_label, bucket, is_default, is_active)
+                 VALUES ('ocinye-test-default', 's3_compatible', 'Test', 'test', $1, TRUE, TRUE)
+                 ON CONFLICT DO NOTHING",
+            )
+            .bind(
+                std::env::var("OCINYE_TEST_STORAGE_BUCKET")
+                    .unwrap_or_else(|_| "ocinye-test-artifacts".to_owned()),
+            )
+            .execute(&pool)
+            .await
+            .expect("backend de armazenamento por omissão");
+        }
+
         // ── O Core, no seu próprio porto ────────────────────────────────
         let core_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
