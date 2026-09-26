@@ -63,7 +63,13 @@ ARG OCINYE_BUILD_JOBS=
 ARG OCINYE_BUILD_FAST=
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/build/target,id=ocinye-target${OCINYE_BUILD_FAST:+-fast},sharing=locked \
-    ${OCINYE_BUILD_FAST:+env CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16} \
+    # As migrações entram no binário na compilação, e o cargo decide recompilar
+    # por datas. A árvore vem de um `git archive`, com a data do commit — que pode
+    # ser **anterior** à última compilação na cache. `touch` torna-as sempre mais
+    # novas, e o `build.rs` do ocinye-core volta a embuti-las: um release nunca
+    # sai sem as migrações do seu próprio commit.
+    touch migrations/* \
+ && ${OCINYE_BUILD_FAST:+env CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16} \
     cargo build --release --locked ${OCINYE_BUILD_JOBS:+--jobs "$OCINYE_BUILD_JOBS"} \
       --bin ocinye-core-server --bin ocinye-workspace --bin ocinye-worker \
       --bin ocinye-conversion-runner --bin ocinye-convert \
