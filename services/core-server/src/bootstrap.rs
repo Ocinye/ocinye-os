@@ -31,6 +31,7 @@ use ocinye_observability::CorrelationIds;
 /// Arguments accepted by the subcommand.
 #[derive(Debug, Default)]
 struct Args {
+    instance_name: Option<String>,
     name: Option<String>,
     email: Option<String>,
     admin_name: Option<String>,
@@ -49,6 +50,10 @@ fn parse_args(argv: &[String]) -> anyhow::Result<Args> {
                 .with_context(|| format!("{flag} needs a value"))
         };
         match flag.as_str() {
+            "--instance-name" => {
+                args.instance_name = Some(value()?);
+                iter.next();
+            }
             "--name" => {
                 args.name = Some(value()?);
                 iter.next();
@@ -78,12 +83,17 @@ fn parse_args(argv: &[String]) -> anyhow::Result<Args> {
 fn print_usage() {
     eprintln!(
         "Uso: ocinye-core-server bootstrap-admin \\
+  [--instance-name \"Nome da Organização\"] \\
   --name        \"Nome Completo\" \\
   --email       pessoa@ocinye.com \\
   --admin-name  \"Nome Completo (Admin)\" \\
   --admin-email pessoa.admin@ocinye.com
 
-Cria duas coisas ligadas entre si:
+Numa base sem instância, cria-a primeiro: com o nome de --instance-name (ou de
+OCINYE_INSTANCE_NAME), e o slug de OCINYE_INSTANCE_SLUG ou derivado do nome.
+Numa instalação que já tem instância, adopta-a.
+
+Depois cria duas coisas ligadas entre si:
 
   · a **pessoa institucional** (--name/--email), que é quem responde. Nasce
     sem credencial: quem provisiona a instituição é o administrador, pelo
@@ -111,6 +121,34 @@ Corre uma única vez. Se já existir um administrador utilizável, recusa."
 /// organização.
 const SLUGS_RECUSADOS: [&str; 6] = ["default", "demo", "test", "example", "sample", "changeme"];
 
+/// O slug que um nome de instância dá: minúsculas ASCII, hífens entre palavras.
+///
+/// «Universidade Agostinho Neto» → `universidade-agostinho-neto`;
+/// «Ciências & Engenharia» → `ciencias-engenharia`. O slug é identidade técnica
+/// (prefixo das chaves de objecto) e não se renomeia; o nome continua a ser o
+/// que as pessoas lêem.
+fn slug_do_nome(nome: &str) -> String {
+    let mut slug = String::with_capacity(nome.len());
+    for c in nome.chars().flat_map(char::to_lowercase) {
+        let base = match c {
+            'á' | 'à' | 'â' | 'ã' | 'ä' => 'a',
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'í' | 'ì' | 'î' | 'ï' => 'i',
+            'ó' | 'ò' | 'ô' | 'õ' | 'ö' => 'o',
+            'ú' | 'ù' | 'û' | 'ü' => 'u',
+            'ç' => 'c',
+            'ñ' => 'n',
+            outro => outro,
+        };
+        if base.is_ascii_alphanumeric() {
+            slug.push(base);
+        } else if !slug.ends_with('-') && !slug.is_empty() {
+            slug.push('-');
+        }
+    }
+    slug.trim_end_matches('-').chars().take(64).collect()
+}
+
 /// Normaliza o slug configurado, ou explica porque não serve.
 ///
 /// Separada de [`run`] para poder ser exercida sem base de dados. A versão
@@ -125,7 +163,7 @@ fn slug_utilizavel(configurado: &str) -> anyhow::Result<String> {
     let slug = configurado.trim().to_lowercase();
     if slug.is_empty() || SLUGS_RECUSADOS.contains(&slug.as_str()) {
         bail!(
-            "OCINYE_ORGANISATION_SLUG está a «{configurado}»: isso não nomeia \
+            "o slug da instância está a «{configurado}»: isso não nomeia \
              uma instituição. Defina-o antes de arrancar."
         );
     }
@@ -166,7 +204,17 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
     let config = CoreConfig::from_env().context("configuração")?;
 
     // Fail-closed antes de escrever seja o que for.
-    let slug = slug_utilizavel(&config.organisation_slug)?;
+    let explicit_slug = if config.organisation_slug.is_empty() {
+        None
+    } else {
+        Some(slug_utilizavel(&config.organisation_slug)?)
+    };
+    let instance_name = args
+        .instance_name
+        .clone()
+        .or_else(|| config.instance_name.clone())
+        .map(|name| name.trim().to_owned())
+        .filter(|name| !name.is_empty());
 
     let pool = db::connect(&config)
         .await
@@ -174,13 +222,25 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
     db::migrate(&pool).await.context("migrations")?;
 
     let ids = CorrelationIds::generate();
-    // Idempotente: a organização é adoptada se já existir, e criada se não.
+    // Idempotente: a instância é adoptada se já existir, e criada se não.
     // Correr o bootstrap outra vez não pode dar uma segunda instituição com o
     // mesmo nome — seria a mesma repartição de autoria, pertenças e histórico
     // que a duplicação de uma pessoa provoca, só que ao nível de tudo.
-    let organisation = organisation::bootstrap_organisation(&pool, &slug, &slug, &ids)
-        .await
-        .context("organização")?;
+    let organisation = match explicit_slug {
+        Some(slug) => {
+            organisation::resolve_instance(&pool, Some(&slug), instance_name.as_deref(), &ids).await
+        }
+        None => match organisation::resolve_instance(&pool, None, None, &ids).await {
+            // A base ainda não tem instância e o nome foi dado: nasce aqui.
+            Err(CoreError::Configuration(_)) if instance_name.is_some() => {
+                let nome = instance_name.as_deref().unwrap_or_default();
+                let slug = slug_utilizavel(&slug_do_nome(nome))?;
+                organisation::resolve_instance(&pool, Some(&slug), Some(nome), &ids).await
+            }
+            outro => outro,
+        },
+    }
+    .context("instância")?;
 
     // The institution has a default resource profile from the start, so every
     // member resolves an entitlement (ADR-0108). Existing installations were
@@ -241,7 +301,10 @@ pub async fn run(argv: &[String]) -> anyhow::Result<()> {
     println!();
     println!("  Instituição e administrador criados.");
     println!();
-    println!("  Organização          {slug}");
+    println!(
+        "  Instância            {} ({})",
+        organisation.name, organisation.slug
+    );
     println!("  Pessoa institucional {name} · {email}");
     println!("    (sem acesso — dê-lho pelo Ocinye OS, em Administração)");
     println!();
@@ -329,6 +392,23 @@ mod tests {
     fn um_slug_a_serio_passa_e_e_normalizado() {
         assert_eq!(slug_utilizavel(" Ocinye ").unwrap(), "ocinye");
         assert_eq!(slug_utilizavel("banza").unwrap(), "banza");
+    }
+
+    /// O slug que um nome de instância dá: legível, ASCII, sem acentos nem
+    /// espaços, e dentro do tamanho da coluna.
+    #[test]
+    fn o_slug_deriva_do_nome_da_instancia() {
+        assert_eq!(
+            slug_do_nome("Universidade Agostinho Neto"),
+            "universidade-agostinho-neto"
+        );
+        assert_eq!(slug_do_nome("Ciências & Engenharia"), "ciencias-engenharia");
+        assert_eq!(slug_do_nome("  Coop. São João  "), "coop-sao-joao");
+        assert_eq!(slug_do_nome(&"a".repeat(80)).len(), 64);
+        assert!(
+            slug_utilizavel(&slug_do_nome("Test")).is_err(),
+            "«test» continua recusado"
+        );
     }
 
     #[test]

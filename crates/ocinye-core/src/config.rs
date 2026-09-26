@@ -348,8 +348,15 @@ pub struct CoreConfig {
     pub log_level: String,
     /// Log format.
     pub log_format: String,
-    /// Slug of the organisation this deployment serves.
+    /// Slug of the Instance this installation serves (ADR-0013).
+    ///
+    /// Empty when configuration does not name one: the Core then resolves the
+    /// Instance from the database ([`crate::modules::organisation::resolve_instance`])
+    /// and writes the resolved slug back here before anything reads it.
     pub organisation_slug: String,
+    /// Name given to the Instance when this installation creates it. Only read
+    /// at creation; afterwards the name is the Instance's, not configuration's.
+    pub instance_name: Option<String>,
     /// PostgreSQL connection string.
     pub database_url: String,
     /// Maximum database connections.
@@ -491,7 +498,26 @@ impl CoreConfig {
                     "pretty"
                 },
             ),
-            organisation_slug: or_default("OCINYE_ORGANISATION_SLUG", "ocinye"),
+            // `OCINYE_INSTANCE_SLUG` é o nome canónico; `OCINYE_ORGANISATION_SLUG`
+            // continua aceite como o nome antigo. Nenhum valor por omissão: o
+            // produto não assume a organização de ninguém (ADR-0013).
+            organisation_slug: {
+                let canonico = optional("OCINYE_INSTANCE_SLUG");
+                let legado = optional("OCINYE_ORGANISATION_SLUG");
+                match (canonico, legado) {
+                    (Some(novo), Some(velho)) if novo.trim() != velho.trim() => {
+                        return Err(CoreError::Validation(
+                            "OCINYE_INSTANCE_SLUG e OCINYE_ORGANISATION_SLUG estão ambas \
+                             definidas com valores diferentes. Deixe apenas \
+                             OCINYE_INSTANCE_SLUG."
+                                .to_owned(),
+                        ));
+                    }
+                    (Some(valor), _) | (None, Some(valor)) => valor.trim().to_lowercase(),
+                    (None, None) => String::new(),
+                }
+            },
+            instance_name: optional("OCINYE_INSTANCE_NAME").map(|name| name.trim().to_owned()),
             database_url: required("OCINYE_DATABASE_URL")?,
             database_max_connections: parse_number("OCINYE_DATABASE_MAX_CONNECTIONS", 10),
             redis_url: or_default("OCINYE_REDIS_URL", "redis://localhost:6380"),
@@ -708,7 +734,8 @@ mod tests {
             bind_address: "0.0.0.0:8080".into(),
             log_level: "info".into(),
             log_format: "json".into(),
-            organisation_slug: "ocinye".into(),
+            organisation_slug: "instancia-de-teste".into(),
+            instance_name: None,
             database_url: "postgres://x".into(),
             database_max_connections: 10,
             redis_url: "redis://x".into(),
