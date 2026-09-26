@@ -173,7 +173,9 @@ pub async fn set_settings(
     let locale = match change.default_locale.as_deref() {
         Some(valor) => Locale::normalize(valor)
             .map(|l| l.as_str().to_owned())
-            .ok_or_else(|| CoreError::Validation("Língua desconhecida: pt, en ou fr.".to_owned()))?,
+            .ok_or_else(|| {
+                CoreError::Validation("Língua desconhecida: pt, en ou fr.".to_owned())
+            })?,
         None => actual.default_locale,
     };
     let timezone = match change.timezone.as_deref() {
@@ -366,7 +368,10 @@ mod tests {
             tipo_de_imagem(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0]),
             Some("image/png")
         );
-        assert_eq!(tipo_de_imagem(&[0xff, 0xd8, 0xff, 0xe0]), Some("image/jpeg"));
+        assert_eq!(
+            tipo_de_imagem(&[0xff, 0xd8, 0xff, 0xe0]),
+            Some("image/jpeg")
+        );
         assert_eq!(tipo_de_imagem(b"RIFF\0\0\0\0WEBPVP8 "), Some("image/webp"));
         assert_eq!(tipo_de_imagem(b"<svg onload='x'>"), None);
         assert_eq!(tipo_de_imagem(b"GIF89a"), None);

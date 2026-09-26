@@ -164,11 +164,26 @@ async fn pedido(
 
 /// As rotas que respondem sem sessão, cada uma com a razão. Tudo o resto exige
 /// uma — e é isso que o teste abaixo prova, rota a rota.
-const PUBLICAS: &[(&str, &str)] = &[
-    ("/health", "liveness: não diz nada sobre a instituição"),
+const PUBLICAS: &[(&str, &str, &str)] = &[
     (
+        "GET",
+        "/health",
+        "liveness: não diz nada sobre a instituição",
+    ),
+    (
+        "GET",
         "/ready",
         "readiness: estado de componentes, sem dados institucionais",
+    ),
+    (
+        "GET",
+        "/instance/branding",
+        "a página de entrada mostra o nome da Instância antes de haver sessão (ADR-0017)",
+    ),
+    (
+        "GET",
+        "/instance/logo",
+        "o logótipo da porta de entrada; mudá-lo exige administração",
     ),
 ];
 
@@ -310,10 +325,10 @@ async fn nenhuma_rota_do_core_responde_a_quem_nao_tem_sessao() {
     let mut verificadas = 0;
     let mut abertas = Vec::new();
     for (rota, metodos) in &rotas {
-        if PUBLICAS.iter().any(|(p, _)| p == rota) {
-            continue;
-        }
         for metodo in metodos {
+            if PUBLICAS.iter().any(|(m, p, _)| m == metodo && p == rota) {
+                continue;
+            }
             let caminho = if rota.starts_with("/api/") {
                 concreto(rota)
             } else {

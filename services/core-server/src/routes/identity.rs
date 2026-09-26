@@ -230,14 +230,25 @@ impl From<identity::Person> for PersonView {
 
 /// `GET /me/apps/pins` — as aplicações que o membro fixou, pela ordem da barra.
 ///
-/// `pinned` é `null` quando o membro nunca escolheu — o Workspace aplica então o
-/// conjunto por omissão; um array (mesmo vazio) é a escolha do membro.
+/// `pinned` é a escolha do membro (`source: "member"`); se ele nunca escolheu,
+/// é o conjunto que a Instância definiu (`source: "instance"`, ADR-0017); se
+/// nenhum dos dois escolheu, é `null` (`source: "product"`) e o Workspace aplica
+/// o conjunto do produto. Um array vazio é uma escolha, e respeita-se.
 async fn list_app_pins(
     State(state): State<AppState>,
     CurrentPrincipal(principal): CurrentPrincipal,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let pins = identity::list_app_pins(&state.pool, &principal).await?;
-    Ok(Json(serde_json::json!({ "pinned": pins })))
+    if let Some(pins) = identity::list_app_pins(&state.pool, &principal).await? {
+        return Ok(Json(
+            serde_json::json!({ "pinned": pins, "source": "member" }),
+        ));
+    }
+    let instancia =
+        organisation::settings::effective(&state.pool, principal.organisation_id).await?;
+    Ok(Json(match instancia.default_pins {
+        Some(pins) => serde_json::json!({ "pinned": pins, "source": "instance" }),
+        None => serde_json::json!({ "pinned": null, "source": "product" }),
+    }))
 }
 
 #[derive(Deserialize)]
