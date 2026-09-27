@@ -15,9 +15,11 @@
 //! fornecedor externo.
 
 use leptos::prelude::*;
+
+use crate::ui::ods::icone;
 use serde_json::Value;
 
-use crate::ui::icon::{icon, Icon};
+use crate::ui::icon::Icon;
 
 /// Uma capacidade oferecida na barra, e o seu estado.
 ///
@@ -185,7 +187,6 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
     // isto, submeter dentro de um Research Workspace devolveria o ecrã
     // institucional e o membro perderia o contexto sem perceber porquê.
     let workspace_id = workspace.as_ref().map(|(code, _)| code.clone());
-    let has_exchange = exchange.is_some();
 
     // O selector de capacidade vive **dentro** do formulário do dock: é um campo
     // com destino real (submete com o pedido), sem depender de associação por
@@ -201,61 +202,57 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                 first,
             } = chip;
             let id = format!("cap-{}", code.to_lowercase());
+            let para = id.clone();
             view! {
-                <input
-                    type="radio"
-                    class="oc-cap__in"
-                    name="capability"
-                    id=id.clone()
-                    value=code
-                    checked=first
-                />
-                <label class="oc-cap" for=id>
-                    {label}
+                <label class="ods-seg__opt" for=para>
+                    <input
+                        type="radio"
+                        class="ods-radio"
+                        name="capability"
+                        id=id
+                        value=code
+                        checked=first
+                    />
+                    <span>{label}</span>
                     {(!available)
-                        .then(|| view! { <small>{crate::i18n::t("prompt.no_active_model")}</small> })}
+                        .then(|| view! { <small class="ods-field__hint">{crate::i18n::t("prompt.no_active_model")}</small> })}
                 </label>
             }
         })
         .collect_view();
 
     view! {
-        <div class="oc-prompt" data-part="prompt">
+        <div class="ods-d12-chat" data-part="prompt">
             // ── Cabeçalho da conversa ──────────────────────────────────
             // Compacto: com que agente se fala, e — dentro de um Research
             // Workspace — o contexto vinculado. Configuração da conversa, não
-            // uma barra de navegação (§26, §27).
-            <header class="oc-prompt__bar">
+            // uma barra de navegação (§26, §27). O D12 não o desenha (Q-30).
+            <header class="ods-app__toolbar">
                 // Uma ligação para os agentes, e não um `listbox` que não abre.
                 // Escolher um agente exige uma lista que o Core sirva por
                 // âmbito; até lá, levar à lista é honesto e funciona (briefing §2).
-                <a class="oc-prompt__agent" href="/ai/agents">
-                    <span class="oc-prompt__agent-dot"></span>
+                <a class="ods-chip" href="/ai/agents">
+                    {crate::ui::ods::ponto(crate::ui::ods::Tom::Neutro)}
                     {agent_label}
                 </a>
 
                 {workspace
                     .map(|(code, unit)| {
                         view! {
-                            <span class="oc-prompt__context">
-                                <i>{crate::i18n::t("prompt.context_eyebrow")}</i>
-                                <b>{format!("{code} · {unit}")}</b>
+                            <span class="ods-label">
+                                {crate::i18n::t("prompt.context_eyebrow")}
+                                " "
+                                <b data-oc-content="1">{format!("{code} · {unit}")}</b>
                             </span>
                         }
                     })}
 
-                <div class="ods-app__toolbar-spacer"></div>
+                <span class="ods-app__toolbar-spacer"></span>
             </header>
 
             // ── Conversa ───────────────────────────────────────────────
-            // A área rola no seu próprio eixo, alinhada ao topo; o conteúdo vive
-            // numa coluna de largura de leitura. Nunca centrada, nunca cortada:
-            // um turno cresce com o que diz (§5, §6, §20, §23).
-            <div
-                class=if has_exchange { "oc-prompt__conv oc-prompt__conv--thread" }
-                    else { "oc-prompt__conv" }
-                data-oc="prompt-scroll"
-            >
+            // A área rola no seu próprio eixo; um turno cresce com o que diz.
+            <div class="ods-d12-chat__scroll" data-oc="prompt-scroll" data-ods-scroll>
                 {match exchange {
                     // Um turno concluído: o pedido do membro, e a resposta com a
                     // sua origem explícita. Uma resposta de sistema nunca se
@@ -265,10 +262,8 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                         let degraded = ex.degraded();
                         let PromptExchange { prompt, origin, content, reason_code, model, .. } = ex;
                         view! {
-                            <div class="oc-thread" data-part="thread">
-                                {member_turn(prompt)}
-                                {ocinye_turn(&author, &origin, degraded, &content, reason_code, model)}
-                            </div>
+                            {member_turn(prompt)}
+                            {ocinye_turn(&author, &origin, degraded, &content, reason_code, model)}
                         }
                             .into_any()
                     }
@@ -277,23 +272,17 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                     // vinda do Core — nunca «desactivado».
                     None => {
                         view! {
-                            <div class="oc-thread oc-thread--empty" data-part="thread thread--empty">
-                                <div class="oc-prompt__hero">
-                                    <span class="ods-empty__icon oc-empty__tile--prompt">
-                                        {icon(Icon::AiHexMd, 26)}
-                                    </span>
-                                    <h1>{crate::i18n::t("prompt.hero.title")}</h1>
-                                    <p class="ods-field__hint">{message}</p>
-                                    <p class="ods-field__hint">
-                                        {crate::i18n::t("prompt.hero.access_note")}
-                                    </p>
-                                </div>
+                            <div class="ods-empty" data-part="thread thread--empty">
+                                <span class="ods-empty__icon">{icone("nye", "ods-icon--lg")}</span>
+                                <h1 class="ods-empty__title">{crate::i18n::t("prompt.hero.title")}</h1>
+                                <p class="ods-empty__body" data-oc-content="1">{message}</p>
+                                <p class="ods-empty__body">{crate::i18n::t("prompt.hero.access_note")}</p>
 
                                 // Cada sugestão submete o pedido que enuncia, e
-                                // continua utilizável sem IA: prova que o Prompt é
-                                // uma superfície de comando, não um widget de LLM
-                                // (M5 §12).
-                                <div class="oc-prompt__suggestions">
+                                // continua utilizável sem IA: prova que o Prompt
+                                // é uma superfície de comando, não um widget de
+                                // LLM (M5 §12).
+                                <div class="ods-chips">
                                     {SUGGESTION_KEYS
                                         .iter()
                                         .map(|key| {
@@ -301,9 +290,7 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                                             view! {
                                                 <form method="post" action="/ai/prompt">
                                                     <input type="hidden" name="prompt" value=text />
-                                                    <button type="submit" class="oc-suggestion">
-                                                        {text}
-                                                    </button>
+                                                    <button type="submit" class="ods-chip">{text}</button>
                                                 </form>
                                             }
                                         })
@@ -317,24 +304,21 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
             </div>
 
             // ── Input ──────────────────────────────────────────────────
-            // Superfície própria, colada ao fundo, distinta da conversa (§21,
-            // §22). A coluna do input acompanha a largura da conversa.
-            <div class="oc-prompt__dock">
-                <form
-                    id="oc-prompt-form"
-                    method="post"
-                    action="/ai/prompt"
-                    class="oc-prompt__input"
-                    data-oc="prompt-form"
-                >
-                    {workspace_id
-                        .map(|id| view! { <input type="hidden" name="workspace" value=id /> })}
+            <form
+                id="oc-prompt-form"
+                method="post"
+                action="/ai/prompt"
+                class="ods-d12-chat__composer"
+                data-oc="prompt-form"
+            >
+                {workspace_id
+                    .map(|id| view! { <input type="hidden" name="workspace" value=id /> })}
 
-                    <div
-                        class="oc-caps oc-caps--dock"
-                        role="radiogroup"
-                        aria-label=crate::i18n::t("prompt.cap.legend")
-                    >
+                <div class="ods-field">
+                    // A capacidade: seleccionável independentemente da
+                    // disponibilidade — autorização e disponibilidade são eixos
+                    // distintos (M5 §10).
+                    <div class="ods-seg" role="radiogroup" aria-label=crate::i18n::t("prompt.cap.legend")>
                         {caps_view}
                     </div>
 
@@ -344,40 +328,34 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                     <textarea
                         id="prompt-input"
                         name="prompt"
-                        class="oc-prompt__textarea"
+                        class="ods-d12-chat__input"
                         rows="1"
                         placeholder=crate::i18n::t("prompt.input.placeholder")
                         data-oc="prompt-textarea"
                     ></textarea>
 
-                    <div class="oc-prompt__actions">
+                    <div class="ods-chips">
                         // Anexar contexto é do dossier e continua visível, mas
                         // declarado indisponível com a razão: eram controlos sem
-                        // handler nem endpoint, e um que não faz nada é pior do
-                        // que um que diz porque ainda não faz (briefing §2C, §53).
+                        // handler nem endpoint (briefing §2C, §53).
                         {action_chip(Icon::Attach, crate::i18n::t("prompt.attach"))}
                         {action_chip(Icon::Dataset, crate::i18n::t("prompt.attach.dataset"))}
                         {action_chip(Icon::Document, crate::i18n::t("prompt.attach.document"))}
                         {action_chip(Icon::Tools, crate::i18n::t("prompt.attach.tools"))}
-
-                        <div class="ods-app__toolbar-spacer"></div>
-
-                        <button
-                            type="submit"
-                            aria-label=crate::i18n::t("prompt.send")
-                            title=crate::i18n::t("prompt.send")
-                            class="oc-prompt__send"
-                            data-oc="prompt-send"
-                        >
-                            {icon(Icon::Send, 16)}
-                        </button>
                     </div>
-                </form>
+                    <p class="ods-field__hint">{crate::i18n::t("prompt.errors_note")}</p>
+                </div>
 
-                <p class="oc-prompt__note">
-                    {crate::i18n::t("prompt.errors_note")}
-                </p>
-            </div>
+                <button
+                    type="submit"
+                    aria-label=crate::i18n::t("prompt.send")
+                    title=crate::i18n::t("prompt.send")
+                    class="ods-nye-orb__send"
+                    data-oc="prompt-send"
+                >
+                    {icone("arrow-r", "")}
+                </button>
+            </form>
         </div>
     }
 }
@@ -390,9 +368,9 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
 /// marcação.
 fn member_turn(prompt: String) -> impl IntoView {
     view! {
-        <div class="oc-turn oc-turn--member">
-            <span class="oc-turn__who">{crate::i18n::t("prompt.you")}</span>
-            <div class="oc-turn__said">{prompt}</div>
+        <div class="ods-d12-turn ods-d12-turn--member">
+            <span class="ods-sr-only">{crate::i18n::t("prompt.you")}</span>
+            <div data-oc-content="1">{prompt}</div>
         </div>
     }
 }
@@ -415,39 +393,34 @@ fn ocinye_turn(
     let body = crate::ui::markdown::render(content);
     let has_meta = reason_code.is_some() || model.is_some();
     view! {
-        <div class="oc-turn oc-turn--ocinye" data-part="turn--ocinye">
-            <div class="oc-turn__prov">
-                <span class="oc-turn__mark">{icon(Icon::AiHexMd, 13)}</span>
-                <span class="oc-turn__who">{author.to_owned()}</span>
-                {degraded.then(|| view! { <span class="oc-turn__badge" data-part="turn__badge">"ESTADO"</span> })}
+        <div class="ods-d12-turn ods-d12-turn--ocinye" data-part="turn--ocinye">
+            <div class="ods-label">
+                {icone("nye", "")}
+                " "
+                {author.to_owned()}
+                {degraded.then(|| view! { " " <span class="ods-badge" data-part="turn__badge">"ESTADO"</span> })}
             </div>
 
-            <div data-part="md" data-oc="resposta" inner_html=body></div>
+            <div class="ods-d12-turn__body" data-part="md" data-oc="resposta" inner_html=body></div>
 
-            <div class="oc-turn__bar">
-                <button type="button" class="oc-turn__act" data-oc="copiar-resposta">
+            <div class="ods-d12-turn__actions">
+                <button type="button" class="ods-btn ods-btn--sm ods-btn--ghost" data-oc="copiar-resposta">
                     {crate::i18n::t("prompt.copy_response")}
                 </button>
                 {has_meta.then(|| {
                     view! {
-                        <details class="oc-turn__meta" data-part="turn__meta">
-                            <summary>{crate::i18n::t("prompt.meta.details")}</summary>
-                            <dl>
-                                <div>
-                                    <dt>{crate::i18n::t("prompt.meta.origin")}</dt>
-                                    <dd>{origin.to_owned()}</dd>
-                                </div>
+                        <details data-part="turn__meta">
+                            <summary class="ods-btn ods-btn--sm ods-btn--ghost">{crate::i18n::t("prompt.meta.details")}</summary>
+                            <dl class="ods-kv">
+                                <dt>{crate::i18n::t("prompt.meta.origin")}</dt>
+                                <dd>{origin.to_owned()}</dd>
                                 {model.map(|m| view! {
-                                    <div>
-                                        <dt>{crate::i18n::t("prompt.meta.model")}</dt>
-                                        <dd>{m}</dd>
-                                    </div>
+                                    <dt>{crate::i18n::t("prompt.meta.model")}</dt>
+                                    <dd>{m}</dd>
                                 })}
                                 {reason_code.map(|code| view! {
-                                    <div>
-                                        <dt>{crate::i18n::t("prompt.meta.reason")}</dt>
-                                        <dd>{code}</dd>
-                                    </div>
+                                    <dt>{crate::i18n::t("prompt.meta.reason")}</dt>
+                                    <dd>{code}</dd>
                                 })}
                             </dl>
                         </details>
@@ -467,11 +440,12 @@ fn ocinye_turn(
 fn action_chip(kind: Icon, label: &'static str) -> impl IntoView {
     view! {
         <span
-            class="ods-chip oc-unavailable" data-part="chip unavailable"
+            class="ods-chip" data-part="chip unavailable"
             aria-disabled="true"
+            data-tip=crate::i18n::t("prompt.attach.unavailable")
             title=crate::i18n::t("prompt.attach.unavailable")
         >
-            {icon(kind, 12)}
+            {crate::ui::ods::icone(crate::ui::ods::icone_do_legado(kind), "ods-icon--sm")}
             {label}
         </span>
     }
@@ -559,9 +533,9 @@ mod tests {
         );
         let html = prompt(ctx, None).to_html();
 
-        // Rótulo e valor são elementos distintos, como no protótipo: o rótulo
-        // é mono e discreto, o código é o que se lê.
-        assert!(html.contains("oc-prompt__context"));
+        // Rótulo e valor são elementos distintos: o rótulo é mono e discreto,
+        // o código é o que se lê.
+        assert!(html.contains(r#"<b data-oc-content="1">IDE-0142 · UENR-001</b>"#));
         assert!(html.contains("CONTEXTO"));
         assert!(html.contains("IDE-0142 · UENR-001"));
     }

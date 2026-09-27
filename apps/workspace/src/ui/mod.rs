@@ -577,6 +577,8 @@ mod render_tests {
         let ai = screens::ai::hub(
             &json!({"available": false, "providers": 0, "message": "Nenhum nó de IA Ocinye está actualmente disponível."}),
             &json!({"items": []}),
+            &json!({"items": [], "total": 0}),
+            &json!({"items": [], "total": 0}),
         )
         .to_html();
         assert!(ai.contains("Nenhum nó de IA Ocinye está actualmente disponível"));
@@ -937,7 +939,7 @@ pub(crate) mod link_tests {
                 Screen::Activity,
                 screens::activity::activity(&json!([]))
             ),
-            page!("ai", Screen::Ai, screens::ai::hub(&ai_status, &empty)),
+            page!("ai", Screen::Ai, screens::ai::hub(&ai_status, &empty, &empty, &empty)),
             page!(
                 "ai-agent-new",
                 Screen::Agents,

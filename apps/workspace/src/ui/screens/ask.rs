@@ -18,9 +18,10 @@ use leptos::prelude::*;
 use serde_json::Value;
 
 use crate::ui::components::{
-    badge, card, classification_badge, empty_state, section_head, Button, EmptyState, Tone, Variant,
+    badge, button, classification_badge, empty_state, Button, EmptyState, Tone, Variant,
 };
-use crate::ui::icon::{icon, Icon};
+use crate::ui::icon::Icon;
+use crate::ui::ods::icone;
 
 /// O que a superfície devolveu.
 pub struct AskView {
@@ -88,27 +89,30 @@ fn command_form(query: &str, intent: &str) -> impl IntoView {
     let query = query.to_owned();
     let selected = intent.to_owned();
 
-    let option = |value: &'static str, label: &'static str, hint: &'static str| {
+    let option_in_form = |value: &'static str, label: &'static str, hint: &'static str| {
         let checked = selected == value;
         let id = format!("intent-{value}");
         let for_id = id.clone();
 
         view! {
-            <label class="oc-intent" for=for_id>
-                <input type="radio" id=id name="intent" value=value checked=checked />
-                <span class="oc-intent__label">{label}</span>
-                <span class="oc-intent__hint">{hint}</span>
+            <label class="ods-seg__opt" for=for_id title=hint>
+                <input class="ods-radio" type="radio" id=id name="intent" value=value checked=checked />
+                <span>{label}</span>
             </label>
         }
     };
 
     view! {
-        <form class="oc-ask" method="get" action="/ask" role="search">
-            <div class="oc-ask__field">
-                {icon(Icon::Search, 15)}
+        // D12 põe `.ods-search` no próprio formulário. As três intenções ficam
+        // por baixo, num `.ods-seg` — escolha explícita e visível, que o D12 não
+        // desenha e que não se pode tirar (Q-29) —, e por isso o formulário
+        // envolve as duas coisas e a barra é um bloco dentro dele.
+        <form class="ods-d12-ask__form" method="get" action="/ask" role="search">
+            <div class="ods-search">
+                {icone("nye", "")}
                 <label class="ods-sr-only" for="ask-q">{crate::i18n::t("ask.field_label")}</label>
                 <input
-                    class="ods-input"
+                    class="ods-search__input"
                     id="ask-q"
                     name="q"
                     type="search"
@@ -116,20 +120,20 @@ fn command_form(query: &str, intent: &str) -> impl IntoView {
                     placeholder=crate::i18n::t("ask.placeholder")
                     autocomplete="off"
                 />
-                <button type="submit" class="ods-btn ods-btn--navy" data-part="btn">{crate::i18n::t("ask.submit")}</button>
+                <button type="submit" class="ods-btn ods-btn--navy ods-btn--sm" data-part="btn">{crate::i18n::t("ask.submit")}</button>
             </div>
 
             // Escreva naturalmente: a superfície lê a frase. Os três modos
             // ficam visíveis como controlo e como reserva — e uma leitura
             // ambígua cai sempre para pesquisar, que não altera nada
             // (briefing §31, §189).
-            <fieldset class="oc-ask__intents">
-                <legend class="oc-ask__legend">
-                    {crate::i18n::t("ask.write_naturally")}
-                </legend>
-                {option("search", crate::i18n::t("ask.mode.search"), crate::i18n::t("ask.find_always"))}
-                {option("ask", crate::i18n::t("ask.mode.ask"), crate::i18n::t("ask.ask_something"))}
-                {option("act", crate::i18n::t("ask.mode.act"), crate::i18n::t("ask.do_something"))}
+            <fieldset class="ods-field">
+                <legend class="ods-field__label">{crate::i18n::t("ask.write_naturally")}</legend>
+                <div class="ods-seg" role="radiogroup">
+                    {option_in_form("search", crate::i18n::t("ask.mode.search"), crate::i18n::t("ask.find_always"))}
+                    {option_in_form("ask", crate::i18n::t("ask.mode.ask"), crate::i18n::t("ask.ask_something"))}
+                    {option_in_form("act", crate::i18n::t("ask.mode.act"), crate::i18n::t("ask.do_something"))}
+                </div>
             </fieldset>
         </form>
     }
@@ -174,8 +178,7 @@ fn results(outcome: &Value) -> impl IntoView {
         {(withheld > 0).then(|| view! {
             // «Encontrei coisas que não posso enviar a um modelo» é diferente
             // de «não encontrei nada» (§188).
-            <div class="ods-notice oc-ask__note" role="status">
-                {icon(Icon::Shield, 15)}
+            <div class="ods-notice" role="status">
                 <p>
                     {crate::i18n::tf("ask.withheld", &[("count", &withheld.to_string())])}
                 </p>
@@ -193,7 +196,7 @@ fn results(outcome: &Value) -> impl IntoView {
             .into_any()
         } else {
             view! {
-                <ul class="oc-ask__results">
+                <ol class="ods-d12-results">
                     {sources
                         .into_iter()
                         .map(|source| {
@@ -203,21 +206,22 @@ fn results(outcome: &Value) -> impl IntoView {
                             let classification = text(&source, "classification", "").to_owned();
 
                             view! {
-                                <li class="oc-ask__result">
-                                    <div class="oc-ask__result-top">
-                                        <span class="oc-ask__result-title">{title}</span>
-                                        {badge(kind, Tone::Gray)}
-                                        {classification_badge(&classification)}
-                                    </div>
-                                    {(!excerpt.is_empty()).then(|| view! {
-                                        <p class="oc-ask__excerpt">{excerpt}</p>
-                                    })}
+                                <li class="ods-d12-result">
+                                    <span>
+                                        <span data-oc-content="1">{title}</span>
+                                        {(!excerpt.is_empty()).then(|| view! {
+                                            <p class="ods-field__hint">{excerpt}</p>
+                                        })}
+                                    </span>
+                                    <span class="ods-app__toolbar-spacer"></span>
+                                    {badge(kind, Tone::Gray)}
+                                    {classification_badge(&classification)}
                                 </li>
                             }
                         })
                         .collect_view()}
-                </ul>
-                <p class="oc-ask__count">{crate::i18n::tf("ask.count", &[("count", &count.to_string())])}</p>
+                </ol>
+                <p class="ods-field__hint">{crate::i18n::tf("ask.count", &[("count", &count.to_string())])}</p>
             }
             .into_any()
         }}
@@ -241,16 +245,14 @@ fn planned(outcome: &Value) -> impl IntoView {
     let plan_id = text(&plan, "id", "").to_owned();
     let count = steps.len();
 
-    card(
-        section_head(
-            crate::i18n::tf("ask.will_do", &[("count", &count.to_string())]),
-            None,
-            None,
-        ),
-        view! {
+    view! {
+        <section class="ods-d12-plan ods-window-surface">
+            <h2 class="ods-widget__title">
+                {crate::i18n::tf("ask.will_do", &[("count", &count.to_string())])}
+            </h2>
             // O plano, e não o raciocínio. O que o modelo pensou não é
             // guardado nem mostrado (§48, §183).
-            <ol class="oc-plan">
+            <ol class="ods-d12-plan__steps">
                 {steps
                     .into_iter()
                     .map(|step| {
@@ -274,8 +276,9 @@ fn planned(outcome: &Value) -> impl IntoView {
                         };
 
                         view! {
-                            <li class="oc-plan__step">
-                                <span class="oc-plan__summary">{summary}</span>
+                            <li>
+                                <span data-oc-content="1">{summary}</span>
+                                " "
                                 {badge(label, tone)}
                             </li>
                         }
@@ -284,19 +287,19 @@ fn planned(outcome: &Value) -> impl IntoView {
             </ol>
 
             {requires_approval.then(|| view! {
-                <p class="oc-ask__note-text">{crate::i18n::t("ask.approval_note")}</p>
+                <p class="ods-field__hint">{crate::i18n::t("ask.approval_note")}</p>
             })}
 
-            <div class="oc-plan__actions">
+            <div class="ods-settings__actions">
                 <form method="post" action=format!("/ask/plans/{plan_id}/execute")>
-                    <button type="submit" class="ods-btn ods-btn--navy" data-part="btn">{crate::i18n::t("ask.confirm")}</button>
+                    <button type="submit" class="ods-btn ods-btn--primary" data-part="btn">{crate::i18n::t("ask.confirm")}</button>
                 </form>
                 <form method="post" action=format!("/ask/plans/{plan_id}/reject")>
                     <button type="submit" class="ods-btn" data-part="btn">{crate::i18n::t("ask.cancel")}</button>
                 </form>
             </div>
-        },
-    )
+        </section>
+    }
 }
 
 /// Um plano que correu.
@@ -309,13 +312,13 @@ fn executed(outcome: &Value) -> impl IntoView {
         .cloned()
         .unwrap_or_default();
 
-    card(
-        section_head(crate::i18n::t("ask.result_title"), None, None),
-        view! {
+    view! {
+        <section class="ods-d12-plan ods-window-surface" data-done="">
+            <h2 class="ods-widget__title">{crate::i18n::t("ask.result_title")}</h2>
             // Factual, sempre. Nunca «tudo feito» quando não foi (§56, §184).
-            <p class="oc-ask__summary">{summary}</p>
+            <p data-oc-content="1">{summary}</p>
 
-            <ol class="oc-plan">
+            <ol class="ods-d12-plan__steps">
                 {steps
                     .into_iter()
                     .map(|step| {
@@ -324,6 +327,7 @@ fn executed(outcome: &Value) -> impl IntoView {
                         let status = text(&result, "status", "not_attempted").to_owned();
                         let detail = text(&result, "detail", "").to_owned();
 
+                        let feito = status == "succeeded";
                         let (tone, label) = match status.as_str() {
                             "succeeded" => (Tone::Ok, crate::i18n::t("ask.status.done")),
                             "dry_run" => (Tone::Blue, crate::i18n::t("ask.kind.simulation")),
@@ -335,21 +339,21 @@ fn executed(outcome: &Value) -> impl IntoView {
                         };
 
                         view! {
-                            <li class="oc-plan__step">
-                                <div class="oc-plan__step-body">
-                                    <span class="oc-plan__summary">{text_summary}</span>
-                                    {(!detail.is_empty()).then(|| view! {
-                                        <p class="oc-plan__detail">{detail}</p>
-                                    })}
-                                </div>
+                            <li>
+                                {feito.then(|| icone("check", ""))}
+                                <span data-oc-content="1">{text_summary}</span>
+                                " "
                                 {badge(label, tone)}
+                                {(!detail.is_empty()).then(|| view! {
+                                    <p class="ods-field__hint">{detail}</p>
+                                })}
                             </li>
                         }
                     })
                     .collect_view()}
             </ol>
-        },
-    )
+        </section>
+    }
 }
 
 /// Indisponível — e a razão.
@@ -357,23 +361,23 @@ fn unavailable(outcome: &Value, may_use_ai: bool) -> impl IntoView {
     let reason = text(outcome, "reason", "").to_owned();
     let alternative = text(outcome, "alternative", "").to_owned();
 
-    empty_state(EmptyState {
-        icon: if may_use_ai { Icon::Ai } else { Icon::Shield },
-        title: if may_use_ai {
-            crate::i18n::t("ask.status.not_available").to_owned()
-        } else {
-            crate::i18n::t("ask.no_assist_access").to_owned()
-        },
-        // Não «Oops». A razão que o Core deu, e o que continua a funcionar
-        // (§188).
-        body: format!("{reason} {alternative}"),
-        actions: if may_use_ai {
-            vec![Button::new(crate::i18n::t("ask.see_ai_status"), Variant::Secondary).href("/ai")]
-        } else {
-            Vec::new()
-        },
-        small: false,
-    })
+    // Não «Oops». A razão que o Core deu, e o que continua a funcionar
+    // (§188).
+    let titulo = if may_use_ai {
+        crate::i18n::t("ask.status.not_available")
+    } else {
+        crate::i18n::t("ask.no_assist_access")
+    };
+    view! {
+        {crate::ui::ods::estado(
+            if may_use_ai { crate::ui::ods::Estado::Indisponivel } else { crate::ui::ods::Estado::Recusado },
+            titulo.to_owned(),
+        )}
+        <p class="ods-page__sub" data-oc-content="1">{format!("{reason} {alternative}")}</p>
+        {may_use_ai.then(|| button(
+            Button::new(crate::i18n::t("ask.see_ai_status"), Variant::Secondary).href("/ai"),
+        ))}
+    }
 }
 
 #[cfg(test)]

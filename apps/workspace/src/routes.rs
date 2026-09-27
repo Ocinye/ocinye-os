@@ -6161,9 +6161,11 @@ async fn ai_hub(State(state): State<WorkspaceState>, headers: HeaderMap) -> Resp
     let member = member_or_login!(state, headers);
     let viewer = viewer(&state, &member).await;
 
-    let (status, models) = tokio::join!(
+    let (status, models, agents, conversations) = tokio::join!(
         optional(&state, &member, "/api/v1/ai/status"),
         optional(&state, &member, "/api/v1/ai/models"),
+        optional(&state, &member, "/api/v1/ai/agents"),
+        optional(&state, &member, "/api/v1/ai/conversations"),
     );
 
     shell_page(
@@ -6171,7 +6173,7 @@ async fn ai_hub(State(state): State<WorkspaceState>, headers: HeaderMap) -> Resp
         &viewer,
         Screen::Ai,
         Vec::new(),
-        ui::screens::ai::hub(&status, &models),
+        ui::screens::ai::hub(&status, &models, &agents, &conversations),
     )
 }
 

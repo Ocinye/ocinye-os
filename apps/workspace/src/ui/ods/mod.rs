@@ -102,6 +102,19 @@ pub fn estado(estado: Estado, mensagem: String) -> impl IntoView {
     }
 }
 
+/// Uma recusa do Core a um pedido que a pessoa acabou de fazer.
+///
+/// O mesmo estado `denied`, mas anunciado de imediato (`role="alert"`): quem
+/// submeteu um formulário tem de saber já que ele não passou, e porquê.
+pub fn recusa(mensagem: String) -> impl IntoView {
+    view! {
+        <div class="ods-state ods-state--denied" role="alert">
+            {icone("lock", "")}
+            <span>{mensagem}</span>
+        </div>
+    }
+}
+
 /// Um estado indisponível à espera de um contrato que ainda não existe
 /// (`docs/ui/CLAUDE_DESIGN_FUNCTIONAL_GAPS.md`).
 pub fn a_espera_de_contrato() -> impl IntoView {

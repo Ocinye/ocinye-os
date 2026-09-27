@@ -670,7 +670,7 @@ fn contexto_do_ambiente(contexto: &Value) -> String {
 }
 
 fn recusa(message: Option<String>) -> impl IntoView {
-    message.map(|texto| crate::ui::ods::estado(crate::ui::ods::Estado::Recusado, texto))
+    message.map(crate::ui::ods::recusa)
 }
 
 /// As classificações que uma pessoa pode escolher.
