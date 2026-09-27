@@ -30,37 +30,52 @@ use ocinye_contracts::AvatarChoice;
 use serde_json::Value;
 
 use crate::ui::components::{button, card, section_head, text_field, Button, Variant};
-use crate::ui::components::{pill_tabs, Tab};
 use ocinye_contracts::Locale;
 
-/// Os três separadores das definições, com o rótulo no idioma corrente.
+/// A moldura D10 das definições do membro: navegação à esquerda, conteúdo à
+/// direita.
 ///
-/// `activo` é o caminho do separador em que se está. Reunir os três num só sítio
-/// impede que uma secção nova acrescente um separador e esqueça outra — a barra
-/// é a mesma em toda a página de definições.
-fn seccoes_das_definicoes(activo: &str) -> Vec<Tab> {
-    vec![
-        Tab::link(
-            crate::i18n::t("settings.tab.account"),
-            "/settings",
-            activo == "/settings",
-        ),
-        Tab::link(
-            crate::i18n::t("settings.tab.security"),
-            "/settings/security",
-            activo == "/settings/security",
-        ),
-        Tab::link(
-            crate::i18n::t("settings.tab.language"),
-            "/settings/language",
-            activo == "/settings/language",
-        ),
-        Tab::link(
-            crate::i18n::t("settings.tab.apps"),
-            "/settings/apps",
-            activo == "/settings/apps",
-        ),
-    ]
+/// `activo` é o caminho da secção em que se está. Reunir as secções num só
+/// sítio impede que uma nova acrescente um item e esqueça outra — a navegação é
+/// a mesma em toda a página de definições. Aparência e Desktop existem no
+/// desenho e esperam por contratos (preferência de tema em `GET /me`; G-04):
+/// aparecem declaradas indisponíveis, com a razão.
+///
+/// `<div>` e não o `<main>` do D10: a casca já tem o `<main>` da página (Q-27).
+pub fn moldura(activo: &str, conteudo: impl IntoView + 'static) -> impl IntoView {
+    let item = |href: &'static str, rotulo: &'static str| {
+        view! {
+            <a class="ods-app__side-item" href=href aria-current=(activo == href).then_some("page")>
+                {rotulo}
+            </a>
+        }
+    };
+    view! {
+        <div class="ods-settings">
+            <nav class="ods-settings__nav" aria-label=crate::i18n::t("settings.tabs.aria")>
+                <p class="ods-label ods-settings__group">{crate::i18n::t("settings.title")}</p>
+                {item("/settings", crate::i18n::t("settings.tab.account"))}
+                {item("/settings/security", crate::i18n::t("settings.tab.security"))}
+                {item("/settings/language", crate::i18n::t("settings.tab.language"))}
+                {item("/settings/apps", crate::i18n::t("settings.tab.apps"))}
+                <span
+                    class="ods-app__side-item"
+                    aria-disabled="true"
+                    data-tip=crate::i18n::t("ods.state.pending_contract")
+                >
+                    {crate::i18n::t("settings.appearance")}
+                </span>
+                <span
+                    class="ods-app__side-item"
+                    aria-disabled="true"
+                    data-tip=crate::i18n::t("ods.state.pending_contract")
+                >
+                    {crate::i18n::t("settings.desktop")}
+                </span>
+            </nav>
+            <div class="ods-settings__main">{conteudo}</div>
+        </div>
+    }
 }
 
 fn text(payload: &Value, key: &str) -> String {
@@ -74,9 +89,9 @@ fn text(payload: &Value, key: &str) -> String {
 /// Uma linha de facto, em leitura.
 fn facto(rotulo: &'static str, valor: String) -> impl IntoView {
     view! {
-        <div>
-            <span class="ods-label">{rotulo}</span>
-            <span>{valor}</span>
+        <div class="ods-settings__row">
+            <span class="ods-settings__row-label">{rotulo}</span>
+            <span data-oc-content="1">{valor}</span>
         </div>
     }
 }
@@ -99,18 +114,13 @@ pub fn account(
     let instituicao = text(organisation, "name");
 
     view! {
-        <div class="ods-page">
+        <div>
             <div class="ods-page__head">
                 <div>
                     <h1 class="ods-page__title">{crate::i18n::t("settings.title")}</h1>
                     <p class="ods-page__sub">{crate::i18n::t("settings.subtitle")}</p>
                 </div>
             </div>
-
-            {pill_tabs(
-                    seccoes_das_definicoes("/settings"),
-                    crate::i18n::t("settings.tabs.aria"),
-                )}
 
             {imagem_de_perfil(escolha, &nome, error, done)}
 
@@ -140,18 +150,13 @@ pub fn account(
 pub fn language(saved: bool) -> impl IntoView {
     let actual = crate::i18n::current();
     view! {
-        <div class="ods-page">
+        <div>
             <div class="ods-page__head">
                 <div>
                     <h1 class="ods-page__title">{crate::i18n::t("settings.title")}</h1>
                     <p class="ods-page__sub">{crate::i18n::t("settings.subtitle")}</p>
                 </div>
             </div>
-
-            {pill_tabs(
-                    seccoes_das_definicoes("/settings/language"),
-                    crate::i18n::t("settings.tabs.aria"),
-                )}
 
             {saved.then(|| view! {
                 <div class="ods-notice" role="status">
@@ -162,32 +167,33 @@ pub fn language(saved: bool) -> impl IntoView {
             {card(
                 section_head(crate::i18n::t("settings.language_region.title"), None, None),
                 view! {
-                    <form method="post" action="/settings/language" class="oc-lang">
+                    <form method="post" action="/settings/language">
                         <p class="ods-field__hint">
                             {crate::i18n::t("settings.language.help")}
                         </p>
-                        <fieldset class="oc-lang__set">
+                        <fieldset class="ods-seg" role="radiogroup">
                             <legend class="ods-sr-only">{crate::i18n::t("settings.language.label")}</legend>
                             {Locale::ALL
                                 .into_iter()
                                 .map(|loc| {
                                     let escolhido = loc == actual;
                                     view! {
-                                        <label class="oc-lang__opt">
+                                        <label class="ods-seg__opt">
                                             <input
+                                                class="ods-radio"
                                                 type="radio"
                                                 name="locale"
                                                 value=loc.as_str()
                                                 checked=escolhido
                                             />
-                                            <span class="oc-lang__name">{loc.native_name()}</span>
+                                            <span>{loc.native_name()}</span>
                                         </label>
                                     }
                                 })
                                 .collect_view()}
                         </fieldset>
-                        <div>
-                            <button class="ods-btn ods-btn--navy" data-part="btn" type="submit">
+                        <div class="ods-settings__actions">
+                            <button class="ods-btn ods-btn--primary" data-part="btn" type="submit">
                                 {crate::i18n::t("settings.language.save")}
                             </button>
                         </div>
@@ -221,18 +227,13 @@ pub fn apps(viewer: &crate::ui::shell::Viewer, saved: bool) -> impl IntoView {
     let vazio = fixaveis.is_empty();
 
     view! {
-        <div class="ods-page">
+        <div>
             <div class="ods-page__head">
                 <div>
                     <h1 class="ods-page__title">{crate::i18n::t("settings.title")}</h1>
                     <p class="ods-page__sub">{crate::i18n::t("settings.subtitle")}</p>
                 </div>
             </div>
-
-            {pill_tabs(
-                    seccoes_das_definicoes("/settings/apps"),
-                    crate::i18n::t("settings.tabs.aria"),
-                )}
 
             {saved.then(|| view! {
                 <div class="ods-notice" role="status">
@@ -255,30 +256,36 @@ pub fn apps(viewer: &crate::ui::shell::Viewer, saved: bool) -> impl IntoView {
                         .into_any()
                     } else {
                         view! {
-                            <form method="post" action="/settings/apps" class="oc-applist">
-                                <fieldset class="oc-applist__set">
+                            <form method="post" action="/settings/apps">
+                                <fieldset class="ods-admin-list">
                                     <legend class="ods-sr-only">{crate::i18n::t("settings.apps.title")}</legend>
                                     {fixaveis
                                         .into_iter()
                                         .map(|app| {
                                             let marcada = fixadas.contains(app.id());
                                             view! {
-                                                <label class="oc-applist__opt">
+                                                <label class="ods-admin-list__opt">
+                                                    <span>
+                                                        <span class="ods-settings__row-label">{app.label()}</span>
+                                                        <span class="ods-settings__row-hint">{app.description()}</span>
+                                                    </span>
+                                                    <span class="ods-app__toolbar-spacer"></span>
                                                     <input
+                                                        class="ods-switch"
                                                         type="checkbox"
+                                                        role="switch"
                                                         name="pinned"
                                                         value=app.id()
                                                         checked=marcada
+                                                        aria-label=app.label()
                                                     />
-                                                    <span class="oc-applist__nome">{app.label()}</span>
-                                                    <span class="oc-applist__desc">{app.description()}</span>
                                                 </label>
                                             }
                                         })
                                         .collect_view()}
                                 </fieldset>
-                                <div>
-                                    <button class="ods-btn ods-btn--navy" data-part="btn" type="submit">
+                                <div class="ods-settings__actions">
+                                    <button class="ods-btn ods-btn--primary" data-part="btn" type="submit">
                                         {crate::i18n::t("settings.apps.save")}
                                     </button>
                                     <button
@@ -321,18 +328,13 @@ pub fn security(
         .unwrap_or_default();
 
     view! {
-        <div class="ods-page">
+        <div>
             <div class="ods-page__head">
                 <div>
                     <h1 class="ods-page__title">{crate::i18n::t("settings.title")}</h1>
                     <p class="ods-page__sub">{crate::i18n::t("settings.subtitle")}</p>
                 </div>
             </div>
-
-            {pill_tabs(
-                    seccoes_das_definicoes("/settings/security"),
-                    crate::i18n::t("settings.tabs.aria"),
-                )}
 
             {error.map(|m| view! { <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="alert">{m}</div> })}
             {done.map(|m| view! { <div class="ods-notice" role="status">{m}</div> })}
@@ -483,7 +485,7 @@ pub fn mfa_recovery(
             <p class="ods-field__hint">
                 {crate::i18n::t("settings.recovery.new_saved")}
             </p>
-            <pre class="oc-mfa__codes" data-oc="recovery-codes">{linhas}</pre>
+            <pre class="ods-auth__codes" data-oc="recovery-codes">{linhas}</pre>
             <div>
                 <button type="button" class="ods-btn ods-btn--sm" data-part="btn" data-oc="recovery-copy">
                     {crate::i18n::t("settings.recovery.copy")}
@@ -536,7 +538,7 @@ pub fn mfa_recovery(
     };
 
     view! {
-        <div class="ods-page">
+        <div>
             <div class="ods-page__head">
                 <h1 class="ods-page__title">{crate::i18n::t("settings.recovery.title")}</h1>
             </div>
@@ -584,20 +586,27 @@ fn imagem_de_perfil(
             );
             let id = (*preset).to_owned();
             let ficheiro = (*file).to_owned();
+            // D10: um grupo de rádios, `.ods-avatar-pick` (o `input` escondido,
+            // a imagem no `label`). Escolher submete (`data-autosubmit`); sem
+            // JavaScript, há o «Guardar» por baixo.
+            let campo = format!("avatar-{id}");
+            let para = campo.clone();
             view! {
-                <form method="post" action="/settings/avatar/preset" class="oc-avatars__cell">
-                    <input type="hidden" name="preset" value=id.clone() />
-                    <button
-                        type="submit"
-                        class="oc-avatars__pick"
-                        class:oc-avatars__pick--on=escolhido
-                        aria-pressed=if escolhido { "true" } else { "false" }
-                        title=id.clone()
-                        aria-label=crate::i18n::tf("settings.avatar.preset_alt", &[("name", &id)])
-                    >
-                        <img src=format!("/static/avatars/{ficheiro}") alt="" />
-                    </button>
-                </form>
+                <input
+                    type="radio"
+                    name="preset"
+                    id=campo
+                    value=id.clone()
+                    checked=escolhido
+                    data-autosubmit="1"
+                />
+                <label
+                    for=para
+                    title=id.clone()
+                    aria-label=crate::i18n::tf("settings.avatar.preset_alt", &[("name", &id)])
+                >
+                    <img src=format!("/static/avatars/{ficheiro}") alt="" />
+                </label>
             }
         })
         .collect();
@@ -605,25 +614,20 @@ fn imagem_de_perfil(
     card(
         section_head(crate::i18n::t("settings.avatar.section"), None, None),
         view! {
-            // `oc-alert`, e não `oc-notice`: a segunda é a classe dos ecrãs de
-            // excepção — 404, recusa, falha — que vivem sozinhos numa página,
-            // centrados, com 96px de margem em cima e em baixo. Aplicada a uma
-            // linha dentro de um cartão, abria um vazio da altura de um ecrã
-            // com a frase suspensa ao meio.
             {error
                 .map(|razao| {
-                    view! { <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="alert">{razao}</div> }
+                    view! { <div class="ods-notice ods-notice--error" role="alert">{razao}</div> }
                 })}
             {done
                 .then(|| {
                     view! {
-                        <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="status">
+                        <div class="ods-notice" role="status">
                             {crate::i18n::t("settings.avatar.updated")}
                         </div>
                     }
                 })}
 
-            <div class="oc-avatar-edit">
+            <div class="ods-d12-person">
                 {avatar(&actual, &iniciais, AvatarSize::Large)}
                 <p class="ods-field__hint">
                     {crate::i18n::t("settings.avatar.initials_note")}
@@ -631,7 +635,15 @@ fn imagem_de_perfil(
             </div>
 
             <p class="ods-field__label">{crate::i18n::t("settings.avatar.presets_label")}</p>
-            <div class="oc-avatars">{presets}</div>
+            <form method="post" action="/settings/avatar/preset">
+                <fieldset class="ods-avatar-pick">
+                    <legend class="ods-sr-only">{crate::i18n::t("settings.avatar.presets_label")}</legend>
+                    {presets}
+                </fieldset>
+                <noscript>
+                    <button type="submit" class="ods-btn ods-btn--sm">{crate::i18n::t("action.save")}</button>
+                </noscript>
+            </form>
 
             <div>
                 <form method="post" action="/settings/avatar/initials">
@@ -644,7 +656,6 @@ fn imagem_de_perfil(
                 method="post"
                 action="/settings/avatar/photo"
                 enctype="multipart/form-data"
-                class="oc-avatar-upload"
             >
                 <input
                     type="file"
@@ -753,8 +764,9 @@ mod tests_apps {
     /// e repor. As Notas estão fixadas; os Ficheiros não.
     #[test]
     fn a_pagina_de_aplicacoes_gere_o_conjunto_fixado() {
-        let html = apps(&viewer(&["notes"]), false).to_html();
-        // O separador novo existe.
+        // A navegação das definições é a moldura D10, à volta de cada secção.
+        let html = moldura("/settings/apps", apps(&viewer(&["notes"]), false)).to_html();
+        // A secção existe na navegação, marcada como a actual.
         assert!(
             html.contains(r#"href="/settings/apps""#),
             "falta o separador Aplicações"

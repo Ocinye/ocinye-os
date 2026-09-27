@@ -5008,7 +5008,7 @@ document.addEventListener('keydown', (event) => {
    dentro de um `<noscript>`, e o formulário é o mesmo. */
 (() => {
   'use strict';
-  document.querySelectorAll('select[data-autosubmit="1"]').forEach((campo) => {
+  document.querySelectorAll('select[data-autosubmit="1"], input[data-autosubmit="1"]').forEach((campo) => {
     campo.addEventListener('change', () => {
       if (campo.form) campo.form.submit();
     });
