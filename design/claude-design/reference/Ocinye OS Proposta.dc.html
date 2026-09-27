@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#E9EDF1}
+body{font-family:'IBM Plex Sans',system-ui,sans-serif;color:#0F1A24;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#0B2D4A;text-decoration:none}a:hover{color:#123C60;text-decoration:underline}
+@keyframes ocPulse{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes ocFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes ocDots{0%,80%,100%{opacity:.2}40%{opacity:1}}
+</style>
+</helmet>
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+<defs>
+<symbol id="home" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 7 8 2.8 13.4 7v6.2H2.6z"></path><path d="M6.4 13.2V9.4h3.2v3.8"></path></symbol>
+<symbol id="work" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="4.8" width="11.6" height="8.4" rx="1.6"></rect><path d="M6 4.8V3.4h4v1.4"></path></symbol>
+<symbol id="units" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.4" y="2.6" width="4.6" height="4.6" rx="1"></rect><rect x="9" y="2.6" width="4.6" height="4.6" rx="1"></rect><rect x="2.4" y="8.8" width="4.6" height="4.6" rx="1"></rect><rect x="9" y="8.8" width="4.6" height="4.6" rx="1"></rect></symbol>
+<symbol id="idea" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="6.6" r="3.8"></circle><path d="M6.4 12.6h3.2M7 14.2h2"></path></symbol>
+<symbol id="project" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="3" width="11.6" height="10" rx="1.6"></rect><path d="M2.2 6.4h11.6M6 6.4v6.6"></path></symbol>
+<symbol id="data" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="4" rx="5.2" ry="1.9"></ellipse><path d="M2.8 4v8c0 1 2.3 1.9 5.2 1.9s5.2-.9 5.2-1.9V4"></path><path d="M2.8 8c0 1 2.3 1.9 5.2 1.9S13.2 9 13.2 8"></path></symbol>
+<symbol id="bibliography" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="2.6" width="3" height="10.8" rx=".8"></rect><rect x="6.6" y="2.6" width="3" height="10.8" rx=".8"></rect><path d="M11.2 3.4l2.2 9.4"></path></symbol>
+<symbol id="knowledge" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 3.4h4.2A1.2 1.2 0 0 1 8 4.6v8.8"></path><path d="M13.4 3.4H9.2A1.2 1.2 0 0 0 8 4.6"></path><path d="M2.6 3.4v9h4.2M13.4 3.4v9H9.2"></path></symbol>
+<symbol id="ai" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8l5.2 3v6.4L8 14.2 2.8 11.2V4.8z"></path><circle cx="8" cy="8" r="2"></circle></symbol>
+<symbol id="notes" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2.2" width="10" height="11.6" rx="1.6"></rect><path d="M5.4 5.6h5.2M5.4 8h5.2M5.4 10.4h3"></path></symbol>
+<symbol id="files" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.2h5.2l3 3v8.6H4z"></path><path d="M9 2.2v3.2h3.2M6 9h4M6 11.2h2.6"></path></symbol>
+<symbol id="folder" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.4c0-.7.5-1.2 1.2-1.2h3l1.4 1.6h5.2c.7 0 1.2.5 1.2 1.2v5.8c0 .7-.5 1.2-1.2 1.2H3.2c-.7 0-1.2-.5-1.2-1.2z"></path></symbol>
+<symbol id="mail" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3.4" width="12" height="9.2" rx="1.6"></rect><path d="m2.6 4.4 5.4 4 5.4-4"></path></symbol>
+<symbol id="messages" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 3.8c0-.7.5-1.2 1.2-1.2h8.4c.7 0 1.2.5 1.2 1.2v6c0 .7-.5 1.2-1.2 1.2H6.4l-3 2.4V3.8z"></path></symbol>
+<symbol id="calendar" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="3.2" width="11.6" height="10.4" rx="1.6"></rect><path d="M2.2 6.6h11.6M5.4 1.8v2.6M10.6 1.8v2.6"></path></symbol>
+<symbol id="tasks" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.4" y="2.4" width="11.2" height="11.2" rx="2"></rect><path d="m5.4 8.2 1.8 1.8 3.6-3.8"></path></symbol>
+<symbol id="results" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 13.6h11.2"></path><rect x="3.4" y="8.4" width="2.4" height="5.2"></rect><rect x="6.8" y="5.4" width="2.4" height="8.2"></rect><rect x="10.2" y="2.6" width="2.4" height="11"></rect></symbol>
+<symbol id="activity" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 8h3l1.8-4.4 2.4 8.8L11 8h3.2"></path></symbol>
+<symbol id="history" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8"></path><path d="M2.4 2.6v2.6H5M8 5.2V8l2 1.4"></path></symbol>
+<symbol id="settings" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2"></circle><circle cx="8" cy="8" r="5.6"></circle></symbol>
+<symbol id="help" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.8"></circle><path d="M6.4 6.4a1.7 1.7 0 1 1 2.4 1.6c-.5.3-.8.6-.8 1.2"></path><circle cx="8" cy="11.2" r=".7" fill="currentColor" stroke="none"></circle></symbol>
+<symbol id="bell" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2a3.8 3.8 0 0 0-3.8 3.8v2.4L3 11h10l-1.2-2.6V6A3.8 3.8 0 0 0 8 2.2z"></path><path d="M6.6 11a1.4 1.4 0 0 0 2.8 0"></path></symbol>
+<symbol id="search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.4"></circle><path d="M10.4 10.4 13.6 13.6"></path></symbol>
+<symbol id="plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"></path></symbol>
+<symbol id="upload" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10.4V2.8M4.8 5.8 8 2.6l3.2 3.2M2.6 10.4v2.2c0 .5.4 1 1 1h8.8c.6 0 1-.5 1-1v-2.2"></path></symbol>
+<symbol id="download" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.6v7.6M4.8 7 8 10.2 11.2 7M2.6 10.4v2.2c0 .5.4 1 1 1h8.8c.6 0 1-.5 1-1v-2.2"></path></symbol>
+<symbol id="share" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="8" r="1.8"></circle><circle cx="12" cy="4" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><path d="m5.6 7.2 4.8-2.4M5.6 8.8l4.8 2.4"></path></symbol>
+<symbol id="archive" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2.8" width="12" height="3" rx=".8"></rect><path d="M3 5.8v6.6c0 .5.4.8.8.8h8.4c.4 0 .8-.3.8-.8V5.8M6.4 8.6h3.2"></path></symbol>
+<symbol id="trash" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 4.4h10.8M6.2 4.4V2.8h3.6v1.6M4 4.4l.7 8.8c0 .4.4.8.8.8h5c.4 0 .8-.4.8-.8l.7-8.8"></path></symbol>
+<symbol id="shield" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8 13.2 4v4.2c0 3.2-2.2 5.4-5.2 6-3-.6-5.2-2.8-5.2-6V4z"></path></symbol>
+<symbol id="members" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5.4" r="2.4"></circle><path d="M1.8 13c0-2.2 1.9-3.6 4.2-3.6s4.2 1.4 4.2 3.6"></path><path d="M10.6 3.2a2.2 2.2 0 0 1 0 4.4M12 9.6c1.3.4 2.2 1.6 2.2 3.2"></path></symbol>
+<symbol id="key" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.4" cy="10.6" r="2.8"></circle><path d="m7.4 8.6 5.8-5.8M11 4.8l1.6 1.6M9.6 6.2l1.2 1.2"></path></symbol>
+<symbol id="billing" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="3.4" width="12.4" height="9.2" rx="1.6"></rect><path d="M1.8 6.4h12.4M4.4 10h2.4"></path></symbol>
+<symbol id="app-home" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 7 8 2.8 13.4 7v6.2H2.6z" fill="currentColor" fill-opacity=".2"></path><path d="M6.4 13.2V9.4h3.2v3.8"></path></symbol>
+<symbol id="app-work" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="4.8" width="11.6" height="8.4" rx="1.6" fill="currentColor" fill-opacity=".2"></rect><path d="M6 4.8V3.4h4v1.4"></path></symbol>
+<symbol id="app-notes" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2.2" width="10" height="11.6" rx="1.6" fill="currentColor" fill-opacity=".2"></rect><path d="M5.4 5.6h5.2M5.4 8h5.2M5.4 10.4h3"></path></symbol>
+<symbol id="app-files" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.2h5.2l3 3v8.6H4z" fill="currentColor" fill-opacity=".2"></path><path d="M9 2.2v3.2h3.2M6 9h4M6 11.2h2.6"></path></symbol>
+<symbol id="app-calendar" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="3.2" width="11.6" height="10.4" rx="1.6" fill="currentColor" fill-opacity=".2"></rect><path d="M2.2 6.6h11.6M5.4 1.8v2.6M10.6 1.8v2.6"></path></symbol>
+<symbol id="app-tasks" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.4" y="2.4" width="11.2" height="11.2" rx="2" fill="currentColor" fill-opacity=".2"></rect><path d="m5.4 8.2 1.8 1.8 3.6-3.8"></path></symbol>
+<symbol id="app-history" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8"></path><path d="M2.4 2.6v2.6H5M8 5.2V8l2 1.4"></path></symbol>
+<symbol id="app-mail" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3.4" width="12" height="9.2" rx="1.6" fill="currentColor" fill-opacity=".2"></rect><path d="m2.6 4.4 5.4 4 5.4-4"></path></symbol>
+<symbol id="app-messages" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 3.8c0-.7.5-1.2 1.2-1.2h8.4c.7 0 1.2.5 1.2 1.2v6c0 .7-.5 1.2-1.2 1.2H6.4l-3 2.4V3.8z" fill="currentColor" fill-opacity=".2"></path></symbol>
+<symbol id="app-units" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.4" y="2.6" width="4.6" height="4.6" rx="1" fill="currentColor" fill-opacity=".2"></rect><rect x="9" y="2.6" width="4.6" height="4.6" rx="1" fill="currentColor" fill-opacity=".2"></rect><rect x="2.4" y="8.8" width="4.6" height="4.6" rx="1" fill="currentColor" fill-opacity=".2"></rect><rect x="9" y="8.8" width="4.6" height="4.6" rx="1" fill="currentColor" fill-opacity=".2"></rect></symbol>
+<symbol id="app-idea" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="6.6" r="3.8" fill="currentColor" fill-opacity=".2"></circle><path d="M6.4 12.6h3.2M7 14.2h2"></path></symbol>
+<symbol id="app-project" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="3" width="11.6" height="10" rx="1.6" fill="currentColor" fill-opacity=".2"></rect><path d="M2.2 6.4h11.6M6 6.4v6.6"></path></symbol>
+<symbol id="app-data" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="4" rx="5.2" ry="1.9" fill="currentColor" fill-opacity=".2"></ellipse><path d="M2.8 4v8c0 1 2.3 1.9 5.2 1.9s5.2-.9 5.2-1.9V4"></path><path d="M2.8 8c0 1 2.3 1.9 5.2 1.9S13.2 9 13.2 8"></path></symbol>
+<symbol id="app-results" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 13.6h11.2"></path><rect x="3.4" y="8.4" width="2.4" height="5.2" fill="currentColor" fill-opacity=".2"></rect><rect x="6.8" y="5.4" width="2.4" height="8.2" fill="currentColor" fill-opacity=".2"></rect><rect x="10.2" y="2.6" width="2.4" height="11" fill="currentColor" fill-opacity=".2"></rect></symbol>
+<symbol id="app-knowledge" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 3.4h4.2A1.2 1.2 0 0 1 8 4.6v8.8"></path><path d="M13.4 3.4H9.2A1.2 1.2 0 0 0 8 4.6"></path><path d="M2.6 3.4v9h4.2M13.4 3.4v9H9.2"></path></symbol>
+<symbol id="app-bibliography" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="2.6" width="3" height="10.8" rx=".8" fill="currentColor" fill-opacity=".2"></rect><rect x="6.6" y="2.6" width="3" height="10.8" rx=".8" fill="currentColor" fill-opacity=".2"></rect><path d="M11.2 3.4l2.2 9.4"></path></symbol>
+<symbol id="app-course" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 14.6 6 8 9 1.4 6z" fill="currentColor" fill-opacity=".2"></path><path d="M4.2 7.4v3.2c0 1 1.7 1.8 3.8 1.8s3.8-.8 3.8-1.8V7.4M14.6 6v3.6"></path></symbol>
+<symbol id="app-ai" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8l5.2 3v6.4L8 14.2 2.8 11.2V4.8z" fill="currentColor" fill-opacity=".2"></path><circle cx="8" cy="8" r="2" fill="currentColor" fill-opacity=".2"></circle></symbol>
+<symbol id="app-gpu" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="4" width="12.4" height="7.4" rx="1.2" fill="currentColor" fill-opacity=".2"></rect><circle cx="6" cy="7.7" r="1.9" fill="currentColor" fill-opacity=".2"></circle><path d="M10 6.2h2.2M10 8h2.2M10 9.6h2.2M3.4 11.4v1.6M6 11.4v1.6"></path></symbol>
+<symbol id="app-activity" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 8h3l1.8-4.4 2.4 8.8L11 8h3.2"></path></symbol>
+<symbol id="app-organization" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 13.6h11.2M3.6 13.6V4.4L8 2.2l4.4 2.2v9.2"></path><path d="M6.2 6.2h.01M9.8 6.2h.01M6.2 9h.01M9.8 9h.01M7 13.6v-2.4h2v2.4"></path></symbol>
+<symbol id="app-settings" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2" fill="currentColor" fill-opacity=".2"></circle><circle cx="8" cy="8" r="5.6" fill="currentColor" fill-opacity=".2"></circle></symbol>
+<symbol id="app-help" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.8" fill="currentColor" fill-opacity=".2"></circle><path d="M6.4 6.4a1.7 1.7 0 1 1 2.4 1.6c-.5.3-.8.6-.8 1.2"></path><circle cx="8" cy="11.2" r=".7" fill="currentColor" stroke="none"></circle></symbol>
+<symbol id="apps-brand" viewBox="0 0 16 16"><polygon points="3.30,0.95 5.34,2.13 5.34,4.47 3.30,5.65 1.26,4.47 1.26,2.13" fill="#0B2D4A" stroke="#0B2D4A" stroke-width=".8" stroke-linejoin="round"></polygon><polygon points="12.70,0.95 14.74,2.13 14.74,4.47 12.70,5.65 10.66,4.47 10.66,2.13" fill="#0B2D4A" stroke="#0B2D4A" stroke-width=".8" stroke-linejoin="round"></polygon><polygon points="3.30,10.35 5.34,11.52 5.34,13.88 3.30,15.05 1.26,13.88 1.26,11.52" fill="#0B2D4A" stroke="#0B2D4A" stroke-width=".8" stroke-linejoin="round"></polygon><polygon points="12.70,10.35 14.74,11.52 14.74,13.88 12.70,15.05 10.66,13.88 10.66,11.52" fill="#0B2D4A" stroke="#0B2D4A" stroke-width=".8" stroke-linejoin="round"></polygon><polygon points="8.00,5.90 9.82,6.95 9.82,9.05 8.00,10.10 6.18,9.05 6.18,6.95" fill="#E0A731" stroke="#E0A731" stroke-width=".8" stroke-linejoin="round"></polygon></symbol>
+<symbol id="agent" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.8" y="4.6" width="10.4" height="7.6" rx="2.2"></rect><circle cx="6.2" cy="8.4" r=".9" fill="currentColor" stroke="none"></circle><circle cx="9.8" cy="8.4" r=".9" fill="currentColor" stroke="none"></circle><path d="M8 4.6V2.8"></path></symbol>
+<symbol id="audit" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 2.4h6.2l3 3v8.2H3.4z"></path><path d="M5.6 7.6h4.8M5.6 10.2h3.2"></path></symbol>
+<symbol id="apps" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="3.6" cy="3.6" r="1.2"></circle><circle cx="8" cy="3.6" r="1.2"></circle><circle cx="12.4" cy="3.6" r="1.2"></circle><circle cx="3.6" cy="8" r="1.2"></circle><circle cx="8" cy="8" r="1.2"></circle><circle cx="12.4" cy="8" r="1.2"></circle><circle cx="3.6" cy="12.4" r="1.2"></circle><circle cx="8" cy="12.4" r="1.2"></circle><circle cx="12.4" cy="12.4" r="1.2"></circle></symbol>
+<symbol id="logout" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 13.6H3.6c-.6 0-1-.4-1-1V3.4c0-.6.4-1 1-1h2.8M10.4 11.2 13.6 8l-3.2-3.2M13.4 8H6.2"></path></symbol>
+<symbol id="admin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.2"></circle><path d="M8 1.9v1.8M8 12.3v1.8M2.9 8H1.1M14.9 8h-1.8M4.4 4.4 3.1 3.1M12.9 12.9l-1.3-1.3M11.6 4.4l1.3-1.3M3.1 12.9l1.3-1.3"></path></symbol>
+<symbol id="integrations" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.4v3M10 2.4v3M4.4 5.4h7.2v2.4a3.6 3.6 0 0 1-7.2 0zM8 11.4v2.4"></path></symbol>
+<symbol id="storage" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="4" rx="1"></rect><rect x="2" y="9" width="12" height="4" rx="1"></rect><circle cx="4.6" cy="5" r=".5" fill="currentColor"></circle><circle cx="4.6" cy="11" r=".5" fill="currentColor"></circle></symbol>
+<symbol id="compute" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4.2" y="4.2" width="7.6" height="7.6" rx="1.2"></rect><path d="M6.6 1.8v2.4M9.4 1.8v2.4M6.6 11.8v2.4M9.4 11.8v2.4M1.8 6.6h2.4M1.8 9.4h2.4M11.8 6.6h2.4M11.8 9.4h2.4"></path></symbol>
+<symbol id="gpu" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="4" width="12.4" height="7.4" rx="1.2"></rect><circle cx="6" cy="7.7" r="1.9"></circle><path d="M10 6.2h2.2M10 8h2.2M10 9.6h2.2M3.4 11.4v1.6M6 11.4v1.6"></path></symbol>
+<symbol id="language" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.8"></circle><path d="M2.2 8h11.6M8 2.2c1.6 1.6 2.4 3.6 2.4 5.8S9.6 12.2 8 13.8C6.4 12.2 5.6 10.2 5.6 8S6.4 3.8 8 2.2z"></path></symbol>
+<symbol id="appearance" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.8"></circle><path d="M8 2.2v11.6a5.8 5.8 0 0 0 0-11.6z" fill="currentColor" stroke="none"></path></symbol>
+<symbol id="workspace" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2 14 5.2 8 8.2 2 5.2z"></path><path d="m2 8 6 3 6-3M2 10.8l6 3 6-3"></path></symbol>
+<symbol id="organization" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 13.6h11.2M3.6 13.6V4.4L8 2.2l4.4 2.2v9.2"></path><path d="M6.2 6.2h.01M9.8 6.2h.01M6.2 9h.01M9.8 9h.01M7 13.6v-2.4h2v2.4"></path></symbol>
+<symbol id="star" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m8 2.2 1.8 3.7 4 .6-2.9 2.8.7 4L8 11.4l-3.6 1.9.7-4-2.9-2.8 4-.6z"></path></symbol>
+<symbol id="star-fill" viewBox="0 0 16 16" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><path d="m8 2.2 1.8 3.7 4 .6-2.9 2.8.7 4L8 11.4l-3.6 1.9.7-4-2.9-2.8 4-.6z"></path></symbol>
+<symbol id="close" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"></path></symbol>
+<symbol id="chev-r" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3.6 4.4 4.4L6 12.4"></path></symbol>
+<symbol id="chev-d" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 6 8 10.4 12.4 6"></path></symbol>
+<symbol id="chev-u" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 10 8 5.6l4.4 4.4"></path></symbol>
+<symbol id="grid" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2.4" y="2.4" width="4.6" height="4.6" rx="1"></rect><rect x="9" y="2.4" width="4.6" height="4.6" rx="1"></rect><rect x="2.4" y="9" width="4.6" height="4.6" rx="1"></rect><rect x="9" y="9" width="4.6" height="4.6" rx="1"></rect></symbol>
+<symbol id="list" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M5.4 4h8.2M5.4 8h8.2M5.4 12h8.2M2.4 4h.01M2.4 8h.01M2.4 12h.01"></path></symbol>
+<symbol id="lock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="10" height="7" rx="1.6"></rect><path d="M5.2 7V5a2.8 2.8 0 0 1 5.6 0v2"></path></symbol>
+<symbol id="user" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.4" r="2.8"></circle><path d="M2.6 14c0-2.8 2.4-4.4 5.4-4.4s5.4 1.6 5.4 4.4"></path></symbol>
+<symbol id="arrow-r" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h9.6M8.8 4.2 12.6 8l-3.8 3.8"></path></symbol>
+<symbol id="arrow-l" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8H3.4M7.2 4.2 3.4 8l3.8 3.8"></path></symbol>
+<symbol id="send" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12.8V3.6M4.2 7.4 8 3.6l3.8 3.8"></path></symbol>
+<symbol id="attach" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 4.8 5.8 9.6a1.9 1.9 0 0 0 2.7 2.7l5-5a3.4 3.4 0 0 0-4.8-4.8L3.6 7.6a4.8 4.8 0 0 0 6.8 6.8"></path></symbol>
+<symbol id="check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m3.4 8.4 3 3 6.2-6.6"></path></symbol>
+<symbol id="more" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.6" cy="8" r="1.2"></circle><circle cx="8" cy="8" r="1.2"></circle><circle cx="12.4" cy="8" r="1.2"></circle></symbol>
+<symbol id="sort" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.8v10.4M2.6 10.8 5 13.2l2.4-2.4M11 13.2V2.8M8.6 5.2 11 2.8l2.4 2.4"></path></symbol>
+<symbol id="clock" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.8"></circle><path d="M8 4.8V8l2.2 1.4"></path></symbol>
+<symbol id="link" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.8 9.2a2.8 2.8 0 0 0 4 0l2-2a2.8 2.8 0 0 0-4-4l-.8.8M9.2 6.8a2.8 2.8 0 0 0-4 0l-2 2a2.8 2.8 0 0 0 4 4l.8-.8"></path></symbol>
+<symbol id="eye" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 8S4 3.6 8 3.6 14.4 8 14.4 8 12 12.4 8 12.4 1.6 8 1.6 8z"></path><circle cx="8" cy="8" r="2"></circle></symbol>
+<symbol id="power" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 4.4a5.2 5.2 0 1 0 6.8 0M8 2.2V8"></path></symbol>
+<symbol id="restart" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 8a5.2 5.2 0 1 1-1.7-3.9"></path><path d="M13 2.2v2.8h-2.8"></path></symbol>
+<symbol id="status" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.6"></rect><path d="M4.6 8.4h1.8l1.1 2L9 5.8l.9 2.6h1.5"></path></symbol>
+<symbol id="sidebar" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2.8" width="12" height="10.4" rx="1.6"></rect><path d="M6.2 2.8v10.4"></path></symbol>
+<symbol id="sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.8"></circle><path d="M8 1.6v1.4M8 13v1.4M1.6 8H3M13 8h1.4M3.5 3.5l1 1M11.5 11.5l1 1M3.5 12.5l1-1M11.5 4.5l1-1"></path></symbol>
+<symbol id="moon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M13.4 9.6A5.6 5.6 0 0 1 6.4 2.6a5.6 5.6 0 1 0 7 7z"></path></symbol>
+<symbol id="auto" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="2.8" width="12.4" height="8.4" rx="1.4"></rect><path d="M5.6 13.6h4.8M8 11.2v2.4"></path></symbol>
+<symbol id="course" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 14.6 6 8 9 1.4 6z"></path><path d="M4.2 7.4v3.2c0 1 1.7 1.8 3.8 1.8s3.8-.8 3.8-1.8V7.4M14.6 6v3.6"></path></symbol>
+<symbol id="edit" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m10.4 2.8 2.8 2.8-7.4 7.4H3v-2.8z"></path></symbol>
+<symbol id="copy" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="5" y="5" width="8.6" height="8.6" rx="1.4"></rect><path d="M11 5V3.6c0-.6-.4-1-1-1H3.6c-.6 0-1 .4-1 1V10c0 .6.4 1 1 1H5"></path></symbol>
+<symbol id="refresh" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 8a5.2 5.2 0 1 1-1.7-3.9"></path><path d="M13 2.2v2.8h-2.8"></path></symbol>
+<symbol id="warning" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.4 14.2 13H1.8z"></path><path d="M8 6.6v2.8M8 11.1h.01"></path></symbol>
+<symbol id="code" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 4.4 1.8 8l3.6 3.6M10.6 4.4 14.2 8l-3.6 3.6"></path></symbol>
+<symbol id="command" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6h4v4H6zM6 6V4.4A1.6 1.6 0 1 0 4.4 6zM10 6h1.6A1.6 1.6 0 1 0 10 4.4zM10 10v1.6a1.6 1.6 0 1 0 1.6-1.6zM6 10H4.4A1.6 1.6 0 1 0 6 11.6z"></path></symbol>
+</defs>
+</svg>
+
+<section id="cover" style="padding:72px 80px 64px;background:#0B2D4A;color:#FFFFFF;position:relative;overflow:hidden">
+  <div style="position:absolute;right:-180px;top:-220px;width:720px;height:720px;border:1px solid rgba(224,167,49,.2);border-radius:50%"></div>
+  <div style="display:flex;align-items:center;gap:18px;position:relative">
+    <div style="width:64px;height:64px;border-radius:17px;background:#FFFFFF;overflow:hidden;display:flex;align-items:center;justify-content:center"><img src="assets/ocinye_logo.png" alt="Ocinye" style="width:94px;height:94px;object-fit:cover;flex:none"></div>
+    <div><div style="font:600 22px 'IBM Plex Sans',sans-serif;letter-spacing:.2em">OCINYE OS</div><div style="margin-top:6px;font:400 12px 'IBM Plex Mono',monospace;letter-spacing:.28em;color:#E0A731">PROPOSTA DE INTERFACE · v1</div></div>
+  </div>
+  <h1 style="margin:44px 0 0;max-width:980px;font:500 48px/1.12 'IBM Plex Sans',sans-serif;letter-spacing:-.015em;position:relative;text-wrap:balance">Um Core único, quatro perfis, uma linguagem visual.</h1>
+  <p style="margin:20px 0 0;max-width:760px;font:400 17px/1.65 'IBM Plex Sans',sans-serif;color:rgba(255,255,255,.72);position:relative">Direcção de design, design system, arquitectura da interface e mockups de alta fidelidade do Ocinye OS. Construído a partir dos tokens do repositório (<span style="font-family:'IBM Plex Mono',monospace;font-size:15px">design/DESIGN_TOKENS.md</span>) e das capturas de os.ocinye.com. O protótipo navegável está em <a href="Ocinye OS.dc.html" style="color:#E0A731">Ocinye OS.dc.html</a>.</p>
+  <div style="margin-top:36px;display:flex;gap:10px;flex-wrap:wrap;position:relative">
+    <a href="#partA" style="height:36px;display:flex;align-items:center;padding:0 14px;border:1px solid rgba(255,255,255,.18);border-radius:9px;color:#FFFFFF;font:500 13px 'IBM Plex Sans',sans-serif">A · Direcção</a>
+    <a href="#partB" style="height:36px;display:flex;align-items:center;padding:0 14px;border:1px solid rgba(255,255,255,.18);border-radius:9px;color:#FFFFFF;font:500 13px 'IBM Plex Sans',sans-serif">B · Design system</a>
+    <a href="#partC" style="height:36px;display:flex;align-items:center;padding:0 14px;border:1px solid rgba(255,255,255,.18);border-radius:9px;color:#FFFFFF;font:500 13px 'IBM Plex Sans',sans-serif">C · Arquitectura</a>
+    <a href="#partD" style="height:36px;display:flex;align-items:center;padding:0 14px;border:1px solid rgba(255,255,255,.18);border-radius:9px;color:#FFFFFF;font:500 13px 'IBM Plex Sans',sans-serif">D · Mockups</a>
+    <a href="#partP" style="height:36px;display:flex;align-items:center;padding:0 14px;border:1px solid rgba(255,255,255,.18);border-radius:9px;color:#FFFFFF;font:500 13px 'IBM Plex Sans',sans-serif">Perfis</a>
+    <a href="#partE" style="height:36px;display:flex;align-items:center;padding:0 14px;border:1px solid rgba(255,255,255,.18);border-radius:9px;color:#FFFFFF;font:500 13px 'IBM Plex Sans',sans-serif">E · Idiomas</a>
+    <a href="#partF" style="height:36px;display:flex;align-items:center;padding:0 14px;border:1px solid rgba(255,255,255,.18);border-radius:9px;color:#FFFFFF;font:500 13px 'IBM Plex Sans',sans-serif">F · Regras</a>
+  </div>
+</section>
+
+<section id="partA" style="padding:64px 80px;border-bottom:1px solid #D5DCE3;background:#F6F8FA">
+  <div style="font:500 11px 'IBM Plex Mono',monospace;color:#8A6110;letter-spacing:.2em">PARTE A · DIRECÇÃO DE DESIGN</div>
+  <h2 style="margin:12px 0 0;font:600 32px 'IBM Plex Sans',sans-serif;letter-spacing:-.01em">Princípios</h2>
+  <div style="margin-top:28px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;max-width:1500px">
+    <div style="background:#FFFFFF;border:1px solid #E4E9F0;border-radius:12px;padding:22px"><div style="font:500 11px 'IBM Plex Mono',monospace;color:#7C8B9A">01</div><h3 style="margin:12px 0 0;font:600 17px 'IBM Plex Sans',sans-serif">Um Core, quatro perfis</h3><p style="margin:8px 0 0;font:400 14px/1.65 'IBM Plex Sans',sans-serif;color:#42546A">Research, Business, Personal e Education são perfis de instância, escolhidos na instalação. Partilham shell, componentes e tokens; o perfil muda aplicações, navegação e vocabulário predefinidos. O membro nunca escolhe o perfil ao iniciar sessão.</p></div>
+    <div style="background:#FFFFFF;border:1px solid #E4E9F0;border-radius:12px;padding:22px"><div style="font:500 11px 'IBM Plex Mono',monospace;color:#7C8B9A">02</div><h3 style="margin:12px 0 0;font:600 17px 'IBM Plex Sans',sans-serif">Navy estrutura, dourado age</h3><p style="margin:8px 0 0;font:400 14px/1.65 'IBM Plex Sans',sans-serif;color:#42546A">Deep Navy #0B2D4A dá estrutura e marca o activo, com texto branco. Sunrise Gold #E0A731 fica reservado à acção principal (Criar, Iniciar sessão, Enviar), ao foco e a pontos de destaque. Nunca como indicador de item activo.</p></div>
+    <div style="background:#FFFFFF;border:1px solid #E4E9F0;border-radius:12px;padding:22px"><div style="font:500 11px 'IBM Plex Mono',monospace;color:#7C8B9A">03</div><h3 style="margin:12px 0 0;font:600 17px 'IBM Plex Sans',sans-serif">IA nativa e modular</h3><p style="margin:8px 0 0;font:400 14px/1.65 'IBM Plex Sans',sans-serif;color:#42546A">O Prompt Ocinye tem lugar fixo na barra lateral, estado na barra de topo e um cartão na Home. Quatro estados (sem nó, nó local, externo, multi) mudam o texto e a cor do ponto, nunca a estrutura. Sem IA o Prompt continua a responder com envelope de estado.</p></div>
+    <div style="background:#FFFFFF;border:1px solid #E4E9F0;border-radius:12px;padding:22px"><div style="font:500 11px 'IBM Plex Mono',monospace;color:#7C8B9A">04</div><h3 style="margin:12px 0 0;font:600 17px 'IBM Plex Sans',sans-serif">Sistema antes de módulo</h3><p style="margin:8px 0 0;font:400 14px/1.65 'IBM Plex Sans',sans-serif;color:#42546A">Pesquisa global (⌘K), lançador (⌘J), Criar, notificações, estado do Core e sessão pertencem ao OS e aparecem iguais em todos os módulos. Cada módulo herda cabeçalho, estados vazios e painéis de detalhe.</p></div>
+  </div>
+  <div style="margin-top:20px;max-width:1500px;display:flex;gap:14px;padding:16px 20px;border-radius:12px;background:#FDF6E7;border:1px solid #F2E3BE;font:400 14px/1.6 'IBM Plex Sans',sans-serif;color:#8A4B10"><b style="font-weight:600;white-space:nowrap">Nota sobre o design system.</b><span>O formulário anexou o sistema «Industry» (steel-blue, Barlow, cantos rectos). Como contraria a identidade institucional pedida no briefing e os tokens já existentes no repositório, esta proposta segue os tokens Ocinye (IBM Plex Sans / Mono, navy + dourado). Se a intenção era outra, diga-me.</span></div>
+</section>
+
+<section id="partB" style="padding:64px 80px;border-bottom:1px solid #D5DCE3;background:#FFFFFF">
+  <div style="font:500 11px 'IBM Plex Mono',monospace;color:#8A6110;letter-spacing:.2em">PARTE B · DESIGN SYSTEM</div>
+  <h2 style="margin:12px 0 0;font:600 32px 'IBM Plex Sans',sans-serif;letter-spacing:-.01em">Tokens</h2>
+  <div style="margin-top:28px;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:40px;max-width:1500px">
+    <div>
+      <div style="font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">COR · MARCA E ESTRUTURA</div>
+      <div style="margin-top:12px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px">
+        <sc-for list="{{ brand }}" as="c" hint-placeholder-count="5"><div><div style="height:84px;border-radius:10px;background:{{ c.hex }};border:1px solid rgba(11,45,74,.08)"></div><div style="margin-top:8px;font:600 12.5px 'IBM Plex Sans',sans-serif">{{ c.name }}</div><div style="margin-top:2px;font:400 11px 'IBM Plex Mono',monospace;color:#7C8B9A">{{ c.hex }}</div><div style="margin-top:4px;font:400 11.5px/1.4 'IBM Plex Sans',sans-serif;color:#5F7183">{{ c.use }}</div></div></sc-for>
+      </div>
+      <div style="margin-top:24px;font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">COR · SUPERFÍCIE, LINHA, TEXTO</div>
+      <div style="margin-top:12px;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px">
+        <sc-for list="{{ neutrals }}" as="c" hint-placeholder-count="8"><div><div style="height:48px;border-radius:8px;background:{{ c.hex }};border:1px solid #E4E9F0"></div><div style="margin-top:6px;font:500 11px 'IBM Plex Sans',sans-serif">{{ c.name }}</div><div style="font:400 10px 'IBM Plex Mono',monospace;color:#7C8B9A">{{ c.hex }}</div></div></sc-for>
+      </div>
+      <div style="margin-top:24px;font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">COR · FUNCIONAL (SÓ EM BADGES, PONTOS DE ESTADO E PRAZOS)</div>
+      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+        <sc-for list="{{ functional }}" as="c" hint-placeholder-count="5"><span style="display:inline-flex;align-items:center;gap:6px;font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.05em;color:{{ c.fg }};background:{{ c.bg }};border:1px solid {{ c.bd }};border-radius:6px;padding:5px 10px"><span style="width:6px;height:6px;border-radius:50%;background:{{ c.dot }}"></span>{{ c.name }}</span></sc-for>
+      </div>
+    </div>
+    <div>
+      <div style="font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">TIPOGRAFIA · IBM PLEX SANS + IBM PLEX MONO</div>
+      <div style="margin-top:12px;border:1px solid #E4E9F0;border-radius:12px;overflow:hidden">
+        <sc-for list="{{ typeScale }}" as="s" hint-placeholder-count="8"><div style="display:flex;align-items:baseline;gap:16px;padding:12px 16px;border-bottom:1px solid #F3F6F9"><span style="width:118px;flex:none;font:400 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A">{{ s.spec }}</span><span style="font:{{ s.font }};letter-spacing:{{ s.ls }};color:#0F1A24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.sample }}</span></div></sc-for>
+      </div>
+      <div style="margin-top:24px;display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div>
+          <div style="font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">RAIOS</div>
+          <div style="margin-top:12px;display:flex;gap:10px;align-items:flex-end"><sc-for list="{{ radii }}" as="r" hint-placeholder-count="6"><div style="text-align:center"><div style="width:44px;height:44px;border:1.5px solid #0B2D4A;border-radius:{{ r.v }};background:#F1F4F8"></div><div style="margin-top:5px;font:400 10px 'IBM Plex Mono',monospace;color:#7C8B9A">{{ r.v }}</div></div></sc-for></div>
+        </div>
+        <div>
+          <div style="font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">ESPAÇAMENTO (BASE 4)</div>
+          <div style="margin-top:12px;display:flex;gap:8px;align-items:flex-end"><sc-for list="{{ spaces }}" as="s" hint-placeholder-count="8"><div style="text-align:center"><div style="width:{{ s.v }};height:{{ s.v }};background:#E0A731;border-radius:2px"></div><div style="margin-top:5px;font:400 10px 'IBM Plex Mono',monospace;color:#7C8B9A">{{ s.n }}</div></div></sc-for></div>
+        </div>
+      </div>
+      <div style="margin-top:24px;font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">ELEVAÇÃO</div>
+      <div style="margin-top:12px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px;background:#F6F8FA;border-radius:12px">
+        <sc-for list="{{ shadows }}" as="s" hint-placeholder-count="4"><div style="height:70px;border-radius:10px;background:#FFFFFF;box-shadow:{{ s.v }};display:flex;align-items:flex-end;padding:8px 10px;font:500 11px 'IBM Plex Mono',monospace;color:#5F7183">{{ s.n }}</div></sc-for>
+      </div>
+    </div>
+  </div>
+
+  <h2 style="margin:64px 0 0;font:600 32px 'IBM Plex Sans',sans-serif;letter-spacing:-.01em">Componentes</h2>
+  <div style="margin-top:28px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;max-width:1500px">
+    <div style="border:1px solid #E4E9F0;border-radius:12px;padding:20px">
+      <div style="font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">BOTÕES</div>
+      <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <button style="height:38px;padding:0 16px;border:0;border-radius:9px;background:#E0A731;color:#0B2D4A;font:600 13px 'IBM Plex Sans',sans-serif">Acção principal</button>
+        <button style="height:38px;padding:0 16px;border:0;border-radius:9px;background:#0B2D4A;color:#FFFFFF;font:500 13px 'IBM Plex Sans',sans-serif">Institucional</button>
+        <button style="height:38px;padding:0 16px;border:1px solid #E4E9F0;border-radius:9px;background:#FFFFFF;color:#0F1A24;font:500 13px 'IBM Plex Sans',sans-serif">Secundário</button>
+        <button style="height:38px;padding:0 12px;border:0;border-radius:9px;background:transparent;color:#42546A;font:500 13px 'IBM Plex Sans',sans-serif">Discreto</button>
+        <button style="height:38px;padding:0 16px;border:0;border-radius:9px;background:#FCF0EF;color:#8C2019;font:500 13px 'IBM Plex Sans',sans-serif">Destrutivo</button>
+        <button style="height:38px;padding:0 16px;border:0;border-radius:9px;background:#E0A731;color:#0B2D4A;font:600 13px 'IBM Plex Sans',sans-serif;opacity:.45">Desactivado</button>
+      </div>
+      <p style="margin:14px 0 0;font:400 12.5px/1.55 'IBM Plex Sans',sans-serif;color:#5F7183">Um só dourado por ecrã. Foco: anel dourado 2px, offset 1px.</p>
+    </div>
+    <div style="border:1px solid #E4E9F0;border-radius:12px;padding:20px">
+      <div style="font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">ITENS DE NAVEGAÇÃO · ESTADOS</div>
+      <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div style="background:#0B2D4A;border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:2px">
+          <div style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font:500 13px 'IBM Plex Sans',sans-serif;color:rgba(255,255,255,.74)"><svg width="15" height="15"><use data-icon="#work"></use></svg>Normal</div>
+          <div style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font:500 13px 'IBM Plex Sans',sans-serif;color:rgba(255,255,255,.74);background:rgba(255,255,255,.07)"><svg width="15" height="15"><use data-icon="#notes"></use></svg>Hover</div>
+          <div style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font:500 13px 'IBM Plex Sans',sans-serif;color:#FFFFFF;background:#1D5A94"><svg width="15" height="15"><use data-icon="#home"></use></svg>Activo</div>
+        </div>
+        <div style="background:#FFFFFF;border:1px solid #E4E9F0;border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:2px">
+          <div style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font:500 13px 'IBM Plex Sans',sans-serif;color:#42546A"><svg width="15" height="15"><use data-icon="#work"></use></svg>Normal</div>
+          <div style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font:500 13px 'IBM Plex Sans',sans-serif;color:#42546A;background:#F1F4F8"><svg width="15" height="15"><use data-icon="#notes"></use></svg>Hover</div>
+          <div style="height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:8px;font:500 13px 'IBM Plex Sans',sans-serif;color:#FFFFFF;background:#0B2D4A"><svg width="15" height="15"><use data-icon="#home"></use></svg>Activo</div>
+        </div>
+      </div>
+      <p style="margin:14px 0 0;font:400 12.5px/1.55 'IBM Plex Sans',sans-serif;color:#5F7183">Activo = fundo azul + texto branco. Sobre navy usa-se o azul claro #1D5A94 para manter contraste.</p>
+    </div>
+    <div style="border:1px solid #E4E9F0;border-radius:12px;padding:20px">
+      <div style="font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">SEGMENTOS, TABS, PILLS, TOGGLE</div>
+      <div style="margin-top:14px;display:flex;gap:2px;padding:3px;background:#F3F6F9;border-radius:9px;width:max-content"><span style="height:28px;padding:0 12px;border-radius:7px;background:#0B2D4A;color:#FFFFFF;font:500 12.5px/28px 'IBM Plex Sans',sans-serif">Detalhes</span><span style="height:28px;padding:0 12px;color:#5F7183;font:500 12.5px/28px 'IBM Plex Sans',sans-serif">Versões</span><span style="height:28px;padding:0 12px;color:#5F7183;font:500 12.5px/28px 'IBM Plex Sans',sans-serif">Partilha</span></div>
+      <div style="margin-top:12px;display:flex;gap:8px"><span style="height:32px;padding:0 14px;border-radius:16px;background:#0B2D4A;color:#FFFFFF;font:500 12.5px/32px 'IBM Plex Sans',sans-serif">Todas</span><span style="height:32px;padding:0 14px;border-radius:16px;border:1px solid #E4E9F0;color:#42546A;font:500 12.5px/30px 'IBM Plex Sans',sans-serif">Investigação</span><span style="height:32px;padding:0 14px;border-radius:16px;border:1px solid #E4E9F0;color:#42546A;font:500 12.5px/30px 'IBM Plex Sans',sans-serif">Conhecimento</span></div>
+      <div style="margin-top:14px;display:flex;align-items:center;gap:14px"><span style="width:36px;height:22px;border-radius:11px;background:#0B2D4A;position:relative"><span style="position:absolute;left:16px;top:3px;width:16px;height:16px;border-radius:50%;background:#FFFFFF"></span></span><span style="width:36px;height:22px;border-radius:11px;background:#C3CDD8;position:relative"><span style="position:absolute;left:2px;top:3px;width:16px;height:16px;border-radius:50%;background:#FFFFFF"></span></span><span style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#0B2D4A;background:#F1F4F8;border-radius:4px;padding:3px 6px">IDEIA</span><span style="font:500 10px 'IBM Plex Mono',monospace;color:#7C8B9A;border:1px solid #E4E9F0;border-radius:5px;padding:2px 6px">⌘K</span></div>
+    </div>
+    <div style="border:1px solid #E4E9F0;border-radius:12px;padding:20px">
+      <div style="font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">CAMPOS</div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+        <label style="display:flex;flex-direction:column;gap:6px;font:500 12px 'IBM Plex Sans',sans-serif;color:#42546A">Nome da instância<span style="height:40px;display:flex;align-items:center;padding:0 12px;border:1px solid #E4E9F0;border-radius:9px;background:#F6F8FA;font:400 14px 'IBM Plex Sans',sans-serif;color:#0F1A24">ocinye-research</span></label>
+        <label style="display:flex;flex-direction:column;gap:6px;font:500 12px 'IBM Plex Sans',sans-serif;color:#42546A">Em foco<span style="height:40px;display:flex;align-items:center;padding:0 12px;border:1.5px solid #E0A731;border-radius:9px;background:#FFFFFF;font:400 14px 'IBM Plex Sans',sans-serif;color:#0F1A24">fidel.monteiro@</span></label>
+        <label style="display:flex;flex-direction:column;gap:6px;font:500 12px 'IBM Plex Sans',sans-serif;color:#42546A">Com erro<span style="height:40px;display:flex;align-items:center;padding:0 12px;border:1.5px solid #B3261E;border-radius:9px;background:#FFFFFF;font:400 14px 'IBM Plex Sans',sans-serif;color:#0F1A24">ocinye research</span><span style="font:400 12px 'IBM Plex Sans',sans-serif;color:#8C2019">Use apenas letras minúsculas, números e hífenes.</span></label>
+      </div>
+    </div>
+    <div style="border:1px solid #E4E9F0;border-radius:12px;padding:20px">
+      <div style="font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">TILE DO LANÇADOR · CARTÃO DE FICHEIRO</div>
+      <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div style="position:relative;padding:14px;border:1px solid #E4E9F0;border-radius:12px"><span style="width:38px;height:38px;border-radius:10px;background:#F1F4F8;color:#0B2D4A;display:flex;align-items:center;justify-content:center"><svg width="18" height="18"><use data-icon="#bibliography"></use></svg></span><svg width="14" height="14" style="position:absolute;top:14px;right:14px;color:#E0A731"><use data-icon="#star-fill"></use></svg><div style="margin-top:12px;font:600 13.5px 'IBM Plex Sans',sans-serif">Bibliografia</div><div style="margin-top:4px;font:400 12px/1.45 'IBM Plex Sans',sans-serif;color:#5F7183">Referências e fontes.</div></div>
+        <div style="border:1px solid #0B2D4A;box-shadow:0 0 0 3px rgba(11,45,74,.12);border-radius:11px;overflow:hidden"><div style="height:84px;background:#F3F6F9;display:flex;align-items:flex-end;justify-content:center;position:relative"><div style="width:56%;height:76%;background:#FFFFFF;border:1px solid #E4E9F0;border-bottom:0;border-radius:4px 4px 0 0;padding:9px 8px;display:flex;flex-direction:column;gap:4px"><div style="height:4px;width:60%;background:#8C2019;opacity:.5;border-radius:2px"></div><div style="height:3px;background:#E4E9F0"></div><div style="height:3px;width:80%;background:#E4E9F0"></div></div></div><div style="padding:8px 10px"><div style="font:500 12.5px 'IBM Plex Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Relatório Q3.pdf</div><div style="margin-top:4px;font:400 10.5px 'IBM Plex Mono',monospace;color:#8A98A6">PDF · 4,2 MB</div></div></div>
+      </div>
+    </div>
+    <div style="border:1px solid #E4E9F0;border-radius:12px;padding:20px">
+      <div style="font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">ESTADO DO SISTEMA · TOAST</div>
+      <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px">
+        <span style="display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:7px;background:#F0F7F3;border:1px solid #D8EBE0;font:500 10.5px 'IBM Plex Mono',monospace;color:#2E6B4C"><span style="width:6px;height:6px;border-radius:50%;background:#3E8F66"></span>CORE OK</span>
+        <span style="display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:7px;background:#FDF6E7;border:1px solid #F2E3BE;font:500 10.5px 'IBM Plex Mono',monospace;color:#8A6110"><span style="width:6px;height:6px;border-radius:50%;background:#E0A731"></span>IA · SEM NÓ</span>
+        <span style="display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:7px;background:#FDF2E7;border:1px solid #F2DBBE;font:500 10.5px 'IBM Plex Mono',monospace;color:#8A4B10"><span style="width:6px;height:6px;border-radius:50%;background:#C87A22"></span>DEGRADADO</span>
+        <span style="display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:7px;background:#FCF0EF;border:1px solid #F1D6D3;font:500 10.5px 'IBM Plex Mono',monospace;color:#8C2019"><span style="width:6px;height:6px;border-radius:50%;background:#B3261E"></span>INDISPONÍVEL</span>
+        <span style="display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:7px;background:#EFF5FB;border:1px solid #D5E4F0;font:500 10.5px 'IBM Plex Mono',monospace;color:#20537F"><span style="width:6px;height:6px;border-radius:50%;background:#2B6CB0"></span>MANUTENÇÃO 22:00</span>
+      </div>
+      <div style="margin-top:16px;display:inline-flex;align-items:center;gap:10px;height:42px;padding:0 18px 0 14px;border-radius:21px;background:#0F1A24;color:#FFFFFF;font:500 13px 'IBM Plex Sans',sans-serif"><span style="width:20px;height:20px;border-radius:50%;background:#3E8F66;display:flex;align-items:center;justify-content:center"><svg width="11" height="11"><use data-icon="#check"></use></svg></span>Alterações guardadas.</div>
+    </div>
+  </div>
+
+  <h2 style="margin:64px 0 0;font:600 32px 'IBM Plex Sans',sans-serif;letter-spacing:-.01em">Iconografia</h2>
+  <p style="margin:8px 0 0;max-width:760px;font:400 15px/1.6 'IBM Plex Sans',sans-serif;color:#5F7183">Grelha 16×16, traço 1,4 px, cantos arredondados, sem preenchimento. Estende o conjunto <span style="font-family:'IBM Plex Mono',monospace;font-size:13px">design/icons/icons.svg</span> do repositório com os ícones pedidos no briefing (ficheiro: assets/icons.svg).</p>
+  <div style="margin-top:22px;display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;max-width:1500px">
+    <sc-for list="{{ icons }}" as="i" hint-placeholder-count="40"><div style="height:92px;border:1px solid #EEF2F6;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#0B2D4A"><svg width="22" height="22"><use data-icon="{{ i.href }}"></use></svg><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A">{{ i.id }}</span></div></sc-for>
+  </div>
+</section>
+
+<section id="partC" style="padding:64px 80px;border-bottom:1px solid #D5DCE3;background:#F6F8FA">
+  <div style="font:500 11px 'IBM Plex Mono',monospace;color:#8A6110;letter-spacing:.2em">PARTE C · ARQUITECTURA DA INTERFACE</div>
+  <h2 style="margin:12px 0 0;font:600 32px 'IBM Plex Sans',sans-serif;letter-spacing:-.01em">Máquina → Instância → Perfil → Contextos</h2>
+  <div style="margin-top:24px;max-width:1500px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;align-items:stretch">
+    <sc-for list="{{ archChain }}" as="a" hint-placeholder-count="5">
+      <div style="display:flex;align-items:stretch">
+        <div style="flex:1;background:{{ a.bg }};color:{{ a.fg }};border:1px solid {{ a.bd }};border-radius:16px;padding:18px 18px 16px;box-shadow:0 1px 2px rgba(11,45,74,.04)">
+          <div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:{{ a.kc }}">{{ a.k }}</div>
+          <div style="margin-top:8px;font:600 16px 'IBM Plex Sans',sans-serif">{{ a.t }}</div>
+          <div style="margin-top:6px;font:400 12.5px/1.55 'IBM Plex Sans',sans-serif;color:{{ a.dc }}">{{ a.d }}</div>
+          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:5px"><sc-for list="{{ a.tags }}" as="g" hint-placeholder-count="3"><span style="font:500 11px 'IBM Plex Mono',monospace;color:{{ a.tc }};background:{{ a.tb }};border-radius:5px;padding:3px 7px">{{ g }}</span></sc-for></div>
+        </div>
+        <sc-if value="{{ a.arrow }}"><div style="width:28px;flex:none;display:flex;align-items:center;justify-content:center;color:#A9B5C1"><svg width="16" height="16"><use data-icon="#chev-r"></use></svg></div></sc-if>
+      </div>
+    </sc-for>
+  </div>
+  <div style="margin-top:16px;max-width:1500px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+    <div style="padding:14px 16px;border-radius:12px;background:#FFFFFF;border:1px solid #EAEFF4;font:400 13px/1.55 'IBM Plex Sans',sans-serif;color:#42546A"><b style="font-weight:600;color:#0F1A24">O perfil controla</b> as predefinições. <b style="font-weight:600;color:#0F1A24">RBAC controla</b> a autoridade. <b style="font-weight:600;color:#0F1A24">O contexto controla</b> o âmbito operacional.</div>
+    <div style="padding:14px 16px;border-radius:12px;background:#FFFFFF;border:1px solid #EAEFF4;font:400 13px/1.55 'IBM Plex Sans',sans-serif;color:#42546A"><b style="font-weight:600;color:#0F1A24">Perfil Personal ≠ Espaço pessoal.</b> Um espaço pessoal existe dentro de qualquer instância compatível, sem mudar o perfil.</div>
+    <div style="padding:14px 16px;border-radius:12px;background:#FFFFFF;border:1px solid #EAEFF4;font:400 13px/1.55 'IBM Plex Sans',sans-serif;color:#42546A"><b style="font-weight:600;color:#0F1A24">O endereço identifica a instância.</b> Sem directório global: os.empresa.com, research.universidade.edu, my.ocinye.local.</div>
+  </div>
+  <h3 style="margin:48px 0 0;font:600 22px 'IBM Plex Sans',sans-serif">Camadas e navegação</h3>
+  <div style="margin-top:28px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px;max-width:1500px">
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="border-radius:12px;background:#FFFFFF;border:1px solid #E4E9F0;padding:18px 20px"><div style="font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">3 · MÓDULOS FUNCIONAIS</div><div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ modules }}" as="m" hint-placeholder-count="20"><span style="font:500 12px 'IBM Plex Sans',sans-serif;color:#28394A;background:#F3F6F9;border-radius:6px;padding:5px 9px">{{ m }}</span></sc-for></div></div>
+      <div style="border-radius:12px;background:#FFFFFF;border:1px solid #E4E9F0;padding:18px 20px"><div style="font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">2 · CONTEXTOS / ESPAÇOS DE TRABALHO</div><div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ envs }}" as="m" hint-placeholder-count="6"><span style="font:500 12px 'IBM Plex Sans',sans-serif;color:#20537F;background:#EFF5FB;border-radius:6px;padding:5px 9px">{{ m }}</span></sc-for></div></div>
+      <div style="border-radius:12px;background:#0B2D4A;padding:18px 20px;color:#FFFFFF"><div style="font:500 10.5px 'IBM Plex Mono',monospace;color:#E0A731;letter-spacing:.14em">1 · OCINYE OS CORE</div><div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ core }}" as="m" hint-placeholder-count="13"><span style="font:500 12px 'IBM Plex Sans',sans-serif;color:#FFFFFF;background:rgba(255,255,255,.08);border-radius:6px;padding:5px 9px">{{ m }}</span></sc-for></div></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <sc-for list="{{ navRoles }}" as="r" hint-placeholder-count="5">
+        <div style="display:flex;gap:16px;padding:16px 18px;background:#FFFFFF;border:1px solid #E4E9F0;border-radius:12px">
+          <span style="width:40px;height:40px;flex:none;border-radius:10px;background:#F1F4F8;color:#0B2D4A;display:flex;align-items:center;justify-content:center"><svg width="18" height="18"><use data-icon="{{ r.ic }}"></use></svg></span>
+          <span><span style="display:flex;align-items:center;gap:8px;font:600 15px 'IBM Plex Sans',sans-serif">{{ r.name }}<span style="font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;border:1px solid #E4E9F0;border-radius:5px;padding:1px 5px">{{ r.key }}</span></span><span style="display:block;margin-top:5px;font:400 13.5px/1.6 'IBM Plex Sans',sans-serif;color:#42546A">{{ r.desc }}</span></span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section id="partD" style="padding:64px 80px;border-bottom:1px solid #D5DCE3;background:#E9EDF1">
+  <div style="font:500 11px 'IBM Plex Mono',monospace;color:#8A6110;letter-spacing:.2em">PARTE D · MOCKUPS PRINCIPAIS</div>
+  <h2 style="margin:12px 0 0;font:600 32px 'IBM Plex Sans',sans-serif;letter-spacing:-.01em">Instalação, sessão e shell · instância Ocinye (Research) · pt</h2>
+  <p style="margin:8px 0 0;max-width:820px;font:400 15px/1.6 'IBM Plex Sans',sans-serif;color:#5F7183">Cada quadro é o protótipo real, fixado num estado. Todos são interactivos. Para navegar livremente abra <a href="Ocinye OS.dc.html">Ocinye OS.dc.html</a>.</p>
+  <div style="margin-top:28px;display:grid;grid-template-columns:repeat(2,720px);gap:40px 28px">
+    <sc-for list="{{ frames }}" as="f" hint-placeholder-count="8">
+      <figure data-fid="{{ f.id }}" style="margin:0">
+        <figcaption style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px"><span style="font:600 10.5px 'IBM Plex Mono',monospace;padding:3px 7px;background:#0B2D4A;color:#FFFFFF;border-radius:4px">{{ f.id }}</span><span style="font:600 14px 'IBM Plex Sans',sans-serif">{{ f.title }}</span><span style="font:400 12.5px 'IBM Plex Sans',sans-serif;color:#5F7183">{{ f.note }}</span></figcaption>
+        <div style="width:720px;height:450px;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08),0 12px 32px rgba(11,45,74,.12);background:#F6F8FA">
+          <div style="width:1440px;height:900px;zoom:.5"><sc-if value="{{ f.vis }}"><dc-import name="Ocinye OS Apps" screen="{{ f.screen }}" preset="{{ f.preset }}" lang="{{ f.lang }}" ai-mode="{{ f.ai }}" theme="{{ f.theme }}" mod-state="{{ f.ms }}" embedded="{{ true }}" keys="{{ false }}" hint-size="1440px,900px" style="width:1440px;height:900px"></dc-import></sc-if>
+          </div>
+        </div>
+      </figure>
+    </sc-for>
+  </div>
+</section>
+
+<section id="partP" style="padding:64px 80px;border-bottom:1px solid #D5DCE3;background:#F6F8FA">
+  <div style="font:500 11px 'IBM Plex Mono',monospace;color:#8A6110;letter-spacing:.2em">PERFIS · O MESMO CORE</div>
+  <h2 style="margin:12px 0 0;font:600 32px 'IBM Plex Sans',sans-serif;letter-spacing:-.01em">Quatro instâncias, um só Core</h2>
+  <p style="margin:8px 0 0;max-width:820px;font:400 15px/1.6 'IBM Plex Sans',sans-serif;color:#5F7183">O perfil pertence à instância e é escolhido na instalação. Muda aplicações, navegação e terminologia predefinidas. O que o membro escolhe depois do login é apenas o espaço de trabalho (organização, unidade, equipa, turma ou espaço pessoal) dentro dessa instância.</p>
+  <div style="margin-top:28px;display:grid;grid-template-columns:repeat(2,720px);gap:40px 28px">
+    <sc-for list="{{ presetFrames }}" as="f" hint-placeholder-count="4">
+      <figure data-fid="{{ f.id }}" style="margin:0">
+        <figcaption style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px"><span style="font:600 10.5px 'IBM Plex Mono',monospace;padding:3px 7px;background:#0B2D4A;color:#FFFFFF;border-radius:4px">{{ f.id }}</span><span style="font:600 14px 'IBM Plex Sans',sans-serif">{{ f.title }}</span><span style="font:400 12.5px 'IBM Plex Sans',sans-serif;color:#5F7183">{{ f.note }}</span></figcaption>
+        <div style="width:720px;height:450px;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08),0 12px 32px rgba(11,45,74,.12);background:#F6F8FA">
+          <div style="width:1440px;height:900px;zoom:.5"><sc-if value="{{ f.vis }}"><dc-import name="Ocinye OS Apps" screen="{{ f.screen }}" preset="{{ f.preset }}" lang="pt" ai-mode="{{ f.ai }}" embedded="{{ true }}" keys="{{ false }}" hint-size="1440px,900px" style="width:1440px;height:900px"></dc-import></sc-if>
+          </div>
+        </div>
+      </figure>
+    </sc-for>
+  </div>
+</section>
+
+<section id="partE" style="padding:64px 80px;border-bottom:1px solid #D5DCE3;background:#E9EDF1">
+  <div style="font:500 11px 'IBM Plex Mono',monospace;color:#8A6110;letter-spacing:.2em">PARTE E · IDIOMAS</div>
+  <h2 style="margin:12px 0 0;font:600 32px 'IBM Plex Sans',sans-serif;letter-spacing:-.01em">pt (canónico) · en · fr</h2>
+  <p style="margin:8px 0 0;max-width:820px;font:400 15px/1.6 'IBM Plex Sans',sans-serif;color:#5F7183">O francês é, em média, 15–25% mais longo que o português. Rótulos de navegação usam elipse em vez de quebra; títulos, estados vazios e descrições quebram linha; botões crescem na horizontal e nunca têm largura fixa. Datas e números seguem o locale (26 de setembro · 26 September · 26 septembre; 1 234 567,89 · 1,234,567.89).</p>
+  <div style="margin-top:28px;display:grid;grid-template-columns:repeat(3,576px);gap:24px">
+    <sc-for list="{{ langFrames }}" as="f" hint-placeholder-count="6">
+      <figure data-fid="{{ f.id }}" style="margin:0">
+        <figcaption style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px"><span style="font:600 10.5px 'IBM Plex Mono',monospace;padding:3px 7px;background:#0B2D4A;color:#FFFFFF;border-radius:4px">{{ f.id }}</span><span style="font:600 14px 'IBM Plex Sans',sans-serif">{{ f.title }}</span></figcaption>
+        <div style="width:576px;height:360px;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08),0 12px 32px rgba(11,45,74,.12);background:#F6F8FA">
+          <div style="width:1440px;height:900px;zoom:.4"><sc-if value="{{ f.vis }}"><dc-import name="Ocinye OS Apps" screen="{{ f.screen }}" preset="research" lang="{{ f.lang }}" ai-mode="none" embedded="{{ true }}" keys="{{ false }}" hint-size="1440px,900px" style="width:1440px;height:900px"></dc-import></sc-if>
+          </div>
+        </div>
+      </figure>
+    </sc-for>
+  </div>
+</section>
+
+<section id="partF" style="padding:64px 80px 96px;background:#FFFFFF">
+  <div style="font:500 11px 'IBM Plex Mono',monospace;color:#8A6110;letter-spacing:.2em">PARTE F · REGRAS FINAIS</div>
+  <h2 style="margin:12px 0 0;font:600 32px 'IBM Plex Sans',sans-serif;letter-spacing:-.01em">Guidelines</h2>
+  <div style="margin-top:28px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;max-width:1500px">
+    <sc-for list="{{ rules }}" as="r" hint-placeholder-count="6">
+      <div style="border:1px solid #E4E9F0;border-radius:12px;padding:22px">
+        <h3 style="margin:0;font:600 16px 'IBM Plex Sans',sans-serif">{{ r.title }}</h3>
+        <ul style="margin:12px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:7px;font:400 13.5px/1.55 'IBM Plex Sans',sans-serif;color:#42546A">
+          <sc-for list="{{ r.items }}" as="x" hint-placeholder-count="4"><li>{{ x }}</li></sc-for>
+        </ul>
+      </div>
+    </sc-for>
+  </div>
+  <div style="margin-top:40px;max-width:1500px;padding:22px 24px;border-radius:12px;background:#F6F8FA;border:1px solid #E4E9F0">
+    <div style="font:500 10.5px 'IBM Plex Mono',monospace;color:#7C8B9A;letter-spacing:.14em">PRÓXIMA ENTREGA</div>
+    <p style="margin:10px 0 0;font:400 14px/1.7 'IBM Plex Sans',sans-serif;color:#28394A">Agentes, Ocinye AI, Audit Log, Mensagens, Conhecimento, Bibliografia e Datasets; densidade compacta aplicada; responsividade tablet/móvel.</p>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  fixIcons() { document.querySelectorAll('use[data-icon]').forEach(u => { if (u.getAttribute('href') !== u.dataset.icon) u.setAttribute('href', u.dataset.icon); }); }
+  
+  state = { vis: {} };
+  componentDidMount() {
+    this.io = new IntersectionObserver(es => { const add = {}; es.forEach(e => { if (e.isIntersecting) add[e.target.dataset.fid] = true; }); if (Object.keys(add).length) this.setState(s => ({ vis: Object.assign({}, s.vis, add) })); }, { rootMargin: '400px' });
+    this.obs = () => document.querySelectorAll('figure[data-fid]').forEach(f => { if (!f._o) { f._o = 1; this.io.observe(f); } });
+    setTimeout(this.obs, 300); setTimeout(this.obs, 1500);
+    this.fixIcons(); requestAnimationFrame(() => this.fixIcons());
+  }
+  componentDidUpdate() { this.obs && this.obs(); this.fixIcons(); }
+  renderVals() {
+    const V = (arr) => arr.map(f => Object.assign({}, f, { vis: !!(this.state && this.state.vis[f.id]) }));
+    const icons = ['home','work','notes','calendar','messages','mail','files','folder','units','idea','project','data','knowledge','bibliography','tasks','results','activity','history','ai','settings','help','bell','search','plus','upload','download','share','archive','trash','shield','members','key','billing','apps','logout','admin','integrations','storage','compute','gpu','language','appearance','workspace','organization','course','star','lock','user','link','eye','code','warning','clock','status'].map(id => ({ id, href: '#' + id }));
+    return {
+      icons,
+      brand: [
+        { name: 'Deep Navy', hex: '#0B2D4A', use: 'Estrutura, sidebar, activo em superfícies claras.' },
+        { name: 'Navy Deep', hex: '#071E33', use: 'Fundo do login e do arranque.' },
+        { name: 'Ocinye Blue', hex: '#1D5A94', use: 'Activo sobre navy; gráficos.' },
+        { name: 'Sunrise Gold', hex: '#E0A731', use: 'Acção principal, foco, envio.' },
+        { name: 'Gold Text', hex: '#8A6110', use: 'Texto dourado sobre claro.' }
+      ],
+      neutrals: [['Canvas','#F6F8FA'],['Surface','#FFFFFF'],['Muted','#F3F6F9'],['Border','#E4E9F0'],['Strong','#C3CDD8'],['Meta','#7C8B9A'],['Secondary','#42546A'],['Text','#0F1A24']].map(([name, hex]) => ({ name, hex })),
+      functional: [['SUCESSO','#2E6B4C','#F0F7F3','#D8EBE0','#3E8F66'],['INFO','#20537F','#EFF5FB','#D5E4F0','#2B6CB0'],['AVISO','#8A4B10','#FDF2E7','#F2DBBE','#C87A22'],['ERRO','#8C2019','#FCF0EF','#F1D6D3','#B3261E'],['DESTAQUE','#8A6110','#FDF6E7','#F2E3BE','#E0A731']].map(([name, fg, bg, bd, dot]) => ({ name, fg, bg, bd, dot })),
+      typeScale: [
+        { spec: 'Display 48/500', font: "500 40px 'IBM Plex Sans',sans-serif", ls: '-.015em', sample: 'Ocinye OS' },
+        { spec: 'Home 26/600', font: "600 26px 'IBM Plex Sans',sans-serif", ls: '-.01em', sample: 'Boa noite, Fidel Monteiro' },
+        { spec: 'Ecrã 24/600', font: "600 24px 'IBM Plex Sans',sans-serif", ls: '-.01em', sample: 'Idioma e região' },
+        { spec: 'KPI 30/600', font: "600 30px 'IBM Plex Sans',sans-serif", ls: '-.01em', sample: '1 204' },
+        { spec: 'Secção 14/600', font: "600 14px 'IBM Plex Sans',sans-serif", ls: '0', sample: 'Continuar trabalho' },
+        { spec: 'Corpo 13.5/400', font: "400 13.5px 'IBM Plex Sans',sans-serif", ls: '0', sample: 'Os módulos essenciais fazem parte do Core.' },
+        { spec: 'Mono 11.5/400', font: "400 11.5px 'IBM Plex Mono',monospace", ls: '0', sample: 'UCS-001-IDEA-001 · há 2 h' },
+        { spec: 'Label 10/500 +.14em', font: "500 10px 'IBM Plex Mono',monospace", ls: '.14em', sample: 'FIXADAS · ESTADO DO SISTEMA' }
+      ],
+      radii: ['4px','7px','9px','12px','16px','22px'].map(v => ({ v })),
+      spaces: [4,8,12,16,20,24,32,40].map(n => ({ n: String(n), v: (n * 0.9) + 'px' })),
+      shadows: [['card','0 2px 10px rgba(11,45,74,.06)'],['input','0 4px 18px rgba(11,45,74,.06)'],['pop','0 16px 40px rgba(11,26,45,.20),0 2px 8px rgba(11,26,45,.10)'],['overlay','0 30px 80px rgba(7,30,51,.32)']].map(([n, v]) => ({ n, v })),
+      archChain: [
+        { k: 'MÁQUINA / NÓ', t: 'Servidor', d: 'Máquina física, VM ou cloud que fornece computação, armazenamento e IA.', tags: ['LAN', 'VPN', 'cloud'], bg: '#FFFFFF', fg: '#0F1A24', bd: '#EAEFF4', kc: '#7C8B9A', dc: '#5F7183', tc: '#42546A', tb: '#F3F6F9', arrow: true },
+        { k: 'INSTALAÇÃO', t: 'Ocinye OS', d: 'O Core: identidade, segurança, armazenamento, aplicações, pesquisa, IA modular.', tags: ['Core', 'v1.0'], bg: '#FFFFFF', fg: '#0F1A24', bd: '#EAEFF4', kc: '#7C8B9A', dc: '#5F7183', tc: '#42546A', tb: '#F3F6F9', arrow: true },
+        { k: 'INSTÂNCIA', t: 'Ocinye', d: 'Ambiente governado de forma independente, identificado pelo endereço.', tags: ['os.ocinye.com'], bg: 'linear-gradient(180deg,#123C60,#0B2D4A)', fg: '#FFFFFF', bd: '#0B2D4A', kc: '#E0A731', dc: 'rgba(255,255,255,.7)', tc: '#FFFFFF', tb: 'rgba(255,255,255,.1)', arrow: true },
+        { k: 'PERFIL DA INSTÂNCIA', t: 'Research', d: 'Escolhido na instalação. Define aplicações, navegação e políticas predefinidas.', tags: ['Research', 'Business', 'Personal', 'Education'], bg: '#FDF6E7', fg: '#0F1A24', bd: '#F2E3BE', kc: '#8A6110', dc: '#8A4B10', tc: '#8A6110', tb: '#FFFFFF', arrow: true },
+        { k: 'CONTEXTOS', t: 'Espaços de trabalho', d: 'Onde o membro opera. Escolhidos após o login só se houver mais de um.', tags: ['Organização', 'Unidade', 'Equipa', 'Turma', 'Espaço pessoal'], bg: '#FFFFFF', fg: '#0F1A24', bd: '#EAEFF4', kc: '#7C8B9A', dc: '#5F7183', tc: '#20537F', tb: '#EFF5FB', arrow: false }
+      ],
+      modules: ['Home','O Meu Trabalho','Notas','Ficheiros','Correio','Mensagens','Calendário','Tarefas','Unidades','Ideias','Projectos','Datasets','Conhecimento','Bibliografia','Resultados','Actividade','Histórico','Prompt Ocinye','Computação','Administração','Turmas'],
+      envs: ['Organização','Unidade','Equipa','Departamento','Turma','Projecto','Espaço pessoal'],
+      core: ['Identidade','Sessão','Segurança','Idioma','Aplicações','Permissões','Armazenamento','Pesquisa global','Notificações','Actividade / logs','Definições','Nós de IA','Estado do sistema'],
+      navRoles: [
+        { ic: '#sidebar', name: 'Barra lateral', key: 'fixa', desc: 'Só o essencial: Aplicações, Prompt, 5–6 módulos principais do perfil e até 4 fixados pelo utilizador. Definições, Ajuda e conta no rodapé. Recolhível para 68 px.' },
+        { ic: '#apps', name: 'Lançador de aplicações', key: '⌘J', desc: 'Onde vive tudo o resto. Pesquisa, categorias, favoritos, recentes. Fixar um favorito pode promovê-lo à barra lateral.' },
+        { ic: '#search', name: 'Paleta de comandos', key: '⌘K', desc: 'Pesquisa global, acções, aplicações, ficheiros e “perguntar ao Prompt” numa só entrada. A mesma caixa na barra de topo.' },
+        { ic: '#plus', name: 'Criar', key: '⌥', desc: 'Menu único de criação, adaptado ao perfil. Cada item tem atalho.' },
+        { ic: '#status', name: 'Barra de topo', key: 'sistema', desc: 'Breadcrumbs, pesquisa, Criar, notificações, estado do Core, estado da IA e relógio. Igual em todos os módulos.' }
+      ],
+      frames: V([
+        { id: 'D1', title: 'Instalação · Boas-vindas', note: 'passo 1 de 12', screen: 'setup', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D2', title: 'Instalação · Perfil da instalação', note: 'único sítio onde o perfil é escolhido', screen: 'setupProfile', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D3', title: 'Instalação · Aplicações', note: 'predefinidas pelo perfil, ajustáveis', screen: 'setupApps', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D4', title: 'Instalação · IA opcional', note: 'configurar mais tarde por omissão', screen: 'setupAi', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D5', title: 'Instalação · Inicialização', note: '', screen: 'setupInit', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D6', title: 'Instalação · Pronto', note: '', screen: 'setupReady', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D7', title: 'Início de sessão da instância', note: 'Ocinye · perfil Research · sem controlos de operador', screen: 'login', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D8', title: 'Verificação em dois passos', note: 'só quando a política exige', screen: 'tfa', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D9', title: 'Escolher espaço de trabalho', note: 'contextos dentro da instância', screen: 'ws', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D10', title: 'Recuperar palavra-passe', note: 'confirmação neutra', screen: 'recover', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D11', title: 'Convite', note: 'primeiro acesso de um membro', screen: 'invite', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D12', title: 'Sessão expirada', note: '', screen: 'expired', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D13', title: 'Acesso revogado', note: '', screen: 'revoked', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D14', title: 'Core degradado', note: 'estado real, sem fingir «operacional»', screen: 'degraded', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D15', title: 'Ecrã de bloqueio', note: 'sessão preservada', screen: 'lock', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D16', title: 'Home · UENR-001', note: 'contexto activo visível', screen: 'home', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D17', title: 'Mudar de espaço', note: 'não muda instância nem perfil', screen: 'ctxmenu', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D18', title: 'Definições › Instância', note: 'apenas administradores', screen: 'instance', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D19', title: 'Definições › Perfil e configuração', note: 'alteração significativa', screen: 'profileCfg', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D20', title: 'Definições › Sistema', note: 'controlos só para operadores', screen: 'system', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D21', title: 'Lançador de aplicações', note: '⌘J', screen: 'launcher', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D22', title: 'Ficheiros', note: '', screen: 'files', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D23', title: 'Prompt · nó local', note: '', screen: 'prompt', preset: 'research', lang: 'pt', ai: 'local' },
+        { id: 'D24', title: 'Definições › Idioma', note: 'pt canónico', screen: 'settings', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D25', title: 'Notas · editor', note: 'folha branca sobre fundo neutro', screen: 'notes', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D26', title: 'Correio · caixa e leitura', note: '', screen: 'mail', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D27', title: 'Calendário · semana', note: 'mês / semana / dia', screen: 'calendar', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D28', title: 'Tarefas · lista', note: 'lista e quadro', screen: 'tasks', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D29', title: 'Actividade', note: 'pessoal e institucional', screen: 'activity', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D30', title: 'Administração · membros', note: '', screen: 'admin', preset: 'research', lang: 'pt', ai: 'none' },
+        { id: 'D31', title: 'Modo escuro · Home', note: '', screen: 'home', preset: 'research', lang: 'pt', ai: 'local', theme: 'dark' },
+        { id: 'D32', title: 'Modo escuro · Correio', note: '', screen: 'mail', preset: 'research', lang: 'pt', ai: 'none', theme: 'dark' },
+        { id: 'D33', title: 'Estado · sem permissão', note: 'aplicado a Administração', screen: 'admin', preset: 'research', lang: 'pt', ai: 'none', ms: 'noPermission' },
+        { id: 'D34', title: 'Estado · não encontrado', note: 'aplicado a Notas', screen: 'notes', preset: 'research', lang: 'pt', ai: 'none', ms: 'notFound' },
+        { id: 'D35', title: 'Estado · manutenção', note: 'aplicado a Correio', screen: 'mail', preset: 'research', lang: 'pt', ai: 'none', ms: 'maintenance' },
+        { id: 'D36', title: 'Estado · quota cheia', note: 'aviso em Ficheiros', screen: 'files', preset: 'research', lang: 'pt', ai: 'none', ms: 'quotaFull' },
+      ]),
+      presetFrames: V([
+        { id: 'P1', title: 'Instância Ocinye · Research', note: 'login → 3 contextos → selector', preset: 'research', ai: 'none', screen: 'login' },
+        { id: 'P2', title: 'Instância Example Company · Business', note: 'SSO configurado · equipas como contextos', preset: 'business', ai: 'external', screen: 'login' },
+        { id: 'P3', title: 'Instância Fidel · Personal', note: 'um só contexto → Home directo', preset: 'personal', ai: 'local', screen: 'login' },
+        { id: 'P4', title: 'Instância Universidade · Education', note: 'departamentos e turmas como contextos', preset: 'education', ai: 'multi', screen: 'login' },
+        { id: 'P5', title: 'Research · Home UENR-001', note: 'contexto Unidade', preset: 'research', ai: 'none', screen: 'home' },
+        { id: 'P6', title: 'Business · Home Equipa de Operações', note: 'contexto Equipa', preset: 'business', ai: 'external', screen: 'home' },
+        { id: 'P7', title: 'Personal · Home Espaço pessoal', note: 'sem selector de contexto', preset: 'personal', ai: 'local', screen: 'home' },
+        { id: 'P8', title: 'Education · Home ENG-201', note: 'contexto Turma', preset: 'education', ai: 'multi', screen: 'home' }
+      ]),
+      langFrames: V([
+        { id: 'E1', title: 'Home · pt', screen: 'home', lang: 'pt' },
+        { id: 'E2', title: 'Home · en', screen: 'home', lang: 'en' },
+        { id: 'E3', title: 'Home · fr', screen: 'home', lang: 'fr' },
+        { id: 'E4', title: 'Login · pt', screen: 'login', lang: 'pt' },
+        { id: 'E5', title: 'Lançador · en', screen: 'launcher', lang: 'en' },
+        { id: 'E6', title: 'Instalação · fr', screen: 'setup', lang: 'fr' }
+      ]),
+      rules: [
+        { title: 'Estados activos', items: ['Activo = fundo azul + texto branco, em todo o sistema.', 'Superfície clara: #0B2D4A. Sidebar navy: #1D5A94.', 'Sem sublinhado dourado como indicador de activo.', 'Hover é sempre um tom neutro, nunca o azul do activo.'] },
+        { title: 'Barra lateral', items: ['Máximo 6 principais + 4 fixados.', 'Aplicações e Prompt no topo, sempre visíveis.', 'Rótulos numa só linha com elipse; o tooltip mostra o nome completo.', 'Recolhida mostra só ícones com tooltip.'] },
+        { title: 'Menus e painéis', items: ['Painéis pousados: branco 94%, blur 18 px, raio 13 px, sombra em 3 camadas.', 'Linha = ícone + assunto + descrição ou atalho.', 'Abrem com fade de .14 s e fecham com Esc ou clique fora.', 'Nunca mais de um painel aberto.'] },
+        { title: 'Lançador', items: ['Pesquisa com foco automático ao abrir.', 'Categorias como pills; activa em navy.', 'Favoritos e recentes só sem filtro activo.', 'Aplicações ocultas pelo perfil não aparecem.'] },
+        { title: 'Estados vazios', items: ['Ícone do módulo, título que diz o que falta, uma frase de contexto.', 'Uma acção principal e, no máximo, uma secundária.', 'Sem ilustrações decorativas.', 'Degradado e erro usam cor funcional só no badge.'] },
+        { title: 'Responsividade', items: ['≥1280: sidebar 248 + painel de detalhe 340.', '1024–1279: sidebar recolhida, detalhe por cima.', '<1024: sidebar em gaveta, grelhas a 1 coluna.', 'Texto nunca em largura fixa; botões crescem com a tradução.'] }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
