@@ -303,9 +303,9 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
         |(id, _)| format!("/files?folder={id}"),
     );
     let _ = &managed_file; // o painel permanente deu lugar aos menus por ficha.
-    // Numa vista plana (favoritos/recentes) ou dentro de uma pasta, só contam
-    // os ficheiros; as fichas de pasta não aparecem, e por isso não pesam no
-    // «vazio» — uma pasta sem ficheiros lê-se «vazia», e não uma grelha muda.
+                           // Numa vista plana (favoritos/recentes) ou dentro de uma pasta, só contam
+                           // os ficheiros; as fichas de pasta não aparecem, e por isso não pesam no
+                           // «vazio» — uma pasta sem ficheiros lê-se «vazia», e não uma grelha muda.
     let meu_vazio = personal_files.is_empty()
         && (em_vista || open_folder.is_some() || personal_folders.is_empty());
 
@@ -1636,8 +1636,14 @@ mod tests {
             "content_type": "application/pdf", "size_bytes": 2048, "versions": 1
         })]))
         .to_html();
-        assert!(html.contains(r#"data-oc="fs-grelha""#), "falta a grelha de fichas");
-        assert!(html.contains(r#"class="ods-file""#), "o ficheiro não é uma ficha");
+        assert!(
+            html.contains(r#"data-oc="fs-grelha""#),
+            "falta a grelha de fichas"
+        );
+        assert!(
+            html.contains(r#"class="ods-file""#),
+            "o ficheiro não é uma ficha"
+        );
         assert!(html.contains("prova.pdf"), "falta o nome do ficheiro");
         // E a forma da tabela institucional nunca traz o seu próprio prefixo.
         assert!(!html.contains("oc-table--oc-table--"));
@@ -1718,7 +1724,10 @@ mod tests {
             "content_type": "application/pdf", "size_bytes": 10, "versions": 1
         });
         let html = all_files(membro_sem_ambiente(vec![ficheiro])).to_html();
-        assert!(html.contains(r#"data-part="fs__acoes""#), "falta o menu de acções");
+        assert!(
+            html.contains(r#"data-part="fs__acoes""#),
+            "falta o menu de acções"
+        );
         assert!(
             html.contains("action=\"/me/files/rename\""),
             "falta mudar nome"

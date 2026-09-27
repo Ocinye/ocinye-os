@@ -790,7 +790,11 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
         .cloned()
         .unwrap_or_default();
 
-    let classe = if minha { "ods-d12-msg ods-d12-msg--mine" } else { "ods-d12-msg" };
+    let classe = if minha {
+        "ods-d12-msg ods-d12-msg--mine"
+    } else {
+        "ods-d12-msg"
+    };
 
     view! {
         <article class=classe data-oc="mensagem" data-minha=minha.then_some("") data-seguida=seguida.then_some("") data-oc-id=id.clone() data-oc-autor=autor>

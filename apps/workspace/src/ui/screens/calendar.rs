@@ -1904,10 +1904,7 @@ mod grelha_do_mes {
         );
         let html = pagina(&[], outro);
 
-        assert!(
-            html.contains("data-hoje"),
-            "a grelha deixou de marcar hoje"
-        );
+        assert!(html.contains("data-hoje"), "a grelha deixou de marcar hoje");
         assert!(
             html.contains("data-selecionado"),
             "a grelha deixou de marcar o dia escolhido"
@@ -2163,8 +2160,14 @@ mod vistas_temporais {
             "as actividades simultâneas não dividiram a largura"
         );
         // E cada uma numa coluna própria: duas na mesma coluna sobrepunham-se.
-        assert!(html.contains(r#"data-coluna="1""#), "falta a primeira coluna");
-        assert!(html.contains(r#"data-coluna="2""#), "falta a segunda coluna");
+        assert!(
+            html.contains(r#"data-coluna="1""#),
+            "falta a primeira coluna"
+        );
+        assert!(
+            html.contains(r#"data-coluna="2""#),
+            "falta a segunda coluna"
+        );
     }
 
     /// O Ano tem doze meses, de Janeiro a Dezembro.

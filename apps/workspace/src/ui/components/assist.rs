@@ -26,7 +26,6 @@
 
 use leptos::prelude::*;
 
-
 /// O contexto em que a superfície aparece.
 pub struct Assist {
     /// Onde o membro está, em linguagem do domínio: «esta Ideia», «este Projecto».

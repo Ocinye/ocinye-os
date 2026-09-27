@@ -108,7 +108,6 @@ pub fn moldura(seccao: SeccaoAdmin, conteudo: impl IntoView + 'static) -> impl I
     }
 }
 
-
 /// Ecrã «Adicionar utilizador».
 ///
 /// Um formulário e não um assistente de cinco passos: os campos cabem num ecrã,

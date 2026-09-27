@@ -2333,7 +2333,8 @@ mod tests {
                 "{ecra}: a acção primária desapareceu em vez de se declarar"
             );
             assert!(
-                html.contains(r#"data-part="unavailable""#) && html.contains("aria-disabled=\"true\""),
+                html.contains(r#"data-part="unavailable""#)
+                    && html.contains("aria-disabled=\"true\""),
                 "{ecra}: a acção aparece sem estar marcada como indisponível"
             );
             assert!(
