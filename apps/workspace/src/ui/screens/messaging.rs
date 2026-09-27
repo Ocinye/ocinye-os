@@ -18,7 +18,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::ui::components::{avatar, empty_state, AvatarSize, Button, EmptyState};
-use crate::ui::icon::{icon, Icon};
+use crate::ui::icon::Icon;
 
 /// A rota canónica do módulo.
 ///
@@ -165,7 +165,7 @@ fn linha_da_conversa(
                 {if grupo {
                     view! {
                         <span aria-hidden="true">
-                            {icon(Icon::Units, 15)}
+                            {crate::ui::ods::icone(crate::ui::ods::icone_do_legado(Icon::Units), "")}
                         </span>
                     }
                         .into_any()
@@ -278,7 +278,7 @@ pub fn messaging(page: &MessagingPage<'_>) -> impl IntoView {
                                 title=crate::i18n::t("messaging.new_conversation")
                             >
                                 <span class="ods-sr-only">{crate::i18n::t("messaging.new_conversation")}</span>
-                                {icon(Icon::Plus, 15)}
+                                {crate::ui::ods::icone(crate::ui::ods::icone_do_legado(Icon::Plus), "")}
                             </button>
                         </div>
                     </header>
@@ -878,7 +878,7 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
                     title=crate::i18n::t("messaging.reply")
                 >
                     <span class="ods-sr-only">{crate::i18n::t("messaging.reply")}</span>
-                    {icon(Icon::Reply, 14)}
+                    {crate::ui::ods::icone(crate::ui::ods::icone_do_legado(Icon::Reply), "")}
                 </button>
                 <button
                     type="button"
@@ -892,7 +892,7 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
                 </button>
                 <button type="button" class="ods-iconbtn" data-oc="copiar" title=crate::i18n::t("messaging.copy_text")>
                     <span class="ods-sr-only">{crate::i18n::t("messaging.copy_text")}</span>
-                    {icon(Icon::Archive, 14)}
+                    {crate::ui::ods::icone(crate::ui::ods::icone_do_legado(Icon::Archive), "")}
                 </button>
             </div>
         </article>

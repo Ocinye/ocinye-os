@@ -11,7 +11,7 @@ use leptos::prelude::*;
 use serde_json::Value;
 
 use crate::ui::components::{badge, button, card, section_head, Button, Tone, Variant};
-use crate::ui::icon::{icon, Icon};
+use crate::ui::icon::Icon;
 use crate::ui::roles;
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -259,7 +259,7 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                     <section class="ods-widget ods-widget-surface" data-part="card">
                         <div class="ods-widget__body">
                             <div>
-                                {icon(Icon::Shield, 14)}
+                                {crate::ui::ods::icone(crate::ui::ods::icone_do_legado(Icon::Shield), "")}
                                 <strong>{crate::i18n::t("admin.new.whats_next")}</strong>
                             </div>
                             <p class="ods-field__hint">
