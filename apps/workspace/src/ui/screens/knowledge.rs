@@ -80,11 +80,11 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
                 </div>
             </div>
 
-            <div class="ods-tabs" >
+            <div class="ods-tabs">
                 {pill_tabs(tabs, t("knowledge.tabs.aria"))}
             </div>
 
-            <div >
+            <div>
                 {counter(t("knowledge.counter.bibliography"), count(&bibliography), Some("/bibliography"))}
                 {counter(t("knowledge.counter.documents"), count(&documents), None)}
                 {counter(t("knowledge.counter.datasets"), count(&datasets), Some("/datasets"))}
@@ -121,7 +121,7 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
                                     .map(|row| {
                                         let kind = text(row, "entity_type").to_uppercase();
                                         view! {
-                                            <div >
+                                            <div>
                                                 <span class="ods-chip">{kind}</span>
                                                 <span data-oc-content="1">
                                                     {text(row, "title")}
@@ -153,10 +153,10 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
 fn counter(label: &'static str, value: i64, href: Option<&'static str>) -> impl IntoView {
     let conteudo = move || {
         view! {
-            <div class="ods-label" >
+            <div class="ods-label">
                 {label.to_uppercase()}
             </div>
-            <div class="ods-d12-metric__value" >
+            <div class="ods-d12-metric__value">
                 {value.to_string()}
             </div>
         }
@@ -216,13 +216,13 @@ fn counter_not_implemented(label: &'static str) -> impl IntoView {
             aria-disabled="true"
             title=t("knowledge.not_in_core")
         >
-            <div class="ods-label" >
+            <div class="ods-label">
                 {label.to_uppercase()}
             </div>
-            <div class="ods-d12-metric__value" >
+            <div class="ods-d12-metric__value">
                 "—"
             </div>
-            <div class="ods-field__hint" >
+            <div class="ods-field__hint">
                 {t("knowledge.not_implemented")}
             </div>
         </div>

@@ -2134,6 +2134,19 @@
     }
   });
 
+  /* «Voltar» dos avisos (D12): a ligação leva a O Meu Trabalho; com histórico
+   * desta origem, volta à página de onde se veio. */
+  document.addEventListener('click', (evento) => {
+    const voltar = evento.target.closest && evento.target.closest('[data-oc="voltar"]');
+    if (!voltar) return;
+    let daqui = false;
+    try { daqui = document.referrer && new URL(document.referrer).origin === window.location.origin; } catch { /* sem referrer */ }
+    if (daqui && window.history.length > 1) {
+      evento.preventDefault();
+      window.history.back();
+    }
+  });
+
   /* ── Ficheiros: o explorador ──────────────────────────────────────────
    *
    * A grelha e a lista são a mesma marcação com um atributo; a vista lembra-se

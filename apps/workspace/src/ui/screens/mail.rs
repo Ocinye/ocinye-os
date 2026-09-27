@@ -215,6 +215,7 @@ pub fn mail(
                         {crate::i18n::t("mail.header_subtitle")}
                     </p>
                 </div>
+                <span class="ods-app__toolbar-spacer"></span>
                 // A hierarquia que a acção merece.
                 //
                 // «Actualizar», «Escrever» e «Definições» tinham o mesmo peso,
@@ -1905,6 +1906,7 @@ pub fn settings(
                     <h1 class="ods-page__title">{crate::i18n::t("mail.settings")}</h1>
                     <p class="ods-page__sub">{crate::i18n::t("mail.settings.subtitle")}</p>
                 </div>
+                <span class="ods-app__toolbar-spacer"></span>
                 <div>
                     {button(Button::new(crate::i18n::t("mail.back_to_mail"), Variant::Secondary).href("/mail"))}
                 </div>

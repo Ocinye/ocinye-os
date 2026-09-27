@@ -15,41 +15,75 @@
 use leptos::prelude::*;
 
 use crate::ui::components::{button, Button, Variant};
-use crate::ui::icon::{icon, Icon};
+use crate::ui::ods::icone;
+
+/// A moldura única dos avisos (D12): ícone, título, texto e acções.
+///
+/// `data-kind` diz que aviso é, para o desenho e para quem testa; o texto diz-o
+/// a quem lê.
+fn aviso(
+    tipo: &'static str,
+    icone_id: &'static str,
+    titulo: &'static str,
+    corpo: impl IntoView + 'static,
+    accoes: impl IntoView + 'static,
+) -> impl IntoView {
+    view! {
+        // `<section>` e não o `<main>` do D12: o aviso é desenhado dentro da
+        // casca, que já tem o `<main>` da página (Q-27).
+        <section class="ods-d12-notice" data-kind=tipo>
+            <span class="ods-empty__icon">{icone(icone_id, "ods-icon--lg")}</span>
+            <h1 class="ods-page__title">{titulo}</h1>
+            {corpo}
+            <div class="ods-settings__actions">{accoes}</div>
+        </section>
+    }
+}
+
+/// «Voltar»: sem JavaScript leva a O Meu Trabalho; com ele, o `app.js` volta à
+/// página de onde se veio quando há para onde voltar (`data-oc="voltar"`).
+fn voltar() -> impl IntoView {
+    view! {
+        <a class="ods-btn" href="/my-work" data-oc="voltar">{crate::i18n::t("notice.back")}</a>
+    }
+}
+
+/// «Recarregar»: uma ligação para esta mesma página. `href=""` pede o mesmo
+/// endereço outra vez, sem JavaScript.
+fn recarregar(rotulo: &'static str) -> impl IntoView {
+    view! { <a class="ods-btn ods-btn--navy" href="">{rotulo}</a> }
+}
 
 /// Caminho inexistente.
 ///
 /// Deliberadamente sem o caminho pedido no corpo: ecoá-lo devolveria texto do
 /// utilizador para dentro da página, e não acrescenta nada que ele não saiba.
 pub fn not_found() -> impl IntoView {
-    view! {
-        <div class="ods-notice">
-            <span class="ods-empty__icon">{icon(Icon::EmptyState, 26)}</span>
-            <h1>{crate::i18n::t("error.not_found.title")}</h1>
-            <p>{crate::i18n::t("error.not_found.body")}</p>
-            <div>
-                {button(Button::new(crate::i18n::t("error.go_home"), Variant::Primary).href("/"))}
-                {button(Button::new(crate::i18n::t("nav.my_work"), Variant::Secondary).href("/my-work"))}
-            </div>
-        </div>
-    }
+    aviso(
+        "not-found",
+        "search",
+        crate::i18n::t("error.not_found.title"),
+        view! { <p class="ods-page__sub">{crate::i18n::t("error.not_found.body")}</p> },
+        button(Button::new(crate::i18n::t("notice.back_desktop"), Variant::Primary).href("/")),
+    )
 }
 
 /// Falha inesperada, com a referência para investigação.
 pub fn failure(correlation_id: &str) -> impl IntoView {
     let reference = correlation_id.to_owned();
-
-    view! {
-        <div class="ods-notice">
-            <span class="ods-empty__icon">{icon(Icon::Shield, 26)}</span>
-            <h1>{crate::i18n::t("error.generic.title")}</h1>
-            <p>{crate::i18n::t("error.generic.body")}</p>
+    aviso(
+        "failure",
+        "status",
+        crate::i18n::t("error.generic.title"),
+        view! {
+            <p class="ods-page__sub">{crate::i18n::t("error.generic.body")}</p>
             <p class="ods-label">{crate::i18n::t("error.reference")}{reference}</p>
-            <div>
-                {button(Button::new(crate::i18n::t("error.go_home"), Variant::Primary).href("/"))}
-            </div>
-        </div>
-    }
+        },
+        view! {
+            {recarregar(crate::i18n::t("ods.retry"))}
+            {button(Button::new(crate::i18n::t("notice.back_desktop"), Variant::Secondary).href("/"))}
+        },
+    )
 }
 
 /// Recusa de acesso.
@@ -57,16 +91,13 @@ pub fn failure(correlation_id: &str) -> impl IntoView {
 /// Usada onde a existência do recurso não é segredo. Onde for, o Core devolve
 /// `not_found` e é [`not_found`] que aparece (ADR-0100).
 pub fn access_denied() -> impl IntoView {
-    view! {
-        <div class="ods-notice">
-            <span class="ods-empty__icon">{icon(Icon::Shield, 26)}</span>
-            <h1>{crate::i18n::t("error.forbidden.title")}</h1>
-            <p>{crate::i18n::t("error.forbidden.body")}</p>
-            <div>
-                {button(Button::new(crate::i18n::t("nav.my_work"), Variant::Primary).href("/my-work"))}
-            </div>
-        </div>
-    }
+    aviso(
+        "denied",
+        "lock",
+        crate::i18n::t("error.forbidden.title"),
+        view! { <p class="ods-page__sub">{crate::i18n::t("error.forbidden.body")}</p> },
+        voltar(),
+    )
 }
 
 /// A aplicação existe no Ocinye OS e esta Instância não a tem activa (ADR-0014).
@@ -76,13 +107,14 @@ pub fn access_denied() -> impl IntoView {
 /// devolve-a tal como estava — por isso a frase diz isso, e diz a quem cabe.
 pub fn application_inactive() -> impl IntoView {
     view! {
-        <div class="ods-notice" data-oc="app-inactive">
-            <span class="ods-empty__icon">{icon(Icon::Settings, 26)}</span>
-            <h1>{crate::i18n::t("notice.app_inactive.title")}</h1>
-            <p>{crate::i18n::t("notice.app_inactive.body")}</p>
-            <div>
-                {button(Button::new(crate::i18n::t("nav.home"), Variant::Primary).href("/"))}
-            </div>
+        <div data-oc="app-inactive">
+            {aviso(
+                "inactive",
+                "apps-brand",
+                crate::i18n::t("notice.app_inactive.title"),
+                view! { <p class="ods-page__sub">{crate::i18n::t("notice.app_inactive.body")}</p> },
+                button(Button::new(crate::i18n::t("notice.back_desktop"), Variant::Primary).href("/")),
+            )}
         </div>
     }
 }
@@ -110,19 +142,16 @@ pub fn unavailable(razao: Option<String>) -> impl IntoView {
     // explicações da mesma coisa lêem-se como se fossem duas coisas.
     let explicacao =
         razao.unwrap_or_else(|| crate::i18n::t("notice.unavailable.default").to_owned());
-    view! {
-        <div class="ods-notice">
-            <span class="ods-empty__icon">{icon(Icon::SystemStatus, 26)}</span>
-            <h1>{crate::i18n::t("notice.unavailable.title")}</h1>
-            <p>{explicacao}</p>
-            <p>
-                {crate::i18n::t("notice.unavailable.aside")}
-            </p>
-            <div>
-                {button(Button::new(crate::i18n::t("notice.go_my_work"), Variant::Primary).href("/my-work"))}
-            </div>
-        </div>
-    }
+    aviso(
+        "unavailable",
+        "status",
+        crate::i18n::t("notice.unavailable.title"),
+        view! {
+            <p class="ods-page__sub">{explicacao}</p>
+            <p class="ods-field__hint">{crate::i18n::t("notice.unavailable.aside")}</p>
+        },
+        (),
+    )
 }
 
 /// O Core percebeu o pedido e recusou-o pelo conteúdo.
@@ -135,19 +164,16 @@ pub fn unavailable(razao: Option<String>) -> impl IntoView {
 /// alguém aquilo que a frase já responde.
 pub fn rejected(razao: &str) -> impl IntoView {
     let razao = razao.to_owned();
-    view! {
-        <div class="ods-notice">
-            <span class="ods-empty__icon">{icon(Icon::SystemStatus, 26)}</span>
-            <h1>{crate::i18n::t("notice.rejected.title")}</h1>
-            <p>{razao}</p>
-            <p>
-                {crate::i18n::t("notice.rejected.aside")}
-            </p>
-            <div>
-                {button(Button::new(crate::i18n::t("notice.go_my_work"), Variant::Primary).href("/my-work"))}
-            </div>
-        </div>
-    }
+    aviso(
+        "rejected",
+        "shield",
+        crate::i18n::t("notice.rejected.title"),
+        view! {
+            <p class="ods-page__sub">{razao}</p>
+            <p class="ods-field__hint">{crate::i18n::t("notice.rejected.aside")}</p>
+        },
+        voltar(),
+    )
 }
 
 /// O estado mudou por baixo do pedido (409).
@@ -157,16 +183,16 @@ pub fn rejected(razao: &str) -> impl IntoView {
 /// perde — recarrega-se para ver a versão actual e decidir sobre ela.
 pub fn conflict(razao: &str) -> impl IntoView {
     let razao = razao.to_owned();
-    view! {
-        <div class="ods-notice">
-            <span class="ods-empty__icon">{icon(Icon::SystemStatus, 26)}</span>
-            <h1>{crate::i18n::t("notice.conflict.title")}</h1>
-            <p>{razao}</p>
-            <p>
-                {crate::i18n::t("notice.conflict.aside")}
-            </p>
-        </div>
-    }
+    aviso(
+        "conflict",
+        "edit",
+        crate::i18n::t("notice.conflict.title"),
+        view! {
+            <p class="ods-page__sub">{razao}</p>
+            <p class="ods-field__hint">{crate::i18n::t("notice.conflict.aside")}</p>
+        },
+        recarregar(crate::i18n::t("notice.reload")),
+    )
 }
 
 #[cfg(test)]
@@ -262,7 +288,7 @@ mod pureza_i18n {
             "n’est pas disponible pour l’instant",
             "La demande n’a pas été acceptée",
             "modifié dans une autre session",
-            "Mon travail",
+            "Retour",
         ] {
             assert!(fr.contains(francesa), "fr: falta «{francesa}»");
         }

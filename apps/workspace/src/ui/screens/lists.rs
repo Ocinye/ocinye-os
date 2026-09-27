@@ -84,6 +84,7 @@ pub fn list_screen(viewer: &Viewer, screen: ListScreen) -> impl IntoView {
                     <h1 class="ods-page__title">{title}</h1>
                     <p class="ods-page__sub">{subtitle}</p>
                 </div>
+                <span class="ods-app__toolbar-spacer"></span>
                 <div>
                     // A acção aparece sempre. Escondê-la a quem não tem a
                     // permissão fazia a interface mudar de forma consoante quem
@@ -270,7 +271,7 @@ fn unit_selector(slice: &Slice, base: &str) -> impl IntoView {
     view! {
         // Um `GET` normal: a escolha vai para o URL, e um endereço de unidade
         // continua a ser essa unidade quando alguém o guarda ou partilha.
-        <form class="oc-unit-pick" method="get" action=base>
+        <form method="get" action=base>
             <label class="ods-field__label" for="unit_id">{crate::i18n::t("lists.unit_pick.label")}</label>
             <select class="ods-input" id="unit_id" name="unit_id">
                 <option value="" disabled=true selected=escolhida.is_none()>
@@ -1994,13 +1995,13 @@ pub fn new_idea(units: &Value, error: Option<String>) -> impl IntoView {
                                         ("RESTRICTED".to_owned(), true),
                                     ],
                                 )}
-                                <p class="ods-field__hint" >
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("lists.new_idea.class_note")}
                                 </p>
                             },
                         )}
 
-                        <div >
+                        <div>
                             {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/ideas"))}
                             {button(Button::new(crate::i18n::t("lists.create.idea_btn"), Variant::Gold))}
                         </div>

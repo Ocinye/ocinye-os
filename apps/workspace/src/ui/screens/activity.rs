@@ -42,7 +42,7 @@ pub fn activity(payload: &Value) -> impl IntoView {
                         view! { <p class="ods-field__hint">{crate::i18n::t("activity.empty")}</p> }.into_any()
                     } else {
                         view! {
-                            <div >
+                            <div>
                                 {rows
                                     .iter()
                                     .map(|row| {
@@ -52,13 +52,13 @@ pub fn activity(payload: &Value) -> impl IntoView {
                                             .take(16)
                                             .collect();
                                         view! {
-                                            <div class="oc-feed__row" >
+                                            <div class="oc-feed__row">
                                                 <i
                                                     aria-hidden="true"
                                                     class="oc-feed__dot"
                                                     data-kind=kind.clone()
                                                 ></i>
-                                                <div >
+                                                <div>
                                                     // A linha é composta pelo Core (`summary`) e é
                                                     // conteúdo, não chrome do Workspace. Traduzi-la é
                                                     // uma mudança no Core — emitir o acontecimento
@@ -67,8 +67,8 @@ pub fn activity(payload: &Value) -> impl IntoView {
                                                     <div data-oc-content="1">
                                                         {text(row, "summary")}
                                                     </div>
-                                                    <div >
-                                                        <span class="ods-field__hint" >
+                                                    <div>
+                                                        <span class="ods-field__hint">
                                                             {format!("{} · {when}", text(row, "actor_name"))}
                                                         </span>
                                                         {classification_badge(&text(row, "classification"))}

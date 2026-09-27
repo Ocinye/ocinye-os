@@ -45,8 +45,8 @@ pub fn hub(status: &Value, models: &Value) -> impl IntoView {
     ];
 
     view! {
-        <div >
-            <div class="ods-page__head" >
+        <div>
+            <div class="ods-page__head">
                 <div>
                     <h1 class="ods-page__title">{crate::i18n::t("nav.ai")}</h1>
                     <p class="ods-page__sub">{crate::i18n::t("ai.subtitle")}</p>
@@ -60,7 +60,7 @@ pub fn hub(status: &Value, models: &Value) -> impl IntoView {
         </div>
 
         <div class="ods-page">
-            <section class="ods-widget ods-widget-surface" data-part="card" >
+            <section class="ods-widget ods-widget-surface" data-part="card">
                 {if available {
                     view! {
                         <div class="ods-widget__body">
@@ -108,10 +108,10 @@ fn counter(
 ) -> impl IntoView {
     view! {
         <a class="ods-widget ods-widget-surface ods-widget__body" data-part="card" href=href >
-            <div class="ods-label" >
+            <div class="ods-label">
                 {label}
             </div>
-            <div class="ods-d12-metric__value" >
+            <div class="ods-d12-metric__value">
                 {value.to_string()}
             </div>
             <div>{action}</div>
@@ -234,13 +234,13 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                                         ),
                                     ],
                                 )}
-                                <p class="ods-field__hint" >
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("ai.scope.help")}
                                 </p>
                             },
                         )}
 
-                        <div ></div>
+                        <div></div>
 
                         {card(
                             section_head(crate::i18n::t("ai.section.knowledge"), None, None),
@@ -261,7 +261,7 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                             },
                         )}
 
-                        <div ></div>
+                        <div></div>
 
                         <section
                             class="ods-widget ods-widget-surface ods-widget__body" data-part="card"
@@ -269,17 +269,17 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                             <div>
                                 <span>{icon(Icon::Shield, 16)}</span>
                                 <div>
-                                    <div class="ods-widget__title" >
+                                    <div class="ods-widget__title">
                                         {crate::i18n::t("ai.security.title")}
                                     </div>
-                                    <p class="ods-field__hint" >
+                                    <p class="ods-field__hint">
                                         {crate::i18n::t("ai.security.body")}
                                     </p>
                                 </div>
                             </div>
                         </section>
 
-                        <div >
+                        <div>
                             {button(Button::new(crate::i18n::t("ask.cancel"), Variant::Secondary).href("/ai/agents"))}
                             <button type="submit" class="ods-btn ods-btn--primary" data-part="btn">
                                 {crate::i18n::t("ai.create_agent")}

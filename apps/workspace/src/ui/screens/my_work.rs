@@ -51,7 +51,7 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                 </div>
             </div>
 
-            <div class="ods-tabs" >
+            <div class="ods-tabs">
                 {pill_tabs(tabs, t("my_work.tabs.aria"))}
             </div>
 
@@ -83,7 +83,7 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                                                     </span>
                                                     {task_priority_badge(&priority)}
                                                     {task_state_badge(&state)}
-                                                    <span >
+                                                    <span>
                                                         {row
                                                             .get("due_on")
                                                             .and_then(Value::as_str)
@@ -104,7 +104,7 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                 </section>
 
                 <div>
-                    <section class="ods-widget ods-widget-surface" data-part="card" >
+                    <section class="ods-widget ods-widget-surface" data-part="card">
                         <div class="ods-widget__head">
                             <h2>{t("my_work.research.title")}</h2>
                         </div>
@@ -128,10 +128,10 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                                                     <a
                                                         href=format!("/workspaces/{id}")
                                                     >
-                                                        <span >
+                                                        <span>
                                                             {text(row, "code")}
                                                         </span>
-                                                        <span >
+                                                        <span>
                                                             {text(row, "title")}
                                                         </span>
                                                     </a>
@@ -183,7 +183,7 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                                     .into_any()
                             } else {
                                 view! {
-                                    <div >
+                                    <div>
                                         {activity_rows
                                             .iter()
                                             .take(8)

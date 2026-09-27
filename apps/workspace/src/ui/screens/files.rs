@@ -1472,7 +1472,7 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
                     section_head(crate::i18n::t("files.details"), None, None),
                     view! {
                         {estado_do_conteudo(&extraction)}
-                        <dl>
+                        <dl class="ods-kv">
                             {detalhe(crate::i18n::t("files.col.type"), &text(&corrente, "content_type"))}
                             {detalhe(crate::i18n::t("files.col.size"), &tamanho(number(&corrente, "size_bytes")))}
                             {detalhe(crate::i18n::t("files.versions"), &contagem.to_string())}
@@ -1546,10 +1546,8 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
 
 fn detalhe(rotulo: &str, valor: &str) -> impl IntoView {
     view! {
-        <div class="ods-d12-folder-head">
-            <dt class="ods-label">{rotulo.to_owned()}</dt>
-            <dd class="ods-file__meta" data-oc-content="1">{valor.to_owned()}</dd>
-        </div>
+        <dt>{rotulo.to_owned()}</dt>
+        <dd data-oc-content="1">{valor.to_owned()}</dd>
     }
 }
 

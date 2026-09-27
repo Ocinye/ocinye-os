@@ -343,6 +343,7 @@ pub fn calendar(page: &CalendarPage<'_>) -> impl IntoView {
                          vêm das tarefas e continuam a pertencer-lhes."
                     </p>
                 </div>
+                <span class="ods-app__toolbar-spacer"></span>
                 {may_create.then(|| view! {
                     <a class="ods-btn ods-btn--navy" data-part="btn" href="/calendar/events/new">
                         {crate::i18n::t("calendar.new_activity_cta")}
@@ -1650,6 +1651,7 @@ pub fn event_detail(event: &Value, may_change: bool, zona: TimeZoneName) -> impl
                     <h1 class="ods-page__title">{campo("title")}</h1>
                     <p class="ods-page__sub">{item.as_ref().map(|i| i.when(zona)).unwrap_or_default()}</p>
                 </div>
+                <span class="ods-app__toolbar-spacer"></span>
                 {(may_change && !cancelado).then(|| view! {
                     <div>
                         <a class="ods-btn" data-part="btn" href=format!("/calendar/events/{id}/edit")>{crate::i18n::t("calendar.edit")}</a>

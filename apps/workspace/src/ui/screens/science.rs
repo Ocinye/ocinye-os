@@ -645,6 +645,7 @@ fn cabecalho(titulo: &'static str, explicacao: &'static str, contexto: &Value) -
                 <h1 class="ods-page__title">{titulo}</h1>
                 <p class="ods-page__sub">{explicacao}</p>
             </div>
+            <span class="ods-app__toolbar-spacer"></span>
             <nav class="ods-crumbs">
                 <a href=format!("/workspaces/{}", text(contexto, "id")) data-oc-content="1">
                     {contexto_do_ambiente(contexto)}
@@ -1538,6 +1539,7 @@ pub fn novo_resultado(view: NovoResultadoView) -> impl IntoView {
                         {crate::i18n::t("science.result.subtitle")}
                     </p>
                 </div>
+                <span class="ods-app__toolbar-spacer"></span>
                 <div>
                     {format!(
                         "{study_title} · {}",

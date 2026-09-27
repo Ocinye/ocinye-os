@@ -86,8 +86,8 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
     ];
 
     view! {
-        <div >
-            <div class="ods-page__head" >
+        <div>
+            <div class="ods-page__head">
                 <div>
                     <h1 class="ods-page__title">{crate::i18n::t("nav.compute")}</h1>
                     <p class="ods-page__sub">{crate::i18n::t("compute.subtitle")}</p>
@@ -179,11 +179,11 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
 fn metric(label: &'static str, value: &str) -> impl IntoView {
     let value = value.to_owned();
     view! {
-        <div class="ods-widget ods-widget-surface ods-widget__body" data-part="card" >
-            <div class="ods-label" >
+        <div class="ods-widget ods-widget-surface ods-widget__body" data-part="card">
+            <div class="ods-label">
                 {label}
             </div>
-            <div class="ods-d12-metric__value" >
+            <div class="ods-d12-metric__value">
                 {value}
             </div>
         </div>
