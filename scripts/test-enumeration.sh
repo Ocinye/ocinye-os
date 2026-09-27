@@ -242,7 +242,9 @@ suites() {
 # 124 → 125 em 2026-09-26: perfis e activação (Parte 2) — uma instância de empresa
 # nasce sem módulos científicos; desactivar Notas esconde-a sem tocar no Core nem
 # nas outras aplicações, e reactivar devolve a nota escrita antes. Uma viagem.
-viagens-de-browser|125|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|125
+# 125 → 126 em 2026-09-27: o feed institucional de Actividade (passo 18 da
+# certificação, Parte 16) — criar uma ideia pelo produto e vê-la em Actividade.
+viagens-de-browser|126|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|126
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

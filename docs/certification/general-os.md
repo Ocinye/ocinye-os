@@ -30,7 +30,7 @@ resolvida (abaixo).
 | 15 | Promover ideia → projecto | `idea_to_project_e2e`; `promoting_the_same_idea_twice_produces_one_project` | browser + Core |
 | 16 | Criar uma tarefa | `task_lifecycle_e2e` | viagens de browser |
 | 17 | Criar um dataset | `uma_pessoa_cria_um_dataset_no_seu_ambiente` | viagens de browser |
-| 18 | Actividade | actividade de notas e do calendário nas viagens; **parcial**: o feed institucional de Actividade não tem viagem própria | viagens de browser |
+| 18 | Actividade | `criar_uma_ideia_aparece_na_actividade`: o feed institucional mostra o acontecimento que o Core registou | viagens de browser |
 | 19 | Fornecedor de IA de teste | fornecedor simulado registado com segredo | `ai_providers_http.rs` |
 | 20 | O Prompt usa-o | `origin=MODEL`, credencial só no cabeçalho | idem |
 | 21 | Segundo fornecedor | cenário C | `ai_routing_http.rs` |
@@ -57,25 +57,23 @@ confirma as aplicações que o contrato de perfis diz que cada um traz.
 scripts/certify-general-os.sh
 ```
 
-Constrói o pacote de prova, corre o `verify.sh` completo (as 125 viagens de
+Constrói o pacote de prova, corre o `verify.sh` completo (as 126 viagens de
 browser, os testes HTTP e todos os portões), as instalações dos quatro perfis, a
 actualização, o restauro e a certificação de hardware, e escreve o resultado com
 o SHA do release.
 
-## Estado das provas de anfitrião
+## Resultado — 2026-09-27
 
-Release `e62a1e5dc795`, pacote de prova, anfitriões Linux descartáveis:
+Os 33 passos têm prova própria; nenhum está `PARTIAL`.
 
-| Prova | Resultado |
-|---|---|
-| Instalação de raiz, quatro perfis (`research`, `business`, `personal`, `education`) | PASS |
-| Actualização N → N+1 com MinIO → Garage, release falhado revertido, reversão manual | PASS |
-| Backup, restauro noutro anfitrião, recusa sem raiz de selagem e com uma errada | PASS |
-| Hardware 2 vCPU · 4 GB e 4 vCPU · 8 GB | PASS ([resultados](../install/hardware-results.md)) |
+| Prova | Onde | Resultado |
+|---|---|---|
+| Instalação de raiz, quatro perfis (`research`, `business`, `personal`, `education`) | pacote `e62a1e5dc795`, anfitriões descartáveis | PASS |
+| Actualização N → N+1 com MinIO → Garage, release falhado revertido sem restos, reversão manual | idem | PASS |
+| Backup, restauro noutro anfitrião, recusa sem raiz de selagem e com uma errada | idem | PASS |
+| Hardware 2 vCPU · 4 GB e 4 vCPU · 8 GB | idem ([resultados](../install/hardware-results.md)) | PASS |
+| `verify.sh` completo contra o Garage (125 viagens de browser, todos os portões) | `01001f7` | PASS |
+| Passo 18, a viagem de Actividade, provada por reversão | `gen-p17-close` | PASS |
+| Passagem da produção para o Garage e deploy | release `18eb8248db1b` | PASS |
 
-## O que falta para o portão
-
-- **Passo 18 — `PARTIAL`.** O feed institucional de Actividade não tem viagem
-  própria; `PARTIAL` não conta como `PASS`.
-- **Passagem da produção para o Garage** e o `verify.sh` completo contra ele
-  ([ADR-0208](../adrs/0208-maintained-object-store.md)).
+A linha de base do release está em [`release-baseline.md`](release-baseline.md).
