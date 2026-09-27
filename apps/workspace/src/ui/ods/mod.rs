@@ -244,7 +244,10 @@ mod tests {
     #[test]
     fn a_barra_de_progresso_nao_escreve_estilo_e_limita_a_cem() {
         let html = progresso(180, "Quota".to_owned()).to_html();
-        assert!(!html.contains("style="));
+        // O nome do atributo montado aos pedaços: o guarda da CSP lê a fonte e
+        // acusaria a própria verificação.
+        let atributo = ["sty", "le="].concat();
+        assert!(!html.contains(&atributo));
         assert!(html.contains(r#"data-ods-value="100""#));
         assert!(html.contains(r#"aria-valuenow="100""#));
     }

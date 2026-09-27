@@ -19,3 +19,4 @@
 | Q-11 | D2 | «Estado detalhado» no cartão de estado não tem destino no Workspace. | Omitido; fica «Ver opções de IA» → `/ai`. |
 | Q-12 | D0 | Os protótipos declaram `*{box-sizing:border-box}` e `html,body{margin:0}`; o `ocinye-ds.css` não. Sem elas o arranque transborda a 390 px. | Copiadas dos protótipos para `static/ods-integration.css`. |
 | Q-13 | D3 | O login do D3 mostra «{nome da instância}». À porta não há sessão: o nome vem de `GET /instance/branding`, público. Sem resposta, mostra «OCINYE OS». | Como descrito. |
+| Q-14 | D4 | O `.ods-desktop__scroll` é absoluto (`inset: 0`) e o Desktop tem `flex: 1`: só tem altura sendo filho de uma coluna flex. Com as aplicações como páginas (até G-05), o Desktop vive dentro do contentor de conteúdo da casca. | `ods-integration.css`: o contentor é coluna flex, e o Desktop ocupa-o. |

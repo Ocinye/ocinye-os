@@ -248,7 +248,8 @@ suites() {
 # comparava o estilo computado com a folha legada, e saiu com ela. As quatro
 # capturas `#[ignore]` de revisão visual saíram também (não contavam como
 # passadas). Registo em `docs/ui/BEHAVIOURAL_CONTRACT_MATRIX.md`.
-viagens-de-browser|125|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|125
+# 125 → 126 em 2026-09-27: o Nye responde no círculo (D7, Claude Design).
+viagens-de-browser|126|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|126
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

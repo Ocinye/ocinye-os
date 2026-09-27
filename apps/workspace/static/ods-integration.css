@@ -7,7 +7,11 @@
 
 /* A `.ods-shell` tem altura fixa e esconde o que transborda (D2): o conteúdo de
  * uma página rola no seu contentor, e não na janela. */
-.ods-shell__main { flex: 1; min-height: 0; overflow-y: auto; }
+.ods-shell__main { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.ods-shell__main > * { flex: none; }
+/* O Desktop (D4) ocupa o contentor: o seu scroll é absoluto (`inset: 0`), e sem
+ * altura do pai ficava com zero — e o Nye e os widgets fora da vista. */
+.ods-shell__main > .ods-desktop { flex: 1; }
 
 /* A base dos protótipos aprovados (`design-reference/*.dc.html`) declara
  * `*{box-sizing:border-box}` e `html,body{margin:0}`; o D0 não as traz. Sem elas

@@ -1568,6 +1568,10 @@ async fn home(State(state): State<WorkspaceState>, headers: HeaderMap) -> Respon
         tasks,
         activity,
         intelligence,
+        perfil: viewer.perfil.clone(),
+        agenda: viewer.temporal.clone(),
+        agenda_falhou: viewer.temporal_failure.is_some(),
+        zona: viewer.zona,
     });
 
     shell_page(

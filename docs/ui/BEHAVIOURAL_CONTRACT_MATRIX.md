@@ -16,6 +16,7 @@
 | `capturas_do_calendario`, `capturas_dos_paineis_da_barra`, `capturas_do_correio`, `capturas_da_ciencia` (browser, `#[ignore]`) e `scripts/capturas.sh` | PNGs para revisão visual humana, e o acabamento igual dos três painéis da barra | **à espera da UI nova** — a revisão visual é do Claude Design |
 | `despejar_lancador_para_verificacao_visual` (unitário, `#[ignore]`) | o lançador aberto com a folha legada, para inspecção | **à espera da UI nova** |
 | `a_largura_da_barra_e_declaravel_para_qualquer_valor` (unitário) | as 101 regras `[data-pct]` na folha legada | **à espera da UI nova** — a barra continua a levar `data-pct` e `aria-valuenow` |
+| `o_subtitulo_concorda_em_numero`, `o_home_nao_oferece_criar_ideia_a_quem_nao_pode`, `com_a_permissao_o_home_leva_ao_formulario`, `cada_accao_indisponivel_diz_a_sua_propria_razao` (unitários, Home) | o resumo por baixo da saudação e o botão «Nova Ideia» da Home legada | **retirados com o D4** — o Desktop não tem saudação nem botões de criar; criar é o «+ Criar» da barra (D2), que não oferece o que a Instância desactivou |
 
 ## Viagens de geometria: vermelhas sem folha de estilo, critério de aceitação da UI nova
 

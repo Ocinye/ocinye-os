@@ -203,7 +203,7 @@ impl Item {
     }
 
     /// A hora, quando tem, na zona de quem olha.
-    fn clock(&self, zona: TimeZoneName) -> Option<String> {
+    pub fn clock(&self, zona: TimeZoneName) -> Option<String> {
         self.starts_at.map(|i| {
             crate::ui::tempo::hora_civil(i, zona)
                 .format("%H:%M")

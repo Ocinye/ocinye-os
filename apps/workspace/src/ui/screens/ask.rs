@@ -58,7 +58,14 @@ pub fn ask(view: &AskView) -> impl IntoView {
             {command_form(&query, &intent)}
 
             {if asked {
-                result(&outcome, view.may_use_ai).into_any()
+                // O marcador por onde o Nye (D7) lê a resposta do Core sem
+                // depender da apresentação desta página.
+                view! {
+                    <div data-oc="ask-result" data-kind=text(&outcome, "kind", "").to_owned()>
+                        {result(&outcome, view.may_use_ai)}
+                    </div>
+                }
+                .into_any()
             } else {
                 empty_state(EmptyState {
                     icon: Icon::Search,

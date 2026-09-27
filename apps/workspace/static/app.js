@@ -3184,8 +3184,101 @@
     }, true);
   }
 
+  /* ── O Nye (D7) ───────────────────────────────────────────────────────
+   *
+   * Um clique abre o círculo; arrastar move o Nye durante a sessão (a posição
+   * não se guarda: G-02). Com JavaScript a pergunta vai a `/ask` e a resposta
+   * do Core aparece no círculo; sem ele, o formulário navega para lá. */
+  function initNye() {
+    const flutuante = $('[data-oc="nye-float"]');
+    const orbe = $('[data-oc="nye-orb"]');
+    if (!flutuante || !orbe) return;
+    const botao = $('[data-oc="nye-open"]', flutuante);
+    const form = $('[data-oc="nye-form"]', orbe);
+    const campo = form ? $('input[name="q"]', form) : null;
+    const estados = $$('[data-state]', orbe);
+    const mostrarEstado = (nome) => estados.forEach((e) => { e.hidden = e.dataset.state !== nome; });
+
+    const abrir = () => {
+      orbe.hidden = false;
+      mostrarEstado('idle');
+      if (campo) { campo.value = ''; campo.focus(); }
+    };
+    const fechar = () => {
+      if (orbe.hidden) return;
+      orbe.hidden = true;
+      if (botao) botao.focus();
+    };
+    $$('[data-oc="nye-close"]', orbe).forEach((el) => el.addEventListener('click', fechar));
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fechar(); });
+
+    // Arrastar: só conta como arrasto depois de alguns píxeis, para um clique
+    // continuar a ser um clique.
+    let inicio = null;
+    let arrastou = false;
+    flutuante.addEventListener('pointerdown', (e) => {
+      inicio = { x: e.clientX, y: e.clientY, l: flutuante.offsetLeft, t: flutuante.offsetTop, id: e.pointerId };
+      arrastou = false;
+    });
+    flutuante.addEventListener('pointermove', (e) => {
+      if (!inicio) return;
+      const dx = e.clientX - inicio.x;
+      const dy = e.clientY - inicio.y;
+      if (!arrastou && Math.hypot(dx, dy) < 5) return;
+      // A captura só quando o arrasto começa: capturar logo ao carregar
+      // mandaria o `click` para o contentor, e o botão nunca abriria.
+      if (!arrastou) flutuante.setPointerCapture(inicio.id);
+      arrastou = true;
+      flutuante.setAttribute('data-dragging', '');
+      const pai = flutuante.offsetParent || document.body;
+      const x = Math.max(0, Math.min(pai.clientWidth - flutuante.offsetWidth, inicio.l + dx));
+      const y = Math.max(0, Math.min(pai.clientHeight - flutuante.offsetHeight, inicio.t + dy));
+      flutuante.style.setProperty('left', x + 'px');
+      flutuante.style.setProperty('top', y + 'px');
+    });
+    flutuante.addEventListener('pointerup', () => {
+      flutuante.removeAttribute('data-dragging');
+      inicio = null;
+    });
+    if (botao) {
+      botao.addEventListener('click', (e) => {
+        if (arrastou) { e.preventDefault(); arrastou = false; return; }
+        abrir();
+      });
+    }
+
+    if (form && campo) {
+      form.addEventListener('submit', async (e) => {
+        const q = campo.value.trim();
+        if (!q) { e.preventDefault(); return; }
+        e.preventDefault();
+        const pergunta = $('[data-oc="nye-q"]', orbe);
+        const resposta = $('[data-oc="nye-a"]', orbe);
+        const completa = $('[data-oc="nye-full"]', orbe);
+        const destino = '/ask?q=' + encodeURIComponent(q);
+        if (pergunta) pergunta.textContent = '«' + q + '»';
+        if (completa) completa.href = destino;
+        mostrarEstado('answer');
+        try {
+          const r = await fetch(destino, { headers: { Accept: 'text/html' } });
+          const doc = new DOMParser().parseFromString(await r.text(), 'text/html');
+          const bloco = doc.querySelector('[data-oc="ask-result"]');
+          if (!bloco) throw new Error('sem resposta');
+          const texto = bloco.textContent.replace(/\s+/g, ' ').trim();
+          resposta.textContent = texto.length > 360 ? texto.slice(0, 360) + '…' : texto;
+          resposta.dataset.tone = bloco.dataset.kind === 'unavailable' ? 'warn' : 'ok';
+        } catch (erro) {
+          resposta.textContent = form.dataset.erro || '';
+          resposta.dataset.tone = 'bad';
+        }
+        campo.value = '';
+      });
+    }
+  }
+
   const start = () => {
     initOds();
+    initNye();
     initPaineis();
     initPrompt();
     initFiles();

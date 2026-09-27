@@ -6,7 +6,8 @@
 use leptos::prelude::*;
 use serde_json::Value;
 
-use crate::ui::components::{button, card, kpi_card, pill, section_head, Button, Kpi, Variant};
+use crate::ui::components::Kpi;
+use crate::ui::ods;
 
 /// Tudo o que o painel mostra, já autorizado pelo Core.
 pub struct Dashboard {
@@ -33,6 +34,14 @@ pub struct Dashboard {
     /// escondia «+ Criar» a quem não tem a permissão. Quem não a tem chegava
     /// ao formulário e era recusado — um botão para uma recusa (briefing §52).
     pub can_create_idea: bool,
+    /// O perfil da Instância, para o Desktop saber que predefinição é a sua.
+    pub perfil: Option<String>,
+    /// A agenda que a barra de topo já leu, para o widget do calendário.
+    pub agenda: Vec<crate::ui::screens::calendar::Item>,
+    /// Se a leitura da agenda falhou: falha não é agenda vazia.
+    pub agenda_falhou: bool,
+    /// O fuso de quem vê, para as horas da agenda.
+    pub zona: ocinye_contracts::temporal::TimeZoneName,
 }
 
 fn text(row: &Value, key: &str) -> String {
@@ -60,135 +69,274 @@ pub fn home(data: Dashboard) -> impl IntoView {
         workspaces,
         tasks,
         activity,
-        intelligence,
-        can_create_idea,
+        perfil,
+        agenda,
+        agenda_falhou,
+        zona,
+        ..
     } = data;
-    use crate::i18n::{t, tf};
-    let saudacao = tf(greeting_key, &[("name", &name)]);
 
-    let open_tasks = items(&tasks).len();
-    let in_review = items(&workspaces)
-        .iter()
-        .filter(|w| text(w, "kind") == "idea")
-        .count();
+    // A disposição é fixa, servida pelo servidor (D4): enquanto não houver
+    // Desktop persistente (G-02), personalizar, minimizar e mover estão
+    // desligados, e nada se guarda no browser.
+    view! {
+        <section class="ods-desktop" data-oc="desktop" data-profile=perfil.unwrap_or_default()>
+            <button
+                type="button"
+                class="ods-btn ods-btn--sm ods-desktop__edit-btn"
+                data-oc="desktop-edit"
+                aria-disabled="true"
+                data-tip=crate::i18n::t("ods.state.pending_contract")
+            >
+                {crate::i18n::t("desktop.customize")}
+            </button>
+            <div class="ods-desktop__scroll" data-ods-scroll>
+                <div class="ods-desktop__grid" data-oc="widget-grid">
+                    {indicadores(kpis)}
+                    {widget_agenda(&agenda, agenda_falhou, zona)}
+                    {widget_continuar(&workspaces)}
+                    {widget_tarefas(&tasks)}
+                    {widget_actividade(&activity)}
+                </div>
+            </div>
+            {nye(greeting_key, &name)}
+        </section>
+    }
+}
 
-    let subtitle = summary(open_tasks, in_review);
+/// O Nye (D7): o botão flutuante do Desktop e o popup circular.
+///
+/// O Nye funciona sem fornecedor de IA: o que responde é o plano do Core em
+/// `/ask`. Sem JavaScript o formulário navega para lá; com ele, a resposta
+/// aparece no círculo. Arrasta-se durante a sessão, e a posição não se guarda
+/// até haver Desktop persistente (G-02). A voz espera pelo G-07.
+fn nye(greeting_key: &'static str, nome: &str) -> impl IntoView {
+    let saudacao = match greeting_key {
+        "home.greeting.morning" => "nye.hello.morning",
+        "home.greeting.afternoon" => "nye.hello.afternoon",
+        _ => "nye.hello.evening",
+    };
+    let primeiro = nome.split_whitespace().next().unwrap_or(nome).to_owned();
+    let ola = crate::i18n::tf(saudacao, &[("name", &primeiro)]);
+    let nucleo = || {
+        view! {
+            <span class="ods-nye-btn__glow"></span>
+            <span class="ods-nye-btn__ring"></span>
+            <span class="ods-nye-btn__track"></span>
+            <span class="ods-nye-btn__arc"></span>
+            <span class="ods-nye-btn__core">{ods::icone("nye", "")}</span>
+        }
+    };
 
     view! {
-        <div class="oc-page oc-page--home">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1 class="oc-head--lg">{saudacao}</h1>
-                    <p>{subtitle}</p>
-                </div>
-                <div class="oc-head__actions">
-                    // Visível sempre, e declarada quando não se pode usar.
-                    {button(if can_create_idea {
-                        Button::new(t("home.new_idea"), Variant::Secondary).href("/ideas/new")
-                    } else {
-                        Button::new(t("home.new_idea"), Variant::Secondary)
-                            .unavailable_because(t("home.no_permission.idea"))
-                    })}
-                    // O projecto cria-se em contexto (promove-se uma ideia); o
-                    // botão leva à lista de projectos, em vez de se declarar
-                    // «indisponível» quando existe (F-07).
-                    {button(Button::new(t("home.new_project"), Variant::Secondary).href("/projects"))}
-                    {button(
-                        Button::new(t("home.prompt_ocinye"), Variant::Primary).href("/ai/prompt").with_dot(),
-                    )}
-                </div>
-            </div>
+        <div class="ods-nye-float" data-oc="nye-float" data-ods-float>
+            <button
+                type="button"
+                class="ods-nye-btn"
+                data-oc="nye-open"
+                aria-haspopup="dialog"
+                aria-label=format!("{} · {}", crate::i18n::t("nye.talk"), crate::i18n::t("nye.drag_hint"))
+            >
+                {nucleo()}
+            </button>
+        </div>
 
-            <div class="oc-grid oc-grid--4 oc-mb-5" >
-                {kpis.into_iter().map(kpi_card).collect_view()}
-            </div>
+        <div class="ods-nye-orb" data-oc="nye-orb" role="dialog" aria-modal="true" aria-label=crate::i18n::t("nye.name") hidden>
+            <div class="ods-scrim" data-oc="nye-close"></div>
+            <div class="ods-nye-orb__circle">
+                <span class="ods-nye-orb__ring ods-nye-orb__ring--track"></span>
+                <span class="ods-nye-orb__ring ods-nye-orb__ring--arc"></span>
+                <span class="ods-nye-orb__ring ods-nye-orb__ring--outer"></span>
+                <button
+                    type="button"
+                    class="ods-iconbtn ods-iconbtn--round ods-nye-orb__close"
+                    data-oc="nye-close"
+                    aria-label=crate::i18n::t("ods.close")
+                >
+                    {ods::icone("close", "")}
+                </button>
+                <span class="ods-nye-btn" aria-hidden="true">{nucleo()}</span>
 
-            <div class="oc-grid oc-grid--main">
-                <div>
-                    {continue_work(&workspaces)}
-                    {pending_tasks(&tasks)}
+                <div data-state="idle">
+                    <p class="ods-nye-orb__hello">{ola}</p>
+                    <p class="ods-nye-orb__sub">{crate::i18n::t("nye.how_help")}</p>
                 </div>
-                <div>
-                    {ai_card(&intelligence)}
-                    {recent_activity(&activity)}
-                    {quick_access(can_create_idea)}
+                <div data-state="listening" hidden>
+                    <div class="ods-nye-wave"><span></span><span></span><span></span><span></span><span></span></div>
+                    <p class="ods-label">{crate::i18n::t("nye.voice.listening")}</p>
                 </div>
+                <div data-state="answer" hidden aria-live="polite">
+                    <p class="ods-nye-orb__q" data-oc="nye-q"></p>
+                    <p class="ods-nye-orb__a" data-oc="nye-a"></p>
+                    <a class="ods-btn ods-btn--sm ods-btn--ghost" data-oc="nye-full" href="/ask">
+                        {crate::i18n::t("nye.full_conversation")}
+                    </a>
+                </div>
+
+                <form class="ods-nye-orb__field" method="get" action="/ask" data-oc="nye-form" data-erro=crate::i18n::t("ods.state.error")>
+                    <label class="ods-sr-only" for="nye-q">{crate::i18n::t("nye.placeholder")}</label>
+                    <input id="nye-q" name="q" placeholder=crate::i18n::t("nye.placeholder") autocomplete="off" />
+                    // G-07: a voz espera por contrato; nunca escuta sem clique.
+                    <button
+                        type="button"
+                        class="ods-nye-orb__mic"
+                        data-oc="nye-voice"
+                        aria-disabled="true"
+                        data-tip=crate::i18n::t("ods.state.pending_contract")
+                        aria-label=crate::i18n::t("nye.talk")
+                    >
+                        {ods::icone("mic", "")}
+                    </button>
+                    <button type="submit" class="ods-nye-orb__send" aria-label=crate::i18n::t("nye.send")>
+                        {ods::icone("arrow-r", "")}
+                    </button>
+                </form>
+                <p class="ods-nye-orb__hint">"ENTER · ESC"</p>
             </div>
         </div>
     }
 }
 
-/// O subtítulo do painel, construído a partir do que existe, no idioma corrente.
-///
-/// Duas cláusulas independentes (tarefas, investigação), cada uma com o seu
-/// plural, juntas por «e». Contar por partes traduz-se bem nas três línguas; uma
-/// frase única com todas as combinações não (i18n §49).
-fn summary(tasks: usize, ideas: usize) -> String {
-    use crate::i18n::{t, tp};
-    let tarefas = i64::try_from(tasks).unwrap_or(i64::MAX);
-    let investigacao = i64::try_from(ideas).unwrap_or(i64::MAX);
-    match (tasks, ideas) {
-        (0, 0) => t("home.summary.empty").to_owned(),
-        (_, 0) => format!(
-            "{}{}",
-            tp("home.summary.tasks", tarefas),
-            t("home.summary.suffix")
-        ),
-        (0, _) => format!(
-            "{}{}",
-            tp("home.summary.research", investigacao),
-            t("home.summary.suffix")
-        ),
-        (_, _) => format!(
-            "{} {} {}{}",
-            tp("home.summary.tasks", tarefas),
-            t("home.summary.join"),
-            tp("home.summary.research", investigacao),
-            t("home.summary.suffix")
-        ),
+/// O ícone e a chave da etiqueta de cada indicador, pelo destino.
+fn indicador_de(href: &str) -> (&'static str, &'static str, &'static str) {
+    match href {
+        "/units" => ("units", "desktop.kpi.units", "units"),
+        "/ideas" => ("idea", "desktop.kpi.ideas", "ideas"),
+        "/projects" => ("project", "desktop.kpi.projects", "projects"),
+        _ => ("data", "desktop.kpi.datasets", "datasets"),
     }
 }
 
-fn continue_work(payload: &Value) -> impl IntoView {
-    let rows = items(payload);
-    let empty = rows.is_empty();
+/// Os indicadores (G-03): contagens das listagens, feitas no servidor. Uma
+/// listagem que falhou mostra `—` e diz porquê — nunca `0`.
+fn indicadores(kpis: Vec<Kpi>) -> impl IntoView {
+    view! {
+        <article class="ods-widget" data-kind="kpis" data-w="full" data-oc="widget" data-widget="kpis">
+            <div class="ods-widget__body ods-kpis">
+                {kpis
+                    .into_iter()
+                    .map(|kpi| {
+                        let (icone, etiqueta, chave) = indicador_de(&kpi.href);
+                        let falhou = kpi.value.is_none();
+                        view! {
+                            <a class="ods-kpi ods-widget-surface" href=kpi.href.clone() data-oc="kpi" data-kpi=chave>
+                                <span class="ods-kpi__head">
+                                    <span class="ods-widget__icon">{ods::icone(icone, "ods-icon--sm")}</span>
+                                    {kpi.label.clone()}
+                                    {ods::icone("arrow-r", "ods-icon--sm")}
+                                </span>
+                                <span>
+                                    <span class="ods-kpi__value">{kpi.value.clone().unwrap_or_else(|| "—".to_owned())}</span>
+                                    " "
+                                    <span class="ods-kpi__label">{crate::i18n::t(etiqueta)}</span>
+                                </span>
+                                {falhou.then(|| ods::estado(ods::Estado::Erro, crate::i18n::t("ods.state.error").to_owned()))}
+                            </a>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </article>
+    }
+}
 
-    let body = if empty {
-        // Os tiles do ramo cheio trazem o seu próprio `oc-card__body`; o estado
-        // vazio não tem tiles, por isso precisa do seu.
+/// A cabeça comum de um widget: ícone, título, e abrir a aplicação. Minimizar
+/// espera pelo G-02.
+fn cabeca(icone: &'static str, titulo: &'static str, destino: &'static str) -> impl IntoView {
+    view! {
+        <header class="ods-widget__head">
+            <span class="ods-widget__icon">{ods::icone(icone, "")}</span>
+            <span class="ods-widget__titles"><span class="ods-widget__title">{titulo}</span></span>
+            <button
+                type="button"
+                class="ods-iconbtn"
+                data-oc="widget-minimize"
+                aria-pressed="false"
+                aria-label=crate::i18n::t("desktop.widget.minimize")
+                aria-disabled="true"
+                data-tip=crate::i18n::t("ods.state.pending_contract")
+            >
+                {ods::icone("close", "ods-icon--sm")}
+            </button>
+            <a class="ods-iconbtn" href=destino aria-label=crate::i18n::t("desktop.widget.open")>
+                {ods::icone("arrow-r", "")}
+            </a>
+        </header>
+    }
+}
+
+/// Um corpo de widget: erro se o Core falhou, vazio se não há nada, e as linhas.
+fn corpo(
+    payload: &Value,
+    vazio: &'static str,
+    linhas: impl FnOnce(Vec<Value>) -> AnyView,
+) -> AnyView {
+    if payload.is_null() {
+        return ods::estado(
+            ods::Estado::Erro,
+            crate::i18n::t("ods.state.error").to_owned(),
+        )
+        .into_any();
+    }
+    let rows = items(payload);
+    if rows.is_empty() {
+        return view! { <p class="ods-empty__body">{crate::i18n::t(vazio)}</p> }.into_any();
+    }
+    linhas(rows)
+}
+
+fn widget_agenda(
+    agenda: &[crate::ui::screens::calendar::Item],
+    falhou: bool,
+    zona: ocinye_contracts::temporal::TimeZoneName,
+) -> impl IntoView {
+    let conteudo = if falhou {
+        ods::estado(
+            ods::Estado::Erro,
+            crate::i18n::t("ods.state.error").to_owned(),
+        )
+        .into_any()
+    } else if agenda.is_empty() {
+        view! { <p class="ods-empty__body">{crate::i18n::t("desktop.widget.calendar.empty")}</p> }
+            .into_any()
+    } else {
         view! {
-            <div class="oc-card__body">
-                <p class="oc-muted">{crate::i18n::t("home.continue.empty")}</p>
+            <div class="ods-widget__list">
+                {agenda
+                    .iter()
+                    .take(7)
+                    .map(|item| view! {
+                        <a class="ods-widget__row ods-widget__cal-row" href=item.href()>
+                            <span class="ods-widget__row-meta">{item.clock(zona).unwrap_or_default()}</span>
+                            <span class="ods-widget__row-main" data-oc-content="1">{item.title.clone()}</span>
+                        </a>
+                    })
+                    .collect_view()}
             </div>
         }
         .into_any()
-    } else {
+    };
+    view! {
+        <article class="ods-widget ods-widget-surface" data-kind="calendar" data-w="1" data-h="2" data-oc="widget" data-widget="calendar">
+            {cabeca("calendar", crate::i18n::t("nav.calendar"), "/calendar")}
+            <div class="ods-widget__body">{conteudo}</div>
+        </article>
+    }
+}
+
+fn widget_continuar(payload: &Value) -> impl IntoView {
+    let conteudo = corpo(payload, "home.continue.empty", |rows| {
         view! {
-            <div class="oc-split oc-split--2" >
+            <div class="ods-widget__list">
                 {rows
                     .iter()
-                    .take(3)
+                    .take(5)
                     .map(|row| {
                         let id = text(row, "id");
-                        let kind = text(row, "kind").to_uppercase();
-                        let classification = text(row, "classification");
                         view! {
-                            <a
-                                href=format!("/workspaces/{id}")
-                                class="oc-card__body oc-card__body--tile"
-                            >
-                                <div class="oc-row oc-gap-5" >
-                                    {pill(kind)}
-                                    <span class="oc-mono" >
-                                        {text(row, "code")}
-                                    </span>
-                                </div>
-                                <div class="oc-fill oc-t-item" data-oc-content="1">
-                                    {text(row, "title")}
-                                </div>
-                                <div class="oc-row oc-gap-5" >
-                                    {crate::ui::components::classification_badge(&classification)}
-                                </div>
+                            <a class="ods-widget__row" href=format!("/workspaces/{id}")>
+                                <span class="ods-widget__row-main" data-oc-content="1">{text(row, "title")}</span>
+                                <span class="ods-widget__row-meta">{text(row, "code")}</span>
                             </a>
                         }
                     })
@@ -196,233 +344,69 @@ fn continue_work(payload: &Value) -> impl IntoView {
             </div>
         }
         .into_any()
-    };
-
+    });
     view! {
-        <section class="oc-card oc-mb-5" data-part="card" >
-            // A etiqueta é a do dossier (§6.2); o «Ver tudo» é nosso, e fica:
-            // o cartão mostra três, e há mais para lá deles.
-            {section_head(
-                crate::i18n::t("home.continue.title"),
-                Some((crate::i18n::t("home.view_all").into(), "/my-work".into())),
-                Some(crate::i18n::t("home.continue.aside").to_owned()),
-            )}
-            {body}
-        </section>
+        <article class="ods-widget ods-widget-surface" data-kind="continue" data-w="2" data-h="1" data-oc="widget" data-widget="continue">
+            {cabeca("work", crate::i18n::t("desktop.widget.continue"), "/my-work")}
+            <div class="ods-widget__body">{conteudo}</div>
+        </article>
     }
 }
 
-fn pending_tasks(payload: &Value) -> impl IntoView {
-    let rows = items(payload);
-
-    let body = if rows.is_empty() {
-        view! { <p class="oc-muted">{crate::i18n::t("home.tasks.empty")}</p> }.into_any()
-    } else {
+fn widget_tarefas(payload: &Value) -> impl IntoView {
+    let conteudo = corpo(payload, "desktop.widget.tasks.empty", |rows| {
         view! {
-            <div>
-                {rows
-                    .iter()
-                    .take(6)
-                    .map(|row| {
-                        let state = text(row, "state");
-                        let due = row.get("due_on").and_then(Value::as_str);
-                        let workspace = text(row, "workspace_id");
-                        view! {
-                            <a
-                                href=format!("/workspaces/{workspace}")
-                                class="oc-list__row"
-                            >
-                                <span class="oc-fill oc-truncate oc-t-cell" data-oc-content="1">
-                                    {text(row, "title")}
-                                </span>
-                                {crate::ui::components::task_state_badge(&state)}
-                                <span class="oc-mono oc-list__meta" >
-                                    {due.map_or_else(
-                                        || crate::i18n::t("home.tasks.no_due").to_owned(),
-                                        ToOwned::to_owned,
-                                    )}
-                                </span>
-                            </a>
-                        }
-                    })
-                    .collect_view()}
-            </div>
-        }
-        .into_any()
-    };
-
-    card(
-        section_head(
-            crate::i18n::t("home.tasks.title"),
-            Some((crate::i18n::t("home.view_all").into(), "/my-work".into())),
-            None,
-        ),
-        body,
-    )
-}
-
-fn recent_activity(payload: &Value) -> impl IntoView {
-    let rows = items(payload);
-
-    let body = if rows.is_empty() {
-        view! { <p class="oc-muted">{crate::i18n::t("home.activity.empty")}</p> }.into_any()
-    } else {
-        view! {
-            <div class="oc-col oc-gap-8" >
+            <div class="ods-widget__list">
                 {rows
                     .iter()
                     .take(8)
                     .map(|row| {
+                        let workspace = text(row, "workspace_id");
+                        let due = row.get("due_on").and_then(Value::as_str).unwrap_or("").to_owned();
                         view! {
-                            <div class="oc-row oc-gap-6" >
-                                <i
-                                    aria-hidden="true"
-                                    class="oc-dot"
-                                ></i>
-                                <div class="oc-fill" >
-                                    // A frase da actividade vem do Core (verbo +
-                                    // título); marca-se como conteúdo até o feed
-                                    // passar a evento semântico (i18n §11, §44).
-                                    <div class="oc-t-note" data-oc-content="1">
-                                        {text(row, "summary")}
-                                    </div>
-                                    <div class="oc-mono oc-t-ghost" data-oc-content="1">
-                                        {text(row, "actor_name")}
-                                    </div>
-                                </div>
-                            </div>
+                            <a class="ods-widget__row" href=format!("/workspaces/{workspace}")>
+                                <span class="ods-widget__row-main" data-oc-content="1">{text(row, "title")}</span>
+                                <span class="ods-widget__row-meta">{due}</span>
+                            </a>
                         }
                     })
                     .collect_view()}
             </div>
         }
         .into_any()
-    };
-
+    });
     view! {
-        <section class="oc-card oc-mb-5" data-part="card" >
-            {section_head(
-                crate::i18n::t("home.activity.title"),
-                Some((crate::i18n::t("home.view_all").into(), "/activity".into())),
-                None,
-            )}
-            <div class="oc-card__body">{body}</div>
-        </section>
+        <article class="ods-widget ods-widget-surface" data-kind="tasks" data-w="1" data-h="2" data-oc="widget" data-widget="tasks">
+            {cabeca("tasks", crate::i18n::t("home.tasks.title"), "/my-work")}
+            <div class="ods-widget__body">{conteudo}</div>
+        </article>
     }
 }
 
-/// O cartão de IA.
-///
-/// Sem nó enrolado, explica o estado real em vez de anunciar uma capacidade que
-/// não existe.
-fn ai_card(status: &Value) -> impl IntoView {
-    let available = status
-        .get("available")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    // A explicação é chrome do produto, e traduz-se: descreve o estado da
-    // plataforma, não é conteúdo de ninguém. Antes vinha a prosa do Core, já
-    // composta em português, e aparecia em português no meio de uma interface
-    // francesa. O Core continua a decidir o estado — `available` —, e é desse
-    // estado, e não da sua prosa, que o texto se deriva, no idioma de quem lê
-    // (i18n §31, §51, §84). A razão detalhada de uma indisponibilidade
-    // específica vive no Hub de IA, não neste resumo.
-    let mensagem = if available {
-        crate::i18n::t("home.ai.available_body")
-    } else {
-        crate::i18n::t("home.ai.unavailable_body")
-    };
-
-    let title = if available {
-        crate::i18n::t("home.ai.available")
-    } else {
-        crate::i18n::t("home.ai.unavailable")
-    };
-
-    view! {
-        <section
-            class="oc-card oc-ai-panel" data-part="card"
-        >
-            <span
-                aria-hidden="true"
-                class="oc-ai-panel__ring"
-            ></span>
-
-            <div class="oc-t-group oc-t-group--gold" >
-                {crate::i18n::t("home.ai.eyebrow")}
-            </div>
-            <h2>
-                {title}
-            </h2>
-            <p>
-                {mensagem}
-            </p>
-            <div class="oc-row oc-gap-5" >
-                {button(Button::new(crate::i18n::t("home.ai.open_prompt"), Variant::Gold).href("/ai/prompt"))}
-                {button(Button::new(crate::i18n::t("home.ai.hub"), Variant::OnNavy).href("/ai"))}
-            </div>
-        </section>
-    }
-}
-
-fn quick_access(can_create_idea: bool) -> impl IntoView {
-    // Cada acção do acesso rápido leva ao ecrã onde se cria — o projecto e o
-    // dataset criam-se em contexto (a lista é a porta), e por isso navegam para
-    // lá em vez de se declararem «indisponíveis», que dizia que não existiam
-    // quando existem (F-07). Só a falta de **permissão** desactiva um item, e aí
-    // a razão é essa, não a do vizinho.
-    let sem_permissao = crate::i18n::t("home.no_permission.idea");
-
-    let actions: [(&str, Option<&str>, &str); 4] = [
-        (
-            crate::i18n::t("home.new_idea"),
-            can_create_idea.then_some("/ideas/new"),
-            sem_permissao,
-        ),
-        (crate::i18n::t("home.new_project"), Some("/projects"), ""),
-        (crate::i18n::t("home.new_dataset"), Some("/datasets"), ""),
-        (crate::i18n::t("home.quick.prompt"), Some("/ai/prompt"), ""),
-    ];
-
-    card(
-        section_head(crate::i18n::t("home.quick.title"), None, None),
+fn widget_actividade(payload: &Value) -> impl IntoView {
+    let conteudo = corpo(payload, "home.activity.empty", |rows| {
         view! {
-            <div class="oc-grid oc-grid--2 oc-grid--tight" >
-                {actions
+            <div class="ods-widget__list">
+                {rows
                     .iter()
-                    .map(|(label, href, reason)| {
-                        href.map_or_else(
-                            || {
-                                view! {
-                                    <span
-                                        class="oc-quick oc-unavailable" data-part="unavailable"
-                                        aria-disabled="true"
-                                        title=*reason
-                                    >
-                                        <span class="oc-btn__dot"></span>
-                                        {*label}
-                                    </span>
-                                }
-                                    .into_any()
-                            },
-                            |href| {
-                                view! {
-                                    <a
-                                        class="oc-quick"
-                                        href=href
-                                    >
-                                        <span class="oc-btn__dot"></span>
-                                        {*label}
-                                    </a>
-                                }
-                                    .into_any()
-                            },
-                        )
+                    .take(8)
+                    .map(|row| view! {
+                        <div class="ods-widget__row">
+                            <span class="ods-widget__row-main" data-oc-content="1">{text(row, "summary")}</span>
+                            <span class="ods-widget__row-meta" data-oc-content="1">{text(row, "actor_name")}</span>
+                        </div>
                     })
                     .collect_view()}
             </div>
-        },
-    )
+        }
+        .into_any()
+    });
+    view! {
+        <article class="ods-widget ods-widget-surface" data-kind="activity" data-w="2" data-h="1" data-oc="widget" data-widget="activity">
+            {cabeca("activity", crate::i18n::t("home.activity.title"), "/activity")}
+            <div class="ods-widget__body">{conteudo}</div>
+        </article>
+    }
 }
 
 /// A chave i18n da saudação correspondente à hora local.
@@ -451,13 +435,6 @@ mod tests {
         assert_eq!(greeting_for(3), "home.greeting.evening");
     }
 
-    #[test]
-    fn o_subtitulo_concorda_em_numero() {
-        assert_eq!(summary(1, 0), "Tem 1 tarefa atribuída.");
-        assert_eq!(summary(6, 0), "Tem 6 tarefas atribuídas.");
-        assert!(summary(0, 0).contains("Nada precisa da sua atenção"));
-    }
-
     fn painel(can_create_idea: bool) -> Dashboard {
         Dashboard {
             greeting_key: "home.greeting.evening",
@@ -468,26 +445,11 @@ mod tests {
             activity: json!([]),
             intelligence: json!({"configured": false}),
             can_create_idea,
+            perfil: None,
+            agenda: Vec::new(),
+            agenda_falhou: false,
+            zona: ocinye_contracts::temporal::TimeZoneName::utc(),
         }
-    }
-
-    /// O Home não oferece o que o Core vai recusar.
-    ///
-    /// A topbar já escondia «+ Criar» a quem não tem a permissão, mas o Home
-    /// mostrava «Nova Ideia» a toda a gente — no cabeçalho e no acesso rápido.
-    /// Um `platform_admin` sem filiação numa unidade via os dois activos,
-    /// carregava, e era recusado. Admin não é root, e um botão para uma recusa
-    /// é pior do que não haver botão (briefing §52).
-    #[test]
-    fn o_home_nao_oferece_criar_ideia_a_quem_nao_pode() {
-        let html = home(painel(false)).to_html();
-        assert!(
-            !html.contains(r#"href="/ideas/new""#),
-            "o Home levou a criar uma ideia sem a permissão que isso exige"
-        );
-        // Continua listada, mas dizendo a verdade sobre porquê.
-        assert!(html.contains("Não tem autorização para criar ideias."));
-        assert!(html.contains("Nova Ideia"));
     }
 
     /// Pureza de idioma: uma língua activa, um só idioma no chrome (i18n §2, §41).
@@ -502,12 +464,11 @@ mod tests {
 
         let fr = with_locale(Locale::Fr, async { home(painel(true)).to_html() }).await;
         for francesa in [
-            "Continuer le travail",
+            "Reprendre le travail",
             "Tâches en attente",
             "Activité récente",
-            "Accès rapide",
-            "Bonsoir, Fidel Monteiro",
-            "Nouveau projet",
+            "Calendrier",
+            "Personnaliser le bureau",
         ] {
             assert!(fr.contains(francesa), "fr: falta o chrome «{francesa}»");
         }
@@ -515,9 +476,7 @@ mod tests {
             "Continuar trabalho",
             "Tarefas pendentes",
             "Actividade recente",
-            "Acesso rápido",
-            "Boa noite",
-            "Novo Projecto",
+            "Personalizar Desktop",
         ] {
             assert!(
                 !fr.contains(portuguesa),
@@ -542,38 +501,12 @@ mod tests {
             ..painel(true)
         };
         let fr_ia = with_locale(Locale::Fr, async { home(com_prosa).to_html() }).await;
-        assert!(
-            fr_ia.contains("Le Prompt Ocinye est opérationnel"),
-            "fr: o corpo do card de IA não foi traduzido"
-        );
+        // O D4 não tem cartão de IA; fica a garantia de que a prosa do Core
+        // em português não chega a um ecrã francês.
         assert!(
             !fr_ia.contains("está operacional"),
             "fr: a prosa do Core em português apareceu no card de IA"
         );
-    }
-
-    /// Com a permissão, os dois caminhos voltam.
-    #[test]
-    fn com_a_permissao_o_home_leva_ao_formulario() {
-        let html = home(painel(true)).to_html();
-        assert_eq!(html.matches(r#"href="/ideas/new""#).count(), 2);
-    }
-
-    /// Uma acção implementada leva ao seu ecrã; só a falta de permissão a
-    /// desactiva, e aí com a sua própria razão — não «indisponível».
-    ///
-    /// «Novo Projecto» e «Novo Dataset» criam-se em contexto e navegam para a
-    /// lista respectiva; «Ainda não disponível» dizia que não existiam (F-07).
-    #[test]
-    fn cada_accao_indisponivel_diz_a_sua_propria_razao() {
-        // Sem permissão para ideias: a Ideia desactiva-se com a sua razão.
-        let html = home(painel(false)).to_html();
-        assert!(html.contains("Não tem autorização para criar ideias."));
-        // Mas as acções implementadas continuam a levar ao seu ecrã, nunca
-        // declaradas «indisponíveis».
-        assert!(!html.contains("Ainda não disponível"));
-        assert!(html.contains(r#"href="/projects""#));
-        assert!(html.contains(r#"href="/datasets""#));
     }
 }
 
@@ -592,6 +525,10 @@ mod integridade {
             activity: json!([]),
             intelligence: json!({"configured": false}),
             can_create_idea: true,
+            perfil: None,
+            agenda: Vec::new(),
+            agenda_falhou: false,
+            zona: ocinye_contracts::temporal::TimeZoneName::utc(),
         }
     }
 
@@ -626,7 +563,10 @@ mod integridade {
             html.contains("UNIDADES"),
             "o cartão desapareceu em vez de se declarar"
         );
-        assert!(html.contains("indisponível"), "a falha não foi declarada");
+        assert!(
+            html.contains("ods-state--error"),
+            "a falha não foi declarada"
+        );
         assert!(
             !html.contains(">0<"),
             "uma contagem que falhou foi apresentada como zero"

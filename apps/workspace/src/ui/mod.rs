@@ -368,13 +368,18 @@ mod render_tests {
                     activity: json!([]),
                     intelligence: json!({"configured": false}),
                     can_create_idea: true,
+                    perfil: None,
+                    agenda: Vec::new(),
+                    agenda_falhou: false,
+                    zona: ocinye_contracts::temporal::TimeZoneName::utc(),
                 })
                 .to_html(),
+                // O Desktop do D4: os widgets da predefinição com dados.
                 vec![
                     "Continuar trabalho",
-                    "Research Workspaces",
+                    "Calendário",
+                    "Tarefas pendentes",
                     "Actividade recente",
-                    "Acesso rápido",
                 ],
             ),
             (
@@ -844,6 +849,10 @@ pub(crate) mod link_tests {
             activity: json!([]),
             intelligence: ai_status.clone(),
             can_create_idea: true,
+            perfil: None,
+            agenda: Vec::new(),
+            agenda_falhou: false,
+            zona: ocinye_contracts::temporal::TimeZoneName::utc(),
         };
 
         vec![

@@ -5238,7 +5238,14 @@ async fn o_calendario_da_barra_nao_le_a_agenda() {
     let painel = harness.open("/").await;
     clicar(&painel, r#"[data-oc="clock"]"#).await;
     esperar_por(&painel, "Abrir Calendário").await;
-    let html = conteudo_estavel(&painel).await;
+    // Só o painel do relógio: o Desktop mostra a agenda num widget (D4), e é
+    // precisamente o painel que não a pode ler.
+    let html: String = painel
+        .evaluate(r#"document.querySelector('[data-oc="temporal-centre"]').outerHTML"#)
+        .await
+        .expect("o painel do relógio")
+        .into_value()
+        .expect("html do painel");
 
     assert!(
         !html.contains(&titulo),
@@ -5817,13 +5824,19 @@ async fn a_home_abre_com_saudacao_e_indicadores() {
     let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
     let page = harness.open("/").await;
 
-    // A saudação depende da hora do servidor; qualquer das três serve.
+    // A saudação é do Nye (D7): abre-se o círculo e é ele que cumprimenta. A
+    // hora é a do servidor; qualquer das três serve.
+    clicar(&page, r#"[data-oc="nye-open"]"#).await;
+    wait_visible(&page, r#"[data-oc="nye-orb"]"#).await;
     let saudou = esperar_ate_condicao(
         &page,
-        r#"['Bom dia', 'Boa tarde', 'Boa noite'].some(s => document.body.innerText.includes(s))"#,
+        r#"['Bom dia', 'Boa tarde', 'Boa noite'].some(s => document.querySelector('[data-oc="nye-orb"]').innerText.includes(s))"#,
     )
     .await;
     assert!(saudou, "a Home não saudou o membro");
+    page.evaluate("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))")
+        .await
+        .expect("fechar o Nye");
     esperar_por(&page, "Unidades").await;
 
     // A navegação essencial está lá, e a Home é a localização corrente.
@@ -5834,6 +5847,53 @@ async fn a_home_abre_com_saudacao_e_indicadores() {
         )
         .await,
         "a Home devia ser a localização corrente na navegação essencial"
+    );
+}
+
+/// O Nye responde dentro do círculo (D7), sem sair do Desktop.
+///
+/// A resposta é a do Core em `/ask` — determinística, sem fornecedor de IA — e
+/// chega ao círculo pelo marcador `ask-result`, não pela apresentação da página.
+#[tokio::test]
+async fn o_nye_responde_no_circulo() {
+    let harness = harness!();
+    let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let page = harness.open("/").await;
+
+    clicar(&page, r#"[data-oc="nye-open"]"#).await;
+    wait_visible(&page, r#"[data-oc="nye-orb"]"#).await;
+    set_field(&page, "#nye-q", "Notas").await;
+    submit(&page, r#"[data-oc="nye-form"]"#).await;
+
+    assert!(
+        esperar_ate_condicao(
+            &page,
+            r#"(document.querySelector('[data-oc="nye-a"]') || {textContent: ''}).textContent.trim().length > 0"#,
+        )
+        .await,
+        "o Nye não mostrou a resposta no círculo"
+    );
+    // Uma resposta, e não a mensagem de erro que o círculo mostra quando não
+    // conseguiu ler a do Core.
+    let tom: String = page
+        .evaluate(r#"document.querySelector('[data-oc="nye-a"]').dataset.tone || ''"#)
+        .await
+        .expect("tom")
+        .into_value()
+        .expect("texto");
+    assert_ne!(
+        tom, "bad",
+        "o círculo mostrou o erro em vez da resposta do Core"
+    );
+    let url = page.url().await.ok().flatten().unwrap_or_default();
+    assert!(!url.contains("/ask"), "a pergunta saiu do Desktop: {url}");
+    assert!(
+        esperar_ate_condicao(
+            &page,
+            r#"document.querySelector('[data-oc="nye-full"]').getAttribute('href') === '/ask?q=Notas'"#,
+        )
+        .await,
+        "«Ver conversa completa» não leva à pergunta feita"
     );
 }
 
