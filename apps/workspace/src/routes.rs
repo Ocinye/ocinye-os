@@ -3659,7 +3659,7 @@ async fn new_member(State(state): State<WorkspaceState>, headers: HeaderMap) -> 
         &viewer,
         Screen::Admin,
         vec![Crumb::to(Screen::Admin)],
-        ui::screens::administration::new_member(&units, None),
+        ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::new_member(&units, None)),
     )
 }
 
@@ -3718,7 +3718,7 @@ async fn create_member(
                 &viewer,
                 Screen::Admin,
                 vec![Crumb::to(Screen::Admin)],
-                ui::screens::administration::issued_credential(
+                ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::issued_credential(
                     // O Core devolve `email`. Lia-se `username`, e desde o
                     // ADR-0106 essa chave não existe: o ecrã que entrega uma
                     // credencial nova mostrava o endereço **em branco**, e
@@ -3735,7 +3735,7 @@ async fn create_member(
                         .get("expires_at")
                         .and_then(Value::as_str)
                         .unwrap_or(""),
-                ),
+                )),
             )
         }
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
@@ -3746,7 +3746,7 @@ async fn create_member(
                 &viewer,
                 Screen::Admin,
                 vec![Crumb::to(Screen::Admin)],
-                ui::screens::administration::new_member(&units, Some(failure.to_string())),
+                ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::new_member(&units, Some(failure.to_string()))),
             )
         }
     }
@@ -3783,7 +3783,7 @@ async fn member_detail(
         &viewer,
         Screen::Admin,
         vec![Crumb::to(Screen::Admin)],
-        ui::screens::administration::member_detail(
+        ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::member_detail(
             &person,
             &security,
             &access,
@@ -3791,7 +3791,7 @@ async fn member_detail(
             &workspaces_catalog,
             &permissions_catalog,
             None,
-        ),
+        )),
     )
 }
 
@@ -4104,7 +4104,7 @@ async fn member_reset_password(
             &viewer,
             Screen::Admin,
             vec![Crumb::to(Screen::Admin)],
-            ui::screens::administration::issued_credential(
+            ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::issued_credential(
                 credential
                     .get("email")
                     .and_then(Value::as_str)
@@ -4117,7 +4117,7 @@ async fn member_reset_password(
                     .get("expires_at")
                     .and_then(Value::as_str)
                     .unwrap_or(""),
-            ),
+            )),
         ),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
@@ -4306,7 +4306,7 @@ async fn member_detail_with_error(
         &viewer,
         Screen::Admin,
         vec![Crumb::to(Screen::Admin)],
-        ui::screens::administration::member_detail(
+        ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::member_detail(
             &person,
             &security,
             &access,
@@ -4314,7 +4314,7 @@ async fn member_detail_with_error(
             &workspaces_catalog,
             &permissions_catalog,
             Some(&failure.to_string()),
-        ),
+        )),
     )
 }
 
@@ -4357,7 +4357,7 @@ async fn provision_member(
                 &viewer,
                 Screen::Admin,
                 vec![Crumb::to(Screen::Admin)],
-                ui::screens::administration::issued_credential(
+                ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::issued_credential(
                     credential
                         .get("email")
                         .and_then(Value::as_str)
@@ -4370,7 +4370,7 @@ async fn provision_member(
                         .get("expires_at")
                         .and_then(Value::as_str)
                         .unwrap_or(""),
-                ),
+                )),
             )
         }
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
@@ -4393,7 +4393,7 @@ async fn provision_member(
                 &viewer,
                 Screen::Admin,
                 vec![Crumb::to(Screen::Admin)],
-                ui::screens::administration::member_detail(
+                ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::member_detail(
                     &person,
                     &security,
                     &access,
@@ -4401,7 +4401,7 @@ async fn provision_member(
                     &workspaces_catalog,
                     &permissions_catalog,
                     Some(&failure.to_string()),
-                ),
+                )),
             )
         }
     }
@@ -7292,7 +7292,7 @@ async fn admin_instance(
         &viewer,
         Screen::Admin,
         Vec::new(),
-        ui::screens::administration::instance(&payload, outcome.ok.as_deref() == Some("1")),
+        ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Instancia, ui::screens::administration::instance(&payload, outcome.ok.as_deref() == Some("1"))),
     )
 }
 

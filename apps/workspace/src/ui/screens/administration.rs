@@ -68,6 +68,47 @@ pub fn position_label(code: &str) -> String {
     )
 }
 
+/// As secções da administração (D10). A navegação só existe dentro dela: um
+/// membro sem autoridade de administração recebe a recusa do Core e nunca a vê.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum SeccaoAdmin {
+    /// A consola: os membros.
+    Membros,
+    /// A Instância: perfil e aplicações.
+    Instancia,
+    /// O registo de auditoria.
+    Auditoria,
+}
+
+/// A moldura D10 da administração: navegação à esquerda, conteúdo à direita.
+///
+/// `<div>` e não o `<main>` do D10: a casca já tem o `<main>` da página (Q-27).
+pub fn moldura(seccao: SeccaoAdmin, conteudo: impl IntoView + 'static) -> impl IntoView {
+    let item = |alvo: SeccaoAdmin, href: &'static str, rotulo: &'static str| {
+        view! {
+            <a
+                class="ods-app__side-item"
+                href=href
+                aria-current=(seccao == alvo).then_some("page")
+            >
+                {rotulo}
+            </a>
+        }
+    };
+    view! {
+        <div class="ods-settings">
+            <nav class="ods-settings__nav" aria-label=crate::i18n::t("nav.admin")>
+                <p class="ods-label ods-settings__group">{crate::i18n::t("nav.admin")}</p>
+                {item(SeccaoAdmin::Membros, "/admin", crate::i18n::t("lists.members.tab"))}
+                {item(SeccaoAdmin::Instancia, "/admin/instance", crate::i18n::t("admin.instance.title"))}
+                {item(SeccaoAdmin::Auditoria, "/audit", crate::i18n::t("nav.audit"))}
+            </nav>
+            <div class="ods-settings__main">{conteudo}</div>
+        </div>
+    }
+}
+
+
 /// Ecrã «Adicionar utilizador».
 ///
 /// Um formulário e não um assistente de cinco passos: os campos cabem num ecrã,
@@ -90,7 +131,7 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
     let has_units = !unit_rows.is_empty();
 
     view! {
-        <div class="ods-page">
+        <div>
             <div class="ods-page__head">
                 <div>
                     <h1 class="ods-page__title">{crate::i18n::t("admin.new.title")}</h1>
@@ -227,9 +268,9 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                         </div>
                     </section>
 
-                    <div>
+                    <div class="ods-settings__actions">
                         {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/admin"))}
-                        <button type="submit" class="ods-btn ods-btn--navy" data-part="btn">{crate::i18n::t("admin.new.submit")}</button>
+                        <button type="submit" class="ods-btn ods-btn--primary" data-part="btn">{crate::i18n::t("admin.new.submit")}</button>
                     </div>
                 </div>
             </form>
@@ -247,7 +288,7 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
     let expires = expires_at.get(..16).unwrap_or(expires_at).replace('T', " ");
 
     view! {
-        <div class="ods-page">
+        <div>
             <div class="ods-page__head">
                 <div>
                     <h1 class="ods-page__title">{crate::i18n::t("admin.issued.title")}</h1>
@@ -255,20 +296,20 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
                 </div>
             </div>
 
-            <section class="ods-widget ods-widget-surface oc-credential" data-part="card">
+            <section class="ods-widget ods-widget-surface" data-part="card">
                 <div class="ods-widget__body">
                     <div class="ods-field">
                         <span class="ods-field__label">{crate::i18n::t("login.institutional_address")}</span>
-                        <div class="oc-credential__value" data-part="credential__value">{email}</div>
+                        <div class="ods-settings__row" data-part="credential__value">{email}</div>
                     </div>
 
                     <div class="ods-field">
                         <span class="ods-field__label">{crate::i18n::t("admin.issued.temp_password")}</span>
-                        <div class="oc-credential__value" data-part="credential__value">
+                        <div class="ods-settings__row" data-part="credential__value">
                             // Coberta por omissão: uma credencial não deve ficar
                             // visível num ecrã que alguém pode estar a partilhar.
                             <span
-                                class="oc-credential__secret"
+                                class="ods-secret"
                                 data-oc="secret"
                                 data-oc-value=password.clone()
                             >
@@ -277,7 +318,7 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
                             <span>
                                 <button
                                     type="button"
-                                    class="ods-btn" data-part="btn"
+                                    class="ods-btn ods-btn--sm" data-part="btn"
                                     data-oc="secret-toggle"
                                     aria-pressed="false"
                                 >
@@ -285,7 +326,7 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
                                 </button>
                                 <button
                                     type="button"
-                                    class="ods-btn" data-part="btn"
+                                    class="ods-btn ods-btn--sm" data-part="btn"
                                     data-oc="secret-copy"
                                 >
                                     {crate::i18n::t("mfa.copy_short")}
@@ -296,7 +337,7 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
 
                     <div class="ods-field">
                         <span class="ods-field__label">{crate::i18n::t("admin.issued.valid_until")}</span>
-                        <div class="oc-credential__value" data-part="credential__value">{expires}" UTC"</div>
+                        <div class="ods-settings__row" data-part="credential__value">{expires}" UTC"</div>
                     </div>
 
                     <div class="ods-notice ods-notice--warning" role="alert">
@@ -306,7 +347,7 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
                 </div>
             </section>
 
-            <div>
+            <div class="ods-settings__actions">
                 {button(Button::new(crate::i18n::t("admin.issued.done"), Variant::Primary).href("/admin"))}
             </div>
         </div>
@@ -375,24 +416,27 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
             {card(
                 section_head(crate::i18n::t("admin.security.credential"), None, None),
                 view! {
-                    <dl>
-                        <dt>{crate::i18n::t("admin.account.status")}</dt>
-                        <dd>{badge(status.clone(), Tone::of(&status))}</dd>
-
-                        <dt>{crate::i18n::t("admin.password.permanent")}</dt>
-                        <dd>
+                    <div class="ods-settings__row">
+                        <span class="ods-settings__row-label">{crate::i18n::t("admin.account.status")}</span>
+                        <span>{badge(status.clone(), Tone::of(&status))}</span>
+                    </div>
+                    <div class="ods-settings__row">
+                        <span class="ods-settings__row-label">{crate::i18n::t("admin.password.permanent")}</span>
+                        <span>
                             {if has_permanent {
                                 crate::i18n::t("admin.password.self_set")
                             } else {
                                 crate::i18n::t("admin.password.not_yet_set")
                             }}
-                        </dd>
-
-                        <dt>{crate::i18n::t("admin.password.set_at")}</dt>
-                        <dd>{changed}</dd>
-
-                        <dt>{crate::i18n::t("admin.credential.temporary")}</dt>
-                        <dd>
+                        </span>
+                    </div>
+                    <div class="ods-settings__row">
+                        <span class="ods-settings__row-label">{crate::i18n::t("admin.password.set_at")}</span>
+                        <span>{changed}</span>
+                    </div>
+                    <div class="ods-settings__row">
+                        <span class="ods-settings__row-label">{crate::i18n::t("admin.credential.temporary")}</span>
+                        <span>
                             {if !tem_temporaria {
                                 view! { <span>"—"</span> }.into_any()
                             } else if temporary_expired {
@@ -413,14 +457,17 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                                 }
                                     .into_any()
                             }}
-                        </dd>
+                        </span>
+                    </div>
+                    <div class="ods-settings__row">
+                        <span class="ods-settings__row-label">{crate::i18n::t("admin.last_sign_in")}</span>
+                        <span>{last_sign_in}</span>
+                    </div>
+                    <div class="ods-settings__row">
+                        <span class="ods-settings__row-label">{crate::i18n::t("admin.recent_failures")}</span>
+                        <span>{failures.to_string()}</span>
+                    </div>
 
-                        <dt>{crate::i18n::t("admin.last_sign_in")}</dt>
-                        <dd>{last_sign_in}</dd>
-
-                        <dt>{crate::i18n::t("admin.recent_failures")}</dt>
-                        <dd>{failures.to_string()}</dd>
-                    </dl>
                 },
             )}
 
@@ -565,7 +612,7 @@ pub fn access_tab(access: &Value) -> impl IntoView {
                     view! { <p class="ods-field__hint">{crate::i18n::t("admin.roles.none_assigned")}</p> }.into_any()
                 } else {
                     view! {
-                        <div>
+                        <div class="ods-chips">
                             {roles
                                 .into_iter()
                                 .map(|role| {
@@ -593,33 +640,40 @@ pub fn access_tab(access: &Value) -> impl IntoView {
                         .into_any()
                 } else {
                     view! {
-                        <div>
-                            {grants
-                                .iter()
-                                .map(|grant| {
-                                    let revoked = grant.get("revoked_at").is_some_and(|v| !v.is_null());
-                                    view! {
-                                        <div>
-                                            <span>
-                                                {text(grant, "permission").to_owned()}
-                                            </span>
-                                            <span>
-                                                {text(grant, "scope").to_owned()}
-                                            </span>
-                                            {badge(
-                                                if revoked {
-                                                    crate::i18n::t("admin.state.revoked")
-                                                } else {
-                                                    crate::i18n::t("admin.state.active")
-                                                }
-                                                .to_owned(),
-                                                if revoked { Tone::Gray } else { Tone::Ok },
-                                            )}
-                                        </div>
-                                    }
-                                })
-                                .collect_view()}
-                        </div>
+                        <table class="ods-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">{crate::i18n::t("admin.col.permission")}</th>
+                                    <th scope="col">{crate::i18n::t("admin.col.scope")}</th>
+                                    <th scope="col">{crate::i18n::t("admin.account.status")}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {grants
+                                    .iter()
+                                    .map(|grant| {
+                                        let revoked = grant.get("revoked_at").is_some_and(|v| !v.is_null());
+                                        view! {
+                                            <tr>
+                                                <td>{text(grant, "permission").to_owned()}</td>
+                                                <td>{text(grant, "scope").to_owned()}</td>
+                                                <td>
+                                                    {badge(
+                                                        if revoked {
+                                                            crate::i18n::t("admin.state.revoked")
+                                                        } else {
+                                                            crate::i18n::t("admin.state.active")
+                                                        }
+                                                        .to_owned(),
+                                                        if revoked { Tone::Gray } else { Tone::Ok },
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        }
+                                    })
+                                    .collect_view()}
+                            </tbody>
+                        </table>
                     }
                         .into_any()
                 },
@@ -641,17 +695,27 @@ pub fn access_tab(access: &Value) -> impl IntoView {
                             .into_any()
                     } else {
                         view! {
-                            <div>
-                                {permissions
-                                    .into_iter()
-                                    .map(|(permission, source)| {
-                                        view! {
-                                            <span>{permission}</span>
-                                            <span class="ods-field__hint">{source_label(&source)}</span>
-                                        }
-                                    })
-                                    .collect_view()}
-                            </div>
+                            <table class="ods-table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">{crate::i18n::t("admin.col.permission")}</th>
+                                        <th scope="col">{crate::i18n::t("resources.source.other")}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {permissions
+                                        .into_iter()
+                                        .map(|(permission, source)| {
+                                            view! {
+                                                <tr>
+                                                    <td>{permission}</td>
+                                                    <td><span class="ods-badge">{source_label(&source)}</span></td>
+                                                </tr>
+                                            }
+                                        })
+                                        .collect_view()}
+                                </tbody>
+                            </table>
                         }
                             .into_any()
                     }}
@@ -726,36 +790,42 @@ fn overview_tab(position: &str, status: &str, security: &Value, access: &Value) 
     let status = status.to_owned();
     let position = position.to_owned();
 
-    card(
-        section_head(crate::i18n::t("admin.overview.summary"), None, None),
-        view! {
-            <dl>
-                <dt>{crate::i18n::t("admin.position.label")}</dt>
-                <dd>{position}{crate::i18n::t("admin.position.no_access_suffix")}</dd>
-
-                <dt>{crate::i18n::t("admin.account.status")}</dt>
-                <dd>{badge(status.clone(), Tone::of(&status))}</dd>
-
-                <dt>{crate::i18n::t("settings.recovery.section")}</dt>
-                <dd>{badge(mfa_texto.to_owned(), mfa_tone)}</dd>
-
-                <dt>{crate::i18n::t("admin.password.permanent")}</dt>
-                <dd>
+    view! {
+        <h3 class="ods-label">{crate::i18n::t("admin.overview.summary")}</h3>
+        <div class="ods-d12-metrics">
+            <div class="ods-d12-metric">
+                <span class="ods-d12-metric__label">{crate::i18n::t("admin.position.label")}</span>
+                <span class="ods-d12-metric__value" data-oc-content="1">{position}</span>
+                <span class="ods-d12-metric__hint">{crate::i18n::t("admin.position.no_access_suffix")}</span>
+            </div>
+            <div class="ods-d12-metric">
+                <span class="ods-d12-metric__label">{crate::i18n::t("admin.account.status")}</span>
+                <span>{badge(status.clone(), Tone::of(&status))}</span>
+            </div>
+            <div class="ods-d12-metric">
+                <span class="ods-d12-metric__label">{crate::i18n::t("settings.recovery.section")}</span>
+                <span>{badge(mfa_texto.to_owned(), mfa_tone)}</span>
+            </div>
+            <div class="ods-d12-metric">
+                <span class="ods-d12-metric__label">{crate::i18n::t("admin.password.permanent")}</span>
+                <span class="ods-d12-metric__hint">
                     {if has_permanent {
                         crate::i18n::t("admin.password.self_set")
                     } else {
                         crate::i18n::t("admin.password.not_yet_set")
                     }}
-                </dd>
-
-                <dt>{crate::i18n::t("admin.roles.technical")}</dt>
-                <dd>{papeis_texto}</dd>
-
-                <dt>{crate::i18n::t("admin.sessions.active")}</dt>
-                <dd>{sessoes.to_string()}</dd>
-            </dl>
-        },
-    )
+                </span>
+            </div>
+            <div class="ods-d12-metric">
+                <span class="ods-d12-metric__label">{crate::i18n::t("admin.roles.technical")}</span>
+                <span class="ods-d12-metric__hint">{papeis_texto}</span>
+            </div>
+            <div class="ods-d12-metric">
+                <span class="ods-d12-metric__label">{crate::i18n::t("admin.sessions.active")}</span>
+                <span class="ods-d12-metric__value">{sessoes.to_string()}</span>
+            </div>
+        </div>
+    }
 }
 
 /// Detalhe de um membro: quem é, o que pode, e o estado da sua credencial.
@@ -805,17 +875,17 @@ pub fn member_detail(
     let access = access.clone();
 
     view! {
-        // Mesmas classes do cabeçalho do Research Workspace: um segundo padrão
-        // de cabeçalho contextual seria um segundo sítio para os alinhar.
+        // O cabeçalho da pessoa (D12, `.ods-d12-person`).
         <div>
-            <div>
+            <div class="ods-d12-person">
+                <span class="ods-avatar ods-avatar--lg" aria-hidden="true">{crate::ui::initials(&name)}</span>
                 <div>
-                    <div>
+                    <div class="ods-chips">
                         <span class="ods-chip">{crate::i18n::t("admin.member.pill")}</span>
-                        <h1 class="ods-page__title">{name}</h1>
                         {badge(status.clone(), Tone::of(&status))}
                     </div>
-                    <div>{email}</div>
+                    <h1 class="ods-page__title" data-oc-content="1">{name.clone()}</h1>
+                    <div class="ods-field__hint" data-oc-content="1">{email}</div>
                     <div class="ods-field__hint">
                         {crate::i18n::t("admin.member.position_prefix")}{position.clone()}
                         {crate::i18n::t("admin.position.no_access_suffix")}
@@ -840,7 +910,7 @@ pub fn member_detail(
                     .iter()
                     .map(|(label_key, porque_key)| {
                         view! {
-                            <span class="ods-tabs__tab oc-unavailable" data-part="tab unavailable" aria-disabled="true" title=crate::i18n::t(porque_key)>
+                            <span class="ods-tabs__tab" data-part="tab unavailable" aria-disabled="true" data-tip=crate::i18n::t(porque_key) title=crate::i18n::t(porque_key)>
                                 {crate::i18n::t(label_key)}
                             </span>
                         }
@@ -849,33 +919,29 @@ pub fn member_detail(
             </nav>
         </div>
 
-        <div class="ods-page">
-            <section id="membro-overview">
-                {section_head(crate::i18n::t("admin.tab.overview"), None, None)}
+        <div>
+            <section class="ods-settings__section" id="membro-overview">
+                <h2 class="ods-settings__section-title">{crate::i18n::t("admin.tab.overview")}</h2>
                 {overview_tab(&position, &status, &security, &access)}
                 {position_admin(&person_id, &position_code, &security)}
             </section>
-            <div></div>
-            <section id="membro-acesso">
-                {section_head(crate::i18n::t("admin.tab.access"), None, None)}
+            <section class="ods-settings__section" id="membro-acesso">
+                <h2 class="ods-settings__section-title">{crate::i18n::t("admin.tab.access")}</h2>
                 {access_tab(&access)}
                 {roles_admin(&person_id, &access)}
                 {grants_admin(&person_id, &access, &permissions_catalog)}
             </section>
-            <div></div>
-            <section id="membro-seguranca">
-                {section_head(crate::i18n::t("settings.tab.security"), None, None)}
+            <section class="ods-settings__section" id="membro-seguranca">
+                <h2 class="ods-settings__section-title">{crate::i18n::t("settings.tab.security")}</h2>
                 {security_tab(&person_id, &security, recusa.as_deref())}
                 {account_admin(&person_id, &security)}
             </section>
-            <div></div>
-            <section id="membro-unidades">
-                {section_head(crate::i18n::t("nav.units"), None, None)}
+            <section class="ods-settings__section" id="membro-unidades">
+                <h2 class="ods-settings__section-title">{crate::i18n::t("nav.units")}</h2>
                 {units_admin(&person_id, &access, &units_catalog)}
             </section>
-            <div></div>
-            <section id="membro-research-workspaces">
-                {section_head(crate::i18n::t("home.continue.aside"), None, None)}
+            <section class="ods-settings__section" id="membro-research-workspaces">
+                <h2 class="ods-settings__section-title">{crate::i18n::t("home.continue.aside")}</h2>
                 {workspaces_admin(&person_id, &access, &workspaces_catalog)}
             </section>
         </div>
@@ -1775,7 +1841,7 @@ pub fn instance(payload: &Value, saved: bool) -> impl IntoView {
         .unwrap_or_default();
 
     view! {
-        <div class="ods-page" data-oc="instance-admin">
+        <div data-oc="instance-admin">
             <div class="ods-page__head">
                 <div>
                     <h1 class="ods-page__title">{crate::i18n::t("admin.instance.title")}</h1>
@@ -1821,7 +1887,7 @@ pub fn instance(payload: &Value, saved: bool) -> impl IntoView {
                         <p class="ods-field__hint">
                             {crate::i18n::t("admin.instance.apps.help")}
                         </p>
-                        <ul class="oc-applist__set" role="list">
+                        <ul class="ods-admin-list" role="list">
                             {aplicacoes
                                 .iter()
                                 .filter_map(|estado| {
@@ -1839,9 +1905,12 @@ pub fn instance(payload: &Value, saved: bool) -> impl IntoView {
                                         (true, false) => "inactive",
                                     };
                                     Some(view! {
-                                        <li class="oc-applist__opt" data-oc="instance-app" data-app-id=id.clone()>
-                                            <span class="oc-applist__nome">{app.label()}</span>
-                                            <span class="oc-applist__desc">{app.description()}</span>
+                                        <li class="ods-admin-list__opt" data-oc="instance-app" data-app-id=id.clone()>
+                                            <span>
+                                                <span class="ods-settings__row-label">{app.label()}</span>
+                                                <span class="ods-settings__row-hint">{app.description()}</span>
+                                            </span>
+                                            <span class="ods-app__toolbar-spacer"></span>
                                             {if essencial {
                                                 badge(crate::i18n::t("admin.instance.apps.essential"), Tone::Gray).into_any()
                                             } else {
@@ -1879,8 +1948,8 @@ pub fn instance(payload: &Value, saved: bool) -> impl IntoView {
                     },
                 )}
 
-                <div>
-                    <button class="ods-btn ods-btn--navy" data-part="btn" type="submit" data-oc="instance-save">
+                <div class="ods-settings__actions">
+                    <button class="ods-btn ods-btn--primary" data-part="btn" type="submit" data-oc="instance-save">
                         {crate::i18n::t("admin.instance.save")}
                     </button>
                 </div>
