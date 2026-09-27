@@ -182,3 +182,56 @@ impl CapabilityHandler for ChooseAvatarPreset {
         })
     }
 }
+
+/// Quem sou: o nome, a Instância e os papéis técnicos da pessoa que pede.
+///
+/// # O que não mostra
+///
+/// Nada que seja um segredo ou um detalhe de segurança: sessões, garantia de
+/// MFA, permissões finas. É o `whoami` do Terminal e a resposta a «quem sou eu
+/// aqui?» do Nye — os mesmos factos que o cabeçalho da conta já mostra.
+pub struct ReadSelf;
+
+#[async_trait]
+impl CapabilityHandler for ReadSelf {
+    fn descriptor(&self) -> CapabilityDescriptor {
+        CapabilityDescriptor {
+            id: CapabilityId::new("identity.self.read"),
+            operation: OperationId::new("identity::read_self"),
+            domain: "identity".to_owned(),
+            summary: "Dizer quem é a pessoa que pede: nome, Instância e papéis.".to_owned(),
+            permission: Permission::OrganisationView,
+            scope: Scope::Institution,
+            risk: RiskLevel::ReadOnly,
+            approval: ApprovalRequirement::Never,
+            max_autonomy: AutonomyLevel::Workflow,
+            reversibility: Reversibility::NothingToUndo,
+            supports_dry_run: false,
+            classification_ceiling: None,
+            input_schema: serde_json::json!({"type": "object", "properties": {}}),
+        }
+    }
+
+    async fn execute(&self, ctx: &ExecutionContext<'_>) -> CoreResult<CapabilityResult> {
+        let instance =
+            crate::modules::organisation::instance_name(ctx.pool, ctx.principal.organisation_id)
+                .await?;
+        let mut roles: Vec<&'static str> =
+            ctx.principal.roles.iter().map(|r| r.as_str()).collect();
+        roles.sort_unstable();
+
+        Ok(CapabilityResult {
+            capability: self.descriptor().id,
+            status: ExecutionStatus::Succeeded,
+            detail: ctx.principal.display_name.clone(),
+            resources: Vec::new(),
+            reversibility: Reversibility::NothingToUndo,
+            output: Some(serde_json::json!({
+                "person_id": ctx.principal.person_id,
+                "display_name": ctx.principal.display_name,
+                "instance": instance,
+                "roles": roles,
+            })),
+        })
+    }
+}

@@ -251,6 +251,10 @@ suites() {
 # 125 → 126 em 2026-09-27: o Nye responde no círculo (D7, Claude Design).
 viagens-de-browser|126|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|126
 paridade|7|-p ocinye-core-server --test parity
+# O Terminal (ocsh, ADR-0312): whoami, contexto reautorizado e alheio recusado,
+# sintaxe do anfitrião e comandos desconhecidos sem execução, ajuda filtrada pela
+# autoridade, e nenhum terminal sem sessão. Criada em 2026-09-27 com cinco provas.
+terminal|5|-p ocinye-core-server --test terminal_http
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
 catalogo-de-operacoes|13|-p ocinye-core --lib operations

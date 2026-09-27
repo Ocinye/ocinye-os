@@ -14,6 +14,7 @@
 pub mod lexer;
 pub mod parser;
 pub mod registry;
+pub mod wire;
 
 pub use parser::{parse, Invocation, ParseError, Parsed, Stage, Value};
 
@@ -165,7 +166,7 @@ mod tests {
             let r = redact(linha);
             assert!(!r.contains(segredo), "{linha} → {r}");
         }
-        assert_eq!(redact("tasks list --mine"), "tasks list --mine");
+        assert_eq!(redact("tasks list --open"), "tasks list --open");
         assert_eq!(redact(r#"nye ask "o que há hoje""#), r#"nye ask "o que há hoje""#);
     }
 }

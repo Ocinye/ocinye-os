@@ -400,9 +400,9 @@ mod tests {
 
     #[test]
     fn familia_sub_opcoes_e_omissao() {
-        let i = run("tasks list --mine");
+        let i = run("tasks list --open");
         assert_eq!((i.spec.family, i.spec.sub), ("tasks", "list"));
-        assert_eq!(i.flags, ["mine"]);
+        assert_eq!(i.flags, ["open"]);
         let i = run("tasks");
         assert_eq!(i.spec.sub, "list", "a omissão");
         let i = run("tasks --json");
@@ -453,7 +453,7 @@ mod tests {
         assert_eq!(parse("tasks frobnicate"), Err(ParseError::UnknownSubcommand { family: "tasks".into(), word: "frobnicate".into() }));
         assert_eq!(parse("clear --json"), Err(ParseError::JsonNotSupported));
         assert_eq!(parse("clear | count"), Err(ParseError::NotPipeable));
-        assert_eq!(parse("tasks list --mine=yes"), Err(ParseError::UnknownOption("--mine".into())));
+        assert_eq!(parse("tasks list --open=yes"), Err(ParseError::UnknownOption("--open".into())));
         assert_eq!(parse("| count"), Err(ParseError::BadStage("|".into())));
         assert_eq!(parse("   "), Ok(Parsed::Empty));
     }

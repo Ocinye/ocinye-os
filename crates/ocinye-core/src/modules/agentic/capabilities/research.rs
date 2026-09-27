@@ -838,3 +838,89 @@ impl CapabilityHandler for ReviseIdea {
         })
     }
 }
+
+/// Os Research Workspaces que a pessoa alcança.
+///
+/// # A lista é a da visibilidade
+///
+/// A mesma `VisibilityFilter` do ecrã de ideias e projectos: um ambiente que a
+/// pessoa não vê não aparece, e não aparece a contagem dele. Serve o `context
+/// list` e o `projects list` do Terminal, e o «em que ambientes trabalho?» do
+/// Nye.
+pub struct ListWorkspaces;
+
+#[async_trait]
+impl CapabilityHandler for ListWorkspaces {
+    fn descriptor(&self) -> CapabilityDescriptor {
+        CapabilityDescriptor {
+            id: CapabilityId::new("research.workspace.list"),
+            operation: OperationId::new("research::list_workspaces"),
+            domain: "research".to_owned(),
+            summary: "Listar os Research Workspaces que a pessoa alcança.".to_owned(),
+            permission: Permission::OrganisationView,
+            scope: Scope::Institution,
+            risk: RiskLevel::ReadOnly,
+            approval: ApprovalRequirement::Never,
+            max_autonomy: AutonomyLevel::Workflow,
+            reversibility: Reversibility::NothingToUndo,
+            supports_dry_run: false,
+            classification_ceiling: None,
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["idea", "project"]},
+                    "mine": {"type": "boolean", "description": "Só aqueles em que participa."}
+                }
+            }),
+        }
+    }
+
+    async fn execute(&self, ctx: &ExecutionContext<'_>) -> CoreResult<CapabilityResult> {
+        let kind: Option<String> = ctx.optional("kind")?;
+        let mine: bool = ctx.optional("mine")?.unwrap_or(false);
+        let kind = match kind.as_deref() {
+            None => None,
+            Some("idea") => Some(ocinye_contracts::research::WorkspaceKind::Idea),
+            Some("project") => Some(ocinye_contracts::research::WorkspaceKind::Project),
+            Some(_) => return Err(CoreError::Validation("kind must be idea or project".to_owned())),
+        };
+        // Os ambientes onde tem papel saem do principal, como na rota.
+        let meus = ctx.principal.workspace_ids();
+        let (workspaces, total) = research::list_workspaces(
+            ctx.pool,
+            ctx.principal,
+            research::WorkspaceQuery {
+                kind,
+                member_of: mine.then_some(meus.as_slice()),
+                ..Default::default()
+            },
+            ocinye_contracts::page::PageRequest { page: 1, page_size: 100 },
+        )
+        .await?;
+
+        Ok(CapabilityResult {
+            capability: self.descriptor().id,
+            status: ExecutionStatus::Succeeded,
+            detail: format!("{total}"),
+            resources: workspaces
+                .iter()
+                .map(|w| ResourceRef {
+                    kind: AgenticKind::Workspace,
+                    id: w.id,
+                    label: Some(w.title.clone()),
+                })
+                .collect(),
+            reversibility: Reversibility::NothingToUndo,
+            output: Some(serde_json::json!({
+                "total": total,
+                "items": workspaces.iter().map(|w| serde_json::json!({
+                    "id": w.id,
+                    "code": w.code,
+                    "title": w.title,
+                    "kind": w.kind,
+                    "classification": w.classification,
+                })).collect::<Vec<_>>(),
+            })),
+        })
+    }
+}
