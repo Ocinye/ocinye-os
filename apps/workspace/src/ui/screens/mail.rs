@@ -1722,27 +1722,27 @@ fn ligar_caixa_nova(member_email: &str, endpoints: &[String]) -> impl IntoView {
     let servidores = endpoints.join(" · ");
     let tem_servidores = !servidores.is_empty();
     view! {
-        <div class="oc-mail__ligacao" data-oc="ligar-caixa-nova">
-            <p class="oc-muted oc-mail__ligacao-caixa">
+        <div class="ods-admin-list__opt" data-oc="ligar-caixa-nova">
+            <p class="ods-field__hint">
                 {crate::i18n::t("mail.no_institutional.body")}
             </p>
-            <form class="oc-mail__conectar" method="post" action="/mail/connect">
-                <dl class="oc-facts oc-mail__conectar-factos">
+            <form method="post" action="/mail/connect">
+                <dl class="ods-kv">
                     <dt>{crate::i18n::t("mail.settings.institutional_email")}</dt>
-                    <dd class="oc-mono">{email}</dd>
+                    <dd>{email}</dd>
                     {tem_servidores.then(|| view! {
                         <dt>{crate::i18n::t("mail.settings.servers")}</dt>
-                        <dd class="oc-mono">{servidores.clone()}</dd>
+                        <dd>{servidores.clone()}</dd>
                     })}
                 </dl>
                 // A senha entra uma vez e nunca é pré-preenchida do estado do
                 // servidor: não há de onde a ler de volta.
-                <div class="oc-mail__conectar-campo">
-                    <label class="oc-field__label" for="mail-nova-senha">
+                <div class="ods-field">
+                    <label class="ods-field__label" for="mail-nova-senha">
                         {crate::i18n::t("mail.settings.password_app")}
                     </label>
                     <input
-                        class="oc-input"
+                        class="ods-input"
                         id="mail-nova-senha"
                         type="password"
                         name="password"
@@ -1750,12 +1750,12 @@ fn ligar_caixa_nova(member_email: &str, endpoints: &[String]) -> impl IntoView {
                         required=""
                     />
                 </div>
-                <p class="oc-muted oc-mail__ligacao-nota">
+                <p class="ods-field__hint">
                     "A senha é verificada contra o servidor e guardada cifrada. Nunca volta
                      a ser mostrada."
                 </p>
                 <div>
-                    <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{crate::i18n::t("mail.settings.save_and_link")}</button>
+                    <button type="submit" class="ods-btn ods-btn--primary" data-part="btn">{crate::i18n::t("mail.settings.save_and_link")}</button>
                 </div>
             </form>
         </div>
@@ -1772,14 +1772,14 @@ fn ligacao_da_caixa(caixa: &Value) -> impl IntoView {
     let sugestao = endereco.clone();
 
     view! {
-        <div class="oc-mail__ligacao" data-oc="ligacao-caixa">
-            <p class="oc-mail__ligacao-caixa">
+        <div class="ods-admin-list__opt" data-oc="ligacao-caixa">
+            <p>
                 <strong>{endereco}</strong>
                 " "
                 {if ligada {
-                    view! { <span class="oc-badge oc-badge--ok">{crate::i18n::t("mail.settings.linked")}</span> }.into_any()
+                    view! { <span class="ods-badge ods-badge--success">{crate::i18n::t("mail.settings.linked")}</span> }.into_any()
                 } else {
-                    view! { <span class="oc-badge">{crate::i18n::t("mail.by_linking")}</span> }.into_any()
+                    view! { <span class="ods-badge">{crate::i18n::t("mail.by_linking")}</span> }.into_any()
                 }}
             </p>
 
@@ -1790,7 +1790,7 @@ fn ligacao_da_caixa(caixa: &Value) -> impl IntoView {
                         method="post"
                         action=format!("/mail/{id}/disconnect")
                     >
-                        <button type="submit" class="oc-btn oc-btn--secondary" data-part="btn">
+                        <button type="submit" class="ods-btn" data-part="btn">
                             {crate::i18n::t("mail.settings.disconnect")}
                         </button>
                     </form>
@@ -1799,7 +1799,6 @@ fn ligacao_da_caixa(caixa: &Value) -> impl IntoView {
             } else {
                 view! {
                     <form
-                        class="oc-mail__ligacao-form"
                         data-oc="ligar-caixa"
                         method="post"
                         action=format!("/mail/{id}/connect")
@@ -1827,21 +1826,21 @@ fn ligacao_da_caixa(caixa: &Value) -> impl IntoView {
                             aria-hidden="true"
                             tabindex="-1"
                             readonly
-                            class="oc-sr"
+                            class="ods-sr-only"
                         />
-                        <label class="oc-campo">
-                            <span class="oc-campo__rotulo">{crate::i18n::t("mail.settings.password")}</span>
+                        <label class="ods-field">
+                            <span class="ods-field__label">{crate::i18n::t("mail.settings.password")}</span>
                             // A senha do correio, e não a do Ocinye. São coisas
                             // distintas, e nenhuma serve para obter a outra.
                             <input
-                                class="oc-entrada"
+                                class="ods-input"
                                 type="password"
                                 name="password"
                                 autocomplete="new-password"
                                 required=true
                             />
                         </label>
-                        <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{crate::i18n::t("mail.link_mailbox")}</button>
+                        <button type="submit" class="ods-btn ods-btn--primary" data-part="btn">{crate::i18n::t("mail.link_mailbox")}</button>
                     </form>
                 }
                 .into_any()
@@ -1915,10 +1914,10 @@ pub fn settings(
             {card(
                 section_head(crate::i18n::t("mail.settings.your_mailboxes"), None, None),
                 view! {
-                    <p class="oc-muted oc-mail__ligacao-nota">
+                    <p class="ods-field__hint">
                         {crate::i18n::t("mail.settings.password_note")}
                     </p>
-                    {view.boxes().iter().map(ligacao_da_caixa).collect_view()}
+                    <div class="ods-admin-list">{view.boxes().iter().map(ligacao_da_caixa).collect_view()}</div>
                     {view.boxes().is_empty().then(|| ligar_caixa_nova(&member_email, &endpoints))}
                 },
             )}
@@ -1926,32 +1925,32 @@ pub fn settings(
             {card(
                 section_head(crate::i18n::t("mail.layout"), None, None),
                 view! {
-                    <p class="oc-muted">
+                    <p class="ods-field__hint">
                         "As larguras dos painéis e as pastas recolhidas ficam guardadas neste
                          browser, e só aqui: são a sua maneira de ler, e não um dado da
                          instituição."
                     </p>
                     <button
                         type="button"
-                        class="oc-btn oc-btn--secondary" data-part="btn"
+                        class="ods-btn" data-part="btn"
                         data-oc="repor-disposicao"
                     >
                         {crate::i18n::t("mail.settings.reset_layout")}
                     </button>
-                    <p class="oc-muted oc-mail__reposto" data-oc="disposicao-reposta" hidden>
+                    <p class="ods-field__hint" data-oc="disposicao-reposta" hidden>
                         {crate::i18n::t("mail.settings.reset_done")}
                     </p>
                 },
             )}
 
-            <div class="oc-grid oc-grid--2">
+            <div class="ods-cards">
                 {card(
                     section_head(crate::i18n::t("mail.settings.preferences"), None, None),
                     view! {
                         <form method="post" action="/mail/settings">
-                            <div class="oc-mail__sig">
-                                <h3 class="oc-mail__sig-title">{crate::i18n::t("mail.settings.signature")}</h3>
-                                <p class="oc-muted oc-mail__sig-note">
+                            <div>
+                                <h3 class="ods-settings__section-title">{crate::i18n::t("mail.settings.signature")}</h3>
+                                <p class="ods-field__hint">
                                     "A Ocinye acrescenta esta assinatura às mensagens que
                                      enviar. É gerada dos seus dados; um campo em falta é
                                      omitido, não deixa linha vazia."
@@ -1959,7 +1958,7 @@ pub fn settings(
                                 // A pré-visualização é HTML gerado pelo Core a partir de
                                 // dados estruturados — nunca marcação de quem escreve — e
                                 // é fiel ao que o destinatário recebe.
-                                <div class="oc-mail__sig-preview" inner_html=signature_html></div>
+                                <div inner_html=signature_html></div>
                                 {named_checkbox(
                                     "mail-official",
                                     "official_signature",
@@ -2002,12 +2001,12 @@ pub fn settings(
                                 ],
                             )}
 
-                            <p class="oc-mail__assist-note">
+                            <p class="ods-field__hint">
                                 "Carregar conteúdo remoto informa quem enviou a mensagem de que
                                  ela foi aberta. O Ocinye OS não o carrega por omissão."
                             </p>
 
-                            <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{crate::i18n::t("mail.settings.save")}</button>
+                            <button type="submit" class="ods-btn ods-btn--primary" data-part="btn">{crate::i18n::t("mail.settings.save")}</button>
                         </form>
                     },
                 )}
@@ -2015,31 +2014,31 @@ pub fn settings(
                 {card(
                     section_head(crate::i18n::t("mail.settings.service_status"), None, None),
                     view! {
-                        <ul class="oc-mail__status">
-                            <li>
+                        <ul>
+                            <li class="ods-settings__row">
                                 <span>{crate::i18n::t("mail.settings.reading")}</span>
                                 {state_badge(can_read)}
                             </li>
-                            <li>
+                            <li class="ods-settings__row">
                                 <span>{crate::i18n::t("mail.settings.sending")}</span>
                                 {state_badge(can_send)}
                             </li>
-                            <li>
+                            <li class="ods-settings__row">
                                 <span>{crate::i18n::t("mail.ai.title")}</span>
                                 {state_badge(ai)}
                             </li>
-                            <li>
+                            <li class="ods-settings__row">
                                 <span>{crate::i18n::t("mail.settings.adapter")}</span>
-                                <span class="oc-mono">{adapter}</span>
+                                <span>{adapter}</span>
                             </li>
                         </ul>
 
-                        <p class="oc-mail__assist-note">{detail}</p>
+                        <p class="ods-field__hint">{detail}</p>
 
                         // Anfitriões e portos. Nenhuma credencial aparece aqui, e
                         // nenhuma pode: o Core não as devolve (briefing §59).
                         {(!endpoints.is_empty()).then(|| view! {
-                            <p class="oc-mono oc-mail__endpoints">{endpoints.join(" · ")}</p>
+                            <p class="ods-label">{endpoints.join(" · ")}</p>
                         })}
                     },
                 )}

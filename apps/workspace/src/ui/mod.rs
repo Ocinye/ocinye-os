@@ -53,7 +53,7 @@ pub fn document_com_cabeca(
     // houver uma preferência de tema do membro: `system` misturaria os tokens
     // escuros com a folha legada, que só tem modo claro.
     out.push_str(
-        "\" class=\"ods-root\" data-theme=\"light\">\n\
+        "\" class=\"ods-root\" data-theme=\"system\">\n\
          <head>\n\
          <meta charset=\"utf-8\">\n\
          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
@@ -1896,6 +1896,71 @@ pub(crate) mod link_tests {
                 "{handler} lê o seu conteúdo com `optional`: uma falha do Core vira lista vazia"
             );
         }
+    }
+
+    /// Nenhum ecrã desenha uma classe da UI legada (`oc-*`).
+    ///
+    /// # Porque existe
+    ///
+    /// A folha de estilo legada foi retirada no UI Reset: uma classe `oc-*` já
+    /// não tem regra nenhuma, e um elemento que a usa aparece sem desenho — sem
+    /// que nada falhe. Os ecrãs passaram às classes do Claude Design (`ods-*`);
+    /// os ganchos de comportamento são `data-oc` e `data-part`, que isto não vê.
+    ///
+    /// # A única excepção, com a razão
+    ///
+    /// O Correio espera pelas respostas Q-23/Q-24 (a grelha redimensionável e o
+    /// compositor). A lista diz-o por nome e falha se ficar desactualizada: um
+    /// ecrã do Correio sem classes legadas tem de sair dela.
+    #[test]
+    fn nenhum_ecra_usa_classes_da_ui_legada() {
+        const A_ESPERA_DO_DESIGN: &[&str] = &[
+            "mail",
+            "mail-message",
+            "mail-synced",
+            "mail-compose",
+            "mail-compose-no-ai",
+        ];
+        let classes = |html: &str| -> Vec<String> {
+            html.split("class=\"")
+                .skip(1)
+                .filter_map(|r| r.split('"').next())
+                .flat_map(|v| v.split_whitespace().map(str::to_owned).collect::<Vec<_>>())
+                .filter(|c| c.starts_with("oc-"))
+                .collect()
+        };
+
+        let mut legadas: Vec<String> = Vec::new();
+        let mut excepcoes_vivas: Vec<&str> = Vec::new();
+        let mut vistos = 0usize;
+        for (ecra, html) in catalogue() {
+            vistos += 1;
+            let achadas = classes(&html);
+            if A_ESPERA_DO_DESIGN.contains(&ecra) {
+                if !achadas.is_empty() {
+                    excepcoes_vivas.push(ecra);
+                }
+                continue;
+            }
+            if let Some(c) = achadas.first() {
+                legadas.push(format!("{ecra}: {c} (+{})", achadas.len() - 1));
+            }
+        }
+
+        assert!(vistos > 40, "o catálogo quase não tem ecrãs ({vistos}): o guarda deixou de observar");
+        assert!(
+            legadas.is_empty(),
+            "classes da UI legada sem folha de estilo:\n  {}",
+            legadas.join("\n  ")
+        );
+        let caducas: Vec<&&str> = A_ESPERA_DO_DESIGN
+            .iter()
+            .filter(|e| !excepcoes_vivas.contains(e))
+            .collect();
+        assert!(
+            caducas.is_empty(),
+            "estes ecrãs já não usam classes legadas e têm de sair da excepção: {caducas:?}"
+        );
     }
 
     /// Uma mensagem dentro de um ecrã não usa a classe do ecrã de excepção.
