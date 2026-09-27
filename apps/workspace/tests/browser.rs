@@ -6356,6 +6356,9 @@ async fn desactivar_uma_aplicacao_esconde_a_e_reactivar_devolve_a_intacta() {
     esperar_por(&notas, "Notas").await;
     submit(&notas, "form[action=\"/notes\"]").await;
     wait_until_left(&notas, "/notes").await;
+    // O autosave é do editor: um título escrito antes de ele se montar não tem
+    // quem o grave. Esperar pela superfície é esperar por ele.
+    elemento(&notas, "[data-oc-notes-surface] .ProseMirror").await;
     let titulo = unique_title("Plano trimestral");
     set_field(&notas, "[data-oc-notes-title]", &titulo).await;
     esperar_por(&notas, "Guardado").await;
