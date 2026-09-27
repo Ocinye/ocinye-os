@@ -3551,25 +3551,9 @@ document.addEventListener('keydown', (event) => {
     a.style.setProperty('top', (Number(a.getAttribute('data-linha')) * FAIXA) + 'px');
   });
 
-  var corpo = document.querySelector('[data-oc="linha-do-tempo"]');
-  if (!corpo) return;
-
-  /* A grelha não rola por si: rola o contentor da página. Leva-se esse
-     contentor até à primeira actividade, ou às sete sem nenhuma. */
-  var rolante = corpo.closest('[data-ods-scroll]') || document.scrollingElement;
-  var alvo = null;
-  var bloco = corpo.querySelector('.ods-d12-cal__event');
-  if (bloco) {
-    /* Uma faixa acima do primeiro evento, para ele não ficar colado ao topo e
-       se perceber que há espaço antes dele. */
-    alvo = Number(bloco.getAttribute('data-linha') || 0) * FAIXA - FAIXA;
-  } else {
-    alvo = 7 * HORA;
-  }
-  if (rolante && alvo !== null) {
-    var topo = corpo.getBoundingClientRect().top - rolante.getBoundingClientRect().top + rolante.scrollTop;
-    rolante.scrollTop = Math.max(0, topo + alvo);
-  }
+  /* Não se rola para a primeira actividade: a grelha do D12 não é um
+     contentor de scroll, e rolar a página levava consigo a barra do
+     Calendário e os cabeçalhos dos dias (Q-31). A vista abre no topo. */
 })();
 
 /* O editor de actividade responde ao que se escolhe.

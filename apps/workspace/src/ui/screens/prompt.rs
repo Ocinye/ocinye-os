@@ -215,7 +215,7 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                     />
                     <span>{label}</span>
                     {(!available)
-                        .then(|| view! { <small class="ods-field__hint">{crate::i18n::t("prompt.no_active_model")}</small> })}
+                        .then(|| view! { " " <small class="ods-field__hint">{crate::i18n::t("prompt.no_active_model")}</small> })}
                 </label>
             }
         })
@@ -304,24 +304,25 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
             </div>
 
             // ── Input ──────────────────────────────────────────────────
+            // O formulário leva a capacidade, os anexos declarados e a nota; a
+            // fila do D12 (`.ods-d12-chat__composer`) é a caixa e o enviar.
             <form
                 id="oc-prompt-form"
                 method="post"
                 action="/ai/prompt"
-                class="ods-d12-chat__composer"
                 data-oc="prompt-form"
             >
                 {workspace_id
                     .map(|id| view! { <input type="hidden" name="workspace" value=id /> })}
 
-                <div class="ods-field">
-                    // A capacidade: seleccionável independentemente da
-                    // disponibilidade — autorização e disponibilidade são eixos
-                    // distintos (M5 §10).
-                    <div class="ods-seg" role="radiogroup" aria-label=crate::i18n::t("prompt.cap.legend")>
-                        {caps_view}
-                    </div>
+                // A capacidade: seleccionável independentemente da
+                // disponibilidade — autorização e disponibilidade são eixos
+                // distintos (M5 §10).
+                <div class="ods-seg" role="radiogroup" aria-label=crate::i18n::t("prompt.cap.legend")>
+                    {caps_view}
+                </div>
 
+                <div class="ods-d12-chat__composer">
                     <label class="ods-sr-only" for="prompt-input">
                         {crate::i18n::t("prompt.input.label")}
                     </label>
@@ -333,28 +334,27 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                         placeholder=crate::i18n::t("prompt.input.placeholder")
                         data-oc="prompt-textarea"
                     ></textarea>
-
-                    <div class="ods-chips">
-                        // Anexar contexto é do dossier e continua visível, mas
-                        // declarado indisponível com a razão: eram controlos sem
-                        // handler nem endpoint (briefing §2C, §53).
-                        {action_chip(Icon::Attach, crate::i18n::t("prompt.attach"))}
-                        {action_chip(Icon::Dataset, crate::i18n::t("prompt.attach.dataset"))}
-                        {action_chip(Icon::Document, crate::i18n::t("prompt.attach.document"))}
-                        {action_chip(Icon::Tools, crate::i18n::t("prompt.attach.tools"))}
-                    </div>
-                    <p class="ods-field__hint">{crate::i18n::t("prompt.errors_note")}</p>
+                    <button
+                        type="submit"
+                        aria-label=crate::i18n::t("prompt.send")
+                        title=crate::i18n::t("prompt.send")
+                        class="ods-nye-orb__send"
+                        data-oc="prompt-send"
+                    >
+                        {icone("arrow-r", "")}
+                    </button>
                 </div>
 
-                <button
-                    type="submit"
-                    aria-label=crate::i18n::t("prompt.send")
-                    title=crate::i18n::t("prompt.send")
-                    class="ods-nye-orb__send"
-                    data-oc="prompt-send"
-                >
-                    {icone("arrow-r", "")}
-                </button>
+                <div class="ods-chips">
+                    // Anexar contexto é do dossier e continua visível, mas
+                    // declarado indisponível com a razão: eram controlos sem
+                    // handler nem endpoint (briefing §2C, §53).
+                    {action_chip(Icon::Attach, crate::i18n::t("prompt.attach"))}
+                    {action_chip(Icon::Dataset, crate::i18n::t("prompt.attach.dataset"))}
+                    {action_chip(Icon::Document, crate::i18n::t("prompt.attach.document"))}
+                    {action_chip(Icon::Tools, crate::i18n::t("prompt.attach.tools"))}
+                </div>
+                <p class="ods-field__hint">{crate::i18n::t("prompt.errors_note")}</p>
             </form>
         </div>
     }

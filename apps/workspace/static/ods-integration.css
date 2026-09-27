@@ -15,3 +15,20 @@
  * desenho o põe. */
 .ods-shell__main:not(:has(> .ods-desktop)) { margin-bottom: 84px; }
 
+/* Q-35. Três colas de base, do mesmo género das que o D12 adoptou (Q-12):
+ *
+ * 1. `hidden` esconde. As classes com `display` próprio (`.ods-files__batch`,
+ *    `.ods-seg`, `.ods-menu`…) ganhavam ao `[hidden]` do browser, e a barra de
+ *    lote dos Ficheiros aparecia com a página vazia.
+ * 2. Um `fieldset` não desenha a moldura do browser: os grupos de rádios
+ *    (`.ods-seg`, intenções, avatares) apareciam dentro de uma caixa cinzenta.
+ * 3. Um botão feito com `<a>` mantém a cor do botão. `.ods-root a` é mais
+ *    específico do que `.ods-btn--navy`, e o texto de «Abrir Prompt» ficava
+ *    navy sobre navy — ilegível. */
+.ods-root [hidden] { display: none !important; }
+.ods-root fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.ods-root a.ods-btn:is(:link, :visited, :hover) { color: var(--ods-text-primary); text-decoration: none; }
+.ods-root a.ods-btn--navy:is(:link, :visited, :hover) { color: var(--ods-text-on-navy); }
+.ods-root a.ods-btn--primary:is(:link, :visited, :hover) { color: var(--ods-text-on-accent); }
+.ods-root a.ods-btn--danger:is(:link, :visited, :hover) { color: #FFFFFF; }
+.ods-root a.ods-btn--danger-soft:is(:link, :visited, :hover) { color: var(--ods-state-error-text); }

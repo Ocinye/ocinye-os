@@ -636,10 +636,9 @@ fn imagem_de_perfil(
 
             <p class="ods-field__label">{crate::i18n::t("settings.avatar.presets_label")}</p>
             <form method="post" action="/settings/avatar/preset">
-                <fieldset class="ods-avatar-pick">
-                    <legend class="ods-sr-only">{crate::i18n::t("settings.avatar.presets_label")}</legend>
+                <div class="ods-avatar-pick" role="radiogroup" aria-label=crate::i18n::t("settings.avatar.presets_label")>
                     {presets}
-                </fieldset>
+                </div>
                 <noscript>
                     <button type="submit" class="ods-btn ods-btn--sm">{crate::i18n::t("action.save")}</button>
                 </noscript>
