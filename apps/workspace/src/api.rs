@@ -441,6 +441,38 @@ pub async fn instance_name(state: &WorkspaceState) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// The public door of the Instance (D7): its name and profile, from the public
+/// `GET /instance/branding`. `None` when the Core does not answer — the door
+/// then names the product, and never guesses an institution.
+pub async fn instance_door(
+    state: &WorkspaceState,
+) -> Option<(String, Option<ocinye_contracts::InstanceProfile>)> {
+    let response = state
+        .http
+        .get(format!(
+            "{}/api/v1/instance/branding",
+            state.config.core_url
+        ))
+        .timeout(std::time::Duration::from_secs(3))
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let payload: Value = response.json().await.ok()?;
+    let name = payload
+        .get("name")
+        .and_then(Value::as_str)
+        .filter(|name| !name.trim().is_empty())?
+        .to_owned();
+    let profile = payload
+        .get("profile")
+        .and_then(Value::as_str)
+        .and_then(|p| p.parse().ok());
+    Some((name, profile))
+}
+
 /// Read the Core's readiness, without a member session.
 ///
 /// Used by the sign-in page so it can say plainly when the platform is not

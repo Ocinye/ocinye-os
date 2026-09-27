@@ -72,6 +72,10 @@ pub struct InstanceBranding {
     pub has_logo: bool,
     /// O produto — que continua identificável como a plataforma.
     pub product: &'static str,
+    /// O perfil da Instância (`research`, `business`, `education`,
+    /// `personal`). O início de sessão mostra-o à porta (D3): diz que
+    /// aplicações a organização usa, e não é segredo de ninguém.
+    pub profile: &'static str,
 }
 
 #[derive(sqlx::FromRow)]
@@ -355,6 +359,9 @@ pub async fn branding(pool: &PgPool, organisation_id: Uuid) -> CoreResult<Instan
         default_locale: definicoes.default_locale,
         has_logo: definicoes.has_logo,
         product: "Ocinye OS",
+        profile: super::applications::profile_of(pool, organisation_id)
+            .await?
+            .as_str(),
     })
 }
 

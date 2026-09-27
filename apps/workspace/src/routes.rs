@@ -215,6 +215,8 @@ pub const ROUTES: &[&str] = &[
     "/ask/plans/{plan_id}/reject",
     "/boot",
     "/login",
+    "/login/language",
+    "/password/recover",
     "/first-access",
     "/mfa",
     "/mfa/confirm",
@@ -604,6 +606,8 @@ pub fn router(state: WorkspaceState) -> Router {
         // Autenticação
         .route("/boot", get(boot_screen))
         .route("/login", get(login).post(login_submit))
+        .route("/login/language", post(login_language))
+        .route("/password/recover", get(password_recover))
         .route("/first-access", get(first_access).post(first_access_submit))
         .route("/mfa", get(mfa_page))
         .route("/mfa/confirm", post(mfa_confirm))
@@ -868,10 +872,10 @@ async fn same_origin_only(
         StatusCode::FORBIDDEN,
         page(
             "Pedido recusado",
-            ui::screens::login::login(
+            ui::screens::login::login_na_porta(
                 true,
                 Some("Este pedido não veio do Ocinye Workspace.".to_owned()),
-                None,
+                &ui::screens::login::Porta::default(),
             ),
         ),
     )
@@ -944,6 +948,20 @@ struct Member {
     /// Vem do browser. Sem ela, cai em UTC — que é a resposta menos errada
     /// quando não se sabe onde a pessoa está, e não uma preferência.
     zona: ocinye_contracts::temporal::TimeZoneName,
+}
+
+/// Para onde vai quem não tem sessão (D12).
+///
+/// Um browser que traz um cookie de sessão que o Workspace já não conhece teve
+/// uma sessão que acabou: diz-se «a sessão expirou». Sem cookie, é uma entrada
+/// como outra qualquer.
+fn destino_de_entrada(headers: &HeaderMap) -> &'static str {
+    let cookie = headers.get(header::COOKIE).and_then(|v| v.to_str().ok());
+    if session::session_id_from_cookies(cookie).is_some() {
+        "/login?reason=expired"
+    } else {
+        "/login"
+    }
 }
 
 fn current_member(state: &WorkspaceState, headers: &HeaderMap) -> Option<Member> {
@@ -1502,7 +1520,7 @@ macro_rules! member_or_login {
                 return Redirect::to("/mfa").into_response()
             }
             Some(member) => member,
-            None => return Redirect::to("/login").into_response(),
+            None => return Redirect::to(destino_de_entrada(&$headers)).into_response(),
         }
     };
 }
@@ -9321,7 +9339,7 @@ async fn move_personal_note(
 /// apresenta o formulário e envia as credenciais ao Ocinye Core, que é a
 /// autoridade de autenticação. O Workspace nunca vê um verificador nem decide
 /// se alguém entra.
-async fn login(State(state): State<WorkspaceState>) -> Response {
+async fn login(State(state): State<WorkspaceState>, Query(q): Query<LoginQuery>) -> Response {
     // O Core respondeu não significa que o Core está pronto.
     //
     // Isto lia `core_ready(...).is_ok()` — sucesso de transporte. Um `/ready`
@@ -9331,8 +9349,84 @@ async fn login(State(state): State<WorkspaceState>) -> Response {
     //
     // O que decide é o corpo.
     let ready = crate::boot::probe(&state).await.state.may_hand_off();
-    let instancia = api::instance_name(&state).await;
-    page("Entrar", ui::screens::login::login(ready, None, instancia))
+    let porta = porta(&state).await;
+    // D12 / D13: o cartão de fim de sessão. `expired` detecta-o o próprio
+    // Workspace (cookie de sessão que já não conhece); `revoked` espera o
+    // motivo do Core (G-27).
+    let fim = match q.reason.as_deref() {
+        Some("expired") => Some(ui::screens::login::FimDeSessao::Expirada),
+        Some("revoked") => Some(ui::screens::login::FimDeSessao::Revogada),
+        _ => None,
+    };
+    if let Some(motivo) = fim {
+        return page(
+            "Entrar",
+            ui::screens::login::fim_de_sessao(motivo, &porta, None),
+        );
+    }
+    page(
+        "Entrar",
+        ui::screens::login::login_na_porta(ready, None, &porta),
+    )
+}
+
+/// `?reason=` do início de sessão (D12 / D13).
+#[derive(Deserialize)]
+struct LoginQuery {
+    #[serde(default)]
+    reason: Option<String>,
+}
+
+/// O que a porta mostra da Instância (D7, G-31): nome e perfil do Core
+/// (`GET /instance/branding`, público) e o anfitrião da URL pública configurada
+/// — não o cabeçalho `Host`, que é o cliente que o escolhe.
+async fn porta(state: &WorkspaceState) -> ui::screens::login::Porta {
+    let (nome, perfil) = api::instance_door(state)
+        .await
+        .map_or((None, None), |(n, p)| (Some(n), p));
+    let host = state
+        .config
+        .public_url
+        .split("://")
+        .nth(1)
+        .map(|resto| resto.split('/').next().unwrap_or(resto).to_owned())
+        .filter(|h| !h.is_empty());
+    ui::screens::login::Porta { nome, perfil, host }
+}
+
+/// `GET /password/recover` — D10. O envio (`POST`, G-26) ainda não existe no
+/// Core: a vista recebe `disponivel=false` e não submete nada.
+async fn password_recover(State(state): State<WorkspaceState>) -> Response {
+    let porta = porta(&state).await;
+    page("Entrar", ui::screens::login::recover(false, false, &porta))
+}
+
+/// A escolha de idioma à porta, antes de haver sessão (G-30).
+#[derive(Deserialize)]
+struct LanguageAtTheDoor {
+    #[serde(default)]
+    lang: String,
+    #[serde(default)]
+    return_to: String,
+}
+
+/// `POST /login/language` — grava o cookie de idioma e volta à porta.
+///
+/// Não toca em conta nenhuma (não há sessão). O destino é uma lista fechada,
+/// para não ser um redireccionamento aberto.
+async fn login_language(
+    State(state): State<WorkspaceState>,
+    Form(form): Form<LanguageAtTheDoor>,
+) -> Response {
+    let destino = match form.return_to.as_str() {
+        "/password/recover" => "/password/recover",
+        _ => "/login",
+    };
+    let Some(locale) = ocinye_contracts::Locale::normalize(&form.lang) else {
+        return Redirect::to(destino).into_response();
+    };
+    let cookie = crate::session::locale_cookie_header(locale.as_str(), state.config.cookie_secure);
+    ([(header::SET_COOKIE, cookie)], Redirect::to(destino)).into_response()
 }
 
 /// Credenciais submetidas pelo formulário.
@@ -9369,12 +9463,12 @@ async fn login_submit(
             // credencial. O Workspace não a enriquece: fazê-lo reintroduziria o
             // oráculo que o Core evita (briefing §35).
             let ready = crate::boot::probe(&state).await.state.may_hand_off();
-            let instancia = api::instance_name(&state).await;
+            let porta = porta(&state).await;
             return (
                 StatusCode::UNAUTHORIZED,
                 page(
                     "Entrar",
-                    ui::screens::login::login(ready, Some(failure.to_string()), instancia),
+                    ui::screens::login::login_na_porta(ready, Some(failure.to_string()), &porta),
                 ),
             )
                 .into_response();
