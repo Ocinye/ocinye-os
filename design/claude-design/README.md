@@ -11,6 +11,12 @@ Tudo cumpre `docs/ui/CLAUDE_DESIGN_CONTRACT.md`: classes e tokens `ods-` só, se
 | `i18n/` | `d0…d11_catalog_entries.rs`: grupos `catalogo!` em pt/en/fr para juntar a `catalog.rs` e a `GROUPS` |
 | `design-reference/` | protótipos aprovados (`Ocinye OS.dc.html`, `Ocinye OS Apps.dc.html`, `Ocinye OS Proposta.dc.html` + `support.js`, logótipo e ícones). Especificação visual; **não é código a copiar** (usa estilo inline) |
 
+## D12 · interiores dos ecrãs e respostas
+- `docs/ui/D12_ANSWERS.md` — decisões Q-01…Q-14.
+- `docs/ui/D12_ADMINISTRATION.md`, `D12_AI.md` (ai, ask, prompt), `D12_CALENDAR.md`, `D12_FILES.md`, `D12_MAIL.md`, `D12_MESSAGING.md`, `D12_NOTES.md`, `D12_PAGES.md` (lists, workspaces, science, my_work, knowledge, resources, compute, search, help, notice, settings) — os 20 ecrãs do pedido.
+- `static/ods-d12-base.css` (colas adoptadas: Q-05, Q-06, Q-07, Q-08, Q-09, Q-12, Q-14) e `static/ods-d12-screens.css` (interiores). Carregar depois do D11.
+- `static/ods-icons.svg` passa a 48 símbolos (Q-04). `i18n/d12_catalog_entries.rs`.
+
 ## Fatias e o que depende de contrato novo
 | Fatia | Pode entrar já | Espera por |
 |---|---|---|

@@ -1180,7 +1180,9 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
                 .map(str::to_owned)
                 .collect::<Vec<_>>()
         })
-        .unwrap_or_else(ui::apps::default_pins);
+        .unwrap_or_else(|| {
+            ui::apps::default_pins_for(organisation.get("profile").and_then(Value::as_str))
+        });
 
     // As aplicações que a Instância tem inactivas (ADR-0014), como o Core as
     // disse. Sem resposta, nenhuma: as outras regras já encolhem a navegação.

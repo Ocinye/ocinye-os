@@ -532,9 +532,8 @@ pub fn shell(
             {crate::i18n::t("nav.skip_to_content")}
         </a>
 
-        {faixa_privilegiada(viewer)}
-
         <div class="ods-shell" data-oc="shell">
+            {faixa_privilegiada(viewer)}
             {topbar(viewer, current, trail)}
             <main class="ods-shell__main" id="conteudo" data-part="main content" data-ods-scroll>
                 {content}
@@ -566,17 +565,47 @@ fn faixa_privilegiada(viewer: &Viewer) -> impl IntoView {
     let nome = viewer.name.clone();
     let email = viewer.email.clone();
 
+    // Faixa própria, vermelha e a toda a largura, acima da barra (D12, Q-07):
+    // não se fecha nem some em repouso.
     view! {
-        <div class="ods-notice ods-notice--error" role="status" data-privilegiada="1">
-            {ods::icone("shield", "")}
+        <div class="ods-privileged" role="status" data-oc="privileged-session" data-privilegiada="1">
+            {ods::icone("shield", "ods-icon--sm")}
             <b>{rotulo}</b>
-            <span>
+            <span class="ods-privileged__who">
                 {nome}
                 {email.map(|e| view! { " · " {e} })}
+                " · "
+                {sessao_actual(viewer)}
             </span>
         </div>
     }
     .into_any()
+}
+
+/// O estado da sessão do Workspace, em palavras.
+///
+/// Só se afirma o que se sabe. O `Instant` guardado sabe dizer quanto falta,
+/// e não sabe dizer a que horas foi emitida nem de onde: não há aqui data de
+/// emissão, dispositivo nem lugar, porque nada disso está guardado.
+fn sessao_actual(viewer: &Viewer) -> String {
+    let Some(restante) = viewer.session_expires_in else {
+        return "activa".to_owned();
+    };
+
+    let minutos = restante.as_secs() / 60;
+    if minutos < 1 {
+        return "activa · a expirar".to_owned();
+    }
+    let horas = minutos / 60;
+    if horas == 0 {
+        return format!("activa · expira em {minutos} min");
+    }
+    let resto = minutos % 60;
+    if resto == 0 {
+        format!("activa · expira em {horas}h")
+    } else {
+        format!("activa · expira em {horas}h {resto}min")
+    }
 }
 
 /// O rótulo do perfil de uma Instância, e as suas iniciais no distintivo.
@@ -729,6 +758,11 @@ fn conta(viewer: &Viewer) -> impl IntoView {
                         <p class="ods-account__inst">{instancia}</p>
                     </div>
                 </div>
+                // Informação de segurança (D12, Q-09): o que se sabe da sessão, e
+                // nada que não esteja guardado.
+                <p class="ods-account__session">
+                    {format!("Sessão actual · {}", sessao_actual(viewer))}
+                </p>
                 <div class="ods-menu">
                     <a class="ods-menu__item" href="/settings" role="menuitem">
                         {ods::icone("user", "")}
@@ -980,7 +1014,7 @@ fn create_menu(inactive_apps: &[String]) -> impl IntoView {
                 aria-haspopup="menu"
                 aria-expanded="false"
             >
-                "+ "
+                {ods::icone("plus", "ods-icon--sm")}
                 {crate::i18n::t("nav.create")}
             </button>
 
@@ -1459,7 +1493,36 @@ struct CreateAction {
     app: &'static str,
 }
 
-const CREATE_ITEMS: [CreateAction; 7] = [
+/// A ordem do «+ Criar» é a do Claude Design (D12, Q-01): o que se cria todos os
+/// dias primeiro, e o institucional depois.
+const CREATE_ITEMS: [CreateAction; 9] = [
+    // Uma nota pessoal não precisa de contexto: cria-se e abre-se o editor.
+    // Caminho próprio (`/notes/new`) para não colidir, no DOM, com o formulário
+    // de criação da lista de Notas — os dois criam a mesma nota pessoal.
+    CreateAction {
+        label: "shell.create.note",
+        via: CreateVia::Create("/notes/new"),
+        key: "N",
+        app: "notes",
+    },
+    CreateAction {
+        label: "shell.create.task",
+        via: CreateVia::Open("/tasks/new"),
+        key: "T",
+        app: "projects",
+    },
+    CreateAction {
+        label: "shell.create.event",
+        via: CreateVia::Open("/calendar/events/new"),
+        key: "E",
+        app: "calendar",
+    },
+    CreateAction {
+        label: "shell.create.message",
+        via: CreateVia::Open("/mail/compose"),
+        key: "M",
+        app: "mail",
+    },
     CreateAction {
         label: "create.idea",
         via: CreateVia::Open("/ideas/new"),
@@ -1472,14 +1535,11 @@ const CREATE_ITEMS: [CreateAction; 7] = [
         key: "P",
         app: "projects",
     },
-    // Uma nota pessoal não precisa de contexto: cria-se e abre-se o editor.
-    // Caminho próprio (`/notes/new`) para não colidir, no DOM, com o formulário
-    // de criação da lista de Notas — os dois criam a mesma nota pessoal.
     CreateAction {
-        label: "create.note",
-        via: CreateVia::Create("/notes/new"),
-        key: "N",
-        app: "notes",
+        label: "create.dataset",
+        via: CreateVia::Open("/datasets/new"),
+        key: "D",
+        app: "datasets",
     },
     CreateAction {
         label: "create.reference",
@@ -1488,19 +1548,7 @@ const CREATE_ITEMS: [CreateAction; 7] = [
         app: "bibliography",
     },
     CreateAction {
-        label: "create.dataset",
-        via: CreateVia::Open("/datasets/new"),
-        key: "D",
-        app: "datasets",
-    },
-    CreateAction {
-        label: "create.task",
-        via: CreateVia::Open("/tasks/new"),
-        key: "T",
-        app: "projects",
-    },
-    CreateAction {
-        label: "create.agent",
+        label: "shell.create.agent",
         via: CreateVia::Open("/ai/agents/new"),
         key: "A",
         app: "agents",
@@ -1884,13 +1932,15 @@ mod tests {
         let html = render(&viewer_with(&ocinye_contracts::Permission::all()));
 
         for accao in [
-            "Nova Ideia",
-            "Novo Projecto",
-            "Nova Nota",
-            "Nova Referência",
-            "Novo Dataset",
-            "Nova Tarefa",
-            "Novo Agente IA",
+            "Nova nota",
+            "Nova tarefa",
+            "Novo evento",
+            "Nova mensagem",
+            "Nova ideia",
+            "Novo projecto",
+            "Novo dataset",
+            "Nova referência",
+            "Novo agente IA",
         ] {
             assert!(html.contains(accao), "a acção {accao} sumiu do «Criar»");
         }
@@ -1908,6 +1958,8 @@ mod tests {
         // As acções que abrem um formulário levam ao ecrã onde o contexto se
         // resolve — não à lista.
         for destino in [
+            "/calendar/events/new",
+            "/mail/compose",
             "/ideas/new",
             "/projects/new",
             "/bibliography/new",
@@ -2092,6 +2144,8 @@ mod tests {
             "o «Criar» voltou a cinzentar acções por falta de contexto"
         );
         for destino in [
+            "/calendar/events/new",
+            "/mail/compose",
             "/ideas/new",
             "/projects/new",
             "/bibliography/new",

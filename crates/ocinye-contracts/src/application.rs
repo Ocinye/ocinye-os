@@ -536,7 +536,9 @@ pub const MANIFESTS: [ApplicationManifest; 23] = [
         ai_capabilities: &[],
         requested_resources: &[],
         health: HealthSource::Core,
-        can_pin: false,
+        // Fixável desde o D12 (Q-10): saiu da navegação essencial, e o perfil
+        // de investigação fixa-a por omissão (`default_pins_for`).
+        can_pin: true,
         default_pin: false,
     },
     ApplicationManifest {

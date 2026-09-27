@@ -241,11 +241,11 @@ const ACTIONS: &[Entry] = catalogo! {
 /// O menu «+ Criar» (Global Create). As acções e atalhos são idênticos entre
 /// línguas; só o rótulo muda (i18n §28).
 const CREATE: &[Entry] = catalogo! {
-    "create.idea": { pt: "Nova Ideia", en: "New Idea", fr: "Nouvelle idée" },
-    "create.project": { pt: "Novo Projecto", en: "New Project", fr: "Nouveau projet" },
+    "create.idea": { pt: "Nova ideia", en: "New idea", fr: "Nouvelle idée" },
+    "create.project": { pt: "Novo projecto", en: "New project", fr: "Nouveau projet" },
     "create.note": { pt: "Nova Nota", en: "New Note", fr: "Nouvelle note" },
-    "create.reference": { pt: "Nova Referência", en: "New Reference", fr: "Nouvelle référence" },
-    "create.dataset": { pt: "Novo Dataset", en: "New Dataset", fr: "Nouveau jeu de données" },
+    "create.reference": { pt: "Nova referência", en: "New reference", fr: "Nouvelle référence" },
+    "create.dataset": { pt: "Novo dataset", en: "New dataset", fr: "Nouveau jeu de données" },
     "create.task": { pt: "Nova Tarefa", en: "New Task", fr: "Nouvelle tâche" },
     "create.agent": { pt: "Novo Agente IA", en: "New AI Agent", fr: "Nouvel agent IA" },
 };
@@ -3067,7 +3067,33 @@ const DS_SETTINGS: &[Entry] = catalogo! {
     "admin.desktop_default": { pt: "Predefinição do Desktop", en: "Desktop default", fr: "Bureau par défaut" },
 };
 
+/// Claude Design, pacote D12. As chaves que já existiam foram actualizadas no
+/// seu lugar (maiúsculas de frase, como o desenho as escreve).
+const DS_SCREENS: &[Entry] = catalogo! {
+    "privileged.label": { pt: "Sessão privilegiada", en: "Privileged session", fr: "Session privilégiée" },
+    "privileged.by": { pt: "conduzida por {name}", en: "conducted by {name}", fr: "menée par {name}" },
+    "privileged.until": { pt: "até às {time}", en: "until {time}", fr: "jusqu’à {time}" },
+    "account.session": { pt: "Sessão actual · expira em {duration}", en: "Current session · expires in {duration}", fr: "Session actuelle · expire dans {duration}" },
+    "pager.range": { pt: "{from}–{to} de {total}", en: "{from}–{to} of {total}", fr: "{from}–{to} sur {total}" },
+    "pager.prev": { pt: "Anterior", en: "Previous", fr: "Précédent" },
+    "pager.next": { pt: "Seguinte", en: "Next", fr: "Suivant" },
+    "files.env.personal": { pt: "Pessoal", en: "Personal", fr: "Personnel" },
+    "files.env.institutional": { pt: "Institucional", en: "Institutional", fr: "Institutionnel" },
+    "files.trash.notice": { pt: "Os itens no lixo são eliminados ao fim de 30 dias.", en: "Items in the trash are deleted after 30 days.", fr: "Les éléments de la corbeille sont supprimés au bout de 30 jours." },
+    "files.quota.near": { pt: "O seu espaço está quase cheio.", en: "Your storage is almost full.", fr: "Votre espace est presque plein." },
+    "messaging.none": { pt: "Escolha uma conversa ou comece uma nova.", en: "Choose a conversation or start a new one.", fr: "Choisissez une conversation ou commencez-en une nouvelle." },
+    "notes.restore_version": { pt: "Repor esta versão", en: "Restore this version", fr: "Restaurer cette version" },
+    "notes.shared_by": { pt: "Partilhada por {name}", en: "Shared by {name}", fr: "Partagée par {name}" },
+    "credential.once": { pt: "Esta credencial não voltará a ser mostrada.", en: "This credential will not be shown again.", fr: "Cet identifiant ne sera plus affiché." },
+    "calendar.more": { pt: "+{n} mais", en: "+{n} more", fr: "+{n} de plus" },
+    "notice.back_desktop": { pt: "Voltar ao Desktop", en: "Back to Desktop", fr: "Retour au bureau" },
+    "notice.back": { pt: "Voltar", en: "Back", fr: "Retour" },
+    "notice.reload": { pt: "Recarregar", en: "Reload", fr: "Recharger" },
+    "prompt.copy": { pt: "Copiar", en: "Copy", fr: "Copier" },
+};
+
 pub const GROUPS: &[&[Entry]] = &[
+    DS_SCREENS,
     DS_SHELL,
     DS_PRIMITIVES,
     DS_SHELL_EXTRA,

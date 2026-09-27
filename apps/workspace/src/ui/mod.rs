@@ -75,7 +75,8 @@ pub fn document_com_cabeca(
          <link rel=\"stylesheet\" href=\"/static/ods-d9-apps.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d10-settings.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d11-adaptive.css\">\n\
-         <link rel=\"stylesheet\" href=\"/static/ods-integration.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d12-base.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d12-screens.css\">\n\
          <title>",
     );
     out.push_str(&escape(title));
@@ -442,9 +443,9 @@ mod render_tests {
         }
     }
 
-    /// As sete acções do menu `+ Criar`, com os atalhos do design.
+    /// As nove acções do menu `+ Criar` (D12, Q-01).
     #[test]
-    fn o_menu_criar_tem_as_sete_accoes_do_design() {
+    fn o_menu_criar_tem_as_accoes_do_design() {
         let html = document(
             "Teste",
             shell::shell(
@@ -457,13 +458,15 @@ mod render_tests {
         );
 
         for action in [
-            "Nova Ideia",
-            "Novo Projecto",
-            "Nova Nota",
-            "Nova Referência",
-            "Novo Dataset",
-            "Nova Tarefa",
-            "Novo Agente IA",
+            "Nova nota",
+            "Nova tarefa",
+            "Novo evento",
+            "Nova mensagem",
+            "Nova ideia",
+            "Novo projecto",
+            "Novo dataset",
+            "Nova referência",
+            "Novo agente IA",
         ] {
             assert!(html.contains(action), "falta no menu Criar: {action}");
         }
@@ -2409,11 +2412,11 @@ pub(crate) mod link_tests {
         let html: String = catalogue().into_iter().map(|(_, html)| html).collect();
 
         for action in [
-            "Novo Projecto",
-            "Nova Nota",
-            "Nova Referência",
-            "Novo Dataset",
-            "Nova Tarefa",
+            "Novo projecto",
+            "Nova nota",
+            "Nova referência",
+            "Novo dataset",
+            "Nova tarefa",
         ] {
             assert!(
                 html.contains(action),

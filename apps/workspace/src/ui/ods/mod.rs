@@ -201,10 +201,8 @@ pub fn avatar_do_membro(
 
 /// O ícone do sprite de cada aplicação.
 ///
-/// O sprite do D1 tem 40 símbolos. As aplicações sem símbolo próprio —
-/// Mensagens, Conhecimento, Bibliografia, Ocinye AI, Computação e
-/// Administração — mostram o de aplicações até o Claude Design os entregar:
-/// um ícone não se inventa aqui.
+/// Um símbolo do sprite por aplicação (D1, completado no D12 com mensagens,
+/// conhecimento, bibliografia, IA, computação e administração).
 pub fn icone_da_aplicacao(ecra: crate::ui::shell::Screen) -> &'static str {
     use crate::ui::shell::Screen;
     match ecra {
@@ -226,7 +224,12 @@ pub fn icone_da_aplicacao(ecra: crate::ui::shell::Screen) -> &'static str {
         Screen::Search => "search",
         Screen::Settings => "settings",
         Screen::Help => "help",
-        _ => "apps-brand",
+        Screen::Messaging => "messages",
+        Screen::Knowledge => "knowledge",
+        Screen::Bibliography => "bibliography",
+        Screen::Ai => "ai",
+        Screen::Compute => "compute",
+        Screen::Admin => "admin",
     }
 }
 

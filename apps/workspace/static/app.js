@@ -236,11 +236,9 @@
     /* O símbolo do sprite, por tipo. Um `<use>` como o resto da interface —
      * uma segunda maneira de desenhar ícones seria uma segunda biblioteca. */
     function iconeDe(linha) {
-      // O sprite do D1 não tem ícone de mensagens: fica o do sino até o
-      // Claude Design o entregar.
       const simbolos = {
-        message_received: 'ods-bell',
-        message_mention: 'ods-bell',
+        message_received: 'ods-messages',
+        message_mention: 'ods-messages',
         reminder: 'ods-bell',
         event_invited: 'ods-calendar',
         event_cancelled: 'ods-calendar',

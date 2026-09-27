@@ -417,6 +417,20 @@ pub fn default_pins() -> Vec<String> {
         .collect()
 }
 
+/// As fixações por omissão de quem nunca escolheu, pelo perfil da Instância.
+///
+/// As do manifesto, e no perfil de investigação também «O Meu Trabalho», que
+/// saiu da navegação essencial e é o ponto de partida do dia de quem investiga
+/// (D12, Q-10). Uma escolha do membro, mesmo vazia, nunca passa por aqui.
+#[must_use]
+pub fn default_pins_for(perfil: Option<&str>) -> Vec<String> {
+    let mut pins = default_pins();
+    if perfil == Some("research") && !pins.iter().any(|p| p == "work") {
+        pins.insert(0, "work".to_owned());
+    }
+    pins
+}
+
 /// Se uma aplicação existe **e** é fixável — o que o Workspace valida antes de
 /// pedir ao Core para guardar a lista.
 #[must_use]
@@ -542,9 +556,10 @@ mod tests {
             }
         }
         assert!(!by_id("home").expect("home").can_pin(), "Home não se fixa");
+        // Desde o D12 (Q-10), «O Meu Trabalho» fixa-se como as outras.
         assert!(
-            !by_id("work").expect("work").can_pin(),
-            "O Meu Trabalho não se fixa"
+            by_id("work").expect("work").can_pin(),
+            "O Meu Trabalho tem de se poder fixar"
         );
         // O conjunto por omissão existe e é pequeno.
         let por_omissao: Vec<&str> = APPLICATIONS
@@ -553,6 +568,21 @@ mod tests {
             .map(Application::id)
             .collect();
         assert_eq!(por_omissao, vec!["notes", "files", "projects"]);
+    }
+
+    /// O perfil de investigação fixa «O Meu Trabalho» por omissão; os outros não.
+    #[test]
+    fn o_meu_trabalho_vem_fixado_so_na_investigacao() {
+        assert_eq!(
+            default_pins_for(Some("research")),
+            vec!["work", "notes", "files", "projects"]
+        );
+        for perfil in [Some("business"), Some("personal"), Some("education"), None] {
+            assert!(
+                !default_pins_for(perfil).iter().any(|p| p == "work"),
+                "{perfil:?} fixou O Meu Trabalho"
+            );
+        }
     }
 
     /// Toda a aplicação pertence a uma categoria conhecida — e cada categoria
