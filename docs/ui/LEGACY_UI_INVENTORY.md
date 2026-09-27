@@ -29,7 +29,7 @@ explícita para isso, e o SHA na `main` já é recuperável.
 | marcadores `data-oc` na UI Rust | 353 |
 | selectores `.oc-` no `app.js` | 38 |
 | classes `oc-`/`is-` alternadas no `app.js` | 59 |
-| selectores `.oc-` nos testes de browser | 421 |
+| selectores `.oc-` nos testes do Workspace | 68 — 35 em `browser.rs`, 36 em `design_fidelity.rs`, 1 em `installed_instance.rs` |
 
 ## O que é o quê
 
@@ -48,7 +48,7 @@ explícita para isso, e o SHA na `main` já é recuperável.
 
 ## O que prende os testes à apresentação
 
-As viagens de browser seleccionam 421 classes `.oc-`. Antes de a folha de
+Os testes seleccionam 68 classes `.oc-`: as 35 das viagens de browser passam a marcadores de comportamento; as 36 de `design_fidelity.rs` medem a apresentação legada e saem com ela, registadas na matriz de contratos. Antes de a folha de
 estilo sair, cada uma passa a um marcador de comportamento (`data-oc`,
 `data-state`) — ou fica registada na matriz de contratos como à espera da UI
 nova. Nenhuma se perde em silêncio.
