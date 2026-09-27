@@ -1,0 +1,220 @@
+/* Ocinye Design System — D0 · fundação
+   Prefixo novo `ods-` / `--ods-`: não colide com as classes `oc-*` legadas.
+   Sem valores soltos nas vistas: tudo lê daqui. Claro e escuro partilham os mesmos nomes. */
+
+
+:root {
+  /* marca */
+  --ods-navy-950: #061A2D;
+  --ods-navy-900: #071E33;
+  --ods-navy-800: #0B2D4A;
+  --ods-navy-700: #123C60;
+  --ods-navy-600: #164268;
+  --ods-navy-500: #1D4F7F;
+  --ods-navy-400: #1D5A94;
+  --ods-gold-600: #C98B12;
+  --ods-gold-500: #E0A731;
+  --ods-gold-400: #E8B445;
+  --ods-gold-300: #F0C257;
+  --ods-gold-200: #F2E3BE;
+  --ods-gold-100: #FDF6E7;
+  --ods-gold-text: #8A6110;
+
+  /* texto */
+  --ods-text-primary: #0F1A24;
+  --ods-text-body: #28394A;
+  --ods-text-secondary: #42546A;
+  --ods-text-muted: #5F7183;
+  --ods-text-meta: #7C8B9A;
+  --ods-text-faint: #A9B5C1;
+  --ods-text-on-accent: #0B2D4A;
+  --ods-text-on-navy: #FFFFFF;
+
+  /* superfícies */
+  --ods-surface-desktop: radial-gradient(1200px 700px at 85% -10%, #1D4F7F 0%, #0B2D4A 45%, #071E33 100%);
+  --ods-surface-app: #F6F8FA;
+  --ods-surface-window: #FFFFFF;
+  --ods-surface-panel: #FAFCFD;
+  --ods-surface-muted: #F3F6F9;
+  --ods-surface-widget: rgba(255, 255, 255, .97);
+  --ods-surface-glass: rgba(255, 255, 255, .72);
+  --ods-surface-glass-dark: rgba(11, 45, 74, .55);
+  --ods-surface-tooltip: rgba(11, 26, 45, .86);
+  --ods-surface-hover: rgba(11, 45, 74, .06);
+  --ods-surface-selected: #E8F0F9;
+  --ods-scrim: rgba(7, 30, 51, .46);
+
+  /* linhas */
+  --ods-border-default: #E4E9F0;
+  --ods-border-soft: #EEF2F6;
+  --ods-border-faint: #F3F6F9;
+  --ods-border-strong: #C3CDD8;
+  --ods-border-glass: rgba(255, 255, 255, .6);
+  --ods-border-widget: rgba(11, 45, 74, .06);
+
+  /* acção */
+  --ods-action-primary: linear-gradient(180deg, var(--ods-gold-400), var(--ods-gold-500));
+  --ods-action-primary-solid: var(--ods-gold-500);
+  --ods-action-navy: linear-gradient(180deg, var(--ods-navy-700), var(--ods-navy-800));
+  --ods-action-danger: #B3261E;
+
+  /* estados */
+  --ods-state-success: #3E8F66; --ods-state-success-text: #2E6B4C; --ods-state-success-bg: #F0F7F3; --ods-state-success-border: #D8EBE0;
+  --ods-state-info: #2B6CB0;    --ods-state-info-text: #20537F;    --ods-state-info-bg: #EFF5FB;    --ods-state-info-border: #D5E4F0;
+  --ods-state-warning: #E0A731; --ods-state-warning-text: #8A6110; --ods-state-warning-bg: #FDF6E7; --ods-state-warning-border: #F2E3BE;
+  --ods-state-error: #B3261E;   --ods-state-error-text: #8C2019;   --ods-state-error-bg: #FCF0EF;   --ods-state-error-border: #F1D6D3;
+
+  /* tipografia */
+  --ods-font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --ods-font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --ods-text-xs: 10px;   /* etiquetas mono em maiúsculas, tracking .12–.16em */
+  --ods-text-sm: 12px;
+  --ods-text-md: 13px;   /* corpo da interface */
+  --ods-text-lg: 15px;
+  --ods-text-xl: 20px;   /* saudação do Nye */
+  --ods-text-2xl: 28px;  /* número de indicador */
+  --ods-text-clock: 88px;/* ecrã de bloqueio */
+  --ods-tracking-label: .14em;
+
+  /* espaço (base 2px) */
+  --ods-space-1: 2px; --ods-space-2: 4px; --ods-space-3: 6px; --ods-space-4: 8px;
+  --ods-space-5: 10px; --ods-space-6: 12px; --ods-space-7: 14px; --ods-space-8: 16px;
+  --ods-space-10: 20px; --ods-space-12: 24px; --ods-space-14: 28px;
+
+  /* raios */
+  --ods-radius-xs: 4px;   /* distintivos */
+  --ods-radius-sm: 7px;   /* ícone de perfil, logótipo na barra */
+  --ods-radius-md: 9px;   /* botões, campos */
+  --ods-radius-lg: 14px;  /* popovers, menus */
+  --ods-radius-xl: 18px;  /* widgets */
+  --ods-radius-2xl: 20px; /* janelas, lançador, barra de apps */
+  --ods-radius-pill: 999px;
+  --ods-radius-round: 50%;/* Nye, popup circular */
+
+  /* elevação */
+  --ods-shadow-widget: 0 1px 2px rgba(7,30,51,.10), 0 14px 36px -14px rgba(7,30,51,.35);
+  --ods-shadow-popover: 0 16px 40px rgba(11,26,45,.25);
+  --ods-shadow-window: 0 30px 80px rgba(7,30,51,.35), 0 0 0 1px rgba(11,45,74,.06);
+  --ods-shadow-overlay: 0 40px 100px rgba(7,30,51,.38), 0 0 0 1px rgba(11,45,74,.06);
+  --ods-shadow-gold: inset 0 1px 0 rgba(255,255,255,.55), inset 0 0 0 1px rgba(138,97,16,.35), 0 1px 2px rgba(138,97,16,.35), 0 4px 10px -3px rgba(201,139,18,.45);
+  --ods-shadow-glass-button: inset 0 1px 0 rgba(255,255,255,.22), inset 0 0 0 1px rgba(255,255,255,.10), inset 0 -8px 16px rgba(0,0,0,.18), 0 14px 34px -6px rgba(7,30,51,.55);
+
+  /* vidro */
+  --ods-blur-glass: blur(28px) saturate(180%);
+  --ods-blur-dark: blur(26px) saturate(170%);
+  --ods-blur-scrim: blur(14px) saturate(130%);
+
+  /* movimento */
+  --ods-ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ods-dur-fast: 120ms;
+  --ods-dur-base: 160ms;
+  --ods-dur-slow: 240ms;
+  --ods-idle-delay: 5s; /* botões flutuantes somem após este repouso (app.js) */
+
+  /* foco */
+  --ods-focus-ring: 0 0 0 2px #FFFFFF, 0 0 0 4px var(--ods-gold-500);
+
+  /* layout */
+  --ods-topbar-h: 44px;
+  --ods-grid-row: 16.333px;  /* 6 linhas + 5 gaps = 168px por unidade de widget */
+  --ods-grid-gap: 14px;
+  --ods-grid-max: 1480px;
+  --ods-launcher-w: 860px;
+  --ods-launcher-h: 640px;
+  --ods-float-size: 96px;    /* área do Nye e do botão das apps */
+  --ods-z-desktop: 1; --ods-z-float: 20; --ods-z-window: 21; --ods-z-shelf: 950;
+  --ods-z-launcher: 2000; --ods-z-overview: 2050; --ods-z-topbar: 2500;
+  --ods-z-nye: 2650; --ods-z-lock: 3050; --ods-z-toast: 3100;
+
+  color-scheme: light;
+}
+
+/* escuro: mesmos nomes, valores diferentes */
+:root[data-theme="dark"] {
+  --ods-text-primary: #EEF3F8;
+  --ods-text-body: #D5DEE7;
+  --ods-text-secondary: #B7C4D1;
+  --ods-text-muted: #93A3B3;
+  --ods-text-meta: #7C8B9A;
+  --ods-text-faint: #5F7183;
+  --ods-surface-app: #0A1826;
+  --ods-surface-window: #0F2233;
+  --ods-surface-panel: #122839;
+  --ods-surface-muted: #15304A;
+  --ods-surface-widget: rgba(16, 36, 54, .94);
+  --ods-surface-glass: rgba(15, 34, 51, .72);
+  --ods-surface-hover: rgba(255, 255, 255, .06);
+  --ods-surface-selected: rgba(29, 90, 148, .35);
+  --ods-border-default: #22405C;
+  --ods-border-soft: #1B3550;
+  --ods-border-faint: #162C43;
+  --ods-border-strong: #33567A;
+  --ods-border-glass: rgba(255, 255, 255, .12);
+  --ods-border-widget: rgba(255, 255, 255, .06);
+  --ods-shadow-popover: 0 16px 40px rgba(0,0,0,.45);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --ods-text-primary: #EEF3F8; --ods-text-body: #D5DEE7; --ods-text-secondary: #B7C4D1; --ods-text-muted: #93A3B3; --ods-text-faint: #5F7183;
+    --ods-surface-app: #0A1826; --ods-surface-window: #0F2233; --ods-surface-panel: #122839; --ods-surface-muted: #15304A;
+    --ods-surface-widget: rgba(16, 36, 54, .94); --ods-surface-glass: rgba(15, 34, 51, .72); --ods-surface-hover: rgba(255, 255, 255, .06); --ods-surface-selected: rgba(29, 90, 148, .35);
+    --ods-border-default: #22405C; --ods-border-soft: #1B3550; --ods-border-faint: #162C43; --ods-border-strong: #33567A; --ods-border-glass: rgba(255, 255, 255, .12); --ods-border-widget: rgba(255, 255, 255, .06);
+    --ods-shadow-popover: 0 16px 40px rgba(0,0,0,.45);
+    color-scheme: dark;
+  }
+}
+
+/* base */
+.ods-root { font-family: var(--ods-font-sans); font-size: var(--ods-text-md); color: var(--ods-text-primary); background: var(--ods-surface-app); -webkit-font-smoothing: antialiased; }
+.ods-root a { color: var(--ods-navy-400); text-decoration: none; }
+.ods-root a:hover { color: var(--ods-navy-800); text-decoration: underline; }
+.ods-root ::selection { background: var(--ods-gold-200); color: var(--ods-text-primary); }
+.ods-root :focus { outline: none; }
+.ods-root :focus-visible { box-shadow: var(--ods-focus-ring); border-radius: var(--ods-radius-sm); }
+.ods-root [disabled], .ods-root [aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.ods-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* etiqueta mono em maiúsculas */
+.ods-label { font: 500 var(--ods-text-xs) var(--ods-font-mono); letter-spacing: var(--ods-tracking-label); text-transform: uppercase; color: var(--ods-text-meta); }
+
+/* superfícies reutilizáveis */
+.ods-glass { background: var(--ods-surface-glass); -webkit-backdrop-filter: var(--ods-blur-glass); backdrop-filter: var(--ods-blur-glass); border: 1px solid var(--ods-border-glass); border-radius: var(--ods-radius-lg); box-shadow: var(--ods-shadow-popover); }
+.ods-glass--dark { background: var(--ods-surface-glass-dark); -webkit-backdrop-filter: var(--ods-blur-dark); backdrop-filter: var(--ods-blur-dark); border: 1px solid rgba(255,255,255,.14); color: var(--ods-text-on-navy); }
+.ods-widget-surface { background: var(--ods-surface-widget); border: 1px solid var(--ods-border-widget); border-radius: var(--ods-radius-xl); box-shadow: var(--ods-shadow-widget); }
+.ods-window-surface { background: var(--ods-surface-window); border-radius: var(--ods-radius-2xl); box-shadow: var(--ods-shadow-window); }
+.ods-scrim { position: fixed; inset: 0; background: var(--ods-scrim); -webkit-backdrop-filter: var(--ods-blur-scrim); backdrop-filter: var(--ods-blur-scrim); }
+
+/* distintivo dourado (perfil Re/Bu/Pe/Ed, Nye) */
+.ods-gold-badge { display: inline-flex; align-items: center; justify-content: center; border-radius: var(--ods-radius-sm); background: radial-gradient(120% 80% at 30% 0%, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 55%), linear-gradient(180deg, var(--ods-gold-300) 0%, var(--ods-gold-500) 55%, var(--ods-gold-600) 100%); box-shadow: var(--ods-shadow-gold); color: var(--ods-text-on-accent); font: 700 11px/1 var(--ods-font-sans); letter-spacing: .02em; text-shadow: 0 1px 0 rgba(255,255,255,.35); }
+
+/* barra de scroll inteligente: invisível em repouso, fina ao passar, escura ao rolar (app.js põe data-scrolling) */
+[data-ods-scroll] { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+[data-ods-scroll]:hover { scrollbar-color: rgba(11,45,74,.16) transparent; }
+[data-ods-scroll][data-scrolling] { scrollbar-color: rgba(11,45,74,.38) transparent; }
+[data-ods-scroll]::-webkit-scrollbar { width: 10px; }
+[data-ods-scroll]::-webkit-scrollbar-thumb { background: transparent; border-radius: 6px; border: 3px solid transparent; background-clip: padding-box; }
+[data-ods-scroll]:hover::-webkit-scrollbar-thumb { background-color: rgba(11,45,74,.16); }
+[data-ods-scroll][data-scrolling]::-webkit-scrollbar-thumb { background-color: rgba(11,45,74,.38); }
+
+/* repouso: elementos flutuantes somem (app.js alterna data-idle na raiz) */
+[data-ods-float] { transition: opacity .45s ease, transform var(--ods-dur-base) var(--ods-ease-out); }
+.ods-root[data-idle] [data-ods-float]:not(:hover):not(:focus-within):not([data-ods-pinned]) { opacity: 0; transform: translateY(4px) scale(.96); }
+
+/* movimento */
+@keyframes ods-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes ods-window-in { from { opacity: 0; transform: scale(.97) translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes ods-shelf-in { from { opacity: 0; transform: translateY(24px) scale(.6); } to { opacity: 1; transform: none; } }
+@keyframes ods-nye-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes ods-nye-ring { 0% { transform: scale(.7); opacity: .55; } 100% { transform: scale(1.6); opacity: 0; } }
+@keyframes ods-nye-glow { 0%, 100% { opacity: .45; transform: scale(.95); } 50% { opacity: .9; transform: scale(1.05); } }
+@keyframes ods-spin { to { transform: rotate(360deg); } }
+@keyframes ods-bar { 0%, 100% { transform: scaleY(.25); } 50% { transform: scaleY(1); } }
+.ods-anim-fade { animation: ods-fade var(--ods-dur-base) ease; }
+.ods-anim-window { animation: ods-window-in 220ms var(--ods-ease-out); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ods-root *, .ods-root *::before, .ods-root *::after { animation: none !important; transition: none !important; }
+}
+
+/* pontos de quebra (usar nos componentes): ≤767 telemóvel · 768–1099 tablet · 1100–1499 portátil (3 colunas) · ≥1500 (4 colunas) */

@@ -48,8 +48,11 @@ pub fn document_com_cabeca(
     let mut out = String::with_capacity(rendered.len() + 1024);
     out.push_str("<!doctype html>\n<html lang=\"");
     out.push_str(lang);
+    // A raiz do sistema de desenho novo (D0). O tema fica claro enquanto não
+    // houver uma preferência de tema do membro: `system` misturaria os tokens
+    // escuros com a folha legada, que só tem modo claro.
     out.push_str(
-        "\">\n\
+        "\" class=\"ods-root\" data-theme=\"light\">\n\
          <head>\n\
          <meta charset=\"utf-8\">\n\
          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
@@ -59,8 +62,9 @@ pub fn document_com_cabeca(
          <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n\
          <link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?\
          family=IBM+Plex+Mono:wght@400;500;600&\
-         family=IBM+Plex+Sans:wght@400;500;600;700&display=swap\">\n\
+         family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap\">\n\
          <link rel=\"stylesheet\" href=\"/static/ocinye.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ocinye-ds.css\">\n\
          <title>",
     );
     out.push_str(&escape(title));
