@@ -17,158 +17,85 @@
 
 use leptos::prelude::*;
 
-use crate::ui::icon::{icon, Icon};
-
 /// O ecrã de login.
 ///
 /// `core_ready` reflecte uma sonda real ao Ocinye Core: sem ele, autenticar não
 /// leva a lado nenhum, e é melhor dizê-lo antes do que falhar depois.
-pub fn login(core_ready: bool, message: Option<String>) -> impl IntoView {
+pub fn login(
+    core_ready: bool,
+    message: Option<String>,
+    instancia: Option<String>,
+) -> impl IntoView {
+    // Sem resposta do Core, o nome é o do produto: nunca se adivinha uma
+    // instituição à porta.
+    let nome = instancia.unwrap_or_else(|| "OCINYE OS".to_owned());
+
     view! {
-        <div class="oc-login" data-part="login">
-            <div class="oc-login__layer oc-login__glow" aria-hidden="true"></div>
-            <div class="oc-login__layer" aria-hidden="true">
-                <span class="oc-login__ring oc-login__ring--a"></span>
-                <span class="oc-login__ring oc-login__ring--b"></span>
-                <span class="oc-login__ring oc-login__ring--c"></span>
-            </div>
-            <div class="oc-login__layer oc-login__grid" aria-hidden="true"></div>
+        <main class="ods-auth" data-part="login">
+            <span class="ods-auth__clock" data-oc="clock"></span>
+            <span class="ods-auth__mark"><img src="/static/ocinye_logo.png" alt="" /></span>
+            <p class="ods-auth__inst">{nome}</p>
+            <p class="ods-label">{crate::i18n::t("auth.instance_line")}</p>
 
-            <div class="oc-login__bar" data-part="login__bar">
-                <span class="oc-login__state">
-                    <i aria-hidden="true"></i>
-                    <span>
-                        {if core_ready {
-                            crate::i18n::t("login.core.operational")
-                        } else {
-                            crate::i18n::t("login.core.unavailable")
-                        }}
-                    </span>
-                </span>
-                <span class="oc-login__clock" data-oc="clock"></span>
-            </div>
+            <section class="ods-auth__card">
+                <h1 class="ods-auth__title">{crate::i18n::t("login.sign_in")}</h1>
 
-            <div class="oc-login__center">
-                <div class="oc-login__brand">
-                    <span class="oc-login__tile">
-                        <img src="/static/ocinye_logo.png" alt="Ocinye" />
-                    </span>
-                    <span class="oc-login__wordmark">"OCINYE OS"</span>
-                    <span class="oc-login__sub">"OCINYE WORKSPACE"</span>
-                </div>
+                // O estado do Core antes de tentar: sem ele, autenticar não leva a
+                // lado nenhum.
+                {(!core_ready).then(|| view! {
+                    <div class="ods-notice ods-notice--error" role="alert">
+                        {crate::i18n::t("login.core_down_note")}
+                    </div>
+                })}
 
-                {message
-                    .map(|text| view! { <div class="oc-login__note" role="alert">{text}</div> })}
+                <form method="post" action="/login">
+                    <label class="ods-field">
+                        <span class="ods-field__label">{crate::i18n::t("login.institutional_address")}</span>
+                        <input
+                            class="ods-input"
+                            id="login-user"
+                            name="email"
+                            type="email"
+                            inputmode="email"
+                            autocomplete="username"
+                            autocapitalize="none"
+                            spellcheck="false"
+                            required
+                        />
+                    </label>
+                    <label class="ods-field">
+                        <span class="ods-field__label">{crate::i18n::t("auth.password")}</span>
+                        <input
+                            class="ods-input"
+                            id="login-pass"
+                            name="password"
+                            type="password"
+                            autocomplete="current-password"
+                            required
+                        />
+                    </label>
 
-                {(!core_ready)
-                    .then(|| {
-                        view! {
-                            <div class="oc-login__note" role="alert">
-                                {crate::i18n::t("login.core_down_note")}
-                            </div>
-                        }
+                    // O erro é o texto que o Core devolveu, nunca um genérico.
+                    {message.map(|texto| view! {
+                        <p class="ods-field__error" role="alert">{texto}</p>
                     })}
 
-                <div class="oc-login__card">
-                    <div class="oc-login__who">
-                        // O logótipo, e não a inicial da instituição.
-                        //
-                        // A letra era um substituto de quando não havia
-                        // ficheiro. Este ecrã é o primeiro que alguém vê do
-                        // Ocinye OS, e é onde a marca tem mais razão para
-                        // aparecer inteira.
-                        //
-                        // `aria-hidden` porque o nome da instituição está
-                        // escrito por baixo: um leitor de ecrã que anunciasse
-                        // as duas coisas diria a mesma coisa duas vezes.
-                        <span class="oc-login__avatar" aria-hidden="true">
-                            <img src="/static/avatars/ocinye.png" alt="" />
-                        </span>
-                        <span class="oc-login__name">{crate::i18n::t("login.institutional_session")}</span>
-                        <span class="oc-login__mail">"ocinye.com"</span>
-                    </div>
+                    <button
+                        type="submit"
+                        class="ods-btn ods-btn--primary ods-btn--block"
+                        data-part="login__submit"
+                        disabled=!core_ready
+                    >
+                        {crate::i18n::t("login.sign_in")}
+                    </button>
+                </form>
 
-                    <form method="post" action="/login">
-                        <div class="oc-login__field">
-                            {icon(Icon::Mail, 13)}
-                            <label class="oc-sr" for="login-user">
-                                {crate::i18n::t("login.institutional_address")}
-                            </label>
-                            // `type="email"` e `autocomplete="username"`.
-                            //
-                            // Não é contradição: `username` é o nome que os
-                            // gestores de palavras-passe conhecem para «a
-                            // conta», e é com ele que guardam o par certo. O
-                            // que muda é o que lá se escreve — o endereço, que
-                            // desde o ADR-0106 é a credencial única.
-                            <input
-                                id="login-user"
-                                name="email"
-                                type="email"
-                                inputmode="email"
-                                autocomplete="username"
-                                autocapitalize="none"
-                                spellcheck="false"
-                                required
-                                placeholder=crate::i18n::t("login.institutional_address")
-                            />
-                        </div>
-
-                        <div class="oc-login__field">
-                            {icon(Icon::Lock, 13)}
-                            <label class="oc-sr" for="login-pass">{crate::i18n::t("auth.password")}</label>
-                            // Sem `maxlength`: truncar silenciosamente uma
-                            // passphrase longa faria a autenticação falhar sem
-                            // que o membro percebesse porquê (briefing §34).
-                            <input
-                                id="login-pass"
-                                name="password"
-                                type="password"
-                                autocomplete="current-password"
-                                required
-                                placeholder=crate::i18n::t("auth.password")
-                            />
-                            // Gestores de palavras-passe e colar funcionam:
-                            // nada aqui os bloqueia (briefing §9).
-                            //
-                            // Sem «Mostrar» aqui, por opção de segurança: no
-                            // acto de entrar a pessoa só digita uma palavra-passe
-                            // que já conhece, e revelá-la em claro num ecrã de
-                            // login só a expõe a quem esteja por perto. O revelar
-                            // pertence ao ecrã de *definição* de palavra-passe
-                            // (`first_access`), onde ajuda a não errar a que se
-                            // está a criar.
-                        </div>
-
-                        <button type="submit" class="oc-login__submit" data-part="login__submit" disabled=!core_ready>
-                            {crate::i18n::t("login.sign_in")}
-                            {icon(Icon::ArrowRight, 14)}
-                        </button>
-                    </form>
-
-                    <div class="oc-login__row">
-                        <span class="oc-login__alt">
-                            {crate::i18n::t("login.granted_by_admin")}
-                        </span>
-                        // A etiqueta BCP-47 do idioma corrente (`pt-PT`, `en`,
-                        // `fr`), e não um selector: a escolha de idioma vive nas
-                        // Definições, e o login apenas declara em que língua a
-                        // interface se está a mostrar. Segue o locale corrente
-                        // para não mentir quando alguém entra já em inglês ou
-                        // francês.
-                        <span class="oc-login__lang" lang=crate::i18n::current().bcp47()>
-                            {crate::i18n::current().bcp47()}
-                        </span>
-                    </div>
+                <div class="ods-auth__foot">
+                    <span>{crate::i18n::t("login.granted_by_admin")}</span>
+                    <span lang=crate::i18n::current().bcp47()>{crate::i18n::current().bcp47()}</span>
                 </div>
-            </div>
-
-            <div class="oc-login__foot">
-                <span>{icon(Icon::Power, 13)}{crate::i18n::t("login.foot.shut_down")}</span>
-                <span>{icon(Icon::Restart, 13)}{crate::i18n::t("login.foot.restart")}</span>
-                <a href="/health">{icon(Icon::SystemStatus, 13)}{crate::i18n::t("login.foot.system_status")}</a>
-            </div>
-        </div>
+            </section>
+        </main>
     }
 }
 
@@ -178,7 +105,7 @@ mod tests {
 
     #[test]
     fn o_login_nao_pede_mfa_nem_oferece_registo() {
-        let html = login(true, None).to_html();
+        let html = login(true, None, None).to_html();
         for forbidden in [
             "MFA",
             crate::i18n::t("login.create_account"),
@@ -197,7 +124,7 @@ mod tests {
     fn o_formulario_submete_as_credenciais_ao_core() {
         // Invertido pelo ADR-0103: o campo era desactivado porque o IdP
         // autenticava. Agora o Core é a autoridade, e o campo tem de funcionar.
-        let html = login(true, None).to_html();
+        let html = login(true, None, None).to_html();
         assert!(html.contains(r#"method="post""#));
         assert!(html.contains(r#"action="/login""#));
         assert!(html.contains(r#"name="email""#));
@@ -210,7 +137,7 @@ mod tests {
     fn gestores_de_palavras_passe_e_colar_funcionam() {
         // Bloquear colar empurra as pessoas para palavras-passe que consigam
         // decorar, que é o oposto do que a política quer (briefing §9).
-        let html = login(true, None).to_html();
+        let html = login(true, None, None).to_html();
         assert!(html.contains(r#"autocomplete="current-password""#));
         assert!(html.contains(r#"autocomplete="username""#));
         assert!(!html.contains("onpaste"));
@@ -222,14 +149,14 @@ mod tests {
         // Segurança: o «Mostrar» pertence ao ecrã de definição de
         // palavra-passe, não ao de entrada. Aqui a pessoa só digita uma
         // palavra-passe que já sabe, e revelá-la em claro só a expõe.
-        let html = login(true, None).to_html();
+        let html = login(true, None, None).to_html();
         assert!(!html.contains("Mostrar"));
         assert!(!html.contains(r#"data-oc="reveal""#));
     }
 
     #[test]
     fn o_ecra_nao_promete_mfa_nem_recuperacao_automatica() {
-        let html = login(true, None).to_html().to_lowercase();
+        let html = login(true, None, None).to_html().to_lowercase();
         for ausente in [
             "mfa",
             "autenticação de dois",
@@ -242,16 +169,28 @@ mod tests {
 
     #[test]
     fn com_o_core_em_baixo_o_ecra_diz_o_e_impede_submeter() {
-        let html = login(false, None).to_html();
-        assert!(html.contains("INDISPONÍVEL"));
+        let html = login(false, None, None).to_html();
         assert!(html.contains("não está acessível"));
+        assert!(
+            html.contains("disabled"),
+            "com o Core em baixo o formulário submete"
+        );
     }
 
     #[test]
     fn todos_os_campos_tem_rotulo() {
-        let html = login(true, None).to_html();
-        assert!(html.contains("for=\"login-user\""));
-        assert!(html.contains("for=\"login-pass\""));
+        // O rótulo envolve o campo (D1): cada campo está dentro do seu `<label>`.
+        let html = login(true, None, None).to_html();
+        for id in ["login-user", "login-pass"] {
+            let antes = html
+                .split(&format!(r#"id="{id}""#))
+                .next()
+                .unwrap_or_default();
+            assert!(
+                antes.rfind("<label").unwrap_or(0) > antes.rfind("</label>").unwrap_or(0),
+                "o campo {id} não está dentro de um rótulo"
+            );
+        }
     }
 }
 
@@ -263,7 +202,7 @@ mod pureza_i18n {
     #[tokio::test]
     async fn o_login_nao_mistura_linguas() {
         use crate::i18n::{with_locale, Locale};
-        let fr = with_locale(Locale::Fr, async { login(true, None).to_html() }).await;
+        let fr = with_locale(Locale::Fr, async { login(true, None, None).to_html() }).await;
         for francesa in ["Se connecter", "Adresse institutionnelle", "Mot de passe"] {
             assert!(fr.contains(francesa), "fr: falta «{francesa}»");
         }

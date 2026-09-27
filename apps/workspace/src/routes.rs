@@ -867,6 +867,7 @@ async fn same_origin_only(
             ui::screens::login::login(
                 true,
                 Some("Este pedido não veio do Ocinye Workspace.".to_owned()),
+                None,
             ),
         ),
     )
@@ -9160,7 +9161,8 @@ async fn login(State(state): State<WorkspaceState>) -> Response {
     //
     // O que decide é o corpo.
     let ready = crate::boot::probe(&state).await.state.may_hand_off();
-    page("Entrar", ui::screens::login::login(ready, None))
+    let instancia = api::instance_name(&state).await;
+    page("Entrar", ui::screens::login::login(ready, None, instancia))
 }
 
 /// Credenciais submetidas pelo formulário.
@@ -9197,11 +9199,12 @@ async fn login_submit(
             // credencial. O Workspace não a enriquece: fazê-lo reintroduziria o
             // oráculo que o Core evita (briefing §35).
             let ready = crate::boot::probe(&state).await.state.may_hand_off();
+            let instancia = api::instance_name(&state).await;
             return (
                 StatusCode::UNAUTHORIZED,
                 page(
                     "Entrar",
-                    ui::screens::login::login(ready, Some(failure.to_string())),
+                    ui::screens::login::login(ready, Some(failure.to_string()), instancia),
                 ),
             )
                 .into_response();

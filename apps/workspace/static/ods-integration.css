@@ -8,3 +8,9 @@
 /* A `.ods-shell` tem altura fixa e esconde o que transborda (D2): o conteúdo de
  * uma página rola no seu contentor, e não na janela. */
 .ods-shell__main { flex: 1; min-height: 0; overflow-y: auto; }
+
+/* A base dos protótipos aprovados (`design-reference/*.dc.html`) declara
+ * `*{box-sizing:border-box}` e `html,body{margin:0}`; o D0 não as traz. Sem elas
+ * um cartão com `width: 100%` e padding transborda num telemóvel. */
+.ods-root *, .ods-root *::before, .ods-root *::after { box-sizing: border-box; }
+.ods-root, .ods-root body { margin: 0; }

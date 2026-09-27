@@ -2223,11 +2223,11 @@ async fn o_workspace_serve_um_browser_a_serio() {
     let html = page.content().await.expect("conteúdo");
 
     assert!(
-        html.contains("Sessão institucional"),
+        html.contains("Iniciar sessão"),
         "a página de entrada não chegou ao browser"
     );
     assert!(
-        html.contains("OCINYE OS"),
+        html.contains("Instalação soberana do Ocinye OS"),
         "o browser recebeu HTML que não é o do Workspace"
     );
 }

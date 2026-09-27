@@ -17,3 +17,5 @@
 | Q-09 | D2 | O menu da conta perdeu a linha «Sessão actual · expira em…». Confirmar. | Retirada, como no D2. |
 | Q-10 | D6 | «O Meu Trabalho» deixa de estar fixo na barra (era navegação essencial com a Home). Confirmar. | Como no D6: Desktop, janelas, Aplicações, fixadas, Lixo. |
 | Q-11 | D2 | «Estado detalhado» no cartão de estado não tem destino no Workspace. | Omitido; fica «Ver opções de IA» → `/ai`. |
+| Q-12 | D0 | Os protótipos declaram `*{box-sizing:border-box}` e `html,body{margin:0}`; o `ocinye-ds.css` não. Sem elas o arranque transborda a 390 px. | Copiadas dos protótipos para `static/ods-integration.css`. |
+| Q-13 | D3 | O login do D3 mostra «{nome da instância}». À porta não há sessão: o nome vem de `GET /instance/branding`, público. Sem resposta, mostra «OCINYE OS». | Como descrito. |

@@ -39,7 +39,7 @@ use crate::boot::{BootOutcome, BootState};
 /// «voltar». O meta continua a ser a garantia; o script é só o histórico.
 pub fn boot(outcome: &BootOutcome, destino: &str) -> impl IntoView {
     let estado = outcome.state.clone();
-    let classe = format!("oc-login oc-boot oc-boot--{}", estado.kind());
+    let tipo = estado.kind();
 
     let (titulo, explicacao) = match estado {
         BootState::Ready => (
@@ -70,58 +70,45 @@ pub fn boot(outcome: &BootOutcome, destino: &str) -> impl IntoView {
     let destino = destino.to_owned();
 
     view! {
-        <div class=classe>
-            <div class="oc-login__layer oc-login__glow" aria-hidden="true"></div>
-            <div class="oc-login__layer" aria-hidden="true">
-                <span class="oc-login__ring oc-login__ring--a"></span>
-                <span class="oc-login__ring oc-login__ring--b"></span>
-                <span class="oc-login__ring oc-login__ring--c"></span>
-            </div>
-            <div class="oc-login__layer oc-login__grid" aria-hidden="true"></div>
+        <main class="ods-boot" data-estado=tipo>
+            <span class="ods-auth__mark"><img src="/static/ocinye_logo.png" alt="" /></span>
+            <p class="ods-label">"OCINYE OS"</p>
 
-            <div class="oc-login__center">
-                <div class="oc-login__brand">
-                    <span class="oc-login__tile">
-                        <img src="/static/ocinye_logo.png" alt="Ocinye" />
-                    </span>
-                    <span class="oc-login__wordmark">"OCINYE OS"</span>
-                    <span class="oc-login__sub">"OCINYE WORKSPACE"</span>
-                </div>
+            <section class="ods-auth__card" role="status" aria-live="polite">
+                <h1 class="ods-auth__title" data-part="boot__title">{titulo}</h1>
+                <p class="ods-auth__lead" data-part="boot__lede">{explicacao}</p>
 
-                // `role=status` e não `role=alert`: isto descreve o estado do
-                // arranque, e um alerta interrompe quem está a ler.
-                <div class="oc-boot__panel" role="status" aria-live="polite">
-                    <h1 class="oc-boot__title" data-part="boot__title">{titulo}</h1>
-                    <p class="oc-boot__lede" data-part="boot__lede">{explicacao}</p>
+                // A barra só enquanto se segue caminho: um arranque parado não
+                // finge que está a andar.
+                {segue.then(|| view! {
+                    <div class="ods-boot__bar" aria-hidden="true"><span></span></div>
+                })}
 
-                    {(!bloqueios.is_empty())
-                        .then(|| view! {
-                            <ul class="oc-boot__list oc-boot__list--blocking" data-part="boot__list--blocking">
-                                {bloqueios.iter().map(|c| componente(c)).collect_view()}
-                            </ul>
-                        })}
+                {(!bloqueios.is_empty())
+                    .then(|| view! {
+                        <ul data-part="boot__list--blocking">
+                            {bloqueios.iter().map(|c| componente(c, true)).collect_view()}
+                        </ul>
+                    })}
 
-                    {(!limitacoes.is_empty())
-                        .then(|| view! {
-                            <ul class="oc-boot__list">
-                                {limitacoes.iter().map(|c| componente(c)).collect_view()}
-                            </ul>
-                        })}
+                {(!limitacoes.is_empty())
+                    .then(|| view! {
+                        <ul>
+                            {limitacoes.iter().map(|c| componente(c, false)).collect_view()}
+                        </ul>
+                    })}
 
-                    // Nunca os dois: ou se segue, ou se oferece tentar de novo.
-                    // Um botão que não faz nada é pior do que botão nenhum.
-                    {(!segue)
-                        .then(|| view! {
-                            <form method="get" action="/boot" class="oc-boot__actions" data-part="boot__actions">
-                                <input type="hidden" name="return_to" value=destino.clone() />
-                                <button type="submit" class="oc-btn oc-btn--gold oc-boot__retry" data-part="btn boot__retry">
-                                    {crate::i18n::t("boot.retry")}
-                                </button>
-                            </form>
-                        })}
-                </div>
-            </div>
-        </div>
+                {(!segue)
+                    .then(|| view! {
+                        <form method="get" action="/boot" class="ods-boot__actions" data-part="boot__actions">
+                            <input type="hidden" name="return_to" value=destino.clone() />
+                            <button type="submit" class="ods-btn ods-btn--primary" data-part="boot__retry">
+                                {crate::i18n::t("boot.retry")}
+                            </button>
+                        </form>
+                    })}
+            </section>
+        </main>
     }
 }
 
@@ -129,11 +116,17 @@ pub fn boot(outcome: &BootOutcome, destino: &str) -> impl IntoView {
 ///
 /// A razão vem do Core, escrita a partir de um conjunto fixo de frases. Entra
 /// como texto — o Leptos escapa-a — e nunca como HTML.
-fn componente(c: &ReadinessComponent) -> impl IntoView {
+fn componente(c: &ReadinessComponent, bloqueia: bool) -> impl IntoView {
+    let classe = if bloqueia {
+        "ods-state ods-state--error"
+    } else {
+        "ods-state ods-state--unavailable"
+    };
     view! {
-        <li class="oc-boot__item">
-            <span class="oc-boot__item-name">{c.component.label().to_owned()}</span>
-            <span class="oc-boot__item-reason">{c.reason.clone()}</span>
+        <li class=classe>
+            <b>{c.component.label().to_owned()}</b>
+            " · "
+            <span>{c.reason.clone()}</span>
         </li>
     }
 }

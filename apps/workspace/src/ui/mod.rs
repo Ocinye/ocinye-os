@@ -246,7 +246,7 @@ mod render_tests {
         let ecras: Vec<(&str, String)> = vec![
             (
                 "login",
-                document("Entrar", screens::login::login(true, None)),
+                document("Entrar", screens::login::login(true, None, None)),
             ),
             (
                 "membros",
@@ -866,7 +866,7 @@ pub(crate) mod link_tests {
             ),
             (
                 "login",
-                document("Iniciar sessão", screens::login::login(true, None)),
+                document("Iniciar sessão", screens::login::login(true, None, None)),
             ),
             page!("home", Screen::Home, screens::home::home(dashboard)),
             page!(

@@ -21,8 +21,6 @@ use leptos::prelude::*;
 use qrcode::render::svg;
 use qrcode::QrCode;
 
-use crate::ui::icon::{icon, Icon};
-
 /// Renderiza a URI `otpauth://` como SVG inline, para o QR caber na CSP apertada
 /// do Workspace sem abrir `img-src`.
 fn qr_svg(otpauth: &str) -> String {
@@ -43,53 +41,24 @@ fn qr_svg(otpauth: &str) -> String {
 /// Moldura comum dos ecrãs de MFA: o mesmo fundo e barra do início de sessão.
 fn frame(rotulo: &'static str, message: Option<String>, corpo: AnyView) -> impl IntoView {
     view! {
-        <div class="oc-login" data-part="login">
-            <div class="oc-login__layer oc-login__glow" aria-hidden="true"></div>
-            <div class="oc-login__layer" aria-hidden="true">
-                <span class="oc-login__ring oc-login__ring--a"></span>
-                <span class="oc-login__ring oc-login__ring--b"></span>
-                <span class="oc-login__ring oc-login__ring--c"></span>
-            </div>
-            <div class="oc-login__layer oc-login__grid" aria-hidden="true"></div>
+        <main class="ods-auth" data-part="login">
+            <span class="ods-auth__clock" data-oc="clock"></span>
+            <span class="ods-auth__mark"><img src="/static/ocinye_logo.png" alt="" /></span>
+            <p class="ods-label">{rotulo}</p>
 
-            <div class="oc-login__bar" data-part="login__bar">
-                <span class="oc-login__state">
-                    <i aria-hidden="true"></i>
-                    <span>{rotulo}</span>
-                </span>
-                <span class="oc-login__clock" data-oc="clock"></span>
-            </div>
-
-            <div class="oc-login__center">
-                <div class="oc-login__brand">
-                    <span class="oc-login__tile">
-                        <img src="/static/ocinye_logo.png" alt="Ocinye" />
-                    </span>
-                    <span class="oc-login__wordmark">"OCINYE OS"</span>
-                    <span class="oc-login__sub">{crate::i18n::t("mfa.wordmark_sub")}</span>
-                </div>
-
-                {message
-                    .map(|text| view! { <div class="oc-login__note" role="alert">{text}</div> })}
-
-                <div class="oc-login__card">{corpo}</div>
-
-                <div class="oc-login__row">
+            <section class="ods-auth__card">
+                {message.map(|text| view! { <p class="ods-field__error" role="alert">{text}</p> })}
+                {corpo}
+                <div class="ods-auth__foot">
                     <form method="post" action="/logout">
-                        <button type="submit" class="oc-login__alt oc-login__alt--button">
+                        <button type="submit" class="ods-btn ods-btn--ghost ods-btn--sm">
                             {crate::i18n::t("auth.sign_out")}
                         </button>
                     </form>
-                    <span class="oc-login__lang">{format!("{} · {}", crate::i18n::current().as_str().to_uppercase(), crate::i18n::current().bcp47())}</span>
+                    <span>{format!("{} · {}", crate::i18n::current().as_str().to_uppercase(), crate::i18n::current().bcp47())}</span>
                 </div>
-            </div>
-
-            <div class="oc-login__foot">
-                <span>{icon(Icon::Power, 13)}{crate::i18n::t("login.foot.shut_down")}</span>
-                <span>{icon(Icon::Restart, 13)}{crate::i18n::t("login.foot.restart")}</span>
-                <a href="/health">{icon(Icon::SystemStatus, 13)}{crate::i18n::t("login.foot.system_status")}</a>
-            </div>
-        </div>
+            </section>
+        </main>
     }
 }
 
@@ -109,25 +78,25 @@ pub fn enrollment(
     let manual = manual_key.map(str::to_owned);
 
     let corpo = view! {
-        <div class="oc-login__who">
-            <span class="oc-login__name">{nome}</span>
-            <span class="oc-login__mail">{crate::i18n::t("mfa.setup")}</span>
-        </div>
+        <div class="ods-account__head"><div>
+            <p class="ods-auth__title">{nome}</p>
+            <p class="ods-account__mail">{crate::i18n::t("mfa.setup")}</p>
+        </div></div>
 
-        <p class="oc-mfa__lead">
+        <p class="ods-auth__lead">
             {crate::i18n::t("mfa.enroll_lead")}
         </p>
 
-        <figure class="oc-mfa__qr">
-            <div class="oc-mfa__qr-img" inner_html=svg
+        <figure class="ods-auth__qr">
+            <div inner_html=svg
                 role="img"
                 aria-label=crate::i18n::t("mfa.qr_alt")></div>
         </figure>
 
         {match manual {
             None => view! {
-                <p class="oc-mfa__manual">
-                    <a class="oc-link" href="/mfa?show_key=1">{crate::i18n::t("mfa.show_manual_key")}</a>
+                <p class="ods-auth__lead">
+                    <a href="/mfa?show_key=1">{crate::i18n::t("mfa.show_manual_key")}</a>
                     {crate::i18n::t("mfa.if_cannot_read_qr")}
                 </p>
             }
@@ -135,17 +104,17 @@ pub fn enrollment(
             Some(chave) => {
                 let mostrar = chave.clone();
                 view! {
-                <div class="oc-mfa__key">
-                    <span class="oc-mfa__key-label">{crate::i18n::t("mfa.manual_key")}</span>
-                    <code class="oc-mono" data-oc="secret" data-oc-value=chave>{mostrar}</code>
+                <div class="ods-field">
+                    <span class="ods-field__label">{crate::i18n::t("mfa.manual_key")}</span>
+                    <code class="ods-auth__secret" data-oc="secret" data-oc-value=chave>{mostrar}</code>
                     <button
                         type="button"
-                        class="oc-btn oc-btn--sm" data-part="btn"
+                        class="ods-btn ods-btn--sm"
                         data-oc="secret-copy"
                     >
                         {crate::i18n::t("mfa.copy_short")}
                     </button>
-                    <p class="oc-muted oc-mt-3">
+                    <p class="ods-field__hint">
                         {crate::i18n::t("mfa.manual_key_note")}
                     </p>
                 </div>
@@ -154,11 +123,10 @@ pub fn enrollment(
             }
         }}
 
-        <form method="post" action="/mfa/confirm" class="oc-mt-6">
-            <div class="oc-login__field">
-                {icon(Icon::Lock, 13)}
-                <label class="oc-sr" for="mfa-code">{crate::i18n::t("mfa.six_digit_code")}</label>
-                <input
+        <form method="post" action="/mfa/confirm">
+            <label class="ods-field">
+                <span class="ods-field__label">{crate::i18n::t("mfa.six_digit_code")}</span>
+                <input class="ods-input"
                     id="mfa-code"
                     name="code"
                     type="text"
@@ -166,12 +134,10 @@ pub fn enrollment(
                     autocomplete="one-time-code"
                     pattern="[0-9 ]*"
                     required
-                    placeholder=crate::i18n::t("mfa.six_digit_code")
                 />
-            </div>
-            <button type="submit" class="oc-login__submit" data-part="login__submit">
+            </label>
+            <button type="submit" class="ods-btn ods-btn--primary ods-btn--block" data-part="login__submit">
                 {crate::i18n::t("mfa.confirm_button")}
-                {icon(Icon::ArrowRight, 14)}
             </button>
         </form>
     }
@@ -189,36 +155,35 @@ pub fn recovery_codes(codes: &[String]) -> impl IntoView {
     let linhas = codes.join("\n");
 
     let corpo = view! {
-        <div class="oc-login__who">
-            <span class="oc-login__name">{crate::i18n::t("mfa.recovery_codes")}</span>
-            <span class="oc-login__mail">{crate::i18n::t("mfa.shown_once")}</span>
-        </div>
+        <div class="ods-account__head"><div>
+            <p class="ods-auth__title">{crate::i18n::t("mfa.recovery_codes")}</p>
+            <p class="ods-account__mail">{crate::i18n::t("mfa.shown_once")}</p>
+        </div></div>
 
-        <p class="oc-mfa__lead">
+        <p class="ods-auth__lead">
             "Guarde estes dez códigos num local seguro. Cada um serve uma única vez,
              e permite entrar quando não tiver a aplicação autenticadora à mão.
              Não voltarão a ser mostrados."
         </p>
 
-        <pre class="oc-mfa__codes oc-mono" data-oc="recovery-codes">{linhas}</pre>
+        <pre class="ods-auth__codes" data-oc="recovery-codes">{linhas}</pre>
 
-        <div class="oc-row oc-gap-3 oc-mt-3">
-            <button type="button" class="oc-btn oc-btn--sm" data-part="btn" data-oc="recovery-copy">
+        <div class="ods-boot__actions">
+            <button type="button" class="ods-btn ods-btn--sm" data-oc="recovery-copy">
                 {crate::i18n::t("mfa.copy_codes")}
             </button>
-            <button type="button" class="oc-btn oc-btn--sm" data-part="btn" data-oc="recovery-download">
+            <button type="button" class="ods-btn ods-btn--sm" data-oc="recovery-download">
                 {crate::i18n::t("mfa.save_file")}
             </button>
         </div>
 
-        <form method="post" action="/mfa/acknowledge" class="oc-mt-6">
-            <label class="oc-check">
-                <input type="checkbox" name="acknowledged" value="1" required />
+        <form method="post" action="/mfa/acknowledge">
+            <label class="ods-field">
+                <input type="checkbox" class="ods-check" name="acknowledged" value="1" required />
                 <span>{crate::i18n::t("mfa.saved_confirm")}</span>
             </label>
-            <button type="submit" class="oc-login__submit oc-mt-3" data-part="login__submit">
+            <button type="submit" class="ods-btn ods-btn--primary ods-btn--block" data-part="login__submit">
                 {crate::i18n::t("mfa.finish")}
-                {icon(Icon::ArrowRight, 14)}
             </button>
         </form>
     }
@@ -235,16 +200,15 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
     let nome = display_name.to_owned();
 
     let corpo = view! {
-        <div class="oc-login__who">
-            <span class="oc-login__name">{nome}</span>
-            <span class="oc-login__mail">{crate::i18n::t("mfa.confirm")}</span>
-        </div>
+        <div class="ods-account__head"><div>
+            <p class="ods-auth__title">{nome}</p>
+            <p class="ods-account__mail">{crate::i18n::t("mfa.confirm")}</p>
+        </div></div>
 
-        <form method="post" action="/mfa/challenge" class="oc-mt-3">
-            <div class="oc-login__field">
-                {icon(Icon::Lock, 13)}
-                <label class="oc-sr" for="mfa-code">{crate::i18n::t("mfa.authenticator_code")}</label>
-                <input
+        <form method="post" action="/mfa/challenge">
+            <label class="ods-field">
+                <span class="ods-field__label">{crate::i18n::t("mfa.authenticator_code")}</span>
+                <input class="ods-input"
                     id="mfa-code"
                     name="code"
                     type="text"
@@ -252,35 +216,31 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
                     autocomplete="one-time-code"
                     pattern="[0-9 ]*"
                     required
-                    placeholder=crate::i18n::t("mfa.authenticator_code")
                 />
-            </div>
-            <button type="submit" class="oc-login__submit" data-part="login__submit">
+            </label>
+            <button type="submit" class="ods-btn ods-btn--primary ods-btn--block" data-part="login__submit">
                 {crate::i18n::t("mfa.sign_in")}
-                {icon(Icon::ArrowRight, 14)}
             </button>
         </form>
 
-        <details class="oc-mfa__fallback oc-mt-6" data-part="mfa__fallback">
+        <details data-part="mfa__fallback">
             <summary>{crate::i18n::t("mfa.no_authenticator")}</summary>
-            <p class="oc-muted oc-mt-3">
+            <p class="ods-field__hint">
                 "Use um dos códigos de recuperação que guardou ao configurar o MFA.
                  Cada código serve uma única vez."
             </p>
-            <form method="post" action="/mfa/recovery" class="oc-mt-3">
-                <div class="oc-login__field">
-                    {icon(Icon::Lock, 13)}
-                    <label class="oc-sr" for="mfa-recovery">{crate::i18n::t("mfa.recovery_code")}</label>
-                    <input
+            <form method="post" action="/mfa/recovery">
+                <label class="ods-field">
+                    <span class="ods-field__label">{crate::i18n::t("mfa.recovery_code")}</span>
+                    <input class="ods-input"
                         id="mfa-recovery"
                         name="code"
                         type="text"
                         autocomplete="off"
                         required
-                        placeholder=crate::i18n::t("mfa.recovery_code")
                     />
-                </div>
-                <button type="submit" class="oc-btn oc-btn--secondary" data-part="btn">
+                </label>
+                <button type="submit" class="ods-btn ods-btn--block">
                     {crate::i18n::t("mfa.enter_with_recovery")}
                 </button>
             </form>
@@ -315,7 +275,12 @@ mod tests {
         assert!(html.contains("/mfa?show_key=1"));
         assert!(html.contains(crate::i18n::t("mfa.show_manual_key")));
         // E não há Workspace nenhum.
-        for fuga in ["oc-side", "oc-topbar", "/administration", "SUPER ADMIN"] {
+        for fuga in [
+            r#"data-oc="shell""#,
+            r#"data-oc="side-pinned""#,
+            "/administration",
+            "SUPER ADMIN",
+        ] {
             assert!(!html.contains(fuga), "o ecrã expõe «{fuga}»");
         }
     }
@@ -363,7 +328,11 @@ mod tests {
         assert!(html.contains("action=\"/mfa/recovery\""));
         assert!(html.contains(crate::i18n::t("mfa.no_authenticator")));
         // Nada do Workspace.
-        for fuga in ["oc-side", "oc-topbar", "SUPER ADMIN"] {
+        for fuga in [
+            r#"data-oc="shell""#,
+            r#"data-oc="side-pinned""#,
+            "SUPER ADMIN",
+        ] {
             assert!(!html.contains(fuga), "o desafio expõe «{fuga}»");
         }
     }
@@ -391,11 +360,11 @@ mod pureza_i18n {
             "OCINYE CORE · CONFIGURER LE MFA",
             "Confirmer",
             "Ouvrez votre application",
-            "État du système",
+            "Se déconnecter",
         ] {
             assert!(fr.contains(francesa), "fr: falta «{francesa}»");
         }
         assert!(!fr.contains("CONFIGURAR MFA"), "fr: moldura portuguesa");
-        assert!(!fr.contains("Estado do Sistema"), "fr: rodapé português");
+        assert!(!fr.contains("Terminar sessão"), "fr: rodapé português");
     }
 }

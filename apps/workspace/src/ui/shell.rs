@@ -1406,21 +1406,19 @@ fn launcher(viewer: &Viewer) -> impl IntoView {
 /// mostra navegação, e não deixa uma sessão privilegiada passar por normal.
 pub fn identidade_indeterminada() -> impl IntoView {
     view! {
-        <div class="oc-login" data-part="login">
-            <div class="oc-login__layer oc-login__glow" aria-hidden="true"></div>
-            <div class="oc-login__center">
-                <div class="oc-login__card">
-                    <div class="oc-login__note" role="alert">
-                        "Não foi possível estabelecer a sua sessão neste momento. \
-                         Isto não é um acesso recusado: o serviço não respondeu a tempo. \
-                         Por segurança, nada é apresentado até a sessão ser confirmada."
-                    </div>
-                    <a class="oc-login__submit" data-part="login__submit" href="/login">
-                        "Voltar ao início de sessão"
-                    </a>
+        <main class="ods-auth">
+            <span class="ods-auth__mark"><img src="/static/ocinye_logo.png" alt="" /></span>
+            <section class="ods-auth__card">
+                <div class="ods-notice ods-notice--warning" role="alert">
+                    "Não foi possível estabelecer a sua sessão neste momento. \
+                     Isto não é um acesso recusado: o serviço não respondeu a tempo. \
+                     Por segurança, nada é apresentado até a sessão ser confirmada."
                 </div>
-            </div>
-        </div>
+                <a class="ods-btn ods-btn--primary ods-btn--block" href="/login">
+                    "Voltar ao início de sessão"
+                </a>
+            </section>
+        </main>
     }
 }
 

@@ -30,6 +30,6 @@ critério de aceitação desse pacote.
 | `a_pessoa_arruma_o_correio_e_nao_o_parte` | as setas movem o separador da disposição | D8 |
 | `o_compositor_obedece_e_guarda_o_que_se_escreveu` | expandir alarga o compositor | D8 |
 | `o_correio_rola_por_dentro_e_nao_por_fora` | a lista rola dentro do seu contentor | D8 |
-| `o_arranque_cabe_num_ecra_pequeno` | nada transborda a 390 px | D3 / D11 |
+| `o_arranque_cabe_num_ecra_pequeno` | nada transborda a 390 px | **verde** com o D3 |
 | `o_separador_de_navegacao_activo_e_azul_branco_sem_dourado` | activo = superfície azul, texto branco | D1 / D2 |
 | `o_detalhe_do_membro_marca_a_seccao_e_atribui_uma_unidade` | o separador clicado fica activo; o scrollspy decide pela geometria das secções, que sem estilo ficam todas na mesma banda | D10 |

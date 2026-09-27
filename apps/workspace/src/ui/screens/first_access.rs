@@ -13,8 +13,6 @@
 
 use leptos::prelude::*;
 
-use crate::ui::icon::{icon, Icon};
-
 /// Comprimento mínimo exigido pelo Ocinye Core.
 ///
 /// Duplicado aqui apenas para o texto do ecrã. O Core valida de novo, e é a
@@ -31,158 +29,111 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
     let email = email.to_owned();
 
     view! {
-        <div class="oc-login" data-part="login">
-            <div class="oc-login__layer oc-login__glow" aria-hidden="true"></div>
-            <div class="oc-login__layer" aria-hidden="true">
-                <span class="oc-login__ring oc-login__ring--a"></span>
-                <span class="oc-login__ring oc-login__ring--b"></span>
-                <span class="oc-login__ring oc-login__ring--c"></span>
-            </div>
-            <div class="oc-login__layer oc-login__grid" aria-hidden="true"></div>
+        <main class="ods-auth" data-part="login">
+            <span class="ods-auth__clock" data-oc="clock"></span>
+            <span class="ods-auth__mark"><img src="/static/ocinye_logo.png" alt="" /></span>
+            <p class="ods-label">{crate::i18n::t("first_access.eyebrow")}</p>
 
-            <div class="oc-login__bar" data-part="login__bar">
-                <span class="oc-login__state">
-                    <i aria-hidden="true"></i>
-                    <span>{crate::i18n::t("first_access.eyebrow")}</span>
-                </span>
-                <span class="oc-login__clock" data-oc="clock"></span>
-            </div>
-
-            <div class="oc-login__center">
-                <div class="oc-login__brand">
-                    <span class="oc-login__tile">
-                        <img src="/static/ocinye_logo.png" alt="Ocinye" />
-                    </span>
-                    <span class="oc-login__wordmark">"OCINYE OS"</span>
-                    <span class="oc-login__sub">{crate::i18n::t("first_access.wordmark_sub")}</span>
+            <section class="ods-auth__card">
+                <div class="ods-account__head">
+                    <span class="ods-avatar" aria-hidden="true">{initials}</span>
+                    <div>
+                        <p class="ods-account__name">{name}</p>
+                        <p class="ods-account__mail">{crate::i18n::t("first_access.set_password")}</p>
+                    </div>
                 </div>
 
-                {message
-                    .map(|text| view! { <div class="oc-login__note" role="alert">{text}</div> })}
+                {message.map(|text| view! { <p class="ods-field__error" role="alert">{text}</p> })}
 
-                <div class="oc-login__card">
-                    <div class="oc-login__who">
-                        <span class="oc-login__avatar" aria-hidden="true">{initials}</span>
-                        <span class="oc-login__name">{name}</span>
-                        <span class="oc-login__mail">{crate::i18n::t("first_access.set_password")}</span>
-                    </div>
+                <p class="ods-auth__lead">
+                    "Por segurança, deve substituir a palavra-passe temporária antes
+                     de continuar. A palavra-passe temporária deixará de funcionar."
+                </p>
 
-                    <p class="oc-first__lead">
-                        "Por segurança, deve substituir a palavra-passe temporária antes
-                         de continuar. A palavra-passe temporária deixará de funcionar."
-                    </p>
+                <form method="post" action="/first-access">
+                    // O gestor de palavras-passe precisa de saber a que conta
+                    // pertence a palavra-passe nova; invisível para quem lê.
+                    <input
+                        type="text"
+                        name="_username"
+                        value=email.clone()
+                        autocomplete="username"
+                        aria-hidden="true"
+                        tabindex="-1"
+                        readonly
+                        class="ods-sr-only"
+                    />
 
-                    <form method="post" action="/first-access">
-                        // O gestor de palavras-passe precisa de saber a quem
-                        // pertence a palavra-passe nova.
-                        //
-                        // Sem este campo o formulário só tem `password` e
-                        // `confirmation`: o browser guarda a credencial sem
-                        // nome associado e, no ecrã de entrada seguinte,
-                        // preenche a palavra-passe deixando o utilizador
-                        // vazio. É a convenção documentada para formulários de
-                        // mudança de palavra-passe.
-                        //
-                        // O campo é enviado com o formulário — `readonly` é
-                        // submetido, ao contrário de `disabled` — e o servidor
-                        // ignora-o: `PasswordForm` só tem `password` e
-                        // `confirmation`. É deliberado que o ignore. Quem está
-                        // autenticado sai da sessão, e aceitar um nome vindo do
-                        // formulário seria deixar o cliente escolher a conta.
-                        <input
-                            type="text"
-                            name="_username"
-                            value=email.clone()
-                            autocomplete="username"
-                            aria-hidden="true"
-                            tabindex="-1"
-                            readonly
-                            class="oc-sr"
-                        />
-
-                        <div class="oc-login__field">
-                            {icon(Icon::Lock, 13)}
-                            <label class="oc-sr" for="new-pass">{crate::i18n::t("first_access.new_password")}</label>
+                    <label class="ods-field">
+                        <span class="ods-field__label">{crate::i18n::t("first_access.new_password")}</span>
+                        <span class="ods-auth__pw">
                             <input
+                                class="ods-input"
                                 id="new-pass"
                                 name="password"
                                 type="password"
                                 autocomplete="new-password"
                                 required
                                 minlength=MIN_LENGTH.to_string()
-                                placeholder=crate::i18n::t("first_access.new_password")
                             />
                             <button
                                 type="button"
-                                class="oc-reveal"
+                                class="ods-btn ods-btn--ghost ods-btn--sm ods-auth__reveal"
                                 data-oc="reveal"
                                 data-oc-target="new-pass"
                                 aria-pressed="false"
                             >
                                 {crate::i18n::t("first_access.show")}
                             </button>
-                        </div>
+                        </span>
+                    </label>
 
-                        <div class="oc-login__field">
-                            {icon(Icon::Lock, 13)}
-                            <label class="oc-sr" for="confirm-pass">
-                                {crate::i18n::t("first_access.confirm_password")}
-                            </label>
+                    <label class="ods-field">
+                        <span class="ods-field__label">{crate::i18n::t("first_access.confirm_password")}</span>
+                        <span class="ods-auth__pw">
                             <input
+                                class="ods-input"
                                 id="confirm-pass"
                                 name="confirmation"
                                 type="password"
                                 autocomplete="new-password"
                                 required
                                 minlength=MIN_LENGTH.to_string()
-                                placeholder=crate::i18n::t("first_access.confirm_password")
                             />
-                            // Também aqui, e pela mesma razão que no campo de
-                            // cima: quem não consegue ler o que escreveu só
-                            // descobre a divergência quando o formulário é
-                            // recusado. Confirmar às cegas transforma uma gralha
-                            // numa tentativa perdida.
                             <button
                                 type="button"
-                                class="oc-reveal"
+                                class="ods-btn ods-btn--ghost ods-btn--sm ods-auth__reveal"
                                 data-oc="reveal"
                                 data-oc-target="confirm-pass"
                                 aria-pressed="false"
                             >
                                 {crate::i18n::t("first_access.show")}
                             </button>
-                        </div>
+                        </span>
+                    </label>
 
-                        <ul class="oc-first__rules">
-                            <li>{crate::i18n::tf("first_access.min_length_dot", &[("min", &MIN_LENGTH.to_string())])}</li>
-                            <li>{crate::i18n::t("first_access.long_phrases")}</li>
-                            <li>{crate::i18n::t("first_access.no_symbols_required")}</li>
-                            <li>{crate::i18n::t("first_access.common_rejected")}</li>
-                        </ul>
+                    <ul class="ods-field__hint">
+                        <li>{crate::i18n::tf("first_access.min_length_dot", &[("min", &MIN_LENGTH.to_string())])}</li>
+                        <li>{crate::i18n::t("first_access.long_phrases")}</li>
+                        <li>{crate::i18n::t("first_access.no_symbols_required")}</li>
+                        <li>{crate::i18n::t("first_access.common_rejected")}</li>
+                    </ul>
 
-                        <button type="submit" class="oc-login__submit" data-part="login__submit">
-                            {crate::i18n::t("first_access.set_password_button")}
-                            {icon(Icon::ArrowRight, 14)}
+                    <button type="submit" class="ods-btn ods-btn--primary ods-btn--block" data-part="login__submit">
+                        {crate::i18n::t("first_access.set_password_button")}
+                    </button>
+                </form>
+
+                <div class="ods-auth__foot">
+                    <form method="post" action="/logout">
+                        <button type="submit" class="ods-btn ods-btn--ghost ods-btn--sm">
+                            {crate::i18n::t("auth.sign_out")}
                         </button>
                     </form>
-
-                    <div class="oc-login__row">
-                        <form method="post" action="/logout">
-                            <button type="submit" class="oc-login__alt oc-login__alt--button">
-                                {crate::i18n::t("auth.sign_out")}
-                            </button>
-                        </form>
-                        <span class="oc-login__lang">{format!("{} · {}", crate::i18n::current().as_str().to_uppercase(), crate::i18n::current().bcp47())}</span>
-                    </div>
+                    <span>{format!("{} · {}", crate::i18n::current().as_str().to_uppercase(), crate::i18n::current().bcp47())}</span>
                 </div>
-            </div>
-
-            <div class="oc-login__foot">
-                <span>{icon(Icon::Power, 13)}{crate::i18n::t("login.foot.shut_down")}</span>
-                <span>{icon(Icon::Restart, 13)}{crate::i18n::t("login.foot.restart")}</span>
-                <a href="/health">{icon(Icon::SystemStatus, 13)}{crate::i18n::t("login.foot.system_status")}</a>
-            </div>
-        </div>
+            </section>
+        </main>
     }
 }
 
@@ -217,8 +168,17 @@ mod tests {
     #[test]
     fn os_dois_campos_tem_rotulo_e_permitem_gestores_de_palavras_passe() {
         let html = render(None);
-        assert!(html.contains(r#"for="new-pass""#));
-        assert!(html.contains(r#"for="confirm-pass""#));
+        // O rótulo envolve o campo (D1): cada campo está dentro do seu `<label>`.
+        for id in ["new-pass", "confirm-pass"] {
+            let antes = html
+                .split(&format!(r#"id="{id}""#))
+                .next()
+                .unwrap_or_default();
+            assert!(
+                antes.rfind("<label").unwrap_or(0) > antes.rfind("</label>").unwrap_or(0),
+                "o campo {id} não está dentro de um rótulo"
+            );
+        }
         assert!(html.contains(r#"autocomplete="new-password""#));
         // Nada bloqueia colar nem limita o comprimento máximo.
         assert!(!html.contains("onpaste"));

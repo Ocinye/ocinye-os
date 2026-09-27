@@ -999,8 +999,8 @@ fn escolher_ambiente(workspaces: Vec<(String, String)>) -> impl IntoView {
                             .map(|(id, nome)| {
                                 view! {
                                     <a
-                                        class="oc-card oc-card--clickable oc-card__body \
-                                               oc-card__body--block" data-part="card"
+                                        class="oc-card oc-card--clickable oc-card__body oc-card__body--block"
+                                        data-part="card"
                                         href=format!("/files?workspace={id}")
                                     >
                                         <div class="oc-t-meta">{crate::i18n::t("files.environment")}</div>
