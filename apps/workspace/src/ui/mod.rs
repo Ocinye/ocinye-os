@@ -14,6 +14,7 @@ pub mod apps;
 pub mod components;
 pub mod icon;
 pub mod markdown;
+pub mod ods;
 pub mod roles;
 pub mod screens;
 pub mod shell;

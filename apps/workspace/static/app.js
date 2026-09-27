@@ -3060,7 +3060,78 @@
     return { carregar };
   }
 
+  /* ── Primitivas do Claude Design (D1) ──────────────────────────────
+   *
+   * O que o D1 atribui ao JavaScript, e só isso: o CSS nunca depende de uma
+   * classe posta aqui — alternam-se atributos, e as medidas vão por CSSOM, que
+   * a CSP admite (um `style=""` no HTML seria descartado). */
+  function initOds() {
+    // A largura de cada barra de progresso sai do seu valor.
+    $$('[data-ods-value]').forEach((barra) => {
+      const valor = Math.max(0, Math.min(100, Number(barra.dataset.odsValue) || 0));
+      const cheio = $('.ods-progress__bar', barra);
+      if (cheio) cheio.style.setProperty('width', valor + '%');
+    });
+
+    // A barra de scroll inteligente: escura enquanto rola, e só então.
+    $$('[data-ods-scroll]').forEach((zona) => {
+      let parar = null;
+      zona.addEventListener('scroll', () => {
+        zona.setAttribute('data-scrolling', '');
+        clearTimeout(parar);
+        parar = setTimeout(() => zona.removeAttribute('data-scrolling'), 700);
+      }, { passive: true });
+    });
+
+    // O repouso dos flutuantes: somem ao fim de `--ods-idle-delay` sem uso, e
+    // voltam ao primeiro movimento, tecla ou foco.
+    const raiz = document.documentElement;
+    const atraso = parseFloat(getComputedStyle(raiz).getPropertyValue('--ods-idle-delay')) * 1000 || 5000;
+    let repouso = null;
+    const acordar = () => {
+      raiz.removeAttribute('data-idle');
+      clearTimeout(repouso);
+      repouso = setTimeout(() => raiz.setAttribute('data-idle', ''), atraso);
+    };
+    ['pointermove', 'keydown', 'focusin', 'touchstart'].forEach((ev) =>
+      document.addEventListener(ev, acordar, { passive: true }));
+    acordar();
+
+    // Os nomes dos botões só com ícone (`data-tip`), à direita, com o rato e
+    // com o foco.
+    let dica = null;
+    const mostrar = (alvo) => {
+      esconder();
+      dica = document.createElement('div');
+      dica.className = 'ods-tooltip';
+      dica.setAttribute('role', 'tooltip');
+      dica.id = 'ods-dica';
+      dica.textContent = alvo.dataset.tip;
+      document.body.appendChild(dica);
+      alvo.setAttribute('aria-describedby', 'ods-dica');
+      const r = alvo.getBoundingClientRect();
+      dica.style.setProperty('left', (r.right + 10 + window.scrollX) + 'px');
+      dica.style.setProperty('top', (r.top + r.height / 2 + window.scrollY) + 'px');
+    };
+    const esconder = () => {
+      if (!dica) return;
+      const alvo = $('[aria-describedby="ods-dica"]');
+      if (alvo) alvo.removeAttribute('aria-describedby');
+      dica.remove();
+      dica = null;
+    };
+    document.addEventListener('mouseover', (e) => {
+      const alvo = e.target.closest('[data-tip]');
+      if (alvo) mostrar(alvo); else esconder();
+    });
+    document.addEventListener('focusin', (e) => {
+      const alvo = e.target.closest('[data-tip]');
+      if (alvo) mostrar(alvo); else esconder();
+    });
+  }
+
   const start = () => {
+    initOds();
     initSidebar();
     initPrompt();
     initFiles();
