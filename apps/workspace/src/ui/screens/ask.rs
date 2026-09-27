@@ -106,9 +106,9 @@ fn command_form(query: &str, intent: &str) -> impl IntoView {
         <form class="oc-ask" method="get" action="/ask" role="search">
             <div class="oc-ask__field">
                 {icon(Icon::Search, 15)}
-                <label class="oc-sr" for="ask-q">{crate::i18n::t("ask.field_label")}</label>
+                <label class="ods-sr-only" for="ask-q">{crate::i18n::t("ask.field_label")}</label>
                 <input
-                    class="oc-input"
+                    class="ods-input"
                     id="ask-q"
                     name="q"
                     type="search"
@@ -116,7 +116,7 @@ fn command_form(query: &str, intent: &str) -> impl IntoView {
                     placeholder=crate::i18n::t("ask.placeholder")
                     autocomplete="off"
                 />
-                <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{crate::i18n::t("ask.submit")}</button>
+                <button type="submit" class="ods-btn ods-btn--navy" data-part="btn">{crate::i18n::t("ask.submit")}</button>
             </div>
 
             // Escreva naturalmente: a superfície lê a frase. Os três modos
@@ -174,7 +174,7 @@ fn results(outcome: &Value) -> impl IntoView {
         {(withheld > 0).then(|| view! {
             // «Encontrei coisas que não posso enviar a um modelo» é diferente
             // de «não encontrei nada» (§188).
-            <div class="oc-callout oc-ask__note" role="status">
+            <div class="ods-notice oc-ask__note" role="status">
                 {icon(Icon::Shield, 15)}
                 <p>
                     {crate::i18n::tf("ask.withheld", &[("count", &withheld.to_string())])}
@@ -289,10 +289,10 @@ fn planned(outcome: &Value) -> impl IntoView {
 
             <div class="oc-plan__actions">
                 <form method="post" action=format!("/ask/plans/{plan_id}/execute")>
-                    <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{crate::i18n::t("ask.confirm")}</button>
+                    <button type="submit" class="ods-btn ods-btn--navy" data-part="btn">{crate::i18n::t("ask.confirm")}</button>
                 </form>
                 <form method="post" action=format!("/ask/plans/{plan_id}/reject")>
-                    <button type="submit" class="oc-btn oc-btn--secondary" data-part="btn">{crate::i18n::t("ask.cancel")}</button>
+                    <button type="submit" class="ods-btn" data-part="btn">{crate::i18n::t("ask.cancel")}</button>
                 </form>
             </div>
         },

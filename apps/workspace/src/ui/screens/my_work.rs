@@ -51,19 +51,19 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                 </div>
             </div>
 
-            <div class="oc-tabs oc-tabs--under oc-card__head--flush" >
+            <div class="ods-tabs" >
                 {pill_tabs(tabs, t("my_work.tabs.aria"))}
             </div>
 
-            <div class="oc-grid oc-grid--detail">
-                <section class="oc-card" data-part="card">
-                    <div class="oc-card__head">
+            <div>
+                <section class="ods-widget ods-widget-surface" data-part="card">
+                    <div class="ods-widget__head">
                         <h2>{t("my_work.tasks.title")}</h2>
-                        <span class="oc-card__meta">{task_rows.len().to_string()}</span>
+                        <span class="ods-label">{task_rows.len().to_string()}</span>
                     </div>
-                    <div class="oc-card__body">
+                    <div class="ods-widget__body">
                         {if task_rows.is_empty() {
-                            view! { <p class="oc-muted">{t("my_work.tasks.empty")}</p> }
+                            view! { <p class="ods-field__hint">{t("my_work.tasks.empty")}</p> }
                                 .into_any()
                         } else {
                             view! {
@@ -77,14 +77,13 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                                             view! {
                                                 <a
                                                     href=format!("/workspaces/{workspace}")
-                                                    class="oc-list__row"
                                                 >
-                                                    <span class="oc-fill oc-truncate oc-t-cell" data-oc-content="1">
+                                                    <span data-oc-content="1">
                                                         {text(row, "title")}
                                                     </span>
                                                     {task_priority_badge(&priority)}
                                                     {task_state_badge(&state)}
-                                                    <span class="oc-mono oc-list__meta" >
+                                                    <span >
                                                         {row
                                                             .get("due_on")
                                                             .and_then(Value::as_str)
@@ -105,14 +104,14 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                 </section>
 
                 <div>
-                    <section class="oc-card oc-mb-5" data-part="card" >
-                        <div class="oc-card__head">
+                    <section class="ods-widget ods-widget-surface" data-part="card" >
+                        <div class="ods-widget__head">
                             <h2>{t("my_work.research.title")}</h2>
                         </div>
-                        <div class="oc-card__body">
+                        <div class="ods-widget__body">
                             {if workspace_rows.is_empty() {
                                 view! {
-                                    <p class="oc-muted">
+                                    <p class="ods-field__hint">
                                         {t("my_work.research.empty")}
                                     </p>
                                 }
@@ -128,12 +127,11 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                                                 view! {
                                                     <a
                                                         href=format!("/workspaces/{id}")
-                                                        class="oc-list__row"
                                                     >
-                                                        <span class="oc-mono oc-list__meta" >
+                                                        <span >
                                                             {text(row, "code")}
                                                         </span>
-                                                        <span class="oc-fill oc-truncate oc-t-cell-2" >
+                                                        <span >
                                                             {text(row, "title")}
                                                         </span>
                                                     </a>
@@ -155,43 +153,43 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                     // de seguir que o domínio não tem. Encher qualquer um deles
                     // com o que está à mão seria mostrar uma coisa a dizer
                     // outra (`CLAUDE.md` §69).
-                    <section class="oc-card oc-mb-5" data-part="card">
-                        <div class="oc-card__head">
+                    <section class="ods-widget ods-widget-surface" data-part="card">
+                        <div class="ods-widget__head">
                             <h2>{t("my_work.documents.title")}</h2>
-                            <span class="oc-card__meta oc-unavailable" data-part="unavailable">{t("my_work.unavailable")}</span>
+                            <span class="ods-label oc-unavailable" data-part="unavailable">{t("my_work.unavailable")}</span>
                         </div>
-                        <div class="oc-card__body">
-                            <p class="oc-muted">{t("my_work.documents.body")}</p>
+                        <div class="ods-widget__body">
+                            <p class="ods-field__hint">{t("my_work.documents.body")}</p>
                         </div>
                     </section>
 
-                    <section class="oc-card oc-mb-5" data-part="card">
-                        <div class="oc-card__head">
+                    <section class="ods-widget ods-widget-surface" data-part="card">
+                        <div class="ods-widget__head">
                             <h2>{t("my_work.units.title")}</h2>
-                            <span class="oc-card__meta oc-unavailable" data-part="unavailable">{t("my_work.unavailable")}</span>
+                            <span class="ods-label oc-unavailable" data-part="unavailable">{t("my_work.unavailable")}</span>
                         </div>
-                        <div class="oc-card__body">
-                            <p class="oc-muted">{t("my_work.units.body")}</p>
+                        <div class="ods-widget__body">
+                            <p class="ods-field__hint">{t("my_work.units.body")}</p>
                         </div>
                     </section>
 
-                    <section class="oc-card" data-part="card">
-                        <div class="oc-card__head">
+                    <section class="ods-widget ods-widget-surface" data-part="card">
+                        <div class="ods-widget__head">
                             <h2>{t("my_work.my_activity.title")}</h2>
                         </div>
-                        <div class="oc-card__body">
+                        <div class="ods-widget__body">
                             {if activity_rows.is_empty() {
-                                view! { <p class="oc-muted">{t("my_work.my_activity.empty")}</p> }
+                                view! { <p class="ods-field__hint">{t("my_work.my_activity.empty")}</p> }
                                     .into_any()
                             } else {
                                 view! {
-                                    <div class="oc-col oc-gap-7" >
+                                    <div >
                                         {activity_rows
                                             .iter()
                                             .take(8)
                                             .map(|row| {
                                                 view! {
-                                                    <div class="oc-t-note" data-oc-content="1">
+                                                    <div class="ods-field__hint" data-oc-content="1">
                                                         {text(row, "summary")}
                                                     </div>
                                                 }

@@ -244,7 +244,7 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                         }
                     })}
 
-                <div class="oc-spacer"></div>
+                <div class="ods-app__toolbar-spacer"></div>
             </header>
 
             // ── Conversa ───────────────────────────────────────────────
@@ -279,12 +279,12 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                         view! {
                             <div class="oc-thread oc-thread--empty" data-part="thread thread--empty">
                                 <div class="oc-prompt__hero">
-                                    <span class="oc-empty__tile oc-empty__tile--prompt">
+                                    <span class="ods-empty__icon oc-empty__tile--prompt">
                                         {icon(Icon::AiHexMd, 26)}
                                     </span>
                                     <h1>{crate::i18n::t("prompt.hero.title")}</h1>
-                                    <p class="oc-t-caption--muted">{message}</p>
-                                    <p class="oc-t-soft">
+                                    <p class="ods-field__hint">{message}</p>
+                                    <p class="ods-field__hint">
                                         {crate::i18n::t("prompt.hero.access_note")}
                                     </p>
                                 </div>
@@ -338,7 +338,7 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                         {caps_view}
                     </div>
 
-                    <label class="oc-sr" for="prompt-input">
+                    <label class="ods-sr-only" for="prompt-input">
                         {crate::i18n::t("prompt.input.label")}
                     </label>
                     <textarea
@@ -360,7 +360,7 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                         {action_chip(Icon::Document, crate::i18n::t("prompt.attach.document"))}
                         {action_chip(Icon::Tools, crate::i18n::t("prompt.attach.tools"))}
 
-                        <div class="oc-spacer"></div>
+                        <div class="ods-app__toolbar-spacer"></div>
 
                         <button
                             type="submit"
@@ -422,7 +422,7 @@ fn ocinye_turn(
                 {degraded.then(|| view! { <span class="oc-turn__badge" data-part="turn__badge">"ESTADO"</span> })}
             </div>
 
-            <div class="oc-md" data-part="md" data-oc="resposta" inner_html=body></div>
+            <div data-part="md" data-oc="resposta" inner_html=body></div>
 
             <div class="oc-turn__bar">
                 <button type="button" class="oc-turn__act" data-oc="copiar-resposta">
@@ -446,7 +446,7 @@ fn ocinye_turn(
                                 {reason_code.map(|code| view! {
                                     <div>
                                         <dt>{crate::i18n::t("prompt.meta.reason")}</dt>
-                                        <dd class="oc-mono">{code}</dd>
+                                        <dd>{code}</dd>
                                     </div>
                                 })}
                             </dl>
@@ -467,7 +467,7 @@ fn ocinye_turn(
 fn action_chip(kind: Icon, label: &'static str) -> impl IntoView {
     view! {
         <span
-            class="oc-chip oc-unavailable" data-part="chip unavailable"
+            class="ods-chip oc-unavailable" data-part="chip unavailable"
             aria-disabled="true"
             title=crate::i18n::t("prompt.attach.unavailable")
         >

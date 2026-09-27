@@ -96,14 +96,14 @@ pub fn scientific_chain(view: ChainView) -> impl IntoView {
         && results.is_empty();
 
     view! {
-        <div class="oc-band">
-            <div class="oc-row--top oc-gap-11 oc-mb-3">
-                <div class="oc-fill">
-                    <div class="oc-row oc-row--wrap oc-gap-6">
+        <div>
+            <div>
+                <div>
+                    <div>
                         {icon(Icon::Science, 22)}
-                        <h1 class="oc-t-screen">{crate::i18n::t("science.title")}</h1>
+                        <h1 class="ods-page__title">{crate::i18n::t("science.title")}</h1>
                     </div>
-                    <div class="oc-mono oc-mt-3">{contexto}</div>
+                    <div>{contexto}</div>
                 </div>
                 <div>
                     {may_create
@@ -161,11 +161,11 @@ pub fn scientific_chain(view: ChainView) -> impl IntoView {
                     .into_any()
             } else {
                 view! {
-                    <div class="oc-grid oc-grid--pares">
+                    <div>
                         {etapa(crate::i18n::t("science.stage.hypotheses"), &hypotheses, "statement", None)}
                         {etapa(crate::i18n::t("science.stage.methodologies"), &methodologies, "title", Some("/methodologies"))}
                     </div>
-                    <div class="oc-grid oc-grid--pares oc-mt-7">
+                    <div>
                         {etapa(crate::i18n::t("science.stage.studies"), &studies, "title", Some("/studies"))}
                         {etapa(crate::i18n::t("science.stage.results"), &results, "title", Some("/results"))}
                     </div>
@@ -187,14 +187,14 @@ fn etapa(
     let linhas: Vec<Value> = linhas.to_vec();
 
     view! {
-        <section class="oc-card" data-part="card">
-            <div class="oc-card__head">
+        <section class="ods-widget ods-widget-surface" data-part="card">
+            <div class="ods-widget__head">
                 <h2>{titulo}</h2>
-                <span class="oc-card__meta">{contagem.to_string()}</span>
+                <span class="ods-label">{contagem.to_string()}</span>
             </div>
-            <div class="oc-card__body">
+            <div class="ods-widget__body">
                 {if linhas.is_empty() {
-                    view! { <p class="oc-muted">{crate::i18n::t("science.stage.empty")}</p> }.into_any()
+                    view! { <p class="ods-field__hint">{crate::i18n::t("science.stage.empty")}</p> }.into_any()
                 } else {
                     view! {
                         <div>
@@ -210,11 +210,11 @@ fn etapa(
                                     let href = destino
                                         .map(|base| format!("{base}/{}", text(linha, "id")));
                                     view! {
-                                        <div class="oc-list__row">
+                                        <div>
                                             {match href {
                                                 Some(href) => {
                                                     view! {
-                                                        <a class="oc-fill oc-truncate oc-t-cell-2" href=href>
+                                                        <a href=href>
                                                             {rotulo}
                                                         </a>
                                                     }
@@ -222,7 +222,7 @@ fn etapa(
                                                 }
                                                 None => {
                                                     view! {
-                                                        <span class="oc-fill oc-truncate oc-t-cell-2">
+                                                        <span>
                                                             {rotulo}
                                                         </span>
                                                     }
@@ -286,11 +286,11 @@ pub fn result_detail(view: ResultView) -> impl IntoView {
     let linhagem = if a_montante { &upstream } else { &downstream };
 
     view! {
-        <div class="oc-band">
-            <div class="oc-row--top oc-gap-11 oc-mb-3">
-                <div class="oc-fill">
-                    <div class="oc-row oc-row--wrap oc-gap-6">
-                        <h1 class="oc-t-screen">{title}</h1>
+        <div>
+            <div>
+                <div>
+                    <div>
+                        <h1 class="ods-page__title">{title}</h1>
                         {badge(status.clone(), Tone::of(&status))}
                         {classification_badge(&classification)}
                     </div>
@@ -311,20 +311,20 @@ pub fn result_detail(view: ResultView) -> impl IntoView {
         </div>
 
         <div class="ods-page">
-            <div class="oc-grid oc-grid--ws">
-                <section class="oc-card" data-part="card">
+            <div>
+                <section class="ods-widget ods-widget-surface" data-part="card">
                     {section_head(crate::i18n::t("science.result.summary_head"), None, None)}
-                    <div class="oc-card__body">
+                    <div class="ods-widget__body">
                         <p>{summary}</p>
                     </div>
                 </section>
 
-                <section class="oc-card" data-part="card">
+                <section class="ods-widget ods-widget-surface" data-part="card">
                     {section_head(crate::i18n::t("science.result.validations_head"), None, None)}
-                    <div class="oc-card__body">
+                    <div class="ods-widget__body">
                         {if validations.is_empty() {
                             view! {
-                                <p class="oc-muted">
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("science.result.no_validations")}
                                 </p>
                             }
@@ -338,11 +338,11 @@ pub fn result_detail(view: ResultView) -> impl IntoView {
                                             let rotulo = text(v, "label");
                                             let nota = maybe(v, "note");
                                             view! {
-                                                <div class="oc-list__row">
-                                                    <span class="oc-fill oc-t-cell-2">{rotulo}</span>
+                                                <div>
+                                                    <span>{rotulo}</span>
                                                     {nota
                                                         .map(|n| {
-                                                            view! { <span class="oc-muted oc-truncate">{n}</span> }
+                                                            view! { <span class="ods-field__hint">{n}</span> }
                                                         })}
                                                 </div>
                                             }
@@ -356,9 +356,9 @@ pub fn result_detail(view: ResultView) -> impl IntoView {
                 </section>
             </div>
 
-            <section class="oc-card oc-mt-7" data-part="card">
+            <section class="ods-widget ods-widget-surface" data-part="card">
                 {section_head(crate::i18n::t("science.result.provenance_head"), None, None)}
-                <div class="oc-card__body">
+                <div class="ods-widget__body">
                     {pill_tabs(
                         vec![
                             Tab::link(crate::i18n::t("science.lineage.upstream"), format!("/results/{id}?direction=upstream"), a_montante),
@@ -397,7 +397,7 @@ fn passos(linhagem: &Value, a_montante: bool) -> impl IntoView {
 
     view! {
         {if passos.is_empty() {
-            view! { <p class="oc-muted">{vazio}</p> }.into_any()
+            view! { <p class="ods-field__hint">{vazio}</p> }.into_any()
         } else {
             view! {
                 <div>
@@ -423,10 +423,10 @@ fn passos(linhagem: &Value, a_montante: bool) -> impl IntoView {
                                 (Tone::Gray, crate::i18n::t("science.provenance.declared"))
                             };
                             view! {
-                                <div class="oc-list__row">
-                                    <span class="oc-truncate oc-t-cell-2">{de}</span>
-                                    <span class="oc-muted oc-mono">{relacao}</span>
-                                    <span class="oc-fill oc-truncate oc-t-cell-2">{para}</span>
+                                <div>
+                                    <span>{de}</span>
+                                    <span class="ods-field__hint">{relacao}</span>
+                                    <span>{para}</span>
                                     {badge(etiqueta, tom)}
                                 </div>
                             }
@@ -442,7 +442,7 @@ fn passos(linhagem: &Value, a_montante: bool) -> impl IntoView {
         {truncada
             .then(|| {
                 view! {
-                    <p class="oc-muted oc-mt-3">
+                    <p class="ods-field__hint">
                         {crate::i18n::t("science.lineage.truncated")}
                     </p>
                 }
@@ -531,10 +531,10 @@ pub fn validate_result(view: ValidateView) -> impl IntoView {
 
             {message
                 .map(|texto| {
-                    view! { <div class="oc-callout oc-callout--error" role="alert">{texto}</div> }
+                    view! { <div class="ods-notice ods-notice--error" role="alert">{texto}</div> }
                 })}
 
-            <div class="oc-callout" role="note">
+            <div class="ods-notice" role="note">
                 <strong>{crate::i18n::t("science.validate.callout_title")}</strong>
                 <p>
                     {crate::i18n::t("science.validate.callout_body")}
@@ -583,7 +583,7 @@ pub fn validate_result(view: ValidateView) -> impl IntoView {
                     },
                 )}
 
-                <div class="oc-row oc-gap-6 oc-mt-7">
+                <div>
                     {button(Button::new(crate::i18n::t("science.action.record"), Variant::Primary))}
                     {button(
                         Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href(format!("/results/{id}")),
@@ -622,7 +622,7 @@ fn cabecalho(titulo: &'static str, explicacao: &'static str, contexto: &Value) -
                 <h1 class="ods-page__title">{titulo}</h1>
                 <p class="ods-page__sub">{explicacao}</p>
             </div>
-            <div class="oc-mono">{contexto_do_ambiente(contexto)}</div>
+            <div>{contexto_do_ambiente(contexto)}</div>
         </div>
     }
 }
@@ -643,7 +643,7 @@ fn contexto_do_ambiente(contexto: &Value) -> String {
 
 fn recusa(message: Option<String>) -> impl IntoView {
     message.map(|texto| {
-        view! { <div class="oc-callout oc-callout--error" role="alert">{texto}</div> }
+        view! { <div class="ods-notice ods-notice--error" role="alert">{texto}</div> }
     })
 }
 
@@ -730,7 +730,7 @@ pub fn nova_hipotese(contexto: Contexto) -> impl IntoView {
 fn accoes(voltar: &str, confirmar: &'static str) -> impl IntoView {
     let voltar = voltar.to_owned();
     view! {
-        <div class="oc-row oc-gap-6 oc-mt-7">
+        <div>
             {button(Button::new(confirmar, Variant::Primary))}
             {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href(voltar))}
         </div>
@@ -812,14 +812,14 @@ pub fn metodologia(view: MetodologiaView) -> impl IntoView {
     let workspace_id = text(&methodology, "workspace_id");
 
     view! {
-        <div class="oc-band">
-            <div class="oc-row--top oc-gap-11 oc-mb-3">
-                <div class="oc-fill">
-                    <div class="oc-row oc-row--wrap oc-gap-6">
-                        <h1 class="oc-t-screen">{title}</h1>
+        <div>
+            <div>
+                <div>
+                    <div>
+                        <h1 class="ods-page__title">{title}</h1>
                         {classification_badge(&classification)}
                     </div>
-                    {purpose.map(|p| view! { <div class="oc-muted oc-mt-3">{p}</div> })}
+                    {purpose.map(|p| view! { <div class="ods-field__hint">{p}</div> })}
                 </div>
                 <div>
                     {may_create
@@ -838,12 +838,12 @@ pub fn metodologia(view: MetodologiaView) -> impl IntoView {
         </div>
 
         <div class="ods-page">
-            <section class="oc-card" data-part="card">
+            <section class="ods-widget ods-widget-surface" data-part="card">
                 {section_head(crate::i18n::t("science.versions_head"), None, None)}
-                <div class="oc-card__body">
+                <div class="ods-widget__body">
                     {if versoes.is_empty() {
                         view! {
-                            <p class="oc-muted">
+                            <p class="ods-field__hint">
                                 {crate::i18n::t("science.methodology.no_versions")}
                             </p>
                         }
@@ -861,9 +861,9 @@ pub fn metodologia(view: MetodologiaView) -> impl IntoView {
                                         let estado = text(v, "status_label");
                                         let tom = Tone::of(&estado);
                                         view! {
-                                            <div class="oc-list__row">
-                                                <span class="oc-mono">{etiqueta}</span>
-                                                <span class="oc-fill oc-truncate">{resumo}</span>
+                                            <div>
+                                                <span>{etiqueta}</span>
+                                                <span>{resumo}</span>
                                                 {badge(estado, tom)}
                                             </div>
                                         }
@@ -917,7 +917,7 @@ pub fn nova_versao(view: NovaVersaoView) -> impl IntoView {
                 .map(|v| {
                     let etiqueta = text(&v, "label");
                     view! {
-                        <div class="oc-callout" role="note">
+                        <div class="ods-notice" role="note">
                             <strong>{crate::i18n::tf("science.version.in_force", &[("label", &etiqueta)])}</strong>
                             <p>
                                 {crate::i18n::t("science.version.in_force_body")}
@@ -1077,7 +1077,7 @@ pub fn novo_estudo(view: NovoEstudoView) -> impl IntoView {
                         {sem_versoes
                             .then(|| {
                                 view! {
-                                    <p class="oc-muted">
+                                    <p class="ods-field__hint">
                                         {crate::i18n::t("science.study.no_methodology_hint")}
                                     </p>
                                 }
@@ -1118,16 +1118,16 @@ pub fn estudo(view: EstudoView) -> impl IntoView {
     let corridas = items(&executions);
 
     view! {
-        <div class="oc-band">
-            <div class="oc-row--top oc-gap-11 oc-mb-3">
-                <div class="oc-fill">
-                    <div class="oc-row oc-row--wrap oc-gap-6">
+        <div>
+            <div>
+                <div>
+                    <div>
                         {pill(kind_label)}
-                        <h1 class="oc-t-screen">{title}</h1>
+                        <h1 class="ods-page__title">{title}</h1>
                         {badge(status.clone(), Tone::of(&status))}
                         {classification_badge(&classification)}
                     </div>
-                    {objective.map(|o| view! { <div class="oc-muted oc-mt-3">{o}</div> })}
+                    {objective.map(|o| view! { <div class="ods-field__hint">{o}</div> })}
                 </div>
                 <div>
                     {may_create
@@ -1146,12 +1146,12 @@ pub fn estudo(view: EstudoView) -> impl IntoView {
         </div>
 
         <div class="ods-page">
-            <section class="oc-card" data-part="card">
+            <section class="ods-widget ods-widget-surface" data-part="card">
                 {section_head(crate::i18n::t("science.executions_head"), None, None)}
-                <div class="oc-card__body">
+                <div class="ods-widget__body">
                     {if corridas.is_empty() {
                         view! {
-                            <p class="oc-muted">
+                            <p class="ods-field__hint">
                                 {crate::i18n::t("science.study.no_executions")}
                             </p>
                         }
@@ -1171,14 +1171,13 @@ pub fn estudo(view: EstudoView) -> impl IntoView {
                                         let onde = maybe(e, "environment")
                                             .or_else(|| maybe(e, "software_name"));
                                         view! {
-                                            <div class="oc-list__row">
+                                            <div>
                                                 <a
-                                                    class="oc-mono"
                                                     href=format!("/executions/{execucao_id}")
                                                 >
                                                     {crate::i18n::tf("science.execution.numbered", &[("sequence", &sequencia.to_string())])}
                                                 </a>
-                                                <span class="oc-fill oc-truncate oc-muted">
+                                                <span class="ods-field__hint">
                                                     {onde.unwrap_or_default()}
                                                 </span>
                                                 {badge(estado.clone(), Tone::of(&estado))}
@@ -1320,7 +1319,7 @@ pub fn nova_execucao(view: NovaExecucaoView) -> impl IntoView {
                             "dataset_version_id",
                             opcoes(dataset_versions, crate::i18n::t("science.execution.no_dataset_version")),
                         )}
-                        <p class="oc-muted">
+                        <p class="ods-field__hint">
                             {crate::i18n::t("science.execution.provenance_hint")}
                         </p>
                     },
@@ -1386,14 +1385,14 @@ pub fn execucao(view: ExecucaoView) -> impl IntoView {
     ];
 
     view! {
-        <div class="oc-band">
-            <div class="oc-row--top oc-gap-11 oc-mb-3">
-                <div class="oc-fill">
-                    <div class="oc-row oc-row--wrap oc-gap-6">
-                        <h1 class="oc-t-screen">{crate::i18n::tf("science.execution.numbered", &[("sequence", &sequencia.to_string())])}</h1>
+        <div>
+            <div>
+                <div>
+                    <div>
+                        <h1 class="ods-page__title">{crate::i18n::tf("science.execution.numbered", &[("sequence", &sequencia.to_string())])}</h1>
                         {badge(estado.clone(), Tone::of(&estado))}
                     </div>
-                    <div class="oc-mono oc-mt-3">
+                    <div>
                         <a href=format!("/studies/{study_id}")>{study_title}</a>
                     </div>
                 </div>
@@ -1414,19 +1413,19 @@ pub fn execucao(view: ExecucaoView) -> impl IntoView {
         </div>
 
         <div class="ods-page">
-            <div class="oc-grid oc-grid--pares">
-                <section class="oc-card" data-part="card">
+            <div>
+                <section class="ods-widget ods-widget-surface" data-part="card">
                     {section_head(crate::i18n::t("science.run_head"), None, None)}
-                    <div class="oc-card__body">
+                    <div class="ods-widget__body">
                         {ficha
                             .into_iter()
                             .filter_map(|(rotulo, valor)| {
                                 valor
                                     .map(|v| {
                                         view! {
-                                            <div class="oc-list__row">
-                                                <span class="oc-muted">{rotulo}</span>
-                                                <span class="oc-fill oc-truncate">{v}</span>
+                                            <div>
+                                                <span class="ods-field__hint">{rotulo}</span>
+                                                <span>{v}</span>
                                             </div>
                                         }
                                     })
@@ -1435,11 +1434,11 @@ pub fn execucao(view: ExecucaoView) -> impl IntoView {
                     </div>
                 </section>
 
-                <section class="oc-card" data-part="card">
+                <section class="ods-widget ods-widget-surface" data-part="card">
                     {section_head(crate::i18n::t("science.execution.produced_head"), None, None)}
-                    <div class="oc-card__body">
+                    <div class="ods-widget__body">
                         {if saidos.is_empty() {
-                            view! { <p class="oc-muted">{crate::i18n::t("science.execution.no_results")}</p> }.into_any()
+                            view! { <p class="ods-field__hint">{crate::i18n::t("science.execution.no_results")}</p> }.into_any()
                         } else {
                             view! {
                                 <div>
@@ -1449,9 +1448,8 @@ pub fn execucao(view: ExecucaoView) -> impl IntoView {
                                             let rid = text(r, "id");
                                             let rtitulo = text(r, "title");
                                             view! {
-                                                <div class="oc-list__row">
+                                                <div>
                                                     <a
-                                                        class="oc-fill oc-truncate oc-t-cell-2"
                                                         href=format!("/results/{rid}")
                                                     >
                                                         {rtitulo}
@@ -1515,7 +1513,7 @@ pub fn novo_resultado(view: NovoResultadoView) -> impl IntoView {
                         {crate::i18n::t("science.result.subtitle")}
                     </p>
                 </div>
-                <div class="oc-mono">
+                <div>
                     {format!(
                         "{study_title} · {}",
                         crate::i18n::tf(
@@ -1527,7 +1525,7 @@ pub fn novo_resultado(view: NovoResultadoView) -> impl IntoView {
             </div>
             {recusa(message)}
 
-            <div class="oc-callout" role="note">
+            <div class="ods-notice" role="note">
                 <strong>{crate::i18n::t("science.result.origin_callout_title")}</strong>
                 <p>
                     {crate::i18n::tf(

@@ -86,7 +86,7 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
     ];
 
     view! {
-        <div class="oc-band" >
+        <div >
             <div class="ods-page__head" >
                 <div>
                     <h1 class="ods-page__title">{crate::i18n::t("nav.compute")}</h1>
@@ -100,7 +100,7 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
         </div>
 
         <div class="ods-page">
-            <section class="oc-card oc-table oc-table--compute oc-mb-5" data-part="card"  data-dense="false">
+            <section class="ods-widget ods-widget-surface ods-table" data-part="card"  data-dense="false">
                 <div class="oc-table__scroll">
                     // O header de colunas do estado futuro fica visível mesmo
                     // sem nós: mostra a forma que os dados terão.
@@ -135,25 +135,25 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
                                     .map_or_else(|| "—".to_owned(), |list| list.len().to_string());
                                 view! {
                                     <div class="oc-table__row" role="row">
-                                        <div class="oc-cell oc-cell--mono">{text(row, "identifier")}</div>
-                                        <div class="oc-cell">{badge(state.clone(), Tone::of(&state))}</div>
-                                        <div class="oc-cell oc-cell--text">
+                                        <div class="ods-num">{text(row, "identifier")}</div>
+                                        <div>{badge(state.clone(), Tone::of(&state))}</div>
+                                        <div>
                                             {text(row, "location_label")}
                                         </div>
-                                        <div class="oc-cell oc-cell--mono">
+                                        <div class="ods-num">
                                             {row
                                                 .get("cpu_cores")
                                                 .and_then(Value::as_i64)
                                                 .map_or_else(|| "—".to_owned(), |n| n.to_string())}
                                         </div>
-                                        <div class="oc-cell oc-cell--mono">
+                                        <div class="ods-num">
                                             {bytes(row, "memory_bytes")}
                                         </div>
-                                        <div class="oc-cell oc-cell--mono">{gpus}</div>
-                                        <div class="oc-cell oc-cell--mono">
+                                        <div class="ods-num">{gpus}</div>
+                                        <div class="ods-num">
                                             {bytes(row, "storage_bytes")}
                                         </div>
-                                        <div class="oc-cell oc-cell--mono">
+                                        <div class="ods-num">
                                             {text(row, "last_seen_at").chars().take(16).collect::<String>()}
                                         </div>
                                     </div>
@@ -166,7 +166,7 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
             </section>
 
             // Métricas a zero, porque zero é o valor verdadeiro.
-            <div class="oc-grid oc-grid--4">
+            <div>
                 {metric(crate::i18n::t("compute.metric.active_jobs"), "0")}
                 {metric(crate::i18n::t("compute.metric.gpu_available"), "0")}
                 {metric(crate::i18n::t("compute.metric.cpu_available"), &online.to_string())}
@@ -179,11 +179,11 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
 fn metric(label: &'static str, value: &str) -> impl IntoView {
     let value = value.to_owned();
     view! {
-        <div class="oc-card oc-card__body" data-part="card" >
-            <div class="oc-t-meta" >
+        <div class="ods-widget ods-widget-surface ods-widget__body" data-part="card" >
+            <div class="ods-label" >
                 {label}
             </div>
-            <div class="oc-t-kpi oc-mt-5" >
+            <div class="ods-d12-metric__value" >
                 {value}
             </div>
         </div>

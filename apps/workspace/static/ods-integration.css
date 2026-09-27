@@ -1,0 +1,16 @@
+/* Integração — cola técnica, não desenho.
+ *
+ * Regras que os pacotes do Claude Design não trazem e sem as quais uma função
+ * que existe deixa de se alcançar. Cada regra aqui é uma pergunta ao Claude
+ * Design (docs/ui/CLAUDE_DESIGN_QUESTIONS.md): adoptar, substituir ou retirar.
+ * Nenhuma escolhe cor, tipografia, raio ou sombra. */
+
+/* Q-25. O botão das aplicações (`.ods-float-apps`, 52px a 16px do canto) fica
+ * por cima de todos os ecrãs e reaparece quando o rato se aproxima do canto —
+ * exactamente quando se vai clicar no que lá está. Fora do Desktop, o conteúdo
+ * que caísse na faixa de baixo (um «Registar» no fim de um formulário curto, ou
+ * qualquer linha de uma lista a rolar) ficava por baixo dele, sem forma de o
+ * alcançar. Fora do Desktop reserva-se a faixa: o conteúdo acaba acima dela, e
+ * o flutuante vive lá. No Desktop (D4) o flutuante está sobre o fundo, como o
+ * desenho o põe. */
+.ods-shell__main:not(:has(> .ods-desktop)) { margin-bottom: 84px; }

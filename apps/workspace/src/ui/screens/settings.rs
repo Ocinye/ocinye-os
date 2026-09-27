@@ -74,9 +74,9 @@ fn text(payload: &Value, key: &str) -> String {
 /// Uma linha de facto, em leitura.
 fn facto(rotulo: &'static str, valor: String) -> impl IntoView {
     view! {
-        <div class="oc-row--between oc-gap-5 oc-list__row">
-            <span class="oc-t-meta">{rotulo}</span>
-            <span class="oc-t-cell">{valor}</span>
+        <div>
+            <span class="ods-label">{rotulo}</span>
+            <span>{valor}</span>
         </div>
     }
 }
@@ -107,7 +107,7 @@ pub fn account(
                 </div>
             </div>
 
-            <div class="oc-tabs oc-tabs--under oc-card__head--flush">
+            <div class="ods-tabs">
                 {pill_tabs(
                     seccoes_das_definicoes("/settings"),
                     crate::i18n::t("settings.tabs.aria"),
@@ -123,7 +123,7 @@ pub fn account(
                     {facto(crate::i18n::t("settings.field.email"), correio)}
                     {facto(crate::i18n::t("settings.field.status"), estado)}
                     {facto(crate::i18n::t("settings.field.institution"), instituicao)}
-                    <p class="oc-muted oc-t-caption--muted oc-mt-5">
+                    <p class="ods-field__hint">
                         {crate::i18n::t("settings.account.managed_note")}
                     </p>
                 },
@@ -150,7 +150,7 @@ pub fn language(saved: bool) -> impl IntoView {
                 </div>
             </div>
 
-            <div class="oc-tabs oc-tabs--under oc-card__head--flush">
+            <div class="ods-tabs">
                 {pill_tabs(
                     seccoes_das_definicoes("/settings/language"),
                     crate::i18n::t("settings.tabs.aria"),
@@ -158,7 +158,7 @@ pub fn language(saved: bool) -> impl IntoView {
             </div>
 
             {saved.then(|| view! {
-                <div class="oc-callout" role="status">
+                <div class="ods-notice" role="status">
                     {crate::i18n::t("settings.language.saved")}
                 </div>
             })}
@@ -167,11 +167,11 @@ pub fn language(saved: bool) -> impl IntoView {
                 section_head(crate::i18n::t("settings.language_region.title"), None, None),
                 view! {
                     <form method="post" action="/settings/language" class="oc-lang">
-                        <p class="oc-t-caption--muted oc-mb-5">
+                        <p class="ods-field__hint">
                             {crate::i18n::t("settings.language.help")}
                         </p>
                         <fieldset class="oc-lang__set">
-                            <legend class="oc-sr">{crate::i18n::t("settings.language.label")}</legend>
+                            <legend class="ods-sr-only">{crate::i18n::t("settings.language.label")}</legend>
                             {Locale::ALL
                                 .into_iter()
                                 .map(|loc| {
@@ -190,8 +190,8 @@ pub fn language(saved: bool) -> impl IntoView {
                                 })
                                 .collect_view()}
                         </fieldset>
-                        <div class="oc-mt-5">
-                            <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
+                        <div>
+                            <button class="ods-btn ods-btn--navy" data-part="btn" type="submit">
                                 {crate::i18n::t("settings.language.save")}
                             </button>
                         </div>
@@ -233,7 +233,7 @@ pub fn apps(viewer: &crate::ui::shell::Viewer, saved: bool) -> impl IntoView {
                 </div>
             </div>
 
-            <div class="oc-tabs oc-tabs--under oc-card__head--flush">
+            <div class="ods-tabs">
                 {pill_tabs(
                     seccoes_das_definicoes("/settings/apps"),
                     crate::i18n::t("settings.tabs.aria"),
@@ -241,7 +241,7 @@ pub fn apps(viewer: &crate::ui::shell::Viewer, saved: bool) -> impl IntoView {
             </div>
 
             {saved.then(|| view! {
-                <div class="oc-callout" role="status">
+                <div class="ods-notice" role="status">
                     {crate::i18n::t("settings.apps.saved")}
                 </div>
             })}
@@ -249,12 +249,12 @@ pub fn apps(viewer: &crate::ui::shell::Viewer, saved: bool) -> impl IntoView {
             {card(
                 section_head(crate::i18n::t("settings.apps.title"), None, None),
                 view! {
-                    <p class="oc-t-caption--muted oc-mb-5">
+                    <p class="ods-field__hint">
                         {crate::i18n::t("settings.apps.help")}
                     </p>
                     {if vazio {
                         view! {
-                            <p class="oc-muted oc-t-caption--muted">
+                            <p class="ods-field__hint">
                                 {crate::i18n::t("settings.apps.empty")}
                             </p>
                         }
@@ -263,7 +263,7 @@ pub fn apps(viewer: &crate::ui::shell::Viewer, saved: bool) -> impl IntoView {
                         view! {
                             <form method="post" action="/settings/apps" class="oc-applist">
                                 <fieldset class="oc-applist__set">
-                                    <legend class="oc-sr">{crate::i18n::t("settings.apps.title")}</legend>
+                                    <legend class="ods-sr-only">{crate::i18n::t("settings.apps.title")}</legend>
                                     {fixaveis
                                         .into_iter()
                                         .map(|app| {
@@ -283,12 +283,12 @@ pub fn apps(viewer: &crate::ui::shell::Viewer, saved: bool) -> impl IntoView {
                                         })
                                         .collect_view()}
                                 </fieldset>
-                                <div class="oc-row oc-gap-5 oc-mt-5">
-                                    <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
+                                <div>
+                                    <button class="ods-btn ods-btn--navy" data-part="btn" type="submit">
                                         {crate::i18n::t("settings.apps.save")}
                                     </button>
                                     <button
-                                        class="oc-btn oc-btn--secondary" data-part="btn"
+                                        class="ods-btn" data-part="btn"
                                         type="submit"
                                         name="action"
                                         value="reset"
@@ -296,7 +296,7 @@ pub fn apps(viewer: &crate::ui::shell::Viewer, saved: bool) -> impl IntoView {
                                         {crate::i18n::t("settings.apps.reset")}
                                     </button>
                                 </div>
-                                <p class="oc-t-caption--muted oc-mt-5">
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("settings.apps.reset_note")}
                                 </p>
                             </form>
@@ -335,15 +335,15 @@ pub fn security(
                 </div>
             </div>
 
-            <div class="oc-tabs oc-tabs--under oc-card__head--flush">
+            <div class="ods-tabs">
                 {pill_tabs(
                     seccoes_das_definicoes("/settings/security"),
                     crate::i18n::t("settings.tabs.aria"),
                 )}
             </div>
 
-            {error.map(|m| view! { <div class="oc-card oc-alert" data-part="card" role="alert">{m}</div> })}
-            {done.map(|m| view! { <div class="oc-callout" role="status">{m}</div> })}
+            {error.map(|m| view! { <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="alert">{m}</div> })}
+            {done.map(|m| view! { <div class="ods-notice" role="status">{m}</div> })}
 
             {card(
                 section_head(crate::i18n::t("settings.password.section"), None, None),
@@ -372,31 +372,31 @@ pub fn security(
                             crate::i18n::t("settings.password.confirm_hint"),
                             "password",
                         )}
-                        <p class="oc-field__hint">
+                        <p class="ods-field__hint">
                             {crate::i18n::t("settings.password.note")}
                         </p>
-                        <div class="oc-row--end oc-gap-5 oc-mt-5">
+                        <div>
                             {button(Button::new(crate::i18n::t("settings.password.change"), Variant::Primary))}
                         </div>
                     </form>
                 },
             )}
 
-            <div class="oc-mt-5"></div>
+            <div></div>
 
             {card(
                 section_head(crate::i18n::t("settings.sessions.section"), None, None),
                 view! {
                     {if !carregou {
                         view! {
-                            <div class="oc-card oc-alert" data-part="card" role="alert">
+                            <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="alert">
                                 {crate::i18n::t("settings.sessions.unreadable")}
                             </div>
                         }
                             .into_any()
                     } else if linhas.is_empty() {
                         view! {
-                            <p class="oc-muted">
+                            <p class="ods-field__hint">
                                 {crate::i18n::t("settings.sessions.none")}
                             </p>
                         }
@@ -422,11 +422,11 @@ pub fn security(
                                             text(s, "ip_prefix"),
                                         );
                                         view! {
-                                            <div class="oc-list__row">
-                                                <span class="oc-fill oc-truncate oc-t-cell">
+                                            <div>
+                                                <span>
                                                     {origem}
                                                 </span>
-                                                <span class="oc-mono oc-list__meta">
+                                                <span>
                                                     {text(s, "last_seen_at")
                                                         .chars()
                                                         .take(16)
@@ -434,7 +434,7 @@ pub fn security(
                                                 </span>
                                                 {if actual {
                                                     view! {
-                                                        <span class="oc-badge oc-badge--ok">
+                                                        <span class="ods-badge ods-badge--success">
                                                             {crate::i18n::t("settings.sessions.current")}
                                                         </span>
                                                     }
@@ -465,7 +465,7 @@ pub fn security(
                         }
                             .into_any()
                     }}
-                    <p class="oc-muted oc-t-caption--muted oc-mt-5">
+                    <p class="ods-field__hint">
                         {crate::i18n::t("settings.sessions.note")}
                     </p>
                 },
@@ -488,15 +488,15 @@ pub fn mfa_recovery(
     let corpo = if let Some(codigos) = codes {
         let linhas = codigos.join("\n");
         view! {
-            <p class="oc-muted">
+            <p class="ods-field__hint">
                 {crate::i18n::t("settings.recovery.new_saved")}
             </p>
-            <pre class="oc-mfa__codes oc-mono" data-oc="recovery-codes">{linhas}</pre>
-            <div class="oc-row oc-gap-3 oc-mt-3">
-                <button type="button" class="oc-btn oc-btn--sm" data-part="btn" data-oc="recovery-copy">
+            <pre class="oc-mfa__codes" data-oc="recovery-codes">{linhas}</pre>
+            <div>
+                <button type="button" class="ods-btn ods-btn--sm" data-part="btn" data-oc="recovery-copy">
                     {crate::i18n::t("settings.recovery.copy")}
                 </button>
-                <button type="button" class="oc-btn oc-btn--sm" data-part="btn" data-oc="recovery-download">
+                <button type="button" class="ods-btn ods-btn--sm" data-part="btn" data-oc="recovery-download">
                     {crate::i18n::t("settings.recovery.download")}
                 </button>
             </div>
@@ -504,15 +504,15 @@ pub fn mfa_recovery(
         .into_any()
     } else if mfa_active {
         view! {
-            <p class="oc-muted">
+            <p class="ods-field__hint">
                 {crate::i18n::t("settings.recovery.regen_intro")}
             </p>
             {error.map(|text| view! {
-                <div class="oc-callout oc-callout--error oc-mt-3" role="alert">{text}</div>
+                <div class="ods-notice ods-notice--error" role="alert">{text}</div>
             })}
-            <form method="post" action="/settings/mfa/regenerate" class="oc-mt-3">
+            <form method="post" action="/settings/mfa/regenerate">
                 <input
-                    class="oc-input oc-mt-3"
+                    class="ods-input"
                     type="password"
                     name="password"
                     autocomplete="current-password"
@@ -520,7 +520,7 @@ pub fn mfa_recovery(
                     placeholder=crate::i18n::t("settings.password.current")
                 />
                 <input
-                    class="oc-input oc-mt-3"
+                    class="ods-input"
                     type="text"
                     name="code"
                     inputmode="numeric"
@@ -528,7 +528,7 @@ pub fn mfa_recovery(
                     required
                     placeholder=crate::i18n::t("settings.recovery.code_ph")
                 />
-                <button class="oc-btn oc-btn--danger oc-mt-3" data-part="btn" type="submit">
+                <button class="ods-btn ods-btn--danger-soft" data-part="btn" type="submit">
                     {crate::i18n::t("settings.recovery.regen_button")}
                 </button>
             </form>
@@ -536,7 +536,7 @@ pub fn mfa_recovery(
         .into_any()
     } else {
         view! {
-            <p class="oc-muted">
+            <p class="ods-field__hint">
                 {crate::i18n::t("settings.recovery.no_mfa")}
             </p>
         }
@@ -546,7 +546,7 @@ pub fn mfa_recovery(
     view! {
         <div class="ods-page">
             <div class="ods-page__head">
-                <h1 class="oc-t-screen">{crate::i18n::t("settings.recovery.title")}</h1>
+                <h1 class="ods-page__title">{crate::i18n::t("settings.recovery.title")}</h1>
             </div>
             {card(section_head(crate::i18n::t("settings.recovery.section"), None, None), corpo)}
         </div>
@@ -620,12 +620,12 @@ fn imagem_de_perfil(
             // com a frase suspensa ao meio.
             {error
                 .map(|razao| {
-                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{razao}</div> }
+                    view! { <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="alert">{razao}</div> }
                 })}
             {done
                 .then(|| {
                     view! {
-                        <div class="oc-card oc-alert oc-alert--ok" data-part="card" role="status">
+                        <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="status">
                             {crate::i18n::t("settings.avatar.updated")}
                         </div>
                     }
@@ -633,21 +633,21 @@ fn imagem_de_perfil(
 
             <div class="oc-avatar-edit">
                 {avatar(&actual, &iniciais, AvatarSize::Large)}
-                <p class="oc-muted oc-t-caption--muted">
+                <p class="ods-field__hint">
                     {crate::i18n::t("settings.avatar.initials_note")}
                 </p>
             </div>
 
-            <p class="oc-field__label oc-mt-8">{crate::i18n::t("settings.avatar.presets_label")}</p>
+            <p class="ods-field__label">{crate::i18n::t("settings.avatar.presets_label")}</p>
             <div class="oc-avatars">{presets}</div>
 
-            <div class="oc-row--end oc-gap-5 oc-mt-8">
+            <div>
                 <form method="post" action="/settings/avatar/initials">
                     {button(Button::new(crate::i18n::t("settings.avatar.use_initials"), Variant::Secondary))}
                 </form>
             </div>
 
-            <p class="oc-field__label oc-mt-8">{crate::i18n::t("settings.avatar.photo_label")}</p>
+            <p class="ods-field__label">{crate::i18n::t("settings.avatar.photo_label")}</p>
             <form
                 method="post"
                 action="/settings/avatar/photo"
@@ -658,7 +658,7 @@ fn imagem_de_perfil(
                     type="file"
                     name="file"
                     id="fotografia"
-                    class="oc-input"
+                    class="ods-input"
                     accept="image/jpeg,image/png,image/webp"
                     required
                 />
@@ -673,7 +673,7 @@ fn imagem_de_perfil(
                     ),
                 )}
             </form>
-            <p class="oc-muted oc-t-caption--muted oc-mt-5">
+            <p class="ods-field__hint">
                 {crate::i18n::t("settings.avatar.photo_note")}
             </p>
         },

@@ -36,13 +36,13 @@ pub fn activity(payload: &Value) -> impl IntoView {
                 </div>
             </div>
 
-            <section class="oc-card" data-part="card">
-                <div class="oc-card__body">
+            <section class="ods-widget ods-widget-surface" data-part="card">
+                <div class="ods-widget__body">
                     {if empty {
-                        view! { <p class="oc-muted">{crate::i18n::t("activity.empty")}</p> }.into_any()
+                        view! { <p class="ods-field__hint">{crate::i18n::t("activity.empty")}</p> }.into_any()
                     } else {
                         view! {
-                            <div class="oc-col" >
+                            <div >
                                 {rows
                                     .iter()
                                     .map(|row| {
@@ -58,17 +58,17 @@ pub fn activity(payload: &Value) -> impl IntoView {
                                                     class="oc-feed__dot"
                                                     data-kind=kind.clone()
                                                 ></i>
-                                                <div class="oc-fill" >
+                                                <div >
                                                     // A linha é composta pelo Core (`summary`) e é
                                                     // conteúdo, não chrome do Workspace. Traduzi-la é
                                                     // uma mudança no Core — emitir o acontecimento
                                                     // como `kind` + sujeito estruturado, e não uma
                                                     // frase já feita —, não deste ecrã (§11, §44).
-                                                    <div class="oc-t-prose" data-oc-content="1">
+                                                    <div data-oc-content="1">
                                                         {text(row, "summary")}
                                                     </div>
-                                                    <div class="oc-row oc-gap-5 oc-mt-2" >
-                                                        <span class="oc-mono oc-t-ghost" >
+                                                    <div >
+                                                        <span class="ods-field__hint" >
                                                             {format!("{} · {when}", text(row, "actor_name"))}
                                                         </span>
                                                         {classification_badge(&text(row, "classification"))}

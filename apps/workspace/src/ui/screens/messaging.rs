@@ -117,7 +117,7 @@ fn presenca(pessoa: &Value) -> impl IntoView {
         let classe = format!("oc-presenca oc-presenca--{estado}");
         view! {
             <span class=classe title=rotulo.clone() data-oc="presenca">
-                <span class="oc-sr">{rotulo.clone()}</span>
+                <span class="ods-sr-only">{rotulo.clone()}</span>
             </span>
         }
     })
@@ -203,7 +203,7 @@ fn linha_da_conversa(
                             };
                             view! {
                                 <span class=classe title=etiqueta.clone()>
-                                    <span class="oc-sr">{etiqueta.clone()}</span>
+                                    <span class="ods-sr-only">{etiqueta.clone()}</span>
                                     <span aria-hidden="true">
                                         {if por_ler > 99 {
                                             "99+".to_owned()
@@ -275,12 +275,12 @@ pub fn messaging(page: &MessagingPage<'_>) -> impl IntoView {
                         <div class="oc-msg__lista-accoes">
                             <button
                                 type="button"
-                                class="oc-btn oc-btn--icone" data-part="btn"
+                                class="ods-btn" data-part="btn"
                                 data-oc="nova-conversa"
                                 aria-haspopup="dialog"
                                 title=crate::i18n::t("messaging.new_conversation")
                             >
-                                <span class="oc-sr">{crate::i18n::t("messaging.new_conversation")}</span>
+                                <span class="ods-sr-only">{crate::i18n::t("messaging.new_conversation")}</span>
                                 {icon(Icon::Plus, 15)}
                             </button>
                         </div>
@@ -362,7 +362,7 @@ fn nova_conversa() -> impl IntoView {
                         data-oc="fechar-nova"
                         title=crate::i18n::t("messaging.close")
                     >
-                        <span class="oc-sr">{crate::i18n::t("messaging.close")}</span>
+                        <span class="ods-sr-only">{crate::i18n::t("messaging.close")}</span>
                         <span aria-hidden="true">"×"</span>
                     </button>
                 </header>
@@ -393,10 +393,10 @@ fn nova_conversa() -> impl IntoView {
                 </div>
 
                 <div class="oc-msg__nova-grupo" data-oc="campo-nome" hidden>
-                    <label class="oc-campo">
-                        <span class="oc-campo__rotulo">{crate::i18n::t("messaging.group_name")}</span>
+                    <label class="ods-field">
+                        <span class="ods-field__label">{crate::i18n::t("messaging.group_name")}</span>
                         <input
-                            class="oc-entrada"
+                            class="ods-input"
                             type="text"
                             data-oc="nome-do-grupo"
                             placeholder=crate::i18n::t("messaging.group_name_placeholder")
@@ -405,10 +405,10 @@ fn nova_conversa() -> impl IntoView {
                     </label>
                 </div>
 
-                <label class="oc-campo">
-                    <span class="oc-campo__rotulo">{crate::i18n::t("messaging.search_person")}</span>
+                <label class="ods-field">
+                    <span class="ods-field__label">{crate::i18n::t("messaging.search_person")}</span>
                     <input
-                        class="oc-entrada"
+                        class="ods-input"
                         type="search"
                         data-oc="procurar-pessoa"
                         placeholder=crate::i18n::t("messaging.person_placeholder")
@@ -437,14 +437,14 @@ fn nova_conversa() -> impl IntoView {
                 <footer class="oc-msg__nova-accoes">
                     <button
                         type="button"
-                        class="oc-btn oc-btn--secondary oc-btn--sm" data-part="btn"
+                        class="ods-btn ods-btn--sm" data-part="btn"
                         data-oc="fechar-nova"
                     >
                         {crate::i18n::t("action.cancel")}
                     </button>
                     <button
                         type="button"
-                        class="oc-btn oc-btn--primary oc-btn--sm" data-part="btn"
+                        class="ods-btn ods-btn--navy ods-btn--sm" data-part="btn"
                         data-oc="criar-conversa"
                         disabled
                     >
@@ -615,7 +615,7 @@ fn cabecalho(
                     view! {
                         <button
                             type="button"
-                            class="oc-btn oc-btn--secondary oc-btn--sm" data-part="btn"
+                            class="ods-btn ods-btn--sm" data-part="btn"
                             data-oc="detalhes-do-grupo"
                             aria-expanded="false"
                             aria-controls=format!("detalhes-{id}")
@@ -664,7 +664,7 @@ fn detalhes_do_grupo(id: &str, participantes: &[Value], governa: bool) -> impl I
                                         view! {
                                             <button
                                                 type="button"
-                                                class="oc-btn oc-btn--ghost oc-btn--sm" data-part="btn"
+                                                class="ods-btn ods-btn--ghost ods-btn--sm" data-part="btn"
                                                 data-oc="retirar"
                                                 data-oc-quem=quem
                                                 title=crate::i18n::tf("messaging.remove_named", &[("name", nome.as_str())])
@@ -685,14 +685,14 @@ fn detalhes_do_grupo(id: &str, participantes: &[Value], governa: bool) -> impl I
                         view! {
                             <button
                                 type="button"
-                                class="oc-btn oc-btn--secondary oc-btn--sm" data-part="btn"
+                                class="ods-btn ods-btn--sm" data-part="btn"
                                 data-oc="acrescentar-membro"
                             >
                                 {crate::i18n::t("messaging.add_someone")}
                             </button>
                         }
                     })}
-                <button type="button" class="oc-btn oc-btn--ghost oc-btn--sm" data-part="btn" data-oc="sair">
+                <button type="button" class="ods-btn ods-btn--ghost ods-btn--sm" data-part="btn" data-oc="sair">
                     {crate::i18n::t("messaging.leave_group")}
                 </button>
             </div>
@@ -898,7 +898,7 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
                     data-oc="responder"
                     title=crate::i18n::t("messaging.reply")
                 >
-                    <span class="oc-sr">{crate::i18n::t("messaging.reply")}</span>
+                    <span class="ods-sr-only">{crate::i18n::t("messaging.reply")}</span>
                     {icon(Icon::Reply, 14)}
                 </button>
                 <button
@@ -908,11 +908,11 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
                     title=crate::i18n::t("messaging.react")
                     aria-haspopup="menu"
                 >
-                    <span class="oc-sr">{crate::i18n::t("messaging.react")}</span>
+                    <span class="ods-sr-only">{crate::i18n::t("messaging.react")}</span>
                     <span aria-hidden="true">"☺"</span>
                 </button>
                 <button type="button" class="oc-msg__accao" data-oc="copiar" title=crate::i18n::t("messaging.copy_text")>
-                    <span class="oc-sr">{crate::i18n::t("messaging.copy_text")}</span>
+                    <span class="ods-sr-only">{crate::i18n::t("messaging.copy_text")}</span>
                     {icon(Icon::Archive, 14)}
                 </button>
             </div>
@@ -963,7 +963,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                     data-oc="cancelar-resposta"
                     title=crate::i18n::t("messaging.stop_replying")
                 >
-                    <span class="oc-sr">{crate::i18n::t("messaging.stop_replying")}</span>
+                    <span class="ods-sr-only">{crate::i18n::t("messaging.stop_replying")}</span>
                     <span aria-hidden="true">"×"</span>
                 </button>
             </div>
@@ -979,14 +979,14 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                 <div class="oc-msg__sugestao-accoes">
                     <button
                         type="button"
-                        class="oc-btn oc-btn--primary oc-btn--sm" data-part="btn"
+                        class="ods-btn ods-btn--navy ods-btn--sm" data-part="btn"
                         data-oc="usar-sugestao"
                     >
                         {crate::i18n::t("messaging.use_suggestion")}
                     </button>
                     <button
                         type="button"
-                        class="oc-btn oc-btn--ghost oc-btn--sm" data-part="btn"
+                        class="ods-btn ods-btn--ghost ods-btn--sm" data-part="btn"
                         data-oc="manter-original"
                     >
                         {crate::i18n::t("messaging.keep_original")}
@@ -995,7 +995,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
             </div>
 
             <div class="oc-msg__caixa">
-                <label class="oc-sr" for="oc-msg-texto">{crate::i18n::t("messaging.write")}</label>
+                <label class="ods-sr-only" for="oc-msg-texto">{crate::i18n::t("messaging.write")}</label>
                 <textarea
                     id="oc-msg-texto"
                     class="oc-msg__entrada"
@@ -1014,7 +1014,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                         aria-expanded="false"
                         title=crate::i18n::t("messaging.emoji_aria")
                     >
-                        <span class="oc-sr">{crate::i18n::t("messaging.choose_emoji")}</span>
+                        <span class="ods-sr-only">{crate::i18n::t("messaging.choose_emoji")}</span>
                         <span aria-hidden="true">"☺"</span>
                     </button>
 
@@ -1030,7 +1030,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                                         aria-expanded="false"
                                         title="Ocinye"
                                     >
-                                        <span class="oc-sr">
+                                        <span class="ods-sr-only">
                                             {crate::i18n::t("messaging.ask_ocinye")}
                                         </span>
                                         <span aria-hidden="true">"✦"</span>
@@ -1064,7 +1064,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
 
                     <button
                         type="button"
-                        class="oc-btn oc-btn--primary oc-btn--sm oc-msg__enviar" data-part="btn"
+                        class="ods-btn ods-btn--navy ods-btn--sm oc-msg__enviar" data-part="btn"
                         data-oc="enviar"
                     >
                         {crate::i18n::t("messaging.send")}
@@ -1073,13 +1073,13 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
             </div>
 
             <p class="oc-msg__ajuda" id="oc-msg-ajuda">
-                <kbd class="oc-kbd">{crate::i18n::t("messaging.kbd.enter")}</kbd>
+                <kbd class="ods-kbd">{crate::i18n::t("messaging.kbd.enter")}</kbd>
                 {crate::i18n::t("messaging.hint.sends")}
-                <kbd class="oc-kbd">{crate::i18n::t("messaging.kbd.shift")}</kbd>
+                <kbd class="ods-kbd">{crate::i18n::t("messaging.kbd.shift")}</kbd>
                 "+"
-                <kbd class="oc-kbd">{crate::i18n::t("messaging.kbd.enter")}</kbd>
+                <kbd class="ods-kbd">{crate::i18n::t("messaging.kbd.enter")}</kbd>
                 {crate::i18n::t("messaging.hint.newline")}
-                <kbd class="oc-kbd">"@"</kbd>
+                <kbd class="ods-kbd">"@"</kbd>
                 {crate::i18n::t("messaging.hint.mentions")}
             </p>
 
@@ -1102,7 +1102,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                                 title=nome
                             >
                                 <span aria-hidden="true">{caracter}</span>
-                                <span class="oc-sr">{nome}</span>
+                                <span class="ods-sr-only">{nome}</span>
                             </button>
                         }
                     })

@@ -344,7 +344,7 @@ pub fn calendar(page: &CalendarPage<'_>) -> impl IntoView {
                     </p>
                 </div>
                 {may_create.then(|| view! {
-                    <a class="oc-btn oc-btn--primary" data-part="btn" href="/calendar/events/new">
+                    <a class="ods-btn ods-btn--navy" data-part="btn" href="/calendar/events/new">
                         {crate::i18n::t("calendar.new_activity_cta")}
                     </a>
                 })}
@@ -356,7 +356,7 @@ pub fn calendar(page: &CalendarPage<'_>) -> impl IntoView {
                 // Um erro é um erro. Dizer «nenhuma actividade» quando a consulta
                 // falhou faria alguém faltar a uma reunião por acreditar no ecrã.
                 Some(motivo) => view! {
-                    <div class="oc-alert oc-alert--error" data-part="alert--error" role="alert">
+                    <div class="ods-notice ods-notice--error" data-part="alert--error" role="alert">
                         <strong>{crate::i18n::t("calendar.unreadable")}</strong>
                         <span>{motivo.clone()}</span>
                     </div>
@@ -1405,15 +1405,15 @@ pub fn event_form(
             </header>
 
             {error.map(|motivo| view! {
-                <div class="oc-alert oc-alert--error" data-part="alert--error" role="alert">{motivo}</div>
+                <div class="ods-notice ods-notice--error" data-part="alert--error" role="alert">{motivo}</div>
             })}
 
             <form class="oc-editor__form" data-part="editor__form" method="post" action=accao data-oc="editor">
                 <section class="oc-editor__bloco">
-                    <label class="oc-campo oc-campo--principal">
-                        <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.title")}</span>
+                    <label class="ods-field">
+                        <span class="ods-field__label">{crate::i18n::t("calendar.field.title")}</span>
                         <input
-                            class="oc-entrada oc-entrada--titulo"
+                            class="ods-input"
                             name="title"
                             required=true
                             value=titulo
@@ -1423,16 +1423,16 @@ pub fn event_form(
                         />
                     </label>
 
-                    <label class="oc-campo">
-                        <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.description")}</span>
-                        <textarea class="oc-entrada oc-entrada--texto" name="description" rows="3">
+                    <label class="ods-field">
+                        <span class="ods-field__label">{crate::i18n::t("calendar.field.description")}</span>
+                        <textarea class="ods-input" name="description" rows="3">
                         </textarea>
                     </label>
 
-                    <label class="oc-campo">
-                        <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.location")}</span>
+                    <label class="ods-field">
+                        <span class="ods-field__label">{crate::i18n::t("calendar.field.location")}</span>
                         <input
-                            class="oc-entrada"
+                            class="ods-input"
                             name="location"
                             maxlength="255"
                             placeholder=crate::i18n::t("calendar.field.location_placeholder")
@@ -1450,20 +1450,20 @@ pub fn event_form(
                     </label>
 
                     <div class="oc-quando" data-oc="timed-fields">
-                        <label class="oc-campo">
-                            <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.start")}</span>
+                        <label class="ods-field">
+                            <span class="ods-field__label">{crate::i18n::t("calendar.field.start")}</span>
                             <input
-                                class="oc-entrada"
+                                class="ods-input"
                                 type="datetime-local"
                                 name="starts_at"
                                 value=inicio_proposto
                                 data-oc="inicio"
                             />
                         </label>
-                        <label class="oc-campo">
-                            <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.end")}</span>
+                        <label class="ods-field">
+                            <span class="ods-field__label">{crate::i18n::t("calendar.field.end")}</span>
                             <input
-                                class="oc-entrada"
+                                class="ods-input"
                                 type="datetime-local"
                                 name="ends_at"
                                 value=fim_proposto
@@ -1473,21 +1473,21 @@ pub fn event_form(
                     </div>
 
                     <div class="oc-quando" data-oc="allday-fields" hidden>
-                        <label class="oc-campo">
-                            <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.first_day")}</span>
+                        <label class="ods-field">
+                            <span class="ods-field__label">{crate::i18n::t("calendar.field.first_day")}</span>
                             <input
-                                class="oc-entrada"
+                                class="ods-input"
                                 type="date"
                                 name="starts_on"
                                 value=hoje.to_string()
                             />
                         </label>
-                        <label class="oc-campo">
-                            <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.last_day")}</span>
+                        <label class="ods-field">
+                            <span class="ods-field__label">{crate::i18n::t("calendar.field.last_day")}</span>
                             // Inclusivo aqui, exclusivo na base. A pessoa escreve o
                             // último dia do evento; a conversão é nossa.
                             <input
-                                class="oc-entrada"
+                                class="ods-input"
                                 type="date"
                                 name="ends_on"
                                 value=hoje.to_string()
@@ -1514,10 +1514,10 @@ pub fn event_form(
                     <section class="oc-editor__bloco" data-oc="participantes">
                         <h2 class="oc-editor__seccao">{crate::i18n::t("calendar.section.participants")}</h2>
 
-                        <label class="oc-campo oc-campo--estreito">
-                            <span class="oc-campo__rotulo">{crate::i18n::t("calendar.search_person")}</span>
+                        <label class="ods-field">
+                            <span class="ods-field__label">{crate::i18n::t("calendar.search_person")}</span>
                             <input
-                                class="oc-entrada"
+                                class="ods-input"
                                 type="search"
                                 data-oc="procura-pessoa"
                                 placeholder=crate::i18n::t("calendar.person_placeholder")
@@ -1560,9 +1560,9 @@ pub fn event_form(
                     <section class="oc-editor__bloco">
                         <h2 class="oc-editor__seccao">{crate::i18n::t("calendar.belongs_to")}</h2>
 
-                        <label class="oc-campo oc-campo--estreito">
-                            <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.scope")}</span>
-                            <select class="oc-entrada" name="scope" data-oc="scope">
+                        <label class="ods-field">
+                            <span class="ods-field__label">{crate::i18n::t("calendar.field.scope")}</span>
+                            <select class="ods-input" name="scope" data-oc="scope">
                                 <option value="personal">{crate::i18n::t("calendar.scope.personal")}</option>
                                 {ha_unidades.then(|| view! {
                                     <option value="unit">{crate::i18n::t("calendar.scope.unit")}</option>
@@ -1577,9 +1577,9 @@ pub fn event_form(
                         </label>
 
                         {ha_unidades.then(|| view! {
-                            <label class="oc-campo oc-campo--estreito" data-oc="unit-field" hidden>
-                                <span class="oc-campo__rotulo">{crate::i18n::t("calendar.scope.unit")}</span>
-                                <select class="oc-entrada" name="unit_id">
+                            <label class="ods-field" data-oc="unit-field" hidden>
+                                <span class="ods-field__label">{crate::i18n::t("calendar.scope.unit")}</span>
+                                <select class="ods-input" name="unit_id">
                                     {unidades.into_iter().map(|(id, nome)| view! {
                                         <option value=id>{nome}</option>
                                     }).collect_view()}
@@ -1589,12 +1589,12 @@ pub fn event_form(
 
                         {ha_ambientes.then(|| view! {
                             <label
-                                class="oc-campo oc-campo--estreito"
+                                class="ods-field"
                                 data-oc="workspace-field"
                                 hidden
                             >
-                                <span class="oc-campo__rotulo">{crate::i18n::t("calendar.belongs.environment")}</span>
-                                <select class="oc-entrada" name="workspace_id">
+                                <span class="ods-field__label">{crate::i18n::t("calendar.belongs.environment")}</span>
+                                <select class="ods-input" name="workspace_id">
                                     {ambientes.into_iter().map(|(id, nome)| view! {
                                         <option value=id>{nome}</option>
                                     }).collect_view()}
@@ -1605,8 +1605,8 @@ pub fn event_form(
                 })}
 
                 <footer class="oc-editor__accoes">
-                    <a class="oc-btn oc-btn--ghost" data-part="btn" href=CALENDAR_ROUTE>{crate::i18n::t("calendar.cancel")}</a>
-                    <button type="submit" class="oc-btn oc-btn--primary" data-part="btn" data-oc="submeter">
+                    <a class="ods-btn ods-btn--ghost" data-part="btn" href=CALENDAR_ROUTE>{crate::i18n::t("calendar.cancel")}</a>
+                    <button type="submit" class="ods-btn ods-btn--navy" data-part="btn" data-oc="submeter">
                         {if a_alterar {
                             crate::i18n::t("calendar.save_changes")
                         } else {
@@ -1652,9 +1652,9 @@ pub fn event_detail(event: &Value, may_change: bool, zona: TimeZoneName) -> impl
                 </div>
                 {(may_change && !cancelado).then(|| view! {
                     <div>
-                        <a class="oc-btn" data-part="btn" href=format!("/calendar/events/{id}/edit")>{crate::i18n::t("calendar.edit")}</a>
+                        <a class="ods-btn" data-part="btn" href=format!("/calendar/events/{id}/edit")>{crate::i18n::t("calendar.edit")}</a>
                         <form method="post" action=format!("/calendar/events/{id}/cancel")>
-                            <button type="submit" class="oc-btn oc-btn--danger" data-part="btn">{crate::i18n::t("calendar.cancel")}</button>
+                            <button type="submit" class="ods-btn ods-btn--danger-soft" data-part="btn">{crate::i18n::t("calendar.cancel")}</button>
                         </form>
                     </div>
                 })}
@@ -1663,12 +1663,12 @@ pub fn event_detail(event: &Value, may_change: bool, zona: TimeZoneName) -> impl
             {cancelado.then(|| view! {
                 // Cancelado continua visível. Um evento que desaparece não avisa
                 // quem o esperava.
-                <div class="oc-alert oc-alert--warning" role="status">
+                <div class="ods-notice ods-notice--warning" role="status">
                     {crate::i18n::t("calendar.cancelled_note")}
                 </div>
             })}
 
-            <dl class="oc-detail">
+            <dl>
                 <dt>{crate::i18n::t("calendar.section.when")}</dt>
                 <dd>{item.as_ref().map(|i| i.when(zona)).unwrap_or_default()}</dd>
                 {(!campo("timezone").is_empty()).then(|| view! {
@@ -1731,13 +1731,13 @@ pub fn notifications(payload: &Value, failure: Option<String>) -> impl IntoView 
 
             {match failure {
                 Some(motivo) => view! {
-                    <div class="oc-alert oc-alert--error" data-part="alert--error" role="alert">
+                    <div class="ods-notice ods-notice--error" data-part="alert--error" role="alert">
                         <strong>{crate::i18n::t("notifications.unreadable")}</strong>
                         <span>{motivo}</span>
                     </div>
                 }.into_any(),
                 None if vazio => view! {
-                    <div class="oc-empty"><p>{crate::i18n::t("notifications.empty")}</p></div>
+                    <div class="ods-empty"><p>{crate::i18n::t("notifications.empty")}</p></div>
                 }.into_any(),
                 None => view! {
                     <ul class="oc-notifications">
@@ -1770,11 +1770,11 @@ pub fn notifications(payload: &Value, failure: Option<String>) -> impl IntoView 
                                     })}
                                     <span class="oc-notification__actions">
                                         {destino.map(|href| view! {
-                                            <a class="oc-btn oc-btn--ghost" data-part="btn" href=href>{crate::i18n::t("calendar.open_item")}</a>
+                                            <a class="ods-btn ods-btn--ghost" data-part="btn" href=href>{crate::i18n::t("calendar.open_item")}</a>
                                         })}
                                         {(!lida).then(|| view! {
                                             <form method="post" action=format!("/notifications/{id}/read")>
-                                                <button type="submit" class="oc-btn oc-btn--ghost" data-part="btn">
+                                                <button type="submit" class="ods-btn ods-btn--ghost" data-part="btn">
                                                     {crate::i18n::t("notifications.mark_read")}
                                                 </button>
                                             </form>

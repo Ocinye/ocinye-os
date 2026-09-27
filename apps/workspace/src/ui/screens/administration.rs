@@ -100,16 +100,16 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
 
             {message
                 .map(|text| {
-                    view! { <div class="oc-callout oc-callout--error" role="alert">{text}</div> }
+                    view! { <div class="ods-notice ods-notice--error" role="alert">{text}</div> }
                 })}
 
-            <form method="post" action="/admin/members/new" class="oc-split oc-split--2">
-                <section class="oc-card" data-part="card">
-                    <div class="oc-card__head"><h2>{crate::i18n::t("admin.new.identity")}</h2></div>
-                    <div class="oc-card__body">
-                        <div class="oc-field">
-                            <label class="oc-field__label" for="m-name">{crate::i18n::t("admin.new.full_name")}</label>
-                            <input class="oc-input" id="m-name" name="full_name" required
+            <form method="post" action="/admin/members/new">
+                <section class="ods-widget ods-widget-surface" data-part="card">
+                    <div class="ods-widget__head"><h2>{crate::i18n::t("admin.new.identity")}</h2></div>
+                    <div class="ods-widget__body">
+                        <div class="ods-field">
+                            <label class="ods-field__label" for="m-name">{crate::i18n::t("admin.new.full_name")}</label>
+                            <input class="ods-input" id="m-name" name="full_name" required
                                    placeholder=crate::i18n::t("admin.new.full_name_ph") />
                         </div>
                         // Um campo, e não dois.
@@ -124,14 +124,14 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                         // O efeito era pior do que desarrumação: nenhum
                         // endereço válido passava a validação do browser, e
                         // ninguém conseguia criar um membro por este ecrã.
-                        <div class="oc-field">
-                            <label class="oc-field__label" for="m-email">
+                        <div class="ods-field">
+                            <label class="ods-field__label" for="m-email">
                                 {crate::i18n::t("login.institutional_address")}
                             </label>
-                            <input class="oc-input" id="m-email" name="email" type="email" required
+                            <input class="ods-input" id="m-email" name="email" type="email" required
                                    autocapitalize="none" spellcheck="false"
                                    placeholder=crate::i18n::t("admin.new.email_ph") />
-                            <p class="oc-field__hint">
+                            <p class="ods-field__hint">
                                 {crate::i18n::t("admin.new.email_hint")}
                             </p>
                         </div>
@@ -139,14 +139,14 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                 </section>
 
                 <div>
-                    <section class="oc-card oc-mb-5" data-part="card">
-                        <div class="oc-card__head"><h2>{crate::i18n::t("admin.new.organisation")}</h2></div>
-                        <div class="oc-card__body">
-                            <div class="oc-field">
-                                <label class="oc-field__label" for="m-position">
+                    <section class="ods-widget ods-widget-surface" data-part="card">
+                        <div class="ods-widget__head"><h2>{crate::i18n::t("admin.new.organisation")}</h2></div>
+                        <div class="ods-widget__body">
+                            <div class="ods-field">
+                                <label class="ods-field__label" for="m-position">
                                     {crate::i18n::t("admin.position.label")}
                                 </label>
-                                <select class="oc-select" id="m-position" name="position">
+                                <select class="ods-input" id="m-position" name="position">
                                     <option value="">"—"</option>
                                     {POSITIONS
                                         .iter()
@@ -155,16 +155,16 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                                         })
                                         .collect_view()}
                                 </select>
-                                <p class="oc-field__hint">
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("admin.new.position_truth")}
                                     <strong>{crate::i18n::t("admin.new.position_no_access")}</strong>
                                 </p>
                             </div>
 
-                            <div class="oc-field">
-                                <label class="oc-field__label" for="m-unit">{crate::i18n::t("admin.new.initial_unit")}</label>
+                            <div class="ods-field">
+                                <label class="ods-field__label" for="m-unit">{crate::i18n::t("admin.new.initial_unit")}</label>
                                 <select
-                                    class="oc-select"
+                                    class="ods-input"
                                     id="m-unit"
                                     name="unit_id"
                                     disabled=!has_units
@@ -191,12 +191,12 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                         </div>
                     </section>
 
-                    <section class="oc-card oc-mb-5" data-part="card">
-                        <div class="oc-card__head"><h2>{crate::i18n::t("admin.new.access")}</h2></div>
-                        <div class="oc-card__body">
-                            <div class="oc-field">
-                                <label class="oc-field__label" for="m-role">{crate::i18n::t("admin.role.technical")}</label>
-                                <select class="oc-select" id="m-role" name="role" required>
+                    <section class="ods-widget ods-widget-surface" data-part="card">
+                        <div class="ods-widget__head"><h2>{crate::i18n::t("admin.new.access")}</h2></div>
+                        <div class="ods-widget__body">
+                            <div class="ods-field">
+                                <label class="ods-field__label" for="m-role">{crate::i18n::t("admin.role.technical")}</label>
+                                <select class="ods-input" id="m-role" name="role" required>
                                     {roles::OFERECIDOS
                                         .into_iter()
                                         .map(|role| {
@@ -208,28 +208,28 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                                         })
                                         .collect_view()}
                                 </select>
-                                <p class="oc-field__hint">
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("admin.new.role_hint")}
                                 </p>
                             </div>
                         </div>
                     </section>
 
-                    <section class="oc-card oc-mb-5" data-part="card">
-                        <div class="oc-card__body oc-card__body--subtle">
-                            <div class="oc-row oc-gap-5">
+                    <section class="ods-widget ods-widget-surface" data-part="card">
+                        <div class="ods-widget__body">
+                            <div>
                                 {icon(Icon::Shield, 14)}
                                 <strong>{crate::i18n::t("admin.new.whats_next")}</strong>
                             </div>
-                            <p class="oc-muted">
+                            <p class="ods-field__hint">
                                 {crate::i18n::t("admin.new.whats_next_body")}
                             </p>
                         </div>
                     </section>
 
-                    <div class="oc-row oc-gap-5 oc-justify-end">
+                    <div>
                         {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/admin"))}
-                        <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{crate::i18n::t("admin.new.submit")}</button>
+                        <button type="submit" class="ods-btn ods-btn--navy" data-part="btn">{crate::i18n::t("admin.new.submit")}</button>
                     </div>
                 </div>
             </form>
@@ -255,16 +255,16 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
                 </div>
             </div>
 
-            <section class="oc-card oc-credential" data-part="card">
-                <div class="oc-card__body">
-                    <div class="oc-field">
-                        <span class="oc-field__label">{crate::i18n::t("login.institutional_address")}</span>
-                        <div class="oc-credential__value oc-mono" data-part="credential__value">{email}</div>
+            <section class="ods-widget ods-widget-surface oc-credential" data-part="card">
+                <div class="ods-widget__body">
+                    <div class="ods-field">
+                        <span class="ods-field__label">{crate::i18n::t("login.institutional_address")}</span>
+                        <div class="oc-credential__value" data-part="credential__value">{email}</div>
                     </div>
 
-                    <div class="oc-field">
-                        <span class="oc-field__label">{crate::i18n::t("admin.issued.temp_password")}</span>
-                        <div class="oc-credential__value oc-mono" data-part="credential__value">
+                    <div class="ods-field">
+                        <span class="ods-field__label">{crate::i18n::t("admin.issued.temp_password")}</span>
+                        <div class="oc-credential__value" data-part="credential__value">
                             // Coberta por omissão: uma credencial não deve ficar
                             // visível num ecrã que alguém pode estar a partilhar.
                             <span
@@ -274,10 +274,10 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
                             >
                                 "••••••••••••••••••••••••••••"
                             </span>
-                            <span class="oc-row oc-gap-5">
+                            <span>
                                 <button
                                     type="button"
-                                    class="oc-btn oc-btn--secondary" data-part="btn"
+                                    class="ods-btn" data-part="btn"
                                     data-oc="secret-toggle"
                                     aria-pressed="false"
                                 >
@@ -285,7 +285,7 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
                                 </button>
                                 <button
                                     type="button"
-                                    class="oc-btn oc-btn--secondary" data-part="btn"
+                                    class="ods-btn" data-part="btn"
                                     data-oc="secret-copy"
                                 >
                                     {crate::i18n::t("mfa.copy_short")}
@@ -294,19 +294,19 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
                         </div>
                     </div>
 
-                    <div class="oc-field">
-                        <span class="oc-field__label">{crate::i18n::t("admin.issued.valid_until")}</span>
-                        <div class="oc-credential__value oc-mono" data-part="credential__value">{expires}" UTC"</div>
+                    <div class="ods-field">
+                        <span class="ods-field__label">{crate::i18n::t("admin.issued.valid_until")}</span>
+                        <div class="oc-credential__value" data-part="credential__value">{expires}" UTC"</div>
                     </div>
 
-                    <div class="oc-callout oc-callout--warning" role="alert">
+                    <div class="ods-notice ods-notice--warning" role="alert">
                         <strong>{crate::i18n::t("admin.issued.shown_once")}</strong>
                         {crate::i18n::t("admin.issued.transmit_note")}
                     </div>
                 </div>
             </section>
 
-            <div class="oc-row oc-gap-5">
+            <div>
                 {button(Button::new(crate::i18n::t("admin.issued.done"), Variant::Primary).href("/admin"))}
             </div>
         </div>
@@ -371,11 +371,11 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
     let pid_sessao = person_id.to_owned();
 
     view! {
-        <div class="oc-split oc-split--2">
+        <div>
             {card(
                 section_head(crate::i18n::t("admin.security.credential"), None, None),
                 view! {
-                    <dl class="oc-facts">
+                    <dl>
                         <dt>{crate::i18n::t("admin.account.status")}</dt>
                         <dd>{badge(status.clone(), Tone::of(&status))}</dd>
 
@@ -389,12 +389,12 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                         </dd>
 
                         <dt>{crate::i18n::t("admin.password.set_at")}</dt>
-                        <dd class="oc-mono">{changed}</dd>
+                        <dd>{changed}</dd>
 
                         <dt>{crate::i18n::t("admin.credential.temporary")}</dt>
                         <dd>
                             {if !tem_temporaria {
-                                view! { <span class="oc-mono">"—"</span> }.into_any()
+                                view! { <span>"—"</span> }.into_any()
                             } else if temporary_expired {
                                 badge(
                                     crate::i18n::tf(
@@ -406,7 +406,7 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                                     .into_any()
                             } else {
                                 view! {
-                                    <span class="oc-mono">
+                                    <span>
                                         {crate::i18n::t("admin.credential.expires_prefix")}
                                         {temporary_expiry.clone()}
                                     </span>
@@ -416,10 +416,10 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                         </dd>
 
                         <dt>{crate::i18n::t("admin.last_sign_in")}</dt>
-                        <dd class="oc-mono">{last_sign_in}</dd>
+                        <dd>{last_sign_in}</dd>
 
                         <dt>{crate::i18n::t("admin.recent_failures")}</dt>
-                        <dd class="oc-mono">{failures.to_string()}</dd>
+                        <dd>{failures.to_string()}</dd>
                     </dl>
                 },
             )}
@@ -431,7 +431,7 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                     Some(session_count.to_string()),
                 ),
                 if sessions.is_empty() {
-                    view! { <p class="oc-muted">{crate::i18n::t("admin.sessions.none")}</p> }.into_any()
+                    view! { <p class="ods-field__hint">{crate::i18n::t("admin.sessions.none")}</p> }.into_any()
                 } else {
                     view! {
                         <div>
@@ -445,18 +445,18 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                                     );
                                     let revogavel = pode_gerir && id != "—";
                                     view! {
-                                        <div class="oc-list__row">
-                                            <span class="oc-fill oc-truncate">
+                                        <div>
+                                            <span>
                                                 {text(session, "user_agent").to_owned()}
                                             </span>
                                             {badge(state.clone(), Tone::of(&state))}
-                                            <span class="oc-mono oc-list__meta">
+                                            <span>
                                                 {text(session, "ip_prefix").to_owned()}
                                             </span>
                                             {revogavel.then(|| view! {
                                                 <form method="post" action=accao_revogar>
                                                     <button
-                                                        class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn"
+                                                        class="ods-btn ods-btn--sm ods-btn--danger-soft" data-part="btn"
                                                         type="submit"
                                                     >
                                                         {crate::i18n::t("admin.action.revoke")}
@@ -477,12 +477,12 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
         {(pode_provisionar || recusa.is_some())
             .then(|| {
                 view! {
-                    <div class="oc-mt-6">
+                    <div>
                         {card(
                             section_head(rotulo_acesso, None, None),
                             view! {
                                 <div>
-                                    <p class="oc-muted">
+                                    <p class="ods-field__hint">
                                         {if reemitir {
                                             crate::i18n::t("admin.access.reissue_note")
                                         } else {
@@ -493,7 +493,7 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                                         .clone()
                                         .map(|texto| view! {
                                                 <div
-                                                    class="oc-callout oc-callout--error oc-mt-3"
+                                                    class="ods-notice ods-notice--error"
                                                     role="alert"
                                                 >
                                                     {texto}
@@ -502,8 +502,8 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                                     {pode_provisionar
                                         .then(|| {
                                             view! {
-                                                <form method="post" action=accao.clone() class="oc-mt-3">
-                                                    <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
+                                                <form method="post" action=accao.clone()>
+                                                    <button class="ods-btn ods-btn--navy" data-part="btn" type="submit">
                                                         {rotulo_acesso}
                                                     </button>
                                                 </form>
@@ -558,14 +558,14 @@ pub fn access_tab(access: &Value) -> impl IntoView {
     let grant_count = grants.len();
 
     view! {
-        <div class="oc-split oc-split--2">
+        <div>
             {card(
                 section_head(crate::i18n::t("admin.roles.technical"), None, None),
                 if roles.is_empty() {
-                    view! { <p class="oc-muted">{crate::i18n::t("admin.roles.none_assigned")}</p> }.into_any()
+                    view! { <p class="ods-field__hint">{crate::i18n::t("admin.roles.none_assigned")}</p> }.into_any()
                 } else {
                     view! {
-                        <div class="oc-row oc-gap-5 oc-wrap">
+                        <div>
                             {roles
                                 .into_iter()
                                 .map(|role| {
@@ -586,7 +586,7 @@ pub fn access_tab(access: &Value) -> impl IntoView {
                 section_head(crate::i18n::t("admin.grants.explicit"), None, Some(grant_count.to_string())),
                 if grants.is_empty() {
                     view! {
-                        <p class="oc-muted">
+                        <p class="ods-field__hint">
                             {crate::i18n::t("admin.grants.none")}
                         </p>
                     }
@@ -599,11 +599,11 @@ pub fn access_tab(access: &Value) -> impl IntoView {
                                 .map(|grant| {
                                     let revoked = grant.get("revoked_at").is_some_and(|v| !v.is_null());
                                     view! {
-                                        <div class="oc-list__row">
-                                            <span class="oc-fill oc-mono oc-truncate">
+                                        <div>
+                                            <span>
                                                 {text(grant, "permission").to_owned()}
                                             </span>
-                                            <span class="oc-mono oc-list__meta">
+                                            <span>
                                                 {text(grant, "scope").to_owned()}
                                             </span>
                                             {badge(
@@ -625,29 +625,29 @@ pub fn access_tab(access: &Value) -> impl IntoView {
                 },
             )}
 
-            <section class="oc-card oc-span-2" data-part="card">
+            <section class="ods-widget ods-widget-surface" data-part="card">
                 {section_head(
                     crate::i18n::t("admin.permissions.institutional"),
                     None,
                     Some(permission_count.to_string()),
                 )}
-                <div class="oc-card__body">
+                <div class="ods-widget__body">
                     {if permissions.is_empty() {
                         view! {
-                            <p class="oc-muted">
+                            <p class="ods-field__hint">
                                 {crate::i18n::t("admin.permissions.none")}
                             </p>
                         }
                             .into_any()
                     } else {
                         view! {
-                            <div class="oc-facts oc-facts--dense">
+                            <div>
                                 {permissions
                                     .into_iter()
                                     .map(|(permission, source)| {
                                         view! {
-                                            <span class="oc-mono">{permission}</span>
-                                            <span class="oc-muted">{source_label(&source)}</span>
+                                            <span>{permission}</span>
+                                            <span class="ods-field__hint">{source_label(&source)}</span>
                                         }
                                     })
                                     .collect_view()}
@@ -729,7 +729,7 @@ fn overview_tab(position: &str, status: &str, security: &Value, access: &Value) 
     card(
         section_head(crate::i18n::t("admin.overview.summary"), None, None),
         view! {
-            <dl class="oc-facts">
+            <dl>
                 <dt>{crate::i18n::t("admin.position.label")}</dt>
                 <dd>{position}{crate::i18n::t("admin.position.no_access_suffix")}</dd>
 
@@ -752,7 +752,7 @@ fn overview_tab(position: &str, status: &str, security: &Value, access: &Value) 
                 <dd>{papeis_texto}</dd>
 
                 <dt>{crate::i18n::t("admin.sessions.active")}</dt>
-                <dd class="oc-mono">{sessoes.to_string()}</dd>
+                <dd>{sessoes.to_string()}</dd>
             </dl>
         },
     )
@@ -807,16 +807,16 @@ pub fn member_detail(
     view! {
         // Mesmas classes do cabeçalho do Research Workspace: um segundo padrão
         // de cabeçalho contextual seria um segundo sítio para os alinhar.
-        <div class="oc-band">
-            <div class="oc-row--top oc-gap-11 oc-mb-3">
-                <div class="oc-fill">
-                    <div class="oc-row oc-row--wrap oc-gap-6">
-                        <span class="oc-pill">{crate::i18n::t("admin.member.pill")}</span>
-                        <h1 class="oc-t-screen">{name}</h1>
+        <div>
+            <div>
+                <div>
+                    <div>
+                        <span class="ods-chip">{crate::i18n::t("admin.member.pill")}</span>
+                        <h1 class="ods-page__title">{name}</h1>
                         {badge(status.clone(), Tone::of(&status))}
                     </div>
-                    <div class="oc-mono oc-mt-3">{email}</div>
-                    <div class="oc-muted oc-mt-3">
+                    <div>{email}</div>
+                    <div class="ods-field__hint">
                         {crate::i18n::t("admin.member.position_prefix")}{position.clone()}
                         {crate::i18n::t("admin.position.no_access_suffix")}
                     </div>
@@ -827,12 +827,12 @@ pub fn member_detail(
             // âncora e pelo scroll. O servidor marca «Overview» activa por
             // omissão (`aria-current="location"`) — funciona sem JavaScript, e
             // um deep-link para outra secção é corrigido no carregamento.
-            <nav class="oc-tabs oc-tabs--ctx" aria-label=crate::i18n::t("admin.member.sections_aria") data-oc-section-nav="">
-                <a class="oc-tab" data-part="tab" href="#membro-overview" aria-current="location">{crate::i18n::t("admin.tab.overview")}</a>
-                <a class="oc-tab" data-part="tab" href="#membro-acesso">{crate::i18n::t("admin.tab.access")}</a>
-                <a class="oc-tab" data-part="tab" href="#membro-seguranca">{crate::i18n::t("settings.tab.security")}</a>
-                <a class="oc-tab" data-part="tab" href="#membro-unidades">{crate::i18n::t("nav.units")}</a>
-                <a class="oc-tab" data-part="tab" href="#membro-research-workspaces">{crate::i18n::t("home.continue.aside")}</a>
+            <nav class="ods-tabs" aria-label=crate::i18n::t("admin.member.sections_aria") data-oc-section-nav="">
+                <a class="ods-tabs__tab" data-part="tab" href="#membro-overview" aria-current="location">{crate::i18n::t("admin.tab.overview")}</a>
+                <a class="ods-tabs__tab" data-part="tab" href="#membro-acesso">{crate::i18n::t("admin.tab.access")}</a>
+                <a class="ods-tabs__tab" data-part="tab" href="#membro-seguranca">{crate::i18n::t("settings.tab.security")}</a>
+                <a class="ods-tabs__tab" data-part="tab" href="#membro-unidades">{crate::i18n::t("nav.units")}</a>
+                <a class="ods-tabs__tab" data-part="tab" href="#membro-research-workspaces">{crate::i18n::t("home.continue.aside")}</a>
                 {[
                     ("nav.activity", "admin.tab.activity_unavailable"),
                     ("admin.tab.audit", "admin.tab.audit_unavailable"),
@@ -840,7 +840,7 @@ pub fn member_detail(
                     .iter()
                     .map(|(label_key, porque_key)| {
                         view! {
-                            <span class="oc-tab oc-unavailable" data-part="tab unavailable" aria-disabled="true" title=crate::i18n::t(porque_key)>
+                            <span class="ods-tabs__tab oc-unavailable" data-part="tab unavailable" aria-disabled="true" title=crate::i18n::t(porque_key)>
                                 {crate::i18n::t(label_key)}
                             </span>
                         }
@@ -855,25 +855,25 @@ pub fn member_detail(
                 {overview_tab(&position, &status, &security, &access)}
                 {position_admin(&person_id, &position_code, &security)}
             </section>
-            <div class="oc-vspace"></div>
+            <div></div>
             <section id="membro-acesso">
                 {section_head(crate::i18n::t("admin.tab.access"), None, None)}
                 {access_tab(&access)}
                 {roles_admin(&person_id, &access)}
                 {grants_admin(&person_id, &access, &permissions_catalog)}
             </section>
-            <div class="oc-vspace"></div>
+            <div></div>
             <section id="membro-seguranca">
                 {section_head(crate::i18n::t("settings.tab.security"), None, None)}
                 {security_tab(&person_id, &security, recusa.as_deref())}
                 {account_admin(&person_id, &security)}
             </section>
-            <div class="oc-vspace"></div>
+            <div></div>
             <section id="membro-unidades">
                 {section_head(crate::i18n::t("nav.units"), None, None)}
                 {units_admin(&person_id, &access, &units_catalog)}
             </section>
-            <div class="oc-vspace"></div>
+            <div></div>
             <section id="membro-research-workspaces">
                 {section_head(crate::i18n::t("home.continue.aside"), None, None)}
                 {workspaces_admin(&person_id, &access, &workspaces_catalog)}
@@ -971,18 +971,18 @@ pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl Int
                 <tr>
                     <td>{nome}</td>
                     <td>
-                        <form method="post" action=accao_papel class="oc-row oc-gap-3">
-                            <select class="oc-select oc-select--sm" name="role">
+                        <form method="post" action=accao_papel>
+                            <select class="ods-input" name="role">
                                 <option value="member" selected=!is_manager>{crate::i18n::t("admin.role.member")}</option>
                                 <option value="manager" selected=is_manager>{crate::i18n::t("admin.role.manager")}</option>
                             </select>
-                            <button class="oc-btn oc-btn--sm" data-part="btn" type="submit">{crate::i18n::t("action.save")}</button>
+                            <button class="ods-btn ods-btn--sm" data-part="btn" type="submit">{crate::i18n::t("action.save")}</button>
                         </form>
                     </td>
-                    <td class="oc-td--actions">
+                    <td>
                         <form method="post" action=accao_remover>
                             <button
-                                class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn"
+                                class="ods-btn ods-btn--sm ods-btn--danger-soft" data-part="btn"
                                 type="submit"
                             >
                                 {crate::i18n::t("action.remove")}
@@ -1002,17 +1002,17 @@ pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl Int
             view! {
                 {if sem_pertencas {
                     view! {
-                        <p class="oc-muted">{crate::i18n::t("admin.units.none_assigned")}</p>
+                        <p class="ods-field__hint">{crate::i18n::t("admin.units.none_assigned")}</p>
                     }
                     .into_any()
                 } else {
                     view! {
-                        <table class="oc-table oc-table--dense">
+                        <table class="ods-table">
                             <thead>
                                 <tr>
                                     <th>{crate::i18n::t("entity.unit")}</th>
                                     <th>{crate::i18n::t("admin.col.role")}</th>
-                                    <th class="oc-td--actions">{crate::i18n::t("admin.col.actions")}</th>
+                                    <th>{crate::i18n::t("admin.col.actions")}</th>
                                 </tr>
                             </thead>
                             <tbody>{linhas}</tbody>
@@ -1023,29 +1023,29 @@ pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl Int
             },
         )}
 
-        <div class="oc-mt-6">
+        <div>
             {card(
                 section_head(crate::i18n::t("admin.units.assign"), None, None),
                 if sem_unidades_na_org {
                     view! {
-                        <p class="oc-muted">
+                        <p class="ods-field__hint">
                             {crate::i18n::t("admin.units.none_org")}
-                            <a class="oc-link" href="/units/new">{crate::i18n::t("nav.units")}</a>
+                            <a href="/units/new">{crate::i18n::t("nav.units")}</a>
                             {crate::i18n::t("admin.units.before_assign")}
                         </p>
                     }
                     .into_any()
                 } else if elegiveis.is_empty() {
                     view! {
-                        <p class="oc-muted">
+                        <p class="ods-field__hint">
                             {crate::i18n::t("admin.units.all_assigned")}
                         </p>
                     }
                     .into_any()
                 } else {
                     view! {
-                        <form method="post" action=accao_atribuir class="oc-row oc-row--wrap oc-gap-3">
-                            <select class="oc-select" name="unit_id" required>
+                        <form method="post" action=accao_atribuir>
+                            <select class="ods-input" name="unit_id" required>
                                 <option value="">{crate::i18n::t("admin.units.choose")}</option>
                                 {elegiveis
                                     .into_iter()
@@ -1054,11 +1054,11 @@ pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl Int
                                     })
                                     .collect_view()}
                             </select>
-                            <select class="oc-select" name="role">
+                            <select class="ods-input" name="role">
                                 <option value="member">{crate::i18n::t("admin.role.member")}</option>
                                 <option value="manager">{crate::i18n::t("admin.role.manager")}</option>
                             </select>
-                            <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
+                            <button class="ods-btn ods-btn--navy" data-part="btn" type="submit">
                                 {crate::i18n::t("admin.action.assign")}
                             </button>
                         </form>
@@ -1161,14 +1161,14 @@ pub fn workspaces_admin(person_id: &str, access: &Value, catalog: &Value) -> imp
                 <tr>
                     <td>{nome}</td>
                     <td>
-                        <form method="post" action=accao_papel class="oc-row oc-gap-3">
-                            <select class="oc-select oc-select--sm" name="role">{opts}</select>
-                            <button class="oc-btn oc-btn--sm" data-part="btn" type="submit">{crate::i18n::t("action.save")}</button>
+                        <form method="post" action=accao_papel>
+                            <select class="ods-input" name="role">{opts}</select>
+                            <button class="ods-btn ods-btn--sm" data-part="btn" type="submit">{crate::i18n::t("action.save")}</button>
                         </form>
                     </td>
-                    <td class="oc-td--actions">
+                    <td>
                         <form method="post" action=accao_remover>
-                            <button class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn" type="submit">
+                            <button class="ods-btn ods-btn--sm ods-btn--danger-soft" data-part="btn" type="submit">
                                 {crate::i18n::t("action.remove")}
                             </button>
                         </form>
@@ -1185,16 +1185,16 @@ pub fn workspaces_admin(person_id: &str, access: &Value, catalog: &Value) -> imp
             section_head(crate::i18n::t("admin.ws.memberships"), None, None),
             view! {
                 {if sem_pertencas {
-                    view! { <p class="oc-muted">{crate::i18n::t("admin.ws.none_assigned")}</p> }
+                    view! { <p class="ods-field__hint">{crate::i18n::t("admin.ws.none_assigned")}</p> }
                         .into_any()
                 } else {
                     view! {
-                        <table class="oc-table oc-table--dense">
+                        <table class="ods-table">
                             <thead>
                                 <tr>
                                     <th>{crate::i18n::t("admin.col.workspace")}</th>
                                     <th>{crate::i18n::t("admin.col.role")}</th>
-                                    <th class="oc-td--actions">{crate::i18n::t("admin.col.actions")}</th>
+                                    <th>{crate::i18n::t("admin.col.actions")}</th>
                                 </tr>
                             </thead>
                             <tbody>{linhas}</tbody>
@@ -1205,19 +1205,19 @@ pub fn workspaces_admin(person_id: &str, access: &Value, catalog: &Value) -> imp
             },
         )}
 
-        <div class="oc-mt-6">
+        <div>
             {card(
                 section_head(crate::i18n::t("admin.ws.assign"), None, None),
                 if sem_workspaces {
                     view! {
-                        <p class="oc-muted">
+                        <p class="ods-field__hint">
                             {crate::i18n::t("admin.ws.none_org")}
                         </p>
                     }
                     .into_any()
                 } else if elegiveis.is_empty() {
                     view! {
-                        <p class="oc-muted">
+                        <p class="ods-field__hint">
                             {crate::i18n::t("admin.ws.all_assigned")}
                         </p>
                     }
@@ -1227,17 +1227,16 @@ pub fn workspaces_admin(person_id: &str, access: &Value, catalog: &Value) -> imp
                         <form
                             method="post"
                             action=accao_atribuir
-                            class="oc-row oc-row--wrap oc-gap-3"
                         >
-                            <select class="oc-select" name="workspace_id" required>
+                            <select class="ods-input" name="workspace_id" required>
                                 <option value="">{crate::i18n::t("admin.ws.choose")}</option>
                                 {elegiveis
                                     .into_iter()
                                     .map(|(id, nome)| view! { <option value=id>{nome}</option> })
                                     .collect_view()}
                             </select>
-                            <select class="oc-select" name="role">{papel_options("member")}</select>
-                            <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">{crate::i18n::t("admin.action.assign")}</button>
+                            <select class="ods-input" name="role">{papel_options("member")}</select>
+                            <button class="ods-btn ods-btn--navy" data-part="btn" type="submit">{crate::i18n::t("admin.action.assign")}</button>
                         </form>
                     }
                     .into_any()
@@ -1293,9 +1292,9 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
             view! {
                 <tr>
                     <td>{etiqueta}</td>
-                    <td class="oc-td--actions">
+                    <td>
                         <form method="post" action=accao>
-                            <button class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn" type="submit">
+                            <button class="ods-btn ods-btn--sm ods-btn--danger-soft" data-part="btn" type="submit">
                                 {crate::i18n::t("admin.action.revoke")}
                             </button>
                         </form>
@@ -1309,22 +1308,22 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
     let accao_conceder = format!("/admin/members/{person_id}/roles");
 
     view! {
-        <div class="oc-mt-6">
+        <div>
             {if pode_gerir {
                 view! {
                 {card(
                     section_head(crate::i18n::t("admin.roles.manage"), None, None),
                     view! {
                         {if sem_papeis {
-                            view! { <p class="oc-muted">{crate::i18n::t("admin.roles.none_assigned_technical")}</p> }
+                            view! { <p class="ods-field__hint">{crate::i18n::t("admin.roles.none_assigned_technical")}</p> }
                                 .into_any()
                         } else {
                             view! {
-                                <table class="oc-table oc-table--dense">
+                                <table class="ods-table">
                                     <thead>
                                         <tr>
                                             <th>{crate::i18n::t("admin.col.role")}</th>
-                                            <th class="oc-td--actions">{crate::i18n::t("admin.col.actions")}</th>
+                                            <th>{crate::i18n::t("admin.col.actions")}</th>
                                         </tr>
                                     </thead>
                                     <tbody>{linhas}</tbody>
@@ -1335,7 +1334,7 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
 
                         {if elegiveis.is_empty() {
                             view! {
-                                <p class="oc-muted oc-mt-3">
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("admin.roles.all_assigned")}
                                 </p>
                             }
@@ -1345,9 +1344,8 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
                                 <form
                                     method="post"
                                     action=accao_conceder.clone()
-                                    class="oc-row oc-row--wrap oc-gap-3 oc-mt-3"
                                 >
-                                    <select class="oc-select" name="role" required>
+                                    <select class="ods-input" name="role" required>
                                         <option value="">{crate::i18n::t("admin.roles.choose")}</option>
                                         {elegiveis
                                             .clone()
@@ -1358,14 +1356,14 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
                                             .collect_view()}
                                     </select>
                                     <input
-                                        class="oc-input oc-fill"
+                                        class="ods-input"
                                         type="text"
                                         name="reason"
                                         required
                                         minlength="4"
                                         placeholder=crate::i18n::t("admin.reason.audit_ph")
                                     />
-                                    <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
+                                    <button class="ods-btn ods-btn--navy" data-part="btn" type="submit">
                                         {crate::i18n::t("admin.action.grant")}
                                     </button>
                                 </form>
@@ -1385,7 +1383,7 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
                 {card(
                     section_head(crate::i18n::t("admin.roles.technical"), None, None),
                     view! {
-                        <p class="oc-muted">
+                        <p class="ods-field__hint">
                             {crate::i18n::t("admin.roles.manage_requires")}
                         </p>
                     },
@@ -1453,19 +1451,19 @@ pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value
             let accao = format!("/admin/members/{person_id}/grants/{id}/revoke");
             Some(view! {
                 <tr>
-                    <td class="oc-mono">{permissao}</td>
-                    <td class="oc-mono oc-muted">{ambito}</td>
-                    <td class="oc-td--actions">
-                        <form method="post" action=accao class="oc-row oc-gap-3">
+                    <td>{permissao}</td>
+                    <td class="ods-field__hint">{ambito}</td>
+                    <td>
+                        <form method="post" action=accao>
                             <input
-                                class="oc-input"
+                                class="ods-input"
                                 type="text"
                                 name="reason"
                                 required
                                 minlength="4"
                                 placeholder=crate::i18n::t("admin.reason.ph")
                             />
-                            <button class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn" type="submit">
+                            <button class="ods-btn ods-btn--sm ods-btn--danger-soft" data-part="btn" type="submit">
                                 {crate::i18n::t("admin.action.revoke")}
                             </button>
                         </form>
@@ -1481,25 +1479,25 @@ pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value
 
     view! {
         {pode_gerir.then(|| view! {
-            <div class="oc-mt-6">
+            <div>
                 {card(
                     section_head(crate::i18n::t("admin.grants.manage"), None, None),
                     view! {
                         {if sem_grants {
                             view! {
-                                <p class="oc-muted">
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("admin.grants.none_active")}
                                 </p>
                             }
                                 .into_any()
                         } else {
                             view! {
-                                <table class="oc-table oc-table--dense">
+                                <table class="ods-table">
                                     <thead>
                                         <tr>
                                             <th>{crate::i18n::t("admin.col.permission")}</th>
                                             <th>{crate::i18n::t("admin.col.scope")}</th>
-                                            <th class="oc-td--actions">{crate::i18n::t("admin.col.actions")}</th>
+                                            <th>{crate::i18n::t("admin.col.actions")}</th>
                                         </tr>
                                     </thead>
                                     <tbody>{linhas}</tbody>
@@ -1510,7 +1508,7 @@ pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value
 
                         {if sem_catalogo {
                             view! {
-                                <p class="oc-muted oc-mt-3">
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("admin.grants.catalog_unavailable")}
                                 </p>
                             }
@@ -1520,12 +1518,11 @@ pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value
                                 <form
                                     method="post"
                                     action=accao_conceder.clone()
-                                    class="oc-row oc-row--wrap oc-gap-3 oc-mt-3"
                                 >
                                     // Âmbito instituição: o acesso dentro de unidades e
                                     // workspaces vive nos separadores próprios.
                                     <input type="hidden" name="scope" value="institution" />
-                                    <select class="oc-select" name="permission" required>
+                                    <select class="ods-input" name="permission" required>
                                         <option value="">{crate::i18n::t("admin.grants.choose")}</option>
                                         {catalogo
                                             .clone()
@@ -1537,14 +1534,14 @@ pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value
                                             .collect_view()}
                                     </select>
                                     <input
-                                        class="oc-input oc-fill"
+                                        class="ods-input"
                                         type="text"
                                         name="reason"
                                         required
                                         minlength="4"
                                         placeholder=crate::i18n::t("admin.reason.audit_ph")
                                     />
-                                    <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
+                                    <button class="ods-btn ods-btn--navy" data-part="btn" type="submit">
                                         {crate::i18n::t("admin.grants.grant_submit")}
                                     </button>
                                 </form>
@@ -1602,21 +1599,20 @@ pub fn position_admin(person_id: &str, current_code: &str, security: &Value) -> 
 
     view! {
         {pode_mudar.then(|| view! {
-            <div class="oc-mt-6">
+            <div>
                 {card(
                     section_head(crate::i18n::t("admin.position.manage"), None, None),
                     view! {
                         <div>
-                            <p class="oc-muted">
+                            <p class="ods-field__hint">
                                 {crate::i18n::t("admin.new.position_truth")}
                                 <strong>{crate::i18n::t("admin.new.position_no_access")}</strong>
                             </p>
                             <form
                                 method="post"
                                 action=accao.clone()
-                                class="oc-row oc-row--wrap oc-gap-3 oc-mt-3"
                             >
-                                <select class="oc-select" name="position">
+                                <select class="ods-input" name="position">
                                     <option value="" selected=current.is_empty()>"—"</option>
                                     {POSITIONS
                                         .iter()
@@ -1630,7 +1626,7 @@ pub fn position_admin(person_id: &str, current_code: &str, security: &Value) -> 
                                         })
                                         .collect_view()}
                                 </select>
-                                <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
+                                <button class="ods-btn ods-btn--navy" data-part="btn" type="submit">
                                     {crate::i18n::t("action.save")}
                                 </button>
                             </form>
@@ -1674,26 +1670,26 @@ pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
 
     view! {
         {pode_gerir.then(|| view! {
-            <div class="oc-mt-6">
+            <div>
                 {card(
                     section_head(crate::i18n::t("admin.account.manage"), None, None),
                     view! {
                         <div>
                             <div>
-                                <p class="oc-muted">
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("admin.account.reset_note")}
                                 </p>
-                                <form method="post" action=accao_reset.clone() class="oc-mt-3">
-                                    <button class="oc-btn oc-btn--danger" data-part="btn" type="submit">
+                                <form method="post" action=accao_reset.clone()>
+                                    <button class="ods-btn ods-btn--danger-soft" data-part="btn" type="submit">
                                         {crate::i18n::t("admin.account.reset_submit")}
                                     </button>
                                 </form>
                             </div>
 
-                            <div class="oc-mt-6">
+                            <div>
                             {if sem_transicoes {
                                 view! {
-                                    <p class="oc-muted">
+                                    <p class="ods-field__hint">
                                         {crate::i18n::t("admin.account.no_transitions")}
                                     </p>
                                 }
@@ -1703,9 +1699,8 @@ pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
                                     <form
                                         method="post"
                                         action=accao_estado.clone()
-                                        class="oc-row oc-row--wrap oc-gap-3"
                                     >
-                                        <select class="oc-select" name="status" required>
+                                        <select class="ods-input" name="status" required>
                                             <option value="">{crate::i18n::t("admin.account.change_state")}</option>
                                             {transicoes
                                                 .clone()
@@ -1716,14 +1711,14 @@ pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
                                                 .collect_view()}
                                         </select>
                                         <input
-                                            class="oc-input oc-fill"
+                                            class="ods-input"
                                             type="text"
                                             name="reason"
                                             required
                                             minlength="4"
                                             placeholder=crate::i18n::t("admin.reason.audit_ph")
                                         />
-                                        <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
+                                        <button class="ods-btn ods-btn--navy" data-part="btn" type="submit">
                                             {crate::i18n::t("admin.action.apply")}
                                         </button>
                                     </form>
@@ -1736,16 +1731,15 @@ pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
                             // do botão, o que a distingue de desactivar: aqui não há
                             // histórico a preservar, porque a conta nunca foi usada.
                             {pode_apagar.then(|| view! {
-                                <div class="oc-mt-6">
-                                    <p class="oc-muted">
+                                <div>
+                                    <p class="ods-field__hint">
                                         {crate::i18n::t("admin.account.delete_note")}
                                     </p>
                                     <form
                                         method="post"
                                         action=accao_apagar.clone()
-                                        class="oc-mt-3"
                                     >
-                                        <button class="oc-btn oc-btn--danger" data-part="btn" type="submit">
+                                        <button class="ods-btn ods-btn--danger-soft" data-part="btn" type="submit">
                                             {crate::i18n::t("admin.account.delete_submit")}
                                         </button>
                                     </form>
@@ -1790,7 +1784,7 @@ pub fn instance(payload: &Value, saved: bool) -> impl IntoView {
             </div>
 
             {saved.then(|| view! {
-                <div class="oc-callout" role="status">
+                <div class="ods-notice" role="status">
                     {crate::i18n::t("admin.instance.saved")}
                 </div>
             })}
@@ -1799,13 +1793,13 @@ pub fn instance(payload: &Value, saved: bool) -> impl IntoView {
                 {card(
                     section_head(crate::i18n::t("admin.instance.profile.title"), None, None),
                     view! {
-                        <p class="oc-t-caption--muted oc-mb-5">
+                        <p class="ods-field__hint">
                             {crate::i18n::t("admin.instance.profile.help")}
                         </p>
-                        <label class="oc-sr" for="instance-profile">
+                        <label class="ods-sr-only" for="instance-profile">
                             {crate::i18n::t("admin.instance.profile.title")}
                         </label>
-                        <select id="instance-profile" name="profile" class="oc-input">
+                        <select id="instance-profile" name="profile" class="ods-input">
                             {["research", "business", "education", "personal"]
                                 .into_iter()
                                 .map(|p| {
@@ -1824,7 +1818,7 @@ pub fn instance(payload: &Value, saved: bool) -> impl IntoView {
                 {card(
                     section_head(crate::i18n::t("admin.instance.apps.title"), None, None),
                     view! {
-                        <p class="oc-t-caption--muted oc-mb-5">
+                        <p class="ods-field__hint">
                             {crate::i18n::t("admin.instance.apps.help")}
                         </p>
                         <ul class="oc-applist__set" role="list">
@@ -1853,7 +1847,7 @@ pub fn instance(payload: &Value, saved: bool) -> impl IntoView {
                                             } else {
                                                 let campo = format!("app:{id}");
                                                 view! {
-                                                    <select name=campo class="oc-input" aria-label=app.label()>
+                                                    <select name=campo class="ods-input" aria-label=app.label()>
                                                         {["profile", "active", "inactive"]
                                                             .into_iter()
                                                             .map(|valor| {
@@ -1885,8 +1879,8 @@ pub fn instance(payload: &Value, saved: bool) -> impl IntoView {
                     },
                 )}
 
-                <div class="oc-mt-5">
-                    <button class="oc-btn oc-btn--primary" data-part="btn" type="submit" data-oc="instance-save">
+                <div>
+                    <button class="ods-btn ods-btn--navy" data-part="btn" type="submit" data-oc="instance-save">
                         {crate::i18n::t("admin.instance.save")}
                     </button>
                 </div>
@@ -2259,7 +2253,7 @@ mod tests {
             "a razão do Core foi engolida pelo caminho"
         );
         assert!(
-            html.contains("oc-callout--error"),
+            html.contains("ods-notice--error"),
             "a razão não está marcada como recusa"
         );
         assert!(

@@ -80,11 +80,11 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
                 </div>
             </div>
 
-            <div class="oc-tabs oc-tabs--under oc-card__head--flush" >
+            <div class="ods-tabs" >
                 {pill_tabs(tabs, t("knowledge.tabs.aria"))}
             </div>
 
-            <div class="oc-grid oc-grid--4 oc-mb-5" >
+            <div >
                 {counter(t("knowledge.counter.bibliography"), count(&bibliography), Some("/bibliography"))}
                 {counter(t("knowledge.counter.documents"), count(&documents), None)}
                 {counter(t("knowledge.counter.datasets"), count(&datasets), Some("/datasets"))}
@@ -100,14 +100,14 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
                 may_use: may_use_assistance,
             })}
 
-            <section class="oc-card" data-part="card">
-                <div class="oc-card__head">
+            <section class="ods-widget ods-widget-surface" data-part="card">
+                <div class="ods-widget__head">
                     <h2>{t("knowledge.recent.title")}</h2>
                 </div>
-                <div class="oc-card__body">
+                <div class="ods-widget__body">
                     {if recent_rows.is_empty() {
                         view! {
-                            <p class="oc-muted">
+                            <p class="ods-field__hint">
                                 {t("knowledge.recent.empty")}
                             </p>
                         }
@@ -121,9 +121,9 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
                                     .map(|row| {
                                         let kind = text(row, "entity_type").to_uppercase();
                                         view! {
-                                            <div class="oc-list__row" >
-                                                <span class="oc-pill">{kind}</span>
-                                                <span class="oc-fill oc-truncate oc-t-cell" data-oc-content="1">
+                                            <div >
+                                                <span class="ods-chip">{kind}</span>
+                                                <span data-oc-content="1">
                                                     {text(row, "title")}
                                                 </span>
                                                 {crate::ui::components::classification_badge(
@@ -153,10 +153,10 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
 fn counter(label: &'static str, value: i64, href: Option<&'static str>) -> impl IntoView {
     let conteudo = move || {
         view! {
-            <div class="oc-t-meta" >
+            <div class="ods-label" >
                 {label.to_uppercase()}
             </div>
-            <div class="oc-t-kpi oc-mt-5" >
+            <div class="ods-d12-metric__value" >
                 {value.to_string()}
             </div>
         }
@@ -167,7 +167,7 @@ fn counter(label: &'static str, value: i64, href: Option<&'static str>) -> impl 
             let interior = conteudo();
             view! {
                 <div
-                    class="oc-card oc-card__body oc-card__body--block" data-part="card"
+                    class="ods-widget ods-widget-surface ods-widget__body" data-part="card"
                     title=t("knowledge.no_screen")
                 >
                     {interior}
@@ -179,7 +179,7 @@ fn counter(label: &'static str, value: i64, href: Option<&'static str>) -> impl 
             let interior = conteudo();
             view! {
                 <a
-                    class="oc-card oc-card--clickable oc-card__body oc-card__body--block" data-part="card"
+                    class="ods-widget ods-widget-surface ods-widget__body" data-part="card"
                     href=href
                 >
                     {interior}
@@ -212,17 +212,17 @@ fn counter(label: &'static str, value: i64, href: Option<&'static str>) -> impl 
 fn counter_not_implemented(label: &'static str) -> impl IntoView {
     view! {
         <div
-            class="oc-card oc-card__body oc-card__body--block oc-unavailable" data-part="card unavailable"
+            class="ods-widget ods-widget-surface ods-widget__body oc-unavailable" data-part="card unavailable"
             aria-disabled="true"
             title=t("knowledge.not_in_core")
         >
-            <div class="oc-t-meta" >
+            <div class="ods-label" >
                 {label.to_uppercase()}
             </div>
-            <div class="oc-t-kpi oc-mt-5" >
+            <div class="ods-d12-metric__value" >
                 "—"
             </div>
-            <div class="oc-t-caption--muted" >
+            <div class="ods-field__hint" >
                 {t("knowledge.not_implemented")}
             </div>
         </div>

@@ -227,17 +227,16 @@ fn idea_lifecycle_actions(id: &str, idea: &Value, workspace: &Value) -> impl Int
                         if requires_note {
                             view! {
                                 <details class="oc-lifecycle__close">
-                                    <summary class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn">
+                                    <summary class="ods-btn ods-btn--sm" data-part="btn">
                                         {verbo}
                                     </summary>
                                     <form
                                         method="post"
                                         action=accao
-                                        class="oc-row oc-row--wrap oc-gap-3 oc-mt-3"
                                     >
                                         <input type="hidden" name="state" value=estado />
                                         <input
-                                            class="oc-input"
+                                            class="ods-input"
                                             type="text"
                                             name="outcome_note"
                                             required
@@ -245,7 +244,7 @@ fn idea_lifecycle_actions(id: &str, idea: &Value, workspace: &Value) -> impl Int
                                             placeholder=crate::i18n::t("workspaces.idea.reason_placeholder")
                                         />
                                         <button
-                                            class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn"
+                                            class="ods-btn ods-btn--sm ods-btn--danger-soft" data-part="btn"
                                             type="submit"
                                         >
                                             {crate::i18n::t("action.confirm")}
@@ -259,7 +258,7 @@ fn idea_lifecycle_actions(id: &str, idea: &Value, workspace: &Value) -> impl Int
                                 <form method="post" action=accao class="oc-lifecycle__step">
                                     <input type="hidden" name="state" value=estado />
                                     <button
-                                        class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn"
+                                        class="ods-btn ods-btn--sm" data-part="btn"
                                         type="submit"
                                     >
                                         {verbo}
@@ -328,18 +327,18 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
     let meta = format!("{code} · {unit_code}");
 
     view! {
-        <div class="oc-band" >
-            <div class="oc-row--top oc-gap-11 oc-mb-3" >
-                <div class="oc-fill" >
-                    <div class="oc-row oc-row--wrap oc-gap-6" >
+        <div >
+            <div >
+                <div >
+                    <div >
                         {pill(kind_label)}
-                        <h1 class="oc-t-screen" >
+                        <h1 class="ods-page__title" >
                             {title}
                         </h1>
                         {badge(state.clone(), Tone::of(&state))}
                         {classification_badge(&classification)}
                     </div>
-                    <div class="oc-mono oc-mt-3" >{meta}</div>
+                    <div >{meta}</div>
                 </div>
 
                 <div>
@@ -361,7 +360,7 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
         </div>
 
         <div class="ods-page" id="ws-visao-geral" >
-            <div class="oc-grid oc-grid--ws">
+            <div>
                 {if is_project {
                     project_overview(&project, &members).into_any()
                 } else {
@@ -391,18 +390,18 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                     may_use: may_use_assistance,
                 })}
 
-                <section class="oc-card" data-part="card" id="ws-actividade">
+                <section class="ods-widget ods-widget-surface" data-part="card" id="ws-actividade">
                     {section_head(crate::i18n::t("workspaces.recent_activity"), None, None)}
-                    <div class="oc-card__body">{activity_list(&activity)}</div>
+                    <div class="ods-widget__body">{activity_list(&activity)}</div>
                 </section>
 
-                <section class="oc-card" data-part="card" id="ws-tarefas">
+                <section class="ods-widget ods-widget-surface" data-part="card" id="ws-tarefas">
                     {section_head(crate::i18n::t("workspaces.tasks"), None, None)}
-                    <div class="oc-card__body">{task_list(&tasks)}</div>
+                    <div class="ods-widget__body">{task_list(&tasks)}</div>
                 </section>
             </div>
 
-            <div class="oc-grid oc-grid--detail oc-mt-7" >
+            <div >
                 <div id="ws-bibliografia">
                     {artefact_card(crate::i18n::t("workspaces.bibliography"), &sources, "title", "/bibliography")}
                 </div>
@@ -411,7 +410,7 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                 </div>
             </div>
 
-            <div class="oc-grid oc-grid--detail oc-mt-7" >
+            <div >
                 <div id="ws-documentos">
                     {artefact_card(crate::i18n::t("workspaces.documents"), &documents, "title", "/knowledge")}
                 </div>
@@ -434,27 +433,27 @@ fn idea_overview(idea: &Value, sources: &Value, datasets: &Value) -> impl IntoVi
     let dataset_count = items(datasets).len();
 
     view! {
-        <section class="oc-card" data-part="card">
+        <section class="ods-widget ods-widget-surface" data-part="card">
             {section_head(crate::i18n::t("workspaces.field.description"), None, None)}
-            <div class="oc-card__body">
-                <p class="oc-t-body" >
+            <div class="ods-widget__body">
+                <p >
                     {text(idea, "summary")}
                 </p>
 
-                <h3 class="oc-t-group oc-mt-9 oc-mb-3" >
+                <h3 class="ods-label" >
                     {crate::i18n::t("workspaces.overview.keywords")}
                 </h3>
                 {if keywords.is_empty() {
-                    view! { <span class="oc-muted" >"—"</span> }.into_any()
+                    view! { <span class="ods-field__hint" >"—"</span> }.into_any()
                 } else {
                     view! {
-                        <div class="oc-row oc-row--wrap oc-gap-3" >
+                        <div >
                             {keywords
                                 .iter()
                                 .filter_map(Value::as_str)
                                 .map(|word| {
                                     view! {
-                                        <span class="oc-tag" >
+                                        <span class="ods-chip" >
                                             {word.to_owned()}
                                         </span>
                                     }
@@ -465,7 +464,7 @@ fn idea_overview(idea: &Value, sources: &Value, datasets: &Value) -> impl IntoVi
                         .into_any()
                 }}
 
-                <div class="oc-split oc-split--3" >
+                <div >
                     {metric(crate::i18n::t("workspaces.references"), source_count)}
                     {metric(crate::i18n::t("workspaces.datasets"), dataset_count)}
                     {metric(crate::i18n::t("workspaces.experiments"), 0)}
@@ -489,30 +488,30 @@ fn project_overview(project: &Value, members: &[Value]) -> impl IntoView {
     let members = members.to_vec();
 
     view! {
-        <section class="oc-card" data-part="card">
+        <section class="ods-widget ods-widget-surface" data-part="card">
             {section_head(crate::i18n::t("workspaces.field.description"), None, None)}
-            <div class="oc-card__body">
-                <p class="oc-t-body" >
+            <div class="ods-widget__body">
+                <p >
                     {text(project, "summary")}
                 </p>
 
-                <h3 class="oc-t-group oc-mt-9 oc-mb-3" >
+                <h3 class="ods-label" >
                     {crate::i18n::t("workspaces.overview.objectives")}
                 </h3>
-                <p class="oc-t-body" >
+                <p >
                     {text(project, "objectives")}
                 </p>
 
-                <div class="oc-row oc-gap-11 oc-mt-10" >
+                <div >
                     {donut(progress)}
                     <div>
-                        <div class="oc-row oc-gap-4" >
+                        <div >
                             {badge(state.clone(), Tone::of(&state))}
                         </div>
                         {from_idea
                             .then(|| {
                                 view! {
-                                    <p class="oc-t-caption--muted oc-mt-4" >
+                                    <p class="ods-field__hint" >
                                         {crate::i18n::t("workspaces.project.from_idea")}
                                     </p>
                                 }
@@ -523,21 +522,21 @@ fn project_overview(project: &Value, members: &[Value]) -> impl IntoView {
                 {(!members.is_empty())
                     .then(|| {
                         view! {
-                            <h3 class="oc-t-group oc-mt-10 oc-mb-3" >
+                            <h3 class="ods-label" >
                                 {crate::i18n::t("workspaces.overview.team")}
                             </h3>
-                            <div class="oc-col oc-gap-5" >
+                            <div >
                                 {members
                                     .iter()
                                     .map(|member| {
                                         let name = text(member, "full_name");
                                         let role = text(member, "role");
                                         view! {
-                                            <div class="oc-row oc-gap-6" >
-                                                <span class="oc-avatar oc-avatar--sm" >
+                                            <div >
+                                                <span class="ods-avatar ods-avatar--sm" >
                                                     {crate::ui::initials(&name)}
                                                 </span>
-                                                <span class="oc-fill oc-t-cell-2" >
+                                                <span >
                                                     {name}
                                                 </span>
                                                 {badge(role.clone(), Tone::of(&role))}
@@ -555,11 +554,11 @@ fn project_overview(project: &Value, members: &[Value]) -> impl IntoView {
 
 fn metric(label: &'static str, value: usize) -> impl IntoView {
     view! {
-        <div class="oc-split__cell" >
-            <div class="oc-t-screen" >
+        <div >
+            <div class="ods-page__title" >
                 {value.to_string()}
             </div>
-            <div class="oc-t-hint oc-mt-1" >
+            <div class="ods-field__hint" >
                 {label}
             </div>
         </div>
@@ -570,9 +569,9 @@ fn metric(label: &'static str, value: usize) -> impl IntoView {
 fn metric_text(label: &'static str, value: &str) -> impl IntoView {
     let value = value.to_owned();
     view! {
-        <div class="oc-split__cell" >
-            <div class="oc-t-cell-2" >{value}</div>
-            <div class="oc-t-hint oc-mt-1" >{label}</div>
+        <div >
+            <div >{value}</div>
+            <div class="ods-field__hint" >{label}</div>
         </div>
     }
 }
@@ -580,22 +579,22 @@ fn metric_text(label: &'static str, value: &str) -> impl IntoView {
 fn activity_list(payload: &Value) -> AnyView {
     let rows = items(payload);
     if rows.is_empty() {
-        return view! { <p class="oc-muted">{crate::i18n::t("workspaces.empty.activity")}</p> }
+        return view! { <p class="ods-field__hint">{crate::i18n::t("workspaces.empty.activity")}</p> }
             .into_any();
     }
 
     view! {
-        <div class="oc-col oc-gap-8" >
+        <div >
             {rows
                 .iter()
                 .take(10)
                 .map(|row| {
                     view! {
                         <div>
-                            <div class="oc-t-note" >
+                            <div class="ods-field__hint" >
                                 {text(row, "summary")}
                             </div>
-                            <div class="oc-mono oc-t-ghost" >
+                            <div class="ods-field__hint" >
                                 {text(row, "actor_name")}
                             </div>
                         </div>
@@ -610,12 +609,12 @@ fn activity_list(payload: &Value) -> AnyView {
 fn task_list(payload: &Value) -> AnyView {
     let rows = items(payload);
     if rows.is_empty() {
-        return view! { <p class="oc-muted">{crate::i18n::t("workspaces.empty.tasks")}</p> }
+        return view! { <p class="ods-field__hint">{crate::i18n::t("workspaces.empty.tasks")}</p> }
             .into_any();
     }
 
     view! {
-        <div class="oc-col oc-gap-9" >
+        <div >
             {rows
                 .iter()
                 .take(8)
@@ -630,8 +629,8 @@ fn task_list(payload: &Value) -> AnyView {
                     let href = format!("/tasks/{}", text(row, "id"));
                     view! {
                         <a class="oc-task-row" href=href>
-                            <div class="oc-row oc-gap-5 oc-mb-1" >
-                                <span class="oc-fill oc-truncate oc-t-cell-2" >
+                            <div >
+                                <span >
                                     {text(row, "title")}
                                 </span>
                                 {badge(state.clone(), Tone::of(&state))}
@@ -709,32 +708,32 @@ pub fn task_detail(
     let assign_action = format!("/tasks/{task_id}/assignee");
 
     view! {
-        <div class="oc-band">
-            <div class="oc-row oc-row--wrap oc-gap-6 oc-mb-2">
+        <div>
+            <div>
                 {pill(crate::i18n::t("workspaces.kind.task"))}
-                <h1 class="oc-t-screen">{text(task, "title")}</h1>
+                <h1 class="ods-page__title">{text(task, "title")}</h1>
                 {badge(task_state_label(&state).to_owned(), Tone::of(&state))}
                 {badge(priority.clone(), Tone::of(&priority))}
             </div>
-            <div class="oc-mono oc-mb-5">
+            <div>
                 <a href=format!("/workspaces/{workspace_id}")>{crate::i18n::t("workspaces.back_to_env")}</a>
             </div>
         </div>
 
         <div class="ods-page">
             {ok.filter(|s| !s.is_empty()).map(|m| view! {
-                <div class="oc-card oc-note" data-part="card" role="status">{m.to_owned()}</div>
+                <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="status">{m.to_owned()}</div>
             })}
             {erro.filter(|s| !s.is_empty()).map(|m| view! {
-                <div class="oc-card oc-alert" data-part="card" role="alert">{m.to_owned()}</div>
+                <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="alert">{m.to_owned()}</div>
             })}
 
-            <div class="oc-grid oc-grid--detail">
-                <section class="oc-card" data-part="card">
+            <div>
+                <section class="ods-widget ods-widget-surface" data-part="card">
                     {section_head(crate::i18n::t("workspaces.task.about"), None, None)}
-                    <div class="oc-card__body">
-                        <p class="oc-t-body">{text(task, "description")}</p>
-                        <div class="oc-split oc-split--2 oc-mt-5">
+                    <div class="ods-widget__body">
+                        <p>{text(task, "description")}</p>
+                        <div>
                             {metric_text(crate::i18n::t("workspaces.field.state"), task_state_label(&state))}
                             {metric_text(crate::i18n::t("workspaces.field.priority"), &priority)}
                             {metric_text(crate::i18n::t("workspaces.field.due"), &text(task, "due_on"))}
@@ -744,14 +743,14 @@ pub fn task_detail(
                 </section>
 
                 {may_act.then(|| view! {
-                    <section class="oc-card" data-part="card">
+                    <section class="ods-widget ods-widget-surface" data-part="card">
                         {section_head(crate::i18n::t("workspaces.task.actions"), None, None)}
-                        <div class="oc-card__body">
-                            <div class="oc-field__label">{crate::i18n::t("workspaces.task.change_state")}</div>
+                        <div class="ods-widget__body">
+                            <div class="ods-field__label">{crate::i18n::t("workspaces.task.change_state")}</div>
                             <div class="oc-lifecycle">
                                 {if transitions.is_empty() {
                                     view! {
-                                        <span class="oc-muted">
+                                        <span class="ods-field__hint">
                                             {crate::i18n::t("workspaces.task.no_transitions")}
                                         </span>
                                     }.into_any()
@@ -765,7 +764,7 @@ pub fn task_detail(
                                         view! {
                                             <form method="post" action=accao class="oc-lifecycle__step">
                                                 <input type="hidden" name="state" value=estado />
-                                                <button class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn" type="submit">
+                                                <button class="ods-btn ods-btn--sm" data-part="btn" type="submit">
                                                     {rotulo}
                                                 </button>
                                             </form>
@@ -774,9 +773,9 @@ pub fn task_detail(
                                 }}
                             </div>
 
-                            <div class="oc-field__label oc-mt-6">{crate::i18n::t("workspaces.field.assignee")}</div>
-                            <form method="post" action=assign_action class="oc-row oc-row--wrap oc-gap-3">
-                                <select class="oc-select" name="assignee_id">
+                            <div class="ods-field__label">{crate::i18n::t("workspaces.field.assignee")}</div>
+                            <form method="post" action=assign_action>
+                                <select class="ods-input" name="assignee_id">
                                     <option value="">{crate::i18n::t("workspaces.no_assignee")}</option>
                                     {members.iter().map(|m| {
                                         let pid = text(m, "person_id");
@@ -785,7 +784,7 @@ pub fn task_detail(
                                         view! { <option value=pid selected=escolhido>{nome}</option> }
                                     }).collect_view()}
                                 </select>
-                                <button class="oc-btn oc-btn--sm oc-btn--primary" data-part="btn" type="submit">
+                                <button class="ods-btn ods-btn--sm ods-btn--navy" data-part="btn" type="submit">
                                     {crate::i18n::t("workspaces.assign")}
                                 </button>
                             </form>
@@ -839,25 +838,25 @@ pub fn dataset_detail(dataset: &Value, versions: &Value) -> AnyView {
     let versoes = items(versions);
 
     view! {
-        <div class="oc-band">
-            <div class="oc-row oc-row--wrap oc-gap-6 oc-mb-2">
+        <div>
+            <div>
                 {pill(crate::i18n::t("workspaces.kind.dataset"))}
-                <h1 class="oc-t-screen">{text(dataset, "title")}</h1>
+                <h1 class="ods-page__title">{text(dataset, "title")}</h1>
                 {classification_badge(&classification)}
                 {badge(state.clone(), Tone::of(&state))}
             </div>
-            <div class="oc-mono oc-mb-5">
+            <div>
                 <a href=format!("/workspaces/{workspace_id}")>{crate::i18n::t("workspaces.back_to_env")}</a>
             </div>
         </div>
 
         <div class="ods-page">
-            <div class="oc-grid oc-grid--detail">
-                <section class="oc-card" data-part="card">
+            <div>
+                <section class="ods-widget ods-widget-surface" data-part="card">
                     {section_head(crate::i18n::t("workspaces.dataset.about"), None, None)}
-                    <div class="oc-card__body">
-                        <p class="oc-t-body">{text(dataset, "description")}</p>
-                        <div class="oc-split oc-split--2 oc-mt-5">
+                    <div class="ods-widget__body">
+                        <p>{text(dataset, "description")}</p>
+                        <div>
                             {metric_text(crate::i18n::t("workspaces.field.code"), &text(dataset, "code"))}
                             {metric_text(crate::i18n::t("workspaces.field.classification"), &classification)}
                             {metric_text(crate::i18n::t("workspaces.field.state"), &state)}
@@ -865,23 +864,23 @@ pub fn dataset_detail(dataset: &Value, versions: &Value) -> AnyView {
                             {metric_text(crate::i18n::t("workspaces.dataset.licence"), &text(dataset, "licence"))}
                             {metric_text(crate::i18n::t("workspaces.dataset.usage_restrictions"), &text(dataset, "usage_restrictions"))}
                         </div>
-                        <div class="oc-field__label oc-mt-6">{crate::i18n::t("workspaces.field.keywords")}</div>
-                        <p class="oc-t-note">{keywords}</p>
+                        <div class="ods-field__label">{crate::i18n::t("workspaces.field.keywords")}</div>
+                        <p class="ods-field__hint">{keywords}</p>
                     </div>
                 </section>
 
-                <section class="oc-card" data-part="card">
+                <section class="ods-widget ods-widget-surface" data-part="card">
                     {section_head(crate::i18n::t("workspaces.dataset.versions"), None, None)}
-                    <div class="oc-card__body">
+                    <div class="ods-widget__body">
                         {if versoes.is_empty() {
                             view! {
-                                <p class="oc-muted">
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("workspaces.dataset.no_versions")}
                                 </p>
                             }.into_any()
                         } else {
                             view! {
-                                <div class="oc-col oc-gap-9">
+                                <div>
                                     {versoes.iter().map(|v| {
                                         let status = text(v, "status");
                                         let ficheiros = v.get("file_count")
@@ -893,13 +892,13 @@ pub fn dataset_detail(dataset: &Value, versions: &Value) -> AnyView {
                                         let publicada = text(v, "published_at");
                                         view! {
                                             <div>
-                                                <div class="oc-row oc-gap-5 oc-mb-1">
-                                                    <span class="oc-fill oc-t-cell-2">
+                                                <div>
+                                                    <span>
                                                         {text(v, "label")}
                                                     </span>
                                                     {badge(status.clone(), Tone::of(&status))}
                                                 </div>
-                                                <div class="oc-mono oc-t-ghost">
+                                                <div class="ods-field__hint">
                                                     {format!(
                                                         "{} · {tamanho}",
                                                         crate::i18n::tp("workspaces.dataset.files", ficheiros),
@@ -913,7 +912,7 @@ pub fn dataset_detail(dataset: &Value, versions: &Value) -> AnyView {
                                                     ))}
                                                 </div>
                                                 {(!text(v, "provenance").is_empty()).then(|| view! {
-                                                    <div class="oc-t-note">{text(v, "provenance")}</div>
+                                                    <div class="ods-field__hint">{text(v, "provenance")}</div>
                                                 })}
                                             </div>
                                         }
@@ -939,14 +938,14 @@ fn artefact_card(
     let count = rows.len();
 
     view! {
-        <section class="oc-card" data-part="card">
-            <div class="oc-card__head">
+        <section class="ods-widget ods-widget-surface" data-part="card">
+            <div class="ods-widget__head">
                 <h2>{title}</h2>
-                <span class="oc-card__meta">{count.to_string()}</span>
+                <span class="ods-label">{count.to_string()}</span>
             </div>
-            <div class="oc-card__body">
+            <div class="ods-widget__body">
                 {if rows.is_empty() {
-                    view! { <p class="oc-muted">{crate::i18n::t("workspaces.empty.records")}</p> }.into_any()
+                    view! { <p class="ods-field__hint">{crate::i18n::t("workspaces.empty.records")}</p> }.into_any()
                 } else {
                     view! {
                         <div>
@@ -955,8 +954,8 @@ fn artefact_card(
                                 .take(6)
                                 .map(|row| {
                                     view! {
-                                        <div class="oc-list__row" >
-                                            <span class="oc-fill oc-truncate oc-t-cell-2" >
+                                        <div >
+                                            <span >
                                                 {text(row, key)}
                                             </span>
                                             {classification_badge(&text(row, "classification"))}
@@ -964,7 +963,7 @@ fn artefact_card(
                                     }
                                 })
                                 .collect_view()}
-                            <a class="oc-card__action oc-mt-5 oc-inline-block" href=href>
+                            <a href=href>
                                 {crate::i18n::t("workspaces.view_all")}
                             </a>
                         </div>
@@ -1061,9 +1060,9 @@ pub fn unit_detail(
         .unwrap_or_default();
 
     view! {
-        <div class="oc-band" >
-            <div class="oc-row oc-row--wrap oc-gap-6 oc-mb-2" >
-                <h1 class="oc-t-screen" >
+        <div >
+            <div >
+                <h1 class="ods-page__title" >
                     {text(unit, "name")}
                 </h1>
                 {pill(text(unit, "code"))}
@@ -1073,12 +1072,12 @@ pub fn unit_detail(
                 {gestao.pode_gerir.then(|| {
                     let href = format!("/units/{id}/edit");
                     view! {
-                        <span class="oc-row__spacer" ></span>
+                        <span class="ods-app__toolbar-spacer" ></span>
                         {button(Button::new(crate::i18n::t("action.edit"), Variant::Secondary).href(href))}
                     }
                 })}
             </div>
-            <div class="oc-mono oc-mb-5" >
+            <div >
                 {crate::i18n::tf(
                     "workspaces.unit.counts",
                     &[
@@ -1092,27 +1091,27 @@ pub fn unit_detail(
         </div>
 
         <div class="ods-page" >
-            <div class="oc-grid oc-grid--detail">
-                <section class="oc-card" data-part="card">
+            <div>
+                <section class="ods-widget ods-widget-surface" data-part="card">
                     {section_head(crate::i18n::t("workspaces.unit.about"), None, None)}
-                    <div class="oc-card__body">
-                        <p class="oc-t-body" >
+                    <div class="ods-widget__body">
+                        <p >
                             {text(unit, "description")}
                         </p>
                         {(!research_areas.is_empty()).then(|| {
                             view! {
-                                <div class="oc-field__label oc-mt-5" >{crate::i18n::t("workspaces.unit.research_areas")}</div>
-                                <div class="oc-chips oc-chips--static" >
+                                <div class="ods-field__label" >{crate::i18n::t("workspaces.unit.research_areas")}</div>
+                                <div class="ods-chips" >
                                     {research_areas
                                         .iter()
                                         .map(|area| view! {
-                                            <span class="oc-chip" data-part="chip" >{area.clone()}</span>
+                                            <span class="ods-chip" data-part="chip" >{area.clone()}</span>
                                         })
                                         .collect_view()}
                                 </div>
                             }
                         })}
-                        <div class="oc-split oc-split--2 oc-mt-5" >
+                        <div >
                             {metric(crate::i18n::t("workspaces.members"), member_rows.len())}
                             {metric(crate::i18n::t("workspaces.ideas"), ideas)}
                             {metric(crate::i18n::t("workspaces.projects"), projects)}
@@ -1121,17 +1120,17 @@ pub fn unit_detail(
                     </div>
                 </section>
 
-                <section class="oc-card" data-part="card">
-                    <div class="oc-card__head">
+                <section class="ods-widget ods-widget-surface" data-part="card">
+                    <div class="ods-widget__head">
                         <h2>{crate::i18n::t("workspaces.members")}</h2>
-                        <span class="oc-card__meta">{member_rows.len().to_string()}</span>
+                        <span class="ods-label">{member_rows.len().to_string()}</span>
                     </div>
-                    <div class="oc-card__body">
+                    <div class="ods-widget__body">
                         {if member_rows.is_empty() {
-                            view! { <p class="oc-muted">{crate::i18n::t("workspaces.empty.members")}</p> }.into_any()
+                            view! { <p class="ods-field__hint">{crate::i18n::t("workspaces.empty.members")}</p> }.into_any()
                         } else {
                             view! {
-                                <div class="oc-col oc-gap-6" >
+                                <div >
                                     {member_rows
                                         .iter()
                                         .map(|member| {
@@ -1143,12 +1142,12 @@ pub fn unit_detail(
                                             let pode = gestao.pode_gerir;
                                             view! {
                                                 <div class="oc-pessoa" data-part="pessoa" >
-                                                    <span class="oc-avatar oc-avatar--sm" >
+                                                    <span class="ods-avatar ods-avatar--sm" >
                                                         {crate::ui::initials(&name)}
                                                     </span>
                                                     <span class="oc-pessoa__quem" >
-                                                        <span class="oc-t-cell-2" >{name}</span>
-                                                        <span class="oc-t-caption--muted" >
+                                                        <span >{name}</span>
+                                                        <span class="ods-field__hint" >
                                                             {email}
                                                         </span>
                                                     </span>
@@ -1194,11 +1193,11 @@ fn gerir_pessoa(unit_id: &str, person_id: &str, role: &str) -> impl IntoView {
             <form method="post" action=format!("/units/{unit_id}/members/role")>
                 <input type="hidden" name="person_id" value=person_id.to_owned() />
                 <input type="hidden" name="role" value=novo />
-                <button class="oc-btn oc-btn--ghost" data-part="btn" type="submit">{rotulo}</button>
+                <button class="ods-btn ods-btn--ghost" data-part="btn" type="submit">{rotulo}</button>
             </form>
             <form method="post" action=format!("/units/{unit_id}/members/remove")>
                 <input type="hidden" name="person_id" value=person_id.to_owned() />
-                <button class="oc-btn oc-btn--ghost" data-part="btn" type="submit">{crate::i18n::t("action.remove")}</button>
+                <button class="ods-btn ods-btn--ghost" data-part="btn" type="submit">{crate::i18n::t("action.remove")}</button>
             </form>
         </span>
     }
@@ -1211,7 +1210,7 @@ fn gerir_pessoa(unit_id: &str, person_id: &str, role: &str) -> impl IntoView {
 fn acrescentar_pessoa(unit_id: &str, candidatos: &[(String, String)]) -> impl IntoView {
     if candidatos.is_empty() {
         return view! {
-            <p class="oc-t-caption--muted oc-mt-5">
+            <p class="ods-field__hint">
                 {crate::i18n::t("workspaces.unit.all_belong")}
             </p>
         }
@@ -1227,20 +1226,20 @@ fn acrescentar_pessoa(unit_id: &str, candidatos: &[(String, String)]) -> impl In
 
     view! {
         <form
-            class="oc-pessoa__acrescentar oc-mt-5" data-part="pessoa__acrescentar"
+            class="oc-pessoa__acrescentar" data-part="pessoa__acrescentar"
             method="post"
             action=format!("/units/{unit_id}/members")
         >
-            <label class="oc-sr" for="oc-unit-person">{crate::i18n::t("workspaces.field.person")}</label>
-            <select class="oc-select" id="oc-unit-person" name="person_id" required>
+            <label class="ods-sr-only" for="oc-unit-person">{crate::i18n::t("workspaces.field.person")}</label>
+            <select class="ods-input" id="oc-unit-person" name="person_id" required>
                 {opcoes}
             </select>
-            <label class="oc-sr" for="oc-unit-role">{crate::i18n::t("workspaces.field.role")}</label>
-            <select class="oc-select" id="oc-unit-role" name="role">
+            <label class="ods-sr-only" for="oc-unit-role">{crate::i18n::t("workspaces.field.role")}</label>
+            <select class="ods-input" id="oc-unit-role" name="role">
                 <option value="member">{crate::i18n::t("workspaces.role.member")}</option>
                 <option value="manager">{crate::i18n::t("workspaces.role.manager")}</option>
             </select>
-            <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">{crate::i18n::t("workspaces.add")}</button>
+            <button class="ods-btn ods-btn--navy" data-part="btn" type="submit">{crate::i18n::t("workspaces.add")}</button>
         </form>
     }
     .into_any()
@@ -1267,17 +1266,17 @@ fn pessoas_do_ambiente(
     let linhas = membros.to_vec();
 
     view! {
-        <section class="oc-card" data-part="card">
-            <div class="oc-card__head">
+        <section class="ods-widget ods-widget-surface" data-part="card">
+            <div class="ods-widget__head">
                 <h2>{crate::i18n::t("workspaces.people")}</h2>
-                <span class="oc-card__meta">{linhas.len().to_string()}</span>
+                <span class="ods-label">{linhas.len().to_string()}</span>
             </div>
-            <div class="oc-card__body">
+            <div class="ods-widget__body">
                 {if linhas.is_empty() {
-                    view! { <p class="oc-muted">{crate::i18n::t("workspaces.empty.people")}</p> }.into_any()
+                    view! { <p class="ods-field__hint">{crate::i18n::t("workspaces.empty.people")}</p> }.into_any()
                 } else {
                     view! {
-                        <div class="oc-col oc-gap-6">
+                        <div>
                             {linhas
                                 .iter()
                                 .map(|membro| {
@@ -1288,11 +1287,11 @@ fn pessoas_do_ambiente(
                                     let pode = gestao.pode_gerir;
                                     view! {
                                         <div class="oc-pessoa" data-part="pessoa">
-                                            <span class="oc-avatar oc-avatar--sm">
+                                            <span class="ods-avatar ods-avatar--sm">
                                                 {crate::ui::initials(&nome)}
                                             </span>
                                             <span class="oc-pessoa__quem">
-                                                <span class="oc-t-cell-2">{nome}</span>
+                                                <span>{nome}</span>
                                             </span>
                                             {badge(papel.clone(), Tone::of(&papel))}
                                             {pode
@@ -1324,7 +1323,7 @@ fn remover_do_ambiente(workspace_id: &str, person_id: &str) -> impl IntoView {
         <span class="oc-pessoa__accoes">
             <form method="post" action=format!("/workspaces/{workspace_id}/members/remove")>
                 <input type="hidden" name="person_id" value=person_id.to_owned() />
-                <button class="oc-btn oc-btn--ghost" data-part="btn" type="submit">{crate::i18n::t("action.remove")}</button>
+                <button class="ods-btn ods-btn--ghost" data-part="btn" type="submit">{crate::i18n::t("action.remove")}</button>
             </form>
         </span>
     }
@@ -1338,7 +1337,7 @@ fn remover_do_ambiente(workspace_id: &str, person_id: &str) -> impl IntoView {
 fn acrescentar_ao_ambiente(workspace_id: &str, candidatos: &[(String, String)]) -> impl IntoView {
     if candidatos.is_empty() {
         return view! {
-            <p class="oc-t-caption--muted oc-mt-5">
+            <p class="ods-field__hint">
                 {crate::i18n::t("workspaces.env.all_belong")}
             </p>
         }
@@ -1354,21 +1353,21 @@ fn acrescentar_ao_ambiente(workspace_id: &str, candidatos: &[(String, String)]) 
 
     view! {
         <form
-            class="oc-pessoa__acrescentar oc-mt-5" data-part="pessoa__acrescentar"
+            class="oc-pessoa__acrescentar" data-part="pessoa__acrescentar"
             method="post"
             action=format!("/workspaces/{workspace_id}/members")
         >
-            <label class="oc-sr" for="oc-ws-person">{crate::i18n::t("workspaces.field.person")}</label>
-            <select class="oc-select" id="oc-ws-person" name="person_id" required>
+            <label class="ods-sr-only" for="oc-ws-person">{crate::i18n::t("workspaces.field.person")}</label>
+            <select class="ods-input" id="oc-ws-person" name="person_id" required>
                 {opcoes}
             </select>
-            <label class="oc-sr" for="oc-ws-role">{crate::i18n::t("workspaces.field.role")}</label>
-            <select class="oc-select" id="oc-ws-role" name="role">
+            <label class="ods-sr-only" for="oc-ws-role">{crate::i18n::t("workspaces.field.role")}</label>
+            <select class="ods-input" id="oc-ws-role" name="role">
                 <option value="member">{crate::i18n::t("workspaces.role.member")}</option>
                 <option value="lead">{crate::i18n::t("workspaces.role.lead")}</option>
                 <option value="viewer">{crate::i18n::t("workspaces.role.viewer")}</option>
             </select>
-            <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">{crate::i18n::t("workspaces.add")}</button>
+            <button class="ods-btn ods-btn--navy" data-part="btn" type="submit">{crate::i18n::t("workspaces.add")}</button>
         </form>
     }
     .into_any()
@@ -1376,9 +1375,9 @@ fn acrescentar_ao_ambiente(workspace_id: &str, candidatos: &[(String, String)]) 
 
 fn aviso_de_gestao(ok: bool, mensagem: &str) -> impl IntoView {
     let classe = if ok {
-        "oc-note oc-note--ok oc-mt-5"
+        "ods-notice"
     } else {
-        "oc-note oc-note--bad oc-mt-5"
+        "ods-notice ods-notice--error"
     };
     view! { <p class=classe role="status">{mensagem.to_owned()}</p> }
 }

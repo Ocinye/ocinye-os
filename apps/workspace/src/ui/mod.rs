@@ -77,6 +77,7 @@ pub fn document_com_cabeca(
          <link rel=\"stylesheet\" href=\"/static/ods-d11-adaptive.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d12-base.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d12-screens.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-integration.css\">\n\
          <title>",
     );
     out.push_str(&escape(title));
@@ -1921,7 +1922,7 @@ pub(crate) mod link_tests {
             if !html.contains(r#"class="oc-shell""#) {
                 continue;
             }
-            for pedaco in html.split(r#"class="oc-notice"#).skip(1) {
+            for pedaco in html.split(r#"class="ods-notice"#).skip(1) {
                 let resto = pedaco.split('"').next().unwrap_or_default();
                 // `oc-notice__tile` e `oc-notice__reference` pertencem ao ecrã.
                 if resto.starts_with("__") {

@@ -118,7 +118,7 @@ pub fn search(query: &str, results: &Value, bodies: &Value, semantic: &Value) ->
                 <form method="get" action="/search" class="oc-search-form">
                     <div class="oc-table__search oc-search-form__field">
                         {icon(Icon::Search, 14)}
-                        <label class="oc-sr" for="search-q">{t("search.field.label")}</label>
+                        <label class="ods-sr-only" for="search-q">{t("search.field.label")}</label>
                         <input
                             id="search-q"
                             name="q"
@@ -128,22 +128,22 @@ pub fn search(query: &str, results: &Value, bodies: &Value, semantic: &Value) ->
                             autofocus
                         />
                     </div>
-                    <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{t("search.submit")}</button>
+                    <button type="submit" class="ods-btn ods-btn--navy" data-part="btn">{t("search.submit")}</button>
                 </form>
 
                 // O modo semântico é declarado, não escondido: faz parte da
                 // arquitectura e o seu estado é informação útil (briefing §32).
                 <div class="oc-search-modes" role="group" aria-label=t("search.mode.aria")>
-                    <span class="oc-tab" data-part="tab" aria-selected="true">{t("search.mode.textual")}</span>
+                    <span class="ods-tabs__tab" data-part="tab" aria-selected="true">{t("search.mode.textual")}</span>
                     {if semantic_available {
                         view! {
-                            <span class="oc-tab" data-part="tab" aria-selected="false">{t("search.mode.semantic")}</span>
+                            <span class="ods-tabs__tab" data-part="tab" aria-selected="false">{t("search.mode.semantic")}</span>
                         }
                             .into_any()
                     } else {
                         view! {
                             <span
-                                class="oc-tab oc-unavailable" data-part="tab unavailable"
+                                class="ods-tabs__tab oc-unavailable" data-part="tab unavailable"
                                 aria-disabled="true"
                                 title=semantic_message.clone()
                             >
@@ -156,12 +156,12 @@ pub fn search(query: &str, results: &Value, bodies: &Value, semantic: &Value) ->
 
                 {if has_query {
                     view! {
-                        <p class="oc-muted oc-mt-6">{count_label}</p>
+                        <p class="ods-field__hint">{count_label}</p>
                     }
                         .into_any()
                 } else {
                     view! {
-                        <div class="oc-vspace"></div>
+                        <div></div>
                     }
                         .into_any()
                 }}
@@ -188,7 +188,7 @@ pub fn search(query: &str, results: &Value, bodies: &Value, semantic: &Value) ->
                     .into_any()
                 } else {
                     view! {
-                        <div class="oc-results">
+                        <div>
                             {hits
                                 .iter()
                                 .map(|hit| {
@@ -205,25 +205,25 @@ pub fn search(query: &str, results: &Value, bodies: &Value, semantic: &Value) ->
                                     // vista Leptos consome-se uma só vez.
                                     let body = move || {
                                         view! {
-                                            <div class="oc-row oc-gap-5 oc-mb-2">
-                                                <span class="oc-pill">{kind}</span>
+                                            <div>
+                                                <span class="ods-chip">{kind}</span>
                                                 {classification_badge(&classification)}
                                             </div>
-                                            <div class="oc-t-item" data-oc-content="1">{title}</div>
+                                            <div data-oc-content="1">{title}</div>
                                             {(!excerpt.is_empty())
                                                 .then(|| {
-                                                    view! { <p class="oc-muted">{excerpt}</p> }
+                                                    view! { <p class="ods-field__hint">{excerpt}</p> }
                                                 })}
                                         }
                                     };
 
                                     match destination(hit) {
                                         Some(href) => {
-                                            view! { <a class="oc-result" href=href>{body()}</a> }
+                                            view! { <a href=href>{body()}</a> }
                                                 .into_any()
                                         }
                                         None => {
-                                            view! { <div class="oc-result">{body()}</div> }.into_any()
+                                            view! { <div>{body()}</div> }.into_any()
                                         }
                                     }
                                 })
@@ -282,26 +282,26 @@ fn resultados_do_corpo(corpos: &[Value]) -> impl IntoView {
             );
 
             view! {
-                <a class="oc-result" href=destino>
-                    <div class="oc-row oc-gap-5 oc-mb-2">
-                        <span class="oc-pill">{t("search.file")}</span>
+                <a href=destino>
+                    <div>
+                        <span class="ods-chip">{t("search.file")}</span>
                         {classification_badge(&classification)}
-                        <span class="oc-t-caption--muted">{citacao}</span>
+                        <span class="ods-field__hint">{citacao}</span>
                     </div>
-                    <div class="oc-t-item" data-oc-content="1">{nome}</div>
+                    <div data-oc-content="1">{nome}</div>
                     // O excerto vem com os termos realçados pelo PostgreSQL, e
                     // é escapado como texto: o realce é uma marca do motor de
                     // pesquisa, não HTML que esta página deva executar.
-                    <p class="oc-muted">{excerto}</p>
+                    <p class="ods-field__hint">{excerto}</p>
                 </a>
             }
         })
         .collect_view();
 
     view! {
-        <section class="oc-mt-6">
-            <h2 class="oc-t-strong oc-mb-5">{t("search.in_file_content")}</h2>
-            <div class="oc-results">{linhas}</div>
+        <section>
+            <h2 class="ods-widget__title">{t("search.in_file_content")}</h2>
+            <div>{linhas}</div>
         </section>
     }
 }
@@ -438,7 +438,7 @@ mod tests {
 
         assert!(html.contains("Dataset solto"));
         assert!(
-            !html.contains(r#"<a class="oc-result""#),
+            !html.contains(r#"<a"#),
             "não deve inventar um destino para um recurso sem ambiente conhecido"
         );
     }

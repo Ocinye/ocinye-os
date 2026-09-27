@@ -271,8 +271,8 @@ fn unit_selector(slice: &Slice, base: &str) -> impl IntoView {
         // Um `GET` normal: a escolha vai para o URL, e um endereço de unidade
         // continua a ser essa unidade quando alguém o guarda ou partilha.
         <form class="oc-unit-pick" method="get" action=base>
-            <label class="oc-field__label" for="unit_id">{crate::i18n::t("lists.unit_pick.label")}</label>
-            <select class="oc-select" id="unit_id" name="unit_id">
+            <label class="ods-field__label" for="unit_id">{crate::i18n::t("lists.unit_pick.label")}</label>
+            <select class="ods-input" id="unit_id" name="unit_id">
                 <option value="" disabled=true selected=escolhida.is_none()>
                     {crate::i18n::t("lists.unit_pick.placeholder")}
                 </option>
@@ -1279,15 +1279,15 @@ fn workspace_destination(workspaces: &Value) -> impl IntoView {
         .collect();
 
     view! {
-        <div class="oc-field">
-            <label class="oc-field__label" for="destino">{crate::i18n::t("lists.research_workspace")}</label>
-            <select class="oc-select" id="destino" name="workspace_id" required>
+        <div class="ods-field">
+            <label class="ods-field__label" for="destino">{crate::i18n::t("lists.research_workspace")}</label>
+            <select class="ods-input" id="destino" name="workspace_id" required>
                 {opcoes
                     .into_iter()
                     .map(|(id, rotulo)| view! { <option value=id>{rotulo}</option> })
                     .collect_view()}
             </select>
-            <p class="oc-field__hint">
+            <p class="ods-field__hint">
                 {crate::i18n::t("lists.destination.hint")}
             </p>
         </div>
@@ -1340,7 +1340,7 @@ pub fn new_source(workspaces: &Value, error: Option<String>) -> impl IntoView {
 
             {error
                 .map(|message| {
-                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{message}</div> }
+                    view! { <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="alert">{message}</div> }
                 })}
 
             {if tem_destino {
@@ -1393,7 +1393,7 @@ pub fn new_source(workspaces: &Value, error: Option<String>) -> impl IntoView {
                             },
                         )}
 
-                        <div class="oc-row--end oc-gap-5 oc-mt-8">
+                        <div>
                             {button(
                                 Button::new(crate::i18n::t("action.cancel"), Variant::Secondary)
                                     .href("/bibliography"),
@@ -1429,7 +1429,7 @@ pub fn new_dataset(workspaces: &Value, error: Option<String>) -> impl IntoView {
 
             {error
                 .map(|message| {
-                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{message}</div> }
+                    view! { <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="alert">{message}</div> }
                 })}
 
             {if tem_destino {
@@ -1478,13 +1478,13 @@ pub fn new_dataset(workspaces: &Value, error: Option<String>) -> impl IntoView {
                                         ("RESTRICTED".to_owned(), true),
                                     ],
                                 )}
-                                <p class="oc-muted oc-t-caption--muted">
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("lists.new_dataset.class_note")}
                                 </p>
                             },
                         )}
 
-                        <div class="oc-row--end oc-gap-5 oc-mt-8">
+                        <div>
                             {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/datasets"))}
                             {button(Button::new(crate::i18n::t("lists.create.dataset_btn"), Variant::Gold))}
                         </div>
@@ -1527,7 +1527,7 @@ pub fn new_task(workspaces: &Value, error: Option<String>) -> impl IntoView {
 
             {error
                 .map(|message| {
-                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{message}</div> }
+                    view! { <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="alert">{message}</div> }
                 })}
 
             {if tem_destino {
@@ -1563,13 +1563,13 @@ pub fn new_task(workspaces: &Value, error: Option<String>) -> impl IntoView {
                                     ],
                                 )}
                                 {text_field("task-due", crate::i18n::t("lists.field.due"), "due_on", "", "date")}
-                                <p class="oc-muted oc-t-caption--muted">
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("lists.new_task.responsible_note")}
                                 </p>
                             },
                         )}
 
-                        <div class="oc-row--end oc-gap-5 oc-mt-8">
+                        <div>
                             {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/my-work"))}
                             {button(Button::new(crate::i18n::t("lists.create.task_btn"), Variant::Gold))}
                         </div>
@@ -1620,7 +1620,7 @@ pub fn new_project(
 
             {error
                 .map(|message| {
-                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{message}</div> }
+                    view! { <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="alert">{message}</div> }
                 })}
 
             {if has_candidates {
@@ -1640,12 +1640,12 @@ pub fn new_project(
                         {card(
                             section_head(crate::i18n::t("lists.new_project.section"), None, None),
                             view! {
-                                <div class="oc-field">
-                                    <label class="oc-field__label" for="promote-idea">
+                                <div class="ods-field">
+                                    <label class="ods-field__label" for="promote-idea">
                                         {crate::i18n::t("lists.new_project.eligible_idea")}
                                     </label>
                                     <select
-                                        class="oc-select"
+                                        class="ods-input"
                                         id="promote-idea"
                                         name="workspace_id"
                                         required
@@ -1661,7 +1661,7 @@ pub fn new_project(
                                             })
                                             .collect_view()}
                                     </select>
-                                    <p class="oc-field__hint">
+                                    <p class="ods-field__hint">
                                         {crate::i18n::t("lists.new_project.eligible_hint")}
                                     </p>
                                 </div>
@@ -1690,7 +1690,7 @@ pub fn new_project(
                             },
                         )}
 
-                        <div class="oc-row--end oc-gap-5 oc-mt-8">
+                        <div>
                             {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/projects"))}
                             {button(Button::new(crate::i18n::t("lists.promote_btn"), Variant::Gold))}
                         </div>
@@ -1740,7 +1740,7 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
 
             {error
                 .map(|message| {
-                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{message}</div> }
+                    view! { <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="alert">{message}</div> }
                 })}
 
             // Sem campo de código: o código é institucional e gerado. Quem cria
@@ -1749,10 +1749,10 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
                 {card(
                     section_head(crate::i18n::t("lists.new_unit.section"), None, None),
                     view! {
-                        <div class="oc-field">
-                            <label class="oc-field__label" for="unit-name">{crate::i18n::t("lists.field.name")}</label>
+                        <div class="ods-field">
+                            <label class="ods-field__label" for="unit-name">{crate::i18n::t("lists.field.name")}</label>
                             <input
-                                class="oc-input"
+                                class="ods-input"
                                 id="unit-name"
                                 name="name"
                                 type="text"
@@ -1765,8 +1765,8 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
                         // O código gerado, mostrado a quem cria. Sem JavaScript,
                         // fica a explicação; com JavaScript, o código previsto
                         // aparece aqui à medida que o nome é escrito.
-                        <div class="oc-field">
-                            <label class="oc-field__label" for="unit-code-preview">{crate::i18n::t("lists.field.code")}</label>
+                        <div class="ods-field">
+                            <label class="ods-field__label" for="unit-code-preview">{crate::i18n::t("lists.field.code")}</label>
                             <output
                                 class="oc-code-preview"
                                 id="unit-code-preview"
@@ -1788,12 +1788,12 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
                         // As áreas de investigação. Base: um campo de texto com
                         // valores separados por vírgulas, que funciona sem
                         // JavaScript. Com JavaScript, o app.js promove-o a fichas.
-                        <div class="oc-field">
-                            <label class="oc-field__label" for="unit-areas">
+                        <div class="ods-field">
+                            <label class="ods-field__label" for="unit-areas">
                                 {crate::i18n::t("lists.field.research_areas")}
                             </label>
                             <input
-                                class="oc-input"
+                                class="ods-input"
                                 id="unit-areas"
                                 name="research_areas"
                                 type="text"
@@ -1806,7 +1806,7 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
                     },
                 )}
 
-                <div class="oc-row--end oc-gap-5 oc-mt-8">
+                <div>
                     {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/units"))}
                     {button(Button::new(crate::i18n::t("lists.create.unit_btn"), Variant::Gold))}
                 </div>
@@ -1842,17 +1842,17 @@ pub fn edit_unit(unit: &Value, error: Option<String>) -> impl IntoView {
 
             {error
                 .map(|message| {
-                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{message}</div> }
+                    view! { <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="alert">{message}</div> }
                 })}
 
             <form method="post" action=action>
                 {card(
                     section_head(crate::i18n::t("lists.new_unit.section"), None, None),
                     view! {
-                        <div class="oc-field">
-                            <label class="oc-field__label" for="unit-code-fixed">{crate::i18n::t("lists.field.code")}</label>
+                        <div class="ods-field">
+                            <label class="ods-field__label" for="unit-code-fixed">{crate::i18n::t("lists.field.code")}</label>
                             <input
-                                class="oc-input oc-input--readonly"
+                                class="ods-input"
                                 id="unit-code-fixed"
                                 type="text"
                                 value=code
@@ -1861,7 +1861,7 @@ pub fn edit_unit(unit: &Value, error: Option<String>) -> impl IntoView {
                             />
                             // Round-trip do código para o re-render de erro; nunca vai ao Core.
                             <input type="hidden" name="code" value=code_hidden />
-                            <p class="oc-field__note" id="unit-code-note">
+                            <p class="ods-field__hint" id="unit-code-note">
                                 {crate::i18n::t("lists.edit_unit.code_note")}
                             </p>
                         </div>
@@ -1883,12 +1883,12 @@ pub fn edit_unit(unit: &Value, error: Option<String>) -> impl IntoView {
                             description,
                         )}
 
-                        <div class="oc-field">
-                            <label class="oc-field__label" for="unit-areas">
+                        <div class="ods-field">
+                            <label class="ods-field__label" for="unit-areas">
                                 {crate::i18n::t("lists.field.research_areas")}
                             </label>
                             <input
-                                class="oc-input"
+                                class="ods-input"
                                 id="unit-areas"
                                 name="research_areas"
                                 type="text"
@@ -1902,7 +1902,7 @@ pub fn edit_unit(unit: &Value, error: Option<String>) -> impl IntoView {
                     },
                 )}
 
-                <div class="oc-row--end oc-gap-5 oc-mt-8">
+                <div>
                     {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href(format!("/units/{id}")))}
                     {button(Button::new(crate::i18n::t("action.save"), Variant::Gold))}
                 </div>
@@ -1937,7 +1937,7 @@ pub fn new_idea(units: &Value, error: Option<String>) -> impl IntoView {
                 .map(|message| {
                     view! {
                         <div
-                            class="oc-card oc-alert" data-part="card"
+                            class="ods-widget ods-widget-surface ods-notice" data-part="card"
                             role="alert"
                         >
                             {message}
@@ -1994,13 +1994,13 @@ pub fn new_idea(units: &Value, error: Option<String>) -> impl IntoView {
                                         ("RESTRICTED".to_owned(), true),
                                     ],
                                 )}
-                                <p class="oc-muted oc-t-caption--muted" >
+                                <p class="ods-field__hint" >
                                     {crate::i18n::t("lists.new_idea.class_note")}
                                 </p>
                             },
                         )}
 
-                        <div class="oc-row--end oc-gap-5 oc-mt-8" >
+                        <div >
                             {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/ideas"))}
                             {button(Button::new(crate::i18n::t("lists.create.idea_btn"), Variant::Gold))}
                         </div>
@@ -2011,13 +2011,13 @@ pub fn new_idea(units: &Value, error: Option<String>) -> impl IntoView {
                 // Sem unidades não há onde colocar uma ideia. Dizê-lo é melhor
                 // do que apresentar um formulário que falharia na submissão.
                 view! {
-                    <section class="oc-card" data-part="card">
-                        <div class="oc-empty">
+                    <section class="ods-widget ods-widget-surface" data-part="card">
+                        <div class="ods-empty">
                             <h3>{crate::i18n::t("lists.new_idea.no_units_title")}</h3>
                             <p>
                                 {crate::i18n::t("lists.new_idea.no_units_body")}
                             </p>
-                            <div class="oc-empty__actions">
+                            <div>
                                 {button(Button::new(crate::i18n::t("lists.see_units_lc"), Variant::Secondary).href("/units"))}
                             </div>
                         </div>
@@ -2042,9 +2042,9 @@ fn units_select(units: &[Value]) -> impl IntoView {
         .collect();
 
     view! {
-        <div class="oc-field">
-            <label class="oc-field__label" for="idea-unit">{crate::i18n::t("lists.field.unit")}</label>
-            <select class="oc-select" id="idea-unit" name="unit_id" required>
+        <div class="ods-field">
+            <label class="ods-field__label" for="idea-unit">{crate::i18n::t("lists.field.unit")}</label>
+            <select class="ods-input" id="idea-unit" name="unit_id" required>
                 {options
                     .into_iter()
                     .map(|(id, label)| view! { <option value=id>{label}</option> })
@@ -2091,28 +2091,28 @@ pub fn bibliography_tools(
 
             {error
                 .map(|message| {
-                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{message}</div> }
+                    view! { <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="alert">{message}</div> }
                 })}
 
             {if tem_destino {
                 view! {
-                    <form class="oc-form" data-part="form" method="post" action="/bibliography/tools">
+                    <form data-part="form" method="post" action="/bibliography/tools">
                         {card(
                             section_head(crate::i18n::t("lists.tools.section"), None, None),
                             view! {
                                 {workspace_destination(workspaces)}
-                                <div class="oc-field">
-                                    <label class="oc-field__label" for="bibtex">"BibTeX"</label>
+                                <div class="ods-field">
+                                    <label class="ods-field__label" for="bibtex">"BibTeX"</label>
                                     <textarea
-                                        class="oc-textarea"
+                                        class="ods-input"
                                         id="bibtex"
                                         name="bibtex"
                                         rows="12"
                                         placeholder=crate::i18n::t("lists.ph.bibtex")
                                     >{escrito}</textarea>
                                 </div>
-                                <div class="oc-actions">
-                                    <button type="submit" class="oc-btn oc-btn--navy" data-part="btn">
+                                <div>
+                                    <button type="submit" class="ods-btn ods-btn--navy" data-part="btn">
                                         {crate::i18n::t("lists.tools.validate")}
                                     </button>
                                 </div>
@@ -2123,7 +2123,7 @@ pub fn bibliography_tools(
                     .into_any()
             } else {
                 view! {
-                    <div class="oc-card" data-part="card">
+                    <div class="ods-widget ods-widget-surface" data-part="card">
                         {empty_state(EmptyState {
                             title: crate::i18n::t("lists.tools.none_title").to_owned(),
                             body: crate::i18n::t("lists.tools.none_body").to_owned(),
@@ -2179,11 +2179,11 @@ fn resultado_da_revisao(revisao: &BibliographyReview) -> impl IntoView {
         .collect();
 
     view! {
-        <div class="oc-mt-6" data-oc="revisao">
+        <div data-oc="revisao">
             {card(
                 section_head(crate::i18n::t("lists.review.section"), None, None),
                 view! {
-                    <p class="oc-t-body">
+                    <p>
                         {badge(
                             if completa {
                                 crate::i18n::t("lists.review.readable")
@@ -2199,9 +2199,9 @@ fn resultado_da_revisao(revisao: &BibliographyReview) -> impl IntoView {
                     {(!ilegiveis.is_empty())
                         .then(|| {
                             view! {
-                                <div class="oc-mt-4">
-                                    <p class="oc-t-strong">{crate::i18n::t("lists.review.unreadable_head")}</p>
-                                    <ul class="oc-list">
+                                <div>
+                                    <p class="ods-widget__title">{crate::i18n::t("lists.review.unreadable_head")}</p>
+                                    <ul>
                                         {ilegiveis
                                             .into_iter()
                                             .map(|excerto| view! { <li>{excerto}</li> })
@@ -2214,9 +2214,9 @@ fn resultado_da_revisao(revisao: &BibliographyReview) -> impl IntoView {
                     {(!entradas.is_empty())
                         .then(|| {
                             view! {
-                                <div class="oc-mt-4">
-                                    <p class="oc-t-strong">{crate::i18n::t("lists.review.read_head")}</p>
-                                    <ul class="oc-list">
+                                <div>
+                                    <p class="ods-widget__title">{crate::i18n::t("lists.review.read_head")}</p>
+                                    <ul>
                                         {entradas
                                             .into_iter()
                                             .map(|(chave, tipo, titulo)| {
@@ -2233,12 +2233,12 @@ fn resultado_da_revisao(revisao: &BibliographyReview) -> impl IntoView {
                             }
                         })}
 
-                    <div class="oc-mt-5">
-                        <label class="oc-field__label" for="normalizado">
+                    <div>
+                        <label class="ods-field__label" for="normalizado">
                             {crate::i18n::t("lists.review.normalised")}
                         </label>
                         <textarea
-                            class="oc-textarea"
+                            class="ods-input"
                             id="normalizado"
                             rows="12"
                             readonly

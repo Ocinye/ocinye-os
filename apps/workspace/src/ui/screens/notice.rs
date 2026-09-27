@@ -23,11 +23,11 @@ use crate::ui::icon::{icon, Icon};
 /// utilizador para dentro da página, e não acrescenta nada que ele não saiba.
 pub fn not_found() -> impl IntoView {
     view! {
-        <div class="oc-notice">
-            <span class="oc-notice__tile">{icon(Icon::EmptyState, 26)}</span>
+        <div class="ods-notice">
+            <span class="ods-empty__icon">{icon(Icon::EmptyState, 26)}</span>
             <h1>{crate::i18n::t("error.not_found.title")}</h1>
             <p>{crate::i18n::t("error.not_found.body")}</p>
-            <div class="oc-row oc-gap-5">
+            <div>
                 {button(Button::new(crate::i18n::t("error.go_home"), Variant::Primary).href("/"))}
                 {button(Button::new(crate::i18n::t("nav.my_work"), Variant::Secondary).href("/my-work"))}
             </div>
@@ -40,12 +40,12 @@ pub fn failure(correlation_id: &str) -> impl IntoView {
     let reference = correlation_id.to_owned();
 
     view! {
-        <div class="oc-notice">
-            <span class="oc-notice__tile">{icon(Icon::Shield, 26)}</span>
+        <div class="ods-notice">
+            <span class="ods-empty__icon">{icon(Icon::Shield, 26)}</span>
             <h1>{crate::i18n::t("error.generic.title")}</h1>
             <p>{crate::i18n::t("error.generic.body")}</p>
-            <p class="oc-mono oc-notice__reference">{crate::i18n::t("error.reference")}{reference}</p>
-            <div class="oc-row oc-gap-5">
+            <p class="ods-label">{crate::i18n::t("error.reference")}{reference}</p>
+            <div>
                 {button(Button::new(crate::i18n::t("error.go_home"), Variant::Primary).href("/"))}
             </div>
         </div>
@@ -58,11 +58,11 @@ pub fn failure(correlation_id: &str) -> impl IntoView {
 /// `not_found` e é [`not_found`] que aparece (ADR-0100).
 pub fn access_denied() -> impl IntoView {
     view! {
-        <div class="oc-notice">
-            <span class="oc-notice__tile">{icon(Icon::Shield, 26)}</span>
+        <div class="ods-notice">
+            <span class="ods-empty__icon">{icon(Icon::Shield, 26)}</span>
             <h1>{crate::i18n::t("error.forbidden.title")}</h1>
             <p>{crate::i18n::t("error.forbidden.body")}</p>
-            <div class="oc-row oc-gap-5">
+            <div>
                 {button(Button::new(crate::i18n::t("nav.my_work"), Variant::Primary).href("/my-work"))}
             </div>
         </div>
@@ -76,11 +76,11 @@ pub fn access_denied() -> impl IntoView {
 /// devolve-a tal como estava — por isso a frase diz isso, e diz a quem cabe.
 pub fn application_inactive() -> impl IntoView {
     view! {
-        <div class="oc-notice" data-oc="app-inactive">
-            <span class="oc-notice__tile">{icon(Icon::Settings, 26)}</span>
+        <div class="ods-notice" data-oc="app-inactive">
+            <span class="ods-empty__icon">{icon(Icon::Settings, 26)}</span>
             <h1>{crate::i18n::t("notice.app_inactive.title")}</h1>
             <p>{crate::i18n::t("notice.app_inactive.body")}</p>
-            <div class="oc-row oc-gap-5">
+            <div>
                 {button(Button::new(crate::i18n::t("nav.home"), Variant::Primary).href("/"))}
             </div>
         </div>
@@ -111,14 +111,14 @@ pub fn unavailable(razao: Option<String>) -> impl IntoView {
     let explicacao =
         razao.unwrap_or_else(|| crate::i18n::t("notice.unavailable.default").to_owned());
     view! {
-        <div class="oc-notice">
-            <span class="oc-notice__tile">{icon(Icon::SystemStatus, 26)}</span>
+        <div class="ods-notice">
+            <span class="ods-empty__icon">{icon(Icon::SystemStatus, 26)}</span>
             <h1>{crate::i18n::t("notice.unavailable.title")}</h1>
             <p>{explicacao}</p>
-            <p class="oc-notice__aside">
+            <p>
                 {crate::i18n::t("notice.unavailable.aside")}
             </p>
-            <div class="oc-row oc-gap-5">
+            <div>
                 {button(Button::new(crate::i18n::t("notice.go_my_work"), Variant::Primary).href("/my-work"))}
             </div>
         </div>
@@ -136,14 +136,14 @@ pub fn unavailable(razao: Option<String>) -> impl IntoView {
 pub fn rejected(razao: &str) -> impl IntoView {
     let razao = razao.to_owned();
     view! {
-        <div class="oc-notice">
-            <span class="oc-notice__tile">{icon(Icon::SystemStatus, 26)}</span>
+        <div class="ods-notice">
+            <span class="ods-empty__icon">{icon(Icon::SystemStatus, 26)}</span>
             <h1>{crate::i18n::t("notice.rejected.title")}</h1>
             <p>{razao}</p>
-            <p class="oc-notice__aside">
+            <p>
                 {crate::i18n::t("notice.rejected.aside")}
             </p>
-            <div class="oc-row oc-gap-5">
+            <div>
                 {button(Button::new(crate::i18n::t("notice.go_my_work"), Variant::Primary).href("/my-work"))}
             </div>
         </div>
@@ -158,11 +158,11 @@ pub fn rejected(razao: &str) -> impl IntoView {
 pub fn conflict(razao: &str) -> impl IntoView {
     let razao = razao.to_owned();
     view! {
-        <div class="oc-notice">
-            <span class="oc-notice__tile">{icon(Icon::SystemStatus, 26)}</span>
+        <div class="ods-notice">
+            <span class="ods-empty__icon">{icon(Icon::SystemStatus, 26)}</span>
             <h1>{crate::i18n::t("notice.conflict.title")}</h1>
             <p>{razao}</p>
-            <p class="oc-notice__aside">
+            <p>
                 {crate::i18n::t("notice.conflict.aside")}
             </p>
         </div>

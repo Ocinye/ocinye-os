@@ -30,24 +30,24 @@ fn seccao(
     corpo: impl IntoView + 'static,
 ) -> impl IntoView {
     view! {
-        <section class="oc-card oc-mb-5" data-part="card" id=ancora>
+        <section class="ods-widget ods-widget-surface" data-part="card" id=ancora>
             {section_head(titulo, None, None)}
-            <div class="oc-card__body">{corpo}</div>
+            <div class="ods-widget__body">{corpo}</div>
         </section>
     }
 }
 
 /// Um parágrafo de ajuda.
 fn p(texto: &'static str) -> impl IntoView {
-    view! { <p class="oc-t-prose oc-mb-5">{texto}</p> }
+    view! { <p>{texto}</p> }
 }
 
 /// Uma entrada de glossário: o estado, e o que significa de facto.
 fn estado(nome: &'static str, significado: &'static str) -> impl IntoView {
     view! {
-        <div class="oc-list__row">
-            <span class="oc-badge oc-badge--gray">{nome}</span>
-            <span class="oc-fill oc-t-cell-2">{significado}</span>
+        <div>
+            <span class="ods-badge">{nome}</span>
+            <span>{significado}</span>
         </div>
     }
 }
@@ -63,9 +63,9 @@ pub fn help() -> impl IntoView {
                 </div>
             </div>
 
-            <nav class="oc-card oc-card__body oc-mb-5" data-part="card" aria-label=crate::i18n::t("help.on_this_page")>
-                <div class="oc-t-meta oc-mb-5">{crate::i18n::t("help.on_this_page")}</div>
-                <div class="oc-col oc-gap-2">
+            <nav class="ods-widget ods-widget-surface ods-widget__body" data-part="card" aria-label=crate::i18n::t("help.on_this_page")>
+                <div class="ods-label">{crate::i18n::t("help.on_this_page")}</div>
+                <div>
                     <a href="#comecar">{crate::i18n::t("help.start")}</a>
                     <a href="#investigacao">{crate::i18n::t("nav.section.research")}</a>
                     <a href="#conhecimento">{crate::i18n::t("help.section.knowledge_data")}</a>
@@ -85,7 +85,7 @@ pub fn help() -> impl IntoView {
                     {p(crate::i18n::t("help.start.p1"))}
                     {p(crate::i18n::t("help.start.p2"))}
                     {p(crate::i18n::t("help.start.p3"))}
-                    <p class="oc-t-prose">
+                    <p>
                         {crate::i18n::t("help.go_to")}<a href="/">{crate::i18n::t("help.link.home")}</a>" · "
                         <a href="/my-work">{crate::i18n::t("nav.my_work")}</a>
                     </p>
@@ -99,7 +99,7 @@ pub fn help() -> impl IntoView {
                     {p(crate::i18n::t("help.research.p1"))}
                     {p(crate::i18n::t("help.research.p2"))}
                     {p(crate::i18n::t("help.research.p3"))}
-                    <p class="oc-t-prose">
+                    <p>
                         {crate::i18n::t("help.go_to")}<a href="/units">{crate::i18n::t("nav.units")}</a>" · "
                         <a href="/ideas">{crate::i18n::t("nav.ideas")}</a>" · "
                         <a href="/projects">{crate::i18n::t("nav.projects")}</a>
@@ -115,7 +115,7 @@ pub fn help() -> impl IntoView {
                     {p(crate::i18n::t("help.knowledge.p2"))}
                     {p(crate::i18n::t("help.knowledge.p3"))}
                     {p(crate::i18n::t("help.knowledge.p4"))}
-                    <p class="oc-t-prose">
+                    <p>
                         {crate::i18n::t("help.go_to")}<a href="/knowledge">{crate::i18n::t("nav.knowledge")}</a>" · "
                         <a href="/bibliography">{crate::i18n::t("nav.bibliography")}</a>" · "
                         <a href="/datasets">{crate::i18n::t("nav.data")}</a>
@@ -156,7 +156,7 @@ pub fn help() -> impl IntoView {
                 view! {
                     {p(crate::i18n::t("help.mail.p1"))}
                     {p(crate::i18n::t("help.mail.p2"))}
-                    <p class="oc-t-prose">{crate::i18n::t("help.go_to")}<a href="/mail">{crate::i18n::t("nav.mail")}</a></p>
+                    <p>{crate::i18n::t("help.go_to")}<a href="/mail">{crate::i18n::t("nav.mail")}</a></p>
                 },
             )}
 
@@ -167,7 +167,7 @@ pub fn help() -> impl IntoView {
                     {p(crate::i18n::t("help.ai.p1"))}
                     {p(crate::i18n::t("help.ai.p2"))}
                     {p(crate::i18n::t("help.ai.p3"))}
-                    <p class="oc-t-prose">
+                    <p>
                         {crate::i18n::t("help.go_to")}<a href="/ai">{crate::i18n::t("nav.ai")}</a>" · "
                         <a href="/ai/agents">{crate::i18n::t("nav.agents")}</a>" · "
                         <a href="/compute">{crate::i18n::t("nav.compute")}</a>
@@ -181,7 +181,7 @@ pub fn help() -> impl IntoView {
                 view! {
                     {p(crate::i18n::t("help.inst.p1"))}
                     {p(crate::i18n::t("help.inst.p2"))}
-                    <p class="oc-t-prose">
+                    <p>
                         {crate::i18n::t("help.go_to")}<a href="/activity">{crate::i18n::t("nav.activity")}</a>" · "
                         <a href="/admin">{crate::i18n::t("nav.admin")}</a>" · "
                         <a href="/audit">{crate::i18n::t("nav.audit")}</a>
@@ -196,7 +196,7 @@ pub fn help() -> impl IntoView {
                     {p(crate::i18n::t("help.account.p1"))}
                     {p(crate::i18n::t("help.account.p2"))}
                     {p(crate::i18n::t("help.account.p3"))}
-                    <p class="oc-t-prose">{crate::i18n::t("help.go_to")}<a href="/settings">{crate::i18n::t("nav.settings")}</a></p>
+                    <p>{crate::i18n::t("help.go_to")}<a href="/settings">{crate::i18n::t("nav.settings")}</a></p>
                 },
             )}
 
@@ -225,7 +225,7 @@ pub fn help() -> impl IntoView {
                         crate::i18n::t("help.state_label.unavailable"),
                         crate::i18n::t("help.state.not_in_state"),
                     )}
-                    <p class="oc-t-prose oc-mt-5">{crate::i18n::t("help.states.footer")}</p>
+                    <p>{crate::i18n::t("help.states.footer")}</p>
                 },
             )}
         </div>

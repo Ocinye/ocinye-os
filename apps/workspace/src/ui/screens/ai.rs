@@ -45,7 +45,7 @@ pub fn hub(status: &Value, models: &Value) -> impl IntoView {
     ];
 
     view! {
-        <div class="oc-band" >
+        <div >
             <div class="ods-page__head" >
                 <div>
                     <h1 class="ods-page__title">{crate::i18n::t("nav.ai")}</h1>
@@ -60,10 +60,10 @@ pub fn hub(status: &Value, models: &Value) -> impl IntoView {
         </div>
 
         <div class="ods-page">
-            <section class="oc-card oc-mb-5" data-part="card" >
+            <section class="ods-widget ods-widget-surface" data-part="card" >
                 {if available {
                     view! {
-                        <div class="oc-card__body">
+                        <div class="ods-widget__body">
                             <p>{message.clone()}</p>
                         </div>
                     }
@@ -85,7 +85,7 @@ pub fn hub(status: &Value, models: &Value) -> impl IntoView {
                 }}
             </section>
 
-            <div class="oc-grid oc-grid--4">
+            <div>
                 {counter(crate::i18n::t("ai.counter.agents"), items(&Value::Null).len(), crate::i18n::t("ai.view_agents"), "/ai/agents")}
                 {counter(crate::i18n::t("ai.counter.models"), model_count, crate::i18n::t("ai.view_models"), "/ai")}
                 {counter(crate::i18n::t("ai.counter.conversations"), 0, crate::i18n::t("ai.open_prompt_action"), "/ai/prompt")}
@@ -107,14 +107,14 @@ fn counter(
     href: &'static str,
 ) -> impl IntoView {
     view! {
-        <a class="oc-card oc-card--clickable oc-card__body oc-card__body--block" data-part="card" href=href >
-            <div class="oc-t-meta" >
+        <a class="ods-widget ods-widget-surface ods-widget__body" data-part="card" href=href >
+            <div class="ods-label" >
                 {label}
             </div>
-            <div class="oc-t-kpi oc-mt-5 oc-mb-3" >
+            <div class="ods-d12-metric__value" >
                 {value.to_string()}
             </div>
-            <div class="oc-card__action">{action}</div>
+            <div>{action}</div>
         </a>
     }
 }
@@ -152,13 +152,13 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
 
             {message
                 .map(|text| {
-                    view! { <div class="oc-callout oc-callout--error" role="alert">{text}</div> }
+                    view! { <div class="ods-notice ods-notice--error" role="alert">{text}</div> }
                 })}
 
             {(!has_models)
                 .then(|| {
                     view! {
-                        <div class="oc-callout oc-callout--warning" role="status">
+                        <div class="ods-notice ods-notice--warning" role="status">
                             <strong>{crate::i18n::t("ai.no_capability_title")}</strong>
                             <p>
                                 {crate::i18n::t("ai.no_capability_body")}
@@ -168,7 +168,7 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                 })}
 
             <form method="post" action="/ai/agents/new">
-                <div class="oc-grid oc-grid--form">
+                <div>
                     <div>
                         {card(
                             section_head(crate::i18n::t("ai.section.identity"), None, None),
@@ -210,7 +210,7 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                                         ("EMBEDDING".to_owned(), true),
                                     ],
                                 )}
-                                <p class="oc-field__hint">
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("ai.capability_hint")}
                                 </p>
                             },
@@ -234,13 +234,13 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                                         ),
                                     ],
                                 )}
-                                <p class="oc-muted oc-t-caption--muted oc-mt-6" >
+                                <p class="ods-field__hint" >
                                     {crate::i18n::t("ai.scope.help")}
                                 </p>
                             },
                         )}
 
-                        <div class="oc-vspace" ></div>
+                        <div ></div>
 
                         {card(
                             section_head(crate::i18n::t("ai.section.knowledge"), None, None),
@@ -261,27 +261,27 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                             },
                         )}
 
-                        <div class="oc-vspace" ></div>
+                        <div ></div>
 
                         <section
-                            class="oc-card oc-card__body oc-card__body--subtle" data-part="card"
+                            class="ods-widget ods-widget-surface ods-widget__body" data-part="card"
                         >
-                            <div class="oc-flex oc-gap-7">
-                                <span class="oc-ink">{icon(Icon::Shield, 16)}</span>
+                            <div>
+                                <span>{icon(Icon::Shield, 16)}</span>
                                 <div>
-                                    <div class="oc-t-strong oc-mb-2" >
+                                    <div class="ods-widget__title" >
                                         {crate::i18n::t("ai.security.title")}
                                     </div>
-                                    <p class="oc-t-caption--muted" >
+                                    <p class="ods-field__hint" >
                                         {crate::i18n::t("ai.security.body")}
                                     </p>
                                 </div>
                             </div>
                         </section>
 
-                        <div class="oc-row--end oc-gap-5 oc-mt-8" >
+                        <div >
                             {button(Button::new(crate::i18n::t("ask.cancel"), Variant::Secondary).href("/ai/agents"))}
-                            <button type="submit" class="oc-btn oc-btn--gold" data-part="btn">
+                            <button type="submit" class="ods-btn ods-btn--primary" data-part="btn">
                                 {crate::i18n::t("ai.create_agent")}
                             </button>
                         </div>
@@ -289,7 +289,7 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                 </div>
             </form>
 
-            <p class="oc-muted oc-t-caption--muted oc-mt-6">
+            <p class="ods-field__hint">
                 {if has_models {
                     crate::i18n::t("ai.available_when_created")
                 } else {
@@ -364,42 +364,42 @@ pub fn agent_detail(agent: &Value) -> impl IntoView {
     let instructions = campo(agent, "instructions");
 
     view! {
-        <div class="oc-band">
-            <div class="oc-row oc-row--wrap oc-gap-6 oc-mb-2">
+        <div>
+            <div>
                 {pill(crate::i18n::t("ai.detail.pill"))}
-                <h1 class="oc-t-screen">{campo(agent, "name")}</h1>
+                <h1 class="ods-page__title">{campo(agent, "name")}</h1>
                 {badge(state_label, Tone::of(&state))}
             </div>
-            <div class="oc-mono oc-mb-5">
+            <div>
                 <a href="/ai/agents">{crate::i18n::t("ai.back_to_agents")}</a>
             </div>
         </div>
 
         <div class="ods-page">
-            <div class="oc-grid oc-grid--detail">
-                <section class="oc-card" data-part="card">
+            <div>
+                <section class="ods-widget ods-widget-surface" data-part="card">
                     {section_head(crate::i18n::t("ai.detail.definition"), None, None)}
-                    <div class="oc-card__body">
-                        <p class="oc-t-body">{purpose}</p>
-                        <div class="oc-split oc-split--2 oc-mt-5">
+                    <div class="ods-widget__body">
+                        <p>{purpose}</p>
+                        <div>
                             {metric(crate::i18n::t("ai.metric.capability"), &campo(agent, "capability"))}
                             {metric(crate::i18n::t("ai.metric.scope"), &scope)}
                             {metric(crate::i18n::t("ai.metric.classification_ceiling"), &classification)}
                             {metric(crate::i18n::t("ai.metric.knowledge_sources"), &fontes_texto)}
                             {metric(crate::i18n::t("ai.metric.created_by"), &campo(agent, "created_by_name"))}
                         </div>
-                        <div class="oc-field__label oc-mt-6">{crate::i18n::t("ai.detail.instructions")}</div>
-                        <p class="oc-t-note">{instructions}</p>
+                        <div class="ods-field__label">{crate::i18n::t("ai.detail.instructions")}</div>
+                        <p class="ods-field__hint">{instructions}</p>
                     </div>
                 </section>
 
-                <section class="oc-card" data-part="card">
+                <section class="ods-widget ods-widget-surface" data-part="card">
                     {section_head(crate::i18n::t("ai.detail.execution"), None, None)}
-                    <div class="oc-card__body">
-                        <div class="oc-row oc-row--wrap oc-gap-6">
+                    <div class="ods-widget__body">
+                        <div>
                             {classification_badge(&classification)}
                         </div>
-                        <p class="oc-t-note oc-mt-5">
+                        <p class="ods-field__hint">
                             {if execution_available {
                                 crate::i18n::t("ai.execution.available")
                             } else {
@@ -417,9 +417,9 @@ pub fn agent_detail(agent: &Value) -> impl IntoView {
 fn metric(label: &'static str, value: &str) -> impl IntoView {
     let value = value.to_owned();
     view! {
-        <div class="oc-split__cell">
-            <div class="oc-t-cell-2">{value}</div>
-            <div class="oc-t-hint oc-mt-1">{label}</div>
+        <div>
+            <div>{value}</div>
+            <div class="ods-field__hint">{label}</div>
         </div>
     }
 }
