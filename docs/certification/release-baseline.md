@@ -10,8 +10,8 @@ passou. Uma capacidade que não tenha linha aqui não está provada.
 
 | | |
 |---|---|
-| Release em produção | `18eb8248db1b` (`main @ 18eb824`, PR #178), deployado a 2026-09-27 |
-| Release anterior | `f0fef6d72071` |
+| Release em produção | `4f8d0489f54e` (`main @ 4f8d048`, PR #179), deployado a 2026-09-27 |
+| Releases anteriores | `18eb8248db1b` (a passagem para o Garage), `f0fef6d72071` |
 | Esquema | 58 migrações |
 | Provas de anfitrião | pacote de prova de `e62a1e5dc795`, anfitriões Linux descartáveis |
 | Verificação canónica | `./scripts/verify.sh` em `01001f7`, contra o Garage: PASS |
@@ -36,7 +36,7 @@ passou. Uma capacidade que não tenha linha aqui não está provada.
 | Encaminhamento entre fornecedores | ADR-0311; os cenários de `ai_routing_http.rs` |
 | Compatibilidade com nó local | o encaminhamento pelo inventário reportado pelo nó (ADR-0304) |
 | Governança de segredos | ADR-0110; nunca devolvidos, procurados em claro em toda a base e não encontrados |
-| Backup e restauro | `scripts/restore-e2e.sh` — PASS. O backup agendado da produção: conjunto local PASS, cópia externa FAIL, corrigida e à espera da próxima execução agendada (abaixo) |
+| Backup e restauro | `scripts/restore-e2e.sh` — PASS; na produção, o agendador dispara e a cópia externa chega ao cofre, confirmada por leitura de volta (abaixo) |
 | Actualização | `scripts/upgrade-e2e.sh` — PASS, com a passagem MinIO → Garage e um release falhado revertido |
 | `pt`, `en`, `fr` | a viagem de troca de língua; o portão de chaves em falta = 0 |
 | Hardware | `MINIMUM_SUPPORTED` 2 vCPU · 4 GB, `RECOMMENDED` 4 vCPU · 8 GB — [medido](../install/hardware-results.md) |
@@ -54,17 +54,30 @@ A jornada de 33 passos está em [`general-os.md`](general-os.md), com os 33 prov
 
 ## Backup agendado
 
-A primeira execução agendada depois do deploy (2026-09-27 03:00 UTC) **não
-passou**. O conjunto local ficou completo — manifesto, base, os 5 objectos já
-lidos do Garage, somas e cifra `age` —, mas a cópia externa para o R2 foi
-recusada: o `rclone` tentou criar o bucket antes de enviar, e a chave do R2, só
-de objectos, recebeu 403. O `mc` que ele substituiu não fazia esse pedido, e as
-provas de anfitrião não o apanharam porque o seu destino aceitava criar buckets.
+- **O agendador dispara:** a execução de 2026-09-27 03:00 UTC foi disparada pelo
+  `ocinye-backup.timer`. O conjunto local ficou completo (manifesto, base, os 5
+  objectos já lidos do Garage, somas, cifra `age`), mas a cópia externa foi
+  recusada: o `rclone` pedia `CreateBucket`, e a chave do R2, só de objectos,
+  recebia 403. O `mc` que ele substituiu não fazia esse pedido.
+- **A cópia externa chega ao cofre:** com `no_check_bucket` no release
+  `4f8d0489f54e`, a execução de 2026-09-27 07:46 UTC — lançada pelo operador com
+  `systemctl start ocinye-backup.service`, a mesma unidade que o agendador dispara —
+  terminou com sucesso: 7 objectos, cópia externa **confirmada por leitura de
+  volta**, e retenção aplicada nas duas pontas.
+- A próxima execução agendada (2026-09-28 03:00 UTC) é a primeira em que as duas
+  coisas acontecem juntas; é confirmação, não condição.
 
-Corrigido em `scripts/backup-remote.sh` com `no_check_bucket`. **A prova é a
-próxima execução disparada pelo agendador depois do deploy da correcção** — não
-uma execução manual (ver [backups](../backups/README.md)). Até ela passar, o RPO
-é o do último conjunto que chegou ao cofre.
+## Escritas novas no Garage
+
+Depois do deploy, um ficheiro carregado pelo browser na produção passou o bucket
+de 5 para 7 objectos (o ficheiro e a sua miniatura), e `verify-objects` recalculou
+a soma dos 7, lidos do Garage.
+
+## Declaração
+
+```
+OCINYE_GENERAL_OS_BASELINE_READY = TRUE   (2026-09-27, release 4f8d0489f54e)
+```
 
 ## O que este release **não** é
 
