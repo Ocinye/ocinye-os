@@ -3519,22 +3519,57 @@ document.addEventListener('keydown', (event) => {
  * vista abre onde há alguma coisa em vez de num sítio fixo que pode não ter
  * nada. */
 (function () {
+  /* A grelha do D12 (`.ods-d12-cal`): uma hora são 48px (a coluna tem 1152px e
+   * as linhas de fundo repetem-se a cada 48px), uma faixa de meia hora são 24px.
+   * O servidor diz onde cada coisa começa e quanto ocupa em atributos; a
+   * posição aplica-se aqui por CSSOM, que a CSP admite — um `style=""` no HTML
+   * seria descartado. */
+  var HORA = 48;
+  var FAIXA = HORA / 2;
+  document.querySelectorAll('.ods-d12-cal[data-dias]').forEach(function (grelha) {
+    var dias = Number(grelha.getAttribute('data-dias')) || 7;
+    /* A grelha do desenho tem sete colunas; o Dia tem uma (Q-31). */
+    if (dias !== 7) {
+      grelha.style.setProperty('grid-template-columns', '56px repeat(' + dias + ', minmax(0, 1fr))');
+    }
+  });
+  document.querySelectorAll('.ods-d12-cal__axis [data-hora]').forEach(function (h) {
+    h.style.setProperty('position', 'absolute');
+    h.style.setProperty('top', (Number(h.getAttribute('data-hora')) * HORA) + 'px');
+  });
+  document.querySelectorAll('.ods-d12-cal__event[data-linha]').forEach(function (b) {
+    var linha = Number(b.getAttribute('data-linha')) || 0;
+    var faixas = Number(b.getAttribute('data-faixas')) || 1;
+    var coluna = Number(b.getAttribute('data-coluna')) || 1;
+    var colunas = Number(b.getAttribute('data-colunas')) || 1;
+    b.style.setProperty('top', (linha * FAIXA) + 'px');
+    b.style.setProperty('height', (faixas * FAIXA - 2) + 'px');
+    b.style.setProperty('left', ((coluna - 1) * 100 / colunas) + '%');
+    b.style.setProperty('width', 'calc(' + (100 / colunas) + '% - 2px)');
+  });
+  document.querySelectorAll('.ods-d12-cal__now[data-linha]').forEach(function (a) {
+    a.style.setProperty('top', (Number(a.getAttribute('data-linha')) * FAIXA) + 'px');
+  });
+
   var corpo = document.querySelector('[data-oc="linha-do-tempo"]');
   if (!corpo) return;
 
-  var bloco = corpo.querySelector('[data-part~=cal-bloco]');
+  /* A grelha não rola por si: rola o contentor da página. Leva-se esse
+     contentor até à primeira actividade, ou às sete sem nenhuma. */
+  var rolante = corpo.closest('[data-ods-scroll]') || document.scrollingElement;
+  var alvo = null;
+  var bloco = corpo.querySelector('.ods-d12-cal__event');
   if (bloco) {
     /* Uma faixa acima do primeiro evento, para ele não ficar colado ao topo e
        se perceber que há espaço antes dele. */
-    var faixa = bloco.offsetHeight > 0 ? bloco.offsetTop : 0;
-    corpo.scrollTop = Math.max(0, faixa - 24);
-    return;
+    alvo = Number(bloco.getAttribute('data-linha') || 0) * FAIXA - FAIXA;
+  } else {
+    alvo = 7 * HORA;
   }
-
-  var eixo = corpo.querySelector('[data-part~=cal-eixo]');
-  if (!eixo || !eixo.children.length) return;
-  var sete = eixo.children[7];
-  if (sete) corpo.scrollTop = sete.offsetTop;
+  if (rolante && alvo !== null) {
+    var topo = corpo.getBoundingClientRect().top - rolante.getBoundingClientRect().top + rolante.scrollTop;
+    rolante.scrollTop = Math.max(0, topo + alvo);
+  }
 })();
 
 /* O editor de actividade responde ao que se escolhe.
@@ -3700,6 +3735,7 @@ document.addEventListener('keydown', (event) => {
 
       var marca = document.createElement('span');
       marca.dataset.part = 'escolhido';
+      marca.className = 'ods-token';
       marca.dataset.id = id;
 
       var texto = document.createElement('span');
@@ -3715,6 +3751,7 @@ document.addEventListener('keydown', (event) => {
       var tirar = document.createElement('button');
       tirar.type = 'button';
       tirar.dataset.part = 'escolhido__tirar';
+      tirar.className = 'ods-iconbtn';
       tirar.setAttribute('aria-label', 'Retirar ' + nome);
       tirar.textContent = '×';
       tirar.addEventListener('click', function () { remover(id); });

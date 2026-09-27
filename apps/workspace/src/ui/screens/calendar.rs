@@ -405,54 +405,40 @@ pub fn calendar(page: &CalendarPage<'_>) -> impl IntoView {
 /// o período onde se está, avançar, e voltar a hoje — e à direita a forma de o
 /// ver. A separação é a informação.
 fn toolbar(current: CalendarView, anchor: NaiveDate) -> impl IntoView {
-    use crate::ui::icon::{icon, Icon};
-
     let anterior = step(current, anchor, false);
     let seguinte = step(current, anchor, true);
     let texto = period_text(current, anchor);
 
     view! {
-        <div class="oc-cal-bar">
-            <div class="oc-cal-bar__tempo">
-                <a
-                    class="oc-cal-nav"
-                    href=format!("/calendar?view={}&on={anterior}", current.as_str())
-                    aria-label=crate::i18n::tf("calendar.nav.prev", &[("label", current.label())])
-                    rel="prev"
-                >
-                    // O mesmo galo do sistema, virado. Acrescentar duas setas ao
-                    // sprite seria acrescentar iconografia para dizer o que a
-                    // que já lá está diz, noutra direcção.
-                    <span class="oc-cal-nav__glifo oc-cal-nav__glifo--anterior">
-                        {icon(Icon::ChevronUp, 16)}
-                    </span>
-                </a>
-                <h2 class="oc-cal-bar__periodo" aria-live="polite">{texto}</h2>
-                <a
-                    class="oc-cal-nav"
-                    href=format!("/calendar?view={}&on={seguinte}", current.as_str())
-                    aria-label=crate::i18n::tf("calendar.nav.next", &[("label", current.label())])
-                    rel="next"
-                >
-                    <span class="oc-cal-nav__glifo oc-cal-nav__glifo--seguinte">
-                        {icon(Icon::ChevronUp, 16)}
-                    </span>
-                </a>
-                <a
-                    class="oc-cal-hoje"
-                    href=format!("/calendar?view={}", current.as_str())
-                >
-                    {crate::i18n::t("calendar.today")}
-                </a>
-            </div>
+        <div class="ods-app__toolbar">
+            <a
+                class="ods-iconbtn"
+                href=format!("/calendar?view={}&on={anterior}", current.as_str())
+                aria-label=crate::i18n::tf("calendar.nav.prev", &[("label", current.label())])
+                rel="prev"
+            >
+                <span aria-hidden="true">"‹"</span>
+            </a>
+            <a class="ods-btn ods-btn--sm" href=format!("/calendar?view={}", current.as_str())>
+                {crate::i18n::t("calendar.today")}
+            </a>
+            <a
+                class="ods-iconbtn"
+                href=format!("/calendar?view={}&on={seguinte}", current.as_str())
+                aria-label=crate::i18n::tf("calendar.nav.next", &[("label", current.label())])
+                rel="next"
+            >
+                <span aria-hidden="true">"›"</span>
+            </a>
+            <h2 class="ods-d12-cal__period" aria-live="polite">{texto}</h2>
+            <span class="ods-app__toolbar-spacer"></span>
 
-            <nav class="oc-cal-vistas" aria-label=crate::i18n::t("calendar.views")>
+            <nav class="ods-seg" aria-label=crate::i18n::t("calendar.views")>
                 {CalendarView::all().into_iter().map(|vista| {
                     let activa = vista == current;
                     view! {
                         <a
-                            class=if activa { "oc-cal-vista oc-cal-vista--activa" }
-                                  else { "oc-cal-vista" }
+                            class="ods-seg__opt"
                             href=format!("/calendar?view={}&on={}", vista.as_str(), anchor)
                             aria-current=activa.then_some("page")
                         >
@@ -728,49 +714,64 @@ fn agora_no_dia(dia: NaiveDate, zona: TimeZoneName) -> Option<usize> {
 }
 
 /// O eixo das horas, à esquerda da grelha.
+///
+/// Cada hora leva `data-hora`; o `app.js` coloca-a por CSSOM à altura da sua
+/// linha (a CSP recusa `style=""` no HTML).
 fn eixo_das_horas() -> impl IntoView {
     view! {
-        <div class="oc-cal-eixo" data-part="cal-eixo" aria-hidden="true">
+        <div class="ods-d12-cal__axis" data-part="cal-eixo" aria-hidden="true">
             {HORAS.map(|h| view! {
-                <span class="oc-cal-eixo__hora">{format!("{h:02}:00")}</span>
+                <span data-hora=h.to_string()>{format!("{h:02}:00")}</span>
             }).collect_view()}
         </div>
     }
 }
 
-/// As linhas de fundo de uma coluna de dia, uma por hora.
+/// As linhas de fundo da grelha, uma por hora.
 fn linhas_das_horas() -> impl IntoView {
-    view! {
-        <div class="oc-cal-linhas" aria-hidden="true">
-            {HORAS.map(|_| view! { <span></span> }).collect_view()}
-        </div>
+    view! { <div class="ods-d12-cal__lines" aria-hidden="true"></div> }
+}
+
+/// O tom de uma actividade na grelha (D12: `navy`, `gold`, `green`).
+///
+/// O desenho dá três tons e não diz a que tipo cada um pertence (Q-31): um
+/// evento é navy, um prazo de tarefa é dourado, um lembrete é verde. O texto e
+/// o `data-kind` dizem o tipo; a cor acompanha.
+fn tom(kind: &str) -> &'static str {
+    match kind {
+        "task_due" => "gold",
+        "reminder" => "green",
+        _ => "navy",
     }
 }
 
 /// Uma coluna de dia com as suas actividades colocadas.
+///
+/// A posição vai por atributos e é o `app.js` que a aplica por CSSOM: a CSP é
+/// `style-src 'self'`, e um atributo de estilo no HTML seria descartado sem uma
+/// palavra.
 fn coluna_do_dia(items: &[Item], dia: NaiveDate, zona: TimeZoneName) -> impl IntoView {
     let colocados = dispor(items, dia, zona);
     let agora = agora_no_dia(dia, zona);
+    let hoje = crate::ui::tempo::hoje_civil(Utc::now(), zona);
 
     view! {
-        <div class="oc-cal-coluna" data-part="cal-coluna" data-oc-dia=dia.to_string()>
-            {linhas_das_horas()}
+        <div
+            class="ods-d12-cal__col"
+            data-part="cal-coluna"
+            data-oc-dia=dia.to_string()
+            aria-current=(dia == hoje).then_some("date")
+        >
             {agora.map(|faixa| view! {
-                <div class=format!("oc-cal-agora oc-cal-l{faixa}") data-part="cal-agora" data-linha=faixa.to_string() aria-hidden="true"></div>
+                <div class="ods-d12-cal__now" data-part="cal-agora" data-linha=faixa.to_string() aria-hidden="true"></div>
             })}
             {colocados.into_iter().map(|c| {
-                // A posição vai por classe, e não por `style`: a CSP deste
-                // Workspace é `style-src 'self'`, e um atributo de estilo seria
-                // descartado sem uma palavra.
-                let classes = format!(
-                    "oc-cal-bloco oc-cal-l{} oc-cal-f{} oc-cal-c{}de{}",
-                    c.linha, c.faixas, c.coluna + 1, c.colunas
-                );
                 let hora = c.item.clock(zona).unwrap_or_default();
                 view! {
                     <a
-                        class=classes
+                        class="ods-d12-cal__event"
                         data-part="cal-bloco"
+                        data-tone=tom(&c.item.kind)
                         data-linha=c.linha.to_string()
                         data-faixas=c.faixas.to_string()
                         data-coluna=(c.coluna + 1).to_string()
@@ -779,8 +780,9 @@ fn coluna_do_dia(items: &[Item], dia: NaiveDate, zona: TimeZoneName) -> impl Int
                         data-kind=c.item.kind.clone()
                         title=c.item.title.clone()
                     >
-                        <span class="oc-cal-bloco__hora" data-part="cal-bloco__hora">{hora}</span>
-                        <span class="oc-cal-bloco__titulo" data-part="cal-bloco__titulo">{c.item.title.clone()}</span>
+                        <span class="ods-label" data-part="cal-bloco__hora">{hora}</span>
+                        " "
+                        <span data-part="cal-bloco__titulo">{c.item.title.clone()}</span>
                     </a>
                 }
             }).collect_view()}
@@ -798,20 +800,21 @@ fn faixa_de_dia_inteiro(dias: &[(NaiveDate, Vec<Item>)]) -> Option<impl IntoView
         .any(|(_, items)| items.iter().any(|i| i.all_day));
     algum.then(|| {
         let dias = dias.to_vec();
+        let quantos = dias.len().to_string();
         view! {
-            <div class="oc-cal-diainteiro">
-                <span class="oc-cal-diainteiro__rotulo">{crate::i18n::t("calendar.all_day")}</span>
-                <div class="oc-cal-diainteiro__dias">
+            <div class="ods-d12-cal" data-dias=quantos>
+                <span class="ods-label">{crate::i18n::t("calendar.all_day")}</span>
+                <div class="ods-d12-cal__allday">
                     {dias.into_iter().map(|(_, items)| view! {
-                        <div class="oc-cal-diainteiro__dia">
+                        <div>
                             {items.iter().filter(|i| i.all_day).map(|item| view! {
                                 <a
-                                    class="oc-cal-bloco oc-cal-bloco--diainteiro" data-part="cal-bloco"
+                                    class="ods-d12-cal__pill" data-part="cal-bloco"
                                     href=item.href()
                                     data-kind=item.kind.clone()
                                     title=item.title.clone()
                                 >
-                                    <span class="oc-cal-bloco__titulo" data-part="cal-bloco__titulo">{item.title.clone()}</span>
+                                    <span data-part="cal-bloco__titulo">{item.title.clone()}</span>
                                 </a>
                             }).collect_view()}
                         </div>
@@ -839,22 +842,20 @@ fn today_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
     let dias = vec![(anchor, do_dia.clone())];
 
     view! {
-        <div class="oc-cal-tempo oc-cal-tempo--dia">
-            {faixa_de_dia_inteiro(&dias)}
-            <div class="oc-cal-cabecas">
-                <span class="oc-cal-cabecas__canto" aria-hidden="true"></span>
-                <div class="oc-cal-cabeca oc-cal-cabeca--hoje">
-                    <span class="oc-cal-cabeca__dia">
-                        {crate::ui::tempo::dia_da_semana(anchor)}
-                    </span>
-                    <span class="oc-cal-cabeca__numero">{anchor.day().to_string()}</span>
+        <div data-part="cal-tempo">
+            <div class="ods-d12-cal" data-dias="1">
+                <span aria-hidden="true"></span>
+                <div aria-current="date">
+                    <span class="ods-label">{crate::ui::tempo::dia_da_semana(anchor)}</span>
+                    " "
+                    <strong>{anchor.day().to_string()}</strong>
                 </div>
             </div>
-            <div class="oc-cal-corpo" data-oc="linha-do-tempo">
+            {faixa_de_dia_inteiro(&dias)}
+            <div class="ods-d12-cal" data-dias="1" data-oc="linha-do-tempo">
+                {linhas_das_horas()}
                 {eixo_das_horas()}
-                <div class="oc-cal-colunas oc-cal-colunas--uma">
-                    {coluna_do_dia(&do_dia, anchor, zona)}
-                </div>
+                {coluna_do_dia(&do_dia, anchor, zona)}
             </div>
         </div>
     }
@@ -872,8 +873,8 @@ fn today_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
 fn agenda_view(items: &[Item], zona: TimeZoneName) -> AnyView {
     if items.is_empty() {
         return view! {
-            <div class="oc-cal-agenda oc-cal-agenda--vazia" data-part="cal-agenda">
-                <p>{crate::i18n::t("calendar.empty.period.dot")}</p>
+            <div class="ods-empty" data-part="cal-agenda">
+                <p class="ods-empty__title">{crate::i18n::t("calendar.empty.period.dot")}</p>
             </div>
         }
         .into_any();
@@ -891,47 +892,30 @@ fn agenda_view(items: &[Item], zona: TimeZoneName) -> AnyView {
     let hoje = crate::ui::tempo::hoje_civil(Utc::now(), zona);
 
     view! {
-        <div class="oc-cal-agenda" data-part="cal-agenda">
+        <div data-part="cal-agenda">
             {dias.into_iter().map(|(dia, lista)| {
-                let e_hoje = dia == hoje;
-                let classe = if e_hoje {
-                    "oc-cal-grupo oc-cal-grupo--hoje"
-                } else {
-                    "oc-cal-grupo"
-                };
                 view! {
-                    <section class=classe>
-                        <div class="oc-cal-grupo__data">
-                            <span class="oc-cal-grupo__numero">{dia.day().to_string()}</span>
-                            <span class="oc-cal-grupo__dia">
-                                {crate::ui::tempo::dia_da_semana(dia)}
-                            </span>
-                            <span class="oc-cal-grupo__mes">
-                                {crate::ui::tempo::mes(dia)}
-                            </span>
-                        </div>
-                        <ul class="oc-cal-grupo__itens">
+                    <section aria-current=(dia == hoje).then_some("date")>
+                        <h3 class="ods-label">
+                            {dia.day().to_string()}
+                            " "
+                            {crate::ui::tempo::dia_da_semana(dia)}
+                            " · "
+                            {crate::ui::tempo::mes(dia)}
+                        </h3>
+                        <ol class="ods-d12-results">
                             {lista.iter().map(|item| view! {
-                                <li>
-                                    <a
-                                        class="oc-cal-linha"
-                                        href=item.href()
-                                        data-kind=item.kind.clone()
-                                    >
-                                        <span class="oc-cal-linha__hora">
-                                            {item.clock(zona).unwrap_or_else(|| crate::i18n::t("calendar.all_day").to_owned())}
-                                        </span>
-                                        <span class="oc-cal-linha__titulo" data-part="cal-linha__titulo">
-                                            {item.title.clone()}
-                                        </span>
-                                        <span class="oc-cal-linha__tipo">
-                                            {item.kind_label()}
-                                        </span>
-                                        {classification_badge(&item.classification)}
-                                    </a>
+                                <li class="ods-d12-result" data-kind=item.kind.clone()>
+                                    <span class="ods-label">
+                                        {item.clock(zona).unwrap_or_else(|| crate::i18n::t("calendar.all_day").to_owned())}
+                                    </span>
+                                    <a href=item.href() data-part="cal-linha__titulo">{item.title.clone()}</a>
+                                    <span class="ods-app__toolbar-spacer"></span>
+                                    <span class="ods-field__hint">{item.kind_label()}</span>
+                                    {classification_badge(&item.classification)}
                                 </li>
                             }).collect_view()}
-                        </ul>
+                        </ol>
                     </section>
                 }
             }).collect_view()}
@@ -957,36 +941,29 @@ fn week_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Into
         .collect();
 
     view! {
-        <div class="oc-cal-tempo oc-cal-tempo--semana">
-            {faixa_de_dia_inteiro(&dias)}
-            <div class="oc-cal-cabecas">
-                <span class="oc-cal-cabecas__canto" aria-hidden="true"></span>
+        <div data-part="cal-tempo">
+            <div class="ods-d12-cal" data-dias="7">
+                <span aria-hidden="true"></span>
                 {dias.iter().map(|(dia, _)| {
                     let dia = *dia;
-                    let classe = if dia == hoje {
-                        "oc-cal-cabeca oc-cal-cabeca--hoje"
-                    } else {
-                        "oc-cal-cabeca"
-                    };
                     view! {
                         <a
-                            class=classe
                             href=format!("/calendar?view=day&on={dia}")
+                            aria-current=(dia == hoje).then_some("date")
                             aria-label=crate::i18n::tf("calendar.view_more", &[("n", &crate::ui::tempo::data_por_extenso(dia))])
                         >
-                            <span class="oc-cal-cabeca__dia">
-                                {crate::ui::tempo::dia_da_semana_curto(dia)}
-                            </span>
-                            <span class="oc-cal-cabeca__numero">{dia.day().to_string()}</span>
+                            <span class="ods-label">{crate::ui::tempo::dia_da_semana_curto(dia)}</span>
+                            " "
+                            <strong>{dia.day().to_string()}</strong>
                         </a>
                     }
                 }).collect_view()}
             </div>
-            <div class="oc-cal-corpo" data-oc="linha-do-tempo">
+            {faixa_de_dia_inteiro(&dias)}
+            <div class="ods-d12-cal" data-dias="7" data-oc="linha-do-tempo">
+                {linhas_das_horas()}
                 {eixo_das_horas()}
-                <div class="oc-cal-colunas">
-                    {dias.iter().map(|(dia, do_dia)| coluna_do_dia(do_dia, *dia, zona)).collect_view()}
-                </div>
+                {dias.iter().map(|(dia, do_dia)| coluna_do_dia(do_dia, *dia, zona)).collect_view()}
             </div>
         </div>
     }
@@ -1015,42 +992,33 @@ fn year_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Into
         items.iter().map(|i| i.day(zona)).collect();
 
     view! {
-        <div class="oc-cal-ano">
+        <div class="ods-cards">
             {(1..=12u32).map(|m| {
                 let primeiro = NaiveDate::from_ymd_opt(ano, m, 1).unwrap_or(anchor);
                 let inicio = month_grid_start(primeiro);
                 view! {
-                    <section class="oc-cal-mini" data-part="cal-mini">
+                    <section class="ods-cal" data-part="cal-mini">
                         <a
-                            class="oc-cal-mini__nome"
+                            class="ods-label"
                             href=format!("/calendar?view=month&on={primeiro}")
                         >
                             {crate::ui::tempo::mes(primeiro)}
                         </a>
-                        <div class="oc-cal-mini__semana" aria-hidden="true">
+                        <div class="ods-cal__grid">
                             {crate::ui::tempo::cabecalhos_da_semana().into_iter()
-                                .map(|d| view! { <span>{d.chars().next().unwrap_or(' ').to_string()}</span> })
+                                .map(|d| view! { <span class="ods-cal__dow" aria-hidden="true">{d.chars().next().unwrap_or(' ').to_string()}</span> })
                                 .collect_view()}
-                        </div>
-                        <div class="oc-cal-mini__dias">
                             {(0..42).map(|offset| {
                                 let dia = inicio + Duration::days(offset);
                                 let fora = dia.month() != m;
-                                let mut classes = String::from("oc-cal-mini__dia");
-                                if fora {
-                                    classes.push_str(" oc-cal-mini__dia--fora");
-                                }
-                                if dia == hoje {
-                                    classes.push_str(" oc-cal-mini__dia--hoje");
-                                }
-                                if !fora && ocupados.contains(&dia) {
-                                    classes.push_str(" oc-cal-mini__dia--ocupado");
-                                }
                                 view! {
                                     <a
-                                        class=classes
+                                        class="ods-cal__day"
                                         href=format!("/calendar?view=day&on={dia}")
                                         aria-label=crate::ui::tempo::data_por_extenso(dia)
+                                        aria-current=(dia == hoje).then_some("date")
+                                        data-out=fora.then_some("")
+                                        data-ocupado=(!fora && ocupados.contains(&dia)).then_some("")
                                     >
                                         {dia.day().to_string()}
                                     </a>
@@ -1070,21 +1038,19 @@ fn month_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
     let hoje = crate::ui::tempo::hoje_civil(Utc::now(), zona);
 
     view! {
-        <div class="oc-cal-month" role="table" aria-label=crate::i18n::t("calendar.grid_aria")>
-            <div class="oc-cal-month__weekdays" role="row">
-                {[
-                    "date.weekday_short.1",
-                    "date.weekday_short.2",
-                    "date.weekday_short.3",
-                    "date.weekday_short.4",
-                    "date.weekday_short.5",
-                    "date.weekday_short.6",
-                    "date.weekday_short.7",
-                ]
-                .into_iter()
-                .map(|chave| view! { <span role="columnheader">{crate::i18n::t(chave)}</span> })
-                .collect_view()}
-            </div>
+        <div class="ods-d12-cal__month" role="table" aria-label=crate::i18n::t("calendar.grid_aria")>
+            {[
+                "date.weekday_short.1",
+                "date.weekday_short.2",
+                "date.weekday_short.3",
+                "date.weekday_short.4",
+                "date.weekday_short.5",
+                "date.weekday_short.6",
+                "date.weekday_short.7",
+            ]
+            .into_iter()
+            .map(|chave| view! { <span class="ods-label" role="columnheader">{crate::i18n::t(chave)}</span> })
+            .collect_view()}
             {(0..42).map(|offset| {
                 let dia = inicio + Duration::days(offset);
                 let do_dia: Vec<Item> =
@@ -1092,34 +1058,27 @@ fn month_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
                 let excedente = do_dia.len().saturating_sub(MONTH_CELL_LIMIT);
                 let fora_do_mes = dia.month() != mes;
 
-                let mut classes = String::from("oc-cal-month__cell");
-                if fora_do_mes {
-                    classes.push_str(" oc-cal-month__cell--outside");
-                }
-                if dia == hoje {
-                    classes.push_str(" oc-cal-month__cell--today");
-                }
-                // O dia escolhido não é o dia de hoje.
-                //
-                // São duas perguntas diferentes — «que dia é hoje» e «que dia
-                // estou a ver» — e há um caso em que coincidem. Se partilhassem
-                // o mesmo tratamento, abrir o dia 12 mostraria o 12 exactamente
-                // como mostra hoje, e ninguém saberia qual é qual.
-                //
-                // A âncora é a data que o endereço traz. Ela já governa a
-                // grelha inteira; o que faltava era dizê-lo na célula.
-                if dia == anchor {
-                    classes.push_str(" oc-cal-month__cell--selected");
-                }
-
                 view! {
                     // A célula leva a sua data. Sem ela, quem quisesse abrir
                     // uma actividade neste dia teria de a extrair do endereço
                     // do número — e um endereço é para navegar, não para ser
                     // lido como dado.
-                    <div class=classes role="cell" data-part="cal-month__cell" data-fora=fora_do_mes.then_some("") data-hoje=(dia == hoje).then_some("") data-selecionado=(dia == anchor).then_some("") data-oc-dia=dia.to_string()>
+                    //
+                    // O dia escolhido não é o dia de hoje: são duas perguntas
+                    // diferentes, e a âncora (o dia do endereço) diz-se na
+                    // célula com `data-selecionado`, e hoje com `aria-current`.
+                    <div
+                        class="ods-d12-cal__cell"
+                        role="cell"
+                        data-part="cal-month__cell"
+                        data-fora=fora_do_mes.then_some("")
+                        data-hoje=(dia == hoje).then_some("")
+                        aria-current=(dia == hoje).then_some("date")
+                        data-selecionado=(dia == anchor).then_some("")
+                        data-oc-dia=dia.to_string()
+                    >
                         <a
-                            class="oc-cal-month__date"
+                            class="ods-label"
                             href=format!("/calendar?view=today&on={dia}")
                             aria-label=crate::i18n::tf("calendar.view_more", &[("n", &crate::ui::tempo::data_por_extenso(dia))])
                         >
@@ -1127,22 +1086,13 @@ fn month_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
                         </a>
                         {do_dia.iter().take(MONTH_CELL_LIMIT).map(|item| view! {
                             <a
-                                class="oc-cal-month__item" data-part="cal-month__item"
+                                class="ods-d12-cal__pill" data-part="cal-month__item"
                                 href=item.href()
                                 data-kind=item.kind.clone()
                                 title=item.title.clone()
                             >
-                                <span class="oc-cal-month__time">
-                                    {item.clock(zona).unwrap_or_default()}
-                                </span>
-                                // O título num elemento próprio, e não num nó
-                                // de texto solto: um nó de texto não recebe
-                                // `min-width: 0`, recusa-se a encolher e as
-                                // reticências nunca aparecem. Cortava a meio da
-                                // palavra sem dizer que tinha cortado.
-                                <span class="oc-cal-month__titulo" data-part="cal-month__titulo">
-                                    {item.title.clone()}
-                                </span>
+                                {item.clock(zona).map(|h| view! { <span class="ods-label">{h}</span> " " })}
+                                <span data-part="cal-month__titulo">{item.title.clone()}</span>
                             </a>
                         }).collect_view()}
                         {(excedente > 0).then(|| view! {
@@ -1150,10 +1100,10 @@ fn month_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
                             // «+3» é uma promessa de que os três estão em
                             // algum lado.
                             <a
-                                class="oc-cal-month__more" data-part="cal-month__more"
+                                class="ods-field__hint" data-part="cal-month__more"
                                 href=format!("/calendar?view=today&on={dia}")
                             >
-                                {format!("+{excedente}")}
+                                {crate::i18n::tf("calendar.more", &[("n", &excedente.to_string())])}
                             </a>
                         })}
                     </div>
@@ -1395,8 +1345,8 @@ pub fn event_form(
 
     view! {
         <div class="ods-page">
-            <header class="oc-editor__cabeca">
-                <h1>
+            <header class="ods-page__head">
+                <h1 class="ods-page__title">
                     {if a_alterar {
                         crate::i18n::t("calendar.edit_activity")
                     } else {
@@ -1409,8 +1359,8 @@ pub fn event_form(
                 <div class="ods-notice ods-notice--error" data-part="alert--error" role="alert">{motivo}</div>
             })}
 
-            <form class="oc-editor__form" data-part="editor__form" method="post" action=accao data-oc="editor">
-                <section class="oc-editor__bloco">
+            <form data-part="editor__form" method="post" action=accao data-oc="editor">
+                <section class="ods-settings__section">
                     <label class="ods-field">
                         <span class="ods-field__label">{crate::i18n::t("calendar.field.title")}</span>
                         <input
@@ -1441,16 +1391,15 @@ pub fn event_form(
                     </label>
                 </section>
 
-                <section class="oc-editor__bloco">
-                    <h2 class="oc-editor__seccao">{crate::i18n::t("calendar.section.when")}</h2>
+                <section class="ods-settings__section">
+                    <h2 class="ods-settings__section-title">{crate::i18n::t("calendar.section.when")}</h2>
 
-                    <label class="oc-interruptor">
-                        <input type="checkbox" name="all_day" value="1" data-oc="all-day" />
-                        <span class="oc-interruptor__marca" aria-hidden="true"></span>
-                        <span class="oc-interruptor__texto">{crate::i18n::t("calendar.all_day")}</span>
+                    <label class="ods-settings__row">
+                        <span class="ods-settings__row-label">{crate::i18n::t("calendar.all_day")}</span>
+                        <input class="ods-switch" type="checkbox" role="switch" name="all_day" value="1" data-oc="all-day" />
                     </label>
 
-                    <div class="oc-quando" data-oc="timed-fields">
+                    <div class="ods-d12-metrics" data-oc="timed-fields">
                         <label class="ods-field">
                             <span class="ods-field__label">{crate::i18n::t("calendar.field.start")}</span>
                             <input
@@ -1473,7 +1422,7 @@ pub fn event_form(
                         </label>
                     </div>
 
-                    <div class="oc-quando" data-oc="allday-fields" hidden>
+                    <div class="ods-d12-metrics" data-oc="allday-fields" hidden>
                         <label class="ods-field">
                             <span class="ods-field__label">{crate::i18n::t("calendar.field.first_day")}</span>
                             <input
@@ -1504,16 +1453,16 @@ pub fn event_form(
                     // Core depois recusaria. O valor continua a ir no pedido, e
                     // continua a ser o Core a validá-lo; o que muda é que deixa
                     // de se pedir a alguém que o escreva.
-                    <p class="oc-zona" data-part="zona">
-                        <span class="oc-zona__rotulo">{crate::i18n::t("calendar.field.timezone")}</span>
-                        <span class="oc-zona__valor" data-oc="timezone-label">"UTC"</span>
+                    <p class="ods-settings__row" data-part="zona">
+                        <span class="ods-settings__row-label">{crate::i18n::t("calendar.field.timezone")}</span>
+                        <span class="ods-label" data-oc="timezone-label">"UTC"</span>
                         <input type="hidden" name="timezone" data-oc="timezone" value="UTC" />
                     </p>
                 </section>
 
                 {(!a_alterar && !participaveis.is_empty()).then(|| view! {
-                    <section class="oc-editor__bloco" data-oc="participantes">
-                        <h2 class="oc-editor__seccao">{crate::i18n::t("calendar.section.participants")}</h2>
+                    <section class="ods-settings__section" data-oc="participantes">
+                        <h2 class="ods-settings__section-title">{crate::i18n::t("calendar.section.participants")}</h2>
 
                         <label class="ods-field">
                             <span class="ods-field__label">{crate::i18n::t("calendar.search_person")}</span>
@@ -1531,35 +1480,35 @@ pub fn event_form(
                         // browser. É o universo que o Core já autorizou a esta
                         // pessoa, e filtrá-lo aqui evita um pedido por cada
                         // tecla — sem alargar o que ela pode ver.
-                        <ul class="oc-pessoas" id="oc-pessoas" data-oc="lista-pessoas" hidden>
+                        <ul class="ods-menu" id="oc-pessoas" data-oc="lista-pessoas" hidden>
                             {participaveis.iter().map(|(id, nome, email)| view! {
                                 <li>
                                     <button
                                         type="button"
-                                        class="oc-pessoa" data-part="pessoa"
+                                        class="ods-menu__item" data-part="pessoa"
                                         data-oc="pessoa"
                                         data-id=id.clone()
                                         data-nome=nome.clone()
                                         data-email=email.clone()
                                     >
                                         <b>{nome.clone()}</b>
-                                        <em>{email.clone()}</em>
+                                        <span class="ods-field__hint">{email.clone()}</span>
                                     </button>
                                 </li>
                             }).collect_view()}
                         </ul>
 
-                        <p class="oc-pessoas__nada" data-oc="sem-pessoas" hidden>
-                            {crate::i18n::t("calendar.no_person_match.dot")}
-                        </p>
+                        <div class="ods-empty" data-oc="sem-pessoas" hidden>
+                            <p class="ods-empty__body">{crate::i18n::t("calendar.no_person_match.dot")}</p>
+                        </div>
 
-                        <div class="oc-escolhidos" data-oc="escolhidos"></div>
+                        <div class="ods-chips" data-oc="escolhidos"></div>
                     </section>
                 })}
 
                 {(!a_alterar).then(|| view! {
-                    <section class="oc-editor__bloco">
-                        <h2 class="oc-editor__seccao">{crate::i18n::t("calendar.belongs_to")}</h2>
+                    <section class="ods-settings__section">
+                        <h2 class="ods-settings__section-title">{crate::i18n::t("calendar.belongs_to")}</h2>
 
                         <label class="ods-field">
                             <span class="ods-field__label">{crate::i18n::t("calendar.field.scope")}</span>
@@ -1605,9 +1554,9 @@ pub fn event_form(
                     </section>
                 })}
 
-                <footer class="oc-editor__accoes">
+                <footer class="ods-settings__actions">
                     <a class="ods-btn ods-btn--ghost" data-part="btn" href=CALENDAR_ROUTE>{crate::i18n::t("calendar.cancel")}</a>
-                    <button type="submit" class="ods-btn ods-btn--navy" data-part="btn" data-oc="submeter">
+                    <button type="submit" class="ods-btn ods-btn--primary" data-part="btn" data-oc="submeter">
                         {if a_alterar {
                             crate::i18n::t("calendar.save_changes")
                         } else {
@@ -1739,10 +1688,10 @@ pub fn notifications(payload: &Value, failure: Option<String>) -> impl IntoView 
                     </div>
                 }.into_any(),
                 None if vazio => view! {
-                    <div class="ods-empty"><p>{crate::i18n::t("notifications.empty")}</p></div>
+                    <div class="ods-empty"><p class="ods-empty__title">{crate::i18n::t("notifications.empty")}</p></div>
                 }.into_any(),
                 None => view! {
-                    <ul class="oc-notifications">
+                    <ul class="ods-notif">
                         {linhas.into_iter().map(|linha| {
                             let campo = |chave: &str| {
                                 linha.get(chave).and_then(Value::as_str).unwrap_or_default().to_owned()
@@ -1761,16 +1710,14 @@ pub fn notifications(payload: &Value, failure: Option<String>) -> impl IntoView 
                             };
 
                             view! {
-                                <li class=if lida {
-                                    "oc-notification"
-                                } else {
-                                    "oc-notification oc-notification--unread"
-                                }>
-                                    <span class="oc-notification__title">{campo("title")}</span>
+                                <li class="ods-notif__item" data-unread=(!lida).then_some("")>
                                     {(!lida).then(|| view! {
-                                        <span class="oc-notification__dot" aria-label=crate::i18n::t("notifications.unread")></span>
+                                        <span class="ods-notif__unread" aria-label=crate::i18n::t("notifications.unread")></span>
                                     })}
-                                    <span class="oc-notification__actions">
+                                    <span class="ods-notif__body">
+                                        <span class="ods-notif__title" data-oc-content="1">{campo("title")}</span>
+                                    </span>
+                                    <span class="ods-settings__actions">
                                         {destino.map(|href| view! {
                                             <a class="ods-btn ods-btn--ghost" data-part="btn" href=href>{crate::i18n::t("calendar.open_item")}</a>
                                         })}
@@ -1857,8 +1804,7 @@ mod grelha_do_mes {
         let html = pagina(&[], dia(2026, 8, 26));
 
         assert_eq!(
-            html.matches("oc-cal-month__cell").count()
-                - html.matches("oc-cal-month__cell--").count(),
+            html.matches(r#"data-part="cal-month__cell""#).count(),
             42,
             "a grelha de um mês vazio não tem as seis semanas"
         );
@@ -1959,16 +1905,16 @@ mod grelha_do_mes {
         let html = pagina(&[], outro);
 
         assert!(
-            html.contains("oc-cal-month__cell--today"),
+            html.contains("data-hoje"),
             "a grelha deixou de marcar hoje"
         );
         assert!(
-            html.contains("oc-cal-month__cell--selected"),
+            html.contains("data-selecionado"),
             "a grelha deixou de marcar o dia escolhido"
         );
 
         // E não na mesma célula, porque não é o mesmo dia.
-        for pedaco in html.split("oc-cal-month__cell") {
+        for pedaco in html.split(r#"data-part="cal-month__cell""#) {
             let e_hoje = pedaco.starts_with("--today");
             let escolhido = pedaco.starts_with("--selected");
             assert!(
@@ -1984,8 +1930,8 @@ mod grelha_do_mes {
         let hoje = crate::ui::tempo::hoje_civil(Utc::now(), zona_de_teste());
         let html = pagina(&[], hoje);
 
-        assert!(html.contains("oc-cal-month__cell--today"));
-        assert!(html.contains("oc-cal-month__cell--selected"));
+        assert!(html.contains("data-hoje"));
+        assert!(html.contains("data-selecionado"));
     }
 
     /// O que não cabe conta-se, e a contagem é a verdadeira.
@@ -1999,12 +1945,15 @@ mod grelha_do_mes {
 
         let esperado = items.len() - MONTH_CELL_LIMIT;
         assert!(
-            html.contains(&format!(">+{esperado}<")),
+            html.contains(&format!(
+                ">{}<",
+                crate::i18n::tf("calendar.more", &[("n", &esperado.to_string())])
+            )),
             "com {} itens e um limite de {MONTH_CELL_LIMIT}, faltava «+{esperado}»",
             items.len()
         );
         assert_eq!(
-            html.matches("oc-cal-month__item").count(),
+            html.matches(r#"data-part="cal-month__item""#).count(),
             MONTH_CELL_LIMIT,
             "a célula mostrou mais itens do que o limite"
         );
@@ -2057,8 +2006,10 @@ mod grelha_do_mes {
         for vista in CalendarView::all() {
             assert_ne!(vista.label(), "Hoje", "«Hoje» voltou a ser uma vista");
         }
+        // Uma ligação, e não texto: «Hoje» leva ao período de hoje.
+        let antes = html.split(">Hoje<").next().unwrap_or_default();
         assert!(
-            html.contains("oc-cal-hoje"),
+            antes.rfind("<a ").unwrap_or(0) > antes.rfind('>').map_or(0, |i| i.saturating_sub(200)),
             "«Hoje» deixou de ser uma acção"
         );
     }
@@ -2135,7 +2086,13 @@ mod vistas_temporais {
         let html = render(CalendarView::Week, &[], dia(2026, 8, 26));
 
         assert_eq!(
-            html.matches("oc-cal-cabeca\"").count() + html.matches("oc-cal-cabeca ").count(),
+            // Os cabeçalhos são a primeira grelha da semana.
+            html.split(r#"data-dias="7""#)
+                .nth(1)
+                .and_then(|g| g.split("</div>").next())
+                .unwrap_or_default()
+                .matches("/calendar?view=day&amp;on=")
+                .count(),
             7,
             "a semana não tem sete cabeçalhos"
         );
@@ -2175,11 +2132,11 @@ mod vistas_temporais {
 
         // 09:00 é a faixa 18 de quarenta e oito; 90 minutos são três faixas.
         assert!(
-            html.contains("oc-cal-l18"),
+            html.contains(r#"data-linha="18""#),
             "as 09:00 não estão na faixa 18"
         );
         assert!(
-            html.contains("oc-cal-f3"),
+            html.contains(r#"data-faixas="3""#),
             "90 minutos não ocupam três faixas"
         );
     }
@@ -2202,12 +2159,12 @@ mod vistas_temporais {
             );
         }
         assert!(
-            html.contains("de3") || html.contains("de2"),
+            html.contains(r#"data-colunas="3""#) || html.contains(r#"data-colunas="2""#),
             "as actividades simultâneas não dividiram a largura"
         );
         // E cada uma numa coluna própria: duas na mesma coluna sobrepunham-se.
-        assert!(html.contains("oc-cal-c1de"), "falta a primeira coluna");
-        assert!(html.contains("oc-cal-c2de"), "falta a segunda coluna");
+        assert!(html.contains(r#"data-coluna="1""#), "falta a primeira coluna");
+        assert!(html.contains(r#"data-coluna="2""#), "falta a segunda coluna");
     }
 
     /// O Ano tem doze meses, de Janeiro a Dezembro.
@@ -2216,7 +2173,7 @@ mod vistas_temporais {
         let html = render(CalendarView::Year, &[], dia(2026, 6, 15));
 
         assert_eq!(
-            html.matches("oc-cal-mini\"").count(),
+            html.matches(r#"data-part="cal-mini""#).count(),
             12,
             "o ano não tem doze meses"
         );
@@ -2237,7 +2194,7 @@ mod vistas_temporais {
         let fevereiro = html
             .split(">Fevereiro<")
             .nth(1)
-            .and_then(|p| p.split("oc-cal-mini\"").next())
+            .and_then(|p| p.split(r#"data-part="cal-mini""#).next())
             .unwrap_or_default();
         assert!(
             fevereiro.contains(r#"on=2028-02-29""#),
@@ -2256,7 +2213,7 @@ mod vistas_temporais {
         let html = render(CalendarView::Agenda, &items, dia(2026, 8, 26));
 
         assert_eq!(
-            html.matches("oc-cal-grupo\"").count() + html.matches("oc-cal-grupo ").count(),
+            html.matches(r#"<h3 class="ods-label">"#).count(),
             2,
             "três actividades em dois dias não deram dois grupos"
         );
