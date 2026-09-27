@@ -303,9 +303,9 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
         |(id, _)| format!("/files?folder={id}"),
     );
     let _ = &managed_file; // o painel permanente deu lugar aos menus por ficha.
-    // Numa vista plana (favoritos/recentes) ou dentro de uma pasta, só contam
-    // os ficheiros; as fichas de pasta não aparecem, e por isso não pesam no
-    // «vazio» — uma pasta sem ficheiros lê-se «vazia», e não uma grelha muda.
+                           // Numa vista plana (favoritos/recentes) ou dentro de uma pasta, só contam
+                           // os ficheiros; as fichas de pasta não aparecem, e por isso não pesam no
+                           // «vazio» — uma pasta sem ficheiros lê-se «vazia», e não uma grelha muda.
     let meu_vazio = personal_files.is_empty()
         && (em_vista || open_folder.is_some() || personal_folders.is_empty());
 
@@ -382,26 +382,29 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                     </button>
                 </div>
 
-                <a
-                    class="ods-btn ods-btn--ghost ods-btn--sm"
-                    href="/files?view=favourites"
-                    aria-current=(view_mode == "favourites").then_some("page")
-                >
-                    {icone("star-fill", "")}
-                    <span>{crate::i18n::t("files.tab.favourites")}</span>
-                </a>
-                <a
-                    class="ods-btn ods-btn--ghost ods-btn--sm"
-                    href="/files?view=recents"
-                    aria-current=(view_mode == "recents").then_some("page")
-                >
-                    {icone("clock", "")}
-                    <span>{crate::i18n::t("files.tab.recent")}</span>
-                </a>
-                <a class="ods-btn ods-btn--ghost ods-btn--sm" href="/files?trash=1">
-                    {icone("trash", "")}
-                    <span>{crate::i18n::t("files.tab.trash")}</span>
-                </a>
+                // Na barra só abaixo de 768px; acima, na lateral (D13, Q-21).
+                <span class="ods-files__views">
+                    <a
+                        class="ods-btn ods-btn--ghost ods-btn--sm"
+                        href="/files?view=favourites"
+                        aria-current=(view_mode == "favourites").then_some("page")
+                    >
+                        {icone("star-fill", "")}
+                        <span>{crate::i18n::t("files.tab.favourites")}</span>
+                    </a>
+                    <a
+                        class="ods-btn ods-btn--ghost ods-btn--sm"
+                        href="/files?view=recents"
+                        aria-current=(view_mode == "recents").then_some("page")
+                    >
+                        {icone("clock", "")}
+                        <span>{crate::i18n::t("files.tab.recent")}</span>
+                    </a>
+                    <a class="ods-btn ods-btn--ghost ods-btn--sm" href="/files?trash=1">
+                        {icone("trash", "")}
+                        <span>{crate::i18n::t("files.tab.trash")}</span>
+                    </a>
+                </span>
 
                 // Nova pasta: o formulário vive num menu, aberto só quando
                 // preciso — não é uma barra permanente.
@@ -432,6 +435,19 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
 
                 // Carregar: um rótulo que dispara o campo escondido — nunca
                 // um «Choose File» do browser. O JS submete ao escolher.
+                // Os textos da bandeja de carregamentos (D13, Q-20), no idioma
+                // de quem carrega: o `app.js` lê-os daqui.
+                <span
+                    hidden
+                    data-oc="up-i18n"
+                    data-title=crate::i18n::t("files.upload.tray.title")
+                    data-done=crate::i18n::t("files.upload.tray.done")
+                    data-show=crate::i18n::t("files.upload.tray.show")
+                    data-reduce=crate::i18n::t("files.upload.tray.reduce")
+                    data-expand=crate::i18n::t("files.upload.tray.expand")
+                    data-cancel=crate::i18n::t("files.upload.cancel")
+                    data-close=crate::i18n::t("files.close")
+                ></span>
                 <form
                     method="post"
                     action="/files/upload"
@@ -488,6 +504,26 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                         {icone("files", "")}
                         <span>{crate::i18n::t("files.my_files")}</span>
                     </a>
+                <a
+                    class="ods-app__side-item"
+                    href="/files?view=favourites"
+                    aria-current=(view_mode == "favourites").then_some("page")
+                >
+                    {icone("star-fill", "")}
+                    <span>{crate::i18n::t("files.tab.favourites")}</span>
+                </a>
+                <a
+                    class="ods-app__side-item"
+                    href="/files?view=recents"
+                    aria-current=(view_mode == "recents").then_some("page")
+                >
+                    {icone("clock", "")}
+                    <span>{crate::i18n::t("files.tab.recent")}</span>
+                </a>
+                <a class="ods-app__side-item" href="/files?trash=1">
+                    {icone("trash", "")}
+                    <span>{crate::i18n::t("files.tab.trash")}</span>
+                </a>
                     {lateral_pastas}
                 </nav>
 
@@ -1463,11 +1499,15 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
                 {notice.map(|(ok, mensagem)| aviso_da_operacao(ok, &mensagem))}
                 {citada.as_ref().map(aviso_de_versao)}
 
+                // Pré-visualização à esquerda; detalhes e «Nova versão» à direita;
+                // histórico por baixo, a toda a largura (D13, Q-22).
+                <div class="ods-d13-filepage">
                 {card(
                     section_head(crate::i18n::t("files.content"), None, None),
                     previsualizacao(preview),
                 )}
 
+                <div>
                 {card(
                     section_head(crate::i18n::t("files.details"), None, None),
                     view! {
@@ -1517,8 +1557,9 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
                             },
                         )
                     })}
+                </div>
 
-                <section>
+                <section class="ods-d13-filepage__history">
                     {section_head(crate::i18n::t("files.version_history"), None, None)}
                     {data_table(Table {
                         tabs: vec![],
@@ -1539,6 +1580,7 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
                         empty: crate::i18n::t("files.no_versions"),
                     })}
                 </section>
+                </div>
             </div>
         </section>
     }
@@ -1636,8 +1678,14 @@ mod tests {
             "content_type": "application/pdf", "size_bytes": 2048, "versions": 1
         })]))
         .to_html();
-        assert!(html.contains(r#"data-oc="fs-grelha""#), "falta a grelha de fichas");
-        assert!(html.contains(r#"class="ods-file""#), "o ficheiro não é uma ficha");
+        assert!(
+            html.contains(r#"data-oc="fs-grelha""#),
+            "falta a grelha de fichas"
+        );
+        assert!(
+            html.contains(r#"class="ods-file""#),
+            "o ficheiro não é uma ficha"
+        );
         assert!(html.contains("prova.pdf"), "falta o nome do ficheiro");
         // E a forma da tabela institucional nunca traz o seu próprio prefixo.
         assert!(!html.contains("oc-table--oc-table--"));
@@ -1718,7 +1766,10 @@ mod tests {
             "content_type": "application/pdf", "size_bytes": 10, "versions": 1
         });
         let html = all_files(membro_sem_ambiente(vec![ficheiro])).to_html();
-        assert!(html.contains(r#"data-part="fs__acoes""#), "falta o menu de acções");
+        assert!(
+            html.contains(r#"data-part="fs__acoes""#),
+            "falta o menu de acções"
+        );
         assert!(
             html.contains("action=\"/me/files/rename\""),
             "falta mudar nome"

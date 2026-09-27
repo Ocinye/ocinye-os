@@ -1,30 +1,19 @@
-//! Ícones.
+//! A identidade semântica dos ícones.
 //!
-//! O conjunto vem exclusivamente de `static/icons.svg` — os 47 símbolos do
-//! design, em traço fino e `currentColor`. Não se misturam bibliotecas com
-//! pesos de traço diferentes: a coerência do conjunto depende disso
-//! (`design/icons/ICONS.md`).
+//! O sprite antigo (`static/icons.svg`) saiu com o D13: o que se desenha é
+//! sempre o sprite do Claude Design (`static/ods-icons.svg`), e
+//! `ui::ods::icone_do_legado` traduz cada variante para o símbolo dele. Esta
+//! enumeração fica como vocabulário tipado — o ícone de um ecrã, de uma acção —
+//! e não como referência a um ficheiro.
 
-use leptos::prelude::*;
-
-/// Os ícones do design, pelo `id` do sprite.
+/// O ícone de um ecrã ou de uma acção, pelo seu significado.
 ///
-/// Enumeração fechada em vez de string: um `id` mal escrito passaria em silêncio
-/// e renderizaria um espaço vazio.
-///
-/// # Porque é um catálogo e não uma lista de utilização
-///
-/// `Icon` espelha `static/icons.svg`, que é o dossier de design. Dois testes
-/// garantem que os dois se cobrem **mutuamente**: nenhum símbolo no sprite sem
-/// variante, nenhuma variante sem símbolo.
-///
-/// Daí o `allow`: uma variante que nenhum ecrã usa hoje não é código morto, é o
-/// catálogo a estar completo. Apagá-la porque o compilador a assinala
-/// desalinharia o catálogo do dossier, e o teste inverso passaria a falhar por
-/// uma razão que ninguém entenderia meses depois.
+/// Enumeração fechada em vez de string: um nome mal escrito passaria em
+/// silêncio. O símbolo desenhado é o do sprite do Claude Design
+/// (`ui::ods::icone_do_legado`).
 #[allow(
     dead_code,
-    reason = "o catálogo espelha o sprite; uma variante sem ecrã é o catálogo completo, não código morto"
+    reason = "vocabulário fechado; uma variante sem ecrã hoje não é código morto"
 )]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Icon {
@@ -152,156 +141,5 @@ impl Icon {
             Self::ComputeLg => "oc-compute-lg",
             Self::EmptyState => "oc-empty-state",
         }
-    }
-
-    /// O `viewBox` original do símbolo.
-    ///
-    /// Necessário porque o sprite mistura três grelhas (14, 16 e 32) e um
-    /// `viewBox` errado deforma o ícone.
-    #[must_use]
-    pub const fn view_box(self) -> &'static str {
-        match self {
-            Self::Plus | Self::Close => "0 0 12 12",
-            Self::User
-            | Self::Lock
-            | Self::ArrowRight
-            | Self::Power
-            | Self::Restart
-            | Self::SystemStatus
-            | Self::SidebarCollapse
-            | Self::Filter
-            | Self::Attach
-            | Self::Dataset
-            | Self::Document
-            | Self::Tools => "0 0 14 14",
-            Self::AiHexLg | Self::AiHexMd | Self::ComputeLg => "0 0 32 32",
-            _ => "0 0 16 16",
-        }
-    }
-}
-
-/// Renderiza um ícone.
-///
-/// Decorativo por omissão (`aria-hidden`): quase todos acompanham texto, e
-/// anunciá-los duplicaria o rótulo. Quando o ícone é a única etiqueta de um
-/// controlo, o rótulo acessível pertence ao botão, não a este elemento.
-pub fn icon(kind: Icon, size: u16) -> impl IntoView {
-    view! {
-        <svg
-            width=size
-            height=size
-            viewBox=kind.view_box()
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.4"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-            focusable="false"
-        >
-            <use href=format!("/static/icons.svg#{}", kind.id())></use>
-        </svg>
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// O catálogo completo do dossier, para verificação cruzada com
-    /// `static/icons.svg`.
-    ///
-    /// O sprite é a fonte de verdade. Se um símbolo for removido ou renomeado
-    /// lá, os dois testes abaixo falham em vez de a interface renderizar um
-    /// espaço vazio.
-    const ALL: [Icon; 50] = [
-        Icon::User,
-        Icon::Lock,
-        Icon::ArrowRight,
-        Icon::Power,
-        Icon::Restart,
-        Icon::SystemStatus,
-        Icon::SidebarCollapse,
-        Icon::ChevronUp,
-        Icon::Search,
-        Icon::Plus,
-        Icon::Close,
-        Icon::Bell,
-        Icon::Calendar,
-        Icon::Filter,
-        Icon::Settings,
-        Icon::Help,
-        Icon::Home,
-        Icon::MyWork,
-        Icon::Apps,
-        Icon::Units,
-        Icon::Idea,
-        Icon::Project,
-        Icon::Knowledge,
-        Icon::Science,
-        Icon::Bibliography,
-        Icon::Data,
-        Icon::Ai,
-        Icon::Agent,
-        Icon::Compute,
-        Icon::Activity,
-        Icon::Admin,
-        Icon::Audit,
-        Icon::AiHexLg,
-        Icon::AiHexMd,
-        Icon::Shield,
-        Icon::Attach,
-        Icon::Dataset,
-        Icon::Document,
-        Icon::Files,
-        Icon::Folder,
-        Icon::Tools,
-        Icon::Send,
-        Icon::Mail,
-        Icon::Messaging,
-        Icon::Star,
-        Icon::Reply,
-        Icon::Archive,
-        Icon::Trash,
-        Icon::ComputeLg,
-        Icon::EmptyState,
-    ];
-
-    #[test]
-    fn todos_os_icones_existem_no_sprite() {
-        let sprite = include_str!("../../static/icons.svg");
-        for kind in ALL {
-            assert!(
-                sprite.contains(&format!("id=\"{}\"", kind.id())),
-                "o símbolo {} não existe em static/icons.svg",
-                kind.id()
-            );
-        }
-    }
-
-    #[test]
-    fn o_sprite_nao_tem_simbolos_por_declarar() {
-        let sprite = include_str!("../../static/icons.svg");
-        let declared: Vec<&str> = ALL.iter().map(|kind| kind.id()).collect();
-
-        for line in sprite.lines() {
-            if let Some(rest) = line.split("id=\"oc-").nth(1) {
-                if let Some(name) = rest.split('"').next() {
-                    let full = format!("oc-{name}");
-                    assert!(
-                        declared.contains(&full.as_str()),
-                        "o símbolo {full} existe no sprite mas não em Icon"
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn os_viewboxes_seguem_as_tres_grelhas_do_conjunto() {
-        assert_eq!(Icon::Plus.view_box(), "0 0 12 12");
-        assert_eq!(Icon::Attach.view_box(), "0 0 14 14");
-        assert_eq!(Icon::Home.view_box(), "0 0 16 16");
-        assert_eq!(Icon::AiHexLg.view_box(), "0 0 32 32");
     }
 }

@@ -1143,6 +1143,23 @@
       });
     }
 
+    /* Cada pega diz a largura da coluna que mede (D13): `aria-valuenow`
+       segue a largura desenhada, venha ela de arrastar, das setas, de recolher
+       ou de repor. */
+    if (window.ResizeObserver) {
+      const colunas = {
+        pastas: mail.querySelector('.ods-mail__pastas'),
+        lista: mail.querySelector('.ods-mail__lista'),
+      };
+      const espelho = new ResizeObserver(() => {
+        mail.querySelectorAll('[data-oc="separador"]').forEach((sep) => {
+          const col = colunas[sep.dataset.ocSeparador];
+          if (col) sep.setAttribute('aria-valuenow', String(Math.round(col.getBoundingClientRect().width)));
+        });
+      });
+      Object.values(colunas).forEach((c) => { if (c) espelho.observe(c); });
+    }
+
     /* ── Arrastar ───────────────────────────────────────────────────── */
 
     mail.querySelectorAll('[data-oc="separador"]').forEach((separador) => {
@@ -1347,6 +1364,8 @@
         const activo = janela.dataset.ocExpandido === 'true';
         if (activo) delete janela.dataset.ocExpandido;
         else janela.dataset.ocExpandido = 'true';
+        /* O CSS do D8/D13 lê `data-expanded`: as duas marcas andam juntas. */
+        janela.toggleAttribute('data-expanded', !activo);
         expandir.setAttribute('aria-pressed', String(!activo));
         expandir.title = activo ? 'Expandir' : 'Repor o tamanho';
       });
@@ -2479,72 +2498,102 @@
   const PARAGEM_CARREGAMENTO_MS = 20000;
 
   function criarJanelaDeCarregamento() {
+    /* A bandeja do D13 (Q-20): `.ods-upload-tray`, acima do flutuante das
+       aplicações. Os textos vêm do servidor (`data-oc="up-i18n"`), no idioma de
+       quem carrega; sem eles, em português. */
+    const fonte = document.querySelector('[data-oc="up-i18n"]');
+    const T = (chave, omissao) => (fonte && fonte.dataset[chave]) || omissao;
+    const preencher = (modelo, valores) =>
+      modelo.replace(/\{(\w+)\}/g, (_, k) => (k in valores ? String(valores[k]) : ''));
+
     let painel = null;
     let corpo = null;
     let tituloEl = null;
+    let totalEl = null;
     let fechado = false;
+    let total = 0;
     let activos = 0;
     let ok = 0;
     let falhas = 0;
+    let temporizador = null;
+
+    function botao(icone, rotulo) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ods-iconbtn';
+      b.setAttribute('aria-label', rotulo);
+      b.title = rotulo;
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'ods-icon');
+      svg.setAttribute('aria-hidden', 'true');
+      const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+      use.setAttribute('href', '/static/ods-icons.svg#ods-' + icone);
+      svg.appendChild(use);
+      b.appendChild(svg);
+      return b;
+    }
+
+    function reduzir(sim) {
+      painel.toggleAttribute('data-reduced', sim);
+      const dobrar = painel.querySelector('[data-part="up__reduzir"]');
+      const rotulo = sim ? T('expand', 'Expandir') : T('reduce', 'Reduzir');
+      dobrar.setAttribute('aria-label', rotulo);
+      dobrar.title = rotulo;
+      dobrar.querySelector('use').setAttribute('href', '/static/ods-icons.svg#ods-' + (sim ? 'chev-r' : 'chev-d'));
+    }
 
     function montar() {
       if (painel) return;
       fechado = false;
       painel = document.createElement('section');
       painel.dataset.part = 'up';
-      painel.className = 'ods-glass';
+      painel.className = 'ods-upload-tray ods-glass';
       painel.setAttribute('role', 'status');
       painel.setAttribute('aria-live', 'polite');
 
       const cabeca = document.createElement('header');
-      cabeca.dataset.part = 'up__head';
+      cabeca.className = 'ods-upload-tray__head';
       tituloEl = document.createElement('span');
       tituloEl.dataset.part = 'up__title';
       cabeca.appendChild(tituloEl);
 
-      const controlos = document.createElement('span');
-      controlos.dataset.part = 'up__controls';
+      const dobrar = botao('chev-d', T('reduce', 'Reduzir'));
+      dobrar.dataset.part = 'up__reduzir';
+      dobrar.addEventListener('click', () => reduzir(!painel.hasAttribute('data-reduced')));
 
-      const dobrar = document.createElement('button');
-      dobrar.type = 'button';
-      dobrar.className = 'ods-iconbtn';
-      dobrar.setAttribute('aria-label', 'Reduzir');
-      dobrar.textContent = '⌄';
-      dobrar.addEventListener('click', () => {
-        const reduzido = painel.toggleAttribute('data-reduzido');
-        dobrar.textContent = reduzido ? '⌃' : '⌄';
-        dobrar.setAttribute('aria-label', reduzido ? 'Expandir' : 'Reduzir');
-      });
-
-      const fechar = document.createElement('button');
-      fechar.type = 'button';
-      fechar.className = 'ods-iconbtn';
-      fechar.setAttribute('aria-label', 'Fechar');
-      fechar.textContent = '×';
+      const fechar = botao('close', T('close', 'Fechar'));
       fechar.addEventListener('click', () => {
+        // Fechar com envios em curso é reduzir: não cancela nada (Q-20).
+        if (activos > 0) { reduzir(true); return; }
         fechado = true;
-        // Fechar cancela o que ainda estiver a subir.
-        corpo.querySelectorAll('[data-abortar]').forEach((b) => b.click());
         remover();
       });
+      cabeca.appendChild(dobrar);
+      cabeca.appendChild(fechar);
 
-      controlos.appendChild(dobrar);
-      controlos.appendChild(fechar);
-      cabeca.appendChild(controlos);
+      const barraTotal = document.createElement('div');
+      barraTotal.className = 'ods-upload-tray__total';
+      totalEl = document.createElement('i');
+      barraTotal.appendChild(totalEl);
 
       corpo = document.createElement('div');
-      corpo.dataset.part = 'up__body';
+      corpo.className = 'ods-upload-tray__list';
 
       painel.appendChild(cabeca);
+      painel.appendChild(barraTotal);
       painel.appendChild(corpo);
       document.body.appendChild(painel);
     }
 
     function remover() {
+      if (temporizador) clearTimeout(temporizador);
+      temporizador = null;
       if (painel && painel.parentNode) painel.parentNode.removeChild(painel);
       painel = null;
       corpo = null;
       tituloEl = null;
+      totalEl = null;
+      total = 0;
       activos = 0;
       ok = 0;
       falhas = 0;
@@ -2552,39 +2601,70 @@
 
     function resumir() {
       if (!tituloEl) return;
+      const feitos = ok + falhas;
+      totalEl.style.setProperty('width', (total ? (feitos * 100) / total : 0) + '%');
       if (activos > 0) {
-        tituloEl.textContent =
-          'A carregar ' + activos + (activos === 1 ? ' ficheiro…' : ' ficheiros…');
+        tituloEl.textContent = preencher(T('title', 'A carregar {n} ficheiros · {done} de {n}'), { n: total, done: feitos });
       } else if (falhas > 0) {
         tituloEl.textContent =
           ok + ' carregado' + (ok === 1 ? '' : 's') + ' · ' + falhas + ' por carregar';
       } else {
-        tituloEl.textContent = ok + (ok === 1 ? ' ficheiro carregado' : ' ficheiros carregados');
+        tituloEl.textContent = preencher(T('done', '{n} ficheiros carregados'), { n: ok });
       }
     }
 
-    /* Quando tudo parou e algo entrou, recarregar a lista para o mostrar — a não
-       ser que a janela já tenha sido fechada à mão. */
+    /* Quando tudo parou e algo entrou: «n ficheiros carregados · Mostrar». A
+       bandeja fecha sozinha ao fim de 6 s se não tiver o foco, e a lista
+       recarrega para os mostrar (Q-20). */
     function assentar() {
-      if (fechado || !painel || activos > 0) return;
-      if (ok > 0) setTimeout(() => window.location.reload(), 1000);
+      if (fechado || !painel || activos > 0 || ok === 0) return;
+      if (!tituloEl.querySelector('[data-part="up__mostrar"]')) {
+        const mostrar = document.createElement('button');
+        mostrar.type = 'button';
+        mostrar.className = 'ods-btn ods-btn--ghost ods-btn--sm';
+        mostrar.dataset.part = 'up__mostrar';
+        mostrar.textContent = T('show', 'Mostrar');
+        mostrar.addEventListener('click', () => window.location.reload());
+        tituloEl.appendChild(document.createTextNode(' · '));
+        tituloEl.appendChild(mostrar);
+      }
+      const tentar = () => {
+        if (!painel) return;
+        if (painel.contains(document.activeElement)) { temporizador = setTimeout(tentar, 6000); return; }
+        remover();
+        window.location.reload();
+      };
+      if (!temporizador) temporizador = setTimeout(tentar, 6000);
     }
 
     function linha(nome) {
       const el = document.createElement('div');
       el.dataset.part = 'up__line';
-      el.className = 'ods-state';
+      el.className = 'ods-upload-tray__row';
+
+      const tipo = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      tipo.setAttribute('class', 'ods-icon');
+      tipo.setAttribute('aria-hidden', 'true');
+      const usoTipo = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+      usoTipo.setAttribute('href', '/static/ods-icons.svg#ods-files');
+      tipo.appendChild(usoTipo);
 
       const info = document.createElement('div');
       info.dataset.part = 'up__info';
-      const titulo = document.createElement('b');
+      const titulo = document.createElement('div');
+      titulo.className = 'ods-upload-tray__name';
       /* `textContent`: o nome do ficheiro vem de fora e não é marcação. */
       titulo.textContent = nome;
-      const estado = document.createElement('span');
+      const estado = document.createElement('div');
+      estado.className = 'ods-state';
       estado.dataset.part = 'up__state';
       estado.textContent = 'A preparar…';
       info.appendChild(titulo);
       info.appendChild(estado);
+
+      const accao = botao('close', T('cancel', 'Cancelar carregamento'));
+      accao.dataset.part = 'up__cancelar';
+      accao.setAttribute('data-abortar', '1');
 
       const barra = document.createElement('div');
       barra.className = 'ods-progress';
@@ -2592,27 +2672,20 @@
       cheio.className = 'ods-progress__bar';
       barra.appendChild(cheio);
 
-      const accao = document.createElement('button');
-      accao.type = 'button';
-      accao.dataset.part = 'up__cancelar';
-      accao.className = 'ods-iconbtn';
-      accao.setAttribute('aria-label', 'Cancelar');
-      accao.setAttribute('data-abortar', '1');
-      accao.textContent = '×';
-
+      el.appendChild(tipo);
       el.appendChild(info);
-      el.appendChild(barra);
       el.appendChild(accao);
+      el.appendChild(barra);
       corpo.appendChild(el);
+      total += 1;
 
       return {
         progresso: (pct) => cheio.style.setProperty('width', pct + '%'),
         diz: (texto, mau) => {
           estado.textContent = texto;
-          estado.dataset.part = 'up__state';
           estado.toggleAttribute('data-mau', !!mau);
           /* Uma falha por ficheiro é uma linha de erro (D8). */
-          el.classList.toggle('ods-state--error', !!mau);
+          estado.classList.toggle('ods-state--error', !!mau);
         },
         aoCancelar: (fn) => accao.addEventListener('click', fn),
         marca: (glifo, classe) => {
@@ -3551,9 +3624,17 @@ document.addEventListener('keydown', (event) => {
     a.style.setProperty('top', (Number(a.getAttribute('data-linha')) * FAIXA) + 'px');
   });
 
-  /* Não se rola para a primeira actividade: a grelha do D12 não é um
-     contentor de scroll, e rolar a página levava consigo a barra do
-     Calendário e os cabeçalhos dos dias (Q-31). A vista abre no topo. */
+  /* As horas rolam dentro do seu contentor (D13, Q-31): abre-se na primeira
+     actividade do período, com meia hora de margem, e sem nenhuma às sete.
+     Rola só o contentor — nunca a página, que levaria a barra e os cabeçalhos. */
+  document.querySelectorAll('[data-oc="cal-scroll"]').forEach(function (rolo) {
+    var linhas = Array.prototype.map.call(
+      rolo.querySelectorAll('.ods-d12-cal__event[data-linha]'),
+      function (b) { return Number(b.getAttribute('data-linha')) || 0; });
+    rolo.scrollTop = linhas.length
+      ? Math.max(0, Math.min.apply(null, linhas) * FAIXA - FAIXA)
+      : 7 * HORA;
+  });
 })();
 
 /* O editor de actividade responde ao que se escolhe.

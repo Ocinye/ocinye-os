@@ -66,7 +66,7 @@ src/
 static/
   ocinye.css     tokens, reset e todos os componentes
   app.js         camada de interacção
-  icons.svg      sprite dos 42 ícones
+  ods-icons.svg  sprite do Claude Design (o antigo icons.svg saiu no D13)
 ```
 
 ## Os ecrãs

@@ -8,8 +8,8 @@ use leptos::prelude::*;
 use serde_json::Value;
 
 use crate::ui::components::{
-    badge, button, card, classification_badge, named_checkbox, pill, radio_group,
-    section_head, select, text_field, textarea, Button, RadioOption, Tone, Variant,
+    badge, button, card, classification_badge, named_checkbox, pill, radio_group, section_head,
+    select, text_field, textarea, Button, RadioOption, Tone, Variant,
 };
 use crate::ui::components::{context_tabs, Tab};
 
@@ -456,7 +456,11 @@ mod tests {
                 .unwrap_or_default()
                 .to_owned()
         };
-        assert_eq!(valor(crate::i18n::t("ai.counter.agents")), "3", "os agentes não vêm do Core");
+        assert_eq!(
+            valor(crate::i18n::t("ai.counter.agents")),
+            "3",
+            "os agentes não vêm do Core"
+        );
         assert_eq!(
             valor(crate::i18n::t("ai.counter.conversations")),
             "—",

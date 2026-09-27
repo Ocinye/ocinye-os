@@ -13,8 +13,8 @@ use leptos::prelude::*;
 use serde_json::Value;
 
 use crate::ui::components::{
-    assist, badge, button, classification_badge, donut, pill, section_head, Assist,
-    Button, Tone, Variant, IDEA_SUGGESTIONS, PROJECT_SUGGESTIONS,
+    assist, badge, button, classification_badge, donut, pill, section_head, Assist, Button, Tone,
+    Variant, IDEA_SUGGESTIONS, PROJECT_SUGGESTIONS,
 };
 use crate::ui::components::{context_tabs, Tab};
 

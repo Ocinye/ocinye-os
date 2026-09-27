@@ -1129,22 +1129,26 @@ pub fn members(viewer: &Viewer, payload: &Value) -> impl IntoView {
         empty: crate::i18n::t("lists.members.empty"),
     };
 
-    list_screen(
-        viewer,
-        ListScreen {
-            title: crate::i18n::t("lists.members.tab"),
-            subtitle: crate::i18n::t("lists.members.subtitle").to_owned(),
-            // «Adicionar», não «Convidar»: sob o ADR-0103 não há convite por email —
-            // o administrador cria a conta e entrega uma credencial temporária.
-            action: Some(crate::i18n::t("lists.new.member")),
-            action_href: Some("/admin/members/new"),
-            action_permission: Permission::MembersCreate,
-            // A configuração da Instância (ADR-0014), para quem a governa.
-            secondary: viewer
-                .can(Permission::OrganisationManage)
-                .then(|| (crate::i18n::t("admin.instance.link"), "/admin/instance")),
-            table,
-        },
+    // A mesma moldura de toda a administração (D13, Q-33).
+    super::administration::moldura_larga(
+        super::administration::SeccaoAdmin::Membros,
+        list_screen(
+            viewer,
+            ListScreen {
+                title: crate::i18n::t("lists.members.tab"),
+                subtitle: crate::i18n::t("lists.members.subtitle").to_owned(),
+                // «Adicionar», não «Convidar»: sob o ADR-0103 não há convite por email —
+                // o administrador cria a conta e entrega uma credencial temporária.
+                action: Some(crate::i18n::t("lists.new.member")),
+                action_href: Some("/admin/members/new"),
+                action_permission: Permission::MembersCreate,
+                // A configuração da Instância (ADR-0014), para quem a governa.
+                secondary: viewer
+                    .can(Permission::OrganisationManage)
+                    .then(|| (crate::i18n::t("admin.instance.link"), "/admin/instance")),
+                table,
+            },
+        ),
     )
 }
 
@@ -1230,18 +1234,22 @@ pub fn audit(viewer: &Viewer, payload: &Value) -> impl IntoView {
         empty: crate::i18n::t("lists.audit.empty"),
     };
 
-    list_screen(
-        viewer,
-        ListScreen {
-            title: crate::i18n::t("nav.audit"),
-            subtitle: crate::i18n::t("lists.audit.subtitle").to_owned(),
-            // Sem acção: o Core não expõe exportação do registo de auditoria.
-            action: None,
-            action_href: None,
-            action_permission: Permission::AuditView,
-            secondary: None,
-            table,
-        },
+    // A mesma moldura de toda a administração (D13, Q-33).
+    super::administration::moldura_larga(
+        super::administration::SeccaoAdmin::Auditoria,
+        list_screen(
+            viewer,
+            ListScreen {
+                title: crate::i18n::t("nav.audit"),
+                subtitle: crate::i18n::t("lists.audit.subtitle").to_owned(),
+                // Sem acção: o Core não expõe exportação do registo de auditoria.
+                action: None,
+                action_href: None,
+                action_permission: Permission::AuditView,
+                secondary: None,
+                table,
+            },
+        ),
     )
 }
 
@@ -2333,7 +2341,8 @@ mod tests {
                 "{ecra}: a acção primária desapareceu em vez de se declarar"
             );
             assert!(
-                html.contains(r#"data-part="unavailable""#) && html.contains("aria-disabled=\"true\""),
+                html.contains(r#"data-part="unavailable""#)
+                    && html.contains("aria-disabled=\"true\""),
                 "{ecra}: a acção aparece sem estar marcada como indisponível"
             );
             assert!(

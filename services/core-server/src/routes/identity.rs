@@ -102,6 +102,10 @@ struct Me {
     /// The applications this Instance has **inactive** (ADR-0014). The
     /// Workspace hides them; an empty list means every application is active.
     inactive_applications: Vec<ocinye_contracts::ApplicationId>,
+    /// O fuso (IANA) em que se decide o dia civil deste membro — o que é «hoje»
+    /// e «esta semana». Não há ainda preferência por membro: é o fuso da
+    /// Instância (ADR-0017), que a configuração só mostra a quem a administra.
+    timezone: String,
 }
 
 /// Um módulo, do ponto de vista da apresentação.
@@ -164,6 +168,8 @@ async fn me(
         principal.organisation_id,
     )
     .await?;
+    let instancia =
+        organisation::settings::effective(&state.pool, principal.organisation_id).await?;
 
     Ok(Json(Me {
         person_id: principal.person_id,
@@ -177,6 +183,7 @@ async fn me(
         capabilities,
         modules,
         inactive_applications,
+        timezone: instancia.timezone,
         units: principal
             .unit_roles
             .iter()

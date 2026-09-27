@@ -249,7 +249,14 @@ suites() {
 # capturas `#[ignore]` de revisão visual saíram também (não contavam como
 # passadas). Registo em `docs/ui/BEHAVIOURAL_CONTRACT_MATRIX.md`.
 # 125 → 126 em 2026-09-27: o Nye responde no círculo (D7, Claude Design).
-viagens-de-browser|126|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|126
+# 126 → 125 marcas em 2026-09-27 (as execuções, não os testes): a linha dizia
+# 126|126 desde o Nye (9b83a17), e nunca foi confrontada com um verify.sh
+# completo neste ramo. Medido teste a teste, em série:
+#   124 viagens levantam um browser cada                         124 marcas
+#     1 delas (o_fuso_declarado_vale_para_a_viagem…) levanta dois  +1 marca
+#     2 estruturais leem ficheiros e não levantam browser            0 marcas
+#   126 testes                                                   125 marcas
+viagens-de-browser|126|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|125
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

@@ -99,7 +99,10 @@ pub fn scientific_chain(view: ChainView) -> impl IntoView {
     // alguma coisa, actual a primeira que ainda não tem, e por fazer as outras.
     let etapas = [
         (crate::i18n::t("science.stage.hypotheses"), hypotheses.len()),
-        (crate::i18n::t("science.stage.methodologies"), methodologies.len()),
+        (
+            crate::i18n::t("science.stage.methodologies"),
+            methodologies.len(),
+        ),
         (crate::i18n::t("science.stage.studies"), studies.len()),
         (crate::i18n::t("science.stage.results"), results.len()),
     ];
