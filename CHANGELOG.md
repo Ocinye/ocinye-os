@@ -7,6 +7,32 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Generalização, Partes 15 a 17 e Garage em produção — 2026-09-27
+
+- **Garage em produção** ([ADR-0208](docs/adrs/0208-maintained-object-store.md),
+  agora `Accepted`): o deploy de `18eb8248db1b` passou a produção do MinIO
+  arquivado para o Garage — 5 objectos copiados e verificados, com as somas
+  recalculadas a ler do Garage. O MinIO ficou parado, com o volume intacto.
+- **Corrigido:** a passagem reescrevia a configuração com o dono `root` e o modo
+  `0600`, e o Compose da produção, que corre como o utilizador de serviço, não a
+  conseguia ler. Agora mantém o dono, o grupo e o modo de cada ficheiro. Na
+  produção os serviços só levantaram depois de repor à mão `root:ocinye 0640`.
+- **Corrigido:** o backup agendado das 03:00 UTC produziu o conjunto local, mas
+  não o conseguiu enviar para o R2. O `rclone` pedia `CreateBucket`, e a chave
+  do R2 só dá acesso a objectos. `backup-remote.sh` passa a usar
+  `no_check_bucket`. A prova é a próxima execução agendada.
+- **Parte 15 — hardware**: `MINIMUM_SUPPORTED` 2 vCPU · 4 GB, `RECOMMENDED`
+  4 vCPU · 8 GB, medidos pela viagem de browser inteira
+  ([resultados](docs/install/hardware-results.md)), agora também com a memória do
+  anfitrião inteiro.
+- **Parte 16 — certificação**: os 33 passos da jornada provados; o passo 18
+  ganhou a viagem de Actividade (`criar_uma_ideia_aparece_na_actividade`, provada
+  por reversão). As viagens de browser passam de 125 para 126.
+- **Parte 17 — linha de base do release**:
+  [evidência canónica](docs/certification/release-baseline.md).
+- Uma viagem de Notas esperava o «Guardado» antes de o editor estar montado, e
+  falhava na CI, que é mais lenta. Agora espera pelo editor primeiro.
+
 ### Generalização, Partes 10 a 14 — 2026-09-26
 
 - **Parte 10 — actualização e reversão**: `ocinye upgrade` (checkpoint da base,

@@ -11983,6 +11983,32 @@ async fn uma_pessoa_cria_uma_ideia_e_nasce_o_workspace() {
     esperar_por(&lista, &titulo).await;
 }
 
+/// O feed institucional de Actividade mostra o que alguém fez, pelo produto.
+///
+/// Criar uma ideia é uma operação do Core que regista o acontecimento na mesma
+/// transacção. A prova é abrir «Actividade» e ver lá essa ideia, pelo título —
+/// o feed lê o que o Core registou, e não o ecrã a inventar uma linha.
+#[tokio::test]
+async fn criar_uma_ideia_aparece_na_actividade() {
+    let harness = harness!();
+    let (pessoa, _cred) = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    harness.manages_a_unit(pessoa).await;
+
+    let titulo = unique_title("Medicao de caudal");
+
+    let pagina = harness.open("/ideas/new").await;
+    esperar_por(&pagina, "Nova Ideia").await;
+    let unidade_id = valor_de(&pagina, "select[name=unit_id] option:nth-child(1)").await;
+    escolher(&pagina, "select[name=unit_id]", &unidade_id).await;
+    set_field(&pagina, "input[name=title]", &titulo).await;
+    submit(&pagina, "form[action$='/ideas/new']").await;
+    esperar_por(&pagina, &titulo).await;
+
+    let actividade = harness.open("/activity").await;
+    esperar_por(&actividade, "Actividade").await;
+    esperar_por(&actividade, &format!("Idea created: {titulo}")).await;
+}
+
 /// IDEA_TO_PROJECT_E2E — o defeito conhecido: uma ideia chega a projecto.
 ///
 /// Prova o ciclo de vida inteiro pelo produto, que era o que faltava: abrir uma

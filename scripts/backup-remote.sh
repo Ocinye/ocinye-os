@@ -80,6 +80,10 @@ export RCLONE_CONFIG_COFRE_ACCESS_KEY_ID="$OCINYE_BACKUP_S3_ACCESS_KEY"
 export RCLONE_CONFIG_COFRE_SECRET_ACCESS_KEY="$OCINYE_BACKUP_S3_SECRET_KEY"
 export RCLONE_CONFIG_COFRE_REGION="${OCINYE_BACKUP_S3_REGION:-us-east-1}"
 export RCLONE_CONFIG_COFRE_FORCE_PATH_STYLE=true
+# O cofre já existe, e quem o cria é o operador, não o backup. Sem isto o rclone
+# tenta `CreateBucket` antes de enviar, e uma chave só de objectos — a do R2 da
+# produção — recebe 403: o conjunto ficava cifrado no servidor e nunca saía.
+export RCLONE_CONFIG_COFRE_NO_CHECK_BUCKET=true
 export RCLONE_CONFIG=/dev/null
 
 ALVO="cofre:$OCINYE_BACKUP_S3_BUCKET/$PREFIXO"

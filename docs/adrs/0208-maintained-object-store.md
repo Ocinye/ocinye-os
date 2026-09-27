@@ -1,6 +1,6 @@
 # ADR-0208 — Um armazenamento de objectos mantido: Garage
 
-- **Estado:** Proposed
+- **Estado:** Accepted
 - **Domínio:** Data
 - **Impacto:** HIGH
 - **Depende de:** [ADR-0200](0200-object-storage.md)
@@ -24,7 +24,7 @@ O que o Core pede ao armazenamento é pouco e está no código
 `UploadPart`, `CompleteMultipartUpload`, `AbortMultipartUpload`), com a soma
 calculada pelo Core. Nada de versões de objecto, políticas públicas nem eventos.
 
-## Decision (proposta)
+## Decision
 
 **Garage** ([garagehq.deuxfleurs.fr](https://garagehq.deuxfleurs.fr)), servidor
 S3-compatível escrito em Rust, mantido pela Deuxfleurs, pensado para correr num
@@ -80,7 +80,21 @@ exercido — a prova de que os testes tocaram no Garage e não saltaram.
     falhado revertido, reversão manual de volta ao MinIO, backup e restauro noutro
     anfitrião com recusa sem a raiz de selagem e com uma errada, e a certificação
     de hardware nas duas classes.
-- **Por fazer para passar a `Accepted`:** a passagem da produção da Ocinye, pelo
-  mesmo procedimento, e o `verify.sh` completo contra o Garage.
+- **Aceite a 2026-09-27**, com as duas condições que faltavam cumpridas:
+  - o `verify.sh` completo passou contra o Garage no commit `01001f7` — as 125
+    viagens de browser, as suites com base de dados e todos os portões;
+  - a produção da Ocinye passou para o Garage no deploy do release
+    `18eb8248db1b` (antes `f0fef6d72071`), pelo mesmo procedimento: 5 objectos,
+    1 218 251 bytes, contagem e bytes iguais nos dois lados, e `verify-objects` a
+    recalcular a soma de cada um, lido do Garage. O MinIO ficou parado com o
+    volume `object-data` intacto, e `core.env.pre-garage` guarda a configuração
+    para um rollback manual.
+- **O que a passagem da produção ensinou.** O script corre como root e reescrevia
+  a configuração com `install -m 600`; o Compose da produção corre como o
+  utilizador de serviço, que lê `/etc/ocinye` pelo grupo, e não conseguiu ler o
+  `object-store.env` novo. A passagem estava verificada e a troca feita, mas os
+  serviços não levantaram até se repor `root:ocinye 0640`. As provas de anfitrião
+  não o apanharam porque aí o Compose corre como root. O script passou a manter
+  o dono, o grupo e o modo de cada ficheiro que reescreve.
 - Os carregamentos em partes abandonados ficam como partes por terminar; o Core já
   os aborta quando a sessão expira, e o Garage tem limpeza própria.

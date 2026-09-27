@@ -56,9 +56,20 @@ BASE_OBJECTOS="$(docker exec ocinye-postgres-1 psql -U ocinye -d ocinye -tAc \
     "SELECT count(*) || ' ' || coalesce(sum(size_bytes),0) FROM storage_objects WHERE status = 'stored'")"
 nota "base: $BASE_OBJECTOS (objectos, bytes) registados como guardados"
 
+# Cada ficheiro reescrito fica com o dono, o grupo e o modo do original. Este
+# script corre como root; o Compose da produção corre como o utilizador de
+# serviço, que lê a configuração pelo grupo. Um `install -m 600` deixou-a legível
+# só pelo root — e a produção não arrancou depois de uma passagem verificada.
+DONO_CORE="$(stat -c '%u %g %a' "$CONFIG/core.env")"
+DONO_OS="$(stat -c '%u %g %a' "$CONFIG/object-store.env")"
+copiar() {  # origem destino "uid gid modo"
+    set -- "$1" "$2" $3
+    install -o "$3" -g "$4" -m "$5" "$1" "$2"
+}
+
 # As credenciais do MinIO, guardadas para a fonte da cópia e para o rollback.
-install -m 600 "$CONFIG/object-store.env" "$CONFIG/object-store-legacy.env"
-install -m 600 "$CONFIG/core.env" "$CONFIG/core.env.pre-garage"
+copiar "$CONFIG/object-store.env" "$CONFIG/object-store-legacy.env" "$DONO_OS"
+copiar "$CONFIG/core.env" "$CONFIG/core.env.pre-garage" "$DONO_CORE"
 
 # ── Os segredos do Garage, gerados aqui ──────────────────────────────────
 hexa() { head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
@@ -78,8 +89,8 @@ umask 022
 
 rollback() {
     printf '\n== Armazenamento: ROLLBACK ==\n' >&2
-    install -m 600 "$CONFIG/core.env.pre-garage" "$CONFIG/core.env"
-    install -m 600 "$CONFIG/object-store-legacy.env" "$CONFIG/object-store.env"
+    copiar "$CONFIG/core.env.pre-garage" "$CONFIG/core.env" "$DONO_CORE"
+    copiar "$CONFIG/object-store-legacy.env" "$CONFIG/object-store.env" "$DONO_OS"
     rm -f "$CONFIG/object-store.env.garage" "$CONFIG/core.env.garage"
     novo stop object-store object-store-legacy >/dev/null 2>&1 || true
     # O release corrente não mudou: voltar a levantá-lo devolve o MinIO, com os
@@ -97,7 +108,7 @@ passo "MIGRATE"
 docker stop ocinye-core-1 ocinye-worker-1 ocinye-workspace-1 >/dev/null 2>&1 || true
 docker stop ocinye-object-store-1 >/dev/null 2>&1 || true
 docker rm ocinye-object-store-1 >/dev/null 2>&1 || true
-install -m 600 "$CONFIG/object-store.env.garage" "$CONFIG/object-store.env"
+copiar "$CONFIG/object-store.env.garage" "$CONFIG/object-store.env" "$DONO_OS"
 novo --profile legacy-object-store up -d object-store-legacy >/dev/null \
     || rollback "o MinIO não voltou a levantar como fonte"
 novo up -d object-store >/dev/null || rollback "o Garage não arrancou"
@@ -156,7 +167,7 @@ tail -3 /tmp/ocinye-cutover-verify.log | sed 's/^/  /'
 
 # ── CUTOVER ──────────────────────────────────────────────────────────────
 passo "CUTOVER"
-install -m 600 "$CONFIG/core.env.garage" "$CONFIG/core.env"
+copiar "$CONFIG/core.env.garage" "$CONFIG/core.env" "$DONO_CORE"
 rm -f "$CONFIG/core.env.garage" "$CONFIG/object-store.env.garage"
 novo --profile legacy-object-store stop object-store-legacy >/dev/null 2>&1 || true
 printf '%s %s objectos=%s bytes=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SHA" \
