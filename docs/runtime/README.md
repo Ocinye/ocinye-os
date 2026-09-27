@@ -21,5 +21,6 @@ Decisões: [ADR-0018](../adrs/0018-universal-web-access-and-runtime-classes.md),
 [ADR-0611](../adrs/0611-runtime-capability-boundary.md),
 [ADR-0617](../adrs/0617-pwa-and-service-worker-policy.md),
 [ADR-0702](../adrs/0702-desktop-shell-technology.md) a
-[ADR-0705](../adrs/0705-dedicated-runtime.md). Estado: `PLANNED` — só a
-discovery e as ADRs existem.
+[ADR-0705](../adrs/0705-dedicated-runtime.md). Estado: R0 (discovery, ADRs) e
+R1 (a declaração tipada `ocinye_contracts::runtime` e o módulo
+`static/runtime.js`, só com a Web) feitas; o resto é `PLANNED`.

@@ -2,8 +2,14 @@
 
 > Duas colunas por runtime: o **alvo** (o que a arquitectura permite, ADRs
 > 0018/0611/0612/0702) e o **estado** (o que existe hoje e está provado). Um
-> `limitado` nunca se escreve `sim`. Quando a declaração tipada existir (R1),
-> esta tabela passa a ser gerada a partir dela.
+> `limitado` nunca se escreve `sim`.
+>
+> Desde a R1, as capacidades **de cliente** (diálogos, webviews, notificações,
+> protocolo, área de transferência…) são código:
+> `ocinye_contracts::runtime::RuntimeCapability::target`, e o `static/runtime.js`
+> tem de dizer exactamente o mesmo para a Web
+> (`apps/workspace/tests/runtime_boundary.rs`). Esta tabela é mais larga: junta
+> as capacidades de produto (aplicações, Nye, Browser) e o estado de cada uma.
 
 Legenda do estado: `CURRENT` provado · `PLANNED` decidido, por fazer · `—` não se aplica.
 

@@ -2246,6 +2246,34 @@ async fn o_workspace_serve_um_browser_a_serio() {
         html.contains("Instalação soberana do Ocinye OS"),
         "o browser recebeu HTML que não é o do Workspace"
     );
+
+    // A declaração do runtime (ADR-0611): existe, diz Web, não promete o que
+    // o navegador impede, e um script não a consegue substituir.
+    assert!(
+        esperar_ate_condicao(&page, "typeof window.ocinyeRuntime === 'object'").await,
+        "window.ocinyeRuntime não existe"
+    );
+    let (modo, fs, abrir, substituida): (String, bool, bool, bool) = page
+        .evaluate(
+            r#"(() => {
+                const r = window.ocinyeRuntime;
+                try { window.ocinyeRuntime = { mode: 'desktop' }; } catch (_) {}
+                try { r.mode = 'desktop'; } catch (_) {}
+                return [r.mode, r.has('native_filesystem'), r.has('native_open_dialog'),
+                        window.ocinyeRuntime.mode !== 'web'];
+            })()"#,
+        )
+        .await
+        .expect("avaliar")
+        .into_value()
+        .expect("tuplo");
+    assert_eq!(modo, "web");
+    assert!(!fs, "a Web não lê o sistema de ficheiros do anfitrião");
+    assert!(abrir, "a Web abre ficheiros pelo seletor do navegador");
+    assert!(
+        !substituida,
+        "uma página conseguiu substituir a declaração do runtime"
+    );
 }
 
 /// Uma pessoa marca um compromisso, do relógio até ao PostgreSQL.

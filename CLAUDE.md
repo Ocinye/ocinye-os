@@ -546,7 +546,7 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1800 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1807 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
@@ -570,7 +570,9 @@ sem que nada falhe.
 
 - **Nenhum runtime além da Web.** Não há PWA, casca Ocinye Desktop, posto
   Dedicated, `ocinye://` nem Ocinye Browser: estão decididos (§45-B,
-  ADR-0018, ADR-0611 a ADR-0617, ADR-0702 a ADR-0705) e são `PLANNED`.
+  ADR-0018, ADR-0611 a ADR-0617, ADR-0702 a ADR-0705) e são `PLANNED`. Existe
+  só a declaração de runtime (ADR-0611): `ocinye_contracts::runtime` e
+  `static/runtime.js`, que hoje diz sempre `web`.
 
 - **Segundo factor universal não existe.** É exigido e está enrolado para
   identidades privilegiadas (acima); a identidades **não** privilegiadas o MFA

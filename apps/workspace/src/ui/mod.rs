@@ -92,7 +92,9 @@ pub fn document_com_cabeca(
          <body>\n",
     );
     out.push_str(&rendered);
-    out.push_str("\n<script src=\"/static/app.js\" defer></script>\n</body>\n</html>");
+    out.push_str(
+        "\n<script src=\"/static/runtime.js\" defer></script>\n<script src=\"/static/app.js\" defer></script>\n</body>\n</html>",
+    );
     out
 }
 
