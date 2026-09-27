@@ -32,6 +32,7 @@ pub mod ids;
 pub mod intelligence;
 pub mod locale;
 pub mod mail;
+pub mod ocsh;
 pub mod page;
 pub mod provenance;
 pub mod readiness;
