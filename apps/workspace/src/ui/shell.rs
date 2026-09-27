@@ -69,6 +69,8 @@ pub enum Screen {
     Settings,
     /// Ajuda do Workspace.
     Help,
+    /// O Terminal (ocsh).
+    Terminal,
 }
 
 impl Screen {
@@ -105,6 +107,7 @@ impl Screen {
             Self::Ask => "ask",
             Self::Settings => "settings",
             Self::Help => "help",
+            Self::Terminal => "terminal",
         }
     }
 
@@ -137,6 +140,7 @@ impl Screen {
             Self::Ask => "/ask",
             Self::Settings => "/settings",
             Self::Help => "/help",
+            Self::Terminal => "/terminal",
         }
     }
 
@@ -148,6 +152,7 @@ impl Screen {
     pub const fn label_key(self) -> &'static str {
         match self {
             Self::Help => "nav.help",
+            Self::Terminal => "terminal.app",
             Self::Settings => "nav.settings",
             Self::Home => "nav.home",
             Self::MyWork => "nav.my_work",
@@ -190,6 +195,7 @@ impl Screen {
     const fn icon_kind(self) -> Icon {
         match self {
             Self::Help => Icon::Help,
+            Self::Terminal => Icon::SystemStatus,
             Self::Settings => Icon::Settings,
             Self::Home => Icon::Home,
             Self::MyWork => Icon::MyWork,
@@ -439,7 +445,10 @@ pub(crate) const fn screen_permission(screen: Screen) -> Option<Permission> {
         | Screen::Notes
         | Screen::Resources
         | Screen::Settings
-        | Screen::Help => None,
+        | Screen::Help
+        // O Terminal não precisa de direito próprio: cada comando é autorizado
+        // pelo Core como a capability que invoca (ADR-0312).
+        | Screen::Terminal => None,
         // O Calendário: a agenda pessoal é do próprio, e `CalendarView` é o que
         // dá acesso aos eventos de unidade, workspace e instituição.
         Screen::Calendar => Some(Permission::CalendarView),
@@ -1565,7 +1574,7 @@ const CREATE_ITEMS: [CreateAction; 9] = [
     not(test),
     allow(dead_code, reason = "lida pela auditoria de estado activo")
 )]
-const SCREENS: [Screen; 23] = [
+const SCREENS: [Screen; 24] = [
     Screen::Home,
     Screen::MyWork,
     Screen::Calendar,
@@ -1589,6 +1598,7 @@ const SCREENS: [Screen; 23] = [
     Screen::Search,
     Screen::Settings,
     Screen::Help,
+    Screen::Terminal,
 ];
 
 impl Screen {
@@ -2494,6 +2504,7 @@ mod tests {
             ("/settings", Screen::Settings),
             ("/settings/security", Screen::Settings),
             ("/help", Screen::Help),
+            ("/terminal", Screen::Terminal),
             // O prefixo mais longo ganha: `/ai` também é prefixo destes.
             ("/ai", Screen::Ai),
             ("/ai/agents", Screen::Agents),

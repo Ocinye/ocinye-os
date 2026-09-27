@@ -27,6 +27,7 @@ mod science;
 mod search;
 mod secrets;
 mod system;
+mod terminal;
 
 use axum::extract::DefaultBodyLimit;
 use axum::http::{header, HeaderValue, Method};
@@ -88,7 +89,8 @@ pub fn router(state: AppState) -> Router {
         .merge(intelligence::routes())
         .merge(compute::routes())
         .merge(governance::routes())
-        .merge(system::routes());
+        .merge(system::routes())
+        .merge(terminal::routes());
 
     Router::new()
         .merge(health::routes())

@@ -108,6 +108,12 @@ fn research() -> Vec<OperationEntry> {
     vec![
         addressable(
             "research",
+            "research::list_workspaces",
+            "research.workspace.list",
+            "Listar os Research Workspaces que a pessoa alcança.",
+        ),
+        addressable(
+            "research",
             "research::create_idea",
             "research.idea.create",
             "Criar uma ideia numa unidade.",
@@ -588,6 +594,12 @@ fn identidade() -> Vec<OperationEntry> {
             "identity::choose_preset",
             "identity.avatar.choose_preset",
             "Escolher um dos avatares Ocinye.",
+        ),
+        addressable(
+            "identity",
+            "identity::read_self",
+            "identity.self.read",
+            "Dizer quem é a pessoa que pede: nome, Instância e papéis.",
         ),
         non_delegable(
             "identity",

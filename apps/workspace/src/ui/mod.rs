@@ -79,6 +79,8 @@ pub fn document_com_cabeca(
          <link rel=\"stylesheet\" href=\"/static/ods-d12-screens.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d13-base.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d13-mail.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d14-terminal.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-integration.css\">\n\
          <title>",
     );
     out.push_str(&escape(title));
@@ -1744,6 +1746,14 @@ pub(crate) mod link_tests {
                 screens::settings::security(None, None, None)
             ),
             page!("help", Screen::Help, screens::help::help()),
+            page!(
+                "terminal",
+                Screen::Terminal,
+                screens::terminal::terminal(&screens::terminal::TerminalView {
+                    who: "fidel".to_owned(),
+                    instance: "ocinye".to_owned(),
+                })
+            ),
             // Os dois recortes de Ideias, e uma lista truncada.
             //
             // Uma varredura que só rende o recorte de origem nunca vê a tab

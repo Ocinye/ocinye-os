@@ -113,6 +113,8 @@ pub const ROUTES: &[&str] = &[
     "/notifications/recent",
     "/notifications/{notification_id}/read",
     "/help",
+    "/terminal",
+    "/terminal/exec",
     "/settings",
     "/settings/security",
     "/settings/language",
@@ -390,6 +392,8 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/tasks/{task_id}/transition", post(task_transition))
         .route("/tasks/{task_id}/assignee", post(task_assign))
         .route("/help", get(help))
+        .route("/terminal", get(terminal))
+        .route("/terminal/exec", post(terminal_exec))
         .route("/settings", get(settings_account))
         .route("/settings/security", get(settings_security))
         .route(
@@ -7529,6 +7533,86 @@ async fn help(State(state): State<WorkspaceState>, headers: HeaderMap) -> Respon
         Vec::new(),
         ui::screens::help::help(),
     )
+}
+
+/// O Ocinye Terminal (ADR-0312).
+///
+/// A página é a casca; cada linha vai ao Core por [`terminal_exec`].
+async fn terminal(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    // `membro@instância`: a primeira palavra do nome, como num prompt; a
+    // instância pelo nome que o Core deu. Só apresentação.
+    let who = viewer
+        .name
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_lowercase();
+    let instance = viewer
+        .organisation
+        .split_whitespace()
+        .next()
+        .unwrap_or("ocinye")
+        .to_lowercase();
+    let vista = ui::screens::terminal::TerminalView { who, instance };
+    shell_page(
+        crate::i18n::t("terminal.app"),
+        &viewer,
+        Screen::Terminal,
+        Vec::new(),
+        ui::screens::terminal::terminal(&vista),
+    )
+}
+
+/// `POST /terminal/exec` — leva uma linha ao Core e devolve-a localizada.
+///
+/// Não faz parse que conte nem decide nada: o Core faz os dois (ADR-0312 §2).
+/// O que volta é JSON para o `terminal.js`, que o desenha com nós de texto.
+async fn terminal_exec(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Json(body): Json<ocinye_contracts::ocsh::wire::ExecRequest>,
+) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "sem sessão" })),
+        )
+            .into_response();
+    };
+    let pedido = serde_json::json!({ "line": body.line, "context": body.context });
+    let resposta = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/commands/exec",
+        &pedido,
+    )
+    .await;
+    match resposta {
+        Ok(valor) => {
+            match serde_json::from_value::<ocinye_contracts::ocsh::wire::ExecResponse>(valor) {
+                Ok(r) => Json(crate::terminal::localize(&r)).into_response(),
+                Err(_) => {
+                    Json(crate::terminal::transport_failure("ocsh.err.failed", 1)).into_response()
+                }
+            }
+        }
+        Err(ApiFailure::Unauthorised) => (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "sem sessão" })),
+        )
+            .into_response(),
+        Err(ApiFailure::ApplicationInactive | ApiFailure::Unavailable(_)) => Json(
+            crate::terminal::transport_failure("ocsh.err.unavailable", 69),
+        )
+        .into_response(),
+        Err(ApiFailure::Forbidden | ApiFailure::Denied) => {
+            Json(crate::terminal::transport_failure("ocsh.denied", 77)).into_response()
+        }
+        Err(_) => Json(crate::terminal::transport_failure("ocsh.err.network", 1)).into_response(),
+    }
 }
 
 /// Largest body the Workspace accepts for a profile photograph.

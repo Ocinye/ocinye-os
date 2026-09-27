@@ -256,8 +256,14 @@ suites() {
 #     1 delas (o_fuso_declarado_vale_para_a_viagem…) levanta dois  +1 marca
 #     2 estruturais leem ficheiros e não levantam browser            0 marcas
 #   126 testes                                                   125 marcas
-viagens-de-browser|126|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|125
+# 126 → 127 testes e 125 → 126 marcas em 2026-09-27: o Terminal executa pelo
+# Core e desenha só texto (ADR-0312, D14) — uma viagem, um levantamento.
+viagens-de-browser|127|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|126
 paridade|7|-p ocinye-core-server --test parity
+# O Terminal (ocsh, ADR-0312): whoami, contexto reautorizado e alheio recusado,
+# sintaxe do anfitrião e comandos desconhecidos sem execução, ajuda filtrada pela
+# autoridade, e nenhum terminal sem sessão. Criada em 2026-09-27 com cinco provas.
+terminal|5|-p ocinye-core-server --test terminal_http
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
 catalogo-de-operacoes|13|-p ocinye-core --lib operations

@@ -3538,6 +3538,20 @@ document.addEventListener('keydown', (event) => {
   window.location.assign(alvo.getAttribute('href'));
 });
 
+/* Ctrl/⌘ + Shift + ` abre o Terminal (D13). `e.code`, e não `e.key`: num
+ * teclado português a tecla do acento grave não dá «`» com Shift.
+ *
+ * Só se o lançador o oferecer a esta pessoa: a ficha é renderizada pelo
+ * servidor segundo a mesma política da barra, e o atalho não chega onde a
+ * descoberta não chegou. */
+document.addEventListener('keydown', (event) => {
+  if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || event.code !== 'Backquote') return;
+  const ficha = document.querySelector('[data-oc="launcher"] a[href="/terminal"]');
+  if (!ficha || window.location.pathname === '/terminal') return;
+  event.preventDefault();
+  window.location.assign('/terminal');
+});
+
 /* A entrega do arranque não deve deixar rasto no histórico.
  *
  * O arranque segue para o destino com `<meta http-equiv="refresh">`, e isso é
