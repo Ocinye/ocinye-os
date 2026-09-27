@@ -20,3 +20,6 @@
 | Q-12 | D0 | Os protótipos declaram `*{box-sizing:border-box}` e `html,body{margin:0}`; o `ocinye-ds.css` não. Sem elas o arranque transborda a 390 px. | Copiadas dos protótipos para `static/ods-integration.css`. |
 | Q-13 | D3 | O login do D3 mostra «{nome da instância}». À porta não há sessão: o nome vem de `GET /instance/branding`, público. Sem resposta, mostra «OCINYE OS». | Como descrito. |
 | Q-14 | D4 | O `.ods-desktop__scroll` é absoluto (`inset: 0`) e o Desktop tem `flex: 1`: só tem altura sendo filho de uma coluna flex. Com as aplicações como páginas (até G-05), o Desktop vive dentro do contentor de conteúdo da casca. | `ods-integration.css`: o contentor é coluna flex, e o Desktop ocupa-o. |
+| Q-15 | D12_NOTES | A gaveta das Notas é `.ods-drawer` (fixa à direita, 420px, sempre visível) sem forma de abrir nem fechar: sobrepõe o editor abaixo de ~1600px. | Actividade/Histórico/Partilha na coluna lateral do D8 (`.ods-app__split`), com os separadores. |
+| Q-16 | D12_NOTES | O papel na partilha é `.ods-seg` ler/editar, mas é um campo de formulário (`name="role"`). | `<select class="ods-input">`. |
+| Q-17 | D12_NOTES | Na rota `/notes` ainda não há nota aberta: a terceira coluna do `.ods-app__split--3` não tem texto de estado vazio no catálogo. | Duas colunas (pastas · lista) até haver o texto. |

@@ -12153,6 +12153,9 @@ async fn uma_nota_partilhada_le_se_e_so_se_le() {
     // O dono partilha a nota, só para leitura, pelo painel do editor.
     let painel = harness.open(&format!("/notes/{note_id}")).await;
     esperar_por(&painel, "Partilha").await;
+    // A partilha é um separador do editor (D12): escolhe-se primeiro.
+    clicar(&painel, r#"[aria-controls="nota-partilha"]"#).await;
+    wait_visible(&painel, "#nota-partilha").await;
     escolher(
         &painel,
         "[data-part~=notes-share__person]",
@@ -12200,7 +12203,7 @@ async fn uma_nota_partilhada_le_se_e_so_se_le() {
     esperar_por(&leitura, "Um plano que vale a pena partilhar").await;
     let html = conteudo_estavel(&leitura).await;
     assert!(
-        html.contains("oc-notes-reader"),
+        html.contains(r#"data-part="notes-reader""#),
         "a nota partilhada não abriu na vista de leitura"
     );
     assert!(

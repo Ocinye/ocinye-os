@@ -10,8 +10,7 @@ use leptos::prelude::*;
 use serde_json::Value;
 
 use crate::i18n::t;
-use crate::ui::components::{button, empty_state, Button, EmptyState, Variant};
-use crate::ui::icon::Icon;
+use crate::ui::ods;
 use crate::ui::shell::Viewer;
 
 fn field<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -49,7 +48,8 @@ fn encode_query(value: &str) -> String {
     out
 }
 
-/// A lista das notas do membro, com o botão de criar e o filtro por etiqueta.
+/// A lista das notas do membro, com as pastas, o filtro por etiqueta e o criar
+/// (D8 + D12_NOTES: moldura `.ods-app`, pastas na coluna lateral).
 pub fn notes_list(
     _viewer: &Viewer,
     payload: &Value,
@@ -71,111 +71,97 @@ pub fn notes_list(
     });
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{t("notes.title")}</h1>
-                    <p>{t("notes.subtitle")}</p>
-                </div>
-                <div class="oc-head__actions">
-                    {button(Button::new(t("notes.trash"), Variant::Secondary).href("/notes/lixo"))}
-                    {button(Button::new(t("notes.shared_with_me"), Variant::Secondary).href("/notes/partilhadas"))}
-                    <form method="post" action="/notes">
-                        {button(Button::new(t("notes.new"), Variant::Gold))}
-                    </form>
-                </div>
-            </div>
-
-            <div class="oc-notes-folders">
-                <a
-                    class=if active_folder.is_none() { "oc-notes-folder is-active" } else { "oc-notes-folder" }
-                    href="/notes"
-                >{t("notes.folder.all")}</a>
-                {folder_rows.iter().map(|folder| {
-                    let fid = field(folder, "id").to_owned();
-                    let fname = field(folder, "name").to_owned();
-                    let is_active = active_folder.as_deref() == Some(fid.as_str());
-                    let alvo = format!("/notes?folder={}", encode_query(&fid));
-                    view! {
-                        <a
-                            class=if is_active { "oc-notes-folder is-active" } else { "oc-notes-folder" }
-                            href=alvo
-                        >{fname}</a>
-                    }
-                }).collect::<Vec<_>>()}
-                <form class="oc-notes-newfolder" method="post" action="/notes/folders">
-                    <input
-                        class="oc-notes-newfolder__input" data-part="notes-newfolder__input"
-                        type="text"
-                        name="name"
-                        placeholder=t("notes.folder.new_placeholder")
-                        aria-label=t("notes.folder.new_aria")
-                        maxlength="120"
-                        required
-                    />
-                    <button class="oc-notes-newfolder__button" type="submit">{t("notes.folder.create")}</button>
+        <div class="ods-app">
+            <div class="ods-app__toolbar">
+                <h1 class="ods-page__title">{t("notes.title")}</h1>
+                <span class="ods-app__toolbar-spacer"></span>
+                <a class="ods-btn ods-btn--sm" href="/notes/lixo">{t("notes.trash")}</a>
+                <a class="ods-btn ods-btn--sm" href="/notes/partilhadas">{t("notes.shared_with_me")}</a>
+                <form method="post" action="/notes">
+                    <button type="submit" class="ods-btn ods-btn--primary ods-btn--sm">{t("notes.new")}</button>
                 </form>
             </div>
+            <div class="ods-app__split">
+                <nav class="ods-app__side" aria-label=t("notes.title")>
+                    <a
+                        class="ods-app__side-item"
+                        href="/notes"
+                        aria-current=active_folder.is_none().then_some("page")
+                    >{t("notes.folder.all")}</a>
+                    {folder_rows.iter().map(|folder| {
+                        let fid = field(folder, "id").to_owned();
+                        let fname = field(folder, "name").to_owned();
+                        let is_active = active_folder.as_deref() == Some(fid.as_str());
+                        let alvo = format!("/notes?folder={}", encode_query(&fid));
+                        view! {
+                            <a
+                                class="ods-app__side-item"
+                                href=alvo
+                                aria-current=is_active.then_some("page")
+                                data-oc-content="1"
+                            >{fname}</a>
+                        }
+                    }).collect::<Vec<_>>()}
+                    <form method="post" action="/notes/folders">
+                        <label class="ods-field">
+                            <span class="ods-sr-only">{t("notes.folder.new_aria")}</span>
+                            <input
+                                class="ods-input"
+                                data-part="notes-newfolder__input"
+                                type="text"
+                                name="name"
+                                placeholder=t("notes.folder.new_placeholder")
+                                maxlength="120"
+                                required
+                            />
+                        </label>
+                        <button class="ods-btn ods-btn--ghost ods-btn--sm ods-btn--block" type="submit">
+                            {t("notes.folder.create")}
+                        </button>
+                    </form>
+                </nav>
 
-            {active_tag.clone().map(|tag| view! {
-                <div class="oc-notes-filter">
-                    <span>{t("notes.filter.tag")} <span class="oc-tag" data-oc-content="1">{tag}</span></span>
-                    <a class="oc-notes-filter__clear" href="/notes">{t("notes.filter.view_all")}</a>
+                <div class="ods-app__main" data-ods-scroll>
+                    {active_tag.clone().map(|tag| view! {
+                        <div class="ods-notice" role="status">
+                            <span>{t("notes.filter.tag")} " " <span class="ods-chip" data-oc-content="1">{tag}</span></span>
+                            <a class="ods-btn ods-btn--ghost ods-btn--sm" href="/notes">{t("notes.filter.view_all")}</a>
+                        </div>
+                    })}
+
+                    {active_folder.clone().map(|fid| {
+                        let name = active_folder_name.clone().unwrap_or_else(|| t("notes.folder.fallback").to_owned());
+                        let apagar = format!("/notes/folders/{fid}/apagar");
+                        view! {
+                            <div class="ods-notice" role="status">
+                                <span>{t("notes.filter.folder")} " " <strong data-oc-content="1">{name}</strong></span>
+                                <a class="ods-btn ods-btn--ghost ods-btn--sm" href="/notes">{t("notes.filter.view_all")}</a>
+                                <form method="post" action=apagar>
+                                    <button type="submit" class="ods-btn ods-btn--danger-soft ods-btn--sm">{t("notes.folder.delete")}</button>
+                                </form>
+                            </div>
+                        }
+                    })}
+
+                    {if has_notes {
+                        view! {
+                            <div class="ods-notes__list">
+                                {rows.iter().map(note_card).collect::<Vec<_>>()}
+                            </div>
+                        }
+                        .into_any()
+                    } else {
+                        let (titulo, corpo) = if active_tag.is_some() {
+                            ("notes.empty.tag.title", "notes.empty.tag.body")
+                        } else if active_folder.is_some() {
+                            ("notes.empty.folder.title", "notes.empty.folder.body")
+                        } else {
+                            ("notes.empty.all.title", "notes.empty.all.body")
+                        };
+                        ods::vazio("notes", t(titulo).to_owned(), Some(t(corpo).to_owned())).into_any()
+                    }}
                 </div>
-            })}
-
-            {active_folder.clone().map(|fid| {
-                let name = active_folder_name.clone().unwrap_or_else(|| t("notes.folder.fallback").to_owned());
-                let apagar = format!("/notes/folders/{fid}/apagar");
-                view! {
-                    <div class="oc-notes-filter">
-                        <span>{t("notes.filter.folder")} <strong data-oc-content="1">{name}</strong></span>
-                        <a class="oc-notes-filter__clear" href="/notes">{t("notes.filter.view_all")}</a>
-                        <form method="post" action=apagar class="oc-notes-filter__delete">
-                            <button type="submit" class="oc-notes-filter__delete-btn">{t("notes.folder.delete")}</button>
-                        </form>
-                    </div>
-                }
-            })}
-
-            {if has_notes {
-                view! {
-                    <div class="oc-notes-list">
-                        {rows
-                            .iter()
-                            .map(note_card)
-                            .collect::<Vec<_>>()}
-                    </div>
-                }
-                    .into_any()
-            } else if active_tag.is_some() {
-                empty_state(EmptyState {
-                    icon: Icon::Document,
-                    title: t("notes.empty.tag.title").to_owned(),
-                    body: t("notes.empty.tag.body").to_owned(),
-                    actions: Vec::new(),
-                    small: false,
-                })
-                    .into_any()
-            } else if active_folder.is_some() {
-                empty_state(EmptyState {
-                    icon: Icon::Document,
-                    title: t("notes.empty.folder.title").to_owned(),
-                    body: t("notes.empty.folder.body").to_owned(),
-                    actions: Vec::new(),
-                    small: false,
-                })
-                    .into_any()
-            } else {
-                empty_state(EmptyState {
-                    icon: Icon::Document,
-                    title: t("notes.empty.all.title").to_owned(),
-                    body: t("notes.empty.all.body").to_owned(),
-                    actions: Vec::new(),
-                    small: false,
-                })
-                    .into_any()
-            }}
+            </div>
         </div>
     }
 }
@@ -195,23 +181,23 @@ fn note_card(note: &Value) -> impl IntoView {
     let href = format!("/notes/{id}");
     let tags = tags_of(note);
 
-    // O cartão é um `div`, não um `a`: o título é a ligação para a nota, e cada
-    // etiqueta é a sua própria ligação para o filtro — um `a` dentro de um `a`
+    // Um `div`, e não um `a`: o título é a ligação para a nota, e cada
+    // etiqueta a sua própria ligação para o filtro — um `a` dentro de um `a`
     // seria HTML inválido.
     view! {
-        <div class="oc-note-card">
-            <a class="oc-note-card__title" href=href data-oc-content="1">{title}</a>
+        <div class="ods-notes__list-item">
+            <a class="ods-notes__title" href=href data-oc-content="1">{title}</a>
             {(!excerpt.is_empty())
-                .then(|| view! { <p class="oc-note-card__excerpt" data-oc-content="1">{excerpt}</p> })}
+                .then(|| view! { <p class="ods-notes__excerpt" data-oc-content="1">{excerpt}</p> })}
             {(!tags.is_empty()).then(|| view! {
-                <div class="oc-note-card__tags">
+                <div class="ods-chips">
                     {tags.iter().map(|tag| {
                         let alvo = format!("/notes?tag={}", encode_query(tag));
-                        view! { <a class="oc-tag" href=alvo data-oc-content="1">{tag.clone()}</a> }
+                        view! { <a class="ods-chip" href=alvo data-oc-content="1">{tag.clone()}</a> }
                     }).collect::<Vec<_>>()}
                 </div>
             })}
-            <div class="oc-note-card__meta">{updated}</div>
+            <p class="ods-label">{updated}</p>
         </div>
     }
 }
@@ -232,37 +218,30 @@ fn updated_label(iso: &str) -> String {
 /// ou edição. Esta lista não decide nada — só mostra o que já foi partilhado.
 pub fn shared_notes_list(_viewer: &Viewer, payload: &Value) -> impl IntoView {
     let rows = payload.as_array().cloned().unwrap_or_default();
-    let has_notes = !rows.is_empty();
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{t("notes.shared_with_me")}</h1>
-                    <p>{t("notes.shared.subtitle")}</p>
-                </div>
-                <div class="oc-head__actions">
-                    {button(Button::new(t("notes.shared.my_notes"), Variant::Secondary).href("/notes"))}
-                </div>
+        <div class="ods-app">
+            <div class="ods-app__toolbar">
+                <h1 class="ods-page__title">{t("notes.shared_with_me")}</h1>
+                <span class="ods-app__toolbar-spacer"></span>
+                <a class="ods-btn ods-btn--sm" href="/notes">{t("notes.shared.my_notes")}</a>
             </div>
-
-            {if has_notes {
-                view! {
-                    <div class="oc-notes-list">
-                        {rows.iter().map(note_card).collect::<Vec<_>>()}
-                    </div>
-                }
+            <div class="ods-app__main" data-ods-scroll>
+                <p class="ods-page__sub">{t("notes.shared.subtitle")}</p>
+                {if rows.is_empty() {
+                    ods::vazio(
+                        "notes",
+                        t("notes.shared.empty.title").to_owned(),
+                        Some(t("notes.shared.empty.body").to_owned()),
+                    )
                     .into_any()
-            } else {
-                empty_state(EmptyState {
-                    icon: Icon::Document,
-                    title: t("notes.shared.empty.title").to_owned(),
-                    body: t("notes.shared.empty.body").to_owned(),
-                    actions: Vec::new(),
-                    small: false,
-                })
+                } else {
+                    view! {
+                        <div class="ods-notes__list">{rows.iter().map(note_card).collect::<Vec<_>>()}</div>
+                    }
                     .into_any()
-            }}
+                }}
+            </div>
         </div>
     }
 }
@@ -273,58 +252,53 @@ pub fn shared_notes_list(_viewer: &Viewer, payload: &Value) -> impl IntoView {
 /// para sempre — e eliminar de vez é um segundo passo deliberado, não o primeiro.
 pub fn notes_trash(_viewer: &Viewer, payload: &Value) -> impl IntoView {
     let rows = payload.as_array().cloned().unwrap_or_default();
-    let has_notes = !rows.is_empty();
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{t("notes.trash")}</h1>
-                    <p>{t("notes.trash.subtitle")}</p>
-                </div>
-                <div class="oc-head__actions">
-                    {button(Button::new(crate::i18n::t("notes.my_notes"), Variant::Secondary).href("/notes"))}
-                </div>
+        <div class="ods-app">
+            <div class="ods-app__toolbar">
+                <h1 class="ods-page__title">{t("notes.trash")}</h1>
+                <span class="ods-app__toolbar-spacer"></span>
+                <a class="ods-btn ods-btn--sm" href="/notes">{crate::i18n::t("notes.my_notes")}</a>
             </div>
-
-            {if has_notes {
-                view! {
-                    <ul class="oc-notes-trash">
-                        {rows.iter().map(|note| {
-                            let id = field(note, "id").to_owned();
-                            let titulo = {
-                                let bruto = field(note, "title");
-                                if bruto.is_empty() { t("notes.untitled").to_owned() } else { bruto.to_owned() }
-                            };
-                            let restaurar = format!("/notes/{id}/restaurar");
-                            let eliminar = format!("/notes/{id}/eliminar");
-                            view! {
-                                <li class="oc-notes-trash__item">
-                                    <span class="oc-notes-trash__title" data-oc-content="1">{titulo}</span>
-                                    <div class="oc-notes-trash__actions">
-                                        <form method="post" action=restaurar>
-                                            <button type="submit" class="oc-notes-trash__restore">{t("notes.trash.restore")}</button>
-                                        </form>
-                                        <form method="post" action=eliminar>
-                                            <button type="submit" class="oc-notes-trash__purge">{t("notes.trash.purge")}</button>
-                                        </form>
-                                    </div>
-                                </li>
-                            }
-                        }).collect::<Vec<_>>()}
-                    </ul>
-                }
+            <div class="ods-app__main" data-ods-scroll>
+                <p class="ods-page__sub">{t("notes.trash.subtitle")}</p>
+                {if rows.is_empty() {
+                    ods::vazio(
+                        "trash",
+                        t("notes.trash.empty.title").to_owned(),
+                        Some(t("notes.trash.empty.body").to_owned()),
+                    )
                     .into_any()
-            } else {
-                empty_state(EmptyState {
-                    icon: Icon::Document,
-                    title: t("notes.trash.empty.title").to_owned(),
-                    body: t("notes.trash.empty.body").to_owned(),
-                    actions: Vec::new(),
-                    small: false,
-                })
+                } else {
+                    view! {
+                        <ul class="ods-notes__list">
+                            {rows.iter().map(|note| {
+                                let id = field(note, "id").to_owned();
+                                let titulo = {
+                                    let bruto = field(note, "title");
+                                    if bruto.is_empty() { t("notes.untitled").to_owned() } else { bruto.to_owned() }
+                                };
+                                let restaurar = format!("/notes/{id}/restaurar");
+                                let eliminar = format!("/notes/{id}/eliminar");
+                                view! {
+                                    <li class="ods-notes__list-item">
+                                        <span class="ods-notes__title" data-oc-content="1">{titulo}</span>
+                                        <div class="ods-boot__actions">
+                                            <form method="post" action=restaurar>
+                                                <button type="submit" class="ods-btn ods-btn--sm">{t("notes.trash.restore")}</button>
+                                            </form>
+                                            <form method="post" action=eliminar>
+                                                <button type="submit" class="ods-btn ods-btn--danger-soft ods-btn--sm">{t("notes.trash.purge")}</button>
+                                            </form>
+                                        </div>
+                                    </li>
+                                }
+                            }).collect::<Vec<_>>()}
+                        </ul>
+                    }
                     .into_any()
-            }}
+                }}
+            </div>
         </div>
     }
 }
@@ -382,104 +356,113 @@ pub fn note_editor(
     };
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{t("notes.editor.title")}</h1>
-                </div>
-                <div class="oc-head__actions">
-                    {button(Button::new(t("notes.editor.back"), Variant::Secondary).href("/notes"))}
-                    {is_owner.then(|| {
-                        let apagar = format!("/notes/{id}/apagar");
-                        view! {
-                            <form method="post" action=apagar class="oc-notes-delete">
-                                <button type="submit" class="oc-notes-delete__btn">{t("notes.editor.delete")}</button>
-                            </form>
-                        }
-                    })}
-                </div>
+        <div class="ods-app">
+            <div class="ods-app__toolbar">
+                <a class="ods-btn ods-btn--ghost ods-btn--sm" href="/notes">{t("notes.editor.back")}</a>
+                <span class="ods-app__toolbar-spacer"></span>
+                {is_owner.then(|| {
+                    let apagar = format!("/notes/{id}/apagar");
+                    view! {
+                        <form method="post" action=apagar>
+                            <button type="submit" class="ods-btn ods-btn--danger-soft ods-btn--sm">{t("notes.editor.delete")}</button>
+                        </form>
+                    }
+                })}
             </div>
 
             {(!is_owner).then(|| view! {
-                <div class="oc-notes-shared-banner">
-                    {t("notes.editor.shared_banner")}
-                </div>
+                <div class="ods-notice" role="status">{t("notes.editor.shared_banner")}</div>
             })}
 
             // O aviso de tempo real: escondido até o socket dizer que a nota
             // mudou noutro sítio. Não recarrega — informa, e a pessoa decide
-            // (ADR-0413 §9). O `app.js` revela-o; sem JavaScript nunca aparece,
-            // e a gravação com revisão base continua a proteger contra sobrepor.
-            <div class="oc-notes-live" data-oc-notes-live="" hidden>
+            // (ADR-0413 §9).
+            <div class="ods-notice ods-notice--warning" data-oc-notes-live="" hidden>
                 {t("notes.editor.live")}
             </div>
 
-            <div
-                class="oc-notes-editor"
-                data-oc-notes-editor=""
-                data-note-id=id.clone()
-                data-save-url=save_url
-                data-revision=revision.to_string()
-                data-oc-notes-doc=document
-            >
-                // O cabeçalho do documento: o título é o título da nota, e os
-                // metadados vivem por baixo, numa linha calma. Não é um painel de
-                // formulário — é a folha de rosto do documento (correcção de
-                // experiência: uma nota é um documento, não um campo de texto).
-                <header class="oc-notes-dochead">
-                    <input
-                        class="oc-notes-title-input"
-                        data-oc-notes-title=""
-                        type="text"
-                        value=title
-                        placeholder=t("notes.untitled")
-                        aria-label=t("notes.editor.title_aria")
-                        autocomplete="off"
-                    />
-                    // Etiquetas e pasta são de quem arruma as suas notas — o dono.
-                    // Um editor edita o conteúdo, não a organização do dono.
+            <div class="ods-app__split">
+                // Actividade, Histórico e Partilha em separadores (D12). A coluna
+                // lateral do D8, e não a `.ods-drawer` fixa: ver Q-15 — o comportamento de separadores que o `app.js` já
+                // tem (`data-oc="tabs"`).
+                <aside class="ods-app__side" aria-label=t("notes.history.title")>
+                    <div class="ods-tabs" role="tablist" data-oc="tabs">
+                        <button type="button" class="ods-tabs__tab" role="tab" aria-selected="true" aria-controls="nota-actividade">
+                            {t("notes.activity.title")}
+                        </button>
+                        <button type="button" class="ods-tabs__tab" role="tab" aria-selected="false" aria-controls="nota-historico" tabindex="-1">
+                            {t("notes.history.title")}
+                        </button>
+                        {is_owner.then(|| view! {
+                            <button type="button" class="ods-tabs__tab" role="tab" aria-selected="false" aria-controls="nota-partilha" tabindex="-1">
+                                {t("notes.share.title")}
+                            </button>
+                        })}
+                    </div>
+                    <div id="nota-actividade" role="tabpanel">{activity_panel(activity)}</div>
+                    <div id="nota-historico" role="tabpanel" hidden>{history_panel(&id, revisions)}</div>
                     {is_owner.then(|| view! {
-                        <div class="oc-notes-meta">
-                            <select
-                                class="oc-notes-folder-select"
-                                data-oc-notes-folder=""
-                                data-move-url=move_url.clone()
-                                aria-label=t("notes.editor.folder_aria")
-                            >
-                                <option value="" selected=current_folder.is_empty()>{t("notes.editor.no_folder")}</option>
-                                {folder_rows.iter().map(|folder| {
-                                    let fid = field(folder, "id").to_owned();
-                                    let fname = field(folder, "name").to_owned();
-                                    let selected = fid == current_folder;
-                                    view! { <option value=fid selected=selected>{fname}</option> }
-                                }).collect::<Vec<_>>()}
-                            </select>
-                            <span class="oc-notes-meta__sep" aria-hidden="true">"·"</span>
-                            <input
-                                class="oc-notes-tags-input"
-                                data-oc-notes-tags=""
-                                type="text"
-                                value=tags.clone()
-                                placeholder=t("notes.editor.tags_placeholder")
-                                aria-label=t("notes.editor.tags_aria")
-                                autocomplete="off"
-                            />
-                        </div>
+                        <div id="nota-partilha" role="tabpanel" hidden>{share_panel(&id, shares, people)}</div>
                     })}
-                </header>
-                <div class="oc-notes-toolbar" data-oc-notes-toolbar="" role="toolbar" aria-label=t("notes.editor.toolbar_aria")></div>
-                <div class="oc-notes-surface" data-oc-notes-surface=""></div>
-                <div class="oc-notes-status" data-oc-notes-status="" aria-live="polite"></div>
+                </aside>
+                <div class="ods-app__main" data-ods-scroll>
+                    <div
+                        class="ods-editor"
+                        data-oc-notes-editor=""
+                        data-note-id=id.clone()
+                        data-save-url=save_url
+                        data-revision=revision.to_string()
+                        data-oc-notes-doc=document
+                    >
+                        <input
+                            class="ods-editor__title"
+                            data-oc-notes-title=""
+                            type="text"
+                            value=title
+                            placeholder=t("notes.untitled")
+                            aria-label=t("notes.editor.title_aria")
+                            autocomplete="off"
+                        />
+                        // O estado de gravação. Dentro do editor, porque é aí que o
+                        // ProseMirror o procura (`editor/src/editor.js`).
+                        <span class="ods-editor__state" data-oc-notes-status="" aria-live="polite"></span>
+                        // Etiquetas e pasta são de quem arruma as suas notas — o
+                        // dono. Um editor edita o conteúdo, não a organização.
+                        {is_owner.then(|| view! {
+                            <div class="ods-boot__actions">
+                                <select
+                                    class="ods-input"
+                                    data-oc-notes-folder=""
+                                    data-move-url=move_url.clone()
+                                    aria-label=t("notes.editor.folder_aria")
+                                >
+                                    <option value="" selected=current_folder.is_empty()>{t("notes.editor.no_folder")}</option>
+                                    {folder_rows.iter().map(|folder| {
+                                        let fid = field(folder, "id").to_owned();
+                                        let fname = field(folder, "name").to_owned();
+                                        let selected = fid == current_folder;
+                                        view! { <option value=fid selected=selected>{fname}</option> }
+                                    }).collect::<Vec<_>>()}
+                                </select>
+                                <input
+                                    class="ods-input"
+                                    data-oc-notes-tags=""
+                                    type="text"
+                                    value=tags.clone()
+                                    placeholder=t("notes.editor.tags_placeholder")
+                                    aria-label=t("notes.editor.tags_aria")
+                                    autocomplete="off"
+                                />
+                            </div>
+                        })}
+                        <div data-oc-notes-toolbar="" role="toolbar" aria-label=t("notes.editor.toolbar_aria")></div>
+                        <div data-oc-notes-surface=""></div>
+                    </div>
+                </div>
+
             </div>
 
-            {is_owner.then(|| share_panel(&id, shares, people))}
-
-            {history_panel(&id, revisions)}
-
-            {activity_panel(activity)}
-
-            // O editor vendorizado, same-origin (CSP script-src 'self'). Só esta
-            // página o carrega; monta-se sozinho sobre o elemento acima.
+            // O editor vendorizado, same-origin (CSP script-src 'self').
             <script src="/static/notes-editor.js" defer></script>
         </div>
     }
@@ -505,72 +488,63 @@ fn activity_label(kind: &str) -> &'static str {
     }
 }
 
-/// O painel de actividade de uma nota — quem fez o quê, e quando.
-///
-/// Os acontecimentos de vida e de acesso da nota (criar, partilhar, revogar,
-/// apagar, restaurar); as edições vivem no histórico de revisões, ao lado. Só
-/// aparece quando há algo a mostrar.
+/// A actividade da nota (D12: `.ods-timeline`).
 fn activity_panel(activity: &Value) -> impl IntoView {
     let rows = activity.as_array().cloned().unwrap_or_default();
-    let has_activity = !rows.is_empty();
-
-    has_activity.then(|| view! {
-        <section class="oc-notes-history">
-            <h2 class="oc-notes-history__title">{t("notes.activity.title")}</h2>
-            <ul class="oc-notes-history__list">
-                {rows.iter().map(|entry| {
-                    let quem = {
-                        let a = field(entry, "actor_name");
-                        if a.is_empty() { t("notes.someone").to_owned() } else { a.to_owned() }
-                    };
-                    let verbo = activity_label(field(entry, "kind"));
-                    let quando = field(entry, "created_at").split('T').next().unwrap_or("").to_owned();
-                    view! {
-                        <li class="oc-notes-history__item">
-                            <span class="oc-notes-history__note-title">{verbo}</span>
-                            <span class="oc-notes-history__meta"><span data-oc-content="1">{quem}</span>" · "{quando}</span>
-                        </li>
-                    }
-                }).collect::<Vec<_>>()}
-            </ul>
-        </section>
-    })
+    if rows.is_empty() {
+        return view! { <p class="ods-empty__body">{t("ods.state.empty")}</p> }.into_any();
+    }
+    view! {
+        <ul class="ods-timeline">
+            {rows.iter().map(|entry| {
+                let quem = {
+                    let a = field(entry, "actor_name");
+                    if a.is_empty() { t("notes.someone").to_owned() } else { a.to_owned() }
+                };
+                let verbo = activity_label(field(entry, "kind"));
+                let quando = field(entry, "created_at").split('T').next().unwrap_or("").to_owned();
+                view! {
+                    <li>
+                        <b>{verbo}</b>
+                        <p class="ods-label"><span data-oc-content="1">{quem}</span>" · "{quando}</p>
+                    </li>
+                }
+            }).collect::<Vec<_>>()}
+        </ul>
+    }
+    .into_any()
 }
 
+/// As revisões da nota (D12: lista de `.ods-menu__item` com data).
 fn history_panel(note_id: &str, revisions: &Value) -> impl IntoView {
     let rows = revisions.as_array().cloned().unwrap_or_default();
-    let has_history = !rows.is_empty();
     let note_id = note_id.to_owned();
-
-    has_history.then(|| view! {
-        <section class="oc-notes-history">
-            <h2 class="oc-notes-history__title">{t("notes.history.title")}</h2>
-            <p class="oc-notes-history__hint">
-                {t("notes.history.hint")}
-            </p>
-            <ul class="oc-notes-history__list">
-                {rows.iter().map(|rev| {
-                    let numero = rev.get("revision").and_then(Value::as_i64).unwrap_or(0);
-                    let autor = {
-                        let a = field(rev, "author_name");
-                        if a.is_empty() { t("notes.history.unknown_author").to_owned() } else { a.to_owned() }
-                    };
-                    let quando = updated_label(field(rev, "created_at"));
-                    let titulo = field(rev, "title").to_owned();
-                    let ver = format!("/notes/{note_id}/revisoes/{numero}");
-                    view! {
-                        <li class="oc-notes-history__item">
-                            <a class="oc-notes-history__link" data-part="notes-history__link" href=ver>
-                                <span class="oc-notes-history__rev">{crate::i18n::tf("notes.history.version", &[("n", &numero.to_string())])}</span>
-                                <span class="oc-notes-history__note-title" data-oc-content="1">{titulo}</span>
-                            </a>
-                            <span class="oc-notes-history__meta"><span data-oc-content="1">{autor}</span>" · "{quando}</span>
-                        </li>
-                    }
-                }).collect::<Vec<_>>()}
-            </ul>
-        </section>
-    })
+    if rows.is_empty() {
+        return view! { <p class="ods-empty__body">{t("ods.state.empty")}</p> }.into_any();
+    }
+    view! {
+        <div class="ods-menu">
+            <p class="ods-field__hint">{t("notes.history.hint")}</p>
+            {rows.iter().map(|rev| {
+                let numero = rev.get("revision").and_then(Value::as_i64).unwrap_or(0);
+                let autor = {
+                    let a = field(rev, "author_name");
+                    if a.is_empty() { t("notes.history.unknown_author").to_owned() } else { a.to_owned() }
+                };
+                let quando = updated_label(field(rev, "created_at"));
+                let titulo = field(rev, "title").to_owned();
+                let ver = format!("/notes/{note_id}/revisoes/{numero}");
+                view! {
+                    <a class="ods-menu__item" data-part="notes-history__link" href=ver>
+                        <span>{crate::i18n::tf("notes.history.version", &[("n", &numero.to_string())])}</span>
+                        <span data-oc-content="1">{titulo}</span>
+                        <span class="ods-menu__kbd"><span data-oc-content="1">{autor}</span>" · "{quando}</span>
+                    </a>
+                }
+            }).collect::<Vec<_>>()}
+        </div>
+    }
+    .into_any()
 }
 
 /// A pré-visualização de uma revisão antiga, em leitura, com o restauro.
@@ -600,30 +574,26 @@ pub fn revision_preview(
     let restaurar = format!("/notes/{note_id}/revisoes/{numero}/restaurar");
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1 data-oc-content="1">{title}</h1>
-                    <p>{crate::i18n::tf("notes.revision.subtitle", &[("n", &numero.to_string())])}</p>
-                </div>
-                <div class="oc-head__actions">
-                    {button(Button::new(t("notes.revision.back"), Variant::Secondary).href(&voltar))}
-                </div>
-            </div>
-
-            {can_write.then(|| view! {
-                <div class="oc-notes-history-actions">
+        <div class="ods-app">
+            <div class="ods-app__toolbar">
+                <a class="ods-btn ods-btn--ghost ods-btn--sm" href=voltar.clone()>{t("notes.revision.back")}</a>
+                <span class="ods-label">{crate::i18n::tf("notes.revision.subtitle", &[("n", &numero.to_string())])}</span>
+                <span class="ods-app__toolbar-spacer"></span>
+                {can_write.then(|| view! {
                     <form method="post" action=restaurar.clone()>
                         <input type="hidden" name="base_revision" value=base_revision.to_string() />
-                        {button(Button::new(t("notes.revision.restore"), Variant::Gold))}
+                        <button type="submit" class="ods-btn ods-btn--primary ods-btn--sm" title=t("notes.revision.restore_hint")>
+                            {t("notes.restore_version")}
+                        </button>
                     </form>
-                    <span class="oc-notes-history-actions__hint">
-                        {t("notes.revision.restore_hint")}
-                    </span>
-                </div>
-            })}
-
-            <div class="oc-notes-reader" data-part="notes-reader" inner_html=html></div>
+                })}
+            </div>
+            <div class="ods-app__main" data-ods-scroll>
+                <article class="ods-editor">
+                    <h1 class="ods-editor__title" data-oc-content="1">{title}</h1>
+                    <div data-part="notes-reader" inner_html=html></div>
+                </article>
+            </div>
         </div>
     }
 }
@@ -645,33 +615,37 @@ fn shared_note_reader(note: &Value) -> impl IntoView {
     let html = field(note, "html").to_owned();
     let tags = tags_of(note);
 
+    let dono = {
+        let n = field(note, "owner_name");
+        if n.is_empty() {
+            t("notes.someone").to_owned()
+        } else {
+            n.to_owned()
+        }
+    };
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1 data-oc-content="1">{title}</h1>
-                </div>
-                <div class="oc-head__actions">
-                    {button(Button::new(t("notes.reader.back"), Variant::Secondary).href("/notes/partilhadas"))}
-                </div>
+        <div class="ods-app">
+            <div class="ods-app__toolbar">
+                <a class="ods-btn ods-btn--ghost ods-btn--sm" href="/notes/partilhadas">{t("notes.reader.back")}</a>
+                <span class="ods-badge">{crate::i18n::tf("notes.shared_by", &[("name", &dono)])}</span>
             </div>
-
-            <div class="oc-notes-shared-banner">
-                {t("notes.reader.readonly_banner")}
+            <div class="ods-app__main" data-ods-scroll>
+                <article class="ods-editor">
+                    <div class="ods-notice" role="status">{t("notes.reader.readonly_banner")}</div>
+                    <h1 class="ods-editor__title" data-oc-content="1">{title}</h1>
+                    {(!tags.is_empty()).then(|| view! {
+                        <div class="ods-chips">
+                            {tags.iter().map(|tag| view! {
+                                <span class="ods-chip" data-oc-content="1">{tag.clone()}</span>
+                            }).collect::<Vec<_>>()}
+                        </div>
+                    })}
+                    // O corpo derivado, escapado pelo Core. O `inner_html` não abre
+                    // caminho a script: `to_html` só emite marcação de uma lista
+                    // fechada de blocos, e a CSP continua `script-src 'self'`.
+                    <div data-part="notes-reader" inner_html=html></div>
+                </article>
             </div>
-
-            {(!tags.is_empty()).then(|| view! {
-                <div class="oc-note-card__tags">
-                    {tags.iter().map(|tag| view! {
-                        <span class="oc-tag" data-oc-content="1">{tag.clone()}</span>
-                    }).collect::<Vec<_>>()}
-                </div>
-            })}
-
-            // O corpo derivado, escapado pelo Core. O `inner_html` não abre
-            // caminho a script: `to_html` só emite marcação de uma lista fechada
-            // de blocos, e a CSP do Workspace continua `script-src 'self'`.
-            <div class="oc-notes-reader" data-part="notes-reader" inner_html=html></div>
         </div>
     }
 }
@@ -720,55 +694,53 @@ fn share_panel(note_id: &str, shares: &Value, people: &Value) -> impl IntoView {
     let note_id = note_id.to_owned();
 
     view! {
-        <section class="oc-notes-share">
-            <h2 class="oc-notes-share__title">{t("notes.share.title")}</h2>
-            <p class="oc-notes-share__hint">
-                {t("notes.share.hint")}
-            </p>
+        <section>
+            <p class="ods-field__hint">{t("notes.share.hint")}</p>
 
             {if can_share {
                 view! {
-                    <form class="oc-notes-share__form" method="post" action=share_url>
-                        <select name="person_id" class="oc-notes-share__person" data-part="notes-share__person" aria-label=t("notes.share.person_aria") required>
-                            {candidates.into_iter().map(|(id, label)| view! {
-                                <option value=id>{label}</option>
-                            }).collect::<Vec<_>>()}
-                        </select>
-                        <select name="role" class="oc-notes-share__role" data-part="notes-share__role" aria-label=t("notes.share.access_aria")>
-                            <option value="viewer">{t("notes.role.viewer")}</option>
-                            <option value="editor">{t("notes.role.editor")}</option>
-                        </select>
-                        <button type="submit" class="oc-notes-share__submit">{t("notes.share.submit")}</button>
+                    <form method="post" action=share_url>
+                        <label class="ods-field">
+                            <span class="ods-field__label">{t("notes.share.person_aria")}</span>
+                            <select name="person_id" class="ods-input" data-part="notes-share__person" required>
+                                {candidates.into_iter().map(|(id, label)| view! {
+                                    <option value=id>{label}</option>
+                                }).collect::<Vec<_>>()}
+                            </select>
+                        </label>
+                        <label class="ods-field">
+                            <span class="ods-field__label">{t("notes.share.access_aria")}</span>
+                            <select name="role" class="ods-input" data-part="notes-share__role">
+                                <option value="viewer">{t("notes.role.viewer")}</option>
+                                <option value="editor">{t("notes.role.editor")}</option>
+                            </select>
+                        </label>
+                        <button type="submit" class="ods-btn ods-btn--primary ods-btn--sm ods-btn--block">{t("notes.share.submit")}</button>
                     </form>
                 }
-                    .into_any()
+                .into_any()
             } else {
-                view! {
-                    <p class="oc-notes-share__empty">
-                        {t("notes.share.none_left")}
-                    </p>
-                }
-                    .into_any()
+                view! { <p class="ods-empty__body">{t("notes.share.none_left")}</p> }.into_any()
             }}
 
             {has_shares.then(|| view! {
-                <ul class="oc-notes-share__list">
+                <div class="ods-menu">
                     {share_rows.iter().map(|share| {
                         let pid = field(share, "person_id").to_owned();
                         let name = field(share, "person_name").to_owned();
                         let role = role_label(field(share, "role"));
                         let revoke_url = format!("/notes/{note_id}/revogar/{pid}");
                         view! {
-                            <li class="oc-notes-share__item">
-                                <span class="oc-notes-share__name" data-oc-content="1">{name}</span>
-                                <span class="oc-notes-share__badge">{role}</span>
-                                <form method="post" action=revoke_url class="oc-notes-share__revoke">
-                                    <button type="submit" class="oc-notes-share__revoke-btn">{t("notes.share.revoke")}</button>
+                            <div class="ods-menu__item">
+                                <span data-oc-content="1">{name}</span>
+                                <span class="ods-badge">{role}</span>
+                                <form method="post" action=revoke_url>
+                                    <button type="submit" class="ods-btn ods-btn--ghost ods-btn--sm">{t("notes.share.revoke")}</button>
                                 </form>
-                            </li>
+                            </div>
                         }
                     }).collect::<Vec<_>>()}
-                </ul>
+                </div>
             })}
         </section>
     }
