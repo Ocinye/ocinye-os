@@ -59,14 +59,28 @@ exercido — a prova de que os testes tocaram no Garage e não saltaram.
 
 ## Consequences
 
-- **Licença.** O Garage é AGPL-3.0. Corre como serviço separado e sem
-  modificações, pelo que o código do Ocinye OS não herda obrigações; uma Instância
-  que o modifique tem de publicar essas modificações. Regista-se no inventário de
+- **Licença.** O Garage é AGPL-3.0. O Ocinye OS usa-o como serviço separado,
+  sem modificações, a partir da imagem publicada, e fala com ele só por S3 e pela
+  API de administração, pela rede. A leitura da Ocinye é que isto não torna o
+  código do Ocinye OS uma obra derivada; **não é um parecer jurídico**, e quem
+  distribua ou modifique o Garage deve ler a AGPL-3.0 com o seu próprio
+  aconselhamento — uma Instância que o modifique e o sirva a terceiros tem, pela
+  secção 13, de oferecer o código dessas modificações. Regista-se no inventário de
   terceiros.
-- **Por fazer para passar a `Accepted`:** o serviço no Compose e no instalador
-  (layout, chave e bucket pelo CLI do Garage, em vez do `mc mb`); o backup e o
-  restauro sem `mc` do MinIO (o espelhamento passa a um cliente S3 genérico); a
-  migração da produção por cópia e `verify-objects`; e as provas de instalação,
-  actualização e restauro verdes com o Garage.
+- **Feito, e provado de raiz com o release `e62a1e5dc795`**, cada prova num
+  anfitrião Linux descartável:
+  - o serviço no Compose e no instalador: a chave e o bucket pela API de
+    administração do Garage (`infra/garage/init.sh`), idempotente, a cada arranque;
+  - o backup e o restauro com o `rclone` (MIT) em vez do `mc`;
+  - a passagem MinIO → Garage (`scripts/object-store-cutover.sh`): PRE-CHECK,
+    MIGRATE com o Core parado, VERIFY por `rclone check`, contagem e bytes e
+    `verify-objects` — o Core recalcula a soma de cada objecto registado, lido do
+    Garage —, CUTOVER, e ROLLBACK que devolve a Instância ao MinIO intacto;
+  - instalação dos quatro perfis, actualização N → N+1 com a passagem, release
+    falhado revertido, reversão manual de volta ao MinIO, backup e restauro noutro
+    anfitrião com recusa sem a raiz de selagem e com uma errada, e a certificação
+    de hardware nas duas classes.
+- **Por fazer para passar a `Accepted`:** a passagem da produção da Ocinye, pelo
+  mesmo procedimento, e o `verify.sh` completo contra o Garage.
 - Os carregamentos em partes abandonados ficam como partes por terminar; o Core já
   os aborta quando a sessão expira, e o Garage tem limpeza própria.

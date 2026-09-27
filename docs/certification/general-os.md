@@ -62,13 +62,20 @@ browser, os testes HTTP e todos os portões), as instalações dos quatro perfis
 actualização, o restauro e a certificação de hardware, e escreve o resultado com
 o SHA do release.
 
+## Estado das provas de anfitrião
+
+Release `e62a1e5dc795`, pacote de prova, anfitriões Linux descartáveis:
+
+| Prova | Resultado |
+|---|---|
+| Instalação de raiz, quatro perfis (`research`, `business`, `personal`, `education`) | PASS |
+| Actualização N → N+1 com MinIO → Garage, release falhado revertido, reversão manual | PASS |
+| Backup, restauro noutro anfitrião, recusa sem raiz de selagem e com uma errada | PASS |
+| Hardware 2 vCPU · 4 GB e 4 vCPU · 8 GB | PASS ([resultados](../install/hardware-results.md)) |
+
 ## O que falta para o portão
 
-- **Armazenamento de objectos mantido.** O MinIO CE foi arquivado pelo
-  fabricante; a Ocinye usa um espelho fixado por digest como ponte
-  ([artefactos de terceiros](../deployment/third-party-artifacts.md)). Escolher um
-  armazenamento S3 mantido — ADR, migração e E2E — é condição do portão, decidida
-  na Parte 0.
-- **Feed institucional de Actividade** sem viagem própria (passo 18).
-- **Provas de anfitrião** (instalação, actualização, restauro, hardware) por
-  correr enquanto o pacote de prova não existir nesta máquina.
+- **Passo 18 — `PARTIAL`.** O feed institucional de Actividade não tem viagem
+  própria; `PARTIAL` não conta como `PASS`.
+- **Passagem da produção para o Garage** e o `verify.sh` completo contra ele
+  ([ADR-0208](../adrs/0208-maintained-object-store.md)).

@@ -11,7 +11,7 @@ Ocinye usa.
 |---|---|
 | Sistema | Linux, 64 bits (a arquitectura do pacote: `amd64` ou `arm64`) |
 | Docker | Engine 24 ou mais recente, com o plugin `docker compose` (v2) |
-| Memória | 3,5 GB, verificados pelo instalador (o mínimo medido é trabalho da Parte 15) |
+| Processador e memória | **mínimo suportado: 2 vCPU e 4 GB**; recomendado: 4 vCPU e 8 GB ([medido](#hardware)). O instalador recusa menos de 3,5 GB |
 | Disco | 15 GB livres em `/srv` |
 | Rede | portas 80 e 443 livres; acesso aos registries das imagens de terceiros |
 | Ferramentas | `bash`, `curl`, coreutils |
@@ -19,6 +19,24 @@ Ocinye usa.
 **Não precisa** de GPU, de chave de fornecedor de IA, de fornecedor externo nem de
 correio configurado. Uma Instância nova arranca com a IA indisponível — que é o
 estado certo até alguém ligar um nó ou registar um fornecedor.
+
+## Hardware
+
+Medido, e não estimado, por `scripts/hardware-certification.sh`: cada classe é um
+anfitrião descartável com os limites de CPU e memória da classe, onde se instala o
+pacote e se corre a viagem de browser inteira — entrar com segundo factor, abrir
+Ficheiros, criar e guardar uma nota, o Prompt responder. Os números estão em
+[`hardware-results.md`](hardware-results.md).
+
+| | Classe | Resultado |
+|---|---|---|
+| `MINIMUM_SUPPORTED` | 2 vCPU · 4 GB | PASS — instala em menos de 2 minutos, anfitrião inteiro ≈ 300 MiB em repouso, página de entrada p95 < 10 ms, nenhum passo da viagem acima de 2,5 s |
+| `RECOMMENDED` | 4 vCPU · 8 GB | PASS — com a mesma viagem; a folga serve o que a medição não carrega: conversão de ficheiros em contentores descartáveis, sincronização de correio, vários membros ao mesmo tempo |
+
+O que a medição **não** diz: foi feita num anfitrião `arm64`, com um membro de cada
+vez, e a memória em repouso não é o pico — um documento de Office a converter ou um
+carregamento grande sobem-no. Menos de 2 vCPU ou de 4 GB não foi medido e não é
+suportado. `amd64` não foi medido nesta corrida.
 
 ## Instalar
 

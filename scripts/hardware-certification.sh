@@ -55,12 +55,15 @@ for classe in "${CLASSES[@]}"; do
     fi
     instalacao=$(( $(date +%s) - inicio ))
 
-    memoria_repouso="—"; p50_ms="—"; p95_ms="—"; tempos="—"
+    memoria_repouso="—"; memoria_anfitriao="—"; p50_ms="—"; p95_ms="—"; tempos="—"
     if [ "$estado" = PASS ]; then
         sleep 60   # repouso: a medição de memória não pode apanhar o arranque
         memoria_repouso="$(docker exec "$nome" docker stats --no-stream --format '{{.MemUsage}}' \
             | awk '{v=$1; u=v; gsub(/[0-9.]/,"",u); gsub(/[A-Za-z]/,"",v);
                     m=(u=="GiB")?v*1024:(u=="KiB")?v/1024:v; t+=m} END {printf "%.0f MiB", t}')"
+        # O anfitrião inteiro, visto de fora: serviços, Docker e sistema — o que a
+        # máquina tem de ter, e não só o que os contentores da Instância gastam.
+        memoria_anfitriao="$(docker stats --no-stream --format '{{.MemUsage}}' "$nome" | awk '{print $1}')"
         for _ in $(seq 1 200); do
             curl -ks -o /dev/null -w '%{time_total}\n' --resolve "$DOMINIO:$PORTO:127.0.0.1" \
                 "https://$DOMINIO:$PORTO/login"
@@ -84,7 +87,7 @@ for classe in "${CLASSES[@]}"; do
     docker rm -f -v "$nome" >/dev/null 2>&1 || true
     rm -rf "$trabalho"
     echo "  $estado ${razao:+— $razao}"
-    linhas+=("| $cpus vCPU · $memoria | $estado | ${instalacao}s | $memoria_repouso | $p50_ms / $p95_ms | $tempos | ${razao:-—} |")
+    linhas+=("| $cpus vCPU · $memoria | $estado | ${instalacao}s | $memoria_repouso | $memoria_anfitriao | $p50_ms / $p95_ms | $tempos | ${razao:-—} |")
 done
 
 {
@@ -96,8 +99,8 @@ done
     echo "Sem GPU, sem fornecedor de IA. Limiares: instalação ≤ ${MAX_INSTALACAO_S}s,"
     echo "p95 da página de entrada ≤ ${MAX_P95_MS} ms, cada passo da viagem ≤ ${MAX_PASSO_MS} ms."
     echo
-    echo "| Classe | Resultado | Instalação | Memória em repouso | Entrada p50 / p95 (ms) | Passos da viagem (ms) | Razão |"
-    echo "|---|---|---|---|---|---|---|"
+    echo "| Classe | Resultado | Instalação | Serviços em repouso | Anfitrião inteiro em repouso | Entrada p50 / p95 (ms) | Passos da viagem (ms) | Razão |"
+    echo "|---|---|---|---|---|---|---|---|"
     printf '%s\n' "${linhas[@]}"
 } > "$RESULTADOS"
 printf '\n  Resultados em %s\n\n' "$RESULTADOS"
