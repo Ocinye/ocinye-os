@@ -14,10 +14,10 @@ pub fn field(
     input_type: &'static str,
 ) -> impl IntoView {
     view! {
-        <div class="oc-field">
-            <label class="oc-field__label" for=id>{label}</label>
+        <div class="ods-field">
+            <label class="ods-field__label" for=id>{label}</label>
             <input
-                class="oc-input"
+                class="ods-input"
                 id=id
                 name=name
                 type=input_type
@@ -43,10 +43,10 @@ pub fn field_with_value(
 ) -> impl IntoView {
     let value = value.into();
     view! {
-        <div class="oc-field">
-            <label class="oc-field__label" for=id>{label}</label>
+        <div class="ods-field">
+            <label class="ods-field__label" for=id>{label}</label>
             <input
-                class="oc-input"
+                class="ods-input"
                 id=id
                 name=name
                 type=input_type
@@ -62,11 +62,12 @@ pub fn field_with_value(
 /// A altura era um atributo `style`, que a CSP do Workspace descarta. São três
 /// tamanhos, e são os três que a aplicação usa; qualquer outro valor cai no do
 /// meio em vez de ficar sem altura nenhuma.
-fn height_class(height: u16) -> &'static str {
+fn filas(height: u16) -> &'static str {
+    // A altura pedida em linhas: o D1 não tem variantes de altura de campo.
     match height {
-        0..=70 => "oc-textarea--sm",
-        71..=100 => "oc-textarea--md",
-        _ => "oc-textarea--lg",
+        0..=70 => "3",
+        71..=100 => "5",
+        _ => "8",
     }
 }
 
@@ -79,10 +80,10 @@ pub fn textarea(
     height: u16,
 ) -> impl IntoView {
     view! {
-        <div class="oc-field">
-            <label class="oc-field__label" for=id>{label}</label>
+        <div class="ods-field">
+            <label class="ods-field__label" for=id>{label}</label>
             <textarea
-                class=format!("oc-textarea {}", height_class(height))
+                class="ods-input" rows=filas(height)
                 id=id
                 name=name
                 placeholder=placeholder
@@ -106,10 +107,10 @@ pub fn textarea_with_value(
 ) -> impl IntoView {
     let value = value.into();
     view! {
-        <div class="oc-field">
-            <label class="oc-field__label" for=id>{label}</label>
+        <div class="ods-field">
+            <label class="ods-field__label" for=id>{label}</label>
             <textarea
-                class=format!("oc-textarea {}", height_class(height))
+                class="ods-input" rows=filas(height)
                 id=id
                 name=name
                 placeholder=placeholder
@@ -134,9 +135,9 @@ pub fn select(
     let none_available = options.iter().all(|(_, available)| !*available);
 
     view! {
-        <div class="oc-field">
-            <label class="oc-field__label" for=id>{label}</label>
-            <select class="oc-select" id=id name=name disabled=none_available>
+        <div class="ods-field">
+            <label class="ods-field__label" for=id>{label}</label>
+            <select class="ods-input" id=id name=name disabled=none_available>
                 {options
                     .into_iter()
                     .map(|(text, available)| {
@@ -202,9 +203,9 @@ pub fn select_labelled(
     let none_available = options.iter().all(|option| !option.available);
 
     view! {
-        <div class="oc-field">
-            <label class="oc-field__label" for=id>{label}</label>
-            <select class="oc-select" id=id name=name disabled=none_available>
+        <div class="ods-field">
+            <label class="ods-field__label" for=id>{label}</label>
+            <select class="ods-input" id=id name=name disabled=none_available>
                 {options
                     .into_iter()
                     .map(|option| {
@@ -238,8 +239,8 @@ pub fn named_checkbox(
     checked: bool,
 ) -> impl IntoView {
     view! {
-        <label class="oc-check" for=id>
-            <input type="checkbox" id=id name=name checked=checked />
+        <label class="ods-field" for=id>
+            <input type="checkbox" class="ods-check" id=id name=name checked=checked />
             <span>{label}</span>
         </label>
     }
@@ -260,9 +261,9 @@ pub fn radio_group(
     options: Vec<RadioOption>,
 ) -> impl IntoView {
     view! {
-        <fieldset class="oc-seg-group">
-            <legend class="oc-field__label">{label}</legend>
-            <div class="oc-seg" role="radiogroup" aria-label=label>
+        <fieldset class="ods-field">
+            <legend class="ods-field__label">{label}</legend>
+            <div class="ods-seg" role="radiogroup" aria-label=label>
                 {options
                     .into_iter()
                     .map(|option| {
@@ -271,7 +272,7 @@ pub fn radio_group(
                         let disabled = option.unavailable_reason.is_some();
                         view! {
                             <label
-                                class="oc-seg__option"
+                                class="ods-seg__opt"
                                 for=label_for
                                 title=option.unavailable_reason.clone().unwrap_or_default()
                             >

@@ -26,7 +26,6 @@
 
 use leptos::prelude::*;
 
-use crate::ui::icon::{icon, Icon};
 
 /// O contexto em que a superfície aparece.
 pub struct Assist {
@@ -82,32 +81,34 @@ pub fn assist(spec: Assist) -> impl IntoView {
     let placeholder = crate::i18n::tf("assist.placeholder", &[("here", here_texto)]);
 
     view! {
-        <section class="oc-assist" aria-labelledby="assist-title">
-            <div class="oc-assist__head">
-                {icon(Icon::Ai, 15)}
-                <h2 class="oc-assist__title" id="assist-title">{crate::i18n::t("assist.title")}</h2>
-                <span class="oc-assist__scope">{here_texto}</span>
-            </div>
+        <section class="ods-widget ods-widget-surface" aria-labelledby="assist-title">
+            <header class="ods-widget__head">
+                <span class="ods-widget__icon">{crate::ui::ods::icone("nye", "")}</span>
+                <span class="ods-widget__titles">
+                    <h2 class="ods-widget__title" id="assist-title">{crate::i18n::t("assist.title")}</h2>
+                    <span class="ods-widget__sub">{here_texto}</span>
+                </span>
+            </header>
 
-            <form class="oc-assist__form" method="get" action="/ask">
+            <form class="ods-search" method="get" action="/ask">
                 {workspace_field}
                 {resource_fields}
-                <label class="oc-sr" for="assist-q">{placeholder.clone()}</label>
+                <label class="ods-sr-only" for="assist-q">{placeholder.clone()}</label>
                 <input
-                    class="oc-input"
+                    class="ods-search__input"
                     id="assist-q"
                     name="q"
                     type="search"
                     placeholder=placeholder
                     autocomplete="off"
                 />
-                <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{crate::i18n::t("assist.submit")}</button>
+                <button type="submit" class="ods-btn ods-btn--primary ods-btn--sm">{crate::i18n::t("assist.submit")}</button>
             </form>
 
             // As sugestões são ligações, não botões: cada uma leva à mesma
             // superfície com a frase já escrita, e o membro vê o que vai
             // acontecer antes de acontecer.
-            <ul class="oc-assist__suggestions">
+            <ul class="ods-chips">
                 {suggestions
                     .iter()
                     .map(|key| {
@@ -117,7 +118,7 @@ pub fn assist(spec: Assist) -> impl IntoView {
                         let href = format!("/ask?q={}", urlencode(phrase));
                         view! {
                             <li>
-                                <a class="oc-chip" data-part="chip" href=href>{phrase}</a>
+                                <a class="ods-chip" href=href>{phrase}</a>
                             </li>
                         }
                     })
@@ -127,7 +128,7 @@ pub fn assist(spec: Assist) -> impl IntoView {
             {(!inference_available)
                 .then(|| {
                     view! {
-                        <p class="oc-assist__state" role="status">
+                        <p class="ods-state ods-state--unavailable" role="status">
                             {crate::i18n::t("assist.no_inference")}
                         </p>
                     }

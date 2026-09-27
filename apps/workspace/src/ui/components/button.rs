@@ -6,7 +6,7 @@
 
 use leptos::prelude::*;
 
-use crate::ui::icon::{icon, Icon};
+use crate::ui::icon::Icon;
 
 /// As variantes do design.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,10 +24,10 @@ pub enum Variant {
 impl Variant {
     const fn class(self) -> &'static str {
         match self {
-            Self::Primary => "oc-btn oc-btn--primary",
-            Self::Gold => "oc-btn oc-btn--gold",
-            Self::Secondary => "oc-btn oc-btn--secondary",
-            Self::OnNavy => "oc-btn oc-btn--on-navy",
+            Self::Primary => "ods-btn ods-btn--navy",
+            Self::Gold => "ods-btn ods-btn--primary",
+            Self::Secondary => "ods-btn",
+            Self::OnNavy => "ods-btn ods-btn--ghost",
         }
     }
 }
@@ -136,8 +136,8 @@ pub fn button(spec: Button) -> impl IntoView {
     // not Clone, and duplicating the construction is cheaper than boxing it.
     let inner = |label: String| {
         view! {
-            {dot.then(|| view! { <span class="oc-btn__dot"></span> })}
-            {kind.map(|k| icon(k, 13))}
+            {dot.then(|| view! { <span class="ods-dot ods-dot--warning" aria-hidden="true"></span> })}
+            {kind.map(|k| crate::ui::ods::icone(crate::ui::ods::icone_do_legado(k), "ods-icon--sm"))}
             {label}
         }
     };
@@ -146,7 +146,8 @@ pub fn button(spec: Button) -> impl IntoView {
         let content = inner(label.clone());
         return view! {
             <span
-                class=format!("{class} oc-unavailable")
+                class=class
+                data-part="unavailable"
                 aria-disabled="true"
                 title=reason
             >

@@ -233,6 +233,58 @@ pub fn icone_da_aplicacao(ecra: crate::ui::shell::Screen) -> &'static str {
     }
 }
 
+/// O símbolo do sprite novo para cada ícone do enum legado (`ui::icon::Icon`),
+/// para os componentes partilhados desenharem com o sprite do Claude Design.
+///
+/// Onze não têm correspondente directo no sprite (Restart, SidebarCollapse,
+/// ChevronUp, Filter, Science, Attach, Tools, Send, Reply, Archive, EmptyState):
+/// levam o mais próximo, e estão em `docs/ui/CLAUDE_DESIGN_QUESTIONS.md` (Q-18).
+pub fn icone_do_legado(icone: crate::ui::icon::Icon) -> &'static str {
+    use crate::ui::icon::Icon;
+    match icone {
+        Icon::User => "user",
+        Icon::Lock => "lock",
+        Icon::ArrowRight | Icon::Send | Icon::Reply => "arrow-r",
+        Icon::Power => "logout",
+        Icon::Restart => "auto",
+        Icon::SystemStatus => "status",
+        Icon::SidebarCollapse | Icon::EmptyState => "grid",
+        Icon::ChevronUp => "chev-d",
+        Icon::Search => "search",
+        Icon::Plus => "plus",
+        Icon::Close => "close",
+        Icon::Bell => "bell",
+        Icon::Calendar => "calendar",
+        Icon::Filter => "list",
+        Icon::Settings | Icon::Tools => "settings",
+        Icon::Help => "help",
+        Icon::Home => "home",
+        Icon::MyWork => "work",
+        Icon::Apps => "apps-brand",
+        Icon::Units => "units",
+        Icon::Idea => "idea",
+        Icon::Project => "project",
+        Icon::Knowledge => "knowledge",
+        Icon::Science | Icon::Data | Icon::Dataset => "data",
+        Icon::Bibliography => "bibliography",
+        Icon::Ai => "ai",
+        Icon::Agent => "agent",
+        Icon::Compute | Icon::ComputeLg => "compute",
+        Icon::Activity => "activity",
+        Icon::Admin => "admin",
+        Icon::Audit => "audit",
+        Icon::AiHexLg | Icon::AiHexMd => "nye",
+        Icon::Shield => "shield",
+        Icon::Attach | Icon::Files | Icon::Folder => "files",
+        Icon::Document => "notes",
+        Icon::Mail => "mail",
+        Icon::Messaging => "messages",
+        Icon::Star => "star-fill",
+        Icon::Archive => "storage",
+        Icon::Trash => "trash",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

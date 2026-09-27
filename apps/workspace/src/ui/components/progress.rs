@@ -8,38 +8,27 @@ use leptos::prelude::*;
 /// percentagem, não uma barra sem significado.
 pub fn progress_bar(pct: u8) -> impl IntoView {
     let pct = pct.min(100);
+    // A barra do D1: a largura sai de `data-ods-value`, posta pelo `app.js`.
     view! {
         <div
-            class="oc-progress"
+            class="ods-progress"
             data-pct=pct.to_string()
+            data-ods-value=pct.to_string()
             role="progressbar"
             aria-valuenow=pct.to_string()
             aria-valuemin="0"
             aria-valuemax="100"
         >
-            <div class="oc-progress__track">
-                <div class="oc-progress__fill"></div>
-            </div>
-            <span class="oc-progress__pct">{format!("{pct}%")}</span>
+            <div class="ods-progress__bar"></div>
         </div>
+        <span class="ods-label">{format!("{pct}%")}</span>
     }
 }
 
 /// Um donut de progresso, para o cabeçalho de um projecto.
 pub fn donut(pct: u8) -> impl IntoView {
-    let pct = pct.min(100);
-    view! {
-        <div
-            class="oc-donut"
-            data-pct=pct.to_string()
-            role="progressbar"
-            aria-valuenow=pct.to_string()
-            aria-valuemin="0"
-            aria-valuemax="100"
-        >
-            <div class="oc-donut__core">{format!("{pct}%")}</div>
-        </div>
-    }
+    // O D1 não tem anel de progresso: a mesma barra, com o valor escrito.
+    progress_bar(pct)
 }
 
 #[cfg(test)]

@@ -27,13 +27,13 @@ pub enum Tone {
 impl Tone {
     const fn class(self) -> &'static str {
         match self {
-            Self::Ok => "oc-badge oc-badge--ok",
-            Self::Gold => "oc-badge oc-badge--gold",
-            Self::Navy => "oc-badge oc-badge--navy",
-            Self::Blue => "oc-badge oc-badge--blue",
-            Self::Gray => "oc-badge oc-badge--gray",
-            Self::Warn => "oc-badge oc-badge--warn",
-            Self::Err => "oc-badge oc-badge--err",
+            Self::Ok => "ods-badge ods-badge--success",
+            Self::Gold => "ods-badge ods-badge--warning",
+            Self::Navy => "ods-badge ods-badge--info",
+            Self::Blue => "ods-badge ods-badge--info",
+            Self::Gray => "ods-badge",
+            Self::Warn => "ods-badge ods-badge--warning",
+            Self::Err => "ods-badge ods-badge--error",
         }
     }
 
@@ -91,7 +91,6 @@ pub fn badge(label: impl Into<String>, tone: Tone) -> impl IntoView {
     let label = label.into();
     view! {
         <span class=tone.class()>
-            <i></i>
             {label}
         </span>
     }
@@ -125,7 +124,6 @@ pub fn classification_badge(classification: &str) -> impl IntoView {
 
     view! {
         <span class=tone.class() title=title>
-            <i></i>
             {rotulo}
         </span>
     }
@@ -146,7 +144,6 @@ pub fn task_state_badge(state: &str) -> impl IntoView {
     let tone = Tone::of(state);
     view! {
         <span class=tone.class()>
-            <i></i>
             {rotulo}
         </span>
     }
@@ -163,7 +160,6 @@ pub fn task_priority_badge(priority: &str) -> impl IntoView {
     let tone = Tone::of(priority);
     view! {
         <span class=tone.class()>
-            <i></i>
             {rotulo}
         </span>
     }
@@ -172,7 +168,7 @@ pub fn task_priority_badge(priority: &str) -> impl IntoView {
 /// Uma pill neutra de tipo ou código.
 pub fn pill(label: impl Into<String>) -> impl IntoView {
     let label = label.into();
-    view! { <span class="oc-pill">{label}</span> }
+    view! { <span class="ods-chip">{label}</span> }
 }
 
 #[cfg(test)]

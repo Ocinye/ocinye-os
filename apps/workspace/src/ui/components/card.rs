@@ -10,20 +10,20 @@ pub fn section_head(
 ) -> impl IntoView {
     let title = title.into();
     view! {
-        <div class="oc-card__head">
-            <h2>{title}</h2>
-            {action.map(|(label, href)| view! { <a class="oc-card__action" href=href>{label}</a> })}
-            {meta.map(|meta| view! { <span class="oc-card__meta">{meta}</span> })}
-        </div>
+        <header class="ods-widget__head">
+            <span class="ods-widget__titles"><h2 class="ods-widget__title">{title}</h2></span>
+            {meta.map(|meta| view! { <span class="ods-label">{meta}</span> })}
+            {action.map(|(label, href)| view! { <a class="ods-btn ods-btn--ghost ods-btn--sm" href=href>{label}</a> })}
+        </header>
     }
 }
 
 /// Um cartão com cabeçalho e corpo.
 pub fn card(head: impl IntoView + 'static, body: impl IntoView + 'static) -> impl IntoView {
     view! {
-        <section class="oc-card" data-part="card">
+        <section class="ods-widget ods-widget-surface" data-part="card">
             {head}
-            <div class="oc-card__body">{body}</div>
+            <div class="ods-widget__body">{body}</div>
         </section>
     }
 }
@@ -60,33 +60,28 @@ pub fn kpi_card(kpi: Kpi) -> impl IntoView {
         href,
     } = kpi;
     let indisponivel = value.is_none();
-    let positive = delta.as_ref().is_some_and(|d| d.starts_with('+'));
-    let delta_class = if positive {
-        "oc-kpi__delta oc-kpi__delta--up"
-    } else {
-        "oc-kpi__delta oc-kpi__delta--down"
-    };
-
     view! {
         <a
-            class="oc-card oc-card--clickable oc-card__body oc-card__body--block" data-part="card"
-            class:oc-unavailable=indisponivel
+            class="ods-kpi ods-widget-surface"
+            data-part="card"
             href=href
-            title=indisponivel
-                .then(|| crate::i18n::t("home.kpi.no_answer").to_owned())
+            title=indisponivel.then(|| crate::i18n::t("home.kpi.no_answer").to_owned())
         >
-            <div class="oc-row--between oc-gap-5" >
-                <span class="oc-t-meta" >
-                    {label}
+            <span class="ods-kpi__head">
+                {label}
+                {delta.map(|d| view! { <span class="ods-label">{d}</span> })}
+            </span>
+            <span>
+                <span class="ods-kpi__value">{value.unwrap_or_else(|| "—".to_owned())}</span>
+                " "
+                <span class="ods-kpi__label">
+                    {if indisponivel { crate::i18n::t("home.kpi.unavailable").to_owned() } else { hint }}
                 </span>
-                <span class=delta_class>{delta.unwrap_or_else(|| "—".to_owned())}</span>
-            </div>
-            <div class="oc-t-kpi oc-t-kpi--lg oc-mt-5 oc-mb-2" >
-                {value.unwrap_or_else(|| "—".to_owned())}
-            </div>
-            <div class="oc-t-caption" >
-                {if indisponivel { crate::i18n::t("home.kpi.unavailable").to_owned() } else { hint }}
-            </div>
+            </span>
+            {indisponivel.then(|| crate::ui::ods::estado(
+                crate::ui::ods::Estado::Erro,
+                crate::i18n::t("ods.state.error").to_owned(),
+            ))}
         </a>
     }
 }

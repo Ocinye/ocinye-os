@@ -70,7 +70,7 @@ fn render(
                             || {
                                 view! {
                                     <span
-                                        class="oc-tab oc-unavailable" data-part="tab unavailable"
+                                        class="ods-tabs__tab" data-part="tab unavailable"
                                         role="tab"
                                         aria-selected="false"
                                         aria-disabled="true"
@@ -84,7 +84,7 @@ fn render(
                             |href| {
                                 view! {
                                     <a
-                                        class="oc-tab" data-part="tab"
+                                        class="ods-tabs__tab" data-part="tab"
                                         role="tab"
                                         aria-selected=selected
                                         aria-current=current
@@ -104,7 +104,7 @@ fn render(
 
 /// Tabs em pill, para listas.
 pub fn pill_tabs(tabs: Vec<Tab>, label: &'static str) -> impl IntoView {
-    render(tabs, "oc-tabs", label, false)
+    render(tabs, "ods-tabs", label, false)
 }
 
 /// Tabs contextuais, para cabeçalhos de detalhe.
@@ -113,7 +113,7 @@ pub fn pill_tabs(tabs: Vec<Tab>, label: &'static str) -> impl IntoView {
 /// 13 tabs e o design prevê-o explicitamente. O separador activo por omissão é
 /// marcado com `aria-current="location"` para funcionar sem JavaScript.
 pub fn context_tabs(tabs: Vec<Tab>, label: &'static str) -> impl IntoView {
-    render(tabs, "oc-tabs oc-tabs--ctx", label, true)
+    render(tabs, "ods-tabs", label, true)
 }
 
 #[cfg(test)]

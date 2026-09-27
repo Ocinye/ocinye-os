@@ -40,9 +40,9 @@ pub enum AvatarSize {
 impl AvatarSize {
     const fn class(self) -> &'static str {
         match self {
-            Self::Small => "oc-avatar oc-avatar--sm",
-            Self::Medium => "oc-avatar oc-avatar--md",
-            Self::Large => "oc-avatar oc-avatar--lg",
+            Self::Small => "ods-avatar ods-avatar--sm",
+            Self::Medium => "ods-avatar",
+            Self::Large => "ods-avatar ods-avatar--lg",
         }
     }
 }

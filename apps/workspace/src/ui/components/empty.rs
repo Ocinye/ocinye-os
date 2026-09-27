@@ -10,7 +10,7 @@
 use leptos::prelude::*;
 
 use super::button::{button, Button};
-use crate::ui::icon::{icon, Icon};
+use crate::ui::icon::Icon;
 
 /// Um estado vazio.
 pub struct EmptyState {
@@ -35,23 +35,20 @@ pub fn empty_state(state: EmptyState) -> impl IntoView {
         actions,
         small,
     } = state;
-    let tile_class = if small {
-        "oc-empty__tile oc-empty__tile--sm"
-    } else {
-        "oc-empty__tile"
-    };
-    let icon_size = if small { 26 } else { 34 };
+    let _ = small; // o D1 tem um só tamanho de estado vazio.
     let has_actions = !actions.is_empty();
 
     view! {
-        <div class="oc-empty">
-            <div class=tile_class>{icon(kind, icon_size)}</div>
-            <h3>{title}</h3>
-            <p>{body}</p>
+        <div class="ods-empty">
+            <span class="ods-empty__icon">
+                {crate::ui::ods::icone(crate::ui::ods::icone_do_legado(kind), "ods-icon--lg")}
+            </span>
+            <p class="ods-empty__title">{title}</p>
+            <p class="ods-empty__body">{body}</p>
             {has_actions
                 .then(|| {
                     view! {
-                        <div class="oc-empty__actions">
+                        <div class="ods-boot__actions">
                             {actions.into_iter().map(button).collect_view()}
                         </div>
                     }

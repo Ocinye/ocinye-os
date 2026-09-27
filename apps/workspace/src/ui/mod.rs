@@ -538,11 +538,11 @@ mod render_tests {
 
         for html in &screens {
             assert!(
-                html.contains("oc-table"),
+                html.contains(r#"data-oc="table""#),
                 "um ecrã de lista não usa a tabela partilhada"
             );
             assert!(
-                html.contains("oc-table__foot"),
+                html.contains("ods-d12-pager"),
                 "falta o rodapé de paginação"
             );
             assert!(html.contains("Filtrar"), "falta o botão Filtrar");
