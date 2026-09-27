@@ -11290,8 +11290,12 @@ async fn o_separador_de_navegacao_activo_e_azul_branco_sem_dourado() {
                    '[data-oc-section-nav] a[data-part~=tab][aria-current="location"]');
                  if (!e) return 'ausente';
                  const c = getComputedStyle(e);
-                 return 'bg=' + c.backgroundColor + ' cor=' + c.color
-                      + ' sombra=' + c.boxShadow;
+                 // A superfície navy do D1 é um gradiente (navy-700 → navy-800,
+                 // `--ods-action-navy`): vive no `background-image`, e o
+                 // `background-color` fica transparente. Lê-se a superfície
+                 // inteira.
+                 return 'bg=' + c.backgroundColor + ' ' + c.backgroundImage
+                      + ' cor=' + c.color + ' sombra=' + c.boxShadow;
                })()"#,
         )
         .await
@@ -11302,13 +11306,11 @@ async fn o_separador_de_navegacao_activo_e_azul_branco_sem_dourado() {
 
     esperar_aria_current(&page, "#ws-visao-geral").await;
     let estilo = estilo_do_activo(&page).await;
+    // A superfície azul Ocinye (D1): o gradiente navy-700 → navy-800.
+    let navy = |e: &str| e.contains("linear-gradient(rgb(18, 60, 96), rgb(11, 45, 74))");
     assert!(
-        estilo.contains("rgb(11, 45, 74)"),
+        navy(&estilo),
         "o separador activo não tem a superfície azul Ocinye: {estilo}"
-    );
-    assert!(
-        estilo.contains("bg=rgb(11, 45, 74)"),
-        "o azul não é o fundo do separador activo: {estilo}"
     );
     assert!(
         estilo.contains("cor=rgb(255, 255, 255)"),
@@ -11323,10 +11325,7 @@ async fn o_separador_de_navegacao_activo_e_azul_branco_sem_dourado() {
     let recarregado = harness.open(&format!("/workspaces/{workspace_id}")).await;
     esperar_aria_current(&recarregado, "#ws-visao-geral").await;
     let estilo2 = estilo_do_activo(&recarregado).await;
-    assert!(
-        estilo2.contains("bg=rgb(11, 45, 74)"),
-        "após recarregar: {estilo2}"
-    );
+    assert!(navy(&estilo2), "após recarregar: {estilo2}");
     assert!(
         estilo2.contains("sombra=none"),
         "após recarregar: {estilo2}"

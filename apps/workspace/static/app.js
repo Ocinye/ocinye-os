@@ -5044,12 +5044,16 @@ document.addEventListener('keydown', (event) => {
       // estado a cada disparo era ruído — e fazia uma página que nunca assenta.
       if (ids.indexOf(id) === -1 || id === ativo) return;
       ativo = id;
+      /* O `aria-selected` acompanha: o D1 pinta o separador activo por ele, e
+         deixá-lo no que o servidor marcou mostrava dois activos depois de rolar. */
       tabs.forEach(function (t) {
-        if (t.getAttribute('href') === '#' + id) {
+        var este = t.getAttribute('href') === '#' + id;
+        if (este) {
           t.setAttribute('aria-current', 'location');
         } else {
           t.removeAttribute('aria-current');
         }
+        if (t.getAttribute('role') === 'tab') t.setAttribute('aria-selected', String(este));
       });
     }
 

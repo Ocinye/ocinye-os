@@ -34,7 +34,7 @@ use crate::ui::components::{
     section_head, select_labelled, text_field, textarea, Button, EmptyState, RadioOption,
     SelectOption, Tab, Tone, Variant,
 };
-use crate::ui::icon::{icon, Icon};
+use crate::ui::icon::Icon;
 
 fn text(row: &Value, key: &str) -> String {
     row.get(key)
@@ -95,47 +95,74 @@ pub fn scientific_chain(view: ChainView) -> impl IntoView {
         && studies.is_empty()
         && results.is_empty();
 
-    view! {
-        <div>
-            <div>
-                <div>
-                    <div>
-                        {icon(Icon::Science, 22)}
-                        <h1 class="ods-page__title">{crate::i18n::t("science.title")}</h1>
-                    </div>
-                    <div>{contexto}</div>
-                </div>
-                <div>
-                    {may_create
-                        .then(|| {
-                            view! {
-                                {button(
-                                    Button::new(crate::i18n::t("science.new_hypothesis"), Variant::Primary)
-                                        .href(
-                                            format!("/workspaces/{id}/science/hypotheses/new"),
-                                        ),
-                                )}
-                                {button(
-                                    Button::new(crate::i18n::t("science.new_methodology"), Variant::Secondary)
-                                        .href(
-                                            format!("/workspaces/{id}/science/methodologies/new"),
-                                        ),
-                                )}
-                                {button(
-                                    Button::new(crate::i18n::t("science.new_study"), Variant::Secondary)
-                                        .href(format!("/workspaces/{id}/science/studies/new")),
-                                )}
-                            }
-                        })}
-                    {button(
-                        Button::new(crate::i18n::t("science.back_to_workspace"), Variant::Secondary)
-                            .href(format!("/workspaces/{id}")),
-                    )}
-                </div>
-            </div>
-        </div>
+    // O estado de cada etapa na faixa da cadeia (D12): feita quando já tem
+    // alguma coisa, actual a primeira que ainda não tem, e por fazer as outras.
+    let etapas = [
+        (crate::i18n::t("science.stage.hypotheses"), hypotheses.len()),
+        (crate::i18n::t("science.stage.methodologies"), methodologies.len()),
+        (crate::i18n::t("science.stage.studies"), studies.len()),
+        (crate::i18n::t("science.stage.results"), results.len()),
+    ];
+    let actual = etapas.iter().position(|(_, n)| *n == 0);
+    let faixa = etapas
+        .iter()
+        .enumerate()
+        .map(|(i, (rotulo, n))| {
+            let estado = if *n > 0 {
+                "done"
+            } else if Some(i) == actual {
+                "current"
+            } else {
+                "todo"
+            };
+            view! {
+                <li class="ods-d12-chain__step" data-state=estado>
+                    <span>{*rotulo}</span>
+                    <span class="ods-badge">{n.to_string()}</span>
+                </li>
+            }
+        })
+        .collect_view();
 
+    view! {
         <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("science.title")}</h1>
+                    <nav class="ods-crumbs">
+                        <a href=format!("/workspaces/{id}") data-oc-content="1">{contexto}</a>
+                    </nav>
+                </div>
+                <span class="ods-app__toolbar-spacer"></span>
+                {may_create
+                    .then(|| {
+                        view! {
+                            {button(
+                                Button::new(crate::i18n::t("science.new_hypothesis"), Variant::Primary)
+                                    .href(
+                                        format!("/workspaces/{id}/science/hypotheses/new"),
+                                    ),
+                            )}
+                            {button(
+                                Button::new(crate::i18n::t("science.new_methodology"), Variant::Secondary)
+                                    .href(
+                                        format!("/workspaces/{id}/science/methodologies/new"),
+                                    ),
+                            )}
+                            {button(
+                                Button::new(crate::i18n::t("science.new_study"), Variant::Secondary)
+                                    .href(format!("/workspaces/{id}/science/studies/new")),
+                            )}
+                        }
+                    })}
+                {button(
+                    Button::new(crate::i18n::t("science.back_to_workspace"), Variant::Secondary)
+                        .href(format!("/workspaces/{id}")),
+                )}
+            </div>
+
+            <ol class="ods-d12-chain" aria-label=crate::i18n::t("science.title")>{faixa}</ol>
+
             {if vazia {
                 empty_state(EmptyState {
                     icon: Icon::Science,
@@ -161,11 +188,9 @@ pub fn scientific_chain(view: ChainView) -> impl IntoView {
                     .into_any()
             } else {
                 view! {
-                    <div>
+                    <div class="ods-cards">
                         {etapa(crate::i18n::t("science.stage.hypotheses"), &hypotheses, "statement", None)}
                         {etapa(crate::i18n::t("science.stage.methodologies"), &methodologies, "title", Some("/methodologies"))}
-                    </div>
-                    <div>
                         {etapa(crate::i18n::t("science.stage.studies"), &studies, "title", Some("/studies"))}
                         {etapa(crate::i18n::t("science.stage.results"), &results, "title", Some("/results"))}
                     </div>
@@ -188,10 +213,10 @@ fn etapa(
 
     view! {
         <section class="ods-widget ods-widget-surface" data-part="card">
-            <div class="ods-widget__head">
-                <h2>{titulo}</h2>
+            <header class="ods-widget__head">
+                <span class="ods-widget__titles"><h2 class="ods-widget__title">{titulo}</h2></span>
                 <span class="ods-label">{contagem.to_string()}</span>
-            </div>
+            </header>
             <div class="ods-widget__body">
                 {if linhas.is_empty() {
                     view! { <p class="ods-field__hint">{crate::i18n::t("science.stage.empty")}</p> }.into_any()
@@ -210,11 +235,11 @@ fn etapa(
                                     let href = destino
                                         .map(|base| format!("{base}/{}", text(linha, "id")));
                                     view! {
-                                        <div>
+                                        <div class="ods-chips">
                                             {match href {
                                                 Some(href) => {
                                                     view! {
-                                                        <a href=href>
+                                                        <a href=href data-oc-content="1">
                                                             {rotulo}
                                                         </a>
                                                     }
@@ -222,7 +247,7 @@ fn etapa(
                                                 }
                                                 None => {
                                                     view! {
-                                                        <span>
+                                                        <span data-oc-content="1">
                                                             {rotulo}
                                                         </span>
                                                     }
@@ -286,43 +311,58 @@ pub fn result_detail(view: ResultView) -> impl IntoView {
     let linhagem = if a_montante { &upstream } else { &downstream };
 
     view! {
-        <div>
-            <div>
+        <div class="ods-page">
+            <div class="ods-page__head">
                 <div>
-                    <div>
-                        <h1 class="ods-page__title">{title}</h1>
+                    <h1 class="ods-page__title" data-oc-content="1">{title}</h1>
+                    <div class="ods-chips">
                         {badge(status.clone(), Tone::of(&status))}
                         {classification_badge(&classification)}
                     </div>
                 </div>
-                <div>
-                    // Validar não é uma acção de agente, e não é aqui que se
-                    // decide: o Core recusa a quem não pode. O botão só
-                    // aparece a quem pode para não prometer o que não cumpre.
-                    {may_validate
-                        .then(|| {
-                            button(
-                                Button::new(crate::i18n::t("science.validate_result"), Variant::Primary)
-                                    .href(format!("/results/{id}/validate")),
-                            )
-                        })}
-                </div>
+                <span class="ods-app__toolbar-spacer"></span>
+                // Validar não é uma acção de agente, e não é aqui que se
+                // decide: o Core recusa a quem não pode. O botão só aparece a
+                // quem pode para não prometer o que não cumpre.
+                {may_validate
+                    .then(|| {
+                        button(
+                            Button::new(crate::i18n::t("science.validate_result"), Variant::Primary)
+                                .href(format!("/results/{id}/validate")),
+                        )
+                    })}
             </div>
-        </div>
 
-        <div class="ods-page">
-            <div>
-                <section class="ods-widget ods-widget-surface" data-part="card">
-                    {section_head(crate::i18n::t("science.result.summary_head"), None, None)}
-                    <div class="ods-widget__body">
-                        <p>{summary}</p>
-                    </div>
-                </section>
+            <div class="ods-detail">
+                <div>
+                    {card(
+                        section_head(crate::i18n::t("science.result.summary_head"), None, None),
+                        view! { <p data-oc-content="1">{summary}</p> },
+                    )}
 
-                <section class="ods-widget ods-widget-surface" data-part="card">
-                    {section_head(crate::i18n::t("science.result.validations_head"), None, None)}
-                    <div class="ods-widget__body">
-                        {if validations.is_empty() {
+                    {card(
+                        section_head(crate::i18n::t("science.result.provenance_head"), None, None),
+                        view! {
+                            {pill_tabs(
+                                vec![
+                                    Tab::link(crate::i18n::t("science.lineage.upstream"), format!("/results/{id}?direction=upstream"), a_montante),
+                                    Tab::link(
+                                        crate::i18n::t("science.lineage.downstream"),
+                                        format!("/results/{id}?direction=downstream"),
+                                        !a_montante,
+                                    ),
+                                ],
+                                crate::i18n::t("science.lineage.aria"),
+                            )}
+                            {passos(linhagem, a_montante)}
+                        },
+                    )}
+                </div>
+
+                <aside>
+                    {card(
+                        section_head(crate::i18n::t("science.result.validations_head"), None, None),
+                        if validations.is_empty() {
                             view! {
                                 <p class="ods-field__hint">
                                     {crate::i18n::t("science.result.no_validations")}
@@ -331,48 +371,30 @@ pub fn result_detail(view: ResultView) -> impl IntoView {
                                 .into_any()
                         } else {
                             view! {
-                                <div>
+                                <ol class="ods-timeline">
                                     {validations
                                         .iter()
                                         .map(|v| {
                                             let rotulo = text(v, "label");
                                             let nota = maybe(v, "note");
                                             view! {
-                                                <div>
-                                                    <span>{rotulo}</span>
+                                                <li class="ods-timeline__item">
+                                                    <p>{rotulo}</p>
                                                     {nota
                                                         .map(|n| {
-                                                            view! { <span class="ods-field__hint">{n}</span> }
+                                                            view! { <p class="ods-field__hint" data-oc-content="1">{n}</p> }
                                                         })}
-                                                </div>
+                                                </li>
                                             }
                                         })
                                         .collect_view()}
-                                </div>
+                                </ol>
                             }
                                 .into_any()
-                        }}
-                    </div>
-                </section>
-            </div>
-
-            <section class="ods-widget ods-widget-surface" data-part="card">
-                {section_head(crate::i18n::t("science.result.provenance_head"), None, None)}
-                <div class="ods-widget__body">
-                    {pill_tabs(
-                        vec![
-                            Tab::link(crate::i18n::t("science.lineage.upstream"), format!("/results/{id}?direction=upstream"), a_montante),
-                            Tab::link(
-                                crate::i18n::t("science.lineage.downstream"),
-                                format!("/results/{id}?direction=downstream"),
-                                !a_montante,
-                            ),
-                        ],
-                        crate::i18n::t("science.lineage.aria"),
+                        },
                     )}
-                    {passos(linhagem, a_montante)}
-                </div>
-            </section>
+                </aside>
+            </div>
         </div>
     }
 }
@@ -400,7 +422,7 @@ fn passos(linhagem: &Value, a_montante: bool) -> impl IntoView {
             view! { <p class="ods-field__hint">{vazio}</p> }.into_any()
         } else {
             view! {
-                <div>
+                <ol class="ods-timeline">
                     {passos
                         .iter()
                         .map(|passo| {
@@ -423,16 +445,20 @@ fn passos(linhagem: &Value, a_montante: bool) -> impl IntoView {
                                 (Tone::Gray, crate::i18n::t("science.provenance.declared"))
                             };
                             view! {
-                                <div>
-                                    <span>{de}</span>
-                                    <span class="ods-field__hint">{relacao}</span>
-                                    <span>{para}</span>
+                                <li class="ods-timeline__item">
+                                    <p>
+                                        <span data-oc-content="1">{de}</span>
+                                        " "
+                                        <span class="ods-field__hint">{relacao}</span>
+                                        " "
+                                        <span data-oc-content="1">{para}</span>
+                                    </p>
                                     {badge(etiqueta, tom)}
-                                </div>
+                                </li>
                             }
                         })
                         .collect_view()}
-                </div>
+                </ol>
             }
                 .into_any()
         }}
@@ -529,10 +555,7 @@ pub fn validate_result(view: ValidateView) -> impl IntoView {
                 </div>
             </div>
 
-            {message
-                .map(|texto| {
-                    view! { <div class="ods-notice ods-notice--error" role="alert">{texto}</div> }
-                })}
+            {recusa(message)}
 
             <div class="ods-notice" role="note">
                 <strong>{crate::i18n::t("science.validate.callout_title")}</strong>
@@ -622,7 +645,11 @@ fn cabecalho(titulo: &'static str, explicacao: &'static str, contexto: &Value) -
                 <h1 class="ods-page__title">{titulo}</h1>
                 <p class="ods-page__sub">{explicacao}</p>
             </div>
-            <div>{contexto_do_ambiente(contexto)}</div>
+            <nav class="ods-crumbs">
+                <a href=format!("/workspaces/{}", text(contexto, "id")) data-oc-content="1">
+                    {contexto_do_ambiente(contexto)}
+                </a>
+            </nav>
         </div>
     }
 }
@@ -642,9 +669,7 @@ fn contexto_do_ambiente(contexto: &Value) -> String {
 }
 
 fn recusa(message: Option<String>) -> impl IntoView {
-    message.map(|texto| {
-        view! { <div class="ods-notice ods-notice--error" role="alert">{texto}</div> }
-    })
+    message.map(|texto| crate::ui::ods::estado(crate::ui::ods::Estado::Recusado, texto))
 }
 
 /// As classificações que uma pessoa pode escolher.
@@ -730,7 +755,7 @@ pub fn nova_hipotese(contexto: Contexto) -> impl IntoView {
 fn accoes(voltar: &str, confirmar: &'static str) -> impl IntoView {
     let voltar = voltar.to_owned();
     view! {
-        <div>
+        <div class="ods-settings__actions">
             {button(Button::new(confirmar, Variant::Primary))}
             {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href(voltar))}
         </div>

@@ -14,3 +14,4 @@
  * o flutuante vive lá. No Desktop (D4) o flutuante está sobre o fundo, como o
  * desenho o põe. */
 .ods-shell__main:not(:has(> .ods-desktop)) { margin-bottom: 84px; }
+
