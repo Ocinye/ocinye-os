@@ -43,11 +43,11 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
     ];
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{t("my_work.title")}</h1>
-                    <p>{t("my_work.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{t("my_work.title")}</h1>
+                    <p class="ods-page__sub">{t("my_work.subtitle")}</p>
                 </div>
             </div>
 

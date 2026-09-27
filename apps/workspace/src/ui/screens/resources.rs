@@ -142,17 +142,17 @@ pub fn resources(me: &Value) -> impl IntoView {
 
     view! {
             <div class="oc-band">
-                <div class="oc-head oc-mb-7">
-                    <div class="oc-head__text">
-                        <h1>{crate::i18n::t("resources.title")}</h1>
-                        <p>
+                <div class="ods-page__head">
+                    <div>
+                        <h1 class="ods-page__title">{crate::i18n::t("resources.title")}</h1>
+                        <p class="ods-page__sub">
     {crate::i18n::t("resources.intro")}
                         </p>
                     </div>
                 </div>
             </div>
 
-            <div class="oc-page">
+            <div class="ods-page">
                 <section class="oc-card oc-card__body oc-mb-5" data-part="card">
                     <div class="oc-row oc-row--between oc-mb-5">
                         <div>

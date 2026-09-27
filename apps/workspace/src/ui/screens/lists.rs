@@ -78,13 +78,13 @@ pub fn list_screen(viewer: &Viewer, screen: ListScreen) -> impl IntoView {
     let may_act = viewer.can(action_permission);
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{title}</h1>
-                    <p>{subtitle}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{title}</h1>
+                    <p class="ods-page__sub">{subtitle}</p>
                 </div>
-                <div class="oc-head__actions">
+                <div>
                     // A acção aparece sempre. Escondê-la a quem não tem a
                     // permissão fazia a interface mudar de forma consoante quem
                     // olha, e quem não a via não ficava a saber que existe nem
@@ -557,11 +557,11 @@ pub fn ideas(viewer: &Viewer, payload: &Value, slice: Slice) -> impl IntoView {
     // afirmação sobre uma unidade que ainda não foi escolhida.
     if slice.awaiting_unit {
         return view! {
-            <div class="oc-page">
-                <div class="oc-head">
-                    <div class="oc-head__text">
-                        <h1>{crate::i18n::t("nav.ideas")}</h1>
-                        <p>{crate::i18n::t("lists.choose_unit_prompt")}</p>
+            <div class="ods-page">
+                <div class="ods-page__head">
+                    <div>
+                        <h1 class="ods-page__title">{crate::i18n::t("nav.ideas")}</h1>
+                        <p class="ods-page__sub">{crate::i18n::t("lists.choose_unit_prompt")}</p>
                     </div>
                 </div>
                 {unit_selector(&slice, "/ideas")}
@@ -675,11 +675,11 @@ pub fn projects(viewer: &Viewer, payload: &Value, slice: Slice) -> impl IntoView
     // afirmação sobre uma unidade que ainda não foi escolhida.
     if slice.awaiting_unit {
         return view! {
-            <div class="oc-page">
-                <div class="oc-head">
-                    <div class="oc-head__text">
-                        <h1>{crate::i18n::t("nav.projects")}</h1>
-                        <p>{crate::i18n::t("lists.choose_unit_prompt")}</p>
+            <div class="ods-page">
+                <div class="ods-page__head">
+                    <div>
+                        <h1 class="ods-page__title">{crate::i18n::t("nav.projects")}</h1>
+                        <p class="ods-page__sub">{crate::i18n::t("lists.choose_unit_prompt")}</p>
                     </div>
                 </div>
                 {unit_selector(&slice, "/projects")}
@@ -1328,11 +1328,11 @@ pub fn new_source(workspaces: &Value, error: Option<String>) -> impl IntoView {
     let tem_destino = destinations(workspaces) > 0;
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("create.reference")}</h1>
-                    <p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("create.reference")}</h1>
+                    <p class="ods-page__sub">
                         {crate::i18n::t("lists.new_source.intro")}
                     </p>
                 </div>
@@ -1417,11 +1417,11 @@ pub fn new_dataset(workspaces: &Value, error: Option<String>) -> impl IntoView {
     let tem_destino = destinations(workspaces) > 0;
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("create.dataset")}</h1>
-                    <p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("create.dataset")}</h1>
+                    <p class="ods-page__sub">
                         {crate::i18n::t("lists.new_dataset.intro")}
                     </p>
                 </div>
@@ -1515,11 +1515,11 @@ pub fn new_task(workspaces: &Value, error: Option<String>) -> impl IntoView {
     let tem_destino = destinations(workspaces) > 0;
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("create.task")}</h1>
-                    <p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("create.task")}</h1>
+                    <p class="ods-page__sub">
                         {crate::i18n::t("lists.new_task.intro")}
                     </p>
                 </div>
@@ -1608,11 +1608,11 @@ pub fn new_project(
     let has_candidates = !rows.is_empty();
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("create.project")}</h1>
-                    <p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("create.project")}</h1>
+                    <p class="ods-page__sub">
                         {crate::i18n::t("lists.new_project.intro")}
                     </p>
                 </div>
@@ -1728,11 +1728,11 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
     use crate::ui::components::{card, section_head, textarea};
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("lists.new.unit")}</h1>
-                    <p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("lists.new.unit")}</h1>
+                    <p class="ods-page__sub">
                         {crate::i18n::t("lists.new_unit.intro")}
                     </p>
                 </div>
@@ -1832,11 +1832,11 @@ pub fn edit_unit(unit: &Value, error: Option<String>) -> impl IntoView {
     let action = format!("/units/{id}/edit");
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("lists.edit.unit")}</h1>
-                    <p>{crate::i18n::t("lists.edit_unit.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("lists.edit.unit")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("lists.edit_unit.subtitle")}</p>
                 </div>
             </div>
 
@@ -1923,11 +1923,11 @@ pub fn new_idea(units: &Value, error: Option<String>) -> impl IntoView {
     let has_units = !unit_rows.is_empty();
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("create.idea")}</h1>
-                    <p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("create.idea")}</h1>
+                    <p class="ods-page__sub">
                         {crate::i18n::t("lists.new_idea.intro")}
                     </p>
                 </div>
@@ -2079,11 +2079,11 @@ pub fn bibliography_tools(
     let escrito = bibtex.to_owned();
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("lists.tools.title")}</h1>
-                    <p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("lists.tools.title")}</h1>
+                    <p class="ods-page__sub">
                         {crate::i18n::t("lists.tools.intro")}
                     </p>
                 </div>
@@ -2328,11 +2328,11 @@ mod tests {
             ("ideias", ideas(&sem, &payload, Slice::default()).to_html()),
         ] {
             assert!(
-                html.contains("oc-btn--primary"),
+                html.contains("ods-btn--navy") || html.contains("ods-btn--primary"),
                 "{ecra}: a acção primária desapareceu em vez de se declarar"
             );
             assert!(
-                html.contains("oc-unavailable") && html.contains("aria-disabled=\"true\""),
+                html.contains(r#"data-part="unavailable""#) && html.contains("aria-disabled=\"true\""),
                 "{ecra}: a acção aparece sem estar marcada como indisponível"
             );
             assert!(
@@ -2340,7 +2340,7 @@ mod tests {
                 "{ecra}: a acção não diz porque está indisponível"
             );
             assert!(
-                !html.contains(r#"class="oc-btn oc-btn--primary" href="#),
+                !html.contains(r#"class="ods-btn ods-btn--navy" href="#),
                 "{ecra}: a acção continua a levar a algum lado sem a permissão"
             );
         }

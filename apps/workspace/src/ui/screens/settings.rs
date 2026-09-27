@@ -99,11 +99,11 @@ pub fn account(
     let instituicao = text(organisation, "name");
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("settings.title")}</h1>
-                    <p>{crate::i18n::t("settings.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("settings.title")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("settings.subtitle")}</p>
                 </div>
             </div>
 
@@ -142,11 +142,11 @@ pub fn account(
 pub fn language(saved: bool) -> impl IntoView {
     let actual = crate::i18n::current();
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("settings.title")}</h1>
-                    <p>{crate::i18n::t("settings.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("settings.title")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("settings.subtitle")}</p>
                 </div>
             </div>
 
@@ -225,11 +225,11 @@ pub fn apps(viewer: &crate::ui::shell::Viewer, saved: bool) -> impl IntoView {
     let vazio = fixaveis.is_empty();
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("settings.title")}</h1>
-                    <p>{crate::i18n::t("settings.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("settings.title")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("settings.subtitle")}</p>
                 </div>
             </div>
 
@@ -327,11 +327,11 @@ pub fn security(
         .unwrap_or_default();
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("settings.title")}</h1>
-                    <p>{crate::i18n::t("settings.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("settings.title")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("settings.subtitle")}</p>
                 </div>
             </div>
 
@@ -544,8 +544,8 @@ pub fn mfa_recovery(
     };
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
+        <div class="ods-page">
+            <div class="ods-page__head">
                 <h1 class="oc-t-screen">{crate::i18n::t("settings.recovery.title")}</h1>
             </div>
             {card(section_head(crate::i18n::t("settings.recovery.section"), None, None), corpo)}

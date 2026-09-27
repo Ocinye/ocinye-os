@@ -105,7 +105,7 @@ pub fn scientific_chain(view: ChainView) -> impl IntoView {
                     </div>
                     <div class="oc-mono oc-mt-3">{contexto}</div>
                 </div>
-                <div class="oc-head__actions">
+                <div>
                     {may_create
                         .then(|| {
                             view! {
@@ -135,7 +135,7 @@ pub fn scientific_chain(view: ChainView) -> impl IntoView {
             </div>
         </div>
 
-        <div class="oc-page">
+        <div class="ods-page">
             {if vazia {
                 empty_state(EmptyState {
                     icon: Icon::Science,
@@ -295,7 +295,7 @@ pub fn result_detail(view: ResultView) -> impl IntoView {
                         {classification_badge(&classification)}
                     </div>
                 </div>
-                <div class="oc-head__actions">
+                <div>
                     // Validar não é uma acção de agente, e não é aqui que se
                     // decide: o Core recusa a quem não pode. O botão só
                     // aparece a quem pode para não prometer o que não cumpre.
@@ -310,7 +310,7 @@ pub fn result_detail(view: ResultView) -> impl IntoView {
             </div>
         </div>
 
-        <div class="oc-page">
+        <div class="ods-page">
             <div class="oc-grid oc-grid--ws">
                 <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("science.result.summary_head"), None, None)}
@@ -521,11 +521,11 @@ pub fn validate_result(view: ValidateView) -> impl IntoView {
     .collect();
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("science.validate_result")}</h1>
-                    <p>{crate::i18n::tf("science.validate.subtitle", &[("title", &title)])}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("science.validate_result")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::tf("science.validate.subtitle", &[("title", &title)])}</p>
                 </div>
             </div>
 
@@ -617,10 +617,10 @@ pub struct Contexto {
 
 fn cabecalho(titulo: &'static str, explicacao: &'static str, contexto: &Value) -> impl IntoView {
     view! {
-        <div class="oc-head">
-            <div class="oc-head__text">
-                <h1>{titulo}</h1>
-                <p>{explicacao}</p>
+        <div class="ods-page__head">
+            <div>
+                <h1 class="ods-page__title">{titulo}</h1>
+                <p class="ods-page__sub">{explicacao}</p>
             </div>
             <div class="oc-mono">{contexto_do_ambiente(contexto)}</div>
         </div>
@@ -691,7 +691,7 @@ pub fn nova_hipotese(contexto: Contexto) -> impl IntoView {
     let id = text(&workspace, "id");
 
     view! {
-        <div class="oc-page oc-page--narrow">
+        <div class="ods-page">
             {cabecalho(
                 crate::i18n::t("science.new_hypothesis"),
                 crate::i18n::t("science.hypothesis.subtitle"),
@@ -743,7 +743,7 @@ pub fn nova_metodologia(contexto: Contexto) -> impl IntoView {
     let id = text(&workspace, "id");
 
     view! {
-        <div class="oc-page oc-page--narrow">
+        <div class="ods-page">
             {cabecalho(
                 crate::i18n::t("science.new_methodology"),
                 crate::i18n::t("science.methodology.subtitle"),
@@ -821,7 +821,7 @@ pub fn metodologia(view: MetodologiaView) -> impl IntoView {
                     </div>
                     {purpose.map(|p| view! { <div class="oc-muted oc-mt-3">{p}</div> })}
                 </div>
-                <div class="oc-head__actions">
+                <div>
                     {may_create
                         .then(|| {
                             button(
@@ -837,7 +837,7 @@ pub fn metodologia(view: MetodologiaView) -> impl IntoView {
             </div>
         </div>
 
-        <div class="oc-page">
+        <div class="ods-page">
             <section class="oc-card" data-part="card">
                 {section_head(crate::i18n::t("science.versions_head"), None, None)}
                 <div class="oc-card__body">
@@ -900,11 +900,11 @@ pub fn nova_versao(view: NovaVersaoView) -> impl IntoView {
     let title = text(&methodology, "title");
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("science.new_version")}</h1>
-                    <p>{crate::i18n::tf("science.version.subtitle", &[("title", &title)])}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("science.new_version")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::tf("science.version.subtitle", &[("title", &title)])}</p>
                 </div>
             </div>
             {recusa(message)}
@@ -1017,7 +1017,7 @@ pub fn novo_estudo(view: NovoEstudoView) -> impl IntoView {
     .collect();
 
     view! {
-        <div class="oc-page oc-page--narrow">
+        <div class="ods-page">
             {cabecalho(
                 crate::i18n::t("science.new_study"),
                 crate::i18n::t("science.study.subtitle"),
@@ -1129,7 +1129,7 @@ pub fn estudo(view: EstudoView) -> impl IntoView {
                     </div>
                     {objective.map(|o| view! { <div class="oc-muted oc-mt-3">{o}</div> })}
                 </div>
-                <div class="oc-head__actions">
+                <div>
                     {may_create
                         .then(|| {
                             button(
@@ -1145,7 +1145,7 @@ pub fn estudo(view: EstudoView) -> impl IntoView {
             </div>
         </div>
 
-        <div class="oc-page">
+        <div class="ods-page">
             <section class="oc-card" data-part="card">
                 {section_head(crate::i18n::t("science.executions_head"), None, None)}
                 <div class="oc-card__body">
@@ -1245,11 +1245,11 @@ pub fn nova_execucao(view: NovaExecucaoView) -> impl IntoView {
     };
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("science.record_execution")}</h1>
-                    <p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("science.record_execution")}</h1>
+                    <p class="ods-page__sub">
                         {crate::i18n::tf("science.execution.subtitle", &[("title", &title)])}
                     </p>
                 </div>
@@ -1397,7 +1397,7 @@ pub fn execucao(view: ExecucaoView) -> impl IntoView {
                         <a href=format!("/studies/{study_id}")>{study_title}</a>
                     </div>
                 </div>
-                <div class="oc-head__actions">
+                <div>
                     // Registar o resultado **aqui** é o que faz a proveniência
                     // nascer sozinha: a operação sabe de que corrida ele veio,
                     // e escreve a aresta na mesma transacção. Não há um segundo
@@ -1413,7 +1413,7 @@ pub fn execucao(view: ExecucaoView) -> impl IntoView {
             </div>
         </div>
 
-        <div class="oc-page">
+        <div class="ods-page">
             <div class="oc-grid oc-grid--pares">
                 <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("science.run_head"), None, None)}
@@ -1507,11 +1507,11 @@ pub fn novo_resultado(view: NovoResultadoView) -> impl IntoView {
     let study_title = text(&study, "title");
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("science.record_result")}</h1>
-                    <p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("science.record_result")}</h1>
+                    <p class="ods-page__sub">
                         {crate::i18n::t("science.result.subtitle")}
                     </p>
                 </div>

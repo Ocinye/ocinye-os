@@ -2146,8 +2146,16 @@
     const grelha = fs.querySelector('[data-oc="fs-grelha"]');
     const alternar = fs.querySelector('[data-oc="fs-vista"]');
     const CHAVE = 'ocinye.files.view';
+    /* O alternador é um `.ods-seg` com uma opção por vista (D12): a opção da
+       vista aplicada fica `aria-selected`. */
     const aplicar = (v) => {
-      if (grelha) grelha.setAttribute('data-view', v === 'list' ? 'list' : 'grid');
+      const vista = v === 'list' ? 'list' : 'grid';
+      if (grelha) grelha.setAttribute('data-view', vista);
+      if (alternar) {
+        alternar.querySelectorAll('[data-view]').forEach((opcao) => {
+          opcao.setAttribute('aria-selected', String(opcao.getAttribute('data-view') === vista));
+        });
+      }
     };
     if (grelha) {
       let v = 'grid';
@@ -2155,11 +2163,12 @@
       aplicar(v);
     }
     if (alternar) {
-      alternar.addEventListener('click', () => {
-        const actual = grelha && grelha.getAttribute('data-view') === 'list' ? 'list' : 'grid';
-        const nova = actual === 'list' ? 'grid' : 'list';
-        aplicar(nova);
-        try { localStorage.setItem(CHAVE, nova); } catch { /* sem armazenamento */ }
+      alternar.querySelectorAll('[data-view]').forEach((opcao) => {
+        opcao.addEventListener('click', () => {
+          const nova = opcao.getAttribute('data-view') === 'list' ? 'list' : 'grid';
+          aplicar(nova);
+          try { localStorage.setItem(CHAVE, nova); } catch { /* sem armazenamento */ }
+        });
       });
     }
 
@@ -2249,7 +2258,7 @@
         fs.querySelectorAll('[data-oc="fs-sel"]').forEach((cb) => {
           const item = cb.closest('[data-part~=fs__item]');
           if (item) {
-            item.toggleAttribute('data-sel', seleccao.has(cb.getAttribute('data-id')));
+            item.setAttribute('aria-selected', String(seleccao.has(cb.getAttribute('data-id'))));
           }
         });
       };
@@ -2470,6 +2479,7 @@
       fechado = false;
       painel = document.createElement('section');
       painel.dataset.part = 'up';
+      painel.className = 'ods-glass';
       painel.setAttribute('role', 'status');
       painel.setAttribute('aria-live', 'polite');
 
@@ -2484,7 +2494,7 @@
 
       const dobrar = document.createElement('button');
       dobrar.type = 'button';
-      dobrar.dataset.part = 'up__icon';
+      dobrar.className = 'ods-iconbtn';
       dobrar.setAttribute('aria-label', 'Reduzir');
       dobrar.textContent = '⌄';
       dobrar.addEventListener('click', () => {
@@ -2495,7 +2505,7 @@
 
       const fechar = document.createElement('button');
       fechar.type = 'button';
-      fechar.dataset.part = 'up__icon';
+      fechar.className = 'ods-iconbtn';
       fechar.setAttribute('aria-label', 'Fechar');
       fechar.textContent = '×';
       fechar.addEventListener('click', () => {
@@ -2550,6 +2560,7 @@
     function linha(nome) {
       const el = document.createElement('div');
       el.dataset.part = 'up__line';
+      el.className = 'ods-state';
 
       const info = document.createElement('div');
       info.dataset.part = 'up__info';
@@ -2562,18 +2573,16 @@
       info.appendChild(titulo);
       info.appendChild(estado);
 
-      const barra = document.createElement('span');
-      barra.dataset.part = 'progress';
-      const carril = document.createElement('span');
-      carril.dataset.part = 'progress__track';
-      const cheio = document.createElement('span');
-      cheio.dataset.part = 'progress__fill progress__fill--var';
-      carril.appendChild(cheio);
-      barra.appendChild(carril);
+      const barra = document.createElement('div');
+      barra.className = 'ods-progress';
+      const cheio = document.createElement('div');
+      cheio.className = 'ods-progress__bar';
+      barra.appendChild(cheio);
 
       const accao = document.createElement('button');
       accao.type = 'button';
-      accao.dataset.part = 'up__icon up__cancelar';
+      accao.dataset.part = 'up__cancelar';
+      accao.className = 'ods-iconbtn';
       accao.setAttribute('aria-label', 'Cancelar');
       accao.setAttribute('data-abortar', '1');
       accao.textContent = '×';
@@ -2584,11 +2593,13 @@
       corpo.appendChild(el);
 
       return {
-        progresso: (pct) => cheio.style.setProperty('--oc-progresso', pct + '%'),
+        progresso: (pct) => cheio.style.setProperty('width', pct + '%'),
         diz: (texto, mau) => {
           estado.textContent = texto;
           estado.dataset.part = 'up__state';
           estado.toggleAttribute('data-mau', !!mau);
+          /* Uma falha por ficheiro é uma linha de erro (D8). */
+          el.classList.toggle('ods-state--error', !!mau);
         },
         aoCancelar: (fn) => accao.addEventListener('click', fn),
         marca: (glifo, classe) => {
@@ -4685,29 +4696,24 @@ document.addEventListener('keydown', (event) => {
   const linha = (nome) => {
     tabuleiro.hidden = false;
     const el = document.createElement('div');
-    el.dataset.part = 'drop__line';
+    el.className = 'ods-state';
 
     const titulo = document.createElement('b');
     titulo.textContent = nome;
 
-    /* O padrão de progresso que a aplicação já tem, e não um novo. A largura
-       entra por variável CSS: a CSP é `style-src 'self'`, e um atributo `style`
-       escrito à mão seria descartado. */
-    const barra = document.createElement('span');
-    barra.dataset.part = 'progress';
-    const carril = document.createElement('span');
-    carril.dataset.part = 'progress__track';
-    const cheio = document.createElement('span');
-    cheio.dataset.part = 'progress__fill progress__fill--var';
-    carril.appendChild(cheio);
-    barra.appendChild(carril);
+    /* A barra de progresso do D1. A largura entra por CSSOM: a CSP é
+       `style-src 'self'`, e um atributo `style` escrito à mão seria
+       descartado. */
+    const barra = document.createElement('div');
+    barra.className = 'ods-progress';
+    const cheio = document.createElement('div');
+    cheio.className = 'ods-progress__bar';
+    barra.appendChild(cheio);
 
     const estado = document.createElement('span');
-    estado.dataset.part = 'drop__state';
     estado.textContent = 'A preparar…';
 
     const accoes = document.createElement('span');
-    accoes.dataset.part = 'drop__accoes';
 
     el.appendChild(titulo);
     el.appendChild(barra);
@@ -4718,17 +4724,18 @@ document.addEventListener('keydown', (event) => {
     return {
       diz: (texto, mau) => {
         estado.textContent = texto;
-        estado.dataset.part = 'drop__state';
         estado.toggleAttribute('data-mau', !!mau);
+        /* Uma falha por ficheiro é uma linha de erro (D8). */
+        el.classList.toggle('ods-state--error', !!mau);
       },
       progresso: (feitas, total) => {
         const pct = Math.round((feitas / total) * 100);
-        cheio.style.setProperty('--oc-progresso', pct + '%');
+        cheio.style.setProperty('width', pct + '%');
       },
       accao: (rotulo, aoClicar) => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.dataset.part = 'btn btn--ghost btn--sm';
+        b.className = 'ods-btn ods-btn--ghost ods-btn--sm';
         b.textContent = rotulo;
         b.addEventListener('click', aoClicar);
         accoes.appendChild(b);

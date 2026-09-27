@@ -47,11 +47,11 @@ pub fn ask(view: &AskView) -> impl IntoView {
     let asked = !query.trim().is_empty();
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("ask.title")}</h1>
-                    <p>{crate::i18n::t("ask.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("ask.title")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("ask.subtitle")}</p>
                 </div>
             </div>
 

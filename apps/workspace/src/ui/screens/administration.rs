@@ -90,11 +90,11 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
     let has_units = !unit_rows.is_empty();
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("admin.new.title")}</h1>
-                    <p>{crate::i18n::t("admin.new.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("admin.new.title")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("admin.new.subtitle")}</p>
                 </div>
             </div>
 
@@ -247,11 +247,11 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
     let expires = expires_at.get(..16).unwrap_or(expires_at).replace('T', " ");
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("admin.issued.title")}</h1>
-                    <p>{crate::i18n::t("admin.issued.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("admin.issued.title")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("admin.issued.subtitle")}</p>
                 </div>
             </div>
 
@@ -849,7 +849,7 @@ pub fn member_detail(
             </nav>
         </div>
 
-        <div class="oc-page">
+        <div class="ods-page">
             <section id="membro-overview">
                 {section_head(crate::i18n::t("admin.tab.overview"), None, None)}
                 {overview_tab(&position, &status, &security, &access)}
@@ -1781,11 +1781,11 @@ pub fn instance(payload: &Value, saved: bool) -> impl IntoView {
         .unwrap_or_default();
 
     view! {
-        <div class="oc-page oc-page--narrow" data-oc="instance-admin">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("admin.instance.title")}</h1>
-                    <p>{crate::i18n::t("admin.instance.subtitle")}</p>
+        <div class="ods-page" data-oc="instance-admin">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("admin.instance.title")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("admin.instance.subtitle")}</p>
                 </div>
             </div>
 

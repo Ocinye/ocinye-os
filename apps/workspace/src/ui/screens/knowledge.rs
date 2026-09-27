@@ -72,11 +72,11 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
         .unwrap_or_default();
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{t("knowledge.title")}</h1>
-                    <p>{t("knowledge.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{t("knowledge.title")}</h1>
+                    <p class="ods-page__sub">{t("knowledge.subtitle")}</p>
                 </div>
             </div>
 

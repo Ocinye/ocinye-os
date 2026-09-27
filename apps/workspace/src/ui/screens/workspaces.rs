@@ -342,7 +342,7 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                     <div class="oc-mono oc-mt-3" >{meta}</div>
                 </div>
 
-                <div class="oc-head__actions">
+                <div>
                     {button(
                         Button::new(crate::i18n::t("workspaces.ai_here"), Variant::Primary)
                             .href(format!("/ai/prompt?workspace={id}"))
@@ -360,7 +360,7 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
             {context_tabs(tabs(tab_labels, &id), crate::i18n::t("workspaces.tabs.aria"))}
         </div>
 
-        <div class="oc-page oc-page" id="ws-visao-geral" >
+        <div class="ods-page" id="ws-visao-geral" >
             <div class="oc-grid oc-grid--ws">
                 {if is_project {
                     project_overview(&project, &members).into_any()
@@ -721,7 +721,7 @@ pub fn task_detail(
             </div>
         </div>
 
-        <div class="oc-page">
+        <div class="ods-page">
             {ok.filter(|s| !s.is_empty()).map(|m| view! {
                 <div class="oc-card oc-note" data-part="card" role="status">{m.to_owned()}</div>
             })}
@@ -851,7 +851,7 @@ pub fn dataset_detail(dataset: &Value, versions: &Value) -> AnyView {
             </div>
         </div>
 
-        <div class="oc-page">
+        <div class="ods-page">
             <div class="oc-grid oc-grid--detail">
                 <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("workspaces.dataset.about"), None, None)}
@@ -1091,7 +1091,7 @@ pub fn unit_detail(
             {context_tabs(unit_tabs, crate::i18n::t("workspaces.unit.tabs.aria"))}
         </div>
 
-        <div class="oc-page oc-page" >
+        <div class="ods-page" >
             <div class="oc-grid oc-grid--detail">
                 <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("workspaces.unit.about"), None, None)}

@@ -21,9 +21,9 @@ use leptos::prelude::*;
 use serde_json::Value;
 
 use crate::ui::components::{
-    classification_badge, data_table, empty_state, Cell, Column, EmptyState, Table,
+    card, classification_badge, data_table, section_head, Cell, Column, Table,
 };
-use crate::ui::icon::{icon, Icon};
+use crate::ui::ods::{aviso, icone, progresso, vazio as vazio_ods, Tom};
 
 fn text(row: &Value, key: &str) -> String {
     row.get(key)
@@ -111,7 +111,7 @@ pub fn files(view: FilesView) -> impl IntoView {
             (
                 Some(format!("{base}&folder={id}")),
                 vec![
-                    Cell::Primary(format!("📁 {}", text(pasta, "name"))),
+                    Cell::Primary(text(pasta, "name")),
                     Cell::Text(crate::i18n::t("files.folder_pill").to_owned()),
                     Cell::Empty,
                     Cell::Empty,
@@ -137,60 +137,81 @@ pub fn files(view: FilesView) -> impl IntoView {
     let vazio = linhas.is_empty();
     let total = linhas.len();
 
+    // A lateral lista os ambientes que o membro alcança: é o
+    // `escolher_ambiente` do D12, com o aberto marcado.
+    let ambientes = workspaces
+        .iter()
+        .map(|(id, nome)| {
+            let actual = *id == workspace_id;
+            view! {
+                <a
+                    class="ods-app__side-item"
+                    href=format!("/files?workspace={id}")
+                    aria-current=actual.then_some("page")
+                    data-oc-content="1"
+                >
+                    {icone("files", "")}
+                    <span>{nome.clone()}</span>
+                </a>
+            }
+        })
+        .collect_view();
+
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("files.title")}</h1>
-                    <p>
+        <section class="ods-app" data-oc="fs">
+            <div class="ods-app__toolbar">
+                <h1 class="ods-page__title">{crate::i18n::t("files.title")}</h1>
+                <span class="ods-app__toolbar-spacer"></span>
+            </div>
+            <div class="ods-app__split">
+                <nav class="ods-app__side" aria-label=crate::i18n::t("files.environment")>
+                    {seletor_de_ambiente(false, Some(base.clone()))}
+                    {ambientes}
+                </nav>
+                <div class="ods-app__main" data-ods-scroll>
+                    <div class="ods-d12-folder-head">{trilho}</div>
+                    <p class="ods-file__meta">
                         {crate::i18n::t("files.institutional_of")}
                         {workspace_name.clone()}
                         {crate::i18n::t("files.institutional_tagline")}
                     </p>
+
+                    {notice.map(|(ok, mensagem)| aviso_da_operacao(ok, &mensagem))}
+
+                    {may_upload
+                        .then(|| barra_de_accoes(&workspace_id, folder_id.as_deref(), &aqui))}
+
+                    {if vazio {
+                        vazio_ods(
+                            "files",
+                            crate::i18n::t("files.empty.nothing_here").to_owned(),
+                            Some(crate::i18n::t("files.empty.folder.body").to_owned()),
+                        )
+                            .into_any()
+                    } else {
+                        data_table(Table {
+                            tabs: vec![],
+                            search: crate::i18n::t("files.filter"),
+                            truncated: false,
+                            shape: "files",
+                            columns: vec![
+                                Column::new(crate::i18n::t("files.col.name")),
+                                Column::new(crate::i18n::t("files.col.type")),
+                                Column::new(crate::i18n::t("files.classification")),
+                                Column::right(crate::i18n::t("files.col.size")),
+                                Column::right(crate::i18n::t("files.versions")),
+                            ],
+                            rows: linhas,
+                            footer: format!("{total} a mostrar"),
+                            previous: None,
+                            next: None,
+                            empty: crate::i18n::t("files.table.empty"),
+                        })
+                            .into_any()
+                    }}
                 </div>
-                {seletor_de_ambiente(&workspaces, &workspace_id)}
             </div>
-
-            {notice.map(|(ok, mensagem)| aviso(ok, &mensagem))}
-
-            {trilho}
-
-            {may_upload
-                .then(|| barra_de_accoes(&workspace_id, folder_id.as_deref(), &aqui))}
-
-            {if vazio {
-                empty_state(EmptyState {
-                    icon: Icon::Files,
-                    title: crate::i18n::t("files.empty.nothing_here").to_owned(),
-                    body: "Esta pasta está vazia. Carregue um ficheiro ou crie uma pasta \
-                           para começar a arrumar."
-                        .to_owned(),
-                    actions: vec![],
-                    small: false,
-                })
-                    .into_any()
-            } else {
-                data_table(Table {
-                    tabs: vec![],
-                    search: crate::i18n::t("files.filter"),
-                    truncated: false,
-                    shape: "files",
-                    columns: vec![
-                        Column::new(crate::i18n::t("files.col.name")),
-                        Column::new(crate::i18n::t("files.col.type")),
-                        Column::new(crate::i18n::t("files.classification")),
-                        Column::right(crate::i18n::t("files.col.size")),
-                        Column::right(crate::i18n::t("files.versions")),
-                    ],
-                    rows: linhas,
-                    footer: format!("{total} a mostrar"),
-                    previous: None,
-                    next: None,
-                    empty: crate::i18n::t("files.table.empty"),
-                })
-                    .into_any()
-            }}
-        </div>
+        </section>
     }
     .into_any()
 }
@@ -274,17 +295,17 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
     let em_vista = vista_nome.is_some();
 
     // ── Meus ficheiros ──────────────────────────────────────────────────
-    // O espaço pessoal como um explorador: uma barra com o caminho e as acções,
-    // e as pastas e os ficheiros como fichas — grelha ou lista, à escolha. Base
-    // dos formulários e das ligações: dentro de uma pasta, fica-se nela.
+    // O espaço pessoal como um explorador: uma barra com as acções, a lateral
+    // com o ambiente e as pastas, e as fichas — grelha ou lista, à escolha.
+    // Base dos formulários e das ligações: dentro de uma pasta, fica-se nela.
     let base_pessoal = open_folder.as_ref().map_or_else(
         || "/files".to_owned(),
         |(id, _)| format!("/files?folder={id}"),
     );
     let _ = &managed_file; // o painel permanente deu lugar aos menus por ficha.
-                           // Numa vista plana (favoritos/recentes) ou dentro de uma pasta, só contam os
-                           // ficheiros; as fichas de pasta não aparecem, e por isso não pesam no «vazio» —
-                           // uma pasta sem ficheiros lê-se «vazia», e não uma grelha muda.
+    // Numa vista plana (favoritos/recentes) ou dentro de uma pasta, só contam
+    // os ficheiros; as fichas de pasta não aparecem, e por isso não pesam no
+    // «vazio» — uma pasta sem ficheiros lê-se «vazia», e não uma grelha muda.
     let meu_vazio = personal_files.is_empty()
         && (em_vista || open_folder.is_some() || personal_folders.is_empty());
 
@@ -309,275 +330,320 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
         .collect();
     let mostrar_institucional = !destinos.is_empty() || !inst_vazio;
 
+    // A pasta aberta na lateral, e a raiz quando não há nenhuma nem vista.
+    let pasta_aberta = open_folder.as_ref().map(|(id, _)| id.clone());
+    let na_raiz = pasta_aberta.is_none() && !em_vista;
+    let lateral_pastas = personal_folders
+        .iter()
+        .map(|p| {
+            let id = text(p, "id");
+            let actual = pasta_aberta.as_deref() == Some(id.as_str());
+            view! {
+                <a
+                    class="ods-app__side-item"
+                    href=format!("/files?folder={id}")
+                    aria-current=actual.then_some("page")
+                    data-oc-content="1"
+                >
+                    {icone("files", "")}
+                    <span>{text(p, "name")}</span>
+                </a>
+            }
+        })
+        .collect_view();
+
+    // A quota: a percentagem para a barra, e o aviso a partir dos 90 %.
+    let percentagem = (storage_limit > 0).then(|| {
+        let pct = storage_used.saturating_mul(100) / storage_limit;
+        u8::try_from(pct.clamp(0, 100)).unwrap_or(100)
+    });
+    let quase_cheia = percentagem.is_some_and(|p| p >= 90);
+
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("files.title")}</h1>
-                    <p>
-                        "Os seus ficheiros pessoais, e os dos ambientes de \
-                         investigação a que pertence."
-                    </p>
-                </div>
-            </div>
+        <section class="ods-app" data-oc="fs">
+            <div class="ods-app__toolbar">
+                <h1 class="ods-page__title">{crate::i18n::t("files.title")}</h1>
+                <span class="ods-app__toolbar-spacer"></span>
 
-            {notice.map(|(ok, mensagem)| aviso(ok, &mensagem))}
-
-            // ── Meus ficheiros: um explorador, não um formulário ──────────
-            <section class="oc-fs" data-oc="fs">
-                <div class="oc-fs__toolbar">
-                    <nav class="oc-fs__trilho" aria-label=crate::i18n::t("files.location")>
-                        {vista_nome.map_or_else(
-                            || open_folder.as_ref().map_or_else(
-                                || view! { <span class="oc-fs__aqui">{crate::i18n::t("files.my_files")}</span> }
-                                    .into_any(),
-                                |(_, nome)| view! {
-                                    <a
-                                        class="oc-fs__acima"
-                                        href="/files"
-                                        data-alvo-raiz="1"
-                                    >{crate::i18n::t("files.my_files")}</a>
-                                    <span class="oc-fs__sep" aria-hidden="true">"›"</span>
-                                    <span class="oc-fs__aqui">{nome.clone()}</span>
-                                }
-                                .into_any(),
-                            ),
-                            |nome| view! {
-                                <a class="oc-fs__acima" href="/files">{crate::i18n::t("files.my_files")}</a>
-                                <span class="oc-fs__sep" aria-hidden="true">"›"</span>
-                                <span class="oc-fs__aqui">{nome}</span>
-                            }
-                            .into_any(),
-                        )}
-                    </nav>
-                    <span class="oc-fs__quota">{quota_texto(storage_used, storage_limit)}</span>
-                    <div class="oc-spacer"></div>
-
-                    // Alternar grelha/lista — enriquecido por JS, a grelha é o
-                    // padrão. O rótulo acessível diz o que faz.
-                    <button
-                        type="button"
-                        class="oc-fs__ferramenta"
-                        data-oc="fs-vista"
-                        title=crate::i18n::t("files.grid_or_list")
-                        aria-label=crate::i18n::t("files.toggle_grid_list")
-                    >
-                        {icon(Icon::Filter, 15)}
+                // Grelha ou lista: o JS aplica e lembra; a grelha é o padrão.
+                <div
+                    class="ods-seg"
+                    role="group"
+                    data-oc="fs-vista"
+                    aria-label=crate::i18n::t("files.grid_or_list")
+                >
+                    <button class="ods-seg__opt" type="button" data-view="grid" aria-selected="true">
+                        {icone("grid", "")}
+                        <span class="ods-sr-only">{crate::i18n::t("files.view.grid")}</span>
                     </button>
-                    <a
-                        class=if view_mode == "favourites" { "oc-fs__ferramenta oc-fs__ferramenta--txt oc-fs__ferramenta--on" } else { "oc-fs__ferramenta oc-fs__ferramenta--txt" }
-                        href="/files?view=favourites"
-                        title=crate::i18n::t("files.tab.favourites")
-                    >
-                        {icon(Icon::Star, 14)}
-                        <span>{crate::i18n::t("files.tab.favourites")}</span>
-                    </a>
-                    <a
-                        class=if view_mode == "recents" { "oc-fs__ferramenta oc-fs__ferramenta--txt oc-fs__ferramenta--on" } else { "oc-fs__ferramenta oc-fs__ferramenta--txt" }
-                        href="/files?view=recents"
-                        title=crate::i18n::t("files.tab.recent")
-                    >
-                        {icon(Icon::Calendar, 14)}
-                        <span>{crate::i18n::t("files.tab.recent")}</span>
-                    </a>
-                    <a class="oc-fs__ferramenta" href="/files?trash=1" title=crate::i18n::t("files.tab.trash") aria-label=crate::i18n::t("files.tab.trash")>
-                        {icon(Icon::Trash, 15)}
-                    </a>
+                    <button class="ods-seg__opt" type="button" data-view="list" aria-selected="false">
+                        {icone("list", "")}
+                        <span class="ods-sr-only">{crate::i18n::t("files.view.list")}</span>
+                    </button>
+                </div>
 
-                    // Nova pasta: o formulário vive num menu, aberto só quando
-                    // preciso — não é uma barra permanente.
-                    <details class="oc-fs__menu" data-part="fs__menu">
-                        <summary class="oc-fs__ferramenta oc-fs__ferramenta--txt">
-                            {icon(Icon::Folder, 14)}
-                            <span>{crate::i18n::t("files.new_folder")}</span>
-                        </summary>
-                        <div class="oc-fs__pop">
-                            <form method="post" action="/me/folders">
-                                <label class="oc-sr" for="oc-nova-pasta">{crate::i18n::t("files.folder_name")}</label>
+                <a
+                    class="ods-btn ods-btn--ghost ods-btn--sm"
+                    href="/files?view=favourites"
+                    aria-current=(view_mode == "favourites").then_some("page")
+                >
+                    {icone("star-fill", "")}
+                    <span>{crate::i18n::t("files.tab.favourites")}</span>
+                </a>
+                <a
+                    class="ods-btn ods-btn--ghost ods-btn--sm"
+                    href="/files?view=recents"
+                    aria-current=(view_mode == "recents").then_some("page")
+                >
+                    {icone("clock", "")}
+                    <span>{crate::i18n::t("files.tab.recent")}</span>
+                </a>
+                <a class="ods-btn ods-btn--ghost ods-btn--sm" href="/files?trash=1">
+                    {icone("trash", "")}
+                    <span>{crate::i18n::t("files.tab.trash")}</span>
+                </a>
+
+                // Nova pasta: o formulário vive num menu, aberto só quando
+                // preciso — não é uma barra permanente.
+                <details class="ods-files__menu" data-part="fs__menu">
+                    <summary class="ods-btn ods-btn--sm">
+                        {icone("plus", "")}
+                        <span>{crate::i18n::t("files.new_folder")}</span>
+                    </summary>
+                    <div class="ods-popover ods-popover--right ods-glass">
+                        <form method="post" action="/me/folders">
+                            <label class="ods-field">
+                                <span class="ods-field__label">{crate::i18n::t("files.folder_name")}</span>
                                 <input
-                                    class="oc-input"
+                                    class="ods-input"
                                     id="oc-nova-pasta"
                                     name="name"
                                     placeholder=crate::i18n::t("files.folder_name_placeholder")
                                     data-oc="nova-pasta"
                                     required
                                 />
-                                <button class="oc-btn oc-btn--secondary oc-btn--sm" data-part="btn" type="submit">
-                                    {crate::i18n::t("action.create")}
-                                </button>
-                            </form>
-                        </div>
-                    </details>
-
-                    // Carregar: um rótulo que dispara o campo escondido — nunca
-                    // um «Choose File» do browser. O JS submete ao escolher.
-                    <form
-                        class="oc-fs__carregar"
-                        method="post"
-                        action="/files/upload"
-                        enctype="multipart/form-data"
-                        data-oc="fs-carregar-form"
-                    >
-                        // Dentro de uma pasta, o carregamento entra nela: um campo
-                        // escondido leva o destino, e o JS repete-o no caminho por
-                        // partes. Sem isto, o ficheiro caía na raiz, fora do Dossier.
-                        {open_folder.as_ref().map(|(id, _)| view! {
-                            <input type="hidden" name="folder_id" value=id.clone() />
-                        })}
-                        {(!destinos.is_empty()).then(|| {
-                            let opcoes = destinos
-                                .iter()
-                                .map(|(id, et)| view! {
-                                    <option value=id.clone()>{et.clone()}</option>
-                                })
-                                .collect_view();
-                            view! {
-                                <label class="oc-sr" for="oc-destino">{crate::i18n::t("files.upload_destination")}</label>
-                                <select class="oc-select oc-fs__destino" id="oc-destino" name="workspace_id">
-                                    <option value="">{crate::i18n::t("files.my_files")}</option>
-                                    {opcoes}
-                                </select>
-                            }
-                        })}
-                        <label class="oc-btn oc-btn--primary oc-fs__carregar-btn" data-part="btn">
-                            {icon(Icon::Attach, 14)}
-                            <span>{crate::i18n::t("files.upload")}</span>
-                            <input class="oc-sr" type="file" name="file" multiple data-oc="fs-carregar" />
-                        </label>
-                    </form>
-                </div>
-
-                // A barra de selecção: aparece (via JS) quando há ficheiros
-                // escolhidos, e move ou elimina em lote.
-                {barra_de_seleccao(&personal_folders, &base_pessoal)}
-
-                // Dentro de uma pasta: mudar-lhe o nome ou eliminá-la.
-                {open_folder.as_ref().map(|(id, nome)| painel_de_pasta(id, nome))}
-
-                {if meu_vazio {
-                    let (titulo, dica) = match view_mode.as_str() {
-                        "favourites" => (
-                            crate::i18n::t("files.empty.favourites"),
-                            crate::i18n::t("files.empty.favourites.body"),
-                        ),
-                        "recents" => (
-                            crate::i18n::t("files.empty.recent"),
-                            crate::i18n::t("files.empty.recent.body"),
-                        ),
-                        _ => (
-                            crate::i18n::t("files.empty.folder"),
-                            crate::i18n::t("files.empty.folder.body"),
-                        ),
-                    };
-                    view! {
-                        <div class="oc-fs__vazio">
-                            <span class="oc-empty__tile">{icon(Icon::Files, 24)}</span>
-                            <p class="oc-t-strong">{titulo}</p>
-                            <p class="oc-t-caption--muted">{dica}</p>
-                        </div>
-                    }
-                    .into_any()
-                } else {
-                    // Fichas de pasta só na raiz de «Meus ficheiros»: as pastas
-                    // pessoais são planas (não aninham), por isso dentro de uma não
-                    // há subpastas — mostrá-las repetiria a própria pasta lá dentro.
-                    // Nas vistas planas (favoritos/recentes) a lista também as
-                    // atravessa. A lista completa continua a servir o menu «mover
-                    // para» de cada ficha; só os cartões é que não aparecem aqui.
-                    let pastas = (!em_vista && open_folder.is_none())
-                        .then(|| personal_folders.iter().map(ficha_de_pasta).collect_view());
-                    let fich = personal_files
-                        .iter()
-                        .map(|f| ficha_de_ficheiro(f, &personal_folders, &base_pessoal))
-                        .collect_view();
-                    view! {
-                        <div class="oc-fs__grelha" data-oc="fs-grelha" data-view="grid">
-                            {pastas}
-                            {fich}
-                        </div>
-                    }
-                    .into_any()
-                }}
-
-                // ── Quick Look: uma camada de pré-visualização, povoada em JS ──
-                //
-                // A imagem serve-se same-origin (`img-src 'self'`), o texto e o
-                // código lêem-se same-origin e mostram-se escapados; um tipo sem
-                // vista inline traz uma ficha com o descarregar. Nada aqui abre
-                // sozinho — o JS enche o corpo e revela a camada.
-                <div class="oc-fs__ql" data-oc="fs-quicklook" hidden>
-                    <div class="oc-fs__ql-fundo" data-oc="fs-ql-fechar"></div>
-                    <div
-                        class="oc-fs__ql-painel"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label=crate::i18n::t("files.preview")
-                    >
-                        <header class="oc-fs__ql-cab">
-                            <span class="oc-fs__ql-nome" data-oc="fs-ql-nome"></span>
-                            <div class="oc-fs__ql-cab-accoes">
-                                <button
-                                    class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn"
-                                    type="button"
-                                    data-oc="fs-ql-descarregar"
-                                >
-                                    {crate::i18n::t("files.download")}
-                                </button>
-                                <button
-                                    class="oc-fs__ql-fechar"
-                                    type="button"
-                                    data-oc="fs-ql-fechar"
-                                    aria-label=crate::i18n::t("files.close")
-                                >
-                                    "×"
-                                </button>
-                            </div>
-                        </header>
-                        <div class="oc-fs__ql-corpo" data-oc="fs-ql-corpo"></div>
+                            </label>
+                            <button class="ods-btn ods-btn--sm" type="submit">
+                                {crate::i18n::t("action.create")}
+                            </button>
+                        </form>
                     </div>
-                </div>
-            </section>
+                </details>
 
-            // ── Ambientes de investigação: adicionais, quando existem ──
-            {mostrar_institucional.then(|| view! {
-                <section class="oc-files__seccao">
-                    <div class="oc-files__seccao-cab">
-                        <h2 class="oc-t-strong">{crate::i18n::t("files.environments")}</h2>
+                // Carregar: um rótulo que dispara o campo escondido — nunca
+                // um «Choose File» do browser. O JS submete ao escolher.
+                <form
+                    method="post"
+                    action="/files/upload"
+                    enctype="multipart/form-data"
+                    data-oc="fs-carregar-form"
+                >
+                    // Dentro de uma pasta, o carregamento entra nela: um campo
+                    // escondido leva o destino, e o JS repete-o no caminho por
+                    // partes. Sem isto, o ficheiro caía na raiz, fora do Dossier.
+                    {open_folder.as_ref().map(|(id, _)| view! {
+                        <input type="hidden" name="folder_id" value=id.clone() />
+                    })}
+                    {(!destinos.is_empty()).then(|| {
+                        let opcoes = destinos
+                            .iter()
+                            .map(|(id, et)| view! {
+                                <option value=id.clone()>{et.clone()}</option>
+                            })
+                            .collect_view();
+                        view! {
+                            <label class="ods-sr-only" for="oc-destino">{crate::i18n::t("files.upload_destination")}</label>
+                            <select class="ods-input" id="oc-destino" name="workspace_id">
+                                <option value="">{crate::i18n::t("files.my_files")}</option>
+                                {opcoes}
+                            </select>
+                        }
+                    })}
+                    <input
+                        class="ods-sr-only"
+                        id="oc-fs-carregar"
+                        type="file"
+                        name="file"
+                        multiple
+                        data-oc="fs-carregar"
+                    />
+                    <label class="ods-btn ods-btn--primary ods-btn--sm" for="oc-fs-carregar">
+                        {icone("plus", "")}
+                        <span>{crate::i18n::t("files.upload")}</span>
+                    </label>
+                </form>
+            </div>
+
+            <div class="ods-app__split">
+                <nav class="ods-app__side" aria-label=crate::i18n::t("files.location")>
+                    {seletor_de_ambiente(
+                        true,
+                        mostrar_institucional.then(|| "#fs-institucional".to_owned()),
+                    )}
+                    <a
+                        class="ods-app__side-item"
+                        href="/files"
+                        aria-current=na_raiz.then_some("page")
+                    >
+                        {icone("files", "")}
+                        <span>{crate::i18n::t("files.my_files")}</span>
+                    </a>
+                    {lateral_pastas}
+                </nav>
+
+                <div class="ods-app__main" data-ods-scroll>
+                    // O cabeçalho da pasta: onde se está, e quanto se usa.
+                    <div class="ods-d12-folder-head">
+                        <nav class="ods-crumbs" aria-label=crate::i18n::t("files.location")>
+                            {vista_nome.map_or_else(
+                                || open_folder.as_ref().map_or_else(
+                                    || view! {
+                                        <span aria-current="page">{crate::i18n::t("files.my_files")}</span>
+                                    }
+                                        .into_any(),
+                                    |(_, nome)| view! {
+                                        <a href="/files" data-alvo-raiz="1">{crate::i18n::t("files.my_files")}</a>
+                                        <span aria-hidden="true">"›"</span>
+                                        <span aria-current="page">{nome.clone()}</span>
+                                    }
+                                    .into_any(),
+                                ),
+                                |nome| view! {
+                                    <a href="/files">{crate::i18n::t("files.my_files")}</a>
+                                    <span aria-hidden="true">"›"</span>
+                                    <span aria-current="page">{nome}</span>
+                                }
+                                .into_any(),
+                            )}
+                        </nav>
+                        <span class="ods-app__toolbar-spacer"></span>
+                        <span class="ods-file__meta">{quota_texto(storage_used, storage_limit)}</span>
+                        {percentagem.map(|p| progresso(p, quota_texto(storage_used, storage_limit)))}
                     </div>
-                    {destino_de_carregamento(&destinos)}
-                    {if inst_vazio {
-                        empty_state(EmptyState {
-                            icon: Icon::Files,
-                            title: crate::i18n::t("files.empty.environments").to_owned(),
-                            body: crate::i18n::t("files.choose_environment_upload").to_owned(),
-                            actions: Vec::new(),
-                            small: true,
-                        })
-                        .into_any()
+
+                    {quase_cheia.then(|| aviso(Tom::Aviso, crate::i18n::t("files.quota.near").to_owned()))}
+
+                    {notice.map(|(ok, mensagem)| aviso_da_operacao(ok, &mensagem))}
+
+                    // Dentro de uma pasta: mudar-lhe o nome ou eliminá-la.
+                    {open_folder.as_ref().map(|(id, nome)| painel_de_pasta(id, nome))}
+
+                    {if meu_vazio {
+                        let (titulo, dica) = match view_mode.as_str() {
+                            "favourites" => (
+                                crate::i18n::t("files.empty.favourites"),
+                                crate::i18n::t("files.empty.favourites.body"),
+                            ),
+                            "recents" => (
+                                crate::i18n::t("files.empty.recent"),
+                                crate::i18n::t("files.empty.recent.body"),
+                            ),
+                            _ => (
+                                crate::i18n::t("files.empty.folder"),
+                                crate::i18n::t("files.empty.folder.body"),
+                            ),
+                        };
+                        vazio_ods("files", titulo.to_owned(), Some(dica.to_owned())).into_any()
                     } else {
-                        data_table(Table {
-                            tabs: vec![],
-                            search: crate::i18n::t("files.filter"),
-                            truncated: i64::try_from(inst_mostrados).unwrap_or(0) < total,
-                            shape: "files-all",
-                            columns: vec![
-                                Column::new(crate::i18n::t("files.col.name")),
-                                Column::new(crate::i18n::t("files.environment")),
-                                Column::new(crate::i18n::t("files.classification")),
-                                Column::right(crate::i18n::t("files.col.size")),
-                                Column::right(crate::i18n::t("files.versions")),
-                            ],
-                            rows: linhas,
-                            footer: format!("{inst_mostrados} de {total}"),
-                            previous: None,
-                            next: None,
-                            empty: crate::i18n::t("files.empty.none_accessible"),
-                        })
+                        // Fichas de pasta só na raiz de «Meus ficheiros»: as
+                        // pastas pessoais são planas (não aninham), por isso
+                        // dentro de uma não há subpastas — mostrá-las repetiria a
+                        // própria pasta lá dentro. Nas vistas planas
+                        // (favoritos/recentes) a lista também as atravessa. A
+                        // lista completa continua a servir o menu «mover para» de
+                        // cada ficha; só os cartões é que não aparecem aqui.
+                        let pastas = (!em_vista && open_folder.is_none())
+                            .then(|| personal_folders.iter().map(ficha_de_pasta).collect_view());
+                        let fich = personal_files
+                            .iter()
+                            .map(|f| ficha_de_ficheiro(f, &personal_folders, &base_pessoal))
+                            .collect_view();
+                        view! {
+                            <div class="ods-files__grid" data-oc="fs-grelha" data-view="grid">
+                                {pastas}
+                                {fich}
+                            </div>
+                        }
                         .into_any()
                     }}
-                </section>
-            })}
-        </div>
+
+                    // A barra de selecção: aparece (via JS) quando há ficheiros
+                    // escolhidos, e move ou elimina em lote.
+                    {barra_de_seleccao(&personal_folders, &base_pessoal)}
+
+                    // ── Ambientes de investigação: adicionais, quando existem ──
+                    {mostrar_institucional.then(|| view! {
+                        <section id="fs-institucional">
+                            <div class="ods-widget__head">
+                                <h2 class="ods-widget__title">{crate::i18n::t("files.environments")}</h2>
+                            </div>
+                            {destino_de_carregamento(&destinos)}
+                            {if inst_vazio {
+                                vazio_ods(
+                                    "files",
+                                    crate::i18n::t("files.empty.environments").to_owned(),
+                                    Some(crate::i18n::t("files.choose_environment_upload").to_owned()),
+                                )
+                                .into_any()
+                            } else {
+                                data_table(Table {
+                                    tabs: vec![],
+                                    search: crate::i18n::t("files.filter"),
+                                    truncated: i64::try_from(inst_mostrados).unwrap_or(0) < total,
+                                    shape: "files-all",
+                                    columns: vec![
+                                        Column::new(crate::i18n::t("files.col.name")),
+                                        Column::new(crate::i18n::t("files.environment")),
+                                        Column::new(crate::i18n::t("files.classification")),
+                                        Column::right(crate::i18n::t("files.col.size")),
+                                        Column::right(crate::i18n::t("files.versions")),
+                                    ],
+                                    rows: linhas,
+                                    footer: format!("{inst_mostrados} de {total}"),
+                                    previous: None,
+                                    next: None,
+                                    empty: crate::i18n::t("files.empty.none_accessible"),
+                                })
+                                .into_any()
+                            }}
+                        </section>
+                    })}
+                </div>
+            </div>
+
+            // ── Quick Look: uma camada de pré-visualização, povoada em JS ──
+            //
+            // A imagem serve-se same-origin (`img-src 'self'`), o texto e o
+            // código lêem-se same-origin e mostram-se escapados; um tipo sem
+            // vista inline traz uma ficha com o descarregar. Nada aqui abre
+            // sozinho — o JS enche o corpo e revela a camada.
+            <div class="ods-quicklook" data-oc="fs-quicklook" hidden>
+                <div class="ods-scrim" data-oc="fs-ql-fechar"></div>
+                <div
+                    class="ods-quicklook__panel ods-glass"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label=crate::i18n::t("files.preview")
+                >
+                    <header class="ods-app__toolbar">
+                        <span class="ods-widget__title" data-oc="fs-ql-nome"></span>
+                        <span class="ods-app__toolbar-spacer"></span>
+                        <button class="ods-btn ods-btn--sm" type="button" data-oc="fs-ql-descarregar">
+                            {crate::i18n::t("files.download")}
+                        </button>
+                        <button
+                            class="ods-iconbtn"
+                            type="button"
+                            data-oc="fs-ql-fechar"
+                            aria-label=crate::i18n::t("files.close")
+                        >
+                            {icone("close", "")}
+                        </button>
+                    </header>
+                    <div class="ods-quicklook__body" data-oc="fs-ql-corpo"></div>
+                </div>
+            </div>
+        </section>
     }
     .into_any()
 }
@@ -590,27 +656,24 @@ fn vista_do_lixo(trash: &[Value], notice: Option<(bool, String)>) -> impl IntoVi
             let id = text(f, "id");
             let nome = text(f, "name");
             view! {
-                <div class="oc-files__lixo-item">
-                    <div class="oc-files__lixo-nome">
-                        <span class="oc-t-strong">{nome}</span>
-                        <span class="oc-t-caption--muted">
-                            {tipo_legivel(&text(f, "content_type"))}
-                            " · "
-                            {tamanho(number(f, "size_bytes"))}
-                        </span>
-                    </div>
-                    <div class="oc-files__lixo-accoes">
-                        <form method="post" action="/me/files/restore">
-                            <input type="hidden" name="file_id" value=id.clone() />
-                            <button class="oc-btn oc-btn--secondary" data-part="btn" type="submit">{crate::i18n::t("files.restore")}</button>
-                        </form>
-                        <form method="post" action="/me/files/purge">
-                            <input type="hidden" name="file_id" value=id />
-                            <button class="oc-btn oc-btn--danger" data-part="btn" type="submit">
-                                {crate::i18n::t("files.delete_permanently")}
-                            </button>
-                        </form>
-                    </div>
+                <div class="ods-file" data-oc="fs-item">
+                    <span class="ods-file__thumb">{icone("files", "ods-icon--lg")}</span>
+                    <span class="ods-file__name" data-oc-content="1">{nome}</span>
+                    <span class="ods-file__meta">
+                        {tipo_legivel(&text(f, "content_type"))}
+                        " · "
+                        {tamanho(number(f, "size_bytes"))}
+                    </span>
+                    <form method="post" action="/me/files/restore">
+                        <input type="hidden" name="file_id" value=id.clone() />
+                        <button class="ods-btn ods-btn--sm" type="submit">{crate::i18n::t("files.restore")}</button>
+                    </form>
+                    <form method="post" action="/me/files/purge">
+                        <input type="hidden" name="file_id" value=id />
+                        <button class="ods-btn ods-btn--danger-soft ods-btn--sm" type="submit">
+                            {crate::i18n::t("files.delete_permanently")}
+                        </button>
+                    </form>
                 </div>
             }
         })
@@ -619,34 +682,32 @@ fn vista_do_lixo(trash: &[Value], notice: Option<(bool, String)>) -> impl IntoVi
     let quantos = trash.len();
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("files.tab.trash")}</h1>
-                    <p>
-                        <a href="/files">{crate::i18n::t("files.back_to_my_files")}</a>
-                        {crate::i18n::t("files.trash.description")}
-                    </p>
-                </div>
+        <section class="ods-app" data-oc="fs">
+            <div class="ods-app__toolbar">
+                <a class="ods-btn ods-btn--ghost ods-btn--sm" href="/files">
+                    {crate::i18n::t("files.back_to_my_files")}
+                </a>
+                <h1 class="ods-page__title">{crate::i18n::t("files.tab.trash")}</h1>
+                <span class="ods-app__toolbar-spacer"></span>
 
                 // Esvaziar tudo de uma vez, mas nunca num só clique: o botão abre
                 // uma confirmação (o mesmo disclosure dos outros menus de
                 // Ficheiros), e é o segundo botão que apaga. Sem selecção, sem
                 // ficheiros — só aparece com o Lixo cheio.
                 {(!trash.is_empty()).then(|| view! {
-                    <details class="oc-fs__menu oc-fs__acoes--abre-esquerda" data-part="fs__menu">
-                        <summary class="oc-btn oc-btn--danger" data-part="btn">
+                    <details class="ods-files__menu" data-part="fs__menu">
+                        <summary class="ods-btn ods-btn--danger-soft ods-btn--sm">
                             {crate::i18n::t("files.trash.empty_all")}
                         </summary>
-                        <div class="oc-fs__pop">
-                            <p class="oc-t-caption--muted oc-mb-3">
+                        <div class="ods-popover ods-popover--right ods-glass">
+                            <p class="ods-field__hint">
                                 {crate::i18n::tf(
                                     "files.trash.empty_confirm",
                                     &[("count", &quantos.to_string())],
                                 )}
                             </p>
                             <form method="post" action="/files/trash/empty">
-                                <button class="oc-btn oc-btn--danger" data-part="btn" type="submit">
+                                <button class="ods-btn ods-btn--danger ods-btn--sm" type="submit">
                                     {crate::i18n::t("files.trash.empty_confirm_action")}
                                 </button>
                             </form>
@@ -655,21 +716,29 @@ fn vista_do_lixo(trash: &[Value], notice: Option<(bool, String)>) -> impl IntoVi
                 })}
             </div>
 
-            {notice.map(|(ok, mensagem)| aviso(ok, &mensagem))}
+            <div class="ods-app__main" data-ods-scroll>
+                <p class="ods-file__meta">
+                    {crate::i18n::t("files.my_files")}
+                    {crate::i18n::t("files.trash.description")}
+                </p>
 
-            {if trash.is_empty() {
-                empty_state(EmptyState {
-                    icon: Icon::Trash,
-                    title: crate::i18n::t("files.trash.empty").to_owned(),
-                    body: crate::i18n::t("files.trash.empty.body").to_owned(),
-                    actions: Vec::new(),
-                    small: true,
-                })
-                .into_any()
-            } else {
-                view! { <div class="oc-files__lixo">{itens}</div> }.into_any()
-            }}
-        </div>
+                {notice.map(|(ok, mensagem)| aviso_da_operacao(ok, &mensagem))}
+
+                {if trash.is_empty() {
+                    vazio_ods(
+                        "trash",
+                        crate::i18n::t("files.trash.empty").to_owned(),
+                        Some(crate::i18n::t("files.trash.empty.body").to_owned()),
+                    )
+                    .into_any()
+                } else {
+                    view! {
+                        <div class="ods-files__grid" data-oc="fs-grelha" data-view="grid">{itens}</div>
+                    }
+                    .into_any()
+                }}
+            </div>
+        </section>
     }
     .into_any()
 }
@@ -689,25 +758,24 @@ fn barra_de_seleccao(folders: &[Value], base: &str) -> impl IntoView {
         })
         .collect_view();
     view! {
-        <div class="oc-fs__lote" data-oc="fs-lote" hidden>
-            <span class="oc-fs__lote-conta" data-oc="fs-lote-conta"></span>
-            <div class="oc-spacer"></div>
-            <form class="oc-fs__lote-form" method="post" action="/me/files/batch/move">
+        <div class="ods-files__batch ods-glass" data-oc="fs-lote" hidden>
+            <span class="ods-file__meta" data-oc="fs-lote-conta"></span>
+            <form method="post" action="/me/files/batch/move">
                 <input type="hidden" name="file_ids" data-oc="fs-lote-ids" />
                 <input type="hidden" name="return_to" value=base.clone() />
-                <label class="oc-sr" for="oc-lote-pasta">{crate::i18n::t("files.move_selection_to")}</label>
-                <select class="oc-select" id="oc-lote-pasta" name="folder_id">
+                <label class="ods-sr-only" for="oc-lote-pasta">{crate::i18n::t("files.move_selection_to")}</label>
+                <select class="ods-input" id="oc-lote-pasta" name="folder_id">
                     <option value="">{crate::i18n::t("files.my_files_root")}</option>
                     {opcoes}
                 </select>
-                <button class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn" type="submit">{crate::i18n::t("files.move")}</button>
+                <button class="ods-btn ods-btn--sm" type="submit">{crate::i18n::t("files.move")}</button>
             </form>
-            <form class="oc-fs__lote-form" method="post" action="/me/files/batch/delete">
+            <form method="post" action="/me/files/batch/delete">
                 <input type="hidden" name="file_ids" data-oc="fs-lote-ids" />
                 <input type="hidden" name="return_to" value=base />
-                <button class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn" type="submit">{crate::i18n::t("files.delete")}</button>
+                <button class="ods-btn ods-btn--danger-soft ods-btn--sm" type="submit">{crate::i18n::t("files.delete")}</button>
             </form>
-            <button class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn" type="button" data-oc="fs-lote-limpar">
+            <button class="ods-btn ods-btn--ghost ods-btn--sm" type="button" data-oc="fs-lote-limpar">
                 {crate::i18n::t("files.clear")}
             </button>
         </div>
@@ -721,16 +789,18 @@ fn ficha_de_pasta(p: &Value) -> impl IntoView {
     let titulo = nome.clone();
     view! {
         <a
-            class="oc-fs__item oc-fs__item--pasta" data-part="fs__item"
+            class="ods-file ods-file--folder"
+            data-part="fs__item"
             href=format!("/files?folder={id}")
             data-oc="fs-item"
+            data-kind="folder"
             data-alvo-pasta=id.clone()
             draggable="false"
             title=titulo
         >
-            <span class="oc-fs__icone oc-fs__icone--pasta">{icon(Icon::Folder, 30)}</span>
-            <span class="oc-fs__nome">{nome}</span>
-            <span class="oc-fs__meta">{crate::i18n::t("files.folder_pill")}</span>
+            <span class="ods-file__thumb">{icone("files", "ods-icon--lg")}</span>
+            <span class="ods-file__name" data-oc-content="1">{nome}</span>
+            <span class="ods-file__meta">{crate::i18n::t("files.folder_pill")}</span>
         </a>
     }
 }
@@ -741,16 +811,17 @@ fn painel_de_pasta(id: &str, nome: &str) -> impl IntoView {
     let id = id.to_owned();
     let nome = nome.to_owned();
     view! {
-        <div class="oc-files__pasta-accoes oc-mb-5">
-            <form class="oc-files__linha-accao" method="post" action="/me/folders/rename">
+        <div class="ods-d12-folder-head">
+            <form method="post" action="/me/folders/rename">
                 <input type="hidden" name="folder_id" value=id.clone() />
-                <label class="oc-sr" for="oc-pasta-nome">{crate::i18n::t("files.new_folder_name")}</label>
-                <input class="oc-input" id="oc-pasta-nome" name="name" value=nome required />
-                <button class="oc-btn oc-btn--secondary" data-part="btn" type="submit">{crate::i18n::t("files.rename")}</button>
+                <label class="ods-sr-only" for="oc-pasta-nome">{crate::i18n::t("files.new_folder_name")}</label>
+                <input class="ods-input" id="oc-pasta-nome" name="name" value=nome required />
+                <button class="ods-btn ods-btn--sm" type="submit">{crate::i18n::t("files.rename")}</button>
             </form>
-            <form class="oc-files__linha-accao" method="post" action="/me/folders/delete">
+            <span class="ods-app__toolbar-spacer"></span>
+            <form method="post" action="/me/folders/delete">
                 <input type="hidden" name="folder_id" value=id />
-                <button class="oc-btn oc-btn--danger" data-part="btn" type="submit">{crate::i18n::t("files.delete_folder")}</button>
+                <button class="ods-btn ods-btn--danger-soft ods-btn--sm" type="submit">{crate::i18n::t("files.delete_folder")}</button>
             </form>
         </div>
     }
@@ -758,6 +829,7 @@ fn painel_de_pasta(id: &str, nome: &str) -> impl IntoView {
 
 /// Um ficheiro como ficha: abre ao clicar, e traz as acções num menu «⋯» — não
 /// num formulário permanente. Descarregar, mudar nome, mover, eliminar.
+#[allow(clippy::too_many_lines)]
 fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView {
     let id = text(f, "id");
     let nome = text(f, "name");
@@ -791,39 +863,35 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
 
     view! {
         <div
-            class="oc-fs__item oc-fs__item--ficheiro" data-part="fs__item fs__item--ficheiro"
+            class="ods-file"
+            data-part="fs__item fs__item--ficheiro"
             data-oc="fs-item"
             data-id=id.clone()
             data-nome=nome.clone()
+            aria-selected="false"
             draggable="true"
         >
             <input
-                class="oc-fs__sel"
+                class="ods-check ods-file__sel"
                 type="checkbox"
                 data-oc="fs-sel"
                 data-id=id.clone()
                 aria-label=crate::i18n::tf("files.select_named", &[("name", &nome)])
             />
-            {favorito.then(|| view! {
-                <span class="oc-fs__estrela" title=crate::i18n::t("files.favourite_star") aria-hidden="true">
-                    {icon(Icon::Star, 13)}
-                </span>
-            })}
-            <a
-                class="oc-fs__abrir"
-                href=format!("/me/files/{version_id}/raw")
+            // Abrir é o Quick Look (D12: um botão); descarregar vive no menu.
+            <button
+                class="ods-file__open"
+                type="button"
                 title=nome.clone()
-                draggable="false"
                 data-oc="fs-abrir"
                 data-version=version_id.clone()
                 data-nome=nome.clone()
                 data-tipo=ctype.clone()
             >
-                <span class="oc-fs__icone">
-                    {icon(Icon::Document, 30)}
+                <span class="ods-file__thumb">
+                    {icone("files", "ods-icon--lg")}
                     {e_com_miniatura.then(|| view! {
                         <img
-                            class="oc-fs__thumb"
                             data-oc="fs-thumb"
                             src=thumb_src
                             alt=""
@@ -831,19 +899,24 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
                         />
                     })}
                 </span>
-                <span class="oc-fs__nome">{nome.clone()}</span>
-                <span class="oc-fs__meta">{tipo}" · "{dim}</span>
-            </a>
-            <details class="oc-fs__acoes" data-part="fs__acoes">
-                <summary class="oc-fs__acoes-btn" aria-label=crate::i18n::t("files.file_actions")>"⋯"</summary>
-                <div class="oc-fs__pop oc-fs__pop--acoes">
-                    <a class="oc-fs__acao" href=format!("/me/files/{version_id}/raw")>
+                <span class="ods-file__name" data-oc-content="1">
+                    {favorito.then(|| view! {
+                        <span title=crate::i18n::t("files.favourite_star")>{icone("star-fill", "")}</span>
+                    })}
+                    {nome.clone()}
+                </span>
+                <span class="ods-file__meta">{tipo}" · "{dim}</span>
+            </button>
+            <details class="ods-files__menu" data-part="fs__acoes">
+                <summary class="ods-iconbtn" aria-label=crate::i18n::t("files.file_actions")>"⋯"</summary>
+                <div class="ods-popover ods-popover--right ods-glass ods-menu">
+                    <a class="ods-menu__item" href=format!("/me/files/{version_id}/raw")>
                         {crate::i18n::t("files.download")}
                     </a>
-                    <form class="oc-fs__acao-form" method="post" action="/me/files/favourite">
+                    <form method="post" action="/me/files/favourite">
                         <input type="hidden" name="file_id" value=id.clone() />
                         <input type="hidden" name="return_to" value=base.clone() />
-                        <button class="oc-fs__acao oc-fs__acao--botao" type="submit">
+                        <button class="ods-menu__item" type="submit">
                             {if favorito {
                                 crate::i18n::t("files.unfavourite")
                             } else {
@@ -851,29 +924,29 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
                             }}
                         </button>
                     </form>
-                    <form class="oc-fs__acao-form" method="post" action="/me/files/rename">
+                    <form method="post" action="/me/files/rename">
                         <input type="hidden" name="file_id" value=id.clone() />
                         <input type="hidden" name="return_to" value=base.clone() />
-                        <label class="oc-sr" for=format!("nome-{id}")>{crate::i18n::t("files.new_name")}</label>
-                        <input class="oc-input" id=format!("nome-{id}") name="name" value=nome.clone() />
-                        <button class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn" type="submit">
+                        <label class="ods-sr-only" for=format!("nome-{id}")>{crate::i18n::t("files.new_name")}</label>
+                        <input class="ods-input" id=format!("nome-{id}") name="name" value=nome.clone() />
+                        <button class="ods-btn ods-btn--sm" type="submit">
                             {crate::i18n::t("files.rename")}
                         </button>
                     </form>
-                    <form class="oc-fs__acao-form" method="post" action="/me/files/move">
+                    <form method="post" action="/me/files/move">
                         <input type="hidden" name="file_id" value=id.clone() />
                         <input type="hidden" name="return_to" value=base.clone() />
-                        <label class="oc-sr" for=format!("pasta-{id}")>{crate::i18n::t("files.move_to")}</label>
-                        <select class="oc-select" id=format!("pasta-{id}") name="folder_id">
+                        <label class="ods-sr-only" for=format!("pasta-{id}")>{crate::i18n::t("files.move_to")}</label>
+                        <select class="ods-input" id=format!("pasta-{id}") name="folder_id">
                             <option value="">{crate::i18n::t("files.my_files_root")}</option>
                             {opcoes}
                         </select>
-                        <button class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn" type="submit">{crate::i18n::t("files.move")}</button>
+                        <button class="ods-btn ods-btn--sm" type="submit">{crate::i18n::t("files.move")}</button>
                     </form>
                     <form method="post" action="/me/files/delete">
                         <input type="hidden" name="file_id" value=id.clone() />
                         <input type="hidden" name="return_to" value=base />
-                        <button class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn" type="submit">{crate::i18n::t("files.delete")}</button>
+                        <button class="ods-menu__item ods-menu__item--danger" type="submit">{crate::i18n::t("files.delete")}</button>
                     </form>
                 </div>
             </details>
@@ -953,12 +1026,12 @@ fn destino_de_carregamento(destinos: &[(String, String)]) -> impl IntoView {
         .collect_view();
 
     view! {
-        <form class="oc-files__destino oc-mb-5" method="get" action="/files">
-            <label class="oc-label" for="oc-files-destino">{crate::i18n::t("files.open_environment")}</label>
-            <select class="oc-select" id="oc-files-destino" name="workspace" required>
+        <form class="ods-d12-folder-head" method="get" action="/files">
+            <label class="ods-field__label" for="oc-files-destino">{crate::i18n::t("files.open_environment")}</label>
+            <select class="ods-input" id="oc-files-destino" name="workspace" required>
                 {opcoes}
             </select>
-            <button class="oc-btn oc-btn--secondary" data-part="btn" type="submit">{crate::i18n::t("files.open")}</button>
+            <button class="ods-btn ods-btn--sm" type="submit">{crate::i18n::t("files.open")}</button>
         </form>
     }
     .into_any()
@@ -972,79 +1045,90 @@ fn destino_de_carregamento(destinos: &[(String, String)]) -> impl IntoView {
 #[allow(dead_code)]
 fn escolher_ambiente(workspaces: Vec<(String, String)>) -> impl IntoView {
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("files.title")}</h1>
-                    <p>{crate::i18n::t("files.choose_environment")}</p>
-                </div>
+        <section class="ods-app" data-oc="fs">
+            <div class="ods-app__toolbar">
+                <h1 class="ods-page__title">{crate::i18n::t("files.title")}</h1>
+                <span class="ods-app__toolbar-spacer"></span>
+                {seletor_de_ambiente(false, None)}
             </div>
-
-            {if workspaces.is_empty() {
-                empty_state(EmptyState {
-                    icon: Icon::Files,
-                    title: crate::i18n::t("files.empty.no_environment").to_owned(),
-                    body: "Os ficheiros institucionais vivem dentro de Research Workspaces. \
-                           Quando pertencer a um, aparece aqui."
-                        .to_owned(),
-                    actions: vec![],
-                    small: false,
-                })
-                    .into_any()
-            } else {
-                view! {
-                    <div class="oc-grid oc-grid--3">
-                        {workspaces
-                            .into_iter()
-                            .map(|(id, nome)| {
-                                view! {
-                                    <a
-                                        class="oc-card oc-card--clickable oc-card__body oc-card__body--block"
-                                        data-part="card"
-                                        href=format!("/files?workspace={id}")
-                                    >
-                                        <div class="oc-t-meta">{crate::i18n::t("files.environment")}</div>
-                                        <div class="oc-t-strong oc-mt-5">{nome}</div>
-                                    </a>
-                                }
-                            })
-                            .collect_view()}
-                    </div>
-                }
-                    .into_any()
-            }}
-        </div>
+            <div class="ods-app__main" data-ods-scroll>
+                <p class="ods-file__meta">{crate::i18n::t("files.choose_environment")}</p>
+                {if workspaces.is_empty() {
+                    vazio_ods(
+                        "files",
+                        crate::i18n::t("files.empty.no_environment").to_owned(),
+                        None,
+                    )
+                        .into_any()
+                } else {
+                    view! {
+                        <div class="ods-files__grid" data-view="grid">
+                            {workspaces
+                                .into_iter()
+                                .map(|(id, nome)| {
+                                    view! {
+                                        <a
+                                            class="ods-file ods-file--folder"
+                                            href=format!("/files?workspace={id}")
+                                        >
+                                            <span class="ods-file__thumb">{icone("files", "ods-icon--lg")}</span>
+                                            <span class="ods-file__name" data-oc-content="1">{nome}</span>
+                                            <span class="ods-file__meta">{crate::i18n::t("files.environment")}</span>
+                                        </a>
+                                    }
+                                })
+                                .collect_view()}
+                        </div>
+                    }
+                        .into_any()
+                }}
+            </div>
+        </section>
     }
 }
 
-fn seletor_de_ambiente(workspaces: &[(String, String)], actual: &str) -> impl IntoView {
-    let opcoes = workspaces
-        .iter()
-        .map(|(id, nome)| {
-            let escolhido = id == actual;
-            view! {
-                <option value=id.clone() selected=escolhido>
-                    {nome.clone()}
-                </option>
-            }
-        })
-        .collect_view();
-
-    view! {
-        <form class="oc-head__aside" method="get" action="/files">
-            <label class="oc-sr" for="oc-files-workspace">{crate::i18n::t("files.environment")}</label>
-            <select
-                class="oc-select"
-                id="oc-files-workspace"
-                name="workspace"
-                data-autosubmit="1"
+/// Pessoal / Institucional (D12, `.ods-seg`).
+///
+/// `institucional` é o destino da opção institucional; sem ele, a opção existe
+/// mas está indisponível — o membro não alcança ambiente nenhum, e isso diz-se.
+fn seletor_de_ambiente(pessoal: bool, institucional: Option<String>) -> impl IntoView {
+    let opcao_institucional = match institucional {
+        Some(destino) => view! {
+            <a
+                class="ods-seg__opt"
+                role="tab"
+                href=destino
+                aria-selected=if pessoal { "false" } else { "true" }
             >
-                {opcoes}
-            </select>
-            <noscript>
-                <button class="oc-btn oc-btn--ghost" data-part="btn" type="submit">{crate::i18n::t("files.view")}</button>
-            </noscript>
-        </form>
+                {crate::i18n::t("files.env.institutional")}
+            </a>
+        }
+        .into_any(),
+        None => view! {
+            <span
+                class="ods-seg__opt"
+                role="tab"
+                aria-selected="false"
+                aria-disabled="true"
+                data-tip=crate::i18n::t("files.empty.no_environment")
+            >
+                {crate::i18n::t("files.env.institutional")}
+            </span>
+        }
+        .into_any(),
+    };
+    view! {
+        <div class="ods-seg" role="tablist" aria-label=crate::i18n::t("files.environment")>
+            <a
+                class="ods-seg__opt"
+                role="tab"
+                href="/files"
+                aria-selected=if pessoal { "true" } else { "false" }
+            >
+                {crate::i18n::t("files.env.personal")}
+            </a>
+            {opcao_institucional}
+        </div>
     }
 }
 
@@ -1055,22 +1139,27 @@ fn seletor_de_ambiente(workspaces: &[(String, String)], actual: &str) -> impl In
 /// «raiz» que ninguém criou.
 fn trilho_de_pastas(base: &str, path: &[Value], workspace_name: &str) -> impl IntoView {
     let raiz = base.to_owned();
+    let ultimo = path.len();
     let degraus = path
         .iter()
-        .map(|pasta| {
+        .enumerate()
+        .map(|(i, pasta)| {
             let id = text(pasta, "id");
             let nome = text(pasta, "name");
             view! {
-                <span class="oc-crumbs__sep" aria-hidden="true">"/"</span>
-                <a class="oc-crumbs__step" href=format!("{base}&folder={id}")>{nome}</a>
+                <span aria-hidden="true">"/"</span>
+                <a
+                    href=format!("{base}&folder={id}")
+                    aria-current=(i + 1 == ultimo).then_some("page")
+                    data-oc-content="1"
+                >{nome}</a>
             }
         })
         .collect_view();
 
     view! {
-        <nav class="oc-crumbs oc-mb-5" aria-label=crate::i18n::t("files.folders_aria")>
-            <a class="oc-crumbs__step" href=raiz>
-                {icon(Icon::Folder, 14)}
+        <nav class="ods-crumbs" aria-label=crate::i18n::t("files.folders_aria")>
+            <a href=raiz aria-current=path.is_empty().then_some("page") data-oc-content="1">
                 {workspace_name.to_owned()}
             </a>
             {degraus}
@@ -1086,83 +1175,71 @@ fn trilho_de_pastas(base: &str, path: &[Value], workspace_name: &str) -> impl In
 fn barra_de_accoes(workspace_id: &str, folder_id: Option<&str>, regresso: &str) -> impl IntoView {
     let folder = folder_id.unwrap_or_default().to_owned();
     view! {
-        <section class="oc-files__bar oc-mb-5">
-            <form
-                class="oc-drop"
-                method="post"
-                action="/files/upload"
-                enctype="multipart/form-data"
-                data-drop="1"
-            >
-                <input type="hidden" name="workspace_id" value=workspace_id.to_owned() />
-                <input type="hidden" name="folder_id" value=folder.clone() />
-                <input type="hidden" name="return_to" value=regresso.to_owned() />
+        <form
+            class="ods-dropzone"
+            method="post"
+            action="/files/upload"
+            enctype="multipart/form-data"
+            data-drop="1"
+        >
+            <input type="hidden" name="workspace_id" value=workspace_id.to_owned() />
+            <input type="hidden" name="folder_id" value=folder.clone() />
+            <input type="hidden" name="return_to" value=regresso.to_owned() />
 
-                <div class="oc-drop__face">
-                    {icon(Icon::Files, 20)}
-                    <div>
-                        <div class="oc-t-strong">{crate::i18n::t("files.drop_here")}</div>
-                        <div class="oc-t-caption--muted">
-                            {crate::i18n::t("files.or_choose")}
-                        </div>
-                    </div>
-                </div>
+            <div class="ods-empty">
+                <span class="ods-empty__icon">{icone("files", "ods-icon--lg")}</span>
+                <p class="ods-empty__title">{crate::i18n::t("files.drop_here")}</p>
+                <p class="ods-empty__body">{crate::i18n::t("files.or_choose")}</p>
+            </div>
 
-                <div class="oc-drop__controls">
-                    <label class="oc-sr" for="oc-files-file">{crate::i18n::t("files.file_label")}</label>
-                    <input
-                        class="oc-input"
-                        id="oc-files-file"
-                        type="file"
-                        name="file"
-                        required
-                        data-drop-input="1"
-                    />
+            <div class="ods-d12-folder-head">
+                <label class="ods-sr-only" for="oc-files-file">{crate::i18n::t("files.file_label")}</label>
+                <input
+                    class="ods-input"
+                    id="oc-files-file"
+                    type="file"
+                    name="file"
+                    required
+                    data-drop-input="1"
+                />
 
-                    <label class="oc-sr" for="oc-files-class">{crate::i18n::t("files.classification")}</label>
-                    <select class="oc-select" id="oc-files-class" name="classification">
-                        <option value="">{crate::i18n::t("files.classification.inherit")}</option>
-                        <option value="PUBLIC">{crate::i18n::t("files.type.public")}</option>
-                        <option value="INTERNAL">{crate::i18n::t("files.class_option.internal")}</option>
-                        <option value="CONFIDENTIAL">{crate::i18n::t("files.class_option.confidential")}</option>
-                        <option value="RESTRICTED">{crate::i18n::t("files.class_option.restricted")}</option>
-                    </select>
+                <label class="ods-sr-only" for="oc-files-class">{crate::i18n::t("files.classification")}</label>
+                <select class="ods-input" id="oc-files-class" name="classification">
+                    <option value="">{crate::i18n::t("files.classification.inherit")}</option>
+                    <option value="PUBLIC">{crate::i18n::t("files.type.public")}</option>
+                    <option value="INTERNAL">{crate::i18n::t("files.class_option.internal")}</option>
+                    <option value="CONFIDENTIAL">{crate::i18n::t("files.class_option.confidential")}</option>
+                    <option value="RESTRICTED">{crate::i18n::t("files.class_option.restricted")}</option>
+                </select>
 
-                    <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">{crate::i18n::t("files.upload")}</button>
-                </div>
+                <button class="ods-btn ods-btn--primary ods-btn--sm" type="submit">{crate::i18n::t("files.upload")}</button>
+            </div>
 
-                <div class="oc-drop__tray" data-drop-tray="1" hidden></div>
-            </form>
+            <div data-drop-tray="1" hidden></div>
+        </form>
 
-            <form class="oc-card oc-files__folder" data-part="card" method="post" action="/files/folder">
-                <input type="hidden" name="workspace_id" value=workspace_id.to_owned() />
-                <input type="hidden" name="parent_id" value=folder />
-                <input type="hidden" name="return_to" value=regresso.to_owned() />
-                <div class="oc-card__body">
-                    <label class="oc-label" for="oc-files-folder">{crate::i18n::t("files.new_folder")}</label>
-                    <input
-                        class="oc-input"
-                        id="oc-files-folder"
-                        type="text"
-                        name="name"
-                        maxlength="128"
-                        required
-                        placeholder=crate::i18n::t("files.folder_name_example")
-                    />
-                    <button class="oc-btn oc-btn--ghost" data-part="btn" type="submit">{crate::i18n::t("files.create_folder")}</button>
-                </div>
-            </form>
-        </section>
+        <form class="ods-d12-folder-head" method="post" action="/files/folder">
+            <input type="hidden" name="workspace_id" value=workspace_id.to_owned() />
+            <input type="hidden" name="parent_id" value=folder />
+            <input type="hidden" name="return_to" value=regresso.to_owned() />
+            <label class="ods-field__label" for="oc-files-folder">{crate::i18n::t("files.new_folder")}</label>
+            <input
+                class="ods-input"
+                id="oc-files-folder"
+                type="text"
+                name="name"
+                maxlength="128"
+                required
+                placeholder=crate::i18n::t("files.folder_name_example")
+            />
+            <button class="ods-btn ods-btn--sm" type="submit">{crate::i18n::t("files.create_folder")}</button>
+        </form>
     }
 }
 
-fn aviso(ok: bool, mensagem: &str) -> impl IntoView {
-    let classe = if ok {
-        "oc-note oc-note--ok"
-    } else {
-        "oc-note oc-note--bad"
-    };
-    view! { <p class=classe role="status">{mensagem.to_owned()}</p> }
+/// O resultado da operação anterior, dito em linha.
+fn aviso_da_operacao(ok: bool, mensagem: &str) -> impl IntoView {
+    aviso(if ok { Tom::Info } else { Tom::Erro }, mensagem.to_owned())
 }
 
 // ── O ficheiro, visto de perto ──────────────────────────────────────────────
@@ -1239,9 +1316,9 @@ fn aviso_de_versao(citada: &VersaoCitada) -> impl IntoView {
 
     if citada.corrente {
         return view! {
-            <div class="oc-note">
-                <p class="oc-t-strong">{format!("A ver a {onde}")}</p>
-                <p class="oc-t-caption--muted">
+            <div class="ods-notice" role="status">
+                <p class="ods-widget__title">{format!("A ver a {onde}")}</p>
+                <p class="ods-field__hint">
                     {crate::i18n::t("files.also_current")}
                 </p>
             </div>
@@ -1250,9 +1327,9 @@ fn aviso_de_versao(citada: &VersaoCitada) -> impl IntoView {
     }
 
     view! {
-        <div class="oc-note oc-note--ok">
-            <p class="oc-t-strong">{format!("A ver a {onde}")}</p>
-            <p class="oc-t-caption--muted">
+        <div class="ods-notice" role="status">
+            <p class="ods-widget__title">{format!("A ver a {onde}")}</p>
+            <p class="ods-field__hint">
                 "Esta não é a versão corrente. Está a ver os bytes exactos que \
                  foram citados — e não o que o ficheiro diz hoje."
             </p>
@@ -1284,30 +1361,30 @@ pub enum Extraccao {
 fn estado_do_conteudo(extraccao: &Extraccao) -> impl IntoView {
     let (classe, titulo, explicacao) = match extraccao {
         Extraccao::Nenhuma => (
-            "oc-note",
+            "ods-notice",
             crate::i18n::t("files.content.not_analysed"),
             "Este ficheiro é anterior à leitura de conteúdo. Carregar uma versão \
              nova torna-o pesquisável.",
         ),
         Extraccao::AProcessar => (
-            "oc-note",
+            "ods-notice",
             "A processar",
             "O ficheiro está guardado. O conteúdo está a ser lido para ficar \
              pesquisável.",
         ),
         Extraccao::Pesquisavel(_) => (
-            "oc-note oc-note--ok",
+            "ods-notice",
             crate::i18n::t("files.content.searchable"),
             crate::i18n::t("files.content.searchable_note"),
         ),
         Extraccao::SemLeitor => (
-            "oc-note",
+            "ods-notice",
             crate::i18n::t("files.content.not_searchable"),
             "Ficheiro guardado. Este formato não tem leitor de conteúdo, por isso \
              o corpo não entra na pesquisa.",
         ),
         Extraccao::Falhou => (
-            "oc-note oc-note--bad",
+            "ods-notice ods-notice--error",
             crate::i18n::t("files.content.not_searchable"),
             "Ficheiro guardado. Não foi possível ler o conteúdo, por isso o corpo \
              não entra na pesquisa. O ficheiro continua íntegro e descarregável.",
@@ -1320,10 +1397,10 @@ fn estado_do_conteudo(extraccao: &Extraccao) -> impl IntoView {
     };
 
     view! {
-        <div class=classe>
-            <p class="oc-t-strong">{titulo}</p>
-            <p class="oc-t-caption--muted">{explicacao}</p>
-            {contagem.map(|texto| view! { <p class="oc-t-caption--muted">{texto}</p> })}
+        <div class=classe role="status">
+            <p class="ods-widget__title">{titulo}</p>
+            <p class="ods-field__hint">{explicacao}</p>
+            {contagem.map(|texto| view! { <p class="ods-field__hint">{texto}</p> })}
         </div>
     }
 }
@@ -1366,62 +1443,59 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
     let contagem = versions.len();
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{nome.clone()}</h1>
-                    <p>
-                        {crate::i18n::t("files.institutional_in")}
-                        <a href=format!("/files?workspace={workspace_id}")>
-                            {text(&file, "workspace_name")}
-                        </a>
-                    </p>
-                </div>
-                <div class="oc-head__aside">
-                    {classification_badge(&text(&file, "classification"))}
-                    <a class="oc-btn oc-btn--primary" data-part="btn" href=format!("/files/{id}/download")>
-                        {crate::i18n::t("files.download")}
+        <section class="ods-app">
+            <div class="ods-app__toolbar">
+                <h1 class="ods-page__title" data-oc-content="1">{nome.clone()}</h1>
+                <span class="ods-file__meta">
+                    {crate::i18n::t("files.institutional_in")}
+                    <a href=format!("/files?workspace={workspace_id}") data-oc-content="1">
+                        {text(&file, "workspace_name")}
                     </a>
-                </div>
+                </span>
+                <span class="ods-app__toolbar-spacer"></span>
+                {classification_badge(&text(&file, "classification"))}
+                <a class="ods-btn ods-btn--primary ods-btn--sm" href=format!("/files/{id}/download")>
+                    {crate::i18n::t("files.download")}
+                </a>
             </div>
 
-            {notice.map(|(ok, mensagem)| aviso(ok, &mensagem))}
-            {citada.as_ref().map(aviso_de_versao)}
+            <div class="ods-app__main" data-ods-scroll>
+                {notice.map(|(ok, mensagem)| aviso_da_operacao(ok, &mensagem))}
+                {citada.as_ref().map(aviso_de_versao)}
 
-            <div class="oc-split">
-                <section class="oc-card" data-part="card">
-                    <div class="oc-card__head"><h2>{crate::i18n::t("files.content")}</h2></div>
-                    <div class="oc-card__body">{previsualizacao(preview)}</div>
-                </section>
+                {card(
+                    section_head(crate::i18n::t("files.content"), None, None),
+                    previsualizacao(preview),
+                )}
 
-                <section class="oc-card" data-part="card">
-                    <div class="oc-card__head"><h2>{crate::i18n::t("files.details")}</h2></div>
-                    <div class="oc-card__body">
-                        {estado_do_conteudo(&extraction)}
-                        {detalhe(crate::i18n::t("files.col.type"), &text(&corrente, "content_type"))}
-                        {detalhe(crate::i18n::t("files.col.size"), &tamanho(number(&corrente, "size_bytes")))}
-                        {detalhe(crate::i18n::t("files.versions"), &contagem.to_string())}
-                        {detalhe(
-                            crate::i18n::t("files.classification.effective"),
-                            &text(&file, "classification"),
-                        )}
-                        {detalhe(crate::i18n::t("files.environment"), &text(&file, "workspace_name"))}
-                        {detalhe(
-                            crate::i18n::t("files.classification.environment"),
-                            &text(&file, "workspace_classification"),
-                        )}
-                        {detalhe(crate::i18n::t("files.sha256"), &text(&corrente, "checksum_sha256"))}
-                    </div>
-                </section>
-            </div>
-
-            {may_upload
-                .then(|| {
+                {card(
+                    section_head(crate::i18n::t("files.details"), None, None),
                     view! {
-                        <section class="oc-card oc-mt-5" data-part="card">
-                            <div class="oc-card__head"><h2>{crate::i18n::t("files.upload_new_version")}</h2></div>
-                            <div class="oc-card__body">
-                                <p class="oc-t-caption--muted">
+                        {estado_do_conteudo(&extraction)}
+                        <dl>
+                            {detalhe(crate::i18n::t("files.col.type"), &text(&corrente, "content_type"))}
+                            {detalhe(crate::i18n::t("files.col.size"), &tamanho(number(&corrente, "size_bytes")))}
+                            {detalhe(crate::i18n::t("files.versions"), &contagem.to_string())}
+                            {detalhe(
+                                crate::i18n::t("files.classification.effective"),
+                                &text(&file, "classification"),
+                            )}
+                            {detalhe(crate::i18n::t("files.environment"), &text(&file, "workspace_name"))}
+                            {detalhe(
+                                crate::i18n::t("files.classification.environment"),
+                                &text(&file, "workspace_classification"),
+                            )}
+                            {detalhe(crate::i18n::t("files.sha256"), &text(&corrente, "checksum_sha256"))}
+                        </dl>
+                    },
+                )}
+
+                {may_upload
+                    .then(|| {
+                        card(
+                            section_head(crate::i18n::t("files.upload_new_version"), None, None),
+                            view! {
+                                <p class="ods-field__hint">
                                     "A versão actual não é substituída. Fica no histórico, \
                                      citável exactamente como está."
                                 </p>
@@ -1430,51 +1504,51 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
                                     action=format!("/files/{id}/version")
                                     enctype="multipart/form-data"
                                 >
-                                    <label class="oc-sr" for="oc-version-file">{crate::i18n::t("files.file_label")}</label>
+                                    <label class="ods-sr-only" for="oc-version-file">{crate::i18n::t("files.file_label")}</label>
                                     <input
-                                        class="oc-input"
+                                        class="ods-input"
                                         id="oc-version-file"
                                         type="file"
                                         name="file"
                                         required
                                     />
-                                    <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">{crate::i18n::t("files.upload_version")}</button>
+                                    <button class="ods-btn ods-btn--primary ods-btn--sm" type="submit">{crate::i18n::t("files.upload_version")}</button>
                                 </form>
-                            </div>
-                        </section>
-                    }
-                })}
+                            },
+                        )
+                    })}
 
-            <section class="oc-mt-5">
-                <h2 class="oc-t-strong oc-mb-5">{crate::i18n::t("files.version_history")}</h2>
-                {data_table(Table {
-                    tabs: vec![],
-                    search: crate::i18n::t("files.filter_versions"),
-                    truncated: false,
-                    shape: "versions",
-                    columns: vec![
-                        Column::new(crate::i18n::t("files.version")),
-                        Column::new(crate::i18n::t("files.col.by")),
-                        Column::new(crate::i18n::t("files.col.when")),
-                        Column::right(crate::i18n::t("files.col.size")),
-                        Column::right(crate::i18n::t("files.col.sum")),
-                    ],
-                    rows: linhas,
-                    footer: format!("{contagem} versões"),
-                    previous: None,
-                    next: None,
-                    empty: crate::i18n::t("files.no_versions"),
-                })}
-            </section>
-        </div>
+                <section>
+                    {section_head(crate::i18n::t("files.version_history"), None, None)}
+                    {data_table(Table {
+                        tabs: vec![],
+                        search: crate::i18n::t("files.filter_versions"),
+                        truncated: false,
+                        shape: "versions",
+                        columns: vec![
+                            Column::new(crate::i18n::t("files.version")),
+                            Column::new(crate::i18n::t("files.col.by")),
+                            Column::new(crate::i18n::t("files.col.when")),
+                            Column::right(crate::i18n::t("files.col.size")),
+                            Column::right(crate::i18n::t("files.col.sum")),
+                        ],
+                        rows: linhas,
+                        footer: format!("{contagem} versões"),
+                        previous: None,
+                        next: None,
+                        empty: crate::i18n::t("files.no_versions"),
+                    })}
+                </section>
+            </div>
+        </section>
     }
 }
 
 fn detalhe(rotulo: &str, valor: &str) -> impl IntoView {
     view! {
-        <div class="oc-kv">
-            <span class="oc-kv__k">{rotulo.to_owned()}</span>
-            <span class="oc-kv__v">{valor.to_owned()}</span>
+        <div class="ods-d12-folder-head">
+            <dt class="ods-label">{rotulo.to_owned()}</dt>
+            <dd class="ods-file__meta" data-oc-content="1">{valor.to_owned()}</dd>
         </div>
     }
 }
@@ -1482,17 +1556,17 @@ fn detalhe(rotulo: &str, valor: &str) -> impl IntoView {
 fn previsualizacao(preview: Preview) -> impl IntoView {
     match preview {
         Preview::Text(conteudo) => view! {
-            <pre class="oc-pre" tabindex="0">{conteudo}</pre>
+            <pre class="ods-quicklook__body" tabindex="0">{conteudo}</pre>
         }
         .into_any(),
         Preview::Image { src, alt } => view! {
-            <img class="oc-preview" data-part="preview" src=src alt=alt />
+            <img data-part="preview" src=src alt=alt />
         }
         .into_any(),
         Preview::UnsupportedType(tipo) => view! {
-            <div class="oc-note">
-                <p class="oc-t-strong">{crate::i18n::t("files.preview.none_for")}<span data-oc-content="1">{tipo}</span></p>
-                <p class="oc-t-caption--muted">
+            <div class="ods-notice" role="status">
+                <p class="ods-widget__title">{crate::i18n::t("files.preview.none_for")}<span data-oc-content="1">{tipo}</span></p>
+                <p class="ods-field__hint">
                     "Esta superfície mostra ficheiros de texto. Descarregue o ficheiro \
                      para o abrir na aplicação que o lê."
                 </p>
@@ -1500,18 +1574,18 @@ fn previsualizacao(preview: Preview) -> impl IntoView {
         }
         .into_any(),
         Preview::TooLarge(bytes) => view! {
-            <div class="oc-note">
-                <p class="oc-t-strong">{crate::i18n::t("files.preview.too_big")}</p>
-                <p class="oc-t-caption--muted">
+            <div class="ods-notice" role="status">
+                <p class="ods-widget__title">{crate::i18n::t("files.preview.too_big")}</p>
+                <p class="ods-field__hint">
                     {crate::i18n::tf("files.preview.too_big_note", &[("size", &tamanho(bytes))])}
                 </p>
             </div>
         }
         .into_any(),
         Preview::Unavailable(razao) => view! {
-            <div class="oc-note oc-note--bad">
-                <p class="oc-t-strong">{crate::i18n::t("files.content.unreadable")}</p>
-                <p class="oc-t-caption--muted">{razao}</p>
+            <div class="ods-notice ods-notice--error" role="status">
+                <p class="ods-widget__title">{crate::i18n::t("files.content.unreadable")}</p>
+                <p class="ods-field__hint">{razao}</p>
             </div>
         }
         .into_any(),
@@ -1564,8 +1638,8 @@ mod tests {
             "content_type": "application/pdf", "size_bytes": 2048, "versions": 1
         })]))
         .to_html();
-        assert!(html.contains("oc-fs__grelha"), "falta a grelha de fichas");
-        assert!(html.contains("oc-fs__item"), "o ficheiro não é uma ficha");
+        assert!(html.contains(r#"data-oc="fs-grelha""#), "falta a grelha de fichas");
+        assert!(html.contains(r#"class="ods-file""#), "o ficheiro não é uma ficha");
         assert!(html.contains("prova.pdf"), "falta o nome do ficheiro");
         // E a forma da tabela institucional nunca traz o seu próprio prefixo.
         assert!(!html.contains("oc-table--oc-table--"));
@@ -1578,7 +1652,7 @@ mod tests {
         v.personal_folders = vec![json!({ "id": "f1", "name": "TESTES" })];
         let html = all_files(v).to_html();
         assert!(
-            html.contains("oc-fs__item--pasta"),
+            html.contains(r#"data-kind="folder""#),
             "a raiz devia mostrar a ficha da pasta"
         );
     }
@@ -1597,7 +1671,7 @@ mod tests {
         v.open_folder = Some(("f1".to_owned(), "TESTES".to_owned()));
         let html = all_files(v).to_html();
         assert!(
-            !html.contains("oc-fs__item--pasta"),
+            !html.contains(r#"data-kind="folder""#),
             "dentro de uma pasta não pode aparecer nenhuma ficha de pasta"
         );
         // O ficheiro que lá está continua a mostrar-se.
@@ -1617,7 +1691,7 @@ mod tests {
         v.open_folder = Some(("f1".to_owned(), "TESTES".to_owned()));
         let html = all_files(v).to_html();
         assert!(
-            html.contains("oc-fs__vazio"),
+            html.contains("ods-empty") && html.contains(crate::i18n::t("files.empty.folder")),
             "uma pasta sem ficheiros devia mostrar o estado vazio"
         );
     }
@@ -1646,7 +1720,7 @@ mod tests {
             "content_type": "application/pdf", "size_bytes": 10, "versions": 1
         });
         let html = all_files(membro_sem_ambiente(vec![ficheiro])).to_html();
-        assert!(html.contains("oc-fs__acoes"), "falta o menu de acções");
+        assert!(html.contains(r#"data-part="fs__acoes""#), "falta o menu de acções");
         assert!(
             html.contains("action=\"/me/files/rename\""),
             "falta mudar nome"
@@ -1754,7 +1828,7 @@ mod tests {
             "falta o alternar favorito"
         );
         assert!(
-            html.contains("oc-fs__estrela"),
+            html.contains("#ods-star-fill"),
             "um ficheiro favorito não mostra a estrela"
         );
         assert!(

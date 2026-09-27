@@ -207,11 +207,11 @@ pub fn mail(
         // barra de acções consigo — e depois de descer uma lista longa, deixa
         // de haver «Escrever» no ecrã. Numa aplicação de correio a moldura
         // fica, e o que se percorre é o conteúdo.
-        <div class="oc-page oc-page--mail">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("mail.title")}</h1>
-                    <p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("mail.title")}</h1>
+                    <p class="ods-page__sub">
                         {crate::i18n::t("mail.header_subtitle")}
                     </p>
                 </div>
@@ -221,7 +221,7 @@ pub fn mail(
                 // e por isso nenhum tinha peso nenhum. Escrever é o que se vem
                 // aqui fazer; actualizar é uma manutenção que se faz de vez em
                 // quando; as definições visitam-se uma vez.
-                <div class="oc-head__actions oc-mail__accoes">
+                <div>
                     {comandos_de_disposicao()}
                     // As definições continuam a existir, e com o peso que têm:
                     // visitam-se uma vez. Tirá-las da barra ao reorganizá-la
@@ -514,11 +514,11 @@ fn unavailable_screen(detail: &str, ligada: bool, configurado: bool) -> impl Int
     };
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("mail.title")}</h1>
-                    <p>{crate::i18n::t("mail.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("mail.title")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("mail.subtitle")}</p>
                 </div>
             </div>
 
@@ -1899,13 +1899,13 @@ pub fn settings(
     let detail = view.detail();
 
     view! {
-        <div class="oc-page">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("mail.settings")}</h1>
-                    <p>{crate::i18n::t("mail.settings.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("mail.settings")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("mail.settings.subtitle")}</p>
                 </div>
-                <div class="oc-head__actions">
+                <div>
                     {button(Button::new(crate::i18n::t("mail.back_to_mail"), Variant::Secondary).href("/mail"))}
                 </div>
             </div>

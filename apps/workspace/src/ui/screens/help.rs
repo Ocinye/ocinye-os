@@ -55,11 +55,11 @@ fn estado(nome: &'static str, significado: &'static str) -> impl IntoView {
 /// O ecrã de ajuda.
 pub fn help() -> impl IntoView {
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("help.title")}</h1>
-                    <p>{crate::i18n::t("help.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("help.title")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("help.subtitle")}</p>
                 </div>
             </div>
 

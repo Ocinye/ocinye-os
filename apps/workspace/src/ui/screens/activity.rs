@@ -28,11 +28,11 @@ pub fn activity(payload: &Value) -> impl IntoView {
     let empty = rows.is_empty();
 
     view! {
-        <div class="oc-page oc-page--feed">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("nav.activity")}</h1>
-                    <p>{crate::i18n::t("activity.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("nav.activity")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("activity.subtitle")}</p>
                 </div>
             </div>
 

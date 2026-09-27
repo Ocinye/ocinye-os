@@ -105,11 +105,11 @@ pub fn search(query: &str, results: &Value, bodies: &Value, semantic: &Value) ->
     };
 
     view! {
-            <div class="oc-page">
-                <div class="oc-head">
-                    <div class="oc-head__text">
-                        <h1>{t("search.title")}</h1>
-                        <p>
+            <div class="ods-page">
+                <div class="ods-page__head">
+                    <div>
+                        <h1 class="ods-page__title">{t("search.title")}</h1>
+                        <p class="ods-page__sub">
     {t("search.subtitle")}
                         </p>
                     </div>

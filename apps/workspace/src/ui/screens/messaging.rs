@@ -267,7 +267,7 @@ pub fn messaging(page: &MessagingPage<'_>) -> impl IntoView {
         .and_then(|s| Uuid::parse_str(s).ok());
 
     view! {
-        <div class="oc-page oc-page--messaging" data-oc="mensagens">
+        <div class="ods-page" data-oc="mensagens">
             <div class="oc-msg" data-oc-aberta=aberta.map(|a| a.to_string())>
                 <aside class="oc-msg__lista" aria-label=crate::i18n::t("messaging.conversations_aria")>
                     <header class="oc-msg__lista-topo">

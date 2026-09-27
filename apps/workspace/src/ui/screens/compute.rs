@@ -87,19 +87,19 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
 
     view! {
         <div class="oc-band" >
-            <div class="oc-head oc-mb-7" >
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("nav.compute")}</h1>
-                    <p>{crate::i18n::t("compute.subtitle")}</p>
+            <div class="ods-page__head" >
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("nav.compute")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("compute.subtitle")}</p>
                 </div>
-                <div class="oc-head__actions">
+                <div>
                     {button(Button::new(crate::i18n::t("compute.add_node"), Variant::Gold).not_yet_available())}
                 </div>
             </div>
             {context_tabs(tabs, crate::i18n::t("compute.sections"))}
         </div>
 
-        <div class="oc-page">
+        <div class="ods-page">
             <section class="oc-card oc-table oc-table--compute oc-mb-5" data-part="card"  data-dense="false">
                 <div class="oc-table__scroll">
                     // O header de colunas do estado futuro fica visível mesmo

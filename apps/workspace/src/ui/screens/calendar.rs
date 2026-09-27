@@ -334,11 +334,11 @@ pub fn calendar(page: &CalendarPage<'_>) -> impl IntoView {
     let zona = *zona;
 
     view! {
-        <div class="oc-page oc-page--calendar" data-part="page--calendar">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("calendar.title")}</h1>
-                    <p>
+        <div class="ods-page" data-part="page--calendar">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("calendar.title")}</h1>
+                    <p class="ods-page__sub">
                         "Os compromissos, prazos e lembretes a que tem acesso. Os prazos
                          vêm das tarefas e continuam a pertencer-lhes."
                     </p>
@@ -1393,7 +1393,7 @@ pub fn event_form(
     let ha_ambientes = !ambientes.is_empty();
 
     view! {
-        <div class="oc-page oc-editor">
+        <div class="ods-page">
             <header class="oc-editor__cabeca">
                 <h1>
                     {if a_alterar {
@@ -1644,14 +1644,14 @@ pub fn event_detail(event: &Value, may_change: bool, zona: TimeZoneName) -> impl
     }));
 
     view! {
-        <div class="oc-page oc-page--detail">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{campo("title")}</h1>
-                    <p>{item.as_ref().map(|i| i.when(zona)).unwrap_or_default()}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{campo("title")}</h1>
+                    <p class="ods-page__sub">{item.as_ref().map(|i| i.when(zona)).unwrap_or_default()}</p>
                 </div>
                 {(may_change && !cancelado).then(|| view! {
-                    <div class="oc-head__actions">
+                    <div>
                         <a class="oc-btn" data-part="btn" href=format!("/calendar/events/{id}/edit")>{crate::i18n::t("calendar.edit")}</a>
                         <form method="post" action=format!("/calendar/events/{id}/cancel")>
                             <button type="submit" class="oc-btn oc-btn--danger" data-part="btn">{crate::i18n::t("calendar.cancel")}</button>
@@ -1715,11 +1715,11 @@ pub fn notifications(payload: &Value, failure: Option<String>) -> impl IntoView 
     let vazio = linhas.is_empty();
 
     view! {
-        <div class="oc-page oc-page--feed">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("notifications.title")}</h1>
-                    <p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("notifications.title")}</h1>
+                    <p class="ods-page__sub">
                         {if por_ler > 0 {
                             crate::i18n::tp("notifications.unread_count", por_ler)
                         } else {

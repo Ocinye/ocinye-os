@@ -46,12 +46,12 @@ pub fn hub(status: &Value, models: &Value) -> impl IntoView {
 
     view! {
         <div class="oc-band" >
-            <div class="oc-head oc-mb-7" >
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("nav.ai")}</h1>
-                    <p>{crate::i18n::t("ai.subtitle")}</p>
+            <div class="ods-page__head" >
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("nav.ai")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("ai.subtitle")}</p>
                 </div>
-                <div class="oc-head__actions">
+                <div>
                     {button(Button::new(crate::i18n::t("ai.create_agent"), Variant::Secondary).href("/ai/agents/new"))}
                     {button(Button::new(crate::i18n::t("ai.open_prompt"), Variant::Primary).href("/ai/prompt").with_dot())}
                 </div>
@@ -59,7 +59,7 @@ pub fn hub(status: &Value, models: &Value) -> impl IntoView {
             {context_tabs(tabs, crate::i18n::t("ai.sections"))}
         </div>
 
-        <div class="oc-page">
+        <div class="ods-page">
             <section class="oc-card oc-mb-5" data-part="card" >
                 {if available {
                     view! {
@@ -142,11 +142,11 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
     let no_capability = crate::i18n::t("ai.no_capability");
 
     view! {
-        <div class="oc-page oc-page--narrow">
-            <div class="oc-head">
-                <div class="oc-head__text">
-                    <h1>{crate::i18n::t("ai.create_agent_title")}</h1>
-                    <p>{crate::i18n::t("ai.new.subtitle")}</p>
+        <div class="ods-page">
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("ai.create_agent_title")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("ai.new.subtitle")}</p>
                 </div>
             </div>
 
@@ -375,7 +375,7 @@ pub fn agent_detail(agent: &Value) -> impl IntoView {
             </div>
         </div>
 
-        <div class="oc-page">
+        <div class="ods-page">
             <div class="oc-grid oc-grid--detail">
                 <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("ai.detail.definition"), None, None)}
