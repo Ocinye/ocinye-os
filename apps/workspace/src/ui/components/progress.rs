@@ -56,19 +56,6 @@ mod tests {
     }
 
     #[test]
-    fn a_largura_da_barra_e_declaravel_para_qualquer_valor() {
-        // A percentagem é o único valor contínuo da interface, e o CSS enumera
-        // os 101 possíveis. Um que faltasse deixaria a barra a zero em silêncio.
-        let css = include_str!("../../../static/ocinye.css");
-        for pct in [0_u8, 1, 37, 99, 100] {
-            assert!(
-                css.contains(&format!(r#"[data-pct="{pct}"]"#)),
-                "falta a regra de {pct}%"
-            );
-        }
-    }
-
-    #[test]
     fn o_progresso_e_anunciado_a_um_leitor_de_ecra() {
         let html = progress_bar(65).to_html();
         assert!(html.contains("role=\"progressbar\""));

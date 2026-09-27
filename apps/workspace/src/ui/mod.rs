@@ -1,8 +1,8 @@
 //! A interface do Ocinye Workspace.
 //!
-//! Implementa o dossier de design em [`design/`](../../../../design/README.md).
-//! Os valores visuais vivem em `static/ocinye.css` como custom properties: nenhum
-//! componente aqui define cor, tamanho ou raio soltos.
+//! A apresentação legada saiu no UI Reset: o que aqui fica é estrutura
+//! semântica e marcadores de comportamento (`data-oc`, `data-part`), à espera
+//! dos pacotes do Claude Design (`docs/ui/CLAUDE_DESIGN_CONTRACT.md`).
 //!
 //! # O que está aqui
 //!
@@ -55,12 +55,6 @@ pub fn document_com_cabeca(
          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
          <meta name=\"robots\" content=\"noindex, nofollow\">\n\
          <link rel=\"icon\" href=\"/static/ocinye_logo.png\">\n\
-         <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n\
-         <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n\
-         <link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?\
-         family=IBM+Plex+Mono:wght@400;500;600&\
-         family=IBM+Plex+Sans:wght@400;500;600;700&display=swap\">\n\
-         <link rel=\"stylesheet\" href=\"/static/ocinye.css\">\n\
          <title>",
     );
     out.push_str(&escape(title));
@@ -132,12 +126,14 @@ mod tests {
     }
 
     #[test]
-    fn o_documento_carrega_o_stylesheet_e_o_script() {
+    fn o_documento_carrega_o_script_e_nenhuma_folha_legada() {
         let html = document("Teste", leptos::prelude::view! { <p>"olá"</p> });
-        assert!(html.contains("/static/ocinye.css"));
         assert!(html.contains("/static/app.js"));
         assert!(html.contains("lang=\"pt-PT\""));
-        assert!(html.contains("IBM+Plex+Sans"));
+        assert!(
+            !html.contains("/static/ocinye.css"),
+            "a folha legada voltou"
+        );
     }
 }
 

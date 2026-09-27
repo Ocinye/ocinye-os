@@ -1840,39 +1840,6 @@ mod tests {
         assert!(en.contains(r#"href="/ideas""#), "o destino /ideas não muda");
     }
 
-    /// Despeja o lançador aberto, num ficheiro autónomo, para inspecção visual.
-    ///
-    ///     cargo test -p ocinye-workspace despejar_lancador -- --ignored --nocapture
-    #[test]
-    #[ignore = "arnês de verificação visual; corre-se de propósito"]
-    fn despejar_lancador_para_verificacao_visual() {
-        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        let css = std::fs::read_to_string(manifest.join("static/ocinye.css")).expect("css");
-        let sprite = std::fs::read_to_string(manifest.join("static/icons.svg")).expect("sprite");
-
-        let corpo = shell(
-            &viewer_de_investigacao(&Permission::all()),
-            Screen::Home,
-            Vec::new(),
-            Screen::Home.label(),
-            view! { <p>"conteúdo"</p> },
-        )
-        .to_html();
-
-        // Sem JavaScript, força-se o lançador visível por CSS, para o ver aberto.
-        let pagina = format!(
-            "<!doctype html><html lang=\"pt-PT\"><head><meta charset=\"utf-8\">\
-             <style>{css}</style>\
-             <style>.oc-apps[hidden]{{display:flex!important}}</style></head>\
-             <body>{sprite}{corpo}</body></html>"
-        );
-        let destino = manifest.join("../../target/verify");
-        std::fs::create_dir_all(&destino).expect("destino");
-        let caminho = destino.join("lancador.html");
-        std::fs::write(&caminho, pagina).expect("escrever");
-        println!("escrito: {}", caminho.display());
-    }
-
     /// O lançador é o último elemento da shell; isola-se do resto por corte.
     fn lancador(html: &str) -> String {
         let inicio = html

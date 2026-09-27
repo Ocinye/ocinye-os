@@ -244,7 +244,11 @@ suites() {
 # nas outras aplicações, e reactivar devolve a nota escrita antes. Uma viagem.
 # 125 → 126 em 2026-09-27: o feed institucional de Actividade (passo 18 da
 # certificação, Parte 16) — criar uma ideia pelo produto e vê-la em Actividade.
-viagens-de-browser|126|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|126
+# 126 → 125 em 2026-09-27: UI Reset — `a_consolidacao_nao_mudou_o_que_a_pessoa_ve`
+# comparava o estilo computado com a folha legada, e saiu com ela. As quatro
+# capturas `#[ignore]` de revisão visual saíram também (não contavam como
+# passadas). Registo em `docs/ui/BEHAVIOURAL_CONTRACT_MATRIX.md`.
+viagens-de-browser|125|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|125
 paridade|7|-p ocinye-core-server --test parity
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization

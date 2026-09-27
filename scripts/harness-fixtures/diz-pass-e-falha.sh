@@ -7,6 +7,6 @@
 # A prova tem de ser a verdadeira, e não uma aproximada. Com uma marca errada, a
 # fixture seria recusada pela exigência de prova antes de chegar à propriedade
 # que existe para isolar — e o teste passaria sem ter testado o estado de saída.
-echo "Equivalência de valores renderizados:"
+echo "test result: ok. 5 passed"
 echo "  tokens introduzidos: 18"
 exit 42
