@@ -154,7 +154,7 @@ pub fn render(source: &str) -> String {
                     } else {
                         // Uma ligação sem esquema seguro não é ligação: fica o
                         // texto, dentro de um `span` que a marca como neutra.
-                        out.push_str("<span class=\"oc-md-deadlink\">");
+                        out.push_str("<span data-part=\"md-deadlink\">");
                         link_close.push("</span>");
                     }
                 }
@@ -162,11 +162,11 @@ pub fn render(source: &str) -> String {
                     // Conteúdo remoto não se carrega a partir de uma resposta: o
                     // texto alternativo entra, a imagem não (mesma postura do
                     // correio). Os eventos de texto seguintes são o `alt`.
-                    out.push_str("<span class=\"oc-md-img\">[imagem: ");
+                    out.push_str("<span data-part=\"md-img\">[imagem: ");
                 }
                 Tag::Table(alignments) => {
                     aligns = alignments;
-                    out.push_str("<div class=\"oc-md-table\"><table>");
+                    out.push_str("<div data-part=\"md-table\"><table class=\"ods-table\">");
                 }
                 Tag::TableHead => {
                     in_head = true;
@@ -180,8 +180,8 @@ pub fn render(source: &str) -> String {
                 Tag::TableCell => {
                     let cell = if in_head { "th" } else { "td" };
                     let class = match aligns.get(col) {
-                        Some(Alignment::Center) => " class=\"oc-md-c\"",
-                        Some(Alignment::Right) => " class=\"oc-md-r\"",
+                        Some(Alignment::Center) => " data-align=\"center\"",
+                        Some(Alignment::Right) => " class=\"ods-num\"",
                         _ => "",
                     };
                     out.push('<');
@@ -203,15 +203,15 @@ pub fn render(source: &str) -> String {
                 TagEnd::BlockQuote(_) => out.push_str("</blockquote>"),
                 TagEnd::CodeBlock => {
                     in_code = false;
-                    out.push_str("<div class=\"oc-md-code\" data-part=\"md-code\"><div class=\"oc-md-code__bar\">");
-                    out.push_str("<span class=\"oc-md-code__lang\">");
+                    out.push_str("<div data-part=\"md-code\"><div class=\"ods-app__toolbar\" data-part=\"md-code__bar\">");
+                    out.push_str("<span class=\"ods-label\" data-part=\"md-code__lang\">");
                     if code_lang.is_empty() {
                         out.push_str("texto");
                     } else {
                         escape(&code_lang, &mut out);
                     }
                     out.push_str(
-                        "</span><button type=\"button\" class=\"oc-md-code__copy\" \
+                        "</span><button type=\"button\" class=\"ods-btn ods-btn--ghost ods-btn--sm\" \
                                   data-oc=\"copiar-codigo\">Copiar</button></div><pre><code>",
                     );
                     escape(&code_buf, &mut out);
@@ -245,7 +245,7 @@ pub fn render(source: &str) -> String {
                 }
             }
             Event::Code(code) => {
-                out.push_str("<code class=\"oc-md-inline\">");
+                out.push_str("<code data-part=\"md-inline\">");
                 escape(&code, &mut out);
                 out.push_str("</code>");
             }
@@ -287,7 +287,7 @@ mod tests {
         let html = render("[carrega](javascript:alert(1))");
         assert!(!html.contains("javascript:"));
         assert!(!html.contains("<a "));
-        assert!(html.contains("oc-md-deadlink"));
+        assert!(html.contains(r#"data-part="md-deadlink""#));
     }
 
     #[test]
@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn um_bloco_de_codigo_traz_lingua_e_copiar() {
         let html = render("```rust\nfn main() {}\n```");
-        assert!(html.contains("oc-md-code__lang"));
+        assert!(html.contains(r#"data-part="md-code__lang""#));
         assert!(html.contains(">rust<"));
         assert!(html.contains("data-oc=\"copiar-codigo\""));
         assert!(html.contains("fn main() {}"));
@@ -323,7 +323,7 @@ mod tests {
     #[test]
     fn uma_tabela_e_envolvida_para_deslizar() {
         let html = render("| a | b |\n|---|---|\n| 1 | 2 |");
-        assert!(html.contains("oc-md-table"));
+        assert!(html.contains(r#"data-part="md-table""#));
         assert!(html.contains("<th>a</th>"));
         assert!(html.contains("<td>1</td>"));
     }
@@ -331,6 +331,6 @@ mod tests {
     #[test]
     fn codigo_em_linha_e_marcado() {
         let html = render("usa `cargo test` agora");
-        assert!(html.contains("<code class=\"oc-md-inline\">cargo test</code>"));
+        assert!(html.contains("<code data-part=\"md-inline\">cargo test</code>"));
     }
 }

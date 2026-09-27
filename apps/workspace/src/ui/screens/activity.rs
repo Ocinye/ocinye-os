@@ -42,7 +42,7 @@ pub fn activity(payload: &Value) -> impl IntoView {
                         view! { <p class="ods-field__hint">{crate::i18n::t("activity.empty")}</p> }.into_any()
                     } else {
                         view! {
-                            <div>
+                            <ol class="ods-timeline">
                                 {rows
                                     .iter()
                                     .map(|row| {
@@ -52,33 +52,25 @@ pub fn activity(payload: &Value) -> impl IntoView {
                                             .take(16)
                                             .collect();
                                         view! {
-                                            <div class="oc-feed__row">
-                                                <i
-                                                    aria-hidden="true"
-                                                    class="oc-feed__dot"
-                                                    data-kind=kind.clone()
-                                                ></i>
-                                                <div>
-                                                    // A linha é composta pelo Core (`summary`) e é
-                                                    // conteúdo, não chrome do Workspace. Traduzi-la é
-                                                    // uma mudança no Core — emitir o acontecimento
-                                                    // como `kind` + sujeito estruturado, e não uma
-                                                    // frase já feita —, não deste ecrã (§11, §44).
-                                                    <div data-oc-content="1">
-                                                        {text(row, "summary")}
-                                                    </div>
-                                                    <div>
-                                                        <span class="ods-field__hint">
-                                                            {format!("{} · {when}", text(row, "actor_name"))}
-                                                        </span>
-                                                        {classification_badge(&text(row, "classification"))}
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            <li class="ods-timeline__item" data-kind=kind.clone()>
+                                                // A linha é composta pelo Core (`summary`) e é
+                                                // conteúdo, não chrome do Workspace. Traduzi-la é
+                                                // uma mudança no Core — emitir o acontecimento
+                                                // como `kind` + sujeito estruturado, e não uma
+                                                // frase já feita —, não deste ecrã (§11, §44).
+                                                <p data-oc-content="1">{text(row, "summary")}</p>
+                                                <p>
+                                                    <span class="ods-field__hint">
+                                                        {format!("{} · {when}", text(row, "actor_name"))}
+                                                    </span>
+                                                    " "
+                                                    {classification_badge(&text(row, "classification"))}
+                                                </p>
+                                            </li>
                                         }
                                     })
                                     .collect_view()}
-                            </div>
+                            </ol>
                         }
                             .into_any()
                     }}

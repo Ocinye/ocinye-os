@@ -1769,7 +1769,7 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
                         <div class="ods-field">
                             <label class="ods-field__label" for="unit-code-preview">{crate::i18n::t("lists.field.code")}</label>
                             <output
-                                class="oc-code-preview"
+                                class="ods-card__code"
                                 id="unit-code-preview"
                                 data-oc-code-preview
                                 data-oc-code-endpoint="/units/code-suggestion"

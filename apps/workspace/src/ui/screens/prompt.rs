@@ -562,7 +562,7 @@ mod tests {
         // O título desceu de nível, o código traz barra com «Copiar», e a
         // autoria nomeia o modelo — nunca o sistema.
         assert!(html.contains("<h3>Estrutura</h3>"));
-        assert!(html.contains("oc-md-code__lang"));
+        assert!(html.contains(r#"data-part="md-code__lang""#));
         assert!(html.contains("data-oc=\"copiar-codigo\""));
         assert!(html.contains("Ocinye AI · Qwen Coder"));
         // A acção de copiar a resposta está presente e é discreta.

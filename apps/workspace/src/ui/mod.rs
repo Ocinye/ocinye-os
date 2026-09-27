@@ -1898,47 +1898,46 @@ pub(crate) mod link_tests {
         }
     }
 
-    /// Uma mensagem dentro de um cartão não usa a classe do ecrã inteiro.
+    /// Uma mensagem dentro de um ecrã não usa a classe do ecrã de excepção.
     ///
     /// # O que se via
     ///
-    /// `oc-notice` é a classe dos ecrãs de excepção — 404, recusa, falha — que
-    /// vivem sozinhos numa página: `margin: 96px auto`, centrados, largura
-    /// máxima de 520px. Aplicada a uma linha dentro do cartão da imagem de
-    /// perfil, abria um vazio da altura de um ecrã com a frase suspensa ao meio
-    /// e o avatar empurrado para o fundo.
+    /// A classe dos ecrãs de excepção — 404, recusa, falha — ocupa a página:
+    /// hoje `ods-d12-notice`, com `min-height: 60vh` e o conteúdo centrado.
+    /// Aplicada a uma linha dentro do cartão da imagem de perfil, abria um
+    /// vazio da altura de um ecrã com a frase suspensa ao meio e o avatar
+    /// empurrado para o fundo. Uma mensagem em linha é `ods-notice`.
     ///
     /// Nenhum teste de comportamento apanha isto: o texto está certo, a
-    /// mensagem é a correcta, o HTML é válido. Só se vê a olho — como a colisão
-    /// de cascata no rodapé da barra.
+    /// mensagem é a correcta, o HTML é válido. Só se vê a olho.
     #[test]
     fn uma_mensagem_em_cartao_nao_usa_a_classe_do_ecra_inteiro() {
         let mut trocadas: Vec<String> = Vec::new();
+        let mut com_casca = 0usize;
 
         for (ecra, html) in catalogue() {
-            // Um ecrã de excepção é a casa legítima de `oc-notice` — e
-            // reconhece-se por não ter shell: 404 e recusa vivem sozinhos numa
-            // página, precisamente porque a shell exige um contexto que nesses
-            // momentos pode não existir. A distinção é estrutural, e não uma
-            // lista de nomes que envelheceria com o próximo ecrã.
-            if !html.contains(r#"class="oc-shell""#) {
+            // Um ecrã de excepção é a casa legítima dessa classe — e
+            // reconhece-se por não ter casca: 404 e recusa vivem sozinhos numa
+            // página. A distinção é estrutural, e não uma lista de nomes.
+            if !html.contains(r#"class="ods-shell""#) {
                 continue;
             }
-            for pedaco in html.split(r#"class="ods-notice"#).skip(1) {
-                let resto = pedaco.split('"').next().unwrap_or_default();
-                // `oc-notice__tile` e `oc-notice__reference` pertencem ao ecrã.
-                if resto.starts_with("__") {
-                    continue;
-                }
-                trocadas.push(format!("{ecra}: class=\"oc-notice{resto}\""));
+            com_casca += 1;
+            if html.contains("ods-d12-notice") {
+                trocadas.push(ecra.to_owned());
             }
         }
 
+        // Sem ecrãs com casca, o teste não observava nada — e passava.
+        assert!(
+            com_casca > 10,
+            "o catálogo quase não tem ecrãs com casca ({com_casca}): o teste deixou de observar"
+        );
         assert!(
             trocadas.is_empty(),
-            "mensagens em cartão a usar a classe do ecrã de excepção:\n  {}\n\
-             `oc-notice` centra e afasta 96px; dentro de um cartão abre um vazio.",
-            trocadas.join("\n  "),
+            "ecrãs com casca a usar a classe do ecrã de excepção: {}\n\
+             `ods-d12-notice` ocupa 60vh; dentro de um ecrã abre um vazio.",
+            trocadas.join(", "),
         );
     }
 
