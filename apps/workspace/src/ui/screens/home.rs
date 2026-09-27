@@ -199,7 +199,7 @@ fn continue_work(payload: &Value) -> impl IntoView {
     };
 
     view! {
-        <section class="oc-card oc-mb-5" >
+        <section class="oc-card oc-mb-5" data-part="card" >
             // A etiqueta é a do dossier (§6.2); o «Ver tudo» é nosso, e fica:
             // o cartão mostra três, e há mais para lá deles.
             {section_head(
@@ -300,7 +300,7 @@ fn recent_activity(payload: &Value) -> impl IntoView {
     };
 
     view! {
-        <section class="oc-card oc-mb-5" >
+        <section class="oc-card oc-mb-5" data-part="card" >
             {section_head(
                 crate::i18n::t("home.activity.title"),
                 Some((crate::i18n::t("home.view_all").into(), "/activity".into())),
@@ -341,7 +341,7 @@ fn ai_card(status: &Value) -> impl IntoView {
 
     view! {
         <section
-            class="oc-card oc-ai-panel"
+            class="oc-card oc-ai-panel" data-part="card"
         >
             <span
                 aria-hidden="true"
@@ -395,7 +395,7 @@ fn quick_access(can_create_idea: bool) -> impl IntoView {
                             || {
                                 view! {
                                     <span
-                                        class="oc-quick oc-unavailable"
+                                        class="oc-quick oc-unavailable" data-part="unavailable"
                                         aria-disabled="true"
                                         title=*reason
                                     >

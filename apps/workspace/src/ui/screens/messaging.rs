@@ -275,7 +275,7 @@ pub fn messaging(page: &MessagingPage<'_>) -> impl IntoView {
                         <div class="oc-msg__lista-accoes">
                             <button
                                 type="button"
-                                class="oc-btn oc-btn--icone"
+                                class="oc-btn oc-btn--icone" data-part="btn"
                                 data-oc="nova-conversa"
                                 aria-haspopup="dialog"
                                 title=crate::i18n::t("messaging.new_conversation")
@@ -297,7 +297,7 @@ pub fn messaging(page: &MessagingPage<'_>) -> impl IntoView {
                             }
                         })}
 
-                    <div class="oc-msg__conversas" role="list">
+                    <div class="oc-msg__conversas" data-part="msg__conversas" role="list">
                         {if conversations.is_empty() {
                             view! {
                                 <p class="oc-msg__sem-conversas">
@@ -437,14 +437,14 @@ fn nova_conversa() -> impl IntoView {
                 <footer class="oc-msg__nova-accoes">
                     <button
                         type="button"
-                        class="oc-btn oc-btn--secondary oc-btn--sm"
+                        class="oc-btn oc-btn--secondary oc-btn--sm" data-part="btn"
                         data-oc="fechar-nova"
                     >
                         {crate::i18n::t("action.cancel")}
                     </button>
                     <button
                         type="button"
-                        class="oc-btn oc-btn--primary oc-btn--sm"
+                        class="oc-btn oc-btn--primary oc-btn--sm" data-part="btn"
                         data-oc="criar-conversa"
                         disabled
                     >
@@ -615,7 +615,7 @@ fn cabecalho(
                     view! {
                         <button
                             type="button"
-                            class="oc-btn oc-btn--secondary oc-btn--sm"
+                            class="oc-btn oc-btn--secondary oc-btn--sm" data-part="btn"
                             data-oc="detalhes-do-grupo"
                             aria-expanded="false"
                             aria-controls=format!("detalhes-{id}")
@@ -664,7 +664,7 @@ fn detalhes_do_grupo(id: &str, participantes: &[Value], governa: bool) -> impl I
                                         view! {
                                             <button
                                                 type="button"
-                                                class="oc-btn oc-btn--ghost oc-btn--sm"
+                                                class="oc-btn oc-btn--ghost oc-btn--sm" data-part="btn"
                                                 data-oc="retirar"
                                                 data-oc-quem=quem
                                                 title=crate::i18n::tf("messaging.remove_named", &[("name", nome.as_str())])
@@ -685,14 +685,14 @@ fn detalhes_do_grupo(id: &str, participantes: &[Value], governa: bool) -> impl I
                         view! {
                             <button
                                 type="button"
-                                class="oc-btn oc-btn--secondary oc-btn--sm"
+                                class="oc-btn oc-btn--secondary oc-btn--sm" data-part="btn"
                                 data-oc="acrescentar-membro"
                             >
                                 {crate::i18n::t("messaging.add_someone")}
                             </button>
                         }
                     })}
-                <button type="button" class="oc-btn oc-btn--ghost oc-btn--sm" data-oc="sair">
+                <button type="button" class="oc-btn oc-btn--ghost oc-btn--sm" data-part="btn" data-oc="sair">
                     {crate::i18n::t("messaging.leave_group")}
                 </button>
             </div>
@@ -796,7 +796,7 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
     }
 
     view! {
-        <article class=classe data-oc="mensagem" data-oc-id=id.clone() data-oc-autor=autor>
+        <article class=classe data-oc="mensagem" data-minha=minha.then_some("") data-seguida=seguida.then_some("") data-oc-id=id.clone() data-oc-autor=autor>
             {(!seguida)
                 .then(|| {
                     view! {
@@ -815,7 +815,7 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
                     .then(|| {
                         view! {
                             <p class="oc-msg__mensagem-topo">
-                                <span class="oc-msg__mensagem-autor">{nome.clone()}</span>
+                                <span class="oc-msg__mensagem-autor" data-part="msg__mensagem-autor">{nome.clone()}</span>
                                 <time class="oc-msg__mensagem-hora">{hora(quando, zona)}</time>
                             </p>
                         }
@@ -842,7 +842,7 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
                 // Texto. Nunca `inner_html`: uma mensagem é escrita por uma
                 // pessoa, e o que ela escrever não pode virar estrutura na
                 // página de quem a lê.
-                <p class="oc-msg__texto" id=format!("mensagem-{id}")>
+                <p class="oc-msg__texto" data-part="msg__texto" id=format!("mensagem-{id}")>
                     {corpo}
                 </p>
 
@@ -979,14 +979,14 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                 <div class="oc-msg__sugestao-accoes">
                     <button
                         type="button"
-                        class="oc-btn oc-btn--primary oc-btn--sm"
+                        class="oc-btn oc-btn--primary oc-btn--sm" data-part="btn"
                         data-oc="usar-sugestao"
                     >
                         {crate::i18n::t("messaging.use_suggestion")}
                     </button>
                     <button
                         type="button"
-                        class="oc-btn oc-btn--ghost oc-btn--sm"
+                        class="oc-btn oc-btn--ghost oc-btn--sm" data-part="btn"
                         data-oc="manter-original"
                     >
                         {crate::i18n::t("messaging.keep_original")}
@@ -1064,7 +1064,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
 
                     <button
                         type="button"
-                        class="oc-btn oc-btn--primary oc-btn--sm oc-msg__enviar"
+                        class="oc-btn oc-btn--primary oc-btn--sm oc-msg__enviar" data-part="btn"
                         data-oc="enviar"
                     >
                         {crate::i18n::t("messaging.send")}

@@ -56,7 +56,7 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
             </div>
 
             <div class="oc-grid oc-grid--detail">
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     <div class="oc-card__head">
                         <h2>{t("my_work.tasks.title")}</h2>
                         <span class="oc-card__meta">{task_rows.len().to_string()}</span>
@@ -105,7 +105,7 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                 </section>
 
                 <div>
-                    <section class="oc-card oc-mb-5" >
+                    <section class="oc-card oc-mb-5" data-part="card" >
                         <div class="oc-card__head">
                             <h2>{t("my_work.research.title")}</h2>
                         </div>
@@ -155,27 +155,27 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                     // de seguir que o domínio não tem. Encher qualquer um deles
                     // com o que está à mão seria mostrar uma coisa a dizer
                     // outra (`CLAUDE.md` §69).
-                    <section class="oc-card oc-mb-5">
+                    <section class="oc-card oc-mb-5" data-part="card">
                         <div class="oc-card__head">
                             <h2>{t("my_work.documents.title")}</h2>
-                            <span class="oc-card__meta oc-unavailable">{t("my_work.unavailable")}</span>
+                            <span class="oc-card__meta oc-unavailable" data-part="unavailable">{t("my_work.unavailable")}</span>
                         </div>
                         <div class="oc-card__body">
                             <p class="oc-muted">{t("my_work.documents.body")}</p>
                         </div>
                     </section>
 
-                    <section class="oc-card oc-mb-5">
+                    <section class="oc-card oc-mb-5" data-part="card">
                         <div class="oc-card__head">
                             <h2>{t("my_work.units.title")}</h2>
-                            <span class="oc-card__meta oc-unavailable">{t("my_work.unavailable")}</span>
+                            <span class="oc-card__meta oc-unavailable" data-part="unavailable">{t("my_work.unavailable")}</span>
                         </div>
                         <div class="oc-card__body">
                             <p class="oc-muted">{t("my_work.units.body")}</p>
                         </div>
                     </section>
 
-                    <section class="oc-card">
+                    <section class="oc-card" data-part="card">
                         <div class="oc-card__head">
                             <h2>{t("my_work.my_activity.title")}</h2>
                         </div>

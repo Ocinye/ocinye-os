@@ -60,7 +60,7 @@ pub fn hub(status: &Value, models: &Value) -> impl IntoView {
         </div>
 
         <div class="oc-page">
-            <section class="oc-card oc-mb-5" >
+            <section class="oc-card oc-mb-5" data-part="card" >
                 {if available {
                     view! {
                         <div class="oc-card__body">
@@ -107,7 +107,7 @@ fn counter(
     href: &'static str,
 ) -> impl IntoView {
     view! {
-        <a class="oc-card oc-card--clickable oc-card__body oc-card__body--block" href=href >
+        <a class="oc-card oc-card--clickable oc-card__body oc-card__body--block" data-part="card" href=href >
             <div class="oc-t-meta" >
                 {label}
             </div>
@@ -264,7 +264,7 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
                         <div class="oc-vspace" ></div>
 
                         <section
-                            class="oc-card oc-card__body oc-card__body--subtle"
+                            class="oc-card oc-card__body oc-card__body--subtle" data-part="card"
                         >
                             <div class="oc-flex oc-gap-7">
                                 <span class="oc-ink">{icon(Icon::Shield, 16)}</span>
@@ -281,7 +281,7 @@ pub fn new_agent(models: &Value, message: Option<String>) -> impl IntoView {
 
                         <div class="oc-row--end oc-gap-5 oc-mt-8" >
                             {button(Button::new(crate::i18n::t("ask.cancel"), Variant::Secondary).href("/ai/agents"))}
-                            <button type="submit" class="oc-btn oc-btn--gold">
+                            <button type="submit" class="oc-btn oc-btn--gold" data-part="btn">
                                 {crate::i18n::t("ai.create_agent")}
                             </button>
                         </div>
@@ -377,7 +377,7 @@ pub fn agent_detail(agent: &Value) -> impl IntoView {
 
         <div class="oc-page">
             <div class="oc-grid oc-grid--detail">
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("ai.detail.definition"), None, None)}
                     <div class="oc-card__body">
                         <p class="oc-t-body">{purpose}</p>
@@ -393,7 +393,7 @@ pub fn agent_detail(agent: &Value) -> impl IntoView {
                     </div>
                 </section>
 
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("ai.detail.execution"), None, None)}
                     <div class="oc-card__body">
                         <div class="oc-row oc-row--wrap oc-gap-6">

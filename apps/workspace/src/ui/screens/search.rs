@@ -128,22 +128,22 @@ pub fn search(query: &str, results: &Value, bodies: &Value, semantic: &Value) ->
                             autofocus
                         />
                     </div>
-                    <button type="submit" class="oc-btn oc-btn--primary">{t("search.submit")}</button>
+                    <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{t("search.submit")}</button>
                 </form>
 
                 // O modo semântico é declarado, não escondido: faz parte da
                 // arquitectura e o seu estado é informação útil (briefing §32).
                 <div class="oc-search-modes" role="group" aria-label=t("search.mode.aria")>
-                    <span class="oc-tab" aria-selected="true">{t("search.mode.textual")}</span>
+                    <span class="oc-tab" data-part="tab" aria-selected="true">{t("search.mode.textual")}</span>
                     {if semantic_available {
                         view! {
-                            <span class="oc-tab" aria-selected="false">{t("search.mode.semantic")}</span>
+                            <span class="oc-tab" data-part="tab" aria-selected="false">{t("search.mode.semantic")}</span>
                         }
                             .into_any()
                     } else {
                         view! {
                             <span
-                                class="oc-tab oc-unavailable"
+                                class="oc-tab oc-unavailable" data-part="tab unavailable"
                                 aria-disabled="true"
                                 title=semantic_message.clone()
                             >

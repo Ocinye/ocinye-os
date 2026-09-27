@@ -109,7 +109,7 @@ fn command_form(query: &str, intent: &str) -> impl IntoView {
                     placeholder=crate::i18n::t("ask.placeholder")
                     autocomplete="off"
                 />
-                <button type="submit" class="oc-btn oc-btn--primary">{crate::i18n::t("ask.submit")}</button>
+                <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{crate::i18n::t("ask.submit")}</button>
             </div>
 
             // Escreva naturalmente: a superfície lê a frase. Os três modos
@@ -282,10 +282,10 @@ fn planned(outcome: &Value) -> impl IntoView {
 
             <div class="oc-plan__actions">
                 <form method="post" action=format!("/ask/plans/{plan_id}/execute")>
-                    <button type="submit" class="oc-btn oc-btn--primary">{crate::i18n::t("ask.confirm")}</button>
+                    <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{crate::i18n::t("ask.confirm")}</button>
                 </form>
                 <form method="post" action=format!("/ask/plans/{plan_id}/reject")>
-                    <button type="submit" class="oc-btn oc-btn--secondary">{crate::i18n::t("ask.cancel")}</button>
+                    <button type="submit" class="oc-btn oc-btn--secondary" data-part="btn">{crate::i18n::t("ask.cancel")}</button>
                 </form>
             </div>
         },

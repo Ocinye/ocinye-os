@@ -386,7 +386,7 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
 
                     // Nova pasta: o formulário vive num menu, aberto só quando
                     // preciso — não é uma barra permanente.
-                    <details class="oc-fs__menu">
+                    <details class="oc-fs__menu" data-part="fs__menu">
                         <summary class="oc-fs__ferramenta oc-fs__ferramenta--txt">
                             {icon(Icon::Folder, 14)}
                             <span>{crate::i18n::t("files.new_folder")}</span>
@@ -402,7 +402,7 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                                     data-oc="nova-pasta"
                                     required
                                 />
-                                <button class="oc-btn oc-btn--secondary oc-btn--sm" type="submit">
+                                <button class="oc-btn oc-btn--secondary oc-btn--sm" data-part="btn" type="submit">
                                     {crate::i18n::t("action.create")}
                                 </button>
                             </form>
@@ -439,7 +439,7 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                                 </select>
                             }
                         })}
-                        <label class="oc-btn oc-btn--primary oc-fs__carregar-btn">
+                        <label class="oc-btn oc-btn--primary oc-fs__carregar-btn" data-part="btn">
                             {icon(Icon::Attach, 14)}
                             <span>{crate::i18n::t("files.upload")}</span>
                             <input class="oc-sr" type="file" name="file" multiple data-oc="fs-carregar" />
@@ -517,7 +517,7 @@ pub fn all_files(view: AllFilesView) -> impl IntoView {
                             <span class="oc-fs__ql-nome" data-oc="fs-ql-nome"></span>
                             <div class="oc-fs__ql-cab-accoes">
                                 <button
-                                    class="oc-btn oc-btn--sm oc-btn--secondary"
+                                    class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn"
                                     type="button"
                                     data-oc="fs-ql-descarregar"
                                 >
@@ -602,11 +602,11 @@ fn vista_do_lixo(trash: &[Value], notice: Option<(bool, String)>) -> impl IntoVi
                     <div class="oc-files__lixo-accoes">
                         <form method="post" action="/me/files/restore">
                             <input type="hidden" name="file_id" value=id.clone() />
-                            <button class="oc-btn oc-btn--secondary" type="submit">{crate::i18n::t("files.restore")}</button>
+                            <button class="oc-btn oc-btn--secondary" data-part="btn" type="submit">{crate::i18n::t("files.restore")}</button>
                         </form>
                         <form method="post" action="/me/files/purge">
                             <input type="hidden" name="file_id" value=id />
-                            <button class="oc-btn oc-btn--danger" type="submit">
+                            <button class="oc-btn oc-btn--danger" data-part="btn" type="submit">
                                 {crate::i18n::t("files.delete_permanently")}
                             </button>
                         </form>
@@ -634,8 +634,8 @@ fn vista_do_lixo(trash: &[Value], notice: Option<(bool, String)>) -> impl IntoVi
                 // Ficheiros), e é o segundo botão que apaga. Sem selecção, sem
                 // ficheiros — só aparece com o Lixo cheio.
                 {(!trash.is_empty()).then(|| view! {
-                    <details class="oc-fs__menu oc-fs__acoes--abre-esquerda">
-                        <summary class="oc-btn oc-btn--danger">
+                    <details class="oc-fs__menu oc-fs__acoes--abre-esquerda" data-part="fs__menu">
+                        <summary class="oc-btn oc-btn--danger" data-part="btn">
                             {crate::i18n::t("files.trash.empty_all")}
                         </summary>
                         <div class="oc-fs__pop">
@@ -646,7 +646,7 @@ fn vista_do_lixo(trash: &[Value], notice: Option<(bool, String)>) -> impl IntoVi
                                 )}
                             </p>
                             <form method="post" action="/files/trash/empty">
-                                <button class="oc-btn oc-btn--danger" type="submit">
+                                <button class="oc-btn oc-btn--danger" data-part="btn" type="submit">
                                     {crate::i18n::t("files.trash.empty_confirm_action")}
                                 </button>
                             </form>
@@ -700,14 +700,14 @@ fn barra_de_seleccao(folders: &[Value], base: &str) -> impl IntoView {
                     <option value="">{crate::i18n::t("files.my_files_root")}</option>
                     {opcoes}
                 </select>
-                <button class="oc-btn oc-btn--sm oc-btn--secondary" type="submit">{crate::i18n::t("files.move")}</button>
+                <button class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn" type="submit">{crate::i18n::t("files.move")}</button>
             </form>
             <form class="oc-fs__lote-form" method="post" action="/me/files/batch/delete">
                 <input type="hidden" name="file_ids" data-oc="fs-lote-ids" />
                 <input type="hidden" name="return_to" value=base />
-                <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">{crate::i18n::t("files.delete")}</button>
+                <button class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn" type="submit">{crate::i18n::t("files.delete")}</button>
             </form>
-            <button class="oc-btn oc-btn--sm oc-btn--secondary" type="button" data-oc="fs-lote-limpar">
+            <button class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn" type="button" data-oc="fs-lote-limpar">
                 {crate::i18n::t("files.clear")}
             </button>
         </div>
@@ -721,7 +721,7 @@ fn ficha_de_pasta(p: &Value) -> impl IntoView {
     let titulo = nome.clone();
     view! {
         <a
-            class="oc-fs__item oc-fs__item--pasta"
+            class="oc-fs__item oc-fs__item--pasta" data-part="fs__item"
             href=format!("/files?folder={id}")
             data-oc="fs-item"
             data-alvo-pasta=id.clone()
@@ -746,11 +746,11 @@ fn painel_de_pasta(id: &str, nome: &str) -> impl IntoView {
                 <input type="hidden" name="folder_id" value=id.clone() />
                 <label class="oc-sr" for="oc-pasta-nome">{crate::i18n::t("files.new_folder_name")}</label>
                 <input class="oc-input" id="oc-pasta-nome" name="name" value=nome required />
-                <button class="oc-btn oc-btn--secondary" type="submit">{crate::i18n::t("files.rename")}</button>
+                <button class="oc-btn oc-btn--secondary" data-part="btn" type="submit">{crate::i18n::t("files.rename")}</button>
             </form>
             <form class="oc-files__linha-accao" method="post" action="/me/folders/delete">
                 <input type="hidden" name="folder_id" value=id />
-                <button class="oc-btn oc-btn--danger" type="submit">{crate::i18n::t("files.delete_folder")}</button>
+                <button class="oc-btn oc-btn--danger" data-part="btn" type="submit">{crate::i18n::t("files.delete_folder")}</button>
             </form>
         </div>
     }
@@ -791,7 +791,7 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
 
     view! {
         <div
-            class="oc-fs__item oc-fs__item--ficheiro"
+            class="oc-fs__item oc-fs__item--ficheiro" data-part="fs__item fs__item--ficheiro"
             data-oc="fs-item"
             data-id=id.clone()
             data-nome=nome.clone()
@@ -834,7 +834,7 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
                 <span class="oc-fs__nome">{nome.clone()}</span>
                 <span class="oc-fs__meta">{tipo}" · "{dim}</span>
             </a>
-            <details class="oc-fs__acoes">
+            <details class="oc-fs__acoes" data-part="fs__acoes">
                 <summary class="oc-fs__acoes-btn" aria-label=crate::i18n::t("files.file_actions")>"⋯"</summary>
                 <div class="oc-fs__pop oc-fs__pop--acoes">
                     <a class="oc-fs__acao" href=format!("/me/files/{version_id}/raw")>
@@ -856,7 +856,7 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
                         <input type="hidden" name="return_to" value=base.clone() />
                         <label class="oc-sr" for=format!("nome-{id}")>{crate::i18n::t("files.new_name")}</label>
                         <input class="oc-input" id=format!("nome-{id}") name="name" value=nome.clone() />
-                        <button class="oc-btn oc-btn--sm oc-btn--secondary" type="submit">
+                        <button class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn" type="submit">
                             {crate::i18n::t("files.rename")}
                         </button>
                     </form>
@@ -868,12 +868,12 @@ fn ficha_de_ficheiro(f: &Value, folders: &[Value], base: &str) -> impl IntoView 
                             <option value="">{crate::i18n::t("files.my_files_root")}</option>
                             {opcoes}
                         </select>
-                        <button class="oc-btn oc-btn--sm oc-btn--secondary" type="submit">{crate::i18n::t("files.move")}</button>
+                        <button class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn" type="submit">{crate::i18n::t("files.move")}</button>
                     </form>
                     <form method="post" action="/me/files/delete">
                         <input type="hidden" name="file_id" value=id.clone() />
                         <input type="hidden" name="return_to" value=base />
-                        <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">{crate::i18n::t("files.delete")}</button>
+                        <button class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn" type="submit">{crate::i18n::t("files.delete")}</button>
                     </form>
                 </div>
             </details>
@@ -958,7 +958,7 @@ fn destino_de_carregamento(destinos: &[(String, String)]) -> impl IntoView {
             <select class="oc-select" id="oc-files-destino" name="workspace" required>
                 {opcoes}
             </select>
-            <button class="oc-btn oc-btn--secondary" type="submit">{crate::i18n::t("files.open")}</button>
+            <button class="oc-btn oc-btn--secondary" data-part="btn" type="submit">{crate::i18n::t("files.open")}</button>
         </form>
     }
     .into_any()
@@ -1000,7 +1000,7 @@ fn escolher_ambiente(workspaces: Vec<(String, String)>) -> impl IntoView {
                                 view! {
                                     <a
                                         class="oc-card oc-card--clickable oc-card__body \
-                                               oc-card__body--block"
+                                               oc-card__body--block" data-part="card"
                                         href=format!("/files?workspace={id}")
                                     >
                                         <div class="oc-t-meta">{crate::i18n::t("files.environment")}</div>
@@ -1042,7 +1042,7 @@ fn seletor_de_ambiente(workspaces: &[(String, String)], actual: &str) -> impl In
                 {opcoes}
             </select>
             <noscript>
-                <button class="oc-btn oc-btn--ghost" type="submit">{crate::i18n::t("files.view")}</button>
+                <button class="oc-btn oc-btn--ghost" data-part="btn" type="submit">{crate::i18n::t("files.view")}</button>
             </noscript>
         </form>
     }
@@ -1128,13 +1128,13 @@ fn barra_de_accoes(workspace_id: &str, folder_id: Option<&str>, regresso: &str) 
                         <option value="RESTRICTED">{crate::i18n::t("files.class_option.restricted")}</option>
                     </select>
 
-                    <button class="oc-btn oc-btn--primary" type="submit">{crate::i18n::t("files.upload")}</button>
+                    <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">{crate::i18n::t("files.upload")}</button>
                 </div>
 
                 <div class="oc-drop__tray" data-drop-tray="1" hidden></div>
             </form>
 
-            <form class="oc-card oc-files__folder" method="post" action="/files/folder">
+            <form class="oc-card oc-files__folder" data-part="card" method="post" action="/files/folder">
                 <input type="hidden" name="workspace_id" value=workspace_id.to_owned() />
                 <input type="hidden" name="parent_id" value=folder />
                 <input type="hidden" name="return_to" value=regresso.to_owned() />
@@ -1149,7 +1149,7 @@ fn barra_de_accoes(workspace_id: &str, folder_id: Option<&str>, regresso: &str) 
                         required
                         placeholder=crate::i18n::t("files.folder_name_example")
                     />
-                    <button class="oc-btn oc-btn--ghost" type="submit">{crate::i18n::t("files.create_folder")}</button>
+                    <button class="oc-btn oc-btn--ghost" data-part="btn" type="submit">{crate::i18n::t("files.create_folder")}</button>
                 </div>
             </form>
         </section>
@@ -1379,7 +1379,7 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
                 </div>
                 <div class="oc-head__aside">
                     {classification_badge(&text(&file, "classification"))}
-                    <a class="oc-btn oc-btn--primary" href=format!("/files/{id}/download")>
+                    <a class="oc-btn oc-btn--primary" data-part="btn" href=format!("/files/{id}/download")>
                         {crate::i18n::t("files.download")}
                     </a>
                 </div>
@@ -1389,12 +1389,12 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
             {citada.as_ref().map(aviso_de_versao)}
 
             <div class="oc-split">
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     <div class="oc-card__head"><h2>{crate::i18n::t("files.content")}</h2></div>
                     <div class="oc-card__body">{previsualizacao(preview)}</div>
                 </section>
 
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     <div class="oc-card__head"><h2>{crate::i18n::t("files.details")}</h2></div>
                     <div class="oc-card__body">
                         {estado_do_conteudo(&extraction)}
@@ -1418,7 +1418,7 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
             {may_upload
                 .then(|| {
                     view! {
-                        <section class="oc-card oc-mt-5">
+                        <section class="oc-card oc-mt-5" data-part="card">
                             <div class="oc-card__head"><h2>{crate::i18n::t("files.upload_new_version")}</h2></div>
                             <div class="oc-card__body">
                                 <p class="oc-t-caption--muted">
@@ -1438,7 +1438,7 @@ pub fn file_detail(view: FileDetailView) -> impl IntoView {
                                         name="file"
                                         required
                                     />
-                                    <button class="oc-btn oc-btn--primary" type="submit">{crate::i18n::t("files.upload_version")}</button>
+                                    <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">{crate::i18n::t("files.upload_version")}</button>
                                 </form>
                             </div>
                         </section>
@@ -1486,7 +1486,7 @@ fn previsualizacao(preview: Preview) -> impl IntoView {
         }
         .into_any(),
         Preview::Image { src, alt } => view! {
-            <img class="oc-preview" src=src alt=alt />
+            <img class="oc-preview" data-part="preview" src=src alt=alt />
         }
         .into_any(),
         Preview::UnsupportedType(tipo) => view! {

@@ -100,7 +100,7 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
         </div>
 
         <div class="oc-page">
-            <section class="oc-card oc-table oc-table--compute oc-mb-5"  data-dense="false">
+            <section class="oc-card oc-table oc-table--compute oc-mb-5" data-part="card"  data-dense="false">
                 <div class="oc-table__scroll">
                     // O header de colunas do estado futuro fica visível mesmo
                     // sem nós: mostra a forma que os dados terão.
@@ -179,7 +179,7 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
 fn metric(label: &'static str, value: &str) -> impl IntoView {
     let value = value.to_owned();
     view! {
-        <div class="oc-card oc-card__body" >
+        <div class="oc-card oc-card__body" data-part="card" >
             <div class="oc-t-meta" >
                 {label}
             </div>

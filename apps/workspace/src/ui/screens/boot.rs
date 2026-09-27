@@ -91,12 +91,12 @@ pub fn boot(outcome: &BootOutcome, destino: &str) -> impl IntoView {
                 // `role=status` e não `role=alert`: isto descreve o estado do
                 // arranque, e um alerta interrompe quem está a ler.
                 <div class="oc-boot__panel" role="status" aria-live="polite">
-                    <h1 class="oc-boot__title">{titulo}</h1>
-                    <p class="oc-boot__lede">{explicacao}</p>
+                    <h1 class="oc-boot__title" data-part="boot__title">{titulo}</h1>
+                    <p class="oc-boot__lede" data-part="boot__lede">{explicacao}</p>
 
                     {(!bloqueios.is_empty())
                         .then(|| view! {
-                            <ul class="oc-boot__list oc-boot__list--blocking">
+                            <ul class="oc-boot__list oc-boot__list--blocking" data-part="boot__list--blocking">
                                 {bloqueios.iter().map(|c| componente(c)).collect_view()}
                             </ul>
                         })}
@@ -112,9 +112,9 @@ pub fn boot(outcome: &BootOutcome, destino: &str) -> impl IntoView {
                     // Um botão que não faz nada é pior do que botão nenhum.
                     {(!segue)
                         .then(|| view! {
-                            <form method="get" action="/boot" class="oc-boot__actions">
+                            <form method="get" action="/boot" class="oc-boot__actions" data-part="boot__actions">
                                 <input type="hidden" name="return_to" value=destino.clone() />
-                                <button type="submit" class="oc-btn oc-btn--gold oc-boot__retry">
+                                <button type="submit" class="oc-btn oc-btn--gold oc-boot__retry" data-part="btn boot__retry">
                                     {crate::i18n::t("boot.retry")}
                                 </button>
                             </form>

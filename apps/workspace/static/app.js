@@ -64,7 +64,7 @@
   /* ── Sidebar colapsável ───────────────────────────────────────────── */
 
   function initSidebar() {
-    const shell = $('.oc-shell');
+    const shell = $('[data-oc="shell"]');
     const toggle = $('[data-oc="collapse"]');
     if (!shell || !toggle) return;
 
@@ -125,7 +125,7 @@
       if (window.ocCloseCreate) window.ocCloseCreate();
       menu.hidden = false;
       button.setAttribute('aria-expanded', 'true');
-      const first = $('.oc-account__item', menu);
+      const first = $('a, button', menu);
       if (first) first.focus();
     };
 
@@ -158,7 +158,7 @@
    * Fecha como o painel da conta fecha: por clique fora, por `Escape`, e
    * quando o foco sai. É o mesmo gesto, e tem de ter o mesmo comportamento. */
   function initSino() {
-    const wrap = $('.oc-sino');
+    const wrap = $('[data-oc="sino"]');
     if (!wrap) return;
 
     const button = $('[data-oc="abrir-notificacoes"]', wrap);
@@ -193,7 +193,7 @@
            * outra coisa, e faria uma pessoa concluir que não recebeu. */
           lista.textContent = '';
           const erro = document.createElement('p');
-          erro.className = 'oc-pop__empty';
+          erro.dataset.oc = 'notificacoes-vazio';
           erro.textContent = 'Não foi possível ler as notificações.';
           lista.appendChild(erro);
         })
@@ -205,7 +205,7 @@
 
       if (!linhas.length) {
         const vazio = document.createElement('p');
-        vazio.className = 'oc-pop__empty';
+        vazio.dataset.oc = 'notificacoes-vazio';
         vazio.textContent = 'Nada por ler.';
         lista.appendChild(vazio);
         return;
@@ -214,13 +214,13 @@
       linhas.forEach((linha) => {
         const destino = destinoDe(linha);
         const item = document.createElement(destino ? 'a' : 'div');
-        item.className = 'oc-pop__item oc-sino__linha';
-        if (!linha.read) item.className += ' oc-sino__linha--por-ler';
+        item.dataset.oc = 'notificacao';
+        if (!linha.read) item.dataset.state = 'por-ler';
         if (destino) item.href = destino;
 
         if (!linha.read) {
           const ponto = document.createElement('span');
-          ponto.className = 'oc-sino__ponto';
+          ponto.dataset.oc = 'notificacao-ponto';
           ponto.setAttribute('aria-hidden', 'true');
           item.appendChild(ponto);
         }
@@ -231,7 +231,7 @@
         item.appendChild(iconeDe(linha));
 
         const texto = document.createElement('span');
-        texto.className = 'oc-sino__texto';
+        texto.dataset.oc = 'notificacao-texto';
         const titulo = document.createElement('b');
         /* `textContent`: o título de uma notificação é escrito por pessoas. */
         titulo.textContent = linha.title || '';
@@ -244,7 +244,7 @@
 
         if (linha.created_at) {
           const quando = document.createElement('span');
-          quando.className = 'oc-sino__quando';
+          quando.dataset.oc = 'notificacao-quando';
           quando.textContent = relativo(linha.created_at);
           item.appendChild(quando);
         }
@@ -267,7 +267,7 @@
       svg.setAttribute('width', '14');
       svg.setAttribute('height', '14');
       svg.setAttribute('aria-hidden', 'true');
-      svg.setAttribute('class', 'oc-sino__icone');
+      svg.dataset.part = 'sino__icone';
       const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
       use.setAttribute('href', '/static/icons.svg#' + (simbolos[linha.kind] || 'oc-bell'));
       svg.appendChild(use);
@@ -343,7 +343,7 @@
     if (!button || !menu) return;
 
     const enabledItems = () =>
-      $$('.oc-create__item', menu).filter(
+      $$('[role="menuitem"]', menu).filter(
         (el) => el.getAttribute('aria-disabled') !== 'true',
       );
 
@@ -416,7 +416,7 @@
      * palette: a ligação fica explícita e greppável, e um teste consegue
      * distinguir um campo ligado de um campo órfão. */
     const input = $('[data-oc="palette-input"]', palette);
-    const items = $$('.oc-palette__item', palette);
+    const items = $$('[data-oc="palette-item"]', palette);
     let restoreFocusTo = null;
 
     const visible = () => items.filter((item) => !item.hidden);
@@ -434,7 +434,7 @@
       palette.hidden = false;
       if (input) { input.value = ''; input.focus(); }
       items.forEach((item) => { item.hidden = false; });
-      $$('.oc-palette__group', palette).forEach((g) => { g.hidden = false; });
+      $$('[data-oc="palette-group-label"]', palette).forEach((g) => { g.hidden = false; });
       highlight(visible()[0]);
     };
 
@@ -453,8 +453,8 @@
       });
       // Um grupo sem itens visíveis desaparece, em vez de ficar um título só.
       $$('[data-oc="palette-group"]', palette).forEach((group) => {
-        const label = $('.oc-palette__group', group);
-        const any = $$('.oc-palette__item', group).some((item) => !item.hidden);
+        const label = $('[data-oc="palette-group-label"]', group);
+        const any = $$('[data-oc="palette-item"]', group).some((item) => !item.hidden);
         if (label) label.hidden = !any;
       });
       highlight(visible()[0]);
@@ -516,7 +516,7 @@
     const cards = $$('[data-oc="launcher-item"]', launcher);
     const chips = $$('[data-oc="launcher-chip"]', launcher);
     const vazio = $('[data-oc="launcher-vazio"]', launcher);
-    const panel = $('.oc-apps__painel', launcher);
+    const panel = $('[data-oc="launcher-painel"]', launcher);
     let restoreFocusTo = null;
     let categoria = 'all';
 
@@ -659,10 +659,10 @@
         const ficha = botao.closest('[data-oc="launcher-cell"]');
         const carta = $('[data-oc="launcher-item"]', ficha);
         const rota = carta.getAttribute('href');
-        const nome = ($('.oc-apps__nome', carta) || {}).textContent || '';
-        const svg = $('.oc-apps__icone svg', carta);
+        const nome = ($('[data-oc="launcher-nome"]', carta) || {}).textContent || '';
+        const svg = $('[data-oc="launcher-icone"] svg', carta);
         const a = document.createElement('a');
-        a.className = 'oc-nav';
+        a.dataset.oc = 'fixada';
         a.href = rota;
         a.title = nome;
         a.setAttribute('aria-label', nome);
@@ -713,11 +713,11 @@
         arrastado = evento.target.closest('[data-app-id]');
         if (arrastado) {
           evento.dataTransfer.effectAllowed = 'move';
-          arrastado.classList.add('oc-nav--dragging');
+          arrastado.dataset.state = 'dragging';
         }
       });
       barra.addEventListener('dragend', () => {
-        if (arrastado) arrastado.classList.remove('oc-nav--dragging');
+        if (arrastado) delete arrastado.dataset.state;
         arrastado = null;
       });
       barra.addEventListener('dragover', (evento) => {
@@ -795,7 +795,7 @@
 
   function initDensity() {
     const apply = (dense) => {
-      $$('.oc-table').forEach((table) => { table.dataset.dense = String(dense); });
+      $$('[data-oc="table"]').forEach((table) => { table.dataset.dense = String(dense); });
       $$('[data-oc="density"]').forEach((button) => {
         button.setAttribute('aria-pressed', String(dense));
       });
@@ -1422,7 +1422,7 @@
         fichas.textContent = '';
         aceites.forEach((endereco, indice) => {
           const ficha = document.createElement('span');
-          ficha.className = 'oc-chip';
+          ficha.dataset.part = 'chip';
           const texto = document.createElement('span');
           /* `textContent`: um endereço vem de fora e não é marcação. */
           texto.textContent = endereco;
@@ -1472,7 +1472,7 @@
       function aceitarPendente(preferirSugestao) {
         const texto = entrada.value.trim();
         if (!texto) return;
-        const primeira = sugestoes.querySelector('.oc-sugestao em');
+        const primeira = sugestoes.querySelector('[data-part~=sugestao] em');
         if (
           preferirSugestao &&
           !sugestoes.hasAttribute('hidden') &&
@@ -1495,7 +1495,7 @@
           const item = document.createElement('li');
           const botao = document.createElement('button');
           botao.type = 'button';
-          botao.className = 'oc-sugestao';
+          botao.dataset.part = 'sugestao';
           const nome = document.createElement('b');
           nome.textContent = pessoa.name || pessoa.email || '';
           const endereco = document.createElement('em');
@@ -1799,7 +1799,7 @@
     janela.addEventListener('change', agendarAutosave);
     /* Tirar uma ficha não dispara `input`; apanha-se o clique no × dela. */
     janela.addEventListener('click', (evento) => {
-      if (evento.target.closest('.oc-chip button')) agendarAutosave();
+      if (evento.target.closest('[data-part~=chip] button')) agendarAutosave();
     });
 
     /* ── Fechar com confirmação ───────────────────────────────────────────
@@ -1937,18 +1937,18 @@
 
     function construirFicha(dados) {
       const li = document.createElement('li');
-      li.className = 'oc-comp__anexo';
+      li.dataset.part = 'comp__anexo';
       li.dataset.oc = 'anexo';
       li.dataset.ocId = dados.id || '';
       const nome = document.createElement('span');
-      nome.className = 'oc-comp__anexo-nome';
+      nome.dataset.part = 'comp__anexo-nome';
       nome.textContent = dados.filename || '';
       const tam = document.createElement('span');
-      tam.className = 'oc-comp__anexo-tam';
+      tam.dataset.part = 'comp__anexo-tam';
       tam.textContent = bytesLegiveis(dados.size_bytes);
       const tirar = document.createElement('button');
       tirar.type = 'button';
-      tirar.className = 'oc-comp__anexo-tirar';
+      tirar.dataset.part = 'comp__anexo-tirar';
       tirar.dataset.oc = 'tirar-anexo';
       tirar.setAttribute('aria-label', 'Retirar ' + (dados.filename || ''));
       tirar.textContent = '×';
@@ -1982,7 +1982,7 @@
           anexosLista.replaceChild(real, provisoria);
         } catch (erro) {
           provisoria.dataset.ocEstado = 'erro';
-          const nome = provisoria.querySelector('.oc-comp__anexo-nome');
+          const nome = provisoria.querySelector('[data-part~=comp__anexo-nome]');
           if (nome) nome.textContent = (ficheiro.name || '') + ' — falhou';
         } finally {
           aCarregar -= 1;
@@ -2060,7 +2060,7 @@
    * um «Copiar»; e a conversa rola para o turno mais recente ao abrir. Nada
    * disto simula IA — é a ergonomia de uma superfície de comando. */
   function initPrompt() {
-    const prompt = $('.oc-prompt');
+    const prompt = $('[data-part~=prompt]');
     if (!prompt) return;
 
     const textarea = $('[data-oc="prompt-textarea"]', prompt);
@@ -2104,7 +2104,7 @@
 
     /* Ao abrir com uma conversa, mostra-se o turno mais recente e devolve-se o
        foco ao input, para escrever a seguir sem procurar o cursor. */
-    if (scroll && $('.oc-thread:not(.oc-thread--empty)', scroll)) {
+    if (scroll && $('[data-part~=thread]:not([data-part~=thread--empty])', scroll)) {
       scroll.scrollTop = scroll.scrollHeight;
     }
     if (textarea) {
@@ -2135,14 +2135,14 @@
   document.addEventListener('click', (evento) => {
     const copiarResposta = evento.target.closest('[data-oc="copiar-resposta"]');
     if (copiarResposta) {
-      const turno = copiarResposta.closest('.oc-turn--ocinye');
-      const corpo = turno && turno.querySelector('.oc-md');
+      const turno = copiarResposta.closest('[data-part~=turn--ocinye]');
+      const corpo = turno && turno.querySelector('[data-part~=md]');
       if (corpo) copiarTexto(corpo.innerText.trim(), copiarResposta, 'Copiado');
       return;
     }
     const copiarCodigo = evento.target.closest('[data-oc="copiar-codigo"]');
     if (copiarCodigo) {
-      const bloco = copiarCodigo.closest('.oc-md-code');
+      const bloco = copiarCodigo.closest('[data-part~=md-code]');
       const codigo = bloco && bloco.querySelector('pre code');
       if (codigo) copiarTexto(codigo.innerText, copiarCodigo, 'Copiado');
     }
@@ -2217,7 +2217,7 @@
 
     /* Fechar os menus abertos ao clicar fora ou com Escape. */
     document.addEventListener('click', (evento) => {
-      fs.querySelectorAll('details.oc-fs__acoes[open], details.oc-fs__menu[open]')
+      fs.querySelectorAll('details[data-part~=fs__acoes][open], details[data-part~=fs__menu][open]')
         .forEach((d) => { if (!d.contains(evento.target)) d.removeAttribute('open'); });
     });
     document.addEventListener('keydown', (evento) => {
@@ -2227,23 +2227,16 @@
     });
 
     /* O menu de acções por ficha escolhe o lado com espaço, para nunca sair
-     * do ecrã: mede a ficha ao abrir e acrescenta a classe de posição. */
-    fs.querySelectorAll('details.oc-fs__acoes').forEach((d) => {
+     * do ecrã: mede a ficha ao abrir e marca o lado em `data-abre`. */
+    fs.querySelectorAll('details[data-part~=fs__acoes]').forEach((d) => {
       d.addEventListener('toggle', () => {
-        d.classList.remove(
-          'oc-fs__acoes--abre-esquerda',
-          'oc-fs__acoes--abre-direita',
-          'oc-fs__acoes--abre-cima',
-        );
+        d.removeAttribute('data-abre');
+        d.removeAttribute('data-abre-cima');
         if (!d.open) return;
         const r = d.getBoundingClientRect();
-        d.classList.add(
-          r.left < window.innerWidth / 2
-            ? 'oc-fs__acoes--abre-direita'
-            : 'oc-fs__acoes--abre-esquerda',
-        );
+        d.dataset.abre = r.left < window.innerWidth / 2 ? 'direita' : 'esquerda';
         if (window.innerHeight - r.bottom < 280) {
-          d.classList.add('oc-fs__acoes--abre-cima');
+          d.dataset.abreCima = '';
         }
       });
     });
@@ -2268,9 +2261,9 @@
           seleccao.size === 1 ? '1 seleccionado' : seleccao.size + ' seleccionados';
         lote.hidden = seleccao.size === 0;
         fs.querySelectorAll('[data-oc="fs-sel"]').forEach((cb) => {
-          const item = cb.closest('.oc-fs__item');
+          const item = cb.closest('[data-part~=fs__item]');
           if (item) {
-            item.classList.toggle('oc-fs__item--sel', seleccao.has(cb.getAttribute('data-id')));
+            item.toggleAttribute('data-sel', seleccao.has(cb.getAttribute('data-id')));
           }
         });
       };
@@ -2318,7 +2311,7 @@
       };
 
       let arrastado = null;
-      fs.querySelectorAll('.oc-fs__item--ficheiro[draggable="true"]').forEach((item) => {
+      fs.querySelectorAll('[data-part~=fs__item--ficheiro][draggable="true"]').forEach((item) => {
         item.addEventListener('dragstart', (evento) => {
           arrastado = item.getAttribute('data-id');
           if (evento.dataTransfer) {
@@ -2339,11 +2332,11 @@
         el.addEventListener('dragover', (evento) => {
           if (!arrastado) return;
           evento.preventDefault();
-          el.classList.add('oc-fs__item--alvo');
+          el.dataset.alvo = '';
         });
-        el.addEventListener('dragleave', () => el.classList.remove('oc-fs__item--alvo'));
+        el.addEventListener('dragleave', () => el.removeAttribute('data-alvo'));
         el.addEventListener('drop', (evento) => {
-          el.classList.remove('oc-fs__item--alvo');
+          el.removeAttribute('data-alvo');
           if (!arrastado) return;
           evento.preventDefault();
           const ids = (seleccao.size > 1 && seleccao.has(arrastado))
@@ -2379,9 +2372,9 @@
       const fichaSemVista = (nome) => {
         corpo.textContent = '';
         const bloco = document.createElement('div');
-        bloco.className = 'oc-fs__ql-ficha';
+        bloco.dataset.part = 'fs__ql-ficha';
         const n = document.createElement('p');
-        n.className = 'oc-fs__ql-ficha-nome';
+        n.dataset.part = 'fs__ql-ficha-nome';
         n.textContent = nome;
         const p = document.createElement('p');
         p.textContent = 'Sem pré-visualização para este tipo. Use Descarregar para o abrir.';
@@ -2403,13 +2396,13 @@
           corpo.appendChild(img);
         } else if (base === 'application/pdf') {
           const quadro = document.createElement('iframe');
-          quadro.className = 'oc-fs__ql-quadro';
+          quadro.dataset.part = 'fs__ql-quadro';
           quadro.src = uri + '/inline';
           quadro.title = nome;
           corpo.appendChild(quadro);
         } else if (eTexto(base)) {
           const espera = document.createElement('p');
-          espera.className = 'oc-fs__ql-espera';
+          espera.dataset.part = 'fs__ql-espera';
           espera.textContent = 'A carregar…';
           corpo.appendChild(espera);
           fetch(uri + '/text', { headers: { accept: 'text/plain' } })
@@ -2417,7 +2410,7 @@
             .then((texto) => {
               corpo.textContent = '';
               const pre = document.createElement('pre');
-              pre.className = 'oc-fs__ql-texto';
+              pre.dataset.part = 'fs__ql-texto';
               pre.textContent = texto; /* textContent escapa por si */
               corpo.appendChild(pre);
             })
@@ -2490,33 +2483,33 @@
       if (painel) return;
       fechado = false;
       painel = document.createElement('section');
-      painel.className = 'oc-up';
+      painel.dataset.part = 'up';
       painel.setAttribute('role', 'status');
       painel.setAttribute('aria-live', 'polite');
 
       const cabeca = document.createElement('header');
-      cabeca.className = 'oc-up__head';
+      cabeca.dataset.part = 'up__head';
       tituloEl = document.createElement('span');
-      tituloEl.className = 'oc-up__title';
+      tituloEl.dataset.part = 'up__title';
       cabeca.appendChild(tituloEl);
 
       const controlos = document.createElement('span');
-      controlos.className = 'oc-up__controls';
+      controlos.dataset.part = 'up__controls';
 
       const dobrar = document.createElement('button');
       dobrar.type = 'button';
-      dobrar.className = 'oc-up__icon';
+      dobrar.dataset.part = 'up__icon';
       dobrar.setAttribute('aria-label', 'Reduzir');
       dobrar.textContent = '⌄';
       dobrar.addEventListener('click', () => {
-        const reduzido = painel.classList.toggle('oc-up--reduzido');
+        const reduzido = painel.toggleAttribute('data-reduzido');
         dobrar.textContent = reduzido ? '⌃' : '⌄';
         dobrar.setAttribute('aria-label', reduzido ? 'Expandir' : 'Reduzir');
       });
 
       const fechar = document.createElement('button');
       fechar.type = 'button';
-      fechar.className = 'oc-up__icon';
+      fechar.dataset.part = 'up__icon';
       fechar.setAttribute('aria-label', 'Fechar');
       fechar.textContent = '×';
       fechar.addEventListener('click', () => {
@@ -2531,7 +2524,7 @@
       cabeca.appendChild(controlos);
 
       corpo = document.createElement('div');
-      corpo.className = 'oc-up__body';
+      corpo.dataset.part = 'up__body';
 
       painel.appendChild(cabeca);
       painel.appendChild(corpo);
@@ -2570,31 +2563,31 @@
 
     function linha(nome) {
       const el = document.createElement('div');
-      el.className = 'oc-up__line';
+      el.dataset.part = 'up__line';
 
       const info = document.createElement('div');
-      info.className = 'oc-up__info';
+      info.dataset.part = 'up__info';
       const titulo = document.createElement('b');
       /* `textContent`: o nome do ficheiro vem de fora e não é marcação. */
       titulo.textContent = nome;
       const estado = document.createElement('span');
-      estado.className = 'oc-up__state';
+      estado.dataset.part = 'up__state';
       estado.textContent = 'A preparar…';
       info.appendChild(titulo);
       info.appendChild(estado);
 
       const barra = document.createElement('span');
-      barra.className = 'oc-progress';
+      barra.dataset.part = 'progress';
       const carril = document.createElement('span');
-      carril.className = 'oc-progress__track';
+      carril.dataset.part = 'progress__track';
       const cheio = document.createElement('span');
-      cheio.className = 'oc-progress__fill oc-progress__fill--var';
+      cheio.dataset.part = 'progress__fill progress__fill--var';
       carril.appendChild(cheio);
       barra.appendChild(carril);
 
       const accao = document.createElement('button');
       accao.type = 'button';
-      accao.className = 'oc-up__icon oc-up__cancelar';
+      accao.dataset.part = 'up__icon up__cancelar';
       accao.setAttribute('aria-label', 'Cancelar');
       accao.setAttribute('data-abortar', '1');
       accao.textContent = '×';
@@ -2608,12 +2601,14 @@
         progresso: (pct) => cheio.style.setProperty('--oc-progresso', pct + '%'),
         diz: (texto, mau) => {
           estado.textContent = texto;
-          estado.className = 'oc-up__state' + (mau ? ' oc-up__state--bad' : '');
+          estado.dataset.part = 'up__state';
+          estado.toggleAttribute('data-mau', !!mau);
         },
         aoCancelar: (fn) => accao.addEventListener('click', fn),
         marca: (glifo, classe) => {
           const m = document.createElement('span');
-          m.className = 'oc-up__mark' + (classe ? ' ' + classe : '');
+          m.dataset.part = 'up__mark';
+          if (classe) m.dataset.estado = classe;
           m.setAttribute('aria-hidden', 'true');
           m.textContent = glifo;
           if (accao.parentNode) accao.parentNode.replaceChild(m, accao);
@@ -2652,11 +2647,11 @@
           ok += 1;
           ui.progresso(100);
           ui.diz('Concluído');
-          ui.marca('✓', 'oc-up__mark--ok');
+          ui.marca('✓', 'ok');
         } else {
           falhas += 1;
           ui.diz(texto || 'Falhou', true);
-          ui.marca('!', 'oc-up__mark--bad');
+          ui.marca('!', 'mau');
         }
         resumir();
         assentar();
@@ -3112,7 +3107,7 @@ document.addEventListener('click', (event) => {
  * vive num atributo desta página e em mais lado nenhum: não há endpoint que o
  * leia de volta. */
 document.addEventListener('click', (event) => {
-  const holder = event.target.closest('.oc-credential__value');
+  const holder = event.target.closest('[data-part~=credential__value]');
   if (!holder) return;
   const secret = holder.querySelector('[data-oc="secret"]');
   if (!secret) return;
@@ -3180,11 +3175,11 @@ document.addEventListener('input', (event) => {
   const field = event.target.closest('[data-oc="table-filter"]');
   if (!field) return;
 
-  const table = field.closest('.oc-table');
+  const table = field.closest('[data-oc="table"]');
   if (!table) return;
 
   const needle = field.value.trim().toLowerCase();
-  const rows = table.querySelectorAll('.oc-table__row');
+  const rows = table.querySelectorAll('[data-oc="table-row"]');
   let shown = 0;
 
   rows.forEach((row) => {
@@ -3195,7 +3190,7 @@ document.addEventListener('input', (event) => {
 
   /* O rodapé passa a contar o que está visível, para que a contagem nunca
    * contradiga o que se vê. */
-  const count = table.querySelector('.oc-table__count');
+  const count = table.querySelector('[data-oc="table-count"]');
   if (count) {
     if (!count.dataset.ocTotal) count.dataset.ocTotal = count.textContent;
     count.textContent = needle
@@ -3287,7 +3282,7 @@ document.addEventListener('keydown', (event) => {
   var corpo = document.querySelector('[data-oc="linha-do-tempo"]');
   if (!corpo) return;
 
-  var bloco = corpo.querySelector('.oc-cal-bloco');
+  var bloco = corpo.querySelector('[data-part~=cal-bloco]');
   if (bloco) {
     /* Uma faixa acima do primeiro evento, para ele não ficar colado ao topo e
        se perceber que há espaço antes dele. */
@@ -3296,7 +3291,7 @@ document.addEventListener('keydown', (event) => {
     return;
   }
 
-  var eixo = corpo.querySelector('.oc-cal-eixo');
+  var eixo = corpo.querySelector('[data-part~=cal-eixo]');
   if (!eixo || !eixo.children.length) return;
   var sete = eixo.children[7];
   if (sete) corpo.scrollTop = sete.offsetTop;
@@ -3346,7 +3341,7 @@ document.addEventListener('keydown', (event) => {
   var diaInteiro = form.querySelector('[data-oc="all-day"]');
   var comHora = form.querySelector('[data-oc="timed-fields"]');
   var semHora = form.querySelector('[data-oc="allday-fields"]');
-  var linhaZona = form.querySelector('.oc-zona');
+  var linhaZona = form.querySelector('[data-part~=zona]');
 
   function aplicarDiaInteiro() {
     var inteiro = diaInteiro && diaInteiro.checked;
@@ -3464,7 +3459,7 @@ document.addEventListener('keydown', (event) => {
       jaEscolhidos[id] = true;
 
       var marca = document.createElement('span');
-      marca.className = 'oc-escolhido';
+      marca.dataset.part = 'escolhido';
       marca.dataset.id = id;
 
       var texto = document.createElement('span');
@@ -3479,7 +3474,7 @@ document.addEventListener('keydown', (event) => {
 
       var tirar = document.createElement('button');
       tirar.type = 'button';
-      tirar.className = 'oc-escolhido__tirar';
+      tirar.dataset.part = 'escolhido__tirar';
       tirar.setAttribute('aria-label', 'Retirar ' + nome);
       tirar.textContent = '×';
       tirar.addEventListener('click', function () { remover(id); });
@@ -3584,9 +3579,9 @@ document.addEventListener('keydown', (event) => {
       .then(function (html) {
         var novo = new DOMParser().parseFromString(html, 'text/html');
         var painelNovo = novo.querySelector('[data-oc="conversa-aberta"]');
-        var listaNova = novo.querySelector('.oc-msg__conversas');
+        var listaNova = novo.querySelector('[data-part~=msg__conversas]');
         var painelActual = $('[data-oc="conversa-aberta"]');
-        var listaActual = $('.oc-msg__conversas');
+        var listaActual = $('[data-part~=msg__conversas]');
 
         /* A posição do scroll antes de trocar: se a pessoa estava a ler
          * mensagens antigas, não se lhe arranca a página debaixo dos olhos. */
@@ -3622,7 +3617,7 @@ document.addEventListener('keydown', (event) => {
     if (!fluxo || $('[data-oc="aviso-novas"]')) return;
     var botao = document.createElement('button');
     botao.type = 'button';
-    botao.className = 'oc-msg__aviso-novas';
+    botao.dataset.part = 'msg__aviso-novas';
     botao.dataset.oc = 'aviso-novas';
     botao.textContent = 'Novas mensagens ↓';
     botao.addEventListener('click', function () {
@@ -3688,8 +3683,8 @@ document.addEventListener('keydown', (event) => {
   function responderA(mensagem) {
     var painelResposta = $('[data-oc="a-responder"]');
     if (!painelResposta) return;
-    var autor = mensagem.querySelector('.oc-msg__mensagem-autor');
-    var texto = mensagem.querySelector('.oc-msg__texto');
+    var autor = mensagem.querySelector('[data-part~=msg__mensagem-autor]');
+    var texto = mensagem.querySelector('[data-part~=msg__texto]');
 
     raiz.dataset.ocResponderA = mensagem.dataset.ocId;
     var quem = $('[data-oc="resposta-quem"]');
@@ -3803,7 +3798,7 @@ document.addEventListener('keydown', (event) => {
 
     if (accao === 'copiar') {
       var msg = alvo.closest('[data-oc="mensagem"]');
-      var texto = msg ? msg.querySelector('.oc-msg__texto') : null;
+      var texto = msg ? msg.querySelector('[data-part~=msg__texto]') : null;
       /* O texto, e não a marcação: colar isto noutro sítio tem de dar o
        * que a pessoa escreveu. */
       if (texto && navigator.clipboard) {
@@ -3883,9 +3878,9 @@ document.addEventListener('keydown', (event) => {
         destino.scrollIntoView({ block: 'center' });
         var bloco = destino.closest('[data-oc="mensagem"]');
         if (bloco) {
-          bloco.classList.add('oc-msg__mensagem--realcada');
+          bloco.dataset.realcada = '';
           window.setTimeout(function () {
-            bloco.classList.remove('oc-msg__mensagem--realcada');
+            bloco.removeAttribute('data-realcada');
           }, 1600);
         }
       }
@@ -3908,13 +3903,13 @@ document.addEventListener('keydown', (event) => {
     if (existente) existente.remove();
 
     var paleta = document.createElement('div');
-    paleta.className = 'oc-msg__emoji oc-msg__emoji--reaccao';
+    paleta.dataset.part = 'msg__emoji msg__emoji--reaccao';
     paleta.dataset.oc = 'paleta-reaccao';
     paleta.setAttribute('role', 'menu');
     REACCOES.forEach(function (emoji) {
       var botao = document.createElement('button');
       botao.type = 'button';
-      botao.className = 'oc-msg__emoji-item';
+      botao.dataset.part = 'msg__emoji-item';
       botao.setAttribute('role', 'menuitem');
       botao.textContent = emoji;
       botao.addEventListener('click', function () {
@@ -4120,7 +4115,7 @@ document.addEventListener('keydown', (event) => {
     modo = novo === 'grupo' ? 'grupo' : 'directa';
     $$('[data-oc="modo"]').forEach(function (botao) {
       var activo = botao.dataset.ocModo === modo;
-      botao.classList.toggle('oc-msg__modo--activo', activo);
+      botao.toggleAttribute('data-activo', activo);
       botao.setAttribute('aria-selected', String(activo));
     });
     var campoNome = $('[data-oc="campo-nome"]');
@@ -4147,7 +4142,7 @@ document.addEventListener('keydown', (event) => {
     pessoas.forEach(function (pessoa) {
       var botao = document.createElement('button');
       botao.type = 'button';
-      botao.className = 'oc-msg__resultado';
+      botao.dataset.part = 'msg__resultado';
       botao.setAttribute('role', 'option');
       botao.setAttribute('aria-selected', 'false');
       botao.dataset.oc = 'escolher-pessoa';
@@ -4155,17 +4150,17 @@ document.addEventListener('keydown', (event) => {
       botao.dataset.ocNome = pessoa.name;
 
       var inicial = document.createElement('span');
-      inicial.className = 'oc-avatar oc-avatar--sm';
+      inicial.dataset.part = 'avatar avatar--sm';
       inicial.setAttribute('aria-hidden', 'true');
       inicial.textContent = iniciaisDe(pessoa.name);
 
       var nome = document.createElement('span');
-      nome.className = 'oc-msg__resultado-nome';
+      nome.dataset.part = 'msg__resultado-nome';
       /* `textContent`: um nome é texto, e continua a sê-lo aqui. */
       nome.textContent = pessoa.name;
 
       var email = document.createElement('span');
-      email.className = 'oc-msg__resultado-email';
+      email.dataset.part = 'msg__resultado-email';
       email.textContent = pessoa.email || '';
 
       botao.appendChild(inicial);
@@ -4217,14 +4212,14 @@ document.addEventListener('keydown', (event) => {
 
     escolhidos.forEach(function (pessoa) {
       var etiqueta = document.createElement('span');
-      etiqueta.className = 'oc-msg__escolhido';
+      etiqueta.dataset.part = 'msg__escolhido';
 
       var nome = document.createElement('span');
       nome.textContent = pessoa.name;
 
       var tirar = document.createElement('button');
       tirar.type = 'button';
-      tirar.className = 'oc-msg__escolhido-tirar';
+      tirar.dataset.part = 'msg__escolhido-tirar';
       tirar.dataset.oc = 'retirar-escolhido';
       tirar.dataset.ocQuem = pessoa.id;
       tirar.title = 'Retirar ' + pessoa.name;
@@ -4354,7 +4349,7 @@ document.addEventListener('keydown', (event) => {
  * Nada aqui cria estado: leva a pessoa ao editor com a data já escolhida, e é
  * ela que decide se marca. */
 (function () {
-  var calendario = document.querySelector('.oc-page--calendar');
+  var calendario = document.querySelector('[data-part~=page--calendar]');
   if (!calendario) return;
 
   /* Um dia inteiro, sem hora: o Mês não a tem. A política de omissão escolhe-a
@@ -4386,11 +4381,11 @@ document.addEventListener('keydown', (event) => {
   calendario.addEventListener('dblclick', function (event) {
     /* Duplo clique **numa actividade** é para a abrir, e não para marcar outra
        por cima dela. */
-    if (event.target.closest('.oc-cal-bloco, .oc-cal-month__item, .oc-cal-month__more, a, button')) {
+    if (event.target.closest('[data-part~=cal-bloco], [data-part~=cal-month__item], [data-part~=cal-month__more], a, button')) {
       return;
     }
 
-    var coluna = event.target.closest('[data-oc-dia].oc-cal-coluna');
+    var coluna = event.target.closest('[data-oc-dia][data-part~=cal-coluna]');
     if (coluna) {
       var caixa = coluna.getBoundingClientRect();
       abrirNaFaixa(coluna.dataset.ocDia, coluna, event.clientY - caixa.top);
@@ -4474,7 +4469,7 @@ document.addEventListener('keydown', (event) => {
   const linha = (nome) => {
     tabuleiro.hidden = false;
     const el = document.createElement('div');
-    el.className = 'oc-drop__line';
+    el.dataset.part = 'drop__line';
 
     const titulo = document.createElement('b');
     titulo.textContent = nome;
@@ -4483,20 +4478,20 @@ document.addEventListener('keydown', (event) => {
        entra por variável CSS: a CSP é `style-src 'self'`, e um atributo `style`
        escrito à mão seria descartado. */
     const barra = document.createElement('span');
-    barra.className = 'oc-progress';
+    barra.dataset.part = 'progress';
     const carril = document.createElement('span');
-    carril.className = 'oc-progress__track';
+    carril.dataset.part = 'progress__track';
     const cheio = document.createElement('span');
-    cheio.className = 'oc-progress__fill oc-progress__fill--var';
+    cheio.dataset.part = 'progress__fill progress__fill--var';
     carril.appendChild(cheio);
     barra.appendChild(carril);
 
     const estado = document.createElement('span');
-    estado.className = 'oc-drop__state';
+    estado.dataset.part = 'drop__state';
     estado.textContent = 'A preparar…';
 
     const accoes = document.createElement('span');
-    accoes.className = 'oc-drop__accoes';
+    accoes.dataset.part = 'drop__accoes';
 
     el.appendChild(titulo);
     el.appendChild(barra);
@@ -4507,7 +4502,8 @@ document.addEventListener('keydown', (event) => {
     return {
       diz: (texto, mau) => {
         estado.textContent = texto;
-        estado.className = 'oc-drop__state' + (mau ? ' oc-drop__state--bad' : '');
+        estado.dataset.part = 'drop__state';
+        estado.toggleAttribute('data-mau', !!mau);
       },
       progresso: (feitas, total) => {
         const pct = Math.round((feitas / total) * 100);
@@ -4516,7 +4512,7 @@ document.addEventListener('keydown', (event) => {
       accao: (rotulo, aoClicar) => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'oc-btn oc-btn--ghost oc-btn--sm';
+        b.dataset.part = 'btn btn--ghost btn--sm';
         b.textContent = rotulo;
         b.addEventListener('click', aoClicar);
         accoes.appendChild(b);
@@ -4807,7 +4803,7 @@ document.addEventListener('keydown', (event) => {
     var nav = document.querySelector('[data-oc-section-nav]');
     if (!nav) return;
     var tabs = Array.prototype.slice.call(
-      nav.querySelectorAll('a.oc-tab[href^="#"]')
+      nav.querySelectorAll('a[data-part~=tab][href^="#"]')
     );
     if (!tabs.length) return;
 
@@ -4897,7 +4893,7 @@ document.addEventListener('keydown', (event) => {
 
     function repor() {
       saida.textContent = explicacao;
-      saida.classList.remove('oc-code-preview--filled');
+      saida.removeAttribute('data-filled');
     }
 
     function actualizar() {
@@ -4914,7 +4910,7 @@ document.addEventListener('keydown', (event) => {
           if (meu !== pedidoActual) return;
           if (dados && typeof dados.code === 'string') {
             saida.textContent = dados.code;
-            saida.classList.add('oc-code-preview--filled');
+            saida.dataset.filled = '';
           }
         })
         .catch(function () { /* offline ou recusado: fica a explicação */ });
@@ -4939,11 +4935,11 @@ document.addEventListener('keydown', (event) => {
         .filter(Boolean);
 
       var envolvente = document.createElement('div');
-      envolvente.className = 'oc-chips oc-chips--editor';
+      envolvente.dataset.part = 'chips chips--editor';
 
       var entrada = document.createElement('input');
       entrada.type = 'text';
-      entrada.className = 'oc-chips__input';
+      entrada.dataset.part = 'chips__input';
       entrada.autocomplete = 'off';
       entrada.placeholder = campo.getAttribute('placeholder') || '';
       var dica = campo.getAttribute('data-oc-chips-hint');
@@ -4961,11 +4957,11 @@ document.addEventListener('keydown', (event) => {
 
       function desenhar() {
         Array.prototype.slice
-          .call(envolvente.querySelectorAll('.oc-chip'))
+          .call(envolvente.querySelectorAll('[data-part~=chip]'))
           .forEach(function (c) { c.remove(); });
         valores.forEach(function (valor, indice) {
           var ficha = document.createElement('span');
-          ficha.className = 'oc-chip';
+          ficha.dataset.part = 'chip';
           var texto = document.createElement('span');
           texto.textContent = valor;
           ficha.appendChild(texto);

@@ -187,7 +187,7 @@ fn etapa(
     let linhas: Vec<Value> = linhas.to_vec();
 
     view! {
-        <section class="oc-card">
+        <section class="oc-card" data-part="card">
             <div class="oc-card__head">
                 <h2>{titulo}</h2>
                 <span class="oc-card__meta">{contagem.to_string()}</span>
@@ -312,14 +312,14 @@ pub fn result_detail(view: ResultView) -> impl IntoView {
 
         <div class="oc-page">
             <div class="oc-grid oc-grid--ws">
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("science.result.summary_head"), None, None)}
                     <div class="oc-card__body">
                         <p>{summary}</p>
                     </div>
                 </section>
 
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("science.result.validations_head"), None, None)}
                     <div class="oc-card__body">
                         {if validations.is_empty() {
@@ -356,7 +356,7 @@ pub fn result_detail(view: ResultView) -> impl IntoView {
                 </section>
             </div>
 
-            <section class="oc-card oc-mt-7">
+            <section class="oc-card oc-mt-7" data-part="card">
                 {section_head(crate::i18n::t("science.result.provenance_head"), None, None)}
                 <div class="oc-card__body">
                     {pill_tabs(
@@ -838,7 +838,7 @@ pub fn metodologia(view: MetodologiaView) -> impl IntoView {
         </div>
 
         <div class="oc-page">
-            <section class="oc-card">
+            <section class="oc-card" data-part="card">
                 {section_head(crate::i18n::t("science.versions_head"), None, None)}
                 <div class="oc-card__body">
                     {if versoes.is_empty() {
@@ -1146,7 +1146,7 @@ pub fn estudo(view: EstudoView) -> impl IntoView {
         </div>
 
         <div class="oc-page">
-            <section class="oc-card">
+            <section class="oc-card" data-part="card">
                 {section_head(crate::i18n::t("science.executions_head"), None, None)}
                 <div class="oc-card__body">
                     {if corridas.is_empty() {
@@ -1415,7 +1415,7 @@ pub fn execucao(view: ExecucaoView) -> impl IntoView {
 
         <div class="oc-page">
             <div class="oc-grid oc-grid--pares">
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("science.run_head"), None, None)}
                     <div class="oc-card__body">
                         {ficha
@@ -1435,7 +1435,7 @@ pub fn execucao(view: ExecucaoView) -> impl IntoView {
                     </div>
                 </section>
 
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("science.execution.produced_head"), None, None)}
                     <div class="oc-card__body">
                         {if saidos.is_empty() {

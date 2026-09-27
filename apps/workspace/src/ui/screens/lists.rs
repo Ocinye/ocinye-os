@@ -1340,7 +1340,7 @@ pub fn new_source(workspaces: &Value, error: Option<String>) -> impl IntoView {
 
             {error
                 .map(|message| {
-                    view! { <div class="oc-card oc-alert" role="alert">{message}</div> }
+                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{message}</div> }
                 })}
 
             {if tem_destino {
@@ -1429,7 +1429,7 @@ pub fn new_dataset(workspaces: &Value, error: Option<String>) -> impl IntoView {
 
             {error
                 .map(|message| {
-                    view! { <div class="oc-card oc-alert" role="alert">{message}</div> }
+                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{message}</div> }
                 })}
 
             {if tem_destino {
@@ -1527,7 +1527,7 @@ pub fn new_task(workspaces: &Value, error: Option<String>) -> impl IntoView {
 
             {error
                 .map(|message| {
-                    view! { <div class="oc-card oc-alert" role="alert">{message}</div> }
+                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{message}</div> }
                 })}
 
             {if tem_destino {
@@ -1620,7 +1620,7 @@ pub fn new_project(
 
             {error
                 .map(|message| {
-                    view! { <div class="oc-card oc-alert" role="alert">{message}</div> }
+                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{message}</div> }
                 })}
 
             {if has_candidates {
@@ -1740,7 +1740,7 @@ pub fn new_unit(error: Option<String>) -> impl IntoView {
 
             {error
                 .map(|message| {
-                    view! { <div class="oc-card oc-alert" role="alert">{message}</div> }
+                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{message}</div> }
                 })}
 
             // Sem campo de código: o código é institucional e gerado. Quem cria
@@ -1842,7 +1842,7 @@ pub fn edit_unit(unit: &Value, error: Option<String>) -> impl IntoView {
 
             {error
                 .map(|message| {
-                    view! { <div class="oc-card oc-alert" role="alert">{message}</div> }
+                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{message}</div> }
                 })}
 
             <form method="post" action=action>
@@ -1937,7 +1937,7 @@ pub fn new_idea(units: &Value, error: Option<String>) -> impl IntoView {
                 .map(|message| {
                     view! {
                         <div
-                            class="oc-card oc-alert"
+                            class="oc-card oc-alert" data-part="card"
                             role="alert"
                         >
                             {message}
@@ -2011,7 +2011,7 @@ pub fn new_idea(units: &Value, error: Option<String>) -> impl IntoView {
                 // Sem unidades não há onde colocar uma ideia. Dizê-lo é melhor
                 // do que apresentar um formulário que falharia na submissão.
                 view! {
-                    <section class="oc-card">
+                    <section class="oc-card" data-part="card">
                         <div class="oc-empty">
                             <h3>{crate::i18n::t("lists.new_idea.no_units_title")}</h3>
                             <p>
@@ -2091,12 +2091,12 @@ pub fn bibliography_tools(
 
             {error
                 .map(|message| {
-                    view! { <div class="oc-card oc-alert" role="alert">{message}</div> }
+                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{message}</div> }
                 })}
 
             {if tem_destino {
                 view! {
-                    <form class="oc-form" method="post" action="/bibliography/tools">
+                    <form class="oc-form" data-part="form" method="post" action="/bibliography/tools">
                         {card(
                             section_head(crate::i18n::t("lists.tools.section"), None, None),
                             view! {
@@ -2112,7 +2112,7 @@ pub fn bibliography_tools(
                                     >{escrito}</textarea>
                                 </div>
                                 <div class="oc-actions">
-                                    <button type="submit" class="oc-btn oc-btn--navy">
+                                    <button type="submit" class="oc-btn oc-btn--navy" data-part="btn">
                                         {crate::i18n::t("lists.tools.validate")}
                                     </button>
                                 </div>
@@ -2123,7 +2123,7 @@ pub fn bibliography_tools(
                     .into_any()
             } else {
                 view! {
-                    <div class="oc-card">
+                    <div class="oc-card" data-part="card">
                         {empty_state(EmptyState {
                             title: crate::i18n::t("lists.tools.none_title").to_owned(),
                             body: crate::i18n::t("lists.tools.none_body").to_owned(),

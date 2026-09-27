@@ -36,7 +36,7 @@ pub fn activity(payload: &Value) -> impl IntoView {
                 </div>
             </div>
 
-            <section class="oc-card">
+            <section class="oc-card" data-part="card">
                 <div class="oc-card__body">
                     {if empty {
                         view! { <p class="oc-muted">{crate::i18n::t("activity.empty")}</p> }.into_any()

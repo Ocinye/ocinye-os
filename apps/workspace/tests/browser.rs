@@ -100,7 +100,7 @@ async fn esperar_pelo_login(page: &Page) {
     let inicio = std::time::Instant::now();
     loop {
         let html = page.content().await.unwrap_or_default();
-        if html.contains("oc-login__submit") {
+        if html.contains("login__submit") {
             return;
         }
         assert!(
@@ -726,7 +726,7 @@ impl Harness {
                     .unwrap_or_else(|e| ("(nenhuma)".to_owned(), e.to_string()));
 
             let visivel: String = diagnostico
-                .split("oc-login")
+                .split("login__")
                 .nth(1)
                 .unwrap_or(&diagnostico)
                 .chars()
@@ -1288,7 +1288,7 @@ impl Harness {
         )
         .await;
         set_field(&formulario, "input[name=timezone]", "Europe/Lisbon").await;
-        submit(&formulario, "form.oc-editor__form").await;
+        submit(&formulario, "form[data-part~=editor__form]").await;
 
         let destino = wait_until_left(&formulario, "/calendar/events/new").await;
         assert!(
@@ -1319,7 +1319,7 @@ impl Harness {
         // 24 → 24. A base guarda 24 → 25, e essa conversão não é da pessoa.
         set_field(&formulario, "input[name=starts_on]", &dia.to_string()).await;
         set_field(&formulario, "input[name=ends_on]", &dia.to_string()).await;
-        submit(&formulario, "form.oc-editor__form").await;
+        submit(&formulario, "form[data-part~=editor__form]").await;
 
         let destino = wait_until_left(&formulario, "/calendar/events/new").await;
         assert!(
@@ -2563,7 +2563,7 @@ async fn uma_hora_inexistente_de_dst_e_recusada_com_frase_a_vista() {
     set_field(&formulario, "input[name=starts_at]", "2027-03-28T01:30").await;
     set_field(&formulario, "input[name=ends_at]", "2027-03-28T02:30").await;
     set_field(&formulario, "input[name=timezone]", "Europe/Lisbon").await;
-    submit(&formulario, "form.oc-editor__form").await;
+    submit(&formulario, "form[data-part~=editor__form]").await;
 
     // Fica no formulário, com o erro tipado à vista — não redirecciona para um
     // detalhe que não devia existir.
@@ -2653,7 +2653,7 @@ async fn alterar_um_evento_pelo_browser_persiste_sem_mexer_na_autoridade() {
     set_field(&edicao, "input[name=starts_at]", &format!("{dia}T15:00")).await;
     set_field(&edicao, "input[name=ends_at]", &format!("{dia}T16:00")).await;
     set_field(&edicao, "input[name=timezone]", "Europe/Lisbon").await;
-    submit(&edicao, "form.oc-editor__form").await;
+    submit(&edicao, "form[data-part~=editor__form]").await;
     wait_until_left(&edicao, "/edit").await;
 
     // O PostgreSQL primeiro.
@@ -2857,21 +2857,21 @@ async fn uma_hora_que_nao_existe_e_explicada_a_pessoa() {
     set_field(&formulario, "input[name=starts_at]", "2026-03-29T02:30").await;
     set_field(&formulario, "input[name=ends_at]", "2026-03-29T03:30").await;
     set_field(&formulario, "input[name=timezone]", "Europe/Paris").await;
-    submit(&formulario, "form.oc-editor__form").await;
+    submit(&formulario, "form[data-part~=editor__form]").await;
 
     // Fica no formulário, com a explicação.
     let inicio = std::time::Instant::now();
     let mut html = String::new();
     while inicio.elapsed() < DEADLINE {
         html = formulario.content().await.unwrap_or_default();
-        if html.contains("oc-alert--error") {
+        if html.contains("alert--error") {
             break;
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
     assert!(
-        html.contains("oc-alert--error"),
+        html.contains("alert--error"),
         "uma hora inexistente não produziu erro visível"
     );
     assert!(
@@ -3031,20 +3031,20 @@ async fn a_consolidacao_nao_mudou_o_que_a_pessoa_ve() {
     // Shell, navegação, conteúdo denso, botão e cartão. Cada linha cobre uma
     // das categorias migradas.
     const ALVOS: [(&str, &str); 7] = [
-        (".oc-top", "height,background-color,z-index"),
-        (".oc-side", "width,background-color,padding"),
-        (".oc-side__nav", "padding,gap,font-size"),
-        (".oc-main", "padding,font-family,font-size"),
+        ("[data-part~=top]", "height,background-color,z-index"),
+        ("[data-part~=side]", "width,background-color,padding"),
+        ("[data-part~=side__nav]", "padding,gap,font-size"),
+        ("[data-part~=main]", "padding,font-family,font-size"),
         (
             "body",
             "font-family,font-size,line-height,color,background-color",
         ),
         (
-            ".oc-btn",
+            "[data-part~=btn]",
             "padding,font-size,font-weight,border-radius,transition",
         ),
         (
-            ".oc-card",
+            "[data-part~=card]",
             "padding,border-radius,box-shadow,background-color",
         ),
     ];
@@ -3067,9 +3067,9 @@ async fn a_consolidacao_nao_mudou_o_que_a_pessoa_ve() {
         leituras.push(
             page.evaluate(
                 r#"(() => {
-                     const migrados = ['.oc-skip', '.oc-account__menu',
-                                       '.oc-create__menu', '.oc-palette',
-                                       '.oc-login__bar'];
+                     const migrados = ['[data-part~=skip]', '[data-part~=account__menu]',
+                                       '[data-part~=create__menu]', '[data-part~=palette]',
+                                       '[data-part~=login__bar]'];
                      return migrados.map((s) => {
                        const e = document.querySelector(s);
                        if (!e) return s + ' ausente';
@@ -3667,7 +3667,7 @@ async fn uma_agenda_que_falha_nao_diz_que_esta_vazia() {
         .await
         .expect("conteúdo");
     assert!(
-        mes_vazio.contains("oc-cal-month__cell"),
+        mes_vazio.contains(r#"data-part="cal-month__cell""#),
         "um mês genuinamente vazio deixou de desenhar a grelha"
     );
     assert!(
@@ -3992,7 +3992,7 @@ async fn sem_sessao_o_arranque_entrega_ao_login() {
 
     let html = conteudo_estavel(&page).await;
     assert!(
-        html.contains("oc-login__submit"),
+        html.contains("login__submit"),
         // A prova, e não só a ausência.
         //
         // «Não há formulário» tem pelo menos três causas — a navegação ainda ia
@@ -4066,7 +4066,7 @@ async fn com_sessao_o_arranque_entrega_ao_workspace() {
 
     let html = page.content().await.expect("conteúdo");
     assert!(
-        html.contains("oc-side__nav"),
+        html.contains("side__nav"),
         "chegou ao Workspace e não há navegação: {}",
         &html[..html.len().min(300)]
     );
@@ -4175,7 +4175,7 @@ async fn um_marcador_forjado_nao_autentica_ninguem() {
 
     let html = conteudo_estavel(&page).await;
     assert!(
-        !html.contains("oc-side__nav"),
+        !html.contains("side__nav"),
         "o Workspace foi servido a quem só tinha um cookie inventado"
     );
 }
@@ -4197,7 +4197,7 @@ async fn com_marcador_e_sessao_o_workspace_abre() {
     );
     let html = conteudo_estavel(&page).await;
     assert!(
-        html.contains("oc-side__nav"),
+        html.contains("side__nav"),
         "o Workspace não abriu para quem tem sessão"
     );
 }
@@ -4330,7 +4330,7 @@ async fn os_modulos_no_arranque_vem_do_core() {
     // Um componente disponível não é uma limitação, e portanto não aparece na
     // lista de limitações do arranque.
     assert!(
-        !pagina.contains("Calendar</span>") || !pagina.contains("oc-boot__list--blocking"),
+        !pagina.contains("Calendar</span>") || !pagina.contains("boot__list--blocking"),
         "o Calendar apareceu como bloqueio estando disponível"
     );
 
@@ -4372,7 +4372,7 @@ async fn o_arranque_e_utilizavel_por_teclado() {
 
     // O título é um título, e não um `div` com letra grande.
     assert!(
-        pagina.contains("<h1") && pagina.contains("oc-boot__title"),
+        pagina.contains("<h1") && pagina.contains("boot__title"),
         "o estado do arranque tem de ser um cabeçalho"
     );
 
@@ -4465,8 +4465,8 @@ async fn um_core_bloqueado_nao_mostra_o_login() {
         pagina.contains("NÃO FOI POSSÍVEL INICIAR"),
         "um Core bloqueado devia bloquear o arranque"
     );
-    assert!(!pagina.contains("oc-login__submit"), "o Login apareceu");
-    assert!(!pagina.contains("oc-side__nav"), "a shell apareceu");
+    assert!(!pagina.contains("login__submit"), "o Login apareceu");
+    assert!(!pagina.contains("side__nav"), "a shell apareceu");
     assert!(pagina.contains("Tentar novamente"), "falta tentar de novo");
     assert!(
         !pagina.contains("http-equiv=\"refresh\""),
@@ -5166,7 +5166,7 @@ async fn a_topbar_acompanha_o_core_ao_longo_da_sessao() {
     // a mesma imprecisão, dita a meio.
     let barra = conteudo_estavel(&page).await;
     assert!(
-        !barra.contains("oc-core-pill--limited") && !barra.contains("oc-core-pill--off"),
+        barra.contains(r#"data-estado="ok""#),
         "o distintivo diz `CORE OK` com o indicador de aviso"
     );
 
@@ -5239,13 +5239,13 @@ async fn um_core_que_recupera_deixa_passar_quem_estava_preso() {
     let mut visto = String::new();
     for _ in 0..40 {
         visto = conteudo_estavel(&page).await;
-        if visto.contains("oc-boot__retry") {
+        if visto.contains("boot__retry") {
             break;
         }
         tokio::time::sleep(Duration::from_millis(120)).await;
     }
     assert!(
-        visto.contains("oc-boot__retry"),
+        visto.contains("boot__retry"),
         "um arranque bloqueado tinha de oferecer tentar novamente: {}",
         &visto[..visto.len().min(400)]
     );
@@ -5257,7 +5257,7 @@ async fn um_core_que_recupera_deixa_passar_quem_estava_preso() {
     // O Core recupera enquanto a pessoa está a olhar para o ecrã.
     prontidao.passa_a(projeccao("ready", serde_json::json!([])), 200);
 
-    submit(&page, "form.oc-boot__actions").await;
+    submit(&page, "form[data-part~=boot__actions]").await;
 
     // E agora passa — para o Login, porque não há sessão nenhuma.
     esperar_pelo_login(&page).await;
@@ -5304,7 +5304,7 @@ async fn uma_pessoa_valida_bibliografia_e_o_wasm_corre_por_baixo() {
 
     escolher(&pagina, "select[name=workspace_id]", &workspace.to_string()).await;
     set_field(&pagina, "textarea[name=bibtex]", bibtex).await;
-    submit(&pagina, "form.oc-form").await;
+    submit(&pagina, "form[data-part~=form]").await;
 
     esperar_por(&pagina, "RESULTADO").await;
     let html = conteudo_estavel(&pagina).await;
@@ -5346,7 +5346,7 @@ async fn uma_bibliografia_partida_e_explicada_a_pessoa() {
         "@article{bom, title = {Um}}\n@misc{isto_nao_fecha",
     )
     .await;
-    submit(&pagina, "form.oc-form").await;
+    submit(&pagina, "form[data-part~=form]").await;
 
     esperar_por(&pagina, "RESULTADO").await;
     let html = conteudo_estavel(&pagina).await;
@@ -5385,7 +5385,7 @@ async fn bibtex_hostil_aparece_como_texto() {
     let hostil = "@article{x, title = {<script>window.__ocinye_xss = 1;</script>}, year = {2024}}";
     escolher(&pagina, "select[name=workspace_id]", &workspace.to_string()).await;
     set_field(&pagina, "textarea[name=bibtex]", hostil).await;
-    submit(&pagina, "form.oc-form").await;
+    submit(&pagina, "form[data-part~=form]").await;
 
     esperar_por(&pagina, "RESULTADO").await;
 
@@ -5506,7 +5506,7 @@ async fn o_calendario_da_barra_nao_le_a_agenda() {
         "o painel não diz em que mês estamos"
     );
     assert!(
-        html.contains("oc-datepop__dia-cel--hoje"),
+        html.contains("data-hoje"),
         "o painel não marca o dia de hoje"
     );
 }
@@ -5584,7 +5584,7 @@ async fn uma_pessoa_marca_uma_actividade_e_ela_aparece_onde_devia() {
     set_field(&editor, "input[name=location]", "Sala do conselho").await;
     set_field(&editor, "input[name=starts_at]", &format!("{hoje}T14:00")).await;
     set_field(&editor, "input[name=ends_at]", &format!("{hoje}T15:30")).await;
-    submit(&editor, "form.oc-editor__form").await;
+    submit(&editor, "form[data-part~=editor__form]").await;
 
     let destino = wait_until_left(&editor, "/calendar/events/new").await;
     assert!(
@@ -5613,18 +5613,21 @@ async fn uma_pessoa_marca_uma_actividade_e_ela_aparece_onde_devia() {
     // A propriedade que interessa é interna: **o bloco está onde a sua própria
     // etiqueta diz que está**. Se alguém mudar a aritmética da colocação, a
     // etiqueta e a posição deixam de bater certo, e é isso que se apanha aqui.
-    // A fronteira é a etiqueta que abre o bloco, e não o nome da classe: partir
-    // por `oc-cal-bloco` parte também dentro de `oc-cal-bloco__hora`, porque um
-    // é prefixo do outro, e a hora fica no pedaço anterior ao do título.
+    // A fronteira é o marcador do bloco com as aspas a fechar: sem elas,
+    // `cal-bloco` partia também dentro de `cal-bloco__hora`, porque um é
+    // prefixo do outro, e a hora ficava no pedaço anterior ao do título.
     let bloco = dia
-        .split(r#"<a class="oc-cal-bloco"#)
+        .split(r#"data-part="cal-bloco""#)
         .find(|p| p.contains(&titulo))
         .unwrap_or_default();
 
     let mostrada = bloco
-        .split(r#"oc-cal-bloco__hora">"#)
+        .split(r#"data-part="cal-bloco__hora""#)
         .nth(1)
-        .and_then(|p| p.split('<').next())
+        // O fim da etiqueta, e não o fim do marcador: a ordem dos atributos
+        // é do renderizador.
+        .and_then(|p| p.split_once('>'))
+        .and_then(|(_, p)| p.split('<').next())
         .unwrap_or_default()
         .trim()
         .to_owned();
@@ -5637,7 +5640,7 @@ async fn uma_pessoa_marca_uma_actividade_e_ela_aparece_onde_devia() {
     let faixa = h.parse::<usize>().expect("hora") * 2
         + usize::from(m.parse::<usize>().expect("minuto") >= 30);
     assert!(
-        bloco.contains(&format!("oc-cal-l{faixa} ")),
+        bloco.contains(&format!(r#"data-linha="{faixa}""#)),
         "o bloco diz «{mostrada}» e está na faixa errada: esperava a {faixa}"
     );
 
@@ -5717,7 +5720,7 @@ async fn uma_pessoa_marca_com_participantes() {
         "o participante escolhido não entrou no pedido"
     );
 
-    submit(&editor, "form.oc-editor__form").await;
+    submit(&editor, "form[data-part~=editor__form]").await;
     let destino = wait_until_left(&editor, "/calendar/events/new").await;
     assert!(
         destino.contains("/calendar/events/"),
@@ -6260,11 +6263,11 @@ async fn uma_instancia_nova_abre_com_o_seu_nome_e_as_suas_aplicacoes() {
             &page,
             // O trilho esconde-se em janelas estreitas (a do harness): lê-se o
             // que o servidor renderizou, e não o que esta largura mostra.
-            r#"(document.querySelector('.oc-crumb') || {textContent: ''}).textContent.includes('COOPERATIVA EXEMPLO')"#,
+            r#"(document.querySelector('[data-part~=crumb]') || {textContent: ''}).textContent.includes('COOPERATIVA EXEMPLO')"#,
         )
         .await,
         "o topo do Workspace devia nomear a instância: {}",
-        page.evaluate("location.pathname + ' | ' + (document.querySelector('.oc-crumb') || document.body).textContent.slice(0, 300)")
+        page.evaluate("location.pathname + ' | ' + (document.querySelector('[data-part~=crumb]') || document.body).textContent.slice(0, 300)")
             .await
             .ok()
             .and_then(|v| v.into_value::<String>().ok())
@@ -6445,10 +6448,15 @@ async fn sem_fornecedor_o_prompt_responde_com_o_estado_degradado() {
     set_field(&page, r#"[data-oc="prompt-textarea"]"#, &pedido).await;
     clicar(&page, r#"[data-oc="prompt-send"]"#).await;
 
-    let respondeu =
-        esperar_ate_condicao(&page, r#"!!document.querySelector('.oc-turn--ocinye')"#).await;
+    let respondeu = esperar_ate_condicao(
+        &page,
+        r#"!!document.querySelector('[data-part~=turn--ocinye]')"#,
+    )
+    .await;
     let turno: String = page
-        .evaluate(r#"(document.querySelector('.oc-turn--ocinye') || document.body).innerText"#)
+        .evaluate(
+            r#"(document.querySelector('[data-part~=turn--ocinye]') || document.body).innerText"#,
+        )
         .await
         .ok()
         .and_then(|v| v.into_value().ok())
@@ -6460,9 +6468,13 @@ async fn sem_fornecedor_o_prompt_responde_com_o_estado_degradado() {
 
     // A razão-máquina vive no detalhe do turno, secundária; abre-se como uma
     // pessoa a abriria.
-    clicar(&page, ".oc-turn--ocinye .oc-turn__meta summary").await;
+    clicar(
+        &page,
+        "[data-part~=turn--ocinye] [data-part~=turn__meta] summary",
+    )
+    .await;
     let detalhe: String = page
-        .evaluate(r#"document.querySelector('.oc-turn--ocinye .oc-turn__meta').textContent"#)
+        .evaluate(r#"document.querySelector('[data-part~=turn--ocinye] [data-part~=turn__meta]').textContent"#)
         .await
         .ok()
         .and_then(|v| v.into_value().ok())
@@ -6480,7 +6492,7 @@ async fn sem_fornecedor_o_prompt_responde_com_o_estado_degradado() {
     assert!(
         esperar_ate_condicao(
             &page,
-            r#"!!document.querySelector('.oc-turn--ocinye .oc-turn__badge')"#
+            r#"!!document.querySelector('[data-part~=turn--ocinye] [data-part~=turn__badge]')"#
         )
         .await,
         "o turno degradado tem de se marcar como estado, não como resposta"
@@ -6832,7 +6844,7 @@ async fn o_ano_inteiro_nao_e_um_pedido_impossivel() {
             "o Ano de {ano} não abriu"
         );
         assert_eq!(
-            html.matches("oc-cal-mini\"").count(),
+            html.matches(r#"data-part="cal-mini""#).count(),
             12,
             "o Ano de {ano} não mostrou doze meses"
         );
@@ -7084,7 +7096,7 @@ async fn um_compromisso_a_meia_noite_e_meia_aparece_no_dia_de_quem_olha() {
     set_field(&formulario, "input[name=starts_at]", &quando).await;
     set_field(&formulario, "input[name=ends_at]", &fim).await;
     set_field(&formulario, "input[name=timezone]", zona).await;
-    submit(&formulario, "form.oc-editor__form").await;
+    submit(&formulario, "form[data-part~=editor__form]").await;
     wait_until_left(&formulario, "/calendar/events/new").await;
 
     // O instante guardado é mesmo do dia anterior em UTC. Sem esta verificação,
@@ -7182,7 +7194,7 @@ async fn uma_pessoa_comeca_uma_conversa_e_envia_a_primeira_mensagem() {
 
     let com_resultados = page.content().await.expect("conteúdo");
     assert!(
-        com_resultados.contains("oc-msg__resultado"),
+        com_resultados.contains("msg__resultado"),
         "a procura não devolveu ninguém"
     );
 
@@ -7209,7 +7221,7 @@ async fn uma_pessoa_comeca_uma_conversa_e_envia_a_primeira_mensagem() {
     // asserção tem de estar aqui, sobre o que a página desenhou.
     let enviada = page.content().await.expect("conteúdo");
     assert!(
-        enviada.contains("oc-msg__mensagem--minha"),
+        enviada.contains("data-minha"),
         "a mensagem que esta pessoa acabou de enviar não ficou marcada como sua"
     );
 
@@ -7358,7 +7370,7 @@ async fn o_sino_abre_um_painel_com_o_que_chegou() {
 
     let html = page.content().await.expect("conteúdo");
     assert!(
-        html.contains("oc-sino__linha"),
+        html.contains(r#"data-oc="notificacao""#),
         "o painel abriu sem desenhar a notificação"
     );
     assert!(
@@ -7366,44 +7378,26 @@ async fn o_sino_abre_um_painel_com_o_que_chegou() {
         "o painel ficou preso no estado de carregamento"
     );
 
-    // ── O acabamento, medido em vez de comparado de olho ────────────────
-    //
-    // A superfície e o ritmo das linhas. O painel da conta é a referência: se
-    // um destes deixar de coincidir, o sino passa a parecer menos acabado do
-    // que ele — que foi exactamente o que aconteceu duas vezes.
-    let medidas: Option<String> = page
+    // Cada linha diz o que é: título e legenda. O acabamento visual (superfície
+    // igual à do painel da conta, ícone por tipo) mediu a UI legada e fica à
+    // espera da UI nova — `docs/ui/BEHAVIOURAL_CONTRACT_MATRIX.md`.
+    let partes: Option<String> = page
         .evaluate(
             "(() => { \
-               const iguais = (a, b, props) => props.every(p => \
-                 getComputedStyle(a).getPropertyValue(p) === \
-                 getComputedStyle(b).getPropertyValue(p)); \
-               const conta = document.querySelector('[data-oc=\"account-menu\"]'); \
-               const sino = document.querySelector('[data-oc=\"notificacoes\"]'); \
-               const linha = document.querySelector('.oc-sino__linha'); \
+               const linha = document.querySelector('[data-oc=\"notificacao\"]'); \
                return JSON.stringify({ \
-                 superficie: iguais(conta, sino, \
-                   ['background-color','backdrop-filter','box-shadow','border-radius']), \
-                 temIcone: !!(linha && linha.querySelector('svg')), \
                  temTitulo: !!(linha && linha.querySelector('b')), \
                  temLegenda: !!(linha && linha.querySelector('em')), \
                }); })()",
         )
         .await
-        .expect("medidas")
+        .expect("partes")
         .into_value()
         .ok();
-
-    let medidas = medidas.unwrap_or_default();
+    let partes = partes.unwrap_or_default();
     assert!(
-        medidas.contains(r#""superficie":true"#),
-        "o painel do sino não tem o acabamento do painel da conta: {medidas}"
-    );
-    assert!(
-        medidas.contains(r#""temIcone":true"#)
-            && medidas.contains(r#""temTitulo":true"#)
-            && medidas.contains(r#""temLegenda":true"#),
-        "uma linha do sino não tem o ritmo das linhas do painel da conta — \
-         ícone, título e legenda: {medidas}"
+        partes.contains(r#""temTitulo":true"#) && partes.contains(r#""temLegenda":true"#),
+        "uma linha do sino não diz o que é — título e legenda: {partes}"
     );
 
     // E fecha por `Escape`, como o painel da conta fecha.
@@ -7645,8 +7639,8 @@ async fn capturas_do_correio() {
     // e a lista ordena por data: a primeira linha é outra mensagem. O teste
     // falhava a dizer que o assunto não apareceu — e ele estava lá, noutra
     // linha, exactamente onde devia estar.
-    clicar(&cheia, ".oc-mail__item").await;
-    esperar_por(&cheia, "oc-mail__pane-head").await;
+    clicar(&cheia, "[data-part~=mail__item]").await;
+    esperar_por(&cheia, "mail__pane-head").await;
     capturar_visivel(&cheia, "correio-leitura").await;
 
     // ── O compositor ────────────────────────────────────────────────────
@@ -7676,7 +7670,7 @@ async fn capturas_do_correio() {
     clicar(&compositor, "[data-oc=mostrar-cc]").await;
     set_field(
         &compositor,
-        ".oc-comp__assunto",
+        "[data-part~=comp__assunto]",
         "Consolidação dos números do trimestre",
     )
     .await;
@@ -7905,8 +7899,8 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
         .unwrap_or(-1.0)
     }
 
-    let pastas_inicial = largura(&page, ".oc-mail__rail").await;
-    let leitura_inicial = largura(&page, ".oc-mail__pane").await;
+    let pastas_inicial = largura(&page, "[data-part~=mail__rail]").await;
+    let leitura_inicial = largura(&page, "[data-part~=mail__pane]").await;
     assert!(
         pastas_inicial > 100.0 && leitura_inicial > 300.0,
         "a disposição inicial já não é utilizável: pastas={pastas_inicial} \
@@ -7929,7 +7923,7 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
         .await
         .expect("seta");
     }
-    let pastas_maiores = largura(&page, ".oc-mail__rail").await;
+    let pastas_maiores = largura(&page, "[data-part~=mail__rail]").await;
     assert!(
         pastas_maiores > pastas_inicial,
         "as setas não moveram o separador: {pastas_inicial} → {pastas_maiores}"
@@ -7948,7 +7942,7 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
         .await
         .expect("seta");
     }
-    let pastas_minimas = largura(&page, ".oc-mail__rail").await;
+    let pastas_minimas = largura(&page, "[data-part~=mail__rail]").await;
     assert!(
         pastas_minimas >= 160.0,
         "o painel das pastas passou o mínimo e ficou inutilizável: {pastas_minimas}px"
@@ -7956,13 +7950,13 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
 
     // ── Recolher, e voltar ──────────────────────────────────────────────
     clicar(&page, "[data-oc=alternar-pastas]").await;
-    let recolhidas = largura(&page, ".oc-mail__rail").await;
+    let recolhidas = largura(&page, "[data-part~=mail__rail]").await;
     assert!(
         recolhidas <= 0.0,
         "as pastas não recolheram: {recolhidas}px"
     );
 
-    let leitura_com_pastas_recolhidas = largura(&page, ".oc-mail__pane").await;
+    let leitura_com_pastas_recolhidas = largura(&page, "[data-part~=mail__pane]").await;
     assert!(
         leitura_com_pastas_recolhidas > leitura_inicial,
         "recolher as pastas não deu o espaço a quem lê: {leitura_inicial} → \
@@ -7986,7 +7980,7 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
     );
 
     clicar(&page, "[data-oc=alternar-pastas]").await;
-    let de_volta = largura(&page, ".oc-mail__rail").await;
+    let de_volta = largura(&page, "[data-part~=mail__rail]").await;
     assert!(de_volta > 100.0, "as pastas não voltaram: {de_volta}px");
 
     // ── O grampo vale mesmo quando não se consegue medir ────────────────
@@ -8033,7 +8027,7 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
     );
 
     // ── Dar o ecrã à leitura, e desfazer ────────────────────────────────
-    let lista_antes = largura(&page, ".oc-mail__list").await;
+    let lista_antes = largura(&page, "[data-part~=mail__list]").await;
     clicar(&page, "[data-oc=focar-leitura]").await;
 
     // A promessa, e não um efeito lateral dela.
@@ -8043,8 +8037,8 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
     // acima ela já podia estar no mínimo, e a asserção falhava sem que nada
     // estivesse errado. O que o modo promete é isto: pastas recolhidas, lista
     // no mínimo, o resto para quem lê.
-    let lista_focada = largura(&page, ".oc-mail__list").await;
-    let pastas_focadas = largura(&page, ".oc-mail__rail").await;
+    let lista_focada = largura(&page, "[data-part~=mail__list]").await;
+    let pastas_focadas = largura(&page, "[data-part~=mail__rail]").await;
     assert!(
         pastas_focadas <= 0.0,
         "o modo de leitura não recolheu as pastas: {pastas_focadas}px"
@@ -8073,8 +8067,8 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
                const w = s => { const el = document.querySelector(s);
                                 return el ? el.getBoundingClientRect().width : 0; };
                return [m.getBoundingClientRect().width,
-                       w('.oc-mail__rail') + w('.oc-mail__list'),
-                       w('.oc-mail__pane')];
+                       w('[data-part~=mail__rail]') + w('[data-part~=mail__list]'),
+                       w('[data-part~=mail__pane]')];
              })()",
         )
         .await
@@ -8097,7 +8091,7 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
     );
 
     clicar(&page, "[data-oc=focar-leitura]").await;
-    let lista_depois = largura(&page, ".oc-mail__list").await;
+    let lista_depois = largura(&page, "[data-part~=mail__list]").await;
     assert!(
         (lista_depois - lista_antes).abs() < 2.0,
         "desfazer o modo de leitura não repôs a lista onde estava: \
@@ -8115,7 +8109,7 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
 
     let outra = harness.open("/mail").await;
     esperar_por(&outra, "Caixa de entrada").await;
-    let recolhidas_ainda = largura(&outra, ".oc-mail__rail").await;
+    let recolhidas_ainda = largura(&outra, "[data-part~=mail__rail]").await;
     assert!(
         recolhidas_ainda <= 0.0,
         "a preferência não sobreviveu à recarga: as pastas voltaram sozinhas \
@@ -8363,7 +8357,7 @@ async fn o_correio_rola_por_dentro_e_nao_por_fora() {
     let medidas: Option<String> = page
         .evaluate(
             "(() => { const d = document.documentElement; \
-               const lista = document.querySelector('.oc-mail__list'); \
+               const lista = document.querySelector('[data-part~=mail__list]'); \
                return JSON.stringify({ \
                  documento: d.scrollHeight, \
                  janela: d.clientHeight, \
@@ -9378,7 +9372,7 @@ async fn uma_imagem_institucional_carrega_na_origem_do_workspace() {
 
     // A página do ficheiro mostra-a, e o `src` é local.
     let detalhe = harness.open(&format!("/files/{file_id}")).await;
-    esperar_por(&detalhe, "oc-preview").await;
+    esperar_por(&detalhe, r#"data-part="preview""#).await;
     let html = detalhe.content().await.expect("conteúdo");
     // A ligação é local **e por versão**: a imagem que se mostra é a da versão
     // que se está a ver, e não «a que o ficheiro tem agora».
@@ -9401,7 +9395,7 @@ async fn uma_imagem_institucional_carrega_na_origem_do_workspace() {
     // E o browser carregou-a mesmo: com a CSP a recusar, `naturalWidth` seria 0.
     let largura: Option<f64> = detalhe
         .evaluate(
-            "(() => { const img = document.querySelector('.oc-preview'); \
+            "(() => { const img = document.querySelector('[data-part~=preview]'); \
               return img ? img.naturalWidth : -1; })()",
         )
         .await
@@ -10174,7 +10168,7 @@ async fn quem_pertence_a_um_ambiente_alcanca_conhecimento_pela_navegacao() {
         let inicio = indice.saturating_sub(420);
         let contexto = &html[inicio..indice];
         assert!(
-            !contexto.contains("oc-nav--unavailable"),
+            !contexto.contains("nav--unavailable"),
             "«{entrada}» aparece como indisponível a quem pertence a um ambiente"
         );
         assert!(
@@ -10268,7 +10262,7 @@ async fn uma_conta_de_investigacao_sem_pertencas_ve_os_modulos_de_investigacao()
             .unwrap_or_else(|| panic!("«{entrada}» não aparece na navegação"));
         let contexto = &html[indice.saturating_sub(420)..indice];
         assert!(
-            !contexto.contains("oc-nav--unavailable"),
+            !contexto.contains("nav--unavailable"),
             "«{entrada}» aparece como indisponível a uma conta de investigação"
         );
     }
@@ -10410,7 +10404,7 @@ async fn uma_unidade_nasce_governavel_e_a_pertenca_concede_se_pelo_produto() {
     );
 
     escolher(&unidade, "#oc-unit-person", &investigador.to_string()).await;
-    submit(&unidade, "form.oc-pessoa__acrescentar").await;
+    submit(&unidade, "form[data-part~=pessoa__acrescentar]").await;
     esperar_por(&unidade, "Pessoa adicionada à unidade").await;
 
     // A pertença existe, e foi criada pelo Core — não por SQL.
@@ -10446,7 +10440,7 @@ async fn quem_nao_gere_a_unidade_nao_recebe_os_controlos_nem_a_operacao() {
     let unidade = harness.open(&format!("/units/{unit_id}")).await;
     let html = unidade.content().await.expect("conteúdo");
     assert!(
-        !html.contains("oc-pessoa__acrescentar"),
+        !html.contains("pessoa__acrescentar"),
         "quem não gere a unidade recebeu o formulário de acrescentar pessoas"
     );
     assert!(
@@ -10711,7 +10705,7 @@ async fn conceder_e_revogar_uma_pertenca_veem_se_na_mesma_sessao() {
     // encontrava-o sempre — a barra de topo escreve quem está autenticado, e
     // quem está autenticado é justamente esta pessoa.
     fn na_lista_de_membros(html: &str, nome: &str) -> bool {
-        html.split("oc-pessoa")
+        html.split(r#"data-part="pessoa"#)
             .skip(1)
             .any(|bloco| bloco[..bloco.len().min(600)].contains(nome))
     }
@@ -10792,13 +10786,13 @@ async fn quem_lidera_um_ambiente_gere_quem_participa_pelo_produto() {
     let pagina = harness.open(&caminho).await;
     let html = pagina.content().await.expect("conteúdo");
     assert!(
-        html.contains("oc-pessoa__acrescentar"),
+        html.contains("pessoa__acrescentar"),
         "quem lidera o ambiente não recebeu o formulário de acrescentar pessoas"
     );
 
     // ── Acrescentar, pelo ecrã ──────────────────────────────────────────
     escolher(&pagina, "#oc-ws-person", &convidada.id.to_string()).await;
-    submit(&pagina, "form.oc-pessoa__acrescentar").await;
+    submit(&pagina, "form[data-part~=pessoa__acrescentar]").await;
     esperar_por(&pagina, "Pessoa adicionada ao ambiente").await;
 
     let papel: Option<String> = sqlx::query_scalar(
@@ -10889,7 +10883,7 @@ async fn quem_nao_lidera_o_ambiente_nao_recebe_os_controlos_nem_a_operacao() {
         "quem participa no ambiente não chegou sequer a lê-lo"
     );
     assert!(
-        !html.contains("oc-pessoa__acrescentar"),
+        !html.contains("pessoa__acrescentar"),
         "quem não lidera o ambiente recebeu o formulário de acrescentar pessoas"
     );
     assert!(
@@ -11282,14 +11276,14 @@ async fn um_carregamento_em_partes_retoma_se_noutro_contexto() {
 /// **mostra**, o diagnóstico é feito a partir do horário da corrida, que é
 /// adivinhar com passos extra.
 fn titulos_visiveis(html: &str) -> String {
-    // As quatro classes que as quatro vistas usam. Escrevi primeiro uma classe
-    // inventada, e a prova teria saído sempre vazia — o que é pior do que não
+    // Os quatro marcadores que as quatro vistas usam. Escrevi primeiro um nome
+    // inventado, e a prova teria saído sempre vazia — o que é pior do que não
     // haver prova: seria uma prova a mentir.
     const ONDE: [&str; 4] = [
-        "oc-cal-bloco__titulo",
-        "oc-cal-linha__titulo",
-        "oc-cal-month__titulo",
-        "oc-cal-agenda",
+        r#"data-part="cal-bloco__titulo""#,
+        r#"data-part="cal-linha__titulo""#,
+        r#"data-part="cal-month__titulo""#,
+        r#"data-part="cal-agenda""#,
     ];
     let mut vistos: Vec<&str> = ONDE
         .iter()
@@ -11377,11 +11371,11 @@ async fn o_conteudo_estavel_nunca_devolve_a_pagina_anterior() {
         let html = conteudo_estavel(&page).await;
 
         assert!(
-            html.contains("oc-login__submit"),
+            html.contains("login__submit"),
             "volta {volta}: o conteúdo estável não é o do Login"
         );
         assert!(
-            !html.contains("NÃO FOI POSSÍVEL CONTACTAR") && !html.contains("oc-boot__lede"),
+            !html.contains("NÃO FOI POSSÍVEL CONTACTAR") && !html.contains("boot__lede"),
             "volta {volta}: o conteúdo estável ainda era o do arranque, com a URL do Login"
         );
         page.close().await.ok();
@@ -11852,7 +11846,7 @@ async fn um_codigo_de_recuperacao_entra_uma_vez_e_nao_a_segunda() {
     esperar_por(&page, "Confirme o segundo factor").await;
 
     // Abre a alternativa de recuperação e usa o código, pelo browser.
-    elemento(&page, "details.oc-mfa__fallback summary")
+    elemento(&page, "details[data-part~=mfa__fallback] summary")
         .await
         .click()
         .await
@@ -12225,7 +12219,7 @@ async fn o_separador_de_navegacao_activo_e_azul_branco_sem_dourado() {
         page.evaluate(
             r#"(() => {
                  const e = document.querySelector(
-                   '[data-oc-section-nav] a.oc-tab[aria-current="location"]');
+                   '[data-oc-section-nav] a[data-part~=tab][aria-current="location"]');
                  if (!e) return 'ausente';
                  const c = getComputedStyle(e);
                  return 'bg=' + c.backgroundColor + ' cor=' + c.color
@@ -12540,8 +12534,8 @@ async fn o_criar_global_abre_cada_criacao_deterministica() {
     // com o menu fechado; a desactivação seria um atributo, não a ausência.
     let desactivadas = page
         .evaluate(
-            "document.querySelectorAll('.oc-create__menu .oc-create__item[aria-disabled=\"true\"], \
-             .oc-create__menu .oc-unavailable').length",
+            "document.querySelectorAll('[data-part~=create__menu] [data-part~=create__item][aria-disabled=\"true\"], \
+             [data-part~=create__menu] [data-part~=unavailable]').length",
         )
         .await
         .expect("contar desactivadas")
@@ -12559,7 +12553,7 @@ async fn o_criar_global_abre_cada_criacao_deterministica() {
     ] {
         let existe = page
             .evaluate(format!(
-                "document.querySelector('.oc-create__menu a[href=\"{destino}\"]') !== null"
+                "document.querySelector('[data-part~=create__menu] a[href=\"{destino}\"]') !== null"
             ))
             .await
             .expect("procurar destino")
@@ -12571,7 +12565,11 @@ async fn o_criar_global_abre_cada_criacao_deterministica() {
     // ── Nova Nota: cria de imediato e abre o editor ─────────────────────
     // Abrir o menu torna os itens visíveis; a Nota é um POST, submetido daqui.
     clicar(&page, "[data-oc=\"create-toggle\"]").await;
-    submit(&page, ".oc-create__menu form[action=\"/notes/new\"]").await;
+    submit(
+        &page,
+        "[data-part~=create__menu] form[action=\"/notes/new\"]",
+    )
+    .await;
 
     // Levou ao editor de uma nota real (URL /notes/{uuid}).
     let url = wait_until_left(&page, "/").await;
@@ -12699,11 +12697,7 @@ async fn uma_pessoa_escreve_uma_nota_e_ela_fica() {
         .await
         .expect("escrever no editor");
     // Uma tarefa é uma tarefa no modelo: o botão transforma a linha numa checklist.
-    clicar(
-        &page,
-        "[data-oc-notes-toolbar] .oc-notes-tool[data-command=\"check\"]",
-    )
-    .await;
+    clicar(&page, "[data-oc-notes-toolbar] [data-command=\"check\"]").await;
 
     // ── O autosave confirma, e só depois do Core ────────────────────────
     //
@@ -13009,7 +13003,7 @@ async fn uma_nota_arruma_se_numa_pasta_pelo_editor() {
     // Criar uma pasta.
     let page = harness.open("/notes").await;
     esperar_por(&page, "Notas").await;
-    set_field(&page, ".oc-notes-newfolder__input", "Trabalho").await;
+    set_field(&page, "[data-part~=notes-newfolder__input]", "Trabalho").await;
     submit(&page, "form[action=\"/notes/folders\"]").await;
     let apos = wait_until_left(&page, "/notes").await;
     let folder_id = apos.rsplit("folder=").next().unwrap_or_default().to_owned();
@@ -13093,11 +13087,11 @@ async fn uma_nota_partilhada_le_se_e_so_se_le() {
     esperar_por(&painel, "Partilha").await;
     escolher(
         &painel,
-        ".oc-notes-share__person",
+        "[data-part~=notes-share__person]",
         &destinatario.to_string(),
     )
     .await;
-    escolher(&painel, ".oc-notes-share__role", "viewer").await;
+    escolher(&painel, "[data-part~=notes-share__role]", "viewer").await;
     submit(
         &painel,
         &format!("form[action=\"/notes/{note_id}/partilhar\"]"),
@@ -13191,7 +13185,7 @@ async fn uma_versao_antiga_de_uma_nota_restaura_se() {
     esperar_por(&editor_c, "Histórico").await;
     let href: String = editor_c
         .evaluate(
-            "(() => { const a = document.querySelector('.oc-notes-history__link'); \
+            "(() => { const a = document.querySelector('[data-part~=notes-history__link]'); \
               return a ? a.getAttribute('href') : ''; })()",
         )
         .await

@@ -43,7 +43,7 @@ fn qr_svg(otpauth: &str) -> String {
 /// Moldura comum dos ecrãs de MFA: o mesmo fundo e barra do início de sessão.
 fn frame(rotulo: &'static str, message: Option<String>, corpo: AnyView) -> impl IntoView {
     view! {
-        <div class="oc-login">
+        <div class="oc-login" data-part="login">
             <div class="oc-login__layer oc-login__glow" aria-hidden="true"></div>
             <div class="oc-login__layer" aria-hidden="true">
                 <span class="oc-login__ring oc-login__ring--a"></span>
@@ -52,7 +52,7 @@ fn frame(rotulo: &'static str, message: Option<String>, corpo: AnyView) -> impl 
             </div>
             <div class="oc-login__layer oc-login__grid" aria-hidden="true"></div>
 
-            <div class="oc-login__bar">
+            <div class="oc-login__bar" data-part="login__bar">
                 <span class="oc-login__state">
                     <i aria-hidden="true"></i>
                     <span>{rotulo}</span>
@@ -140,7 +140,7 @@ pub fn enrollment(
                     <code class="oc-mono" data-oc="secret" data-oc-value=chave>{mostrar}</code>
                     <button
                         type="button"
-                        class="oc-btn oc-btn--sm"
+                        class="oc-btn oc-btn--sm" data-part="btn"
                         data-oc="secret-copy"
                     >
                         {crate::i18n::t("mfa.copy_short")}
@@ -169,7 +169,7 @@ pub fn enrollment(
                     placeholder=crate::i18n::t("mfa.six_digit_code")
                 />
             </div>
-            <button type="submit" class="oc-login__submit">
+            <button type="submit" class="oc-login__submit" data-part="login__submit">
                 {crate::i18n::t("mfa.confirm_button")}
                 {icon(Icon::ArrowRight, 14)}
             </button>
@@ -203,10 +203,10 @@ pub fn recovery_codes(codes: &[String]) -> impl IntoView {
         <pre class="oc-mfa__codes oc-mono" data-oc="recovery-codes">{linhas}</pre>
 
         <div class="oc-row oc-gap-3 oc-mt-3">
-            <button type="button" class="oc-btn oc-btn--sm" data-oc="recovery-copy">
+            <button type="button" class="oc-btn oc-btn--sm" data-part="btn" data-oc="recovery-copy">
                 {crate::i18n::t("mfa.copy_codes")}
             </button>
-            <button type="button" class="oc-btn oc-btn--sm" data-oc="recovery-download">
+            <button type="button" class="oc-btn oc-btn--sm" data-part="btn" data-oc="recovery-download">
                 {crate::i18n::t("mfa.save_file")}
             </button>
         </div>
@@ -216,7 +216,7 @@ pub fn recovery_codes(codes: &[String]) -> impl IntoView {
                 <input type="checkbox" name="acknowledged" value="1" required />
                 <span>{crate::i18n::t("mfa.saved_confirm")}</span>
             </label>
-            <button type="submit" class="oc-login__submit oc-mt-3">
+            <button type="submit" class="oc-login__submit oc-mt-3" data-part="login__submit">
                 {crate::i18n::t("mfa.finish")}
                 {icon(Icon::ArrowRight, 14)}
             </button>
@@ -255,13 +255,13 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
                     placeholder=crate::i18n::t("mfa.authenticator_code")
                 />
             </div>
-            <button type="submit" class="oc-login__submit">
+            <button type="submit" class="oc-login__submit" data-part="login__submit">
                 {crate::i18n::t("mfa.sign_in")}
                 {icon(Icon::ArrowRight, 14)}
             </button>
         </form>
 
-        <details class="oc-mfa__fallback oc-mt-6">
+        <details class="oc-mfa__fallback oc-mt-6" data-part="mfa__fallback">
             <summary>{crate::i18n::t("mfa.no_authenticator")}</summary>
             <p class="oc-muted oc-mt-3">
                 "Use um dos códigos de recuperação que guardou ao configurar o MFA.
@@ -280,7 +280,7 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
                         placeholder=crate::i18n::t("mfa.recovery_code")
                     />
                 </div>
-                <button type="submit" class="oc-btn oc-btn--secondary">
+                <button type="submit" class="oc-btn oc-btn--secondary" data-part="btn">
                     {crate::i18n::t("mfa.enter_with_recovery")}
                 </button>
             </form>
