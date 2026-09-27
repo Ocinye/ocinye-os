@@ -15,6 +15,11 @@
  * todas as tabelas continuam a funcionar. Ver ADR-0602.
  */
 
+/* A língua das datas e horas é a da página (`<html lang>`, decidida pelo
+ * servidor), e não um português fixo: à porta, em inglês, o relógio dizia
+ * «DOMINGO». */
+const OC_LANG = document.documentElement.lang || 'pt-PT';
+
 (() => {
   'use strict';
 
@@ -288,7 +293,7 @@
       if (horas < 24) return horas + 'h';
       const dias = Math.round(horas / 24);
       if (dias < 7) return dias + 'd';
-      return entao.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' });
+      return entao.toLocaleDateString(OC_LANG, { day: '2-digit', month: '2-digit' });
     }
 
     button.addEventListener('click', (event) => {
@@ -825,10 +830,10 @@
 
     const tick = () => {
       const now = new Date();
-      const date = now.toLocaleDateString('pt-PT', {
+      const date = now.toLocaleDateString(OC_LANG, {
         weekday: 'short', day: '2-digit', month: 'short',
       });
-      const time = now.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+      const time = now.toLocaleTimeString(OC_LANG, { hour: '2-digit', minute: '2-digit' });
 
       clocks.forEach((clock) => {
         const hora = $('[data-part="clock-time"]', clock);
@@ -848,7 +853,7 @@
           // Só a data, sem hora: um `datetime` com minutos ficaria errado no
           // minuto seguinte, e ninguém o reescreve entre ticks.
           clock.dateTime = now.toISOString().slice(0, 10);
-          clock.title = now.toLocaleDateString('pt-PT', {
+          clock.title = now.toLocaleDateString(OC_LANG, {
             weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
           });
         }
@@ -861,7 +866,7 @@
       const painelHora = $('[data-oc="temporal-clock"]');
       const painelZona = $('[data-oc="temporal-zone"]');
       if (painelData) {
-        painelData.textContent = now.toLocaleDateString('pt-PT', {
+        painelData.textContent = now.toLocaleDateString(OC_LANG, {
           weekday: 'long', day: 'numeric', month: 'long',
         });
       }
@@ -5386,5 +5391,135 @@ document.addEventListener('keydown', (event) => {
     document.addEventListener('DOMContentLoaded', arrancar);
   } else {
     arrancar();
+  }
+})();
+
+/* O runtime visto pela interface (D15.1, ADR-0611, ADR-0617).
+ *
+ * Três coisas, todas lidas de `window.ocinyeRuntime` — este ficheiro nunca
+ * pergunta ao ambiente por si:
+ *
+ *   1. «Há uma nova versão do Ocinye.» O cliente servido tem uma identidade
+ *      (`<meta name="ocinye-build">`); cada resposta traz a actual em
+ *      `X-Ocinye-Build`. Quando divergem, uma faixa diz-o e oferece recarregar.
+ *      Nunca recarrega sozinho: o que a pessoa não guardou é dela.
+ *   2. A sugestão de instalar (PWA), uma vez, dispensável, só onde o
+ *      navegador a oferece (`beforeinstallprompt`) e só no Desktop.
+ *   3. O cartão de Definições › Runtime, preenchido com a declaração real.
+ */
+(() => {
+  'use strict';
+
+  const meta = document.querySelector('meta[name="ocinye-build"]');
+  if (!meta) return;
+  const runtime = window.ocinyeRuntime;
+
+  /* ── 1. Nova versão ─────────────────────────────────────────────────── */
+  const minha = meta.content;
+  let faixa = null;
+  function mostrarFaixa() {
+    if (faixa) return;
+    faixa = document.createElement('div');
+    faixa.className = 'ods-update-banner';
+    faixa.dataset.oc = 'update-banner';
+    faixa.setAttribute('role', 'status');
+    const texto = document.createElement('span');
+    texto.textContent = meta.dataset.update || '';
+    const botao = document.createElement('button');
+    botao.type = 'button';
+    botao.className = 'ods-btn ods-btn--sm';
+    botao.dataset.oc = 'update-reload';
+    botao.textContent = meta.dataset.reload || '';
+    botao.addEventListener('click', () => window.location.reload());
+    faixa.append(texto, botao);
+    const principal = document.querySelector('.ods-shell__main');
+    (principal || document.body).prepend(faixa);
+  }
+  async function verificarVersao() {
+    if (faixa || document.hidden || minha === 'dev') return;
+    try {
+      const r = await fetch('/health', { cache: 'no-store', credentials: 'same-origin' });
+      const actual = r.headers.get('x-ocinye-build');
+      if (actual && actual !== meta.content) mostrarFaixa();
+    } catch (_) { /* sem ligação: nada a dizer sobre versões */ }
+  }
+  document.addEventListener('visibilitychange', verificarVersao);
+  window.setInterval(verificarVersao, 5 * 60 * 1000);
+
+  /* ── 2. Instalar (PWA) ──────────────────────────────────────────────── */
+  const CHAVE = 'ocinye.install-hint.dismissed';
+  let pedido = null;
+  const dispensada = () => {
+    try { return window.localStorage.getItem(CHAVE) === '1'; } catch (_) { return false; }
+  };
+  const dispensar = () => {
+    try { window.localStorage.setItem(CHAVE, '1'); } catch (_) { /* fica só por esta página */ }
+  };
+  async function instalar() {
+    if (!pedido) return;
+    pedido.prompt();
+    try { await pedido.userChoice; } catch (_) { /* a escolha é da pessoa */ }
+    pedido = null;
+    document.querySelectorAll('[data-oc="runtime-install"], [data-oc="install-hint"]').forEach((el) => {
+      if (el.dataset.oc === 'install-hint') el.remove(); else el.hidden = true;
+    });
+  }
+  function sugerir() {
+    if (dispensada() || !document.querySelector('.ods-desktop') || document.querySelector('[data-oc="install-hint"]')) return;
+    const caixa = document.createElement('div');
+    caixa.className = 'ods-install-hint ods-glass';
+    caixa.dataset.oc = 'install-hint';
+    caixa.setAttribute('role', 'dialog');
+    caixa.setAttribute('aria-label', meta.dataset.install || '');
+    const titulo = document.createElement('strong');
+    titulo.textContent = meta.dataset.install || '';
+    const corpo = document.createElement('p');
+    corpo.className = 'ods-field__hint';
+    corpo.textContent = meta.dataset.installBody || '';
+    const accoes = document.createElement('div');
+    accoes.className = 'ods-settings__actions';
+    const agoraNao = document.createElement('button');
+    agoraNao.type = 'button';
+    agoraNao.className = 'ods-btn ods-btn--sm';
+    agoraNao.dataset.oc = 'install-hint-dismiss';
+    agoraNao.textContent = meta.dataset.notNow || '';
+    agoraNao.addEventListener('click', () => { dispensar(); caixa.remove(); });
+    const sim = document.createElement('button');
+    sim.type = 'button';
+    sim.className = 'ods-btn ods-btn--primary ods-btn--sm';
+    sim.dataset.oc = 'install-hint-accept';
+    sim.textContent = meta.dataset.install || '';
+    sim.addEventListener('click', () => { dispensar(); instalar(); });
+    accoes.append(agoraNao, sim);
+    caixa.append(titulo, corpo, accoes);
+    document.querySelector('.ods-desktop').append(caixa);
+  }
+  window.addEventListener('beforeinstallprompt', (evento) => {
+    evento.preventDefault();
+    if (runtime && runtime.standalone) return;
+    pedido = evento;
+    document.querySelectorAll('[data-oc="runtime-install"]').forEach((b) => { b.hidden = false; });
+    sugerir();
+  });
+  document.querySelectorAll('[data-oc="runtime-install"]').forEach((b) => b.addEventListener('click', instalar));
+
+  /* ── 3. Definições › Runtime ────────────────────────────────────────── */
+  const cartao = document.querySelector('[data-oc="runtime-card"]');
+  if (cartao && runtime) {
+    const nome = cartao.querySelector('[data-part="runtime-name"]');
+    if (nome) nome.textContent = meta.dataset[runtime.mode] || runtime.mode;
+    const pwa = cartao.querySelector('[data-part="runtime-standalone"]');
+    if (pwa) pwa.hidden = !runtime.standalone;
+    const GLIFO = { yes: '✓', limited: '–', no: '✕' };
+    cartao.querySelectorAll('.ods-runtime-cap[data-cap]').forEach((linha) => {
+      const cap = linha.dataset.cap;
+      let nivel = null;
+      if (cap === 'native') nivel = runtime.mode === 'web' ? 'no' : 'yes';
+      else if (cap !== 'instance') nivel = runtime.availability(cap);
+      if (!nivel) return;
+      linha.dataset.level = nivel;
+      const glifo = linha.querySelector('b');
+      if (glifo) glifo.textContent = GLIFO[nivel];
+    });
   }
 })();

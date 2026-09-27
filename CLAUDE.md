@@ -255,7 +255,7 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED` e em produção** 96 ecrãs em Leptos SSR,
+- **Ocinye Workspace: `IMPLEMENTED` e em produção** 98 ecrãs em Leptos SSR,
   servido de `os.ocinye.com`, atrás da Cloudflare, do mesmo SHA que o Core;
   sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
   pelas permissões que o Core calcula.
@@ -555,14 +555,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1843 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1846 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **678 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **679 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se
@@ -577,11 +577,16 @@ sem que nada falhe.
 
 **Continua a não existir:**
 
-- **Nenhum runtime além da Web.** Não há PWA, casca Ocinye Desktop, posto
+- **Nenhum runtime além da Web.** Não há casca Ocinye Desktop, posto
   Dedicated, `ocinye://` nem Ocinye Browser: estão decididos (§45-B,
-  ADR-0018, ADR-0611 a ADR-0617, ADR-0702 a ADR-0705) e são `PLANNED`. Existe
-  só a declaração de runtime (ADR-0611): `ocinye_contracts::runtime` e
-  `static/runtime.js`, que hoje diz sempre `web`.
+  ADR-0018, ADR-0611 a ADR-0617, ADR-0702 a ADR-0705) e são `PLANNED`. Da
+  camada de runtimes existe só: a declaração (ADR-0611,
+  `ocinye_contracts::runtime` e `static/runtime.js`, que hoje diz sempre `web`);
+  a Web instalável (manifesto em `/manifest.webmanifest`, **sem** service
+  worker, ADR-0617); o `X-Ocinye-Build` em cada resposta, com a faixa «há uma
+  nova versão» que nunca recarrega sozinha; e `Definições › Runtime`. A garantia
+  de acesso sem instalação tem prova própria
+  (`o_ocinye_web_chega_a_tudo_sem_instalacao`).
 
 - **Segundo factor universal não existe.** É exigido e está enrolado para
   identidades privilegiadas (acima); a identidades **não** privilegiadas o MFA

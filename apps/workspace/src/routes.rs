@@ -113,12 +113,14 @@ pub const ROUTES: &[&str] = &[
     "/notifications/recent",
     "/notifications/{notification_id}/read",
     "/help",
+    "/manifest.webmanifest",
     "/terminal",
     "/terminal/exec",
     "/settings",
     "/settings/security",
     "/settings/language",
     "/settings/apps",
+    "/settings/runtime",
     "/settings/mfa",
     "/settings/mfa/regenerate",
     "/settings/password",
@@ -215,6 +217,8 @@ pub const ROUTES: &[&str] = &[
     "/ask/plans/{plan_id}/reject",
     "/boot",
     "/login",
+    "/password/recover",
+    "/login/language",
     "/first-access",
     "/mfa",
     "/mfa/confirm",
@@ -227,6 +231,7 @@ pub const ROUTES: &[&str] = &[
 
 /// O router do Workspace.
 pub fn router(state: WorkspaceState) -> Router {
+    crate::build::init(std::path::Path::new(&state.config.static_dir));
     Router::new()
         // Pessoal
         .route("/", get(home))
@@ -401,6 +406,7 @@ pub fn router(state: WorkspaceState) -> Router {
             get(settings_language).post(set_language),
         )
         .route("/settings/apps", get(settings_apps).post(save_apps))
+        .route("/settings/runtime", get(settings_runtime))
         .route("/settings/mfa", get(settings_mfa))
         .route("/settings/mfa/regenerate", post(settings_mfa_regenerate))
         .route("/settings/password", post(change_password))
@@ -604,6 +610,8 @@ pub fn router(state: WorkspaceState) -> Router {
         // Autenticação
         .route("/boot", get(boot_screen))
         .route("/login", get(login).post(login_submit))
+        .route("/password/recover", get(login_recover))
+        .route("/login/language", post(login_language))
         .route("/first-access", get(first_access).post(first_access_submit))
         .route("/mfa", get(mfa_page))
         .route("/mfa/confirm", post(mfa_confirm))
@@ -612,6 +620,7 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/mfa/recovery", post(mfa_recovery))
         .route("/logout", post(logout))
         .route("/health", get(health))
+        .route("/manifest.webmanifest", get(web_manifest))
         .nest_service("/static", ServeDir::new(state.config.static_dir.clone()))
         .fallback(not_found)
         // O portão de arranque corre **antes** de qualquer página ser
@@ -692,6 +701,7 @@ async fn boot_gate(request: axum::extract::Request, next: axum::middleware::Next
     let dispensado = metodo != axum::http::Method::GET
         || caminho == "/boot"
         || caminho == "/health"
+        || caminho == "/manifest.webmanifest"
         || caminho.starts_with("/static/")
         || caminho.starts_with("/avatar/");
 
@@ -793,6 +803,7 @@ async fn security_headers(
              img-src 'self' data:; \
              connect-src 'self'; \
              frame-src 'self'; \
+             manifest-src 'self'; \
              form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
         ),
         (
@@ -802,6 +813,12 @@ async fn security_headers(
         // As páginas são por membro; uma cache partilhada nunca as pode reter.
         ("cache-control", "no-store"),
     ];
+
+    // A identidade do cliente servido (D15 G-17): um separador aberto compara-a
+    // com a sua e diz quando há uma versão nova — sem recarregar sozinho.
+    if let Ok(build) = HeaderValue::from_str(crate::build::id()) {
+        response.headers_mut().insert("x-ocinye-build", build);
+    }
 
     for (name, value) in HEADERS {
         if let (Ok(name), Ok(value)) = (
@@ -871,7 +888,7 @@ async fn same_origin_only(
             ui::screens::login::login(
                 true,
                 Some("Este pedido não veio do Ocinye Workspace.".to_owned()),
-                None,
+                ui::screens::login::Porta::default(),
             ),
         ),
     )
@@ -944,6 +961,20 @@ struct Member {
     /// Vem do browser. Sem ela, cai em UTC — que é a resposta menos errada
     /// quando não se sabe onde a pessoa está, e não uma preferência.
     zona: ocinye_contracts::temporal::TimeZoneName,
+}
+
+/// Para onde vai quem não tem sessão (D16 · D12).
+///
+/// Um browser que traz um cookie de sessão que o Workspace já não conhece teve
+/// uma sessão que acabou: diz-se «a sessão expirou». Sem cookie, é uma entrada
+/// como outra qualquer.
+fn destino_de_entrada(headers: &HeaderMap) -> &'static str {
+    let cookie = headers.get(header::COOKIE).and_then(|v| v.to_str().ok());
+    if session::session_id_from_cookies(cookie).is_some() {
+        "/login?reason=expired"
+    } else {
+        "/login"
+    }
 }
 
 fn current_member(state: &WorkspaceState, headers: &HeaderMap) -> Option<Member> {
@@ -1502,7 +1533,7 @@ macro_rules! member_or_login {
                 return Redirect::to("/mfa").into_response()
             }
             Some(member) => member,
-            None => return Redirect::to("/login").into_response(),
+            None => return Redirect::to(destino_de_entrada(&$headers)).into_response(),
         }
     };
 }
@@ -7325,6 +7356,22 @@ async fn settings_apps(
     )
 }
 
+/// `Definições › Runtime` (D15, ecrã U): só leitura.
+async fn settings_runtime(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    shell_page(
+        crate::i18n::t("settings.title"),
+        &viewer,
+        Screen::Settings,
+        Vec::new(),
+        ui::screens::settings::moldura(
+            "/settings/runtime",
+            ui::screens::settings::runtime(crate::build::id()),
+        ),
+    )
+}
+
 /// `Administração › Instância`: o perfil e as aplicações activas (ADR-0014).
 ///
 /// A página é do Core: sem `organisation.view` o Core recusa, e a recusa
@@ -7613,6 +7660,38 @@ async fn terminal_exec(
         }
         Err(_) => Json(crate::terminal::transport_failure("ocsh.err.network", 1)).into_response(),
     }
+}
+
+/// `GET /manifest.webmanifest` — a identidade instalável da Web (ADR-0617).
+///
+/// Público, como a página de entrada: diz o nome da Instância e mais nada. Sem
+/// service worker: a instalação não guarda estado nenhum, e a Web instalada é a
+/// mesma Web, noutra janela (ADR-0018).
+async fn web_manifest(State(state): State<WorkspaceState>) -> Response {
+    let instancia = api::instance_name(&state).await;
+    let nome = instancia
+        .as_deref()
+        .map_or_else(|| "Ocinye OS".to_owned(), |n| format!("{n} · Ocinye OS"));
+    let curto = instancia.unwrap_or_else(|| "Ocinye".to_owned());
+    let corpo = serde_json::json!({
+        "name": nome,
+        "short_name": curto,
+        "id": "/",
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#071E33",
+        "theme_color": "#071E33",
+        "icons": [
+            { "src": "/static/icons/ocinye-192.png", "sizes": "192x192", "type": "image/png" },
+            { "src": "/static/icons/ocinye-512.png", "sizes": "512x512", "type": "image/png" }
+        ]
+    });
+    (
+        [(header::CONTENT_TYPE, "application/manifest+json")],
+        corpo.to_string(),
+    )
+        .into_response()
 }
 
 /// Largest body the Workspace accepts for a profile photograph.
@@ -9321,7 +9400,14 @@ async fn move_personal_note(
 /// apresenta o formulário e envia as credenciais ao Ocinye Core, que é a
 /// autoridade de autenticação. O Workspace nunca vê um verificador nem decide
 /// se alguém entra.
-async fn login(State(state): State<WorkspaceState>) -> Response {
+/// `?reason=` do início de sessão (D16).
+#[derive(Deserialize)]
+struct LoginQuery {
+    #[serde(default)]
+    reason: Option<String>,
+}
+
+async fn login(State(state): State<WorkspaceState>, Query(q): Query<LoginQuery>) -> Response {
     // O Core respondeu não significa que o Core está pronto.
     //
     // Isto lia `core_ready(...).is_ok()` — sucesso de transporte. Um `/ready`
@@ -9331,8 +9417,67 @@ async fn login(State(state): State<WorkspaceState>) -> Response {
     //
     // O que decide é o corpo.
     let ready = crate::boot::probe(&state).await.state.may_hand_off();
-    let instancia = api::instance_name(&state).await;
-    page("Entrar", ui::screens::login::login(ready, None, instancia))
+    let porta = porta(&state).await;
+    if q.reason.as_deref() == Some("expired") {
+        return page("Entrar", ui::screens::login::expired(ready, porta));
+    }
+    page("Entrar", ui::screens::login::login(ready, None, porta))
+}
+
+/// O que a porta mostra da Instância: nome e perfil do Core (públicos), e o
+/// anfitrião por onde se chega.
+async fn porta(state: &WorkspaceState) -> ui::screens::login::Porta {
+    let (nome, perfil) = api::instance_door(state)
+        .await
+        .map_or((None, None), |(n, p)| (Some(n), p));
+    let anfitriao = state
+        .config
+        .public_url
+        .split("://")
+        .nth(1)
+        .map(|resto| resto.split('/').next().unwrap_or(resto).to_owned())
+        .filter(|h| !h.is_empty());
+    ui::screens::login::Porta {
+        nome,
+        perfil,
+        anfitriao,
+    }
+}
+
+/// `GET /password/recover` — «Esqueceu a palavra-passe?» (D16 · D10).
+async fn login_recover(State(state): State<WorkspaceState>) -> Response {
+    let ready = crate::boot::probe(&state).await.state.may_hand_off();
+    let porta = porta(&state).await;
+    page("Entrar", ui::screens::login::recover(ready, porta))
+}
+
+/// A escolha de idioma à porta, antes de haver sessão.
+#[derive(Deserialize)]
+struct LanguageAtTheDoor {
+    #[serde(default)]
+    lang: String,
+    #[serde(default)]
+    return_to: String,
+}
+
+/// `POST /login/language` — grava o cookie de idioma e volta à porta.
+///
+/// Só isso: não toca na conta de ninguém (não há conta). O destino é uma lista
+/// fechada, para não ser um redireccionamento aberto.
+async fn login_language(
+    State(state): State<WorkspaceState>,
+    Form(form): Form<LanguageAtTheDoor>,
+) -> Response {
+    let destino = if form.return_to == "/password/recover" {
+        "/password/recover"
+    } else {
+        "/login"
+    };
+    let Some(locale) = ocinye_contracts::Locale::normalize(&form.lang) else {
+        return Redirect::to(destino).into_response();
+    };
+    let cookie = crate::session::locale_cookie_header(locale.as_str(), state.config.cookie_secure);
+    ([(header::SET_COOKIE, cookie)], Redirect::to(destino)).into_response()
 }
 
 /// Credenciais submetidas pelo formulário.
@@ -9369,12 +9514,12 @@ async fn login_submit(
             // credencial. O Workspace não a enriquece: fazê-lo reintroduziria o
             // oráculo que o Core evita (briefing §35).
             let ready = crate::boot::probe(&state).await.state.may_hand_off();
-            let instancia = api::instance_name(&state).await;
+            let porta = porta(&state).await;
             return (
                 StatusCode::UNAUTHORIZED,
                 page(
                     "Entrar",
-                    ui::screens::login::login(ready, Some(failure.to_string()), instancia),
+                    ui::screens::login::login(ready, Some(failure.to_string()), porta),
                 ),
             )
                 .into_response();

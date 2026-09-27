@@ -30,6 +30,6 @@ Legenda do estado: `CURRENT` provado · `PLANNED` decidido, por fazer · `—` n
 | Ligações `ocinye://` | **limitado** — resolvidas dentro do Ocinye; de fora, a rota HTTPS | PLANNED (R8) | sim (protocolo registado) | PLANNED (R10) | sim | PLANNED |
 | Área de transferência | sim (API do navegador, gesto da pessoa) | CURRENT | sim | PLANNED | sim | PLANNED |
 | Full Workspace | **limitado** — ecrã inteiro do navegador | — | sim | PLANNED | sim (política) | PLANNED |
-| Instalação (PWA) | sim, opcional | PLANNED (R2) | — | — | — | — |
-| Actualização | recarregar quando a pessoa quiser | PLANNED (G-17) | actualizador assinado | PLANNED | actualizador + política | PLANNED |
+| Instalação (PWA) | sim, opcional | CURRENT (manifesto; sem service worker) | — | — | — | — |
+| Actualização | recarregar quando a pessoa quiser | CURRENT (`X-Ocinye-Build` + faixa) | actualizador assinado | PLANNED | actualizador + política | PLANNED |
 | Tempo real (WebSocket) | sim | **defeituoso** — ver `CURRENT_STATE.md` | sim | PLANNED | sim | PLANNED |

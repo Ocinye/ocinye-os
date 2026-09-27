@@ -58,6 +58,7 @@ pub fn moldura(activo: &str, conteudo: impl IntoView + 'static) -> impl IntoView
                 {item("/settings/security", crate::i18n::t("settings.tab.security"))}
                 {item("/settings/language", crate::i18n::t("settings.tab.language"))}
                 {item("/settings/apps", crate::i18n::t("settings.tab.apps"))}
+                {item("/settings/runtime", crate::i18n::t("runtime.title"))}
                 <span
                     class="ods-app__side-item"
                     aria-disabled="true"
@@ -136,6 +137,91 @@ pub fn account(
                     </p>
                 },
             )}
+        </div>
+    }
+}
+/// Uma capacidade no cartão de runtime (D15, ecrã U).
+///
+/// O servidor não sabe em que runtime a página vai correr — a mesma página
+/// serve a Web e a casca Desktop. Desenha o alvo da Web; o `runtime.js` troca
+/// nível e detalhe pela declaração real do cliente (`data-cap`).
+fn capacidade(
+    cap: &'static str,
+    rotulo: &'static str,
+    nivel: &'static str,
+    detalhe: &'static str,
+) -> impl IntoView {
+    let glifo = match nivel {
+        "yes" => "✓",
+        "limited" => "–",
+        _ => "✕",
+    };
+    view! {
+        <div class="ods-runtime-cap" data-cap=cap data-level=nivel>
+            <b aria-hidden="true">{glifo}</b>
+            <span>{crate::i18n::t(rotulo)}</span>
+            <em>{crate::i18n::t(detalhe)}</em>
+        </div>
+    }
+}
+
+/// `Definições › Runtime`: como este computador chega à Instância (D15, U).
+///
+/// Só leitura. Diz o que o código faz, porque lê a mesma declaração que o
+/// código usa (`ocinyeRuntime`, ADR-0611).
+pub fn runtime(build: &str) -> impl IntoView {
+    view! {
+        <div>
+            <div class="ods-page__head">
+                <div>
+                    <h1 class="ods-page__title">{crate::i18n::t("runtime.title")}</h1>
+                    <p class="ods-page__sub">{crate::i18n::t("runtime.sub")}</p>
+                </div>
+            </div>
+
+            <section class="ods-runtime-card" data-oc="runtime-card" aria-labelledby="runtime-nome">
+                <div class="ods-settings__row">
+                    <strong id="runtime-nome" data-part="runtime-name">{crate::i18n::t("runtime.web")}</strong>
+                    <span class="ods-app__toolbar-spacer"></span>
+                    <span class="ods-scope" data-scope="local">{crate::i18n::t("runtime.set.in_browser")}</span>
+                </div>
+                <p class="ods-field__hint" data-part="runtime-standalone" hidden>
+                    {crate::i18n::t("runtime.installed_pwa")}
+                </p>
+                <div class="ods-runtime-card__caps">
+                    {capacidade("instance", "runtime.cap.instance", "yes", "runtime.cap.available")}
+                    {capacidade("native", "runtime.cap.native", "no", "runtime.cap.not_in_browser")}
+                    {capacidade("external_webview", "runtime.cap.browser", "limited", "runtime.cap.limited_browser")}
+                    {capacidade("native_notifications", "runtime.cap.notifications", "limited", "runtime.cap.browser_notif")}
+                    {capacidade("native_save_dialog", "runtime.cap.files", "limited", "runtime.cap.upload_only")}
+                    {capacidade("protocol_handler", "runtime.cap.links", "limited", "runtime.cap.web_url")}
+                </div>
+                <div class="ods-settings__actions">
+                    // Só aparece quando o navegador oferece a instalação
+                    // (`beforeinstallprompt`); sem suporte, não há botão.
+                    <button type="button" class="ods-btn ods-btn--primary ods-btn--sm" data-oc="runtime-install" hidden>
+                        {crate::i18n::t("runtime.install")}
+                    </button>
+                </div>
+            </section>
+
+            <section class="ods-settings__section">
+                <h2 class="ods-settings__section-title">{crate::i18n::t("runtime.set.about")}</h2>
+                <div class="ods-settings__row">
+                    <div>
+                        <div>{crate::i18n::t("runtime.set.web_client")}</div>
+                        <div class="ods-field__hint">{crate::i18n::t("runtime.set.web_client.desc")}</div>
+                    </div>
+                    <span class="ods-app__toolbar-spacer"></span>
+                    <code data-part="runtime-build">{build.to_owned()}</code>
+                </div>
+                <div class="ods-settings__row">
+                    <div>
+                        <div>{crate::i18n::t("runtime.cap.files")}</div>
+                        <div class="ods-field__hint">{crate::i18n::t("runtime.set.web_files.desc")}</div>
+                    </div>
+                </div>
+            </section>
         </div>
     }
 }

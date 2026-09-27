@@ -12614,3 +12614,135 @@ async fn o_terminal_executa_pelo_core_e_desenha_so_texto() {
         .expect("texto");
     assert_eq!(valor, "", "o histórico passou de um separador para outro");
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A garantia de acesso Web (ADR-0018) — constitucional
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Um navegador sem nada instalado chega a tudo o que a Instância oferece.
+///
+/// # A frase
+///
+/// > **A instalação acrescenta ao Ocinye. Nunca é precisa para chegar ao
+/// > Ocinye.**
+///
+/// Esta viagem é a prova. Um browser limpo, só com o endereço da Instância:
+/// entrar → Desktop → o Nye responde (determinístico, sem IA) → Ficheiros →
+/// Notas → o Terminal executa pelo Core → Definições › Runtime diz «Ocinye Web»
+/// e não promete o que o navegador impede. E a Web é instalável (manifesto) e
+/// diz, sem recarregar sozinha, quando há uma versão nova do cliente.
+#[tokio::test]
+async fn o_ocinye_web_chega_a_tudo_sem_instalacao() {
+    let harness = harness!();
+    let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+
+    // ── Desktop e o Nye, sem fornecedor de IA ───────────────────────────
+    let page = harness.open("/").await;
+    wait_visible(&page, ".ods-desktop").await;
+    clicar(&page, r#"[data-oc="nye-open"]"#).await;
+    wait_visible(&page, r#"[data-oc="nye-orb"]"#).await;
+    set_field(&page, "#nye-q", "Notas").await;
+    submit(&page, r#"[data-oc="nye-form"]"#).await;
+    assert!(
+        esperar_ate_condicao(
+            &page,
+            r#"(document.querySelector('[data-oc="nye-a"]') || {textContent: ''}).textContent.trim().length > 0
+               && (document.querySelector('[data-oc="nye-a"]').dataset.tone || '') !== 'bad'"#,
+        )
+        .await,
+        "o Nye não respondeu na Web"
+    );
+
+    // ── As aplicações do dia-a-dia ──────────────────────────────────────
+    for (rota, sinal) in [
+        ("/files", r#"[data-oc="fs-carregar"]"#),
+        ("/notes", ".ods-page, .ods-app"),
+        ("/settings", ".ods-settings"),
+    ] {
+        let p = harness.open(rota).await;
+        wait_visible(&p, sinal).await;
+        let recusa: bool = p
+            .evaluate(r#"!!document.querySelector('[data-oc="app-inactive"], .ods-d12-notice[data-kind="error"]')"#)
+            .await
+            .expect("avaliar")
+            .into_value()
+            .expect("bool");
+        assert!(!recusa, "{rota} não abriu na Web");
+    }
+
+    // ── O Terminal executa pelo Core ────────────────────────────────────
+    let terminal = harness.open("/terminal").await;
+    elemento(&terminal, r#"[data-oc="term-line"]"#).await;
+    let (exit, texto) = terminal_executar(&terminal, "whoami").await;
+    assert_eq!(exit, "0", "o Terminal não executou na Web: {texto}");
+
+    // ── Definições › Runtime diz a verdade ──────────────────────────────
+    let runtime = harness.open("/settings/runtime").await;
+    wait_visible(&runtime, r#"[data-oc="runtime-card"]"#).await;
+    let (nome, nativo, browser): (String, String, String) = runtime
+        .evaluate(
+            r#"(() => {
+                const c = document.querySelector('[data-oc="runtime-card"]');
+                const nivel = (cap) => c.querySelector(`[data-cap="${cap}"]`).dataset.level;
+                return [c.querySelector('[data-part="runtime-name"]').textContent.trim(),
+                        nivel('native'), nivel('external_webview')];
+            })()"#,
+        )
+        .await
+        .expect("avaliar")
+        .into_value()
+        .expect("tuplo");
+    assert_eq!(nome, "Ocinye Web");
+    assert_eq!(nativo, "no", "a Web não tem integração nativa");
+    assert_eq!(
+        browser, "limited",
+        "o Browser integrado é limitado na Web, nunca «sim»"
+    );
+
+    // ── Instalável: o manifesto é válido e os ícones existem ────────────
+    let (display, inicio, icones_ok, cabecalho_igual): (String, String, bool, bool) = runtime
+        .evaluate(
+            r#"(async () => {
+                const m = await (await fetch(document.querySelector('link[rel="manifest"]').href)).json();
+                const tipos = await Promise.all(m.icons.map(async (i) => {
+                    const r = await fetch(i.src);
+                    return r.ok && (r.headers.get('content-type') || '').startsWith('image/png');
+                }));
+                const h = await fetch('/health', { cache: 'no-store' });
+                return [m.display, m.start_url,
+                        tipos.length >= 2 && tipos.every(Boolean),
+                        h.headers.get('x-ocinye-build') === document.querySelector('meta[name="ocinye-build"]').content];
+            })()"#,
+        )
+        .await
+        .expect("avaliar")
+        .into_value()
+        .expect("tuplo");
+    assert_eq!(display, "standalone");
+    assert_eq!(inicio, "/");
+    assert!(icones_ok, "os ícones do manifesto não servem PNG");
+    assert!(
+        cabecalho_igual,
+        "X-Ocinye-Build diverge da identidade da página"
+    );
+
+    // ── Uma versão nova diz-se, e não recarrega sozinha ─────────────────
+    runtime
+        .evaluate(
+            r#"(() => {
+                window.__ficou = 'sim';
+                document.querySelector('meta[name="ocinye-build"]').content = 'antiga';
+                document.dispatchEvent(new Event('visibilitychange'));
+            })()"#,
+        )
+        .await
+        .expect("simular versão antiga");
+    wait_visible(&runtime, r#"[data-oc="update-banner"]"#).await;
+    let ficou: String = runtime
+        .evaluate("window.__ficou || ''")
+        .await
+        .expect("avaliar")
+        .into_value()
+        .expect("texto");
+    assert_eq!(ficou, "sim", "a página recarregou sozinha");
+}

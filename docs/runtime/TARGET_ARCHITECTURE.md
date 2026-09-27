@@ -71,7 +71,7 @@ router do Workspace. Sem casca, a rota HTTPS.
 |---|---|---|
 | R0 | discovery + ADRs | este documento |
 | R1 | `ocinye_contracts::runtime` + `static/runtime.js` + guarda anti-detecção espalhada — **feito** | unitários + guarda por reversão + viagem de browser |
-| R2 | PWA (manifesto, sem SW ou SW mínimo), `X-Ocinye-Build`, viagem constitucional Web | E2E |
+| R2 | PWA (manifesto, sem service worker), `X-Ocinye-Build`, faixa «nova versão», Definições › Runtime, viagem constitucional Web — **feito** | E2E |
 | R3 | casca: arranque, ligação, confiança, login, webview de confiança; prova de partições por plataforma | E2E por plataforma |
 | R4 | ponte tipada; navegação fora da origem interceptada | negativos |
 | R5 | Browser Manager + webview externo isolado | E2E isolamento |

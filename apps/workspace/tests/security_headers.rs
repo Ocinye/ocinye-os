@@ -117,6 +117,8 @@ async fn a_politica_de_conteudo_continua_fechada() {
         // `*`. O PDF é desenhado pelo visualizador do browser, fora do processo
         // da página.
         "frame-src 'self'",
+        // O manifesto da Web instalável (ADR-0617), só da própria origem.
+        "manifest-src 'self'",
     ] {
         assert!(
             politica.contains(exigido),
@@ -151,5 +153,19 @@ async fn o_transporte_seguro_e_exigido_em_producao_e_so_ai() {
         desenvolvimento.is_empty(),
         "desenvolvimento corre em claro e recebeu `Strict-Transport-Security`: \
          isto tranca o `localhost` do browser de quem desenvolve"
+    );
+}
+
+/// Toda a resposta diz que cliente web está a ser servido (D15 G-17).
+///
+/// Um separador aberto compara-o com o seu para dizer «há uma nova versão».
+/// Sem o cabeçalho nas respostas comuns — incluindo um 404 —, a comparação
+/// não teria nada com que comparar.
+#[tokio::test]
+async fn toda_a_resposta_diz_que_cliente_serve() {
+    let build = valor(&cabecalhos(false).await, "x-ocinye-build");
+    assert!(
+        !build.is_empty() && build.chars().all(|c| c.is_ascii_alphanumeric()),
+        "sem identidade do cliente servido: «{build}»"
     );
 }

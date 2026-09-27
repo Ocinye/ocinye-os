@@ -21,6 +21,9 @@ Decisões: [ADR-0018](../adrs/0018-universal-web-access-and-runtime-classes.md),
 [ADR-0611](../adrs/0611-runtime-capability-boundary.md),
 [ADR-0617](../adrs/0617-pwa-and-service-worker-policy.md),
 [ADR-0702](../adrs/0702-desktop-shell-technology.md) a
-[ADR-0705](../adrs/0705-dedicated-runtime.md). Estado: R0 (discovery, ADRs) e
+[ADR-0705](../adrs/0705-dedicated-runtime.md). Estado: R0 (discovery, ADRs),
 R1 (a declaração tipada `ocinye_contracts::runtime` e o módulo
-`static/runtime.js`, só com a Web) feitas; o resto é `PLANNED`.
+`static/runtime.js`, só com a Web) e R2 (manifesto PWA sem service worker,
+`X-Ocinye-Build` com a faixa «há uma nova versão», Definições › Runtime, e a
+viagem constitucional `o_ocinye_web_chega_a_tudo_sem_instalacao`) feitas; o
+resto é `PLANNED`.

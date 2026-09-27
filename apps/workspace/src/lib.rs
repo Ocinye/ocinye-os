@@ -51,6 +51,7 @@
 
 pub mod api;
 pub mod boot;
+pub mod build;
 pub mod config;
 pub mod i18n;
 pub mod routes;

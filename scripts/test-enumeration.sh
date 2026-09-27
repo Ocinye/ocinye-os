@@ -258,7 +258,10 @@ suites() {
 #   126 testes                                                   125 marcas
 # 126 → 127 testes e 125 → 126 marcas em 2026-09-27: o Terminal executa pelo
 # Core e desenha só texto (ADR-0312, D14) — uma viagem, um levantamento.
-viagens-de-browser|127|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|126
+# 127 → 128 testes e 126 → 127 marcas em 2026-09-27: a garantia de acesso Web
+# (ADR-0018) — um browser limpo chega a tudo, sem instalar; uma viagem, um
+# levantamento.
+viagens-de-browser|128|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|127
 paridade|7|-p ocinye-core-server --test parity
 # O Terminal (ocsh, ADR-0312): whoami, contexto reautorizado e alheio recusado,
 # sintaxe do anfitrião e comandos desconhecidos sem execução, ajuda filtrada pela

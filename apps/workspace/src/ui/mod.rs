@@ -59,6 +59,8 @@ pub fn document_com_cabeca(
          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
          <meta name=\"robots\" content=\"noindex, nofollow\">\n\
          <link rel=\"icon\" href=\"/static/ocinye_logo.png\">\n\
+         <link rel=\"manifest\" href=\"/manifest.webmanifest\">\n\
+         <meta name=\"theme-color\" content=\"#071E33\">\n\
          <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n\
          <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n\
          <link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?\
@@ -68,23 +70,45 @@ pub fn document_com_cabeca(
          <link rel=\"stylesheet\" href=\"/static/ods-d1-primitives.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d2-shell.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d3-auth.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d3-auth-proto.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d16-auth-states.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d4-desktop.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d5-windows.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d6-launcher.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d7-nye.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d8-apps-core.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d9-apps.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d10-settings.css\">\n\
-         <link rel=\"stylesheet\" href=\"/static/ods-d11-adaptive.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d12-base.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d12-screens.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d13-base.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d13-mail.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d14-terminal.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d15-browser.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d15-runtime.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-integration.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d11-adaptive.css\">\n\
          <title>",
     );
     out.push_str(&escape(title));
     out.push_str(" · Ocinye Workspace</title>\n");
+    // A identidade do cliente servido, e as frases da faixa «há uma nova
+    // versão» (D15 G-17), no idioma de quem lê: o `app.js` compara esta
+    // identidade com a do `X-Ocinye-Build` e nunca recarrega sozinho.
+    out.push_str(&format!(
+        "<meta name=\"ocinye-build\" content=\"{}\" data-update=\"{}\" data-reload=\"{}\" \
+         data-install=\"{}\" data-install-body=\"{}\" data-not-now=\"{}\" \
+         data-web=\"{}\" data-desktop=\"{}\" data-dedicated=\"{}\">\n",
+        escape(crate::build::id()),
+        escape(crate::i18n::t("runtime.update.web")),
+        escape(crate::i18n::t("runtime.update.reload")),
+        escape(crate::i18n::t("runtime.install")),
+        escape(crate::i18n::t("runtime.install_hint.body")),
+        escape(crate::i18n::t("runtime.install_hint.not_now")),
+        escape(crate::i18n::t("runtime.web")),
+        escape(crate::i18n::t("runtime.desktop")),
+        escape(crate::i18n::t("runtime.dedicated")),
+    ));
     if let Some(extra) = cabeca {
         out.push_str(&extra);
         out.push('\n');
@@ -253,7 +277,10 @@ mod render_tests {
         let ecras: Vec<(&str, String)> = vec![
             (
                 "login",
-                document("Entrar", screens::login::login(true, None, None)),
+                document(
+                    "Entrar",
+                    screens::login::login(true, None, screens::login::Porta::default()),
+                ),
             ),
             (
                 "membros",
@@ -886,7 +913,10 @@ pub(crate) mod link_tests {
             ),
             (
                 "login",
-                document("Iniciar sessão", screens::login::login(true, None, None)),
+                document(
+                    "Iniciar sessão",
+                    screens::login::login(true, None, screens::login::Porta::default()),
+                ),
             ),
             page!("home", Screen::Home, screens::home::home(dashboard)),
             page!(
@@ -1744,6 +1774,14 @@ pub(crate) mod link_tests {
                 "settings-security-sem-lista",
                 Screen::Settings,
                 screens::settings::security(None, None, None)
+            ),
+            page!(
+                "settings-runtime",
+                Screen::Settings,
+                screens::settings::moldura(
+                    "/settings/runtime",
+                    screens::settings::runtime("abc123def456")
+                )
             ),
             page!("help", Screen::Help, screens::help::help()),
             page!(

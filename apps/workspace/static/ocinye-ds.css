@@ -2,6 +2,7 @@
    Prefixo novo `ods-` / `--ods-`: não colide com as classes `oc-*` legadas.
    Sem valores soltos nas vistas: tudo lê daqui. Claro e escuro partilham os mesmos nomes. */
 
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 :root {
   /* marca */

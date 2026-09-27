@@ -18,7 +18,10 @@ disco.
 - **Manifesto** servido pelo Workspace: `name` da Instância, `start_url: /`,
   `scope: /`, `display: standalone`, `theme_color` do D15, ícones do sprite da
   marca.
-- **Service worker mínimo, ou nenhum:** se existir, só serve os estáticos
+- **Nenhum service worker, nesta fundação (R2).** Os navegadores actuais
+  instalam a Web sem ele, e sem ele não há cache nenhuma que possa prender um
+  cliente. Se um dia for preciso (ecrã «sem ligação»), vale a regra seguinte.
+- **Se existir, service worker mínimo:** se existir, só serve os estáticos
   versionados (`/static/*` do release corrente) e um ecrã «sem ligação»; **nunca**
   guarda HTML autenticado, respostas do BFF ou da API, ficheiros, pré-visualizações
   nem nada do Core. Actualiza-se a cada release (`skipWaiting` controlado) e
