@@ -17,6 +17,15 @@
 :root[data-theme="dark"] .ods-launcher__favs { background: var(--ods-surface-panel); }
 :root[data-theme="dark"] .ods-banner { background: var(--ods-surface-window); }
 :root[data-theme="dark"] .ods-monitor__confirm { background: rgba(179,38,30,.12); }
+/* D13 · Q-34: as mesmas correcções quando o tema segue o sistema e o sistema está escuro. */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .ods-topbar__logo { background: linear-gradient(180deg, #1B3550, #122839); }
+  :root[data-theme="system"] .ods-widget__icon, :root[data-theme="system"] .ods-app-tile, :root[data-theme="system"] .ods-empty__icon { background: linear-gradient(180deg, #1B3550, #15304A); color: #D5DEE7; }
+  :root[data-theme="system"] .ods-launcher__head { background: var(--ods-surface-panel); }
+  :root[data-theme="system"] .ods-launcher__favs { background: var(--ods-surface-panel); }
+  :root[data-theme="system"] .ods-banner { background: var(--ods-surface-window); }
+  :root[data-theme="system"] .ods-monitor__confirm { background: rgba(179,38,30,.12); }
+}
 /* textos longos (en/fr): nada com largura fixa corta texto */
 .ods-menu__item, .ods-tabs__tab, .ods-btn { min-width: 0; }
 .ods-menu__item > span:not(.ods-menu__kbd) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

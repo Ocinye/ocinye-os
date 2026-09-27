@@ -1661,8 +1661,16 @@ async fn my_work(State(state): State<WorkspaceState>, headers: HeaderMap) -> Res
         optional(&state, &member, "/api/v1/workspaces?mine=true&page_size=20"),
         optional(&state, &member, "/api/v1/activity?page_size=20"),
     );
+    // O dia civil de «hoje» é o do fuso que o Core diz (D13, Q-28); sem ele,
+    // não se agrupa — fica a tabela única.
+    let me = optional(&state, &member, "/api/v1/me").await;
+    let fuso = me
+        .get("timezone")
+        .and_then(Value::as_str)
+        .and_then(|z| ocinye_contracts::temporal::TimeZoneName::try_from(z.to_owned()).ok());
+    let hoje = fuso.map(|z| ui::tempo::hoje_civil(chrono::Utc::now(), z));
 
-    let content = ui::screens::my_work::my_work(&tasks, &workspaces, &activity);
+    let content = ui::screens::my_work::my_work(&tasks, &workspaces, &activity, hoje);
     shell_page(
         crate::i18n::t("nav.my_work"),
         &viewer,
@@ -3796,7 +3804,7 @@ async fn member_detail(
         &viewer,
         Screen::Admin,
         vec![Crumb::to(Screen::Admin)],
-        ui::screens::administration::moldura(
+        ui::screens::administration::moldura_larga(
             ui::screens::administration::SeccaoAdmin::Membros,
             ui::screens::administration::member_detail(
                 &person,
@@ -4325,7 +4333,7 @@ async fn member_detail_with_error(
         &viewer,
         Screen::Admin,
         vec![Crumb::to(Screen::Admin)],
-        ui::screens::administration::moldura(
+        ui::screens::administration::moldura_larga(
             ui::screens::administration::SeccaoAdmin::Membros,
             ui::screens::administration::member_detail(
                 &person,
@@ -4418,7 +4426,7 @@ async fn provision_member(
                 &viewer,
                 Screen::Admin,
                 vec![Crumb::to(Screen::Admin)],
-                ui::screens::administration::moldura(
+                ui::screens::administration::moldura_larga(
                     ui::screens::administration::SeccaoAdmin::Membros,
                     ui::screens::administration::member_detail(
                         &person,
@@ -6468,6 +6476,7 @@ async fn submit_prompt(
                     content: "Não tem autorização para utilizar as capacidades de IA nesta \
                               instalação do Ocinye OS."
                         .to_owned(),
+                    capability: None,
                 })
             }
             // Qualquer outra recusa do Core chega ao membro nas palavras que o
@@ -6479,10 +6488,16 @@ async fn submit_prompt(
                 reason_code: None,
                 model: None,
                 content: failure.to_string(),
+                capability: None,
             }),
         }
     };
 
+    // A resposta diz com que capacidade foi pedida (D13, Q-30).
+    let exchange = exchange.map(|mut e| {
+        e.capability = form.capability.clone();
+        e
+    });
     let content = ui::screens::prompt::prompt(
         ui::screens::prompt::context_from(&status, context),
         exchange,
@@ -6511,6 +6526,7 @@ fn exchange_from_envelope(prompt: &str, value: &Value) -> ui::screens::prompt::P
         reason_code: field("reason_code"),
         model: field("model"),
         content: field("content").unwrap_or_default(),
+        capability: None,
     }
 }
 

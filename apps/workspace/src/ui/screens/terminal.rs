@@ -1,8 +1,8 @@
-//! O Ocinye Terminal — a casca da aplicação (D13.1) com a execução no Core.
+//! O Ocinye Terminal — a casca da aplicação (D14.1) com a execução no Core.
 //!
 //! # O que este ecrã é
 //!
-//! A marcação do D13 (`docs/ui/D13_TERMINAL.md`): separadores, viewport,
+//! A marcação do D14 (`docs/ui/D14_TERMINAL.md`; o pacote chegou como «D13» e o Design renumerou-o): separadores, viewport,
 //! prompt, barra de estado e preferências. O comportamento vive em
 //! `/static/terminal.js`; cada linha vai ao Core por `POST /terminal/exec`, e o
 //! que volta é desenhado com nós de texto.

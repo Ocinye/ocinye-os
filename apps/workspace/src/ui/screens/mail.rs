@@ -29,7 +29,8 @@ use crate::ui::components::{
     badge, button, card, empty_state, named_checkbox, section_head, select_labelled,
     textarea_with_value, Button, EmptyState, SelectOption, Tone, Variant,
 };
-use crate::ui::icon::{icon, Icon};
+use crate::ui::icon::Icon;
+use crate::ui::ods::{icone, icone_do_legado};
 use crate::ui::shell::Viewer;
 
 /// O contexto de correio partilhado por todos os ecrãs desta família.
@@ -207,75 +208,89 @@ pub fn mail(
         // barra de acções consigo — e depois de descer uma lista longa, deixa
         // de haver «Escrever» no ecrã. Numa aplicação de correio a moldura
         // fica, e o que se percorre é o conteúdo.
-        <div class="ods-page">
-            <div class="ods-page__head">
-                <div>
-                    <h1 class="ods-page__title">{crate::i18n::t("mail.title")}</h1>
-                    <p class="ods-page__sub">
-                        {crate::i18n::t("mail.header_subtitle")}
-                    </p>
-                </div>
-                <span class="ods-app__toolbar-spacer"></span>
-                // A hierarquia que a acção merece.
-                //
-                // «Actualizar», «Escrever» e «Definições» tinham o mesmo peso,
-                // e por isso nenhum tinha peso nenhum. Escrever é o que se vem
-                // aqui fazer; actualizar é uma manutenção que se faz de vez em
-                // quando; as definições visitam-se uma vez.
-                <div>
-                    {comandos_de_disposicao()}
-                    // As definições continuam a existir, e com o peso que têm:
-                    // visitam-se uma vez. Tirá-las da barra ao reorganizá-la
-                    // teria deixado a caixa sem caminho para se ligar.
-                    <a
-                        class="oc-icon-btn"
-                        href="/mail/settings"
-                        title=crate::i18n::t("mail.settings")
-                    >
-                        <span class="oc-sr">{crate::i18n::t("mail.settings")}</span>
-                        {icon(Icon::Settings, 15)}
-                    </a>
-                    {sync_action(&current_id, view.can_read(), &folder)}
-                    {compose_action(can_compose, &current_id, view.can_send())}
-                </div>
+        //
+        // Por isso a grelha (`data-oc="mail"`) é filha **directa** da área
+        // principal da casca: é assim que o D13 a reconhece e lhe tira o
+        // scroll próprio (`.ods-shell__main:has(> [data-oc="mail"])`).
+        <div class="ods-app__toolbar">
+            <div>
+                <h1 class="ods-page__title">{crate::i18n::t("mail.title")}</h1>
+                <p class="ods-page__sub">
+                    {crate::i18n::t("mail.header_subtitle")}
+                </p>
             </div>
+            <span class="ods-app__toolbar-spacer"></span>
+            // A hierarquia que a acção merece.
+            //
+            // «Actualizar», «Escrever» e «Definições» tinham o mesmo peso,
+            // e por isso nenhum tinha peso nenhum. Escrever é o que se vem
+            // aqui fazer; actualizar é uma manutenção que se faz de vez em
+            // quando; as definições visitam-se uma vez.
+            //
+            // As definições continuam a existir, e com o peso que têm:
+            // visitam-se uma vez. Tirá-las da barra ao reorganizá-la
+            // teria deixado a caixa sem caminho para se ligar.
+            <a
+                class="ods-iconbtn"
+                href="/mail/settings"
+                title=crate::i18n::t("mail.settings")
+            >
+                <span class="ods-sr-only">{crate::i18n::t("mail.settings")}</span>
+                {icone("settings", "")}
+            </a>
+            {sync_action(&current_id, view.can_read(), &folder)}
+            {compose_action(can_compose, &current_id, view.can_send())}
+        </div>
 
-            {view.sync_notice.as_ref().map(|notice| view! {
-                <div class="oc-callout oc-mail__banner" role="status">
-                    {icon(Icon::Restart, 15)}
+        {view.sync_notice.as_ref().map(|notice| view! {
+            <div class="ods-app__toolbar">
+                <div class="ods-notice" role="status">
+                    {icone(icone_do_legado(Icon::Restart), "")}
                     <p>{notice.clone()}</p>
                 </div>
-            })}
+            </div>
+        })}
 
-            {mostrar_aviso.then(|| service_notice(&detail, view.mailbox_linked()))}
+        {mostrar_aviso.then(|| service_notice(&detail, view.mailbox_linked()))}
 
-            // Uma superfície, e não três cartões.
-            //
-            // As três colunas eram três caixas com borda própria, cada uma com
-            // o seu contorno e o seu raio — e uma caixa dentro de uma página
-            // dentro de uma casca lê-se como um painel de administração, não
-            // como uma aplicação de correio. Agora é uma superfície contínua,
-            // dividida por linhas finas e pelos separadores que a pessoa
-            // arrasta.
-            <div class="oc-mail" data-oc="mail">
-                {rail(&boxes, &current_id, &folder, &ja_dito)}
-                {separador("pastas", crate::i18n::t("mail.adjust_folders_width"))}
-                {list(&current_id, &folder, &query, messages, open, view.can_read())}
-                {separador("lista", crate::i18n::t("mail.adjust_list_width"))}
+        // Uma superfície, e não três cartões.
+        //
+        // As três colunas eram três caixas com borda própria, cada uma com
+        // o seu contorno e o seu raio — e uma caixa dentro de uma página
+        // dentro de uma casca lê-se como um painel de administração, não
+        // como uma aplicação de correio. Agora é uma superfície contínua,
+        // dividida por linhas finas e pelos separadores que a pessoa
+        // arrasta.
+        //
+        // A grelha lê `--oc-mail-pastas` e `--oc-mail-lista`, que o `app.js`
+        // escreve **neste** elemento, e `data-oc-pastas`, que ele põe e tira
+        // aqui. Sem o atributo à partida: entre 1024 e 1279 px é a sua
+        // ausência que deixa o CSS recolher as pastas por omissão (D13).
+        <div class="ods-mail" data-oc="mail">
+            {rail(&boxes, &current_id, &folder, &ja_dito)}
+            {separador("pastas", crate::i18n::t("mail.sep.folders"), 168, 220)}
+            {list(&current_id, &folder, &query, messages, open, view.can_read())}
+            {separador("lista", crate::i18n::t("mail.sep.list"), 240, 340)}
+            <article
+                class="ods-mail__leitura"
+                data-part="mail__pane"
+                data-ods-scroll
+                aria-label=crate::i18n::t("mail.message")
+            >
                 {open.map_or_else(
                     || reading_placeholder().into_any(),
                     |message| reading(viewer, view, message).into_any(),
                 )}
-            </div>
-
-            // O compositor abre **sobre** o correio, e não noutra página.
-            //
-            // Escrever é um acto que acontece a olhar para a caixa: para
-            // confirmar um nome, reler o que se responde, ver o que já
-            // chegou. Uma página à parte tira isso, e obriga a voltar atrás
-            // para recuperar aquilo que se tinha à frente.
-            {compositor.map(|draft| compositor_flutuante(view, draft))}
+            </article>
         </div>
+
+        // O compositor abre **sobre** o correio, e não noutra página.
+        //
+        // Escrever é um acto que acontece a olhar para a caixa: para
+        // confirmar um nome, reler o que se responde, ver o que já
+        // chegou. Uma página à parte tira isso, e obriga a voltar atrás
+        // para recuperar aquilo que se tinha à frente.
+        {compositor.map(|draft| compositor_flutuante(view, draft))}
     }
     .into_any()
 }
@@ -323,19 +338,23 @@ const fn icone_da_pasta(pasta: &str) -> Icon {
 ///
 /// **O Core não sabe que isto existe.** Larguras de painel são disposição, e
 /// disposição pertence a quem está a olhar — não à instituição.
-fn separador(qual: &'static str, rotulo: &'static str) -> impl IntoView {
+///
+/// `minimo` é o mesmo mínimo que o `app.js` impõe (`MINIMOS`), e `omissao` a
+/// largura de partida do D13 (220 / 340 px). A linha visível desenha-a o CSS
+/// (`::after`); o elemento fica vazio.
+fn separador(qual: &'static str, rotulo: &'static str, minimo: u16, omissao: u16) -> impl IntoView {
     view! {
         <div
-            class="oc-mail__split"
+            class="ods-mail__sep"
             data-oc="separador"
             data-oc-separador=qual
             role="separator"
             aria-orientation="vertical"
             aria-label=rotulo
+            aria-valuemin=minimo
+            aria-valuenow=omissao
             tabindex="0"
-        >
-            <span class="oc-mail__split-linha" aria-hidden="true"></span>
-        </div>
+        ></div>
     }
 }
 
@@ -353,30 +372,42 @@ fn separador(qual: &'static str, rotulo: &'static str) -> impl IntoView {
 /// «minimizar» porque não existe minimizado, e não há botão de expandir
 /// separado do de repor: é o mesmo botão, e o seu estado diz em qual dos dois
 /// mundos se está.
-fn comandos_de_disposicao() -> impl IntoView {
+///
+/// # Porque são dois, e em sítios diferentes
+///
+/// O D13 põe cada um junto do que muda: recolher as pastas no cimo da coluna
+/// das pastas, o modo de leitura na barra da lista.
+fn alternar_pastas() -> impl IntoView {
     view! {
-        <div class="oc-mail__disposicao" data-oc="disposicao">
+        <div class="ods-mail__pastas-head" data-oc="disposicao">
             <button
                 type="button"
-                class="oc-icon-btn"
+                class="ods-iconbtn"
                 data-oc="alternar-pastas"
                 aria-pressed="false"
-                title=crate::i18n::t("mail.collapse_folders")
+                aria-label=crate::i18n::t("mail.folders.collapse")
+                title=crate::i18n::t("mail.folders.collapse")
             >
-                <span class="oc-sr">{crate::i18n::t("mail.collapse_folders")}</span>
-                {icon(Icon::SidebarCollapse, 15)}
-            </button>
-            <button
-                type="button"
-                class="oc-icon-btn"
-                data-oc="focar-leitura"
-                aria-pressed="false"
-                title=crate::i18n::t("mail.give_screen_to_reading")
-            >
-                <span class="oc-sr">{crate::i18n::t("mail.give_screen_to_reading")}</span>
-                {icon(Icon::Filter, 15)}
+                {icone("panel-left", "")}
             </button>
         </div>
+    }
+}
+
+/// O modo de leitura: pastas recolhidas e lista no mínimo (o `app.js` faz o
+/// resto). O estado diz-se por `aria-pressed`.
+fn focar_leitura() -> impl IntoView {
+    view! {
+        <button
+            type="button"
+            class="ods-iconbtn"
+            data-oc="focar-leitura"
+            aria-pressed="false"
+            aria-label=crate::i18n::t("mail.focus_reading")
+            title=crate::i18n::t("mail.focus_reading")
+        >
+            {icone("focus", "")}
+        </button>
     }
 }
 
@@ -389,7 +420,7 @@ fn comandos_de_disposicao() -> impl IntoView {
 fn sync_action(mailbox_id: &str, service_up: bool, folder: &str) -> impl IntoView {
     if !service_up || mailbox_id.is_empty() {
         return view! {
-            <span class="oc-btn oc-btn--secondary oc-unavailable" data-part="btn unavailable" aria-disabled="true"
+            <span class="ods-btn" data-part="btn unavailable" aria-disabled="true"
                   title=crate::i18n::t("mail.service_unavailable")>
                 {crate::i18n::t("mail.refresh")}
             </span>
@@ -401,10 +432,10 @@ fn sync_action(mailbox_id: &str, service_up: bool, folder: &str) -> impl IntoVie
     view! {
         // Formulário e não ligação: actualizar altera estado, e um `GET` que
         // altera estado é actualizado por qualquer pré-carregamento do browser.
-        <form method="post" action=action class="oc-mail__sync">
+        <form method="post" action=action>
             <input type="hidden" name="folder" value=folder.to_owned() />
-            <button type="submit" class="oc-btn oc-btn--secondary" data-part="btn">
-                {icon(Icon::Restart, 13)}
+            <button type="submit" class="ods-btn" data-part="btn">
+                {icone(icone_do_legado(Icon::Restart), "ods-icon--sm")}
                 {crate::i18n::t("mail.refresh")}
             </button>
         </form>
@@ -429,7 +460,7 @@ fn compose_action(can_compose: bool, mailbox_id: &str, service_up: bool) -> impl
             crate::i18n::t("mail.send_unavailable")
         };
         view! {
-            <span class="oc-btn oc-btn--primary oc-unavailable" data-part="btn unavailable" aria-disabled="true" title=reason>
+            <span class="ods-btn ods-btn--navy" data-part="btn unavailable" aria-disabled="true" title=reason>
                 {crate::i18n::t("mail.compose")}
             </span>
         }
@@ -451,12 +482,14 @@ fn service_notice(detail: &str, ligada: bool) -> impl IntoView {
     let detail = detail.to_owned();
     let por_ligar = !ligada;
     view! {
-        <div class="oc-callout oc-callout--warning oc-mail__banner" role="status">
-            {icon(Icon::Shield, 15)}
-            <p>{detail}</p>
-            {por_ligar.then(|| button(
-                Button::new(crate::i18n::t("mail.link_my_mailbox"), Variant::Secondary).href("/mail/settings"),
-            ))}
+        <div class="ods-app__toolbar">
+            <div class="ods-notice ods-notice--warning" role="status">
+                {icone("shield", "")}
+                <p>{detail}</p>
+                {por_ligar.then(|| button(
+                    Button::new(crate::i18n::t("mail.link_my_mailbox"), Variant::Secondary).href("/mail/settings"),
+                ))}
+            </div>
         </div>
     }
 }
@@ -554,7 +587,13 @@ fn rail(boxes: &[Value], current_id: &str, folder: &str, ja_dito: &str) -> impl 
     let ja_dito = ja_dito.trim().to_owned();
 
     view! {
-        <nav class="oc-mail__rail" data-part="mail__rail" aria-label=crate::i18n::t("mail.mailboxes")>
+        <nav
+            class="ods-mail__pastas"
+            data-part="mail__rail"
+            data-ods-scroll
+            aria-label=crate::i18n::t("mail.mailboxes")
+        >
+            {alternar_pastas()}
             {boxes
                 .into_iter()
                 .map(|mailbox| {
@@ -567,6 +606,8 @@ fn rail(boxes: &[Value], current_id: &str, folder: &str, ja_dito: &str) -> impl 
                         .and_then(Value::as_str)
                         .unwrap_or(&address)
                         .to_owned();
+                    let titulo_endereco = address.clone();
+                    let titulo_nome = name.clone();
                     let sync_error = mailbox
                         .get("last_sync_error")
                         .and_then(Value::as_str)
@@ -581,21 +622,29 @@ fn rail(boxes: &[Value], current_id: &str, folder: &str, ja_dito: &str) -> impl 
                     let folder = folder.clone();
 
                     view! {
-                        <div class="oc-mail__box" data-active=active.to_string()>
-                            <div class="oc-mail__box-head">
-                                <span class="oc-mail__box-name">{name}</span>
+                        // A identidade da caixa usa `ods-mail__pasta-nome`
+                        // para o nome e o endereço: com as pastas recolhidas
+                        // no trilho de 56 px, é essa classe que o D13 esconde
+                        // à vista (e deixa legível à tecnologia de apoio).
+                        <div class="ods-d13-group" data-active=active.to_string()>
+                            <p class="ods-d13-group__label">
+                                <span class="ods-mail__pasta-nome ods-card__title" title=titulo_nome>
+                                    {name}
+                                </span>
                                 {shared.then(|| badge(crate::i18n::t("mail.shared"), Tone::Gray))}
-                            </div>
-                            <span class="oc-mail__box-address oc-mono">{address}</span>
+                            </p>
+                            <p class="ods-mail__pasta-nome ods-field__hint" title=titulo_endereco>
+                                {address}
+                            </p>
 
                             // Uma falha de sincronização aparece onde a caixa
                             // aparece. Escondê-la faria a lista parecer
                             // actualizada quando não está (briefing §100).
                             {sync_error.map(|reason| view! {
-                                <p class="oc-mail__box-error" role="status">{reason}</p>
+                                <p class="ods-notice ods-notice--warning" role="status">{reason}</p>
                             })}
 
-                            <ul class="oc-mail__folders">
+                            <ul class="ods-d12-results">
                                 {folders
                                     .into_iter()
                                     .map(|entry| {
@@ -616,18 +665,23 @@ fn rail(boxes: &[Value], current_id: &str, folder: &str, ja_dito: &str) -> impl 
                                             .unwrap_or(0);
                                         let selected = active && key == folder;
                                         let href = format!("/mail/{id}?folder={key}");
+                                        let titulo_pasta = label.clone();
 
                                         view! {
                                             <li>
+                                                // O `title` leva o nome quando
+                                                // o trilho recolhido só mostra
+                                                // o ícone.
                                                 <a
-                                                    class="oc-mail__folder"
+                                                    class="ods-mail__pasta"
                                                     href=href
+                                                    title=titulo_pasta
                                                     aria-current=selected.then_some("page")
                                                 >
-                                                    {icon(icone_da_pasta(&key), 14)}
-                                                    <span>{label}</span>
+                                                    {icone(icone_do_legado(icone_da_pasta(&key)), "")}
+                                                    <span class="ods-mail__pasta-nome">{label}</span>
                                                     {(unread > 0).then(|| view! {
-                                                        <span class="oc-mail__count">{unread}</span>
+                                                        <span class="ods-mail__pasta-n">{unread}</span>
                                                     })}
                                                 </a>
                                             </li>
@@ -679,29 +733,34 @@ fn list(
     let count = items.len();
 
     view! {
-        <div class="oc-mail__list" data-part="mail__list">
-            // Pesquisa por GET, dentro da caixa aberta. O Core filtra por
-            // pertença antes de devolver — pesquisar não é forma de alcançar
-            // correio alheio (`CLAUDE.md` §28).
-            <form class="oc-mail__search" method="get" action=action role="search">
-                <input type="hidden" name="folder" value=folder.clone() />
-                <label class="oc-sr" for="mail-q">{crate::i18n::t("mail.search_this_box")}</label>
-                <span class="oc-mail__search-icon">{icon(Icon::Search, 14)}</span>
-                <input
-                    class="oc-input"
-                    id="mail-q"
-                    name="q"
-                    type="search"
-                    value=query.to_owned()
-                    placeholder=crate::i18n::t("mail.search_this_box.placeholder")
-                />
-                <button type="submit" class="oc-btn oc-btn--secondary" data-part="btn">{crate::i18n::t("mail.search_submit")}</button>
-            </form>
+        <section class="ods-mail__lista" data-part="mail__list" data-ods-scroll>
+            <div class="ods-mail__lista-bar">
+                // Pesquisa por GET, dentro da caixa aberta. O Core filtra por
+                // pertença antes de devolver — pesquisar não é forma de alcançar
+                // correio alheio (`CLAUDE.md` §28).
+                <form class="ods-search" method="get" action=action role="search">
+                    <input type="hidden" name="folder" value=folder.clone() />
+                    <label class="ods-sr-only" for="mail-q">{crate::i18n::t("mail.search_this_box")}</label>
+                    {icone("search", "ods-icon--sm")}
+                    <input
+                        class="ods-search__input"
+                        id="mail-q"
+                        name="q"
+                        type="search"
+                        value=query.to_owned()
+                        placeholder=crate::i18n::t("mail.search_this_box.placeholder")
+                    />
+                    <button type="submit" class="ods-btn ods-btn--sm" data-part="btn">{crate::i18n::t("mail.search_submit")}</button>
+                </form>
+                {focar_leitura()}
+            </div>
 
             {searching.then(|| view! {
-                <p class="oc-mail__result-count" role="status">
-                    {crate::i18n::tf("mail.search.result_count", &[("count", &count.to_string())])}
-                </p>
+                <div class="ods-d12-folder-head">
+                    <p class="ods-field__hint" role="status">
+                        {crate::i18n::tf("mail.search.result_count", &[("count", &count.to_string())])}
+                    </p>
+                </div>
             })}
 
             {if items.is_empty() {
@@ -729,7 +788,7 @@ fn list(
                 .into_any()
             } else {
                 view! {
-                    <ul class="oc-mail__items">
+                    <ul class="ods-d12-results">
                         {items
                             .into_iter()
                             .map(|message| row(&message, &open_id))
@@ -738,7 +797,7 @@ fn list(
                 }
                 .into_any()
             }}
-        </div>
+        </section>
     }
 }
 
@@ -779,34 +838,42 @@ fn row(message: &Value, open_id: &str) -> impl IntoView {
 
     view! {
         <li>
+            // A linha do D8: marca · remetente, assunto e resumo · data.
+            // `data-unread` só existe quando é verdade — o D8 pesa a linha pela
+            // presença do atributo, e `data-unread="false"` também pesaria.
             <a
-                class="oc-mail__item" data-part="mail__item"
+                class="ods-mail__row" data-part="mail__item"
                 href=href
-                data-unread=unread.to_string()
+                data-unread=unread.then_some("")
                 aria-current=selected.then_some("page")
             >
-                <div class="oc-mail__item-top">
-                    <span class="oc-mail__from">{from}</span>
-                    <span class="oc-mail__address oc-mono">{address}</span>
-                    <span class="oc-mail__when oc-mono">{when}</span>
-                </div>
-                <div class="oc-mail__item-mid">
+                <span>
                     // Não-lida marcada por peso e por marca, nunca só por cor
                     // (`CLAUDE.md` §51).
-                    {unread.then(|| view! { <span class="oc-mail__dot" aria-label=crate::i18n::t("mail.unread_badge")></span> })}
-                    <span class="oc-mail__subject">{subject}</span>
-                    {starred.then(|| view! {
-                        <span class="oc-mail__star" aria-label=crate::i18n::t("mail.starred_label")>
-                            {icon(Icon::Star, 12)}
-                        </span>
-                    })}
-                    {has_attachments.then(|| view! {
-                        <span class="oc-mail__clip" aria-label=crate::i18n::t("mail.has_attachments")>
-                            {icon(Icon::Attach, 12)}
-                        </span>
-                    })}
+                    {unread.then(|| view! { <span class="ods-dot" aria-label=crate::i18n::t("mail.unread_badge")></span> })}
+                </span>
+                <div>
+                    <div class="ods-mail__from">
+                        {from}
+                        " "
+                        <span class="ods-field__hint">{address}</span>
+                    </div>
+                    <div class="ods-mail__subject">
+                        {starred.then(|| view! {
+                            <span aria-label=crate::i18n::t("mail.starred_label")>
+                                {icone("star-fill", "ods-icon--sm")}
+                            </span>
+                        })}
+                        {has_attachments.then(|| view! {
+                            <span aria-label=crate::i18n::t("mail.has_attachments")>
+                                {icone(icone_do_legado(Icon::Attach), "ods-icon--sm")}
+                            </span>
+                        })}
+                        {subject}
+                    </div>
+                    <p class="ods-field__hint">{preview}</p>
                 </div>
-                <p class="oc-mail__preview">{preview}</p>
+                <span class="ods-mail__when">{when}</span>
             </a>
         </li>
     }
@@ -814,19 +881,15 @@ fn row(message: &Value, open_id: &str) -> impl IntoView {
 
 /// A coluna de leitura antes de se abrir alguma coisa.
 fn reading_placeholder() -> impl IntoView {
-    view! {
-        <div class="oc-mail__pane oc-mail__pane--empty" data-part="mail__pane">
-            {empty_state(EmptyState {
-                icon: Icon::Mail,
-                title: crate::i18n::t("mail.select_message").to_owned(),
-                body: "O conteúdo aparece aqui. Imagens e conteúdo remoto não são \
-                       carregados automaticamente."
-                    .to_owned(),
-                actions: Vec::new(),
-                small: true,
-            })}
-        </div>
-    }
+    empty_state(EmptyState {
+        icon: Icon::Mail,
+        title: crate::i18n::t("mail.select_message").to_owned(),
+        body: "O conteúdo aparece aqui. Imagens e conteúdo remoto não são \
+               carregados automaticamente."
+            .to_owned(),
+        actions: Vec::new(),
+        small: true,
+    })
 }
 
 // ── Coluna 3: a leitura ─────────────────────────────────────────────────
@@ -880,30 +943,32 @@ fn reading(viewer: &Viewer, view: &MailView, payload: &Value) -> impl IntoView {
     let _ = viewer;
 
     view! {
-        <article class="oc-mail__pane" data-part="mail__pane">
-            <header class="oc-mail__pane-head" data-part="mail__pane-head">
-                <h2>{subject}</h2>
-                <div class="oc-mail__meta">
-                    <span class="oc-mail__from">
+        <div class="ods-d12-mail-read">
+            <header data-part="mail__pane-head">
+                <h2 class="ods-page__title">{subject}</h2>
+                <p>
+                    <span class="ods-mail__from">
                         {if from_display.is_empty() { from_address.clone() } else { from_display }}
                     </span>
-                    <span class="oc-mono oc-mail__address">{from_address}</span>
-                    <span class="oc-mono oc-mail__when">{when}</span>
-                </div>
+                    " "
+                    <span class="ods-field__hint">{from_address}</span>
+                    " "
+                    <span class="ods-mail__when">{when}</span>
+                </p>
                 {(!recipients.is_empty()).then(|| view! {
-                    <p class="oc-mail__recipients">{crate::i18n::t("mail.reader.to")}<span class="oc-mono" data-oc-content="1">{recipients}</span></p>
+                    <p class="ods-field__hint">{crate::i18n::t("mail.reader.to")}<span data-oc-content="1">{recipients}</span></p>
                 })}
                 {(!copies.is_empty()).then(|| view! {
-                    <p class="oc-mail__recipients">{crate::i18n::t("mail.reader.cc")}<span class="oc-mono" data-oc-content="1">{copies}</span></p>
+                    <p class="ods-field__hint">{crate::i18n::t("mail.reader.cc")}<span data-oc-content="1">{copies}</span></p>
                 })}
 
-                <div class="oc-mail__actions">
+                <div class="ods-settings__actions">
                     {if can_reply {
                         button(Button::new(crate::i18n::t("mail.reply"), Variant::Primary).href(reply_href)).into_any()
                     } else {
                         view! {
                             <span
-                                class="oc-btn oc-btn--primary oc-unavailable" data-part="btn unavailable"
+                                class="ods-btn ods-btn--navy" data-part="btn unavailable"
                                 aria-disabled="true"
                                 title=crate::i18n::t("mail.send_unavailable")
                             >{crate::i18n::t("mail.reply")}</span>
@@ -932,17 +997,17 @@ fn reading(viewer: &Viewer, view: &MailView, payload: &Value) -> impl IntoView {
             // higienizado do Ocinye Core, por lista de permissões: sem
             // `<script>`, sem `on*`, sem `javascript:`, sem `<iframe>`,
             // sem `<form>`. Ver `ocinye_core::modules::mail::sanitize`.
-            <div class="oc-mail__body" inner_html=body_html></div>
+            <div class="ods-d12-mail-read__body" inner_html=body_html></div>
 
             {(!attachments.is_empty()).then(|| attachment_list(&attachments))}
 
             {(!domains.is_empty()).then(|| view! {
-                <p class="oc-mail__domains">
+                <p class="ods-field__hint">
                     {crate::i18n::t("mail.links_to")}
-                    <span class="oc-mono">{domains.join(", ")}</span>
+                    <span>{domains.join(", ")}</span>
                 </p>
             })}
-        </article>
+        </div>
     }
 }
 
@@ -974,12 +1039,14 @@ fn flag_form(
 ) -> impl IntoView {
     let action = format!("/mail/message/{id}/flags");
     view! {
-        <form method="post" action=action class="oc-mail__flag">
+        // O D12 desenha estas acções como botões de ícone; o rótulo fica
+        // inteiro para quem não vê o ícone (e no `title` para quem o vê).
+        <form method="post" action=action>
             <input type="hidden" name="field" value=field />
             <input type="hidden" name="value" value=value.to_string() />
-            <button type="submit" class="oc-btn oc-btn--secondary" data-part="btn" title=label>
-                {icon(kind, 13)}
-                {label}
+            <button type="submit" class="ods-iconbtn" data-part="btn" title=label>
+                {icone(icone_do_legado(kind), "")}
+                <span class="ods-sr-only">{label}</span>
             </button>
         </form>
     }
@@ -1006,8 +1073,8 @@ fn flag_form(
 /// ausência declarada (`CLAUDE.md` §69, briefing §66).
 fn remote_banner(_id: &str, blocked: u64) -> impl IntoView {
     view! {
-        <div class="oc-callout oc-mail__banner" role="status">
-            {icon(Icon::Shield, 15)}
+        <div class="ods-notice" role="status">
+            {icone("shield", "")}
             <p>
                 {format!(
                     "{blocked} elemento(s) remoto(s) não foram carregados. O Ocinye \
@@ -1027,9 +1094,9 @@ fn remote_banner(_id: &str, blocked: u64) -> impl IntoView {
 fn attachment_list(attachments: &[Value]) -> impl IntoView {
     let attachments = attachments.to_vec();
     view! {
-        <section class="oc-mail__attachments">
-            <h3>{crate::i18n::t("mail.attachments")}</h3>
-            <ul>
+        <section>
+            <h3 class="ods-label">{crate::i18n::t("mail.attachments")}</h3>
+            <ul class="ods-d12-results ods-chips">
                 {attachments
                     .into_iter()
                     .map(|attachment| {
@@ -1040,13 +1107,13 @@ fn attachment_list(attachments: &[Value]) -> impl IntoView {
                             .and_then(Value::as_i64)
                             .unwrap_or(0);
                         view! {
-                            <li class="oc-mail__attachment">
-                                {icon(Icon::Attach, 13)}
-                                <span class="oc-mail__attachment-name">{name}</span>
-                                <span class="oc-mono oc-mail__attachment-meta">
+                            <li class="ods-token">
+                                {icone(icone_do_legado(Icon::Attach), "ods-icon--sm")}
+                                <span>{name}</span>
+                                <span class="ods-mail__when">
                                     {format!("{kind} · {}", human_size(size))}
                                 </span>
-                                <span class="oc-unavailable" data-part="unavailable" aria-disabled="true"
+                                <span class="ods-chip" data-part="unavailable" aria-disabled="true"
                                       title=crate::i18n::t("mail.attachment.unavailable")>
                                     {crate::i18n::t("mail.attachment.download")}
                                 </span>
@@ -1223,57 +1290,75 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
     let bcc_aberto = !bcc.is_empty();
     let assinatura = draft.signature_html.clone();
 
+    // A estrutura do D8/D13: a janela (`.ods-composer`) é uma coluna; dentro
+    // dela, o formulário ocupa a janela toda (`.ods-app`, a moldura comum das
+    // apps) e é ele a coluna barra · linhas · corpo · rodapé. A barra vive
+    // dentro do formulário porque é a única forma de o corpo (`flex: 1`) ser
+    // filho de uma coluna flexível sem acrescentar CSS; não tem campos, e
+    // por isso não muda o que se submete.
     view! {
-        <div
-            class="oc-comp"
+        <section
+            class="ods-composer ods-window-surface"
             data-oc="compositor"
             data-oc-draft-id=draft_id.clone().unwrap_or_default()
             role="dialog"
             aria-label=titulo
         >
-            // A pega é o cabeçalho inteiro: agarrar por uma barra fina é
-            // preciso de mais para uma janela que se quer mover à pressa.
-            <header class="oc-comp__topo" data-oc="compositor-pega">
-                <h2 class="oc-comp__titulo">{titulo}</h2>
-                <div class="oc-comp__janela">
+            // A pega de redimensionar, no canto superior esquerdo: a janela
+            // está ancorada em baixo à direita e cresce para cima e para a
+            // esquerda (D13, Q-24).
+            <button
+                type="button"
+                class="ods-composer__grip"
+                data-oc="compositor-puxador"
+                aria-label=crate::i18n::t("mail.composer.resize")
+            >
+                {icone("grip", "")}
+            </button>
+
+            <form class="ods-app" method="post" action="/mail/send">
+                // A pega de mover é o cabeçalho inteiro: agarrar por uma barra
+                // fina é preciso de mais para uma janela que se quer mover à
+                // pressa.
+                <header class="ods-composer__bar" data-oc="compositor-pega">
+                    <h2 class="ods-modal__title">{titulo}</h2>
+                    <span class="ods-app__toolbar-spacer"></span>
                     <button
                         type="button"
-                        class="oc-icon-btn"
+                        class="ods-iconbtn"
                         data-oc="compositor-expandir"
                         aria-pressed="false"
                         title=crate::i18n::t("mail.compose.expand_short")
                     >
-                        <span class="oc-sr">{crate::i18n::t("mail.compose.expand")}</span>
-                        {icon(Icon::Filter, 14)}
+                        <span class="ods-sr-only">{crate::i18n::t("mail.compose.expand")}</span>
+                        {icone(icone_do_legado(Icon::Filter), "")}
                     </button>
                     // Fechar continua a ser uma ligação — fechar sem script tem
                     // de funcionar, e voltar ao correio é o que fechar significa.
                     // Com script, é interceptada: se houver alterações por
                     // guardar, pergunta antes de sair (briefing §2).
                     <a
-                        class="oc-icon-btn"
+                        class="ods-iconbtn"
                         href="/mail"
                         title=crate::i18n::t("mail.compose.close_short")
                         data-oc="compositor-fechar"
                     >
-                        <span class="oc-sr">{crate::i18n::t("mail.compose.close")}</span>
-                        {icon(Icon::Close, 14)}
+                        <span class="ods-sr-only">{crate::i18n::t("mail.compose.close")}</span>
+                        {icone("close", "")}
                     </a>
-                </div>
-            </header>
+                </header>
 
-            {erro.map(|razao| view! {
-                <p class="oc-comp__erro" role="alert">{razao}</p>
-            })}
+                {erro.map(|razao| view! {
+                    <p class="ods-notice ods-notice--error" role="alert">{razao}</p>
+                })}
 
-            {gerado.then(|| view! {
-                <p class="oc-comp__gerado" role="status">
-                    "O texto abaixo foi preparado pela assistência. Nada foi enviado:
-                     leia, altere o que for preciso, e envie quando quiser."
-                </p>
-            })}
+                {gerado.then(|| view! {
+                    <p class="ods-notice" role="status">
+                        "O texto abaixo foi preparado pela assistência. Nada foi enviado:
+                         leia, altere o que for preciso, e envie quando quiser."
+                    </p>
+                })}
 
-            <form class="oc-comp__forma" method="post" action="/mail/send">
                 <input type="hidden" name="mailbox_id" value=mailbox_id />
                 // O identificador do rascunho persistido, quando já existe. O JS
                 // do autosave lê-o e reescreve-o; viaja no formulário para o
@@ -1290,18 +1375,18 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
 
                 // O remetente é um facto, e não uma escolha: o Core resolve-o
                 // a partir de quem está autenticado e recusa qualquer outro.
-                <div class="oc-comp__linha oc-comp__linha--de">
-                    <span class="oc-comp__rotulo">{crate::i18n::t("mail.compose.from")}</span>
+                <div class="ods-composer__line">
+                    <span class="ods-field__label">{crate::i18n::t("mail.compose.from")}</span>
                     {if sem_identidade {
                         view! {
-                            <span class="oc-comp__sem-identidade">
+                            <span class="ods-field__hint">
                                 {crate::i18n::t("mail.no_mailbox_to_send")}
                             </span>
                         }
                         .into_any()
                     } else {
                         view! {
-                            <span class="oc-comp__de oc-mono">{de.clone()}</span>
+                            <span>{de.clone()}</span>
                             <input type="hidden" name="from" value=de.clone() />
                         }
                         .into_any()
@@ -1310,22 +1395,24 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
 
                 {campo_de_destinatarios("to", crate::i18n::t("mail.compose.to"), &to, true)}
 
-                <div class="oc-comp__linha oc-comp__linha--cc" data-oc="linha-cc" hidden=!cc_aberto>
+                <div data-oc="linha-cc" hidden=!cc_aberto>
                     {campo_de_destinatarios("cc", crate::i18n::t("mail.compose.cc"), &cc, false)}
                 </div>
 
-                <div class="oc-comp__linha oc-comp__linha--cc" data-oc="linha-bcc" hidden=!bcc_aberto>
+                <div data-oc="linha-bcc" hidden=!bcc_aberto>
                     {campo_de_destinatarios("bcc", crate::i18n::t("mail.compose.bcc"), &bcc, false)}
                 </div>
 
-                <input
-                    class="oc-comp__assunto" data-part="comp__assunto"
-                    type="text"
-                    name="subject"
-                    value=subject
-                    placeholder=crate::i18n::t("mail.compose.subject")
-                    aria-label=crate::i18n::t("mail.compose.subject")
-                />
+                <div class="ods-composer__line">
+                    <input
+                        class="ods-search__input" data-part="comp__assunto"
+                        type="text"
+                        name="subject"
+                        value=subject
+                        placeholder=crate::i18n::t("mail.compose.subject")
+                        aria-label=crate::i18n::t("mail.compose.subject")
+                    />
+                </div>
 
                 // A formatação e o editor de corpo rico (ADR-0415). Progressivo:
                 // sem JavaScript, a barra e o editor ficam escondidos e o
@@ -1335,112 +1422,115 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                 // envio: nenhum controlo do cliente é a fronteira de segurança.
                 {barra_de_formatacao()}
 
-                // Os anexos aparecem logo abaixo da barra, para ficarem à vista
-                // assim que se juntam. A lista só ocupa espaço quando tem fichas
-                // (`:not(:empty)` no CSS). Cada anexo já guardado vem do servidor;
-                // o JS acrescenta os novos e trata a remoção. Os bytes passam pela
-                // quota (ADR-0108) e são validados no Core (§40).
-                <ul class="oc-comp__anexos-lista" data-oc="anexos-lista">
-                    {anexos
-                        .into_iter()
-                        .map(|anexo| ficha_de_anexo(&anexo.id, &anexo.filename, &anexo.size))
-                        .collect_view()}
-                </ul>
+                <div class="ods-composer__body">
+                    // Os anexos aparecem logo abaixo da barra, para ficarem à
+                    // vista assim que se juntam. A lista não ocupa espaço
+                    // vazia (sem margem nem recuo). Cada anexo já guardado vem
+                    // do servidor; o JS acrescenta os novos e trata a remoção.
+                    // Os bytes passam pela quota (ADR-0108) e são validados no
+                    // Core (§40).
+                    <ul class="ods-d12-results ods-chips" data-oc="anexos-lista">
+                        {anexos
+                            .into_iter()
+                            .map(|anexo| ficha_de_anexo(&anexo.id, &anexo.filename, &anexo.size))
+                            .collect_view()}
+                    </ul>
 
-                {match corpo_html.clone() {
-                    Some(html) => view! {
-                        <div
-                            class="oc-comp__editor"
-                            data-oc="compositor-editor"
-                            contenteditable="true"
-                            role="textbox"
-                            aria-multiline="true"
-                            aria-label=crate::i18n::t("mail.message")
-                            inner_html=html
-                            hidden
-                        ></div>
-                    }
-                    .into_any(),
-                    None => view! {
-                        <div
-                            class="oc-comp__editor"
-                            data-oc="compositor-editor"
-                            contenteditable="true"
-                            role="textbox"
-                            aria-multiline="true"
-                            aria-label=crate::i18n::t("mail.message")
-                            hidden
-                        >{corpo.clone()}</div>
-                    }
-                    .into_any(),
-                }}
+                    {match corpo_html.clone() {
+                        Some(html) => view! {
+                            <div
+                                class="ods-d12-mail-read__body"
+                                data-oc="compositor-editor"
+                                contenteditable="true"
+                                role="textbox"
+                                aria-multiline="true"
+                                aria-label=crate::i18n::t("mail.message")
+                                inner_html=html
+                                hidden
+                            ></div>
+                        }
+                        .into_any(),
+                        None => view! {
+                            <div
+                                class="ods-d12-mail-read__body"
+                                data-oc="compositor-editor"
+                                contenteditable="true"
+                                role="textbox"
+                                aria-multiline="true"
+                                aria-label=crate::i18n::t("mail.message")
+                                hidden
+                            >{corpo.clone()}</div>
+                        }
+                        .into_any(),
+                    }}
 
-                <textarea
-                    class="oc-comp__corpo"
-                    name="body"
-                    data-oc="compositor-corpo"
-                    placeholder=crate::i18n::t("mail.compose.body_placeholder")
-                    aria-label=crate::i18n::t("mail.message")
-                >{corpo}</textarea>
+                    <textarea
+                        class="ods-input"
+                        rows="12"
+                        name="body"
+                        data-oc="compositor-corpo"
+                        placeholder=crate::i18n::t("mail.compose.body_placeholder")
+                        aria-label=crate::i18n::t("mail.message")
+                    >{corpo}</textarea>
 
-                <input
-                    type="hidden"
-                    name="html_body"
-                    data-oc="compositor-html"
-                    value=corpo_html.unwrap_or_default()
-                />
+                    <input
+                        type="hidden"
+                        name="html_body"
+                        data-oc="compositor-html"
+                        value=corpo_html.unwrap_or_default()
+                    />
 
-                // A instrução da assistência viaja com o formulário para não
-                // se perder quando o texto é regenerado.
-                <input type="hidden" name="instruction" value=instrucao />
+                    // A instrução da assistência viaja com o formulário para não
+                    // se perder quando o texto é regenerado.
+                    <input type="hidden" name="instruction" value=instrucao />
 
-                // A assinatura institucional não se escreve aqui: é
-                // acrescentada no envio, como projecção determinística do Core
-                // (ADR-0414). Mostra-se para quem escreve saber o que vai sair
-                // — «não via a assinatura em baixo» —, mas não é editável, e por
-                // isso vive fora do corpo submetido.
-                {assinatura.map(|html| view! {
-                    <details class="oc-comp__assinatura" data-oc="assinatura">
-                        <summary class="oc-comp__assinatura-rotulo">
-                            {crate::i18n::t("mail.settings.signature_added")}
-                        </summary>
-                        <div class="oc-comp__assinatura-corpo" inner_html=html></div>
-                    </details>
-                })}
+                    // A assinatura institucional não se escreve aqui: é
+                    // acrescentada no envio, como projecção determinística do Core
+                    // (ADR-0414). Mostra-se para quem escreve saber o que vai sair
+                    // — «não via a assinatura em baixo» —, mas não é editável, e por
+                    // isso vive fora do corpo submetido.
+                    {assinatura.map(|html| view! {
+                        <details data-oc="assinatura">
+                            <summary class="ods-field__hint">
+                                {crate::i18n::t("mail.settings.signature_added")}
+                            </summary>
+                            <div inner_html=html></div>
+                        </details>
+                    })}
 
-                {confirmacao.map(|_| view! {
-                    <label class="oc-comp__confirmar" for="mail-confirm">
-                        <input type="checkbox" id="mail-confirm" name="confirmed" value="true" />
-                        <span>
-                            "Confirmo que pretendo enviar esta mensagem para fora da
-                             instituição."
-                        </span>
-                    </label>
-                })}
+                    {confirmacao.map(|_| view! {
+                        <label class="ods-notice ods-notice--warning" for="mail-confirm">
+                            <input class="ods-check" type="checkbox" id="mail-confirm" name="confirmed" value="true" />
+                            <span>
+                                "Confirmo que pretendo enviar esta mensagem para fora da
+                                 instituição."
+                            </span>
+                        </label>
+                    })}
+                </div>
 
-                <footer class="oc-comp__barra">
+                <footer class="ods-composer__foot">
                     {assistencia_na_barra(view)}
-                    <div class="oc-comp__enviar">
-                        // Estado do autosave: discreto, ao lado do envio. Só o JS
-                        // o preenche («A guardar…», «Guardado às HH:MM», «Erro ao
-                        // guardar»); sem script fica vazio e o envio funciona na
-                        // mesma (briefing §55).
-                        <span
-                            class="oc-comp__estado"
-                            data-oc="compositor-estado"
-                            role="status"
-                            aria-live="polite"
-                        ></span>
-                        <button
-                            type="submit"
-                            class="oc-btn oc-btn--primary" data-part="btn"
-                            data-oc="compositor-enviar"
-                            disabled=sem_identidade
-                        >
-                            {icon(Icon::Send, 14)}
-                            {crate::i18n::t("mail.compose.send")}
-                        </button>
-                    </div>
+                    <span class="ods-app__toolbar-spacer"></span>
+                    // Estado do autosave: discreto, ao lado do envio. Só o JS
+                    // o preenche («A guardar…», «Guardado às HH:MM», «Erro ao
+                    // guardar»); sem script fica vazio e o envio funciona na
+                    // mesma (briefing §55).
+                    <span
+                        class="ods-editor__state"
+                        data-oc="compositor-estado"
+                        role="status"
+                        aria-live="polite"
+                    ></span>
+                    <button
+                        type="submit"
+                        class="ods-btn ods-btn--navy" data-part="btn"
+                        data-oc="compositor-enviar"
+                        disabled=sem_identidade
+                    >
+                        {icone(icone_do_legado(Icon::Send), "ods-icon--sm")}
+                        {crate::i18n::t("mail.compose.send")}
+                    </button>
                 </footer>
             </form>
 
@@ -1448,38 +1538,40 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
             // nunca `confirm()` do browser (briefing §58). Escondido até ser
             // preciso; o JS mostra-o, prende-lhe o foco, e trata cada acção.
             <div
-                class="oc-comp__descartar"
+                class="ods-modal"
                 data-oc="compositor-descartar"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="oc-descartar-titulo"
                 hidden
             >
-                <div class="oc-comp__descartar-caixa">
-                    <h3 id="oc-descartar-titulo" class="oc-comp__descartar-titulo">
-                        {crate::i18n::t("mail.compose.save_as_draft_q")}
-                    </h3>
-                    <p class="oc-comp__descartar-corpo">
+                <div class="ods-modal__panel ods-window-surface">
+                    <div class="ods-modal__head">
+                        <h3 id="oc-descartar-titulo" class="ods-modal__title">
+                            {crate::i18n::t("mail.compose.save_as_draft_q")}
+                        </h3>
+                    </div>
+                    <p class="ods-modal__body">
                         {crate::i18n::t("mail.compose.unsent_changes")}
                     </p>
-                    <div class="oc-comp__descartar-accoes">
+                    <div class="ods-modal__foot">
                         <button
                             type="button"
-                            class="oc-btn oc-btn--primary" data-part="btn"
+                            class="ods-btn ods-btn--navy" data-part="btn"
                             data-oc="descartar-guardar"
                         >
                             {crate::i18n::t("mail.compose.save_draft")}
                         </button>
                         <button
                             type="button"
-                            class="oc-btn oc-btn--danger" data-part="btn"
+                            class="ods-btn ods-btn--danger" data-part="btn"
                             data-oc="descartar-descartar"
                         >
                             {crate::i18n::t("mail.compose.discard")}
                         </button>
                         <button
                             type="button"
-                            class="oc-btn" data-part="btn"
+                            class="ods-btn" data-part="btn"
                             data-oc="descartar-cancelar"
                         >
                             {crate::i18n::t("mail.compose.cancel")}
@@ -1487,24 +1579,10 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                     </div>
                 </div>
             </div>
-
-            <span
-                class="oc-comp__puxador"
-                data-oc="compositor-puxador"
-                aria-hidden="true"
-            ></span>
-        </div>
+        </section>
     }
 }
 
-/// Uma linha de destinatários, com fichas quando o browser as souber fazer.
-///
-/// # Porque o campo de texto continua a existir
-///
-/// Porque é ele que submete. As fichas são uma camada por cima: o JavaScript
-/// lê este campo, desenha as fichas, e volta a escrevê-lo a cada alteração. Se
-/// o script não correr, fica um campo de texto com endereços separados por
-/// vírgula — que é feio e funciona.
 /// Uma ficha de anexo: nome, tamanho, e um botão para o retirar.
 ///
 /// O botão leva `data-oc` (contrato de comportamento) e o `data-oc-id` que o JS
@@ -1512,13 +1590,13 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
 fn ficha_de_anexo(id: &str, filename: &str, size: &str) -> impl IntoView {
     let rotulo = crate::i18n::tf("mail.remove_attachment_named", &[("file", filename)]);
     view! {
-        <li class="oc-comp__anexo" data-oc="anexo" data-oc-id=id.to_owned()>
-            {icon(Icon::Attach, 12)}
-            <span class="oc-comp__anexo-nome" data-part="comp__anexo-nome">{filename.to_owned()}</span>
-            <span class="oc-comp__anexo-tam">{size.to_owned()}</span>
+        <li class="ods-token" data-oc="anexo" data-oc-id=id.to_owned()>
+            {icone(icone_do_legado(Icon::Attach), "ods-icon--sm")}
+            <span data-part="comp__anexo-nome">{filename.to_owned()}</span>
+            <span class="ods-mail__when">{size.to_owned()}</span>
             <button
                 type="button"
-                class="oc-comp__anexo-tirar"
+                class="ods-iconbtn"
                 data-oc="tirar-anexo"
                 aria-label=rotulo
             >
@@ -1533,22 +1611,26 @@ fn ficha_de_anexo(id: &str, filename: &str, size: &str) -> impl IntoView {
 /// Cada botão nomeia o comando de edição que executa (`data-oc-cmd`); o JS
 /// liga-os ao editor e não há aqui nenhum controlo morto (briefing §12). Fica
 /// escondida sem JavaScript — sem editor não há formatação a aplicar.
+///
+/// Os glifos de negrito, itálico, sublinhado e riscado são os próprios
+/// elementos (`<b>`, `<i>`, `<u>`, `<s>`): mostram o que fazem sem classe
+/// nenhuma a desenhá-los.
 fn barra_de_formatacao() -> impl IntoView {
-    // (comando, argumento, rótulo, glifo, classe do glifo)
-    let botoes: [(&str, &str, &str, &str, &str); 9] = [
-        ("bold", "", "mail.fmt.bold", "B", "oc-ff__b"),
-        ("italic", "", "mail.fmt.italic", "I", "oc-ff__i"),
-        ("underline", "", "mail.fmt.underline", "U", "oc-ff__u"),
-        ("strikeThrough", "", "mail.fmt.strike", "S", "oc-ff__s"),
-        ("insertUnorderedList", "", "mail.fmt.list", "•", ""),
-        ("insertOrderedList", "", "mail.fmt.numbered", "1.", ""),
-        ("formatBlock", "blockquote", "mail.fmt.quote", "❝", ""),
-        ("link", "", "mail.fmt.link", "↗", ""),
-        ("removeFormat", "", "mail.fmt.clear", "⌫", ""),
+    // (comando, argumento, rótulo, glifo)
+    let botoes: [(&str, &str, &str, &str); 9] = [
+        ("bold", "", "mail.fmt.bold", "B"),
+        ("italic", "", "mail.fmt.italic", "I"),
+        ("underline", "", "mail.fmt.underline", "U"),
+        ("strikeThrough", "", "mail.fmt.strike", "S"),
+        ("insertUnorderedList", "", "mail.fmt.list", "•"),
+        ("insertOrderedList", "", "mail.fmt.numbered", "1."),
+        ("formatBlock", "blockquote", "mail.fmt.quote", "❝"),
+        ("link", "", "mail.fmt.link", "↗"),
+        ("removeFormat", "", "mail.fmt.clear", "⌫"),
     ];
     view! {
         <div
-            class="oc-comp__ferramentas"
+            class="ods-composer__line"
             data-oc="compositor-ferramentas"
             role="toolbar"
             aria-label=crate::i18n::t("mail.fmt.toolbar")
@@ -1556,37 +1638,44 @@ fn barra_de_formatacao() -> impl IntoView {
         >
             {botoes
                 .into_iter()
-                .map(|(cmd, arg, rotulo, glifo, classe)| {
+                .map(|(cmd, arg, rotulo, glifo)| {
+                    let glifo = match cmd {
+                        "bold" => view! { <b aria-hidden="true">{glifo}</b> }.into_any(),
+                        "italic" => view! { <i aria-hidden="true">{glifo}</i> }.into_any(),
+                        "underline" => view! { <u aria-hidden="true">{glifo}</u> }.into_any(),
+                        "strikeThrough" => view! { <s aria-hidden="true">{glifo}</s> }.into_any(),
+                        _ => view! { <span aria-hidden="true">{glifo}</span> }.into_any(),
+                    };
                     view! {
                         <button
                             type="button"
-                            class="oc-comp__ferramenta"
+                            class="ods-iconbtn"
                             data-oc="ferramenta"
                             data-oc-cmd=cmd
                             data-oc-arg=arg
                             title=crate::i18n::t(rotulo)
                             aria-label=crate::i18n::t(rotulo)
                         >
-                            <span class=classe aria-hidden="true">{glifo}</span>
+                            {glifo}
                         </button>
                     }
                 })
                 .collect_view()}
 
-            <span class="oc-comp__ferramenta-sep" aria-hidden="true"></span>
+            <span class="ods-app__toolbar-spacer" aria-hidden="true"></span>
 
             // Anexar vive na barra, ao lado da formatação — faz parte das
             // ferramentas de composição, não de uma fila solta lá em baixo. O
             // `label` abre o selector; largar ficheiros sobre a janela também
             // anexa (o JS liga isso). Só o clipe: o gesto é universal, e o nome
             // acessível fica no `title` e no `aria-label` do campo.
-            <label class="oc-comp__ferramenta oc-comp__anexar" title=crate::i18n::t("mail.compose.attach") aria-label=crate::i18n::t("mail.compose.attach")>
-                {icon(Icon::Attach, 15)}
+            <label class="ods-iconbtn" title=crate::i18n::t("mail.compose.attach") aria-label=crate::i18n::t("mail.compose.attach")>
+                {icone(icone_do_legado(Icon::Attach), "")}
                 <input
                     type="file"
                     multiple
                     data-oc="compositor-ficheiro"
-                    class="oc-sr"
+                    class="ods-sr-only"
                     aria-label=crate::i18n::t("mail.compose.attach")
                 />
             </label>
@@ -1594,6 +1683,14 @@ fn barra_de_formatacao() -> impl IntoView {
     }
 }
 
+/// Uma linha de destinatários, com fichas quando o browser as souber fazer.
+///
+/// # Porque o campo de texto continua a existir
+///
+/// Porque é ele que submete. As fichas são uma camada por cima: o JavaScript
+/// lê este campo, desenha as fichas, e volta a escrevê-lo a cada alteração. Se
+/// o script não correr, fica um campo de texto com endereços separados por
+/// vírgula — que é feio e funciona.
 fn campo_de_destinatarios(
     nome: &'static str,
     rotulo: &'static str,
@@ -1603,12 +1700,12 @@ fn campo_de_destinatarios(
     let valor = valor.to_owned();
     let id = format!("mail-{nome}");
     view! {
-        <div class="oc-comp__linha" data-oc="destinatarios" data-oc-campo=nome>
-            <label class="oc-comp__rotulo" for=id.clone()>{rotulo}</label>
-            <div class="oc-comp__campo">
-                <div class="oc-chips" data-oc="fichas" hidden></div>
+        <div class="ods-composer__line" data-oc="destinatarios" data-oc-campo=nome>
+            <label class="ods-field__label" for=id.clone()>{rotulo}</label>
+            <div class="ods-field">
+                <div class="ods-chips" data-oc="fichas" hidden></div>
                 <input
-                    class="oc-comp__entrada"
+                    class="ods-search__input"
                     type="text"
                     id=id
                     name=nome
@@ -1617,21 +1714,20 @@ fn campo_de_destinatarios(
                     autocomplete="off"
                     data-oc="destino-entrada"
                 />
-                <ul class="oc-sugestoes" data-oc="sugestoes" hidden></ul>
+                <ul class="ods-menu ods-d12-results" data-oc="sugestoes" hidden></ul>
             </div>
             {principal.then(|| view! {
                 // `Cc` e `Bcc` são acções discretas, e não campos vazios
                 // permanentes: a maioria das mensagens não leva cópia, e um campo
                 // que quase nunca se usa a ocupar uma linha é ruído em todas as
                 // outras. Abrir um não muda destinatários — só revela a linha.
-                <span class="oc-comp__ccbcc">
-                    <button type="button" class="oc-comp__cc" data-oc="mostrar-cc">
-                        {crate::i18n::t("mail.compose.cc")}
-                    </button>
-                    <button type="button" class="oc-comp__cc" data-oc="mostrar-bcc">
-                        {crate::i18n::t("mail.compose.bcc")}
-                    </button>
-                </span>
+                <span class="ods-app__toolbar-spacer"></span>
+                <button type="button" class="ods-btn ods-btn--sm ods-btn--ghost" data-oc="mostrar-cc">
+                    {crate::i18n::t("mail.compose.cc")}
+                </button>
+                <button type="button" class="ods-btn ods-btn--sm ods-btn--ghost" data-oc="mostrar-bcc">
+                    {crate::i18n::t("mail.compose.bcc")}
+                </button>
             })}
         </div>
     }
@@ -1648,23 +1744,22 @@ fn campo_de_destinatarios(
 /// vai funcionar não deve ocupar espaço.
 fn assistencia_na_barra(view: &MailView) -> impl IntoView {
     if !view.may_use_ai() {
-        return view! { <div class="oc-comp__ia"></div> }.into_any();
+        return ().into_any();
     }
 
     if !view.ai_available() {
         return view! {
-            <div class="oc-comp__ia">
-                <span class="oc-comp__ia-nota">
-                    {crate::i18n::t("mail.ai.unavailable")}
-                </span>
-                <a class="oc-comp__ia-link" href="/ai">{crate::i18n::t("mail.ai.why")}</a>
-            </div>
+            <span class="ods-field__hint">
+                {crate::i18n::t("mail.ai.unavailable")}
+                " "
+                <a href="/ai">{crate::i18n::t("mail.ai.why")}</a>
+            </span>
         }
         .into_any();
     }
 
     view! {
-        <div class="oc-comp__ia" data-oc="assistencia">
+        <div class="ods-chips" data-oc="assistencia">
             {[
                 (ComposeAction::Proofread, crate::i18n::t("mail.ai.proofread")),
                 (ComposeAction::Clarify, crate::i18n::t("mail.ai.clarify")),
@@ -1679,7 +1774,7 @@ fn assistencia_na_barra(view: &MailView) -> impl IntoView {
                 // texto que a pessoa escreveu segue com ele.
                 <button
                     type="submit"
-                    class="oc-comp__ia-accao"
+                    class="ods-chip"
                     formaction="/mail/assist"
                     name="action"
                     value=accao.as_str()
@@ -2115,7 +2210,7 @@ mod integridade {
             "o ecrã não declarou a ausência de serviço"
         );
         assert!(
-            !html.contains("oc-mail__rail"),
+            !html.contains("ods-mail__pastas"),
             "apareceu uma lista de caixas sem haver serviço"
         );
         assert!(

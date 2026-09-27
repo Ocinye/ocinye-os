@@ -43,7 +43,7 @@ Moldura `.ods-page` (D9). Métricas sempre em `.ods-d12-metrics` › `.ods-d12-m
 **Estados** (todos os painéis com dados): a carregar `ods-skeleton` + `aria-busy="true"` · vazio `ods-empty` · erro `ods-state--error` (texto do Core) · recusado `ods-state--denied` · indisponível `ods-state--unavailable`. Falha do Core nunca aparece como 0 ou lista vazia.
 
 ## `notice.rs` (5) — ecrãs de aviso
-Estrutura única: `<main class="ods-d12-notice" data-kind="…">` · `.ods-empty__icon` · título · texto · acções.
+Estrutura única: `<section class="ods-d12-notice" data-kind="…">` (D13, Q-27: a casca já tem o `<main>`) · `.ods-empty__icon` · título · texto · acções.
 | Painel | `data-kind` | Ícone | Acção |
 |---|---|---|---|
 | `not_found` | `not-found` | `ods-search` | «Voltar ao Desktop» `/` |

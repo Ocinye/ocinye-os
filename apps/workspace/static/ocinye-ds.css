@@ -167,8 +167,7 @@
 
 /* base */
 .ods-root { font-family: var(--ods-font-sans); font-size: var(--ods-text-md); color: var(--ods-text-primary); background: var(--ods-surface-app); -webkit-font-smoothing: antialiased; }
-.ods-root a { color: var(--ods-navy-400); text-decoration: none; }
-.ods-root a:hover { color: var(--ods-navy-800); text-decoration: underline; }
+/* As ligações passaram a especificidade zero no D13 (Q-35): ods-d13-base.css. */
 .ods-root ::selection { background: var(--ods-gold-200); color: var(--ods-text-primary); }
 .ods-root :focus { outline: none; }
 .ods-root :focus-visible { box-shadow: var(--ods-focus-ring); border-radius: var(--ods-radius-sm); }

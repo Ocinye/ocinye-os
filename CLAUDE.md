@@ -95,7 +95,7 @@ sem que nada falhe.
   4 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`) e 1
   aplicação (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 229 caminhos e 274 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 230 caminhos e 275 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -255,7 +255,7 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED` e em produção** 95 ecrãs em Leptos SSR,
+- **Ocinye Workspace: `IMPLEMENTED` e em produção** 96 ecrãs em Leptos SSR,
   servido de `os.ocinye.com`, atrás da Cloudflare, do mesmo SHA que o Core;
   sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
   pelas permissões que o Core calcula.
@@ -338,6 +338,15 @@ sem que nada falhe.
   `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão distinto de `OCINYE_AI_READY`, e
   **não** torna a IA disponível.
 - **58 migrations**, aplicáveis de base vazia; 92 tabelas.
+- **Ocinye Terminal e ocsh: `IMPLEMENTED` (fundação), por fazer merge**
+  ([ADR-0312](docs/adrs/0312-ocsh-governed-command-shell.md)). Uma linha de
+  comandos governada que **não é uma shell do anfitrião**: o parse é
+  determinístico e acontece no Core, cada comando invoca uma capability pelo
+  executor agentic (`POST /api/v1/commands/exec`), sintaxe do anfitrião
+  (`;`, `&&`, `$(…)`, `>`) e `sudo`/`bash` são recusados com código 126, e um
+  comando desconhecido nunca vai para o Nye. A página `/terminal` desenha só
+  texto; o histórico vive na memória do separador e nunca guarda o valor de uma
+  opção sensível. Ainda não há confirmações, streaming nem ponte para o Nye.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -529,8 +538,8 @@ sem que nada falhe.
   `CreateBucket`, que a chave do R2 recusa; corrigido com `no_check_bucket`. Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **82 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
-  **74 READMEs**, `docs/` povoado — incluindo
+- **83 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
+  **76 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -546,14 +555,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1827 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1836 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **675 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **678 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se

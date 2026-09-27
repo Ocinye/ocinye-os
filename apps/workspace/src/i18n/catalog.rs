@@ -3079,7 +3079,6 @@ const DS_SCREENS: &[Entry] = catalogo! {
     "pager.next": { pt: "Seguinte", en: "Next", fr: "Suivant" },
     "files.env.personal": { pt: "Pessoal", en: "Personal", fr: "Personnel" },
     "files.env.institutional": { pt: "Institucional", en: "Institutional", fr: "Institutionnel" },
-    "files.trash.notice": { pt: "Os itens no lixo são eliminados ao fim de 30 dias.", en: "Items in the trash are deleted after 30 days.", fr: "Les éléments de la corbeille sont supprimés au bout de 30 jours." },
     "files.quota.near": { pt: "O seu espaço está quase cheio.", en: "Your storage is almost full.", fr: "Votre espace est presque plein." },
     "messaging.none": { pt: "Escolha uma conversa ou comece uma nova.", en: "Choose a conversation or start a new one.", fr: "Choisissez une conversation ou commencez-en une nouvelle." },
     "notes.restore_version": { pt: "Repor esta versão", en: "Restore this version", fr: "Restaurer cette version" },
@@ -3092,7 +3091,7 @@ const DS_SCREENS: &[Entry] = catalogo! {
     "prompt.copy": { pt: "Copiar", en: "Copy", fr: "Copier" },
 };
 
-// D13 · Ocinye Terminal (ocsh). Juntar a catalog.rs e acrescentar DS_TERMINAL a GROUPS.
+// D14 · Ocinye Terminal (ocsh). Juntar a catalog.rs e acrescentar DS_TERMINAL a GROUPS.
 // As descrições de comandos vêm localizadas do registo (G-10); até lá usar ocsh.cmd.*.
 const DS_TERMINAL: &[Entry] = catalogo! {
     "terminal.app": { pt: "Terminal", en: "Terminal", fr: "Terminal" },
@@ -3302,7 +3301,7 @@ const DS_TERMINAL: &[Entry] = catalogo! {
     "ocsh.status.done": { pt: "Concluído", en: "Done", fr: "Terminé" },
 };
 
-// Chaves de engenharia do Terminal que o D13 não traz: descrições do registo
+// Chaves de engenharia do Terminal que o D14 não traz: descrições do registo
 // (`ocsh.family.*`, `ocsh.cmd.*`), rótulos de colunas (`ocsh.col.*`) e erros
 // do parser e do executor. Texto, não desenho.
 const DS_TERMINAL_ENGINE: &[Entry] = catalogo! {
@@ -3357,6 +3356,34 @@ const DS_TERMINAL_ENGINE: &[Entry] = catalogo! {
     "ocsh.ok.context_workspace": { pt: "Contexto: {code}", en: "Context: {code}", fr: "Contexte : {code}" },
 };
 
+// D13 · Correio e respostas Q-19…Q-35. Juntar a catalog.rs e acrescentar DS_D13 a GROUPS.
+// Retirar: "files.trash.notice" (Q-19).
+const DS_D13: &[Entry] = catalogo! {
+    "mail.sep.folders": { pt: "Largura das pastas", en: "Folder width", fr: "Largeur des dossiers" },
+    "mail.sep.list": { pt: "Largura da lista", en: "List width", fr: "Largeur de la liste" },
+    "mail.folders.collapse": { pt: "Recolher pastas", en: "Collapse folders", fr: "Réduire les dossiers" },
+    "mail.folders.expand": { pt: "Mostrar pastas", en: "Show folders", fr: "Afficher les dossiers" },
+    "mail.focus_reading": { pt: "Modo de leitura", en: "Reading mode", fr: "Mode lecture" },
+    "mail.layout.reset": { pt: "Repor disposição", en: "Reset layout", fr: "Rétablir la disposition" },
+    "mail.composer.resize": { pt: "Redimensionar compositor", en: "Resize composer", fr: "Redimensionner l’éditeur" },
+    "mail.composer.expand": { pt: "Expandir", en: "Expand", fr: "Agrandir" },
+    "mail.composer.restore": { pt: "Repor tamanho", en: "Restore size", fr: "Rétablir la taille" },
+    "files.upload.tray.title": { pt: "A carregar {n} ficheiros · {done} de {n}", en: "Uploading {n} files · {done} of {n}", fr: "Téléversement de {n} fichiers · {done} sur {n}" },
+    "files.upload.tray.done": { pt: "{n} ficheiros carregados", en: "{n} files uploaded", fr: "{n} fichiers téléversés" },
+    "files.upload.tray.show": { pt: "Mostrar", en: "Show", fr: "Afficher" },
+    "files.upload.tray.reduce": { pt: "Reduzir", en: "Minimise", fr: "Réduire" },
+    "files.upload.tray.expand": { pt: "Expandir", en: "Expand", fr: "Agrandir" },
+    "files.upload.cancel": { pt: "Cancelar carregamento", en: "Cancel upload", fr: "Annuler le téléversement" },
+    "my_work.group.overdue": { pt: "Atrasadas", en: "Overdue", fr: "En retard" },
+    "my_work.group.today": { pt: "Hoje", en: "Today", fr: "Aujourd’hui" },
+    "my_work.group.week": { pt: "Esta semana", en: "This week", fr: "Cette semaine" },
+    "my_work.group.later": { pt: "Depois", en: "Later", fr: "Plus tard" },
+    "my_work.group.none": { pt: "Sem prazo", en: "No due date", fr: "Sans échéance" },
+    "calendar.prev": { pt: "Anterior", en: "Previous", fr: "Précédent" },
+    "calendar.next": { pt: "Seguinte", en: "Next", fr: "Suivant" },
+    "messages.actions": { pt: "Acções da mensagem", en: "Message actions", fr: "Actions du message" },
+};
+
 pub const GROUPS: &[&[Entry]] = &[
     DS_SCREENS,
     DS_SHELL,
@@ -3371,6 +3398,7 @@ pub const GROUPS: &[&[Entry]] = &[
     DS_SETTINGS,
     DS_TERMINAL,
     DS_TERMINAL_ENGINE,
+    DS_D13,
     ACTIVITY,
     NOTICE,
     MISC_A,

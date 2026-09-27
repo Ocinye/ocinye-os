@@ -36,7 +36,7 @@ explícita para isso, e o SHA na `main` já é recuperável.
 | Camada | Onde | Classificação |
 |---|---|---|
 | Folha de estilo, tokens, tipografia, raios, sombras | `static/ocinye.css` | `VISUAL_ONLY` — sai |
-| Sprite de ícones e o seu mapeamento | `static/icons.svg`, `ui/icon.rs` | `VISUAL_ONLY` — sai |
+| Sprite de ícones e o seu mapeamento | `static/icons.svg`, `ui/icon.rs` | `VISUAL_ONLY` — **saiu no D13** (fica o vocabulário `Icon`) |
 | Primitivas visuais (cartão, distintivo, botão, tabela, separadores…) | `ui/components/` | `VISUAL_ONLY` na forma; os contratos de acessibilidade dos separadores (`aria-current`/`aria-selected`) ficam |
 | Casca: barra lateral, barra de topo, lançador, paleta | `ui/shell.rs` | `MIXED_UI_AND_LOGIC` — a filtragem por permissões, a fixação e o registo de aplicações ficam; a apresentação sai |
 | Ecrãs | `ui/screens/` | `MIXED_UI_AND_LOGIC` — formulários, rotas de POST, estados de erro/vazio e marcadores `data-oc` ficam; a composição visual sai |

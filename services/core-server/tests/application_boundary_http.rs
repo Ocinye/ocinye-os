@@ -236,6 +236,12 @@ async fn uma_aplicacao_inactiva_e_recusada_pelo_core_e_o_resto_continua() {
     assert!(corpo_me["inactive_applications"]
         .as_array()
         .is_some_and(|a| a.iter().any(|id| id == "mail")));
+    // O fuso em que se decide o dia civil — o da Instância, a um membro que
+    // não administra (D13, Q-28): um nome IANA, nunca vazio.
+    assert!(
+        corpo_me["timezone"].as_str().is_some_and(|z| !z.is_empty()),
+        "o me não diz o fuso: {corpo_me}"
+    );
     let (pronto, _) = pedido(&state, None, "GET", "/ready", None).await;
     assert_eq!(pronto, StatusCode::OK, "o Core continua pronto");
     let (config, _) = pedido(

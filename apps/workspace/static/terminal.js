@@ -1,5 +1,5 @@
 /*
- * Ocinye Terminal — a camada de interacção do D13 (ADR-0312).
+ * Ocinye Terminal — a camada de interacção do D14 (ADR-0312).
  *
  * O que este ficheiro faz: separadores, linha de comando, histórico da sessão,
  * completar, pesquisa no histórico, e desenhar o que o Core respondeu.

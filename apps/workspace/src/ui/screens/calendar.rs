@@ -417,7 +417,7 @@ fn toolbar(current: CalendarView, anchor: NaiveDate) -> impl IntoView {
                 aria-label=crate::i18n::tf("calendar.nav.prev", &[("label", current.label())])
                 rel="prev"
             >
-                <span aria-hidden="true">"‹"</span>
+                {crate::ui::ods::icone("chev-l", "")}
             </a>
             <a class="ods-btn ods-btn--sm" href=format!("/calendar?view={}", current.as_str())>
                 {crate::i18n::t("calendar.today")}
@@ -428,7 +428,7 @@ fn toolbar(current: CalendarView, anchor: NaiveDate) -> impl IntoView {
                 aria-label=crate::i18n::tf("calendar.nav.next", &[("label", current.label())])
                 rel="next"
             >
-                <span aria-hidden="true">"›"</span>
+                {crate::ui::ods::icone("chev-r", "")}
             </a>
             <h2 class="ods-d12-cal__period" aria-live="polite">{texto}</h2>
             <span class="ods-app__toolbar-spacer"></span>
@@ -842,20 +842,26 @@ fn today_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
     let dias = vec![(anchor, do_dia.clone())];
 
     view! {
-        <div data-part="cal-tempo">
-            <div class="ods-d12-cal" data-dias="1">
-                <span aria-hidden="true"></span>
-                <div aria-current="date">
-                    <span class="ods-label">{crate::ui::tempo::dia_da_semana(anchor)}</span>
-                    " "
-                    <strong>{anchor.day().to_string()}</strong>
+        // Q-31: os cabeçalhos e o «todo o dia» ficam fora do scroll; só as
+        // horas rolam, dentro do seu contentor.
+        <div class="ods-d13-cal" data-part="cal-tempo">
+            <div class="ods-d13-cal__head">
+                <div class="ods-d12-cal" data-dias="1">
+                    <span aria-hidden="true"></span>
+                    <div aria-current="date">
+                        <span class="ods-label">{crate::ui::tempo::dia_da_semana(anchor)}</span>
+                        " "
+                        <strong>{anchor.day().to_string()}</strong>
+                    </div>
                 </div>
+                {faixa_de_dia_inteiro(&dias)}
             </div>
-            {faixa_de_dia_inteiro(&dias)}
-            <div class="ods-d12-cal" data-dias="1" data-oc="linha-do-tempo">
-                {linhas_das_horas()}
-                {eixo_das_horas()}
-                {coluna_do_dia(&do_dia, anchor, zona)}
+            <div class="ods-d13-cal__scroll" data-oc="cal-scroll">
+                <div class="ods-d12-cal" data-dias="1" data-oc="linha-do-tempo">
+                    {linhas_das_horas()}
+                    {eixo_das_horas()}
+                    {coluna_do_dia(&do_dia, anchor, zona)}
+                </div>
             </div>
         </div>
     }
@@ -941,7 +947,8 @@ fn week_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Into
         .collect();
 
     view! {
-        <div data-part="cal-tempo">
+        <div class="ods-d13-cal" data-part="cal-tempo">
+            <div class="ods-d13-cal__head">
             <div class="ods-d12-cal" data-dias="7">
                 <span aria-hidden="true"></span>
                 {dias.iter().map(|(dia, _)| {
@@ -960,10 +967,13 @@ fn week_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Into
                 }).collect_view()}
             </div>
             {faixa_de_dia_inteiro(&dias)}
-            <div class="ods-d12-cal" data-dias="7" data-oc="linha-do-tempo">
-                {linhas_das_horas()}
-                {eixo_das_horas()}
-                {dias.iter().map(|(dia, do_dia)| coluna_do_dia(do_dia, *dia, zona)).collect_view()}
+            </div>
+            <div class="ods-d13-cal__scroll" data-oc="cal-scroll">
+                <div class="ods-d12-cal" data-dias="7" data-oc="linha-do-tempo">
+                    {linhas_das_horas()}
+                    {eixo_das_horas()}
+                    {dias.iter().map(|(dia, do_dia)| coluna_do_dia(do_dia, *dia, zona)).collect_view()}
+                </div>
             </div>
         </div>
     }
@@ -1078,7 +1088,7 @@ fn month_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
                         data-oc-dia=dia.to_string()
                     >
                         <a
-                            class="ods-label"
+                            class="ods-label ods-d12-cal__num"
                             href=format!("/calendar?view=today&on={dia}")
                             aria-label=crate::i18n::tf("calendar.view_more", &[("n", &crate::ui::tempo::data_por_extenso(dia))])
                         >

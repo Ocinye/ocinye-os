@@ -21,7 +21,7 @@
 | Tempo real | `GET /api/v1/realtime` (WebSocket, ADR-0012), canais `Conversation`/`Person` | transporte para eventos de comandos longos, se vierem a existir |
 | Outbox e worker | `core/outbox.rs`, `services/worker` | trabalho assíncrono do Core |
 | BFF do Workspace | `apps/workspace/src/routes.rs` (JSON same-origin, sessão no servidor, `origin_is_ours`) | o Terminal fala com o Core através do Workspace, como as Notas e o Correio |
-| Design | pacote D13 em `~/Downloads/handoff-d13-terminal` (a aplicar em M9) | especificação visual, gramática ocsh proposta, códigos de saída, G-10…G-15 |
+| Design | pacote D14 (entregue como «D13» em `handoff-d13-terminal`; renumerado pelo Design) — aplicado em M3 | especificação visual, gramática ocsh proposta, códigos de saída, G-10…G-15 |
 
 ## O que não existe
 

@@ -84,6 +84,20 @@ pub enum SeccaoAdmin {
 ///
 /// `<div>` e não o `<main>` do D10: a casca já tem o `<main>` da página (Q-27).
 pub fn moldura(seccao: SeccaoAdmin, conteudo: impl IntoView + 'static) -> impl IntoView {
+    moldura_com(seccao, false, conteudo)
+}
+
+/// A moldura para os ecrãs com tabelas — roster, acesso, papéis, concessões,
+/// auditoria: `.ods-settings__main[data-wide]` (D13, Q-33).
+pub fn moldura_larga(seccao: SeccaoAdmin, conteudo: impl IntoView + 'static) -> impl IntoView {
+    moldura_com(seccao, true, conteudo)
+}
+
+fn moldura_com(
+    seccao: SeccaoAdmin,
+    larga: bool,
+    conteudo: impl IntoView + 'static,
+) -> impl IntoView {
     let item = |alvo: SeccaoAdmin, href: &'static str, rotulo: &'static str| {
         view! {
             <a
@@ -103,7 +117,7 @@ pub fn moldura(seccao: SeccaoAdmin, conteudo: impl IntoView + 'static) -> impl I
                 {item(SeccaoAdmin::Instancia, "/admin/instance", crate::i18n::t("admin.instance.title"))}
                 {item(SeccaoAdmin::Auditoria, "/audit", crate::i18n::t("nav.audit"))}
             </nav>
-            <div class="ods-settings__main">{conteudo}</div>
+            <div class="ods-settings__main" data-wide=larga.then_some("")>{conteudo}</div>
         </div>
     }
 }

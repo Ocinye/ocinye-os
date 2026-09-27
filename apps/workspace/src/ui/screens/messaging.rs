@@ -871,10 +871,15 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
                     })}
             </div>
 
-            // As acções aparecem ao passar o rato e ao focar, e não estão
-            // sempre lá: uma barra permanente por mensagem enche a conversa de
-            // botões que ninguém pediu.
-            <div data-oc="accoes-da-mensagem">
+            // As acções aparecem ao passar o rato e ao focar (D13, Q-32): estão
+            // sempre no DOM e alcançáveis por Tab, e sempre visíveis em ecrãs
+            // sem rato.
+            <div
+                class="ods-d13-msg__actions"
+                data-oc="accoes-da-mensagem"
+                role="group"
+                aria-label=crate::i18n::t("messages.actions")
+            >
                 <button
                     type="button"
                     class="ods-iconbtn"

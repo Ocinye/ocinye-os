@@ -1,6 +1,6 @@
 # ocsh — modelo de comandos
 
-> Proposta M0. A gramática e os códigos de saída seguem o D13_OCSH do Claude
+> Proposta M0. A gramática e os códigos de saída seguem o D14_OCSH do Claude
 > Design; onde o repositório já decide (risco, aprovação, autoridade), o
 > repositório prevalece.
 

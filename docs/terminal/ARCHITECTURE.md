@@ -96,7 +96,7 @@ registo para ajuda e autocompletar imediatos, mas nunca decide o que executa.
 | M6 | mutações com confirmação por plano | M5 |
 | M7 | ponte Nye explícita | M6 |
 | M8 | pipelines tipados, depois `.ocsh` limitado | M4 |
-| M9 | integração do D13 (visual) | M3 |
+| M9 | integração do D14 (visual) | M3 |
 | M10 | E2E, segurança, navegadores, locales, certificação | tudo |
 
 Streaming e Ctrl+C sobre trabalhos longos (G-12) e elevação de sessão (G-14)

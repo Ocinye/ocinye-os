@@ -58,6 +58,20 @@ pub struct PromptExchange {
     pub model: Option<String>,
     /// A resposta, nas palavras de quem a redigiu.
     pub content: String,
+    /// A capacidade com que o pedido foi feito (`GENERAL`, `REASONING`, …),
+    /// dita no cabeçalho do turno do Nye (D13, Q-30).
+    pub capability: Option<String>,
+}
+
+/// O rótulo de uma capacidade, no idioma de quem olha.
+#[must_use]
+pub fn capability_label(code: &str) -> &'static str {
+    match code {
+        "REASONING" => crate::i18n::t("prompt.cap.reasoning"),
+        "CODING" => crate::i18n::t("prompt.cap.coding"),
+        "EMBEDDING" => crate::i18n::t("prompt.cap.data"),
+        _ => crate::i18n::t("prompt.cap.general"),
+    }
 }
 
 impl PromptExchange {
@@ -121,12 +135,7 @@ pub fn context_from(status: &Value, workspace: Option<(String, String)>) -> Prom
                         .get("capability")
                         .and_then(Value::as_str)
                         .unwrap_or("GENERAL");
-                    let label = match code {
-                        "REASONING" => crate::i18n::t("prompt.cap.reasoning"),
-                        "CODING" => crate::i18n::t("prompt.cap.coding"),
-                        "EMBEDDING" => crate::i18n::t("prompt.cap.data"),
-                        _ => crate::i18n::t("prompt.cap.general"),
-                    };
+                    let label = capability_label(code);
                     let ready = entry
                         .get("available")
                         .and_then(Value::as_bool)
@@ -260,10 +269,10 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                     Some(ex) => {
                         let author = ex.author();
                         let degraded = ex.degraded();
-                        let PromptExchange { prompt, origin, content, reason_code, model, .. } = ex;
+                        let PromptExchange { prompt, origin, content, reason_code, model, capability, .. } = ex;
                         view! {
                             {member_turn(prompt)}
-                            {ocinye_turn(&author, &origin, degraded, &content, reason_code, model)}
+                            {ocinye_turn(&author, &origin, degraded, &content, reason_code, model, capability)}
                         }
                             .into_any()
                     }
@@ -389,8 +398,10 @@ fn ocinye_turn(
     content: &str,
     reason_code: Option<String>,
     model: Option<String>,
+    capability: Option<String>,
 ) -> impl IntoView {
     let body = crate::ui::markdown::render(content);
+    let capacidade = capability.as_deref().map(capability_label);
     let has_meta = reason_code.is_some() || model.is_some();
     view! {
         <div class="ods-d12-turn ods-d12-turn--ocinye" data-part="turn--ocinye">
@@ -398,6 +409,7 @@ fn ocinye_turn(
                 {icone("nye", "")}
                 " "
                 {author.to_owned()}
+                {capacidade.map(|c| view! { " · " <span data-part="turn__capability">{c}</span> })}
                 {degraded.then(|| view! { " " <span class="ods-badge" data-part="turn__badge">"ESTADO"</span> })}
             </div>
 
@@ -479,6 +491,7 @@ mod tests {
             reason_code: Some("AI_NO_PROVIDER_AVAILABLE".to_owned()),
             model: None,
             content: "Nenhuma capacidade de inferência está actualmente disponível.".to_owned(),
+            capability: None,
         }
     }
 
@@ -557,6 +570,7 @@ mod tests {
             reason_code: None,
             model: Some("Qwen Coder".to_owned()),
             content: "## Estrutura\n\nUsa `axum`.\n\n```rust\nfn main() {}\n```".to_owned(),
+            capability: None,
         };
         let html = prompt(context_from(&unavailable(), None), Some(exchange)).to_html();
         // O título desceu de nível, o código traz barra com «Copiar», e a
@@ -599,6 +613,7 @@ mod pureza_i18n {
             reason_code: Some("AI_NO_PROVIDER_AVAILABLE".to_owned()),
             model: None,
             content: "Nenhuma capacidade de inferência está disponível.".to_owned(),
+            capability: None,
         };
 
         let fr = with_locale(Locale::Fr, async {

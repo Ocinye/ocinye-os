@@ -2130,15 +2130,31 @@ async fn abrir_lancador(page: &Page) {
 /// outros botões de submissão, e o primeiro da página pode estar escondido.
 /// Carrega num elemento, como uma pessoa faria.
 async fn clicar(page: &Page, seletor: &str) {
-    elemento(page, seletor).await.click().await.expect("clicar");
+    let alvo = elemento(page, seletor).await;
+    trazer_a_vista(page, seletor).await;
+    alvo.click().await.expect("clicar");
+}
+
+/// Rola o alvo para a zona livre, como uma pessoa rola antes de carregar.
+///
+/// Desde o D13 (Q-25), a folga do flutuante das aplicações é `padding-bottom` e
+/// `scroll-padding-bottom` do contentor de scroll: um botão pode estar à
+/// vista **por baixo** do flutuante, e o clique do CDP — que só rola quando o
+/// alvo está fora do ecrã — caía no flutuante. `scrollIntoView` respeita o
+/// `scroll-padding` e deixa o alvo acima da faixa.
+async fn trazer_a_vista(page: &Page, seletor: &str) {
+    let script = format!(
+        "(() => {{ const e = document.querySelector({seletor:?}); \
+          if (e) e.scrollIntoView({{ block: 'nearest' }}); }})()"
+    );
+    let _ = page.evaluate(script).await;
 }
 
 async fn submit(page: &Page, formulario: &str) {
-    elemento(page, &format!("{formulario} button[type=submit]"))
-        .await
-        .click()
-        .await
-        .expect("submeter");
+    let seletor = format!("{formulario} button[type=submit]");
+    let alvo = elemento(page, &seletor).await;
+    trazer_a_vista(page, &seletor).await;
+    alvo.click().await.expect("submeter");
 }
 
 /// Espera que o separador cuja âncora é `href` fique com `aria-current=location`.
@@ -7163,6 +7179,33 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
         .unwrap_or(-1.0)
     }
 
+    /// O que é «pastas recolhidas», desde o D13.
+    ///
+    /// Até ao D13, recolher tirava a coluna inteira e media-se largura zero.
+    /// O D13 (`docs/ui/D13_MAIL.md`, «pastas recolhidas») decidiu outra coisa:
+    /// a coluna fica um **trilho de 56 px**, só com os ícones e a contagem em
+    /// ponto, e os nomes saem da vista (ficam para a tecnologia de apoio). O
+    /// que se mede passa a ser isso — as duas metades, e não só a largura: um
+    /// trilho estreito com os nomes ainda à vista não é um trilho, é uma
+    /// coluna espremida.
+    const TRILHO: f64 = 56.0;
+    async fn medir_pastas(page: &Page) -> (f64, f64) {
+        page.evaluate(
+            "(() => {
+               const trilho = document.querySelector('[data-part~=mail__rail]');
+               if (!trilho) return [-1, -1];
+               const nomes = [...trilho.querySelectorAll('.ods-mail__pasta-nome')]
+                 .map(n => n.getBoundingClientRect().width);
+               return [trilho.getBoundingClientRect().width,
+                       nomes.length ? Math.max(...nomes) : -1];
+             })()",
+        )
+        .await
+        .expect("medida")
+        .into_value::<(f64, f64)>()
+        .unwrap_or((-1.0, -1.0))
+    }
+
     let pastas_inicial = largura(&page, "[data-part~=mail__rail]").await;
     let leitura_inicial = largura(&page, "[data-part~=mail__pane]").await;
     assert!(
@@ -7214,10 +7257,11 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
 
     // ── Recolher, e voltar ──────────────────────────────────────────────
     clicar(&page, "[data-oc=alternar-pastas]").await;
-    let recolhidas = largura(&page, "[data-part~=mail__rail]").await;
+    let (recolhidas, nomes_recolhidos) = medir_pastas(&page).await;
     assert!(
-        recolhidas <= 0.0,
-        "as pastas não recolheram: {recolhidas}px"
+        recolhidas <= TRILHO + 0.5 && (0.0..=1.0).contains(&nomes_recolhidos),
+        "as pastas não recolheram ao trilho: {recolhidas}px, nomes com \
+         {nomes_recolhidos}px à vista"
     );
 
     let leitura_com_pastas_recolhidas = largura(&page, "[data-part~=mail__pane]").await;
@@ -7244,8 +7288,11 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
     );
 
     clicar(&page, "[data-oc=alternar-pastas]").await;
-    let de_volta = largura(&page, "[data-part~=mail__rail]").await;
-    assert!(de_volta > 100.0, "as pastas não voltaram: {de_volta}px");
+    let (de_volta, nomes_de_volta) = medir_pastas(&page).await;
+    assert!(
+        de_volta > 100.0 && nomes_de_volta > 1.0,
+        "as pastas não voltaram: {de_volta}px, nomes com {nomes_de_volta}px"
+    );
 
     // ── O grampo vale mesmo quando não se consegue medir ────────────────
     //
@@ -7302,10 +7349,11 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
     // estivesse errado. O que o modo promete é isto: pastas recolhidas, lista
     // no mínimo, o resto para quem lê.
     let lista_focada = largura(&page, "[data-part~=mail__list]").await;
-    let pastas_focadas = largura(&page, "[data-part~=mail__rail]").await;
+    let (pastas_focadas, nomes_focados) = medir_pastas(&page).await;
     assert!(
-        pastas_focadas <= 0.0,
-        "o modo de leitura não recolheu as pastas: {pastas_focadas}px"
+        pastas_focadas <= TRILHO + 0.5 && (0.0..=1.0).contains(&nomes_focados),
+        "o modo de leitura não recolheu as pastas ao trilho: {pastas_focadas}px, \
+         nomes com {nomes_focados}px à vista"
     );
     assert!(
         lista_focada <= lista_antes,
@@ -7373,11 +7421,11 @@ async fn a_pessoa_arruma_o_correio_e_nao_o_parte() {
 
     let outra = harness.open("/mail").await;
     esperar_por(&outra, "Caixa de entrada").await;
-    let recolhidas_ainda = largura(&outra, "[data-part~=mail__rail]").await;
+    let (recolhidas_ainda, nomes_ainda) = medir_pastas(&outra).await;
     assert!(
-        recolhidas_ainda <= 0.0,
+        recolhidas_ainda <= TRILHO + 0.5 && (0.0..=1.0).contains(&nomes_ainda),
         "a preferência não sobreviveu à recarga: as pastas voltaram sozinhas \
-         ({recolhidas_ainda}px)"
+         ({recolhidas_ainda}px, nomes com {nomes_ainda}px à vista)"
     );
 }
 

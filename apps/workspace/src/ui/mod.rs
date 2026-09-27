@@ -77,7 +77,9 @@ pub fn document_com_cabeca(
          <link rel=\"stylesheet\" href=\"/static/ods-d11-adaptive.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d12-base.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d12-screens.css\">\n\
-         <link rel=\"stylesheet\" href=\"/static/ods-d13-terminal.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d13-base.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d13-mail.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d14-terminal.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-integration.css\">\n\
          <title>",
     );
@@ -353,7 +355,7 @@ mod render_tests {
         let ecras: Vec<(&str, String, Vec<&str>)> = vec![
             (
                 "O Meu Trabalho",
-                screens::my_work::my_work(&vazio, &vazio, &vazio).to_html(),
+                screens::my_work::my_work(&vazio, &vazio, &vazio, None).to_html(),
                 vec![
                     "Tarefas atribuídas",
                     "Documentos recentes",
@@ -888,7 +890,7 @@ pub(crate) mod link_tests {
             page!(
                 "my-work",
                 Screen::MyWork,
-                screens::my_work::my_work(&empty, &empty, &empty)
+                screens::my_work::my_work(&empty, &empty, &empty, None)
             ),
             page!(
                 "units",
@@ -1920,20 +1922,15 @@ pub(crate) mod link_tests {
     /// que nada falhe. Os ecrãs passaram às classes do Claude Design (`ods-*`);
     /// os ganchos de comportamento são `data-oc` e `data-part`, que isto não vê.
     ///
-    /// # A única excepção, com a razão
+    /// # As excepções, com a razão
     ///
-    /// O Correio espera pelas respostas Q-23/Q-24 (a grelha redimensionável e o
-    /// compositor). A lista diz-o por nome e falha se ficar desactualizada: um
-    /// ecrã do Correio sem classes legadas tem de sair dela.
+    /// Nenhuma, desde o D13: o Correio, que esperava pelas respostas Q-23/Q-24
+    /// (a grelha redimensionável e o compositor), passou às classes `ods-`. A
+    /// lista fica para um ecrã que tenha mesmo de esperar pelo desenho: diz-o
+    /// por nome e falha se ficar desactualizada.
     #[test]
     fn nenhum_ecra_usa_classes_da_ui_legada() {
-        const A_ESPERA_DO_DESIGN: &[&str] = &[
-            "mail",
-            "mail-message",
-            "mail-synced",
-            "mail-compose",
-            "mail-compose-no-ai",
-        ];
+        const A_ESPERA_DO_DESIGN: &[&str] = &[];
         let classes = |html: &str| -> Vec<String> {
             html.split("class=\"")
                 .skip(1)
