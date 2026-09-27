@@ -107,12 +107,10 @@ pub fn account(
                 </div>
             </div>
 
-            <div class="ods-tabs">
-                {pill_tabs(
+            {pill_tabs(
                     seccoes_das_definicoes("/settings"),
                     crate::i18n::t("settings.tabs.aria"),
                 )}
-            </div>
 
             {imagem_de_perfil(escolha, &nome, error, done)}
 
@@ -150,12 +148,10 @@ pub fn language(saved: bool) -> impl IntoView {
                 </div>
             </div>
 
-            <div class="ods-tabs">
-                {pill_tabs(
+            {pill_tabs(
                     seccoes_das_definicoes("/settings/language"),
                     crate::i18n::t("settings.tabs.aria"),
                 )}
-            </div>
 
             {saved.then(|| view! {
                 <div class="ods-notice" role="status">
@@ -233,12 +229,10 @@ pub fn apps(viewer: &crate::ui::shell::Viewer, saved: bool) -> impl IntoView {
                 </div>
             </div>
 
-            <div class="ods-tabs">
-                {pill_tabs(
+            {pill_tabs(
                     seccoes_das_definicoes("/settings/apps"),
                     crate::i18n::t("settings.tabs.aria"),
                 )}
-            </div>
 
             {saved.then(|| view! {
                 <div class="ods-notice" role="status">
@@ -335,12 +329,10 @@ pub fn security(
                 </div>
             </div>
 
-            <div class="ods-tabs">
-                {pill_tabs(
+            {pill_tabs(
                     seccoes_das_definicoes("/settings/security"),
                     crate::i18n::t("settings.tabs.aria"),
                 )}
-            </div>
 
             {error.map(|m| view! { <div class="ods-widget ods-widget-surface ods-notice" data-part="card" role="alert">{m}</div> })}
             {done.map(|m| view! { <div class="ods-notice" role="status">{m}</div> })}

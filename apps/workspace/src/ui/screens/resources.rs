@@ -141,7 +141,7 @@ pub fn resources(me: &Value) -> impl IntoView {
         .unwrap_or_default();
 
     view! {
-            <div>
+            <div class="ods-page">
                 <div class="ods-page__head">
                     <div>
                         <h1 class="ods-page__title">{crate::i18n::t("resources.title")}</h1>
@@ -150,19 +150,16 @@ pub fn resources(me: &Value) -> impl IntoView {
                         </p>
                     </div>
                 </div>
-            </div>
 
-            <div class="ods-page">
-                <section class="ods-widget ods-widget-surface ods-widget__body" data-part="card">
-                    <div>
-                        <div>
-                            <h2>{crate::i18n::t("resources.storage.title")}</h2>
-                            <p class="ods-label">
-                                {crate::i18n::t("resources.storage.subtitle")}
-                            </p>
-                        </div>
+                <section class="ods-widget ods-widget-surface" data-part="card">
+                    <header class="ods-widget__head">
+                        <span class="ods-widget__titles">
+                            <h2 class="ods-widget__title">{crate::i18n::t("resources.storage.title")}</h2>
+                            <span class="ods-widget__sub">{crate::i18n::t("resources.storage.subtitle")}</span>
+                        </span>
                         {badge(state_text, state_tone)}
-                    </div>
+                    </header>
+                    <div class="ods-widget__body">
 
                     {if has_limit {
                         progress_bar(pct).into_any()
@@ -175,20 +172,22 @@ pub fn resources(me: &Value) -> impl IntoView {
                         .into_any()
                     }}
 
-                    <div>
+                    <div class="ods-d12-metrics">
                         {metric(crate::i18n::t("resources.in_use"), &used_h)}
                         {metric(crate::i18n::t("resources.limit"), &limit_h)}
                         {metric(crate::i18n::t("resources.available"), &available_h)}
                     </div>
+                    </div>
                 </section>
 
-                <section class="ods-widget ods-widget-surface ods-widget__body" data-part="card">
-                    <div>
-                        <h2>{crate::i18n::t("resources.origin.title")}</h2>
-                        <p class="ods-label">
-    {crate::i18n::t("resources.origin.help")}
-                        </p>
-                    </div>
+                <section class="ods-widget ods-widget-surface" data-part="card">
+                    <header class="ods-widget__head">
+                        <span class="ods-widget__titles">
+                            <h2 class="ods-widget__title">{crate::i18n::t("resources.origin.title")}</h2>
+                        </span>
+                    </header>
+                    <div class="ods-widget__body">
+                    <p class="ods-field__hint">{crate::i18n::t("resources.origin.help")}</p>
 
                     {if parts.is_empty() {
                         view! {
@@ -225,24 +224,25 @@ pub fn resources(me: &Value) -> impl IntoView {
                                     .collect::<Vec<_>>()
                                     .join(" · ");
                                 view! {
-                                    <div>
+                                    <div class="ods-settings__row">
                                         <div>
-                                            <div class="ods-widget__title">{source_label(source)}</div>
+                                            <div class="ods-settings__row-label">{source_label(source)}</div>
                                             {(!meta.is_empty())
                                                 .then(|| view! {
-                                                    <div class="ods-label">{meta}</div>
+                                                    <div class="ods-settings__row-hint">{meta}</div>
                                                 })}
                                         </div>
-                                        <span>{quantity}</span>
+                                        <span class="ods-num">{quantity}</span>
                                     </div>
                                 }
                             })
                             .collect_view()
                             .into_any()
                     }}
+                    </div>
                 </section>
 
-                <p class="ods-label">
+                <p class="ods-field__hint">
     {crate::i18n::t("resources.footnote")}
                 </p>
             </div>
@@ -252,9 +252,9 @@ pub fn resources(me: &Value) -> impl IntoView {
 fn metric(label: &'static str, value: &str) -> impl IntoView {
     let value = value.to_owned();
     view! {
-        <div class="ods-widget ods-widget-surface ods-widget__body" data-part="card">
-            <div class="ods-label">{label}</div>
-            <div class="ods-d12-metric__value">{value}</div>
+        <div class="ods-d12-metric" data-part="card">
+            <span class="ods-d12-metric__label">{label}</span>
+            <span class="ods-d12-metric__value">{value}</span>
         </div>
     }
 }

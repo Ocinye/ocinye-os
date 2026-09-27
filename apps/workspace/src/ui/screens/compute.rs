@@ -86,92 +86,81 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
     ];
 
     view! {
-        <div>
+        <div class="ods-page">
             <div class="ods-page__head">
                 <div>
                     <h1 class="ods-page__title">{crate::i18n::t("nav.compute")}</h1>
                     <p class="ods-page__sub">{crate::i18n::t("compute.subtitle")}</p>
                 </div>
-                <div>
-                    {button(Button::new(crate::i18n::t("compute.add_node"), Variant::Gold).not_yet_available())}
-                </div>
+                <span class="ods-app__toolbar-spacer"></span>
+                {button(Button::new(crate::i18n::t("compute.add_node"), Variant::Gold).not_yet_available())}
             </div>
             {context_tabs(tabs, crate::i18n::t("compute.sections"))}
-        </div>
-
-        <div class="ods-page">
-            <section class="ods-widget ods-widget-surface ods-table" data-part="card"  data-dense="false">
-                <div class="oc-table__scroll">
-                    // O header de colunas do estado futuro fica visível mesmo
-                    // sem nós: mostra a forma que os dados terão.
-                    <div class="oc-table__head" role="row">
-                        {columns()
-                            .iter()
-                            .map(|label| view! { <span role="columnheader">{*label}</span> })
-                            .collect_view()}
-                    </div>
-
-                    {if rows.is_empty() {
-                        empty_state(EmptyState {
-                                icon: Icon::ComputeLg,
-                                title: crate::i18n::tf(
-                                    "compute.registered_count",
-                                    &[("count", &registered.to_string())],
-                                ),
-                                body: message.clone(),
-                                actions: vec![
-                                    Button::new(crate::i18n::t("compute.add_node"), Variant::Gold).not_yet_available(),
-                                ],
-                                small: true,
-                            })
-                            .into_any()
-                    } else {
-                        rows.iter()
-                            .map(|row| {
-                                let state = text(row, "status");
-                                let gpus = row
-                                    .get("gpus")
-                                    .and_then(Value::as_array)
-                                    .map_or_else(|| "—".to_owned(), |list| list.len().to_string());
-                                view! {
-                                    <div class="oc-table__row" role="row">
-                                        <div class="ods-num">{text(row, "identifier")}</div>
-                                        <div>{badge(state.clone(), Tone::of(&state))}</div>
-                                        <div>
-                                            {text(row, "location_label")}
-                                        </div>
-                                        <div class="ods-num">
-                                            {row
-                                                .get("cpu_cores")
-                                                .and_then(Value::as_i64)
-                                                .map_or_else(|| "—".to_owned(), |n| n.to_string())}
-                                        </div>
-                                        <div class="ods-num">
-                                            {bytes(row, "memory_bytes")}
-                                        </div>
-                                        <div class="ods-num">{gpus}</div>
-                                        <div class="ods-num">
-                                            {bytes(row, "storage_bytes")}
-                                        </div>
-                                        <div class="ods-num">
-                                            {text(row, "last_seen_at").chars().take(16).collect::<String>()}
-                                        </div>
-                                    </div>
-                                }
-                            })
-                            .collect_view()
-                            .into_any()
-                    }}
-                </div>
-            </section>
 
             // Métricas a zero, porque zero é o valor verdadeiro.
-            <div>
+            <div class="ods-d12-metrics">
                 {metric(crate::i18n::t("compute.metric.active_jobs"), "0")}
                 {metric(crate::i18n::t("compute.metric.gpu_available"), "0")}
                 {metric(crate::i18n::t("compute.metric.cpu_available"), &online.to_string())}
                 {metric(crate::i18n::t("compute.metric.storage"), "0 B")}
             </div>
+
+            // O cabeçalho de colunas fica visível mesmo sem nós: mostra a forma
+            // que os dados terão.
+            <table class="ods-table">
+                <thead>
+                    <tr>
+                        {columns()
+                            .iter()
+                            .map(|label| view! { <th scope="col">{*label}</th> })
+                            .collect_view()}
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.iter()
+                        .map(|row| {
+                            let state = text(row, "status");
+                            let gpus = row
+                                .get("gpus")
+                                .and_then(Value::as_array)
+                                .map_or_else(|| "—".to_owned(), |list| list.len().to_string());
+                            view! {
+                                <tr>
+                                    <td class="ods-num">{text(row, "identifier")}</td>
+                                    <td>{badge(state.clone(), Tone::of(&state))}</td>
+                                    <td>{text(row, "location_label")}</td>
+                                    <td class="ods-num">
+                                        {row
+                                            .get("cpu_cores")
+                                            .and_then(Value::as_i64)
+                                            .map_or_else(|| "—".to_owned(), |n| n.to_string())}
+                                    </td>
+                                    <td class="ods-num">{bytes(row, "memory_bytes")}</td>
+                                    <td class="ods-num">{gpus}</td>
+                                    <td class="ods-num">{bytes(row, "storage_bytes")}</td>
+                                    <td class="ods-num">
+                                        {text(row, "last_seen_at").chars().take(16).collect::<String>()}
+                                    </td>
+                                </tr>
+                            }
+                        })
+                        .collect_view()}
+                </tbody>
+            </table>
+            {rows.is_empty().then(|| {
+                empty_state(EmptyState {
+                    icon: Icon::ComputeLg,
+                    title: crate::i18n::tf(
+                        "compute.registered_count",
+                        &[("count", &registered.to_string())],
+                    ),
+                    body: message.clone(),
+                    actions: vec![
+                        Button::new(crate::i18n::t("compute.add_node"), Variant::Gold).not_yet_available(),
+                    ],
+                    small: true,
+                })
+            })}
         </div>
     }
 }
@@ -179,13 +168,9 @@ pub fn compute(status: &Value, nodes: &Value) -> impl IntoView {
 fn metric(label: &'static str, value: &str) -> impl IntoView {
     let value = value.to_owned();
     view! {
-        <div class="ods-widget ods-widget-surface ods-widget__body" data-part="card">
-            <div class="ods-label">
-                {label}
-            </div>
-            <div class="ods-d12-metric__value">
-                {value}
-            </div>
+        <div class="ods-d12-metric" data-part="card">
+            <span class="ods-d12-metric__label">{label}</span>
+            <span class="ods-d12-metric__value">{value}</span>
         </div>
     }
 }

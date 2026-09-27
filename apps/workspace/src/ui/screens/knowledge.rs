@@ -80,11 +80,9 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
                 </div>
             </div>
 
-            <div class="ods-tabs">
-                {pill_tabs(tabs, t("knowledge.tabs.aria"))}
-            </div>
+            {pill_tabs(tabs, t("knowledge.tabs.aria"))}
 
-            <div>
+            <div class="ods-d12-metrics">
                 {counter(t("knowledge.counter.bibliography"), count(&bibliography), Some("/bibliography"))}
                 {counter(t("knowledge.counter.documents"), count(&documents), None)}
                 {counter(t("knowledge.counter.datasets"), count(&datasets), Some("/datasets"))}
@@ -101,9 +99,9 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
             })}
 
             <section class="ods-widget ods-widget-surface" data-part="card">
-                <div class="ods-widget__head">
-                    <h2>{t("knowledge.recent.title")}</h2>
-                </div>
+                <header class="ods-widget__head">
+                    <span class="ods-widget__titles"><h2 class="ods-widget__title">{t("knowledge.recent.title")}</h2></span>
+                </header>
                 <div class="ods-widget__body">
                     {if recent_rows.is_empty() {
                         view! {
@@ -153,12 +151,8 @@ pub fn knowledge(counts: KnowledgeCounts) -> impl IntoView {
 fn counter(label: &'static str, value: i64, href: Option<&'static str>) -> impl IntoView {
     let conteudo = move || {
         view! {
-            <div class="ods-label">
-                {label.to_uppercase()}
-            </div>
-            <div class="ods-d12-metric__value">
-                {value.to_string()}
-            </div>
+            <span class="ods-d12-metric__label">{label}</span>
+            <span class="ods-d12-metric__value">{value.to_string()}</span>
         }
     };
 
@@ -166,10 +160,7 @@ fn counter(label: &'static str, value: i64, href: Option<&'static str>) -> impl 
         || {
             let interior = conteudo();
             view! {
-                <div
-                    class="ods-widget ods-widget-surface ods-widget__body" data-part="card"
-                    title=t("knowledge.no_screen")
-                >
+                <div class="ods-d12-metric" data-part="card" title=t("knowledge.no_screen")>
                     {interior}
                 </div>
             }
@@ -178,10 +169,7 @@ fn counter(label: &'static str, value: i64, href: Option<&'static str>) -> impl 
         |href| {
             let interior = conteudo();
             view! {
-                <a
-                    class="ods-widget ods-widget-surface ods-widget__body" data-part="card"
-                    href=href
-                >
+                <a class="ods-d12-metric" data-part="card" href=href>
                     {interior}
                 </a>
             }
@@ -212,19 +200,15 @@ fn counter(label: &'static str, value: i64, href: Option<&'static str>) -> impl 
 fn counter_not_implemented(label: &'static str) -> impl IntoView {
     view! {
         <div
-            class="ods-widget ods-widget-surface ods-widget__body oc-unavailable" data-part="card unavailable"
+            class="ods-d12-metric"
+            data-unavailable=""
+            data-part="card unavailable"
             aria-disabled="true"
             title=t("knowledge.not_in_core")
         >
-            <div class="ods-label">
-                {label.to_uppercase()}
-            </div>
-            <div class="ods-d12-metric__value">
-                "—"
-            </div>
-            <div class="ods-field__hint">
-                {t("knowledge.not_implemented")}
-            </div>
+            <span class="ods-d12-metric__label">{label}</span>
+            <span class="ods-d12-metric__value">"—"</span>
+            <span class="ods-d12-metric__hint">{t("ods.state.pending_contract")}</span>
         </div>
     }
 }

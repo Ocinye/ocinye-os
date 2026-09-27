@@ -45,9 +45,9 @@ fn p(texto: &'static str) -> impl IntoView {
 /// Uma entrada de glossário: o estado, e o que significa de facto.
 fn estado(nome: &'static str, significado: &'static str) -> impl IntoView {
     view! {
-        <div>
+        <div class="ods-settings__row">
             <span class="ods-badge">{nome}</span>
-            <span>{significado}</span>
+            <span class="ods-settings__row-hint">{significado}</span>
         </div>
     }
 }
@@ -63,21 +63,24 @@ pub fn help() -> impl IntoView {
                 </div>
             </div>
 
-            <nav class="ods-widget ods-widget-surface ods-widget__body" data-part="card" aria-label=crate::i18n::t("help.on_this_page")>
+            // Índice lateral e artigos (D12, `.ods-d12-help`).
+            <div class="ods-d12-help">
+            <nav class="ods-app__side" aria-label=crate::i18n::t("help.on_this_page")>
                 <div class="ods-label">{crate::i18n::t("help.on_this_page")}</div>
                 <div>
-                    <a href="#comecar">{crate::i18n::t("help.start")}</a>
-                    <a href="#investigacao">{crate::i18n::t("nav.section.research")}</a>
-                    <a href="#conhecimento">{crate::i18n::t("help.section.knowledge_data")}</a>
-                    <a href="#tempo">{crate::i18n::t("help.section.time_calendar")}</a>
-                    <a href="#correio">{crate::i18n::t("nav.mail")}</a>
-                    <a href="#inteligencia">{crate::i18n::t("help.section.ai_agents_compute")}</a>
-                    <a href="#institucional">{crate::i18n::t("nav.section.institutional")}</a>
-                    <a href="#conta">{crate::i18n::t("help.section.account_security")}</a>
-                    <a href="#estados">{crate::i18n::t("help.section.system_states")}</a>
+                    <a class="ods-app__side-item" href="#comecar">{crate::i18n::t("help.start")}</a>
+                    <a class="ods-app__side-item" href="#investigacao">{crate::i18n::t("nav.section.research")}</a>
+                    <a class="ods-app__side-item" href="#conhecimento">{crate::i18n::t("help.section.knowledge_data")}</a>
+                    <a class="ods-app__side-item" href="#tempo">{crate::i18n::t("help.section.time_calendar")}</a>
+                    <a class="ods-app__side-item" href="#correio">{crate::i18n::t("nav.mail")}</a>
+                    <a class="ods-app__side-item" href="#inteligencia">{crate::i18n::t("help.section.ai_agents_compute")}</a>
+                    <a class="ods-app__side-item" href="#institucional">{crate::i18n::t("nav.section.institutional")}</a>
+                    <a class="ods-app__side-item" href="#conta">{crate::i18n::t("help.section.account_security")}</a>
+                    <a class="ods-app__side-item" href="#estados">{crate::i18n::t("help.section.system_states")}</a>
                 </div>
             </nav>
 
+            <div>
             {seccao(
                 "comecar",
                 crate::i18n::t("help.start"),
@@ -228,6 +231,8 @@ pub fn help() -> impl IntoView {
                     <p>{crate::i18n::t("help.states.footer")}</p>
                 },
             )}
+            </div>
+            </div>
         </div>
     }
 }

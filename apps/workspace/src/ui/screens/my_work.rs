@@ -51,14 +51,12 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                 </div>
             </div>
 
-            <div class="ods-tabs">
-                {pill_tabs(tabs, t("my_work.tabs.aria"))}
-            </div>
+            {pill_tabs(tabs, t("my_work.tabs.aria"))}
 
-            <div>
+            <div class="ods-detail">
                 <section class="ods-widget ods-widget-surface" data-part="card">
                     <div class="ods-widget__head">
-                        <h2>{t("my_work.tasks.title")}</h2>
+                        <span class="ods-widget__titles"><h2 class="ods-widget__title">{t("my_work.tasks.title")}</h2></span>
                         <span class="ods-label">{task_rows.len().to_string()}</span>
                     </div>
                     <div class="ods-widget__body">
@@ -67,46 +65,56 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                                 .into_any()
                         } else {
                             view! {
-                                <div>
-                                    {task_rows
-                                        .iter()
-                                        .map(|row| {
-                                            let state = text(row, "state");
-                                            let priority = text(row, "priority");
-                                            let workspace = text(row, "workspace_id");
-                                            view! {
-                                                <a
-                                                    href=format!("/workspaces/{workspace}")
-                                                >
-                                                    <span data-oc-content="1">
-                                                        {text(row, "title")}
-                                                    </span>
-                                                    {task_priority_badge(&priority)}
-                                                    {task_state_badge(&state)}
-                                                    <span>
-                                                        {row
-                                                            .get("due_on")
-                                                            .and_then(Value::as_str)
-                                                            .map_or_else(
-                                                                || t("my_work.no_due").to_owned(),
-                                                                ToOwned::to_owned,
-                                                            )}
-                                                    </span>
-                                                </a>
-                                            }
-                                        })
-                                        .collect_view()}
-                                </div>
+                                <table class="ods-table">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">{t("my_work.tasks.title")}</th>
+                                            <th scope="col">{t("workspaces.field.priority")}</th>
+                                            <th scope="col">{t("workspaces.field.state")}</th>
+                                            <th scope="col" class="ods-num">{t("workspaces.field.due")}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {task_rows
+                                            .iter()
+                                            .map(|row| {
+                                                let state = text(row, "state");
+                                                let priority = text(row, "priority");
+                                                let workspace = text(row, "workspace_id");
+                                                let href = format!("/workspaces/{workspace}");
+                                                let destino = href.clone();
+                                                view! {
+                                                    <tr data-oc="table-row" data-oc-href=destino>
+                                                        <td>
+                                                            <a href=href data-oc-content="1">{text(row, "title")}</a>
+                                                        </td>
+                                                        <td>{task_priority_badge(&priority)}</td>
+                                                        <td>{task_state_badge(&state)}</td>
+                                                        <td class="ods-num">
+                                                            {row
+                                                                .get("due_on")
+                                                                .and_then(Value::as_str)
+                                                                .map_or_else(
+                                                                    || t("my_work.no_due").to_owned(),
+                                                                    ToOwned::to_owned,
+                                                                )}
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            })
+                                            .collect_view()}
+                                    </tbody>
+                                </table>
                             }
                                 .into_any()
                         }}
                     </div>
                 </section>
 
-                <div>
+                <aside>
                     <section class="ods-widget ods-widget-surface" data-part="card">
                         <div class="ods-widget__head">
-                            <h2>{t("my_work.research.title")}</h2>
+                            <span class="ods-widget__titles"><h2 class="ods-widget__title">{t("my_work.research.title")}</h2></span>
                         </div>
                         <div class="ods-widget__body">
                             {if workspace_rows.is_empty() {
@@ -155,8 +163,8 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                     // outra (`CLAUDE.md` §69).
                     <section class="ods-widget ods-widget-surface" data-part="card">
                         <div class="ods-widget__head">
-                            <h2>{t("my_work.documents.title")}</h2>
-                            <span class="ods-label oc-unavailable" data-part="unavailable">{t("my_work.unavailable")}</span>
+                            <span class="ods-widget__titles"><h2 class="ods-widget__title">{t("my_work.documents.title")}</h2></span>
+                            <span class="ods-badge" data-part="unavailable">{t("my_work.unavailable")}</span>
                         </div>
                         <div class="ods-widget__body">
                             <p class="ods-field__hint">{t("my_work.documents.body")}</p>
@@ -165,8 +173,8 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
 
                     <section class="ods-widget ods-widget-surface" data-part="card">
                         <div class="ods-widget__head">
-                            <h2>{t("my_work.units.title")}</h2>
-                            <span class="ods-label oc-unavailable" data-part="unavailable">{t("my_work.unavailable")}</span>
+                            <span class="ods-widget__titles"><h2 class="ods-widget__title">{t("my_work.units.title")}</h2></span>
+                            <span class="ods-badge" data-part="unavailable">{t("my_work.unavailable")}</span>
                         </div>
                         <div class="ods-widget__body">
                             <p class="ods-field__hint">{t("my_work.units.body")}</p>
@@ -175,7 +183,7 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
 
                     <section class="ods-widget ods-widget-surface" data-part="card">
                         <div class="ods-widget__head">
-                            <h2>{t("my_work.my_activity.title")}</h2>
+                            <span class="ods-widget__titles"><h2 class="ods-widget__title">{t("my_work.my_activity.title")}</h2></span>
                         </div>
                         <div class="ods-widget__body">
                             {if activity_rows.is_empty() {
@@ -183,25 +191,25 @@ pub fn my_work(tasks: &Value, workspaces: &Value, activity: &Value) -> impl Into
                                     .into_any()
                             } else {
                                 view! {
-                                    <div>
+                                    <ol class="ods-timeline">
                                         {activity_rows
                                             .iter()
                                             .take(8)
                                             .map(|row| {
                                                 view! {
-                                                    <div class="ods-field__hint" data-oc-content="1">
+                                                    <li class="ods-timeline__item" data-oc-content="1">
                                                         {text(row, "summary")}
-                                                    </div>
+                                                    </li>
                                                 }
                                             })
                                             .collect_view()}
-                                    </div>
+                                    </ol>
                                 }
                                     .into_any()
                             }}
                         </div>
                     </section>
-                </div>
+                </aside>
             </div>
         </div>
     }

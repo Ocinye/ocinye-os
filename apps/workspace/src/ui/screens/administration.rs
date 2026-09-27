@@ -105,7 +105,7 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
 
             <form method="post" action="/admin/members/new">
                 <section class="ods-widget ods-widget-surface" data-part="card">
-                    <div class="ods-widget__head"><h2>{crate::i18n::t("admin.new.identity")}</h2></div>
+                    <div class="ods-widget__head"><span class="ods-widget__titles"><h2 class="ods-widget__title">{crate::i18n::t("admin.new.identity")}</h2></span></div>
                     <div class="ods-widget__body">
                         <div class="ods-field">
                             <label class="ods-field__label" for="m-name">{crate::i18n::t("admin.new.full_name")}</label>
@@ -140,7 +140,7 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
 
                 <div>
                     <section class="ods-widget ods-widget-surface" data-part="card">
-                        <div class="ods-widget__head"><h2>{crate::i18n::t("admin.new.organisation")}</h2></div>
+                        <div class="ods-widget__head"><span class="ods-widget__titles"><h2 class="ods-widget__title">{crate::i18n::t("admin.new.organisation")}</h2></span></div>
                         <div class="ods-widget__body">
                             <div class="ods-field">
                                 <label class="ods-field__label" for="m-position">
@@ -192,7 +192,7 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                     </section>
 
                     <section class="ods-widget ods-widget-surface" data-part="card">
-                        <div class="ods-widget__head"><h2>{crate::i18n::t("admin.new.access")}</h2></div>
+                        <div class="ods-widget__head"><span class="ods-widget__titles"><h2 class="ods-widget__title">{crate::i18n::t("admin.new.access")}</h2></span></div>
                         <div class="ods-widget__body">
                             <div class="ods-field">
                                 <label class="ods-field__label" for="m-role">{crate::i18n::t("admin.role.technical")}</label>

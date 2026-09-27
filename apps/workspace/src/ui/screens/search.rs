@@ -15,11 +15,13 @@
 //! filtra depois, e nunca revela contagens de material inacessível.
 
 use leptos::prelude::*;
+
+use crate::ui::ods::icone;
 use serde_json::Value;
 
 use crate::i18n::t;
 use crate::ui::components::{classification_badge, empty_state, EmptyState};
-use crate::ui::icon::{icon, Icon};
+use crate::ui::icon::Icon;
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or("")
@@ -115,36 +117,36 @@ pub fn search(query: &str, results: &Value, bodies: &Value, semantic: &Value) ->
                     </div>
                 </div>
 
-                <form method="get" action="/search" class="oc-search-form">
-                    <div class="oc-table__search oc-search-form__field">
-                        {icon(Icon::Search, 14)}
-                        <label class="ods-sr-only" for="search-q">{t("search.field.label")}</label>
-                        <input
-                            id="search-q"
-                            name="q"
-                            type="search"
-                            value=query.clone()
-                            placeholder=t("search.field.placeholder")
-                            autofocus
-                        />
-                    </div>
-                    <button type="submit" class="ods-btn ods-btn--navy" data-part="btn">{t("search.submit")}</button>
+                <form method="get" action="/search" class="ods-search" role="search">
+                    {icone("search", "")}
+                    <label class="ods-sr-only" for="search-q">{t("search.field.label")}</label>
+                    <input
+                        class="ods-search__input"
+                        id="search-q"
+                        name="q"
+                        type="search"
+                        value=query.clone()
+                        placeholder=t("search.field.placeholder")
+                        autofocus
+                    />
+                    <button type="submit" class="ods-btn ods-btn--navy ods-btn--sm" data-part="btn">{t("search.submit")}</button>
                 </form>
 
                 // O modo semântico é declarado, não escondido: faz parte da
                 // arquitectura e o seu estado é informação útil (briefing §32).
-                <div class="oc-search-modes" role="group" aria-label=t("search.mode.aria")>
-                    <span class="ods-tabs__tab" data-part="tab" aria-selected="true">{t("search.mode.textual")}</span>
+                <div class="ods-seg" role="group" aria-label=t("search.mode.aria")>
+                    <span class="ods-seg__opt" data-part="tab" aria-selected="true">{t("search.mode.textual")}</span>
                     {if semantic_available {
                         view! {
-                            <span class="ods-tabs__tab" data-part="tab" aria-selected="false">{t("search.mode.semantic")}</span>
+                            <span class="ods-seg__opt" data-part="tab" aria-selected="false">{t("search.mode.semantic")}</span>
                         }
                             .into_any()
                     } else {
                         view! {
                             <span
-                                class="ods-tabs__tab oc-unavailable" data-part="tab unavailable"
+                                class="ods-seg__opt" data-part="tab unavailable"
                                 aria-disabled="true"
+                                data-tip=semantic_message.clone()
                                 title=semantic_message.clone()
                             >
                                 {t("search.mode.semantic_unavailable")}
@@ -187,44 +189,58 @@ pub fn search(query: &str, results: &Value, bodies: &Value, semantic: &Value) ->
                     })
                     .into_any()
                 } else {
+                    // Agrupados pelo tipo (D12), pela ordem em que o Core os
+                    // devolveu: o primeiro grupo é o do resultado mais
+                    // relevante, e dentro de cada um a ordem mantém-se.
+                    let mut grupos: Vec<(String, Vec<Value>)> = Vec::new();
+                    for hit in &hits {
+                        let tipo = entity_label(text(hit, "entity_type")).to_owned();
+                        match grupos.iter_mut().find(|(g, _)| *g == tipo) {
+                            Some((_, lista)) => lista.push(hit.clone()),
+                            None => grupos.push((tipo, vec![hit.clone()])),
+                        }
+                    }
                     view! {
                         <div>
-                            {hits
-                                .iter()
-                                .map(|hit| {
-                                    let classification = text(hit, "classification").to_owned();
-                                    let kind = entity_label(text(hit, "entity_type")).to_owned();
-                                    let title = text(hit, "title").to_owned();
-                                    let excerpt = hit
-                                        .get("excerpt")
-                                        .and_then(Value::as_str)
-                                        .unwrap_or("")
-                                        .to_owned();
-
-                                    // A vista constrói-se dentro de cada ramo: uma
-                                    // vista Leptos consome-se uma só vez.
-                                    let body = move || {
-                                        view! {
-                                            <div>
-                                                <span class="ods-chip">{kind}</span>
-                                                {classification_badge(&classification)}
-                                            </div>
-                                            <div data-oc-content="1">{title}</div>
-                                            {(!excerpt.is_empty())
-                                                .then(|| {
-                                                    view! { <p class="ods-field__hint">{excerpt}</p> }
-                                                })}
-                                        }
-                                    };
-
-                                    match destination(hit) {
-                                        Some(href) => {
-                                            view! { <a href=href>{body()}</a> }
-                                                .into_any()
-                                        }
-                                        None => {
-                                            view! { <div>{body()}</div> }.into_any()
-                                        }
+                            {grupos
+                                .into_iter()
+                                .map(|(tipo, lista)| {
+                                    let linhas = lista
+                                        .iter()
+                                        .map(|hit| {
+                                            let classification = text(hit, "classification").to_owned();
+                                            let title = text(hit, "title").to_owned();
+                                            let excerpt = hit
+                                                .get("excerpt")
+                                                .and_then(Value::as_str)
+                                                .unwrap_or("")
+                                                .to_owned();
+                                            let nome = match destination(hit) {
+                                                Some(href) => view! {
+                                                    <a href=href data-oc-content="1">{title}</a>
+                                                }
+                                                    .into_any(),
+                                                None => view! { <span data-oc-content="1">{title}</span> }.into_any(),
+                                            };
+                                            view! {
+                                                <li class="ods-d12-result">
+                                                    <span>
+                                                        {nome}
+                                                        {(!excerpt.is_empty()).then(|| {
+                                                            view! { <p class="ods-field__hint">{excerpt}</p> }
+                                                        })}
+                                                    </span>
+                                                    <span class="ods-app__toolbar-spacer"></span>
+                                                    {classification_badge(&classification)}
+                                                </li>
+                                            }
+                                        })
+                                        .collect_view();
+                                    view! {
+                                        <section>
+                                            <h2 class="ods-label">{tipo}</h2>
+                                            <ol class="ods-d12-results">{linhas}</ol>
+                                        </section>
                                     }
                                 })
                                 .collect_view()}
@@ -282,26 +298,28 @@ fn resultados_do_corpo(corpos: &[Value]) -> impl IntoView {
             );
 
             view! {
-                <a href=destino>
-                    <div>
-                        <span class="ods-chip">{t("search.file")}</span>
-                        {classification_badge(&classification)}
-                        <span class="ods-field__hint">{citacao}</span>
-                    </div>
-                    <div data-oc-content="1">{nome}</div>
-                    // O excerto vem com os termos realçados pelo PostgreSQL, e
-                    // é escapado como texto: o realce é uma marca do motor de
-                    // pesquisa, não HTML que esta página deva executar.
-                    <p class="ods-field__hint">{excerto}</p>
-                </a>
+                <li class="ods-d12-result">
+                    <span>
+                        <a href=destino data-oc-content="1">{nome}</a>
+                        " "
+                        <span class="ods-label">{t("search.file")} " · " {citacao}</span>
+                        // O excerto vem com os termos realçados pelo
+                        // PostgreSQL, e é escapado como texto: o realce é uma
+                        // marca do motor de pesquisa, não HTML que esta página
+                        // deva executar.
+                        <p class="ods-field__hint">{excerto}</p>
+                    </span>
+                    <span class="ods-app__toolbar-spacer"></span>
+                    {classification_badge(&classification)}
+                </li>
             }
         })
         .collect_view();
 
     view! {
         <section>
-            <h2 class="ods-widget__title">{t("search.in_file_content")}</h2>
-            <div>{linhas}</div>
+            <h2 class="ods-label">{t("search.in_file_content")}</h2>
+            <ol class="ods-d12-results">{linhas}</ol>
         </section>
     }
 }

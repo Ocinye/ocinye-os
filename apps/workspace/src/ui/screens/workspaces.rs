@@ -933,7 +933,7 @@ fn artefact_card(
     view! {
         <section class="ods-widget ods-widget-surface" data-part="card">
             <div class="ods-widget__head">
-                <h2>{title}</h2>
+                <span class="ods-widget__titles"><h2 class="ods-widget__title">{title}</h2></span>
                 <span class="ods-label">{count.to_string()}</span>
             </div>
             <div class="ods-widget__body">
@@ -1115,7 +1115,7 @@ pub fn unit_detail(
 
                 <section class="ods-widget ods-widget-surface" data-part="card">
                     <div class="ods-widget__head">
-                        <h2>{crate::i18n::t("workspaces.members")}</h2>
+                        <span class="ods-widget__titles"><h2 class="ods-widget__title">{crate::i18n::t("workspaces.members")}</h2></span>
                         <span class="ods-label">{member_rows.len().to_string()}</span>
                     </div>
                     <div class="ods-widget__body">
@@ -1261,7 +1261,7 @@ fn pessoas_do_ambiente(
     view! {
         <section class="ods-widget ods-widget-surface" data-part="card">
             <div class="ods-widget__head">
-                <h2>{crate::i18n::t("workspaces.people")}</h2>
+                <span class="ods-widget__titles"><h2 class="ods-widget__title">{crate::i18n::t("workspaces.people")}</h2></span>
                 <span class="ods-label">{linhas.len().to_string()}</span>
             </div>
             <div class="ods-widget__body">
