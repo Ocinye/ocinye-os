@@ -882,7 +882,11 @@ impl CapabilityHandler for ListWorkspaces {
             None => None,
             Some("idea") => Some(ocinye_contracts::research::WorkspaceKind::Idea),
             Some("project") => Some(ocinye_contracts::research::WorkspaceKind::Project),
-            Some(_) => return Err(CoreError::Validation("kind must be idea or project".to_owned())),
+            Some(_) => {
+                return Err(CoreError::Validation(
+                    "kind must be idea or project".to_owned(),
+                ))
+            }
         };
         // Os ambientes onde tem papel saem do principal, como na rota.
         let meus = ctx.principal.workspace_ids();
@@ -894,7 +898,10 @@ impl CapabilityHandler for ListWorkspaces {
                 member_of: mine.then_some(meus.as_slice()),
                 ..Default::default()
             },
-            ocinye_contracts::page::PageRequest { page: 1, page_size: 100 },
+            ocinye_contracts::page::PageRequest {
+                page: 1,
+                page_size: 100,
+            },
         )
         .await?;
 

@@ -36,7 +36,10 @@ macro_rules! pool {
             return;
         };
         let pool = PgPool::connect(&url).await.expect("base de dados");
-        sqlx::migrate!("../../migrations").run(&pool).await.expect("migrations");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("migrations");
         ocinye_core::fixtures::refuse_canonical_organisation(&pool).await;
         pool
     }};
@@ -114,7 +117,11 @@ async fn organisation(pool: &PgPool) -> Uuid {
         .expect("organização")
 }
 
-async fn member(pool: &PgPool, organisation_id: Uuid, roles: &[TechnicalRole]) -> (Principal, Secret) {
+async fn member(
+    pool: &PgPool,
+    organisation_id: Uuid,
+    roles: &[TechnicalRole],
+) -> (Principal, Secret) {
     let handle = format!("t{}", Uuid::new_v4().simple());
     let person_id: Uuid = sqlx::query_scalar(
         "INSERT INTO people (organisation_id, full_name, email, status)
@@ -150,8 +157,13 @@ async fn member(pool: &PgPool, organisation_id: Uuid, roles: &[TechnicalRole]) -
     .execute(pool)
     .await
     .expect("sessão");
-    let record = identity::person_by_id(pool, person_id).await.expect("consulta").expect("pessoa");
-    let principal = identity::principal_for_person(pool, &record).await.expect("principal");
+    let record = identity::person_by_id(pool, person_id)
+        .await
+        .expect("consulta")
+        .expect("pessoa");
+    let principal = identity::principal_for_person(pool, &record)
+        .await
+        .expect("principal");
     (principal, token)
 }
 
@@ -169,8 +181,13 @@ async fn post(state: &AppState, token: &Secret, path: &str, body: Value) -> (Sta
         .await
         .expect("resposta");
     let status = response.status();
-    let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024).await.expect("corpo");
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("corpo");
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
 async fn exec(state: &AppState, token: &Secret, line: &str, context: Option<Uuid>) -> Value {
@@ -238,9 +255,20 @@ async fn whoami_diz_quem_pede_e_o_contexto() {
     assert_eq!(body["exit"], 0, "{body}");
     assert_eq!(body["capability"], "identity.self.read");
     let rows = body["blocks"][0]["rows"].as_array().expect("factos");
-    assert!(rows.iter().any(|r| r[0] == "display_name" && r[1] == me.display_name.as_str()), "{body}");
-    assert!(rows.iter().any(|r| r[0] == "instance" && r[1] == "Instituição do Terminal"), "{body}");
-    assert!(rows.iter().any(|r| r[0] == "context" && r[1] == "personal"), "{body}");
+    assert!(
+        rows.iter()
+            .any(|r| r[0] == "display_name" && r[1] == me.display_name.as_str()),
+        "{body}"
+    );
+    assert!(
+        rows.iter()
+            .any(|r| r[0] == "instance" && r[1] == "Instituição do Terminal"),
+        "{body}"
+    );
+    assert!(
+        rows.iter().any(|r| r[0] == "context" && r[1] == "personal"),
+        "{body}"
+    );
 
     let json = exec(&state, &token, "whoami --json", None).await;
     assert_eq!(json["blocks"][0]["kind"], "json", "{json}");
@@ -257,7 +285,10 @@ async fn o_contexto_so_aponta_para_ambientes_alcancaveis() {
     // Quem o criou vê-o na lista, entra nele por código, e as tarefas correm lá.
     let list = exec(&state, &admin_token, "context list", None).await;
     assert_eq!(list["exit"], 0, "{list}");
-    let code = list["blocks"][0]["rows"][0][0].as_str().expect("código").to_owned();
+    let code = list["blocks"][0]["rows"][0][0]
+        .as_str()
+        .expect("código")
+        .to_owned();
     let usar = exec(&state, &admin_token, &format!("context use {code}"), None).await;
     assert_eq!(usar["exit"], 0, "{usar}");
     assert_eq!(usar["context"]["workspace_id"], ws.to_string(), "{usar}");
@@ -278,7 +309,10 @@ async fn o_contexto_so_aponta_para_ambientes_alcancaveis() {
     let forjado = exec(&state, &outro_token, "tasks list", Some(ws)).await;
     assert_eq!(forjado["exit"], 77, "{forjado}");
     assert_eq!(note_key(&forjado), "ocsh.err.context_unreachable");
-    assert!(forjado["context"]["workspace_id"].is_null(), "o contexto forjado não pode ficar: {forjado}");
+    assert!(
+        forjado["context"]["workspace_id"].is_null(),
+        "o contexto forjado não pode ficar: {forjado}"
+    );
     let lista_alheia = exec(&state, &outro_token, "context list", None).await;
     assert!(
         !lista_alheia.to_string().contains(&code),
@@ -308,7 +342,10 @@ async fn sintaxe_do_anfitriao_e_comandos_desconhecidos_nao_executam() {
     ] {
         let body = exec(&state, &token, line, None).await;
         assert_eq!(body["exit"], exit, "{line}: {body}");
-        assert!(body["capability"].is_null(), "{line} executou uma capability: {body}");
+        assert!(
+            body["capability"].is_null(),
+            "{line} executou uma capability: {body}"
+        );
     }
 
     // Uma linha desconhecida nunca chega ao Nye: nenhuma interacção de IA fica
@@ -336,8 +373,14 @@ async fn a_ajuda_so_mostra_o_que_a_pessoa_pode_usar() {
     let de = |body: &Value| body["blocks"][0]["entries"].to_string();
     let m = exec(&state, &membro, "help", None).await;
     let o = exec(&state, &operador, "help", None).await;
-    assert!(de(&m).contains("whoami") && de(&m).contains("context list"), "{m}");
-    assert!(de(&o).contains("nodes list"), "o operador não vê `nodes`: {o}");
+    assert!(
+        de(&m).contains("whoami") && de(&m).contains("context list"),
+        "{m}"
+    );
+    assert!(
+        de(&o).contains("nodes list"),
+        "o operador não vê `nodes`: {o}"
+    );
     if !de(&m).contains("nodes list") {
         // Escondido na ajuda, e recusado se escrito.
         let n = exec(&state, &membro, "nodes list", None).await;
@@ -352,6 +395,12 @@ async fn sem_sessao_nao_ha_terminal() {
     let pool = pool!();
     let org = organisation(&pool).await;
     let state = nucleo(pool.clone(), org);
-    let (status, _) = post(&state, &Secret::new("x".repeat(64)), "/api/v1/commands/exec", json!({"line": "whoami"})).await;
+    let (status, _) = post(
+        &state,
+        &Secret::new("x".repeat(64)),
+        "/api/v1/commands/exec",
+        json!({"line": "whoami"}),
+    )
+    .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }

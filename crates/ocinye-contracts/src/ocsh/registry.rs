@@ -141,15 +141,51 @@ const NO_OPTS: &[OptSpec] = &[];
 
 /// As famílias, pela ordem da ajuda.
 pub const FAMILIES: &[FamilySpec] = &[
-    FamilySpec { name: "help", default_sub: None, help_key: "ocsh.family.help" },
-    FamilySpec { name: "clear", default_sub: None, help_key: "ocsh.family.clear" },
-    FamilySpec { name: "history", default_sub: None, help_key: "ocsh.family.history" },
-    FamilySpec { name: "exit", default_sub: None, help_key: "ocsh.family.exit" },
-    FamilySpec { name: "whoami", default_sub: None, help_key: "ocsh.family.whoami" },
-    FamilySpec { name: "context", default_sub: Some("show"), help_key: "ocsh.family.context" },
-    FamilySpec { name: "tasks", default_sub: Some("list"), help_key: "ocsh.family.tasks" },
-    FamilySpec { name: "nodes", default_sub: Some("list"), help_key: "ocsh.family.nodes" },
-    FamilySpec { name: "nye", default_sub: None, help_key: "ocsh.family.nye" },
+    FamilySpec {
+        name: "help",
+        default_sub: None,
+        help_key: "ocsh.family.help",
+    },
+    FamilySpec {
+        name: "clear",
+        default_sub: None,
+        help_key: "ocsh.family.clear",
+    },
+    FamilySpec {
+        name: "history",
+        default_sub: None,
+        help_key: "ocsh.family.history",
+    },
+    FamilySpec {
+        name: "exit",
+        default_sub: None,
+        help_key: "ocsh.family.exit",
+    },
+    FamilySpec {
+        name: "whoami",
+        default_sub: None,
+        help_key: "ocsh.family.whoami",
+    },
+    FamilySpec {
+        name: "context",
+        default_sub: Some("show"),
+        help_key: "ocsh.family.context",
+    },
+    FamilySpec {
+        name: "tasks",
+        default_sub: Some("list"),
+        help_key: "ocsh.family.tasks",
+    },
+    FamilySpec {
+        name: "nodes",
+        default_sub: Some("list"),
+        help_key: "ocsh.family.nodes",
+    },
+    FamilySpec {
+        name: "nye",
+        default_sub: None,
+        help_key: "ocsh.family.nye",
+    },
 ];
 
 /// Os comandos. Cada entrada com [`Binding::Capability`] tem de existir no
@@ -158,7 +194,13 @@ pub const COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         family: "help",
         sub: "",
-        args: &[ArgSpec { name: "topic", kind: ValueKind::Text, required: false, rest: false, sensitive: false }],
+        args: &[ArgSpec {
+            name: "topic",
+            kind: ValueKind::Text,
+            required: false,
+            rest: false,
+            sensitive: false,
+        }],
         options: NO_OPTS,
         binding: Binding::Local,
         output: OutputShape::Lines,
@@ -231,7 +273,11 @@ pub const COMMANDS: &[CommandSpec] = &[
         family: "context",
         sub: "list",
         args: NO_ARGS,
-        options: &[OptSpec { name: "mine", value: None, sensitive: false }],
+        options: &[OptSpec {
+            name: "mine",
+            value: None,
+            sensitive: false,
+        }],
         binding: Binding::Capability("research.workspace.list"),
         output: OutputShape::Table(&["code", "title", "kind"]),
         json: true,
@@ -242,7 +288,13 @@ pub const COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         family: "context",
         sub: "use",
-        args: &[ArgSpec { name: "target", kind: ValueKind::Id, required: true, rest: false, sensitive: false }],
+        args: &[ArgSpec {
+            name: "target",
+            kind: ValueKind::Id,
+            required: true,
+            rest: false,
+            sensitive: false,
+        }],
         options: NO_OPTS,
         binding: Binding::Capability("research.workspace.list"),
         output: OutputShape::Note,
@@ -255,7 +307,11 @@ pub const COMMANDS: &[CommandSpec] = &[
         family: "tasks",
         sub: "list",
         args: NO_ARGS,
-        options: &[OptSpec { name: "open", value: None, sensitive: false }],
+        options: &[OptSpec {
+            name: "open",
+            value: None,
+            sensitive: false,
+        }],
         binding: Binding::Capability("collaboration.task.list"),
         output: OutputShape::Table(&["title", "state", "due_on"]),
         json: true,
@@ -278,7 +334,13 @@ pub const COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         family: "nye",
         sub: "ask",
-        args: &[ArgSpec { name: "question", kind: ValueKind::Text, required: true, rest: true, sensitive: false }],
+        args: &[ArgSpec {
+            name: "question",
+            kind: ValueKind::Text,
+            required: true,
+            rest: true,
+            sensitive: false,
+        }],
         options: NO_OPTS,
         binding: Binding::Nye,
         output: OutputShape::Lines,
@@ -354,9 +416,17 @@ mod tests {
             assert!(family(c.family).is_some(), "{} sem família", c.family);
         }
         for f in FAMILIES {
-            assert!(commands_of(f.name).next().is_some(), "família {} sem comandos", f.name);
+            assert!(
+                commands_of(f.name).next().is_some(),
+                "família {} sem comandos",
+                f.name
+            );
             if let Some(d) = f.default_sub {
-                assert!(command(f.name, d).is_some(), "{}: omissão {d} não existe", f.name);
+                assert!(
+                    command(f.name, d).is_some(),
+                    "{}: omissão {d} não existe",
+                    f.name
+                );
             }
         }
     }
@@ -366,7 +436,12 @@ mod tests {
         let mut vistos = BTreeSet::new();
         let mut chaves = BTreeSet::new();
         for c in COMMANDS {
-            assert!(vistos.insert((c.family, c.sub)), "{} {} repetido", c.family, c.sub);
+            assert!(
+                vistos.insert((c.family, c.sub)),
+                "{} {} repetido",
+                c.family,
+                c.sub
+            );
             assert!(chaves.insert(c.help_key), "{} repetida", c.help_key);
         }
     }
@@ -375,7 +450,12 @@ mod tests {
     fn so_o_ultimo_argumento_absorve_o_resto() {
         for c in COMMANDS {
             for (i, a) in c.args.iter().enumerate() {
-                assert!(!a.rest || i + 1 == c.args.len(), "{} {}: rest não é o último", c.family, c.sub);
+                assert!(
+                    !a.rest || i + 1 == c.args.len(),
+                    "{} {}: rest não é o último",
+                    c.family,
+                    c.sub
+                );
             }
         }
     }

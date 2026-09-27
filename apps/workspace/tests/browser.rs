@@ -12385,3 +12385,156 @@ async fn uma_nota_apagada_vai_ao_lixo_e_restaura_se() {
     let de_volta = harness.open("/notes").await;
     esperar_por(&de_volta, "Nota descartavel").await;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// O Ocinye Terminal (ADR-0312)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Escreve uma linha no Terminal e carrega em Enter; devolve o texto da
+/// entrada que ela produziu, depois de o Core ter respondido.
+async fn terminal_executar(page: &Page, linha: &str) -> (String, String) {
+    let antes: i64 = page
+        .evaluate(r#"document.querySelectorAll('[data-oc="term-entry"][data-exit]').length"#)
+        .await
+        .expect("contar")
+        .into_value()
+        .expect("número");
+    let campo = elemento(page, r#"[data-oc="term-line"]:not([disabled])"#).await;
+    campo.click().await.expect("focar");
+    campo.type_str(linha).await.expect("escrever");
+    campo.press_key("Enter").await.expect("Enter");
+    let condicao = format!(
+        r#"document.querySelectorAll('[data-oc="term-entry"][data-exit]').length > {antes}"#
+    );
+    assert!(
+        esperar_ate_condicao(page, &condicao).await,
+        "«{linha}» não teve resposta do Core"
+    );
+    let (exit, texto): (String, String) = page
+        .evaluate(
+            r#"(() => { const e = [...document.querySelectorAll('[data-oc="term-entry"][data-exit]')].pop();
+                return [e.dataset.exit, e.innerText]; })()"#,
+        )
+        .await
+        .expect("ler a entrada")
+        .into_value()
+        .expect("par");
+    (exit, texto)
+}
+
+/// O Terminal executa pelo Core, desenha só texto, e não guarda segredos.
+///
+/// # A viagem
+///
+/// ```text
+/// entrar → /terminal → whoami (Core, exit 0)
+///        → sintaxe do anfitrião, sudo, comando desconhecido (126/127, nada corre)
+///        → HTML escrito pela pessoa volta como texto, não como elemento
+///        → uma opção sensível nunca chega ao histórico nem à página
+///        → Tab completa pelo registo que o Core filtrou → ↑ recupera
+///        → um separador novo tem o seu histórico
+/// ```
+#[tokio::test]
+async fn o_terminal_executa_pelo_core_e_desenha_so_texto() {
+    let harness = harness!();
+    harness.sign_in(&[TechnicalRole::ResearchMember]).await;
+    let page = harness.open("/terminal").await;
+    elemento(&page, r#"[data-oc="term-line"]"#).await;
+
+    // ── Um comando do Core ──────────────────────────────────────────────
+    let (exit, texto) = terminal_executar(&page, "whoami").await;
+    assert_eq!(exit, "0", "whoami falhou: {texto}");
+    assert!(texto.contains("Instância"), "whoami sem factos: {texto}");
+
+    // ── O ocsh não é uma shell do anfitrião ─────────────────────────────
+    let (exit, texto) = terminal_executar(&page, "whoami; rm -rf /").await;
+    assert_eq!(
+        exit, "126",
+        "a sintaxe do anfitrião não foi recusada: {texto}"
+    );
+    let (exit, texto) = terminal_executar(&page, "sudo whoami").await;
+    assert_eq!(exit, "126", "sudo não foi recusado: {texto}");
+    assert!(texto.contains("sudo"), "{texto}");
+    let (exit, texto) = terminal_executar(&page, "whomai").await;
+    assert_eq!(exit, "127", "{texto}");
+    assert!(texto.contains("whoami"), "sem «quis dizer»: {texto}");
+
+    // ── O que a pessoa escreveu é texto, nunca HTML ─────────────────────
+    let (exit, texto) = terminal_executar(&page, r#""<img src=x onerror=alert(1)>""#).await;
+    assert_eq!(exit, "127", "{texto}");
+    assert!(
+        texto.contains("<img src=x"),
+        "o texto não voltou como texto: {texto}"
+    );
+    let imagens: i64 = page
+        .evaluate(r#"document.querySelectorAll('.ods-term-pane__view img').length"#)
+        .await
+        .expect("contar")
+        .into_value()
+        .expect("número");
+    assert_eq!(imagens, 0, "HTML da linha virou elemento");
+
+    // ── Segredos ────────────────────────────────────────────────────────
+    let (exit, _) = terminal_executar(&page, "whoami --password hunter2").await;
+    assert_ne!(exit, "0");
+    let (_, historia) = terminal_executar(&page, "history").await;
+    assert!(
+        historia.contains("••••"),
+        "o histórico não redigiu: {historia}"
+    );
+    let html = page.content().await.expect("conteúdo");
+    assert!(!html.contains("hunter2"), "o segredo ficou na página");
+
+    // ── Tab completa pelo registo; ↑ recupera ───────────────────────────
+    let campo = elemento(&page, r#"[data-oc="term-line"]:not([disabled])"#).await;
+    campo.click().await.expect("focar");
+    campo.type_str("whoa").await.expect("escrever");
+    campo.press_key("Tab").await.expect("Tab");
+    assert!(
+        esperar_ate_condicao(
+            &page,
+            r#"document.querySelector('[data-oc="term-pane"]:not([hidden]) [data-oc="term-line"]').value === 'whoami '"#,
+        )
+        .await,
+        "Tab não completou «whoa»"
+    );
+    page.evaluate(
+        r#"(() => { const l = document.querySelector('[data-oc="term-pane"]:not([hidden]) [data-oc="term-line"]');
+            l.value = ''; l.dispatchEvent(new Event('input', { bubbles: true })); })()"#,
+    )
+    .await
+    .expect("limpar");
+    campo.press_key("ArrowUp").await.expect("↑");
+    assert!(
+        esperar_ate_condicao(
+            &page,
+            r#"document.querySelector('[data-oc="term-pane"]:not([hidden]) [data-oc="term-line"]').value === 'history'"#,
+        )
+        .await,
+        "↑ não recuperou a última linha"
+    );
+
+    // ── Um separador novo é outra sessão ────────────────────────────────
+    clicar(&page, r#"[data-oc="term-tab-new"]"#).await;
+    assert!(
+        esperar_ate_condicao(
+            &page,
+            r#"document.querySelectorAll('[data-oc="term-tab"]').length === 2"#
+        )
+        .await,
+        "o separador novo não apareceu"
+    );
+    let novo = elemento(
+        &page,
+        r#"[data-oc="term-pane"]:not([hidden]) [data-oc="term-line"]"#,
+    )
+    .await;
+    novo.press_key("ArrowUp").await.expect("↑");
+    let valor: String = page
+        .evaluate(r#"document.querySelector('[data-oc="term-pane"]:not([hidden]) [data-oc="term-line"]').value"#)
+        .await
+        .expect("ler")
+        .into_value()
+        .expect("texto");
+    assert_eq!(valor, "", "o histórico passou de um separador para outro");
+}

@@ -237,6 +237,7 @@ pub fn icone_da_aplicacao(ecra: crate::ui::shell::Screen) -> &'static str {
         Screen::Search => "search",
         Screen::Settings => "settings",
         Screen::Help => "help",
+        Screen::Terminal => "terminal",
         Screen::Messaging => "messages",
         Screen::Knowledge => "knowledge",
         Screen::Bibliography => "bibliography",

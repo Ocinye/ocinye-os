@@ -249,7 +249,9 @@ suites() {
 # capturas `#[ignore]` de revisão visual saíram também (não contavam como
 # passadas). Registo em `docs/ui/BEHAVIOURAL_CONTRACT_MATRIX.md`.
 # 125 → 126 em 2026-09-27: o Nye responde no círculo (D7, Claude Design).
-viagens-de-browser|126|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|126
+# 126 → 127 em 2026-09-27: o Terminal executa pelo Core e desenha só texto
+# (ADR-0312, D13).
+viagens-de-browser|127|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|127
 paridade|7|-p ocinye-core-server --test parity
 # O Terminal (ocsh, ADR-0312): whoami, contexto reautorizado e alheio recusado,
 # sintaxe do anfitrião e comandos desconhecidos sem execução, ajuda filtrada pela

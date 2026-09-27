@@ -70,6 +70,8 @@ pub enum ApplicationId {
     Settings,
     /// Ajuda.
     Help,
+    /// O Terminal (ocsh, ADR-0312).
+    Terminal,
 }
 
 /// Se uma aplicação pode ser desactivada numa Instância.
@@ -84,7 +86,7 @@ pub enum ApplicationClass {
 
 impl ApplicationId {
     /// Todas, na ordem do registo.
-    pub const ALL: [ApplicationId; 23] = [
+    pub const ALL: [ApplicationId; 24] = [
         Self::Notes,
         Self::Calendar,
         Self::Work,
@@ -108,6 +110,7 @@ impl ApplicationId {
         Self::Audit,
         Self::Settings,
         Self::Help,
+        Self::Terminal,
     ];
 
     /// O identificador técnico — o que se persiste.
@@ -137,6 +140,7 @@ impl ApplicationId {
             Self::Audit => "audit",
             Self::Settings => "settings",
             Self::Help => "help",
+            Self::Terminal => "terminal",
         }
     }
 
@@ -267,6 +271,7 @@ impl InstanceProfile {
                     | A::Audit
                     | A::Units
                     | A::Projects
+                    | A::Terminal
             ),
             Self::Education => matches!(
                 app,
@@ -281,8 +286,12 @@ impl InstanceProfile {
                     | A::Projects
                     | A::Knowledge
                     | A::Bibliography
+                    | A::Terminal
             ),
-            Self::Personal => matches!(app, A::Notes | A::Calendar | A::Mail | A::Prompt),
+            Self::Personal => matches!(
+                app,
+                A::Notes | A::Calendar | A::Mail | A::Prompt | A::Terminal
+            ),
         }
     }
 
@@ -354,16 +363,19 @@ pub enum ApplicationCategory {
     Research,
     /// Recursos, actividade, administração, definições, ajuda.
     Administration,
+    /// Ferramentas do sistema: o Terminal.
+    System,
 }
 
 impl ApplicationCategory {
     /// As cinco, na ordem do lançador.
-    pub const ALL: [ApplicationCategory; 5] = [
+    pub const ALL: [ApplicationCategory; 6] = [
         Self::Productivity,
         Self::Research,
         Self::Knowledge,
         Self::Communication,
         Self::Administration,
+        Self::System,
     ];
 
     /// O identificador técnico.
@@ -375,6 +387,7 @@ impl ApplicationCategory {
             Self::Knowledge => "knowledge",
             Self::Research => "research",
             Self::Administration => "administration",
+            Self::System => "system",
         }
     }
 }
@@ -488,7 +501,7 @@ use crate::intelligence::AiCapability;
 use crate::resource::ResourceType;
 
 /// Os manifestos de todas as aplicações nativas, na ordem do registo.
-pub const MANIFESTS: [ApplicationManifest; 23] = [
+pub const MANIFESTS: [ApplicationManifest; 24] = [
     ApplicationManifest {
         id: ApplicationId::Notes,
         category: ApplicationCategory::Productivity,
@@ -837,6 +850,23 @@ pub const MANIFESTS: [ApplicationManifest; 23] = [
         name_key: "nav.help",
         description_key: "apps.desc.help",
         api_prefixes: &[],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+    },
+    // O Terminal não traz autoridade própria: cada comando invoca uma
+    // capability, autorizada pelo Core (ADR-0312). O prefixo é o da execução.
+    ApplicationManifest {
+        id: ApplicationId::Terminal,
+        category: ApplicationCategory::System,
+        route: "/terminal",
+        name_key: "terminal.app",
+        description_key: "terminal.app.desc",
+        api_prefixes: &["/commands"],
         storage: StorageUse::None,
         network: NetworkUse::None,
         ai_capabilities: &[],

@@ -216,8 +216,7 @@ impl CapabilityHandler for ReadSelf {
         let instance =
             crate::modules::organisation::instance_name(ctx.pool, ctx.principal.organisation_id)
                 .await?;
-        let mut roles: Vec<&'static str> =
-            ctx.principal.roles.iter().map(|r| r.as_str()).collect();
+        let mut roles: Vec<&'static str> = ctx.principal.roles.iter().map(|r| r.as_str()).collect();
         roles.sort_unstable();
 
         Ok(CapabilityResult {

@@ -8,8 +8,7 @@ use std::collections::BTreeMap;
 
 use super::lexer::{lex, LexError, Token};
 use super::registry::{
-    command, distance, family, CommandSpec, ValueKind, FAMILIES, HOST_SHELL_WORDS,
-    POSIX_HINTS,
+    command, distance, family, CommandSpec, ValueKind, FAMILIES, HOST_SHELL_WORDS, POSIX_HINTS,
 };
 use super::ExitCode;
 
@@ -167,7 +166,10 @@ pub fn parse(line: &str) -> Result<Parsed, ParseError> {
     let mut segments: Vec<Vec<(String, bool)>> = vec![vec![]];
     for t in tokens {
         match t {
-            Token::Word { text, quoted } => segments.last_mut().expect("há sempre um").push((text, quoted)),
+            Token::Word { text, quoted } => segments
+                .last_mut()
+                .expect("há sempre um")
+                .push((text, quoted)),
             Token::Pipe => segments.push(vec![]),
         }
     }
@@ -212,10 +214,20 @@ pub fn parse(line: &str) -> Result<Parsed, ParseError> {
                 s
             }
             Some((w, false)) if !w.starts_with('-') && fam.default_sub.is_none() => {
-                return Err(ParseError::UnknownSubcommand { family: fam.name.into(), word: w.clone() })
+                return Err(ParseError::UnknownSubcommand {
+                    family: fam.name.into(),
+                    word: w.clone(),
+                })
             }
-            Some((w, false)) if !w.starts_with('-') && command(fam.name, fam.default_sub.unwrap_or("")).is_some_and(|c| c.args.is_empty()) => {
-                return Err(ParseError::UnknownSubcommand { family: fam.name.into(), word: w.clone() })
+            Some((w, false))
+                if !w.starts_with('-')
+                    && command(fam.name, fam.default_sub.unwrap_or(""))
+                        .is_some_and(|c| c.args.is_empty()) =>
+            {
+                return Err(ParseError::UnknownSubcommand {
+                    family: fam.name.into(),
+                    word: w.clone(),
+                })
             }
             _ => match fam.default_sub {
                 Some(d) => command(fam.name, d).expect("omissão verificada no registo"),
@@ -260,7 +272,9 @@ fn bind(spec: &'static CommandSpec, words: &[(String, bool)]) -> Result<Invocati
     while i < words.len() {
         let (w, quoted) = &words[i];
         // Depois de um argumento `rest`, tudo é texto dele.
-        let absorbing = spec.args.last().is_some_and(|a| a.rest) && positional.len() + 1 >= spec.args.len() && !positional.is_empty();
+        let absorbing = spec.args.last().is_some_and(|a| a.rest)
+            && positional.len() + 1 >= spec.args.len()
+            && !positional.is_empty();
         if !quoted && !absorbing && w.starts_with("--") && w.len() > 2 {
             let body = &w[2..];
             let (name, inline) = match body.split_once('=') {
@@ -287,13 +301,21 @@ fn bind(spec: &'static CommandSpec, words: &[(String, bool)]) -> Result<Invocati
                         Some(v) => v,
                         None => {
                             i += 1;
-                            words.get(i).map(|(v, _)| v.clone()).ok_or(ParseError::MissingOptionValue(opt.name))?
+                            words
+                                .get(i)
+                                .map(|(v, _)| v.clone())
+                                .ok_or(ParseError::MissingOptionValue(opt.name))?
                         }
                     };
                     options.insert(opt.name, typed(opt.name, kind, raw)?);
                 }
             }
-        } else if !quoted && !absorbing && w.starts_with('-') && w.len() > 1 && !w[1..].starts_with(|c: char| c.is_ascii_digit()) {
+        } else if !quoted
+            && !absorbing
+            && w.starts_with('-')
+            && w.len() > 1
+            && !w[1..].starts_with(|c: char| c.is_ascii_digit())
+        {
             return Err(ParseError::UnknownOption(w.clone()));
         } else {
             positional.push(w.clone());
@@ -326,7 +348,14 @@ fn bind(spec: &'static CommandSpec, words: &[(String, bool)]) -> Result<Invocati
     if let Some(extra) = pos.next() {
         return Err(ParseError::UnexpectedArgument(extra));
     }
-    Ok(Invocation { spec, args, options, flags, json, stages: vec![] })
+    Ok(Invocation {
+        spec,
+        args,
+        options,
+        flags,
+        json,
+        stages: vec![],
+    })
 }
 
 fn typed(name: &'static str, kind: ValueKind, raw: String) -> Result<Value, ParseError> {
@@ -355,11 +384,22 @@ fn stage(words: &[(String, bool)]) -> Result<Stage, ParseError> {
             if rest.is_empty() {
                 return Err(ParseError::BadStage(op.clone()));
             }
-            Ok(Stage::Filter(rest.iter().map(|(w, _)| w.as_str()).collect::<Vec<_>>().join(" ")))
+            Ok(Stage::Filter(
+                rest.iter()
+                    .map(|(w, _)| w.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            ))
         }
         "sort" => match rest {
-            [(c, _)] => Ok(Stage::Sort { column: c.clone(), desc: false }),
-            [(c, _), (d, false)] if d == "--desc" => Ok(Stage::Sort { column: c.clone(), desc: true }),
+            [(c, _)] => Ok(Stage::Sort {
+                column: c.clone(),
+                desc: false,
+            }),
+            [(c, _), (d, false)] if d == "--desc" => Ok(Stage::Sort {
+                column: c.clone(),
+                desc: true,
+            }),
             _ => Err(ParseError::BadStage(op.clone())),
         },
         "head" => one(rest)?
@@ -412,48 +452,105 @@ mod tests {
     #[test]
     fn nye_ask_absorve_o_resto_e_o_atalho() {
         let i = run("nye ask resume o projecto --json");
-        assert_eq!(i.args["question"], Value::Text("resume o projecto --json".into()));
+        assert_eq!(
+            i.args["question"],
+            Value::Text("resume o projecto --json".into())
+        );
         let i = run("?  o que tenho para hoje");
         assert_eq!((i.spec.family, i.spec.sub), ("nye", "ask"));
-        assert_eq!(i.args["question"], Value::Text("o que tenho para hoje".into()));
+        assert_eq!(
+            i.args["question"],
+            Value::Text("o que tenho para hoje".into())
+        );
         assert_eq!(parse("?"), Err(ParseError::MissingArgument("question")));
-        assert!(matches!(parse("nye"), Err(ParseError::UnknownSubcommand { .. })));
+        assert!(matches!(
+            parse("nye"),
+            Err(ParseError::UnknownSubcommand { .. })
+        ));
     }
 
     #[test]
     fn desconhecido_e_127_com_sugestao_e_nunca_vai_ao_nye() {
         let e = parse("taks list").unwrap_err();
-        assert_eq!(e, ParseError::UnknownCommand { word: "taks".into(), suggestion: Some("tasks".into()) });
+        assert_eq!(
+            e,
+            ParseError::UnknownCommand {
+                word: "taks".into(),
+                suggestion: Some("tasks".into())
+            }
+        );
         assert_eq!(e.exit(), ExitCode::NotFound);
         let e = parse("ls -la").unwrap_err();
-        assert_eq!(e, ParseError::UnknownCommand { word: "ls".into(), suggestion: Some("files ls".into()) });
+        assert_eq!(
+            e,
+            ParseError::UnknownCommand {
+                word: "ls".into(),
+                suggestion: Some("files ls".into())
+            }
+        );
         let e = parse("resume este projecto por favor").unwrap_err();
-        assert!(matches!(e, ParseError::UnknownCommand { .. }), "linguagem natural não é um comando");
+        assert!(
+            matches!(e, ParseError::UnknownCommand { .. }),
+            "linguagem natural não é um comando"
+        );
     }
 
     #[test]
     fn shells_do_anfitriao_sao_126() {
-        for linha in ["sudo tasks list", "bash -c 'rm -rf /'", "SH", "ssh root@host", "eval x"] {
+        for linha in [
+            "sudo tasks list",
+            "bash -c 'rm -rf /'",
+            "SH",
+            "ssh root@host",
+            "eval x",
+        ] {
             let e = parse(linha).unwrap_err();
             assert!(matches!(e, ParseError::HostShell(_)), "{linha}: {e:?}");
             assert_eq!(e.exit(), ExitCode::Blocked);
         }
-        for linha in ["tasks; rm -rf /", "tasks && id", "tasks | /bin/sh", "tasks $(id)", "tasks `id`"] {
+        for linha in [
+            "tasks; rm -rf /",
+            "tasks && id",
+            "tasks | /bin/sh",
+            "tasks $(id)",
+            "tasks `id`",
+        ] {
             let e = parse(linha).unwrap_err();
-            assert!(matches!(e.exit(), ExitCode::Blocked | ExitCode::Usage), "{linha}: {e:?}");
+            assert!(
+                matches!(e.exit(), ExitCode::Blocked | ExitCode::Usage),
+                "{linha}: {e:?}"
+            );
         }
         // `| /bin/sh` não é uma operação de pipeline: erro de uso, nunca execução.
-        assert_eq!(parse("tasks | /bin/sh"), Err(ParseError::BadStage("/bin/sh".into())));
+        assert_eq!(
+            parse("tasks | /bin/sh"),
+            Err(ParseError::BadStage("/bin/sh".into()))
+        );
     }
 
     #[test]
     fn erros_de_uso() {
-        assert_eq!(parse("tasks list --everything"), Err(ParseError::UnknownOption("--everything".into())));
-        assert_eq!(parse("tasks list extra"), Err(ParseError::UnexpectedArgument("extra".into())));
-        assert_eq!(parse("tasks frobnicate"), Err(ParseError::UnknownSubcommand { family: "tasks".into(), word: "frobnicate".into() }));
+        assert_eq!(
+            parse("tasks list --everything"),
+            Err(ParseError::UnknownOption("--everything".into()))
+        );
+        assert_eq!(
+            parse("tasks list extra"),
+            Err(ParseError::UnexpectedArgument("extra".into()))
+        );
+        assert_eq!(
+            parse("tasks frobnicate"),
+            Err(ParseError::UnknownSubcommand {
+                family: "tasks".into(),
+                word: "frobnicate".into()
+            })
+        );
         assert_eq!(parse("clear --json"), Err(ParseError::JsonNotSupported));
         assert_eq!(parse("clear | count"), Err(ParseError::NotPipeable));
-        assert_eq!(parse("tasks list --open=yes"), Err(ParseError::UnknownOption("--open".into())));
+        assert_eq!(
+            parse("tasks list --open=yes"),
+            Err(ParseError::UnknownOption("--open".into()))
+        );
         assert_eq!(parse("| count"), Err(ParseError::BadStage("|".into())));
         assert_eq!(parse("   "), Ok(Parsed::Empty));
     }
@@ -468,7 +565,10 @@ mod tests {
     #[test]
     fn ajuda_por_opcao() {
         assert_eq!(parse("tasks --help"), Ok(Parsed::Help("tasks".into())));
-        assert_eq!(parse("tasks list -h"), Ok(Parsed::Help("tasks list".into())));
+        assert_eq!(
+            parse("tasks list -h"),
+            Ok(Parsed::Help("tasks list".into()))
+        );
     }
 
     #[test]
@@ -478,15 +578,27 @@ mod tests {
             i.stages,
             vec![
                 Stage::Filter("active".into()),
-                Stage::Sort { column: "due".into(), desc: true },
+                Stage::Sort {
+                    column: "due".into(),
+                    desc: true
+                },
                 Stage::Head(5)
             ]
         );
         let i = run("tasks | export json");
         assert!(i.json);
-        assert_eq!(parse("tasks | head x"), Err(ParseError::BadStage("head".into())));
-        assert_eq!(parse("tasks | grep x"), Err(ParseError::BadStage("grep".into())));
-        assert_eq!(parse("tasks | count extra"), Err(ParseError::BadStage("count".into())));
+        assert_eq!(
+            parse("tasks | head x"),
+            Err(ParseError::BadStage("head".into()))
+        );
+        assert_eq!(
+            parse("tasks | grep x"),
+            Err(ParseError::BadStage("grep".into()))
+        );
+        assert_eq!(
+            parse("tasks | count extra"),
+            Err(ParseError::BadStage("count".into()))
+        );
     }
 
     /// Fuzz determinístico: linhas geradas de um alfabeto hostil nunca fazem o
@@ -495,10 +607,10 @@ mod tests {
     #[test]
     fn fuzz_deterministico_nao_rebenta() {
         const ALFABETO: &[&str] = &[
-            "tasks", "list", "nye", "ask", "help", "--mine", "--json", "--help", "-h", "|", "filter",
-            "sort", "head", "count", "export", "json", "\"", "'", "\\", ";", "&", "&&", ">", "<",
-            "`", "$(", "${", "$X", "$", " ", "\t", "?", "../", "é", "🙂", "\u{202e}", "=", "--x=",
-            "5", "-1", "sudo", "ls",
+            "tasks", "list", "nye", "ask", "help", "--mine", "--json", "--help", "-h", "|",
+            "filter", "sort", "head", "count", "export", "json", "\"", "'", "\\", ";", "&", "&&",
+            ">", "<", "`", "$(", "${", "$X", "$", " ", "\t", "?", "../", "é", "🙂", "\u{202e}",
+            "=", "--x=", "5", "-1", "sudo", "ls",
         ];
         let mut estado: u64 = 0x9E37_79B9_7F4A_7C15;
         for _ in 0..20_000 {
@@ -518,7 +630,11 @@ mod tests {
             }
             if let Ok(Parsed::Run(inv)) = parse(&linha) {
                 // Se é um comando, é um comando do registo — nada mais.
-                assert_eq!(command(inv.spec.family, inv.spec.sub), Some(inv.spec), "{linha}");
+                assert_eq!(
+                    command(inv.spec.family, inv.spec.sub),
+                    Some(inv.spec),
+                    "{linha}"
+                );
             }
         }
     }

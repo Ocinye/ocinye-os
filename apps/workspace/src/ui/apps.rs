@@ -46,6 +46,8 @@ pub enum Category {
     Communication,
     /// Administração — recursos, definições e a consola institucional.
     Administration,
+    /// Sistema — o Terminal.
+    System,
 }
 
 impl From<ocinye_contracts::ApplicationCategory> for Category {
@@ -57,6 +59,7 @@ impl From<ocinye_contracts::ApplicationCategory> for Category {
             C::Knowledge => Self::Knowledge,
             C::Communication => Self::Communication,
             C::Administration => Self::Administration,
+            C::System => Self::System,
         }
     }
 }
@@ -71,6 +74,7 @@ impl Category {
             Self::Knowledge => "knowledge",
             Self::Communication => "communication",
             Self::Administration => "administration",
+            Self::System => "system",
         }
     }
 
@@ -83,18 +87,20 @@ impl Category {
             Self::Knowledge => "apps.category.knowledge",
             Self::Communication => "apps.category.communication",
             Self::Administration => "apps.category.administration",
+            Self::System => "terminal.category.system",
         }
     }
 
     /// As categorias, na ordem em que os filtros aparecem.
     #[must_use]
-    pub const fn all() -> [Category; 5] {
+    pub const fn all() -> [Category; 6] {
         [
             Self::Productivity,
             Self::Research,
             Self::Knowledge,
             Self::Communication,
             Self::Administration,
+            Self::System,
         ]
     }
 }
@@ -383,6 +389,19 @@ pub const APPLICATIONS: &[Application] = &[
         screen: Screen::Help,
         keywords: &["help", "ajuda", "aide", "suporte", "support"],
     },
+    Application {
+        screen: Screen::Terminal,
+        keywords: &[
+            "terminal",
+            "ocsh",
+            "shell",
+            "consola",
+            "console",
+            "linha de comandos",
+            "command line",
+            "ligne de commande",
+        ],
+    },
 ];
 
 /// As aplicações visíveis a este membro, na ordem do registo.
@@ -534,10 +553,10 @@ mod tests {
             by_id("ask").is_none(),
             "Ask não é uma aplicação do lançador"
         );
-        // Vinte e cinco ecrãs menos os dois da superfície de comando.
+        // Vinte e seis ecrãs menos os dois da superfície de comando.
         assert_eq!(
             APPLICATIONS.len(),
-            23,
+            24,
             "o registo deixou de cobrir todos os ecrãs"
         );
     }

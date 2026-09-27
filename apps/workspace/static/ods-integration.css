@@ -32,3 +32,20 @@
 .ods-root a.ods-btn--primary:is(:link, :visited, :hover) { color: var(--ods-text-on-accent); }
 .ods-root a.ods-btn--danger:is(:link, :visited, :hover) { color: #FFFFFF; }
 .ods-root a.ods-btn--danger-soft:is(:link, :visited, :hover) { color: var(--ods-state-error-text); }
+
+/* Q-36. A tabela do Terminal é uma grelha plana (D13), mas `role="table"`
+ * exige linhas. Cada linha é um `role="row"` que não gera caixa: as células
+ * continuam filhas da grelha para o posicionamento, e a árvore de
+ * acessibilidade tem as linhas que a tabela declara. */
+.ods-term-table__row { display: contents; }
+
+/* Q-38. Duas colas do Terminal (D13).
+ *
+ * 1. Os segmentos com acção (`data-go`) são `<button>`, para serem alcançáveis
+ *    por teclado; o D13 desenha-os como texto. Tira-se o cromado do botão e
+ *    fica a cor do `data-tone`.
+ * 2. `.ods-root :focus-visible` desenha o anel em todo o foco; o D13 diz que a
+ *    linha de comando não tem anel — o cursor é o indicador. */
+.ods-term button.ods-term-seg { margin: 0; padding: 0; border: 0; background: none; font: inherit; text-align: inherit; }
+button.ods-term-seg { color: var(--ods-term-fg); }
+.ods-term-input textarea:focus-visible { box-shadow: none; }

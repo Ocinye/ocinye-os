@@ -68,7 +68,10 @@ pub fn lex(line: &str) -> Result<Vec<Token>, LexError> {
     if line.len() > MAX_LINE_BYTES {
         return Err(LexError::TooLong);
     }
-    if line.chars().any(|c| c.is_control() && c != ' ' && c != '\t') {
+    if line
+        .chars()
+        .any(|c| c.is_control() && c != ' ' && c != '\t')
+    {
         return Err(LexError::ControlCharacter);
     }
 
@@ -208,19 +211,39 @@ mod tests {
 
     #[test]
     fn palavras_aspas_e_escapes() {
-        assert_eq!(words(r#"files mkdir "Annual Reports""#), ["files", "mkdir", "Annual Reports"]);
-        assert_eq!(words("files mkdir 'a \"b\" c'"), ["files", "mkdir", "a \"b\" c"]);
+        assert_eq!(
+            words(r#"files mkdir "Annual Reports""#),
+            ["files", "mkdir", "Annual Reports"]
+        );
+        assert_eq!(
+            words("files mkdir 'a \"b\" c'"),
+            ["files", "mkdir", "a \"b\" c"]
+        );
         assert_eq!(words(r#"x "a\"b""#), ["x", "a\"b"]);
-        assert_eq!(words(r"files mkdir Annual\ Reports"), ["files", "mkdir", "Annual Reports"]);
+        assert_eq!(
+            words(r"files mkdir Annual\ Reports"),
+            ["files", "mkdir", "Annual Reports"]
+        );
         assert_eq!(words("  projects   list  "), ["projects", "list"]);
-        assert_eq!(words("projects list | filter active"), ["projects", "list", "|", "filter", "active"]);
+        assert_eq!(
+            words("projects list | filter active"),
+            ["projects", "list", "|", "filter", "active"]
+        );
         assert_eq!(words("a|b"), ["a", "|", "b"]);
     }
 
     #[test]
     fn dentro_de_aspas_a_sintaxe_do_anfitriao_e_texto() {
-        assert_eq!(words(r#"files mkdir "$(rm -rf /); `x` > y && z""#).last().unwrap(), "$(rm -rf /); `x` > y && z");
-        assert_eq!(words("files mkdir 'custo $5'"), ["files", "mkdir", "custo $5"]);
+        assert_eq!(
+            words(r#"files mkdir "$(rm -rf /); `x` > y && z""#)
+                .last()
+                .unwrap(),
+            "$(rm -rf /); `x` > y && z"
+        );
+        assert_eq!(
+            words("files mkdir 'custo $5'"),
+            ["files", "mkdir", "custo $5"]
+        );
         assert_eq!(words("preco $5"), ["preco", "$5"]);
     }
 
@@ -245,20 +268,35 @@ mod tests {
 
     #[test]
     fn linhas_malformadas_nao_rebentam() {
-        assert_eq!(lex(r#"files mkdir "aberta"#), Err(LexError::UnterminatedQuote));
+        assert_eq!(
+            lex(r#"files mkdir "aberta"#),
+            Err(LexError::UnterminatedQuote)
+        );
         assert_eq!(lex("files mkdir 'aberta"), Err(LexError::UnterminatedQuote));
         assert_eq!(lex("files ls \\"), Err(LexError::DanglingEscape));
         assert_eq!(lex("files\u{0}ls"), Err(LexError::ControlCharacter));
         assert_eq!(lex("files\u{1b}[31mls"), Err(LexError::ControlCharacter));
         assert_eq!(lex(&"a".repeat(MAX_LINE_BYTES + 1)), Err(LexError::TooLong));
-        assert_eq!(lex(&"a ".repeat(MAX_TOKENS + 1)), Err(LexError::TooManyTokens));
+        assert_eq!(
+            lex(&"a ".repeat(MAX_TOKENS + 1)),
+            Err(LexError::TooManyTokens)
+        );
         assert_eq!(lex(""), Ok(vec![]));
-        assert_eq!(words("files mkdir Relatórios 🙂 ﬁ"), ["files", "mkdir", "Relatórios", "🙂", "ﬁ"]);
+        assert_eq!(
+            words("files mkdir Relatórios 🙂 ﬁ"),
+            ["files", "mkdir", "Relatórios", "🙂", "ﬁ"]
+        );
     }
 
     #[test]
     fn aspas_marcam_a_palavra() {
         let t = lex(r#"x "--json""#).unwrap();
-        assert_eq!(t[1], Token::Word { text: "--json".into(), quoted: true });
+        assert_eq!(
+            t[1],
+            Token::Word {
+                text: "--json".into(),
+                quoted: true
+            }
+        );
     }
 }

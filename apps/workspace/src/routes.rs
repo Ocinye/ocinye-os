@@ -113,6 +113,8 @@ pub const ROUTES: &[&str] = &[
     "/notifications/recent",
     "/notifications/{notification_id}/read",
     "/help",
+    "/terminal",
+    "/terminal/exec",
     "/settings",
     "/settings/security",
     "/settings/language",
@@ -390,6 +392,8 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/tasks/{task_id}/transition", post(task_transition))
         .route("/tasks/{task_id}/assignee", post(task_assign))
         .route("/help", get(help))
+        .route("/terminal", get(terminal))
+        .route("/terminal/exec", post(terminal_exec))
         .route("/settings", get(settings_account))
         .route("/settings/security", get(settings_security))
         .route(
@@ -3659,7 +3663,10 @@ async fn new_member(State(state): State<WorkspaceState>, headers: HeaderMap) -> 
         &viewer,
         Screen::Admin,
         vec![Crumb::to(Screen::Admin)],
-        ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::new_member(&units, None)),
+        ui::screens::administration::moldura(
+            ui::screens::administration::SeccaoAdmin::Membros,
+            ui::screens::administration::new_member(&units, None),
+        ),
     )
 }
 
@@ -3718,24 +3725,27 @@ async fn create_member(
                 &viewer,
                 Screen::Admin,
                 vec![Crumb::to(Screen::Admin)],
-                ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::issued_credential(
-                    // O Core devolve `email`. Lia-se `username`, e desde o
-                    // ADR-0106 essa chave não existe: o ecrã que entrega uma
-                    // credencial nova mostrava o endereço **em branco**, e
-                    // ninguém o via porque um campo vazio parece um campo.
-                    credential
-                        .get("email")
-                        .and_then(Value::as_str)
-                        .unwrap_or(""),
-                    credential
-                        .get("temporary_password")
-                        .and_then(Value::as_str)
-                        .unwrap_or(""),
-                    credential
-                        .get("expires_at")
-                        .and_then(Value::as_str)
-                        .unwrap_or(""),
-                )),
+                ui::screens::administration::moldura(
+                    ui::screens::administration::SeccaoAdmin::Membros,
+                    ui::screens::administration::issued_credential(
+                        // O Core devolve `email`. Lia-se `username`, e desde o
+                        // ADR-0106 essa chave não existe: o ecrã que entrega uma
+                        // credencial nova mostrava o endereço **em branco**, e
+                        // ninguém o via porque um campo vazio parece um campo.
+                        credential
+                            .get("email")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                        credential
+                            .get("temporary_password")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                        credential
+                            .get("expires_at")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                    ),
+                ),
             )
         }
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
@@ -3746,7 +3756,10 @@ async fn create_member(
                 &viewer,
                 Screen::Admin,
                 vec![Crumb::to(Screen::Admin)],
-                ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::new_member(&units, Some(failure.to_string()))),
+                ui::screens::administration::moldura(
+                    ui::screens::administration::SeccaoAdmin::Membros,
+                    ui::screens::administration::new_member(&units, Some(failure.to_string())),
+                ),
             )
         }
     }
@@ -3783,15 +3796,18 @@ async fn member_detail(
         &viewer,
         Screen::Admin,
         vec![Crumb::to(Screen::Admin)],
-        ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::member_detail(
-            &person,
-            &security,
-            &access,
-            &units_catalog,
-            &workspaces_catalog,
-            &permissions_catalog,
-            None,
-        )),
+        ui::screens::administration::moldura(
+            ui::screens::administration::SeccaoAdmin::Membros,
+            ui::screens::administration::member_detail(
+                &person,
+                &security,
+                &access,
+                &units_catalog,
+                &workspaces_catalog,
+                &permissions_catalog,
+                None,
+            ),
+        ),
     )
 }
 
@@ -4104,20 +4120,23 @@ async fn member_reset_password(
             &viewer,
             Screen::Admin,
             vec![Crumb::to(Screen::Admin)],
-            ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::issued_credential(
-                credential
-                    .get("email")
-                    .and_then(Value::as_str)
-                    .unwrap_or(""),
-                credential
-                    .get("temporary_password")
-                    .and_then(Value::as_str)
-                    .unwrap_or(""),
-                credential
-                    .get("expires_at")
-                    .and_then(Value::as_str)
-                    .unwrap_or(""),
-            )),
+            ui::screens::administration::moldura(
+                ui::screens::administration::SeccaoAdmin::Membros,
+                ui::screens::administration::issued_credential(
+                    credential
+                        .get("email")
+                        .and_then(Value::as_str)
+                        .unwrap_or(""),
+                    credential
+                        .get("temporary_password")
+                        .and_then(Value::as_str)
+                        .unwrap_or(""),
+                    credential
+                        .get("expires_at")
+                        .and_then(Value::as_str)
+                        .unwrap_or(""),
+                ),
+            ),
         ),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
@@ -4306,15 +4325,18 @@ async fn member_detail_with_error(
         &viewer,
         Screen::Admin,
         vec![Crumb::to(Screen::Admin)],
-        ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::member_detail(
-            &person,
-            &security,
-            &access,
-            &units_catalog,
-            &workspaces_catalog,
-            &permissions_catalog,
-            Some(&failure.to_string()),
-        )),
+        ui::screens::administration::moldura(
+            ui::screens::administration::SeccaoAdmin::Membros,
+            ui::screens::administration::member_detail(
+                &person,
+                &security,
+                &access,
+                &units_catalog,
+                &workspaces_catalog,
+                &permissions_catalog,
+                Some(&failure.to_string()),
+            ),
+        ),
     )
 }
 
@@ -4357,20 +4379,23 @@ async fn provision_member(
                 &viewer,
                 Screen::Admin,
                 vec![Crumb::to(Screen::Admin)],
-                ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::issued_credential(
-                    credential
-                        .get("email")
-                        .and_then(Value::as_str)
-                        .unwrap_or(""),
-                    credential
-                        .get("temporary_password")
-                        .and_then(Value::as_str)
-                        .unwrap_or(""),
-                    credential
-                        .get("expires_at")
-                        .and_then(Value::as_str)
-                        .unwrap_or(""),
-                )),
+                ui::screens::administration::moldura(
+                    ui::screens::administration::SeccaoAdmin::Membros,
+                    ui::screens::administration::issued_credential(
+                        credential
+                            .get("email")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                        credential
+                            .get("temporary_password")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                        credential
+                            .get("expires_at")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                    ),
+                ),
             )
         }
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
@@ -4393,15 +4418,18 @@ async fn provision_member(
                 &viewer,
                 Screen::Admin,
                 vec![Crumb::to(Screen::Admin)],
-                ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Membros, ui::screens::administration::member_detail(
-                    &person,
-                    &security,
-                    &access,
-                    &units_catalog,
-                    &workspaces_catalog,
-                    &permissions_catalog,
-                    Some(&failure.to_string()),
-                )),
+                ui::screens::administration::moldura(
+                    ui::screens::administration::SeccaoAdmin::Membros,
+                    ui::screens::administration::member_detail(
+                        &person,
+                        &security,
+                        &access,
+                        &units_catalog,
+                        &workspaces_catalog,
+                        &permissions_catalog,
+                        Some(&failure.to_string()),
+                    ),
+                ),
             )
         }
     }
@@ -7191,13 +7219,16 @@ async fn settings_account(
         &viewer,
         Screen::Settings,
         Vec::new(),
-        ui::screens::settings::moldura("/settings", ui::screens::settings::account(
-            &me,
-            &organisation,
-            &viewer.avatar,
-            outcome.avatar_erro,
-            outcome.avatar.as_deref() == Some("ok"),
-        )),
+        ui::screens::settings::moldura(
+            "/settings",
+            ui::screens::settings::account(
+                &me,
+                &organisation,
+                &viewer.avatar,
+                outcome.avatar_erro,
+                outcome.avatar.as_deref() == Some("ok"),
+            ),
+        ),
     )
 }
 
@@ -7221,7 +7252,10 @@ async fn settings_language(
         &viewer,
         Screen::Settings,
         Vec::new(),
-        ui::screens::settings::moldura("/settings/language", ui::screens::settings::language(outcome.ok.as_deref() == Some("1"))),
+        ui::screens::settings::moldura(
+            "/settings/language",
+            ui::screens::settings::language(outcome.ok.as_deref() == Some("1")),
+        ),
     )
 }
 
@@ -7268,7 +7302,10 @@ async fn settings_apps(
         &viewer,
         Screen::Settings,
         Vec::new(),
-        ui::screens::settings::moldura("/settings/apps", ui::screens::settings::apps(&viewer, outcome.ok.as_deref() == Some("1"))),
+        ui::screens::settings::moldura(
+            "/settings/apps",
+            ui::screens::settings::apps(&viewer, outcome.ok.as_deref() == Some("1")),
+        ),
     )
 }
 
@@ -7292,7 +7329,10 @@ async fn admin_instance(
         &viewer,
         Screen::Admin,
         Vec::new(),
-        ui::screens::administration::moldura(ui::screens::administration::SeccaoAdmin::Instancia, ui::screens::administration::instance(&payload, outcome.ok.as_deref() == Some("1"))),
+        ui::screens::administration::moldura(
+            ui::screens::administration::SeccaoAdmin::Instancia,
+            ui::screens::administration::instance(&payload, outcome.ok.as_deref() == Some("1")),
+        ),
     )
 }
 
@@ -7477,6 +7517,86 @@ async fn help(State(state): State<WorkspaceState>, headers: HeaderMap) -> Respon
         Vec::new(),
         ui::screens::help::help(),
     )
+}
+
+/// O Ocinye Terminal (ADR-0312).
+///
+/// A página é a casca; cada linha vai ao Core por [`terminal_exec`].
+async fn terminal(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    let viewer = viewer(&state, &member).await;
+    // `membro@instância`: a primeira palavra do nome, como num prompt; a
+    // instância pelo nome que o Core deu. Só apresentação.
+    let who = viewer
+        .name
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_lowercase();
+    let instance = viewer
+        .organisation
+        .split_whitespace()
+        .next()
+        .unwrap_or("ocinye")
+        .to_lowercase();
+    let vista = ui::screens::terminal::TerminalView { who, instance };
+    shell_page(
+        crate::i18n::t("terminal.app"),
+        &viewer,
+        Screen::Terminal,
+        Vec::new(),
+        ui::screens::terminal::terminal(&vista),
+    )
+}
+
+/// `POST /terminal/exec` — leva uma linha ao Core e devolve-a localizada.
+///
+/// Não faz parse que conte nem decide nada: o Core faz os dois (ADR-0312 §2).
+/// O que volta é JSON para o `terminal.js`, que o desenha com nós de texto.
+async fn terminal_exec(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Json(body): Json<ocinye_contracts::ocsh::wire::ExecRequest>,
+) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "sem sessão" })),
+        )
+            .into_response();
+    };
+    let pedido = serde_json::json!({ "line": body.line, "context": body.context });
+    let resposta = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/commands/exec",
+        &pedido,
+    )
+    .await;
+    match resposta {
+        Ok(valor) => {
+            match serde_json::from_value::<ocinye_contracts::ocsh::wire::ExecResponse>(valor) {
+                Ok(r) => Json(crate::terminal::localize(&r)).into_response(),
+                Err(_) => {
+                    Json(crate::terminal::transport_failure("ocsh.err.failed", 1)).into_response()
+                }
+            }
+        }
+        Err(ApiFailure::Unauthorised) => (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "sem sessão" })),
+        )
+            .into_response(),
+        Err(ApiFailure::ApplicationInactive | ApiFailure::Unavailable(_)) => Json(
+            crate::terminal::transport_failure("ocsh.err.unavailable", 69),
+        )
+        .into_response(),
+        Err(ApiFailure::Forbidden | ApiFailure::Denied) => {
+            Json(crate::terminal::transport_failure("ocsh.denied", 77)).into_response()
+        }
+        Err(_) => Json(crate::terminal::transport_failure("ocsh.err.network", 1)).into_response(),
+    }
 }
 
 /// Largest body the Workspace accepts for a profile photograph.
@@ -7709,7 +7829,10 @@ async fn settings_security(State(state): State<WorkspaceState>, headers: HeaderM
         &viewer,
         Screen::Settings,
         Vec::new(),
-        ui::screens::settings::moldura("/settings/security", ui::screens::settings::security(Some(&sessions), None, None)),
+        ui::screens::settings::moldura(
+            "/settings/security",
+            ui::screens::settings::security(Some(&sessions), None, None),
+        ),
     )
 }
 
@@ -7727,7 +7850,10 @@ async fn settings_mfa(State(state): State<WorkspaceState>, headers: HeaderMap) -
         &viewer,
         Screen::Settings,
         Vec::new(),
-        ui::screens::settings::moldura("/settings/security", ui::screens::settings::mfa_recovery(activo, None, None)),
+        ui::screens::settings::moldura(
+            "/settings/security",
+            ui::screens::settings::mfa_recovery(activo, None, None),
+        ),
     )
 }
 
@@ -7773,7 +7899,10 @@ async fn settings_mfa_regenerate(
                 &viewer,
                 Screen::Settings,
                 Vec::new(),
-                ui::screens::settings::moldura("/settings/security", ui::screens::settings::mfa_recovery(true, Some(&codigos), None)),
+                ui::screens::settings::moldura(
+                    "/settings/security",
+                    ui::screens::settings::mfa_recovery(true, Some(&codigos), None),
+                ),
             )
         }
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
@@ -7782,7 +7911,10 @@ async fn settings_mfa_regenerate(
             &viewer,
             Screen::Settings,
             Vec::new(),
-            ui::screens::settings::moldura("/settings/security", ui::screens::settings::mfa_recovery(true, None, Some(failure.to_string()))),
+            ui::screens::settings::moldura(
+                "/settings/security",
+                ui::screens::settings::mfa_recovery(true, None, Some(failure.to_string())),
+            ),
         ),
     }
 }
@@ -7874,7 +8006,14 @@ async fn change_password(
                 &viewer,
                 Screen::Settings,
                 Vec::new(),
-                ui::screens::settings::moldura("/settings/security", ui::screens::settings::security(sessions.as_ref(), Some(failure.to_string()), None)),
+                ui::screens::settings::moldura(
+                    "/settings/security",
+                    ui::screens::settings::security(
+                        sessions.as_ref(),
+                        Some(failure.to_string()),
+                        None,
+                    ),
+                ),
             )
         }
     }
@@ -7927,7 +8066,14 @@ async fn revoke_session(
                 &viewer,
                 Screen::Settings,
                 Vec::new(),
-                ui::screens::settings::moldura("/settings/security", ui::screens::settings::security(sessions.as_ref(), Some(failure.to_string()), None)),
+                ui::screens::settings::moldura(
+                    "/settings/security",
+                    ui::screens::settings::security(
+                        sessions.as_ref(),
+                        Some(failure.to_string()),
+                        None,
+                    ),
+                ),
             )
         }
     }

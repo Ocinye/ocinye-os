@@ -19,8 +19,8 @@ use std::cmp::Ordering;
 use std::time::Instant;
 
 use ocinye_contracts::agentic::{
-    CapabilityId, CapabilityRequest, CapabilityResult, ExecutionStatus, ResourceKind as AgenticKind,
-    ResourceRef,
+    CapabilityId, CapabilityRequest, CapabilityResult, ExecutionStatus,
+    ResourceKind as AgenticKind, ResourceRef,
 };
 use ocinye_contracts::ocsh::registry::{Binding, OutputShape, COMMANDS};
 use ocinye_contracts::ocsh::wire::{Block, ContextView, ExecRequest, ExecResponse, Tone};
@@ -33,8 +33,8 @@ use uuid::Uuid;
 use crate::capabilities::Capabilities;
 use crate::error::CoreResult;
 use crate::modules::agentic::{executor, registry, runtime};
-use ocinye_observability::CorrelationIds;
 use crate::realtime::Realtime;
+use ocinye_observability::CorrelationIds;
 
 /// Palavras que querem dizer «o contexto pessoal», nas três línguas.
 const PERSONAL: &[&str] = &["personal", "pessoal", "personnel", "~"];
@@ -58,14 +58,23 @@ pub struct Deps<'a> {
 /// Só quando o executor não consegue concluir (por exemplo, a auditoria de uma
 /// mutação não se escreve). Recusas, erros de uso e comandos desconhecidos são
 /// respostas com código de saída, não erros.
-pub async fn execute(deps: &Deps<'_>, principal: &Principal, request: &ExecRequest) -> CoreResult<ExecResponse> {
+pub async fn execute(
+    deps: &Deps<'_>,
+    principal: &Principal,
+    request: &ExecRequest,
+) -> CoreResult<ExecResponse> {
     let start = Instant::now();
     let context = resolve_context(deps.pool, principal, request.context.as_deref()).await;
 
     let (exit, blocks, capability, context) = match context {
         Err(()) => (
             ExitCode::Denied,
-            vec![note(Tone::Deny, "ocsh.err.context_unreachable", vec![], vec!["context use personal".into()])],
+            vec![note(
+                Tone::Deny,
+                "ocsh.err.context_unreachable",
+                vec![],
+                vec!["context use personal".into()],
+            )],
             None,
             ContextView::personal(),
         ),
@@ -88,15 +97,32 @@ pub async fn execute(deps: &Deps<'_>, principal: &Principal, request: &ExecReque
 
 type Outcome = (ExitCode, Vec<Block>, Option<String>, ContextView);
 
-async fn run(deps: &Deps<'_>, principal: &Principal, inv: &Invocation, context: ContextView) -> CoreResult<Outcome> {
+async fn run(
+    deps: &Deps<'_>,
+    principal: &Principal,
+    inv: &Invocation,
+    context: ContextView,
+) -> CoreResult<Outcome> {
     let spec = inv.spec;
     match spec.binding {
         Binding::Local => {
             if spec.family == "help" {
-                let topic = inv.args.get("topic").and_then(|v| v.as_text()).unwrap_or("").to_owned();
+                let topic = inv
+                    .args
+                    .get("topic")
+                    .and_then(|v| v.as_text())
+                    .unwrap_or("")
+                    .to_owned();
                 return Ok((ExitCode::Ok, vec![help(principal, &topic)], None, context));
             }
-            Ok((ExitCode::Ok, vec![Block::Client { action: spec.family.to_owned() }], None, context))
+            Ok((
+                ExitCode::Ok,
+                vec![Block::Client {
+                    action: spec.family.to_owned(),
+                }],
+                None,
+                context,
+            ))
         }
         Binding::Nye => Ok((
             ExitCode::Unavailable,
@@ -108,7 +134,12 @@ async fn run(deps: &Deps<'_>, principal: &Principal, inv: &Invocation, context: 
             let Some((input, resources)) = request_for(inv, &context) else {
                 return Ok((
                     ExitCode::Usage,
-                    vec![note(Tone::Warn, "ocsh.err.needs_workspace", vec![], vec!["context list".into()])],
+                    vec![note(
+                        Tone::Warn,
+                        "ocsh.err.needs_workspace",
+                        vec![],
+                        vec!["context list".into()],
+                    )],
                     None,
                     context,
                 ));
@@ -119,7 +150,8 @@ async fn run(deps: &Deps<'_>, principal: &Principal, inv: &Invocation, context: 
                 resources,
                 dry_run: false,
             };
-            let institution = ResourceContext::organisation(ResourceKind::Person, principal.organisation_id);
+            let institution =
+                ResourceContext::organisation(ResourceKind::Person, principal.organisation_id);
             let result = executor::execute(
                 deps.pool,
                 deps.capabilities,
@@ -158,16 +190,27 @@ fn request_for(inv: &Invocation, context: &ContextView) -> Option<(Value, Vec<Re
 }
 
 /// Do resultado da capability aos blocos do Terminal.
-fn render(inv: &Invocation, result: &CapabilityResult, context: ContextView) -> (ExitCode, Vec<Block>, ContextView) {
-    let refusal = |exit, tone, key: &str| (exit, vec![note(tone, key, vec![], vec![])], context.clone());
+fn render(
+    inv: &Invocation,
+    result: &CapabilityResult,
+    context: ContextView,
+) -> (ExitCode, Vec<Block>, ContextView) {
+    let refusal =
+        |exit, tone, key: &str| (exit, vec![note(tone, key, vec![], vec![])], context.clone());
     match result.status {
         ExecutionStatus::Succeeded => {}
-        ExecutionStatus::PermissionDenied => return refusal(ExitCode::Denied, Tone::Deny, "ocsh.err.denied"),
+        ExecutionStatus::PermissionDenied => {
+            return refusal(ExitCode::Denied, Tone::Deny, "ocsh.denied")
+        }
         ExecutionStatus::CapabilityUnavailable => {
             return refusal(ExitCode::Unavailable, Tone::Warn, "ocsh.err.unavailable")
         }
-        ExecutionStatus::ValidationFailed => return refusal(ExitCode::Usage, Tone::Err, "ocsh.err.invalid"),
-        ExecutionStatus::ResourceNotFound => return refusal(ExitCode::Failure, Tone::Err, "ocsh.err.not_found"),
+        ExecutionStatus::ValidationFailed => {
+            return refusal(ExitCode::Usage, Tone::Err, "ocsh.err.invalid")
+        }
+        ExecutionStatus::ResourceNotFound => {
+            return refusal(ExitCode::Failure, Tone::Err, "ocsh.err.resource_missing")
+        }
         ExecutionStatus::ApprovalRequired => {
             return refusal(ExitCode::Denied, Tone::Warn, "ocsh.err.needs_confirmation")
         }
@@ -189,12 +232,15 @@ fn render(inv: &Invocation, result: &CapabilityResult, context: ContextView) -> 
             match pipeline(rows, &inv.stages, columns) {
                 Ok(Piped::Rows(rows, route)) => {
                     let block = if inv.json {
-                        Block::Json { value: rows_as_json(columns, &rows) }
+                        Block::Json {
+                            value: rows_as_json(columns, &rows),
+                        }
                     } else {
                         Block::Table {
                             columns: columns.iter().map(|c| (*c).to_owned()).collect(),
                             rows,
-                            pipeline: route.map(|r| format!("{}.{} → {r}", inv.spec.family, inv.spec.sub)),
+                            pipeline: route
+                                .map(|r| format!("{}.{} → {r}", inv.spec.family, inv.spec.sub)),
                         }
                     };
                     (ExitCode::Ok, vec![block], context)
@@ -202,15 +248,24 @@ fn render(inv: &Invocation, result: &CapabilityResult, context: ContextView) -> 
                 Ok(Piped::Count(n)) => (
                     ExitCode::Ok,
                     vec![if inv.json {
-                        Block::Json { value: json!({ "count": n }) }
+                        Block::Json {
+                            value: json!({ "count": n }),
+                        }
                     } else {
-                        Block::Facts { rows: vec![("count".into(), n.to_string())] }
+                        Block::Facts {
+                            rows: vec![("count".into(), n.to_string())],
+                        }
                     }],
                     context,
                 ),
                 Err(column) => (
                     ExitCode::Usage,
-                    vec![note(Tone::Err, "ocsh.err.unknown_column", vec![("column".into(), column)], vec![])],
+                    vec![note(
+                        Tone::Err,
+                        "ocsh.err.unknown_column",
+                        vec![("column".into(), column)],
+                        vec![],
+                    )],
                     context,
                 ),
             }
@@ -228,7 +283,13 @@ fn render(inv: &Invocation, result: &CapabilityResult, context: ContextView) -> 
                 })
                 .collect();
             let block = if inv.json {
-                Block::Json { value: Value::Object(rows.iter().map(|(k, v)| (k.clone(), Value::String(v.clone()))).collect()) }
+                Block::Json {
+                    value: Value::Object(
+                        rows.iter()
+                            .map(|(k, v)| (k.clone(), Value::String(v.clone())))
+                            .collect(),
+                    ),
+                }
             } else {
                 Block::Facts { rows }
             };
@@ -238,16 +299,33 @@ fn render(inv: &Invocation, result: &CapabilityResult, context: ContextView) -> 
     }
 }
 
-fn context_command(inv: &Invocation, output: &Value, context: ContextView) -> (ExitCode, Vec<Block>, ContextView) {
-    let items = output.get("items").and_then(Value::as_array).cloned().unwrap_or_default();
+fn context_command(
+    inv: &Invocation,
+    output: &Value,
+    context: ContextView,
+) -> (ExitCode, Vec<Block>, ContextView) {
+    let items = output
+        .get("items")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let view_of = |item: &Value| ContextView {
-        workspace_id: item.get("id").and_then(Value::as_str).and_then(|s| Uuid::parse_str(s).ok()),
+        workspace_id: item
+            .get("id")
+            .and_then(Value::as_str)
+            .and_then(|s| Uuid::parse_str(s).ok()),
         code: item.get("code").and_then(Value::as_str).map(str::to_owned),
         title: item.get("title").and_then(Value::as_str).map(str::to_owned),
     };
 
     if inv.spec.sub == "use" {
-        let target = inv.args.get("target").and_then(|v| v.as_text()).unwrap_or("").trim().to_owned();
+        let target = inv
+            .args
+            .get("target")
+            .and_then(|v| v.as_text())
+            .unwrap_or("")
+            .trim()
+            .to_owned();
         if PERSONAL.contains(&target.to_lowercase().as_str()) {
             return (
                 ExitCode::Ok,
@@ -258,7 +336,9 @@ fn context_command(inv: &Invocation, output: &Value, context: ContextView) -> (E
         let wanted = target.to_lowercase();
         let found = items.iter().find(|item| {
             ["id", "code", "title"].iter().any(|k| {
-                item.get(*k).and_then(Value::as_str).is_some_and(|v| v.to_lowercase() == wanted)
+                item.get(*k)
+                    .and_then(Value::as_str)
+                    .is_some_and(|v| v.to_lowercase() == wanted)
             })
         });
         return match found {
@@ -279,7 +359,12 @@ fn context_command(inv: &Invocation, output: &Value, context: ContextView) -> (E
             // se revela que existe um ambiente onde a pessoa não entra.
             None => (
                 ExitCode::Failure,
-                vec![note(Tone::Err, "ocsh.err.context_not_found", vec![("target".into(), target)], vec!["context list".into()])],
+                vec![note(
+                    Tone::Err,
+                    "ocsh.err.context_not_found",
+                    vec![("target".into(), target)],
+                    vec!["context list".into()],
+                )],
                 context,
             ),
         };
@@ -287,18 +372,34 @@ fn context_command(inv: &Invocation, output: &Value, context: ContextView) -> (E
 
     // `context` / `context show`.
     let rows = vec![
-        ("context".to_owned(), context.code.clone().unwrap_or_else(|| "personal".into())),
-        ("title".to_owned(), context.title.clone().unwrap_or_else(|| "—".into())),
+        (
+            "context".to_owned(),
+            context.code.clone().unwrap_or_else(|| "personal".into()),
+        ),
+        (
+            "title".to_owned(),
+            context.title.clone().unwrap_or_else(|| "—".into()),
+        ),
         (
             "kind".to_owned(),
             context
                 .workspace_id
-                .and_then(|id| items.iter().find(|i| i.get("id").and_then(Value::as_str) == Some(&id.to_string())))
+                .and_then(|id| {
+                    items
+                        .iter()
+                        .find(|i| i.get("id").and_then(Value::as_str) == Some(&id.to_string()))
+                })
                 .map_or_else(|| "personal".to_owned(), |i| cell(i.get("kind"))),
         ),
     ];
     let block = if inv.json {
-        Block::Json { value: Value::Object(rows.iter().map(|(k, v)| (k.clone(), Value::String(v.clone()))).collect()) }
+        Block::Json {
+            value: Value::Object(
+                rows.iter()
+                    .map(|(k, v)| (k.clone(), Value::String(v.clone())))
+                    .collect(),
+            ),
+        }
     } else {
         Block::Facts { rows }
     };
@@ -309,7 +410,11 @@ fn context_command(inv: &Invocation, output: &Value, context: ContextView) -> (E
 ///
 /// `Err(())` quando o separador aponta para um ambiente que a pessoa já não
 /// alcança (ou nunca alcançou): o Terminal volta ao pessoal e di-lo.
-async fn resolve_context(pool: &PgPool, principal: &Principal, raw: Option<&str>) -> Result<ContextView, ()> {
+async fn resolve_context(
+    pool: &PgPool,
+    principal: &Principal,
+    raw: Option<&str>,
+) -> Result<ContextView, ()> {
     let Some(raw) = raw.map(str::trim).filter(|r| !r.is_empty()) else {
         return Ok(ContextView::personal());
     };
@@ -349,7 +454,10 @@ fn help(principal: &Principal, topic: &str) -> Block {
         })
         .map(|c| (usage(c), c.help_key.to_owned()))
         .collect();
-    Block::Help { topic: topic.to_owned(), entries }
+    Block::Help {
+        topic: topic.to_owned(),
+        entries,
+    }
 }
 
 fn usage(c: &ocinye_contracts::ocsh::registry::CommandSpec) -> String {
@@ -359,7 +467,11 @@ fn usage(c: &ocinye_contracts::ocsh::registry::CommandSpec) -> String {
         out.push_str(c.sub);
     }
     for a in c.args {
-        out.push_str(&if a.required { format!(" <{}>", a.name) } else { format!(" [{}]", a.name) });
+        out.push_str(&if a.required {
+            format!(" <{}>", a.name)
+        } else {
+            format!(" [{}]", a.name)
+        });
     }
     for o in c.options {
         out.push_str(&match o.value {
@@ -377,46 +489,112 @@ fn parse_error(error: &ParseError) -> Block {
     match error {
         ParseError::UnknownCommand { word, suggestion } => note(
             Tone::Err,
-            "ocsh.err.not_found_cmd",
-            vec![("word".into(), word.clone())],
+            "ocsh.err.not_found",
+            vec![("cmd".into(), word.clone())],
             suggestion.iter().cloned().collect(),
         ),
-        ParseError::HostShell(word) => note(Tone::Deny, "ocsh.err.host_shell", vec![("word".into(), word.clone())], vec!["help".into()]),
-        ParseError::Lex(ocinye_contracts::ocsh::lexer::LexError::HostSyntax(op)) => {
-            note(Tone::Deny, "ocsh.err.host_syntax", vec![("op".into(), (*op).to_owned())], vec![])
+        // `sudo` tem uma resposta própria: a autoridade vem das capabilities,
+        // e não de um prefixo.
+        ParseError::HostShell(word) => {
+            let key = if matches!(word.to_lowercase().as_str(), "sudo" | "su" | "doas") {
+                "ocsh.sudo.title"
+            } else {
+                "ocsh.host.title"
+            };
+            note(
+                Tone::Deny,
+                key,
+                vec![("cmd".into(), word.clone())],
+                vec!["help".into()],
+            )
         }
-        ParseError::Lex(e) => note(Tone::Err, "ocsh.err.syntax", vec![("detail".into(), e.to_string())], vec![]),
+        ParseError::Lex(ocinye_contracts::ocsh::lexer::LexError::HostSyntax(op)) => note(
+            Tone::Deny,
+            "ocsh.err.host_syntax",
+            vec![("op".into(), (*op).to_owned())],
+            vec![],
+        ),
+        ParseError::Lex(e) => note(
+            Tone::Err,
+            "ocsh.err.syntax",
+            vec![("detail".into(), e.to_string())],
+            vec![],
+        ),
         ParseError::UnknownSubcommand { family, word } => note(
             Tone::Err,
-            "ocsh.err.unknown_sub",
-            vec![("family".into(), family.clone()), ("word".into(), word.clone())],
+            if word.is_empty() {
+                "ocsh.err.missing_sub"
+            } else {
+                "ocsh.err.bad_sub"
+            },
+            vec![
+                ("family".into(), family.clone()),
+                ("cmd".into(), word.clone()),
+            ],
             vec![format!("help {family}")],
         ),
-        ParseError::MissingArgument(name) => note(Tone::Err, "ocsh.err.missing_arg", vec![("name".into(), (*name).to_owned())], vec![]),
-        ParseError::UnexpectedArgument(w) => note(Tone::Err, "ocsh.err.unexpected_arg", vec![("word".into(), w.clone())], vec![]),
-        ParseError::UnknownOption(o) => note(Tone::Err, "ocsh.err.unknown_option", vec![("option".into(), o.clone())], vec![]),
-        ParseError::MissingOptionValue(o) => note(Tone::Err, "ocsh.err.missing_value", vec![("option".into(), (*o).to_owned())], vec![]),
+        ParseError::MissingArgument(name) => note(
+            Tone::Err,
+            "ocsh.err.missing_arg",
+            vec![("name".into(), (*name).to_owned())],
+            vec![],
+        ),
+        ParseError::UnexpectedArgument(w) => note(
+            Tone::Err,
+            "ocsh.err.unexpected_arg",
+            vec![("cmd".into(), w.clone())],
+            vec![],
+        ),
+        ParseError::UnknownOption(o) => note(
+            Tone::Err,
+            "ocsh.err.bad_opt",
+            vec![("opt".into(), o.clone())],
+            vec![],
+        ),
+        ParseError::MissingOptionValue(o) => note(
+            Tone::Err,
+            "ocsh.err.missing_value",
+            vec![("opt".into(), format!("--{o}"))],
+            vec![],
+        ),
         ParseError::BadValue { name, value } => note(
             Tone::Err,
             "ocsh.err.bad_value",
-            vec![("name".into(), (*name).to_owned()), ("value".into(), value.clone())],
+            vec![
+                ("name".into(), (*name).to_owned()),
+                ("value".into(), value.clone()),
+            ],
             vec![],
         ),
-        ParseError::BadStage(s) => note(Tone::Err, "ocsh.err.bad_stage", vec![("stage".into(), s.clone())], vec![]),
+        ParseError::BadStage(s) => note(
+            Tone::Err,
+            "ocsh.err.pipe",
+            vec![("op".into(), s.clone())],
+            vec![],
+        ),
         ParseError::JsonNotSupported => note(Tone::Err, "ocsh.err.no_json", vec![], vec![]),
         ParseError::NotPipeable => note(Tone::Err, "ocsh.err.not_pipeable", vec![], vec![]),
     }
 }
 
 fn note(tone: Tone, key: &str, params: Vec<(String, String)>, suggestions: Vec<String>) -> Block {
-    Block::Note { tone, key: key.to_owned(), params, suggestions }
+    Block::Note {
+        tone,
+        key: key.to_owned(),
+        params,
+        suggestions,
+    }
 }
 
 fn cell(value: Option<&Value>) -> String {
     match value {
         None | Some(Value::Null) => "—".to_owned(),
         Some(Value::String(s)) => s.clone(),
-        Some(Value::Array(items)) => items.iter().map(|v| cell(Some(v))).collect::<Vec<_>>().join(", "),
+        Some(Value::Array(items)) => items
+            .iter()
+            .map(|v| cell(Some(v)))
+            .collect::<Vec<_>>()
+            .join(", "),
         Some(other) => other.to_string(),
     }
 }
@@ -425,14 +603,27 @@ fn table_rows(output: &Value, columns: &[&str]) -> Vec<Vec<String>> {
     output
         .get("items")
         .and_then(Value::as_array)
-        .map(|items| items.iter().map(|item| columns.iter().map(|c| cell(item.get(*c))).collect()).collect())
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| columns.iter().map(|c| cell(item.get(*c))).collect())
+                .collect()
+        })
         .unwrap_or_default()
 }
 
 fn rows_as_json(columns: &[&str], rows: &[Vec<String>]) -> Value {
     Value::Array(
         rows.iter()
-            .map(|r| Value::Object(columns.iter().zip(r).map(|(c, v)| ((*c).to_owned(), Value::String(v.clone()))).collect()))
+            .map(|r| {
+                Value::Object(
+                    columns
+                        .iter()
+                        .zip(r)
+                        .map(|(c, v)| ((*c).to_owned(), Value::String(v.clone())))
+                        .collect(),
+                )
+            })
             .collect(),
     )
 }
@@ -444,7 +635,11 @@ enum Piped {
 
 /// Aplica as operações do pipeline tipado sobre as linhas. `Err(coluna)` quando
 /// `sort` nomeia uma coluna que o comando não tem.
-fn pipeline(mut rows: Vec<Vec<String>>, stages: &[Stage], columns: &[&str]) -> Result<Piped, String> {
+fn pipeline(
+    mut rows: Vec<Vec<String>>,
+    stages: &[Stage],
+    columns: &[&str],
+) -> Result<Piped, String> {
     let mut route: Vec<String> = Vec::new();
     for stage in stages {
         match stage {
@@ -454,12 +649,22 @@ fn pipeline(mut rows: Vec<Vec<String>>, stages: &[Stage], columns: &[&str]) -> R
                 route.push(format!("filter({text})"));
             }
             Stage::Sort { column, desc } => {
-                let idx = columns.iter().position(|c| c == column).ok_or_else(|| column.clone())?;
+                let idx = columns
+                    .iter()
+                    .position(|c| c == column)
+                    .ok_or_else(|| column.clone())?;
                 rows.sort_by(|a, b| {
                     let o = compare(&a[idx], &b[idx]);
-                    if *desc { o.reverse() } else { o }
+                    if *desc {
+                        o.reverse()
+                    } else {
+                        o
+                    }
                 });
-                route.push(format!("sort({column}{})", if *desc { ", desc" } else { "" }));
+                route.push(format!(
+                    "sort({column}{})",
+                    if *desc { ", desc" } else { "" }
+                ));
             }
             Stage::Head(n) => {
                 rows.truncate(usize::try_from(*n).unwrap_or(usize::MAX));
@@ -469,7 +674,10 @@ fn pipeline(mut rows: Vec<Vec<String>>, stages: &[Stage], columns: &[&str]) -> R
             Stage::ExportJson => route.push("export(json)".into()),
         }
     }
-    Ok(Piped::Rows(rows, (!route.is_empty()).then(|| route.join(" → "))))
+    Ok(Piped::Rows(
+        rows,
+        (!route.is_empty()).then(|| route.join(" → ")),
+    ))
 }
 
 /// Ordena números como números e o resto como texto.
@@ -508,18 +716,47 @@ mod tests {
             vec!["c".to_owned(), "100".to_owned()],
         ];
         let cols = ["name", "n"];
-        let Ok(Piped::Rows(out, route)) = pipeline(rows.clone(), &[Stage::Sort { column: "n".into(), desc: false }, Stage::Head(2)], &cols) else {
+        let Ok(Piped::Rows(out, route)) = pipeline(
+            rows.clone(),
+            &[
+                Stage::Sort {
+                    column: "n".into(),
+                    desc: false,
+                },
+                Stage::Head(2),
+            ],
+            &cols,
+        ) else {
             panic!()
         };
-        assert_eq!(out, vec![vec!["a".to_owned(), "9".to_owned()], vec!["b".to_owned(), "10".to_owned()]], "numérico");
+        assert_eq!(
+            out,
+            vec![
+                vec!["a".to_owned(), "9".to_owned()],
+                vec!["b".to_owned(), "10".to_owned()]
+            ],
+            "numérico"
+        );
         assert_eq!(route.as_deref(), Some("sort(n) → head(2)"));
-        assert!(matches!(pipeline(rows.clone(), &[Stage::Filter("A".into()), Stage::Count], &cols), Ok(Piped::Count(1))));
-        assert!(matches!(pipeline(rows, &[Stage::Sort { column: "x".into(), desc: true }], &cols), Err(c) if c == "x"));
+        assert!(matches!(
+            pipeline(
+                rows.clone(),
+                &[Stage::Filter("A".into()), Stage::Count],
+                &cols
+            ),
+            Ok(Piped::Count(1))
+        ));
+        assert!(
+            matches!(pipeline(rows, &[Stage::Sort { column: "x".into(), desc: true }], &cols), Err(c) if c == "x")
+        );
     }
 
     #[test]
     fn celulas_de_dados_sao_texto() {
-        assert_eq!(cell(Some(&json!("<script>x</script>"))), "<script>x</script>");
+        assert_eq!(
+            cell(Some(&json!("<script>x</script>"))),
+            "<script>x</script>"
+        );
         assert_eq!(cell(Some(&json!(null))), "—");
         assert_eq!(cell(Some(&json!(["a", "b"]))), "a, b");
     }

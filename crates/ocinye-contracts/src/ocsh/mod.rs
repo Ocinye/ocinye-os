@@ -58,7 +58,9 @@ impl ExitCode {
 }
 
 /// Nomes de opção que são sempre sensíveis, declarados ou não.
-pub const SENSITIVE_OPTION_NAMES: &[&str] = &["password", "token", "secret", "key", "api-key", "mfa", "code"];
+pub const SENSITIVE_OPTION_NAMES: &[&str] = &[
+    "password", "token", "secret", "key", "api-key", "mfa", "code",
+];
 
 /// A linha pronta para histórico, logs ou auditoria: valores de argumentos e
 /// opções sensíveis substituídos por `••••`.
@@ -70,7 +72,10 @@ pub fn redact(line: &str) -> String {
     let Ok(tokens) = lexer::lex(line) else {
         // Linha ilegível: guarda-se só a primeira palavra, sem nada que possa
         // ser um segredo.
-        return line.split_whitespace().next().map_or_else(String::new, |w| format!("{w} ••••"));
+        return line
+            .split_whitespace()
+            .next()
+            .map_or_else(String::new, |w| format!("{w} ••••"));
     };
     let mut out: Vec<String> = Vec::new();
     let mut hide_next = false;
@@ -100,7 +105,11 @@ pub fn redact(line: &str) -> String {
                         }
                     }
                 }
-                out.push(if quoted || text.contains(' ') { quote(&text) } else { text });
+                out.push(if quoted || text.contains(' ') {
+                    quote(&text)
+                } else {
+                    text
+                });
             }
         }
     }
@@ -167,6 +176,9 @@ mod tests {
             assert!(!r.contains(segredo), "{linha} → {r}");
         }
         assert_eq!(redact("tasks list --open"), "tasks list --open");
-        assert_eq!(redact(r#"nye ask "o que há hoje""#), r#"nye ask "o que há hoje""#);
+        assert_eq!(
+            redact(r#"nye ask "o que há hoje""#),
+            r#"nye ask "o que há hoje""#
+        );
     }
 }

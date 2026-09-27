@@ -77,6 +77,7 @@ pub fn document_com_cabeca(
          <link rel=\"stylesheet\" href=\"/static/ods-d11-adaptive.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d12-base.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d12-screens.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d13-terminal.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-integration.css\">\n\
          <title>",
     );
@@ -939,7 +940,11 @@ pub(crate) mod link_tests {
                 Screen::Activity,
                 screens::activity::activity(&json!([]))
             ),
-            page!("ai", Screen::Ai, screens::ai::hub(&ai_status, &empty, &empty, &empty)),
+            page!(
+                "ai",
+                Screen::Ai,
+                screens::ai::hub(&ai_status, &empty, &empty, &empty)
+            ),
             page!(
                 "ai-agent-new",
                 Screen::Agents,
@@ -1737,6 +1742,14 @@ pub(crate) mod link_tests {
                 screens::settings::security(None, None, None)
             ),
             page!("help", Screen::Help, screens::help::help()),
+            page!(
+                "terminal",
+                Screen::Terminal,
+                screens::terminal::terminal(&screens::terminal::TerminalView {
+                    who: "fidel".to_owned(),
+                    instance: "ocinye".to_owned(),
+                })
+            ),
             // Os dois recortes de Ideias, e uma lista truncada.
             //
             // Uma varredura que só rende o recorte de origem nunca vê a tab
@@ -1947,7 +1960,10 @@ pub(crate) mod link_tests {
             }
         }
 
-        assert!(vistos > 40, "o catálogo quase não tem ecrãs ({vistos}): o guarda deixou de observar");
+        assert!(
+            vistos > 40,
+            "o catálogo quase não tem ecrãs ({vistos}): o guarda deixou de observar"
+        );
         assert!(
             legadas.is_empty(),
             "classes da UI legada sem folha de estilo:\n  {}",
