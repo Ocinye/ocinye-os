@@ -12,7 +12,7 @@
  *   - obter dados — isso é do servidor, com a sessão dele.
  *
  * É progressive enhancement: sem JavaScript, a navegação, os formulários e
- * todas as tabelas continuam a funcionar. Ver ADR-0019.
+ * todas as tabelas continuam a funcionar. Ver ADR-0602.
  */
 
 (() => {

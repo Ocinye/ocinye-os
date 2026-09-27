@@ -529,8 +529,8 @@ sem que nada falhe.
   `CreateBucket`, que a chave do R2 recusa; corrigido com `no_check_bucket`. Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **82 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
-  **75 READMEs**, `docs/` povoado — incluindo
+- **94 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
+  **77 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -567,6 +567,10 @@ sem que nada falhe.
   `./scripts/verify.sh` passou a incluir a auditoria de dependências.
 
 **Continua a não existir:**
+
+- **Nenhum runtime além da Web.** Não há PWA, casca Ocinye Desktop, posto
+  Dedicated, `ocinye://` nem Ocinye Browser: estão decididos (§45-B,
+  ADR-0018, ADR-0611 a ADR-0617, ADR-0702 a ADR-0705) e são `PLANNED`.
 
 - **Segundo factor universal não existe.** É exigido e está enrolado para
   identidades privilegiadas (acima); a identidades **não** privilegiadas o MFA
@@ -1780,6 +1784,44 @@ seguem são vinculativas e vivem em [`docs/applications/`](docs/applications/REA
 
 ---
 
+## 45-B. Runtimes e o Ocinye Browser
+
+Uma Instância alcança-se pela **Web**, pelo **Desktop** (casca nativa) e por um
+posto **Dedicated** — runtimes, não perfis de Instância
+([ADR-0018](docs/adrs/0018-universal-web-access-and-runtime-classes.md),
+[`docs/runtime/`](docs/runtime/README.md), [`docs/browser/`](docs/browser/README.md)).
+Estado: `PLANNED`. As regras seguintes são vinculativas desde já:
+
+> **A Web do Ocinye é um modo de acesso de primeira classe. A instalação
+> Desktop é opcional: acrescenta ao Ocinye, nunca é precisa para chegar a uma
+> Instância.**
+
+> **Web, Desktop e Dedicated usam a mesma autoridade do Core. A casca Desktop
+> hospeda; o Core governa.** A casca nunca é uma segunda autoridade de
+> autorização.
+
+> **Conteúdo web externo não é de confiança**, mesmo dentro do Ocinye Browser.
+> **Webviews externos não recebem a sessão do Ocinye nem a ponte nativa
+> privilegiada**, e nenhuma página externa alcança APIs nativas.
+
+> **O Browser Manager é dono da navegação externa; o Gestor de Janelas é dono
+> das janelas do Ocinye. As abas do Browser não são janelas do Ocinye.**
+
+> **`ocinye://` é um protocolo estrito de ligações internas, não um canal de
+> execução de comandos.** Toda a ligação tem equivalente HTTPS.
+
+> **O Nye só acede ao conteúdo de uma página por capabilities governadas do
+> Browser, e só com pedido explícito. O ocsh controla o Browser por comandos
+> tipados.**
+
+> **A Web degrada com honestidade quando a caixa de areia do navegador impede
+> a integração. Não há proxy universal da Web pelo Core.**
+
+> **A detecção de runtime vive num só módulo** (`ocinyeRuntime`, ADR-0611); não
+> se espalham `if (window.__TAURI__)` nem perguntas ao agente de utilizador.
+
+---
+
 ## 46. Densidade de informação
 
 Um sistema científico pode e deve ter informação densa. **Não resolvas tudo com
@@ -2163,6 +2205,7 @@ Estrutura actual — `CURRENT`:
 
 ```
 docs/adrs            docs/agentic        docs/ai             docs/applications
+docs/browser         docs/runtime
 docs/architecture    docs/authorization  docs/backups        docs/capabilities
 docs/compute         docs/data-model     docs/deployment     docs/development
 docs/domain          docs/feature-status docs/identity       docs/instance
