@@ -3895,6 +3895,7 @@ document.addEventListener('keydown', (event) => {
     var botao = document.createElement('button');
     botao.type = 'button';
     botao.dataset.part = 'msg__aviso-novas';
+    botao.className = 'ods-btn ods-btn--sm';
     botao.dataset.oc = 'aviso-novas';
     botao.textContent = 'Novas mensagens ↓';
     botao.addEventListener('click', function () {
@@ -4181,12 +4182,14 @@ document.addEventListener('keydown', (event) => {
 
     var paleta = document.createElement('div');
     paleta.dataset.part = 'msg__emoji msg__emoji--reaccao';
+    paleta.className = 'ods-chips ods-glass';
     paleta.dataset.oc = 'paleta-reaccao';
     paleta.setAttribute('role', 'menu');
     REACCOES.forEach(function (emoji) {
       var botao = document.createElement('button');
       botao.type = 'button';
       botao.dataset.part = 'msg__emoji-item';
+      botao.className = 'ods-iconbtn';
       botao.setAttribute('role', 'menuitem');
       botao.textContent = emoji;
       botao.addEventListener('click', function () {
@@ -4420,6 +4423,7 @@ document.addEventListener('keydown', (event) => {
       var botao = document.createElement('button');
       botao.type = 'button';
       botao.dataset.part = 'msg__resultado';
+      botao.className = 'ods-menu__item';
       botao.setAttribute('role', 'option');
       botao.setAttribute('aria-selected', 'false');
       botao.dataset.oc = 'escolher-pessoa';
@@ -4438,6 +4442,7 @@ document.addEventListener('keydown', (event) => {
 
       var email = document.createElement('span');
       email.dataset.part = 'msg__resultado-email';
+      email.className = 'ods-field__hint';
       email.textContent = pessoa.email || '';
 
       botao.appendChild(inicial);
@@ -4490,6 +4495,7 @@ document.addEventListener('keydown', (event) => {
     escolhidos.forEach(function (pessoa) {
       var etiqueta = document.createElement('span');
       etiqueta.dataset.part = 'msg__escolhido';
+      etiqueta.className = 'ods-token';
 
       var nome = document.createElement('span');
       nome.textContent = pessoa.name;
@@ -4497,6 +4503,7 @@ document.addEventListener('keydown', (event) => {
       var tirar = document.createElement('button');
       tirar.type = 'button';
       tirar.dataset.part = 'msg__escolhido-tirar';
+      tirar.className = 'ods-iconbtn';
       tirar.dataset.oc = 'retirar-escolhido';
       tirar.dataset.ocQuem = pessoa.id;
       tirar.title = 'Retirar ' + pessoa.name;

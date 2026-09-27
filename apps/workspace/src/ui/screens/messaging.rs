@@ -114,7 +114,13 @@ fn presenca(pessoa: &Value) -> impl IntoView {
     // Sem tempo real não há presença nenhuma para mostrar. Um ponto cinzento a
     // dizer «Offline» seria uma afirmação que ninguém verificou.
     (!estado.is_empty()).then(|| {
-        let classe = format!("oc-presenca oc-presenca--{estado}");
+        // D12: o ponto verde é disponível; ocupado e não incomodar avisam; o
+        // resto é neutro. O texto diz sempre o estado.
+        let classe = match estado.as_str() {
+            "disponivel" => "ods-dot ods-dot--success",
+            "ocupado" | "nao_incomodar" => "ods-dot ods-dot--warning",
+            _ => "ods-dot",
+        };
         view! {
             <span class=classe title=rotulo.clone() data-oc="presenca">
                 <span class="ods-sr-only">{rotulo.clone()}</span>
@@ -143,33 +149,29 @@ fn linha_da_conversa(
 
     // Três pistas, e não só a cor: peso da letra, um marcador, e a contagem.
     // Uma pessoa que não distinga cores continua a ver o que falta ler.
-    let classe = if por_ler > 0 {
-        "oc-conversa oc-conversa--por-ler"
-    } else {
-        "oc-conversa"
-    };
 
     let outro = conversa.get("other").cloned().unwrap_or(Value::Null);
 
     view! {
         <a
-            class=classe
+            class="ods-d12-conv"
+            data-unread=(por_ler > 0).then_some("")
             href=format!("{ROUTE}/{id}")
             aria-current=activa.then_some("page")
             data-oc="conversa"
             data-oc-id=id
         >
-            <span class="oc-conversa__quem">
+            <span>
                 {if grupo {
                     view! {
-                        <span class="oc-conversa__grupo" aria-hidden="true">
+                        <span aria-hidden="true">
                             {icon(Icon::Units, 15)}
                         </span>
                     }
                         .into_any()
                 } else {
                     view! {
-                        <span class="oc-conversa__avatar">
+                        <span>
                             {avatar(
                                 &ocinye_contracts::AvatarChoice::Initials,
                                 &iniciais(&titulo),
@@ -182,13 +184,13 @@ fn linha_da_conversa(
                 }}
             </span>
 
-            <span class="oc-conversa__corpo">
-                <span class="oc-conversa__topo">
-                    <span class="oc-conversa__titulo">{titulo}</span>
-                    {quando.map(|q| view! { <span class="oc-conversa__quando">{q}</span> })}
+            <span>
+                <span>
+                    <span class="ods-widget__title">{titulo}</span>
+                    {quando.map(|q| view! { <span class="ods-label">{q}</span> })}
                 </span>
-                <span class="oc-conversa__fundo">
-                    <span class="oc-conversa__ultima">{ultima}</span>
+                <span>
+                    <span class="ods-field__hint">{ultima}</span>
                     {(por_ler > 0)
                         .then(|| {
                             let etiqueta = if mencoes > 0 {
@@ -196,13 +198,8 @@ fn linha_da_conversa(
                             } else {
                                 crate::i18n::tp("messaging.unread_count", por_ler)
                             };
-                            let classe = if mencoes > 0 {
-                                "oc-conversa__contagem oc-conversa__contagem--mencao"
-                            } else {
-                                "oc-conversa__contagem"
-                            };
                             view! {
-                                <span class=classe title=etiqueta.clone()>
+                                <span class="ods-count" data-mencao=(mencoes > 0).then_some("") title=etiqueta.clone()>
                                     <span class="ods-sr-only">{etiqueta.clone()}</span>
                                     <span aria-hidden="true">
                                         {if por_ler > 99 {
@@ -267,12 +264,12 @@ pub fn messaging(page: &MessagingPage<'_>) -> impl IntoView {
         .and_then(|s| Uuid::parse_str(s).ok());
 
     view! {
-        <div class="ods-page" data-oc="mensagens">
-            <div class="oc-msg" data-oc-aberta=aberta.map(|a| a.to_string())>
-                <aside class="oc-msg__lista" aria-label=crate::i18n::t("messaging.conversations_aria")>
-                    <header class="oc-msg__lista-topo">
-                        <h1 class="oc-msg__titulo">{crate::i18n::t("messaging.title")}</h1>
-                        <div class="oc-msg__lista-accoes">
+        <div class="ods-app" data-oc="mensagens">
+            <div class="ods-app__split" data-oc-aberta=aberta.map(|a| a.to_string())>
+                <aside class="ods-app__side" aria-label=crate::i18n::t("messaging.conversations_aria")>
+                    <header class="ods-app__toolbar">
+                        <h1 class="ods-page__title">{crate::i18n::t("messaging.title")}</h1>
+                        <div>
                             <button
                                 type="button"
                                 class="ods-btn" data-part="btn"
@@ -289,7 +286,7 @@ pub fn messaging(page: &MessagingPage<'_>) -> impl IntoView {
                     {(!realtime)
                         .then(|| {
                             view! {
-                                <p class="oc-msg__degradado" data-oc="realtime-degradado">
+                                <p class="ods-notice ods-notice--warning" data-oc="realtime-degradado">
                                     "As actualizações em tempo real estão indisponíveis. \
                                      O histórico continua completo; recarregue para ver o \
                                      que chegou."
@@ -297,10 +294,10 @@ pub fn messaging(page: &MessagingPage<'_>) -> impl IntoView {
                             }
                         })}
 
-                    <div class="oc-msg__conversas" data-part="msg__conversas" role="list">
+                    <div data-part="msg__conversas" role="list">
                         {if conversations.is_empty() {
                             view! {
-                                <p class="oc-msg__sem-conversas">
+                                <p class="ods-field__hint">
                                     {crate::i18n::t("messaging.none_yet")}
                                 </p>
                             }
@@ -317,7 +314,7 @@ pub fn messaging(page: &MessagingPage<'_>) -> impl IntoView {
 
                 {nova_conversa()}
 
-                <section class="oc-msg__conversa" aria-label=crate::i18n::t("messaging.conversation_aria")>
+                <section class="ods-app__main" aria-label=crate::i18n::t("messaging.conversation_aria")>
                     {match (failure.as_deref(), open) {
                         (Some(razao), _) => aviso(razao).into_any(),
                         (None, None) => sem_conversa(conversations.is_empty()).into_any(),
@@ -345,20 +342,20 @@ pub fn messaging(page: &MessagingPage<'_>) -> impl IntoView {
 /// abre as Mensagens.
 fn nova_conversa() -> impl IntoView {
     view! {
-        <div class="oc-msg__nova" data-oc="nova-conversa-dialogo" hidden>
-            <div class="oc-msg__nova-fundo" data-oc="fechar-nova"></div>
+        <div class="ods-modal" data-oc="nova-conversa-dialogo" hidden>
+            <div class="ods-scrim" data-oc="fechar-nova"></div>
 
             <div
-                class="oc-msg__nova-caixa"
+                class="ods-modal__panel ods-glass"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="oc-nova-titulo"
             >
-                <header class="oc-msg__nova-topo">
-                    <h2 class="oc-msg__nova-titulo" id="oc-nova-titulo">{crate::i18n::t("messaging.new_conversation")}</h2>
+                <header class="ods-modal__head">
+                    <h2 class="ods-modal__title" id="oc-nova-titulo">{crate::i18n::t("messaging.new_conversation")}</h2>
                     <button
                         type="button"
-                        class="oc-msg__accao"
+                        class="ods-iconbtn"
                         data-oc="fechar-nova"
                         title=crate::i18n::t("messaging.close")
                     >
@@ -367,12 +364,14 @@ fn nova_conversa() -> impl IntoView {
                     </button>
                 </header>
 
+                <div class="ods-modal__body">
+
                 // Directa ou grupo. A escolha muda o que o formulário pede: um
                 // grupo precisa de nome, uma directa é com uma pessoa.
-                <div class="oc-msg__nova-modo" role="tablist" aria-label=crate::i18n::t("messaging.conversation_type")>
+                <div class="ods-seg" role="tablist" aria-label=crate::i18n::t("messaging.conversation_type")>
                     <button
                         type="button"
-                        class="oc-msg__modo oc-msg__modo--activo"
+                        class="ods-seg__opt"
                         role="tab"
                         aria-selected="true"
                         data-oc="modo"
@@ -382,7 +381,7 @@ fn nova_conversa() -> impl IntoView {
                     </button>
                     <button
                         type="button"
-                        class="oc-msg__modo"
+                        class="ods-seg__opt"
                         role="tab"
                         aria-selected="false"
                         data-oc="modo"
@@ -392,7 +391,7 @@ fn nova_conversa() -> impl IntoView {
                     </button>
                 </div>
 
-                <div class="oc-msg__nova-grupo" data-oc="campo-nome" hidden>
+                <div data-oc="campo-nome" hidden>
                     <label class="ods-field">
                         <span class="ods-field__label">{crate::i18n::t("messaging.group_name")}</span>
                         <input
@@ -420,21 +419,23 @@ fn nova_conversa() -> impl IntoView {
                 </label>
 
                 // Quem já foi escolhido, para um grupo.
-                <div class="oc-msg__escolhidos" data-oc="escolhidos" hidden></div>
+                <div class="ods-chips" data-oc="escolhidos" hidden></div>
 
                 <div
-                    class="oc-msg__resultados"
+                    class="ods-menu"
                     id="oc-nova-resultados"
                     data-oc="resultados"
                     role="listbox"
                     aria-label=crate::i18n::t("messaging.people_aria")
                 ></div>
 
-                <p class="oc-msg__nova-estado" data-oc="estado-da-procura">
+                <p class="ods-field__hint" data-oc="estado-da-procura">
                     {crate::i18n::t("messaging.min_two_letters")}
                 </p>
 
-                <footer class="oc-msg__nova-accoes">
+                </div>
+
+                <footer class="ods-modal__foot">
                     <button
                         type="button"
                         class="ods-btn ods-btn--sm" data-part="btn"
@@ -464,7 +465,7 @@ fn nova_conversa() -> impl IntoView {
 fn aviso(razao: &str) -> impl IntoView {
     let razao = razao.to_owned();
     view! {
-        <div class="oc-msg__vazio" data-oc="erro">
+        <div data-oc="erro">
             {empty_state(EmptyState {
                 icon: Icon::Messaging,
                 title: crate::i18n::t("messaging.unreadable").to_owned(),
@@ -493,7 +494,7 @@ fn sem_conversa(primeira_vez: bool) -> impl IntoView {
     };
 
     view! {
-        <div class="oc-msg__vazio">
+        <div>
             {empty_state(EmptyState {
                 icon: Icon::Messaging,
                 title: titulo.to_owned(),
@@ -537,13 +538,13 @@ fn aberta_view(
     let lido_ate = instante(conversa, "last_read_at");
 
     view! {
-        <div class="oc-msg__painel" data-oc="conversa-aberta" data-oc-id=id.clone()>
+        <div class="ods-d12-thread" data-oc="conversa-aberta" data-oc-id=id.clone()>
             {cabecalho(&titulo, grupo, &outro, &participantes, governa, &id)}
 
-            <div class="oc-msg__fluxo" data-oc="fluxo" tabindex="0" role="log" aria-live="polite">
+            <div class="ods-d12-thread__scroll" data-oc="fluxo" tabindex="0" role="log" aria-live="polite">
                 {if mensagens.is_empty() {
                     view! {
-                        <p class="oc-msg__primeira">
+                        <p class="ods-field__hint">
                             {crate::i18n::t("messaging.no_messages_yet")}
                         </p>
                     }
@@ -553,7 +554,7 @@ fn aberta_view(
                 }}
             </div>
 
-            <p class="oc-msg__escrita" data-oc="a-escrever" hidden></p>
+            <p class="ods-field__hint" data-oc="a-escrever" hidden></p>
 
             {composer(&id, ai, &participantes, me)}
         </div>
@@ -574,18 +575,18 @@ fn cabecalho(
     let id = id.to_owned();
 
     view! {
-        <header class="oc-msg__cabecalho">
-            <div class="oc-msg__identidade">
+        <header class="ods-app__toolbar">
+            <div>
                 {avatar(
                     &ocinye_contracts::AvatarChoice::Initials,
                     &iniciais(&titulo),
                     AvatarSize::Medium,
                 )}
-                <div class="oc-msg__quem">
-                    <h2 class="oc-msg__nome">{titulo.clone()}</h2>
+                <div>
+                    <h2 class="ods-widget__title">{titulo.clone()}</h2>
                     {if grupo {
                         view! {
-                            <p class="oc-msg__estado">
+                            <p class="ods-label">
                                 {format!(
                                     "{quantos} {}",
                                     if quantos == 1 { "participante" } else { "participantes" },
@@ -600,7 +601,7 @@ fn cabecalho(
                             .unwrap_or_default()
                             .to_owned();
                         view! {
-                            <p class="oc-msg__estado">
+                            <p class="ods-label">
                                 {presenca(&outro)}
                                 <span>{rotulo}</span>
                             </p>
@@ -642,22 +643,22 @@ fn detalhes_do_grupo(id: &str, participantes: &[Value], governa: bool) -> impl I
     let linhas: Vec<Value> = participantes.to_vec();
 
     view! {
-        <aside class="oc-msg__detalhes" id=format!("detalhes-{id}") data-oc="detalhes" hidden>
-            <h3 class="oc-msg__detalhes-titulo">{crate::i18n::t("messaging.participants")}</h3>
-            <ul class="oc-msg__participantes">
+        <aside class="ods-widget ods-widget-surface" id=format!("detalhes-{id}") data-oc="detalhes" hidden>
+            <h3 class="ods-widget__title">{crate::i18n::t("messaging.participants")}</h3>
+            <ul class="ods-admin-list">
                 {linhas
                     .into_iter()
                     .map(|p| {
                         let nome = texto(&p, "name").to_owned();
                         let quem = texto(&p, "id").to_owned();
                         view! {
-                            <li class="oc-msg__participante">
+                            <li class="ods-admin-list__opt">
                                 {avatar(
                                     &ocinye_contracts::AvatarChoice::Initials,
                                     &iniciais(&nome),
                                     AvatarSize::Small,
                                 )}
-                                <span class="oc-msg__participante-nome">{nome.clone()}</span>
+                                <span>{nome.clone()}</span>
                                 {presenca(&p)}
                                 {governa
                                     .then(|| {
@@ -679,7 +680,7 @@ fn detalhes_do_grupo(id: &str, participantes: &[Value], governa: bool) -> impl I
                     .collect_view()}
             </ul>
 
-            <div class="oc-msg__detalhes-accoes">
+            <div class="ods-settings__actions">
                 {governa
                     .then(|| {
                         view! {
@@ -730,7 +731,7 @@ fn fluxo(
         if dia_anterior != Some(dia) {
             blocos.push(
                 view! {
-                    <div class="oc-msg__dia" role="separator">
+                    <div class="ods-d12-thread__day" role="separator">
                         <span>{separador_do_dia(dia, hoje)}</span>
                     </div>
                 }
@@ -746,7 +747,7 @@ fn fluxo(
                 if quando > lido {
                     blocos.push(
                         view! {
-                            <div class="oc-msg__novas" role="separator" data-oc="novas">
+                            <div class="ods-d12-thread__day" role="separator" data-oc="novas">
                                 <span>{crate::i18n::t("messaging.new_messages")}</span>
                             </div>
                         }
@@ -768,7 +769,9 @@ fn fluxo(
         instante_anterior = Some(quando);
     }
 
-    view! { <div class="oc-msg__blocos">{blocos}</div> }
+    // Sem invólucro: a conversa (`.ods-d12-thread__scroll`) alinha cada
+    // mensagem à sua margem, e um bloco intermédio desfazia isso.
+    view! { {blocos} }
 }
 
 fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) -> impl IntoView {
@@ -787,36 +790,17 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
         .cloned()
         .unwrap_or_default();
 
-    let mut classe = String::from("oc-msg__mensagem");
-    if minha {
-        classe.push_str(" oc-msg__mensagem--minha");
-    }
-    if seguida {
-        classe.push_str(" oc-msg__mensagem--seguida");
-    }
+    let classe = if minha { "ods-d12-msg ods-d12-msg--mine" } else { "ods-d12-msg" };
 
     view! {
         <article class=classe data-oc="mensagem" data-minha=minha.then_some("") data-seguida=seguida.then_some("") data-oc-id=id.clone() data-oc-autor=autor>
-            {(!seguida)
-                .then(|| {
-                    view! {
-                        <span class="oc-msg__mensagem-avatar" aria-hidden="true">
-                            {avatar(
-                                &ocinye_contracts::AvatarChoice::Initials,
-                                &iniciais(&nome),
-                                AvatarSize::Small,
-                            )}
-                        </span>
-                    }
-                })}
-
-            <div class="oc-msg__mensagem-corpo">
+            <div>
                 {(!seguida)
                     .then(|| {
                         view! {
-                            <p class="oc-msg__mensagem-topo">
-                                <span class="oc-msg__mensagem-autor" data-part="msg__mensagem-autor">{nome.clone()}</span>
-                                <time class="oc-msg__mensagem-hora">{hora(quando, zona)}</time>
+                            <p class="ods-label">
+                                <span data-part="msg__mensagem-autor">{nome.clone()}</span>
+                                <time class="ods-d12-msg__time">{hora(quando, zona)}</time>
                             </p>
                         }
                     })}
@@ -828,13 +812,13 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
                         let excerto = texto(&citada, "excerpt").to_owned();
                         view! {
                             <a
-                                class="oc-msg__citada"
+                                class="ods-field__hint"
                                 href=format!("#mensagem-{alvo}")
                                 data-oc="citada"
                                 data-oc-alvo=alvo
                             >
-                                <span class="oc-msg__citada-quem">{quem}</span>
-                                <span class="oc-msg__citada-texto">{excerto}</span>
+                                <span class="ods-label">{quem}</span>
+                                <span>{excerto}</span>
                             </a>
                         }
                     })}
@@ -842,17 +826,17 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
                 // Texto. Nunca `inner_html`: uma mensagem é escrita por uma
                 // pessoa, e o que ela escrever não pode virar estrutura na
                 // página de quem a lê.
-                <p class="oc-msg__texto" data-part="msg__texto" id=format!("mensagem-{id}")>
+                <p data-part="msg__texto" id=format!("mensagem-{id}")>
                     {corpo}
                 </p>
 
                 {editada
-                    .then(|| view! { <span class="oc-msg__editada">"editada"</span> })}
+                    .then(|| view! { <span class="ods-d12-msg__time">"editada"</span> })}
 
                 {(!reaccoes.is_empty())
                     .then(|| {
                         view! {
-                            <div class="oc-msg__reaccoes">
+                            <div class="ods-chips">
                                 {reaccoes
                                     .into_iter()
                                     .map(|r| {
@@ -862,21 +846,16 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
                                             .get("mine")
                                             .and_then(Value::as_bool)
                                             .unwrap_or(false);
-                                        let classe = if minha {
-                                            "oc-msg__reaccao oc-msg__reaccao--minha"
-                                        } else {
-                                            "oc-msg__reaccao"
-                                        };
                                         view! {
                                             <button
                                                 type="button"
-                                                class=classe
+                                                class="ods-chip"
                                                 data-oc="reagir"
                                                 data-oc-emoji=emoji.clone()
                                                 aria-pressed=minha.to_string()
                                             >
                                                 <span aria-hidden="true">{emoji.clone()}</span>
-                                                <span class="oc-msg__reaccao-conta">
+                                                <span>
                                                     {quantas.to_string()}
                                                 </span>
                                             </button>
@@ -891,10 +870,10 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
             // As acções aparecem ao passar o rato e ao focar, e não estão
             // sempre lá: uma barra permanente por mensagem enche a conversa de
             // botões que ninguém pediu.
-            <div class="oc-msg__accoes" data-oc="accoes-da-mensagem">
+            <div data-oc="accoes-da-mensagem">
                 <button
                     type="button"
-                    class="oc-msg__accao"
+                    class="ods-iconbtn"
                     data-oc="responder"
                     title=crate::i18n::t("messaging.reply")
                 >
@@ -903,7 +882,7 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
                 </button>
                 <button
                     type="button"
-                    class="oc-msg__accao"
+                    class="ods-iconbtn"
                     data-oc="abrir-reaccoes"
                     title=crate::i18n::t("messaging.react")
                     aria-haspopup="menu"
@@ -911,7 +890,7 @@ fn mensagem_view(mensagem: &Value, me: Uuid, seguida: bool, zona: TimeZoneName) 
                     <span class="ods-sr-only">{crate::i18n::t("messaging.react")}</span>
                     <span aria-hidden="true">"☺"</span>
                 </button>
-                <button type="button" class="oc-msg__accao" data-oc="copiar" title=crate::i18n::t("messaging.copy_text")>
+                <button type="button" class="ods-iconbtn" data-oc="copiar" title=crate::i18n::t("messaging.copy_text")>
                     <span class="ods-sr-only">{crate::i18n::t("messaging.copy_text")}</span>
                     {icon(Icon::Archive, 14)}
                 </button>
@@ -950,16 +929,16 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
         .collect();
 
     view! {
-        <div class="oc-msg__composer" data-oc="composer" data-oc-conversa=id.clone()>
+        <div data-oc="composer" data-oc-conversa=id.clone()>
             // O estado de resposta, quando a pessoa escolheu responder a uma.
-            <div class="oc-msg__resposta" data-oc="a-responder" hidden>
-                <div class="oc-msg__resposta-texto">
-                    <span class="oc-msg__resposta-quem" data-oc="resposta-quem"></span>
-                    <span class="oc-msg__resposta-excerto" data-oc="resposta-excerto"></span>
+            <div class="ods-notice" data-oc="a-responder" hidden>
+                <div>
+                    <span class="ods-label" data-oc="resposta-quem"></span>
+                    <span class="ods-field__hint" data-oc="resposta-excerto"></span>
                 </div>
                 <button
                     type="button"
-                    class="oc-msg__accao"
+                    class="ods-iconbtn"
                     data-oc="cancelar-resposta"
                     title=crate::i18n::t("messaging.stop_replying")
                 >
@@ -970,13 +949,13 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
 
             // A sugestão do Ocinye, quando há uma. O original fica por baixo,
             // recuperável, até alguém escolher.
-            <div class="oc-msg__sugestao" data-oc="sugestao" hidden>
-                <p class="oc-msg__sugestao-topo">
-                    <span class="oc-msg__sugestao-marca" aria-hidden="true">"✦"</span>
+            <div class="ods-notice" data-oc="sugestao" hidden>
+                <p class="ods-label">
+                    <span aria-hidden="true">"✦"</span>
                     <span data-oc="sugestao-titulo">{crate::i18n::t("messaging.suggestion")}</span>
                 </p>
-                <p class="oc-msg__sugestao-texto" data-oc="sugestao-texto"></p>
-                <div class="oc-msg__sugestao-accoes">
+                <p data-oc="sugestao-texto"></p>
+                <div class="ods-settings__actions">
                     <button
                         type="button"
                         class="ods-btn ods-btn--navy ods-btn--sm" data-part="btn"
@@ -994,21 +973,21 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                 </div>
             </div>
 
-            <div class="oc-msg__caixa">
+            <div class="ods-d12-chat__composer">
                 <label class="ods-sr-only" for="oc-msg-texto">{crate::i18n::t("messaging.write")}</label>
                 <textarea
                     id="oc-msg-texto"
-                    class="oc-msg__entrada"
+                    class="ods-d12-chat__input"
                     data-oc="texto"
                     rows="1"
                     placeholder=crate::i18n::t("messaging.write_placeholder")
                     aria-describedby="oc-msg-ajuda"
                 ></textarea>
 
-                <div class="oc-msg__ferramentas">
+                <div>
                     <button
                         type="button"
-                        class="oc-msg__ferramenta"
+                        class="ods-iconbtn"
                         data-oc="abrir-emoji"
                         aria-haspopup="dialog"
                         aria-expanded="false"
@@ -1021,10 +1000,10 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                     {ai
                         .then(|| {
                             view! {
-                                <div class="oc-msg__assist">
+                                <div>
                                     <button
                                         type="button"
-                                        class="oc-msg__ferramenta oc-msg__ferramenta--assist"
+                                        class="ods-iconbtn"
                                         data-oc="abrir-assist"
                                         aria-haspopup="menu"
                                         aria-expanded="false"
@@ -1035,7 +1014,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                                         </span>
                                         <span aria-hidden="true">"✦"</span>
                                     </button>
-                                    <div class="oc-msg__assist-menu" data-oc="assist-menu" hidden>
+                                    <div class="ods-menu" data-oc="assist-menu" hidden>
                                         {[
                                             ("corrigir", crate::i18n::t("messaging.ai.proofread")),
                                             ("melhorar", crate::i18n::t("messaging.ai.improve")),
@@ -1048,7 +1027,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                                                 view! {
                                                     <button
                                                         type="button"
-                                                        class="oc-msg__assist-item"
+                                                        class="ods-menu__item"
                                                         data-oc="assist"
                                                         data-oc-accao=chave
                                                     >
@@ -1064,7 +1043,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
 
                     <button
                         type="button"
-                        class="ods-btn ods-btn--navy ods-btn--sm oc-msg__enviar" data-part="btn"
+                        class="ods-btn ods-btn--primary ods-btn--sm" data-part="btn"
                         data-oc="enviar"
                     >
                         {crate::i18n::t("messaging.send")}
@@ -1072,7 +1051,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                 </div>
             </div>
 
-            <p class="oc-msg__ajuda" id="oc-msg-ajuda">
+            <p class="ods-field__hint" id="oc-msg-ajuda">
                 <kbd class="ods-kbd">{crate::i18n::t("messaging.kbd.enter")}</kbd>
                 {crate::i18n::t("messaging.hint.sends")}
                 <kbd class="ods-kbd">{crate::i18n::t("messaging.kbd.shift")}</kbd>
@@ -1085,7 +1064,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
 
             // A paleta de emoji, ancorada ao composer.
             <div
-                class="oc-msg__emoji"
+                class="ods-chips"
                 data-oc="emoji"
                 role="dialog"
                 aria-label=crate::i18n::t("messaging.emoji_aria")
@@ -1096,7 +1075,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                         view! {
                             <button
                                 type="button"
-                                class="oc-msg__emoji-item"
+                                class="ods-iconbtn"
                                 data-oc="emoji-item"
                                 data-oc-emoji=caracter
                                 title=nome
@@ -1112,7 +1091,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
             // As pessoas que se podem mencionar nesta conversa, e mais nenhuma.
             // Mencionar não dá acesso: quem não participa não está aqui, e o
             // Core recusa na mesma.
-            <div class="oc-msg__mencoes" data-oc="mencoes" role="listbox" hidden>
+            <div class="ods-menu" data-oc="mencoes" role="listbox" hidden>
                 {outros
                     .into_iter()
                     .map(|p| {
@@ -1121,7 +1100,7 @@ fn composer(id: &str, ai: bool, participantes: &[Value], me: Uuid) -> impl IntoV
                         view! {
                             <button
                                 type="button"
-                                class="oc-msg__mencao"
+                                class="ods-menu__item"
                                 role="option"
                                 aria-selected="false"
                                 data-oc="mencao"
@@ -1331,8 +1310,8 @@ mod tests {
         let html = linha_da_conversa(&conversa, None, dia(2026, 3, 12), zona()).to_html();
 
         // Peso, marcador e contagem — e não só cor.
-        assert!(html.contains("oc-conversa--por-ler"));
-        assert!(html.contains("oc-conversa__contagem"));
+        assert!(html.contains("data-unread"));
+        assert!(html.contains(r#"class="ods-count""#));
         assert!(html.contains("3 por ler"));
     }
 
@@ -1346,8 +1325,8 @@ mod tests {
             "unread_mentions": 0,
         });
         let html = linha_da_conversa(&conversa, None, dia(2026, 3, 12), zona()).to_html();
-        assert!(!html.contains("oc-conversa__contagem"));
-        assert!(!html.contains("oc-conversa--por-ler"));
+        assert!(!html.contains(r#"class="ods-count""#));
+        assert!(!html.contains("data-unread"));
     }
 
     #[test]
@@ -1357,14 +1336,14 @@ mod tests {
         let sem = serde_json::json!({"id": "x", "name": "Ana"});
         // Uma vista ausente rende um marcador vazio, e não uma cadeia vazia:
         // a asserção é sobre não haver ponto de presença nenhum.
-        assert!(!presenca(&sem).to_html().contains("oc-presenca"));
+        assert!(!presenca(&sem).to_html().contains(r#"data-oc="presenca""#));
 
         let com = serde_json::json!({
             "id": "x", "name": "Ana",
             "presence": "ocupado", "presence_label": "Ocupado",
         });
         let html = presenca(&com).to_html();
-        assert!(html.contains("oc-presenca--ocupado"));
+        assert!(html.contains("ods-dot--warning") && html.contains("Ocupado"));
         assert!(html.contains("Ocupado"));
     }
 
@@ -1386,13 +1365,13 @@ mod tests {
         assert!(
             mensagem_view(&minha, eu, false, zona())
                 .to_html()
-                .contains("oc-msg__mensagem--minha"),
+                .contains("data-minha"),
             "a minha mensagem não ficou marcada como minha"
         );
         assert!(
             !mensagem_view(&dele, eu, false, zona())
                 .to_html()
-                .contains("oc-msg__mensagem--minha"),
+                .contains("data-minha"),
             "a mensagem de outra pessoa ficou marcada como minha"
         );
     }
@@ -1422,7 +1401,7 @@ mod tests {
         .to_html();
 
         // A segunda vem agrupada; a terceira não, porque mudou o dia.
-        assert_eq!(html.matches("oc-msg__mensagem--seguida").count(), 1);
+        assert_eq!(html.matches("data-seguida").count(), 1);
         assert!(html.contains("Hoje"));
         assert!(html.contains("Ontem"));
     }
