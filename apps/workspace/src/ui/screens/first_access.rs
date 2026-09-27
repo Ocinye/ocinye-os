@@ -1,5 +1,8 @@
 //! Ecrã de primeiro acesso: definir a palavra-passe definitiva.
 //!
+//! DESIGN_LOCKED · Proposta D11 (convite / primeiro acesso). Moldura partilhada
+//! com o login.
+//!
 //! Faz parte do arranque do sistema, não é um formulário de recuperação de um
 //! website (briefing §109). Usa a mesma linguagem visual do ecrã de início de
 //! sessão porque é o mesmo momento: alguém está a entrar no Ocinye OS pela
@@ -30,9 +33,10 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
 
     view! {
         <main class="ods-auth" data-part="login">
-            <span class="ods-auth__clock" data-oc="clock"></span>
+            {crate::ui::screens::login::barra(None)}
+            <div class="ods-auth__stage">
             <span class="ods-auth__mark"><img src="/static/ocinye_logo.png" alt="" /></span>
-            <p class="ods-label">{crate::i18n::t("first_access.eyebrow")}</p>
+            <p class="ods-auth__product">{crate::i18n::t("first_access.eyebrow")}</p>
 
             <section class="ods-auth__card">
                 <div class="ods-account__head">
@@ -45,10 +49,7 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
 
                 {message.map(|text| view! { <p class="ods-field__error" role="alert">{text}</p> })}
 
-                <p class="ods-auth__lead">
-                    "Por segurança, deve substituir a palavra-passe temporária antes
-                     de continuar. A palavra-passe temporária deixará de funcionar."
-                </p>
+                <p class="ods-auth__lead">{crate::i18n::t("first_access.lead")}</p>
 
                 <form method="post" action="/first-access">
                     // O gestor de palavras-passe precisa de saber a que conta
@@ -64,9 +65,10 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
                         class="ods-sr-only"
                     />
 
-                    <label class="ods-field">
+                    <label class="ods-field ods-auth__field">
                         <span class="ods-field__label">{crate::i18n::t("first_access.new_password")}</span>
-                        <span class="ods-auth__pw">
+                        <span class="ods-auth__input ods-auth__pw">
+                            {crate::ui::ods::icone("lock", "")}
                             <input
                                 class="ods-input"
                                 id="new-pass"
@@ -82,15 +84,19 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
                                 data-oc="reveal"
                                 data-oc-target="new-pass"
                                 aria-pressed="false"
+                                data-label-show=crate::i18n::t("first_access.show")
+                                data-label-hide=crate::i18n::t("first_access.hide")
                             >
-                                {crate::i18n::t("first_access.show")}
+                                {crate::ui::ods::icone("eye", "")}
+                                <span data-part="reveal-label">{crate::i18n::t("first_access.show")}</span>
                             </button>
                         </span>
                     </label>
 
-                    <label class="ods-field">
+                    <label class="ods-field ods-auth__field">
                         <span class="ods-field__label">{crate::i18n::t("first_access.confirm_password")}</span>
-                        <span class="ods-auth__pw">
+                        <span class="ods-auth__input ods-auth__pw">
+                            {crate::ui::ods::icone("lock", "")}
                             <input
                                 class="ods-input"
                                 id="confirm-pass"
@@ -106,33 +112,39 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
                                 data-oc="reveal"
                                 data-oc-target="confirm-pass"
                                 aria-pressed="false"
+                                data-label-show=crate::i18n::t("first_access.show")
+                                data-label-hide=crate::i18n::t("first_access.hide")
                             >
-                                {crate::i18n::t("first_access.show")}
+                                {crate::ui::ods::icone("eye", "")}
+                                <span data-part="reveal-label">{crate::i18n::t("first_access.show")}</span>
                             </button>
                         </span>
                     </label>
 
-                    <ul class="ods-field__hint">
+                    <ul class="ods-field__hint ods-auth__rules">
                         <li>{crate::i18n::tf("first_access.min_length_dot", &[("min", &MIN_LENGTH.to_string())])}</li>
                         <li>{crate::i18n::t("first_access.long_phrases")}</li>
                         <li>{crate::i18n::t("first_access.no_symbols_required")}</li>
                         <li>{crate::i18n::t("first_access.common_rejected")}</li>
                     </ul>
 
-                    <button type="submit" class="ods-btn ods-btn--primary ods-btn--block" data-part="login__submit">
+                    <button type="submit" class="ods-btn ods-btn--primary ods-btn--block ods-auth__submit" data-part="login__submit">
                         {crate::i18n::t("first_access.set_password_button")}
+                        {crate::ui::ods::icone("arrow-r", "")}
                     </button>
                 </form>
 
                 <div class="ods-auth__foot">
                     <form method="post" action="/logout">
                         <button type="submit" class="ods-btn ods-btn--ghost ods-btn--sm">
+                            {crate::ui::ods::icone("logout", "")}
                             {crate::i18n::t("auth.sign_out")}
                         </button>
                     </form>
-                    <span>{format!("{} · {}", crate::i18n::current().as_str().to_uppercase(), crate::i18n::current().bcp47())}</span>
+                    <span class="ods-auth__locale">{format!("{} · {}", crate::i18n::current().as_str().to_uppercase(), crate::i18n::current().bcp47())}</span>
                 </div>
             </section>
+            </div>
         </main>
     }
 }

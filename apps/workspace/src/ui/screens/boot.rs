@@ -1,5 +1,7 @@
 //! O arranque, como uma pessoa o vê.
 //!
+//! DESIGN_LOCKED · moldura do login (Proposta D7) aplicada ao arranque.
+//!
 //! # Isto não é um ecrã de carregamento
 //!
 //! Um ecrã de carregamento enche o tempo enquanto se espera. Isto mostra uma
@@ -70,9 +72,11 @@ pub fn boot(outcome: &BootOutcome, destino: &str) -> impl IntoView {
     let destino = destino.to_owned();
 
     view! {
-        <main class="ods-boot" data-estado=tipo>
+        <main class="ods-auth ods-boot" data-estado=tipo>
+            {crate::ui::screens::login::barra(None)}
+            <div class="ods-auth__stage">
             <span class="ods-auth__mark"><img src="/static/ocinye_logo.png" alt="" /></span>
-            <p class="ods-label">"OCINYE OS"</p>
+            <p class="ods-auth__product">{crate::i18n::t("auth.product")}</p>
 
             <section class="ods-auth__card" role="status" aria-live="polite">
                 <h1 class="ods-auth__title" data-part="boot__title">{titulo}</h1>
@@ -86,14 +90,14 @@ pub fn boot(outcome: &BootOutcome, destino: &str) -> impl IntoView {
 
                 {(!bloqueios.is_empty())
                     .then(|| view! {
-                        <ul data-part="boot__list--blocking">
+                        <ul class="ods-boot__list" data-part="boot__list--blocking">
                             {bloqueios.iter().map(|c| componente(c, true)).collect_view()}
                         </ul>
                     })}
 
                 {(!limitacoes.is_empty())
                     .then(|| view! {
-                        <ul>
+                        <ul class="ods-boot__list">
                             {limitacoes.iter().map(|c| componente(c, false)).collect_view()}
                         </ul>
                     })}
@@ -102,12 +106,13 @@ pub fn boot(outcome: &BootOutcome, destino: &str) -> impl IntoView {
                     .then(|| view! {
                         <form method="get" action="/boot" class="ods-boot__actions" data-part="boot__actions">
                             <input type="hidden" name="return_to" value=destino.clone() />
-                            <button type="submit" class="ods-btn ods-btn--primary" data-part="boot__retry">
+                            <button type="submit" class="ods-btn ods-btn--primary ods-auth__submit" data-part="boot__retry">
                                 {crate::i18n::t("boot.retry")}
                             </button>
                         </form>
                     })}
             </section>
+            </div>
         </main>
     }
 }

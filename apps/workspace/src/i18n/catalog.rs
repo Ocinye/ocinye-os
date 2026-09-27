@@ -3384,7 +3384,40 @@ const DS_D13: &[Entry] = catalogo! {
     "messages.actions": { pt: "Acções da mensagem", en: "Message actions", fr: "Actions du message" },
 };
 
+// DESIGN · fatia 1 (autenticação). Inserido pelo apply.sh antes de `pub const GROUPS`,
+// e DS_AUTH_CANON acrescentado à lista GROUPS.
+const DS_AUTH_CANON: &[Entry] = catalogo! {
+    "auth.product": { pt: "OCINYE OS", en: "OCINYE OS", fr: "OCINYE OS" },
+    "auth.langs": { pt: "Idioma da interface", en: "Interface language", fr: "Langue de l’interface" },
+    "login.core.retry": { pt: "Tentar novamente", en: "Try again", fr: "Réessayer" },
+    "first_access.hide": { pt: "Ocultar", en: "Hide", fr: "Masquer" },
+    "first_access.lead": { pt: "Por segurança, deve substituir a palavra-passe temporária antes de continuar. A palavra-passe temporária deixará de funcionar.", en: "For security, replace the temporary password before continuing. The temporary password will stop working.", fr: "Par sécurité, remplacez le mot de passe temporaire avant de continuer. Le mot de passe temporaire cessera de fonctionner." },
+    "mfa.recovery_lead": { pt: "Guarde estes dez códigos num local seguro. Cada um serve uma única vez, e permite entrar quando não tiver a aplicação autenticadora à mão. Não voltarão a ser mostrados.", en: "Keep these ten codes somewhere safe. Each works only once and lets you sign in when you do not have your authenticator app to hand. They will not be shown again.", fr: "Conservez ces dix codes en lieu sûr. Chacun ne sert qu’une seule fois et permet de vous connecter sans votre application d’authentification. Ils ne seront plus affichés." },
+    "mfa.recovery_hint": { pt: "Use um dos códigos de recuperação que guardou ao configurar o MFA. Cada código serve uma única vez.", en: "Use one of the recovery codes you saved when setting up MFA. Each code works only once.", fr: "Utilisez l’un des codes de récupération enregistrés lors de la configuration du MFA. Chaque code ne sert qu’une seule fois." },
+    "auth.state.expired_t": { pt: "A sessão expirou", en: "Your session expired", fr: "La session a expiré" },
+    "auth.state.expired_b": { pt: "Por segurança, a sessão terminou após 30 minutos de inactividade. Inicie sessão novamente para continuar.", en: "For security, your session ended after 30 minutes of inactivity. Sign in again to continue.", fr: "Par sécurité, la session s’est terminée après 30 minutes d’inactivité. Reconnectez-vous pour continuer." },
+    "auth.state.sign_in_again": { pt: "Iniciar sessão novamente", en: "Sign in again", fr: "Se reconnecter" },
+    "auth.state.revoked_t": { pt: "Acesso revogado", en: "Access revoked", fr: "Accès révoqué" },
+    "auth.state.revoked_b": { pt: "O seu acesso a esta instância foi retirado por um administrador. Se considera que se trata de um erro, contacte a administração.", en: "An administrator removed your access to this instance. If you think this is a mistake, contact the administration.", fr: "Un administrateur a retiré votre accès à cette instance. Si vous pensez qu’il s’agit d’une erreur, contactez l’administration." },
+    "auth.state.contact": { pt: "Contactar administração", en: "Contact administration", fr: "Contacter l’administration" },
+    "auth.state.back_login": { pt: "Voltar ao início de sessão", en: "Back to sign in", fr: "Retour à la connexion" },
+    "auth.state.recover_t": { pt: "Recuperar palavra-passe", en: "Recover password", fr: "Récupérer le mot de passe" },
+    "auth.state.recover_b": { pt: "Indique o endereço associado à sua conta nesta instância. Enviaremos instruções se existir uma conta correspondente.", en: "Enter the address linked to your account in this instance. We will send instructions if a matching account exists.", fr: "Indiquez l’adresse associée à votre compte dans cette instance. Nous enverrons des instructions si un compte correspondant existe." },
+    "auth.state.send": { pt: "Enviar instruções", en: "Send instructions", fr: "Envoyer les instructions" },
+    "auth.state.sent_t": { pt: "Verifique o seu correio", en: "Check your email", fr: "Consultez votre courrier" },
+    "auth.state.sent_b": { pt: "Se existir uma conta com esse endereço nesta instância, receberá instruções dentro de alguns minutos.", en: "If an account with that address exists in this instance, you will receive instructions within a few minutes.", fr: "Si un compte avec cette adresse existe dans cette instance, vous recevrez des instructions d’ici quelques minutes." },
+    "login.forgot": { pt: "Esqueceu a palavra-passe?", en: "Forgot your password?", fr: "Mot de passe oublié ?" },
+    "login.or": { pt: "OU", en: "OR", fr: "OU" },
+    "auth.profile_word": { pt: "PERFIL", en: "PROFILE", fr: "PROFIL" },
+    "auth.passkey": { pt: "Usar chave de acesso", en: "Use a passkey", fr: "Utiliser une clé d’accès" },
+    "auth.sso": { pt: "Continuar com SSO da empresa", en: "Continue with company SSO", fr: "Continuer avec le SSO de l’entreprise" },
+    "auth.ws.title": { pt: "Escolher espaço de trabalho", en: "Choose a workspace", fr: "Choisir un espace de travail" },
+    "auth.ws.lead": { pt: "Tem acesso a {n} espaços de trabalho nesta instância.", en: "You have access to {n} workspaces in this instance.", fr: "Vous avez accès à {n} espaces de travail dans cette instance." },
+    "auth.ws.remember": { pt: "Lembrar este espaço neste dispositivo", en: "Remember this workspace on this device", fr: "Mémoriser cet espace sur cet appareil" },
+};
+
 pub const GROUPS: &[&[Entry]] = &[
+    DS_AUTH_CANON,
     DS_SCREENS,
     DS_SHELL,
     DS_PRIMITIVES,

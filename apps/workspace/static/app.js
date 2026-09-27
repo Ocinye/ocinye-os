@@ -3399,10 +3399,9 @@
   }
 })();
 
-/* Alternador «Mostrar palavra-passe» num campo de entrada.
- *
- * Existe porque um gestor de palavras-passe escreve numa caixa que o membro não
- * consegue ler, e uma tentativa falhada conta para o throttle. */
+/* DESIGN · alternador de palavra-passe (substitui o bloco «Alternador "Mostrar palavra-passe"» do app.js).
+ * O rótulo vem da vista (data-label-show / data-label-hide, já traduzidos) e só o
+ * <span data-part="reveal-label"> muda: o ícone fica. */
 document.addEventListener('click', (event) => {
   const toggle = event.target.closest('[data-oc="reveal"]');
   if (!toggle) return;
@@ -3410,7 +3409,10 @@ document.addEventListener('click', (event) => {
   if (!field) return;
   const shown = field.type === 'text';
   field.type = shown ? 'password' : 'text';
-  toggle.textContent = shown ? 'Mostrar' : 'Ocultar';
+  const label = toggle.querySelector('[data-part="reveal-label"]');
+  const text = shown ? toggle.dataset.labelShow : toggle.dataset.labelHide;
+  if (label && text) label.textContent = text;
+  else if (text) toggle.textContent = text;
   toggle.setAttribute('aria-pressed', String(!shown));
 });
 

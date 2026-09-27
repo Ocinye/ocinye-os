@@ -1,5 +1,8 @@
 //! Os ecrãs do segundo factor (ADR-0107).
 //!
+//! DESIGN_LOCKED · Proposta D8. Moldura partilhada com o login (`login::barra`,
+//! `login::identidade`); o conteúdo de cada cartão é deste ficheiro.
+//!
 //! Fazem parte do arranque de uma sessão privilegiada, não são um formulário de
 //! um website. Usam a mesma linguagem visual do início de sessão e do primeiro
 //! acesso, porque é o mesmo momento: alguém está a estabelecer autoridade.
@@ -40,24 +43,29 @@ fn qr_svg(otpauth: &str) -> String {
 
 /// Moldura comum dos ecrãs de MFA: o mesmo fundo e barra do início de sessão.
 fn frame(rotulo: &'static str, message: Option<String>, corpo: AnyView) -> impl IntoView {
+    use crate::ui::screens::login::barra;
     view! {
         <main class="ods-auth" data-part="login">
-            <span class="ods-auth__clock" data-oc="clock"></span>
-            <span class="ods-auth__mark"><img src="/static/ocinye_logo.png" alt="" /></span>
-            <p class="ods-label">{rotulo}</p>
+            {barra(None)}
+            <div class="ods-auth__stage">
+                <span class="ods-auth__mark"><img src="/static/ocinye_logo.png" alt="" /></span>
+                <p class="ods-auth__product">{rotulo}</p>
 
-            <section class="ods-auth__card">
-                {message.map(|text| view! { <p class="ods-field__error" role="alert">{text}</p> })}
-                {corpo}
-                <div class="ods-auth__foot">
-                    <form method="post" action="/logout">
-                        <button type="submit" class="ods-btn ods-btn--ghost ods-btn--sm">
-                            {crate::i18n::t("auth.sign_out")}
-                        </button>
-                    </form>
-                    <span>{format!("{} · {}", crate::i18n::current().as_str().to_uppercase(), crate::i18n::current().bcp47())}</span>
-                </div>
-            </section>
+                <section class="ods-auth__card">
+                    <span class="ods-auth__icon" data-tone="gold">{crate::ui::ods::icone("shield", "ods-icon--lg")}</span>
+                    {message.map(|text| view! { <p class="ods-field__error" role="alert">{text}</p> })}
+                    {corpo}
+                    <div class="ods-auth__foot">
+                        <form method="post" action="/logout">
+                            <button type="submit" class="ods-btn ods-btn--ghost ods-btn--sm">
+                                {crate::ui::ods::icone("logout", "")}
+                                {crate::i18n::t("auth.sign_out")}
+                            </button>
+                        </form>
+                        <span class="ods-auth__locale">{format!("{} · {}", crate::i18n::current().as_str().to_uppercase(), crate::i18n::current().bcp47())}</span>
+                    </div>
+                </section>
+            </div>
         </main>
     }
 }
@@ -126,7 +134,9 @@ pub fn enrollment(
         <form method="post" action="/mfa/confirm">
             <label class="ods-field">
                 <span class="ods-field__label">{crate::i18n::t("mfa.six_digit_code")}</span>
-                <input class="ods-input"
+                <span class="ods-auth__otp">
+                    <span class="ods-auth__otp-cells" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></span>
+                    <input class="ods-input ods-auth__code"
                     id="mfa-code"
                     name="code"
                     type="text"
@@ -135,6 +145,7 @@ pub fn enrollment(
                     pattern="[0-9 ]*"
                     required
                 />
+                </span>
             </label>
             <button type="submit" class="ods-btn ods-btn--primary ods-btn--block" data-part="login__submit">
                 {crate::i18n::t("mfa.confirm_button")}
@@ -160,15 +171,11 @@ pub fn recovery_codes(codes: &[String]) -> impl IntoView {
             <p class="ods-account__mail">{crate::i18n::t("mfa.shown_once")}</p>
         </div></div>
 
-        <p class="ods-auth__lead">
-            "Guarde estes dez códigos num local seguro. Cada um serve uma única vez,
-             e permite entrar quando não tiver a aplicação autenticadora à mão.
-             Não voltarão a ser mostrados."
-        </p>
+        <p class="ods-auth__lead">{crate::i18n::t("mfa.recovery_lead")}</p>
 
         <pre class="ods-auth__codes" data-oc="recovery-codes">{linhas}</pre>
 
-        <div class="ods-boot__actions">
+        <div class="ods-auth__actions">
             <button type="button" class="ods-btn ods-btn--sm" data-oc="recovery-copy">
                 {crate::i18n::t("mfa.copy_codes")}
             </button>
@@ -178,7 +185,7 @@ pub fn recovery_codes(codes: &[String]) -> impl IntoView {
         </div>
 
         <form method="post" action="/mfa/acknowledge">
-            <label class="ods-field">
+            <label class="ods-auth__ack">
                 <input type="checkbox" class="ods-check" name="acknowledged" value="1" required />
                 <span>{crate::i18n::t("mfa.saved_confirm")}</span>
             </label>
@@ -208,7 +215,9 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
         <form method="post" action="/mfa/challenge">
             <label class="ods-field">
                 <span class="ods-field__label">{crate::i18n::t("mfa.authenticator_code")}</span>
-                <input class="ods-input"
+                <span class="ods-auth__otp">
+                    <span class="ods-auth__otp-cells" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></span>
+                    <input class="ods-input ods-auth__code"
                     id="mfa-code"
                     name="code"
                     type="text"
@@ -217,18 +226,16 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
                     pattern="[0-9 ]*"
                     required
                 />
+                </span>
             </label>
             <button type="submit" class="ods-btn ods-btn--primary ods-btn--block" data-part="login__submit">
                 {crate::i18n::t("mfa.sign_in")}
             </button>
         </form>
 
-        <details data-part="mfa__fallback">
+        <details class="ods-auth__details" data-part="mfa__fallback">
             <summary>{crate::i18n::t("mfa.no_authenticator")}</summary>
-            <p class="ods-field__hint">
-                "Use um dos códigos de recuperação que guardou ao configurar o MFA.
-                 Cada código serve uma única vez."
-            </p>
+            <p class="ods-field__hint">{crate::i18n::t("mfa.recovery_hint")}</p>
             <form method="post" action="/mfa/recovery">
                 <label class="ods-field">
                     <span class="ods-field__label">{crate::i18n::t("mfa.recovery_code")}</span>

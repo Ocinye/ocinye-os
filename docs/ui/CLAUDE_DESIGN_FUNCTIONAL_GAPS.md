@@ -15,3 +15,14 @@
 | G-07 | Nye › voz | push-to-talk, estados ouvir / transcrever / agir / falar / falha | contrato de voz | `POST /ask/voice` (áudio → transcrição) ou Web Speech só no cliente, com consentimento explícito; sem escuta permanente |
 | G-08 | Monitor de Actividade | processos/serviços com CPU, memória, disco, rede, GPU; terminar processo não-sistema | métricas de serviços e nós | `GET /admin/monitor?metric=cpu|mem|disk|net|gpu` → `{services:[{id, name, kind, owner, protected, value, value2}], summary}`; `POST /admin/monitor/{id}/stop` só para serviços não protegidos, autorizado no Core |
 | G-09 | Casca › estado CORE · IA | resumo curto do Core e do fornecedor de IA activo | agregado tipado | `GET /me/status` → `{core:{ok, version, services}, ai:{mode:none|local|external, model, node}}` |
+
+# Acrescento a docs/ui/CLAUDE_DESIGN_FUNCTIONAL_GAPS.md (fatia 1 · autenticação)
+
+| ID | Ecrã | Comportamento | Contrato | Estado |
+|---|---|---|---|---|
+| G-26 | Recuperar palavra-passe (D10) | pedir instruções; resposta sempre neutra | `GET /password/recover` → `recover(false, disponivel, …)`; `POST /password/recover {email}` → 202 sempre → `recover(true, …)` | vista pronta; `disponivel=false` até existir o POST |
+| G-27 | Sessão expirada / acesso revogado (D12, D13) | cartão por motivo | `/login?reason=expired` (cookie de sessão desconhecido) · `/login?reason=revoked` (motivo do Core) → `fim_de_sessao(…)` | vista pronta |
+| G-30 | Idioma antes da sessão (D7) | pt · en · fr no rodapé do cartão | `POST /login/language {lang, return_to}` grava `oc_locale` e redirige | **CONNECT** |
+| G-31 | Perfil e endereço à porta (D7, P1–P4) | etiqueta do perfil + anfitrião | `GET /api/v1/instance/branding` → `profile`; anfitrião do pedido → `Porta { nome, perfil, host }` → `login_na_porta(…)` | **CONNECT** |
+| — | Chave de acesso · SSO (D7) | botões desenhados | sem ADR: `aria-disabled="true"` + `ods.state.pending_contract`; SSO só no perfil `business` | à espera de ADR |
+| — | Lembrar espaço (D9) | preferência por dispositivo | sem contrato: caixa desligada com o estado | à espera de contrato |
