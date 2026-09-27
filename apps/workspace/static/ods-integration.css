@@ -1,0 +1,10 @@
+/* Integração — cola técnica, não desenho.
+ *
+ * Regras que os pacotes D0–D11 do Claude Design não trazem e sem as quais a
+ * casca não funciona como páginas (enquanto não houver janelas, G-05). Cada
+ * regra aqui é uma pergunta ao Claude Design: adoptar, substituir ou retirar.
+ * Nenhuma escolhe cor, tipografia, raio ou sombra. */
+
+/* A `.ods-shell` tem altura fixa e esconde o que transborda (D2): o conteúdo de
+ * uma página rola no seu contentor, e não na janela. */
+.ods-shell__main { flex: 1; min-height: 0; overflow-y: auto; }

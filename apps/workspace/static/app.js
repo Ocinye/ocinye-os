@@ -61,33 +61,6 @@
     } catch { /* modo privado ou armazenamento bloqueado: não é fatal */ }
   };
 
-  /* ── Sidebar colapsável ───────────────────────────────────────────── */
-
-  function initSidebar() {
-    const shell = $('[data-oc="shell"]');
-    const toggle = $('[data-oc="collapse"]');
-    if (!shell || !toggle) return;
-
-    // O nome do botão é a acção que ele executa, e a acção inverte-se: quando a
-    // barra está recolhida, este botão abre-a. Deixar o rótulo fixo em
-    // «Colapsar navegação» faria o leitor de ecrã anunciar o oposto do que
-    // acontece — `aria-expanded` diz o estado, mas o nome tem de dizer o gesto.
-    const apply = (collapsed) => {
-      shell.dataset.side = collapsed ? 'collapsed' : 'expanded';
-      toggle.setAttribute('aria-expanded', String(!collapsed));
-      const name = collapsed ? 'Expandir navegação' : 'Colapsar navegação';
-      toggle.setAttribute('aria-label', name);
-      toggle.setAttribute('title', name);
-    };
-
-    apply(readPrefs().sidebarCollapsed === true);
-
-    toggle.addEventListener('click', () => {
-      const collapsed = shell.dataset.side !== 'collapsed';
-      apply(collapsed);
-      writePref('sidebarCollapsed', collapsed);
-    });
-  }
 
   /* ── Conta e sessão ───────────────────────────────────────────────── */
 
@@ -193,6 +166,7 @@
            * outra coisa, e faria uma pessoa concluir que não recebeu. */
           lista.textContent = '';
           const erro = document.createElement('p');
+          erro.className = 'ods-state ods-state--error';
           erro.dataset.oc = 'notificacoes-vazio';
           erro.textContent = 'Não foi possível ler as notificações.';
           lista.appendChild(erro);
@@ -205,6 +179,7 @@
 
       if (!linhas.length) {
         const vazio = document.createElement('p');
+        vazio.className = 'ods-empty__body';
         vazio.dataset.oc = 'notificacoes-vazio';
         vazio.textContent = 'Nada por ler.';
         lista.appendChild(vazio);
@@ -214,12 +189,14 @@
       linhas.forEach((linha) => {
         const destino = destinoDe(linha);
         const item = document.createElement(destino ? 'a' : 'div');
+        item.className = 'ods-notif__item';
         item.dataset.oc = 'notificacao';
-        if (!linha.read) item.dataset.state = 'por-ler';
+        if (!linha.read) { item.dataset.state = 'por-ler'; item.setAttribute('data-unread', ''); }
         if (destino) item.href = destino;
 
         if (!linha.read) {
           const ponto = document.createElement('span');
+          ponto.className = 'ods-notif__unread';
           ponto.dataset.oc = 'notificacao-ponto';
           ponto.setAttribute('aria-hidden', 'true');
           item.appendChild(ponto);
@@ -233,17 +210,20 @@
         const texto = document.createElement('span');
         texto.dataset.oc = 'notificacao-texto';
         const titulo = document.createElement('b');
+        titulo.className = 'ods-notif__title';
         /* `textContent`: o título de uma notificação é escrito por pessoas. */
         titulo.textContent = linha.title || '';
         texto.appendChild(titulo);
 
         const legenda = document.createElement('em');
+        legenda.className = 'ods-notif__body';
         legenda.textContent = linha.body || generoDe(linha);
         texto.appendChild(legenda);
         item.appendChild(texto);
 
         if (linha.created_at) {
           const quando = document.createElement('span');
+          quando.className = 'ods-notif__when';
           quando.dataset.oc = 'notificacao-quando';
           quando.textContent = relativo(linha.created_at);
           item.appendChild(quando);
@@ -256,22 +236,25 @@
     /* O símbolo do sprite, por tipo. Um `<use>` como o resto da interface —
      * uma segunda maneira de desenhar ícones seria uma segunda biblioteca. */
     function iconeDe(linha) {
+      // O sprite do D1 não tem ícone de mensagens: fica o do sino até o
+      // Claude Design o entregar.
       const simbolos = {
-        message_received: 'oc-messaging',
-        message_mention: 'oc-messaging',
-        reminder: 'oc-bell',
-        event_invited: 'oc-calendar',
-        event_cancelled: 'oc-calendar',
+        message_received: 'ods-bell',
+        message_mention: 'ods-bell',
+        reminder: 'ods-bell',
+        event_invited: 'ods-calendar',
+        event_cancelled: 'ods-calendar',
       };
+      const caixa = document.createElement('span');
+      caixa.className = 'ods-notif__icon';
+      caixa.setAttribute('aria-hidden', 'true');
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('width', '14');
-      svg.setAttribute('height', '14');
-      svg.setAttribute('aria-hidden', 'true');
-      svg.dataset.part = 'sino__icone';
+      svg.setAttribute('class', 'ods-icon');
       const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-      use.setAttribute('href', '/static/icons.svg#' + (simbolos[linha.kind] || 'oc-bell'));
+      use.setAttribute('href', '/static/ods-icons.svg#' + (simbolos[linha.kind] || 'ods-bell'));
       svg.appendChild(use);
-      return svg;
+      caixa.appendChild(svg);
+      return caixa;
     }
 
     /* O que é, dito em duas palavras. A linha de baixo do painel da conta diz o
@@ -531,7 +514,7 @@
       const agulha = (input ? input.value : '').trim().toLowerCase();
       let visiveis = 0;
       cards.forEach((card) => {
-        const naCategoria = categoria === 'all' || card.dataset.cat === categoria;
+        const naCategoria = categoria === 'all' || card.dataset.category === categoria;
         const naPesquisa = agulha === '' || (card.dataset.search || '').includes(agulha);
         const mostra = naCategoria && naPesquisa;
         celula(card).hidden = !mostra;
@@ -544,7 +527,7 @@
       restoreFocusTo = document.activeElement;
       launcher.hidden = false;
       categoria = 'all';
-      chips.forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.cat === 'all')));
+      chips.forEach((c) => c.setAttribute('aria-selected', String(c.dataset.category === 'all')));
       if (input) { input.value = ''; }
       aplicar();
       if (input) input.focus();
@@ -560,8 +543,8 @@
 
     chips.forEach((chip) => {
       chip.addEventListener('click', () => {
-        categoria = chip.dataset.cat || 'all';
-        chips.forEach((c) => c.setAttribute('aria-pressed', String(c === chip)));
+        categoria = chip.dataset.category || 'all';
+        chips.forEach((c) => c.setAttribute('aria-selected', String(c === chip)));
         aplicar();
       });
     });
@@ -614,7 +597,8 @@
 
     window.addEventListener('keydown', (evento) => {
       const key = evento.key.toLowerCase();
-      if ((evento.metaKey || evento.ctrlKey) && evento.shiftKey && key === 'a') {
+      // ⌘J (D6), e o ⌘⇧A de sempre.
+      if ((evento.metaKey || evento.ctrlKey) && ((evento.shiftKey && key === 'a') || (!evento.shiftKey && key === 'j'))) {
         evento.preventDefault();
         launcher.hidden ? abrir() : fechar();
       }
@@ -662,17 +646,21 @@
         const nome = ($('[data-oc="launcher-nome"]', carta) || {}).textContent || '';
         const svg = $('[data-oc="launcher-icone"] svg', carta);
         const a = document.createElement('a');
+        a.className = 'ods-shelf__btn';
         a.dataset.oc = 'fixada';
         a.href = rota;
-        a.title = nome;
+        a.dataset.tip = nome;
         a.setAttribute('aria-label', nome);
         a.dataset.appId = id;
         a.draggable = true;
-        if (svg) a.appendChild(svg.cloneNode(true));
-        const span = document.createElement('span');
-        span.textContent = nome;
-        a.appendChild(span);
-        barra.appendChild(a);
+        if (svg) {
+          const icone = svg.cloneNode(true);
+          icone.setAttribute('class', 'ods-icon');
+          a.appendChild(icone);
+        }
+        // Antes do separador final: o Lixo fecha sempre a barra (D6).
+        const fim = $('[data-oc="shelf-fim"]', barra);
+        barra.insertBefore(a, fim);
       } else if (existente) {
         existente.remove();
       }
@@ -845,8 +833,8 @@
       const time = now.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
 
       clocks.forEach((clock) => {
-        const hora = $('b', clock);
-        const dia = $('span', clock);
+        const hora = $('[data-part="clock-time"]', clock);
+        const dia = $('[data-part="clock-date"]', clock);
 
         if (hora && dia) {
           // A topbar: duas linhas.
@@ -3130,9 +3118,75 @@
     });
   }
 
+  /* ── Painéis da barra de topo e a doca (D2, D4/D6) ────────────────────
+   *
+   * O perfil e o estado do sistema abrem um painel cada, como a conta e o
+   * sino: um só de cada vez, fecham com `Escape` ou com um clique fora, e
+   * devolvem o foco ao botão. O botão flutuante abre a barra das aplicações.
+   * Alternam-se `hidden` e `aria-expanded`, e nada mais. */
+  function initPaineis() {
+    const pares = [
+      ['[data-oc="profile-toggle"]', '[data-oc="profile-card"]'],
+      ['[data-oc="status-toggle"]', '[data-oc="status-card"]'],
+      ['[data-oc="shelf-toggle"]', '[data-oc="side-pinned"]'],
+    ]
+      .map(([b, p]) => [$(b), $(p)])
+      .filter(([botao, painel]) => botao && painel);
+
+    const fecharOutros = (excepto) => {
+      pares.forEach(([botao, painel]) => {
+        if (painel !== excepto && !painel.hidden) {
+          painel.hidden = true;
+          botao.setAttribute('aria-expanded', 'false');
+        }
+      });
+      if (excepto) {
+        if (window.ocCloseAccount) window.ocCloseAccount();
+        if (window.ocCloseCreate) window.ocCloseCreate();
+      }
+    };
+    window.ocClosePaineis = () => fecharOutros(null);
+
+    pares.forEach(([botao, painel]) => {
+      botao.addEventListener('click', (evento) => {
+        evento.stopPropagation();
+        const abrir = painel.hidden;
+        fecharOutros(painel);
+        painel.hidden = !abrir;
+        botao.setAttribute('aria-expanded', String(abrir));
+      });
+    });
+
+    document.addEventListener('click', (evento) => {
+      pares.forEach(([botao, painel]) => {
+        if (!painel.hidden && !painel.contains(evento.target) && !botao.contains(evento.target)) {
+          painel.hidden = true;
+          botao.setAttribute('aria-expanded', 'false');
+        }
+      });
+    });
+
+    document.addEventListener('keydown', (evento) => {
+      if (evento.key !== 'Escape') return;
+      pares.forEach(([botao, painel]) => {
+        if (!painel.hidden) {
+          painel.hidden = true;
+          botao.setAttribute('aria-expanded', 'false');
+          botao.focus();
+        }
+      });
+    });
+
+    // Um botão declarado indisponível não age: nem clique nem teclado.
+    document.addEventListener('click', (evento) => {
+      const morto = evento.target.closest('[aria-disabled="true"]');
+      if (morto) { evento.preventDefault(); evento.stopPropagation(); }
+    }, true);
+  }
+
   const start = () => {
     initOds();
-    initSidebar();
+    initPaineis();
     initPrompt();
     initFiles();
     initSino();

@@ -1195,10 +1195,17 @@ async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
         })
         .unwrap_or_default();
 
+    // O perfil da Instância, do mesmo `/organisation` que dá o nome.
+    let perfil = organisation
+        .get("profile")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+
     Viewer {
         resolucao,
         pinned,
         inactive_apps,
+        perfil,
         zona: member.zona,
         name: member.session.display_name.clone(),
         // As duas verdades, ambas do Core.

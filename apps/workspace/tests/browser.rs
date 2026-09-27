@@ -2105,6 +2105,25 @@ async fn set_field(page: &Page, seletor: &str, valor: &str) {
     }
 }
 
+/// Abre o Gestor de Aplicações como uma pessoa o abre (D4/D6): o botão
+/// flutuante mostra a barra das aplicações, e o botão «Aplicações» dela abre o
+/// lançador.
+async fn abrir_lancador(page: &Page) {
+    clicar(page, r#"[data-oc="shelf-toggle"]"#).await;
+    wait_visible(page, r#"[data-oc="side-pinned"]"#).await;
+    // A barra entra com uma animação de escala (D6): clicar a meio dela é
+    // clicar onde o botão ainda não está.
+    assert!(
+        esperar_ate_condicao(
+            page,
+            r#"document.querySelector('[data-oc="side-pinned"]').getAnimations().length === 0"#,
+        )
+        .await,
+        "a barra das aplicações não assentou"
+    );
+    clicar(page, r#"[data-oc="launcher-open"]"#).await;
+}
+
 /// Submete o formulário da página.
 ///
 /// O selector é o do formulário, e não `button[type=submit]` solto: a shell tem
@@ -3786,7 +3805,7 @@ async fn com_sessao_o_arranque_entrega_ao_workspace() {
 
     let html = page.content().await.expect("conteúdo");
     assert!(
-        html.contains("side__nav"),
+        html.contains(r#"data-oc="shell""#),
         "chegou ao Workspace e não há navegação: {}",
         &html[..html.len().min(300)]
     );
@@ -3895,7 +3914,7 @@ async fn um_marcador_forjado_nao_autentica_ninguem() {
 
     let html = conteudo_estavel(&page).await;
     assert!(
-        !html.contains("side__nav"),
+        !html.contains(r#"data-oc="shell""#),
         "o Workspace foi servido a quem só tinha um cookie inventado"
     );
 }
@@ -3917,7 +3936,7 @@ async fn com_marcador_e_sessao_o_workspace_abre() {
     );
     let html = conteudo_estavel(&page).await;
     assert!(
-        html.contains("side__nav"),
+        html.contains(r#"data-oc="shell""#),
         "o Workspace não abriu para quem tem sessão"
     );
 }
@@ -4186,7 +4205,7 @@ async fn um_core_bloqueado_nao_mostra_o_login() {
         "um Core bloqueado devia bloquear o arranque"
     );
     assert!(!pagina.contains("login__submit"), "o Login apareceu");
-    assert!(!pagina.contains("side__nav"), "a shell apareceu");
+    assert!(!pagina.contains(r#"data-oc="shell""#), "a shell apareceu");
     assert!(pagina.contains("Tentar novamente"), "falta tentar de novo");
     assert!(
         !pagina.contains("http-equiv=\"refresh\""),
@@ -4791,14 +4810,20 @@ async fn entrar_em(harness: &Harness, workspace_url: &str, credenciais: &Credenc
 /// não houver nenhum, aí sim é notícia, e a mensagem leva o princípio do
 /// documento para se poder ver o que chegou em vez dele.
 async fn estado_na_topbar(page: &Page) -> String {
-    const ROTULOS: [&str; 3] = ["CORE SEM RESPOSTA", "CORE INDISPONÍVEL", "CORE OK"];
+    // O estado vai em `data-estado` no indicador (D2); o rótulo devolvido é o
+    // de sempre, para as asserções dizerem o que a pessoa lê.
+    const ROTULOS: [(&str, &str); 3] = [
+        (r#"data-estado="silencio""#, "CORE SEM RESPOSTA"),
+        (r#"data-estado="indisponivel""#, "CORE INDISPONÍVEL"),
+        (r#"data-estado="ok""#, "CORE OK"),
+    ];
 
     let inicio = std::time::Instant::now();
     let mut html = String::new();
     while inicio.elapsed() < Duration::from_secs(30) {
         html = conteudo_estavel(page).await;
-        for rotulo in ROTULOS {
-            if html.contains(rotulo) {
+        for (marca, rotulo) in ROTULOS {
+            if html.contains(marca) {
                 return rotulo.to_owned();
             }
         }
@@ -5226,7 +5251,7 @@ async fn o_calendario_da_barra_nao_le_a_agenda() {
         "o painel não diz em que mês estamos"
     );
     assert!(
-        html.contains("data-hoje"),
+        html.contains(r#"aria-current="date""#),
         "o painel não marca o dia de hoje"
     );
 }
@@ -5575,7 +5600,7 @@ async fn o_lancador_abre_da_barra_e_fecha_com_escape() {
     let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
     let page = harness.open("/").await;
 
-    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    abrir_lancador(&page).await;
     wait_visible(&page, r#"[data-oc="launcher"]"#).await;
 
     // O foco entra na pesquisa ao abrir.
@@ -5616,7 +5641,7 @@ async fn lancar_uma_aplicacao_navega_para_a_rota() {
     let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
     let page = harness.open("/").await;
 
-    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    abrir_lancador(&page).await;
     wait_visible(&page, r#"[data-oc="launcher"]"#).await;
     clicar(&page, r#"[data-oc="launcher-item"][href="/notes"]"#).await;
 
@@ -5634,7 +5659,7 @@ async fn a_pesquisa_do_lancador_filtra() {
     let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
     let page = harness.open("/").await;
 
-    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    abrir_lancador(&page).await;
     wait_visible(&page, r#"[data-oc="launcher"]"#).await;
 
     // «recurso» encontra «Meus Recursos» e não as Notas.
@@ -5667,13 +5692,13 @@ async fn o_filtro_de_categoria_mostra_so_a_categoria() {
     let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
     let page = harness.open("/").await;
 
-    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    abrir_lancador(&page).await;
     wait_visible(&page, r#"[data-oc="launcher"]"#).await;
 
     // Produtividade mostra as Notas; «Meus Recursos» (Administração) desaparece.
     clicar(
         &page,
-        r#"[data-oc="launcher-chip"][data-cat="productivity"]"#,
+        r#"[data-oc="launcher-chip"][data-category="productivity"]"#,
     )
     .await;
     assert!(
@@ -5695,7 +5720,7 @@ async fn fixar_persiste_e_desafixar_nao_desinstala() {
     let page = harness.open("/").await;
 
     // «Meus Recursos» não está fixado por omissão. Fixa-se pelo lançador.
-    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    abrir_lancador(&page).await;
     wait_visible(&page, r#"[data-oc="launcher"]"#).await;
     clicar(
         &page,
@@ -5719,7 +5744,7 @@ async fn fixar_persiste_e_desafixar_nao_desinstala() {
     assert!(persiste, "a fixação não sobreviveu ao recarregamento");
 
     // Desafixar tira o atalho da barra — mas a ficha continua no lançador.
-    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    abrir_lancador(&page).await;
     wait_visible(&page, r#"[data-oc="launcher"]"#).await;
     clicar(
         &page,
@@ -5750,7 +5775,7 @@ async fn a_descoberta_respeita_a_autorizacao() {
     let _ = harness.sign_in(&[TechnicalRole::ResearchMember]).await;
     let page = harness.open("/").await;
 
-    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    abrir_lancador(&page).await;
     wait_visible(&page, r#"[data-oc="launcher"]"#).await;
 
     let sem_admin = esperar_ate_condicao(
@@ -5983,11 +6008,11 @@ async fn uma_instancia_nova_abre_com_o_seu_nome_e_as_suas_aplicacoes() {
             &page,
             // O trilho esconde-se em janelas estreitas (a do harness): lê-se o
             // que o servidor renderizou, e não o que esta largura mostra.
-            r#"(document.querySelector('[data-part~=crumb]') || {textContent: ''}).textContent.includes('COOPERATIVA EXEMPLO')"#,
+            r#"(document.querySelector('[data-oc="ctx"]') || {textContent: ''}).textContent.toUpperCase().includes('COOPERATIVA EXEMPLO')"#,
         )
         .await,
         "o topo do Workspace devia nomear a instância: {}",
-        page.evaluate("location.pathname + ' | ' + (document.querySelector('[data-part~=crumb]') || document.body).textContent.slice(0, 300)")
+        page.evaluate("location.pathname + ' | ' + (document.querySelector('[data-oc=\"ctx\"]') || document.body).textContent.slice(0, 300)")
             .await
             .ok()
             .and_then(|v| v.into_value::<String>().ok())
@@ -5995,7 +6020,7 @@ async fn uma_instancia_nova_abre_com_o_seu_nome_e_as_suas_aplicacoes() {
     );
 
     // O lançador abre e mostra as aplicações, incluindo a Administração.
-    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    abrir_lancador(&page).await;
     wait_visible(&page, r#"[data-oc="launcher"]"#).await;
     // Ficheiros não entra aqui: hoje a sua visibilidade depende da relevância
     // de módulo de investigação, e um administrador sem papel de investigação
@@ -6052,7 +6077,7 @@ async fn desactivar_uma_aplicacao_esconde_a_e_reactivar_devolve_a_intacta() {
 
     // ── O perfil de empresa: sem módulos científicos, com Ficheiros ──────
     let page = harness.open("/").await;
-    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    abrir_lancador(&page).await;
     wait_visible(&page, r#"[data-oc="launcher"]"#).await;
     // Projectos vem no perfil, mas aparece por relevância de investigação, e um
     // administrador sem papel de investigação não o tem — os papéis de membro
@@ -6097,7 +6122,7 @@ async fn desactivar_uma_aplicacao_esconde_a_e_reactivar_devolve_a_intacta() {
     );
 
     let page = harness.open("/").await;
-    clicar(&page, r#"[data-oc="launcher-open"]"#).await;
+    abrir_lancador(&page).await;
     wait_visible(&page, r#"[data-oc="launcher"]"#).await;
     assert!(
         esperar_ate_condicao(

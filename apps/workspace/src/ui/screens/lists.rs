@@ -2261,6 +2261,7 @@ mod tests {
         Viewer {
             pinned: crate::ui::apps::default_pins(),
             inactive_apps: Vec::new(),
+            perfil: None,
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,
@@ -2287,6 +2288,7 @@ mod tests {
         Viewer {
             pinned: crate::ui::apps::default_pins(),
             inactive_apps: Vec::new(),
+            perfil: None,
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,

@@ -6,12 +6,12 @@
 use leptos::prelude::*;
 use ocinye_contracts::AvatarChoice;
 
-use crate::ui::components::AvatarSize;
 use ocinye_contracts::Permission;
 
 use crate::ui::apps;
-use crate::ui::icon::{icon, Icon};
+use crate::ui::icon::Icon;
 use crate::ui::initials;
+use crate::ui::ods;
 
 /// Um ecrã da navegação.
 ///
@@ -386,6 +386,10 @@ pub struct Viewer {
     /// estão activas — ou quando o Core não respondeu, e aí as outras regras já
     /// encolhem a navegação.
     pub inactive_apps: Vec<String>,
+    /// O perfil da Instância (`research`, `business`, `personal`, `education`),
+    /// como o Core o disse em `/organisation` (ADR-0014). `None` sem resposta: o
+    /// distintivo do perfil não afirma o que não se sabe.
+    pub perfil: Option<String>,
 }
 
 impl Viewer {
@@ -510,7 +514,12 @@ impl Crumb {
     }
 }
 
-/// A shell completa.
+/// A shell completa (Claude Design, D2 e D6).
+///
+/// A barra de topo, o conteúdo, e a doca: o botão flutuante que abre a barra
+/// vertical das aplicações fixadas. A filtragem por permissões, o registo de
+/// aplicações e as fixações continuam a ser as de sempre — muda só a
+/// apresentação (`docs/ui/D2_SHELL.md`).
 pub fn shell(
     viewer: &Viewer,
     active: Screen,
@@ -518,27 +527,872 @@ pub fn shell(
     current: &str,
     content: impl IntoView + 'static,
 ) -> impl IntoView {
-    let avatar = initials(&viewer.name);
-    let core_status = viewer.core_status;
-
     view! {
-        <a class="oc-skip" data-part="skip" href="#conteudo">"Saltar para o conteúdo"</a>
+        <a class="ods-sr-only" data-part="skip" href="#conteudo">
+            {crate::i18n::t("nav.skip_to_content")}
+        </a>
 
         {faixa_privilegiada(viewer)}
 
-        <div class="oc-shell" data-oc="shell" data-side="expanded">
-            {sidebar(viewer, &avatar, active)}
-
-            <div class="oc-main" data-part="main">
-                {topbar(viewer, current, trail, &core_status)}
-                <main class="oc-content" data-part="content" id="conteudo">
-                    {content}
-                </main>
-            </div>
+        <div class="ods-shell" data-oc="shell">
+            {topbar(viewer, current, trail)}
+            <main class="ods-shell__main" id="conteudo" data-part="main content" data-ods-scroll>
+                {content}
+            </main>
+            {doca(viewer, active)}
         </div>
 
         {palette(viewer)}
         {launcher(viewer)}
+    }
+}
+
+/// A faixa de sessão privilegiada.
+///
+/// Uma sessão com autoridade elevada diz-se em cada ecrã, e não só no menu da
+/// conta: é a regra de sempre (ADR-0107). O D2 não a desenha; entra com a
+/// primitiva de aviso do D1, a mais próxima, até o Claude Design a desenhar.
+fn faixa_privilegiada(viewer: &Viewer) -> impl IntoView {
+    if !viewer.sessao_privilegiada {
+        return ().into_any();
+    }
+
+    // O rótulo diz o que a autoridade é **agora**.
+    let rotulo = if viewer.administra {
+        "SUPER ADMIN · SESSÃO PRIVILEGIADA"
+    } else {
+        "SESSÃO PRIVILEGIADA · SEM AUTORIDADE ADMINISTRATIVA"
+    };
+    let nome = viewer.name.clone();
+    let email = viewer.email.clone();
+
+    view! {
+        <div class="ods-notice ods-notice--error" role="status" data-privilegiada="1">
+            {ods::icone("shield", "")}
+            <b>{rotulo}</b>
+            <span>
+                {nome}
+                {email.map(|e| view! { " · " {e} })}
+            </span>
+        </div>
+    }
+    .into_any()
+}
+
+/// O rótulo do perfil de uma Instância, e as suas iniciais no distintivo.
+fn perfil_de(perfil: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    // (iniciais, chave do nome, chave da descrição)
+    match perfil {
+        "research" => Some((
+            "Re",
+            "admin.instance.profile.research",
+            "shell.profile.research.desc",
+        )),
+        "business" => Some((
+            "Bu",
+            "admin.instance.profile.business",
+            "shell.profile.business.desc",
+        )),
+        "personal" => Some((
+            "Pe",
+            "admin.instance.profile.personal",
+            "shell.profile.personal.desc",
+        )),
+        "education" => Some((
+            "Ed",
+            "admin.instance.profile.education",
+            "shell.profile.education.desc",
+        )),
+        _ => None,
+    }
+}
+
+/// A barra de topo, pela ordem exacta do D2.
+fn topbar(viewer: &Viewer, current: &str, trail: Vec<Crumb>) -> impl IntoView {
+    // O dia de hoje onde a pessoa está, e não em Greenwich.
+    let hoje = crate::ui::tempo::hoje_civil(chrono::Utc::now(), viewer.zona);
+    let current = current.to_owned();
+
+    view! {
+        <header class="ods-topbar">
+            {conta(viewer)}
+            {perfil(viewer)}
+
+            // O contexto é a Instância. O Ocinye OS não tem unidade activa
+            // global (§34.3): mostrar aqui uma unidade seria inventá-la. Texto, e
+            // não botão, porque não há nada a escolher.
+            <span class="ods-topbar__ctx" data-oc="ctx">
+                <span class="ods-topbar__ctx-icon">{ods::icone("units", "ods-icon--sm")}</span>
+                {viewer.organisation.clone()}
+            </span>
+
+            <nav class="ods-crumbs" data-part="crumb" aria-label="Trilho">
+                {trail
+                    .into_iter()
+                    .map(|crumb| {
+                        view! {
+                            <span aria-hidden="true">"/"</span>
+                            <a href=crumb.href>{crumb.label}</a>
+                        }
+                    })
+                    .collect_view()}
+                <span aria-hidden="true">"/"</span>
+                <span aria-current="page">{current}</span>
+            </nav>
+
+            // A Universal Command Surface: pesquisar, perguntar, executar. Um
+            // formulário, que funciona sem JavaScript e sem nó de IA.
+            <form class="ods-topbar__ask" method="get" action="/ask" role="search">
+                {ods::icone("nye", "")}
+                <label class="ods-sr-only" for="oc-command">{crate::i18n::t("nav.ask")}</label>
+                <input
+                    id="oc-command"
+                    name="q"
+                    type="search"
+                    placeholder=crate::i18n::t("nav.search.placeholder")
+                    autocomplete="off"
+                />
+                <kbd class="ods-kbd" data-oc="palette-open" title="Command palette">"⌘K"</kbd>
+            </form>
+
+            {create_menu(&viewer.inactive_apps)}
+            {estado_do_sistema(viewer.core_status)}
+            {notifications(viewer.unread)}
+
+            // O relógio é do computador de quem está a ver, e nunca decide
+            // nada. `hidden` até o JS lhe escrever a hora: mostrar um relógio
+            // vazio seria mostrar uma hora que não sabemos.
+            <div class="ods-slot">
+                <button
+                    type="button"
+                    class="ods-topbar__clock"
+                    data-oc="clock"
+                    aria-expanded="false"
+                    aria-controls="oc-temporal-centre"
+                    aria-label="Centro Temporal"
+                    hidden
+                >
+                    <span class="ods-topbar__date" data-part="clock-date"></span>
+                    <span class="ods-topbar__time" data-part="clock-time"></span>
+                </button>
+                {crate::ui::screens::calendar::system_calendar(hoje)}
+            </div>
+        </header>
+    }
+}
+
+/// A conta: o logótipo abre o menu pessoal.
+///
+/// > **The profile popover is a personal session surface, never an
+/// > authorization surface.**
+///
+/// Atalhos para o que o membro já tem, e nunca autoridade institucional.
+fn conta(viewer: &Viewer) -> impl IntoView {
+    let nome = viewer.name.clone();
+    let iniciais = initials(&nome);
+    let email = viewer.email.clone();
+    let instancia = viewer
+        .perfil
+        .as_deref()
+        .and_then(perfil_de)
+        .map(|(_, chave, _)| format!("OCINYE OS · {}", crate::i18n::t(chave).to_uppercase()))
+        .unwrap_or_else(|| "OCINYE OS".to_owned());
+
+    view! {
+        <div class="ods-slot" data-oc="account">
+            <button
+                type="button"
+                class="ods-topbar__logo"
+                data-oc="account-toggle"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-controls="oc-account-menu"
+                aria-label=nome.clone()
+                title=nome.clone()
+            >
+                <img src="/static/ocinye_logo.png" alt="" />
+            </button>
+
+            <div
+                class="ods-popover ods-popover--left ods-glass ods-account"
+                id="oc-account-menu"
+                data-oc="account-menu"
+                role="menu"
+                aria-label="Conta e sessão"
+                hidden
+            >
+                <div class="ods-account__head">
+                    {ods::avatar_do_membro(&viewer.avatar, &iniciais, &nome, ods::TamanhoAvatar::Medio)}
+                    <div>
+                        <p class="ods-account__name">{nome.clone()}</p>
+                        {email.map(|e| view! { <p class="ods-account__mail">{e}</p> })}
+                        <p class="ods-account__inst">{instancia}</p>
+                    </div>
+                </div>
+                <div class="ods-menu">
+                    <a class="ods-menu__item" href="/settings" role="menuitem">
+                        {ods::icone("user", "")}
+                        {crate::i18n::t("shell.account")}
+                    </a>
+                    <a class="ods-menu__item" href="/settings/security" role="menuitem">
+                        {ods::icone("settings", "")}
+                        {crate::i18n::t("nav.settings")}
+                    </a>
+                    <a class="ods-menu__item" href="/help" role="menuitem">
+                        {ods::icone("help", "")}
+                        {crate::i18n::t("nav.help")}
+                    </a>
+                    // G-01: bloquear o ecrã espera por `POST /session/lock`.
+                    <button
+                        type="button"
+                        class="ods-menu__item"
+                        data-oc="lock-open"
+                        role="menuitem"
+                        aria-disabled="true"
+                        data-tip=crate::i18n::t("ods.state.pending_contract")
+                    >
+                        {ods::icone("lock", "")}
+                        {crate::i18n::t("shell.lock")}
+                        <kbd class="ods-menu__kbd">"⌘ L"</kbd>
+                    </button>
+                    <div class="ods-menu__sep"></div>
+                    <form method="post" action="/logout">
+                        <button type="submit" class="ods-menu__item ods-menu__item--danger" role="menuitem">
+                            {ods::icone("logout", "")}
+                            {crate::i18n::t("nav.sign_out")}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+/// O distintivo do perfil da Instância (Re/Bu/Pe/Ed) e o seu cartão.
+///
+/// O perfil é da Instância, decidido pela administração, e o cartão di-lo. Sem
+/// resposta do Core o distintivo não aparece: não se afirma um perfil que não
+/// se sabe.
+fn perfil(viewer: &Viewer) -> impl IntoView {
+    let Some((iniciais, chave_nome, chave_desc)) = viewer.perfil.as_deref().and_then(perfil_de)
+    else {
+        return ().into_any();
+    };
+    let nome = crate::i18n::t(chave_nome);
+    let rotulo = format!("{}: {nome}", crate::i18n::t("shell.profile.title"));
+    let modulos: Vec<&'static str> = crate::ui::apps::visible_to(viewer, viewer.core_status)
+        .into_iter()
+        .map(|app| app.label())
+        .collect();
+
+    view! {
+        <div class="ods-slot" data-oc="profile">
+            <button
+                type="button"
+                class="ods-topbar__profile ods-gold-badge"
+                data-oc="profile-toggle"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+                aria-controls="oc-profile-card"
+                aria-label=rotulo.clone()
+                title=rotulo
+            >
+                {iniciais}
+            </button>
+            <div
+                class="ods-popover ods-popover--left ods-glass ods-profile-card"
+                id="oc-profile-card"
+                data-oc="profile-card"
+                role="dialog"
+                aria-label=crate::i18n::t("shell.profile.title")
+                hidden
+            >
+                <div class="ods-profile-card__head">
+                    <span class="ods-profile-card__badge ods-gold-badge" aria-hidden="true">{iniciais}</span>
+                    <div>
+                        <p class="ods-label">{crate::i18n::t("shell.profile.title")}</p>
+                        <p class="ods-profile-card__name">{nome}</p>
+                    </div>
+                </div>
+                <p class="ods-profile-card__desc">{crate::i18n::t(chave_desc)}</p>
+                <dl class="ods-kv">
+                    <dt>{crate::i18n::t("shell.profile.instance")}</dt>
+                    <dd>{viewer.organisation.clone()}</dd>
+                    <dt>{crate::i18n::t("shell.profile.desktop")}</dt>
+                    // G-04: a versão da predefinição do Desktop não existe ainda.
+                    <dd>{crate::i18n::t("shell.profile.desktop_version_pending")}</dd>
+                </dl>
+                <div class="ods-kv">
+                    <p class="ods-label">{crate::i18n::t("shell.profile.main_modules")}</p>
+                    <div class="ods-chips">
+                        {modulos
+                            .into_iter()
+                            .map(|m| view! { <span class="ods-chip">{m}</span> })
+                            .collect_view()}
+                    </div>
+                </div>
+                <p class="ods-profile-card__desc">{crate::i18n::t("shell.profile.set_by_admin")}</p>
+            </div>
+        </div>
+    }
+    .into_any()
+}
+
+/// O estado do sistema: CORE e IA.
+///
+/// O ponto do Core reflecte a sonda real ao Core — nunca «OK» sem resposta
+/// dele. A linha da IA espera pelo G-09 (um resumo tipado do fornecedor) e
+/// diz-o, em vez de adivinhar.
+fn estado_do_sistema(estado: CoreStatus) -> impl IntoView {
+    let (tom, rotulo, estado_core) = match estado {
+        CoreStatus::Ok => (
+            ods::Tom::Sucesso,
+            crate::i18n::t("shell.status.core.ok"),
+            "ok",
+        ),
+        CoreStatus::Unavailable => (ods::Tom::Erro, "INDISPONÍVEL", "indisponivel"),
+        CoreStatus::Silent => (ods::Tom::Erro, "SEM RESPOSTA", "silencio"),
+    };
+
+    view! {
+        <div class="ods-slot">
+            <button
+                type="button"
+                class="ods-status"
+                data-oc="status-toggle"
+                data-part="core-pill"
+                data-estado=estado_core
+                aria-haspopup="dialog"
+                aria-expanded="false"
+                aria-controls="oc-status-card"
+                aria-label=crate::i18n::t("shell.status.title")
+            >
+                {ods::ponto(tom)}
+                "CORE"
+                {ods::ponto(ods::Tom::Neutro)}
+                "IA"
+            </button>
+            <div
+                class="ods-popover ods-popover--right ods-glass ods-status-card"
+                id="oc-status-card"
+                data-oc="status-card"
+                role="dialog"
+                aria-label=crate::i18n::t("shell.status.title")
+                hidden
+            >
+                <p class="ods-menu__title ods-label">{crate::i18n::t("shell.status.title")}</p>
+                <div class="ods-status-row">
+                    <span class="ods-status-row__icon">{ods::ponto(tom)}</span>
+                    <div>
+                        <p class="ods-status-row__title">
+                            {crate::i18n::t("shell.status.core")} " "
+                            {ods::distintivo(rotulo.to_uppercase(), tom)}
+                        </p>
+                        <p class="ods-status-row__desc">{crate::i18n::t("shell.status.core.desc")}</p>
+                    </div>
+                </div>
+                <div class="ods-status-row">
+                    <span class="ods-status-row__icon ods-status-row__icon--warning">
+                        {ods::ponto(ods::Tom::Aviso)}
+                    </span>
+                    <div>
+                        <p class="ods-status-row__title">{crate::i18n::t("shell.status.ai")}</p>
+                        {ods::a_espera_de_contrato()}
+                    </div>
+                </div>
+                <div class="ods-menu">
+                    <a class="ods-btn ods-btn--sm" href="/ai">{crate::i18n::t("shell.status.ai.options")}</a>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+/// O sino de notificações.
+///
+/// O ponto só se pinta quando há o que contar: o número vem do Core. O painel
+/// carrega quando abre — renderizá-lo em cada página seria pedir ao Core a lista
+/// inteira a cada navegação para a esconder quase sempre.
+fn notifications(unread: usize) -> impl IntoView {
+    let titulo = if unread == 0 {
+        crate::i18n::t("shell.notifications").to_owned()
+    } else {
+        format!(
+            "{} · {}",
+            crate::i18n::t("shell.notifications"),
+            crate::i18n::tf("shell.notifications.unread", &[("n", &unread.to_string())])
+        )
+    };
+
+    view! {
+        <div class="ods-slot" data-oc="sino">
+            <button
+                type="button"
+                class="ods-iconbtn"
+                data-oc="abrir-notificacoes"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+                aria-controls="oc-notificacoes"
+                title=titulo.clone()
+                aria-label=titulo
+            >
+                {ods::icone("bell", "")}
+                {(unread > 0).then(|| view! {
+                    <span class="ods-count" data-oc="notificacoes-contagem" aria-hidden="true">
+                        {unread.to_string()}
+                    </span>
+                })}
+            </button>
+
+            <div
+                class="ods-popover ods-popover--right ods-glass ods-notif"
+                id="oc-notificacoes"
+                data-oc="notificacoes"
+                role="dialog"
+                aria-label=crate::i18n::t("shell.notifications")
+                hidden
+            >
+                <div class="ods-notif__list" data-oc="notificacoes-lista">
+                    <p class="ods-empty__body">{crate::i18n::t("ods.loading")}</p>
+                </div>
+                <a class="ods-btn ods-btn--ghost ods-btn--block" href="/notifications">
+                    {crate::i18n::t("shell.notifications.all")}
+                </a>
+            </div>
+        </div>
+    }
+}
+
+/// O «+ Criar».
+///
+/// Os itens são os de sempre (ideia, projecto, nota, referência, dataset,
+/// tarefa, agente), filtrados pelas aplicações activas na Instância. O D2
+/// propõe outro conjunto; a escolha fica com quem decide o produto, e até lá
+/// não se perde nenhuma criação que já existe.
+fn create_menu(inactive_apps: &[String]) -> impl IntoView {
+    let inactive_apps = inactive_apps.to_vec();
+    view! {
+        <div class="ods-slot" data-oc="create">
+            <button
+                type="button"
+                class="ods-topbar__create"
+                data-oc="create-toggle"
+                aria-haspopup="menu"
+                aria-expanded="false"
+            >
+                "+ "
+                {crate::i18n::t("nav.create")}
+            </button>
+
+            <div
+                class="ods-popover ods-popover--right ods-glass ods-create-menu"
+                data-part="create__menu"
+                data-oc="create-menu"
+                role="menu"
+                hidden
+            >
+                <p class="ods-menu__title ods-label">{crate::i18n::t("shell.create.title")}</p>
+                <div class="ods-menu">
+                    {CREATE_ITEMS
+                        .iter()
+                        .filter(|item| !inactive_apps.iter().any(|id| id == item.app))
+                        .map(create_menu_item)
+                        .collect_view()}
+                </div>
+            </div>
+        </div>
+    }
+}
+
+/// Um item do «Criar»: uma ligação que abre o formulário, ou um botão que cria
+/// de imediato com um `POST`. `data-oc-key` leva a tecla de acesso ao `app.js`.
+fn create_menu_item(action: &CreateAction) -> impl IntoView {
+    let CreateAction {
+        label, via, key, ..
+    } = *action;
+
+    match via {
+        CreateVia::Open(href) => view! {
+            <a class="ods-menu__item" data-part="create__item" role="menuitem" href=href data-oc-key=key>
+                {crate::i18n::t(label)}
+                <kbd class="ods-menu__kbd">{key}</kbd>
+            </a>
+        }
+        .into_any(),
+        CreateVia::Create(action_url) => view! {
+            <form method="post" action=action_url role="none">
+                <button
+                    type="submit"
+                    class="ods-menu__item"
+                    data-part="create__item"
+                    role="menuitem"
+                    data-oc-key=key
+                >
+                    {crate::i18n::t(label)}
+                    <kbd class="ods-menu__kbd">{key}</kbd>
+                </button>
+            </form>
+        }
+        .into_any(),
+    }
+}
+
+/// A doca: o botão flutuante das aplicações e a barra vertical que ele abre
+/// (D4, D6).
+///
+/// A barra é navegação essencial mais as aplicações que o membro fixou, pela
+/// ordem dele e filtradas pela visibilidade: nunca oferece um ecrã sem
+/// autorização. `Desafixar ≠ desinstalar` (§45-A).
+fn doca(viewer: &Viewer, active: Screen) -> impl IntoView {
+    let fixadas = apps::pinned_visible(&viewer.pinned, viewer, viewer.core_status);
+
+    view! {
+        <button
+            type="button"
+            class="ods-float-apps"
+            data-oc="shelf-toggle"
+            data-ods-float
+            aria-expanded="false"
+            aria-controls="oc-shelf"
+            aria-label=crate::i18n::t("shell.shelf.show")
+        >
+            {ods::icone("apps-brand-dark", "")}
+        </button>
+
+        <nav
+            class="ods-shelf ods-glass--dark"
+            id="oc-shelf"
+            data-oc="side-pinned"
+            aria-label=crate::i18n::t("shell.shelf.apps")
+            hidden
+        >
+            <a
+                class="ods-shelf__btn"
+                href="/"
+                aria-current=(active == Screen::Home).then_some("page")
+                data-tip=crate::i18n::t("shell.shelf.desktop")
+                aria-label=crate::i18n::t("shell.shelf.desktop")
+            >
+                {ods::icone("home", "")}
+            </a>
+            // G-05: não há janelas enquanto o gestor de janelas não existir.
+            <button
+                type="button"
+                class="ods-shelf__btn"
+                aria-disabled="true"
+                data-tip=crate::i18n::t("ods.state.pending_contract")
+                aria-label=crate::i18n::t("shell.shelf.windows")
+            >
+                {ods::icone("grid", "")}
+            </button>
+            <button
+                type="button"
+                class="ods-shelf__btn"
+                data-oc="launcher-open"
+                aria-haspopup="dialog"
+                data-tip=crate::i18n::t("shell.shelf.apps")
+                aria-label=crate::i18n::t("shell.shelf.apps")
+            >
+                {ods::icone("apps-brand-dark", "")}
+            </button>
+            <span class="ods-shelf__sep" aria-hidden="true"></span>
+            {fixadas
+                .into_iter()
+                .map(|app| item_fixado(app.screen, app.screen == active))
+                .collect_view()}
+            <span class="ods-shelf__sep" data-oc="shelf-fim" aria-hidden="true"></span>
+            <a
+                class="ods-shelf__btn"
+                href="/files?trash=1"
+                data-tip=crate::i18n::t("shell.shelf.trash")
+                aria-label=crate::i18n::t("shell.shelf.trash")
+            >
+                {ods::icone("trash", "")}
+            </a>
+        </nav>
+    }
+}
+
+/// Uma aplicação fixada na barra, com o `data-app-id` que o cliente usa para a
+/// acrescentar ou retirar ao vivo quando o membro fixa ou desafixa no lançador.
+fn item_fixado(screen: Screen, on: bool) -> impl IntoView {
+    view! {
+        <a
+            class="ods-shelf__btn"
+            href=screen.path()
+            data-oc="fixada"
+            data-app-id=screen.id()
+            aria-current=on.then_some("page")
+            data-tip=screen.label()
+            aria-label=screen.label()
+        >
+            {ods::icone(ods::icone_da_aplicacao(screen), "")}
+        </a>
+    }
+}
+
+/// A command palette (⌘K).
+///
+/// O D2 não a desenha: entra com as primitivas do D1 (diálogo, pesquisa,
+/// menu). O filtro é local, mas o que entra na página não é: só os ecrãs e as
+/// acções que o membro alcança (briefing §65).
+fn palette(viewer: &Viewer) -> impl IntoView {
+    let screens: Vec<Screen> = PALETTE_NAV
+        .iter()
+        .copied()
+        .filter(|screen| screen_permission(*screen).is_none_or(|p| viewer.can(p)))
+        .filter(|screen| !viewer.inactive_apps.iter().any(|id| id == screen.id()))
+        .collect();
+
+    // Uma acção de uma aplicação que a Instância desactivou não se oferece.
+    let activa = |href: &str| {
+        crate::ui::apps::APPLICATIONS
+            .iter()
+            .filter(|app| app.screen.path() != "/" && href.starts_with(app.screen.path()))
+            .max_by_key(|app| app.screen.path().len())
+            .is_none_or(|app| !viewer.inactive_apps.iter().any(|id| id == app.id()))
+    };
+    let actions: Vec<(&str, &str, &str)> = PALETTE_ACTIONS
+        .iter()
+        .filter(|(_, _, _, permission)| viewer.can(*permission))
+        .filter(|(_, href, _, _)| activa(href))
+        .map(|(label, href, shortcut, _)| (*label, *href, *shortcut))
+        .collect();
+
+    view! {
+        <div
+            class="ods-modal"
+            data-part="palette"
+            data-oc="palette"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Pesquisar ou executar um comando"
+            hidden
+        >
+            <div class="ods-scrim"></div>
+            <div class="ods-modal__panel ods-window-surface">
+                <div class="ods-modal__head">
+                    <label class="ods-search">
+                        {ods::icone("search", "")}
+                        <span class="ods-sr-only">"Pesquisar ou executar um comando"</span>
+                        <input
+                            id="palette-input"
+                            class="ods-search__input"
+                            type="text"
+                            data-oc="palette-input"
+                            autocomplete="off"
+                            placeholder="Pesquisar ou executar um comando…"
+                        />
+                        <kbd class="ods-kbd">"ESC"</kbd>
+                    </label>
+                </div>
+                <div class="ods-modal__body ods-menu">
+                    <div data-oc="palette-group">
+                        <p class="ods-menu__title ods-label" data-oc="palette-group-label">"NAVEGAR"</p>
+                        {screens
+                            .into_iter()
+                            .map(|screen| {
+                                view! {
+                                    <a
+                                        class="ods-menu__item"
+                                        data-oc="palette-item"
+                                        href=screen.path()
+                                        data-label=screen.label()
+                                    >
+                                        {ods::icone(ods::icone_da_aplicacao(screen), "")}
+                                        {screen.label()}
+                                    </a>
+                                }
+                            })
+                            .collect_view()}
+                    </div>
+                    <div data-oc="palette-group">
+                        <p class="ods-menu__title ods-label" data-oc="palette-group-label">"ACÇÕES"</p>
+                        {actions
+                            .into_iter()
+                            .map(|(label, href, shortcut)| {
+                                view! {
+                                    <a
+                                        class="ods-menu__item"
+                                        data-oc="palette-item"
+                                        href=href
+                                        data-label=label
+                                        // O atalho vai no atributo, e não só no
+                                        // `<kbd>`: é daqui que o teclado o lê.
+                                        data-shortcut=shortcut
+                                    >
+                                        {label}
+                                        {(!shortcut.is_empty())
+                                            .then(|| view! { <kbd class="ods-menu__kbd">{shortcut}</kbd> })}
+                                    </a>
+                                }
+                            })
+                            .collect_view()}
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+/// O Gestor de Aplicações (D6): o lançador, a superfície de descoberta de todas
+/// as aplicações que o membro alcança.
+///
+/// A grelha vem renderizada do servidor, filtrada pela autorização; o cliente
+/// só abre, fecha e filtra o que já lá está. Não há segunda lista no cliente.
+fn launcher(viewer: &Viewer) -> impl IntoView {
+    use crate::ui::apps::{self, Category};
+
+    let apps = apps::visible_to(viewer, viewer.core_status);
+    let total = apps.len();
+
+    let cats = std::iter::once(("apps.category.all", "all"))
+        .chain(
+            Category::all()
+                .into_iter()
+                .filter(|c| apps.iter().any(|app| app.category() == *c))
+                .map(|c| (c.label_key(), c.id())),
+        )
+        .map(|(label_key, id)| {
+            let contagem = if id == "all" {
+                total
+            } else {
+                apps.iter().filter(|app| app.category().id() == id).count()
+            };
+            view! {
+                <button
+                    type="button"
+                    class="ods-tabs__tab"
+                    role="tab"
+                    data-oc="launcher-chip"
+                    data-category=id
+                    aria-selected=if id == "all" { "true" } else { "false" }
+                >
+                    {crate::i18n::t(label_key)}
+                    <span class="ods-tabs__count">{contagem.to_string()}</span>
+                </button>
+            }
+        })
+        .collect_view();
+
+    let fixadas: std::collections::BTreeSet<&str> =
+        viewer.pinned.iter().map(String::as_str).collect();
+
+    let cards = apps
+        .into_iter()
+        .map(|app| {
+            let label = app.label();
+            let descricao = app.description();
+            let procura = format!(
+                "{} {} {}",
+                label.to_lowercase(),
+                descricao.to_lowercase(),
+                app.keywords.join(" ")
+            );
+            let fixada = fixadas.contains(app.id());
+            let rotulo_fixar = crate::i18n::t(if fixada { "apps.unpin" } else { "apps.pin" });
+            let botao_fixar = app.can_pin().then(|| {
+                view! {
+                    <button
+                        type="button"
+                        class="ods-iconbtn ods-launcher__pin"
+                        data-oc="launcher-pin"
+                        data-app-id=app.id()
+                        data-label-pin=crate::i18n::t("apps.pin")
+                        data-label-unpin=crate::i18n::t("apps.unpin")
+                        aria-pressed=if fixada { "true" } else { "false" }
+                        title=rotulo_fixar
+                        aria-label=rotulo_fixar
+                    >
+                        {ods::icone("star-fill", "ods-icon--sm")}
+                    </button>
+                }
+            });
+            view! {
+                <div class="ods-launcher__cell" data-oc="launcher-cell">
+                    <a
+                        class="ods-launcher__item"
+                        href=app.route()
+                        data-oc="launcher-item"
+                        data-app-id=app.id()
+                        data-category=app.category().id()
+                        data-search=procura
+                        aria-label=label
+                    >
+                        <span class="ods-app-tile" data-oc="launcher-icone">
+                            {ods::icone(ods::icone_da_aplicacao(app.screen), "ods-icon--lg")}
+                        </span>
+                        <span>
+                            <span class="ods-launcher__name" data-oc="launcher-nome">{label}</span>
+                            <span class="ods-launcher__desc">{descricao}</span>
+                        </span>
+                    </a>
+                    {botao_fixar}
+                </div>
+            }
+        })
+        .collect_view();
+
+    view! {
+        <div
+            class="ods-launcher"
+            data-oc="launcher"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ods-launcher-title"
+            hidden
+        >
+            <div class="ods-scrim" data-oc="launcher-fechar"></div>
+            <div class="ods-launcher__panel ods-window-surface" data-oc="launcher-painel">
+                <div class="ods-launcher__head">
+                    <div class="ods-launcher__title-row">
+                        {ods::icone("apps-brand", "ods-icon--lg")}
+                        <h2 class="ods-launcher__title" id="ods-launcher-title">
+                            {crate::i18n::t("apps.title")}
+                        </h2>
+                        <span class="ods-badge">{total.to_string()}</span>
+                        <span class="ods-kbd">{crate::i18n::t("apps.esc_hint")}</span>
+                        <button
+                            type="button"
+                            class="ods-iconbtn"
+                            data-oc="launcher-fechar"
+                            aria-label=crate::i18n::t("apps.close")
+                        >
+                            {ods::icone("close", "")}
+                        </button>
+                    </div>
+                    <label class="ods-search ods-launcher__search">
+                        {ods::icone("search", "")}
+                        <span class="ods-sr-only">{crate::i18n::t("apps.search_placeholder")}</span>
+                        <input
+                            id="launcher-input"
+                            class="ods-search__input"
+                            type="text"
+                            data-oc="launcher-input"
+                            autocomplete="off"
+                            placeholder=crate::i18n::t("apps.search_placeholder")
+                        />
+                        <kbd class="ods-kbd">"⌘J"</kbd>
+                    </label>
+                    <div
+                        class="ods-tabs ods-launcher__cats"
+                        role="tablist"
+                        aria-label=crate::i18n::t("apps.title")
+                    >
+                        {cats}
+                    </div>
+                </div>
+                <div class="ods-launcher__body" data-ods-scroll>
+                    <div class="ods-launcher__grid" data-oc="launcher-grelha">
+                        {cards}
+                    </div>
+                    <div class="ods-empty" data-oc="launcher-vazio" hidden>
+                        <p class="ods-empty__title">{crate::i18n::t("apps.empty")}</p>
+                        <p class="ods-empty__body">{crate::i18n::t("apps.empty.hint")}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     }
 }
 
@@ -568,618 +1422,6 @@ pub fn identidade_indeterminada() -> impl IntoView {
             </div>
         </div>
     }
-}
-
-/// A faixa que torna uma sessão privilegiada inconfundível.
-///
-/// # Porque isto é segurança e não decoração
-///
-/// > **Uma sessão privilegiada nunca pode parecer igual a uma sessão normal.**
-///
-/// Com duas janelas abertas — uma de trabalho, outra de administração — a
-/// pessoa tem de saber qual carrega autoridade elevada **sem abrir menus**. Uma
-/// operação administrativa executada por engano na janela errada é o acidente
-/// que isto existe para impedir.
-///
-/// # Duas verdades, dois papéis
-///
-/// O **tipo** de identidade governa o tratamento: privilegiada, faixa vermelha.
-/// A **autoridade corrente** governa o rótulo: com `PlatformAdmin`, «Super
-/// Admin». Revogada a autoridade, a faixa fica — a sessão continua a ser a de
-/// quem administrava — e o rótulo muda para dizer a verdade.
-///
-/// Colapsar as duas faria a interface afirmar «Super Admin» a quem já não pode
-/// administrar.
-///
-/// # Não só cor
-///
-/// Vermelho, ícone e texto. Quem não distingue cores tem de perceber isto na
-/// mesma, e uma faixa que dependesse só do vermelho seria invisível a essa
-/// pessoa — precisamente na janela onde enganar-se custa mais.
-///
-/// E vermelho aqui não quer dizer avaria: quer dizer autoridade elevada. É por
-/// isso que leva um cadeado e não um triângulo, e que a composição é a de um
-/// estado e não a de um erro.
-fn faixa_privilegiada(viewer: &Viewer) -> impl IntoView {
-    if !viewer.sessao_privilegiada {
-        return ().into_any();
-    }
-
-    // O rótulo diz o que a autoridade é **agora**.
-    let rotulo = if viewer.administra {
-        "SUPER ADMIN · SESSÃO PRIVILEGIADA"
-    } else {
-        "SESSÃO PRIVILEGIADA · SEM AUTORIDADE ADMINISTRATIVA"
-    };
-    let nome = viewer.name.clone();
-    let email = viewer.email.clone();
-
-    view! {
-        <div class="oc-privilegiada" role="status" data-privilegiada="1">
-            <span class="oc-privilegiada__marca">
-                {icon(Icon::Shield, 16)}
-                <b class="oc-privilegiada__rotulo">{rotulo}</b>
-            </span>
-            <span class="oc-privilegiada__quem">
-                {nome}
-                {email.map(|e| view! { <span class="oc-privilegiada__email">{e}</span> })}
-            </span>
-        </div>
-    }
-    .into_any()
-}
-
-/// Um item da barra lateral: a âncora azul de sempre, marcada activa quando é o
-/// ecrã corrente.
-fn item_de_navegacao(screen: Screen, on: bool) -> impl IntoView {
-    view! {
-        <a
-            class="oc-nav"
-            href=screen.path()
-            title=screen.label()
-            aria-label=screen.label()
-            aria-current=on.then_some("page")
-        >
-            {icon(screen.icon(), 15)}
-            <span>{screen.label()}</span>
-        </a>
-    }
-}
-
-/// Uma aplicação fixada: como um item de navegação, mas com o `data-app-id` que
-/// o cliente usa para a acrescentar ou remover ao vivo quando o membro fixa ou
-/// desafixa no lançador, sem recarregar a página.
-fn item_fixado(screen: Screen, on: bool) -> impl IntoView {
-    view! {
-        <a
-            class="oc-nav"
-            href=screen.path()
-            title=screen.label()
-            aria-label=screen.label()
-            aria-current=on.then_some("page")
-            data-oc="fixada"
-            data-app-id=screen.id()
-        >
-            {icon(screen.icon(), 15)}
-            <span>{screen.label()}</span>
-        </a>
-    }
-}
-
-fn sidebar(viewer: &Viewer, avatar: &str, active: Screen) -> impl IntoView {
-    // O dossier põe no rodapé o estado do sistema, e não o nome da organização
-    // (`design/README.md` §5.2). Reflecte a mesma sonda ao Core que a pílula da
-    // topbar: dizer «SISTEMA OK» com o Core em baixo seria pintar o estado
-    // bonito em vez do estado.
-    //
-    // Tem linha própria, fora do cartão do membro: quem está OK é o Core.
-    let core_status = viewer.core_status;
-    let avatar = avatar.to_owned();
-
-    view! {
-        <aside class="oc-side" data-part="side">
-            <div class="oc-side__head">
-                <span class="oc-side__tile">
-                    <img src="/static/ocinye_logo.png" alt="" />
-                </span>
-                <span class="oc-side__names">
-                    <span class="oc-side__title">"OCINYE OS"</span>
-                    <span class="oc-side__sub">"WORKSPACE"</span>
-                </span>
-                <button
-                    type="button"
-                    class="oc-side__collapse"
-                    data-oc="collapse"
-                    aria-expanded="true"
-                    aria-label="Colapsar navegação"
-                    title="Colapsar navegação"
-                >
-                    {icon(Icon::SidebarCollapse, 14)}
-                </button>
-            </div>
-
-            // O Gestor de Aplicações: a porta para a descoberta de todas as
-            // aplicações. Fica sempre à vista de um membro autenticado (§8), e
-            // abre o lançador centrado sem sair do ecrã.
-            <button
-                type="button"
-                class="oc-side__apps"
-                data-oc="launcher-open"
-                aria-haspopup="dialog"
-                title=crate::i18n::t("apps.open")
-            >
-                {icon(Icon::Apps, 16)}
-                <span>{crate::i18n::t("apps.title")}</span>
-            </button>
-
-            <nav class="oc-side__nav" data-part="side__nav" aria-label="Navegação principal">
-                // A barra deixou de ser o catálogo inteiro: é **navegação
-                // essencial** mais as **aplicações que o membro fixou**. Tudo o
-                // resto descobre-se no Gestor de Aplicações, acima. A barra fica
-                // elegante mesmo quando o sistema tiver dezenas de aplicações,
-                // porque a descoberta já não depende do tamanho dela.
-
-                // O essencial: a Home e O Meu Trabalho, de qualquer membro
-                // autenticado, sempre presentes e nunca fixáveis.
-                {[Screen::Home, Screen::MyWork]
-                    .into_iter()
-                    .map(|screen| item_de_navegacao(screen, screen == active))
-                    .collect_view()}
-
-                // As fixadas, pela ordem do membro, filtradas pela visibilidade:
-                // a barra nunca oferece uma ficha para um ecrã sem autorização. O
-                // cabeçalho e o contentor existem sempre (o cabeçalho esconde-se
-                // quando nada está fixado), para o cliente ter um alvo estável
-                // onde acrescentar ou remover uma ficha ao vivo, sem recarregar.
-                {
-                    let fixadas = apps::pinned_visible(&viewer.pinned, viewer, core_status);
-                    let vazio = fixadas.is_empty();
-                    view! {
-                        <div
-                            class="oc-side__group"
-                            data-oc="side-pinned-label"
-                            hidden=vazio
-                        >
-                            {crate::i18n::t("nav.section.pinned")}
-                        </div>
-                        <div data-oc="side-pinned">
-                            {fixadas
-                                .into_iter()
-                                .map(|app| item_fixado(app.screen, app.screen == active))
-                                .collect_view()}
-                        </div>
-                    }
-                }
-            </nav>
-
-            <div class="oc-side__foot">
-                // O estado da plataforma vive na topbar, e só lá.
-                //
-                // Esteve aqui, em linha própria, depois de sair de dentro do
-                // cartão do membro — onde parecia um atributo da pessoa. Mas
-                // `CORE OK` na topbar diz exactamente a mesma coisa, e dizê-la
-                // duas vezes no mesmo ecrã não a torna mais verdadeira.
-                //
-                // A hierarquia fica limpa: a topbar responde «como está o
-                // sistema», e o rodapé «quem sou eu aqui».
-                <a class="oc-side__foot-item" href="/settings" title="Definições" aria-label="Definições">
-                    {icon(Icon::Settings, 15)}
-                    <span class="oc-side__foot-label">"Definições"</span>
-                </a>
-                <a class="oc-side__foot-item" href="/help" title="Ajuda" aria-label="Ajuda">
-                    {icon(Icon::Help, 15)}
-                    <span class="oc-side__foot-label">"Ajuda"</span>
-                </a>
-
-                {account(viewer, &avatar)}
-            </div>
-        </aside>
-    }
-}
-
-/// O controlo de conta do rodapé, e a superfície que ele abre.
-///
-/// # O que este menu é, e o que não pode tornar-se
-///
-/// > **The profile popover is a personal session surface, never an
-/// > authorization surface.**
-///
-/// Dá atalhos para capacidades que o membro já tem — a sua conta, as suas
-/// credenciais, a sua sessão — e nunca concede autoridade institucional. Não
-/// há aqui papéis, permissões, concessões, administração nem troca de
-/// organização: nada disso é pessoal, e um menu pessoal que os mostrasse
-/// começaria a parecer o sítio onde se pedem.
-///
-/// # Divulgação, não menu
-///
-/// A semântica é a de um *disclosure*: um botão que revela uma região, e não
-/// `role="menu"`. Um menu ARIA obriga a navegação por setas e faz o `Tab` sair
-/// da superfície inteira; aqui as acções são ligações e um formulário normais,
-/// e quem usa `Tab` espera percorrê-las. Prometer semântica de menu e entregar
-/// ligações seria anunciar um teclado que não existe.
-///
-/// # Sem JavaScript
-///
-/// Sem `app.js` a região fica fechada, e com ela o botão de terminar sessão.
-/// Não é um beco: `Definições → Segurança` lista as sessões do membro e
-/// termina a actual com um formulário `POST` sem uma linha de script. A saída
-/// existe nos dois mundos.
-fn account(viewer: &Viewer, avatar: &str) -> impl IntoView {
-    let name = viewer.name.clone();
-    let avatar = avatar.to_owned();
-    let email = viewer.email.clone();
-    let trigger_title = format!("{name} — conta e sessão");
-
-    // A linha secundária do botão fechado é a identidade, não o sistema. É o
-    // endereço, que é a identidade inteira desde o ADR-0106.
-    let subtitulo = email.clone();
-
-    view! {
-        <div class="oc-account" data-oc="account">
-            <button
-                type="button"
-                class="oc-profile"
-                data-oc="account-toggle"
-                aria-expanded="false"
-                aria-controls="oc-account-menu"
-                title=trigger_title.clone()
-                aria-label=trigger_title
-            >
-                {crate::ui::components::avatar(&viewer.avatar, &avatar, AvatarSize::Small)}
-                <span class="oc-profile__text">
-                    <span class="oc-profile__name">{name.clone()}</span>
-                    {subtitulo
-                        .clone()
-                        .map(|linha| view! { <span class="oc-profile__sub">{linha}</span> })}
-                </span>
-                {icon(Icon::ChevronUp, 12)}
-            </button>
-
-            <div
-                class="oc-account__menu" data-part="account__menu"
-                id="oc-account-menu"
-                data-oc="account-menu"
-                hidden
-                aria-label="Conta e sessão"
-            >
-                <div class="oc-account__id">
-                    {crate::ui::components::avatar(&viewer.avatar, &avatar, AvatarSize::Medium)}
-                    <span class="oc-account__id-text">
-                        <b>{name}</b>
-                        {email.map(|e| view! {
-                            <span class="oc-account__handle">{e}</span>
-                        })}
-                    </span>
-                </div>
-
-                <div class="oc-account__group">
-                    <a class="oc-account__item" href="/settings">
-                        {icon(Icon::User, 14)}
-                        <span>
-                            <b>"A minha conta"</b>
-                            <em>"Dados da conta e identidade institucional"</em>
-                        </span>
-                    </a>
-                    <a class="oc-account__item" href="/settings/security">
-                        {icon(Icon::Shield, 14)}
-                        <span>
-                            <b>"Segurança"</b>
-                            <em>"Palavra-passe e sessões"</em>
-                        </span>
-                    </a>
-                </div>
-
-                // O resumo da sessão é uma linha, não um painel. O detalhe
-                // completo — todas as sessões, cada uma com a sua revogação —
-                // vive em Definições, e duplicá-lo aqui faria do menu um
-                // segundo Definições pior do que o primeiro.
-                <div class="oc-account__session">
-                    <span class="oc-account__session-label">"Sessão actual"</span>
-                    <span class="oc-account__session-value">{sessao_actual(viewer)}</span>
-                </div>
-
-                // Terminar sessão fecha o menu e a hierarquia: identidade,
-                // conta, segurança, sessão, saída. Separado por um divisor
-                // porque é a única acção daqui que destrói alguma coisa.
-                <form class="oc-account__out" method="post" action="/logout">
-                    <button type="submit" class="oc-account__item oc-account__item--out">
-                        {icon(Icon::Power, 14)}
-                        <span><b>"Terminar sessão"</b></span>
-                    </button>
-                </form>
-            </div>
-        </div>
-    }
-}
-
-/// O estado da sessão do Workspace, em palavras.
-///
-/// Só se afirma o que se sabe. O `Instant` guardado sabe dizer quanto falta,
-/// e não sabe dizer a que horas foi emitida nem de onde: não há aqui data de
-/// emissão, dispositivo nem lugar, porque nada disso está guardado — e o
-/// `user-agent`, que estaria, é um indício de sessão e não um dispositivo
-/// verificado.
-fn sessao_actual(viewer: &Viewer) -> String {
-    let Some(restante) = viewer.session_expires_in else {
-        return "activa".to_owned();
-    };
-
-    let minutos = restante.as_secs() / 60;
-    if minutos < 1 {
-        return "activa · a expirar".to_owned();
-    }
-    let horas = minutos / 60;
-    if horas == 0 {
-        return format!("activa · expira em {minutos} min");
-    }
-    let resto = minutos % 60;
-    if resto == 0 {
-        format!("activa · expira em {horas}h")
-    } else {
-        format!("activa · expira em {horas}h {resto}min")
-    }
-}
-
-fn topbar(
-    viewer: &Viewer,
-    current: &str,
-    trail: Vec<Crumb>,
-    core_status: &CoreStatus,
-) -> impl IntoView {
-    // O dia de hoje onde a pessoa está, e não em Greenwich.
-    let hoje = crate::ui::tempo::hoje_civil(chrono::Utc::now(), viewer.zona);
-    // O último degrau é a página, e não o ecrã a que ela pertence.
-    //
-    // Era `active.label()`, e em todos os ecrãs com trilho isso repetia o
-    // degrau anterior: `/units/{id}` lia-se «Unidades / Unidades», e
-    // `/bibliography/new` lia-se «Bibliografia / Bibliografia». Um trilho que
-    // repete o degrau não diz onde se está — diz duas vezes onde se entrou.
-    //
-    // O nome da página já viajava até aqui como título do documento, e era
-    // deitado fora à porta.
-    let current = current.to_owned();
-    let organisation = viewer.organisation.to_uppercase();
-    let has_trail = !trail.is_empty();
-
-    view! {
-        <header class="oc-top" data-part="top">
-            <nav class="oc-crumb" data-part="crumb" aria-label="Trilho">
-                // A instituição, e não a palavra «OCINYE» escrita no código. O
-                // dossier mostra-a assim porque a instituição é a Ocinye; o
-                // trilho deve dizer qual é, não presumir qual será.
-                {organisation}
-                <i aria-hidden="true">"/"</i>
-                {if has_trail {
-                    view! {
-                        {trail
-                            .into_iter()
-                            .map(|crumb| {
-                                view! {
-                                    <a href=crumb.href>{crumb.label}</a>
-                                    <i aria-hidden="true">"/"</i>
-                                }
-                            })
-                            .collect_view()}
-                        <b>{current.clone()}</b>
-                    }
-                        .into_any()
-                } else {
-                    view! { <b>{current}</b> }.into_any()
-                }}
-            </nav>
-
-            // Uma ligação, e não um botão que abre a command palette. A palette
-            // filtra **navegação** localmente; não procura em nada. Prometer
-            // «Pesquisar no Ocinye» e abrir um filtro de menus era uma promessa
-            // por cumprir sobre um endpoint que já existia (briefing §32).
-            //
-            // O `⌘K` continua a abrir a palette: são duas coisas distintas, e
-            // agora cada uma faz o que anuncia.
-            // A Universal Command Surface. Uma barra, três intenções:
-            // pesquisar, perguntar, executar. É um formulário e não uma
-            // ligação, porque perguntar e executar submetem — e continua a
-            // funcionar sem JavaScript e sem nenhum nó de IA, porque pesquisar
-            // é determinístico (briefing §29, §32).
-            <form class="oc-search" method="get" action="/ask" role="search">
-                {icon(Icon::Search, 14)}
-                <label class="oc-sr" for="oc-command">
-                    {crate::i18n::t("nav.ask")}
-                </label>
-                <input
-                    class="oc-search__input"
-                    id="oc-command"
-                    name="q"
-                    type="search"
-                    placeholder=crate::i18n::t("nav.search.placeholder")
-                    autocomplete="off"
-                />
-                <kbd class="oc-kbd" data-oc="palette-open" title="Command palette">"⌘K"</kbd>
-            </form>
-
-            <div class="oc-spacer"></div>
-
-            // O «+ Criar» está sempre disponível: toda a criação determinista
-            // funciona sem GPU, e a mais simples — uma nota pessoal — está ao
-            // alcance de qualquer membro. O contexto (unidade, ambiente, ideia)
-            // resolve-se no formulário de cada acção, com estado vazio accionável
-            // quando falta; a autoridade real é sempre do Core (§2, §3, §15).
-            {create_menu(&viewer.inactive_apps)}
-
-            <span class="oc-divider" aria-hidden="true"></span>
-
-            // O sino do dossier (§5.3).
-            //
-            // Foi retirado numa auditoria anterior por ser um botão sem handler
-            // com um ponto de «não lidas» que nada alimentava. Voltou quando
-            // passou a haver o que contar: o Core tem notificações, o worker
-            // entrega-as, e o ponto só se pinta quando há por ler.
-            {notifications(viewer.unread)}
-
-
-            {core_status_pill(core_status)}
-
-            // O relógio, no lugar onde estava o avatar.
-            //
-            // O avatar ali era repetição: a identidade do membro está no rodapé
-            // da barra lateral, com o nome e o menu de conta, e a topbar
-            // mostrava a mesma pessoa outra vez sem acrescentar nada.
-            //
-            // A hierarquia fica assim:
-            //
-            //   topbar          → operação, estado do sistema, tempo
-            //   rodapé da barra → conta, identidade, sessão
-            //
-            // # A hora é do computador de quem está a ver
-            //
-            // Não vem do Core, não precisa de API, não é persistida, e **nunca
-            // decide nada**: carimbos de auditoria, expiração de sessões e
-            // prazos continuam a vir do Core e da base de dados. A hora do
-            // browser é escolhida por quem o usa, e usá-la para autorização
-            // seria deixar decidir quem mexe no relógio.
-            //
-            // Chega vazio porque o servidor não sabe em que fuso está quem lê.
-            // Escrever ali uma hora seria escrever a hora do *servidor* com o
-            // aspecto da hora de quem está a ver.
-            // O relógio deixa de ser decoração e passa a ser a entrada para o
-            // Centro Temporal.
-            //
-            // Um `button` a sério, e não um `div` com um clique: assim tem foco,
-            // responde ao teclado, e um leitor de ecrã sabe dizer o que é e se
-            // está aberto. `hidden` até o JS lhe escrever a hora — mostrar um
-            // relógio vazio seria mostrar uma hora que não sabemos.
-            <button
-                type="button"
-                class="oc-clock"
-                data-oc="clock"
-                aria-expanded="false"
-                aria-controls="oc-temporal-centre"
-                aria-label="Centro Temporal"
-                hidden
-            >
-                <b></b>
-                <span></span>
-            </button>
-
-            {crate::ui::screens::calendar::system_calendar(hoje)}
-        </header>
-    }
-}
-
-/// O sino de notificações (`design/README.md` §5.3, item 6).
-///
-/// A forma é a do dossier: 29×29, ícone de 16px, e o ponto dourado de 6px com
-/// anel branco no canto. O CSS do ponto já existia — foi escrito para este sino
-/// e ficou sem uso quando ele saiu numa auditoria anterior.
-///
-/// O que o ponto significa é «tem coisas por ler», e isso é **dado**, não
-/// decoração. O número vem do Core, e o ponto pinta-se apenas quando há o que
-/// contar. É a mesma regra que faz os contadores da Home mostrarem `0` em vez
-/// dos `86` do protótipo: o desenho traz um exemplo com dados, e nós mostramos
-/// o que existe.
-fn notifications(unread: usize) -> impl IntoView {
-    let title = if unread == 0 {
-        "Nada por ler".to_owned()
-    } else {
-        format!("{unread} por ler")
-    };
-
-    view! {
-        <div class="oc-sino" data-oc="sino">
-            // Abre um painel, e não uma página.
-            //
-            // Ver o que chegou é um relance, e não uma navegação: levar a
-            // pessoa a outro ecrã fá-la perder o sítio onde estava para depois
-            // ter de voltar.
-            //
-            // A página continua a existir, e é para onde o rodapé leva: um
-            // painel mostra o que é recente, e um histórico é outra coisa.
-            <button
-                type="button"
-                class="oc-icon-btn"
-                data-oc="abrir-notificacoes"
-                aria-haspopup="dialog"
-                aria-expanded="false"
-                aria-controls="oc-notificacoes"
-                title=title.clone()
-                aria-label=title
-            >
-                {icon(Icon::Bell, 16)}
-                {(unread > 0).then(|| view! { <i aria-hidden="true"></i> })}
-            </button>
-
-            <div
-                class="oc-pop oc-sino__painel"
-                id="oc-notificacoes"
-                data-oc="notificacoes"
-                role="dialog"
-                aria-label="Notificações"
-                hidden
-            >
-                <header class="oc-pop__head">
-                    <span class="oc-pop__title">"Notificações"</span>
-                    <span class="oc-pop__meta" data-oc="notificacoes-contagem">
-                        {if unread == 0 {
-                            "tudo lido".to_owned()
-                        } else {
-                            format!("{unread} por ler")
-                        }}
-                    </span>
-                </header>
-
-                // O conteúdo chega quando o painel abre. Renderizá-lo em cada
-                // página seria pedir ao Core a lista inteira a cada navegação,
-                // para a esconder quase sempre.
-                <div class="oc-sino__lista" data-oc="notificacoes-lista">
-                    <p class="oc-pop__empty">"A carregar…"</p>
-                </div>
-
-                <div class="oc-pop__foot">
-                    // Ícone e legenda, como as linhas do painel da conta: um
-                    // rodapé com uma frase solta lê-se como um resto.
-                    <a class="oc-pop__item" href="/notifications">
-                        {icon(Icon::ArrowRight, 14)}
-                        <span>
-                            <b>"Ver todas"</b>
-                            <em>"O histórico completo de avisos"</em>
-                        </span>
-                    </a>
-                </div>
-            </div>
-        </div>
-    }
-}
-
-/// O indicador de estado do Core.
-///
-/// Reflecte uma sonda real ao Core. Quando não responde, diz-o — em vez de
-/// mostrar `CORE OK` porque é o estado bonito.
-fn core_status_pill(estado: &CoreStatus) -> impl IntoView {
-    let (rotulo, titulo, modificador) = match estado {
-        CoreStatus::Ok => ("CORE OK", "O Ocinye Core está pronto", ""),
-        CoreStatus::Unavailable => (
-            "CORE INDISPONÍVEL",
-            "O Ocinye Core respondeu que não está em condições de operar",
-            " oc-core-pill--off",
-        ),
-        CoreStatus::Silent => (
-            "CORE SEM RESPOSTA",
-            "Não houve resposta do Ocinye Core",
-            " oc-core-pill--off",
-        ),
-    };
-    // O estado, dito como dado, e não só como modificador visual.
-    let estado_core = match estado {
-        CoreStatus::Ok => "ok",
-        CoreStatus::Unavailable => "indisponivel",
-        CoreStatus::Silent => "silencio",
-    };
-    view! {
-        <span class=format!("oc-core-pill{modificador}") data-part="core-pill" data-estado=estado_core title=titulo>
-            <i aria-hidden="true"></i>
-            <span>{rotulo}</span>
-        </span>
-    }
-    .into_any()
 }
 
 /// Como uma acção do «Criar» se concretiza.
@@ -1266,70 +1508,6 @@ const CREATE_ITEMS: [CreateAction; 7] = [
         app: "agents",
     },
 ];
-
-fn create_menu(inactive_apps: &[String]) -> impl IntoView {
-    let inactive_apps = inactive_apps.to_vec();
-    view! {
-        <div class="oc-create" data-oc="create">
-            <button
-                type="button"
-                class="oc-btn oc-btn--gold" data-part="btn"
-                data-oc="create-toggle"
-                aria-haspopup="menu"
-                aria-expanded="false"
-            >
-                {icon(Icon::Plus, 12)}
-                {crate::i18n::t("nav.create")}
-            </button>
-
-            <div class="oc-create__menu" data-part="create__menu" data-oc="create-menu" role="menu" hidden>
-                {CREATE_ITEMS
-                    .iter()
-                    .filter(|item| !inactive_apps.iter().any(|id| id == item.app))
-                    .map(create_menu_item)
-                    .collect_view()}
-            </div>
-        </div>
-    }
-}
-
-/// Um item do menu «Criar».
-///
-/// Duas formas, e a interface distingue-as: uma acção que abre um formulário, uma
-/// ligação; uma criação imediata, um botão que submete. `data-oc-key` leva a
-/// tecla de acesso ao `app.js`, que a activa com o menu aberto.
-fn create_menu_item(action: &CreateAction) -> impl IntoView {
-    let CreateAction {
-        label, via, key, ..
-    } = *action;
-
-    match via {
-        CreateVia::Open(href) => view! {
-            <a class="oc-create__item" data-part="create__item" role="menuitem" href=href data-oc-key=key>
-                {crate::i18n::t(label)}
-                <kbd class="oc-kbd">{key}</kbd>
-            </a>
-        }
-        .into_any(),
-        // Uma criação imediata é um `POST`, e por isso um formulário — nunca um
-        // `GET` com efeito. O botão é o item do menu, focável e activável pela
-        // tecla de acesso como qualquer outro.
-        CreateVia::Create(action_url) => view! {
-            <form class="oc-create__form" method="post" action=action_url role="none">
-                <button
-                    type="submit"
-                    class="oc-create__item" data-part="create__item"
-                    role="menuitem"
-                    data-oc-key=key
-                >
-                    {crate::i18n::t(label)}
-                    <kbd class="oc-kbd">{key}</kbd>
-                </button>
-            </form>
-        }
-        .into_any(),
-    }
-}
 
 /// Todos os ecrãs, incluindo os que não estão na navegação lateral.
 ///
@@ -1453,275 +1631,6 @@ const PALETTE_ACTIONS: [(&str, &str, &str, Permission); 4] = [
     ("Ver Computação", "/compute", "⌘⇧C", Permission::ComputeView),
 ];
 
-/// A command palette.
-///
-/// O filtro de texto é local, mas **o que entra na página não é**: a palette é
-/// renderizada apenas com os ecrãs e acções que o membro pode alcançar. Mandar
-/// todos e esconder alguns no browser seria enviar ao cliente informação
-/// que ele não devia ter (briefing §65).
-fn palette(viewer: &Viewer) -> impl IntoView {
-    let screens: Vec<Screen> = PALETTE_NAV
-        .iter()
-        .copied()
-        .filter(|screen| screen_permission(*screen).is_none_or(|p| viewer.can(p)))
-        // Uma aplicação que a Instância desactivou não se oferece (ADR-0014).
-        .filter(|screen| !viewer.inactive_apps.iter().any(|id| id == screen.id()))
-        .collect();
-
-    // A aplicação de cada acção, pelo caminho: uma acção de uma aplicação
-    // desactivada não se oferece.
-    // A aplicação é a de rota mais longa que prefixa o caminho: `/ai/prompt`
-    // é do Prompt, e não do Ocinye AI (`/ai`).
-    let activa = |href: &str| {
-        crate::ui::apps::APPLICATIONS
-            .iter()
-            .filter(|app| app.screen.path() != "/" && href.starts_with(app.screen.path()))
-            .max_by_key(|app| app.screen.path().len())
-            .is_none_or(|app| !viewer.inactive_apps.iter().any(|id| id == app.id()))
-    };
-    let actions: Vec<(&str, &str, &str)> = PALETTE_ACTIONS
-        .iter()
-        .filter(|(_, _, _, permission)| viewer.can(*permission))
-        .filter(|(_, href, _, _)| activa(href))
-        .map(|(label, href, shortcut, _)| (*label, *href, *shortcut))
-        .collect();
-
-    view! {
-        <div
-            class="oc-palette" data-part="palette"
-            data-oc="palette"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Pesquisar ou executar um comando"
-            hidden
-        >
-            <div class="oc-palette__panel">
-                <div class="oc-palette__field">
-                    {icon(Icon::Search, 16)}
-                    <label class="oc-sr" for="palette-input">
-                        "Pesquisar ou executar um comando"
-                    </label>
-                    <input
-                        id="palette-input"
-                        type="text"
-                        data-oc="palette-input"
-                        autocomplete="off"
-                        placeholder="Pesquisar ou executar um comando…"
-                    />
-                    <kbd class="oc-kbd">"ESC"</kbd>
-                </div>
-
-                <div class="oc-palette__list">
-                    <div data-oc="palette-group">
-                        <div class="oc-palette__group" data-oc="palette-group-label">"NAVEGAR"</div>
-                        {screens
-                            .into_iter()
-                            .map(|screen| {
-                                view! {
-                                    <a
-                                        class="oc-palette__item"
-                                        data-oc="palette-item"
-                                        href=screen.path()
-                                        data-label=screen.label()
-                                    >
-                                        <i aria-hidden="true"></i>
-                                        {screen.label()}
-                                    </a>
-                                }
-                            })
-                            .collect_view()}
-                    </div>
-
-                    <div data-oc="palette-group">
-                        <div class="oc-palette__group" data-oc="palette-group-label">"ACÇÕES"</div>
-                        {actions
-                            .into_iter()
-                            .map(|(label, href, shortcut)| {
-                                view! {
-                                    <a
-                                        class="oc-palette__item oc-palette__item--action"
-                                        data-oc="palette-item"
-                                        href=href
-                                        data-label=label
-                                        // O atalho vai no atributo, e não só no
-                                        // `<kbd>`: é daqui que o teclado o lê.
-                                        // Ler do texto visível prenderia o
-                                        // comportamento à forma de o escrever.
-                                        data-shortcut=shortcut
-                                    >
-                                        <i aria-hidden="true"></i>
-                                        {label}
-                                        {(!shortcut.is_empty())
-                                            .then(|| view! { <kbd class="oc-kbd">{shortcut}</kbd> })}
-                                    </a>
-                                }
-                            })
-                            .collect_view()}
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-}
-
-/// O Gestor de Aplicações — o lançador centrado.
-///
-/// A superfície autoritativa de descoberta: a grelha de todas as aplicações que
-/// o membro pode abrir, lida do [`crate::ui::apps`] e filtrada pela mesma
-/// política da barra lateral. Pesquisa e filtro por categoria acontecem no
-/// cliente, sobre o que já foi renderizado — imediato, sem um pedido ao Core só
-/// para mostrar nomes e ícones (§57). Lançar é navegar para a rota canónica; a
-/// barra lateral e o menu «Criar» são superfícies distintas (§35, §60).
-fn launcher(viewer: &Viewer) -> impl IntoView {
-    use crate::ui::apps::{self, Category};
-
-    let apps = apps::visible_to(viewer, viewer.core_status);
-
-    // Só se mostra o filtro de uma categoria que tenha ao menos uma aplicação
-    // visível: um filtro que abre no vazio não é um filtro. Com o Core em baixo,
-    // sobram as categorias das aplicações que não exigem direito nenhum.
-    let chips = std::iter::once(("apps.category.all", "all"))
-        .chain(
-            Category::all()
-                .into_iter()
-                .filter(|c| apps.iter().any(|app| app.category() == *c))
-                .map(|c| (c.label_key(), c.id())),
-        )
-        .map(|(label_key, id)| {
-            let activo = id == "all";
-            view! {
-                <button
-                    type="button"
-                    class="oc-apps__chip"
-                    data-oc="launcher-chip"
-                    data-cat=id
-                    aria-pressed=if activo { "true" } else { "false" }
-                >
-                    {crate::i18n::t(label_key)}
-                </button>
-            }
-        })
-        .collect_view();
-
-    // O conjunto fixado, para marcar cada ficha fixável com o seu estado inicial.
-    let fixadas: std::collections::BTreeSet<&str> =
-        viewer.pinned.iter().map(String::as_str).collect();
-
-    let cards = apps
-        .into_iter()
-        .map(|app| {
-            let label = app.label();
-            let descricao = app.description();
-            // O que a pesquisa do cliente compara: o rótulo e a descrição já
-            // traduzidos, mais as palavras-chave estáveis entre línguas, tudo em
-            // minúsculas. Assim «file», «fichier» e «ficheiro» encontram os
-            // Ficheiros seja qual for o idioma do membro.
-            let procura = format!(
-                "{} {} {}",
-                label.to_lowercase(),
-                descricao.to_lowercase(),
-                app.keywords.join(" ")
-            );
-            let fixada = fixadas.contains(app.id());
-            // Só as fixáveis trazem o botão de fixar; as estruturais (Home, O Meu
-            // Trabalho) já são navegação e não se fixam.
-            let botao_fixar = app.can_pin().then(|| {
-                view! {
-                    <button
-                        type="button"
-                        class="oc-apps__pin"
-                        data-oc="launcher-pin"
-                        data-app-id=app.id()
-                        data-label-pin=crate::i18n::t("apps.pin")
-                        data-label-unpin=crate::i18n::t("apps.unpin")
-                        aria-pressed=if fixada { "true" } else { "false" }
-                        title=crate::i18n::t(if fixada { "apps.unpin" } else { "apps.pin" })
-                        aria-label=crate::i18n::t(if fixada { "apps.unpin" } else { "apps.pin" })
-                    >
-                        {icon(Icon::Star, 14)}
-                    </button>
-                }
-            });
-            view! {
-                <div class="oc-apps__cell" data-oc="launcher-cell">
-                    <a
-                        class="oc-apps__card"
-                        href=app.route()
-                        data-oc="launcher-item"
-                        data-cat=app.category().id()
-                        data-search=procura
-                        aria-label=label
-                    >
-                        <span class="oc-apps__icone" data-oc="launcher-icone">{icon(app.icon(), 22)}</span>
-                        <span class="oc-apps__nome" data-oc="launcher-nome">{label}</span>
-                        <span class="oc-apps__desc">{descricao}</span>
-                    </a>
-                    {botao_fixar}
-                </div>
-            }
-        })
-        .collect_view();
-
-    view! {
-        <div
-            class="oc-apps"
-            data-oc="launcher"
-            role="dialog"
-            aria-modal="true"
-            aria-label=crate::i18n::t("apps.title")
-            hidden
-        >
-            <div class="oc-apps__fundo" data-oc="launcher-fechar"></div>
-            <div class="oc-apps__painel" data-oc="launcher-painel">
-                <header class="oc-apps__cab">
-                    <span class="oc-apps__marca">
-                        {icon(Icon::Apps, 20)}
-                        <b>{crate::i18n::t("apps.title")}</b>
-                    </span>
-                    <span class="oc-apps__cab-fim">
-                        <kbd class="oc-kbd">{crate::i18n::t("apps.esc_hint")}</kbd>
-                        <button
-                            type="button"
-                            class="oc-apps__fechar"
-                            data-oc="launcher-fechar"
-                            aria-label=crate::i18n::t("apps.close")
-                        >
-                            {icon(Icon::Close, 12)}
-                        </button>
-                    </span>
-                </header>
-
-                <div class="oc-apps__campo">
-                    {icon(Icon::Search, 16)}
-                    <label class="oc-sr" for="launcher-input">
-                        {crate::i18n::t("apps.search_placeholder")}
-                    </label>
-                    <input
-                        id="launcher-input"
-                        type="text"
-                        data-oc="launcher-input"
-                        autocomplete="off"
-                        placeholder=crate::i18n::t("apps.search_placeholder")
-                    />
-                </div>
-
-                <div class="oc-apps__chips" role="group" aria-label=crate::i18n::t("apps.title")>
-                    {chips}
-                </div>
-
-                <div class="oc-apps__grelha" data-oc="launcher-grelha">
-                    {cards}
-                </div>
-
-                <div class="oc-apps__vazio" data-oc="launcher-vazio" hidden>
-                    <p class="oc-t-strong">{crate::i18n::t("apps.empty")}</p>
-                    <p class="oc-t-caption--muted">{crate::i18n::t("apps.empty.hint")}</p>
-                </div>
-            </div>
-        </div>
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1753,6 +1662,7 @@ mod tests {
         Viewer {
             pinned: crate::ui::apps::default_pins(),
             inactive_apps: Vec::new(),
+            perfil: None,
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             modules: todos_os_modulos(),
             ..viewer_with(permissions)
@@ -1765,6 +1675,7 @@ mod tests {
         Viewer {
             pinned: crate::ui::apps::default_pins(),
             inactive_apps: Vec::new(),
+            perfil: None,
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             zona: "UTC".to_owned().try_into().expect("fuso conhecido"),
             avatar: ocinye_contracts::AvatarChoice::Initials,
@@ -1791,10 +1702,12 @@ mod tests {
         let inicio = html
             .find(r#"data-oc="account-menu""#)
             .expect("a superfície de conta desapareceu");
-        // A superfície é o último elemento do rodapé, e o rodapé fecha a barra:
-        // até `</aside>` é tudo menu, e nada de menu fica de fora.
-        let fim = html[inicio..]
-            .find("</aside>")
+        // O menu vive no primeiro lugar da barra de topo (D2): acaba onde começa
+        // o lugar seguinte — o perfil, ou o contexto quando não há perfil.
+        let fim = [r#"data-oc="profile""#, r#"data-oc="ctx""#]
+            .iter()
+            .filter_map(|marca| html[inicio..].find(marca))
+            .min()
             .map_or(html.len(), |offset| inicio + offset);
         html[inicio..fim].to_owned()
     }
@@ -1870,7 +1783,7 @@ mod tests {
         );
         assert!(l.contains(r#"data-oc="launcher-grelha""#), "falta a grelha");
         // «Todos» começa activo; as cinco categorias existem.
-        assert!(l.contains(r#"data-cat="all""#), "falta o filtro Todos");
+        assert!(l.contains(r#"data-category="all""#), "falta o filtro Todos");
         for cat in [
             "productivity",
             "research",
@@ -1879,7 +1792,7 @@ mod tests {
             "administration",
         ] {
             assert!(
-                l.contains(&format!(r#"data-cat="{cat}""#)),
+                l.contains(&format!(r#"data-category="{cat}""#)),
                 "falta a categoria {cat}"
             );
         }
@@ -1984,8 +1897,13 @@ mod tests {
             assert!(html.contains(accao), "a acção {accao} sumiu do «Criar»");
         }
 
+        let criar = html
+            .split(r#"data-oc="create-menu""#)
+            .nth(1)
+            .and_then(|resto| resto.split(r#"data-oc="status-toggle""#).next())
+            .expect("o menu «Criar» desapareceu");
         assert!(
-            !html.contains("Ainda não disponível") && !html.contains("oc-unavailable"),
+            !criar.contains("Ainda não disponível") && !criar.contains("aria-disabled"),
             "o «Criar» declara uma acção implementada como indisponível"
         );
 
@@ -2071,10 +1989,10 @@ mod tests {
         assert!(!html.contains(r#"href="/units""#));
     }
 
-    /// A barra lateral, isolada — de `oc-side__nav` até ao seu `</nav>`.
+    /// A barra de aplicações, isolada — de `side-pinned` até ao seu `</nav>`.
     fn barra_nav(html: &str) -> String {
         let inicio = html
-            .find(r#"data-part="side__nav""#)
+            .find(r#"data-oc="side-pinned""#)
             .expect("a barra sumiu");
         let fim = html[inicio..]
             .find("</nav>")
@@ -2092,16 +2010,16 @@ mod tests {
         let barra = barra_nav(&render(&member));
 
         // O essencial e as fixadas visíveis estão lá.
+        // O Desktop e as fixadas por omissão (D6). «O Meu Trabalho» deixou de
+        // estar fixo na barra: abre-se pelo lançador, como as outras.
         for rota in [
             r#"href="/""#,
-            r#"href="/my-work""#,
             r#"href="/notes""#,
             r#"href="/files""#,
             r#"href="/projects""#,
         ] {
             assert!(barra.contains(rota), "a barra devia mostrar {rota}");
         }
-        assert!(barra.contains("Fixadas"), "falta o cabeçalho das fixadas");
         // O que **não** está fixado não está na barra — mesmo que exista. A
         // descoberta é no lançador, e a barra não volta a ser o catálogo.
         for rota in [
@@ -2125,8 +2043,8 @@ mod tests {
 
         // O essencial não depende do Core.
         assert!(
-            barra.contains(r#"href="/my-work""#),
-            "O Meu Trabalho depende do Core"
+            barra.contains(r#"href="/""#),
+            "o Desktop não depende do Core e tem de estar sempre"
         );
         // Ficheiros e Projectos estão no conjunto por omissão, mas são governados
         // e não aparecem sem confirmação. As Notas (sem direito) podem aparecer.
@@ -2298,14 +2216,14 @@ mod tests {
 
         assert!(
             menu.contains(r#"href="/settings""#),
-            "«A minha conta» não leva a Definições"
+            "«Conta» não leva a Definições"
         );
         assert!(
             menu.contains(r#"href="/settings/security""#),
-            "«Segurança» não leva a Definições / Segurança"
+            "«Definições» não leva às definições da pessoa"
         );
-        assert!(menu.contains("A minha conta"));
-        assert!(menu.contains("Segurança"));
+        assert!(menu.contains("Conta"));
+        assert!(menu.contains("Definições"));
     }
 
     /// O menu pessoal não expõe autoridade institucional.
@@ -2391,10 +2309,17 @@ mod tests {
                 "o menu de conta tem uma ligação para lado nenhum"
             );
         }
-        assert!(
-            !menu.contains(r#"type="button""#),
-            "o menu de conta tem um botão que não submete nada"
-        );
+        // Um botão que não submete só é aceitável declarado indisponível, com
+        // a razão (D2: «Bloquear ecrã» espera pelo G-01).
+        for pedaco in menu.split("<button").skip(1) {
+            let inicio = pedaco.split('>').next().unwrap_or_default();
+            if inicio.contains(r#"type="button""#) {
+                assert!(
+                    inicio.contains(r#"aria-disabled="true""#) && inicio.contains("data-tip="),
+                    "o menu de conta tem um botão que não faz nada e não diz porquê: {inicio}"
+                );
+            }
+        }
     }
 
     /// A sessão actual diz o que se sabe, e só isso.
@@ -2405,17 +2330,10 @@ mod tests {
     /// confiança que ele não tem.
     #[test]
     fn a_sessao_actual_nao_inventa_dispositivo_nem_lugar() {
+        // O resumo «Sessão actual» saiu com o desenho do D2; o que fica é o que
+        // ele guardava: o menu não afirma o que não está guardado.
         let html = render(&viewer_with(&[]));
         let menu = super::tests::menu(&html);
-
-        assert!(
-            menu.contains("Sessão actual"),
-            "o resumo da sessão desapareceu"
-        );
-        assert!(
-            menu.contains("expira em 8h"),
-            "o resumo não usa a expiração real da sessão: {menu}"
-        );
 
         for invencao in [
             "Chrome",
@@ -2482,35 +2400,22 @@ mod tests {
     /// seu nome num atributo, que sobrevive ao `display: none`.
     #[test]
     fn com_a_barra_estreita_nenhum_controlo_conserva_o_nome() {
+        // Os botões da barra de aplicações só têm ícone (D6): o nome acessível
+        // é o único nome que têm.
         let html = render(&viewer_with(&ocinye_contracts::Permission::all()));
-        let barra = html
-            .split(r#"data-part="side""#)
-            .nth(1)
-            .and_then(|rest| rest.split("</aside>").next())
-            .expect("barra lateral desapareceu");
+        let barra = barra_nav(&html);
 
-        // Só os controlos cujo texto a container query esconde. O menu de
-        // conta não entra: o seu conteúdo não colapsa — abre por cima da barra,
-        // com a largura toda — e exigir-lhe `aria-label` duplicaria em atributo
-        // o texto que já se lê.
         let mut sem_nome: Vec<String> = Vec::new();
         for tag in barra.split('<').skip(1) {
             let inicio = tag.split('>').next().unwrap_or_default();
-            let colapsa = inicio.contains(r#"class="oc-nav""#)
-                || inicio.contains(r#"data-part="nav--unavailable""#)
-                || inicio.contains(r#"class="oc-side__foot-item""#)
-                || inicio.contains(r#"class="oc-profile""#);
-            if !colapsa {
-                continue;
-            }
-            if !inicio.contains("aria-label=") {
+            if inicio.contains("ods-shelf__btn") && !inicio.contains("aria-label=") {
                 sem_nome.push(format!("<{inicio}>"));
             }
         }
 
         assert!(
             sem_nome.is_empty(),
-            "controlos da barra lateral sem nome acessível quando o texto colapsa:\n  {}",
+            "controlos da barra de aplicações sem nome acessível:\n  {}",
             sem_nome.join("\n  ")
         );
     }
@@ -2577,10 +2482,9 @@ mod tests {
         v
     }
 
-    /// Os ecrãs que a barra desenha: o essencial mais tudo o que é fixável.
+    /// Os ecrãs que a barra desenha: o Desktop mais tudo o que é fixável (D6).
     fn ecras_da_barra() -> Vec<Screen> {
         std::iter::once(Screen::Home)
-            .chain(std::iter::once(Screen::MyWork))
             .chain(
                 apps::APPLICATIONS
                     .iter()
@@ -2729,12 +2633,15 @@ mod tests {
                 pai.path(),
             );
             assert!(
-                nav.contains("<b>Detalhe</b>"),
+                nav.contains(r#"aria-current="page">Detalhe<"#),
                 "a página não fecha o trilho com o seu próprio nome: {nav}"
             );
             // E fecha-o em texto. Um degrau final que fosse ligação apontaria
             // para a página onde já se está.
-            let antes_do_fim = nav.split("<b>").next().unwrap_or_default();
+            let antes_do_fim = nav
+                .split(r#"aria-current="page""#)
+                .next()
+                .unwrap_or_default();
             assert!(
                 !antes_do_fim.contains(">Detalhe</a>"),
                 "a página actual aparece como ligação no seu próprio trilho: {nav}"
@@ -2842,35 +2749,27 @@ mod tests {
     fn a_identidade_aparece_uma_vez_e_e_no_rodape() {
         let html = render(&viewer_with(&[]));
 
-        let topbar = html
-            .split(r#"class="oc-topbar""#)
-            .nth(1)
-            .and_then(|resto| resto.split("</header>").next())
-            .or_else(|| html.split(r#"data-part="main""#).nth(1))
-            .unwrap_or(&html);
-        let topbar = topbar
-            .split(r#"data-part="content""#)
-            .next()
-            .unwrap_or(topbar);
-
+        // A identidade vive no menu da conta, que o logótipo abre (D2), e só
+        // lá: a barra de topo mostra o logótipo, não a pessoa outra vez.
+        let menu = super::tests::menu(&html);
         assert!(
-            !topbar.contains("oc-avatar"),
-            "a identidade voltou à topbar, onde já estava no rodapé"
+            menu.contains("ods-avatar"),
+            "a identidade saiu do menu da conta"
         );
-        assert!(
-            topbar.contains(r#"data-oc="clock""#),
-            "o relógio não está na topbar"
-        );
-
-        // E o estado do sistema é dito uma vez: na topbar.
         assert_eq!(
-            html.matches("CORE OK").count(),
+            html.matches("ods-avatar").count(),
+            menu.matches("ods-avatar").count(),
+            "a identidade aparece fora do menu da conta"
+        );
+        assert!(
+            html.contains(r#"data-oc="clock""#),
+            "o relógio não está na barra"
+        );
+
+        assert_eq!(
+            html.matches("OPERACIONAL").count(),
             1,
             "o estado do sistema é dito mais do que uma vez"
-        );
-        assert!(
-            !html.contains("SISTEMA OK"),
-            "o estado do sistema voltou ao rodapé, onde a topbar já o diz"
         );
     }
 
@@ -2884,12 +2783,12 @@ mod tests {
     fn os_tres_estados_do_core_dizem_coisas_diferentes() {
         let rotulos: Vec<String> = [CoreStatus::Ok, CoreStatus::Unavailable, CoreStatus::Silent]
             .iter()
-            .map(|e| core_status_pill(e).to_html())
+            .map(|e| estado_do_sistema(*e).to_html())
             .collect();
 
-        assert!(rotulos[0].contains("CORE OK"));
-        assert!(rotulos[1].contains("CORE INDISPONÍVEL"));
-        assert!(rotulos[2].contains("CORE SEM RESPOSTA"));
+        assert!(rotulos[0].contains("OPERACIONAL"));
+        assert!(rotulos[1].contains("INDISPONÍVEL"));
+        assert!(rotulos[2].contains("SEM RESPOSTA"));
 
         // E são mesmo quatro: nenhum par diz o mesmo.
         for (i, a) in rotulos.iter().enumerate() {
@@ -2914,6 +2813,7 @@ mod tests {
         Viewer {
             pinned: crate::ui::apps::default_pins(),
             inactive_apps: Vec::new(),
+            perfil: None,
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: true,
             administra: true,
@@ -2941,7 +2841,7 @@ mod tests {
             "a faixa não diz por que credencial"
         );
         assert!(
-            html.contains("oc-privilegiada"),
+            html.contains(r#"data-privilegiada="1""#),
             "o tratamento visual não foi aplicado"
         );
     }
@@ -2954,7 +2854,7 @@ mod tests {
     fn uma_sessao_normal_nao_tem_faixa() {
         let html = render(&viewer_with(&[]));
         assert!(
-            !html.contains("oc-privilegiada"),
+            !html.contains(r#"data-privilegiada="1""#),
             "uma sessão normal recebeu a faixa"
         );
         assert!(
@@ -2980,7 +2880,7 @@ mod tests {
         };
         let html = render(&sem);
         assert!(
-            html.contains("oc-privilegiada"),
+            html.contains(r#"data-privilegiada="1""#),
             "a faixa desapareceu por lhe terem tirado a autoridade: a sessão continua \
              a ser privilegiada"
         );
@@ -3008,7 +2908,7 @@ mod tests {
         };
         let html = render(&mentira);
         assert!(
-            html.contains("oc-privilegiada"),
+            html.contains(r#"data-privilegiada="1""#),
             "o controlo não montou a mentira"
         );
         // E mesmo assim não pode nada: as permissões são vazias.
@@ -3039,7 +2939,7 @@ mod tests {
             "a falha-fechada desenhou a shell autenticada normal"
         );
         assert!(
-            !html.contains("oc-privilegiada"),
+            !html.contains(r#"data-privilegiada="1""#),
             "a falha-fechada deixou passar a faixa privilegiada"
         );
         assert!(
@@ -3073,7 +2973,7 @@ mod prontidao_da_instalacao_e_estado_do_core {
                 CoreStatus::Silent
             }
         };
-        core_status_pill(&core).to_html()
+        estado_do_sistema(core).to_html()
     }
 
     /// Uma instalação sem correio, sem inferência e sem computação continua a
@@ -3109,12 +3009,12 @@ mod prontidao_da_instalacao_e_estado_do_core {
         // A segunda: o que a pessoa lê.
         let html = distintivo(prontidao);
         assert!(
-            html.contains("CORE OK"),
+            html.contains(r#"data-estado="ok""#) && html.contains("OPERACIONAL"),
             "com a instalação `degraded` por opcionais, a topbar diz: {html}"
         );
         assert!(
-            !html.contains("CORE LIMITADO"),
-            "o Core aparece limitado por falta de capacidades opcionais: {html}"
+            !html.contains("ods-dot--error"),
+            "o Core aparece em falha por falta de capacidades opcionais: {html}"
         );
     }
 
@@ -3127,15 +3027,13 @@ mod prontidao_da_instalacao_e_estado_do_core {
         for prontidao in [ReadinessOverall::Ready, ReadinessOverall::Degraded] {
             let html = distintivo(prontidao);
             assert!(
-                html.contains(r#"class="oc-core-pill""#),
-                "{prontidao:?} não usa a classe base sozinha: {html}"
+                html.contains("ods-dot--success"),
+                "{prontidao:?} não pinta o ponto do Core como operacional: {html}"
             );
-            for modificador in ["--limited", "--off", "--warn"] {
-                assert!(
-                    !html.contains(modificador),
-                    "{prontidao:?} traz o modificador `{modificador}`: {html}"
-                );
-            }
+            assert!(
+                !html.contains("ods-badge--error"),
+                "{prontidao:?} traz o distintivo de falha: {html}"
+            );
         }
     }
 
@@ -3143,13 +3041,15 @@ mod prontidao_da_instalacao_e_estado_do_core {
     #[test]
     fn blocked_e_sem_resposta_nunca_sao_core_ok() {
         let bloqueado = distintivo(ReadinessOverall::Blocked);
-        assert!(bloqueado.contains("CORE INDISPONÍVEL"));
-        assert!(!bloqueado.contains("CORE OK"));
-        assert!(bloqueado.contains("oc-core-pill--off"));
+        assert!(bloqueado.contains("INDISPONÍVEL"));
+        assert!(!bloqueado.contains("OPERACIONAL"));
+        assert!(bloqueado.contains(r#"data-estado="indisponivel""#));
+        assert!(bloqueado.contains("ods-dot--error"));
 
-        let calado = core_status_pill(&CoreStatus::Silent).to_html();
-        assert!(calado.contains("CORE SEM RESPOSTA"));
-        assert!(!calado.contains("CORE OK"));
-        assert!(calado.contains("oc-core-pill--off"));
+        let calado = estado_do_sistema(CoreStatus::Silent).to_html();
+        assert!(calado.contains("SEM RESPOSTA"));
+        assert!(!calado.contains("OPERACIONAL"));
+        assert!(calado.contains(r#"data-estado="silencio""#));
+        assert!(calado.contains("ods-dot--error"));
     }
 }

@@ -216,12 +216,18 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
 
     // ── As aplicações do perfil ─────────────────────────────────────────
     page.goto(format!("{base}/")).await.expect("home");
-    page.find_element(r#"[data-oc="launcher-open"]"#)
-        .await
-        .expect("lançador")
-        .click()
-        .await
-        .expect("abrir");
+    // O botão flutuante mostra a barra, e o «Aplicações» dela abre o lançador.
+    for seletor in [
+        r#"[data-oc="shelf-toggle"]"#,
+        r#"[data-oc="launcher-open"]"#,
+    ] {
+        page.find_element(seletor)
+            .await
+            .expect("lançador")
+            .click()
+            .await
+            .expect("abrir");
+    }
     let tem = |rota: &str| {
         format!(r#"!!document.querySelector('[data-oc="launcher-item"][href="{rota}"]')"#)
     };

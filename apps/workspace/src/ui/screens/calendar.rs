@@ -1194,46 +1194,39 @@ pub fn system_calendar(hoje: NaiveDate) -> impl IntoView {
 
     view! {
         <div
-            class="oc-pop oc-datepop"
+            class="ods-popover ods-popover--right ods-glass ods-cal"
             id="oc-temporal-centre"
             data-oc="temporal-centre"
             role="dialog"
             aria-label=crate::i18n::t("calendar.system")
             hidden
         >
-            <header class="oc-datepop__cabeca">
-                <span class="oc-datepop__dia">{tempo::dia_da_semana(hoje)}</span>
-                <span class="oc-datepop__data">{tempo::data_por_extenso(hoje)}</span>
-            </header>
+            <p class="ods-label">{tempo::dia_da_semana(hoje)} " · " {tempo::data_por_extenso(hoje)}</p>
+            <p class="ods-menu__title">{tempo::mes_e_ano(hoje)}</p>
 
-            <div class="oc-datepop__mes">{tempo::mes_e_ano(hoje)}</div>
-
-            <div class="oc-datepop__semana" aria-hidden="true">
+            <div class="ods-cal__grid">
                 {tempo::cabecalhos_da_semana().into_iter()
-                    .map(|d| view! { <span>{d}</span> })
+                    .map(|d| view! { <span class="ods-cal__dow" aria-hidden="true">{d}</span> })
                     .collect_view()}
-            </div>
-
-            <div class="oc-datepop__dias">
                 {(0..42).map(|offset| {
                     let dia = inicio + Duration::days(offset);
-                    let mut classes = String::from("oc-datepop__dia-cel");
-                    if dia.month() != hoje.month() {
-                        classes.push_str(" oc-datepop__dia-cel--fora");
+                    view! {
+                        <span
+                            class="ods-cal__day"
+                            data-part="datepop__dia-cel"
+                            data-out=(dia.month() != hoje.month()).then_some("")
+                            data-semana=(week_start(dia) == semana_de_hoje).then_some("")
+                            aria-current=(dia == hoje).then_some("date")
+                        >
+                            {dia.day().to_string()}
+                        </span>
                     }
-                    if week_start(dia) == semana_de_hoje {
-                        classes.push_str(" oc-datepop__dia-cel--semana");
-                    }
-                    if dia == hoje {
-                        classes.push_str(" oc-datepop__dia-cel--hoje");
-                    }
-                    view! { <span class=classes data-part="datepop__dia-cel" data-fora=(dia.month() != hoje.month()).then_some("") data-semana=(week_start(dia) == semana_de_hoje).then_some("") data-hoje=(dia == hoje).then_some("")>{dia.day().to_string()}</span> }
                 }).collect_view()}
             </div>
 
-            <footer class="oc-datepop__accoes">
-                <a class="oc-datepop__abrir" href=CALENDAR_ROUTE>{crate::i18n::t("calendar.open")}</a>
-            </footer>
+            <a class="ods-btn ods-btn--ghost ods-btn--block" data-part="cal-abrir" href=CALENDAR_ROUTE>
+                {crate::i18n::t("shell.calendar.open")}
+            </a>
         </div>
     }
 }
@@ -2298,9 +2291,9 @@ mod vistas_temporais {
 
         assert!(html.contains("Agosto 2026"), "não diz em que mês estamos");
         assert!(html.contains("Quarta-feira"), "não diz que dia da semana é");
-        assert!(html.contains("oc-datepop__dia-cel--hoje"), "não marca hoje");
+        assert!(html.contains(r#"aria-current="date""#), "não marca hoje");
         assert!(
-            html.contains(crate::i18n::t("calendar.open")),
+            html.contains(crate::i18n::t("shell.calendar.open")),
             "não abre o Calendário"
         );
 
@@ -2316,7 +2309,7 @@ mod vistas_temporais {
         // elemento, e dentro dele o endereço.
         let elemento = html
             .split("<a ")
-            .find(|p| p.contains("oc-datepop__abrir"))
+            .find(|p| p.contains(r#"data-part="cal-abrir""#))
             .unwrap_or_default();
         let destino = elemento
             .split(r#"href=""#)
@@ -2329,12 +2322,12 @@ mod vistas_temporais {
         );
 
         // 42 células, e nenhuma actividade: a grelha sai da data, não do domínio.
-        assert_eq!(
-            html.matches("oc-datepop__dia-cel").count()
-                - html.matches("oc-datepop__dia-cel--").count(),
-            42
-        );
-        for marca in ["oc-cal-item", "oc-cal-bloco", "oc-cal-linha"] {
+        assert_eq!(html.matches(r#"data-part="datepop__dia-cel""#).count(), 42);
+        for marca in [
+            r#"data-part="cal-bloco"#,
+            r#"data-part="cal-linha"#,
+            "data-kind=",
+        ] {
             assert!(
                 !html.contains(marca),
                 "o painel trouxe «{marca}»: leu a agenda"

@@ -753,6 +753,7 @@ mod tests_apps {
             .collect(),
             pinned: pinned.iter().map(|s| (*s).to_owned()).collect(),
             inactive_apps: Vec::new(),
+            perfil: None,
         }
     }
 

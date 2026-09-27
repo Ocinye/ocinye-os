@@ -180,6 +180,56 @@ pub fn avatar(
     }
 }
 
+/// O avatar de um membro, a partir da escolha que o Core guardou: a fotografia
+/// (endereçada pela versão), um avatar do catálogo, ou as iniciais.
+pub fn avatar_do_membro(
+    escolha: &ocinye_contracts::AvatarChoice,
+    iniciais: &str,
+    nome: &str,
+    tamanho: TamanhoAvatar,
+) -> impl IntoView {
+    use ocinye_contracts::AvatarChoice;
+    let imagem = match escolha {
+        AvatarChoice::Initials => None,
+        AvatarChoice::Preset { preset } => {
+            AvatarChoice::preset_file(preset).map(|file| format!("/static/avatars/{file}"))
+        }
+        AvatarChoice::Custom { version } => Some(format!("/avatar/me/{version}")),
+    };
+    avatar(iniciais.to_owned(), imagem, nome.to_owned(), tamanho)
+}
+
+/// O ícone do sprite de cada aplicação.
+///
+/// O sprite do D1 tem 40 símbolos. As aplicações sem símbolo próprio —
+/// Mensagens, Conhecimento, Bibliografia, Ocinye AI, Computação e
+/// Administração — mostram o de aplicações até o Claude Design os entregar:
+/// um ícone não se inventa aqui.
+pub fn icone_da_aplicacao(ecra: crate::ui::shell::Screen) -> &'static str {
+    use crate::ui::shell::Screen;
+    match ecra {
+        Screen::Home => "home",
+        Screen::MyWork => "work",
+        Screen::Notes => "notes",
+        Screen::Calendar => "calendar",
+        Screen::Mail => "mail",
+        Screen::Resources => "storage",
+        Screen::Units => "units",
+        Screen::Ideas => "idea",
+        Screen::Projects => "project",
+        Screen::Files => "files",
+        Screen::Datasets => "data",
+        Screen::Agents => "agent",
+        Screen::Activity => "activity",
+        Screen::Audit => "audit",
+        Screen::Prompt | Screen::Ask => "nye",
+        Screen::Search => "search",
+        Screen::Settings => "settings",
+        Screen::Help => "help",
+        _ => "apps-brand",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

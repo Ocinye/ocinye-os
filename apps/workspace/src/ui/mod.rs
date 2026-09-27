@@ -75,6 +75,7 @@ pub fn document_com_cabeca(
          <link rel=\"stylesheet\" href=\"/static/ods-d9-apps.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d10-settings.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ods-d11-adaptive.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-integration.css\">\n\
          <title>",
     );
     out.push_str(&escape(title));
@@ -174,6 +175,7 @@ mod render_tests {
         Viewer {
             pinned: crate::ui::apps::default_pins(),
             inactive_apps: Vec::new(),
+            perfil: None,
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,
@@ -414,22 +416,22 @@ mod render_tests {
         );
 
         for expected in [
-            "oc-shell",
+            "data-oc=\"shell\"",
             "OCINYE OS",
-            // A barra é agora navegação essencial mais as fixadas, e o Gestor de
-            // Aplicações é a porta para o resto.
+            // A doca (D4/D6): o botão flutuante, a barra das fixadas, e o
+            // Gestor de Aplicações como porta para o resto.
+            "data-oc=\"shelf-toggle\"",
+            "data-oc=\"side-pinned\"",
             "data-oc=\"launcher-open\"",
             "data-oc=\"launcher\"",
-            "Fixadas",
-            r#"href="/my-work""#,
             // A Universal Command Surface substituiu a barra de pesquisa: uma
             // barra, três intenções (briefing §29).
             "Pesquisar, perguntar ou executar no Ocinye…",
             "⌘K",
             "data-oc=\"create\"",
             "data-oc=\"palette\"",
-            "data-oc=\"collapse\"",
-            "CORE OK",
+            "data-oc=\"status-toggle\"",
+            "OPERACIONAL",
         ] {
             assert!(html.contains(expected), "falta na shell: {expected}");
         }
@@ -476,7 +478,14 @@ mod render_tests {
                 leptos::prelude::view! { <p></p> },
             ),
         );
-        assert_eq!(html.matches("aria-current=\"page\"").count(), 1);
+        // Na barra de aplicações, um e só um. O trilho fecha também com
+        // `aria-current` (D1), e isso é outra afirmação.
+        let barra = html
+            .split(r#"data-oc="side-pinned""#)
+            .nth(1)
+            .and_then(|resto| resto.split("</nav>").next())
+            .expect("a barra de aplicações desapareceu");
+        assert_eq!(barra.matches("aria-current=\"page\"").count(), 1);
     }
 
     /// Um ecrã de detalhe mostra o trilho até ele, e termina em si próprio.
@@ -497,7 +506,7 @@ mod render_tests {
         // A página fecha o trilho com o seu próprio nome, e não com o do ecrã:
         // «Ideias / Ideias» não diz onde se está.
         assert!(
-            html.contains("<b>Ideia AI-IDEA-001</b>"),
+            html.contains(r#"aria-current="page">Ideia AI-IDEA-001<"#),
             "o trilho não termina no nome da página"
         );
     }
@@ -586,6 +595,7 @@ pub(crate) mod link_tests {
         Viewer {
             pinned: crate::ui::apps::default_pins(),
             inactive_apps: Vec::new(),
+            perfil: None,
             resolucao: crate::ui::shell::ResolucaoSessao::Resolvida,
             sessao_privilegiada: false,
             administra: false,
@@ -2185,8 +2195,11 @@ pub(crate) mod link_tests {
                     .contains("href=")
                     || etiqueta.contains("href=");
                 let declarada = etiqueta.contains("title=") && etiqueta.contains("aria-disabled");
+                // Um filtro no cliente (as categorias do lançador) é um recorte
+                // real: a grelha muda sem pedido nenhum.
+                let filtro = etiqueta.contains(r#"data-oc="launcher-chip""#);
 
-                if !(seleccionada || ligacao || declarada) {
+                if !(seleccionada || ligacao || declarada || filtro) {
                     mudas.push(format!("{ecra}: «{rotulo}»"));
                 }
             }
