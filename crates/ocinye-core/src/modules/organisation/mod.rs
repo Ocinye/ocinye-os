@@ -17,6 +17,7 @@ mod repository;
 mod service;
 
 pub mod applications;
+pub mod settings;
 
 pub use applications::{
     application_of_api_path, application_states, inactive_applications, instance_applications,

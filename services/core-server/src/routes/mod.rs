@@ -14,6 +14,7 @@ mod files;
 mod governance;
 mod health;
 mod identity;
+mod instance_settings;
 mod intelligence;
 mod knowledge;
 mod mail;
@@ -83,6 +84,7 @@ pub fn router(state: AppState) -> Router {
         .merge(search::routes())
         .merge(secrets::routes())
         .merge(ai_providers::routes())
+        .merge(instance_settings::routes())
         .merge(intelligence::routes())
         .merge(compute::routes())
         .merge(governance::routes())

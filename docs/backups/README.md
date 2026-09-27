@@ -95,7 +95,7 @@ por isso que perder um conjunto não é perder tudo.
 
 Não há dependência de fornecedor: o comando que move os objectos é
 configuração (`OCINYE_OBJECT_SYNC_CMD`), e recebe a pasta em
-`$OCINYE_OBJECT_DIR`. Serve `mc`, `rclone`, `aws s3` ou o que a instalação
+`$OCINYE_OBJECT_DIR`. Serve o `rclone` (o cliente da imagem de backup, ADR-0208), `aws s3` ou o que a instalação
 tiver.
 
 ## O ensaio de 2026-08-29 — A → B → C

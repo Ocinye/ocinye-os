@@ -20,6 +20,7 @@
 //! Without it, `if no_gpu` appears in twenty components and drifts apart. Here
 //! it is decided once and read everywhere (briefing §54).
 
+pub mod operations;
 mod service;
 
 pub use service::system_capabilities;

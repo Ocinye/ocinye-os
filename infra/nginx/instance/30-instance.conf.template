@@ -1,0 +1,38 @@
+# O Workspace desta Instância. Gerado por `install/ocinye` para {{DOMINIO}}.
+#
+# Só o Workspace é público. O Core fala com ele pela rede interna do Compose e
+# não tem porta nem anfitrião próprio: um cliente que precise da API directa é
+# uma decisão de quem administra, que acrescenta o seu `server`.
+server {
+    listen 80;
+    server_name {{DOMINIO}};
+
+    location = /nginx-health {
+        access_log off;
+        return 200 "ok\n";
+    }
+
+    location / {
+        return 308 https://$http_host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name {{DOMINIO}};
+
+    ssl_certificate     /etc/nginx/tls/instance.pem;
+    ssl_certificate_key /etc/nginx/tls/instance.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    client_max_body_size 640m;
+    client_body_timeout  300s;
+
+    location / {
+        set $destino_workspace http://workspace:8090;
+        proxy_pass $destino_workspace;
+    }
+}

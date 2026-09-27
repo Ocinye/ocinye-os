@@ -95,7 +95,7 @@ sem que nada falhe.
   4 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`) e 1
   aplicação (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 225 caminhos e 268 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 229 caminhos e 274 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -202,6 +202,50 @@ sem que nada falhe.
   recurso a outro candidato quando permitido). Tudo excluído pela política é
   `AI_POLICY_BLOCKED`. Provado por HTTP com dois fornecedores simulados e um
   externo que aceitaria tudo: um pedido confidencial nunca o contacta.
+- **Instalação num anfitrião Linux: `IMPLEMENTED`**
+  ([ADR-0701](docs/adrs/0701-release-bundle-and-host-installer.md),
+  [instalar](docs/install/README.md)). `scripts/release-bundle.sh` produz o pacote
+  de um commit — árvore, imagens, instalador e somas — e `install/ocinye install`
+  instala-o num anfitrião Linux com Docker, sem GPU nem fornecedor de IA:
+  verifica o anfitrião, confere as somas, gera os segredos no anfitrião, cria a
+  Instância com o perfil escolhido e o primeiro administrador, levanta os
+  serviços e confirma de fora que o Workspace responde. O resultado tem o layout
+  da produção da Ocinye. `scripts/install-e2e.sh` prova-o num anfitrião
+  descartável, duas vezes, de raiz.
+- **Actualização, reversão e backup de uma Instância instalada: `IMPLEMENTED`,
+  provado em anfitriões descartáveis** ([instalar](docs/install/README.md)).
+  `ocinye upgrade` faz checkpoint da base, troca o release, passa um portão de
+  saúde e volta sozinho ao anterior se ele falhar — repondo a base quando o
+  esquema já tinha migrado; `ocinye rollback --confirm` reverte à mão.
+  `ocinye backup` produz o conjunto de continuidade, e `ocinye install --restore`
+  instala noutro anfitrião a partir dele, com a raiz de selagem de origem, e só
+  abre depois das três verificações de continuidade. Provado a 2026-09-27 com o
+  pacote de prova de `e62a1e5dc795`, cada prova num anfitrião Linux novo:
+  instalação de raiz dos quatro perfis; actualização N → N+1 com a passagem
+  MinIO → Garage; um release cuja segunda migração rebenta, recusado e revertido
+  sem restos no esquema; reversão manual de volta ao MinIO; e backup e restauro
+  noutro anfitrião, recusado sem a raiz de selagem e com uma errada.
+- **Hardware medido: `MINIMUM_SUPPORTED` 2 vCPU · 4 GB, `RECOMMENDED` 4 vCPU ·
+  8 GB**, sem GPU, pela viagem de browser inteira em anfitriões com esses
+  limites ([resultados](docs/install/hardware-results.md)). Medido em `arm64`;
+  `amd64` não foi medido.
+- **Armazenamento de objectos: Garage** ([ADR-0208](docs/adrs/0208-maintained-object-store.md),
+  `Proposed` até a produção passar). O MinIO CE foi arquivado pelo fabricante;
+  o Compose, o instalador, a CI e o backup (com o `rclone`) usam o Garage, e a
+  passagem de uma Instância existente é verificada objecto a objecto e reversível.
+- **Nenhuma rota do Core responde sem sessão: `IMPLEMENTED`**
+  ([fronteiras de confiança](docs/security/trust-boundaries.md)). Uma varredura
+  lê o inventário do próprio código das rotas — o mesmo número que os factos do
+  repositório publicam — e exige `401` de cada operação não pública; as públicas
+  estão listadas por método, com a razão.
+- **Vista do operador: `IMPLEMENTED`.** `GET /api/v1/system/operations` junta, só
+  para a administração da plataforma, a vivacidade de cada nó, a saúde de cada
+  fornecedor de IA, as aplicações activas e a pressão de armazenamento — em
+  contagens, nunca nomes nem conteúdo.
+- **Configuração e marca da Instância: `IMPLEMENTED`**
+  ([ADR-0017](docs/adrs/0017-instance-configuration-and-branding.md)). Língua por
+  omissão, fuso, aplicações fixadas por omissão e logótipo governado, por
+  Instância; a marca pública diz o nome e mantém o Ocinye OS identificável.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
@@ -287,7 +331,7 @@ sem que nada falhe.
   capacidade, e a superfície de Administração de recursos.
   `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão distinto de `OCINYE_AI_READY`, e
   **não** torna a IA disponível.
-- **57 migrations**, aplicáveis de base vazia; 91 tabelas.
+- **58 migrations**, aplicáveis de base vazia; 92 tabelas.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -472,16 +516,16 @@ sem que nada falhe.
   **O agendador está instalado em produção** (`ocinye-backup.timer`, diário às
   03:00) — **e falhava**: verificado a 2026-09-26, a imagem de backup
   descarregava o `mc` de `dl.min.io`, que deixou de o servir, e reconstrói-se a
-  cada release. O `mc` passa a vir do espelho da Ocinye
-  ([artefactos de terceiros](docs/deployment/third-party-artifacts.md)). Até à
+  cada release. O `mc` passou a vir do espelho da Ocinye, e com o Garage o backup
+  usa o `rclone` ([artefactos de terceiros](docs/deployment/third-party-artifacts.md)). Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **79 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
-  **73 READMEs**, `docs/` povoado — incluindo
+- **82 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
+  **74 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
-  `infra/compose/docker-compose.yml` (postgres, redis, minio).
+  `infra/compose/docker-compose.yml` (postgres, redis, garage).
 - **Repositório institucional: [`Ocinye/ocinye-os`](https://github.com/Ocinye/ocinye-os), público.**
   Primeiro commit em 2026-08-23, com identidade humana. A CI corre no GitHub
   Actions contra PostgreSQL efémero, e um passo conta os testes que correram
@@ -493,14 +537,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1819 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1826 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **671 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **674 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
   elemento interactivo ficar sem contrato definido, um guarda que falha se
@@ -2113,7 +2157,7 @@ docs/adrs            docs/agentic        docs/ai             docs/applications
 docs/architecture    docs/authorization  docs/backups        docs/capabilities
 docs/compute         docs/data-model     docs/deployment     docs/development
 docs/domain          docs/feature-status docs/identity       docs/instance
-docs/knowledge       docs/nodes
+docs/install         docs/knowledge       docs/nodes
 docs/mail            docs/node-protocol  docs/operations     docs/password-policy
 docs/runbooks        docs/search         docs/security       docs/storage
 docs/testing         docs/threat-model   docs/ui-core-contract docs/wasm

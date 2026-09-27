@@ -29,10 +29,9 @@ RUN apt-get update \
 
 COPY . .
 
-ARG BIN
 # `sharing=locked`, e não o `shared` por omissão.
 #
-# As três imagens constroem em paralelo e partilhavam este cache. Duas
+# As imagens constroem em paralelo e partilham o cache do registry. Duas
 # desempacotavam o mesmo crate ao mesmo tempo e a segunda encontrava o
 # `.cargo-ok` da primeira meio escrito:
 #
@@ -40,15 +39,45 @@ ARG BIN
 #     File exists (os error 17)
 #
 # Um cache partilhado sem tranca não é um cache: é uma corrida que só se
-# manifesta quando há paralelismo — e por isso nunca aparece em máquina de
-# quem constrói uma imagem de cada vez.
+# manifesta quando há paralelismo.
 #
-# O `target` leva `id` por binário: são três compilações diferentes, e
-# partilhá-lo faria uma invalidar os artefactos da outra a cada construção.
+# # Os cinco binários de uma vez
+#
+# Antes, cada imagem compilava só o seu binário, com o seu `target` — cinco
+# compilações da árvore inteira por release, e cinco conjuntos de features que se
+# invalidavam uns aos outros se partilhassem o cache. Agora este estágio não
+# depende de `BIN`: compila os cinco numa só invocação, com um conjunto de
+# features, e o BuildKit reutiliza esta camada em todas as imagens. Cada imagem
+# copia daqui o binário que o seu `BIN` nomeia.
+#
+# Processos de compilação: vazio é o que o cargo decide (todos os núcleos). Uma
+# máquina com pouca memória para os núcleos passa o tempo a trocar memória;
+# `OCINYE_BUILD_JOBS` limita-os. Não se chama `CARGO_BUILD_JOBS`: um ARG é
+# também variável de ambiente do RUN, e o cargo recusaria o valor vazio.
+#
+# `OCINYE_BUILD_FAST=1` é para **pacotes de prova** (instalação, actualização,
+# restauro): o mesmo código, sem LTO e com 16 unidades de código — minutos em
+# vez de horas numa máquina modesta, e um binário mais lento. Nunca num release
+# de produção; o pacote regista-o em `BUILD`.
+ARG OCINYE_BUILD_JOBS=
+ARG OCINYE_BUILD_FAST=
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,target=/build/target,id=ocinye-target-${BIN},sharing=locked \
-    cargo build --release --locked --bin "${BIN}" \
- && cp "target/release/${BIN}" /usr/local/bin/ocinye-binario
+    --mount=type=cache,target=/build/target,id=ocinye-target${OCINYE_BUILD_FAST:+-fast},sharing=locked \
+    # As migrações entram no binário na compilação, e o cargo decide recompilar
+    # por datas. A árvore vem de um `git archive`, com a data do commit — que pode
+    # ser **anterior** à última compilação na cache. `touch` torna-as sempre mais
+    # novas, e o `build.rs` do ocinye-core volta a embuti-las: um release nunca
+    # sai sem as migrações do seu próprio commit.
+    touch migrations/* \
+ && ${OCINYE_BUILD_FAST:+env CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16} \
+    cargo build --release --locked ${OCINYE_BUILD_JOBS:+--jobs "$OCINYE_BUILD_JOBS"} \
+      --bin ocinye-core-server --bin ocinye-workspace --bin ocinye-worker \
+      --bin ocinye-conversion-runner --bin ocinye-convert \
+ && mkdir -p /usr/local/bin/ocinye \
+ && for b in ocinye-core-server ocinye-workspace ocinye-worker \
+             ocinye-conversion-runner ocinye-convert; do \
+      cp "target/release/$b" "/usr/local/bin/ocinye/$b"; \
+    done
 
 # ── A imagem que corre ───────────────────────────────────────────────────
 #
@@ -67,7 +96,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --create-home --uid 10001 ocinye
 
-COPY --from=builder /usr/local/bin/ocinye-binario /usr/local/bin/ocinye
+ARG BIN
+COPY --from=builder /usr/local/bin/ocinye/${BIN} /usr/local/bin/ocinye
 
 # Os estáticos do Workspace. Vão em todas as imagens porque custam kilobytes e
 # porque uma imagem que os não tivesse falharia só quando alguém abrisse uma
@@ -102,7 +132,7 @@ RUN apt-get update \
       ffmpeg \
       fonts-dejavu-core \
  && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /usr/local/bin/ocinye-binario /usr/local/bin/ocinye-convert
+COPY --from=builder /usr/local/bin/ocinye/ocinye-convert /usr/local/bin/ocinye-convert
 ENTRYPOINT ["/usr/local/bin/ocinye-convert"]
 
 # ── A imagem do Conversion Runner ─────────────────────────────────────────
@@ -119,6 +149,6 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=docker:27-cli /usr/local/bin/docker /usr/local/bin/docker
-COPY --from=builder /usr/local/bin/ocinye-binario /usr/local/bin/ocinye-conversion-runner
+COPY --from=builder /usr/local/bin/ocinye/ocinye-conversion-runner /usr/local/bin/ocinye-conversion-runner
 WORKDIR /srv/ocinye
 ENTRYPOINT ["/usr/local/bin/ocinye-conversion-runner"]

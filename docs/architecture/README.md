@@ -458,7 +458,7 @@ institucional, e essa decisão fica registada como qualquer outra.
 | Experience | `apps/workspace` | `CURRENT` (SSR); hidratação `PLANNED` |
 | Agentic Control | `ocinye-core::modules::agentic`, `ocinye-domain::policy::agentic` | `CURRENT`; inferência `NO_RESOURCE` |
 | Control | `crates/ocinye-core`, `services/core-server` | `CURRENT` |
-| Knowledge & Data | `ocinye-core::modules::{knowledge,data,search}` + PostgreSQL + MinIO | `CURRENT` |
+| Knowledge & Data | `ocinye-core::modules::{knowledge,data,search}` + PostgreSQL + Garage (S3) | `CURRENT` |
 | Produção científica | `ocinye-core::modules::science` | `CURRENT`; linhagem com tecto de 5 saltos |
 | Intelligence | `ocinye-core::modules::intelligence` | `CURRENT` (arquitectura); 0 fornecedores |
 | Compute | `ocinye-core::modules::compute`, `services/node-agent` | `CURRENT` (registo); 0 nós |

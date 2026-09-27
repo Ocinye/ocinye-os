@@ -1,0 +1,628 @@
+#!/usr/bin/env bash
+# ocinye — instala e governa uma Instância do Ocinye OS num anfitrião Linux.
+#
+# # O que é
+#
+# O instalador de um **release**: vive dentro do pacote que o release produz
+# (`scripts/release-bundle.sh`), ao lado das imagens e da árvore desse commit, e
+# instala exactamente esse commit. Não descarrega código, não segue `main`, e não
+# precisa de `curl | sh` — o pacote traz as somas, e as somas conferem-se antes de
+# qualquer coisa ser escrita no anfitrião.
+#
+# # O que deixa no anfitrião
+#
+# O mesmo layout que a produção da Ocinye usa (docs/deployment):
+#
+#   /srv/ocinye/releases/<sha>   a árvore do release
+#   /srv/ocinye/current          → o release corrente
+#   /etc/ocinye/*.env            configuração e segredos, 0600, nunca no Git
+#   /etc/ocinye/nginx, tls       o proxy, gerado para o domínio desta Instância
+#
+# Uma Instância instalada assim e a produção da Ocinye são o mesmo produto: o
+# mesmo Compose, as mesmas imagens, o mesmo proxy.
+#
+# # O que não exige
+#
+# GPU, chave de fornecedor de IA, fornecedor externo, correio configurado. Uma
+# Instância nova arranca com IA indisponível — que é o estado correcto até alguém
+# ligar um nó ou registar um fornecedor.
+#
+# Subcomandos: install · status · upgrade · rollback · backup · uninstall
+set -euo pipefail
+
+CONFIG="${OCINYE_CONFIG_DIR:-/etc/ocinye}"
+RAIZ="${OCINYE_ROOT:-/srv/ocinye}"
+COMPOSE="infra/compose/docker-compose.production.yml"
+MIN_RAM_MB=3500
+MIN_DISK_GB=15
+
+AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+fatal() { printf '\n  RECUSADO — %s\n\n' "$1" >&2; exit 1; }
+passo() { printf '\n== %s ==\n' "$1"; }
+nota()  { printf '  %s\n' "$1"; }
+
+uso() {
+    cat <<'EOF'
+Uso:
+  ocinye install --domain os.exemplo.org --instance-name "Nome" \
+                 --profile research|business|education|personal \
+                 --name "Pessoa" --email pessoa@exemplo.org \
+                 --admin-name "Pessoa (Admin)" --admin-email admin@exemplo.org \
+                 [--public-url https://os.exemplo.org] \
+                 [--tls self-signed | --tls provided --cert CERT.pem --key KEY.pem] \
+                 [--credential-file FICHEIRO]
+  ocinye status
+  ocinye upgrade                 (a partir do pacote do release novo)
+  ocinye rollback --confirm
+  ocinye backup
+  ocinye install --domain D --restore CONJUNTO --sealing-key-file FICHEIRO [--public-url U]
+  ocinye uninstall --purge
+
+install  verifica o anfitrião, confere o pacote, gera a configuração e os
+         segredos, carrega as imagens do release, cria a Instância e o primeiro
+         administrador, levanta os serviços e confirma a saúde.
+status   mostra o release corrente e o estado dos serviços.
+upgrade  actualiza para o release deste pacote: checkpoint da base, troca,
+         portão de saúde — e, se falhar, volta sozinho ao release anterior
+         (repondo a base quando o esquema já tinha migrado).
+backup   produz um conjunto de continuidade em /srv/ocinye/backups (base,
+         objectos, manifesto, somas; nunca a raiz de selagem).
+install --restore
+         instala a partir de um conjunto: a Instância, as pessoas e os dados vêm
+         dele, a raiz de selagem vem de --sealing-key-file, e a Instância só abre
+         depois de as três verificações de continuidade passarem.
+rollback --confirm
+         volta ao release anterior à última actualização e repõe a base desse
+         momento. O que se escreveu depois perde-se.
+uninstall --purge
+         pára os serviços e apaga **tudo** — dados, configuração e releases.
+         Não há volta: é para anfitriões descartáveis e para a prova de
+         instalação, não para uma Instância com dados.
+
+A palavra-passe temporária do administrador é impressa uma vez no terminal, ou
+escrita em --credential-file (0600) quando a instalação é automatizada. Não fica
+em mais lado nenhum.
+EOF
+}
+
+# ── Utilitários ──────────────────────────────────────────────────────────
+
+aleatorio() {
+    # 32 bytes do núcleo, em base64 sem caracteres que partam um URL ou um .env.
+    head -c "${1:-32}" /dev/urandom | base64 | tr -d '\n=+/' | head -c "${2:-40}"
+}
+
+chave_de_selagem() {
+    # Exactamente 32 bytes em base64 padrão: é o formato que o Core exige.
+    head -c 32 /dev/urandom | base64 | tr -d '\n'
+}
+
+compose() {
+    # O ambiente de interpolação é o do release, como o systemd o vê.
+    (cd "$RAIZ/current" && set -a && . "$CONFIG/release.env" && set +a \
+        && docker compose -f "$COMPOSE" "$@")
+}
+
+esperar_saudavel() {
+    local servico="$1" limite="${2:-300}" inicio estado
+    inicio=$(date +%s)
+    while :; do
+        estado="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}sem-healthcheck{{end}}' \
+                  "ocinye-$servico-1" 2>/dev/null || echo ausente)"
+        [ "$estado" = healthy ] && return 0
+        if [ $(( $(date +%s) - inicio )) -gt "$limite" ]; then
+            fatal "o serviço $servico não ficou saudável em ${limite}s (estado: $estado).
+  Veja: docker logs ocinye-$servico-1"
+        fi
+        sleep 3
+    done
+}
+
+# ── backup / restauro ────────────────────────────────────────────────────
+#
+# O mecanismo é o de continuidade institucional (ADR-0700): um conjunto com a
+# base, os objectos, o manifesto e as somas — e **nunca** a raiz de selagem, que
+# viaja por um canal próprio. O instalador só o liga à Instância instalada.
+
+restaurar_conjunto() {  # pasta do conjunto
+    local origem="$1" nome
+    nome="$(basename "$origem")"
+    [ -n "$nome" ] && [ "$nome" != / ] || fatal "conjunto sem nome: $origem"
+    passo "Restauro"
+    install -d -m 700 "$RAIZ/backups"
+    rm -rf "${RAIZ:?}/backups/${nome:?}"
+    cp -a "$origem" "$RAIZ/backups/$nome"
+    # O restauro corre na imagem de backup do release: pg_restore, mc e o
+    # binário do Core para as verificações, e nada do repositório.
+    compose --profile backup build backup >/dev/null
+    compose --profile backup run --rm -T --no-deps \
+        --entrypoint /opt/ocinye/scripts/institutional-restore.sh \
+        -e 'OCINYE_OBJECT_RESTORE_CMD=/opt/ocinye/scripts/backup-objects.sh restore "$OCINYE_OBJECT_DIR"' \
+        backup "$RAIZ/backups/$nome" \
+        || fatal "o restauro falhou; a base de destino pode ter estado parcial — desinstale e repita"
+    passo "Verificação de continuidade"
+    compose --profile backup run --rm -T --no-deps \
+        --entrypoint /opt/ocinye/scripts/institutional-verify.sh \
+        backup "$RAIZ/backups/$nome" \
+        || fatal "a verificação de continuidade não passou: a Instância não abre sobre um restauro não provado"
+}
+
+backup_() {
+    [ "$(id -u)" = 0 ] || fatal "corra-o como root"
+    [ -r "$CONFIG/release.env" ] || fatal "não há nenhuma Instância instalada neste anfitrião"
+    passo "Backup institucional"
+    compose --profile backup build backup >/dev/null
+    compose --profile backup run --rm -T backup || fatal "o backup falhou"
+    local ultimo
+    ultimo="$(ls -1dt "$RAIZ"/backups/ocinye-* 2>/dev/null | grep -v INCOMPLETO | head -1)"
+    [ -n "$ultimo" ] || fatal "o backup não deixou nenhum conjunto em $RAIZ/backups"
+    printf '\n  Conjunto: %s\n' "$ultimo"
+    printf '  A raiz de selagem não está nele: guarde a de %s/core.env à parte.\n\n' "$CONFIG"
+}
+
+# ── install ──────────────────────────────────────────────────────────────
+
+install_() {
+    local dominio="" nome_instancia="" perfil="" nome="" email="" admin_nome="" \
+          admin_email="" url_publico="" tls="self-signed" cert="" chave="" \
+          ficheiro_credencial="" restaurar="" ficheiro_selagem="" destinatario=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --domain) dominio="$2"; shift 2 ;;
+            --instance-name) nome_instancia="$2"; shift 2 ;;
+            --profile) perfil="$2"; shift 2 ;;
+            --name) nome="$2"; shift 2 ;;
+            --email) email="$2"; shift 2 ;;
+            --admin-name) admin_nome="$2"; shift 2 ;;
+            --admin-email) admin_email="$2"; shift 2 ;;
+            --public-url) url_publico="$2"; shift 2 ;;
+            --tls) tls="$2"; shift 2 ;;
+            --cert) cert="$2"; shift 2 ;;
+            --key) chave="$2"; shift 2 ;;
+            --credential-file) ficheiro_credencial="$2"; shift 2 ;;
+            --restore) restaurar="$2"; shift 2 ;;
+            --sealing-key-file) ficheiro_selagem="$2"; shift 2 ;;
+            --backup-recipient) destinatario="$2"; shift 2 ;;
+            -h|--help) uso; exit 0 ;;
+            *) fatal "opção desconhecida: $1" ;;
+        esac
+    done
+    if [ -n "$restaurar" ]; then
+        # A Instância vem do conjunto: nome, perfil e pessoas já lá estão.
+        [ -n "$dominio" ] || { uso; fatal "falta --domain"; }
+        [ -d "$restaurar" ] || fatal "--restore aponta para «$restaurar», que não é um conjunto"
+        [ -r "$ficheiro_selagem" ] \
+            || fatal "--restore exige --sealing-key-file: sem a raiz de selagem da origem,
+  as credenciais e os segundos factores chegam íntegros e ilegíveis"
+    else
+        for obrigatorio in dominio nome_instancia perfil nome email admin_nome admin_email; do
+            [ -n "${!obrigatorio}" ] || { uso; fatal "falta --${obrigatorio//_/-}"; }
+        done
+        case "$perfil" in research|business|education|personal) ;;
+            *) fatal "perfil desconhecido: $perfil (research, business, education, personal)" ;;
+        esac
+    fi
+    [[ "$dominio" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] \
+        || fatal "o domínio «$dominio» não é um nome de anfitrião"
+    url_publico="${url_publico:-https://$dominio}"
+    [[ "$url_publico" == https://* ]] \
+        || fatal "o endereço público tem de ser https: o Workspace recusa cookies de sessão fora dele"
+    case "$tls" in
+        self-signed) ;;
+        provided) [ -r "$cert" ] && [ -r "$chave" ] \
+                      || fatal "--tls provided exige --cert e --key legíveis" ;;
+        *) fatal "--tls é self-signed ou provided" ;;
+    esac
+
+    # ── 1. O anfitrião ────────────────────────────────────────────────
+    passo "O anfitrião"
+    [ "$(id -u)" = 0 ] || fatal "o instalador escreve em $CONFIG e $RAIZ: corra-o como root"
+    [ "$(uname -s)" = Linux ] || fatal "o Ocinye OS instala-se num anfitrião Linux"
+    command -v docker >/dev/null || fatal "falta o Docker (Engine 24 ou mais recente)"
+    docker info >/dev/null 2>&1 || fatal "o Docker não está a correr"
+    docker compose version >/dev/null 2>&1 || fatal "falta o plugin docker compose (v2)"
+    local ram_mb disco_gb
+    ram_mb=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+    [ "$ram_mb" -ge "$MIN_RAM_MB" ] \
+        || fatal "o anfitrião tem ${ram_mb} MB de memória; o mínimo medido é ${MIN_RAM_MB} MB"
+    mkdir -p "$RAIZ"
+    disco_gb=$(df -Pk "$RAIZ" | awk 'NR==2 {print int($4/1048576)}')
+    [ "$disco_gb" -ge "$MIN_DISK_GB" ] \
+        || fatal "há ${disco_gb} GB livres em $RAIZ; o mínimo é ${MIN_DISK_GB} GB"
+    [ ! -e "$CONFIG/core.env" ] \
+        || fatal "já existe uma Instância neste anfitrião ($CONFIG/core.env).
+  Instalar por cima apagaria a raiz de selagem de dados que existem."
+    nota "Linux · Docker $(docker version -f '{{.Server.Version}}') · ${ram_mb} MB · ${disco_gb} GB livres"
+
+    # ── 2. O pacote ──────────────────────────────────────────────────
+    passo "O pacote"
+    [ -r "$AQUI/RELEASE" ] && [ -r "$AQUI/SHA256SUMS" ] \
+        || fatal "isto não é um pacote de release (faltam RELEASE e SHA256SUMS)"
+    SHA="$(tr -d '[:space:]' < "$AQUI/RELEASE")"
+    [[ "$SHA" =~ ^[0-9a-f]{12}$ ]] || fatal "RELEASE não contém um SHA curto válido"
+    (cd "$AQUI" && sha256sum -c SHA256SUMS >/dev/null) \
+        || fatal "as somas do pacote não conferem: não instalo um pacote alterado"
+    nota "release $SHA · somas conferidas"
+
+    # ── 3. O release no sítio ────────────────────────────────────────
+    passo "O release"
+    install -d -m 755 "$RAIZ/releases/$SHA" "$RAIZ/conversion-spool" "$RAIZ/backups"
+    tar -xzf "$AQUI/source.tar.gz" -C "$RAIZ/releases/$SHA"
+    ln -sfn "$RAIZ/releases/$SHA" "$RAIZ/current"
+    nota "$RAIZ/current → releases/$SHA"
+
+    # ── 4. Configuração e segredos ───────────────────────────────────
+    passo "Configuração"
+    install -d -m 750 "$CONFIG" "$CONFIG/nginx" "$CONFIG/tls"
+    umask 077
+    local pg_senha s3_chave s3_segredo
+    pg_senha="$(aleatorio 48 40)"
+    # O formato que o Garage exige para uma chave importada: `GK` e 24 hexadecimais,
+    # e um segredo de 64 hexadecimais (ADR-0208).
+    s3_chave="GK$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    s3_segredo="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+
+    printf 'OCINYE_RELEASE_SHA=%s\nOCINYE_PROXY_HEALTH_HOST=%s\n' "$SHA" "$dominio" \
+        > "$CONFIG/release.env"
+    cat > "$CONFIG/comum.env" <<EOF
+OCINYE_ENVIRONMENT=production
+OCINYE_LOG_FORMAT=json
+OCINYE_LOG_LEVEL=info
+EOF
+    cat > "$CONFIG/postgres.env" <<EOF
+POSTGRES_USER=ocinye
+POSTGRES_DB=ocinye
+POSTGRES_PASSWORD=$pg_senha
+EOF
+    cat > "$CONFIG/object-store.env" <<EOF
+GARAGE_RPC_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+GARAGE_ADMIN_TOKEN=$(aleatorio 48 40)
+EOF
+    cat > "$CONFIG/core.env" <<EOF
+OCINYE_DATABASE_URL=postgres://ocinye:$pg_senha@postgres:5432/ocinye
+OCINYE_REDIS_URL=redis://redis:6379
+OCINYE_STORAGE_ENDPOINT_URL=http://object-store:3900
+OCINYE_STORAGE_REGION=us-east-1
+OCINYE_STORAGE_ACCESS_KEY=$s3_chave
+OCINYE_STORAGE_SECRET_KEY=$s3_segredo
+OCINYE_STORAGE_BUCKET=ocinye-artifacts
+OCINYE_STORAGE_BACKEND_CODE=local-object-store
+OCINYE_STORAGE_LOCATION_LABEL=$dominio
+OCINYE_STORAGE_RESIDENCY=UNDECLARED
+OCINYE_SEALING_KEY=$(if [ -n "$restaurar" ]; then tr -d '[:space:]' < "$ficheiro_selagem"; else chave_de_selagem; fi)
+OCINYE_CORS_ALLOWED_ORIGINS=$url_publico
+EOF
+    if [ -z "$restaurar" ]; then
+        printf 'OCINYE_INSTANCE_NAME=%s\nOCINYE_INSTANCE_PROFILE=%s\n' \
+            "$nome_instancia" "$perfil" >> "$CONFIG/core.env"
+    fi
+    # O backup institucional desta Instância (ADR-0700). Sem destinatário `age`
+    # o conjunto fica em claro, e por isso nunca sai do anfitrião.
+    printf 'OCINYE_BACKUP_DIR=%s\nOCINYE_BACKUP_BACKEND=none\nOCINYE_BACKUP_KEEP=7\nOCINYE_BACKUP_RECIPIENT=%s\n' \
+        "$RAIZ/backups" "$destinatario" > "$CONFIG/backup.env"
+    cat > "$CONFIG/workspace.env" <<EOF
+OCINYE_WORKSPACE_PUBLIC_URL=$url_publico
+EOF
+    umask 022
+    chmod 600 "$CONFIG"/*.env
+    nota "segredos gerados neste anfitrião: base de dados, armazenamento, raiz de selagem"
+    nota "a raiz de selagem está em $CONFIG/core.env — sem ela, um backup não se lê"
+
+    # O proxy: um anfitrião, o Workspace. O Core não tem porta pública.
+    sed -e "s|{{DOMINIO}}|$dominio|g" \
+        "$RAIZ/current/infra/nginx/instance/30-instance.conf.template" \
+        > "$CONFIG/nginx/30-instance.conf"
+    cp "$RAIZ/current/infra/nginx/instance/00-comum.conf" "$CONFIG/nginx/00-comum.conf"
+    cp "$RAIZ/current/infra/nginx/instance/10-default.conf" "$CONFIG/nginx/10-default.conf"
+    if [ "$tls" = provided ]; then
+        install -m 644 "$cert" "$CONFIG/tls/instance.pem"
+        install -m 600 "$chave" "$CONFIG/tls/instance.key"
+        nota "TLS: certificado fornecido"
+    else
+        docker run --rm -v "$CONFIG/tls:/tls" --entrypoint /bin/sh nginx:1.27-alpine -c \
+            "apk add --no-cache openssl >/dev/null 2>&1 && \
+             openssl req -x509 -newkey rsa:3072 -nodes -days 825 \
+               -subj '/CN=$dominio' -addext 'subjectAltName=DNS:$dominio' \
+               -keyout /tls/instance.key -out /tls/instance.pem 2>/dev/null && \
+             chmod 600 /tls/instance.key"
+        nota "TLS: certificado auto-assinado para $dominio (substitua-o antes de uso real)"
+    fi
+
+    # ── 5. As imagens do release ─────────────────────────────────────
+    passo "Imagens"
+    for imagem in "$AQUI"/images/*.tar; do
+        docker load -q -i "$imagem" | sed 's/^/  /'
+    done
+    for servico in core-server workspace worker conversion-runner converter; do
+        docker image inspect "ocinye/ocinye-$servico:$SHA" >/dev/null 2>&1 \
+            || fatal "o pacote não trouxe ocinye/ocinye-$servico:$SHA"
+    done
+
+    # ── 6. Persistência ──────────────────────────────────────────────
+    passo "Persistência"
+    compose up -d postgres redis object-store >/dev/null
+    esperar_saudavel postgres
+    esperar_saudavel object-store
+    # `run`, e não `up`: o código de saída do init é o que diz se o bucket e a
+    # chave do Core ficaram como se pediu.
+    compose run --rm -T object-store-init > /tmp/ocinye-object-store-init.log 2>&1 \
+        || { cat /tmp/ocinye-object-store-init.log >&2; fatal "a preparação do armazenamento falhou"; }
+    nota "base de dados e armazenamento (Garage) prontos; bucket privado"
+
+    # ── 7. A Instância: criada, ou trazida de um conjunto ────────────
+    if [ -n "$restaurar" ]; then
+        restaurar_conjunto "$restaurar"
+        passo "Serviços"
+        compose up -d --remove-orphans >/dev/null
+        esperar_saudavel core
+        esperar_saudavel workspace
+        esperar_saudavel proxy
+        passo "Saúde"
+        local codigo_r
+        codigo_r="$(curl -ks -o /dev/null -w '%{http_code}' --resolve "$dominio:443:127.0.0.1" \
+                    "https://$dominio/")"
+        [ "$codigo_r" = 303 ] || fatal "o Workspace respondeu $codigo_r em https://$dominio/"
+        printf '\n  Ocinye OS %s restaurado a partir de %s.\n' "$SHA" "$(basename "$restaurar")"
+        printf '  Workspace: %s — as pessoas entram com as credenciais de origem.\n\n' "$url_publico"
+        return 0
+    fi
+    passo "Instância"
+    local saida
+    saida="$(compose run --rm --no-deps -T core bootstrap-admin \
+        --instance-name "$nome_instancia" --profile "$perfil" \
+        --name "$nome" --email "$email" \
+        --admin-name "$admin_nome" --admin-email "$admin_email" 2>&1)" \
+        || { printf '%s\n' "$saida" | grep -v 'Palavra-passe' >&2
+             fatal "o bootstrap da Instância falhou"; }
+    local credencial
+    credencial="$(printf '%s\n' "$saida" | sed -n 's/^ *Palavra-passe  *//p' | head -1)"
+    [ -n "$credencial" ] || fatal "o bootstrap não devolveu a credencial temporária"
+    nota "Instância «$nome_instancia» criada, perfil $perfil"
+
+    # ── 8. Levantar ──────────────────────────────────────────────────
+    passo "Serviços"
+    compose up -d --remove-orphans >/dev/null
+    esperar_saudavel core
+    esperar_saudavel workspace
+    esperar_saudavel proxy
+
+    # ── 9. Saúde, vista de fora ──────────────────────────────────────
+    passo "Saúde"
+    local codigo
+    codigo="$(curl -ks -o /dev/null -w '%{http_code}' --resolve "$dominio:443:127.0.0.1" \
+              "https://$dominio/")"
+    [ "$codigo" = 303 ] || fatal "o Workspace respondeu $codigo em https://$dominio/ (esperado 303 → /login)"
+    nota "https://$dominio/ → 303 (início de sessão)"
+
+    if command -v systemctl >/dev/null && [ -d /run/systemd/system ]; then
+        install -m 644 "$RAIZ/current/infra/systemd/ocinye.service" /etc/systemd/system/ocinye.service
+        systemctl daemon-reload && systemctl enable ocinye.service >/dev/null 2>&1
+        nota "ocinye.service activo: a Instância volta depois de um reboot"
+    fi
+
+    printf '\n  Ocinye OS %s instalado.\n' "$SHA"
+    printf '  Workspace:        %s\n' "$url_publico"
+    printf '  Administrador:    %s\n' "$admin_email"
+    if [ -n "$ficheiro_credencial" ]; then
+        (umask 077 && printf '%s\n' "$credencial" > "$ficheiro_credencial")
+        printf '  Credencial temporária escrita em %s (0600).\n\n' "$ficheiro_credencial"
+    else
+        printf '  Credencial temporária: %s\n' "$credencial"
+        printf '  (mostrada uma vez; troca-se no primeiro acesso, com segundo factor)\n\n'
+    fi
+}
+
+# ── upgrade / rollback ───────────────────────────────────────────────────
+#
+# Uma actualização não é `git pull` e esperança. É, por esta ordem:
+#
+#   verificar → checkpoint da base → instalar o release novo → trocar →
+#   portão de saúde → (se falhar) reverter
+#
+# O checkpoint existe porque as migrações não têm volta: o Core anterior recusa
+# arrancar sobre um esquema mais novo (docs/runbooks/rollback-production.md).
+# Reverter uma actualização que já migrou é, por isso, repor a base do
+# checkpoint — e o instalador só o faz quando a versão do esquema mudou.
+#
+# O que o checkpoint **não** cobre: objectos escritos no armazenamento durante a
+# janela de uma actualização falhada. Numa actualização que falha no portão de
+# saúde essa janela é de segundos e sem sessões; ficam como objectos órfãos, que
+# a continuidade distingue (`verify-objects`).
+
+versao_do_esquema() {
+    docker exec ocinye-postgres-1 psql -U ocinye -d ocinye -tAc \
+        "SELECT COALESCE(MAX(version), 0) FROM _sqlx_migrations WHERE success" 2>/dev/null \
+        | tr -d '[:space:]'
+}
+
+portao_de_saude() {
+    local dominio="$1" limite="${2:-300}" inicio codigo
+    inicio=$(date +%s)
+    for servico in core workspace proxy; do
+        while :; do
+            estado="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}sem{{end}}' \
+                      "ocinye-$servico-1" 2>/dev/null || echo ausente)"
+            [ "$estado" = healthy ] && break
+            [ $(( $(date +%s) - inicio )) -gt "$limite" ] && { nota "$servico: $estado"; return 1; }
+            sleep 3
+        done
+    done
+    codigo="$(curl -ks -o /dev/null -w '%{http_code}' --resolve "$dominio:443:127.0.0.1" "https://$dominio/")"
+    [ "$codigo" = 303 ] || { nota "https://$dominio/ respondeu $codigo"; return 1; }
+}
+
+trocar_para() {  # sha
+    local destino="$1" dominio
+    dominio="$(sed -n 's/^OCINYE_PROXY_HEALTH_HOST=//p' "$CONFIG/release.env")"
+    ln -sfn "$RAIZ/releases/$destino" "$RAIZ/current"
+    sed -i "s/^OCINYE_RELEASE_SHA=.*/OCINYE_RELEASE_SHA=$destino/" "$CONFIG/release.env"
+    SHA="$destino"
+    # O proxy vem do release para onde se vai, e não do que lá estava.
+    local nginx="$RAIZ/releases/$destino/infra/nginx/instance"
+    cp "$nginx/00-comum.conf" "$nginx/10-default.conf" "$CONFIG/nginx/"
+    sed -e "s|{{DOMINIO}}|$dominio|g" "$nginx/30-instance.conf.template" \
+        > "$CONFIG/nginx/30-instance.conf"
+    docker exec ocinye-proxy-1 nginx -s reload >/dev/null 2>&1 || true
+}
+
+repor_checkpoint() {  # ficheiro
+    # A base é recriada e o checkpoint reposto nela vazia. `pg_restore --clean`
+    # só apaga o que está no checkpoint: uma tabela que a migração falhada criou
+    # depois ficava na base — foi o que a prova de actualização apanhou.
+    compose stop core worker workspace >/dev/null 2>&1 || true
+    docker exec ocinye-postgres-1 dropdb -U ocinye --force ocinye \
+        && docker exec ocinye-postgres-1 createdb -U ocinye ocinye \
+        && docker exec -i ocinye-postgres-1 pg_restore -U ocinye -d ocinye \
+            --no-owner --single-transaction < "$1"
+}
+
+upgrade_() {
+    [ "$(id -u)" = 0 ] || fatal "corra-o como root"
+    [ -r "$CONFIG/release.env" ] || fatal "não há nenhuma Instância instalada neste anfitrião"
+    local anterior novo dominio antes depois checkpoint
+    anterior="$(sed -n 's/^OCINYE_RELEASE_SHA=//p' "$CONFIG/release.env")"
+    dominio="$(sed -n 's/^OCINYE_PROXY_HEALTH_HOST=//p' "$CONFIG/release.env")"
+    [ -n "$dominio" ] || fatal "release.env não diz o domínio desta Instância"
+
+    passo "Verificação"
+    [ -r "$AQUI/RELEASE" ] && [ -r "$AQUI/SHA256SUMS" ] \
+        || fatal "isto não é um pacote de release (faltam RELEASE e SHA256SUMS)"
+    novo="$(tr -d '[:space:]' < "$AQUI/RELEASE")"
+    [[ "$novo" =~ ^[0-9a-f]{12}$ ]] || fatal "RELEASE não contém um SHA curto válido"
+    [ "$novo" != "$anterior" ] || fatal "o release $novo já é o corrente"
+    (cd "$AQUI" && sha256sum -c SHA256SUMS >/dev/null) \
+        || fatal "as somas do pacote não conferem: não instalo um pacote alterado"
+    SHA="$anterior"
+    portao_de_saude "$dominio" 60 \
+        || fatal "a Instância não está saudável antes da actualização; resolva isso primeiro"
+    nota "$anterior → $novo · somas conferidas · Instância saudável"
+
+    passo "Checkpoint"
+    install -d -m 700 "$RAIZ/checkpoints"
+    checkpoint="$RAIZ/checkpoints/$anterior-para-$novo-$(date -u +%Y%m%dT%H%M%SZ).dump"
+    docker exec ocinye-postgres-1 pg_dump -U ocinye -d ocinye -Fc > "$checkpoint" \
+        || fatal "o checkpoint da base falhou; nada foi alterado"
+    chmod 600 "$checkpoint"
+    antes="$(versao_do_esquema)"
+    nota "base em $checkpoint · esquema $antes"
+
+    passo "Release novo"
+    install -d -m 755 "$RAIZ/releases/$novo"
+    tar -xzf "$AQUI/source.tar.gz" -C "$RAIZ/releases/$novo"
+    for imagem in "$AQUI"/images/*.tar; do
+        docker load -q -i "$imagem" >/dev/null
+    done
+    for servico in core-server workspace worker conversion-runner converter; do
+        docker image inspect "ocinye/ocinye-$servico:$novo" >/dev/null 2>&1 \
+            || fatal "o pacote não trouxe ocinye/ocinye-$servico:$novo; nada foi trocado"
+    done
+    nota "release e imagens de $novo prontos"
+
+    # Uma Instância que ainda guarda os bytes no MinIO arquivado passa-os para o
+    # Garage **antes** da troca, com verificação e rollback próprios (ADR-0208).
+    # Sem MinIO, não faz nada.
+    passo "Armazenamento"
+    bash "$RAIZ/releases/$novo/scripts/object-store-cutover.sh" "$RAIZ/releases/$novo" "$novo" \
+        || fatal "a passagem do armazenamento para o Garage falhou; a Instância continua em $anterior"
+
+    passo "Troca"
+    trocar_para "$novo"
+    compose up -d --remove-orphans >/dev/null 2>&1 || true
+
+    passo "Portão de saúde"
+    if portao_de_saude "$dominio" 300; then
+        depois="$(versao_do_esquema)"
+        nota "Core, Workspace e proxy saudáveis · esquema $antes → $depois"
+        # Só uma actualização que passou fica registada como a que `rollback`
+        # desfaz: uma que falhou e foi revertida não mudou nada a desfazer.
+        printf '%s\n' "$anterior" > "$RAIZ/checkpoints/ultimo-release"
+        printf '%s\n' "$checkpoint" > "$RAIZ/checkpoints/ultimo-checkpoint"
+        printf '\n  Ocinye OS actualizado para %s. Anterior: %s (ocinye rollback).\n\n' "$novo" "$anterior"
+        return 0
+    fi
+
+    passo "Reversão"
+    depois="$(versao_do_esquema)"
+    trocar_para "$anterior"
+    if [ "$depois" != "$antes" ]; then
+        nota "o release $novo migrou o esquema ($antes → $depois): repõe-se o checkpoint"
+        repor_checkpoint "$checkpoint" || fatal "a reposição do checkpoint falhou: $checkpoint"
+    else
+        nota "o esquema não mudou ($antes): basta voltar ao release anterior"
+    fi
+    compose up -d --remove-orphans >/dev/null 2>&1 || true
+    portao_de_saude "$dominio" 300 \
+        || fatal "a reversão para $anterior não ficou saudável — intervenção necessária (checkpoint: $checkpoint)"
+    printf '\n  ACTUALIZAÇÃO RECUSADA — %s não passou o portão de saúde.\n' "$novo" >&2
+    printf '  A Instância voltou a %s, saudável, com o esquema %s.\n\n' "$anterior" "$(versao_do_esquema)" >&2
+    exit 3
+}
+
+rollback_() {
+    [ "$(id -u)" = 0 ] || fatal "corra-o como root"
+    [ -r "$RAIZ/checkpoints/ultimo-release" ] || fatal "não há actualização a reverter"
+    local anterior checkpoint dominio antes
+    anterior="$(cat "$RAIZ/checkpoints/ultimo-release")"
+    checkpoint="$(cat "$RAIZ/checkpoints/ultimo-checkpoint")"
+    dominio="$(sed -n 's/^OCINYE_PROXY_HEALTH_HOST=//p' "$CONFIG/release.env")"
+    SHA="$(sed -n 's/^OCINYE_RELEASE_SHA=//p' "$CONFIG/release.env")"
+    [ "$SHA" != "$anterior" ] || fatal "o release corrente já é $anterior"
+    passo "Reversão manual $SHA → $anterior"
+    nota "a base volta ao checkpoint de antes da actualização: o que se escreveu depois perde-se"
+    [ "${1:-}" = --confirm ] || fatal "confirme com --confirm: dados escritos depois da actualização perdem-se"
+    antes="$(versao_do_esquema)"
+    # Voltar a um release anterior ao Garage é voltar também ao MinIO, cujos
+    # dados nunca saíram do volume; o que se escreveu depois fica no Garage, e
+    # perde-se para esta Instância como o resto do que se escreveu depois.
+    if [ -e "$CONFIG/object-store-cutover.done" ] \
+        && grep -q 'minio-server' "$RAIZ/releases/$anterior/infra/compose/docker-compose.production.yml"; then
+        install -m 600 "$CONFIG/core.env.pre-garage" "$CONFIG/core.env"
+        install -m 600 "$CONFIG/object-store-legacy.env" "$CONFIG/object-store.env"
+        rm -f "$CONFIG/object-store-cutover.done"
+        docker rm -f ocinye-object-store-1 >/dev/null 2>&1 || true
+        nota "armazenamento de volta ao MinIO"
+    fi
+    trocar_para "$anterior"
+    repor_checkpoint "$checkpoint"
+    compose up -d --remove-orphans >/dev/null 2>&1 || true
+    portao_de_saude "$dominio" 300 || fatal "a reversão não ficou saudável (checkpoint: $checkpoint)"
+    printf '\n  Instância em %s, esquema %s → %s.\n\n' "$anterior" "$antes" "$(versao_do_esquema)"
+}
+
+# ── status ───────────────────────────────────────────────────────────────
+
+status_() {
+    [ -r "$CONFIG/release.env" ] || fatal "não há nenhuma Instância instalada neste anfitrião"
+    SHA="$(sed -n 's/^OCINYE_RELEASE_SHA=//p' "$CONFIG/release.env")"
+    printf '  release %s\n' "$SHA"
+    compose ps --format 'table {{.Service}}\t{{.Status}}'
+}
+
+# ── uninstall ────────────────────────────────────────────────────────────
+
+uninstall_() {
+    [ "${1:-}" = --purge ] || fatal "uninstall apaga dados: confirme com --purge"
+    [ "$(id -u)" = 0 ] || fatal "corra-o como root"
+    if [ -r "$CONFIG/release.env" ] && [ -d "$RAIZ/current" ]; then
+        SHA="$(sed -n 's/^OCINYE_RELEASE_SHA=//p' "$CONFIG/release.env")"
+        compose --profile backup down -v --remove-orphans >/dev/null 2>&1 || true
+    fi
+    if command -v systemctl >/dev/null && [ -f /etc/systemd/system/ocinye.service ]; then
+        systemctl disable ocinye.service >/dev/null 2>&1 || true
+        rm -f /etc/systemd/system/ocinye.service
+    fi
+    rm -rf "$CONFIG" "$RAIZ"
+    nota "Instância removida: dados, configuração e releases"
+}
+
+case "${1:-}" in
+    install) shift; install_ "$@" ;;
+    status) status_ ;;
+    upgrade) shift; upgrade_ "$@" ;;
+    backup) backup_ ;;
+    rollback) shift; rollback_ "$@" ;;
+    uninstall) shift; uninstall_ "$@" ;;
+    -h|--help|"") uso ;;
+    *) uso; fatal "subcomando desconhecido: $1" ;;
+esac

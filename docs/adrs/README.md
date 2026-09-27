@@ -128,6 +128,7 @@ O que o Ocinye OS é, onde reside a autoridade, e sobre que runtime assenta.
 - [ADR-0014](0014-instance-profiles-and-application-activation.md) — Perfis de Instância e activação de aplicações
 - [ADR-0015](0015-core-and-applications-boundary.md) — A fronteira entre o Core e as aplicações
 - [ADR-0016](0016-application-manifest-contract.md) — O manifesto de aplicação
+- [ADR-0017](0017-instance-configuration-and-branding.md) — Configuração e marca da Instância
 
 ### 0100–0199 · Identidade, Segurança, Autorização e Governação
 
@@ -157,6 +158,7 @@ Onde o material da instituição vive, e o que o acompanha.
 - [ADR-0205](0205-content-extraction-and-lexical-body-search.md) — Extracção de conteúdo e pesquisa lexical do corpo
 - [ADR-0206](0206-embeddings-and-hybrid-retrieval.md) — Embeddings versionados e recuperação híbrida
 - [ADR-0207](0207-personal-files-and-storage.md) — Ficheiros pessoais: todo o membro tem um espaço próprio
+- [ADR-0208](0208-maintained-object-store.md) — Um armazenamento de objectos mantido: Garage
 
 ### 0300–0399 · IA, Controlo Agentic e Inferência
 
@@ -226,6 +228,7 @@ A interface humana.
 Como o sistema sobrevive ao sítio onde corre.
 
 - [ADR-0700](0700-institutional-continuity-and-portability.md) — Continuidade institucional e portabilidade entre servidores
+- [ADR-0701](0701-release-bundle-and-host-installer.md) — O pacote de release e o instalador de anfitrião
 
 Famílias sem ADRs não aparecem. `0800–0899` (integrações externas) e
 `0900–0999` (reservado) estão vazias, e nenhuma ADR será criada apenas para as
@@ -253,6 +256,7 @@ preencher.
 | [0014](0014-instance-profiles-and-application-activation.md) | Perfis de Instância e activação de aplicações | Foundation | `HIGH` | Accepted |
 | [0015](0015-core-and-applications-boundary.md) | A fronteira entre o Core e as aplicações | Foundation | `HIGH` | Accepted |
 | [0016](0016-application-manifest-contract.md) | O manifesto de aplicação | Foundation | `HIGH` | Accepted |
+| [0017](0017-instance-configuration-and-branding.md) | Configuração e marca da Instância | Foundation | `MEDIUM` | Accepted |
 | [0100](0100-authorization-model.md) | RBAC + ABAC contextual, fail closed | Security | `FOUNDATIONAL` | Accepted |
 | [0101](0101-permissions-scopes-and-grants.md) | Permissões nomeadas, âmbitos e grants explícitos | Security | `HIGH` | Accepted |
 | [0102](0102-identity-provider.md) | Identity Provider dedicado (Keycloak) | Identity | `HIGH` | Superseded |
@@ -309,6 +313,7 @@ preencher.
 | [0608](0608-same-origin-institutional-downloads.md) | Descarga institucional servida same-origin | Workspace | `MEDIUM` | Accepted |
 | [0609](0609-disposable-conversion-isolation.md) | Conversão de conteúdo não confiável em contentores descartáveis | Workspace | `HIGH` | Accepted |
 | [0700](0700-institutional-continuity-and-portability.md) | Continuidade institucional e portabilidade entre servidores | Operations | `FOUNDATIONAL` | Accepted |
+| [0701](0701-release-bundle-and-host-installer.md) | O pacote de release e o instalador de anfitrião | Operations | `HIGH` | Accepted |
 
 ---
 

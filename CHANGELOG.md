@@ -7,6 +7,40 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Generalização, Partes 10 a 14 — 2026-09-26
+
+- **Parte 10 — actualização e reversão**: `ocinye upgrade` (checkpoint da base,
+  troca, portão de saúde, reversão automática repondo a base quando o esquema já
+  tinha migrado) e `ocinye rollback --confirm`. Prova em `scripts/upgrade-e2e.sh`.
+- **Parte 11 — backup e restauro**: `ocinye backup` e
+  `ocinye install --restore … --sealing-key-file …`, que só abre a Instância
+  depois das três verificações de continuidade. Prova em `scripts/restore-e2e.sh`,
+  com a mesma pessoa a entrar com o mesmo segundo factor noutro anfitrião.
+- **Parte 12 — fronteiras de confiança**: varredura de todas as rotas do Core sem
+  sessão; [quem confia em quem](docs/security/trust-boundaries.md), com o teste
+  que prova cada fronteira.
+- **Parte 13 — vista do operador**: `GET /api/v1/system/operations`.
+- **Parte 14 — configuração e marca**
+  ([ADR-0017](docs/adrs/0017-instance-configuration-and-branding.md)): língua,
+  fuso, fixações por omissão e logótipo por Instância (migração 0058).
+- O Dockerfile compila os cinco binários uma vez e partilha a camada entre as
+  imagens.
+
+### Generalização, Parte 9: instalar num anfitrião Linux — 2026-09-26
+
+- **Pacote de release** (`scripts/release-bundle.sh`): a árvore de um commit, as
+  cinco imagens, o instalador e `SHA256SUMS`
+  ([ADR-0701](docs/adrs/0701-release-bundle-and-host-installer.md)).
+- **Instalador** `install/ocinye` (`install`, `status`, `uninstall --purge`): o
+  layout da produção num anfitrião novo, com segredos gerados no anfitrião,
+  Instância e primeiro administrador criados no bootstrap, e saúde confirmada de
+  fora. Proxy genérico de um anfitrião (`infra/nginx/instance/`).
+- **Prova de instalação** (`scripts/install-e2e.sh`): instalar num anfitrião
+  descartável, entrar e trabalhar por um browser, destruir, repetir com outro
+  perfil. [Guia de instalação](docs/install/README.md).
+- O host do healthcheck do proxy passa a ser `OCINYE_PROXY_HEALTH_HOST`, com
+  `ocinye.com` por omissão — a produção não muda.
+
 ### Generalização, Parte 8: política e roteamento de IA — 2026-09-26
 
 - **Política antes da preferência**

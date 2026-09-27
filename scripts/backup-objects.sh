@@ -1,25 +1,19 @@
 #!/usr/bin/env bash
-# Traz para o conjunto de continuidade os bytes institucionais.
+# Traz para o conjunto de continuidade os bytes institucionais — e devolve-os
+# ao armazenamento num restauro.
 #
-# **Bash, e não `/bin/sh`.** Como o `backup-remote.sh`, a codificação percent das
-# credenciais para `MC_HOST_*` usa `printf '%b' '\xNN'` — escapes hexadecimais que
-# o `bash` entende e o `dash` (o `/bin/sh` do Ubuntu) não. Sob dash a credencial
-# saía deformada e o `mc` recusava o MinIO de origem. Auditado um a um, não por
-# troca global de shebangs.
+# # O cliente é o rclone
 #
-# # Porque não um comando no ambiente
+# Era o `mc` do MinIO. O MinIO foi arquivado e o `mc` deixou de ser servido,
+# o que partiu o backup nocturno em Setembro de 2026. O rclone é mantido, fala
+# S3 com qualquer implementação, e configura-se só por ambiente — sem ficheiro,
+# sem credenciais em URL (ADR-0208).
 #
-# `OCINYE_OBJECT_SYNC_CMD` tinha exactamente o problema do transporte remoto:
-# um comando de shell numa variável, corrido por `eval`. E tinha um problema a
-# mais — obrigava quem instala a escrever **outra vez** onde vivem os bytes,
-# quando a aplicação já o sabe.
+# # A origem é a configuração do Core
 #
-# Aqui a origem é a mesma configuração que o Core usa. Duas descrições do mesmo
-# armazenamento é um sítio onde discordar, e o dia em que discordassem o backup
-# copiaria um bucket que já não é o da instituição.
-#
-# A arquitectura continua S3-compatible (ADR-0200). O cliente é uma dependência
-# declarada; o endpoint é o que a instalação tem.
+# Não se escreve outra vez onde vivem os bytes: lê-se a mesma configuração que o
+# Core usa. Duas descrições do mesmo armazenamento seriam um sítio onde
+# discordar, e o backup copiaria um bucket que já não é o da instituição.
 #
 # # Configuração
 #
@@ -27,10 +21,11 @@
 #     OCINYE_STORAGE_ACCESS_KEY
 #     OCINYE_STORAGE_SECRET_KEY
 #     OCINYE_STORAGE_BUCKET
+#     OCINYE_STORAGE_REGION         por omissão us-east-1
 #
-# # Uso
-#
-#     backup-objects.sh mirror DESTINO
+# Uso:
+#     backup-objects.sh mirror  PASTA   do bucket para a pasta
+#     backup-objects.sh restore PASTA   da pasta para o bucket
 set -eu
 
 fatal() { printf 'backup-objects: %s\n' "$1" >&2; exit 1; }
@@ -40,32 +35,39 @@ for obrigatoria in OCINYE_STORAGE_ENDPOINT_URL OCINYE_STORAGE_ACCESS_KEY \
   eval "valor=\${$obrigatoria:-}"
   [ -n "$valor" ] || fatal "$obrigatoria não está definida."
 done
+command -v rclone >/dev/null 2>&1 || fatal "o rclone não está instalado."
 
-command -v mc >/dev/null 2>&1 || fatal "o cliente 'mc' não está instalado."
-
-codificar() {
-  printf '%s' "$1" | od -An -tx1 -v | tr ' ' '\n' | grep -v '^$' | while read -r byte; do
-    case "$byte" in
-      2d|2e|5f|7e|3[0-9]|4[1-9a-f]|5[0-9a]|6[1-9a-f]|7[0-9a]) printf '%b' "\\x$byte" ;;
-      *) printf '%%%s' "$(printf '%s' "$byte" | tr '[:lower:]' '[:upper:]')" ;;
-    esac
-  done
-}
-
-ESQUEMA="$(printf '%s' "$OCINYE_STORAGE_ENDPOINT_URL" | sed 's#://.*##')"
-ANFITRIAO="$(printf '%s' "$OCINYE_STORAGE_ENDPOINT_URL" | sed 's#^[a-z]*://##')"
-MC_HOST_ocinyeorigem="$ESQUEMA://$(codificar "$OCINYE_STORAGE_ACCESS_KEY"):$(codificar "$OCINYE_STORAGE_SECRET_KEY")@$ANFITRIAO"
-export MC_HOST_ocinyeorigem
+# O remoto «instituicao», descrito só por ambiente: nada no disco, nada na linha
+# de comandos que um `ps` mostrasse.
+export RCLONE_CONFIG_INSTITUICAO_TYPE=s3
+export RCLONE_CONFIG_INSTITUICAO_PROVIDER=Other
+export RCLONE_CONFIG_INSTITUICAO_ENDPOINT="$OCINYE_STORAGE_ENDPOINT_URL"
+export RCLONE_CONFIG_INSTITUICAO_ACCESS_KEY_ID="$OCINYE_STORAGE_ACCESS_KEY"
+export RCLONE_CONFIG_INSTITUICAO_SECRET_ACCESS_KEY="$OCINYE_STORAGE_SECRET_KEY"
+export RCLONE_CONFIG_INSTITUICAO_REGION="${OCINYE_STORAGE_REGION:-us-east-1}"
+export RCLONE_CONFIG_INSTITUICAO_FORCE_PATH_STYLE=true
+export RCLONE_CONFIG=/dev/null
 
 case "${1:-}" in
   mirror)
     [ $# -eq 2 ] || fatal "uso: mirror DESTINO"
     mkdir -p "$2"
-    mc mirror --quiet --overwrite \
-      "ocinyeorigem/$OCINYE_STORAGE_BUCKET" "$2" >/dev/null \
+    rclone copy --quiet "instituicao:$OCINYE_STORAGE_BUCKET" "$2" \
       || fatal "a cópia dos objectos falhou."
+    # A cópia confere-se contra a origem, ficheiro a ficheiro, e não se presume
+    # por o comando ter saído zero.
+    rclone check --quiet --one-way "instituicao:$OCINYE_STORAGE_BUCKET" "$2" \
+      || fatal "a cópia dos objectos não confere com o bucket."
+    ;;
+  restore)
+    [ $# -eq 2 ] || fatal "uso: restore ORIGEM"
+    [ -d "$2" ] || fatal "«$2» não é uma pasta."
+    rclone copy --quiet "$2" "instituicao:$OCINYE_STORAGE_BUCKET" \
+      || fatal "a reposição dos objectos falhou."
+    rclone check --quiet --one-way "$2" "instituicao:$OCINYE_STORAGE_BUCKET" \
+      || fatal "os objectos repostos não conferem com o conjunto."
     ;;
   *)
-    fatal "operação desconhecida: ${1:-}. Use mirror."
+    fatal "operação desconhecida: ${1:-}. Use mirror ou restore."
     ;;
 esac

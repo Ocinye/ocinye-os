@@ -9,7 +9,7 @@ produção é servida a partir destes ficheiros — ver
 
 | Caminho | O quê |
 |---|---|
-| [`compose/docker-compose.yml`](compose/docker-compose.yml) | Stack **local**: PostgreSQL, Redis, MinIO |
+| [`compose/docker-compose.yml`](compose/docker-compose.yml) | Stack **local**: PostgreSQL, Redis, Garage (S3) |
 | [`compose/docker-compose.production.yml`](compose/docker-compose.production.yml) | Topologia de **produção**: proxy, workspace, core, worker, postgres, redis, object-store |
 | [`docker/Dockerfile`](docker/Dockerfile) | Imagem dos serviços, construída no host e etiquetada pelo SHA do release |
 | [`systemd/ocinye.service`](systemd/ocinye.service) | Arranque ordenado da stack de produção após reboot |
@@ -26,7 +26,7 @@ docker compose -f infra/compose/docker-compose.yml up -d
 |---|---|---|
 | PostgreSQL 17 + pgvector | 5442 | pgvector é exigido pela migration 0006 |
 | Redis 7 | 6380 | Coordenação efémera, nunca fonte de verdade |
-| MinIO | 9000 (consola 9001) | Bucket criado **privado** pelo `minio-init` |
+| Garage (S3) | 9000 | Layout, chave e bucket **privado** pelo `garage-init` (`infra/garage/init.sh`) |
 
 Portas fora do habitual de propósito: colidir com outro PostgreSQL local é a
 primeira coisa que acontece a quem já desenvolve noutro projecto.

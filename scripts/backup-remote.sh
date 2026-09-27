@@ -1,21 +1,16 @@
 #!/usr/bin/env bash
 # O transporte da cópia institucional para fora deste servidor.
 #
-# **Bash, e não `/bin/sh`.** A codificação percent das credenciais para o
-# `MC_HOST_*` usa `printf '%b' '\xNN'` — os escapes hexadecimais que o `bash`
-# entende e o `dash` (o `/bin/sh` do Debian/Ubuntu) não. Sob `dash`, `codificar`
-# devolvia o literal `\x41` em vez do byte, a credencial saía deformada, e o
-# `mc` recusava com «Access Denied» — um destino que responde a dizer que as
-# credenciais não abrem o bucket. O shebang era `#!/bin/sh`, e a máquina onde
-# isto se escreveu tinha `sh` a resolver para `bash`; o servidor não.
+# **Bash, e não `/bin/sh`**, por coerência com os irmãos: a codificação de
+# credenciais do tempo do `mc` já não existe, mas o shebang que a protegia fica.
 #
 # # Porque isto existe
 #
 # Porque a interface anterior era um **comando de shell numa variável de
 # ambiente**:
 #
-#     OCINYE_BACKUP_REMOTE_CMD=mc cp --quiet
-#     OCINYE_BACKUP_VERIFY_CMD=mc cat cofre/…
+#     OCINYE_BACKUP_REMOTE_CMD=… cp --quiet
+#     OCINYE_BACKUP_VERIFY_CMD=… cat cofre/…
 #
 # Três problemas, e nenhum é estético.
 #
@@ -55,12 +50,13 @@
 #     list                   os conjuntos no destino, mais recente primeiro
 #     prune QUANTOS          aplica retenção no destino
 #
-# # Porque `mc` e não `aws`
+# # O cliente é o rclone
 #
-# Porque fala S3 com qualquer implementação compatível, é o cliente que a
-# instalação já usa para o armazenamento institucional, e aceita credenciais por
-# `MC_HOST_*` — que as mantém fora da linha de comandos e portanto fora do `ps`.
-# A escolha é uma dependência declarada, e não um comando arbitrário.
+# Era o `mc` do MinIO, que deixou de ser servido quando o MinIO foi arquivado
+# (ADR-0208). O rclone fala S3 com qualquer implementação compatível, é mantido,
+# e configura-se só por ambiente (`RCLONE_CONFIG_COFRE_*`) — as credenciais ficam
+# fora da linha de comandos e portanto fora do `ps`, como com o `MC_HOST_*`. A
+# escolha é uma dependência declarada, e não um comando arbitrário.
 set -eu
 
 fatal() { printf 'backup-remote: %s\n' "$1" >&2; exit 1; }
@@ -74,59 +70,43 @@ for obrigatoria in OCINYE_BACKUP_S3_ENDPOINT OCINYE_BACKUP_S3_BUCKET \
   eval "valor=\${$obrigatoria:-}"
   [ -n "$valor" ] || fatal "$obrigatoria não está definida."
 done
-
 PREFIXO="${OCINYE_BACKUP_S3_PREFIX:-conjuntos}"
-command -v mc >/dev/null 2>&1 || fatal "o cliente 'mc' não está instalado."
+command -v rclone >/dev/null 2>&1 || fatal "o rclone não está instalado."
 
-# As credenciais entram por ambiente, e não por argumento: um argumento é
-# visível no `ps` para qualquer processo da máquina.
-#
-# O `mc` exige-as percent-encoded dentro do URL.
-codificar() {
-  printf '%s' "$1" | od -An -tx1 -v | tr ' ' '\n' | grep -v '^$' | while read -r byte; do
-    case "$byte" in
-      2d|2e|5f|7e|3[0-9]|4[1-9a-f]|5[0-9a]|6[1-9a-f]|7[0-9a]) printf '%b' "\\x$byte" ;;
-      *) printf '%%%s' "$(printf '%s' "$byte" | tr '[:lower:]' '[:upper:]')" ;;
-    esac
-  done
-}
+export RCLONE_CONFIG_COFRE_TYPE=s3
+export RCLONE_CONFIG_COFRE_PROVIDER=Other
+export RCLONE_CONFIG_COFRE_ENDPOINT="$OCINYE_BACKUP_S3_ENDPOINT"
+export RCLONE_CONFIG_COFRE_ACCESS_KEY_ID="$OCINYE_BACKUP_S3_ACCESS_KEY"
+export RCLONE_CONFIG_COFRE_SECRET_ACCESS_KEY="$OCINYE_BACKUP_S3_SECRET_KEY"
+export RCLONE_CONFIG_COFRE_REGION="${OCINYE_BACKUP_S3_REGION:-us-east-1}"
+export RCLONE_CONFIG_COFRE_FORCE_PATH_STYLE=true
+export RCLONE_CONFIG=/dev/null
 
-CHAVE="$(codificar "$OCINYE_BACKUP_S3_ACCESS_KEY")"
-SEGREDO="$(codificar "$OCINYE_BACKUP_S3_SECRET_KEY")"
-ESQUEMA="$(printf '%s' "$OCINYE_BACKUP_S3_ENDPOINT" | sed 's#://.*##')"
-ANFITRIAO="$(printf '%s' "$OCINYE_BACKUP_S3_ENDPOINT" | sed 's#^[a-z]*://##')"
-MC_HOST_ocinyecofre="$ESQUEMA://$CHAVE:$SEGREDO@$ANFITRIAO"
-export MC_HOST_ocinyecofre
-
-ALVO="ocinyecofre/$OCINYE_BACKUP_S3_BUCKET/$PREFIXO"
+ALVO="cofre:$OCINYE_BACKUP_S3_BUCKET/$PREFIXO"
 
 case "${1:-}" in
   probe)
     # Sondar antes de tentar: descobrir que as credenciais estão erradas depois
     # de cifrar meio gigabyte é descobri-lo tarde de mais para servir.
-    mc ls "ocinyecofre/$OCINYE_BACKUP_S3_BUCKET" >/dev/null 2>&1 \
+    rclone lsf --max-depth 1 "cofre:$OCINYE_BACKUP_S3_BUCKET" >/dev/null 2>&1 \
       || fatal "o destino não respondeu, ou as credenciais não abrem o bucket."
     printf 'destino alcançável: %s/%s\n' "$OCINYE_BACKUP_S3_BUCKET" "$PREFIXO"
     ;;
-
   put)
     [ $# -eq 3 ] || fatal "uso: put FICHEIRO NOME"
     [ -f "$2" ] || fatal "não existe: $2"
-    mc cp --quiet "$2" "$ALVO/$3" >/dev/null \
+    rclone copyto --quiet "$2" "$ALVO/$3" \
       || fatal "o envio de $3 falhou."
     ;;
-
   read-back)
     # Lê o que **está lá**. O `put` sair zero não é prova de que chegou: um
     # cliente mal configurado escreve numa pasta local e sai zero na mesma.
     [ $# -eq 2 ] || fatal "uso: read-back NOME"
-    mc cat "$ALVO/$2" 2>/dev/null || fatal "não foi possível ler $2 do destino."
+    rclone cat "$ALVO/$2" 2>/dev/null || fatal "não foi possível ler $2 do destino."
     ;;
-
   list)
-    mc ls "$ALVO/" 2>/dev/null | awk '{print $NF}' | grep -v '\.sha256$' | sort -r || true
+    rclone lsf "$ALVO/" 2>/dev/null | sed 's#/$##' | grep -v '\.sha256$' | sort -r || true
     ;;
-
   prune)
     [ $# -eq 2 ] || fatal "uso: prune QUANTOS"
     QUANTOS="$2"
@@ -137,12 +117,12 @@ case "${1:-}" in
     [ -n "$VELHOS" ] || exit 0
     printf '%s\n' "$VELHOS" | while read -r velho; do
       [ -n "$velho" ] || continue
-      mc rm --quiet --recursive --force "$ALVO/$velho" >/dev/null 2>&1 || true
-      mc rm --quiet --force "$ALVO/$velho.sha256" >/dev/null 2>&1 || true
+      rclone purge "$ALVO/$velho" >/dev/null 2>&1 \
+        || rclone deletefile "$ALVO/$velho" >/dev/null 2>&1 || true
+      rclone deletefile "$ALVO/$velho.sha256" >/dev/null 2>&1 || true
       printf 'removido do destino: %s\n' "$velho"
     done
     ;;
-
   *)
     fatal "operação desconhecida: ${1:-}. Use probe, put, read-back, list ou prune."
     ;;

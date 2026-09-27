@@ -153,6 +153,13 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
     // raiz de selagem viaja à parte, e `verify-keys` prova que abrem.
     ("instance_secrets", Comparacao::Identidades),
     (
+        "instance_settings",
+        Comparacao::Fora(
+            "configuração da Instância, uma linha por organização e sem identidade \
+             própria; viaja com a organização, e o logótipo com os objectos (ADR-0017)",
+        ),
+    ),
+    (
         "instance_applications",
         Comparacao::Fora(
             "configuração da Instância, chaveada por organização e aplicação e sem \
