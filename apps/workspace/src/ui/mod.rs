@@ -1,8 +1,8 @@
 //! A interface do Ocinye Workspace.
 //!
-//! Implementa o dossier de design em [`design/`](../../../../design/README.md).
-//! Os valores visuais vivem em `static/ocinye.css` como custom properties: nenhum
-//! componente aqui define cor, tamanho ou raio soltos.
+//! A apresentação legada saiu no UI Reset: o que aqui fica é estrutura
+//! semântica e marcadores de comportamento (`data-oc`, `data-part`), à espera
+//! dos pacotes do Claude Design (`docs/ui/CLAUDE_DESIGN_CONTRACT.md`).
 //!
 //! # O que está aqui
 //!
@@ -63,8 +63,17 @@ pub fn document_com_cabeca(
          <link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?\
          family=IBM+Plex+Mono:wght@400;500;600&\
          family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap\">\n\
-         <link rel=\"stylesheet\" href=\"/static/ocinye.css\">\n\
          <link rel=\"stylesheet\" href=\"/static/ocinye-ds.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d1-primitives.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d2-shell.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d3-auth.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d4-desktop.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d6-launcher.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d7-nye.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d8-apps-core.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d9-apps.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d10-settings.css\">\n\
+         <link rel=\"stylesheet\" href=\"/static/ods-d11-adaptive.css\">\n\
          <title>",
     );
     out.push_str(&escape(title));
@@ -136,12 +145,14 @@ mod tests {
     }
 
     #[test]
-    fn o_documento_carrega_o_stylesheet_e_o_script() {
+    fn o_documento_carrega_o_script_e_nenhuma_folha_legada() {
         let html = document("Teste", leptos::prelude::view! { <p>"olá"</p> });
-        assert!(html.contains("/static/ocinye.css"));
         assert!(html.contains("/static/app.js"));
         assert!(html.contains("lang=\"pt-PT\""));
-        assert!(html.contains("IBM+Plex+Sans"));
+        assert!(
+            !html.contains("/static/ocinye.css"),
+            "a folha legada voltou"
+        );
     }
 }
 

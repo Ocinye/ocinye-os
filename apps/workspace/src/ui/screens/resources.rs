@@ -153,7 +153,7 @@ pub fn resources(me: &Value) -> impl IntoView {
             </div>
 
             <div class="oc-page">
-                <section class="oc-card oc-card__body oc-mb-5">
+                <section class="oc-card oc-card__body oc-mb-5" data-part="card">
                     <div class="oc-row oc-row--between oc-mb-5">
                         <div>
                             <h2>{crate::i18n::t("resources.storage.title")}</h2>
@@ -182,7 +182,7 @@ pub fn resources(me: &Value) -> impl IntoView {
                     </div>
                 </section>
 
-                <section class="oc-card oc-card__body">
+                <section class="oc-card oc-card__body" data-part="card">
                     <div class="oc-mb-5">
                         <h2>{crate::i18n::t("resources.origin.title")}</h2>
                         <p class="oc-t-meta">
@@ -252,7 +252,7 @@ pub fn resources(me: &Value) -> impl IntoView {
 fn metric(label: &'static str, value: &str) -> impl IntoView {
     let value = value.to_owned();
     view! {
-        <div class="oc-card oc-card__body">
+        <div class="oc-card oc-card__body" data-part="card">
             <div class="oc-t-meta">{label}</div>
             <div class="oc-t-kpi oc-mt-5">{value}</div>
         </div>

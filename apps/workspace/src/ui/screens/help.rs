@@ -30,7 +30,7 @@ fn seccao(
     corpo: impl IntoView + 'static,
 ) -> impl IntoView {
     view! {
-        <section class="oc-card oc-mb-5" id=ancora>
+        <section class="oc-card oc-mb-5" data-part="card" id=ancora>
             {section_head(titulo, None, None)}
             <div class="oc-card__body">{corpo}</div>
         </section>
@@ -63,7 +63,7 @@ pub fn help() -> impl IntoView {
                 </div>
             </div>
 
-            <nav class="oc-card oc-card__body oc-mb-5" aria-label=crate::i18n::t("help.on_this_page")>
+            <nav class="oc-card oc-card__body oc-mb-5" data-part="card" aria-label=crate::i18n::t("help.on_this_page")>
                 <div class="oc-t-meta oc-mb-5">{crate::i18n::t("help.on_this_page")}</div>
                 <div class="oc-col oc-gap-2">
                     <a href="#comecar">{crate::i18n::t("help.start")}</a>

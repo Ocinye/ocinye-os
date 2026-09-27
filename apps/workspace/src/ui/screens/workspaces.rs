@@ -227,7 +227,7 @@ fn idea_lifecycle_actions(id: &str, idea: &Value, workspace: &Value) -> impl Int
                         if requires_note {
                             view! {
                                 <details class="oc-lifecycle__close">
-                                    <summary class="oc-btn oc-btn--sm oc-btn--secondary">
+                                    <summary class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn">
                                         {verbo}
                                     </summary>
                                     <form
@@ -245,7 +245,7 @@ fn idea_lifecycle_actions(id: &str, idea: &Value, workspace: &Value) -> impl Int
                                             placeholder=crate::i18n::t("workspaces.idea.reason_placeholder")
                                         />
                                         <button
-                                            class="oc-btn oc-btn--sm oc-btn--danger"
+                                            class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn"
                                             type="submit"
                                         >
                                             {crate::i18n::t("action.confirm")}
@@ -259,7 +259,7 @@ fn idea_lifecycle_actions(id: &str, idea: &Value, workspace: &Value) -> impl Int
                                 <form method="post" action=accao class="oc-lifecycle__step">
                                     <input type="hidden" name="state" value=estado />
                                     <button
-                                        class="oc-btn oc-btn--sm oc-btn--secondary"
+                                        class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn"
                                         type="submit"
                                     >
                                         {verbo}
@@ -391,12 +391,12 @@ pub fn research_workspace(view: WorkspaceView) -> impl IntoView {
                     may_use: may_use_assistance,
                 })}
 
-                <section class="oc-card" id="ws-actividade">
+                <section class="oc-card" data-part="card" id="ws-actividade">
                     {section_head(crate::i18n::t("workspaces.recent_activity"), None, None)}
                     <div class="oc-card__body">{activity_list(&activity)}</div>
                 </section>
 
-                <section class="oc-card" id="ws-tarefas">
+                <section class="oc-card" data-part="card" id="ws-tarefas">
                     {section_head(crate::i18n::t("workspaces.tasks"), None, None)}
                     <div class="oc-card__body">{task_list(&tasks)}</div>
                 </section>
@@ -434,7 +434,7 @@ fn idea_overview(idea: &Value, sources: &Value, datasets: &Value) -> impl IntoVi
     let dataset_count = items(datasets).len();
 
     view! {
-        <section class="oc-card">
+        <section class="oc-card" data-part="card">
             {section_head(crate::i18n::t("workspaces.field.description"), None, None)}
             <div class="oc-card__body">
                 <p class="oc-t-body" >
@@ -489,7 +489,7 @@ fn project_overview(project: &Value, members: &[Value]) -> impl IntoView {
     let members = members.to_vec();
 
     view! {
-        <section class="oc-card">
+        <section class="oc-card" data-part="card">
             {section_head(crate::i18n::t("workspaces.field.description"), None, None)}
             <div class="oc-card__body">
                 <p class="oc-t-body" >
@@ -723,14 +723,14 @@ pub fn task_detail(
 
         <div class="oc-page">
             {ok.filter(|s| !s.is_empty()).map(|m| view! {
-                <div class="oc-card oc-note" role="status">{m.to_owned()}</div>
+                <div class="oc-card oc-note" data-part="card" role="status">{m.to_owned()}</div>
             })}
             {erro.filter(|s| !s.is_empty()).map(|m| view! {
-                <div class="oc-card oc-alert" role="alert">{m.to_owned()}</div>
+                <div class="oc-card oc-alert" data-part="card" role="alert">{m.to_owned()}</div>
             })}
 
             <div class="oc-grid oc-grid--detail">
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("workspaces.task.about"), None, None)}
                     <div class="oc-card__body">
                         <p class="oc-t-body">{text(task, "description")}</p>
@@ -744,7 +744,7 @@ pub fn task_detail(
                 </section>
 
                 {may_act.then(|| view! {
-                    <section class="oc-card">
+                    <section class="oc-card" data-part="card">
                         {section_head(crate::i18n::t("workspaces.task.actions"), None, None)}
                         <div class="oc-card__body">
                             <div class="oc-field__label">{crate::i18n::t("workspaces.task.change_state")}</div>
@@ -765,7 +765,7 @@ pub fn task_detail(
                                         view! {
                                             <form method="post" action=accao class="oc-lifecycle__step">
                                                 <input type="hidden" name="state" value=estado />
-                                                <button class="oc-btn oc-btn--sm oc-btn--secondary" type="submit">
+                                                <button class="oc-btn oc-btn--sm oc-btn--secondary" data-part="btn" type="submit">
                                                     {rotulo}
                                                 </button>
                                             </form>
@@ -785,7 +785,7 @@ pub fn task_detail(
                                         view! { <option value=pid selected=escolhido>{nome}</option> }
                                     }).collect_view()}
                                 </select>
-                                <button class="oc-btn oc-btn--sm oc-btn--primary" type="submit">
+                                <button class="oc-btn oc-btn--sm oc-btn--primary" data-part="btn" type="submit">
                                     {crate::i18n::t("workspaces.assign")}
                                 </button>
                             </form>
@@ -853,7 +853,7 @@ pub fn dataset_detail(dataset: &Value, versions: &Value) -> AnyView {
 
         <div class="oc-page">
             <div class="oc-grid oc-grid--detail">
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("workspaces.dataset.about"), None, None)}
                     <div class="oc-card__body">
                         <p class="oc-t-body">{text(dataset, "description")}</p>
@@ -870,7 +870,7 @@ pub fn dataset_detail(dataset: &Value, versions: &Value) -> AnyView {
                     </div>
                 </section>
 
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("workspaces.dataset.versions"), None, None)}
                     <div class="oc-card__body">
                         {if versoes.is_empty() {
@@ -939,7 +939,7 @@ fn artefact_card(
     let count = rows.len();
 
     view! {
-        <section class="oc-card">
+        <section class="oc-card" data-part="card">
             <div class="oc-card__head">
                 <h2>{title}</h2>
                 <span class="oc-card__meta">{count.to_string()}</span>
@@ -1093,7 +1093,7 @@ pub fn unit_detail(
 
         <div class="oc-page oc-page" >
             <div class="oc-grid oc-grid--detail">
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     {section_head(crate::i18n::t("workspaces.unit.about"), None, None)}
                     <div class="oc-card__body">
                         <p class="oc-t-body" >
@@ -1106,7 +1106,7 @@ pub fn unit_detail(
                                     {research_areas
                                         .iter()
                                         .map(|area| view! {
-                                            <span class="oc-chip" >{area.clone()}</span>
+                                            <span class="oc-chip" data-part="chip" >{area.clone()}</span>
                                         })
                                         .collect_view()}
                                 </div>
@@ -1121,7 +1121,7 @@ pub fn unit_detail(
                     </div>
                 </section>
 
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     <div class="oc-card__head">
                         <h2>{crate::i18n::t("workspaces.members")}</h2>
                         <span class="oc-card__meta">{member_rows.len().to_string()}</span>
@@ -1142,7 +1142,7 @@ pub fn unit_detail(
                                             let unidade = id.clone();
                                             let pode = gestao.pode_gerir;
                                             view! {
-                                                <div class="oc-pessoa" >
+                                                <div class="oc-pessoa" data-part="pessoa" >
                                                     <span class="oc-avatar oc-avatar--sm" >
                                                         {crate::ui::initials(&name)}
                                                     </span>
@@ -1194,11 +1194,11 @@ fn gerir_pessoa(unit_id: &str, person_id: &str, role: &str) -> impl IntoView {
             <form method="post" action=format!("/units/{unit_id}/members/role")>
                 <input type="hidden" name="person_id" value=person_id.to_owned() />
                 <input type="hidden" name="role" value=novo />
-                <button class="oc-btn oc-btn--ghost" type="submit">{rotulo}</button>
+                <button class="oc-btn oc-btn--ghost" data-part="btn" type="submit">{rotulo}</button>
             </form>
             <form method="post" action=format!("/units/{unit_id}/members/remove")>
                 <input type="hidden" name="person_id" value=person_id.to_owned() />
-                <button class="oc-btn oc-btn--ghost" type="submit">{crate::i18n::t("action.remove")}</button>
+                <button class="oc-btn oc-btn--ghost" data-part="btn" type="submit">{crate::i18n::t("action.remove")}</button>
             </form>
         </span>
     }
@@ -1227,7 +1227,7 @@ fn acrescentar_pessoa(unit_id: &str, candidatos: &[(String, String)]) -> impl In
 
     view! {
         <form
-            class="oc-pessoa__acrescentar oc-mt-5"
+            class="oc-pessoa__acrescentar oc-mt-5" data-part="pessoa__acrescentar"
             method="post"
             action=format!("/units/{unit_id}/members")
         >
@@ -1240,7 +1240,7 @@ fn acrescentar_pessoa(unit_id: &str, candidatos: &[(String, String)]) -> impl In
                 <option value="member">{crate::i18n::t("workspaces.role.member")}</option>
                 <option value="manager">{crate::i18n::t("workspaces.role.manager")}</option>
             </select>
-            <button class="oc-btn oc-btn--primary" type="submit">{crate::i18n::t("workspaces.add")}</button>
+            <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">{crate::i18n::t("workspaces.add")}</button>
         </form>
     }
     .into_any()
@@ -1267,7 +1267,7 @@ fn pessoas_do_ambiente(
     let linhas = membros.to_vec();
 
     view! {
-        <section class="oc-card">
+        <section class="oc-card" data-part="card">
             <div class="oc-card__head">
                 <h2>{crate::i18n::t("workspaces.people")}</h2>
                 <span class="oc-card__meta">{linhas.len().to_string()}</span>
@@ -1287,7 +1287,7 @@ fn pessoas_do_ambiente(
                                     let ambiente = id.clone();
                                     let pode = gestao.pode_gerir;
                                     view! {
-                                        <div class="oc-pessoa">
+                                        <div class="oc-pessoa" data-part="pessoa">
                                             <span class="oc-avatar oc-avatar--sm">
                                                 {crate::ui::initials(&nome)}
                                             </span>
@@ -1324,7 +1324,7 @@ fn remover_do_ambiente(workspace_id: &str, person_id: &str) -> impl IntoView {
         <span class="oc-pessoa__accoes">
             <form method="post" action=format!("/workspaces/{workspace_id}/members/remove")>
                 <input type="hidden" name="person_id" value=person_id.to_owned() />
-                <button class="oc-btn oc-btn--ghost" type="submit">{crate::i18n::t("action.remove")}</button>
+                <button class="oc-btn oc-btn--ghost" data-part="btn" type="submit">{crate::i18n::t("action.remove")}</button>
             </form>
         </span>
     }
@@ -1354,7 +1354,7 @@ fn acrescentar_ao_ambiente(workspace_id: &str, candidatos: &[(String, String)]) 
 
     view! {
         <form
-            class="oc-pessoa__acrescentar oc-mt-5"
+            class="oc-pessoa__acrescentar oc-mt-5" data-part="pessoa__acrescentar"
             method="post"
             action=format!("/workspaces/{workspace_id}/members")
         >
@@ -1368,7 +1368,7 @@ fn acrescentar_ao_ambiente(workspace_id: &str, candidatos: &[(String, String)]) 
                 <option value="lead">{crate::i18n::t("workspaces.role.lead")}</option>
                 <option value="viewer">{crate::i18n::t("workspaces.role.viewer")}</option>
             </select>
-            <button class="oc-btn oc-btn--primary" type="submit">{crate::i18n::t("workspaces.add")}</button>
+            <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">{crate::i18n::t("workspaces.add")}</button>
         </form>
     }
     .into_any()

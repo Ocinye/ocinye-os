@@ -1,0 +1,56 @@
+/* D8 · Ficheiros, Notas, Correio — moldura comum das apps */
+.ods-app { height: 100%; display: flex; flex-direction: column; background: var(--ods-surface-window); }
+.ods-app__toolbar { flex: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--ods-border-soft); }
+.ods-app__toolbar-spacer { flex: 1; }
+.ods-app__split { flex: 1; min-height: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr); }
+.ods-app__split--3 { grid-template-columns: 220px minmax(280px, 380px) minmax(0, 1fr); }
+.ods-app__side { border-right: 1px solid var(--ods-border-soft); background: var(--ods-surface-panel); overflow-y: auto; padding: 10px 8px; }
+.ods-app__side-item { display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 10px; border-radius: 8px; color: var(--ods-text-body); font: 500 13px var(--ods-font-sans); text-decoration: none; }
+.ods-app__side-item:hover { background: var(--ods-surface-hover); text-decoration: none; }
+.ods-app__side-item[aria-current] { background: var(--ods-action-navy); color: #FFFFFF; }
+.ods-app__side-count { margin-left: auto; font: 500 10.5px var(--ods-font-mono); opacity: .7; }
+.ods-app__main { min-width: 0; overflow-y: auto; }
+@media (max-width: 767px) { .ods-app__split, .ods-app__split--3 { grid-template-columns: 1fr; } .ods-app__side { display: none; } }
+
+/* Ficheiros */
+.ods-files__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; padding: 16px; }
+.ods-files__grid[data-view="list"] { grid-template-columns: 1fr; gap: 0; padding: 0; }
+.ods-file { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; border: 1px solid transparent; cursor: pointer; }
+.ods-file:hover { background: var(--ods-surface-muted); }
+.ods-file[aria-selected="true"] { background: var(--ods-surface-selected); border-color: rgba(29,90,148,.35); }
+.ods-file__thumb { aspect-ratio: 4 / 3; border-radius: 9px; background: var(--ods-surface-muted); display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--ods-text-meta); }
+.ods-file__thumb img { width: 100%; height: 100%; object-fit: cover; }
+.ods-file__name { font: 500 12.5px var(--ods-font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ods-file__meta { font: 400 10.5px var(--ods-font-mono); color: var(--ods-text-faint); }
+.ods-files__grid[data-view="list"] .ods-file { flex-direction: row; align-items: center; border-radius: 0; border-bottom: 1px solid var(--ods-border-faint); }
+.ods-files__grid[data-view="list"] .ods-file__thumb { width: 28px; aspect-ratio: 1; border-radius: 6px; }
+.ods-files__batch { position: sticky; bottom: 12px; margin: 0 auto; width: max-content; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; }
+.ods-quicklook { position: fixed; inset: 0; z-index: var(--ods-z-launcher); display: flex; align-items: center; justify-content: center; padding: 32px; }
+.ods-quicklook[hidden] { display: none; }
+.ods-quicklook__panel { position: relative; width: min(960px, 100%); height: min(720px, 100%); display: flex; flex-direction: column; overflow: hidden; }
+.ods-quicklook__body { flex: 1; min-height: 0; overflow: auto; background: var(--ods-surface-muted); }
+.ods-dropzone { border: 2px dashed var(--ods-border-strong); border-radius: 14px; }
+.ods-dropzone[data-over] { border-color: var(--ods-gold-500); background: var(--ods-gold-100); }
+
+/* Notas */
+.ods-notes__list-item { display: block; padding: 10px 14px; border-bottom: 1px solid var(--ods-border-faint); text-decoration: none; color: inherit; }
+.ods-notes__list-item[aria-current] { background: var(--ods-surface-selected); }
+.ods-notes__title { font: 600 13px var(--ods-font-sans); } .ods-notes__excerpt { margin-top: 2px; font: 400 12px/1.45 var(--ods-font-sans); color: var(--ods-text-muted); }
+.ods-editor { max-width: 760px; margin: 0 auto; padding: 28px 32px 80px; font: 400 15px/1.7 var(--ods-font-sans); color: var(--ods-text-primary); }
+.ods-editor__title { width: 100%; border: 0; outline: 0; background: transparent; font: 600 26px/1.25 var(--ods-font-sans); color: var(--ods-text-primary); }
+.ods-editor__state { font: 400 11px var(--ods-font-mono); color: var(--ods-text-faint); }
+.ods-editor__state[data-dirty] { color: var(--ods-gold-text); }
+
+/* Correio */
+.ods-mail__row { display: grid; grid-template-columns: 20px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--ods-border-faint); text-decoration: none; color: inherit; }
+.ods-mail__row[data-unread] .ods-mail__from, .ods-mail__row[data-unread] .ods-mail__subject { font-weight: 600; }
+.ods-mail__row[aria-current] { background: var(--ods-surface-selected); }
+.ods-mail__from { font: 500 13px var(--ods-font-sans); } .ods-mail__subject { font: 400 12.5px var(--ods-font-sans); color: var(--ods-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ods-mail__when { font: 400 10.5px var(--ods-font-mono); color: var(--ods-text-faint); }
+.ods-composer { position: fixed; right: 24px; bottom: 0; z-index: var(--ods-z-launcher); width: min(560px, calc(100% - 32px)); height: min(620px, calc(100% - 80px)); display: flex; flex-direction: column; border-radius: 14px 14px 0 0; overflow: hidden; }
+.ods-composer[data-expanded] { inset: 5% 10%; width: auto; height: auto; border-radius: 14px; }
+.ods-composer__bar { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px; background: var(--ods-action-navy); color: #FFFFFF; cursor: grab; }
+.ods-composer__line { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border-bottom: 1px solid var(--ods-border-faint); }
+.ods-composer__body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px; }
+.ods-composer__foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--ods-border-soft); }
+.ods-token { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 4px 0 8px; border-radius: 12px; background: var(--ods-surface-muted); font: 500 12px var(--ods-font-sans); }

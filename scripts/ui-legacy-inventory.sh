@@ -26,4 +26,4 @@ printf '%-44s %s\n' "classes oc- distintas na UI Rust" "$(distintos '"oc-[a-z0-9
 printf '%-44s %s\n' "marcadores data-oc na UI Rust" "$(conta 'data-oc' $RS)"
 printf '%-44s %s\n' "selectores .oc- no app.js" "$(distintos '\.oc-[a-z0-9_-]+' "$STATIC/app.js")"
 printf '%-44s %s\n' "classes oc-/is- alternadas no app.js" "$(distintos "'(oc|is)-[a-z0-9_-]+'" "$STATIC/app.js")"
-printf '%-44s %s\n' "selectores .oc- nos testes de browser" "$(distintos '\.oc-[a-z0-9_-]+' "$TESTS")"
+printf '%-44s %s\n' "selectores .oc- nos testes de browser" "$(distintos '\.oc-[a-z0-9_-]+' "$TESTS"/*.rs)"

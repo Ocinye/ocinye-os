@@ -1,0 +1,20 @@
+/* D3 · arranque, login, MFA, primeiro acesso */
+.ods-auth { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; color: #FFFFFF; background: var(--ods-surface-desktop); }
+.ods-auth__mark { width: 64px; height: 64px; border-radius: 18px; background: #FFFFFF; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: 0 18px 50px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.14); }
+.ods-auth__mark img { width: 94px; height: 94px; object-fit: cover; }
+.ods-auth__inst { font: 600 22px var(--ods-font-sans); }
+.ods-auth__clock { position: fixed; top: 18px; right: 22px; font: 500 12.5px var(--ods-font-mono); color: rgba(255,255,255,.6); }
+.ods-auth__card { width: min(400px, 100%); padding: 28px 26px 22px; border-radius: var(--ods-radius-2xl); background: var(--ods-surface-window); color: var(--ods-text-primary); box-shadow: var(--ods-shadow-overlay); display: flex; flex-direction: column; gap: 14px; }
+.ods-auth__title { margin: 0; font: 600 18px var(--ods-font-sans); }
+.ods-auth__lead { margin: 0; font: 400 13px/1.55 var(--ods-font-sans); color: var(--ods-text-muted); }
+.ods-auth__pw { position: relative; display: flex; }
+.ods-auth__pw .ods-input { flex: 1; padding-right: 40px; }
+.ods-auth__reveal { position: absolute; right: 4px; top: 4px; }
+.ods-auth__foot { display: flex; justify-content: space-between; gap: 10px; font: 400 12px var(--ods-font-sans); color: var(--ods-text-muted); }
+.ods-auth__secret { font: 500 13px var(--ods-font-mono); letter-spacing: .08em; padding: 10px 12px; border-radius: var(--ods-radius-md); background: var(--ods-surface-muted); word-break: break-all; }
+.ods-auth__codes { margin: 0; padding: 12px 14px; border-radius: var(--ods-radius-md); background: var(--ods-surface-muted); font: 500 13px/1.8 var(--ods-font-mono); columns: 2; }
+.ods-boot { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: var(--ods-surface-desktop); color: #FFFFFF; }
+.ods-boot__bar { width: 180px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.14); overflow: hidden; }
+.ods-boot__bar span { display: block; width: 40%; height: 100%; background: var(--ods-gold-500); animation: ods-boot 1.4s var(--ods-ease-out) infinite; }
+@keyframes ods-boot { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
+.ods-boot__actions { display: flex; gap: 8px; }

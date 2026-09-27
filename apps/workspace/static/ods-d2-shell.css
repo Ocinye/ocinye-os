@@ -1,0 +1,63 @@
+/* D2 · casca */
+.ods-shell { position: relative; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: var(--ods-surface-app); }
+.ods-topbar { position: relative; z-index: var(--ods-z-topbar); height: var(--ods-topbar-h); flex: none; display: flex; align-items: center; gap: 10px; padding: 0 12px; }
+.ods-topbar__logo { position: relative; width: 26px; height: 26px; padding: 0; border: 0; border-radius: var(--ods-radius-sm); overflow: hidden; cursor: pointer; background: linear-gradient(180deg, #FFFFFF 0%, #F2F5F9 100%); box-shadow: inset 0 1px 0 #FFFFFF, inset 0 0 0 1px rgba(11,45,74,.10), 0 1px 2px rgba(11,45,74,.14), 0 4px 10px -3px rgba(11,45,74,.22); display: flex; align-items: center; justify-content: center; transition: transform var(--ods-dur-base) var(--ods-ease-out); }
+.ods-topbar__logo:hover { transform: translateY(-1px); }
+.ods-topbar__logo img { width: 36px; height: 36px; object-fit: cover; }
+.ods-topbar__profile { width: 26px; height: 26px; border: 0; padding: 0; cursor: pointer; }
+.ods-topbar__ctx { max-width: 100%; height: 28px; display: flex; align-items: center; gap: 7px; padding: 0 8px 0 4px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; font: 500 13px var(--ods-font-sans); color: var(--ods-text-primary); }
+.ods-topbar__ctx:hover { background: var(--ods-surface-muted); }
+.ods-topbar__ctx-icon { width: 20px; height: 20px; border-radius: 6px; background: #FDF3DC; color: var(--ods-gold-600); display: flex; align-items: center; justify-content: center; }
+.ods-topbar__ask { flex: 1 1 160px; min-width: 32px; max-width: 380px; margin: 0 auto; height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 8px; border: 1px solid var(--ods-border-soft); border-radius: 9px; background: var(--ods-surface-window); color: var(--ods-text-faint); font: 400 12.5px var(--ods-font-sans); }
+.ods-topbar__ask input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; color: var(--ods-text-primary); }
+.ods-topbar__create { height: 28px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 8px; border: 0; border-radius: 8px; background: var(--ods-action-primary); color: var(--ods-text-on-accent); font: 600 12.5px var(--ods-font-sans); cursor: pointer; box-shadow: var(--ods-shadow-gold); }
+.ods-topbar__clock { display: flex; align-items: baseline; gap: 8px; height: 28px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; white-space: nowrap; }
+.ods-topbar__clock:hover, .ods-topbar__clock[aria-expanded="true"] { background: var(--ods-surface-muted); }
+.ods-topbar__date { font: 500 12.5px var(--ods-font-sans); color: var(--ods-text-secondary); }
+.ods-topbar__time { font: 600 13px var(--ods-font-sans); color: var(--ods-text-primary); font-variant-numeric: tabular-nums; }
+.ods-slot { position: relative; flex: none; }
+
+/* painéis da casca (todos são .ods-popover .ods-glass) */
+.ods-account { width: 270px; } .ods-profile-card { width: 300px; } .ods-status-card { width: 320px; } .ods-create-menu { width: 260px; } .ods-notif { width: 340px; } .ods-cal { width: 292px; padding: 14px 12px 10px; }
+.ods-account__head { display: flex; align-items: center; gap: 10px; padding: 10px 10px 12px; border-bottom: 1px solid var(--ods-border-soft); margin-bottom: 4px; }
+.ods-account__name { font: 600 13.5px var(--ods-font-sans); } .ods-account__mail { margin-top: 2px; font: 400 10.5px var(--ods-font-mono); color: var(--ods-text-meta); }
+.ods-account__inst { margin-top: 3px; font: 500 9.5px var(--ods-font-mono); letter-spacing: .12em; color: var(--ods-gold-text); }
+.ods-profile-card__head { display: flex; align-items: center; gap: 12px; padding: 10px 10px 12px; }
+.ods-profile-card__badge { width: 40px; height: 40px; border-radius: 10px; font-size: 15px; }
+.ods-profile-card__name { margin-top: 3px; font: 600 15px var(--ods-font-sans); }
+.ods-profile-card__desc { padding: 0 10px 12px; font: 400 12.5px/1.5 var(--ods-font-sans); color: var(--ods-text-muted); }
+.ods-kv { margin: 0 4px; padding: 10px 6px; border-top: 1px solid var(--ods-border-soft); display: grid; grid-template-columns: auto minmax(0,1fr); column-gap: 14px; row-gap: 8px; }
+.ods-kv dt { font: 500 9.5px/18px var(--ods-font-mono); letter-spacing: .1em; color: var(--ods-text-meta); text-transform: uppercase; }
+.ods-kv dd { margin: 0; line-height: 18px; font: 400 12px var(--ods-font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ods-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.ods-chip { height: 22px; padding: 0 8px; display: inline-flex; align-items: center; border-radius: 6px; background: var(--ods-surface-muted); font: 500 11.5px var(--ods-font-sans); color: var(--ods-text-body); }
+.ods-status-row { display: flex; gap: 12px; padding: 10px; }
+.ods-status-row__icon { width: 30px; height: 30px; flex: none; border-radius: 9px; display: flex; align-items: center; justify-content: center; background: var(--ods-state-success-bg); }
+.ods-status-row__icon--warning { background: var(--ods-state-warning-bg); }
+.ods-status-row__title { font: 600 13.5px var(--ods-font-sans); }
+.ods-status-row__desc { margin-top: 4px; font: 400 12.5px/1.5 var(--ods-font-sans); color: var(--ods-text-secondary); }
+.ods-status-row__meta { margin-top: 6px; font: 400 10.5px var(--ods-font-mono); color: var(--ods-text-meta); }
+.ods-notif__item { display: flex; gap: 10px; padding: 9px 10px; border-radius: 9px; text-decoration: none; color: inherit; }
+.ods-notif__item:hover { background: var(--ods-surface-hover); text-decoration: none; }
+.ods-notif__icon { width: 28px; height: 28px; flex: none; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: var(--ods-state-info-bg); color: var(--ods-state-info-text); }
+.ods-notif__title { font: 500 13px/1.35 var(--ods-font-sans); color: var(--ods-text-primary); }
+.ods-notif__item[data-unread] .ods-notif__title { font-weight: 600; }
+.ods-notif__body { margin-top: 2px; font: 400 12px/1.4 var(--ods-font-sans); color: var(--ods-text-muted); }
+.ods-notif__when { margin-top: 3px; font: 400 10.5px var(--ods-font-mono); color: var(--ods-text-faint); }
+.ods-notif__unread { width: 7px; height: 7px; margin-top: 6px; flex: none; border-radius: 50%; background: var(--ods-gold-500); }
+.ods-cal__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+.ods-cal__dow { font: 500 11px var(--ods-font-sans); color: var(--ods-text-meta); padding: 4px 0; }
+.ods-cal__day { height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font: 400 12.5px var(--ods-font-sans); color: var(--ods-text-body); }
+.ods-cal__day[data-out] { color: var(--ods-border-strong); }
+.ods-cal__day[aria-current="date"] { background: var(--ods-navy-800); color: #FFFFFF; font-weight: 600; }
+.ods-cal__week[data-current] { background: var(--ods-surface-muted); border-radius: 10px; }
+
+/* ecrã de bloqueio (G-01) */
+.ods-lock { position: fixed; inset: 0; z-index: var(--ods-z-lock); display: flex; flex-direction: column; align-items: center; color: #FFFFFF; background: radial-gradient(1100px 700px at 72% 8%, rgba(22,68,110,.9) 0%, rgba(11,45,74,.94) 42%, rgba(7,30,51,.97) 100%); -webkit-backdrop-filter: blur(28px) saturate(140%); backdrop-filter: blur(28px) saturate(140%); animation: ods-fade 200ms ease; }
+.ods-lock__clock { margin-top: 14vh; font: 300 var(--ods-text-clock)/1 var(--ods-font-sans); letter-spacing: -.02em; }
+.ods-lock__date { margin-top: 6px; font: 400 15px var(--ods-font-sans); color: rgba(255,255,255,.72); }
+.ods-lock__who { margin: auto 0 16vh; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.ods-lock__form { display: flex; align-items: center; gap: 6px; width: 280px; height: 42px; padding: 0 5px 0 14px; border-radius: 12px; background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,.16); }
+.ods-lock__form input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: #FFFFFF; font: 400 14px var(--ods-font-sans); }
+.ods-lock__msg { min-height: 16px; font: 400 12px var(--ods-font-sans); color: rgba(255,255,255,.55); }
+.ods-lock__msg[data-error] { color: #F2A39C; }

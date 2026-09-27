@@ -70,7 +70,7 @@ fn render(
                             || {
                                 view! {
                                     <span
-                                        class="oc-tab oc-unavailable"
+                                        class="oc-tab oc-unavailable" data-part="tab unavailable"
                                         role="tab"
                                         aria-selected="false"
                                         aria-disabled="true"
@@ -84,7 +84,7 @@ fn render(
                             |href| {
                                 view! {
                                     <a
-                                        class="oc-tab"
+                                        class="oc-tab" data-part="tab"
                                         role="tab"
                                         aria-selected=selected
                                         aria-current=current

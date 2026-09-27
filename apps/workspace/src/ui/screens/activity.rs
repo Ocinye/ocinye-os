@@ -21,8 +21,8 @@ fn text(row: &Value, key: &str) -> String {
 
 /// O feed de actividade.
 ///
-/// A cor do ponto vem do tipo de acontecimento, declarada em `ocinye.css` por
-/// `[data-kind]`. Nunca é o único sinal: o texto diz sempre o que aconteceu.
+/// O tipo de acontecimento vai em `data-kind`, para a apresentação o distinguir.
+/// Nunca é o único sinal: o texto diz sempre o que aconteceu.
 pub fn activity(payload: &Value) -> impl IntoView {
     let rows = payload.as_array().cloned().unwrap_or_default();
     let empty = rows.is_empty();
@@ -36,7 +36,7 @@ pub fn activity(payload: &Value) -> impl IntoView {
                 </div>
             </div>
 
-            <section class="oc-card">
+            <section class="oc-card" data-part="card">
                 <div class="oc-card__body">
                     {if empty {
                         view! { <p class="oc-muted">{crate::i18n::t("activity.empty")}</p> }.into_any()

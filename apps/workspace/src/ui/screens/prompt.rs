@@ -220,7 +220,7 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
         .collect_view();
 
     view! {
-        <div class="oc-prompt">
+        <div class="oc-prompt" data-part="prompt">
             // ── Cabeçalho da conversa ──────────────────────────────────
             // Compacto: com que agente se fala, e — dentro de um Research
             // Workspace — o contexto vinculado. Configuração da conversa, não
@@ -265,7 +265,7 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                         let degraded = ex.degraded();
                         let PromptExchange { prompt, origin, content, reason_code, model, .. } = ex;
                         view! {
-                            <div class="oc-thread">
+                            <div class="oc-thread" data-part="thread">
                                 {member_turn(prompt)}
                                 {ocinye_turn(&author, &origin, degraded, &content, reason_code, model)}
                             </div>
@@ -277,7 +277,7 @@ pub fn prompt(ctx: PromptContext, exchange: Option<PromptExchange>) -> impl Into
                     // vinda do Core — nunca «desactivado».
                     None => {
                         view! {
-                            <div class="oc-thread oc-thread--empty">
+                            <div class="oc-thread oc-thread--empty" data-part="thread thread--empty">
                                 <div class="oc-prompt__hero">
                                     <span class="oc-empty__tile oc-empty__tile--prompt">
                                         {icon(Icon::AiHexMd, 26)}
@@ -415,14 +415,14 @@ fn ocinye_turn(
     let body = crate::ui::markdown::render(content);
     let has_meta = reason_code.is_some() || model.is_some();
     view! {
-        <div class="oc-turn oc-turn--ocinye">
+        <div class="oc-turn oc-turn--ocinye" data-part="turn--ocinye">
             <div class="oc-turn__prov">
                 <span class="oc-turn__mark">{icon(Icon::AiHexMd, 13)}</span>
                 <span class="oc-turn__who">{author.to_owned()}</span>
-                {degraded.then(|| view! { <span class="oc-turn__badge">"ESTADO"</span> })}
+                {degraded.then(|| view! { <span class="oc-turn__badge" data-part="turn__badge">"ESTADO"</span> })}
             </div>
 
-            <div class="oc-md" data-oc="resposta" inner_html=body></div>
+            <div class="oc-md" data-part="md" data-oc="resposta" inner_html=body></div>
 
             <div class="oc-turn__bar">
                 <button type="button" class="oc-turn__act" data-oc="copiar-resposta">
@@ -430,7 +430,7 @@ fn ocinye_turn(
                 </button>
                 {has_meta.then(|| {
                     view! {
-                        <details class="oc-turn__meta">
+                        <details class="oc-turn__meta" data-part="turn__meta">
                             <summary>{crate::i18n::t("prompt.meta.details")}</summary>
                             <dl>
                                 <div>
@@ -467,7 +467,7 @@ fn ocinye_turn(
 fn action_chip(kind: Icon, label: &'static str) -> impl IntoView {
     view! {
         <span
-            class="oc-chip oc-unavailable"
+            class="oc-chip oc-unavailable" data-part="chip unavailable"
             aria-disabled="true"
             title=crate::i18n::t("prompt.attach.unavailable")
         >

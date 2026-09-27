@@ -2951,8 +2951,133 @@ const DS_SHELL: &[Entry] = catalogo! {
     "monitor.stopped": { pt: "{name} terminado", en: "{name} quit", fr: "{name} arrêté" },
 };
 
+/// Claude Design, pacote D1.
+const DS_PRIMITIVES: &[Entry] = catalogo! {
+    "ods.close": { pt: "Fechar", en: "Close", fr: "Fermer" },
+    "ods.cancel": { pt: "Cancelar", en: "Cancel", fr: "Annuler" },
+    "ods.confirm": { pt: "Confirmar", en: "Confirm", fr: "Confirmer" },
+    "ods.undo": { pt: "Anular", en: "Undo", fr: "Annuler" },
+    "ods.loading": { pt: "A carregar…", en: "Loading…", fr: "Chargement…" },
+    "ods.retry": { pt: "Tentar de novo", en: "Try again", fr: "Réessayer" },
+    "ods.state.empty": { pt: "Ainda não há nada aqui.", en: "Nothing here yet.", fr: "Rien ici pour le moment." },
+    "ods.state.error": { pt: "Não foi possível carregar. O Core não respondeu.", en: "Could not load. The Core did not respond.", fr: "Chargement impossible. Le Core n’a pas répondu." },
+    "ods.state.denied": { pt: "Sem permissão para ver isto neste espaço.", en: "You don’t have permission to see this in this space.", fr: "Vous n’avez pas la permission de voir ceci dans cet espace." },
+    "ods.state.unavailable": { pt: "Indisponível nesta instância.", en: "Unavailable in this instance.", fr: "Indisponible dans cette instance." },
+    "ods.state.pending_contract": { pt: "Ainda não disponível. Esta função está a ser preparada.", en: "Not available yet. This feature is being prepared.", fr: "Pas encore disponible. Cette fonction est en préparation." },
+    "ods.sort.asc": { pt: "Ordem crescente", en: "Ascending", fr: "Ordre croissant" },
+    "ods.sort.desc": { pt: "Ordem decrescente", en: "Descending", fr: "Ordre décroissant" },
+};
+
+/// Claude Design, pacote D2.
+const DS_SHELL_EXTRA: &[Entry] = catalogo! {
+    "shell.account": { pt: "Conta", en: "Account", fr: "Compte" },
+    "shell.appearance": { pt: "Aparência do Desktop", en: "Desktop appearance", fr: "Apparence du bureau" },
+    "shell.notifications": { pt: "Notificações", en: "Notifications", fr: "Notifications" },
+    "shell.notifications.unread": { pt: "{n} por ler", en: "{n} unread", fr: "{n} non lues" },
+    "shell.notifications.read_all": { pt: "Marcar todas como lidas", en: "Mark all as read", fr: "Tout marquer comme lu" },
+    "shell.notifications.all": { pt: "Ver todas as notificações", en: "See all notifications", fr: "Voir toutes les notifications" },
+    "shell.notifications.empty": { pt: "Sem notificações.", en: "No notifications.", fr: "Aucune notification." },
+    "shell.calendar.open": { pt: "Abrir Calendário", en: "Open Calendar", fr: "Ouvrir le calendrier" },
+    "shell.profile.desktop_version_pending": { pt: "Versão da predefinição ainda não disponível", en: "Default version not available yet", fr: "Version par défaut pas encore disponible" },
+};
+
+/// Claude Design, pacote D3.
+const DS_AUTH: &[Entry] = catalogo! {
+    "auth.instance_line": { pt: "Instalação soberana do Ocinye OS", en: "Sovereign Ocinye OS installation", fr: "Installation souveraine d’Ocinye OS" },
+    "auth.boot.starting": { pt: "A iniciar o Ocinye OS…", en: "Starting Ocinye OS…", fr: "Démarrage d’Ocinye OS…" },
+    "auth.session_ended": { pt: "Sessão terminada. O seu Desktop fica guardado nesta instância.", en: "Signed out. Your Desktop is kept on this instance.", fr: "Session terminée. Votre bureau reste enregistré sur cette instance." },
+};
+
+/// Claude Design, pacote D4.
+const DS_DESKTOP: &[Entry] = catalogo! {
+    "desktop.customize": { pt: "Personalizar Desktop", en: "Customise Desktop", fr: "Personnaliser le bureau" },
+    "desktop.customize.done": { pt: "Concluído", en: "Done", fr: "Terminé" },
+    "desktop.add_widgets": { pt: "Adicionar widgets", en: "Add widgets", fr: "Ajouter des widgets" },
+    "desktop.widget.open": { pt: "Abrir", en: "Open", fr: "Ouvrir" },
+    "desktop.widget.required": { pt: "Obrigatório pela organização", en: "Required by the organisation", fr: "Imposé par l’organisation" },
+    "desktop.widget.calendar.empty": { pt: "Sem eventos esta semana.", en: "No events this week.", fr: "Aucun événement cette semaine." },
+    "desktop.widget.notice.empty": { pt: "Sem avisos.", en: "No notices.", fr: "Aucun avis." },
+    "desktop.widget.tasks.empty": { pt: "Sem tarefas atribuídas.", en: "No tasks assigned.", fr: "Aucune tâche assignée." },
+    "desktop.widget.continue": { pt: "Continuar trabalho", en: "Continue working", fr: "Reprendre le travail" },
+    "desktop.widget.notice": { pt: "Avisos institucionais", en: "Institutional notices", fr: "Avis institutionnels" },
+    "desktop.widget.storage": { pt: "Armazenamento", en: "Storage", fr: "Stockage" },
+    "desktop.widget.storage.of": { pt: "de {total}", en: "of {total}", fr: "sur {total}" },
+    "desktop.newer_default": { pt: "Está disponível uma nova predefinição do Desktop", en: "A new Desktop default is available", fr: "Une nouvelle configuration par défaut du bureau est disponible" },
+    "desktop.use_newer": { pt: "Usar nova predefinição", en: "Use new default", fr: "Utiliser la nouvelle configuration" },
+    "desktop.preview": { pt: "Pré-visualizar", en: "Preview", fr: "Aperçu" },
+    "desktop.later": { pt: "Mais tarde", en: "Later", fr: "Plus tard" },
+};
+
+/// Claude Design, pacote D6.
+const DS_LAUNCHER: &[Entry] = catalogo! {
+    "launcher.count": { pt: "{n} aplicações", en: "{n} applications", fr: "{n} applications" },
+    "launcher.search": { pt: "Pesquisar aplicações do Ocinye…", en: "Search Ocinye applications…", fr: "Rechercher des applications Ocinye…" },
+    "launcher.all": { pt: "Todas", en: "All", fr: "Toutes" },
+    "launcher.favourites": { pt: "Favoritos", en: "Favourites", fr: "Favoris" },
+    "launcher.recent": { pt: "Recentes", en: "Recent", fr: "Récents" },
+    "launcher.all_apps": { pt: "Todas as aplicações", en: "All applications", fr: "Toutes les applications" },
+    "launcher.empty": { pt: "Nenhuma aplicação corresponde à pesquisa.", en: "No application matches your search.", fr: "Aucune application ne correspond à la recherche." },
+    "launcher.pin": { pt: "Fixar {app}", en: "Pin {app}", fr: "Épingler {app}" },
+    "launcher.unpin": { pt: "Desafixar {app}", en: "Unpin {app}", fr: "Désépingler {app}" },
+    "launcher.hint.navigate": { pt: "navegar", en: "navigate", fr: "naviguer" },
+    "launcher.hint.open": { pt: "abrir", en: "open", fr: "ouvrir" },
+    "launcher.hint.close": { pt: "fechar", en: "close", fr: "fermer" },
+};
+
+/// Claude Design, pacote D7.
+const DS_NYE: &[Entry] = catalogo! {
+    "nye.confirm": { pt: "Confirmar", en: "Confirm", fr: "Confirmer" },
+    "nye.reject": { pt: "Recusar", en: "Decline", fr: "Refuser" },
+    "nye.no_model": { pt: "Não há um modelo disponível para este pedido. Posso abrir o documento ou procurar ficheiros relacionados.", en: "No model is available for this request. I can open the document or find related files.", fr: "Aucun modèle n’est disponible pour cette demande. Je peux ouvrir le document ou rechercher des fichiers liés." },
+    "nye.blocked": { pt: "Bloqueado pela política de IA. Nada foi enviado.", en: "Blocked by the AI policy. Nothing was sent.", fr: "Bloqué par la politique d’IA. Rien n’a été envoyé." },
+    "nye.denied": { pt: "Não tem permissão para esta acção.", en: "You don’t have permission for this action.", fr: "Vous n’avez pas la permission pour cette action." },
+    "nye.voice.unavailable": { pt: "A voz ainda não está disponível nesta instância.", en: "Voice is not available on this instance yet.", fr: "La voix n’est pas encore disponible sur cette instance." },
+};
+
+/// Claude Design, pacote D8.
+const DS_APPS_CORE: &[Entry] = catalogo! {
+    "files.view.grid": { pt: "Grelha", en: "Grid", fr: "Grille" },
+    "files.view.list": { pt: "Lista", en: "List", fr: "Liste" },
+    "files.empty.title": { pt: "Esta pasta está vazia", en: "This folder is empty", fr: "Ce dossier est vide" },
+    "files.empty.body": { pt: "Arraste ficheiros para aqui ou use Carregar.", en: "Drag files here or use Upload.", fr: "Faites glisser des fichiers ici ou utilisez Téléverser." },
+    "notes.state.saved": { pt: "Guardado", en: "Saved", fr: "Enregistré" },
+    "notes.state.unsaved": { pt: "Alterações por guardar", en: "Unsaved changes", fr: "Modifications non enregistrées" },
+};
+
+/// Claude Design, pacote D9.
+const DS_APPS: &[Entry] = catalogo! {
+    "monitor.unavailable": { pt: "O Monitor de Actividade precisa de métricas do Core que ainda não existem.", en: "Activity Monitor needs Core metrics that are not available yet.", fr: "Le moniteur d’activité a besoin de métriques du Core qui ne sont pas encore disponibles." },
+    "monitor.col.process": { pt: "Processo", en: "Process", fr: "Processus" },
+    "monitor.col.kind": { pt: "Tipo", en: "Kind", fr: "Type" },
+    "monitor.col.user": { pt: "Utilizador", en: "User", fr: "Utilisateur" },
+    "monitor.summary.processes": { pt: "Processos", en: "Processes", fr: "Processus" },
+    "monitor.summary.threads": { pt: "Threads", en: "Threads", fr: "Threads" },
+    "monitor.summary.uptime": { pt: "Tempo activo", en: "Uptime", fr: "Temps de fonctionnement" },
+};
+
+/// Claude Design, pacote D10.
+const DS_SETTINGS: &[Entry] = catalogo! {
+    "settings.appearance": { pt: "Aparência", en: "Appearance", fr: "Apparence" },
+    "settings.theme.light": { pt: "Claro", en: "Light", fr: "Clair" },
+    "settings.theme.dark": { pt: "Escuro", en: "Dark", fr: "Sombre" },
+    "settings.theme.system": { pt: "Automático", en: "Automatic", fr: "Automatique" },
+    "settings.desktop": { pt: "Desktop", en: "Desktop", fr: "Bureau" },
+    "settings.desktop.restore": { pt: "Repor disposição", en: "Restore layout", fr: "Rétablir la disposition" },
+    "settings.desktop.keeps": { pt: "Não altera idioma, palavra-passe, notificações, fornecedores de IA, ficheiros nem dados das aplicações.", en: "Does not change language, password, notifications, AI providers, files or application data.", fr: "Ne modifie ni la langue, ni le mot de passe, ni les notifications, ni les fournisseurs d’IA, ni les fichiers, ni les données des applications." },
+    "admin.desktop_default": { pt: "Predefinição do Desktop", en: "Desktop default", fr: "Bureau par défaut" },
+};
+
 pub const GROUPS: &[&[Entry]] = &[
     DS_SHELL,
+    DS_PRIMITIVES,
+    DS_SHELL_EXTRA,
+    DS_AUTH,
+    DS_DESKTOP,
+    DS_LAUNCHER,
+    DS_NYE,
+    DS_APPS_CORE,
+    DS_APPS,
+    DS_SETTINGS,
     ACTIVITY,
     NOTICE,
     MISC_A,

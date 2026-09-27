@@ -388,7 +388,7 @@ fn comandos_de_disposicao() -> impl IntoView {
 fn sync_action(mailbox_id: &str, service_up: bool, folder: &str) -> impl IntoView {
     if !service_up || mailbox_id.is_empty() {
         return view! {
-            <span class="oc-btn oc-btn--secondary oc-unavailable" aria-disabled="true"
+            <span class="oc-btn oc-btn--secondary oc-unavailable" data-part="btn unavailable" aria-disabled="true"
                   title=crate::i18n::t("mail.service_unavailable")>
                 {crate::i18n::t("mail.refresh")}
             </span>
@@ -402,7 +402,7 @@ fn sync_action(mailbox_id: &str, service_up: bool, folder: &str) -> impl IntoVie
         // altera estado é actualizado por qualquer pré-carregamento do browser.
         <form method="post" action=action class="oc-mail__sync">
             <input type="hidden" name="folder" value=folder.to_owned() />
-            <button type="submit" class="oc-btn oc-btn--secondary">
+            <button type="submit" class="oc-btn oc-btn--secondary" data-part="btn">
                 {icon(Icon::Restart, 13)}
                 {crate::i18n::t("mail.refresh")}
             </button>
@@ -428,7 +428,7 @@ fn compose_action(can_compose: bool, mailbox_id: &str, service_up: bool) -> impl
             crate::i18n::t("mail.send_unavailable")
         };
         view! {
-            <span class="oc-btn oc-btn--primary oc-unavailable" aria-disabled="true" title=reason>
+            <span class="oc-btn oc-btn--primary oc-unavailable" data-part="btn unavailable" aria-disabled="true" title=reason>
                 {crate::i18n::t("mail.compose")}
             </span>
         }
@@ -553,7 +553,7 @@ fn rail(boxes: &[Value], current_id: &str, folder: &str, ja_dito: &str) -> impl 
     let ja_dito = ja_dito.trim().to_owned();
 
     view! {
-        <nav class="oc-mail__rail" aria-label=crate::i18n::t("mail.mailboxes")>
+        <nav class="oc-mail__rail" data-part="mail__rail" aria-label=crate::i18n::t("mail.mailboxes")>
             {boxes
                 .into_iter()
                 .map(|mailbox| {
@@ -678,7 +678,7 @@ fn list(
     let count = items.len();
 
     view! {
-        <div class="oc-mail__list">
+        <div class="oc-mail__list" data-part="mail__list">
             // Pesquisa por GET, dentro da caixa aberta. O Core filtra por
             // pertença antes de devolver — pesquisar não é forma de alcançar
             // correio alheio (`CLAUDE.md` §28).
@@ -694,7 +694,7 @@ fn list(
                     value=query.to_owned()
                     placeholder=crate::i18n::t("mail.search_this_box.placeholder")
                 />
-                <button type="submit" class="oc-btn oc-btn--secondary">{crate::i18n::t("mail.search_submit")}</button>
+                <button type="submit" class="oc-btn oc-btn--secondary" data-part="btn">{crate::i18n::t("mail.search_submit")}</button>
             </form>
 
             {searching.then(|| view! {
@@ -779,7 +779,7 @@ fn row(message: &Value, open_id: &str) -> impl IntoView {
     view! {
         <li>
             <a
-                class="oc-mail__item"
+                class="oc-mail__item" data-part="mail__item"
                 href=href
                 data-unread=unread.to_string()
                 aria-current=selected.then_some("page")
@@ -814,7 +814,7 @@ fn row(message: &Value, open_id: &str) -> impl IntoView {
 /// A coluna de leitura antes de se abrir alguma coisa.
 fn reading_placeholder() -> impl IntoView {
     view! {
-        <div class="oc-mail__pane oc-mail__pane--empty">
+        <div class="oc-mail__pane oc-mail__pane--empty" data-part="mail__pane">
             {empty_state(EmptyState {
                 icon: Icon::Mail,
                 title: crate::i18n::t("mail.select_message").to_owned(),
@@ -879,8 +879,8 @@ fn reading(viewer: &Viewer, view: &MailView, payload: &Value) -> impl IntoView {
     let _ = viewer;
 
     view! {
-        <article class="oc-mail__pane">
-            <header class="oc-mail__pane-head">
+        <article class="oc-mail__pane" data-part="mail__pane">
+            <header class="oc-mail__pane-head" data-part="mail__pane-head">
                 <h2>{subject}</h2>
                 <div class="oc-mail__meta">
                     <span class="oc-mail__from">
@@ -902,7 +902,7 @@ fn reading(viewer: &Viewer, view: &MailView, payload: &Value) -> impl IntoView {
                     } else {
                         view! {
                             <span
-                                class="oc-btn oc-btn--primary oc-unavailable"
+                                class="oc-btn oc-btn--primary oc-unavailable" data-part="btn unavailable"
                                 aria-disabled="true"
                                 title=crate::i18n::t("mail.send_unavailable")
                             >{crate::i18n::t("mail.reply")}</span>
@@ -976,7 +976,7 @@ fn flag_form(
         <form method="post" action=action class="oc-mail__flag">
             <input type="hidden" name="field" value=field />
             <input type="hidden" name="value" value=value.to_string() />
-            <button type="submit" class="oc-btn oc-btn--secondary" title=label>
+            <button type="submit" class="oc-btn oc-btn--secondary" data-part="btn" title=label>
                 {icon(kind, 13)}
                 {label}
             </button>
@@ -1045,7 +1045,7 @@ fn attachment_list(attachments: &[Value]) -> impl IntoView {
                                 <span class="oc-mono oc-mail__attachment-meta">
                                     {format!("{kind} · {}", human_size(size))}
                                 </span>
-                                <span class="oc-unavailable" aria-disabled="true"
+                                <span class="oc-unavailable" data-part="unavailable" aria-disabled="true"
                                       title=crate::i18n::t("mail.attachment.unavailable")>
                                     {crate::i18n::t("mail.attachment.download")}
                                 </span>
@@ -1318,7 +1318,7 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                 </div>
 
                 <input
-                    class="oc-comp__assunto"
+                    class="oc-comp__assunto" data-part="comp__assunto"
                     type="text"
                     name="subject"
                     value=subject
@@ -1432,7 +1432,7 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                         ></span>
                         <button
                             type="submit"
-                            class="oc-btn oc-btn--primary"
+                            class="oc-btn oc-btn--primary" data-part="btn"
                             data-oc="compositor-enviar"
                             disabled=sem_identidade
                         >
@@ -1464,21 +1464,21 @@ fn compositor_flutuante(view: &MailView, draft: &ComposeDraft) -> impl IntoView 
                     <div class="oc-comp__descartar-accoes">
                         <button
                             type="button"
-                            class="oc-btn oc-btn--primary"
+                            class="oc-btn oc-btn--primary" data-part="btn"
                             data-oc="descartar-guardar"
                         >
                             {crate::i18n::t("mail.compose.save_draft")}
                         </button>
                         <button
                             type="button"
-                            class="oc-btn oc-btn--danger"
+                            class="oc-btn oc-btn--danger" data-part="btn"
                             data-oc="descartar-descartar"
                         >
                             {crate::i18n::t("mail.compose.discard")}
                         </button>
                         <button
                             type="button"
-                            class="oc-btn"
+                            class="oc-btn" data-part="btn"
                             data-oc="descartar-cancelar"
                         >
                             {crate::i18n::t("mail.compose.cancel")}
@@ -1513,7 +1513,7 @@ fn ficha_de_anexo(id: &str, filename: &str, size: &str) -> impl IntoView {
     view! {
         <li class="oc-comp__anexo" data-oc="anexo" data-oc-id=id.to_owned()>
             {icon(Icon::Attach, 12)}
-            <span class="oc-comp__anexo-nome">{filename.to_owned()}</span>
+            <span class="oc-comp__anexo-nome" data-part="comp__anexo-nome">{filename.to_owned()}</span>
             <span class="oc-comp__anexo-tam">{size.to_owned()}</span>
             <button
                 type="button"
@@ -1754,7 +1754,7 @@ fn ligar_caixa_nova(member_email: &str, endpoints: &[String]) -> impl IntoView {
                      a ser mostrada."
                 </p>
                 <div>
-                    <button type="submit" class="oc-btn oc-btn--primary">{crate::i18n::t("mail.settings.save_and_link")}</button>
+                    <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{crate::i18n::t("mail.settings.save_and_link")}</button>
                 </div>
             </form>
         </div>
@@ -1789,7 +1789,7 @@ fn ligacao_da_caixa(caixa: &Value) -> impl IntoView {
                         method="post"
                         action=format!("/mail/{id}/disconnect")
                     >
-                        <button type="submit" class="oc-btn oc-btn--secondary">
+                        <button type="submit" class="oc-btn oc-btn--secondary" data-part="btn">
                             {crate::i18n::t("mail.settings.disconnect")}
                         </button>
                     </form>
@@ -1840,7 +1840,7 @@ fn ligacao_da_caixa(caixa: &Value) -> impl IntoView {
                                 required=true
                             />
                         </label>
-                        <button type="submit" class="oc-btn oc-btn--primary">{crate::i18n::t("mail.link_mailbox")}</button>
+                        <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{crate::i18n::t("mail.link_mailbox")}</button>
                     </form>
                 }
                 .into_any()
@@ -1931,7 +1931,7 @@ pub fn settings(
                     </p>
                     <button
                         type="button"
-                        class="oc-btn oc-btn--secondary"
+                        class="oc-btn oc-btn--secondary" data-part="btn"
                         data-oc="repor-disposicao"
                     >
                         {crate::i18n::t("mail.settings.reset_layout")}
@@ -2005,7 +2005,7 @@ pub fn settings(
                                  ela foi aberta. O Ocinye OS não o carrega por omissão."
                             </p>
 
-                            <button type="submit" class="oc-btn oc-btn--primary">{crate::i18n::t("mail.settings.save")}</button>
+                            <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{crate::i18n::t("mail.settings.save")}</button>
                         </form>
                     },
                 )}

@@ -104,7 +104,7 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                 })}
 
             <form method="post" action="/admin/members/new" class="oc-split oc-split--2">
-                <section class="oc-card">
+                <section class="oc-card" data-part="card">
                     <div class="oc-card__head"><h2>{crate::i18n::t("admin.new.identity")}</h2></div>
                     <div class="oc-card__body">
                         <div class="oc-field">
@@ -139,7 +139,7 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                 </section>
 
                 <div>
-                    <section class="oc-card oc-mb-5">
+                    <section class="oc-card oc-mb-5" data-part="card">
                         <div class="oc-card__head"><h2>{crate::i18n::t("admin.new.organisation")}</h2></div>
                         <div class="oc-card__body">
                             <div class="oc-field">
@@ -191,7 +191,7 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                         </div>
                     </section>
 
-                    <section class="oc-card oc-mb-5">
+                    <section class="oc-card oc-mb-5" data-part="card">
                         <div class="oc-card__head"><h2>{crate::i18n::t("admin.new.access")}</h2></div>
                         <div class="oc-card__body">
                             <div class="oc-field">
@@ -215,7 +215,7 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
                         </div>
                     </section>
 
-                    <section class="oc-card oc-mb-5">
+                    <section class="oc-card oc-mb-5" data-part="card">
                         <div class="oc-card__body oc-card__body--subtle">
                             <div class="oc-row oc-gap-5">
                                 {icon(Icon::Shield, 14)}
@@ -229,7 +229,7 @@ pub fn new_member(units: &Value, message: Option<String>) -> impl IntoView {
 
                     <div class="oc-row oc-gap-5 oc-justify-end">
                         {button(Button::new(crate::i18n::t("action.cancel"), Variant::Secondary).href("/admin"))}
-                        <button type="submit" class="oc-btn oc-btn--primary">{crate::i18n::t("admin.new.submit")}</button>
+                        <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{crate::i18n::t("admin.new.submit")}</button>
                     </div>
                 </div>
             </form>
@@ -255,16 +255,16 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
                 </div>
             </div>
 
-            <section class="oc-card oc-credential">
+            <section class="oc-card oc-credential" data-part="card">
                 <div class="oc-card__body">
                     <div class="oc-field">
                         <span class="oc-field__label">{crate::i18n::t("login.institutional_address")}</span>
-                        <div class="oc-credential__value oc-mono">{email}</div>
+                        <div class="oc-credential__value oc-mono" data-part="credential__value">{email}</div>
                     </div>
 
                     <div class="oc-field">
                         <span class="oc-field__label">{crate::i18n::t("admin.issued.temp_password")}</span>
-                        <div class="oc-credential__value oc-mono">
+                        <div class="oc-credential__value oc-mono" data-part="credential__value">
                             // Coberta por omissão: uma credencial não deve ficar
                             // visível num ecrã que alguém pode estar a partilhar.
                             <span
@@ -277,7 +277,7 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
                             <span class="oc-row oc-gap-5">
                                 <button
                                     type="button"
-                                    class="oc-btn oc-btn--secondary"
+                                    class="oc-btn oc-btn--secondary" data-part="btn"
                                     data-oc="secret-toggle"
                                     aria-pressed="false"
                                 >
@@ -285,7 +285,7 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
                                 </button>
                                 <button
                                     type="button"
-                                    class="oc-btn oc-btn--secondary"
+                                    class="oc-btn oc-btn--secondary" data-part="btn"
                                     data-oc="secret-copy"
                                 >
                                     {crate::i18n::t("mfa.copy_short")}
@@ -296,7 +296,7 @@ pub fn issued_credential(email: &str, password: &str, expires_at: &str) -> impl 
 
                     <div class="oc-field">
                         <span class="oc-field__label">{crate::i18n::t("admin.issued.valid_until")}</span>
-                        <div class="oc-credential__value oc-mono">{expires}" UTC"</div>
+                        <div class="oc-credential__value oc-mono" data-part="credential__value">{expires}" UTC"</div>
                     </div>
 
                     <div class="oc-callout oc-callout--warning" role="alert">
@@ -456,7 +456,7 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                                             {revogavel.then(|| view! {
                                                 <form method="post" action=accao_revogar>
                                                     <button
-                                                        class="oc-btn oc-btn--sm oc-btn--danger"
+                                                        class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn"
                                                         type="submit"
                                                     >
                                                         {crate::i18n::t("admin.action.revoke")}
@@ -503,7 +503,7 @@ pub fn security_tab(person_id: &str, overview: &Value, recusa: Option<&str>) -> 
                                         .then(|| {
                                             view! {
                                                 <form method="post" action=accao.clone() class="oc-mt-3">
-                                                    <button class="oc-btn oc-btn--primary" type="submit">
+                                                    <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
                                                         {rotulo_acesso}
                                                     </button>
                                                 </form>
@@ -625,7 +625,7 @@ pub fn access_tab(access: &Value) -> impl IntoView {
                 },
             )}
 
-            <section class="oc-card oc-span-2">
+            <section class="oc-card oc-span-2" data-part="card">
                 {section_head(
                     crate::i18n::t("admin.permissions.institutional"),
                     None,
@@ -828,11 +828,11 @@ pub fn member_detail(
             // omissão (`aria-current="location"`) — funciona sem JavaScript, e
             // um deep-link para outra secção é corrigido no carregamento.
             <nav class="oc-tabs oc-tabs--ctx" aria-label=crate::i18n::t("admin.member.sections_aria") data-oc-section-nav="">
-                <a class="oc-tab" href="#membro-overview" aria-current="location">{crate::i18n::t("admin.tab.overview")}</a>
-                <a class="oc-tab" href="#membro-acesso">{crate::i18n::t("admin.tab.access")}</a>
-                <a class="oc-tab" href="#membro-seguranca">{crate::i18n::t("settings.tab.security")}</a>
-                <a class="oc-tab" href="#membro-unidades">{crate::i18n::t("nav.units")}</a>
-                <a class="oc-tab" href="#membro-research-workspaces">{crate::i18n::t("home.continue.aside")}</a>
+                <a class="oc-tab" data-part="tab" href="#membro-overview" aria-current="location">{crate::i18n::t("admin.tab.overview")}</a>
+                <a class="oc-tab" data-part="tab" href="#membro-acesso">{crate::i18n::t("admin.tab.access")}</a>
+                <a class="oc-tab" data-part="tab" href="#membro-seguranca">{crate::i18n::t("settings.tab.security")}</a>
+                <a class="oc-tab" data-part="tab" href="#membro-unidades">{crate::i18n::t("nav.units")}</a>
+                <a class="oc-tab" data-part="tab" href="#membro-research-workspaces">{crate::i18n::t("home.continue.aside")}</a>
                 {[
                     ("nav.activity", "admin.tab.activity_unavailable"),
                     ("admin.tab.audit", "admin.tab.audit_unavailable"),
@@ -840,7 +840,7 @@ pub fn member_detail(
                     .iter()
                     .map(|(label_key, porque_key)| {
                         view! {
-                            <span class="oc-tab oc-unavailable" aria-disabled="true" title=crate::i18n::t(porque_key)>
+                            <span class="oc-tab oc-unavailable" data-part="tab unavailable" aria-disabled="true" title=crate::i18n::t(porque_key)>
                                 {crate::i18n::t(label_key)}
                             </span>
                         }
@@ -976,13 +976,13 @@ pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl Int
                                 <option value="member" selected=!is_manager>{crate::i18n::t("admin.role.member")}</option>
                                 <option value="manager" selected=is_manager>{crate::i18n::t("admin.role.manager")}</option>
                             </select>
-                            <button class="oc-btn oc-btn--sm" type="submit">{crate::i18n::t("action.save")}</button>
+                            <button class="oc-btn oc-btn--sm" data-part="btn" type="submit">{crate::i18n::t("action.save")}</button>
                         </form>
                     </td>
                     <td class="oc-td--actions">
                         <form method="post" action=accao_remover>
                             <button
-                                class="oc-btn oc-btn--sm oc-btn--danger"
+                                class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn"
                                 type="submit"
                             >
                                 {crate::i18n::t("action.remove")}
@@ -1058,7 +1058,7 @@ pub fn units_admin(person_id: &str, access: &Value, catalog: &Value) -> impl Int
                                 <option value="member">{crate::i18n::t("admin.role.member")}</option>
                                 <option value="manager">{crate::i18n::t("admin.role.manager")}</option>
                             </select>
-                            <button class="oc-btn oc-btn--primary" type="submit">
+                            <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
                                 {crate::i18n::t("admin.action.assign")}
                             </button>
                         </form>
@@ -1163,12 +1163,12 @@ pub fn workspaces_admin(person_id: &str, access: &Value, catalog: &Value) -> imp
                     <td>
                         <form method="post" action=accao_papel class="oc-row oc-gap-3">
                             <select class="oc-select oc-select--sm" name="role">{opts}</select>
-                            <button class="oc-btn oc-btn--sm" type="submit">{crate::i18n::t("action.save")}</button>
+                            <button class="oc-btn oc-btn--sm" data-part="btn" type="submit">{crate::i18n::t("action.save")}</button>
                         </form>
                     </td>
                     <td class="oc-td--actions">
                         <form method="post" action=accao_remover>
-                            <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">
+                            <button class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn" type="submit">
                                 {crate::i18n::t("action.remove")}
                             </button>
                         </form>
@@ -1237,7 +1237,7 @@ pub fn workspaces_admin(person_id: &str, access: &Value, catalog: &Value) -> imp
                                     .collect_view()}
                             </select>
                             <select class="oc-select" name="role">{papel_options("member")}</select>
-                            <button class="oc-btn oc-btn--primary" type="submit">{crate::i18n::t("admin.action.assign")}</button>
+                            <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">{crate::i18n::t("admin.action.assign")}</button>
                         </form>
                     }
                     .into_any()
@@ -1295,7 +1295,7 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
                     <td>{etiqueta}</td>
                     <td class="oc-td--actions">
                         <form method="post" action=accao>
-                            <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">
+                            <button class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn" type="submit">
                                 {crate::i18n::t("admin.action.revoke")}
                             </button>
                         </form>
@@ -1365,7 +1365,7 @@ pub fn roles_admin(person_id: &str, access: &Value) -> impl IntoView {
                                         minlength="4"
                                         placeholder=crate::i18n::t("admin.reason.audit_ph")
                                     />
-                                    <button class="oc-btn oc-btn--primary" type="submit">
+                                    <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
                                         {crate::i18n::t("admin.action.grant")}
                                     </button>
                                 </form>
@@ -1465,7 +1465,7 @@ pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value
                                 minlength="4"
                                 placeholder=crate::i18n::t("admin.reason.ph")
                             />
-                            <button class="oc-btn oc-btn--sm oc-btn--danger" type="submit">
+                            <button class="oc-btn oc-btn--sm oc-btn--danger" data-part="btn" type="submit">
                                 {crate::i18n::t("admin.action.revoke")}
                             </button>
                         </form>
@@ -1544,7 +1544,7 @@ pub fn grants_admin(person_id: &str, access: &Value, permissions_catalog: &Value
                                         minlength="4"
                                         placeholder=crate::i18n::t("admin.reason.audit_ph")
                                     />
-                                    <button class="oc-btn oc-btn--primary" type="submit">
+                                    <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
                                         {crate::i18n::t("admin.grants.grant_submit")}
                                     </button>
                                 </form>
@@ -1630,7 +1630,7 @@ pub fn position_admin(person_id: &str, current_code: &str, security: &Value) -> 
                                         })
                                         .collect_view()}
                                 </select>
-                                <button class="oc-btn oc-btn--primary" type="submit">
+                                <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
                                     {crate::i18n::t("action.save")}
                                 </button>
                             </form>
@@ -1684,7 +1684,7 @@ pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
                                     {crate::i18n::t("admin.account.reset_note")}
                                 </p>
                                 <form method="post" action=accao_reset.clone() class="oc-mt-3">
-                                    <button class="oc-btn oc-btn--danger" type="submit">
+                                    <button class="oc-btn oc-btn--danger" data-part="btn" type="submit">
                                         {crate::i18n::t("admin.account.reset_submit")}
                                     </button>
                                 </form>
@@ -1723,7 +1723,7 @@ pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
                                             minlength="4"
                                             placeholder=crate::i18n::t("admin.reason.audit_ph")
                                         />
-                                        <button class="oc-btn oc-btn--primary" type="submit">
+                                        <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
                                             {crate::i18n::t("admin.action.apply")}
                                         </button>
                                     </form>
@@ -1745,7 +1745,7 @@ pub fn account_admin(person_id: &str, overview: &Value) -> impl IntoView {
                                         action=accao_apagar.clone()
                                         class="oc-mt-3"
                                     >
-                                        <button class="oc-btn oc-btn--danger" type="submit">
+                                        <button class="oc-btn oc-btn--danger" data-part="btn" type="submit">
                                             {crate::i18n::t("admin.account.delete_submit")}
                                         </button>
                                     </form>
@@ -1886,7 +1886,7 @@ pub fn instance(payload: &Value, saved: bool) -> impl IntoView {
                 )}
 
                 <div class="oc-mt-5">
-                    <button class="oc-btn oc-btn--primary" type="submit" data-oc="instance-save">
+                    <button class="oc-btn oc-btn--primary" data-part="btn" type="submit" data-oc="instance-save">
                         {crate::i18n::t("admin.instance.save")}
                     </button>
                 </div>

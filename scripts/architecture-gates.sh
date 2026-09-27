@@ -74,16 +74,20 @@ cd "$raiz"
 #     tudo o que o arranque chama existe, os painéis igualam o painel da conta,
 #     as regras partilhadas fora de uma media query, e a superfície de um painel
 #     não se reescreve.
+#   UI Reset, 2026-09-27: `Design System Integrity` (29) e `Rendered-Value
+#   Equivalence` mediam a UI legada — tokens, medidas e o estilo computado da
+#   folha `ocinye.css` — e saíram com ela. Os cinco testes que guardam
+#   fronteiras que qualquer desenho tem de respeitar ficaram em `UI Contract`.
+#   Ver `docs/ui/BEHAVIOURAL_CONTRACT_MATRIX.md`.
 portoes() {
     cat <<'TABELA'
 Architecture Dependency Boundary|python3 scripts/architecture_boundaries.py|Fronteiras arquitecturais:
 Experience Structural Boundary|cargo test -q -p ocinye-workspace --test experience_boundary|test result: ok. 7 passed
-Design System Integrity|cargo test -q -p ocinye-workspace --test design_fidelity|test result: ok. 29 passed
-Rendered-Value Equivalence|python3 scripts/rendered_value_equivalence.py|Equivalência de valores renderizados:
+UI Contract|cargo test -q -p ocinye-workspace --test ui_contract|test result: ok. 5 passed
 TABELA
 }
 
-ESPERADOS=4
+ESPERADOS=3
 
 # A impressão digital da árvore versionada: caminho, tamanho e data de
 # alteração. Um ficheiro tocado e restaurado muda a data, e por isso aparece

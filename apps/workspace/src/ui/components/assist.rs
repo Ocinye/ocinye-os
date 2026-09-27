@@ -101,7 +101,7 @@ pub fn assist(spec: Assist) -> impl IntoView {
                     placeholder=placeholder
                     autocomplete="off"
                 />
-                <button type="submit" class="oc-btn oc-btn--primary">{crate::i18n::t("assist.submit")}</button>
+                <button type="submit" class="oc-btn oc-btn--primary" data-part="btn">{crate::i18n::t("assist.submit")}</button>
             </form>
 
             // As sugestões são ligações, não botões: cada uma leva à mesma
@@ -117,7 +117,7 @@ pub fn assist(spec: Assist) -> impl IntoView {
                         let href = format!("/ask?q={}", urlencode(phrase));
                         view! {
                             <li>
-                                <a class="oc-chip" href=href>{phrase}</a>
+                                <a class="oc-chip" data-part="chip" href=href>{phrase}</a>
                             </li>
                         }
                     })

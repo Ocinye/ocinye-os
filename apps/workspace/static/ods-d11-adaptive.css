@@ -1,0 +1,22 @@
+/* D11 · adaptação, escuro e idiomas (acrescentos transversais) */
+/* tablet: janelas simplificadas; telemóvel: uma superfície activa */
+@media (max-width: 1099px) { .ods-topbar__ask { max-width: 240px; } .ods-topbar__date { display: none; } }
+@media (max-width: 767px) {
+  .ods-topbar { gap: 6px; padding: 0 8px; }
+  .ods-topbar__ask, .ods-crumbs, .ods-status { display: none; }
+  .ods-launcher__panel { height: 100%; border-radius: 0; }
+  .ods-launcher__sections { grid-template-columns: 1fr; }
+  .ods-nye-orb__circle { border-radius: 28px; aspect-ratio: auto; padding: 32px 20px; }
+  .ods-shelf { bottom: 80px; }
+  .ods-popover { position: fixed; left: 8px !important; right: 8px !important; width: auto; }
+}
+/* escuro: ajustes que os tokens não cobrem */
+:root[data-theme="dark"] .ods-topbar__logo { background: linear-gradient(180deg, #1B3550, #122839); }
+:root[data-theme="dark"] .ods-widget__icon, :root[data-theme="dark"] .ods-app-tile, :root[data-theme="dark"] .ods-empty__icon { background: linear-gradient(180deg, #1B3550, #15304A); color: #D5DEE7; }
+:root[data-theme="dark"] .ods-launcher__head { background: var(--ods-surface-panel); }
+:root[data-theme="dark"] .ods-launcher__favs { background: var(--ods-surface-panel); }
+:root[data-theme="dark"] .ods-banner { background: var(--ods-surface-window); }
+:root[data-theme="dark"] .ods-monitor__confirm { background: rgba(179,38,30,.12); }
+/* textos longos (en/fr): nada com largura fixa corta texto */
+.ods-menu__item, .ods-tabs__tab, .ods-btn { min-width: 0; }
+.ods-menu__item > span:not(.ods-menu__kbd) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

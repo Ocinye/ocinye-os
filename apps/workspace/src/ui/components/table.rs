@@ -208,7 +208,7 @@ pub fn data_table(table: Table) -> impl IntoView {
     let is_empty = rows.is_empty();
 
     view! {
-        <section class=format!("oc-card oc-table oc-table--{shape}") data-dense="false">
+        <section class=format!("oc-card oc-table oc-table--{shape}") data-oc="table" data-dense="false">
             <div class="oc-table__bar">
                 // Os separadores de filtro eram `<button role="tab">` sem
                 // handler: clicar não fazia nada. O Core ainda não expõe estes
@@ -221,7 +221,7 @@ pub fn data_table(table: Table) -> impl IntoView {
                         .map(|tab| match tab.state {
                             TabState::Current => {
                                 view! {
-                                    <span class="oc-tab" role="tab" aria-selected="true">
+                                    <span class="oc-tab" data-part="tab" role="tab" aria-selected="true">
                                         {tab.label}
                                     </span>
                                 }
@@ -230,7 +230,7 @@ pub fn data_table(table: Table) -> impl IntoView {
                             TabState::Available(query) => {
                                 view! {
                                     <a
-                                        class="oc-tab"
+                                        class="oc-tab" data-part="tab"
                                         role="tab"
                                         aria-selected="false"
                                         href=query
@@ -249,7 +249,7 @@ pub fn data_table(table: Table) -> impl IntoView {
                             TabState::NotImplemented(razao) => {
                                 view! {
                                     <span
-                                        class="oc-tab oc-unavailable"
+                                        class="oc-tab oc-unavailable" data-part="tab unavailable"
                                         role="tab"
                                         aria-selected="false"
                                         aria-disabled="true"
@@ -338,7 +338,7 @@ pub fn data_table(table: Table) -> impl IntoView {
                                 // clique do meio e sem JavaScript.
                                 Some(href) => {
                                     view! {
-                                        <a class="oc-table__row" role="row" href=href>
+                                        <a class="oc-table__row" data-oc="table-row" role="row" href=href>
                                             {render_cells()}
                                         </a>
                                     }
@@ -346,7 +346,7 @@ pub fn data_table(table: Table) -> impl IntoView {
                                 }
                                 None => {
                                     view! {
-                                        <div class="oc-table__row" role="row">
+                                        <div class="oc-table__row" data-oc="table-row" role="row">
                                             {render_cells()}
                                         </div>
                                     }
@@ -382,7 +382,7 @@ pub fn data_table(table: Table) -> impl IntoView {
                             </a>
                         }
                     })}
-                <span class="oc-table__count">{footer}</span>
+                <span class="oc-table__count" data-oc="table-count">{footer}</span>
                 {next
                     .map(|href| {
                         view! {

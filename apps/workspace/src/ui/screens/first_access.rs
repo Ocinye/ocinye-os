@@ -31,7 +31,7 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
     let email = email.to_owned();
 
     view! {
-        <div class="oc-login">
+        <div class="oc-login" data-part="login">
             <div class="oc-login__layer oc-login__glow" aria-hidden="true"></div>
             <div class="oc-login__layer" aria-hidden="true">
                 <span class="oc-login__ring oc-login__ring--a"></span>
@@ -40,7 +40,7 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
             </div>
             <div class="oc-login__layer oc-login__grid" aria-hidden="true"></div>
 
-            <div class="oc-login__bar">
+            <div class="oc-login__bar" data-part="login__bar">
                 <span class="oc-login__state">
                     <i aria-hidden="true"></i>
                     <span>{crate::i18n::t("first_access.eyebrow")}</span>
@@ -160,7 +160,7 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
                             <li>{crate::i18n::t("first_access.common_rejected")}</li>
                         </ul>
 
-                        <button type="submit" class="oc-login__submit">
+                        <button type="submit" class="oc-login__submit" data-part="login__submit">
                             {crate::i18n::t("first_access.set_password_button")}
                             {icon(Icon::ArrowRight, 14)}
                         </button>

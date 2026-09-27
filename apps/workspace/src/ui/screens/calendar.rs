@@ -334,7 +334,7 @@ pub fn calendar(page: &CalendarPage<'_>) -> impl IntoView {
     let zona = *zona;
 
     view! {
-        <div class="oc-page oc-page--calendar">
+        <div class="oc-page oc-page--calendar" data-part="page--calendar">
             <div class="oc-head">
                 <div class="oc-head__text">
                     <h1>{crate::i18n::t("calendar.title")}</h1>
@@ -344,7 +344,7 @@ pub fn calendar(page: &CalendarPage<'_>) -> impl IntoView {
                     </p>
                 </div>
                 {may_create.then(|| view! {
-                    <a class="oc-btn oc-btn--primary" href="/calendar/events/new">
+                    <a class="oc-btn oc-btn--primary" data-part="btn" href="/calendar/events/new">
                         {crate::i18n::t("calendar.new_activity_cta")}
                     </a>
                 })}
@@ -356,7 +356,7 @@ pub fn calendar(page: &CalendarPage<'_>) -> impl IntoView {
                 // Um erro é um erro. Dizer «nenhuma actividade» quando a consulta
                 // falhou faria alguém faltar a uma reunião por acreditar no ecrã.
                 Some(motivo) => view! {
-                    <div class="oc-alert oc-alert--error" role="alert">
+                    <div class="oc-alert oc-alert--error" data-part="alert--error" role="alert">
                         <strong>{crate::i18n::t("calendar.unreadable")}</strong>
                         <span>{motivo.clone()}</span>
                     </div>
@@ -729,7 +729,7 @@ fn agora_no_dia(dia: NaiveDate, zona: TimeZoneName) -> Option<usize> {
 /// O eixo das horas, à esquerda da grelha.
 fn eixo_das_horas() -> impl IntoView {
     view! {
-        <div class="oc-cal-eixo" aria-hidden="true">
+        <div class="oc-cal-eixo" data-part="cal-eixo" aria-hidden="true">
             {HORAS.map(|h| view! {
                 <span class="oc-cal-eixo__hora">{format!("{h:02}:00")}</span>
             }).collect_view()}
@@ -752,10 +752,10 @@ fn coluna_do_dia(items: &[Item], dia: NaiveDate, zona: TimeZoneName) -> impl Int
     let agora = agora_no_dia(dia, zona);
 
     view! {
-        <div class="oc-cal-coluna" data-oc-dia=dia.to_string()>
+        <div class="oc-cal-coluna" data-part="cal-coluna" data-oc-dia=dia.to_string()>
             {linhas_das_horas()}
             {agora.map(|faixa| view! {
-                <div class=format!("oc-cal-agora oc-cal-l{faixa}") aria-hidden="true"></div>
+                <div class=format!("oc-cal-agora oc-cal-l{faixa}") data-part="cal-agora" data-linha=faixa.to_string() aria-hidden="true"></div>
             })}
             {colocados.into_iter().map(|c| {
                 // A posição vai por classe, e não por `style`: a CSP deste
@@ -769,12 +769,17 @@ fn coluna_do_dia(items: &[Item], dia: NaiveDate, zona: TimeZoneName) -> impl Int
                 view! {
                     <a
                         class=classes
+                        data-part="cal-bloco"
+                        data-linha=c.linha.to_string()
+                        data-faixas=c.faixas.to_string()
+                        data-coluna=(c.coluna + 1).to_string()
+                        data-colunas=c.colunas.to_string()
                         href=c.item.href()
                         data-kind=c.item.kind.clone()
                         title=c.item.title.clone()
                     >
-                        <span class="oc-cal-bloco__hora">{hora}</span>
-                        <span class="oc-cal-bloco__titulo">{c.item.title.clone()}</span>
+                        <span class="oc-cal-bloco__hora" data-part="cal-bloco__hora">{hora}</span>
+                        <span class="oc-cal-bloco__titulo" data-part="cal-bloco__titulo">{c.item.title.clone()}</span>
                     </a>
                 }
             }).collect_view()}
@@ -800,12 +805,12 @@ fn faixa_de_dia_inteiro(dias: &[(NaiveDate, Vec<Item>)]) -> Option<impl IntoView
                         <div class="oc-cal-diainteiro__dia">
                             {items.iter().filter(|i| i.all_day).map(|item| view! {
                                 <a
-                                    class="oc-cal-bloco oc-cal-bloco--diainteiro"
+                                    class="oc-cal-bloco oc-cal-bloco--diainteiro" data-part="cal-bloco"
                                     href=item.href()
                                     data-kind=item.kind.clone()
                                     title=item.title.clone()
                                 >
-                                    <span class="oc-cal-bloco__titulo">{item.title.clone()}</span>
+                                    <span class="oc-cal-bloco__titulo" data-part="cal-bloco__titulo">{item.title.clone()}</span>
                                 </a>
                             }).collect_view()}
                         </div>
@@ -866,7 +871,7 @@ fn today_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
 fn agenda_view(items: &[Item], zona: TimeZoneName) -> AnyView {
     if items.is_empty() {
         return view! {
-            <div class="oc-cal-agenda oc-cal-agenda--vazia">
+            <div class="oc-cal-agenda oc-cal-agenda--vazia" data-part="cal-agenda">
                 <p>{crate::i18n::t("calendar.empty.period.dot")}</p>
             </div>
         }
@@ -885,7 +890,7 @@ fn agenda_view(items: &[Item], zona: TimeZoneName) -> AnyView {
     let hoje = crate::ui::tempo::hoje_civil(Utc::now(), zona);
 
     view! {
-        <div class="oc-cal-agenda">
+        <div class="oc-cal-agenda" data-part="cal-agenda">
             {dias.into_iter().map(|(dia, lista)| {
                 let e_hoje = dia == hoje;
                 let classe = if e_hoje {
@@ -915,7 +920,7 @@ fn agenda_view(items: &[Item], zona: TimeZoneName) -> AnyView {
                                         <span class="oc-cal-linha__hora">
                                             {item.clock(zona).unwrap_or_else(|| crate::i18n::t("calendar.all_day").to_owned())}
                                         </span>
-                                        <span class="oc-cal-linha__titulo">
+                                        <span class="oc-cal-linha__titulo" data-part="cal-linha__titulo">
                                             {item.title.clone()}
                                         </span>
                                         <span class="oc-cal-linha__tipo">
@@ -1014,7 +1019,7 @@ fn year_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Into
                 let primeiro = NaiveDate::from_ymd_opt(ano, m, 1).unwrap_or(anchor);
                 let inicio = month_grid_start(primeiro);
                 view! {
-                    <section class="oc-cal-mini">
+                    <section class="oc-cal-mini" data-part="cal-mini">
                         <a
                             class="oc-cal-mini__nome"
                             href=format!("/calendar?view=month&on={primeiro}")
@@ -1111,7 +1116,7 @@ fn month_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
                     // uma actividade neste dia teria de a extrair do endereço
                     // do número — e um endereço é para navegar, não para ser
                     // lido como dado.
-                    <div class=classes role="cell" data-oc-dia=dia.to_string()>
+                    <div class=classes role="cell" data-part="cal-month__cell" data-fora=fora_do_mes.then_some("") data-hoje=(dia == hoje).then_some("") data-selecionado=(dia == anchor).then_some("") data-oc-dia=dia.to_string()>
                         <a
                             class="oc-cal-month__date"
                             href=format!("/calendar?view=today&on={dia}")
@@ -1121,7 +1126,7 @@ fn month_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
                         </a>
                         {do_dia.iter().take(MONTH_CELL_LIMIT).map(|item| view! {
                             <a
-                                class="oc-cal-month__item"
+                                class="oc-cal-month__item" data-part="cal-month__item"
                                 href=item.href()
                                 data-kind=item.kind.clone()
                                 title=item.title.clone()
@@ -1134,7 +1139,7 @@ fn month_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
                                 // `min-width: 0`, recusa-se a encolher e as
                                 // reticências nunca aparecem. Cortava a meio da
                                 // palavra sem dizer que tinha cortado.
-                                <span class="oc-cal-month__titulo">
+                                <span class="oc-cal-month__titulo" data-part="cal-month__titulo">
                                     {item.title.clone()}
                                 </span>
                             </a>
@@ -1144,7 +1149,7 @@ fn month_view(items: &[Item], anchor: NaiveDate, zona: TimeZoneName) -> impl Int
                             // «+3» é uma promessa de que os três estão em
                             // algum lado.
                             <a
-                                class="oc-cal-month__more"
+                                class="oc-cal-month__more" data-part="cal-month__more"
                                 href=format!("/calendar?view=today&on={dia}")
                             >
                                 {format!("+{excedente}")}
@@ -1222,7 +1227,7 @@ pub fn system_calendar(hoje: NaiveDate) -> impl IntoView {
                     if dia == hoje {
                         classes.push_str(" oc-datepop__dia-cel--hoje");
                     }
-                    view! { <span class=classes>{dia.day().to_string()}</span> }
+                    view! { <span class=classes data-part="datepop__dia-cel" data-fora=(dia.month() != hoje.month()).then_some("") data-semana=(week_start(dia) == semana_de_hoje).then_some("") data-hoje=(dia == hoje).then_some("")>{dia.day().to_string()}</span> }
                 }).collect_view()}
             </div>
 
@@ -1407,10 +1412,10 @@ pub fn event_form(
             </header>
 
             {error.map(|motivo| view! {
-                <div class="oc-alert oc-alert--error" role="alert">{motivo}</div>
+                <div class="oc-alert oc-alert--error" data-part="alert--error" role="alert">{motivo}</div>
             })}
 
-            <form class="oc-editor__form" method="post" action=accao data-oc="editor">
+            <form class="oc-editor__form" data-part="editor__form" method="post" action=accao data-oc="editor">
                 <section class="oc-editor__bloco">
                     <label class="oc-campo oc-campo--principal">
                         <span class="oc-campo__rotulo">{crate::i18n::t("calendar.field.title")}</span>
@@ -1505,7 +1510,7 @@ pub fn event_form(
                     // Core depois recusaria. O valor continua a ir no pedido, e
                     // continua a ser o Core a validá-lo; o que muda é que deixa
                     // de se pedir a alguém que o escreva.
-                    <p class="oc-zona">
+                    <p class="oc-zona" data-part="zona">
                         <span class="oc-zona__rotulo">{crate::i18n::t("calendar.field.timezone")}</span>
                         <span class="oc-zona__valor" data-oc="timezone-label">"UTC"</span>
                         <input type="hidden" name="timezone" data-oc="timezone" value="UTC" />
@@ -1537,7 +1542,7 @@ pub fn event_form(
                                 <li>
                                     <button
                                         type="button"
-                                        class="oc-pessoa"
+                                        class="oc-pessoa" data-part="pessoa"
                                         data-oc="pessoa"
                                         data-id=id.clone()
                                         data-nome=nome.clone()
@@ -1607,8 +1612,8 @@ pub fn event_form(
                 })}
 
                 <footer class="oc-editor__accoes">
-                    <a class="oc-btn oc-btn--ghost" href=CALENDAR_ROUTE>{crate::i18n::t("calendar.cancel")}</a>
-                    <button type="submit" class="oc-btn oc-btn--primary" data-oc="submeter">
+                    <a class="oc-btn oc-btn--ghost" data-part="btn" href=CALENDAR_ROUTE>{crate::i18n::t("calendar.cancel")}</a>
+                    <button type="submit" class="oc-btn oc-btn--primary" data-part="btn" data-oc="submeter">
                         {if a_alterar {
                             crate::i18n::t("calendar.save_changes")
                         } else {
@@ -1654,9 +1659,9 @@ pub fn event_detail(event: &Value, may_change: bool, zona: TimeZoneName) -> impl
                 </div>
                 {(may_change && !cancelado).then(|| view! {
                     <div class="oc-head__actions">
-                        <a class="oc-btn" href=format!("/calendar/events/{id}/edit")>{crate::i18n::t("calendar.edit")}</a>
+                        <a class="oc-btn" data-part="btn" href=format!("/calendar/events/{id}/edit")>{crate::i18n::t("calendar.edit")}</a>
                         <form method="post" action=format!("/calendar/events/{id}/cancel")>
-                            <button type="submit" class="oc-btn oc-btn--danger">{crate::i18n::t("calendar.cancel")}</button>
+                            <button type="submit" class="oc-btn oc-btn--danger" data-part="btn">{crate::i18n::t("calendar.cancel")}</button>
                         </form>
                     </div>
                 })}
@@ -1733,7 +1738,7 @@ pub fn notifications(payload: &Value, failure: Option<String>) -> impl IntoView 
 
             {match failure {
                 Some(motivo) => view! {
-                    <div class="oc-alert oc-alert--error" role="alert">
+                    <div class="oc-alert oc-alert--error" data-part="alert--error" role="alert">
                         <strong>{crate::i18n::t("notifications.unreadable")}</strong>
                         <span>{motivo}</span>
                     </div>
@@ -1772,11 +1777,11 @@ pub fn notifications(payload: &Value, failure: Option<String>) -> impl IntoView 
                                     })}
                                     <span class="oc-notification__actions">
                                         {destino.map(|href| view! {
-                                            <a class="oc-btn oc-btn--ghost" href=href>{crate::i18n::t("calendar.open_item")}</a>
+                                            <a class="oc-btn oc-btn--ghost" data-part="btn" href=href>{crate::i18n::t("calendar.open_item")}</a>
                                         })}
                                         {(!lida).then(|| view! {
                                             <form method="post" action=format!("/notifications/{id}/read")>
-                                                <button type="submit" class="oc-btn oc-btn--ghost">
+                                                <button type="submit" class="oc-btn oc-btn--ghost" data-part="btn">
                                                     {crate::i18n::t("notifications.mark_read")}
                                                 </button>
                                             </form>

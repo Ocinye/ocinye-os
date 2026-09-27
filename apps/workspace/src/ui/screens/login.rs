@@ -25,7 +25,7 @@ use crate::ui::icon::{icon, Icon};
 /// leva a lado nenhum, e é melhor dizê-lo antes do que falhar depois.
 pub fn login(core_ready: bool, message: Option<String>) -> impl IntoView {
     view! {
-        <div class="oc-login">
+        <div class="oc-login" data-part="login">
             <div class="oc-login__layer oc-login__glow" aria-hidden="true"></div>
             <div class="oc-login__layer" aria-hidden="true">
                 <span class="oc-login__ring oc-login__ring--a"></span>
@@ -34,7 +34,7 @@ pub fn login(core_ready: bool, message: Option<String>) -> impl IntoView {
             </div>
             <div class="oc-login__layer oc-login__grid" aria-hidden="true"></div>
 
-            <div class="oc-login__bar">
+            <div class="oc-login__bar" data-part="login__bar">
                 <span class="oc-login__state">
                     <i aria-hidden="true"></i>
                     <span>
@@ -140,7 +140,7 @@ pub fn login(core_ready: bool, message: Option<String>) -> impl IntoView {
                             // está a criar.
                         </div>
 
-                        <button type="submit" class="oc-login__submit" disabled=!core_ready>
+                        <button type="submit" class="oc-login__submit" data-part="login__submit" disabled=!core_ready>
                             {crate::i18n::t("login.sign_in")}
                             {icon(Icon::ArrowRight, 14)}
                         </button>

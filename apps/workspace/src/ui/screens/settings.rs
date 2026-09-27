@@ -191,7 +191,7 @@ pub fn language(saved: bool) -> impl IntoView {
                                 .collect_view()}
                         </fieldset>
                         <div class="oc-mt-5">
-                            <button class="oc-btn oc-btn--primary" type="submit">
+                            <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
                                 {crate::i18n::t("settings.language.save")}
                             </button>
                         </div>
@@ -284,11 +284,11 @@ pub fn apps(viewer: &crate::ui::shell::Viewer, saved: bool) -> impl IntoView {
                                         .collect_view()}
                                 </fieldset>
                                 <div class="oc-row oc-gap-5 oc-mt-5">
-                                    <button class="oc-btn oc-btn--primary" type="submit">
+                                    <button class="oc-btn oc-btn--primary" data-part="btn" type="submit">
                                         {crate::i18n::t("settings.apps.save")}
                                     </button>
                                     <button
-                                        class="oc-btn oc-btn--secondary"
+                                        class="oc-btn oc-btn--secondary" data-part="btn"
                                         type="submit"
                                         name="action"
                                         value="reset"
@@ -342,7 +342,7 @@ pub fn security(
                 )}
             </div>
 
-            {error.map(|m| view! { <div class="oc-card oc-alert" role="alert">{m}</div> })}
+            {error.map(|m| view! { <div class="oc-card oc-alert" data-part="card" role="alert">{m}</div> })}
             {done.map(|m| view! { <div class="oc-callout" role="status">{m}</div> })}
 
             {card(
@@ -389,7 +389,7 @@ pub fn security(
                 view! {
                     {if !carregou {
                         view! {
-                            <div class="oc-card oc-alert" role="alert">
+                            <div class="oc-card oc-alert" data-part="card" role="alert">
                                 {crate::i18n::t("settings.sessions.unreadable")}
                             </div>
                         }
@@ -493,10 +493,10 @@ pub fn mfa_recovery(
             </p>
             <pre class="oc-mfa__codes oc-mono" data-oc="recovery-codes">{linhas}</pre>
             <div class="oc-row oc-gap-3 oc-mt-3">
-                <button type="button" class="oc-btn oc-btn--sm" data-oc="recovery-copy">
+                <button type="button" class="oc-btn oc-btn--sm" data-part="btn" data-oc="recovery-copy">
                     {crate::i18n::t("settings.recovery.copy")}
                 </button>
-                <button type="button" class="oc-btn oc-btn--sm" data-oc="recovery-download">
+                <button type="button" class="oc-btn oc-btn--sm" data-part="btn" data-oc="recovery-download">
                     {crate::i18n::t("settings.recovery.download")}
                 </button>
             </div>
@@ -528,7 +528,7 @@ pub fn mfa_recovery(
                     required
                     placeholder=crate::i18n::t("settings.recovery.code_ph")
                 />
-                <button class="oc-btn oc-btn--danger oc-mt-3" type="submit">
+                <button class="oc-btn oc-btn--danger oc-mt-3" data-part="btn" type="submit">
                     {crate::i18n::t("settings.recovery.regen_button")}
                 </button>
             </form>
@@ -620,12 +620,12 @@ fn imagem_de_perfil(
             // com a frase suspensa ao meio.
             {error
                 .map(|razao| {
-                    view! { <div class="oc-card oc-alert" role="alert">{razao}</div> }
+                    view! { <div class="oc-card oc-alert" data-part="card" role="alert">{razao}</div> }
                 })}
             {done
                 .then(|| {
                     view! {
-                        <div class="oc-card oc-alert oc-alert--ok" role="status">
+                        <div class="oc-card oc-alert oc-alert--ok" data-part="card" role="status">
                             {crate::i18n::t("settings.avatar.updated")}
                         </div>
                     }

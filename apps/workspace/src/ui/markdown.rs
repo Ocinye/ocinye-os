@@ -203,7 +203,7 @@ pub fn render(source: &str) -> String {
                 TagEnd::BlockQuote(_) => out.push_str("</blockquote>"),
                 TagEnd::CodeBlock => {
                     in_code = false;
-                    out.push_str("<div class=\"oc-md-code\"><div class=\"oc-md-code__bar\">");
+                    out.push_str("<div class=\"oc-md-code\" data-part=\"md-code\"><div class=\"oc-md-code__bar\">");
                     out.push_str("<span class=\"oc-md-code__lang\">");
                     if code_lang.is_empty() {
                         out.push_str("texto");

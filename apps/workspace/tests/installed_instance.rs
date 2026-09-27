@@ -320,7 +320,11 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
         .await
         .expect("enviar");
     assert!(
-        condicao(&page, "!!document.querySelector('.oc-turn--ocinye')").await,
+        condicao(
+            &page,
+            "!!document.querySelector('[data-part~=turn--ocinye]')"
+        )
+        .await,
         "o Prompt não respondeu"
     );
     tempos.push(("prompt_responde", t.elapsed().as_millis()));
@@ -338,7 +342,7 @@ async fn uma_instancia_instalada_abre_entra_e_trabalha() {
     // inferência.
     let turno: String = page
         .evaluate(
-            "(() => { const t = document.querySelector('.oc-turn--ocinye'); \
+            "(() => { const t = document.querySelector('[data-part~=turn--ocinye]'); \
                t.querySelectorAll('details').forEach(d => d.open = true); \
                return t.innerText; })()",
         )

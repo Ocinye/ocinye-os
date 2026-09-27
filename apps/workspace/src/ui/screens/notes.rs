@@ -105,7 +105,7 @@ pub fn notes_list(
                 }).collect::<Vec<_>>()}
                 <form class="oc-notes-newfolder" method="post" action="/notes/folders">
                     <input
-                        class="oc-notes-newfolder__input"
+                        class="oc-notes-newfolder__input" data-part="notes-newfolder__input"
                         type="text"
                         name="name"
                         placeholder=t("notes.folder.new_placeholder")
@@ -560,7 +560,7 @@ fn history_panel(note_id: &str, revisions: &Value) -> impl IntoView {
                     let ver = format!("/notes/{note_id}/revisoes/{numero}");
                     view! {
                         <li class="oc-notes-history__item">
-                            <a class="oc-notes-history__link" href=ver>
+                            <a class="oc-notes-history__link" data-part="notes-history__link" href=ver>
                                 <span class="oc-notes-history__rev">{crate::i18n::tf("notes.history.version", &[("n", &numero.to_string())])}</span>
                                 <span class="oc-notes-history__note-title" data-oc-content="1">{titulo}</span>
                             </a>
@@ -623,7 +623,7 @@ pub fn revision_preview(
                 </div>
             })}
 
-            <div class="oc-notes-reader" inner_html=html></div>
+            <div class="oc-notes-reader" data-part="notes-reader" inner_html=html></div>
         </div>
     }
 }
@@ -671,7 +671,7 @@ fn shared_note_reader(note: &Value) -> impl IntoView {
             // O corpo derivado, escapado pelo Core. O `inner_html` não abre
             // caminho a script: `to_html` só emite marcação de uma lista fechada
             // de blocos, e a CSP do Workspace continua `script-src 'self'`.
-            <div class="oc-notes-reader" inner_html=html></div>
+            <div class="oc-notes-reader" data-part="notes-reader" inner_html=html></div>
         </div>
     }
 }
@@ -729,12 +729,12 @@ fn share_panel(note_id: &str, shares: &Value, people: &Value) -> impl IntoView {
             {if can_share {
                 view! {
                     <form class="oc-notes-share__form" method="post" action=share_url>
-                        <select name="person_id" class="oc-notes-share__person" aria-label=t("notes.share.person_aria") required>
+                        <select name="person_id" class="oc-notes-share__person" data-part="notes-share__person" aria-label=t("notes.share.person_aria") required>
                             {candidates.into_iter().map(|(id, label)| view! {
                                 <option value=id>{label}</option>
                             }).collect::<Vec<_>>()}
                         </select>
-                        <select name="role" class="oc-notes-share__role" aria-label=t("notes.share.access_aria")>
+                        <select name="role" class="oc-notes-share__role" data-part="notes-share__role" aria-label=t("notes.share.access_aria")>
                             <option value="viewer">{t("notes.role.viewer")}</option>
                             <option value="editor">{t("notes.role.editor")}</option>
                         </select>

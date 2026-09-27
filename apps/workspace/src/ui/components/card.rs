@@ -21,7 +21,7 @@ pub fn section_head(
 /// Um cartão com cabeçalho e corpo.
 pub fn card(head: impl IntoView + 'static, body: impl IntoView + 'static) -> impl IntoView {
     view! {
-        <section class="oc-card">
+        <section class="oc-card" data-part="card">
             {head}
             <div class="oc-card__body">{body}</div>
         </section>
@@ -69,7 +69,7 @@ pub fn kpi_card(kpi: Kpi) -> impl IntoView {
 
     view! {
         <a
-            class="oc-card oc-card--clickable oc-card__body oc-card__body--block"
+            class="oc-card oc-card--clickable oc-card__body oc-card__body--block" data-part="card"
             class:oc-unavailable=indisponivel
             href=href
             title=indisponivel

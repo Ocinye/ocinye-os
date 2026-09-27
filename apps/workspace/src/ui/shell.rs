@@ -522,16 +522,16 @@ pub fn shell(
     let core_status = viewer.core_status;
 
     view! {
-        <a class="oc-skip" href="#conteudo">"Saltar para o conteúdo"</a>
+        <a class="oc-skip" data-part="skip" href="#conteudo">"Saltar para o conteúdo"</a>
 
         {faixa_privilegiada(viewer)}
 
-        <div class="oc-shell" data-side="expanded">
+        <div class="oc-shell" data-oc="shell" data-side="expanded">
             {sidebar(viewer, &avatar, active)}
 
-            <div class="oc-main">
+            <div class="oc-main" data-part="main">
                 {topbar(viewer, current, trail, &core_status)}
-                <main class="oc-content" id="conteudo">
+                <main class="oc-content" data-part="content" id="conteudo">
                     {content}
                 </main>
             </div>
@@ -552,7 +552,7 @@ pub fn shell(
 /// mostra navegação, e não deixa uma sessão privilegiada passar por normal.
 pub fn identidade_indeterminada() -> impl IntoView {
     view! {
-        <div class="oc-login">
+        <div class="oc-login" data-part="login">
             <div class="oc-login__layer oc-login__glow" aria-hidden="true"></div>
             <div class="oc-login__center">
                 <div class="oc-login__card">
@@ -561,7 +561,7 @@ pub fn identidade_indeterminada() -> impl IntoView {
                          Isto não é um acesso recusado: o serviço não respondeu a tempo. \
                          Por segurança, nada é apresentado até a sessão ser confirmada."
                     </div>
-                    <a class="oc-login__submit" href="/login">
+                    <a class="oc-login__submit" data-part="login__submit" href="/login">
                         "Voltar ao início de sessão"
                     </a>
                 </div>
@@ -657,6 +657,7 @@ fn item_fixado(screen: Screen, on: bool) -> impl IntoView {
             title=screen.label()
             aria-label=screen.label()
             aria-current=on.then_some("page")
+            data-oc="fixada"
             data-app-id=screen.id()
         >
             {icon(screen.icon(), 15)}
@@ -676,7 +677,7 @@ fn sidebar(viewer: &Viewer, avatar: &str, active: Screen) -> impl IntoView {
     let avatar = avatar.to_owned();
 
     view! {
-        <aside class="oc-side">
+        <aside class="oc-side" data-part="side">
             <div class="oc-side__head">
                 <span class="oc-side__tile">
                     <img src="/static/ocinye_logo.png" alt="" />
@@ -711,7 +712,7 @@ fn sidebar(viewer: &Viewer, avatar: &str, active: Screen) -> impl IntoView {
                 <span>{crate::i18n::t("apps.title")}</span>
             </button>
 
-            <nav class="oc-side__nav" aria-label="Navegação principal">
+            <nav class="oc-side__nav" data-part="side__nav" aria-label="Navegação principal">
                 // A barra deixou de ser o catálogo inteiro: é **navegação
                 // essencial** mais as **aplicações que o membro fixou**. Tudo o
                 // resto descobre-se no Gestor de Aplicações, acima. A barra fica
@@ -835,7 +836,7 @@ fn account(viewer: &Viewer, avatar: &str) -> impl IntoView {
             </button>
 
             <div
-                class="oc-account__menu"
+                class="oc-account__menu" data-part="account__menu"
                 id="oc-account-menu"
                 data-oc="account-menu"
                 hidden
@@ -941,8 +942,8 @@ fn topbar(
     let has_trail = !trail.is_empty();
 
     view! {
-        <header class="oc-top">
-            <nav class="oc-crumb" aria-label="Trilho">
+        <header class="oc-top" data-part="top">
+            <nav class="oc-crumb" data-part="crumb" aria-label="Trilho">
                 // A instituição, e não a palavra «OCINYE» escrita no código. O
                 // dossier mostra-a assim porque a instituição é a Ocinye; o
                 // trilho deve dizer qual é, não presumir qual será.
@@ -1083,7 +1084,7 @@ fn notifications(unread: usize) -> impl IntoView {
     };
 
     view! {
-        <div class="oc-sino">
+        <div class="oc-sino" data-oc="sino">
             // Abre um painel, e não uma página.
             //
             // Ver o que chegou é um relance, e não uma navegação: levar a
@@ -1166,8 +1167,14 @@ fn core_status_pill(estado: &CoreStatus) -> impl IntoView {
             " oc-core-pill--off",
         ),
     };
+    // O estado, dito como dado, e não só como modificador visual.
+    let estado_core = match estado {
+        CoreStatus::Ok => "ok",
+        CoreStatus::Unavailable => "indisponivel",
+        CoreStatus::Silent => "silencio",
+    };
     view! {
-        <span class=format!("oc-core-pill{modificador}") title=titulo>
+        <span class=format!("oc-core-pill{modificador}") data-part="core-pill" data-estado=estado_core title=titulo>
             <i aria-hidden="true"></i>
             <span>{rotulo}</span>
         </span>
@@ -1266,7 +1273,7 @@ fn create_menu(inactive_apps: &[String]) -> impl IntoView {
         <div class="oc-create" data-oc="create">
             <button
                 type="button"
-                class="oc-btn oc-btn--gold"
+                class="oc-btn oc-btn--gold" data-part="btn"
                 data-oc="create-toggle"
                 aria-haspopup="menu"
                 aria-expanded="false"
@@ -1275,7 +1282,7 @@ fn create_menu(inactive_apps: &[String]) -> impl IntoView {
                 {crate::i18n::t("nav.create")}
             </button>
 
-            <div class="oc-create__menu" data-oc="create-menu" role="menu" hidden>
+            <div class="oc-create__menu" data-part="create__menu" data-oc="create-menu" role="menu" hidden>
                 {CREATE_ITEMS
                     .iter()
                     .filter(|item| !inactive_apps.iter().any(|id| id == item.app))
@@ -1298,7 +1305,7 @@ fn create_menu_item(action: &CreateAction) -> impl IntoView {
 
     match via {
         CreateVia::Open(href) => view! {
-            <a class="oc-create__item" role="menuitem" href=href data-oc-key=key>
+            <a class="oc-create__item" data-part="create__item" role="menuitem" href=href data-oc-key=key>
                 {crate::i18n::t(label)}
                 <kbd class="oc-kbd">{key}</kbd>
             </a>
@@ -1311,7 +1318,7 @@ fn create_menu_item(action: &CreateAction) -> impl IntoView {
             <form class="oc-create__form" method="post" action=action_url role="none">
                 <button
                     type="submit"
-                    class="oc-create__item"
+                    class="oc-create__item" data-part="create__item"
                     role="menuitem"
                     data-oc-key=key
                 >
@@ -1481,7 +1488,7 @@ fn palette(viewer: &Viewer) -> impl IntoView {
 
     view! {
         <div
-            class="oc-palette"
+            class="oc-palette" data-part="palette"
             data-oc="palette"
             role="dialog"
             aria-modal="true"
@@ -1506,13 +1513,14 @@ fn palette(viewer: &Viewer) -> impl IntoView {
 
                 <div class="oc-palette__list">
                     <div data-oc="palette-group">
-                        <div class="oc-palette__group">"NAVEGAR"</div>
+                        <div class="oc-palette__group" data-oc="palette-group-label">"NAVEGAR"</div>
                         {screens
                             .into_iter()
                             .map(|screen| {
                                 view! {
                                     <a
                                         class="oc-palette__item"
+                                        data-oc="palette-item"
                                         href=screen.path()
                                         data-label=screen.label()
                                     >
@@ -1525,13 +1533,14 @@ fn palette(viewer: &Viewer) -> impl IntoView {
                     </div>
 
                     <div data-oc="palette-group">
-                        <div class="oc-palette__group">"ACÇÕES"</div>
+                        <div class="oc-palette__group" data-oc="palette-group-label">"ACÇÕES"</div>
                         {actions
                             .into_iter()
                             .map(|(label, href, shortcut)| {
                                 view! {
                                     <a
                                         class="oc-palette__item oc-palette__item--action"
+                                        data-oc="palette-item"
                                         href=href
                                         data-label=label
                                         // O atalho vai no atributo, e não só no
@@ -1643,8 +1652,8 @@ fn launcher(viewer: &Viewer) -> impl IntoView {
                         data-search=procura
                         aria-label=label
                     >
-                        <span class="oc-apps__icone">{icon(app.icon(), 22)}</span>
-                        <span class="oc-apps__nome">{label}</span>
+                        <span class="oc-apps__icone" data-oc="launcher-icone">{icon(app.icon(), 22)}</span>
+                        <span class="oc-apps__nome" data-oc="launcher-nome">{label}</span>
                         <span class="oc-apps__desc">{descricao}</span>
                     </a>
                     {botao_fixar}
@@ -1663,7 +1672,7 @@ fn launcher(viewer: &Viewer) -> impl IntoView {
             hidden
         >
             <div class="oc-apps__fundo" data-oc="launcher-fechar"></div>
-            <div class="oc-apps__painel">
+            <div class="oc-apps__painel" data-oc="launcher-painel">
                 <header class="oc-apps__cab">
                     <span class="oc-apps__marca">
                         {icon(Icon::Apps, 20)}
@@ -1829,39 +1838,6 @@ mod tests {
         assert!(en.contains(">Files<") || en.contains("Files"), "en: Files");
         assert!(en.contains("Research"), "en: secção Research");
         assert!(en.contains(r#"href="/ideas""#), "o destino /ideas não muda");
-    }
-
-    /// Despeja o lançador aberto, num ficheiro autónomo, para inspecção visual.
-    ///
-    ///     cargo test -p ocinye-workspace despejar_lancador -- --ignored --nocapture
-    #[test]
-    #[ignore = "arnês de verificação visual; corre-se de propósito"]
-    fn despejar_lancador_para_verificacao_visual() {
-        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        let css = std::fs::read_to_string(manifest.join("static/ocinye.css")).expect("css");
-        let sprite = std::fs::read_to_string(manifest.join("static/icons.svg")).expect("sprite");
-
-        let corpo = shell(
-            &viewer_de_investigacao(&Permission::all()),
-            Screen::Home,
-            Vec::new(),
-            Screen::Home.label(),
-            view! { <p>"conteúdo"</p> },
-        )
-        .to_html();
-
-        // Sem JavaScript, força-se o lançador visível por CSS, para o ver aberto.
-        let pagina = format!(
-            "<!doctype html><html lang=\"pt-PT\"><head><meta charset=\"utf-8\">\
-             <style>{css}</style>\
-             <style>.oc-apps[hidden]{{display:flex!important}}</style></head>\
-             <body>{sprite}{corpo}</body></html>"
-        );
-        let destino = manifest.join("../../target/verify");
-        std::fs::create_dir_all(&destino).expect("destino");
-        let caminho = destino.join("lancador.html");
-        std::fs::write(&caminho, pagina).expect("escrever");
-        println!("escrito: {}", caminho.display());
     }
 
     /// O lançador é o último elemento da shell; isola-se do resto por corte.
@@ -2097,7 +2073,9 @@ mod tests {
 
     /// A barra lateral, isolada — de `oc-side__nav` até ao seu `</nav>`.
     fn barra_nav(html: &str) -> String {
-        let inicio = html.find(r#"class="oc-side__nav""#).expect("a barra sumiu");
+        let inicio = html
+            .find(r#"data-part="side__nav""#)
+            .expect("a barra sumiu");
         let fim = html[inicio..]
             .find("</nav>")
             .map_or(html.len(), |o| inicio + o);
@@ -2506,7 +2484,7 @@ mod tests {
     fn com_a_barra_estreita_nenhum_controlo_conserva_o_nome() {
         let html = render(&viewer_with(&ocinye_contracts::Permission::all()));
         let barra = html
-            .split(r#"class="oc-side""#)
+            .split(r#"data-part="side""#)
             .nth(1)
             .and_then(|rest| rest.split("</aside>").next())
             .expect("barra lateral desapareceu");
@@ -2519,7 +2497,7 @@ mod tests {
         for tag in barra.split('<').skip(1) {
             let inicio = tag.split('>').next().unwrap_or_default();
             let colapsa = inicio.contains(r#"class="oc-nav""#)
-                || inicio.contains(r#"class="oc-nav oc-nav--unavailable""#)
+                || inicio.contains(r#"data-part="nav--unavailable""#)
                 || inicio.contains(r#"class="oc-side__foot-item""#)
                 || inicio.contains(r#"class="oc-profile""#);
             if !colapsa {
@@ -2739,7 +2717,7 @@ mod tests {
             .to_html();
 
             let nav = html
-                .split(r#"class="oc-crumb""#)
+                .split(r#"data-part="crumb""#)
                 .nth(1)
                 .and_then(|resto| resto.split("</nav>").next())
                 .expect("o trilho desapareceu da topbar");
@@ -2868,10 +2846,10 @@ mod tests {
             .split(r#"class="oc-topbar""#)
             .nth(1)
             .and_then(|resto| resto.split("</header>").next())
-            .or_else(|| html.split(r#"class="oc-main""#).nth(1))
+            .or_else(|| html.split(r#"data-part="main""#).nth(1))
             .unwrap_or(&html);
         let topbar = topbar
-            .split(r#"class="oc-content""#)
+            .split(r#"data-part="content""#)
             .next()
             .unwrap_or(topbar);
 
