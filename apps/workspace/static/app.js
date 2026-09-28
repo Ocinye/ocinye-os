@@ -3422,7 +3422,12 @@ document.addEventListener('click', (event) => {
  * vive num atributo desta página e em mais lado nenhum: não há endpoint que o
  * leia de volta. */
 document.addEventListener('click', (event) => {
-  const holder = event.target.closest('[data-part~=credential__value]');
+  /* O segredo e os botões vivem juntos: na credencial temporária, dentro de
+     `credential__value`; na chave manual do MFA, no mesmo campo. Sem este
+     segundo caso, «Copiar» no MFA não fazia nada. */
+  const gatilho = event.target.closest('[data-oc="secret-copy"], [data-oc="secret-toggle"]');
+  const holder = event.target.closest('[data-part~=credential__value]')
+    || (gatilho && gatilho.parentElement);
   if (!holder) return;
   const secret = holder.querySelector('[data-oc="secret"]');
   if (!secret) return;
@@ -3439,9 +3444,10 @@ document.addEventListener('click', (event) => {
 
   if (event.target.closest('[data-oc="secret-copy"]') && navigator.clipboard) {
     const button = event.target.closest('[data-oc="secret-copy"]');
+    const original = button.textContent;
     navigator.clipboard.writeText(value).then(() => {
-      button.textContent = 'Copiado';
-      setTimeout(() => { button.textContent = 'Copiar'; }, 2000);
+      button.textContent = button.dataset.copied || 'Copiado';
+      setTimeout(() => { button.textContent = original; }, 2000);
     });
   }
 });
