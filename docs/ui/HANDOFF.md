@@ -434,3 +434,6 @@ Nenhum ecrã de destino é desta fatia. Até cada ecrã chegar, **a rota respond
 
 ## D001.1 · correcções de paridade e estados em falta
 Contratos: `DesktopDefault.source` (`DefaultSource::System | Instance`), `Backup::Unknown`, `ErrorKind`/`ErrorVm`, `IdentityFailVm`. Novas vistas: `screens::error::{in_shell, at_door}` e `screens::auth::identity::identity_unavailable`. O registo de widgets não muda. Detalhe: HANDOFF.md do pacote D001.1, §0.
+
+## D001.2 · fecho da paridade da D001
+Só CSS (`oc-shell.css`, `oc-desk.css`): a pastilha CORE·IA; a margem de 30px sem a barra; 4 colunas só com a área ≥ 960px (a referência a 924 tem 2 colunas); títulos em até duas linhas; Indicadores 4 numa linha ou 2 + 2. Decisões: REGISTRY_IS_CANONICAL e IMPLEMENTATION_CANONICAL_REFERENCE_CORRECTED. Detalhe: HANDOFF.md do pacote, §00.

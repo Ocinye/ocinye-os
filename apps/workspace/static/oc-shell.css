@@ -70,8 +70,10 @@
 .oc-ctx__name { font: 500 13px var(--oc-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oc-ctx__btn > .oc-icon { width: 13px; height: 13px; color: #8A98A6; }
 
-.oc-status { height: 24px; padding: 0 8px; border-radius: 12px; display: inline-flex; align-items: center; gap: 10px; background: transparent; font: 500 10px var(--oc-mono); letter-spacing: .06em; color: var(--oc-ink-3); }
-.oc-status:hover { background: #F1F4F8; }
+.oc-status { height: 24px; padding: 0 8px; border-radius: 12px; display: inline-flex; align-items: center; gap: 10px; background: #F3F6F9; font: 500 10px var(--oc-mono); letter-spacing: .06em; color: var(--oc-ink-3); }
+.oc-status:hover, .oc-status[aria-expanded="true"] { background: #EAEFF4; }
+.oc-status:active { background: #E1E8F0; }
+.oc-status:focus-visible { outline: 2px solid var(--oc-gold-500); outline-offset: 2px; }
 .oc-status:hover { text-decoration: none; }
 .oc-status__part { display: inline-flex; align-items: center; gap: 5px; }
 .oc-status__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--oc-ok); }
@@ -125,6 +127,9 @@
 .oc-dock-toggle { position: absolute; left: 16px; bottom: 16px; z-index: 5; width: 52px; height: 52px; border: 0; border-radius: 17px; background: linear-gradient(180deg, var(--oc-navy-800), var(--oc-navy-900)); color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 12px 30px -10px rgba(4, 16, 28, .7); }
 .oc-dock-toggle .oc-icon { width: 28px; height: 28px; }
 .oc-desk[data-dock="hidden"] .oc-dock { display: none; }
+/* D001.2 · Sem a barra de aplicações, a área de trabalho ganha a margem própria
+   do Desktop (30px) em vez da junta de 12px à barra: a grelha começa em x=36. */
+.oc-desk[data-dock="hidden"] .oc-desk__main { padding-left: 30px; }
 
 /* janela de aplicação (G-05: ocupa a área) */
 .oc-window { height: 100%; min-height: 480px; display: flex; flex-direction: column; border-radius: 16px; overflow: hidden; background: var(--oc-bg); box-shadow: 0 24px 60px -24px rgba(4, 16, 28, .6); }
