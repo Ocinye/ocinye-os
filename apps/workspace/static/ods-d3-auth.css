@@ -35,7 +35,7 @@
 .ods-auth__inst { margin: 14px 0 0; font: 600 var(--ods-text-2xl)/1.1 var(--ods-font-sans); letter-spacing: -.01em; text-align: center; text-wrap: balance; }
 .ods-auth__meta { margin: 10px 0 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
 .ods-auth__meta-word { font: 500 10px var(--ods-font-mono); letter-spacing: .16em; color: rgba(255, 255, 255, .45); }
-.ods-auth__profile { font: 500 10.5px var(--ods-font-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--ods-gold-500); border: 1px solid rgba(224, 167, 49, .35); border-radius: 5px; padding: 2px 7px; }
+.ods-auth__profile { font: 500 10.5px var(--ods-font-mono); letter-spacing: .16em; color: var(--ods-gold-500); border: 1px solid rgba(224, 167, 49, .35); border-radius: 5px; padding: 2px 7px; }
 .ods-auth__host { font: 400 11px var(--ods-font-mono); color: rgba(255, 255, 255, .4); }
 .ods-auth__host::before { content: "· "; }
 .ods-auth__line { margin: 10px 0 0; font: 500 10.5px var(--ods-font-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--ods-auth-text-faint); text-align: center; }

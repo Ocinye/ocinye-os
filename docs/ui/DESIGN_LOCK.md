@@ -34,6 +34,7 @@ A implementação visual canónica do Ocinye OS, escrita pelo Claude Design no p
 - `POST /login/language`: o botão submete `lang` e `return_to`.
 
 ### Diferenças conscientes face ao protótipo
+- Rótulo do campo de identidade: «Endereço institucional» (`login.institutional_address`) e não «Endereço de correio ou utilizador». O Core só aceita o endereço (ADR-0106) e o campo é `type="email"`: prometer «ou utilizador» levaria a uma recusa sem explicação.
 - MFA: as seis caixas são desenho e o código entra num só `<input autocomplete="one-time-code">` por cima delas. Só CSS: o passo das caixas é o passo dos dígitos (`1ch + letter-spacing`). O realce da caixa seguinte, se se quiser, é comportamento (`app.js`); por agora, o conjunto fica dourado com foco.
 
 ## Fatias seguintes

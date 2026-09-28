@@ -82,31 +82,37 @@ pub fn identidade(porta: &Porta) -> impl IntoView {
         <span class="ods-auth__mark"><img src="/static/ocinye_logo.png" alt="" /></span>
         <p class="ods-auth__product">{crate::i18n::t("auth.product")}</p>
         {nome.map(|n| view! { <p class="ods-auth__inst">{n}</p> })}
-        {if tem_meta {
-            view! {
-                <p class="ods-auth__meta">
-                    {perfil.map(|p| view! {
-                        <span class="ods-auth__meta-word">{crate::i18n::t("auth.profile_word")}</span>
-                        <span class="ods-auth__profile" data-profile=p.as_str()>{p.as_str()}</span>
-                    })}
-                    {host.map(|h| view! { <span class="ods-auth__host">{h}</span> })}
-                </p>
-            }
-            .into_any()
-        } else {
-            view! { <p class="ods-auth__line">{crate::i18n::t("auth.instance_line")}</p> }.into_any()
-        }}
+        {tem_meta.then(|| view! {
+            <p class="ods-auth__meta">
+                {perfil.map(|p| view! {
+                    <span class="ods-auth__meta-word">{crate::i18n::t("auth.profile_word")}</span>
+                    <span class="ods-auth__profile" data-profile=p.as_str()>{nome_do_perfil(p)}</span>
+                })}
+                {host.map(|h| view! { <span class="ods-auth__host">{h}</span> })}
+            </p>
+        })}
     }
 }
 
-/// O rodapé do cartão: a frase de soberania e o seletor de idioma
+/// O nome do perfil como o D7 o escreve: a marca do perfil, igual nas três
+/// línguas (`Research`, `Business`, `Education`, `Personal`).
+fn nome_do_perfil(perfil: InstanceProfile) -> String {
+    let id = perfil.as_str();
+    let mut letras = id.chars();
+    letras
+        .next()
+        .map(|c| c.to_uppercase().chain(letras).collect())
+        .unwrap_or_default()
+}
+
+/// O rodapé do cartão: a frase de soberania (`auth.instance_line`, D7) e o seletor de idioma
 /// (`POST /login/language`, G-30). `return_to` é o caminho a que se volta.
 pub fn rodape(return_to: &str) -> impl IntoView {
     let actual = crate::i18n::current().as_str();
     let volta = return_to.to_owned();
     view! {
         <div class="ods-auth__foot">
-            <span>{crate::i18n::t("login.granted_by_admin")}</span>
+            <span class="ods-auth__sovereign">{crate::i18n::t("auth.instance_line")}</span>
             <form class="ods-auth__langs" method="post" action="/login/language" aria-label=crate::i18n::t("auth.langs")>
                 <input type="hidden" name="return_to" value=volta />
                 {["pt", "en", "fr"].into_iter().map(|codigo| {
@@ -240,7 +246,7 @@ pub fn login_na_porta(core_ready: bool, message: Option<String>, porta: &Porta) 
 
                     <p class="ods-auth__or"><span>{crate::i18n::t("login.or")}</span></p>
                     <div class="ods-auth__alt">
-                        {indisponivel("passkey", "lock", crate::i18n::t("auth.passkey"))}
+                        {indisponivel("passkey", "key", crate::i18n::t("auth.passkey"))}
                         {empresa.then(|| indisponivel("sso", "shield", crate::i18n::t("auth.sso")))}
                     </div>
 
@@ -556,6 +562,24 @@ mod tests {
         assert!(html.contains(r#"name="return_to" value="/login""#));
         assert_eq!(html.matches(r#"name="lang""#).count(), 3);
         assert_eq!(html.matches(r#"aria-pressed="true""#).count(), 1);
+    }
+
+    #[test]
+    fn o_rodape_diz_a_instalacao_soberana_e_nao_nomeia_uma_organizacao() {
+        let html = login(true, None, None).to_html();
+        assert!(html.contains(crate::i18n::t("auth.instance_line")));
+        assert!(!html.contains(crate::i18n::t("login.granted_by_admin")));
+        assert_eq!(
+            html.matches(crate::i18n::t("auth.instance_line")).count(),
+            1
+        );
+    }
+
+    #[test]
+    fn o_perfil_escreve_se_como_no_d7() {
+        let html = login_na_porta(true, None, &porta_empresa()).to_html();
+        assert!(html.contains(">Business<"));
+        assert!(html.contains("#ods-key"));
     }
 
     #[test]
