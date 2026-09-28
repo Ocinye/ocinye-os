@@ -6,7 +6,7 @@
   "integrated_on": "2026-09-29",
   "integration_branch": "feat/design-d001-2-1 (from feat/design-d001-2 @ 5076c68)",
   "integration_status": "INTEGRATED_VISUAL_PARITY_TRUE",
-  "integration_commit": "see git log on feat/design-d001-2-1 (one commit: D001.2.1 application, guard and records)",
+  "integration_commit": "60d832d (D001.2.1 on feat/design-d001-2-1)",
   "package": {
     "path": "ocinye-design-complete-D001.2.1",
     "checksums": "109/109 OK (sha256)",
@@ -403,5 +403,19 @@
       },
       "feedback": "docs/ui/CODE_FEEDBACK.md"
     }
-  ]
+  ],
+  "release": {
+    "target_branch": "main",
+    "target_head_before": "8a62438",
+    "divergence": "1 documentation-only commit on main (#180), merged without conflicts as e579d3c",
+    "pull_request": 181,
+    "merge_commit": "7c20f8d",
+    "merge_strategy": "merge commit (no squash)",
+    "ci": "green on PR #181 and on main 7c20f8d",
+    "post_merge_verify": "PASS on 7c20f8d (verify.sh exit 0, tree unchanged; member_desktop_layouts 5/5, d001_css_contract 5/5, d001_journeys 19/19)",
+    "deployed": false,
+    "production_revision": "4f8d048",
+    "deploy_decision": "merge now, deploy later (Fidel, 2026-09-29): production keeps the pre-wipe UI until D002 or an explicit deploy",
+    "production_smoke": "NOT_RUN"
+  }
 }

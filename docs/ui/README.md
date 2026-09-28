@@ -1,7 +1,7 @@
 # Interface do Workspace
 
-**Estado: Claude Design D001.2.1 integrada** (2026-09-29, ramo
-`feat/design-d001-2-1`, sobre a D001.2). A D001 está fechada. O código de interface é do Design e está fechado
+**Estado: Claude Design D001.2.1 em `main`** (2026-09-29, PR #181, merge
+`7c20f8d`; ainda não deployada, produção continua em `4f8d048`). A D001 está fechada. O código de interface é do Design e está fechado
 ([`DESIGN_LOCK.md`](DESIGN_LOCK.md)); o contrato detalhado de rotas e
 ViewModels está em [`HANDOFF.md`](HANDOFF.md).
 
