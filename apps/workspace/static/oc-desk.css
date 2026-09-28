@@ -71,7 +71,8 @@ button.oc-dw__all:focus-visible { outline: 2px solid var(--oc-gold-500); outline
 .oc-stat--bar { flex-direction: column; align-items: stretch; justify-content: flex-end; gap: 8px; }
 .oc-stat--bar p { margin: 0; display: flex; align-items: baseline; gap: 8px; }
 /* indicadores */
-.oc-kpis { height: 100%; margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+/* D001.2.1 · Exactamente 4 ou 2 colunas, nunca auto-fit: 3 + 1 é impossível por construção. */
+.oc-kpis { height: 100%; margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .oc-kpi { height: 100%; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 13px 14px 14px 16px; border-radius: 18px; background: var(--dw-bg); border: 1px solid var(--dw-line); -webkit-backdrop-filter: blur(18px) saturate(140%); backdrop-filter: blur(18px) saturate(140%); color: var(--dw-fg); transition: transform var(--oc-fast); }
 .oc-kpi:hover { transform: translateY(-2px); text-decoration: none; color: var(--dw-fg); }
 .oc-kpi__head { display: flex; align-items: center; gap: 9px; min-width: 0; }
@@ -195,13 +196,14 @@ button.oc-dw__all:focus-visible { outline: 2px solid var(--oc-gold-500); outline
 /* D001.2 · A grelha responde à largura da área de trabalho (container query):
    ≥ 960px → 4 colunas; 400–959px → 2 colunas (a composição da referência a
    924×540: Calendário e Tarefas 1×2 ocupam meia largura cada); < 400px → 1.
-   Os Indicadores: 4 numa linha enquanto couberem (área ≥ 640px, 107px de
-   altura); abaixo, 2 + 2 (dois andares); nunca 3 + 1. */
+   Os Indicadores: 4 numa linha só quando cabem 4 × 150px + 3 × 14px = 642px
+   dentro do widget, cujo contorno (1px de cada lado, transparente) tira 2px:
+   área ≥ 644px. Abaixo, 2 + 2 (dois andares). Nunca 3 + 1 (D001.2.1). */
 @container oc-desk-main (max-width: 959px) {
   .oc-dgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .oc-dw--c3, .oc-dw--c4 { grid-column: span 2; }
 }
-@container oc-desk-main (max-width: 639px) {
+@container oc-desk-main (max-width: 643.98px) {
   .oc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .oc-dw[data-kind="kpis"] { grid-row: span 9; }
 }

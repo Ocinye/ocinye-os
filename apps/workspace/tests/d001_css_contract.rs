@@ -39,8 +39,17 @@ fn sem_a_barra_de_aplicacoes_a_grelha_ganha_a_margem_do_desktop() {
 fn as_colunas_respondem_a_area_de_trabalho_e_nao_a_janela() {
     // 4 colunas só com a área de trabalho ≥ 960px: a 924×540 são 2.
     assert!(DESK.contains("@container oc-desk-main (max-width: 959px)"));
-    // Os Indicadores passam a 2 + 2 abaixo de 640px de área.
-    assert!(DESK.contains("@container oc-desk-main (max-width: 639px)"));
+}
+
+/// Os Indicadores são exactamente 4 ou 2 por linha (D001.2.1): com `auto-fit`
+/// havia uma faixa de 640–643px de área em que ficavam 3 + 1 e o quarto era
+/// cortado. Quatro precisam de 642px dentro de um widget com 2px de contorno.
+#[test]
+fn os_indicadores_sao_quatro_ou_dois_nunca_tres_mais_um() {
+    let kpis = rule(DESK, ".oc-kpis");
+    assert!(!kpis.contains("auto-fit"), "{kpis}");
+    assert!(kpis.contains("repeat(4, minmax(0, 1fr))"), "{kpis}");
+    assert!(DESK.contains("@container oc-desk-main (max-width: 643.98px)"));
 }
 
 #[test]

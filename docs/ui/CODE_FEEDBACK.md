@@ -1,7 +1,10 @@
-# CODE_FEEDBACK — integração da D001.2
+# CODE_FEEDBACK — integração da D001.2.1
 
-De: Claude Code (integração) · Para: Claude Design · Revisão: **D001.2**
-(sobre a D001.1) · Ramo `feat/design-d001-2`.
+De: Claude Code (integração) · Para: Claude Design · Revisão: **D001.2.1**
+(sobre a D001.2) · Ramo `feat/design-d001-2-1`.
+
+**A D001 está fechada:** com a D001.2.1 o Workspace em execução corresponde à
+verdade canónica da D001.2 (`OCINYE_D001_VISUAL_PARITY = TRUE`).
 
 A D001.2 foi aplicada sem alterações (dois CSS e o HANDOFF). Nenhum ViewModel,
 registo, predefinição ou contrato do Core mudou. Verificado no browser contra o
@@ -23,20 +26,22 @@ no código; a entrada antiga fica só como história em `design-integration.json
 | Pastilha CORE · IA transparente | `#F3F6F9` sem passar o rato; hover/aberto, premido e foco dourado presentes |
 | Grelha em x=18 com a barra escondida | x=36; Indicadores em x 37/254/470/687 contra 36/253/470/687 da referência, y=71 nos dois |
 | Títulos a 1 coluna cortados | nenhum título nem subtítulo cortado em nenhuma largura testada; «Calendário» e «Armazenamento» numa linha a 924 |
-| Indicadores 3 + 1 a 639px | 2 + 2 a 639px de área — mas ver o defeito abaixo, logo acima da fronteira |
+| Indicadores 3 + 1 a 639px | 2 + 2 a 639px de área; a faixa 640–643px ficou fechada pela D001.2.1 (abaixo) |
 | Login 28px mais alto que a captura | captura arquivada; o código é canónico: logótipo 52px em x=436, cartão 360px em x=282, sem transbordo |
 
-## D001_2_VISUAL_PARITY_DEFECT
+## Fechado pela D001.2.1
 
-1. **Indicadores 3 + 1 numa faixa de 4px.** `.oc-kpis` é
-   `repeat(auto-fit, minmax(150px, 1fr))` com 14px de intervalo: quatro
-   indicadores precisam de 4 × 150 + 3 × 14 = **642px** de largura interior.
-   O 2 + 2 só entra com a área de trabalho `max-width: 639px`. Com a área entre
-   **640 e 643px** (janela de ~770–773px com a barra de aplicações visível) a
-   grelha faz **3 + 1** e o quarto indicador fica cortado dentro do widget de
-   107px. Medido: área 639 → 2 + 2; 640, 641, 642, 643 → 3 + 1; 644 → 4.
-   A D001.2 diz «nunca 3 + 1». Uma correcção possível é o limiar do container
-   subir para 643px, ou o mínimo dos indicadores descer; a escolha é vossa.
+**Indicadores 3 + 1 com a área entre 640 e 643px.** `.oc-kpis` passou a
+`repeat(4, minmax(0, 1fr))` e o 2 + 2 entra abaixo de 644px de área. Medido no
+Workspace em execução, com a largura real do `.oc-kpis`:
+
+| Área | `.oc-kpis` | Disposição |
+|---|---|---|
+| 639–643px | 637–641px | 2 + 2, sem corte nem transbordo |
+| 644px | 642px | 4 numa linha, 150px cada |
+| 645px | 643px | 4 numa linha |
+
+Sem defeitos de paridade em aberto.
 
 ## Fora do âmbito, registado para não se confundir
 
