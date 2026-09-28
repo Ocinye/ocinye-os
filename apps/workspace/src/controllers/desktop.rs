@@ -21,18 +21,15 @@ use crate::api::ApiFailure;
 use crate::i18n::{t, tp};
 use crate::ui::screens::home::registry::{self, KPIS};
 use crate::ui::view_models::{
-    Ago, ContinueItem, ContinueKind, CoreError, Count, DeskWidget, DesktopDefault, DesktopVm,
-    Distribution, Load, Metric, PlacedWidget, StorageUse, WidgetContent, WidgetItem, WidgetKind,
+    Ago, Backup, ContinueItem, ContinueKind, CoreError, Count, DefaultSource, DeskWidget,
+    DesktopDefault, DesktopVm, Distribution, HealthVm, Load, Metric, PlacedWidget, StorageUse,
+    WidgetContent, WidgetItem, WidgetKind,
 };
 use crate::WorkspaceState;
 
 /// A versão da predefinição do sistema. Sobe quando o Design mudar
 /// `registry::system_default`.
 pub const SYSTEM_DEFAULT_VERSION: u32 = 1;
-
-/// A data em que a predefinição do sistema foi publicada: a revisão D001 do
-/// Design (MANIFEST `created_at`).
-const SYSTEM_DEFAULT_PUBLISHED: (i32, u32, u32) = (2026, 9, 28);
 
 /// Quantos itens mostra uma lista de widget.
 const LIST_LIMIT: usize = 5;
@@ -41,24 +38,18 @@ const LIST_LIMIT: usize = 5;
 const CONTINUE_LIMIT: usize = 7;
 const CONTINUE_MAX_AGE_SECS: i64 = 30 * 86_400;
 
-fn distribution_name(d: Distribution) -> &'static str {
-    match d {
-        Distribution::Research => t("dist.research"),
-        Distribution::Business => t("dist.business"),
-        Distribution::Personal => t("dist.personal"),
-        Distribution::Education => t("dist.education"),
-    }
-}
-
-/// A predefinição do sistema para a Distribuição, na forma que a folha
-/// «Repor predefinição» mostra.
+/// A predefinição do sistema para a Distribuição (`DefaultSource::System`).
+///
+/// Ninguém a publicou: não tem nome dado pela administração nem data, e a
+/// folha «Repor predefinição» diz que vem com o Ocinye OS (D001.1). Quando a
+/// administração publicar uma (FG-014), essa é `DefaultSource::Instance`.
 #[must_use]
 pub fn system_default(d: Distribution) -> DesktopDefault {
-    let (y, m, day) = SYSTEM_DEFAULT_PUBLISHED;
     DesktopDefault {
-        name: format!("{} Desktop Default", distribution_name(d)),
+        source: DefaultSource::System,
+        name: String::new(),
         version: SYSTEM_DEFAULT_VERSION,
-        published: format!("{day:02}/{m:02}/{y}"),
+        published: String::new(),
         wallpaper: SYSTEM_WALLPAPER,
         dim: SYSTEM_DIM,
         widgets: registry::system_default(d),
@@ -136,9 +127,13 @@ fn instant(v: &Value, k: &str) -> Option<DateTime<Utc>> {
         .map(|d| d.with_timezone(&Utc))
 }
 
+/// O que os widgets partilham: o relógio e a zona do membro, e o que a casca
+/// já apurou sobre o Core e sobre a autoridade de quem vê.
 struct Clock {
     now: DateTime<Utc>,
     zone: ocinye_contracts::temporal::TimeZoneName,
+    core_ok: bool,
+    is_admin: bool,
 }
 
 impl Clock {
@@ -569,6 +564,33 @@ async fn continue_working(
     ))
 }
 
+/// «Estado do sistema»: o Core pela sonda ao `/ready`, os nós de computação
+/// pelo batimento, e a cópia de segurança como `Unknown` — o Core ainda não
+/// regista cópias (FG-016), e afirmar êxito, falha ou hora seria inventar. A
+/// ausência de registo não degrada o estado (`backup_fresh = true`, D001.1).
+/// Só quem administra recebe a ligação ao Monitor.
+async fn health(caller: &Caller<'_>, state: &WorkspaceState, clock: &Clock) -> WidgetContent {
+    WidgetContent::Health(match caller.get(state, "/api/v1/compute/status").await {
+        Ok(v) => {
+            let n = |k: &str| {
+                v.get(k)
+                    .and_then(Value::as_u64)
+                    .and_then(|n| u16::try_from(n).ok())
+                    .unwrap_or(0)
+            };
+            let (nodes_up, nodes_total) = (n("online_nodes"), n("registered_nodes"));
+            Load::Ready(HealthVm {
+                state: HealthVm::derive_state(clock.core_ok, nodes_up, nodes_total, true),
+                nodes_up,
+                nodes_total,
+                backup: Backup::Unknown,
+                admin_href: clock.is_admin.then(|| "/admin/monitor".to_owned()),
+            })
+        }
+        Err(f) => load_of("compute status", &f),
+    })
+}
+
 /// Os dados de um widget, pela forma que o seu tipo desenha.
 async fn content(
     placed: &PlacedWidget,
@@ -591,9 +613,7 @@ async fn content(
         WidgetKind::Ideas => counter(caller, state, IDEAS_IN_PROGRESS, "desk.kpi.ideas_q").await,
         WidgetKind::Datasets => counter(caller, state, DATASETS, "desk.kpi.datasets_q").await,
         WidgetKind::Storage => storage(caller, state).await,
-        // O estado agregado precisa do registo de cópias de segurança, que o
-        // Core ainda não tem; afirmar «sem cópia» seria falso (FG-016).
-        WidgetKind::Health => WidgetContent::Health(Load::Unavailable),
+        WidgetKind::Health => health(caller, state, clock).await,
     }
 }
 
@@ -631,6 +651,8 @@ pub async fn desktop(ctx: ShellContext, caller: &Caller<'_>, state: &WorkspaceSt
     let clock = Clock {
         now: Utc::now(),
         zone: ctx.zone,
+        core_ok: ctx.core.operational(),
+        is_admin: ctx.is_admin,
     };
     // Um futuro por tipo, todos em paralelo: um Desktop tem no máximo um de cada.
     let find = |k: WidgetKind| placed.iter().find(|p| p.kind == k);
@@ -693,10 +715,9 @@ pub async fn desktop(ctx: ShellContext, caller: &Caller<'_>, state: &WorkspaceSt
         shell: ctx.vm,
         version,
         widgets,
-        // A predefinição do sistema não foi publicada pela administração: a
-        // disposição do membro vem dela por construção, e o aviso de «nova
-        // predefinição» não tem nada a anunciar.
-        base_version: Some(default.version),
+        // O Core não guarda de que predefinição veio a disposição, e com a do
+        // sistema a vista já não anuncia «nova predefinição» (D001.1).
+        base_version: None,
         default: Some(default),
         is_admin: ctx.is_admin,
         can_customise,
@@ -711,6 +732,11 @@ mod tests {
     #[test]
     fn a_predefinicao_do_sistema_nao_anuncia_uma_publicacao_da_administracao() {
         let d = system_default(Distribution::Business);
+        assert_eq!(d.source, DefaultSource::System);
+        assert!(
+            d.name.is_empty() && d.published.is_empty(),
+            "uma data que ninguém publicou"
+        );
         assert_eq!(d.version, SYSTEM_DEFAULT_VERSION);
         assert_eq!(d.widgets, registry::system_default(Distribution::Business));
         assert_eq!((d.wallpaper, d.dim), (Wallpaper::Ocinye, 20));

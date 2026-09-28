@@ -25,8 +25,8 @@ use crate::experience::navigation::Screen;
 use crate::session::{self, Session};
 use crate::ui;
 use crate::ui::view_models::{
-    DocumentVm, FirstAccessVm, LoginVm, MfaChallengeVm, MfaCodesVm, MfaSetupVm, RecoverVm,
-    SessionEndReason, SessionEndVm, Surface, Theme,
+    DocumentVm, ErrorKind, ErrorVm, FirstAccessVm, IdentityFailVm, LoginVm, MfaChallengeVm,
+    MfaCodesVm, MfaSetupVm, RecoverVm, SessionEndReason, SessionEndVm, Surface, Theme,
 };
 use crate::WorkspaceState;
 
@@ -630,6 +630,12 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/health", get(health))
         .nest_service("/static", ServeDir::new(state.config.static_dir.clone()))
         .fallback(not_found)
+        // As páginas de erro do Design (D001.1) desenham-se à saída, dentro do
+        // idioma do pedido, sobre o estado que a rota escolheu.
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            error_pages,
+        ))
         // O portão de arranque corre **antes** de qualquer página ser
         // construída. Uma pessoa que abra o Ocinye OS vê o arranque, e não o
         // Workspace a ser escondido depois.
@@ -1021,15 +1027,105 @@ async fn optional(state: &WorkspaceState, member: &Member, path: &str) -> Value 
     .unwrap_or(Value::Null)
 }
 
+/// Uma resposta de erro que a página do Design (D001.1) vai desenhar.
+///
+/// As rotas devolvem o estado e esta marca; [`error_pages`] troca o corpo pela
+/// página certa — dentro da casca se o pedido traz um membro, à porta se não —
+/// sem mexer no estado HTTP. Assim as dezenas de acções que já devolviam um
+/// 404/403/502 ganham a página sem cada uma ter de saber desenhá-la.
+#[derive(Clone, Debug)]
+struct ErrorPage {
+    kind: ErrorKind,
+    reference: Option<String>,
+}
+
+fn error_marker(estado: StatusCode, kind: ErrorKind, reference: Option<String>) -> Response {
+    let mut resposta = (estado, kind.as_str().to_owned()).into_response();
+    resposta
+        .extensions_mut()
+        .insert(ErrorPage { kind, reference });
+    resposta
+}
+
+/// Troca o corpo das respostas marcadas por [`error_marker`] pela página de
+/// erro do Design, mantendo o estado. Só para quem pede um documento.
+async fn error_pages(
+    State(state): State<WorkspaceState>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let headers = request.headers().clone();
+    let get = request.method() == axum::http::Method::GET;
+    let caminho = request
+        .uri()
+        .path_and_query()
+        .map_or_else(|| "/".to_owned(), ToString::to_string);
+    let resposta = next.run(request).await;
+    let Some(pagina) = resposta.extensions().get::<ErrorPage>().cloned() else {
+        return resposta;
+    };
+    let quer_html = headers
+        .get(header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .is_none_or(|v| v.contains("text/html") || v.contains("*/*"));
+    if !quer_html {
+        return resposta;
+    }
+    let estado = resposta.status();
+    let vm = ErrorVm {
+        kind: pagina.kind,
+        reference: pagina.reference,
+        // «Tentar de novo» só repete uma leitura; nunca reenvia um formulário.
+        retry_href: (get && pagina.kind == ErrorKind::Upstream)
+            .then(|| crate::boot::safe_return_target(&caminho, ROUTES))
+            .flatten(),
+    };
+    (estado, error_document(&state, &headers, &vm).await).into_response()
+}
+
+fn error_title(kind: ErrorKind) -> &'static str {
+    crate::i18n::t(match kind {
+        ErrorKind::NotFound => "error.404.title",
+        ErrorKind::Forbidden => "error.403.title",
+        ErrorKind::Upstream => "error.502.title",
+    })
+}
+
+/// A página de erro: na casca, se o pedido traz um membro cuja identidade o
+/// Core confirma; à porta em qualquer outro caso.
+async fn error_document(state: &WorkspaceState, headers: &HeaderMap, vm: &ErrorVm) -> Response {
+    let membro = current_member(state, headers)
+        .filter(|m| !m.session.must_change_password && !m.session.mfa_required);
+    if let Some(member) = membro {
+        let quem = caller(&member);
+        if let Shell::Ready(ctx) = controllers::shell(state, &quem, "", String::new()).await {
+            return html(
+                error_title(vm.kind),
+                Surface::Shell,
+                ui::screens::error::in_shell(&ctx.vm, vm),
+            );
+        }
+    }
+    html(
+        error_title(vm.kind),
+        Surface::Auth,
+        ui::screens::error::at_door(&controllers::door(state).await, vm),
+    )
+}
+
 /// Traduz uma recusa do Core em algo sobre que o membro possa agir.
 fn failure_response(failure: &ApiFailure) -> Response {
-    // Sem interface, a recusa diz-se pelo estado HTTP e por um código estável.
     // Recusa e inexistência continuam a ter o mesmo aspecto (ADR-0100), e o
-    // detalhe de uma avaria vai para o log, nunca para a resposta.
+    // detalhe de uma avaria vai para o log, nunca para a resposta: 404, 403 e
+    // 502 levam a página do Design (D001.1); os outros, o código estável.
     let (estado, codigo) = match failure {
         ApiFailure::Unauthorised => return Redirect::to("/login").into_response(),
-        ApiFailure::Denied => (StatusCode::NOT_FOUND, "not_found"),
-        ApiFailure::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
+        ApiFailure::Denied => {
+            return error_marker(StatusCode::NOT_FOUND, ErrorKind::NotFound, None)
+        }
+        ApiFailure::Forbidden => {
+            return error_marker(StatusCode::FORBIDDEN, ErrorKind::Forbidden, None)
+        }
         ApiFailure::Unavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, "unavailable"),
         ApiFailure::ApplicationInactive => {
             (StatusCode::SERVICE_UNAVAILABLE, "application_inactive")
@@ -1037,17 +1133,19 @@ fn failure_response(failure: &ApiFailure) -> Response {
         ApiFailure::Rejected(_) => (StatusCode::UNPROCESSABLE_ENTITY, "rejected"),
         ApiFailure::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
         ApiFailure::Failed(message) => {
-            let reference = Uuid::new_v4().to_string();
-            tracing::error!(reference = %reference, detail = %message, "a Core call failed");
-            (StatusCode::BAD_GATEWAY, "failed")
+            return error_marker(
+                StatusCode::BAD_GATEWAY,
+                ErrorKind::Upstream,
+                Some(controllers::reference(message)),
+            );
         }
     };
     (estado, codigo).into_response()
 }
 
-/// Sem página: a interface foi retirada.
+/// Caminho que o Workspace não serve: 404, com a página do Design.
 async fn not_found() -> Response {
-    (StatusCode::NOT_FOUND, "not_found").into_response()
+    error_marker(StatusCode::NOT_FOUND, ErrorKind::NotFound, None)
 }
 
 // ── Arranque ─────────────────────────────────────────────────────────────
@@ -1154,16 +1252,23 @@ fn caller(member: &Member) -> Caller<'_> {
 }
 
 /// A identidade da sessão ficou por estabelecer: o Core não deu resposta
-/// autoritária ao `/me`. Falha fechado — nenhuma casca autenticada, só a
-/// referência para o administrador. O Design ainda não desenhou esta superfície
-/// (CODE_FEEDBACK: MISSING_DESIGN_STATE); usa-se o componente de erro do Core.
-fn identity_indeterminate(reference: &str) -> Response {
+/// autoritária ao `/me`. Falha fechado (D001.1): nenhuma casca autenticada,
+/// só «Tentar de novo», «Terminar sessão» e a referência, com 503.
+async fn identity_indeterminate(
+    state: &WorkspaceState,
+    reference: String,
+    retry_href: &str,
+) -> Response {
     (
         StatusCode::SERVICE_UNAVAILABLE,
         html(
-            crate::i18n::t("auth.product"),
+            crate::i18n::t("auth.identity.title"),
             Surface::Auth,
-            ui::components::core_error(reference),
+            ui::screens::auth::identity::identity_unavailable(&IdentityFailVm {
+                door: controllers::door(state).await,
+                reference: Some(reference),
+                retry_href: retry_href.to_owned(),
+            }),
         ),
     )
         .into_response()
@@ -1217,7 +1322,20 @@ async fn pending_page(
     match controllers::shell(state, &quem, href, title.clone()).await {
         Shell::Ready(ctx) => {
             if gate.is_some_and(|screen| !screen_open(&ctx, screen)) {
-                return not_found().await;
+                let vm = ErrorVm {
+                    kind: ErrorKind::NotFound,
+                    reference: None,
+                    retry_href: None,
+                };
+                return (
+                    StatusCode::NOT_FOUND,
+                    html(
+                        error_title(vm.kind),
+                        Surface::Shell,
+                        ui::screens::error::in_shell(&ctx.vm, &vm),
+                    ),
+                )
+                    .into_response();
             }
             let page_title = title.clone();
             html(
@@ -1227,7 +1345,7 @@ async fn pending_page(
             )
         }
         Shell::SignIn => session_ended(state, headers),
-        Shell::Indeterminate(reference) => identity_indeterminate(&reference),
+        Shell::Indeterminate(reference) => identity_indeterminate(state, reference, href).await,
     }
 }
 
@@ -1301,7 +1419,7 @@ async fn home(State(state): State<WorkspaceState>, headers: HeaderMap) -> Respon
             )
         }
         Shell::SignIn => session_ended(&state, &headers),
-        Shell::Indeterminate(reference) => identity_indeterminate(&reference),
+        Shell::Indeterminate(reference) => identity_indeterminate(&state, reference, "/").await,
     }
 }
 

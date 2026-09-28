@@ -787,15 +787,15 @@ async fn as_aplicacoes_sem_ecra_sao_janelas_honestas_e_as_fechadas_nao_existem()
     assert!(html.contains("oc-app-pending"));
 }
 
-#[tokio::test]
-async fn o_core_sem_resposta_a_identidade_falha_fechado() {
-    // Um Core que diz estar pronto mas não consegue dizer quem é a sessão.
+/// Um Core falso: `/ready` com o `overall` dado, e 500 em tudo o resto. Serve
+/// para o que o Core verdadeiro não faz de propósito: não saber quem é a sessão.
+async fn core_falso(overall: &'static str) -> String {
     let core = axum::Router::new()
         .route(
             "/ready",
-            axum::routing::get(|| async {
+            axum::routing::get(move || async move {
                 axum::Json(serde_json::json!({
-                    "overall": "ready", "contract_version": 1, "components": []
+                    "overall": overall, "contract_version": 1, "components": []
                 }))
             }),
         )
@@ -803,14 +803,19 @@ async fn o_core_sem_resposta_a_identidade_falha_fechado() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("porto");
-    let core_url = format!(
+    let url = format!(
         "http://127.0.0.1:{}",
         listener.local_addr().expect("endereço").port()
     );
     tokio::spawn(async move {
         let _ = axum::serve(listener, core).await;
     });
-    let ws = workspace_state(&core_url, "http://127.0.0.1");
+    url
+}
+
+/// O Workspace verdadeiro, com uma sessão local já aberta, à frente de `core_url`.
+fn workspace_com_sessao(core_url: &str) -> (axum::Router, String) {
+    let ws = workspace_state(core_url, "http://127.0.0.1");
     let id = ws.sessions.create(ocinye_workspace::session::Session {
         access_token: "t".to_owned(),
         display_name: "Ana".to_owned(),
@@ -819,29 +824,201 @@ async fn o_core_sem_resposta_a_identidade_falha_fechado() {
         mfa_required: false,
         expires_at: std::time::Instant::now() + Duration::from_secs(60),
     });
-    let app = workspace_routes::router(ws);
+    (
+        workspace_routes::router(ws),
+        format!("oc_boot=1; {}={id}", ocinye_workspace::session::COOKIE_NAME),
+    )
+}
+
+async fn em_memoria(
+    app: axum::Router,
+    request: axum::http::Request<axum::body::Body>,
+) -> (u16, String) {
     use tower::ServiceExt;
-    let resposta = app
-        .oneshot(
-            axum::http::Request::builder()
-                .uri("/")
-                .header(
-                    "cookie",
-                    format!("oc_boot=1; {}={id}", ocinye_workspace::session::COOKIE_NAME),
-                )
-                .body(axum::body::Body::empty())
-                .expect("pedido"),
-        )
-        .await
-        .expect("resposta");
-    assert_eq!(resposta.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let resposta = app.oneshot(request).await.expect("resposta");
+    let estado = resposta.status().as_u16();
     let corpo = axum::body::to_bytes(resposta.into_body(), 1 << 20)
         .await
         .expect("corpo");
-    let html = String::from_utf8_lossy(&corpo);
+    (estado, String::from_utf8_lossy(&corpo).into_owned())
+}
+
+#[tokio::test]
+async fn o_core_sem_resposta_a_identidade_falha_fechado() {
+    let (app, cookie) = workspace_com_sessao(&core_falso("ready").await);
+    let (estado, html) = em_memoria(
+        app,
+        axum::http::Request::builder()
+            .uri("/notes")
+            .header("cookie", cookie)
+            .body(axum::body::Body::empty())
+            .expect("pedido"),
+    )
+    .await;
+    assert_eq!(estado, 503);
     assert!(
-        !html.contains("oc-top") && !html.contains(r#"data-oc="desk""#),
+        !html.contains("oc-top")
+            && !html.contains("oc-dock")
+            && !html.contains(r#"data-oc="desk""#),
         "desenhou a casca"
     );
+    assert!(
+        html.contains(r#"data-part="identity""#),
+        "não é a página de identidade do D001.1"
+    );
+    assert!(
+        html.contains(r#"action="/logout""#),
+        "sem «Terminar sessão»"
+    );
+    assert!(
+        html.contains(r#"href="/notes""#),
+        "«Tentar de novo» não repete a rota pedida"
+    );
     assert!(html.contains("OC-"), "sem referência para o administrador");
+}
+
+#[tokio::test]
+async fn uma_avaria_do_core_numa_accao_e_um_502_com_referencia() {
+    let (app, cookie) = workspace_com_sessao(&core_falso("ready").await);
+    let (estado, html) = em_memoria(
+        app,
+        axum::http::Request::builder()
+            .method("POST")
+            .uri(format!("/admin/members/{}/status", Uuid::new_v4()))
+            .header("cookie", cookie)
+            .header("origin", "http://127.0.0.1")
+            .header("accept", "text/html")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(axum::body::Body::from("status=suspended&reason=x"))
+            .expect("pedido"),
+    )
+    .await;
+    assert_eq!(estado, 502);
+    assert!(html.contains("ERRO 502") && html.contains("OC-"), "{html}");
+    // Sem identidade confirmada, a página é a da porta — nunca a casca.
+    assert!(!html.contains("oc-top"));
+    // Um formulário não se reenvia: sem «Tentar de novo».
+    assert!(!html.contains("Tentar de novo"));
+    assert!(!html.to_lowercase().contains("internal server error"));
+}
+
+#[tokio::test]
+async fn a_porta_diz_operacional_com_o_ready_degradado() {
+    let (app, _) = workspace_com_sessao(&core_falso("degraded").await);
+    let (estado, html) = em_memoria(
+        app,
+        axum::http::Request::builder()
+            .uri("/login")
+            .header("cookie", "oc_boot=1")
+            .body(axum::body::Body::empty())
+            .expect("pedido"),
+    )
+    .await;
+    assert_eq!(estado, 200);
+    assert!(html.contains("INSTÂNCIA OCINYE OS · OPERACIONAL"));
+    let (app, _) = workspace_com_sessao(&core_falso("blocked").await);
+    let (_, html) = em_memoria(
+        app,
+        axum::http::Request::builder()
+            .uri("/login")
+            .header("cookie", "oc_boot=1")
+            .body(axum::body::Body::empty())
+            .expect("pedido"),
+    )
+    .await;
+    assert!(
+        !html.contains("OPERACIONAL"),
+        "uma Instância bloqueada não é operacional"
+    );
+}
+
+#[tokio::test]
+async fn um_caminho_que_nao_existe_e_um_404_do_design_na_casca_e_a_porta() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (_, cookie) = s.membro_com_sessao(&[TechnicalRole::ResearchMember]).await;
+    let (status, html) = s.html("/nao-existe", &cookie).await;
+    assert_eq!(status, 404);
+    assert!(
+        html.contains("ERRO 404") && html.contains("oc-top"),
+        "sem casca para quem tem sessão"
+    );
+    let (status, html) = s.html("/nao-existe", "").await;
+    assert_eq!(status, 404);
+    assert!(html.contains("ERRO 404") && html.contains(r#"data-part="error""#));
+    assert!(!html.contains("oc-top"));
+    // A aplicação que o membro não abre é igual a uma rota que não existe.
+    let (status, html) = s.html("/admin", &cookie).await;
+    assert_eq!(status, 404);
+    assert!(html.contains("ERRO 404") && !html.contains("oc-app-pending"));
+}
+
+#[tokio::test]
+async fn uma_recusa_do_core_numa_accao_e_um_403_do_design() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (id, cookie) = s.membro_com_sessao(&[TechnicalRole::ResearchMember]).await;
+    let r = s
+        .escrever(
+            reqwest::Method::POST,
+            &format!("/admin/members/{id}/status"),
+            &cookie,
+        )
+        .header("accept", "text/html")
+        .form(&[("status", "suspended"), ("reason", "viagem")])
+        .send()
+        .await
+        .expect("POST");
+    let status = r.status().as_u16();
+    let html = r.text().await.unwrap_or_default();
+    // O Core recusa a operação a quem não administra pessoas: 403 real.
+    assert_eq!(status, 403);
+    assert!(
+        html.contains(&format!("ERRO {status}")) && html.contains("oc-top"),
+        "{html}"
+    );
+}
+
+#[tokio::test]
+async fn o_estado_do_sistema_diz_copia_sem_registo_e_so_o_admin_abre_o_monitor() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (_, cookie) = s.membro_com_sessao(&[TechnicalRole::ResearchMember]).await;
+    let r = s
+        .escrever(reqwest::Method::PUT, "/me/desktop", &cookie)
+        .json(
+            &serde_json::json!({"version": 0, "wallpaper": "ocinye", "fit": "fill", "dim": 20,
+            "widgets": [{"id": "notice", "kind": "notice", "w": 2, "h": 1},
+                        {"id": "health", "kind": "health", "w": 2, "h": 1}]}),
+        )
+        .send()
+        .await
+        .expect("PUT");
+    assert_eq!(r.status().as_u16(), 200);
+    let (_, html) = s.html("/", &cookie).await;
+    assert!(
+        html.contains("cópia sem registo"),
+        "Backup::Unknown não chegou ao widget"
+    );
+    assert!(!html.contains("cópia falhou") && !html.contains("sem cópia"));
+    assert!(
+        !html.contains(r#"href="/admin/monitor""#),
+        "o Monitor aparece a quem não administra"
+    );
+}
+
+#[tokio::test]
+async fn a_predefinicao_do_sistema_nao_se_apresenta_como_publicada() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (_, cookie) = s.membro_com_sessao(&[TechnicalRole::ResearchMember]).await;
+    let (_, html) = s.html("/", &cookie).await;
+    assert!(html.contains(r#"data-source="system""#));
+    assert!(html.contains("A administração da Instância ainda não publicou"));
+    assert!(!html.contains("publicada a") && !html.contains("Desktop Default"));
+    assert!(!html.contains("A administração publicou uma nova predefinição"));
 }
