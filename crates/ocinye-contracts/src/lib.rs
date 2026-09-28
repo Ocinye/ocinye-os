@@ -27,6 +27,7 @@ pub mod bibliography;
 pub mod calendar;
 pub mod classification;
 pub mod compute;
+pub mod desktop;
 pub mod error;
 pub mod ids;
 pub mod intelligence;

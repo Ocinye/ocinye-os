@@ -75,6 +75,30 @@ fn promotable_predicate(only: bool) -> &'static str {
     }
 }
 
+/// Restringe aos ambientes cujo trabalho está em curso.
+///
+/// Uma ideia está em curso enquanto percorre o ciclo de investigação — ainda não
+/// foi promovida, rejeitada nem arquivada. Um projecto está em curso quando está
+/// `active`. É o recorte que os indicadores do Desktop contam («em
+/// investigação», «em execução»): contar tudo o que o membro alcança chamaria
+/// «em curso» a trabalho fechado.
+fn in_progress_predicate(only: bool) -> &'static str {
+    if only {
+        "(EXISTS (
+           SELECT 1 FROM ideas i
+            WHERE i.workspace_id = research_workspaces.id
+              AND i.state IN ('discovery', 'exploration', 'concept', 'review', 'project_candidate')
+              AND i.promoted_project_id IS NULL
+         ) OR EXISTS (
+           SELECT 1 FROM projects p
+            WHERE p.workspace_id = research_workspaces.id
+              AND p.state = 'active'
+         ))"
+    } else {
+        "TRUE"
+    }
+}
+
 /// Os recortes de uma listagem de research workspaces.
 ///
 /// Agrupados num tipo porque são um conceito só — «que subconjunto» — e porque
@@ -88,6 +112,8 @@ pub struct WorkspaceQuery<'a> {
     pub kind: Option<WorkspaceKind>,
     /// Restringe a ideias que a promoção aceitaria hoje.
     pub promotable_only: bool,
+    /// Restringe a ideias e projectos com trabalho em curso.
+    pub in_progress_only: bool,
     /// Restringe aos ambientes onde o membro tem papel.
     ///
     /// Distinto de visibilidade: **ver** um Research Workspace e **participar**
@@ -129,6 +155,7 @@ pub async fn list_workspaces<'e>(
 ) -> CoreResult<Vec<ResearchWorkspace>> {
     let predicate = to_sql(filter, WORKSPACE_VISIBILITY);
     let promotable = promotable_predicate(query.promotable_only);
+    let em_curso = in_progress_predicate(query.in_progress_only);
     let participacao = membership_predicate(query.member_of);
     let workspaces = sqlx::query_as::<_, ResearchWorkspace>(&format!(
         "SELECT {WORKSPACE_COLUMNS} FROM research_workspaces
@@ -136,6 +163,7 @@ pub async fn list_workspaces<'e>(
             AND ($2::uuid IS NULL OR unit_id = $2)
             AND ($3::text IS NULL OR kind = $3)
             AND {promotable}
+            AND {em_curso}
             AND {participacao}
             AND {predicate}
           ORDER BY created_at DESC
@@ -164,6 +192,7 @@ pub async fn count_workspaces<'e>(
 ) -> CoreResult<i64> {
     let predicate = to_sql(filter, WORKSPACE_VISIBILITY);
     let promotable = promotable_predicate(query.promotable_only);
+    let em_curso = in_progress_predicate(query.in_progress_only);
     let participacao = membership_predicate(query.member_of);
     let total = sqlx::query_scalar::<_, i64>(&format!(
         "SELECT COUNT(*) FROM research_workspaces
@@ -171,6 +200,7 @@ pub async fn count_workspaces<'e>(
             AND ($2::uuid IS NULL OR unit_id = $2)
             AND ($3::text IS NULL OR kind = $3)
             AND {promotable}
+            AND {em_curso}
             AND {participacao}
             AND {predicate}"
     ))

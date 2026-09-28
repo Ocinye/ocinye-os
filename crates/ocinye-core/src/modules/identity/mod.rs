@@ -23,12 +23,14 @@ mod app_pins;
 mod authentication;
 mod avatar;
 mod credentials;
+mod desktop;
 mod mfa;
 mod model;
 mod repository;
 mod service;
 
 pub use app_pins::{list_app_pins, set_app_pins};
+pub use desktop::{get_desktop, put_desktop, reset_desktop, StoredDesktop};
 
 pub use accounts::{
     bootstrap_platform_admin, bootstrap_privileged_identity, change_own_password, create_member,

@@ -29,6 +29,11 @@ pub fn routes() -> Router<AppState> {
         // As aplicações que o membro fixou na barra lateral — a sua preferência,
         // resolvida pela sessão. Ler e substituir; nunca uma pessoa no caminho.
         .route("/me/apps/pins", get(list_app_pins).put(set_app_pins))
+        // A disposição do Desktop do membro (Claude Design D001, FG-017): a sua
+        // preferência, com concorrência optimista. Repor apaga a disposição
+        // própria e o membro volta a seguir a predefinição.
+        .route("/me/desktop", get(get_desktop).put(put_desktop))
+        .route("/me/desktop/restore", post(restore_desktop))
         .route("/people", get(list_people))
         .route("/people/{person_id}", get(get_person))
         .route("/invitations", post(create_invitation))
@@ -272,6 +277,78 @@ async fn set_app_pins(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     identity::set_app_pins(&state.pool, &principal, &request.pinned).await?;
     Ok(Json(serde_json::json!({ "pinned": request.pinned })))
+}
+
+/// A disposição do Desktop, como o Workspace a lê.
+///
+/// `layout: null` quando o membro nunca personalizou — o Workspace desenha a
+/// predefinição da distribuição, que é dele (o registo do Design). `version: 0`
+/// nesse caso: é a versão que a primeira gravação tem de trazer.
+///
+/// `can_customise` é a política da Instância. Ainda não há política que o
+/// feche, e por isso é sempre `true`; o campo existe para que a interface não
+/// tenha de mudar quando houver. `default` é a predefinição publicada pela
+/// administração (FG-014), que ainda não existe: `null`.
+fn desktop_view(stored: Option<identity::StoredDesktop>) -> serde_json::Value {
+    let (version, layout) = match stored {
+        Some(s) => (
+            s.version,
+            serde_json::to_value(s.layout).unwrap_or(serde_json::Value::Null),
+        ),
+        None => (0, serde_json::Value::Null),
+    };
+    serde_json::json!({
+        "version": version,
+        "layout": layout,
+        "can_customise": true,
+        "default": null,
+    })
+}
+
+/// `GET /me/desktop` — a disposição do Desktop do membro.
+async fn get_desktop(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let stored = identity::get_desktop(&state.pool, &principal).await?;
+    Ok(Json(desktop_view(stored)))
+}
+
+#[derive(Deserialize)]
+struct PutDesktop {
+    /// A versão que o cliente leu (`0`: nunca personalizou).
+    version: i32,
+    #[serde(flatten)]
+    layout: ocinye_contracts::desktop::DesktopLayout,
+}
+
+/// `PUT /me/desktop` — grava a disposição. `409` quando outra sessão gravou
+/// entretanto; `422` quando a disposição viola o registo.
+async fn put_desktop(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Json(request): Json<PutDesktop>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let admin = principal.is_organisation_admin();
+    identity::put_desktop(
+        &state.pool,
+        &principal,
+        request.version,
+        &request.layout,
+        admin,
+    )
+    .await?;
+    let stored = identity::get_desktop(&state.pool, &principal).await?;
+    Ok(Json(desktop_view(stored)))
+}
+
+/// `POST /me/desktop/restore` — repõe a predefinição. Muda só a disposição.
+async fn restore_desktop(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    identity::reset_desktop(&state.pool, &principal).await?;
+    Ok(Json(desktop_view(None)))
 }
 
 async fn list_people(

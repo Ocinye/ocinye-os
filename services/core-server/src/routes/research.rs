@@ -163,6 +163,11 @@ struct ListWorkspacesQuery {
     /// a promoção chega — isto é o que a interface oferece, não o que ela pode.
     #[serde(default)]
     promotable: Option<bool>,
+    /// Restringe a ideias e projectos com trabalho em curso (ideias ainda no
+    /// ciclo de investigação, projectos `active`). Serve os indicadores do
+    /// Desktop, que dizem «em investigação» e «em execução».
+    #[serde(default)]
+    in_progress: Option<bool>,
     /// Restringe aos ambientes onde quem pergunta tem papel.
     ///
     /// «Ver» e «participar» são coisas diferentes: um ecrã que promete a
@@ -199,6 +204,7 @@ async fn list_workspaces(
             unit_id: query.unit_id,
             kind: query.kind,
             promotable_only: query.promotable.unwrap_or(false),
+            in_progress_only: query.in_progress.unwrap_or(false),
             member_of: query.mine.unwrap_or(false).then_some(meus.as_slice()),
         },
         page,
