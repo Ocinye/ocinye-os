@@ -256,12 +256,13 @@ sem que nada falhe.
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
 - **Ocinye Workspace: `IMPLEMENTED` como BFF, com a interface Claude Design
-  D001 nesta árvore (ramo `feat/design-d001`, por empurrar).** A UI foi apagada
+  D001.1 nesta árvore (ramo `feat/design-d001-1`, por empurrar).** A UI foi apagada
   a 2026-09-28 ([apagamento](docs/ui/UI_WIPE_REPORT.md)) e voltou com o código
   do Design, aplicado sem alterações ([registo](docs/ui/design-integration.json)):
   arranque, login em dois passos, fim de sessão, primeiro acesso, MFA, a casca
   (barra de cima, menu da conta, barra de aplicações, lançador, paleta) e o
-  Desktop com 14 widgets e personalização, gravada no Core
+  Desktop com 14 widgets e personalização, as páginas de erro 404/403/502 e a
+  falha de identidade (503), gravada no Core
   (`GET`/`PUT /api/v1/me/desktop`, concorrência optimista). As aplicações ainda
   sem ecrã do Design abrem a janela `app_pending` dentro da casca:
   **0 páginas** respondem `503 interface_pending`. Produção continua em `os.ocinye.com`, com
@@ -562,14 +563,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1409 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1421 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **576 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **582 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
@@ -583,10 +584,12 @@ sem que nada falhe.
 
 **Continua a não existir:**
 
-- **Nenhuma interface nesta árvore.** Não há ecrã nenhum: o Ocinye OS não se
-  usa por um browser a partir deste código até chegar o do Claude Design. As
-  viagens de browser e as guardas de ecrã saíram com a UI, e as provas de
-  instalação, actualização, restauro e hardware terminam em `NOT_RUN`
+- **Nenhum ecrã de aplicação nesta árvore.** A casca, a autenticação e o
+  Desktop do Claude Design (D001.1) estão ligados; as aplicações abrem a
+  janela `app_pending` até o Design as entregar (D002+). As viagens de browser
+  com Chrome saíram com a UI antiga; as de HTTP contra um Core real voltaram
+  (`apps/workspace/tests/d001_journeys.rs`). As provas de instalação,
+  actualização, restauro e hardware continuam em `NOT_RUN`
   ([apagamento](docs/ui/UI_WIPE_REPORT.md)).
 
 - **Nenhum runtime além da Web.** Não há PWA, casca Ocinye Desktop, posto
