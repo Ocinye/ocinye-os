@@ -244,8 +244,30 @@ suites() {
 # nas outras aplicações, e reactivar devolve a nota escrita antes. Uma viagem.
 # 125 → 126 em 2026-09-27: o feed institucional de Actividade (passo 18 da
 # certificação, Parte 16) — criar uma ideia pelo produto e vê-la em Actividade.
-viagens-de-browser|126|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|126
+# 126 → 125 em 2026-09-27: UI Reset — `a_consolidacao_nao_mudou_o_que_a_pessoa_ve`
+# comparava o estilo computado com a folha legada, e saiu com ela. As quatro
+# capturas `#[ignore]` de revisão visual saíram também (não contavam como
+# passadas). Registo em `docs/ui/BEHAVIOURAL_CONTRACT_MATRIX.md`.
+# 125 → 126 em 2026-09-27: o Nye responde no círculo (D7, Claude Design).
+# 126 → 125 marcas em 2026-09-27 (as execuções, não os testes): a linha dizia
+# 126|126 desde o Nye (9b83a17), e nunca foi confrontada com um verify.sh
+# completo neste ramo. Medido teste a teste, em série:
+#   124 viagens levantam um browser cada                         124 marcas
+#     1 delas (o_fuso_declarado_vale_para_a_viagem…) levanta dois  +1 marca
+#     2 estruturais leem ficheiros e não levantam browser            0 marcas
+#   126 testes                                                   125 marcas
+# 126 → 127 testes e 125 → 126 marcas em 2026-09-27: o Terminal executa pelo
+# Core e desenha só texto (ADR-0312, D14) — uma viagem, um levantamento.
+# 127 → fora em 2026-09-28: apagamento da UI. A UI inteira saiu à espera do
+# código do Claude Design, e as 127 viagens com ela: conduziam ecrãs que deixaram
+# de existir. Os nomes e o contrato de cada uma estão em
+# `docs/ui/UI_WIPE_REPORT.md`, para voltarem quando houver ecrãs. A suite sai da
+# tabela por decisão, e não por ter encolhido sozinha.
 paridade|7|-p ocinye-core-server --test parity
+# O Terminal (ocsh, ADR-0312): whoami, contexto reautorizado e alheio recusado,
+# sintaxe do anfitrião e comandos desconhecidos sem execução, ajuda filtrada pela
+# autoridade, e nenhum terminal sem sessão. Criada em 2026-09-27 com cinco provas.
+terminal|5|-p ocinye-core-server --test terminal_http
 verificador-de-tokens|31|-p ocinye-core --test authn
 autorizacao|12|-p ocinye-core --test authorization
 catalogo-de-operacoes|13|-p ocinye-core --lib operations

@@ -1,7 +1,7 @@
 # Viagens de browser: duas fontes de estado implícito
 
 - **Escrito em:** 2026-08-31, depois de duas falhas de CI
-- **Relaciona-se com:** [`apps/workspace/tests/browser.rs`](../../apps/workspace/tests/browser.rs)
+- **Relaciona-se com:** `apps/workspace/tests/browser.rs`, retirado com a UI em 2026-09-28 ([`docs/ui/`](../ui/README.md)); as duas lições valem para a suite que voltar
 
 Uma viagem de browser é a única prova que atravessa o produto inteiro, e por isso
 é também onde o não-determinismo se esconde melhor: um teste que falha uma vez em

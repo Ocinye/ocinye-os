@@ -12,6 +12,7 @@ Cada operação aparece na sua linha. Duas operações distintas nunca são agru
 
 | Operação | Módulo | Exposição | Capability | Fronteira | Razão |
 |---|---|---|---|---|---|
+| `research::list_workspaces` | research | Addressable | `research.workspace.list` | — | — |
 | `research::create_idea` | research | Addressable | `research.idea.create` | — | — |
 | `research::update_idea` | research | Addressable | `research.idea.revise` | — | — |
 | `research::transition_idea` | research | Addressable | `research.idea.transition` | — | — |
@@ -71,6 +72,7 @@ Cada operação aparece na sua linha. Duas operações distintas nunca são agru
 | `organisation::add_unit_member` | organisation | NonDelegable | — | `AUTHORITY_BOUNDARY` | O efeito principal é mudar a fronteira de autorização ou a capacidade de outra pessoa aceder ao sistema. Uma operação assim não deve tornar-se executável só porque conteúdo recuperado não confiável pode influenciar uma proposta agentic. |
 | `identity::revoke_own_session` | identity | Addressable | `identity.session.revoke` | — | — |
 | `identity::choose_preset` | identity | Addressable | `identity.avatar.choose_preset` | — | — |
+| `identity::read_self` | identity | Addressable | `identity.self.read` | — | — |
 | `identity::change_own_password` | identity | NonDelegable | — | `SECRET_BOUNDARY` | A execução segura exige a palavra-passe actual, e uma palavra-passe nunca pode entrar no contexto de um modelo. O agente pode abrir Definições → Segurança e explicar o que se segue. |
 | `identity::reset_password` | identity | NonDelegable | — | `SECRET_BOUNDARY` | A operação produz uma credencial temporária. Delegá-la faria o material secreto passar pelo plano agentic para chegar a quem o pediu. |
 | `identity::create_member` | identity | NonDelegable | — | `SECRET_BOUNDARY` | Tal como está modelada, a operação devolve a credencial de primeiro acesso. Se um dia a criação e a emissão forem operações separadas, a primeira volta a ser candidata a endereçável. |
@@ -83,12 +85,12 @@ Cada operação aparece na sua linha. Duas operações distintas nunca são agru
 
 | | |
 |---|---|
-| Operações institucionais significativas | **66** |
-| `Addressable` | **50** |
+| Operações institucionais significativas | **68** |
+| `Addressable` | **52** |
 | `NonDelegable` | **15** |
 | `NotImplemented` | **1** |
 | Sem classificação | **0** |
-| Capabilities no registry | **50** |
+| Capabilities no registry | **52** |
 
 ## Fronteiras de confiança
 

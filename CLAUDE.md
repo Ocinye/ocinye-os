@@ -95,7 +95,7 @@ sem que nada falhe.
   4 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`) e 1
   aplicação (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 229 caminhos e 274 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 232 caminhos e 278 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -256,10 +256,18 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED` e em produção** 95 ecrãs em Leptos SSR,
-  servido de `os.ocinye.com`, atrás da Cloudflare, do mesmo SHA que o Core;
-  sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
-  pelas permissões que o Core calcula.
+- **Ocinye Workspace: `IMPLEMENTED` como BFF, com a interface Claude Design
+  D001.2.1 nesta árvore (ramo `feat/design-d001-2-1`, por empurrar).** A UI foi apagada
+  a 2026-09-28 ([apagamento](docs/ui/UI_WIPE_REPORT.md)) e voltou com o código
+  do Design, aplicado sem alterações ([registo](docs/ui/design-integration.json)):
+  arranque, login em dois passos, fim de sessão, primeiro acesso, MFA, a casca
+  (barra de cima, menu da conta, barra de aplicações, lançador, paleta) e o
+  Desktop com 14 widgets e personalização, as páginas de erro 404/403/502 e a
+  falha de identidade (503), gravada no Core
+  (`GET`/`PUT /api/v1/me/desktop`, concorrência optimista). As aplicações ainda
+  sem ecrã do Design abrem a janela `app_pending` dentro da casca:
+  **0 páginas** respondem `503 interface_pending`. Produção continua em `os.ocinye.com`, com
+  a UI anterior ao apagamento, até ao próximo deploy.
 - **Gestor de Aplicações: `IMPLEMENTED` e em produção** (§45-A,
   [docs/applications](docs/applications/README.md)). As aplicações são entidades
   de primeira classe: um **registo autoritativo** único alimenta o **lançador**
@@ -338,7 +346,16 @@ sem que nada falhe.
   capacidade, e a superfície de Administração de recursos.
   `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão distinto de `OCINYE_AI_READY`, e
   **não** torna a IA disponível.
-- **58 migrations**, aplicáveis de base vazia; 92 tabelas.
+- **59 migrations**, aplicáveis de base vazia; 93 tabelas.
+- **Ocinye Terminal e ocsh: `IMPLEMENTED` (fundação), por fazer merge**
+  ([ADR-0312](docs/adrs/0312-ocsh-governed-command-shell.md)). Uma linha de
+  comandos governada que **não é uma shell do anfitrião**: o parse é
+  determinístico e acontece no Core, cada comando invoca uma capability pelo
+  executor agentic (`POST /api/v1/commands/exec`), sintaxe do anfitrião
+  (`;`, `&&`, `$(…)`, `>`) e `sudo`/`bash` são recusados com código 126, e um
+  comando desconhecido nunca vai para o Nye. A página `/terminal` desenha só
+  texto; o histórico vive na memória do separador e nunca guarda o valor de uma
+  opção sensível. Ainda não há confirmações, streaming nem ponte para o Nye.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -532,8 +549,8 @@ sem que nada falhe.
   leitura de volta. Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **82 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
-  **74 READMEs**, `docs/` povoado — incluindo
+- **95 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
+  **53 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -549,17 +566,16 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1827 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1426 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **675 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **582 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
-  mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
-  elemento interactivo ficar sem contrato definido, um guarda que falha se
+  mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
   completo contra um fornecedor determinístico — **sem GPU** —, e a Provider
   Conformance Suite.
@@ -570,6 +586,20 @@ sem que nada falhe.
   `./scripts/verify.sh` passou a incluir a auditoria de dependências.
 
 **Continua a não existir:**
+
+- **Nenhum ecrã de aplicação nesta árvore.** A casca, a autenticação e o
+  Desktop do Claude Design (D001.2.1) estão ligados; as aplicações abrem a
+  janela `app_pending` até o Design as entregar (D002+). As viagens de browser
+  com Chrome saíram com a UI antiga; as de HTTP contra um Core real voltaram
+  (`apps/workspace/tests/d001_journeys.rs`). As provas de instalação,
+  actualização, restauro e hardware continuam em `NOT_RUN`
+  ([apagamento](docs/ui/UI_WIPE_REPORT.md)).
+
+- **Nenhum runtime além da Web.** Não há PWA, casca Ocinye Desktop, posto
+  Dedicated, `ocinye://` nem Ocinye Browser: estão decididos (§45-B,
+  ADR-0018, ADR-0611 a ADR-0617, ADR-0702 a ADR-0705) e são `PLANNED`. Existe
+  só a declaração de runtime (ADR-0611): `ocinye_contracts::runtime` e
+  `static/runtime.js`, que hoje diz sempre `web`.
 
 - **Segundo factor universal não existe.** É exigido e está enrolado para
   identidades privilegiadas (acima); a identidades **não** privilegiadas o MFA
@@ -1179,7 +1209,7 @@ crates/ocinye-core              crates/ocinye-capabilities
 services/core-server            services/worker
 services/node-agent             services/conversion-runner
 wasm/capabilities/bibtex-import
-design    docs    infra    migrations    scripts
+docs    infra    migrations    scripts
 ```
 
 As capacidades WASM vivem fora da workspace do host: compilam para
@@ -1731,10 +1761,10 @@ azul Ocinye preenchida com primeiro plano branco. **Não** se usa sublinhado
 dourado nem qualquer `border-bottom`/`box-shadow` como indicador de navegação
 activa, e nunca há um segundo indicador a competir. Foco, hover e indisponível são
 visualmente distintos do activo. O dourado continua a ser acento (CTA, pontos,
-estados, foco), mas não é o indicador de navegação activa. A especificação vive em
-[`design/README.md` §7.7](design/README.md), e a semântica (`aria-current` para
-rota/secção, `aria-selected` para tabs) tem guarda em
-`ui::components::tabs::tests`.
+estados, foco), mas não é o indicador de navegação activa. A especificação e a
+guarda da semântica (`aria-current` para rota/secção, `aria-selected` para tabs)
+saíram com o apagamento da UI (2026-09-28, [`docs/ui/`](docs/ui/README.md)); a
+regra continua a valer para o código que o Claude Design entregar.
 
 ---
 
@@ -1781,6 +1811,44 @@ seguem são vinculativas e vivem em [`docs/applications/`](docs/applications/REA
 > **Disponibilidade de aplicação ≠ disponibilidade de fornecedor.** O Prompt é uma
 > aplicação para quem tem `ai.use` e lança **mesmo sem GPU**; a ausência de
 > inferência degrada a resposta, não desactiva a aplicação.
+
+---
+
+## 45-B. Runtimes e o Ocinye Browser
+
+Uma Instância alcança-se pela **Web**, pelo **Desktop** (casca nativa) e por um
+posto **Dedicated** — runtimes, não perfis de Instância
+([ADR-0018](docs/adrs/0018-universal-web-access-and-runtime-classes.md),
+[`docs/runtime/`](docs/runtime/README.md), [`docs/browser/`](docs/browser/README.md)).
+Estado: `PLANNED`. As regras seguintes são vinculativas desde já:
+
+> **A Web do Ocinye é um modo de acesso de primeira classe. A instalação
+> Desktop é opcional: acrescenta ao Ocinye, nunca é precisa para chegar a uma
+> Instância.**
+
+> **Web, Desktop e Dedicated usam a mesma autoridade do Core. A casca Desktop
+> hospeda; o Core governa.** A casca nunca é uma segunda autoridade de
+> autorização.
+
+> **Conteúdo web externo não é de confiança**, mesmo dentro do Ocinye Browser.
+> **Webviews externos não recebem a sessão do Ocinye nem a ponte nativa
+> privilegiada**, e nenhuma página externa alcança APIs nativas.
+
+> **O Browser Manager é dono da navegação externa; o Gestor de Janelas é dono
+> das janelas do Ocinye. As abas do Browser não são janelas do Ocinye.**
+
+> **`ocinye://` é um protocolo estrito de ligações internas, não um canal de
+> execução de comandos.** Toda a ligação tem equivalente HTTPS.
+
+> **O Nye só acede ao conteúdo de uma página por capabilities governadas do
+> Browser, e só com pedido explícito. O ocsh controla o Browser por comandos
+> tipados.**
+
+> **A Web degrada com honestidade quando a caixa de areia do navegador impede
+> a integração. Não há proxy universal da Web pelo Core.**
+
+> **A detecção de runtime vive num só módulo** (`ocinyeRuntime`, ADR-0611); não
+> se espalham `if (window.__TAURI__)` nem perguntas ao agente de utilizador.
 
 ---
 
@@ -2167,6 +2235,7 @@ Estrutura actual — `CURRENT`:
 
 ```
 docs/adrs            docs/agentic        docs/ai             docs/applications
+docs/browser         docs/runtime
 docs/architecture    docs/authorization  docs/backups        docs/capabilities
 docs/compute         docs/data-model     docs/deployment     docs/development
 docs/domain          docs/feature-status docs/identity       docs/instance

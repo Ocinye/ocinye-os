@@ -462,6 +462,13 @@ const ESQUEMA: &[(&str, Comparacao)] = &[
         ),
     ),
     (
+        "member_desktop_layouts",
+        Comparacao::Fora(
+            "preferência de apresentação (a disposição do Desktop), chaveada pela \
+             pessoa e sem identidade própria; viaja com o membro",
+        ),
+    ),
+    (
         "action_approvals",
         Comparacao::Fora("linha-filha sem identidade própria; viaja com o plano"),
     ),

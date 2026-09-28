@@ -88,8 +88,8 @@ flowchart LR
   `scripts/cloudflare-ranges.sh`. **Não há lista de permitidos** no origin: a
   protecção é o `default_server` e o certificado Origin CA, não um filtro de IP.
 - A porta 80 serve sem redireccionar para HTTPS (a Cloudflare faz esse papel).
-- A CSP do Workspace permite `fonts.googleapis.com` e `fonts.gstatic.com`: o
-  browser do membro depende da Google Fonts.
+- As fontes (IBM Plex) são servidas pelo próprio Workspace desde 2026-09-28: a
+  CSP é `font-src 'self'`, e o browser do membro não fala com a Google.
 
 ## 4. Armazéns de dados
 
@@ -119,7 +119,7 @@ flowchart LR
 ## 6. Inventário de aplicações
 
 O registo autoritativo é **dados Rust estáticos**:
-`APPLICATIONS` em [`apps/workspace/src/ui/apps.rs`](../../apps/workspace/src/ui/apps.rs),
+`APPLICATIONS` em [`apps/workspace/src/experience/apps.rs`](../../apps/workspace/src/experience/apps.rs),
 23 entradas, cada uma apoiada num `Screen` tipado. Não há activação por
 instalação: todas as aplicações existem sempre, e a visibilidade decide-se por
 permissão e, para quatro delas, por relevância de módulo.
@@ -168,7 +168,6 @@ qualquer aplicação é uma falha do Core.
 | apt.postgresql.org, deb.debian.org, crates.io | build | técnica | activas |
 | GitHub | origem do deploy, CI, advisories | técnica | activa |
 | Servidor de correio (LWS) | IMAP/SMTP | integração | só em configuração e comentários; nenhum código específico |
-| Google Fonts | CSP e browser | técnica | activa |
 | Destino de backup S3 | `backup-remote.sh` | operacional | configurado fora do repositório |
 
 ## 9. Modelo de recursos

@@ -59,6 +59,7 @@ flowchart TB
     A0309["ADR-0309<br/>Conversas de IA"]
     A0310["ADR-0310<br/>Tecido de IA:<br/>fornecedores"]
     A0311["ADR-0311<br/>Política e<br/>roteamento de IA"]
+    A0312["ADR-0312<br/>ocsh: shell<br/>governada"]
     A0400["ADR-0400<br/>Ocinye Mail"]
     A0500["ADR-0500<br/>Compute Registry"]
     A0501["ADR-0501<br/>Capability Runtime"]
@@ -91,6 +92,7 @@ flowchart TB
     A0301 --> A0302
     A0301 --> A0303
     A0303 --> A0307
+    A0307 --> A0312
     A0002 --> A0307
     A0303 --> A0400
 
@@ -129,6 +131,7 @@ O que o Ocinye OS é, onde reside a autoridade, e sobre que runtime assenta.
 - [ADR-0015](0015-core-and-applications-boundary.md) — A fronteira entre o Core e as aplicações
 - [ADR-0016](0016-application-manifest-contract.md) — O manifesto de aplicação
 - [ADR-0017](0017-instance-configuration-and-branding.md) — Configuração e marca da Instância
+- [ADR-0018](0018-universal-web-access-and-runtime-classes.md) — Acesso Web universal e as três classes de runtime
 
 ### 0100–0199 · Identidade, Segurança, Autorização e Governação
 
@@ -176,6 +179,7 @@ Como a inteligência opera o sistema sem o governar.
 - [ADR-0309](0309-ai-conversation-persistence-and-provenance.md) — Persistência e proveniência de conversas de IA
 - [ADR-0310](0310-ai-fabric-provider-registry.md) — O tecido de IA: fornecedores registados pela Instância
 - [ADR-0311](0311-ai-policy-and-multi-provider-routing.md) — Política e roteamento de IA entre vários fornecedores
+- [ADR-0312](0312-ocsh-governed-command-shell.md) — ocsh: uma shell de comandos governada sobre as capabilities do Core
 
 ### 0400–0499 · Módulos Institucionais Nativos
 
@@ -222,6 +226,13 @@ A interface humana.
 - [ADR-0607](0607-files-as-a-content-browser.md) — Ficheiros como um explorador de conteúdo
 - [ADR-0608](0608-same-origin-institutional-downloads.md) — Descarga institucional servida same-origin
 - [ADR-0609](0609-disposable-conversion-isolation.md) — Conversão de conteúdo não confiável em contentores descartáveis
+- [ADR-0611](0611-runtime-capability-boundary.md) — A fronteira tipada de capacidades de runtime
+- [ADR-0612](0612-browser-manager.md) — O Browser Manager e o recurso honesto da Web
+- [ADR-0613](0613-ocinye-deep-link-protocol.md) — `ocinye://`: um protocolo de ligações internas, nunca um canal de comandos
+- [ADR-0614](0614-browser-downloads-and-uploads.md) — Transferências e carregamentos do Browser pelo caminho governado dos Ficheiros
+- [ADR-0615](0615-browser-privacy-model.md) — Privacidade do Browser: histórico, marcadores, privado, telemetria
+- [ADR-0616](0616-browser-page-context-for-nye.md) — Páginas do Browser como contexto do Nye: explícito, limitado, não confiável
+- [ADR-0617](0617-pwa-and-service-worker-policy.md) — PWA: identidade instalável, sem cache de estado autenticado
 
 ### 0700–0799 · Deployment, rede, operação e resiliência
 
@@ -229,6 +240,10 @@ Como o sistema sobrevive ao sítio onde corre.
 
 - [ADR-0700](0700-institutional-continuity-and-portability.md) — Continuidade institucional e portabilidade entre servidores
 - [ADR-0701](0701-release-bundle-and-host-installer.md) — O pacote de release e o instalador de anfitrião
+- [ADR-0702](0702-desktop-shell-technology.md) — A casca Ocinye Desktop: Tauri 2 sobre o WebView do sistema
+- [ADR-0703](0703-desktop-trust-boundary-and-native-bridge.md) — A fronteira de confiança da casca: webview de confiança, webviews externos, ponte tipada
+- [ADR-0704](0704-desktop-instance-connection-and-updates.md) — Ligação da casca a uma Instância, compatibilidade e actualizações
+- [ADR-0705](0705-dedicated-runtime.md) — Ocinye Dedicated: uma configuração de implantação, não um sistema operativo
 
 Famílias sem ADRs não aparecem. `0800–0899` (integrações externas) e
 `0900–0999` (reservado) estão vazias, e nenhuma ADR será criada apenas para as
@@ -257,6 +272,7 @@ preencher.
 | [0015](0015-core-and-applications-boundary.md) | A fronteira entre o Core e as aplicações | Foundation | `HIGH` | Accepted |
 | [0016](0016-application-manifest-contract.md) | O manifesto de aplicação | Foundation | `HIGH` | Accepted |
 | [0017](0017-instance-configuration-and-branding.md) | Configuração e marca da Instância | Foundation | `MEDIUM` | Accepted |
+| [0018](0018-universal-web-access-and-runtime-classes.md) | Acesso Web universal e as três classes de runtime | Foundation | `FOUNDATIONAL` | Proposed |
 | [0100](0100-authorization-model.md) | RBAC + ABAC contextual, fail closed | Security | `FOUNDATIONAL` | Accepted |
 | [0101](0101-permissions-scopes-and-grants.md) | Permissões nomeadas, âmbitos e grants explícitos | Security | `HIGH` | Accepted |
 | [0102](0102-identity-provider.md) | Identity Provider dedicado (Keycloak) | Identity | `HIGH` | Superseded |
@@ -313,8 +329,19 @@ preencher.
 | [0607](0607-files-as-a-content-browser.md) | Ficheiros como um explorador de conteúdo | Workspace | `HIGH` | Accepted |
 | [0608](0608-same-origin-institutional-downloads.md) | Descarga institucional servida same-origin | Workspace | `MEDIUM` | Accepted |
 | [0609](0609-disposable-conversion-isolation.md) | Conversão de conteúdo não confiável em contentores descartáveis | Workspace | `HIGH` | Accepted |
+| [0611](0611-runtime-capability-boundary.md) | A fronteira tipada de capacidades de runtime | Workspace | `HIGH` | Proposed |
+| [0612](0612-browser-manager.md) | O Browser Manager e o recurso honesto da Web | Workspace | `HIGH` | Proposed |
+| [0613](0613-ocinye-deep-link-protocol.md) | `ocinye://`: um protocolo de ligações internas, nunca um canal de comandos | Workspace | `HIGH` | Proposed |
+| [0614](0614-browser-downloads-and-uploads.md) | Transferências e carregamentos do Browser pelo caminho governado dos Ficheiros | Workspace | `HIGH` | Proposed |
+| [0615](0615-browser-privacy-model.md) | Privacidade do Browser: histórico, marcadores, privado, telemetria | Workspace | `MEDIUM` | Proposed |
+| [0616](0616-browser-page-context-for-nye.md) | Páginas do Browser como contexto do Nye: explícito, limitado, não confiável | Workspace | `HIGH` | Proposed |
+| [0617](0617-pwa-and-service-worker-policy.md) | PWA: identidade instalável, sem cache de estado autenticado | Workspace | `MEDIUM` | Proposed |
 | [0700](0700-institutional-continuity-and-portability.md) | Continuidade institucional e portabilidade entre servidores | Operations | `FOUNDATIONAL` | Accepted |
 | [0701](0701-release-bundle-and-host-installer.md) | O pacote de release e o instalador de anfitrião | Operations | `HIGH` | Accepted |
+| [0702](0702-desktop-shell-technology.md) | A casca Ocinye Desktop: Tauri 2 sobre o WebView do sistema | Operations | `HIGH` | Proposed |
+| [0703](0703-desktop-trust-boundary-and-native-bridge.md) | A fronteira de confiança da casca: webview de confiança, webviews externos, ponte tipada | Operations | `FOUNDATIONAL` | Proposed |
+| [0704](0704-desktop-instance-connection-and-updates.md) | Ligação da casca a uma Instância, compatibilidade e actualizações | Operations | `HIGH` | Proposed |
+| [0705](0705-dedicated-runtime.md) | Ocinye Dedicated: uma configuração de implantação, não um sistema operativo | Operations | `MEDIUM` | Proposed |
 
 ---
 

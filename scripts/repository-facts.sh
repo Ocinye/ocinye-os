@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 python3 - <<'PY'
-import pathlib, re
+import pathlib, re, subprocess
 
 def ler(padrao):
     return [p.read_text() for p in pathlib.Path().glob(padrao)]
@@ -61,14 +61,18 @@ for argumento in argumentos_de_route(rotas):
 print(f"caminhos-core        {len(caminhos)}")
 print(f"operacoes-core       {operacoes}")
 
-# ── O Workspace: ecrãs ───────────────────────────────────────────────────
+# ── O Workspace: páginas à espera de interface ───────────────────────────
 #
-# Um ecrã é um caminho que um membro abre. `KNOWN_PATHS` inclui destinos de
-# `POST` que nunca se abrem, por isso a contagem sai do router e conta os
-# caminhos que respondem a `GET`.
+# A UI foi apagada em 2026-09-28 (`docs/ui/UI_WIPE_REPORT.md`). Uma página é um
+# caminho `GET` que um membro abre; enquanto não há ecrãs, cada uma responde
+# `503 interface_pending` por um handler sem argumentos que só devolve isso. A
+# contagem são os caminhos `GET` cujo handler é esse, e desce à medida que o
+# código do Claude Design os substitui.
 ws = pathlib.Path('apps/workspace/src/routes.rs').read_text()
-ecras = {m.group(1) for m in re.finditer(r'\.route\(\s*"([^"]+)"\s*,\s*get\(', ws, re.S)}
-print(f"ecras-workspace      {len(ecras)}")
+pendentes_fn = set(re.findall(r'async fn ([a-z_0-9]+)\(\) -> Response \{\s*interface_pending\(\)\s*\}', ws))
+paginas = {m.group(1) for m in re.finditer(r'\.route\(\s*"([^"]+)"\s*,\s*get\(([a-z_0-9]+)\)', ws, re.S)
+           if m.group(2) in pendentes_fn}
+print(f"paginas-pendentes    {len(paginas)}")
 
 # ── Persistência ─────────────────────────────────────────────────────────
 sql = "\n".join(ler('migrations/*.sql'))
@@ -112,5 +116,9 @@ print(f"funcoes-de-teste     {funcoes}")
 
 print(f"adrs                 {len(list(pathlib.Path('docs/adrs').glob('[0-9]*.md')))}")
 print(f"runbooks             {len([p for p in pathlib.Path('docs/runbooks').glob('*.md') if p.name != 'README.md'])}")
-print(f"readmes              {len([p for p in pathlib.Path().rglob('README.md') if 'target' not in p.parts and '.git' not in p.parts])}")
+# Só os versionados: `rglob` via também as dependências de terceiros que um
+# `npm install` deixa em `apps/workspace/editor/node_modules/` (23 READMEs do
+# ProseMirror), e o número dependia da máquina onde se corria.
+_versionados = subprocess.run(["git", "ls-files"], capture_output=True, text=True, check=True).stdout.splitlines()
+print(f"readmes              {len([p for p in _versionados if pathlib.PurePath(p).name == 'README.md'])}")
 PY

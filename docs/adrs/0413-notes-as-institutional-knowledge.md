@@ -118,7 +118,7 @@ Ocinye é o que se persiste; o da biblioteca traduz-se para ele na fronteira.
 ### 3. O editor é vendorizado, same-origin, e melhora o progressivo
 
 A CSP do Workspace é `script-src 'self'` sem `unsafe-inline` nem `unsafe-eval`
-(ADR-0600, ADR-0019). O editor é uma biblioteca **vendorizada em `static/`** e
+(ADR-0600, ADR-0602). O editor é uma biblioteca **vendorizada em `static/`** e
 servida same-origin, inicializada a partir do `app.js` — nunca de um CDN, nunca
 de `&lt;script&gt;` embutido, nunca de um segundo *framework* (sem React/Vue). Produz
 o **documento estruturado canónico** (§2), que o **Core valida contra o esquema

@@ -414,6 +414,65 @@ pub async fn post_unauthenticated(
     Err(ApiFailure::Failed(message))
 }
 
+/// The Instance's public name, for the sign-in page (ADR-0017).
+///
+/// `GET /instance/branding` is public on purpose: a person at the door needs to
+/// know which Instance they are entering. `None` when the Core does not answer —
+/// the page then names the product, and never guesses an institution.
+pub async fn instance_name(state: &WorkspaceState) -> Option<String> {
+    let response = state
+        .http
+        .get(format!(
+            "{}/api/v1/instance/branding",
+            state.config.core_url
+        ))
+        .timeout(std::time::Duration::from_secs(3))
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let payload: Value = response.json().await.ok()?;
+    payload
+        .get("name")
+        .and_then(Value::as_str)
+        .filter(|name| !name.trim().is_empty())
+        .map(str::to_owned)
+}
+
+/// The public door of the Instance (D7): its name and profile, from the public
+/// `GET /instance/branding`. `None` when the Core does not answer — the door
+/// then names the product, and never guesses an institution.
+pub async fn instance_door(
+    state: &WorkspaceState,
+) -> Option<(String, Option<ocinye_contracts::InstanceProfile>)> {
+    let response = state
+        .http
+        .get(format!(
+            "{}/api/v1/instance/branding",
+            state.config.core_url
+        ))
+        .timeout(std::time::Duration::from_secs(3))
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let payload: Value = response.json().await.ok()?;
+    let name = payload
+        .get("name")
+        .and_then(Value::as_str)
+        .filter(|name| !name.trim().is_empty())?
+        .to_owned();
+    let profile = payload
+        .get("profile")
+        .and_then(Value::as_str)
+        .and_then(|p| p.parse().ok());
+    Some((name, profile))
+}
+
 /// Read the Core's readiness, without a member session.
 ///
 /// Used by the sign-in page so it can say plainly when the platform is not

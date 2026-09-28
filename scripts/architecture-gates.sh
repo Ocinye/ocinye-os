@@ -74,16 +74,23 @@ cd "$raiz"
 #     tudo o que o arranque chama existe, os painéis igualam o painel da conta,
 #     as regras partilhadas fora de uma media query, e a superfície de um painel
 #     não se reescreve.
+#   UI Reset, 2026-09-27: `Design System Integrity` (29) e `Rendered-Value
+#   Equivalence` mediam a UI legada — tokens, medidas e o estilo computado da
+#   folha `ocinye.css` — e saíram com ela. Os cinco testes que guardam
+#   fronteiras que qualquer desenho tem de respeitar ficaram em `UI Contract`.
+#   Ver `docs/ui/BEHAVIOURAL_CONTRACT_MATRIX.md`.
+#   Apagamento da UI, 2026-09-28: a UI inteira saiu à espera do código do
+#   Claude Design, e com ela `Experience Structural Boundary` (7) e `UI Contract`
+#   (5), que mediam ecrãs que deixaram de existir. Voltam quando houver ecrãs.
+#   Entrou `Runtime Boundary` (2), a fronteira do ADR-0611, que continua viva.
 portoes() {
     cat <<'TABELA'
 Architecture Dependency Boundary|python3 scripts/architecture_boundaries.py|Fronteiras arquitecturais:
-Experience Structural Boundary|cargo test -q -p ocinye-workspace --test experience_boundary|test result: ok. 7 passed
-Design System Integrity|cargo test -q -p ocinye-workspace --test design_fidelity|test result: ok. 29 passed
-Rendered-Value Equivalence|python3 scripts/rendered_value_equivalence.py|Equivalência de valores renderizados:
+Runtime Boundary|cargo test -q -p ocinye-workspace --test runtime_boundary|test result: ok. 2 passed
 TABELA
 }
 
-ESPERADOS=4
+ESPERADOS=2
 
 # A impressão digital da árvore versionada: caminho, tamanho e data de
 # alteração. Um ficheiro tocado e restaurado muda a data, e por isso aparece
@@ -94,6 +101,11 @@ ESPERADOS=4
 # maneira mais clara possível — a impressão digital vinha `Blocks: Total: …`, que
 # muda entre duas leituras porque o disco se enche, e o guarda acusava toda a
 # gente. Falhava para o lado seguro, e falhava na mesma.
+#
+# A data vai em nanossegundos, e não em segundos. Em segundos, tocar e restaurar
+# um ficheiro no mesmo segundo em que foi escrito não deixava rasto — e foi o que
+# aconteceu quando o portão que a prova de integridade usa passou a correr logo
+# a seguir à criação da worktree (apagamento da UI, 2026-09-28).
 impressao_da_arvore() {
     python3 - <<'FIM' | sort
 import os, subprocess
@@ -104,7 +116,7 @@ for nome in saida.stdout.splitlines():
     except OSError:
         print("%s AUSENTE" % nome)
         continue
-    print("%s %d %d" % (nome, info.st_size, int(info.st_mtime)))
+    print("%s %d %d" % (nome, info.st_size, info.st_mtime_ns))
 FIM
 }
 

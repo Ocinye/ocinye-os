@@ -428,11 +428,10 @@ services/
                          nós computacionais; ainda sem execução operacional.
 
 apps/
-  workspace              Experience Runtime — Axum + Leptos, renderização no
-                         servidor.
+  workspace              Experience Runtime — Axum, BFF. Sem interface desde
+                         2026-09-28 (docs/ui/UI_WIPE_REPORT.md).
 
 wasm/capabilities/       Capabilities isoladas. Alvo wasm32-wasip1.
-design/                  Dossier de design do Workspace.
 migrations/              Migrations SQL versionadas.
 infra/                   Docker Compose para desenvolvimento local.
 docs/                    Arquitectura, ADRs, segurança, operação.

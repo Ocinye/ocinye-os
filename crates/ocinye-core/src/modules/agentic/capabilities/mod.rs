@@ -134,5 +134,8 @@ pub fn all() -> Vec<Arc<dyn CapabilityHandler>> {
         Arc::new(mail::SendDraft),
         // Compute: reports real state, which is currently zero nodes.
         Arc::new(compute::ListNodes),
+        // Leituras de base que o Terminal (ocsh) e o Nye partilham.
+        Arc::new(self_service::ReadSelf),
+        Arc::new(research::ListWorkspaces),
     ]
 }

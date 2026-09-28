@@ -1,0 +1,407 @@
+{
+  "schema_version": 1,
+  "design_revision": "D001.2.1",
+  "based_on": "D001.2",
+  "design_base_sha": "c99cbdac2402c6fed16fbcd0d69690fa51e57358",
+  "integrated_on": "2026-09-29",
+  "integration_branch": "feat/design-d001-2-1 (from feat/design-d001-2 @ 5076c68)",
+  "integration_status": "INTEGRATED_VISUAL_PARITY_TRUE",
+  "integration_commit": "see git log on feat/design-d001-2-1 (one commit: D001.2.1 application, guard and records)",
+  "package": {
+    "path": "ocinye-design-complete-D001.2.1",
+    "checksums": "109/109 OK (sha256)",
+    "files_changed_vs_d001_2": [
+      "apps/workspace/static/oc-desk.css"
+    ],
+    "change": ".oc-kpis repeat(4, minmax(0, 1fr)) instead of auto-fit; 2 + 2 below a 644px work area (@container max-width 643.98px)",
+    "application_method": "copy of oc-desk.css from implementation/; the rest of the package already matched the tree",
+    "unexpected_diffs": "NONE"
+  },
+  "view_model_changes": "NONE",
+  "widget_registry_changed": false,
+  "widget_default_changed": false,
+  "core_contract_changes": "NONE",
+  "indicators_boundary": {
+    "measured_in": "running Workspace, app bar shown, work area = viewport - 130px; .oc-kpis width = work area - 2px",
+    "639": ".oc-kpis 637px: 2 + 2, no clipping, no overflow",
+    "640": ".oc-kpis 638px: 2 + 2, no clipping, no overflow",
+    "641": ".oc-kpis 639px: 2 + 2, no clipping, no overflow",
+    "642": ".oc-kpis 640px: 2 + 2, no clipping, no overflow",
+    "643": ".oc-kpis 641px: 2 + 2, no clipping, no overflow",
+    "644": ".oc-kpis 642px: 4 in a row (150px each), no clipping, no overflow",
+    "645": ".oc-kpis 643px: 4 in a row (150.25px), no clipping, no overflow"
+  },
+  "visual_parity": {
+    "desktop_924": "MATCH (unchanged from D001.2): 2 columns, grid at x=36, tiles at x 37/254/470/687 y=71, Indicators 107px, pill #F3F6F9, no clipped title",
+    "desktop_1440": "NO_REGRESSION: 4 columns, Indicators 107px",
+    "auth_924": "MATCH (unchanged; no auth CSS in D001.2.1)",
+    "shell_924": "MATCH (unchanged; no shell CSS in D001.2.1)",
+    "result": "OCINYE_D001_VISUAL_PARITY = TRUE"
+  },
+  "tests": {
+    "css_contract_tests": "5/5 (new: Indicators exactly 4 or 2; fails on the auto-fit rule)",
+    "design_view_tests": "50/50",
+    "unit_tests": "121/121",
+    "journeys": "19/19 against a real Core"
+  },
+  "functional_gaps_total": 25,
+  "functional_gaps_resolved": [
+    "FG-017",
+    "FG-018",
+    "FG-025"
+  ],
+  "functional_gaps_partially_resolved": [
+    "FG-015",
+    "FG-016 (Backup::Unknown until the Core records backups)"
+  ],
+  "functional_gaps_remaining": {
+    "CORE_CONTRACT_REQUIRED": [
+      "FG-002",
+      "FG-003",
+      "FG-013",
+      "FG-014",
+      "FG-015 (ideas/projects/datasets)",
+      "FG-016 (backup record)",
+      "FG-024 (CORE_STATUS_CONTRACT_FOLLOWUP)"
+    ],
+    "WAITING_FOR_LATER_SCOPE": [
+      "FG-001",
+      "FG-004",
+      "FG-005",
+      "FG-006",
+      "FG-007",
+      "FG-008",
+      "FG-009",
+      "FG-010",
+      "FG-011",
+      "FG-012",
+      "FG-019",
+      "FG-020",
+      "FG-021",
+      "FG-022",
+      "FG-023"
+    ]
+  },
+  "design_limitations": {
+    "DESKTOP_DARK_DESIGN": "PENDING_DESIGN",
+    "DESKTOP_SYSTEM_DESIGN": "PENDING_DESIGN",
+    "screenshots_other_distributions": "NOT_AVAILABLE (Business/Personal/Education verified by tests, not by reference image)",
+    "screenshots_en_fr_beyond_login": "NOT_AVAILABLE",
+    "tablet_mobile": "NOT_AVAILABLE"
+  },
+  "feedback": "docs/ui/CODE_FEEDBACK.md",
+  "history": [
+    {
+      "schema_version": 1,
+      "design_revision": "D001.2",
+      "based_on": "D001.1",
+      "design_base_sha": "c99cbdac2402c6fed16fbcd0d69690fa51e57358",
+      "integrated_on": "2026-09-29",
+      "integration_branch": "feat/design-d001-2 (from feat/design-d001-1 @ 4293a81)",
+      "integration_status": "INTEGRATED_VISUAL_PARITY_ONE_RESIDUAL (closed by D001.2.1)",
+      "integration_commit": "105c3ae (application), 5076c68 (records, CSS guards)",
+      "package": {
+        "path": "ocinye-design-complete-D001.2",
+        "checksums": "109/109 OK (sha256)",
+        "files_changed_vs_d001_1": [
+          "apps/workspace/static/oc-shell.css",
+          "apps/workspace/static/oc-desk.css",
+          "docs/ui/HANDOFF.md (Design doc)"
+        ],
+        "application_method": "copy of the two changed CSS files and the Design HANDOFF from implementation/; the rest of the package already matched the tree (only the known cargo-fmt differences); d001.1-to-d001.2.patch read and checked against a minimal diff (it rewrites the two files whole)",
+        "unexpected_diffs": "NONE",
+        "references_changed": "auth-login-research-{pt,en,fr} captures archived as superseded; design/claude-design/reference unchanged"
+      },
+      "view_model_changes": "NONE",
+      "widget_registry_changed": false,
+      "widget_default_changed": false,
+      "core_contract_changes": "NONE",
+      "visual_parity": {
+        "reference_viewport": "924x540, Research, pt, light, registry default (no member layout; restore returns layout null)",
+        "login_924": "MATCH: logo 52px at x=436, card 360px at x=282, centred, no overflow (the canonical geometry; old captures superseded)",
+        "shell_924": "MATCH: CORE/IA pill #F3F6F9 without hover; hover/open, pressed and gold focus states present",
+        "desktop_924": "MATCH: 2 columns of 420px (app bar hidden), grid at x=36, Indicators 107px, tiles at x 37/254/470/687 vs reference 36/253/470/687, y=71 both; titles readable on one line",
+        "desktop_924_app_bar_shown": "2 columns of 390px from x=96, app bar inside the viewport, no clipping",
+        "desktop_1440": "NO_REGRESSION: 4 columns, Indicators 107px",
+        "grid_container_rule": "work area 970px -> 4 columns, 930px -> 2, 335px -> 1",
+        "indicators": "4 in a row at work area >= 644px; 2 + 2 at <= 639px; 3 + 1 with the 4th tile clipped at 640-643px (see CODE_FEEDBACK)",
+        "titles": "no ellipsis at any tested width; Calendário and Armazenamento on one line at 924",
+        "reveal_tile_hidden_app_bar": "the reference's bottom-left tile (x 22-73, y 486-537) is the FG-007 auto-hide reveal button (reference only); the implemented manual show button sits at y 466-518 and is not held to it",
+        "d001_1_regressions": "NONE: collapse button, tooltips, account menu glass, weekday, restore copy, MFA key, recovery codes, login focus, 404 in the shell"
+      },
+      "tests": {
+        "design_view_tests": "50/50",
+        "css_contract_tests": "4/4 (tests/d001_css_contract.rs; the pill test fails when the pill is reverted)",
+        "journeys": "19/19 against a real Core"
+      },
+      "functional_gaps_total": 25,
+      "functional_gaps_resolved": [
+        "FG-017",
+        "FG-018",
+        "FG-025"
+      ],
+      "functional_gaps_partially_resolved": [
+        "FG-015",
+        "FG-016 (Backup::Unknown until the Core records backups)"
+      ],
+      "functional_gaps_remaining": {
+        "CORE_CONTRACT_REQUIRED": [
+          "FG-002",
+          "FG-003",
+          "FG-013",
+          "FG-014",
+          "FG-015 (ideas/projects/datasets)",
+          "FG-016 (backup record)",
+          "FG-024 (CORE_STATUS_CONTRACT_FOLLOWUP)"
+        ],
+        "WAITING_FOR_LATER_SCOPE": [
+          "FG-001",
+          "FG-004",
+          "FG-005",
+          "FG-006",
+          "FG-007",
+          "FG-008",
+          "FG-009",
+          "FG-010",
+          "FG-011",
+          "FG-012",
+          "FG-019",
+          "FG-020",
+          "FG-021",
+          "FG-022",
+          "FG-023"
+        ]
+      },
+      "design_limitations": {
+        "DESKTOP_DARK_DESIGN": "PENDING_DESIGN",
+        "DESKTOP_SYSTEM_DESIGN": "PENDING_DESIGN",
+        "screenshots_other_distributions": "NOT_AVAILABLE (Business/Personal/Education verified by tests, not by reference image)",
+        "screenshots_en_fr_beyond_login": "NOT_AVAILABLE",
+        "tablet_mobile": "NOT_AVAILABLE"
+      },
+      "feedback": "docs/ui/CODE_FEEDBACK.md"
+    },
+    {
+      "schema_version": 1,
+      "design_revision": "D001.1",
+      "based_on": "D001",
+      "design_base_sha": "c99cbdac2402c6fed16fbcd0d69690fa51e57358",
+      "integrated_on": "2026-09-29",
+      "integration_branch": "feat/design-d001-1 (from feat/design-d001 @ a0b5357)",
+      "integration_status": "INTEGRATED_VISUAL_PARITY_PARTIAL",
+      "integration_commit": "1d4e77a (application), cf9f47b (wiring), 4293a81 (records)",
+      "package": {
+        "path": "ocinye-design-complete-D001.1",
+        "checksums": "107/107 OK (sha256); file list = checksum list",
+        "application_method": "copy of implementation/ over the D001 files, exactly apply.sh's copy step; apply.sh (byte-identical to D001's) not run because it refuses the untracked editor/node_modules, and its wiring step is a no-op on this tree; patch not used (base drift); cargo fmt",
+        "files_changed": 14,
+        "files_added": 2,
+        "differs_from_package_beyond_fmt": 0,
+        "references_and_screenshots_changed": false
+      },
+      "view_model_contract_changes": [
+        "DesktopDefault.source: DefaultSource {System, Instance}",
+        "Backup::Unknown",
+        "ErrorKind + ErrorVm",
+        "IdentityFailVm"
+      ],
+      "view_model_changes_additive_only": true,
+      "widget_registry_changed": false,
+      "core_contract_changes": "NONE",
+      "wiring": {
+        "desktop_default_source": "System for registry::system_default (no name, no date); Instance reserved for FG-014; base_version pin removed",
+        "backup_unknown": "Health widget Ready(HealthVm) from /ready, /compute/status and Backup::Unknown (backup_fresh = true); Monitor link only for administrators",
+        "errors": "404/403/502 render screens::error::in_shell with a confirmed member, at_door otherwise; status preserved; retry only on a GET 502",
+        "identity_failure": "technical failure of /me -> screens::auth::identity::identity_unavailable, HTTP 503, retry the requested route, sign out, reference",
+        "door": "/ready degraded -> OPERACIONAL unchanged (FG-024, CORE_STATUS_CONTRACT_FOLLOWUP)"
+      },
+      "visual_parity": {
+        "reference_viewport": "924x540, Research, pt, light",
+        "grid_924": "FIXED: 4 columns (188px with the app bar shown, 207.5px hidden); Indicators 107px",
+        "app_bar_924": "FIXED: document height 540; app bar at y 139-440; hidden state reveal tile at 22,466",
+        "collapse_button": "FIXED: appearance none, no background or border",
+        "tooltip": "FIXED: widget name interpolated in pt, en, fr",
+        "mfa_key": "FIXED: real 32-character key wraps inside its box; document width 924",
+        "recovery_codes": "FIXED: 10 real codes, one line each, no overflow",
+        "login_focus": "FIXED: step 2 focus keeps the status bar at y 0 (preventScroll)",
+        "account_menu": "FIXED: glass rgba(255,255,255,.72), blur 28px, radius 20px",
+        "weekday": "FIXED: Ter 29 set / Tue 29 Sep / Mar 29 sept",
+        "restore_copy": "FIXED: PREDEFINIÇÃO DO SISTEMA, no version or date",
+        "auth_924": "MATCH horizontally and in size; 28px vertical offset from the reference capture (see CODE_FEEDBACK)",
+        "shell_924": "MISMATCH: CORE·IA chip transparent; the reference shows the pill",
+        "desktop_924": "NEAR_MATCH: vertical geometry and row heights identical; 18px left inset difference in the hidden app bar state; 1-column titles truncate",
+        "desktop_1440": "NO_REGRESSION",
+        "breakpoints": "NO_OVERFLOW at 1100, 899, 760, 639, 375 (Desktop) and 760, 520, 375 (auth); Indicators wrap 3+1 at 639"
+      },
+      "functional_gaps_total": 25,
+      "functional_gaps_resolved": [
+        "FG-017",
+        "FG-018",
+        "FG-025"
+      ],
+      "functional_gaps_partially_resolved": [
+        "FG-015",
+        "FG-016 (Backup::Unknown until the Core records backups)"
+      ],
+      "functional_gaps_remaining": {
+        "CORE_CONTRACT_REQUIRED": [
+          "FG-002",
+          "FG-003",
+          "FG-013",
+          "FG-014",
+          "FG-015 (ideas/projects/datasets)",
+          "FG-016 (backup record)",
+          "FG-024 (CORE_STATUS_CONTRACT_FOLLOWUP)"
+        ],
+        "WAITING_FOR_LATER_SCOPE": [
+          "FG-001",
+          "FG-004",
+          "FG-005",
+          "FG-006",
+          "FG-007",
+          "FG-008",
+          "FG-009",
+          "FG-010",
+          "FG-011",
+          "FG-012",
+          "FG-019",
+          "FG-020",
+          "FG-021",
+          "FG-022",
+          "FG-023"
+        ]
+      },
+      "design_limitations": {
+        "DESKTOP_DARK_DESIGN": "PENDING_DESIGN",
+        "DESKTOP_SYSTEM_DESIGN": "PENDING_DESIGN",
+        "screenshots_other_distributions": "NOT_AVAILABLE (Business/Personal/Education verified by tests, not by reference image)",
+        "screenshots_en_fr_beyond_login": "NOT_AVAILABLE",
+        "tablet_mobile": "NOT_AVAILABLE"
+      },
+      "feedback": "docs/ui/CODE_FEEDBACK.md",
+      "correction_by_d001_2": "The grid_924 entry above recorded 4 columns at 924x540 as FIXED. That reading of the reference was wrong: the 924x540 reference is a 2-column composition (Design re-audit, D001.2). Kept as history, not as a parity target."
+    },
+    {
+      "schema_version": 1,
+      "design_revision": "D001",
+      "design_base_sha": "c99cbdac2402c6fed16fbcd0d69690fa51e57358",
+      "integrated_on": "2026-09-28",
+      "integration_branch": "feat/design-d001",
+      "integration_status": "INTEGRATED_VISUAL_PARITY_PARTIAL",
+      "integration_commit": "ccc12e3 (application), f4d4d71 (Core Desktop), 6ec6fec (wiring), a0b5357 (section 1)",
+      "package": {
+        "path": "ocinye-design-complete-D001",
+        "checksums": "105/105 OK (sha256)",
+        "application_method": "patch/canonical-ui.patch (git apply --check clean) + ocinye-logo.png copied + reference copied as apply.sh does; cargo fmt",
+        "implementation_files_identical_to_package": 30,
+        "design_files_changed_by_integration": 0
+      },
+      "areas_integrated": {
+        "auth": {
+          "boot": "GET /boot -> ui::screens::auth::boot (BootVm from /ready); signed-in member on a ready Instance continues to the deep link",
+          "login": "GET /login -> login(LoginVm); refused POST /login re-renders login with the error and the address (401)",
+          "session_end": "GET /login?reason=expired|revoked -> session_end",
+          "recover": "GET /password/recover -> recover(available=false) (G-26)",
+          "first_access": "GET /first-access -> first_access(min_length from Core); refused POST re-renders with the Core message (422)",
+          "mfa": "GET /mfa -> setup (server QR, manual key only with ?show_key=1) or challenge; POST /mfa/confirm -> codes (no-store); refused challenge/recovery re-render challenge",
+          "logout": "POST /logout (unchanged)"
+        },
+        "shell": {
+          "top_bar": "ShellVm from /me, /organisation (Distribution), /notifications (unread), /me/apps/pins, /ai/status, /ready, /me/desktop (wallpaper, dim)",
+          "account_menu": "live name, email, Distribution; Lock drawn disabled with its reason (FG-001)",
+          "app_bar_and_launcher": "experience::apps registry filtered by visible_to (permissions, modules, inactive apps); pins via PUT /apps/pins -> Core",
+          "palette": "GET /search (app_pending until D002)",
+          "fail_closed": "a technical failure of /me renders no shell (503 with a reference), never a normal session"
+        },
+        "desktop": {
+          "route": "GET / -> ui::screens::home::home(DesktopVm)",
+          "hierarchy": "System Default per Distribution (registry::system_default) -> Instance Default (FG-014, not designed: none) -> Member Layout (Core)",
+          "persistence": "Core: member_desktop_layouts (migration 0059), GET/PUT /api/v1/me/desktop (optimistic version, 409), POST /api/v1/me/desktop/restore; validated against ocinye_contracts::desktop (pinned to the Design registry by a test)",
+          "widgets": {
+            "kpis": "units active (/units), ideas and projects in progress (/workspaces?in_progress=true, new Core filter), datasets (/datasets total)",
+            "notice": "Unavailable (FG-013: no institutional notices in the Core)",
+            "continue": "own personal notes and files by last change, <= 7, <= 30 days (ideas/projects/datasets: FG-015 remaining)",
+            "tasks": "/tasks?mine=true&open_only=true",
+            "calendar": "/calendar/agenda for today in the member time zone",
+            "notes": "/me/notes",
+            "files": "/me/files?view=recents",
+            "mail": "/mail/status, first connected mailbox, unread inbox messages; Unavailable without a linked mailbox",
+            "activity": "/activity",
+            "projects": "list: /workspaces?kind=project&mine=true; count (1 column): projects in progress",
+            "ideas": "count: ideas in progress",
+            "datasets": "count: /datasets total",
+            "storage": "/me/files storage used/limit",
+            "health": "Unavailable (FG-016: no backup run record in the Core)"
+          }
+        },
+        "window_frame_and_app_pending": "every application GET route without a Design screen renders shell::app_pending inside the shell; apps the member cannot open answer 404 (/admin, /audit, /admin/monitor for non-admins)"
+      },
+      "functional_gaps_total": 23,
+      "functional_gaps_resolved": [
+        "FG-017",
+        "FG-018"
+      ],
+      "functional_gaps_partially_resolved": [
+        "FG-015"
+      ],
+      "functional_gaps_remaining": {
+        "CORE_CONTRACT_REQUIRED": [
+          "FG-002",
+          "FG-003",
+          "FG-013",
+          "FG-014",
+          "FG-015 (ideas/projects/datasets)",
+          "FG-016"
+        ],
+        "WAITING_FOR_LATER_SCOPE": [
+          "FG-001",
+          "FG-004",
+          "FG-005",
+          "FG-006",
+          "FG-007",
+          "FG-008",
+          "FG-009",
+          "FG-010",
+          "FG-011",
+          "FG-012",
+          "FG-019",
+          "FG-020",
+          "FG-021",
+          "FG-022",
+          "FG-023"
+        ]
+      },
+      "functional_gap_notes": {
+        "FG-005": "bell and unread counter wired to the Core; the popover is reference-only",
+        "FG-021": "D001 obligation met: every app route serves app_pending; the apps themselves arrive in D002+"
+      },
+      "backend_added_for_d001": [
+        "ocinye_contracts::desktop (widget rules, wallpapers, validation)",
+        "migration 0059_member_desktop_layouts",
+        "Core identity::desktop + GET/PUT /me/desktop + POST /me/desktop/restore",
+        "Core: in_progress filter on GET /workspaces (KPI and counter widgets)",
+        "Workspace controllers/ (door, boot, fail-closed shell, Desktop and widget adapters)",
+        "Workspace i18n: boot component names and the localized sign-in refusal (Code-owned)"
+      ],
+      "visual_parity": {
+        "reference_viewport": "924x540",
+        "auth": "MATCH (identical geometry and size; the reference capture sits 28px lower because the prototype document overflowed 540px)",
+        "shell_top_bar": "MATCH (clock weekday not abbreviated in pt-PT: see CODE_FEEDBACK)",
+        "account_menu": "MATCH_STRUCTURE (opaque instead of glass)",
+        "launcher": "MATCH_D001_SCOPE (grid, search, pins); categories/favourites/recents are FG-008",
+        "desktop_924x540": "MISMATCH from Design CSS: 2 columns under 1100px (reference: 4) and .oc-shell min-height lets the page grow (dock below the fold)",
+        "desktop_1440x900": "MATCH_STRUCTURE (4 columns, 107px Indicators, system default order)",
+        "app_pending": "MATCH_D001_SCOPE",
+        "widget_collapse_button": "DEFECT in Design code (browser button chrome, title shows {name})"
+      },
+      "design_limitations": {
+        "DESKTOP_DARK_DESIGN": "PENDING_DESIGN",
+        "DESKTOP_SYSTEM_DESIGN": "PENDING_DESIGN",
+        "screenshots_other_distributions": "NOT_AVAILABLE (Business/Personal/Education verified by tests, not by reference image)",
+        "screenshots_en_fr_beyond_login": "NOT_AVAILABLE",
+        "tablet_mobile": "NOT_AVAILABLE"
+      },
+      "feedback": "docs/ui/CODE_FEEDBACK.md"
+    }
+  ]
+}

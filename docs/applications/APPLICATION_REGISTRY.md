@@ -1,7 +1,7 @@
 # Registo de aplicações — inventário
 
 > A **fonte** deste inventário é o registo tipado em
-> [`apps/workspace/src/ui/apps.rs`](../../apps/workspace/src/ui/apps.rs); esta
+> [`apps/workspace/src/experience/apps.rs`](../../apps/workspace/src/experience/apps.rs); esta
 > tabela é um retrato dele. Quando divergirem, o código manda — e um teste
 > (`cada_aplicacao_tem_rota_registada`, `…_no_catalogo`, `…_unicos`) impede o
 > registo de ficar incompleto. A rota, o rótulo, o ícone e o **direito** de cada

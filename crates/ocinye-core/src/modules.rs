@@ -33,3 +33,4 @@ pub mod resource;
 pub mod science;
 pub mod search;
 pub mod secrets;
+pub mod terminal;
