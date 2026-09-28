@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 python3 - <<'PY'
-import pathlib, re
+import pathlib, re, subprocess
 
 def ler(padrao):
     return [p.read_text() for p in pathlib.Path().glob(padrao)]
@@ -112,5 +112,9 @@ print(f"funcoes-de-teste     {funcoes}")
 
 print(f"adrs                 {len(list(pathlib.Path('docs/adrs').glob('[0-9]*.md')))}")
 print(f"runbooks             {len([p for p in pathlib.Path('docs/runbooks').glob('*.md') if p.name != 'README.md'])}")
-print(f"readmes              {len([p for p in pathlib.Path().rglob('README.md') if 'target' not in p.parts and '.git' not in p.parts])}")
+# Só os versionados: `rglob` via também as dependências de terceiros que um
+# `npm install` deixa em `apps/workspace/editor/node_modules/` (23 READMEs do
+# ProseMirror), e o número dependia da máquina onde se corria.
+_versionados = subprocess.run(["git", "ls-files"], capture_output=True, text=True, check=True).stdout.splitlines()
+print(f"readmes              {len([p for p in _versionados if pathlib.PurePath(p).name == 'README.md'])}")
 PY

@@ -255,7 +255,7 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED` e em produção** 96 ecrãs em Leptos SSR,
+- **Ocinye Workspace: `IMPLEMENTED` e em produção** 97 ecrãs em Leptos SSR,
   servido de `os.ocinye.com`, atrás da Cloudflare, do mesmo SHA que o Core;
   sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
   pelas permissões que o Core calcula.
@@ -539,7 +539,7 @@ sem que nada falhe.
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
 - **95 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
-  **78 READMEs**, `docs/` povoado — incluindo
+  **55 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -555,7 +555,7 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1843 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1853 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
