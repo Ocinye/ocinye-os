@@ -32,6 +32,9 @@ pub struct Porta {
     pub perfil: Option<InstanceProfile>,
     /// O endereço por onde se chegou, sem esquema (`os.ocinye.com`).
     pub host: Option<String>,
+    /// O estado do Core, se o ecrã o sondou (`boot::probe`). `None` não
+    /// afirma nada; o login recebe-o sempre à parte.
+    pub core: Option<bool>,
 }
 
 impl Porta {
@@ -91,6 +94,23 @@ pub fn identidade(porta: &Porta) -> impl IntoView {
                 {host.map(|h| view! { <span class="ods-auth__host">{h}</span> })}
             </p>
         })}
+    }
+}
+
+/// A etiqueta do cartão (`OCINYE CORE · CONFIGURAR MFA`, `PRIMEIRO ACESSO`…).
+pub fn kicker(texto: &'static str) -> impl IntoView {
+    view! { <p class="ods-auth__kicker">{texto}</p> }
+}
+
+/// Sair a meio de um fluxo de autenticação (MFA, primeiro acesso).
+pub fn saida() -> impl IntoView {
+    view! {
+        <form class="ods-auth__signout" method="post" action="/logout">
+            <button type="submit" class="ods-btn ods-btn--ghost ods-btn--sm">
+                {ods::icone("logout", "")}
+                {crate::i18n::t("auth.sign_out")}
+            </button>
+        </form>
     }
 }
 
@@ -329,7 +349,7 @@ pub fn fim_de_sessao(
     };
     view! {
         <main class="ods-auth" data-part="login">
-            {barra(None)}
+            {barra(porta.core)}
             <div class="ods-auth__stage">
                 {identidade(porta)}
                 <section class="ods-auth__card ods-auth__card--state" data-state=estado>
@@ -366,7 +386,6 @@ pub fn recover(enviado: bool, disponivel: bool, porta: &Porta) -> impl IntoView 
             <span class="ods-auth__icon">{ods::icone("lock", "ods-icon--lg")}</span>
             <h1 class="ods-auth__title">{crate::i18n::t("auth.state.recover_t")}</h1>
             <p class="ods-auth__lead">{crate::i18n::t("auth.state.recover_b")}</p>
-            {(!disponivel).then(ods::a_espera_de_contrato)}
             <form class="ods-auth__form" method="post" action="/password/recover">
                 <label class="ods-field ods-auth__field">
                     <span class="ods-field__label">{crate::i18n::t("login.institutional_address")}</span>
@@ -383,6 +402,12 @@ pub fn recover(enviado: bool, disponivel: bool, porta: &Porta) -> impl IntoView 
                 >
                     {crate::i18n::t("auth.state.send")}
                 </button>
+                {(!disponivel).then(|| view! {
+                    <p class="ods-auth__pending" role="status">
+                        {ods::icone("clock", "")}
+                        <span>{crate::i18n::t("ods.state.pending_contract")}</span>
+                    </p>
+                })}
             </form>
             <a class="ods-auth__link" href="/login">{crate::i18n::t("auth.state.back_login")}</a>
         }
@@ -390,7 +415,7 @@ pub fn recover(enviado: bool, disponivel: bool, porta: &Porta) -> impl IntoView 
     };
     view! {
         <main class="ods-auth" data-part="recover">
-            {barra(None)}
+            {barra(porta.core)}
             <div class="ods-auth__stage">
                 {identidade(porta)}
                 <section class="ods-auth__card ods-auth__card--state">
@@ -447,7 +472,7 @@ pub fn escolher_espaco(espacos: &[EspacoVista], porta: &Porta) -> impl IntoView 
         .collect_view();
     view! {
         <main class="ods-auth" data-part="workspace-pick">
-            {barra(None)}
+            {barra(porta.core)}
             <div class="ods-auth__stage">
                 {identidade(porta)}
                 <section class="ods-auth__card">
@@ -474,6 +499,7 @@ mod tests {
             nome: Some("Example Company".to_owned()),
             perfil: Some(InstanceProfile::Business),
             host: Some("os.example.com".to_owned()),
+            core: Some(true),
         }
     }
 
@@ -625,6 +651,27 @@ mod tests {
     }
 
     #[test]
+    fn toda_a_familia_mostra_o_estado_do_core_quando_se_sabe() {
+        let p = porta_empresa();
+        for html in [
+            fim_de_sessao(FimDeSessao::Expirada, &p, None).to_html(),
+            fim_de_sessao(FimDeSessao::Revogada, &p, None).to_html(),
+            recover(false, false, &p).to_html(),
+        ] {
+            assert!(html.contains("ods-auth__core"));
+            assert!(html.contains("/login/language"));
+            assert!(html.contains(crate::i18n::t("auth.instance_line")));
+        }
+    }
+
+    #[test]
+    fn a_sessao_expirada_nao_inventa_uma_duracao() {
+        let html = fim_de_sessao(FimDeSessao::Expirada, &Porta::default(), None).to_html();
+        assert!(!html.contains("30 minutos"));
+        assert!(!html.contains("inactividade"));
+    }
+
+    #[test]
     fn revogado_nao_oferece_formulario_de_entrada() {
         let html = fim_de_sessao(FimDeSessao::Revogada, &Porta::default(), None).to_html();
         assert!(!html.contains(r#"action="/login""#));
@@ -634,10 +681,12 @@ mod tests {
     #[test]
     fn recuperar_sem_contrato_nao_submete() {
         let html = recover(false, false, &Porta::default()).to_html();
-        assert!(html.contains("ods-state--unavailable"));
+        assert!(html.contains("ods-auth__pending"));
         assert!(html.contains("disabled"));
+        // O aviso vem depois do botão que explica, não entre a frase e o campo.
+        assert!(html.find("ods-auth__pending").unwrap() > html.find("recover__submit").unwrap());
         let ligado = recover(false, true, &Porta::default()).to_html();
-        assert!(!ligado.contains("ods-state--unavailable"));
+        assert!(!ligado.contains("ods-auth__pending"));
     }
 
     #[test]

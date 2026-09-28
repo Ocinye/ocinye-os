@@ -27,18 +27,34 @@ const MIN_LENGTH: usize = 15;
 /// `message` traz a recusa do Core — comprimento, blocklist, reutilização da
 /// credencial temporária — tal como o Core a redigiu.
 pub fn first_access(display_name: &str, email: &str, message: Option<String>) -> impl IntoView {
+    first_access_na_porta(
+        display_name,
+        email,
+        message,
+        &crate::ui::screens::login::Porta::default(),
+    )
+}
+
+/// O primeiro acesso com a moldura completa (instância, perfil, estado do Core).
+pub fn first_access_na_porta(
+    display_name: &str,
+    email: &str,
+    message: Option<String>,
+    porta: &crate::ui::screens::login::Porta,
+) -> impl IntoView {
+    use crate::ui::screens::login::{barra, identidade, kicker, rodape, saida};
     let initials = crate::ui::initials(display_name);
     let name = display_name.to_owned();
     let email = email.to_owned();
 
     view! {
         <main class="ods-auth" data-part="login">
-            {crate::ui::screens::login::barra(None)}
+            {barra(porta.core)}
             <div class="ods-auth__stage">
-            <span class="ods-auth__mark"><img src="/static/ocinye_logo.png" alt="" /></span>
-            <p class="ods-auth__product">{crate::i18n::t("first_access.eyebrow")}</p>
+            {identidade(porta)}
 
             <section class="ods-auth__card">
+                {kicker(crate::i18n::t("first_access.eyebrow"))}
                 <div class="ods-account__head">
                     <span class="ods-avatar" aria-hidden="true">{initials}</span>
                     <div>
@@ -51,7 +67,7 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
 
                 <p class="ods-auth__lead">{crate::i18n::t("first_access.lead")}</p>
 
-                <form method="post" action="/first-access">
+                <form class="ods-auth__form" method="post" action="/first-access">
                     // O gestor de palavras-passe precisa de saber a que conta
                     // pertence a palavra-passe nova; invisível para quem lê.
                     <input
@@ -134,15 +150,8 @@ pub fn first_access(display_name: &str, email: &str, message: Option<String>) ->
                     </button>
                 </form>
 
-                <div class="ods-auth__foot">
-                    <form method="post" action="/logout">
-                        <button type="submit" class="ods-btn ods-btn--ghost ods-btn--sm">
-                            {crate::ui::ods::icone("logout", "")}
-                            {crate::i18n::t("auth.sign_out")}
-                        </button>
-                    </form>
-                    <span class="ods-auth__locale">{format!("{} · {}", crate::i18n::current().as_str().to_uppercase(), crate::i18n::current().bcp47())}</span>
-                </div>
+                {saida()}
+                {rodape("/first-access")}
             </section>
             </div>
         </main>

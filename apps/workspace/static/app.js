@@ -5396,3 +5396,34 @@ document.addEventListener('keydown', (event) => {
     arrancar();
   }
 })();
+
+/* DESIGN · código de seis dígitos (MFA, D8).
+ * O campo único ([data-part="otp-input"]) recebe teclado, colar e o gestor de
+ * palavras-passe; este bloco só espelha os dígitos nas seis células e realça a
+ * seguinte. Apresentação pura: o valor submetido é sempre o do campo. */
+(function () {
+  function sync(box, focused) {
+    const input = box.querySelector('[data-part="otp-input"]');
+    const cells = box.querySelectorAll('[data-part="otp-cell"]');
+    if (!input || !cells.length) return;
+    const digits = (input.value || '').replace(/\D/g, '').slice(0, cells.length);
+    cells.forEach((cell, i) => {
+      cell.textContent = digits[i] || '';
+      if (digits[i]) cell.setAttribute('data-filled', ''); else cell.removeAttribute('data-filled');
+      const active = focused && i === Math.min(digits.length, cells.length - 1);
+      if (active) cell.setAttribute('data-active', ''); else cell.removeAttribute('data-active');
+    });
+  }
+  function init() {
+    document.querySelectorAll('[data-oc="otp"]').forEach((box) => {
+      const input = box.querySelector('[data-part="otp-input"]');
+      if (!input || box.hasAttribute('data-ready')) return;
+      box.setAttribute('data-ready', '');
+      const on = () => sync(box, document.activeElement === input);
+      ['input', 'focus', 'blur', 'keyup', 'change'].forEach((ev) => input.addEventListener(ev, on));
+      on();
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();

@@ -51,7 +51,12 @@
 .ods-auth__icon[data-tone="ok"] { background: rgba(62, 143, 102, .2); color: #86D4AA; }
 
 /* formulário */
-.ods-auth__form { display: flex; flex-direction: column; gap: 12px; margin: 4px 0 0; }
+.ods-auth__form { display: flex; flex-direction: column; gap: 14px; margin: 4px 0 0; }
+.ods-auth__form > .ods-auth__submit { margin-top: 6px; }
+.ods-auth__kicker { margin: 0; font: 500 10.5px var(--ods-font-mono); letter-spacing: var(--ods-tracking-label); text-transform: uppercase; color: var(--ods-gold-500); text-align: center; }
+.ods-auth__signout { margin: 0; align-self: center; }
+.ods-auth__pending { margin: 0; display: flex; align-items: flex-start; justify-content: center; gap: 8px; font: 400 12px/1.5 var(--ods-font-sans); color: var(--ods-auth-text-soft); text-align: left; }
+.ods-auth__pending .ods-icon { flex: none; width: 14px; height: 14px; margin-top: 2px; color: var(--ods-gold-500); }
 .ods-auth .ods-field { gap: 7px; text-align: left; }
 .ods-auth .ods-field__label { font: 500 10px var(--ods-font-mono); letter-spacing: var(--ods-tracking-label); text-transform: uppercase; color: var(--ods-auth-text-faint); }
 .ods-auth .ods-field__hint { font: 400 12px/1.5 var(--ods-font-sans); color: var(--ods-auth-text-faint); }
@@ -68,9 +73,13 @@
 .ods-auth__reveal { flex: none; height: 28px; margin-right: -8px; gap: 6px; color: var(--ods-auth-link); }
 .ods-auth__reveal .ods-icon { width: 14px; height: 14px; }
 .ods-auth__code { font: 500 20px var(--ods-font-mono); letter-spacing: .5em; text-align: center; }
-.ods-auth__rules { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.ods-auth__rules { margin: 2px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; text-align: left; }
 .ods-auth__ack { display: flex; align-items: flex-start; gap: 9px; font: 400 12.5px/1.5 var(--ods-font-sans); color: var(--ods-auth-text-soft); text-align: left; cursor: pointer; }
-.ods-auth .ods-check { flex: none; margin-top: 2px; accent-color: var(--ods-gold-500); }
+.ods-auth .ods-check { -webkit-appearance: none; appearance: none; flex: none; width: 17px; height: 17px; margin: 1px 0 0; border: 1.5px solid rgba(255, 255, 255, .35); border-radius: 5px; background: transparent; background-position: center; background-repeat: no-repeat; background-size: 11px 11px; cursor: pointer; transition: background-color var(--ods-dur-fast), border-color var(--ods-dur-fast); }
+.ods-auth .ods-check:hover { border-color: rgba(255, 255, 255, .6); }
+.ods-auth .ods-check:checked { border-color: var(--ods-navy-400); background-color: var(--ods-navy-400); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23FFFFFF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3.4 8.4 3 3 6.2-6.6'/%3E%3C/svg%3E"); }
+.ods-auth .ods-check:focus-visible { outline: 2px solid var(--ods-gold-500); outline-offset: 2px; }
+.ods-auth .ods-check:disabled { opacity: .45; cursor: not-allowed; }
 
 .ods-auth__forgot { align-self: flex-end; margin-top: -2px; }
 .ods-auth__or { margin: 2px 0; display: flex; align-items: center; gap: 12px; font: 500 10px var(--ods-font-mono); letter-spacing: var(--ods-tracking-label); color: rgba(255, 255, 255, .35); }
@@ -79,15 +88,18 @@
 .ods-auth__secondary[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
 .ods-auth__secondary[aria-disabled="true"]:hover { background: rgba(255, 255, 255, .03); }
 
-/* código de seis dígitos: seis caixas desenhadas, um só campo por cima
-   (gestores de palavras-passe, colar, one-time-code). O passo das caixas é o
-   mesmo dos dígitos: 1ch + espaçamento. */
-.ods-auth__otp { --otp-ls: 3ch; --otp-gap: 8px; position: relative; align-self: center; display: block; font: 500 22px var(--ods-font-mono); width: calc(6 * (1ch + var(--otp-ls)) - var(--otp-gap)); height: 52px; }
-.ods-auth__otp-cells { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(6, calc(1ch + var(--otp-ls) - var(--otp-gap))); column-gap: var(--otp-gap); pointer-events: none; }
-.ods-auth__otp-cells span { border: 1px solid rgba(255, 255, 255, .16); border-radius: var(--ods-auth-radius-field); background: var(--ods-auth-field-bg); transition: border-color var(--ods-dur-fast); }
-.ods-auth__otp:focus-within .ods-auth__otp-cells span { border-color: rgba(224, 167, 49, .55); }
-.ods-auth .ods-auth__otp .ods-auth__code { position: relative; width: 100%; height: 100%; padding: 0 0 0 calc((var(--otp-ls) - var(--otp-gap)) / 2); border: 0; border-radius: 0; background: transparent; box-shadow: none; font: inherit; letter-spacing: var(--otp-ls); text-align: left; caret-color: var(--ods-gold-500); overflow: hidden; }
-.ods-auth .ods-auth__otp .ods-auth__code:focus-visible { box-shadow: none; outline: none; }
+/* código de seis dígitos (D8): as células mostram os dígitos; o campo único
+   fica por cima, transparente, só para teclado, colar e gestor de
+   palavras-passe. Sem JavaScript (sem data-ready) o campo é um campo normal. */
+.ods-auth__otp { position: relative; display: block; width: 100%; }
+.ods-auth__otp-cells { display: none; }
+.ods-auth__otp[data-ready] .ods-auth__otp-cells { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; height: 52px; pointer-events: none; }
+.ods-auth__otp-cells span { display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255, 255, 255, .16); border-radius: var(--ods-auth-radius-field); background: var(--ods-auth-field-bg); font: 500 20px var(--ods-font-mono); color: var(--ods-text-on-navy); transition: border-color var(--ods-dur-fast), box-shadow var(--ods-dur-fast); }
+.ods-auth__otp-cells span[data-active] { border-color: var(--ods-gold-500); box-shadow: 0 0 0 3px rgba(224, 167, 49, .18); }
+.ods-auth .ods-auth__code { font: 500 20px var(--ods-font-mono); letter-spacing: .3em; text-align: center; }
+.ods-auth .ods-auth__otp[data-ready] .ods-auth__code { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; background: transparent; box-shadow: none; color: transparent; -webkit-text-fill-color: transparent; caret-color: transparent; letter-spacing: 0; cursor: text; }
+.ods-auth .ods-auth__otp[data-ready] .ods-auth__code::selection { background: transparent; }
+.ods-auth .ods-auth__otp[data-ready] .ods-auth__code:focus-visible { outline: none; box-shadow: none; }
 
 /* quem estava (sessão expirada) */
 .ods-auth__who { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--ods-auth-radius-field); background: var(--ods-auth-field-bg); border: 1px solid rgba(255, 255, 255, .1); text-align: left; }
@@ -120,7 +132,7 @@
 .ods-auth .ods-btn--ghost { color: var(--ods-auth-link); }
 .ods-auth .ods-btn--ghost:hover { background: rgba(255, 255, 255, .07); color: var(--ods-text-on-navy); }
 .ods-auth .ods-btn--ghost .ods-icon { width: 14px; height: 14px; }
-.ods-auth__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ods-auth__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .ods-auth__link, .ods-auth a:not(.ods-btn):not(.ods-auth__banner-link):not(.ods-ws) { font: 500 12.5px var(--ods-font-sans); color: var(--ods-auth-link); text-decoration: none; }
 .ods-auth__link { align-self: center; }
 .ods-auth a:not(.ods-btn):not(.ods-ws):hover { color: var(--ods-text-on-navy); text-decoration: underline; }
@@ -135,7 +147,8 @@
 .ods-auth__banner-link:hover { text-decoration: underline; }
 
 /* MFA */
-.ods-auth .ods-account__head { display: flex; align-items: center; gap: 12px; text-align: left; }
+.ods-auth .ods-account__head { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0; padding: 0; border: 0; text-align: center; }
+.ods-auth .ods-account__head > div { display: flex; flex-direction: column; align-items: center; }
 .ods-auth .ods-account__name { margin: 0; font: 600 15px var(--ods-font-sans); }
 .ods-auth .ods-account__mail { margin: 3px 0 0; font: 400 12px var(--ods-font-sans); color: var(--ods-auth-text-soft); }
 .ods-auth__qr { margin: 0; align-self: center; padding: 12px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 12px 30px rgba(7, 30, 51, .35); }
@@ -143,6 +156,7 @@
 .ods-auth__secret { display: block; padding: 10px 12px; border-radius: var(--ods-radius-md); background: rgba(7, 30, 51, .45); border: 1px solid rgba(255, 255, 255, .1); font: 500 13px var(--ods-font-mono); letter-spacing: .08em; color: var(--ods-text-on-navy); word-break: break-all; }
 .ods-auth__codes { margin: 0; padding: 12px 14px; border-radius: var(--ods-radius-md); background: rgba(7, 30, 51, .45); border: 1px solid rgba(255, 255, 255, .1); font: 500 13px/1.8 var(--ods-font-mono); color: var(--ods-text-on-navy); columns: 2; text-align: left; }
 .ods-auth__details { text-align: left; display: flex; flex-direction: column; gap: 10px; }
+.ods-auth__details[open] .ods-auth__form { margin-top: 10px; }
 .ods-auth__details > summary { font: 500 12.5px var(--ods-font-sans); color: var(--ods-auth-link); cursor: pointer; list-style: none; }
 .ods-auth__details > summary::-webkit-details-marker { display: none; }
 .ods-auth__details[open] > summary { margin-bottom: 8px; color: var(--ods-text-on-navy); }
@@ -180,12 +194,12 @@
   .ods-auth__card { margin-top: 20px; padding: 22px 18px 16px; }
   .ods-auth__foot { flex-wrap: wrap; }
   .ods-auth__codes { columns: 1; }
-  .ods-auth__otp { --otp-ls: 2.4ch; --otp-gap: 6px; font-size: 20px; height: 48px; }
+  .ods-auth__otp[data-ready] .ods-auth__otp-cells { gap: 6px; height: 48px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ods-auth__core-dot, .ods-boot__bar span { animation: none; }
-  .ods-auth__input, .ods-ws, .ods-auth__otp-cells span { transition: none; }
+  .ods-auth__input, .ods-ws, .ods-auth__otp-cells span, .ods-auth .ods-check { transition: none; }
 }
 
 @media (forced-colors: active) {

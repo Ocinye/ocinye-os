@@ -21,6 +21,8 @@
 //! mesmo segredo (ADR-0107).
 
 use leptos::prelude::*;
+
+use crate::ui::screens::login::{barra, identidade, kicker, rodape, saida, Porta};
 use qrcode::render::svg;
 use qrcode::QrCode;
 
@@ -42,28 +44,26 @@ fn qr_svg(otpauth: &str) -> String {
 }
 
 /// Moldura comum dos ecrãs de MFA: o mesmo fundo e barra do início de sessão.
-fn frame(rotulo: &'static str, message: Option<String>, corpo: AnyView) -> impl IntoView {
-    use crate::ui::screens::login::barra;
+fn frame(
+    rotulo: &'static str,
+    message: Option<String>,
+    corpo: AnyView,
+    porta: &Porta,
+    volta: &'static str,
+) -> impl IntoView {
     view! {
         <main class="ods-auth" data-part="login">
-            {barra(None)}
+            {barra(porta.core)}
             <div class="ods-auth__stage">
-                <span class="ods-auth__mark"><img src="/static/ocinye_logo.png" alt="" /></span>
-                <p class="ods-auth__product">{rotulo}</p>
+                {identidade(porta)}
 
                 <section class="ods-auth__card">
                     <span class="ods-auth__icon" data-tone="gold">{crate::ui::ods::icone("shield", "ods-icon--lg")}</span>
+                    {kicker(rotulo)}
                     {message.map(|text| view! { <p class="ods-field__error" role="alert">{text}</p> })}
                     {corpo}
-                    <div class="ods-auth__foot">
-                        <form method="post" action="/logout">
-                            <button type="submit" class="ods-btn ods-btn--ghost ods-btn--sm">
-                                {crate::ui::ods::icone("logout", "")}
-                                {crate::i18n::t("auth.sign_out")}
-                            </button>
-                        </form>
-                        <span class="ods-auth__locale">{format!("{} · {}", crate::i18n::current().as_str().to_uppercase(), crate::i18n::current().bcp47())}</span>
-                    </div>
+                    {saida()}
+                    {rodape(volta)}
                 </section>
             </div>
         </main>
@@ -80,6 +80,23 @@ pub fn enrollment(
     otpauth_uri: &str,
     manual_key: Option<&str>,
     message: Option<String>,
+) -> impl IntoView {
+    enrollment_na_porta(
+        display_name,
+        otpauth_uri,
+        manual_key,
+        message,
+        &Porta::default(),
+    )
+}
+
+/// O enrolamento com a moldura completa (instância, perfil, estado do Core).
+pub fn enrollment_na_porta(
+    display_name: &str,
+    otpauth_uri: &str,
+    manual_key: Option<&str>,
+    message: Option<String>,
+    porta: &Porta,
 ) -> impl IntoView {
     let svg = qr_svg(otpauth_uri);
     let nome = display_name.to_owned();
@@ -131,12 +148,12 @@ pub fn enrollment(
             }
         }}
 
-        <form method="post" action="/mfa/confirm">
+        <form class="ods-auth__form" method="post" action="/mfa/confirm">
             <label class="ods-field">
                 <span class="ods-field__label">{crate::i18n::t("mfa.six_digit_code")}</span>
-                <span class="ods-auth__otp">
-                    <span class="ods-auth__otp-cells" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></span>
-                    <input class="ods-input ods-auth__code"
+                <span class="ods-auth__otp" data-oc="otp">
+                    <span class="ods-auth__otp-cells" aria-hidden="true"><span data-part="otp-cell"></span><span data-part="otp-cell"></span><span data-part="otp-cell"></span><span data-part="otp-cell"></span><span data-part="otp-cell"></span><span data-part="otp-cell"></span></span>
+                    <input class="ods-input ods-auth__code" data-part="otp-input"
                     id="mfa-code"
                     name="code"
                     type="text"
@@ -154,7 +171,13 @@ pub fn enrollment(
     }
     .into_any();
 
-    frame(crate::i18n::t("mfa.frame.setup"), message, corpo)
+    frame(
+        crate::i18n::t("mfa.frame.setup"),
+        message,
+        corpo,
+        porta,
+        "/mfa",
+    )
 }
 
 /// Ecrã dos códigos de recuperação: mostrados uma única vez.
@@ -163,6 +186,11 @@ pub fn enrollment(
 /// não fecha (ADR-0107). Copiar e guardar acontecem no browser; nada volta ao
 /// Core.
 pub fn recovery_codes(codes: &[String]) -> impl IntoView {
+    recovery_codes_na_porta(codes, &Porta::default())
+}
+
+/// Os códigos de recuperação com a moldura completa.
+pub fn recovery_codes_na_porta(codes: &[String], porta: &Porta) -> impl IntoView {
     let linhas = codes.join("\n");
 
     let corpo = view! {
@@ -184,7 +212,7 @@ pub fn recovery_codes(codes: &[String]) -> impl IntoView {
             </button>
         </div>
 
-        <form method="post" action="/mfa/acknowledge">
+        <form class="ods-auth__form" method="post" action="/mfa/acknowledge">
             <label class="ods-auth__ack">
                 <input type="checkbox" class="ods-check" name="acknowledged" value="1" required />
                 <span>{crate::i18n::t("mfa.saved_confirm")}</span>
@@ -196,7 +224,13 @@ pub fn recovery_codes(codes: &[String]) -> impl IntoView {
     }
     .into_any();
 
-    frame(crate::i18n::t("mfa.frame.recovery"), None, corpo)
+    frame(
+        crate::i18n::t("mfa.frame.recovery"),
+        None,
+        corpo,
+        porta,
+        "/mfa",
+    )
 }
 
 /// Ecrã de desafio: o login corrente de uma identidade já enrolada.
@@ -204,6 +238,15 @@ pub fn recovery_codes(codes: &[String]) -> impl IntoView {
 /// O campo do código de autenticador e o de recuperação são secções distintas e
 /// rotuladas, para que ninguém escreva um no outro sem perceber.
 pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
+    challenge_na_porta(display_name, message, &Porta::default())
+}
+
+/// O desafio com a moldura completa.
+pub fn challenge_na_porta(
+    display_name: &str,
+    message: Option<String>,
+    porta: &Porta,
+) -> impl IntoView {
     let nome = display_name.to_owned();
 
     let corpo = view! {
@@ -212,12 +255,12 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
             <p class="ods-account__mail">{crate::i18n::t("mfa.confirm")}</p>
         </div></div>
 
-        <form method="post" action="/mfa/challenge">
+        <form class="ods-auth__form" method="post" action="/mfa/challenge">
             <label class="ods-field">
                 <span class="ods-field__label">{crate::i18n::t("mfa.authenticator_code")}</span>
-                <span class="ods-auth__otp">
-                    <span class="ods-auth__otp-cells" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></span>
-                    <input class="ods-input ods-auth__code"
+                <span class="ods-auth__otp" data-oc="otp">
+                    <span class="ods-auth__otp-cells" aria-hidden="true"><span data-part="otp-cell"></span><span data-part="otp-cell"></span><span data-part="otp-cell"></span><span data-part="otp-cell"></span><span data-part="otp-cell"></span><span data-part="otp-cell"></span></span>
+                    <input class="ods-input ods-auth__code" data-part="otp-input"
                     id="mfa-code"
                     name="code"
                     type="text"
@@ -236,7 +279,7 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
         <details class="ods-auth__details" data-part="mfa__fallback">
             <summary>{crate::i18n::t("mfa.no_authenticator")}</summary>
             <p class="ods-field__hint">{crate::i18n::t("mfa.recovery_hint")}</p>
-            <form method="post" action="/mfa/recovery">
+            <form class="ods-auth__form" method="post" action="/mfa/recovery">
                 <label class="ods-field">
                     <span class="ods-field__label">{crate::i18n::t("mfa.recovery_code")}</span>
                     <input class="ods-input"
@@ -255,7 +298,13 @@ pub fn challenge(display_name: &str, message: Option<String>) -> impl IntoView {
     }
     .into_any();
 
-    frame(crate::i18n::t("mfa.frame.challenge"), message, corpo)
+    frame(
+        crate::i18n::t("mfa.frame.challenge"),
+        message,
+        corpo,
+        porta,
+        "/mfa",
+    )
 }
 
 #[cfg(test)]

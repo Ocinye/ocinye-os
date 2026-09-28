@@ -21,12 +21,14 @@ A implementação visual canónica do Ocinye OS, escrita pelo Claude Design no p
 | Escolher espaço | `escolher_espaco(&[EspacoVista], &Porta)` | D9 | ligações `/workspaces/{id}`; «lembrar» sem contrato | sim |
 | Recuperar palavra-passe | `recover(enviado, disponivel, &Porta)` | D10 | G-26 · `disponivel=false` até ao POST | sim |
 | Sessão expirada · acesso revogado | `fim_de_sessao(FimDeSessao, &Porta, Option<QuemEstava>)` | D12, D13 | G-27 · `/login?reason=…` | sim |
-| Segundo factor (seis caixas + um campo) | `ui/screens/mfa.rs` · `.ods-auth__otp` | D8 | ligado (`/mfa/*`) | sim |
+| Segundo factor · configurar (QR), códigos, desafio | `ui/screens/mfa.rs` · `.ods-auth__otp` | D8, D8a, D8b | ligado (`/mfa/*`) · **só super admin** (sessão privilegiada, ADR-0107); membros não passam por estes ecrãs | sim |
 | Primeiro acesso | `ui/screens/first_access.rs` | D11 | ligado | sim |
 | Arranque | `ui/screens/boot.rs` | moldura D7 | ligado | sim |
 | Alternador de palavra-passe | `static/app.js` · bloco `DESIGN · alternador` | D11 | visual puro | sim |
 
 ### Para o Claude Code ligar
+- `Porta` ganhou `core: Option<bool>`: preencher com `boot::probe(...).state.may_hand_off()` em todos os ecrãs da família (se construíres `Porta` com literal, acrescenta o campo ou usa `..Default::default()`).
+- MFA e primeiro acesso: `enrollment_na_porta`, `recovery_codes_na_porta`, `challenge_na_porta`, `first_access_na_porta` recebem `&Porta`. As funções antigas mantêm-se e delegam com `Porta::default()`.
 - `routes.rs` `login`/`login_submit`: construir `Porta { nome, perfil, host }` a partir de `/api/v1/instance/branding` e do cabeçalho `Host`, e chamar `login_na_porta`.
 - `GET /login?reason=expired|revoked` → `fim_de_sessao`.
 - `GET /password/recover` → `recover(false, false, &porta)` até existir o POST.
@@ -35,7 +37,7 @@ A implementação visual canónica do Ocinye OS, escrita pelo Claude Design no p
 
 ### Diferenças conscientes face ao protótipo
 - Rótulo do campo de identidade: «Endereço institucional» (`login.institutional_address`) e não «Endereço de correio ou utilizador». O Core só aceita o endereço (ADR-0106) e o campo é `type="email"`: prometer «ou utilizador» levaria a uma recusa sem explicação.
-- MFA: as seis caixas são desenho e o código entra num só `<input autocomplete="one-time-code">` por cima delas. Só CSS: o passo das caixas é o passo dos dígitos (`1ch + letter-spacing`). O realce da caixa seguinte, se se quiser, é comportamento (`app.js`); por agora, o conjunto fica dourado com foco.
+- MFA: as seis células mostram os dígitos (`[data-part="otp-cell"]`), espelhados pelo bloco `DESIGN · código de seis dígitos` do `app.js`; o campo único `[data-part="otp-input"]` fica por cima, transparente, e é o que se submete. Sem JavaScript, o campo aparece como um campo normal.
 
 ## Fatias seguintes
 2. Casca + Desktop + barra de aplicações + lançador — `shell.rs`, `home.rs`
