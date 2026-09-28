@@ -119,7 +119,7 @@ flowchart LR
 ## 6. Inventário de aplicações
 
 O registo autoritativo é **dados Rust estáticos**:
-`APPLICATIONS` em [`apps/workspace/src/ui/apps.rs`](../../apps/workspace/src/ui/apps.rs),
+`APPLICATIONS` em [`apps/workspace/src/experience/apps.rs`](../../apps/workspace/src/experience/apps.rs),
 23 entradas, cada uma apoiada num `Screen` tipado. Não há activação por
 instalação: todas as aplicações existem sempre, e a visibilidade decide-se por
 permissão e, para quatro delas, por relevância de módulo.

@@ -52,8 +52,12 @@ fn so_o_runtime_js_pergunta_ao_ambiente() {
             }
         }
     }
-    // Zero examinados seria um guarda que não viu nada.
-    assert!(examinados >= 1, "nenhum JavaScript do Workspace examinado");
+    // Depois do apagamento da UI, `runtime.js` é o único JavaScript do
+    // Workspace, e a metade JS deste guarda não tem o que examinar até o código
+    // do Claude Design chegar. A metade Rust continua a ter, e é ela que prova
+    // que o guarda viu alguma coisa.
+    let _ = examinados;
+    let mut fontes_rust = 0;
 
     let fontes = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut pilha = vec![fontes];
@@ -63,6 +67,7 @@ fn so_o_runtime_js_pergunta_ao_ambiente() {
             if p.is_dir() {
                 pilha.push(p);
             } else if p.extension().is_some_and(|e| e == "rs") {
+                fontes_rust += 1;
                 let texto = std::fs::read_to_string(&p).expect("ler");
                 for proibido in ["__TAURI__", "__TAURI_INTERNALS__"] {
                     if texto.contains(proibido) {
@@ -73,6 +78,11 @@ fn so_o_runtime_js_pergunta_ao_ambiente() {
         }
     }
 
+    // Zero examinados seria um guarda que não viu nada.
+    assert!(
+        fontes_rust >= 1,
+        "nenhuma fonte Rust do Workspace examinada"
+    );
     assert!(
         violacoes.is_empty(),
         "detecção de runtime fora de static/runtime.js (ADR-0611):\n  {}",
@@ -126,15 +136,4 @@ fn a_tabela_da_web_e_a_do_contrato() {
         js.contains(&format!("const CAPABILITY_VERSION = {CAPABILITY_VERSION};")),
         "a versão da declaração diverge"
     );
-}
-
-/// O `runtime.js` carrega antes do `app.js` em todas as páginas.
-#[test]
-fn o_runtime_carrega_antes_da_camada_de_interaccao() {
-    let casca = include_str!("../src/ui/mod.rs");
-    let runtime = casca
-        .find("/static/runtime.js")
-        .expect("runtime.js na casca");
-    let app = casca.find("/static/app.js").expect("app.js na casca");
-    assert!(runtime < app, "runtime.js tem de carregar antes de app.js");
 }

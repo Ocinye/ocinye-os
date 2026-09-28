@@ -26,8 +26,8 @@
 //! registo esconde o que o membro não pode alcançar; a autoridade continua no
 //! Core, que recusa quem escrever a rota à mão (`CLAUDE.md` §4, §59).
 
-use crate::ui::icon::Icon;
-use crate::ui::shell::{screen_module, screen_permission, CoreStatus, Screen, Viewer};
+use crate::experience::icon::Icon;
+use crate::experience::navigation::{screen_module, screen_permission, CoreStatus, Screen, Viewer};
 
 /// A taxonomia de categorias — metadados de produto, nunca texto traduzido.
 ///
@@ -664,29 +664,5 @@ mod tests {
                 app.id()
             );
         }
-    }
-
-    /// Uma aplicação que a Instância desactivou não aparece no lançador, nem
-    /// fixada — e as outras continuam lá.
-    #[test]
-    fn uma_aplicacao_inactiva_nao_se_oferece() {
-        let mut viewer = crate::ui::render_tests::viewer_completo();
-        let antes = visible_to(&viewer, CoreStatus::Ok);
-        assert!(antes.iter().any(|a| a.id() == "notes"));
-
-        viewer.inactive_apps = vec!["notes".to_owned()];
-        let depois = visible_to(&viewer, CoreStatus::Ok);
-        assert!(!depois.iter().any(|a| a.id() == "notes"));
-        assert_eq!(depois.len(), antes.len() - 1, "só a inactiva saiu");
-
-        let fixadas = pinned_visible(
-            &["notes".to_owned(), "files".to_owned()],
-            &viewer,
-            CoreStatus::Ok,
-        );
-        assert_eq!(
-            fixadas.iter().map(|a| a.id()).collect::<Vec<_>>(),
-            vec!["files"]
-        );
     }
 }

@@ -4,6 +4,6 @@
 # É o caso mais silencioso de todos: nada falhou, e nada foi observado. Emite a
 # prova esperada de propósito, para que o que o recuse seja a exigência de
 # observações e não outra defesa.
-echo "test result: ok. 5 passed"
+echo "test result: ok. 2 passed"
 echo "  observações: 0"
 exit 0

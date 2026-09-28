@@ -11,6 +11,15 @@
 # Uso: scripts/install-e2e.sh PASTA_DO_PACOTE
 set -euo pipefail
 
+# NOT_RUN enquanto não houver interface. A prova conduz a Instância instalada
+# por um browser (`apps/workspace/tests/installed_instance.rs`), e esse teste saiu
+# com o apagamento da UI (2026-09-28). Correr o resto e dizer verde seria provar
+# menos do que o nome promete; volta quando o código do Claude Design chegar.
+if [ ! -f "$(git rev-parse --show-toplevel)/apps/workspace/tests/installed_instance.rs" ]; then
+    echo "NOT_RUN: a viagem de browser da Instância instalada não existe (UI apagada; ver docs/ui/UI_WIPE_REPORT.md)" >&2
+    exit 2
+fi
+
 PACOTE="${1:?indique a pasta do pacote (scripts/release-bundle.sh)}"
 [ -r "$PACOTE/RELEASE" ] || { echo "não é um pacote: $PACOTE" >&2; exit 2; }
 PACOTE="$(cd "$PACOTE" && pwd)"

@@ -28,10 +28,10 @@ efeito secundário de um `use`.
     Arestas de produção estão fechadas por omissão. Arestas só de teste podem
     existir apenas quando explicitamente classificadas e justificadas.
 
-O `ocinye-workspace` depende do `ocinye-core-server` **em testes**: o harness de
-browser levanta um Core a sério, em processo, para provar que uma pessoa
-consegue usar o produto. Isso é legítimo e não atravessa fronteira nenhuma — o
-binário enviado não leva o Core consigo.
+O `ocinye-workspace` dependia do `ocinye-core-server` **em testes**: o harness
+de browser levantava um Core a sério, em processo, para provar que uma pessoa
+consegue usar o produto. Saiu com a UI (2026-09-28); quando voltar, a aresta
+volta a ser legítima — o binário enviado não leva o Core consigo.
 
 O que este guarda recusa é a promoção silenciosa. Se alguém mover
 `ocinye-core` de `dev-dependencies` para `dependencies`, o nome da aresta
@@ -118,11 +118,11 @@ DEV = {
     # alvos de teste, e só para uma função que o binário não contém. O portão
     # «Isolamento do fornecedor de teste» confirma-o em cada corrida.
     "ocinye-core-server": {"ocinye-core"},
-    "ocinye-workspace": {
-        "ocinye-core",
-        "ocinye-core-server",
-        "ocinye-observability",
-    },
+    # O harness de browser levantava um Core em processo e por isso ligava
+    # `ocinye-core` e `ocinye-core-server` em teste. Saiu com a UI a 2026-09-28
+    # (`docs/ui/UI_WIPE_REPORT.md`), e as duas arestas com ele; voltam quando
+    # voltar a haver viagens.
+    "ocinye-workspace": {"ocinye-observability"},
 }
 
 
@@ -144,17 +144,8 @@ EXPERIENCE_RUNTIME = {
     "anyhow",
     "axum",
     "chrono",
-    "leptos",
     "ocinye-contracts",
     "ocinye-observability",
-    # Renderiza o Markdown das respostas do Prompt. Presentation pura: recebe
-    # texto e devolve marcação, percorrendo os eventos do parser e emitindo só a
-    # árvore autorizada (`ui::markdown`); não alcança estado institucional, e o
-    # HTML em bruto é escapado, nunca injectado.
-    "pulldown-cmark",
-    # Renderiza o QR do enrolamento de MFA para SVG. Presentation pura: recebe
-    # o texto do otpauth e devolve marcação; não alcança estado institucional.
-    "qrcode",
     "rand",
     "reqwest",
     "serde",

@@ -15,6 +15,15 @@
 #      CLASSE = "cpus:memória", por exemplo "2:4g" "4:8g" (por omissão as duas)
 set -euo pipefail
 
+# NOT_RUN enquanto não houver interface. A prova conduz a Instância instalada
+# por um browser (`apps/workspace/tests/installed_instance.rs`), e esse teste saiu
+# com o apagamento da UI (2026-09-28). Correr o resto e dizer verde seria provar
+# menos do que o nome promete; volta quando o código do Claude Design chegar.
+if [ ! -f "$(git rev-parse --show-toplevel)/apps/workspace/tests/installed_instance.rs" ]; then
+    echo "NOT_RUN: a viagem de browser da Instância instalada não existe (UI apagada; ver docs/ui/UI_WIPE_REPORT.md)" >&2
+    exit 2
+fi
+
 PACOTE="$(cd "${1:?indique a pasta do pacote}" && pwd)"; shift
 CLASSES=("$@"); [ ${#CLASSES[@]} -gt 0 ] || CLASSES=("2:4g" "4:8g")
 PORTO="${OCINYE_INSTALL_E2E_PORT:-18443}"

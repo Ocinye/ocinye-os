@@ -14,6 +14,15 @@
 # Uso: scripts/upgrade-e2e.sh PACOTE_A PACOTE_B PACOTE_C
 set -euo pipefail
 
+# NOT_RUN enquanto não houver interface. A prova conduz a Instância instalada
+# por um browser (`apps/workspace/tests/installed_instance.rs`), e esse teste saiu
+# com o apagamento da UI (2026-09-28). Correr o resto e dizer verde seria provar
+# menos do que o nome promete; volta quando o código do Claude Design chegar.
+if [ ! -f "$(git rev-parse --show-toplevel)/apps/workspace/tests/installed_instance.rs" ]; then
+    echo "NOT_RUN: a viagem de browser da Instância instalada não existe (UI apagada; ver docs/ui/UI_WIPE_REPORT.md)" >&2
+    exit 2
+fi
+
 A="$(cd "${1:?pacote A}" && pwd)"; B="$(cd "${2:?pacote B}" && pwd)"; C="$(cd "${3:?pacote C}" && pwd)"
 PORTO="${OCINYE_INSTALL_E2E_PORT:-18443}"
 DOMINIO="os.instalacao.test"

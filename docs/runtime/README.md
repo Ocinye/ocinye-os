@@ -15,7 +15,7 @@ cujo anfitrião arranca a casca). São runtimes, não perfis de Instância.
 **Pertence aqui:** o modelo de runtimes, a fronteira de capacidades, a casca
 Desktop, a PWA, o posto dedicado. **Não pertence:** o Browser (em
 [`../browser/`](../browser/README.md)) nem o visual (pacote D15 em
-[`../ui/`](../ui/)).
+[`../ui/`](../ui/README.md)).
 
 Decisões: [ADR-0018](../adrs/0018-universal-web-access-and-runtime-classes.md),
 [ADR-0611](../adrs/0611-runtime-capability-boundary.md),

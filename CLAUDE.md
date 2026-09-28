@@ -255,10 +255,15 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED` e em produção** 97 ecrãs em Leptos SSR,
-  servido de `os.ocinye.com`, atrás da Cloudflare, do mesmo SHA que o Core;
-  sessão BFF com os tokens no servidor, navegação e menu de criação filtrados
-  pelas permissões que o Core calcula.
+- **Ocinye Workspace: `IMPLEMENTED` como BFF, sem interface nesta árvore.** A
+  UI foi apagada por inteiro a 2026-09-28, à espera do código do Claude Design
+  ([apagamento](docs/ui/UI_WIPE_REPORT.md)): ecrãs, shell, CSS, `app.js`, o
+  editor de notas, o compositor, o Quick Look e a página do Terminal. Ficam a
+  sessão BFF com os tokens no servidor, as rotas, as acções contra o Core e o
+  que serve bytes ou JSON; **80 páginas** respondem `503 interface_pending`.
+  Onde esta secção descreve uma superfície humana, descreve o que existia até
+  `2923bae` e o que a produção ainda corre — não esta árvore. Produção continua
+  em `os.ocinye.com`, com a UI que tinha.
 - **Gestor de Aplicações: `IMPLEMENTED` e em produção** (§45-A,
   [docs/applications](docs/applications/README.md)). As aplicações são entidades
   de primeira classe: um **registo autoritativo** único alimenta o **lançador**
@@ -539,7 +544,7 @@ sem que nada falhe.
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
 - **95 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
-  **55 READMEs**, `docs/` povoado — incluindo
+  **53 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
 - `README.md`, `.env.example`, `Cargo.lock`, CI (`.github/workflows/ci.yml`) e
@@ -555,17 +560,16 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1855 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1338 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **678 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **558 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
-  mão. Incluem quatro guardas que percorrem todos os ecrãs e falham se algum
-  elemento interactivo ficar sem contrato definido, um guarda que falha se
+  mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
   completo contra um fornecedor determinístico — **sem GPU** —, e a Provider
   Conformance Suite.
@@ -576,6 +580,12 @@ sem que nada falhe.
   `./scripts/verify.sh` passou a incluir a auditoria de dependências.
 
 **Continua a não existir:**
+
+- **Nenhuma interface nesta árvore.** Não há ecrã nenhum: o Ocinye OS não se
+  usa por um browser a partir deste código até chegar o do Claude Design. As
+  viagens de browser e as guardas de ecrã saíram com a UI, e as provas de
+  instalação, actualização, restauro e hardware terminam em `NOT_RUN`
+  ([apagamento](docs/ui/UI_WIPE_REPORT.md)).
 
 - **Nenhum runtime além da Web.** Não há PWA, casca Ocinye Desktop, posto
   Dedicated, `ocinye://` nem Ocinye Browser: estão decididos (§45-B,
@@ -1190,7 +1200,7 @@ crates/ocinye-core              crates/ocinye-capabilities
 services/core-server            services/worker
 services/node-agent             services/conversion-runner
 wasm/capabilities/bibtex-import
-design    docs    infra    migrations    scripts
+docs    infra    migrations    scripts
 ```
 
 As capacidades WASM vivem fora da workspace do host: compilam para
@@ -1742,10 +1752,10 @@ azul Ocinye preenchida com primeiro plano branco. **Não** se usa sublinhado
 dourado nem qualquer `border-bottom`/`box-shadow` como indicador de navegação
 activa, e nunca há um segundo indicador a competir. Foco, hover e indisponível são
 visualmente distintos do activo. O dourado continua a ser acento (CTA, pontos,
-estados, foco), mas não é o indicador de navegação activa. A especificação vive em
-[`design/README.md` §7.7](design/README.md), e a semântica (`aria-current` para
-rota/secção, `aria-selected` para tabs) tem guarda em
-`ui::components::tabs::tests`.
+estados, foco), mas não é o indicador de navegação activa. A especificação e a
+guarda da semântica (`aria-current` para rota/secção, `aria-selected` para tabs)
+saíram com o apagamento da UI (2026-09-28, [`docs/ui/`](docs/ui/README.md)); a
+regra continua a valer para o código que o Claude Design entregar.
 
 ---
 

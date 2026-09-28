@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use axum::extract::{DefaultBodyLimit, Form, Multipart, Path, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
-use axum::response::{Html, IntoResponse, Redirect, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::Deserialize;
@@ -19,9 +19,8 @@ use tower_http::services::ServeDir;
 use uuid::Uuid;
 
 use crate::api::{self, ApiFailure};
+use crate::experience;
 use crate::session::{self, Session};
-use crate::ui;
-use crate::ui::shell::{Crumb, ResolucaoSessao, Screen, Viewer};
 use crate::WorkspaceState;
 
 /// Todos os caminhos que o Workspace serve.
@@ -236,7 +235,7 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/resources", get(meus_recursos))
         // Correio
         // ── Mensagens ───────────────────────────────────────────────────
-        .route(ui::screens::messaging::ROUTE, get(messaging))
+        .route("/messages", get(messaging))
         .route("/messages/{conversation}", get(messaging_conversation))
         .route("/messages/start", post(messaging_start))
         .route("/messages/assist", post(messaging_assist))
@@ -637,6 +636,20 @@ pub fn router(state: WorkspaceState) -> Router {
         .with_state(state)
 }
 
+/// A resposta de todas as páginas enquanto a interface não existe.
+///
+/// A UI foi apagada por inteiro (ramo `chore/ui-wipe`) à espera do código do
+/// Claude Design. As rotas, a sessão e as acções continuam; o que uma pessoa
+/// veria responde `503` com um código estável, sem HTML.
+fn interface_pending() -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        "interface_pending",
+    )
+        .into_response()
+}
+
 /// Resolve o idioma do pedido e corre o resto dentro do seu escopo.
 ///
 /// A língua ambiente vem **só** de uma escolha explícita — o cookie `oc_locale`,
@@ -868,18 +881,7 @@ async fn same_origin_only(
         path = %request.uri().path(),
         "refused a state-changing request from another origin"
     );
-    (
-        StatusCode::FORBIDDEN,
-        page(
-            "Pedido recusado",
-            ui::screens::login::login_na_porta(
-                true,
-                Some("Este pedido não veio do Ocinye Workspace.".to_owned()),
-                &ui::screens::login::Porta::default(),
-            ),
-        ),
-    )
-        .into_response()
+    (StatusCode::FORBIDDEN, interface_pending()).into_response()
 }
 
 /// Métodos que podem alterar estado.
@@ -943,11 +945,6 @@ async fn health() -> &'static str {
 struct Member {
     session: Session,
     correlation_id: String,
-    /// A zona em que este membro está a olhar para o sistema.
-    ///
-    /// Vem do browser. Sem ela, cai em UTC — que é a resposta menos errada
-    /// quando não se sabe onde a pessoa está, e não uma preferência.
-    zona: ocinye_contracts::temporal::TimeZoneName,
 }
 
 /// Para onde vai quem não tem sessão (D12).
@@ -973,7 +970,6 @@ fn current_member(state: &WorkspaceState, headers: &HeaderMap) -> Option<Member>
     Some(Member {
         session,
         correlation_id: Uuid::new_v4().to_string(),
-        zona: ui::tempo::zona_declarada(session::zone_from_cookies(cookie).as_deref()),
     })
 }
 
@@ -1012,495 +1008,40 @@ async fn optional(state: &WorkspaceState, member: &Member, path: &str) -> Value 
     .unwrap_or(Value::Null)
 }
 
-/// O contexto da shell: quem está a ver, o que pode, e se o Core responde.
-/// Se o Intelligence Plane consegue servir alguma coisa, segundo o Core.
-///
-/// Ausência lê-se como indisponível. O contrário — assumir disponível quando
-/// não se confirmou — poria um campo activo à frente de alguém para depois
-/// falhar (`docs/ui-core-contract/`).
-fn inference_available(status: &Value) -> bool {
-    status
-        .get("available")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-}
-
-/// Como classificar o resultado do `/me` que estabelece a identidade da sessão.
-///
-/// Separada de [`viewer`] por ser a decisão de segurança do fail-closed, e a
-/// única aqui que merece prova isolada: um erro técnico **não** é uma sessão
-/// normal. `Ok` resolve; `401` é o caminho de autenticação; tudo o resto —
-/// 5xx, `503`, tempo esgotado, rede, erro de base de dados — deixa a identidade
-/// por estabelecer, e a shell falha fechado.
-fn resolucao_de(me: &Result<Value, crate::api::ApiFailure>) -> ResolucaoSessao {
-    match me {
-        Ok(_) => ResolucaoSessao::Resolvida,
-        Err(crate::api::ApiFailure::Unauthorised) => ResolucaoSessao::NaoAutenticada,
-        Err(_) => ResolucaoSessao::Indeterminada,
-    }
-}
-
-#[cfg(test)]
-mod resolucao_de_sessao {
-    use super::resolucao_de;
-    use crate::api::ApiFailure;
-    use crate::ui::shell::ResolucaoSessao;
-    use serde_json::json;
-
-    #[test]
-    fn uma_resposta_com_corpo_resolve_a_identidade() {
-        let me = Ok(json!({ "identity_kind": "privileged", "roles": ["platform_admin"] }));
-        assert_eq!(resolucao_de(&me), ResolucaoSessao::Resolvida);
-    }
-
-    #[test]
-    fn quatrocentos_e_um_e_o_caminho_de_autenticacao() {
-        let me = Err(ApiFailure::Unauthorised);
-        assert_eq!(resolucao_de(&me), ResolucaoSessao::NaoAutenticada);
-    }
-
-    /// O defeito que isto fecha: um erro técnico ao ler a identidade não pode
-    /// virar uma sessão normal. Todos falham fechado como indeterminados.
-    #[test]
-    fn uma_falha_tecnica_nunca_e_uma_sessao_normal() {
-        for falha in [
-            ApiFailure::Failed("a base de dados recusou".to_owned()),
-            ApiFailure::Unavailable(None),
-            ApiFailure::Forbidden,
-            ApiFailure::Denied,
-            ApiFailure::Rejected("x".to_owned()),
-        ] {
-            let me: Result<serde_json::Value, _> = Err(falha);
-            assert_eq!(
-                resolucao_de(&me),
-                ResolucaoSessao::Indeterminada,
-                "uma falha técnica foi tratada como sessão resolvida"
-            );
-        }
-    }
-}
-
-async fn viewer(state: &WorkspaceState, member: &Member) -> Viewer {
-    // A agenda e as notificações vão em paralelo com o resto: a barra superior
-    // desenha-se em cada página, e uma consulta em série acrescentaria latência
-    // a todas elas.
-    let agora = chrono::Utc::now();
-    // O `/me` estabelece a identidade da sessão, e o seu erro **não se engole**.
-    // As outras consultas alimentam a barra e degradam-se para vazio sem
-    // consequência; a identidade não: uma falha técnica ao resolvê-la não é
-    // prova de que a sessão é normal, e por isso é classificada, não perdida.
-    let (me_result, organisation, temporal, notificacoes, pins) = tokio::join!(
-        api::get::<Value>(
-            state,
-            &member.session.access_token,
-            &member.correlation_id,
-            "/api/v1/me",
-        ),
-        optional(state, member, "/api/v1/organisation"),
-        calendar_agenda(
-            state,
-            member,
-            agora - chrono::Duration::hours(12),
-            agora + chrono::Duration::days(14),
-        ),
-        optional(state, member, "/api/v1/notifications"),
-        optional(state, member, "/api/v1/me/apps/pins"),
-    );
-    let resolucao = resolucao_de(&me_result);
-    // Uma identidade indeterminada é o estado que o fail-closed existe para
-    // apanhar. Regista-se com o id de correlação para que uma recorrência do
-    // erro técnico do `/me` seja rastreável até ao pedido, sem engolir nada.
-    if resolucao == ResolucaoSessao::Indeterminada {
-        if let Err(erro) = &me_result {
-            tracing::warn!(
-                correlation_id = %member.correlation_id,
-                error = %erro,
-                "identidade da sessão indeterminada: /me falhou tecnicamente; a apresentar superfície fail-closed"
-            );
-        }
-    }
-    let me = me_result.unwrap_or(Value::Null);
-    // O estado do Core vem do `/ready`, e nunca de um pedido de domínio.
-    //
-    // Isto era `!organisation.is_null()`: se a consulta de organização
-    // respondesse, o Core estaria bem. Um pedido de domínio responde por razões
-    // suas, e uma delas não é a prontidão institucional — a base podia estar de
-    // pé com a compatibilidade quebrada, e a topbar diria «CORE OK».
-    //
-    // `Degraded` é `Ok` aqui, e isso não é indulgência: é o que o distintivo
-    // diz. Ele diz **CORE**, e `decide()` no Core devolve `Blocked` antes de
-    // chegar a `Degraded`, portanto `Degraded` significa, por construção, que
-    // todos os componentes críticos estão disponíveis e que algum opcional não
-    // está. Um Core inteiro e operacional não fica «limitado» por não haver
-    // SMTP configurado nem nenhum nó de computação registado.
-    //
-    // A prontidão da instalação continua a dizer a verdade: `/ready` responde
-    // `degraded` e nomeia os componentes. São duas afirmações diferentes sobre
-    // coisas diferentes, e passam a ser ditas em separado.
-    let core_status = {
-        use crate::boot::BootState;
-        match crate::boot::probe(state).await.state {
-            BootState::Ready | BootState::Degraded => ui::shell::CoreStatus::Ok,
-            BootState::Blocked => ui::shell::CoreStatus::Unavailable,
-            BootState::Unreachable | BootState::Uninitialized | BootState::Checking => {
-                ui::shell::CoreStatus::Silent
-            }
-        }
-    };
-
-    // Erro e vazio dizem-se de maneiras diferentes, também aqui.
-    let (temporal_items, temporal_failure) = match temporal {
-        Ok(payload) => (ui::screens::calendar::items_from(&payload), None),
-        Err(erro) => (Vec::new(), Some(erro.to_string())),
-    };
-    let unread = notificacoes
-        .get("unread")
-        .and_then(Value::as_u64)
-        .unwrap_or(0) as usize;
-
-    // Sem resposta do Core, a lista fica vazia e a navegação encolhe ao mínimo.
-    // É o comportamento certo: não conseguir confirmar o que alguém pode não é
-    // razão para lhe mostrar tudo (`CLAUDE.md` §31).
-    let capabilities = me
-        .get("capabilities")
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default();
-
-    // Os módulos relevantes, como o Core os projectou. Sem resposta dele a
-    // lista fica vazia e a navegação encolhe — a mesma regra das capacidades.
-    let modules: Vec<String> = me
-        .get("modules")
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter(|m| m.get("relevant").and_then(Value::as_bool) == Some(true))
-                .filter_map(|m| m.get("module").and_then(Value::as_str))
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default();
-
-    // As aplicações fixadas na barra lateral. `pinned: null` (ou sem resposta)
-    // quer dizer que o membro nunca escolheu — aplica-se o conjunto por omissão
-    // do registo; uma lista (mesmo vazia) é a escolha do membro, respeitada tal
-    // como veio. A filtragem por visibilidade acontece ao desenhar a barra.
-    let pinned = pins
-        .get("pinned")
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::to_owned)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_else(|| {
-            ui::apps::default_pins_for(organisation.get("profile").and_then(Value::as_str))
-        });
-
-    // As aplicações que a Instância tem inactivas (ADR-0014), como o Core as
-    // disse. Sem resposta, nenhuma: as outras regras já encolhem a navegação.
-    let inactive_apps = me
-        .get("inactive_applications")
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default();
-
-    // O perfil da Instância, do mesmo `/organisation` que dá o nome.
-    let perfil = organisation
-        .get("profile")
-        .and_then(Value::as_str)
-        .map(str::to_owned);
-
-    Viewer {
-        resolucao,
-        pinned,
-        inactive_apps,
-        perfil,
-        zona: member.zona,
-        name: member.session.display_name.clone(),
-        // As duas verdades, ambas do Core.
-        //
-        // Sem resposta dele, `false` nos dois: a apresentação privilegiada é
-        // uma afirmação sobre a sessão, e não se afirma o que não se sabe. O
-        // caminho seguro aqui é o silêncio — uma sessão normal a mais é um
-        // incómodo; uma sessão privilegiada apresentada como normal é o estado
-        // que isto existe para impedir, e por isso o Core em silêncio leva a
-        // pessoa ao arranque antes de chegar aqui.
-        sessao_privilegiada: me
-            .get("identity_kind")
-            .and_then(Value::as_str)
-            .is_some_and(|kind| kind == "privileged"),
-        administra: me
-            .get("roles")
-            .and_then(Value::as_array)
-            .is_some_and(|roles| {
-                roles
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .any(|r| r == "platform_admin")
-            }),
-        // O endereço vem do Core, que é onde o registo vive. A sessão local
-        // serve de recurso: é aquele com que a pessoa entrou, e é o mesmo.
-        email: me
-            .get("email")
-            .and_then(Value::as_str)
-            .filter(|value| !value.is_empty())
-            .map(str::to_owned)
-            .or_else(|| {
-                let entrada = member.session.email.trim();
-                (!entrada.is_empty()).then(|| entrada.to_owned())
-            }),
-        session_expires_in: member
-            .session
-            .expires_at
-            .checked_duration_since(std::time::Instant::now()),
-        // Sem resposta do Core ficam as iniciais. Não saber qual é a escolha
-        // não é razão para inventar uma, e as iniciais não dependem de nada
-        // para estarem certas.
-        avatar: me
-            .get("avatar")
-            .and_then(|value| serde_json::from_value(value.clone()).ok())
-            .unwrap_or(ocinye_contracts::AvatarChoice::Initials),
-        // Sem resposta, o nome do produto — nunca o de uma organização, que
-        // seria afirmar a instância de outra pessoa (ADR-0013).
-        organisation: organisation
-            .get("name")
-            .and_then(Value::as_str)
-            .unwrap_or("Ocinye OS")
-            .to_owned(),
-        core_status,
-        temporal: temporal_items,
-        temporal_failure,
-        unread,
-        capabilities,
-        modules,
-    }
-}
-
-/// Renderiza um documento.
-fn page(title: &str, body: impl leptos::IntoView + 'static) -> Response {
-    Html(ui::document(title, body)).into_response()
-}
-
-/// Renderiza um ecrã dentro da shell.
-fn shell_page(
-    title: &str,
-    viewer: &Viewer,
-    active: Screen,
-    trail: Vec<Crumb>,
-    content: impl leptos::IntoView + 'static,
-) -> Response {
-    // Falha fechado sobre a identidade da sessão. A shell normal só se desenha
-    // quando o Core disse o que a sessão é. Se a identidade ficou por resolver,
-    // não se apresenta a shell autenticada — a ausência de resposta não é prova
-    // de sessão normal.
-    match viewer.resolucao {
-        // Uma aplicação que a Instância desactivou não abre, mesmo por rota
-        // escrita à mão: a shell diz que não está activa, e o conteúdo não se
-        // desenha (ADR-0014). A API da aplicação é da fronteira do Core.
-        ResolucaoSessao::Resolvida if viewer.inactive_apps.iter().any(|id| id == active.id()) => {
-            page(
-                title,
-                ui::shell::shell(
-                    viewer,
-                    active,
-                    trail,
-                    title,
-                    ui::screens::notice::application_inactive(),
-                ),
-            )
-        }
-        ResolucaoSessao::Resolvida => page(
-            title,
-            ui::shell::shell(viewer, active, trail, title, content),
-        ),
-        // A sessão não está autenticada: caminho normal de início de sessão.
-        ResolucaoSessao::NaoAutenticada => Redirect::to("/login").into_response(),
-        // A identidade não pôde ser estabelecida por falha técnica: superfície
-        // neutra, nunca a shell normal.
-        ResolucaoSessao::Indeterminada => page(title, ui::shell::identidade_indeterminada()),
-    }
-}
-
 /// Traduz uma recusa do Core em algo sobre que o membro possa agir.
 fn failure_response(failure: &ApiFailure) -> Response {
-    match failure {
-        // Uma sessão expirada é um acontecimento normal, não um erro a explicar.
-        ApiFailure::Unauthorised => Redirect::to("/login").into_response(),
-
-        // Recusa e inexistência têm o mesmo aspecto de propósito: revelar que
-        // um recurso existe mas está fechado já é informação (ADR-0100).
-        //
-        // Antes desta auditoria isto renderizava o **ecrã de login**, pelo que
-        // um membro com sessão válida via um formulário de autenticação e
-        // concluía que a sua sessão tinha terminado (briefing §46, §116).
-        ApiFailure::Denied => (
-            StatusCode::NOT_FOUND,
-            page("Não encontrado", ui::screens::notice::not_found()),
-        )
-            .into_response(),
-
-        // Uma recusa de autorização não é um erro inesperado, e não deve
-        // aparecer como tal: o membro precisa de saber que é uma questão de
-        // acesso e o que fazer a seguir (briefing §46, §106).
-        ApiFailure::Forbidden => (
-            StatusCode::FORBIDDEN,
-            page("Sem acesso", ui::screens::notice::access_denied()),
-        )
-            .into_response(),
-
-        // Uma dependência em falta não é uma avaria, e a página não pode
-        // dizer «erro» a quem precisa de saber que a instalação não tem uma
-        // peça de pé. A capacidade existe; falta o serviço.
-        ApiFailure::Unavailable(razao) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            page(
-                "Indisponível",
-                ui::screens::notice::unavailable(razao.clone()),
-            ),
-        )
-            .into_response(),
-
-        // A Instância não tem a aplicação activa (ADR-0014, ADR-0015): é
-        // configuração, e não uma peça em falta, e diz-se com o aviso próprio.
-        ApiFailure::ApplicationInactive => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            page(
-                crate::i18n::t("notice.app_inactive.title"),
-                ui::screens::notice::application_inactive(),
-            ),
-        )
-            .into_response(),
-
-        // Uma recusa por conteúdo é uma resposta, e não uma avaria. Quem
-        // chega aqui vindo de um formulário devia tê-la apanhado antes, para
-        // a mostrar ao lado do campo; esta é a rede para quem não o fez.
-        ApiFailure::Rejected(message) => (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            page("Pedido recusado", ui::screens::notice::rejected(message)),
-        )
-            .into_response(),
-
-        // Um conflito de concorrência é uma resposta, não uma avaria: o estado
-        // mudou por baixo do pedido, e a pessoa precisa de recarregar, não de
-        // uma referência de log.
-        ApiFailure::Conflict(message) => (
-            StatusCode::CONFLICT,
-            page("Conflito", ui::screens::notice::conflict(message)),
-        )
-            .into_response(),
-
-        ApiFailure::Failed(message) => {
-            // O detalhe vai para o log, com o identificador que o correlaciona;
-            // ao membro vai a referência e nada mais (briefing §47, §69).
-            let reference = Uuid::new_v4().to_string();
-            tracing::error!(
-                reference = %reference,
-                detail = %message,
-                "a Core call failed"
-            );
-            (
-                StatusCode::BAD_GATEWAY,
-                page("Erro", ui::screens::notice::failure(&reference)),
-            )
-                .into_response()
+    // Sem interface, a recusa diz-se pelo estado HTTP e por um código estável.
+    // Recusa e inexistência continuam a ter o mesmo aspecto (ADR-0100), e o
+    // detalhe de uma avaria vai para o log, nunca para a resposta.
+    let (estado, codigo) = match failure {
+        ApiFailure::Unauthorised => return Redirect::to("/login").into_response(),
+        ApiFailure::Denied => (StatusCode::NOT_FOUND, "not_found"),
+        ApiFailure::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
+        ApiFailure::Unavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, "unavailable"),
+        ApiFailure::ApplicationInactive => {
+            (StatusCode::SERVICE_UNAVAILABLE, "application_inactive")
         }
-    }
+        ApiFailure::Rejected(_) => (StatusCode::UNPROCESSABLE_ENTITY, "rejected"),
+        ApiFailure::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
+        ApiFailure::Failed(message) => {
+            let reference = Uuid::new_v4().to_string();
+            tracing::error!(reference = %reference, detail = %message, "a Core call failed");
+            (StatusCode::BAD_GATEWAY, "failed")
+        }
+    };
+    (estado, codigo).into_response()
 }
 
-/// Caminho que o Workspace não serve.
-///
-/// Sem isto, o Axum devolvia um 404 de corpo vazio: uma página em branco com o
-/// aspecto do framework e não do Ocinye OS (briefing §75).
+/// Sem página: a interface foi retirada.
 async fn not_found() -> Response {
-    (
-        StatusCode::NOT_FOUND,
-        page(
-            crate::i18n::t("error.not_found.title"),
-            ui::screens::notice::not_found(),
-        ),
-    )
-        .into_response()
+    (StatusCode::NOT_FOUND, "not_found").into_response()
 }
 
 // ── Arranque ─────────────────────────────────────────────────────────────
 
-/// O que o arranque recebe de quem o pede.
-#[derive(Deserialize)]
-struct BootQuery {
-    /// Para onde seguir quando o Core deixar.
-    #[serde(default)]
-    return_to: Option<String>,
-}
-
-/// O arranque institucional.
-///
-/// # Porque é que isto é uma rota, e não um estado dentro de outra página
-///
-/// Porque o arranque acontece antes de haver Workspace. Uma superfície que
-/// vivesse dentro do Workspace obrigaria a renderizar o Workspace primeiro e a
-/// escondê-lo depois — e um flash de conteúdo protegido é conteúdo protegido
-/// mostrado.
-///
-/// # A prontidão é apurada aqui, no servidor
-///
-/// Quando esta página chega ao browser, a decisão já foi tomada. Não há
-/// percentagens a subir nem etapas a acender: o que se vê é o que o Core disse.
-async fn boot_screen(
-    State(state): State<WorkspaceState>,
-    Query(query): Query<BootQuery>,
-) -> Response {
-    let destino = query
-        .return_to
-        .as_deref()
-        .and_then(|d| crate::boot::safe_return_target(d, ROUTES))
-        .unwrap_or_else(|| "/".to_owned());
-
-    let outcome = crate::boot::probe(&state).await;
-    let segue = outcome.state.may_hand_off();
-
-    let corpo = ui::screens::boot::boot(&outcome, &destino);
-    let cabeca = ui::screens::boot::handoff_meta(&outcome, &destino);
-    let html = ui::document_com_cabeca("A iniciar", corpo, cabeca);
-
-    let mut resposta = Html(html).into_response();
-
-    // O arranque nunca é guardado. Uma prontidão em cache é uma resposta sobre
-    // um sistema que já não existe.
-    resposta.headers_mut().insert(
-        axum::http::header::CACHE_CONTROL,
-        axum::http::HeaderValue::from_static("no-store, no-cache, must-revalidate"),
-    );
-
-    // O marcador só é gravado quando houve por onde seguir. Gravá-lo num
-    // arranque bloqueado faria a tentativa seguinte saltar a apresentação de um
-    // problema que continua lá.
-    if segue {
-        if let Ok(valor) = axum::http::HeaderValue::from_str(&crate::boot::marker_cookie(
-            state.config.cookie_secure,
-        )) {
-            resposta
-                .headers_mut()
-                .append(axum::http::header::SET_COOKIE, valor);
-        }
-    }
-
-    resposta
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn boot_screen() -> Response {
+    interface_pending()
 }
 
 /// Macro de guarda: sem sessão, vai para o login.
@@ -1527,193 +1068,19 @@ macro_rules! member_or_login {
 
 // ── Pessoal ──────────────────────────────────────────────────────────────
 
-async fn home(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let (workspaces, tasks, activity, intelligence, units, ideas, projects, datasets) = tokio::join!(
-        optional(&state, &member, "/api/v1/workspaces?page_size=6"),
-        optional(
-            &state,
-            &member,
-            "/api/v1/tasks?mine=true&open_only=true&page_size=8"
-        ),
-        optional(&state, &member, "/api/v1/activity?page_size=8"),
-        optional(&state, &member, "/api/v1/ai/status"),
-        optional(&state, &member, "/api/v1/units"),
-        // Cada contador pede o seu tipo, tal como a lista que abre. Ambos
-        // chamavam `/workspaces?page_size=1` sem filtro, pelo que mostravam
-        // sempre o mesmo total — invisível só enquanto ambos eram zero.
-        optional(&state, &member, "/api/v1/workspaces?kind=idea&page_size=1"),
-        optional(
-            &state,
-            &member,
-            "/api/v1/workspaces?kind=project&page_size=1"
-        ),
-        optional(&state, &member, "/api/v1/datasets?page_size=1"),
-    );
-
-    let kpis: Vec<ui::components::Kpi> = [
-        kpi(
-            crate::i18n::t("home.kpi.units"),
-            count_of(&units),
-            crate::i18n::t("home.kpi.units.hint"),
-            "/units",
-        ),
-        kpi(
-            crate::i18n::t("home.kpi.ideas"),
-            count_of(&ideas),
-            crate::i18n::t("home.kpi.ideas.hint"),
-            "/ideas",
-        ),
-        kpi(
-            crate::i18n::t("home.kpi.projects"),
-            count_of(&projects),
-            crate::i18n::t("home.kpi.projects.hint"),
-            "/projects",
-        ),
-        kpi(
-            crate::i18n::t("home.kpi.datasets"),
-            count_of(&datasets),
-            crate::i18n::t("home.kpi.datasets.hint"),
-            "/datasets",
-        ),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let content = ui::screens::home::home(ui::screens::home::Dashboard {
-        greeting_key: ui::screens::home::greeting_for(local_hour()),
-        name: viewer.name.clone(),
-        can_create_idea: viewer.can(ocinye_contracts::Permission::IdeasCreate),
-        kpis,
-        workspaces,
-        tasks,
-        activity,
-        intelligence,
-        perfil: viewer.perfil.clone(),
-        agenda: viewer.temporal.clone(),
-        agenda_falhou: viewer.temporal_failure.is_some(),
-        zona: viewer.zona,
-    });
-
-    shell_page(
-        crate::i18n::t("nav.home"),
-        &viewer,
-        Screen::Home,
-        Vec::new(),
-        content,
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn home() -> Response {
+    interface_pending()
 }
 
-/// A hora local, para a saudação.
-///
-/// Deriva de UTC porque o servidor não conhece o fuso do membro; um erro de
-/// saudação é preferível a inventar um fuso.
-fn local_hour() -> u32 {
-    chrono::Utc::now()
-        .format("%H")
-        .to_string()
-        .parse()
-        .unwrap_or(9)
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn my_work() -> Response {
+    interface_pending()
 }
 
-/// A contagem de uma colecção, quando o Core a devolveu.
-///
-/// `None` quando não devolveu — o que acontece tanto por indisponibilidade como
-/// por recusa de acesso. Distinguir isto de zero importa: `optional` engole a
-/// recusa e devolve `Null`, e apresentar `0` diria «não existe nenhum» a quem
-/// apenas não pode ver (briefing §57).
-fn count_of(payload: &Value) -> Option<String> {
-    if payload.is_null() {
-        return None;
-    }
-    payload
-        .get("total")
-        .and_then(Value::as_i64)
-        .or_else(|| {
-            payload
-                .as_array()
-                .map(|a| i64::try_from(a.len()).unwrap_or(0))
-        })
-        .map(|count| count.to_string())
-}
-
-/// Um indicador da Home.
-///
-/// O cartão aparece sempre. Quando o Core não respondeu à contagem mostra `—`
-/// e diz-se indisponível, em vez de desaparecer: um cartão que some não
-/// informa ninguém de que algo falhou. E nunca mostra `0`, que afirmaria uma
-/// consulta bem-sucedida sem registos — indistinguível de um acervo vazio.
-///
-/// Antes devolvia `None` quando o Core não respondeu, porque um cartão que
-/// diz `0` sobre uma colecção que o membro não pode ver é uma estatística
-/// inventada, e um cartão que liga a um ecrã que lhe será recusado é uma
-/// ligação morta (briefing §19, §52).
-fn kpi(label: &str, value: Option<String>, hint: &str, href: &str) -> Option<ui::components::Kpi> {
-    Some(ui::components::Kpi {
-        label: label.to_owned(),
-        value,
-        // O Core ainda não expõe variação entre períodos. Mostrar um delta
-        // inventado seria pior do que mostrar nenhum.
-        delta: None,
-        hint: hint.to_owned(),
-        href: href.to_owned(),
-    })
-}
-
-async fn my_work(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let (tasks, workspaces, activity) = tokio::join!(
-        optional(
-            &state,
-            &member,
-            "/api/v1/tasks?mine=true&open_only=true&page_size=50"
-        ),
-        // `mine=true`: o cartão promete «investigação em que participo», e ver
-        // um ambiente não é participar nele. Sem o recorte, esta secção
-        // mostrava tudo o que o membro alcança — que é outra coisa, e mais.
-        optional(&state, &member, "/api/v1/workspaces?mine=true&page_size=20"),
-        optional(&state, &member, "/api/v1/activity?page_size=20"),
-    );
-    // O dia civil de «hoje» é o do fuso que o Core diz (D13, Q-28); sem ele,
-    // não se agrupa — fica a tabela única.
-    let me = optional(&state, &member, "/api/v1/me").await;
-    let fuso = me
-        .get("timezone")
-        .and_then(Value::as_str)
-        .and_then(|z| ocinye_contracts::temporal::TimeZoneName::try_from(z.to_owned()).ok());
-    let hoje = fuso.map(|z| ui::tempo::hoje_civil(chrono::Utc::now(), z));
-
-    let content = ui::screens::my_work::my_work(&tasks, &workspaces, &activity, hoje);
-    shell_page(
-        crate::i18n::t("nav.my_work"),
-        &viewer,
-        Screen::MyWork,
-        Vec::new(),
-        content,
-    )
-}
-
-/// «Meus Recursos» — a quota de armazenamento do próprio membro e como se chega
-/// a ela. O Core resolve e autoriza a partir da sessão; o ecrã só apresenta.
-async fn meus_recursos(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let me = optional(&state, &member, "/api/v1/resources/me").await;
-
-    let content = ui::screens::resources::resources(&me);
-    shell_page(
-        crate::i18n::t("nav.resources"),
-        &viewer,
-        Screen::Resources,
-        Vec::new(),
-        content,
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn meus_recursos() -> Response {
+    interface_pending()
 }
 
 // ── Correio ──────────────────────────────────────────────────────────────
@@ -1722,32 +1089,6 @@ async fn meus_recursos(State(state): State<WorkspaceState>, headers: HeaderMap) 
 // o serviço de correio**. `assist` devolve texto e volta a desenhar o composer;
 // não tem forma de enviar, e não é por convenção — é por não chamar a rota que
 // envia (briefing §15).
-
-/// O que uma vista de correio precisa, recolhido em paralelo.
-///
-/// Estado e caixas são pedidos ao mesmo tempo porque nenhum depende do outro, e
-/// a diferença é visível: são duas viagens ao Core em cada ecrã de correio.
-async fn mail_context(
-    state: &WorkspaceState,
-    member: &Member,
-    mailbox: Option<String>,
-    folder: String,
-    query: String,
-) -> ui::screens::mail::MailView {
-    let (status, mailboxes) = tokio::join!(
-        optional(state, member, "/api/v1/mail/status"),
-        optional(state, member, "/api/v1/mail/mailboxes"),
-    );
-
-    ui::screens::mail::MailView {
-        status,
-        sync_notice: None,
-        mailboxes,
-        active_mailbox: mailbox,
-        folder,
-        query,
-    }
-}
 
 #[derive(Deserialize)]
 struct SyncForm {
@@ -1797,153 +1138,19 @@ async fn mail_sync(
     .into_response()
 }
 
-#[derive(Deserialize)]
-struct MailQuery {
-    #[serde(default)]
-    folder: Option<String>,
-    #[serde(default)]
-    q: Option<String>,
-    /// O resultado de uma actualização acabada de pedir, para o mostrar.
-    #[serde(default)]
-    sync: Option<String>,
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn mail() -> Response {
+    interface_pending()
 }
 
-async fn mail(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(query): Query<MailQuery>,
-) -> Response {
-    mail_screen(state, headers, None, query, None).await
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn mail_mailbox() -> Response {
+    interface_pending()
 }
 
-async fn mail_mailbox(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(mailbox_id): Path<String>,
-    Query(query): Query<MailQuery>,
-) -> Response {
-    mail_screen(state, headers, Some(mailbox_id), query, None).await
-}
-
-/// O ecrã de correio, com ou sem mensagem aberta.
-async fn mail_screen(
-    state: WorkspaceState,
-    headers: HeaderMap,
-    mailbox_id: Option<String>,
-    query: MailQuery,
-    open: Option<Value>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let folder = query.folder.unwrap_or_else(|| "inbox".to_owned());
-    let term = query.q.unwrap_or_default();
-
-    let mut view = mail_context(&state, &member, mailbox_id, folder.clone(), term.clone()).await;
-    view.sync_notice = query.sync;
-
-    // Sem caixa resolvida não há lista a pedir. Pedi-la com um identificador
-    // vazio produziria uma recusa do Core que não diz nada ao membro.
-    let messages = match view
-        .mailboxes
-        .as_array()
-        .and_then(|boxes| {
-            view.active_mailbox.as_ref().map_or_else(
-                || boxes.first(),
-                |wanted| {
-                    boxes.iter().find(|mailbox| {
-                        mailbox.get("id").and_then(Value::as_str) == Some(wanted.as_str())
-                    })
-                },
-            )
-        })
-        .and_then(|mailbox| mailbox.get("id"))
-        .and_then(Value::as_str)
-    {
-        Some(id) => {
-            let path = if term.trim().is_empty() {
-                format!("/api/v1/mail/mailboxes/{id}/messages?folder={folder}")
-            } else {
-                format!(
-                    "/api/v1/mail/mailboxes/{id}/messages?folder={folder}&q={}",
-                    urlencoding_minimal(term.trim())
-                )
-            };
-            optional(&state, &member, &path).await
-        }
-        None => Value::Null,
-    };
-
-    shell_page(
-        crate::i18n::t("mail.title"),
-        &viewer,
-        Screen::Mail,
-        Vec::new(),
-        ui::screens::mail::mail(&viewer, &view, &messages, open.as_ref(), None),
-    )
-}
-
-#[derive(Deserialize)]
-struct MessageQuery {
-    /// Se o membro pediu explicitamente o conteúdo remoto desta mensagem.
-    #[serde(default)]
-    remote: Option<String>,
-    /// Marca a re-abertura logo após «Marcar como não lida»: nesse caso, abrir
-    /// **não** volta a marcar como lida, para não desfazer a acção explícita.
-    /// Uma abertura normal (a partir da lista) não o traz, e marca como lida.
-    #[serde(default)]
-    unread: Option<String>,
-}
-
-async fn mail_message(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(message_id): Path<Uuid>,
-    Query(query): Query<MessageQuery>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    // Nunca por omissão: carregar conteúdo remoto informa quem enviou a
-    // mensagem de que ela foi aberta (briefing §12).
-    let allow_remote = query.remote.as_deref() == Some("1");
-    // Abrir marca como lida — a transição de abertura —, excepto quando é a
-    // re-abertura imediata a seguir a «Marcar como não lida» (`?unread=1`), que
-    // não pode desfazer a acção explícita. Uma abertura vinda da lista marca.
-    let mark_read = query.unread.as_deref() != Some("1");
-    let path = format!(
-        "/api/v1/mail/messages/{message_id}?allow_remote={allow_remote}&mark_read={mark_read}"
-    );
-
-    let opened = match required(&state, &member, &path).await {
-        Ok(message) => message,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let mailbox_id = opened
-        .get("message")
-        .and_then(|message| message.get("mailbox_id"))
-        .and_then(Value::as_str)
-        .map(str::to_owned);
-
-    let folder = opened
-        .get("message")
-        .and_then(|message| message.get("folder"))
-        .and_then(Value::as_str)
-        .unwrap_or("inbox")
-        .to_owned();
-
-    mail_screen(
-        state,
-        headers,
-        mailbox_id,
-        MailQuery {
-            folder: Some(folder),
-            q: None,
-            sync: None,
-        },
-        Some(opened),
-    )
-    .await
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn mail_message() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -1994,255 +1201,9 @@ async fn mail_flags(
     }
 }
 
-#[derive(Deserialize)]
-struct ComposeQuery {
-    #[serde(default)]
-    mailbox: Option<String>,
-    #[serde(default)]
-    reply: Option<Uuid>,
-    /// Um rascunho a retomar. Faz o compositor sobreviver a um recarregamento e
-    /// abre um rascunho guardado tal como ficou.
-    #[serde(default)]
-    draft: Option<Uuid>,
-}
-
-/// A caixa por baixo do compositor: as mensagens da caixa activa, para o
-/// correio não desaparecer enquanto se escreve.
-///
-/// O compositor é uma janela sobre o correio, e não uma página à parte — abrir,
-/// gerar texto e falhar um envio mostram todos a mesma janela sobre a mesma
-/// caixa. Esta função é o que essas três rotas partilham.
-async fn caixa_por_baixo(
-    state: &WorkspaceState,
-    member: &Member,
-    view: &ui::screens::mail::MailView,
-) -> Value {
-    let caixa = view
-        .mailboxes
-        .as_array()
-        .and_then(|caixas| {
-            view.active_mailbox.as_ref().map_or_else(
-                || caixas.first(),
-                |querida| {
-                    caixas.iter().find(|caixa| {
-                        caixa.get("id").and_then(Value::as_str) == Some(querida.as_str())
-                    })
-                },
-            )
-        })
-        .and_then(|caixa| caixa.get("id"))
-        .and_then(Value::as_str)
-        .map(str::to_owned);
-
-    match caixa {
-        Some(id) => {
-            optional(
-                state,
-                member,
-                &format!("/api/v1/mail/mailboxes/{id}/messages?folder=inbox"),
-            )
-            .await
-        }
-        None => Value::Null,
-    }
-}
-
-/// A assinatura institucional a pré-visualizar no compositor.
-///
-/// `None` quando o membro a desligou nas preferências, ou quando não pôde ser
-/// obtida: o compositor nunca afirma uma assinatura que não vai sair. O HTML é
-/// a mesma projecção determinística que o envio acrescenta (ADR-0414).
-/// Um tamanho em bytes, legível. Unidades binárias, como uma quota.
-fn bytes_legiveis(n: i64) -> String {
-    if n <= 0 {
-        return "0 B".to_owned();
-    }
-    const UNIDADES: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
-    let mut tamanho = n as f64;
-    let mut unidade = 0;
-    while tamanho >= 1024.0 && unidade < UNIDADES.len() - 1 {
-        tamanho /= 1024.0;
-        unidade += 1;
-    }
-    if unidade == 0 {
-        format!("{n} B")
-    } else {
-        format!("{tamanho:.1} {}", UNIDADES[unidade])
-    }
-}
-
-/// Os anexos já guardados num rascunho, para os mostrar no compositor.
-async fn anexos_do_rascunho(
-    state: &WorkspaceState,
-    member: &Member,
-    draft_id: &str,
-) -> Vec<ui::screens::mail::ComposeAttachmentView> {
-    let lista = optional(
-        state,
-        member,
-        &format!("/api/v1/mail/drafts/{draft_id}/attachments"),
-    )
-    .await;
-    lista
-        .as_array()
-        .map(|items| {
-            items
-                .iter()
-                .map(|a| ui::screens::mail::ComposeAttachmentView {
-                    id: a
-                        .get("id")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_owned(),
-                    filename: a
-                        .get("filename")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default()
-                        .to_owned(),
-                    size: bytes_legiveis(a.get("size_bytes").and_then(Value::as_i64).unwrap_or(0)),
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-async fn assinatura_para_previsualizar(state: &WorkspaceState, member: &Member) -> Option<String> {
-    let preferencias = optional(state, member, "/api/v1/mail/preferences").await;
-    let activa = preferencias
-        .get("official_signature")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-    if !activa {
-        return None;
-    }
-
-    optional(state, member, "/api/v1/mail/signature")
-        .await
-        .get("html")
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-}
-
-async fn compose(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(query): Query<ComposeQuery>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let view = mail_context(
-        &state,
-        &member,
-        query.mailbox.clone(),
-        "inbox".to_owned(),
-        String::new(),
-    )
-    .await;
-
-    let mut draft = ui::screens::mail::ComposeDraft {
-        mailbox_id: query.mailbox.clone().unwrap_or_default(),
-        signature_html: assinatura_para_previsualizar(&state, &member).await,
-        ..Default::default()
-    };
-
-    // Retomar um rascunho guardado — o que torna o compositor à prova de um
-    // recarregamento e o que a lista de Rascunhos abre. Vem inteiro do Core,
-    // resolvido pela sessão; um identificador que não seja do membro dá 404 e
-    // o compositor abre vazio, sem revelar que o rascunho existe.
-    if let Some(draft_id) = query.draft {
-        let path = format!("/api/v1/mail/drafts/{draft_id}");
-        if let Ok(saved) = required(&state, &member, &path).await {
-            let join = |chave: &str| -> String {
-                saved
-                    .get(chave)
-                    .and_then(Value::as_array)
-                    .map(|items| {
-                        items
-                            .iter()
-                            .filter_map(Value::as_str)
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    })
-                    .unwrap_or_default()
-            };
-            draft.draft_id = Some(draft_id.to_string());
-            draft.mailbox_id = saved
-                .get("mailbox_id")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned();
-            draft.to = join("to_addresses");
-            draft.cc = join("cc_addresses");
-            draft.bcc = join("bcc_addresses");
-            draft.subject = saved
-                .get("subject")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned();
-            draft.body = saved
-                .get("body")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned();
-            draft.body_html = saved
-                .get("body_html")
-                .and_then(Value::as_str)
-                .map(str::to_owned);
-            draft.reply_to = saved
-                .get("in_reply_to_id")
-                .and_then(Value::as_str)
-                .map(str::to_owned);
-            draft.attachments = anexos_do_rascunho(&state, &member, &draft_id.to_string()).await;
-        }
-    }
-
-    // Uma resposta traz o destinatário e o assunto já preenchidos, e a citação
-    // do que se responde. Nada disto é gerado: é o que a mensagem original diz.
-    if let Some(reply_to) = query.reply {
-        let path = format!("/api/v1/mail/messages/{reply_to}?allow_remote=false");
-        if let Ok(original) = required(&state, &member, &path).await {
-            let message = original.get("message").cloned().unwrap_or(Value::Null);
-            let subject = message
-                .get("subject")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-
-            draft.to = message
-                .get("from_address")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned();
-            draft.subject = if subject.to_lowercase().starts_with("re:") {
-                subject.to_owned()
-            } else {
-                format!("Re: {subject}")
-            };
-            draft.reply_to = Some(reply_to.to_string());
-            if draft.mailbox_id.is_empty() {
-                draft.mailbox_id = message
-                    .get("mailbox_id")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_owned();
-            }
-        }
-    }
-
-    // O correio por baixo, e o compositor por cima.
-    //
-    // Era uma página só com o formulário. Escrever passou a acontecer a olhar
-    // para a caixa — que é como se escreve: a confirmar um nome, a reler o que
-    // se responde, a ver o que entretanto chegou.
-    let messages = caixa_por_baixo(&state, &member, &view).await;
-
-    shell_page(
-        "Nova mensagem",
-        &viewer,
-        Screen::Mail,
-        vec![Crumb::to(Screen::Mail)],
-        ui::screens::mail::mail(&viewer, &view, &messages, None, Some(&draft)),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn compose() -> Response {
+    interface_pending()
 }
 
 /// O formulário do composer, tal como chega das duas rotas que o submetem.
@@ -2265,105 +1226,15 @@ struct ComposeForm {
     #[serde(default)]
     html_body: String,
     #[serde(default)]
-    reply_to: Option<String>,
-    #[serde(default)]
-    action: String,
-    #[serde(default)]
-    instruction: String,
-    #[serde(default)]
     confirmed: Option<String>,
 }
 
-impl ComposeForm {
-    /// O rascunho tal como está, para o devolver intacto ao ecrã.
-    fn draft(&self) -> ui::screens::mail::ComposeDraft {
-        ui::screens::mail::ComposeDraft {
-            draft_id: self.draft_id.clone(),
-            mailbox_id: self.mailbox_id.clone(),
-            to: self.to.clone(),
-            cc: self.cc.clone(),
-            bcc: self.bcc.clone(),
-            subject: self.subject.clone(),
-            body: self.body.clone(),
-            body_html: Some(self.html_body.clone()).filter(|html| !html.is_empty()),
-            // Os anexos vêm do Core (a rota que re-desenha carrega-os); não
-            // viajam no formulário.
-            attachments: Vec::new(),
-            reply_to: self.reply_to.clone(),
-            instruction: self.instruction.clone(),
-            confirmation: None,
-            error: None,
-            generated: false,
-            // A assinatura não vem do formulário: é lida do Core pela rota que
-            // volta a desenhar o compositor, para não viajar no cliente.
-            signature_html: None,
-        }
-    }
-}
-
-/// Gera texto e volta a desenhar o composer.
+/// Página retirada no apagamento da UI; espera o Claude Design.
 ///
-/// **Não envia.** Não chama `/api/v1/mail/send`, e o resultado aterra num campo
-/// editável que exige um segundo acto humano (briefing §15).
-async fn assist(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<ComposeForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let view = mail_context(
-        &state,
-        &member,
-        Some(form.mailbox_id.clone()),
-        "inbox".to_owned(),
-        String::new(),
-    )
-    .await;
-
-    let body = serde_json::json!({
-        "action": form.action,
-        "instruction": form.instruction,
-        "draft_body": form.body,
-        "source_message_id": form.reply_to,
-    });
-
-    let mut draft = form.draft();
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/mail/assist",
-        &body,
-    )
-    .await
-    {
-        Ok(result) => {
-            if let Some(text) = result.get("text").and_then(Value::as_str) {
-                draft.body = text.to_owned();
-                draft.generated = true;
-            }
-        }
-        Err(ApiFailure::Unauthorised) => return Redirect::to("/login").into_response(),
-        // Uma assistência que falha não perde a mensagem escrita. O rascunho
-        // volta como estava, com a razão por cima.
-        Err(failure) => draft.error = Some(failure.to_string()),
-    }
-
-    // Uma só janela: gerar texto devolve o mesmo compositor sobre a mesma
-    // caixa, e não uma página à parte.
-    draft.signature_html = assinatura_para_previsualizar(&state, &member).await;
-    let messages = caixa_por_baixo(&state, &member, &view).await;
-
-    shell_page(
-        "Nova mensagem",
-        &viewer,
-        Screen::Mail,
-        vec![Crumb::to(Screen::Mail)],
-        ui::screens::mail::mail(&viewer, &view, &messages, None, Some(&draft)),
-    )
+/// A assistência de escrita devolvia o texto dentro do compositor. Sem
+/// compositor, não há onde o pôr, e pedi-lo ao Core seria gastar para nada.
+async fn assist() -> Response {
+    interface_pending()
 }
 
 /// Envia. A única rota do Workspace que o faz.
@@ -2373,7 +1244,6 @@ async fn send_mail(
     Form(form): Form<ComposeForm>,
 ) -> Response {
     let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
 
     let split = |raw: &str| -> Vec<String> {
         raw.split([',', ';'])
@@ -2422,52 +1292,7 @@ async fn send_mail(
             Redirect::to("/mail").into_response()
         }
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => {
-            let view = mail_context(
-                &state,
-                &member,
-                Some(form.mailbox_id.clone()),
-                "inbox".to_owned(),
-                String::new(),
-            )
-            .await;
-
-            let mut draft = form.draft();
-            // Os anexos persistem no rascunho; recarrega-os para a janela que
-            // volta não os perder de vista.
-            if let Some(draft_id) = form.draft_id.as_deref().filter(|id| !id.is_empty()) {
-                draft.attachments = anexos_do_rascunho(&state, &member, draft_id).await;
-            }
-            let reason = failure.to_string();
-
-            // O Core distingue «confirme» de «recusado». A interface tem de
-            // distinguir também: um pedido de confirmação mostra a caixa de
-            // confirmação, uma recusa não a mostra — confirmar não desfaz uma
-            // recusa, e oferecer a caixa sugeriria que sim (briefing §35).
-            if reason.contains("Confirme") {
-                draft.confirmation = Some(reason);
-            } else {
-                draft.error = Some(reason);
-            }
-
-            // O erro volta na mesma janela sobre a mesma caixa. Era aqui que
-            // uma segunda janela aparecia — uma página à parte, com o mesmo
-            // formulário e outra aparência — e é o que se deixou de fazer.
-            draft.signature_html = assinatura_para_previsualizar(&state, &member).await;
-            let messages = caixa_por_baixo(&state, &member, &view).await;
-
-            (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                shell_page(
-                    "Nova mensagem",
-                    &viewer,
-                    Screen::Mail,
-                    vec![Crumb::to(Screen::Mail)],
-                    ui::screens::mail::mail(&viewer, &view, &messages, None, Some(&draft)),
-                ),
-            )
-                .into_response()
-        }
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -2664,133 +1489,21 @@ async fn draft_attachment_remove(
     resposta_de_rascunho(resultado)
 }
 
-async fn mail_settings(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let view = mail_context(&state, &member, None, "inbox".to_owned(), String::new()).await;
-    let (preferences, signature) = tokio::join!(
-        optional(&state, &member, "/api/v1/mail/preferences"),
-        optional(&state, &member, "/api/v1/mail/signature"),
-    );
-
-    shell_page(
-        crate::i18n::t("mail.settings.title"),
-        &viewer,
-        Screen::Mail,
-        vec![Crumb::to(Screen::Mail)],
-        ui::screens::mail::settings(&view, &preferences, &signature, &member.session.email),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn mail_settings() -> Response {
+    interface_pending()
 }
 
 // ── Mensagens ────────────────────────────────────────────────────────────
 
-/// A aplicação Mensagens, sem conversa aberta.
-async fn messaging(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    render_messaging(&state, &member, None).await
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn messaging() -> Response {
+    interface_pending()
 }
 
-/// A aplicação Mensagens, com uma conversa aberta.
-async fn messaging_conversation(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(conversation): Path<String>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    render_messaging(&state, &member, Some(&conversation)).await
-}
-
-/// Desenha a aplicação.
-///
-/// # Porque a lista vem sempre
-///
-/// Porque a aplicação continua a ser as Mensagens mesmo quando não há conversa
-/// aberta. Substituir o módulo inteiro por uma frase seria trocar a aplicação
-/// por um aviso.
-async fn render_messaging(
-    state: &WorkspaceState,
-    member: &Member,
-    conversation: Option<&str>,
-) -> Response {
-    let viewer = viewer(state, member).await;
-
-    // Erro e vazio não se dizem da mesma maneira. Uma lista que falhou a
-    // carregar e aparecesse como «ainda não falou com ninguém» faria alguém
-    // concluir que perdeu conversas.
-    let (lista, failure) = match required(state, member, "/api/v1/messaging/conversations").await {
-        Ok(valor) => (valor.as_array().cloned().unwrap_or_default(), None),
-        Err(erro) => (Vec::new(), Some(erro.to_string())),
-    };
-
-    // A conversa aberta e as suas mensagens, quando há uma.
-    let (aberta, mensagens) = match conversation {
-        None => (None, Vec::new()),
-        Some(id) => {
-            let detalhe = optional(
-                state,
-                member,
-                &format!("/api/v1/messaging/conversations/{id}"),
-            )
-            .await;
-            let historico = optional(
-                state,
-                member,
-                &format!("/api/v1/messaging/conversations/{id}/messages"),
-            )
-            .await;
-            // O Core devolve da mais recente para trás; o fluxo lê-se ao
-            // contrário.
-            let mut mensagens: Vec<Value> = historico.as_array().cloned().unwrap_or_default();
-            mensagens.reverse();
-            ((!detalhe.is_null()).then_some(detalhe), mensagens)
-        }
-    };
-
-    // A assistência só aparece se houver quem a sirva. Um botão que promete
-    // melhorar um texto e falha depois é pior do que não existir.
-    // A prontidão vem do `/ready`, que é onde ela vive — e não de um pedido de
-    // domínio que por acaso falha quando a capacidade não existe.
-    let prontidao = api::core_ready(state).await.unwrap_or(Value::Null);
-    let disponivel = |componente: &str| {
-        prontidao
-            .get("components")
-            .and_then(Value::as_array)
-            .is_some_and(|todos| {
-                todos.iter().any(|c| {
-                    c.get("component").and_then(Value::as_str) == Some(componente)
-                        && c.get("state").and_then(Value::as_str) == Some("available")
-                })
-            })
-    };
-
-    let ai = viewer.can(ocinye_contracts::Permission::MessagingAiUse) && disponivel("intelligence");
-    let realtime = disponivel("realtime");
-
-    // Quem está a olhar. O identificador vem do Core, e não da sessão local:
-    // é ele que decide quem é o principal.
-    let eu = optional(state, member, "/api/v1/me").await;
-    let me = quem_sou(&eu);
-
-    let pagina = ui::screens::messaging::messaging(&ui::screens::messaging::MessagingPage {
-        conversations: &lista,
-        open: aberta.as_ref(),
-        messages: &mensagens,
-        me,
-        zona: member.zona,
-        ai,
-        realtime,
-        failure,
-    });
-
-    let trilho = vec![Crumb::to(Screen::Messaging)];
-    shell_page(
-        crate::i18n::t("messaging.title"),
-        &viewer,
-        Screen::Messaging,
-        trilho,
-        pagina,
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn messaging_conversation() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -3256,7 +1969,7 @@ async fn messaging_leave(
     .await
     {
         // Depois de sair, a conversa deixa de existir para quem saiu.
-        Ok(_) => Redirect::to(ui::screens::messaging::ROUTE).into_response(),
+        Ok(_) => Redirect::to("/messages").into_response(),
         Err(failure) => failure_response(&failure),
     }
 }
@@ -3408,433 +2121,53 @@ async fn mail_disconnect(
 
 // ── Listas ───────────────────────────────────────────────────────────────
 
-/// Renderiza um ecrã de lista a partir de um endpoint do Core.
-macro_rules! list_route {
-    ($name:ident, $screen:expr, $title:expr, $path:expr, $render:path) => {
-        async fn $name(
-            State(state): State<WorkspaceState>,
-            headers: HeaderMap,
-            Query(slice): Query<ListSlice>,
-        ) -> Response {
-            let member = member_or_login!(state, headers);
-            let viewer = viewer(&state, &member).await;
-            let path = com_pagina($path, slice.page);
-            // O conteúdo principal do ecrã: uma recusa é mostrada como recusa,
-            // e não como lista vazia.
-            let payload = match required(&state, &member, &path).await {
-                Ok(payload) => payload,
-                Err(failure) => return failure_response(&failure),
-            };
-            shell_page(
-                $title,
-                &viewer,
-                $screen,
-                Vec::new(),
-                $render(&viewer, &payload),
-            )
-        }
-    };
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn units() -> Response {
+    interface_pending()
 }
 
-list_route!(
-    units,
-    Screen::Units,
-    "Unidades",
-    "/api/v1/units",
-    ui::screens::lists::units
-);
-/// As unidades que o membro pode usar como recorte desta consulta.
-///
-/// # Porque é uma intersecção
-///
-/// `/api/v1/me` diz a que unidades o membro **pertence**, sem nomes.
-/// `/api/v1/units` traz os nomes das unidades que ele **pode ler**, já filtradas
-/// pela política. Nenhuma das duas listas sozinha é a resposta certa:
-///
-/// - só as memberships dariam identificadores sem nome, e um selector de UUIDs
-///   não é um selector;
-/// - só a lista institucional daria unidades a que o membro não pertence, e
-///   «Da Unidade» passaria a significar «de qualquer unidade».
-///
-/// O Core continua a ser a autoridade: um `unit_id` escrito à mão no URL não
-/// ganha nada por estar aqui, porque é lá que a consulta é decidida.
-async fn eligible_units(state: &WorkspaceState, member: &Member) -> Vec<(String, String)> {
-    let (me, unidades) = tokio::join!(
-        optional(state, member, "/api/v1/me"),
-        optional(state, member, "/api/v1/units"),
-    );
-
-    let minhas: std::collections::HashSet<String> = me
-        .get("units")
-        .and_then(Value::as_array)
-        .map(|itens| {
-            itens
-                .iter()
-                .filter_map(|m| m.get("id").and_then(Value::as_str))
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default();
-
-    unidades
-        .get("items")
-        .and_then(Value::as_array)
-        .map(|itens| {
-            itens
-                .iter()
-                .filter_map(|u| {
-                    let id = u.get("id").and_then(Value::as_str)?;
-                    if !minhas.contains(id) {
-                        return None;
-                    }
-                    let nome = u
-                        .get("name")
-                        .and_then(Value::as_str)
-                        .unwrap_or_else(|| u.get("code").and_then(Value::as_str).unwrap_or(id));
-                    Some((id.to_owned(), nome.to_owned()))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn ideas() -> Response {
+    interface_pending()
 }
-
-/// O recorte e a página pedidos numa lista.
-///
-/// A página vive no URL e não em estado de sessão: um endereço de segunda
-/// página tem de continuar a ser a segunda página quando alguém o guarda,
-/// partilha ou recarrega.
-#[derive(Debug, Default, Deserialize)]
-struct ListSlice {
-    /// Apenas aqueles em que o membro participa.
-    #[serde(default)]
-    mine: bool,
-    /// A página pedida, 1-based.
-    #[serde(default)]
-    page: Option<u32>,
-    /// A unidade escolhida como recorte.
-    ///
-    /// Nunca inferida. Quando o membro pertence a várias, é ele que escolhe —
-    /// o Ocinye OS não tem conceito de «unidade principal», e escolher a
-    /// primeira, a mais antiga ou a alfabeticamente primeira seria inventar um.
-    #[serde(default)]
-    unit_id: Option<Uuid>,
-    /// Se o recorte por unidade foi pedido sem ainda haver escolha.
-    #[serde(default)]
-    unit: bool,
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn projects() -> Response {
+    interface_pending()
 }
-
-/// Acrescenta a página a um caminho do Core, se houver.
-///
-/// O Core normaliza o que receber — `page=0` vira 1, um tamanho absurdo é
-/// limitado — porque recusar um parâmetro malformado transformá-lo-ia num
-/// vector de negação de serviço contra a base de dados.
-fn com_pagina(base: &str, page: Option<u32>) -> String {
-    match page {
-        Some(n) if n > 1 => {
-            // `/api/v1/units` não tem query e `/api/v1/sources?page_size=50`
-            // tem. Colar `&page=2` ao primeiro daria um caminho malformado, e
-            // bastava alguém escrever `?page=2` num ecrã não paginado para o
-            // provocar.
-            let junta = if base.contains('?') { '&' } else { '?' };
-            format!("{base}{junta}page={n}")
-        }
-        _ => base.to_owned(),
-    }
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn datasets() -> Response {
+    interface_pending()
 }
-
-/// A consulta que produz um recorte de workspaces.
-///
-/// Separada da macro para poder ser verificada: dentro dela, o único modo de
-/// provar que `mine=true` chega ao Core seria simular o Core.
-///
-/// O recorte é do Core, e não daqui. O Workspace não filtra a lista que
-/// recebeu — pedir «as minhas» e depois esconder as outras no browser seria
-/// mandar ao cliente exactamente o que ele não devia ter.
-fn workspace_list_path(kind: &str, slice: &ListSlice) -> String {
-    let base = format!("/api/v1/workspaces?kind={kind}&page_size=50");
-    let mut path = base;
-    if slice.mine {
-        path.push_str("&mine=true");
-    }
-    // A unidade viaja tipada até ao Core, que decide se o membro a pode usar.
-    // Aqui é só um parâmetro; a autoridade está do outro lado.
-    if let Some(unit_id) = slice.unit_id {
-        path.push_str(&format!("&unit_id={unit_id}"));
-    }
-    path
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn agents() -> Response {
+    interface_pending()
 }
-
-/// Ideias e Projectos partilham o ecrã, a consulta e os recortes.
-///
-/// `mine=true` chega ao Core como `mine=true`, e é lá que significa alguma
-/// coisa: participação efectiva conjugada com o `VisibilityFilter`. O Workspace
-/// não filtra nada — passa o pedido e mostra o que voltou.
-macro_rules! workspace_list {
-    ($name:ident, $screen:expr, $title:expr, $kind:expr, $render:path) => {
-        async fn $name(
-            State(state): State<WorkspaceState>,
-            headers: HeaderMap,
-            Query(slice): Query<ListSlice>,
-        ) -> Response {
-            let member = member_or_login!(state, headers);
-            let viewer = viewer(&state, &member).await;
-            // O selector só é montado quando o recorte por unidade está em
-            // jogo: uma chamada a mais em todas as páginas para um controlo que
-            // a maioria delas não mostra seria trabalho por nada.
-            let unidades = if slice.unit || slice.unit_id.is_some() {
-                eligible_units(&state, &member).await
-            } else {
-                Vec::new()
-            };
-
-            // Uma unidade elegível escolhe-se sozinha: não há ambiguidade para
-            // resolver, e obrigar a escolher entre uma opção é cerimónia.
-            let mut slice = slice;
-            if slice.unit && slice.unit_id.is_none() && unidades.len() == 1 {
-                slice.unit_id = unidades[0].0.parse().ok();
-            }
-
-            // Pedida a unidade e havendo várias, a escolha é do membro. A lista
-            // não é filtrada por uma unidade inventada, nem mostrada inteira
-            // como se o recorte tivesse sido aplicado.
-            let escolha_pendente = slice.unit && slice.unit_id.is_none();
-
-            let payload = if escolha_pendente {
-                Value::Null
-            } else {
-                let path = com_pagina(&workspace_list_path($kind, &slice), slice.page);
-                match required(&state, &member, &path).await {
-                    Ok(payload) => payload,
-                    Err(failure) => return failure_response(&failure),
-                }
-            };
-
-            shell_page(
-                $title,
-                &viewer,
-                $screen,
-                Vec::new(),
-                $render(
-                    &viewer,
-                    &payload,
-                    ui::screens::lists::Slice {
-                        mine: slice.mine,
-                        unit_id: slice.unit_id.map(|id| id.to_string()),
-                        units: unidades,
-                        awaiting_unit: escolha_pendente,
-                    },
-                ),
-            )
-        }
-    };
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn admin() -> Response {
+    interface_pending()
 }
-
-workspace_list!(
-    ideas,
-    Screen::Ideas,
-    "Ideias",
-    "idea",
-    ui::screens::lists::ideas
-);
-workspace_list!(
-    projects,
-    Screen::Projects,
-    "Projectos",
-    "project",
-    ui::screens::lists::projects
-);
-list_route!(
-    datasets,
-    Screen::Datasets,
-    "Dados",
-    "/api/v1/datasets?page_size=50",
-    ui::screens::lists::datasets
-);
-list_route!(
-    agents,
-    Screen::Agents,
-    "Agentes",
-    "/api/v1/ai/agents",
-    ui::screens::lists::agents
-);
-list_route!(
-    admin,
-    Screen::Admin,
-    "Administração",
-    // A consola lê o roster administrativo, e não o directório `/people`: aquele
-    // exige `MembersManage` no Core, este basta o `MembersView` de qualquer
-    // membro. Um investigador que abrisse `/admin` recebe a recusa do Core (que
-    // o `list_route!` mostra como recusa), e não a lista inteira dos colegas.
-    "/api/v1/administration/members?page_size=50",
-    ui::screens::lists::members
-);
-list_route!(
-    audit,
-    Screen::Audit,
-    "Audit Log",
-    "/api/v1/audit?page_size=50",
-    ui::screens::lists::audit
-);
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn audit() -> Response {
+    interface_pending()
+}
 
 // ── Administração de membros ─────────────────────────────────────────────
 
-/// `GET /admin/members/new` — formulário de criação.
-async fn new_member(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let units = optional(&state, &member, "/api/v1/units").await;
-
-    shell_page(
-        "Adicionar utilizador",
-        &viewer,
-        Screen::Admin,
-        vec![Crumb::to(Screen::Admin)],
-        ui::screens::administration::moldura(
-            ui::screens::administration::SeccaoAdmin::Membros,
-            ui::screens::administration::new_member(&units, None),
-        ),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_member() -> Response {
+    interface_pending()
 }
 
-/// Campos do formulário de criação.
-#[derive(Deserialize)]
-struct NewMemberForm {
-    #[serde(default)]
-    full_name: String,
-    #[serde(default)]
-    email: String,
-    #[serde(default)]
-    position: String,
-    #[serde(default)]
-    role: String,
-    #[serde(default)]
-    unit_id: String,
+/// Acção retirada no apagamento da UI; espera o Claude Design.
+///
+/// Produz um segredo que se mostra uma única vez; sem ecrã, perdia-se.
+async fn create_member() -> Response {
+    interface_pending()
 }
 
-/// `POST /admin/members/new` — cria e mostra a credencial, uma única vez.
-async fn create_member(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<NewMemberForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let mut body = serde_json::json!({
-        "full_name": form.full_name,
-        "email": form.email,
-        "role": form.role,
-    });
-    // Campos opcionais só viajam quando têm valor: enviar `""` faria o Core
-    // rejeitar uma posição vazia como posição desconhecida.
-    if !form.position.is_empty() {
-        body["position"] = Value::String(form.position);
-    }
-    if !form.unit_id.is_empty() {
-        body["unit_id"] = Value::String(form.unit_id);
-    }
-
-    let outcome = api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/administration/members",
-        &body,
-    )
-    .await;
-
-    match outcome {
-        Ok(created) => {
-            let credential = created.get("credential").cloned().unwrap_or(Value::Null);
-            shell_page(
-                "Utilizador criado",
-                &viewer,
-                Screen::Admin,
-                vec![Crumb::to(Screen::Admin)],
-                ui::screens::administration::moldura(
-                    ui::screens::administration::SeccaoAdmin::Membros,
-                    ui::screens::administration::issued_credential(
-                        // O Core devolve `email`. Lia-se `username`, e desde o
-                        // ADR-0106 essa chave não existe: o ecrã que entrega uma
-                        // credencial nova mostrava o endereço **em branco**, e
-                        // ninguém o via porque um campo vazio parece um campo.
-                        credential
-                            .get("email")
-                            .and_then(Value::as_str)
-                            .unwrap_or(""),
-                        credential
-                            .get("temporary_password")
-                            .and_then(Value::as_str)
-                            .unwrap_or(""),
-                        credential
-                            .get("expires_at")
-                            .and_then(Value::as_str)
-                            .unwrap_or(""),
-                    ),
-                ),
-            )
-        }
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => {
-            let units = optional(&state, &member, "/api/v1/units").await;
-            shell_page(
-                "Adicionar utilizador",
-                &viewer,
-                Screen::Admin,
-                vec![Crumb::to(Screen::Admin)],
-                ui::screens::administration::moldura(
-                    ui::screens::administration::SeccaoAdmin::Membros,
-                    ui::screens::administration::new_member(&units, Some(failure.to_string())),
-                ),
-            )
-        }
-    }
-}
-
-/// `GET /admin/members/{id}` — detalhe: acesso e segurança.
-async fn member_detail(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(person_id): Path<String>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let person_path = format!("/api/v1/people/{person_id}");
-    let security_path = format!("/api/v1/administration/members/{person_id}/security");
-    let access_path = format!("/api/v1/administration/members/{person_id}/access");
-
-    let (person, security, access, units_catalog, workspaces_catalog, permissions_catalog) = tokio::join!(
-        optional(&state, &member, &person_path),
-        optional(&state, &member, &security_path),
-        optional(&state, &member, &access_path),
-        optional(&state, &member, "/api/v1/units"),
-        optional(&state, &member, "/api/v1/workspaces?page_size=100"),
-        optional(&state, &member, "/api/v1/administration/permissions"),
-    );
-
-    if person.is_null() {
-        return failure_response(&ApiFailure::Denied);
-    }
-
-    shell_page(
-        "Membro",
-        &viewer,
-        Screen::Admin,
-        vec![Crumb::to(Screen::Admin)],
-        ui::screens::administration::moldura_larga(
-            ui::screens::administration::SeccaoAdmin::Membros,
-            ui::screens::administration::member_detail(
-                &person,
-                &security,
-                &access,
-                &units_catalog,
-                &workspaces_catalog,
-                &permissions_catalog,
-                None,
-            ),
-        ),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn member_detail() -> Response {
+    interface_pending()
 }
 
 /// Corpo do formulário de atribuição de unidade a um membro.
@@ -3873,7 +2206,7 @@ async fn member_unit_assign(
     .await
     {
         Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -3900,7 +2233,7 @@ async fn member_unit_role(
     .await
     {
         Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -3925,7 +2258,7 @@ async fn member_unit_remove(
     .await
     {
         Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -3959,7 +2292,7 @@ async fn member_workspace_assign(
     .await
     {
         Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -3985,7 +2318,7 @@ async fn member_workspace_role(
     .await
     {
         Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -4009,7 +2342,7 @@ async fn member_workspace_remove(
     .await
     {
         Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -4045,7 +2378,7 @@ async fn member_set_status(
     .await
     {
         Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -4083,7 +2416,7 @@ async fn member_set_position(
     .await
     {
         Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -4110,63 +2443,15 @@ async fn member_delete(
     .await
     {
         Ok(_) => Redirect::to("/admin").into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+        Err(failure) => failure_response(&failure),
     }
 }
 
-/// `POST /admin/members/{person_id}/reset-password` — emite uma credencial
-/// temporária nova e mostra-a **uma única vez**.
+/// Acção retirada no apagamento da UI; espera o Claude Design.
 ///
-/// Como o provisionamento, o sucesso não é um redirecto: a palavra-passe nova
-/// vive só neste ecrã, e um redirecto perdê-la-ia. A palavra-passe nunca é
-/// registada nem recuperável (briefing §19, §73).
-async fn member_reset_password(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(person_id): Path<String>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let path = format!("/api/v1/administration/members/{person_id}/password-reset");
-    let outcome = api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &path,
-        &serde_json::json!({}),
-    )
-    .await;
-
-    match outcome {
-        // A reposição devolve o `IssuedCredential` no topo do corpo — sem o
-        // envelope `credential` que `create`/`provision` usam.
-        Ok(credential) => shell_page(
-            "Palavra-passe reposta",
-            &viewer,
-            Screen::Admin,
-            vec![Crumb::to(Screen::Admin)],
-            ui::screens::administration::moldura(
-                ui::screens::administration::SeccaoAdmin::Membros,
-                ui::screens::administration::issued_credential(
-                    credential
-                        .get("email")
-                        .and_then(Value::as_str)
-                        .unwrap_or(""),
-                    credential
-                        .get("temporary_password")
-                        .and_then(Value::as_str)
-                        .unwrap_or(""),
-                    credential
-                        .get("expires_at")
-                        .and_then(Value::as_str)
-                        .unwrap_or(""),
-                ),
-            ),
-        ),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
-    }
+/// Produz um segredo que se mostra uma única vez; sem ecrã, perdia-se.
+async fn member_reset_password() -> Response {
+    interface_pending()
 }
 
 /// Corpo do formulário de concessão de papel técnico.
@@ -4197,7 +2482,7 @@ async fn member_role_grant(
     .await
     {
         Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -4225,7 +2510,7 @@ async fn member_role_revoke(
     .await
     {
         Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -4262,7 +2547,7 @@ async fn member_grant_create(
     .await
     {
         Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -4293,7 +2578,7 @@ async fn member_grant_revoke(
     .await
     {
         Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -4318,408 +2603,44 @@ async fn member_session_revoke(
     .await
     {
         Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => member_detail_with_error(&state, &member, &person_id, &failure).await,
+        Err(failure) => failure_response(&failure),
     }
 }
 
-/// Re-renderiza o detalhe do membro com a recusa do Core à vista, em vez de a
-/// engolir: uma operação administrativa que falha diz porquê, no mesmo sítio.
-async fn member_detail_with_error(
-    state: &WorkspaceState,
-    member: &Member,
-    person_id: &str,
-    failure: &ApiFailure,
-) -> Response {
-    // Uma sessão expirada é login; uma recusa autoritária mostra-se no ecrã.
-    if matches!(failure, ApiFailure::Unauthorised) {
-        return Redirect::to("/login").into_response();
-    }
-    let viewer = viewer(state, member).await;
-    let person_path = format!("/api/v1/people/{person_id}");
-    let security_path = format!("/api/v1/administration/members/{person_id}/security");
-    let access_path = format!("/api/v1/administration/members/{person_id}/access");
-    let (person, security, access, units_catalog, workspaces_catalog, permissions_catalog) = tokio::join!(
-        optional(state, member, &person_path),
-        optional(state, member, &security_path),
-        optional(state, member, &access_path),
-        optional(state, member, "/api/v1/units"),
-        optional(state, member, "/api/v1/workspaces?page_size=100"),
-        optional(state, member, "/api/v1/administration/permissions"),
-    );
-    shell_page(
-        "Membro",
-        &viewer,
-        Screen::Admin,
-        vec![Crumb::to(Screen::Admin)],
-        ui::screens::administration::moldura_larga(
-            ui::screens::administration::SeccaoAdmin::Membros,
-            ui::screens::administration::member_detail(
-                &person,
-                &security,
-                &access,
-                &units_catalog,
-                &workspaces_catalog,
-                &permissions_catalog,
-                Some(&failure.to_string()),
-            ),
-        ),
-    )
+/// Acção retirada no apagamento da UI; espera o Claude Design.
+///
+/// Produz um segredo que se mostra uma única vez; sem ecrã, perdia-se.
+async fn provision_member() -> Response {
+    interface_pending()
 }
 
-/// `POST /admin/members/{id}/provision` — dá acesso a quem já existe.
-///
-/// # Porque não é «criar um utilizador»
-///
-/// Porque a pessoa já está na instituição. É o caso de quem nasceu do bootstrap
-/// do servidor: existe porque a identidade privilegiada precisa de dono, e não
-/// tem como entrar porque o servidor não provisiona a instituição. Criá-la
-/// outra vez daria dois registos com o mesmo nome, e a autoria, as pertenças e
-/// o histórico ficariam repartidos por dois sítios que ninguém volta a juntar.
-///
-/// A recusa do Core é mostrada no mesmo ecrã, e não engolida: se a pessoa já
-/// tem acesso, quem administra precisa de saber que o caminho é a reposição de
-/// palavra-passe — que fica registada como reposição.
-async fn provision_member(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(person_id): Path<String>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let caminho = format!("/api/v1/administration/members/{person_id}/provision");
-    let outcome = api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &caminho,
-        &serde_json::json!({}),
-    )
-    .await;
-
-    match outcome {
-        Ok(created) => {
-            let credential = created.get("credential").cloned().unwrap_or(Value::Null);
-            shell_page(
-                "Acesso concedido",
-                &viewer,
-                Screen::Admin,
-                vec![Crumb::to(Screen::Admin)],
-                ui::screens::administration::moldura(
-                    ui::screens::administration::SeccaoAdmin::Membros,
-                    ui::screens::administration::issued_credential(
-                        credential
-                            .get("email")
-                            .and_then(Value::as_str)
-                            .unwrap_or(""),
-                        credential
-                            .get("temporary_password")
-                            .and_then(Value::as_str)
-                            .unwrap_or(""),
-                        credential
-                            .get("expires_at")
-                            .and_then(Value::as_str)
-                            .unwrap_or(""),
-                    ),
-                ),
-            )
-        }
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => {
-            // Volta ao detalhe com a razão. Um redirecto limpo perderia-a, e o
-            // botão continuaria lá como se nada tivesse acontecido.
-            let person_path = format!("/api/v1/people/{person_id}");
-            let security_path = format!("/api/v1/administration/members/{person_id}/security");
-            let access_path = format!("/api/v1/administration/members/{person_id}/access");
-            let (person, security, access, units_catalog, workspaces_catalog, permissions_catalog) = tokio::join!(
-                optional(&state, &member, &person_path),
-                optional(&state, &member, &security_path),
-                optional(&state, &member, &access_path),
-                optional(&state, &member, "/api/v1/units"),
-                optional(&state, &member, "/api/v1/workspaces?page_size=100"),
-                optional(&state, &member, "/api/v1/administration/permissions"),
-            );
-            shell_page(
-                "Membro",
-                &viewer,
-                Screen::Admin,
-                vec![Crumb::to(Screen::Admin)],
-                ui::screens::administration::moldura_larga(
-                    ui::screens::administration::SeccaoAdmin::Membros,
-                    ui::screens::administration::member_detail(
-                        &person,
-                        &security,
-                        &access,
-                        &units_catalog,
-                        &workspaces_catalog,
-                        &permissions_catalog,
-                        Some(&failure.to_string()),
-                    ),
-                ),
-            )
-        }
-    }
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn bibliography() -> Response {
+    interface_pending()
 }
 
-/// Bibliografia.
-///
-/// O Core expõe fontes por Research Workspace; sem um workspace escolhido, a
-/// lista aparece vazia com a explicação em vez de um erro.
-/// A bibliografia institucional.
-///
-/// Este ecrã passava `Value::Null` ao componente e nunca chamava o Core: a
-/// tabela renderizava sempre vazia, e nada dizia porquê. Um ecrã vazio não
-/// prova que não há dados — pode provar apenas que ninguém o ligou.
-///
-/// Usa `required` e não `optional` de propósito: uma falha do Core é mostrada
-/// como falha. Com `optional`, um erro voltava como `null` e o ecrã dizia «não
-/// há bibliografia» quando o que houve foi uma consulta falhada.
-async fn bibliography(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let payload = match required(&state, &member, "/api/v1/sources?page_size=50").await {
-        Ok(payload) => payload,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    shell_page(
-        "Bibliografia",
-        &viewer,
-        Screen::Bibliography,
-        Vec::new(),
-        ui::screens::lists::bibliography(&viewer, &payload),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn bibliography_tools() -> Response {
+    interface_pending()
 }
 
-/// Ferramentas bibliográficas, em branco.
-async fn bibliography_tools(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let destinos = creation_destinations(&state, &member).await;
-    let trail = vec![Crumb::to(Screen::Bibliography)];
-
-    shell_page(
-        "Ferramentas bibliográficas",
-        &viewer,
-        Screen::Bibliography,
-        trail,
-        ui::screens::lists::bibliography_tools(&destinos, "", None, None),
-    )
-}
-
-/// O que o formulário das ferramentas envia.
-#[derive(Deserialize)]
-struct BibliographyToolsForm {
-    workspace_id: Uuid,
-    #[serde(default)]
-    bibtex: String,
-}
-
-/// Pede ao Core que reveja a bibliografia, e mostra o que ele respondeu.
+/// Acção retirada no apagamento da UI; espera o Claude Design.
 ///
-/// # Porque a Experience não conhece o Capability Runtime
-///
-/// Porque pede uma operação de domínio. Que a leitura aconteça dentro de um
-/// isolamento WebAssembly é decisão do Core, e a Experience não tem — nem deve
-/// ter — como saber qual componente corre.
-async fn review_bibliography(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<BibliographyToolsForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let destinos = creation_destinations(&state, &member).await;
-    let trail = vec![Crumb::to(Screen::Bibliography)];
-
-    // Recusa antes de gastar um pedido ao Core. O limite canónico é o do
-    // contrato, e é o Core que o aplica; isto poupa a viagem.
-    if form.bibtex.len() > ocinye_contracts::bibliography::MAX_BIBTEX_BYTES {
-        return shell_page(
-            "Ferramentas bibliográficas",
-            &viewer,
-            Screen::Bibliography,
-            trail,
-            ui::screens::lists::bibliography_tools(
-                &destinos,
-                "",
-                None,
-                Some("A bibliografia é demasiado extensa para ser revista de uma vez.".to_owned()),
-            ),
-        );
-    }
-
-    let caminho = format!(
-        "/api/v1/workspaces/{}/bibliography/review",
-        form.workspace_id
-    );
-    let corpo = serde_json::json!({ "bibtex": form.bibtex });
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &caminho,
-        &corpo,
-    )
-    .await
-    {
-        Ok(payload) => {
-            let revisao: Option<ocinye_contracts::bibliography::BibliographyReview> =
-                serde_json::from_value(payload).ok();
-            let erro = revisao
-                .is_none()
-                .then(|| "Não foi possível ler o resultado da revisão.".to_owned());
-
-            shell_page(
-                "Ferramentas bibliográficas",
-                &viewer,
-                Screen::Bibliography,
-                trail,
-                ui::screens::lists::bibliography_tools(
-                    &destinos,
-                    &form.bibtex,
-                    revisao.as_ref(),
-                    erro,
-                ),
-            )
-        }
-        Err(failure) => shell_page(
-            "Ferramentas bibliográficas",
-            &viewer,
-            Screen::Bibliography,
-            trail,
-            ui::screens::lists::bibliography_tools(
-                &destinos,
-                &form.bibtex,
-                None,
-                Some(failure.to_string()),
-            ),
-        ),
-    }
+/// A revisão devolvia o seu resultado num ecrã.
+async fn review_bibliography() -> Response {
+    interface_pending()
 }
 
 // ── Investigação ─────────────────────────────────────────────────────────
 
-async fn unit_detail(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(unit_id): Path<Uuid>,
-    Query(query): Query<FilesQuery>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let unit = match api::get::<Value>(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/units/{unit_id}"),
-    )
-    .await
-    {
-        Ok(unit) => unit,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let viewer = viewer(&state, &member).await;
-    let members_path = format!("/api/v1/units/{unit_id}/members");
-    let workspaces_path = format!("/api/v1/workspaces?unit_id={unit_id}&page_size=50");
-
-    let (members, workspaces) = tokio::join!(
-        optional(&state, &member, &members_path),
-        optional(&state, &member, &workspaces_path),
-    );
-
-    // Quem já pertence, para não o oferecer outra vez na lista de escolha.
-    let ja_pertencem: std::collections::HashSet<String> = members
-        .as_array()
-        .map(|linhas| {
-            linhas
-                .iter()
-                .filter_map(|m| m.get("person_id").and_then(Value::as_str))
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default();
-
-    let pessoas = optional(&state, &member, "/api/v1/people?page_size=200").await;
-    let candidatos: Vec<(String, String)> = pessoas
-        .get("items")
-        .and_then(Value::as_array)
-        .map(|linhas| {
-            linhas
-                .iter()
-                .filter_map(|p| {
-                    let id = p.get("id").and_then(Value::as_str)?;
-                    if ja_pertencem.contains(id) {
-                        return None;
-                    }
-                    let nome = p.get("full_name").and_then(Value::as_str).unwrap_or("—");
-                    let email = p.get("email").and_then(Value::as_str).unwrap_or("");
-                    Some((id.to_owned(), format!("{nome} · {email}")))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    let gestao = ui::screens::workspaces::GestaoDePessoas {
-        // Do Core, e não de um palpite sobre o papel de quem está a ver.
-        pode_gerir: unit
-            .get("may_manage_members")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-        candidatos,
-        aviso: aviso_de_pertenca(query.ok.as_deref(), query.erro.as_deref()),
-    };
-
-    let trail = vec![Crumb::to(Screen::Units)];
-    let content = ui::screens::workspaces::unit_detail(&unit, &members, &workspaces, &gestao);
-
-    shell_page("Detalhe da Unidade", &viewer, Screen::Units, trail, content)
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn unit_detail() -> Response {
+    interface_pending()
 }
 
-/// Uma ideia abre o seu Research Workspace.
-async fn idea_workspace(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(idea_id): Path<Uuid>,
-    Query(aviso): Query<AvisoQuery>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    match api::get::<Value>(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/ideas/{idea_id}"),
-    )
-    .await
-    {
-        Ok(payload) => {
-            let workspace_id = payload
-                .get("workspace")
-                .and_then(|w| w.get("id"))
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned();
-            // Um aviso (o resultado de uma transição, por exemplo) viaja com o
-            // redirecto para o ambiente, onde é mostrado.
-            let mut destino = format!("/workspaces/{workspace_id}");
-            let mut query: Vec<String> = Vec::new();
-            if let Some(ok) = aviso.ok.as_deref().filter(|s| !s.is_empty()) {
-                query.push(format!("ok={}", urlencoding_minimal(ok)));
-            }
-            if let Some(erro) = aviso.erro.as_deref().filter(|s| !s.is_empty()) {
-                query.push(format!("erro={}", urlencoding_minimal(erro)));
-            }
-            if !query.is_empty() {
-                destino.push('?');
-                destino.push_str(&query.join("&"));
-            }
-            Redirect::to(&destino).into_response()
-        }
-        Err(failure) => failure_response(&failure),
-    }
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn idea_workspace() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -4769,500 +2690,35 @@ async fn transition_idea(
     }
 }
 
-/// Um projecto abre o seu Research Workspace.
-async fn project_workspace(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(project_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    match api::get::<Value>(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/projects/{project_id}"),
-    )
-    .await
-    {
-        Ok(payload) => {
-            let workspace_id = payload
-                .get("workspace_id")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned();
-            Redirect::to(&format!("/workspaces/{workspace_id}")).into_response()
-        }
-        Err(failure) => failure_response(&failure),
-    }
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn project_workspace() -> Response {
+    interface_pending()
 }
 
-/// O Research Workspace.
-async fn research_workspace(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(workspace_id): Path<Uuid>,
-    Query(aviso): Query<AvisoQuery>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    // A visão geral é a leitura que autoriza: se falhar, nada mais é pedido.
-    let overview = match api::get::<Value>(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/workspaces/{workspace_id}"),
-    )
-    .await
-    {
-        Ok(overview) => overview,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let viewer = viewer(&state, &member).await;
-
-    let sources_path = format!("/api/v1/workspaces/{workspace_id}/sources");
-    let notes_path = format!("/api/v1/workspaces/{workspace_id}/notes");
-    let documents_path = format!("/api/v1/workspaces/{workspace_id}/documents");
-    let datasets_path = format!("/api/v1/datasets?workspace_id={workspace_id}");
-    let tasks_path = format!("/api/v1/tasks?workspace_id={workspace_id}");
-    let activity_path = format!("/api/v1/activity?workspace_id={workspace_id}");
-
-    let (sources, notes, documents, datasets, tasks, activity, ai) = tokio::join!(
-        optional(&state, &member, &sources_path),
-        optional(&state, &member, &notes_path),
-        optional(&state, &member, &documents_path),
-        optional(&state, &member, &datasets_path),
-        optional(&state, &member, &tasks_path),
-        optional(&state, &member, &activity_path),
-        // A disponibilidade vem do Core. A interface não a infere, e com o
-        // Core em silêncio assume indisponível — que é o estado honesto.
-        optional(&state, &member, "/api/v1/ai/status"),
-    );
-
-    // O mesmo ecrã serve ideias e projectos, e o trilho segue o que o
-    // workspace é — não o caminho por onde se lá chegou.
-    let is_project = overview.get("project").is_some_and(|p| !p.is_null());
-    let screen = if is_project {
-        Screen::Projects
-    } else {
-        Screen::Ideas
-    };
-
-    // Quem já participa, para não voltar a ser oferecido.
-    let ja_participam: std::collections::HashSet<String> = overview
-        .get("members")
-        .and_then(Value::as_array)
-        .map(|linhas| {
-            linhas
-                .iter()
-                .filter_map(|m| m.get("person_id").and_then(Value::as_str))
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default();
-
-    let pode_gerir = overview
-        .get("workspace")
-        .and_then(|w| w.get("may_manage_members"))
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-
-    // A lista de candidatos só se pede a quem pode usá-la. Pedi-la sempre seria
-    // ler a organização inteira para a deitar fora em todos os ecrãs.
-    let candidatos: Vec<(String, String)> = if pode_gerir {
-        let pessoas = optional(&state, &member, "/api/v1/people?page_size=200").await;
-        pessoas
-            .get("items")
-            .and_then(Value::as_array)
-            .map(|linhas| {
-                linhas
-                    .iter()
-                    .filter_map(|p| {
-                        let pid = p.get("id").and_then(Value::as_str)?;
-                        if ja_participam.contains(pid) {
-                            return None;
-                        }
-                        let nome = p.get("full_name").and_then(Value::as_str).unwrap_or("—");
-                        let email = p.get("email").and_then(Value::as_str).unwrap_or("");
-                        Some((pid.to_owned(), format!("{nome} · {email}")))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-
-    let gestao = ui::screens::workspaces::GestaoDePessoas {
-        // Do Core, e não de um palpite sobre o papel de quem está a ver.
-        pode_gerir,
-        candidatos,
-        aviso: aviso_de_participacao(aviso.ok.as_deref(), aviso.erro.as_deref()),
-    };
-
-    let trail = vec![Crumb::to(screen)];
-
-    let content =
-        ui::screens::workspaces::research_workspace(ui::screens::workspaces::WorkspaceView {
-            overview,
-            sources,
-            notes,
-            documents,
-            datasets,
-            tasks,
-            activity,
-            inference_available: inference_available(&ai),
-            may_use_assistance: viewer.can(ocinye_contracts::Permission::AiUse),
-            gestao,
-        });
-
-    shell_page("Research Workspace", &viewer, screen, trail, content)
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn research_workspace() -> Response {
+    interface_pending()
 }
 
 // ── Ciência ──────────────────────────────────────────────────────────────
 
-/// A cadeia científica de um Research Workspace.
-async fn scientific_chain(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(workspace_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    // A visão geral é a leitura que autoriza. Se o ambiente não é alcançável,
-    // nada mais é pedido — e a resposta é a mesma que daria a um identificador
-    // inventado.
-    let overview = match api::get::<Value>(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/workspaces/{workspace_id}"),
-    )
-    .await
-    {
-        Ok(overview) => overview,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let viewer = viewer(&state, &member).await;
-
-    let hypotheses_path = format!("/api/v1/workspaces/{workspace_id}/hypotheses");
-    let methodologies_path = format!("/api/v1/workspaces/{workspace_id}/methodologies");
-    let studies_path = format!("/api/v1/workspaces/{workspace_id}/studies");
-    let results_path = format!("/api/v1/workspaces/{workspace_id}/results");
-
-    let (hypotheses, methodologies, studies, results) = tokio::join!(
-        optional(&state, &member, &hypotheses_path),
-        optional(&state, &member, &methodologies_path),
-        optional(&state, &member, &studies_path),
-        optional(&state, &member, &results_path),
-    );
-
-    let is_project = overview.get("project").is_some_and(|p| !p.is_null());
-    let screen = if is_project {
-        Screen::Projects
-    } else {
-        Screen::Ideas
-    };
-    let trail = vec![
-        Crumb::to(screen),
-        Crumb {
-            label: "Research Workspace".to_owned(),
-            href: format!("/workspaces/{workspace_id}"),
-        },
-    ];
-
-    // Quem decide é o Core, e para este ambiente.
-    //
-    // `viewer.can` responde no âmbito institucional, e `science.create` chega
-    // pela pertença à unidade e ao ambiente — nunca por papel técnico. Usá-lo
-    // aqui escondia a criação a toda a gente, incluindo a quem lidera o
-    // ambiente. Esconder o botão nunca foi segurança; a operação recusa na
-    // mesma. É para não prometer o que não se cumpre.
-    let pode_criar = overview
-        .get("workspace")
-        .and_then(|w| w.get("may_create"))
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-
-    let content = ui::screens::science::scientific_chain(ui::screens::science::ChainView {
-        overview,
-        hypotheses,
-        methodologies,
-        studies,
-        results,
-        may_create: pode_criar,
-    });
-
-    shell_page("Ciência", &viewer, screen, trail, content)
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn scientific_chain() -> Response {
+    interface_pending()
 }
 
-/// De onde veio um resultado, e o que dependeu dele.
-async fn result_detail(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(result_id): Path<Uuid>,
-    Query(query): Query<LineageQuery>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let result = match api::get::<Value>(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/results/{result_id}"),
-    )
-    .await
-    {
-        Ok(result) => result,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let viewer = viewer(&state, &member).await;
-
-    // As duas travessias são pedidas sempre, e não só a que se mostra: as tabs
-    // trocam de sentido sem ir buscar nada, e uma delas vazia é informação
-    // — «nada depende disto» — que se quer ver de imediato.
-    let validations_path = format!("/api/v1/results/{result_id}/validations");
-    let upstream_path = format!("/api/v1/lineage/result/{result_id}?direction=upstream");
-    let downstream_path = format!("/api/v1/lineage/result/{result_id}?direction=downstream");
-
-    let (validations, upstream, downstream) = tokio::join!(
-        optional(&state, &member, &validations_path),
-        optional(&state, &member, &upstream_path),
-        optional(&state, &member, &downstream_path),
-    );
-
-    let direction = if query.direction.as_deref() == Some("downstream") {
-        "downstream"
-    } else {
-        "upstream"
-    };
-
-    let workspace_id = result
-        .get("workspace_id")
-        .and_then(Value::as_str)
-        .map(str::to_owned);
-
-    let mut trail = vec![Crumb::to(Screen::Ideas)];
-    if let Some(workspace_id) = workspace_id {
-        trail.push(Crumb {
-            label: "Ciência".to_owned(),
-            href: format!("/workspaces/{workspace_id}/science"),
-        });
-    }
-
-    let result_may_validate = result
-        .get("may_validate")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-
-    let content = ui::screens::science::result_detail(ui::screens::science::ResultView {
-        result,
-        validations,
-        upstream,
-        downstream,
-        direction,
-        // Vem do Core, com o contexto deste resultado: `results.validate`
-        // chega pela liderança do ambiente ou pela gestão da unidade, e as
-        // capacidades que o `/identity/me` publica são as institucionais,
-        // onde uma permissão de ambiente nunca aparece.
-        may_validate: result_may_validate,
-    });
-
-    shell_page("Resultado", &viewer, Screen::Ideas, trail, content)
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn result_detail() -> Response {
+    interface_pending()
 }
 
 // ── Construir a cadeia ───────────────────────────────────────────────────
 
-/// O ambiente, resolvido pelo Core, que autoriza tudo o que se segue.
-///
-/// Se ele não é alcançável, nada mais é pedido — e a resposta é a mesma que
-/// daria a um identificador inventado.
-async fn ambiente_ou_recusa(
-    state: &WorkspaceState,
-    member: &Member,
-    workspace_id: Uuid,
-) -> Result<Value, api::ApiFailure> {
-    let overview = api::get::<Value>(
-        state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/workspaces/{workspace_id}"),
-    )
-    .await?;
-    Ok(overview.get("workspace").cloned().unwrap_or(Value::Null))
-}
-
-/// Se este membro pode criar no ambiente que contém aquele recurso.
-///
-/// A resposta é do Core, e para aquele ambiente. `viewer.can` responde no
-/// âmbito institucional, e `science.create` chega pela pertença à unidade e ao
-/// ambiente — nunca por papel técnico. Perguntá-lo ao viewer escondia a criação
-/// a toda a gente, incluindo a quem lidera o ambiente.
-///
-/// Sem ambiente conhecido, ou com o Core em silêncio, a resposta é não: é a
-/// única conservadora, e não prometer é melhor do que prometer uma recusa.
-async fn pode_criar_no_ambiente(state: &WorkspaceState, member: &Member, recurso: &Value) -> bool {
-    let Some(workspace_id) = recurso.get("workspace_id").and_then(Value::as_str) else {
-        return false;
-    };
-    optional(state, member, &format!("/api/v1/workspaces/{workspace_id}"))
-        .await
-        .get("workspace")
-        .and_then(|w| w.get("may_create"))
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-}
-
-/// A recusa que volta ao formulário, e a que não volta.
-///
-/// Só o que a pessoa pode resolver preenchendo outra vez: o conteúdo que o
-/// Core não aceitou, ou a autoridade que lhe falta. Uma avaria, uma sessão
-/// caída ou um recurso inalcançável não se corrigem no campo.
-fn motivo_para_o_formulario(failure: &api::ApiFailure) -> Option<String> {
-    match failure {
-        api::ApiFailure::Rejected(mensagem) => Some(mensagem.clone()),
-        api::ApiFailure::Forbidden => {
-            Some("Não tem autorização para criar isto neste ambiente.".to_owned())
-        }
-        _ => None,
-    }
-}
-
-/// As versões de metodologia publicadas num ambiente, prontas para um selector.
-///
-/// **Versões**, e nunca metodologias: a matriz de proveniência aceita
-/// `Study → MethodologyVersion` e recusa a metodologia mutável. Oferecer a
-/// metodologia poria no ecrã uma escolha que o Core recusa, e deixaria o `422`
-/// ensinar a regra a quem já tinha preenchido o resto.
-async fn versoes_de_metodologia(
-    state: &WorkspaceState,
-    member: &Member,
-    workspace_id: Uuid,
-) -> Vec<(String, String)> {
-    let metodologias = optional(
-        state,
-        member,
-        &format!("/api/v1/workspaces/{workspace_id}/methodologies"),
-    )
-    .await;
-
-    let mut opcoes = Vec::new();
-    for metodologia in metodologias.as_array().into_iter().flatten() {
-        let Some(id) = metodologia.get("id").and_then(Value::as_str) else {
-            continue;
-        };
-        let titulo = metodologia
-            .get("title")
-            .and_then(Value::as_str)
-            .unwrap_or("Metodologia");
-        let versoes = optional(
-            state,
-            member,
-            &format!("/api/v1/methodologies/{id}/versions"),
-        )
-        .await;
-        for versao in versoes.as_array().into_iter().flatten() {
-            // Só publicadas: uma versão em rascunho ainda não é o que a
-            // proveniência pode citar.
-            if versao.get("status").and_then(Value::as_str) != Some("published") {
-                continue;
-            }
-            let Some(version_id) = versao.get("id").and_then(Value::as_str) else {
-                continue;
-            };
-            let etiqueta = versao
-                .get("label")
-                .and_then(Value::as_str)
-                .unwrap_or("versão");
-            opcoes.push((version_id.to_owned(), format!("{titulo} · {etiqueta}")));
-        }
-    }
-    opcoes
-}
-
-/// As versões de dataset alcançáveis a partir de um ambiente.
-async fn versoes_de_dataset(
-    state: &WorkspaceState,
-    member: &Member,
-    workspace_id: Uuid,
-) -> Vec<(String, String)> {
-    let datasets = optional(
-        state,
-        member,
-        &format!("/api/v1/datasets?workspace_id={workspace_id}"),
-    )
-    .await;
-
-    let linhas = datasets
-        .get("items")
-        .and_then(Value::as_array)
-        .cloned()
-        .or_else(|| datasets.as_array().cloned())
-        .unwrap_or_default();
-
-    let mut opcoes = Vec::new();
-    for dataset in &linhas {
-        let Some(id) = dataset.get("id").and_then(Value::as_str) else {
-            continue;
-        };
-        let nome = dataset
-            .get("title")
-            .or_else(|| dataset.get("name"))
-            .and_then(Value::as_str)
-            .unwrap_or("Dataset");
-        let versoes = optional(state, member, &format!("/api/v1/datasets/{id}/versions")).await;
-        let linhas_v = versoes
-            .get("items")
-            .and_then(Value::as_array)
-            .cloned()
-            .or_else(|| versoes.as_array().cloned())
-            .unwrap_or_default();
-        for versao in &linhas_v {
-            let Some(version_id) = versao.get("id").and_then(Value::as_str) else {
-                continue;
-            };
-            let etiqueta = versao
-                .get("label")
-                .and_then(Value::as_str)
-                .unwrap_or("versão");
-            opcoes.push((version_id.to_owned(), format!("{nome} · {etiqueta}")));
-        }
-    }
-    opcoes
-}
-
 // ── Hipótese ─────────────────────────────────────────────────────────────
 
-async fn new_hypothesis(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(workspace_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    match pagina_de_hipotese(&state, &member, workspace_id, None).await {
-        Ok(resposta) => resposta,
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-async fn pagina_de_hipotese(
-    state: &WorkspaceState,
-    member: &Member,
-    workspace_id: Uuid,
-    message: Option<String>,
-) -> Result<Response, api::ApiFailure> {
-    let workspace = ambiente_ou_recusa(state, member, workspace_id).await?;
-    let viewer = viewer(state, member).await;
-    Ok(shell_page(
-        "Nova hipótese",
-        &viewer,
-        Screen::Ideas,
-        trilho_da_ciencia(workspace_id),
-        ui::screens::science::nova_hipotese(ui::screens::science::Contexto { workspace, message }),
-    ))
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_hypothesis() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -5298,60 +2754,15 @@ async fn create_hypothesis(
     .await
     {
         Ok(_) => Redirect::to(&format!("/workspaces/{workspace_id}/science")).into_response(),
-        Err(failure) => match motivo_para_o_formulario(&failure) {
-            Some(motivo) => {
-                match pagina_de_hipotese(&state, &member, workspace_id, Some(motivo)).await {
-                    Ok(resposta) => resposta,
-                    Err(failure) => failure_response(&failure),
-                }
-            }
-            None => failure_response(&failure),
-        },
-    }
-}
-
-fn trilho_da_ciencia(workspace_id: Uuid) -> Vec<Crumb> {
-    vec![
-        Crumb::to(Screen::Ideas),
-        Crumb {
-            label: "Ciência".to_owned(),
-            href: format!("/workspaces/{workspace_id}/science"),
-        },
-    ]
-}
-
-// ── Metodologia e versões ────────────────────────────────────────────────
-
-async fn new_methodology(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(workspace_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    match pagina_de_metodologia(&state, &member, workspace_id, None).await {
-        Ok(resposta) => resposta,
         Err(failure) => failure_response(&failure),
     }
 }
 
-async fn pagina_de_metodologia(
-    state: &WorkspaceState,
-    member: &Member,
-    workspace_id: Uuid,
-    message: Option<String>,
-) -> Result<Response, api::ApiFailure> {
-    let workspace = ambiente_ou_recusa(state, member, workspace_id).await?;
-    let viewer = viewer(state, member).await;
-    Ok(shell_page(
-        "Nova metodologia",
-        &viewer,
-        Screen::Ideas,
-        trilho_da_ciencia(workspace_id),
-        ui::screens::science::nova_metodologia(ui::screens::science::Contexto {
-            workspace,
-            message,
-        }),
-    ))
+// ── Metodologia e versões ────────────────────────────────────────────────
+
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_methodology() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -5396,126 +2807,18 @@ async fn create_methodology(
                 }
             }
         }
-        Err(failure) => match motivo_para_o_formulario(&failure) {
-            Some(motivo) => {
-                match pagina_de_metodologia(&state, &member, workspace_id, Some(motivo)).await {
-                    Ok(resposta) => resposta,
-                    Err(failure) => failure_response(&failure),
-                }
-            }
-            None => failure_response(&failure),
-        },
-    }
-}
-
-async fn methodology_detail(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(methodology_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let methodology = match api::get::<Value>(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/methodologies/{methodology_id}"),
-    )
-    .await
-    {
-        Ok(valor) => valor,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let versions = optional(
-        &state,
-        &member,
-        &format!("/api/v1/methodologies/{methodology_id}/versions"),
-    )
-    .await;
-    let pode_criar = pode_criar_no_ambiente(&state, &member, &methodology).await;
-    let viewer = viewer(&state, &member).await;
-    let workspace_id = methodology
-        .get("workspace_id")
-        .and_then(Value::as_str)
-        .and_then(|v| Uuid::parse_str(v).ok());
-
-    let trail = workspace_id.map_or_else(|| vec![Crumb::to(Screen::Ideas)], trilho_da_ciencia);
-
-    shell_page(
-        "Metodologia",
-        &viewer,
-        Screen::Ideas,
-        trail,
-        ui::screens::science::metodologia(ui::screens::science::MetodologiaView {
-            methodology,
-            versions,
-            may_create: pode_criar,
-        }),
-    )
-}
-
-async fn new_version(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(methodology_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    match pagina_de_versao(&state, &member, methodology_id, None).await {
-        Ok(resposta) => resposta,
         Err(failure) => failure_response(&failure),
     }
 }
 
-async fn pagina_de_versao(
-    state: &WorkspaceState,
-    member: &Member,
-    methodology_id: Uuid,
-    message: Option<String>,
-) -> Result<Response, api::ApiFailure> {
-    let methodology = api::get::<Value>(
-        state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/methodologies/{methodology_id}"),
-    )
-    .await?;
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn methodology_detail() -> Response {
+    interface_pending()
+}
 
-    let versions = optional(
-        state,
-        member,
-        &format!("/api/v1/methodologies/{methodology_id}/versions"),
-    )
-    .await;
-
-    // A que está em vigor é a publicada que ninguém substituiu.
-    let em_vigor = versions.as_array().and_then(|linhas| {
-        linhas
-            .iter()
-            .find(|v| {
-                v.get("status").and_then(Value::as_str) == Some("published")
-                    && v.get("superseded_by_id").is_none_or(Value::is_null)
-            })
-            .cloned()
-    });
-
-    let viewer = viewer(state, member).await;
-    Ok(shell_page(
-        "Nova versão",
-        &viewer,
-        Screen::Ideas,
-        vec![
-            Crumb::to(Screen::Ideas),
-            Crumb {
-                label: "Metodologia".to_owned(),
-                href: format!("/methodologies/{methodology_id}"),
-            },
-        ],
-        ui::screens::science::nova_versao(ui::screens::science::NovaVersaoView {
-            methodology,
-            em_vigor,
-            message,
-        }),
-    ))
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_version() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -5545,60 +2848,15 @@ async fn publish_version(
     .await
     {
         Ok(_) => Redirect::to(&format!("/methodologies/{methodology_id}")).into_response(),
-        Err(failure) => match motivo_para_o_formulario(&failure) {
-            Some(motivo) => {
-                match pagina_de_versao(&state, &member, methodology_id, Some(motivo)).await {
-                    Ok(resposta) => resposta,
-                    Err(failure) => failure_response(&failure),
-                }
-            }
-            None => failure_response(&failure),
-        },
+        Err(failure) => failure_response(&failure),
     }
 }
 
 // ── Estudo e execuções ───────────────────────────────────────────────────
 
-async fn new_study(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(workspace_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    match pagina_de_estudo(&state, &member, workspace_id, None).await {
-        Ok(resposta) => resposta,
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-async fn pagina_de_estudo(
-    state: &WorkspaceState,
-    member: &Member,
-    workspace_id: Uuid,
-    message: Option<String>,
-) -> Result<Response, api::ApiFailure> {
-    let workspace = ambiente_ou_recusa(state, member, workspace_id).await?;
-    let hypotheses = optional(
-        state,
-        member,
-        &format!("/api/v1/workspaces/{workspace_id}/hypotheses"),
-    )
-    .await;
-    let methodology_versions = versoes_de_metodologia(state, member, workspace_id).await;
-    let viewer = viewer(state, member).await;
-
-    Ok(shell_page(
-        "Novo estudo",
-        &viewer,
-        Screen::Ideas,
-        trilho_da_ciencia(workspace_id),
-        ui::screens::science::novo_estudo(ui::screens::science::NovoEstudoView {
-            workspace,
-            hypotheses,
-            methodology_versions,
-            message,
-        }),
-    ))
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_study() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -5646,121 +2904,18 @@ async fn create_study(
             Some(id) => Redirect::to(&format!("/studies/{id}")).into_response(),
             None => Redirect::to(&format!("/workspaces/{workspace_id}/science")).into_response(),
         },
-        Err(failure) => match motivo_para_o_formulario(&failure) {
-            Some(motivo) => {
-                match pagina_de_estudo(&state, &member, workspace_id, Some(motivo)).await {
-                    Ok(resposta) => resposta,
-                    Err(failure) => failure_response(&failure),
-                }
-            }
-            None => failure_response(&failure),
-        },
-    }
-}
-
-async fn study_detail(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(study_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let study = match api::get::<Value>(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/studies/{study_id}"),
-    )
-    .await
-    {
-        Ok(valor) => valor,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let executions = optional(
-        &state,
-        &member,
-        &format!("/api/v1/studies/{study_id}/executions"),
-    )
-    .await;
-    let pode_criar = pode_criar_no_ambiente(&state, &member, &study).await;
-    let viewer = viewer(&state, &member).await;
-    let trail = study
-        .get("workspace_id")
-        .and_then(Value::as_str)
-        .and_then(|v| Uuid::parse_str(v).ok())
-        .map_or_else(|| vec![Crumb::to(Screen::Ideas)], trilho_da_ciencia);
-
-    shell_page(
-        "Estudo",
-        &viewer,
-        Screen::Ideas,
-        trail,
-        ui::screens::science::estudo(ui::screens::science::EstudoView {
-            study,
-            executions,
-            may_create: pode_criar,
-        }),
-    )
-}
-
-async fn new_execution(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(study_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    match pagina_de_execucao(&state, &member, study_id, None).await {
-        Ok(resposta) => resposta,
         Err(failure) => failure_response(&failure),
     }
 }
 
-async fn pagina_de_execucao(
-    state: &WorkspaceState,
-    member: &Member,
-    study_id: Uuid,
-    message: Option<String>,
-) -> Result<Response, api::ApiFailure> {
-    let study = api::get::<Value>(
-        state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/studies/{study_id}"),
-    )
-    .await?;
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn study_detail() -> Response {
+    interface_pending()
+}
 
-    let workspace_id = study
-        .get("workspace_id")
-        .and_then(Value::as_str)
-        .and_then(|v| Uuid::parse_str(v).ok());
-
-    let (methodology_versions, dataset_versions) = match workspace_id {
-        Some(id) => (
-            versoes_de_metodologia(state, member, id).await,
-            versoes_de_dataset(state, member, id).await,
-        ),
-        None => (Vec::new(), Vec::new()),
-    };
-
-    let viewer = viewer(state, member).await;
-    Ok(shell_page(
-        "Registar execução",
-        &viewer,
-        Screen::Ideas,
-        vec![
-            Crumb::to(Screen::Ideas),
-            Crumb {
-                label: "Estudo".to_owned(),
-                href: format!("/studies/{study_id}"),
-            },
-        ],
-        ui::screens::science::nova_execucao(ui::screens::science::NovaExecucaoView {
-            study,
-            methodology_versions,
-            dataset_versions,
-            message,
-        }),
-    ))
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_execution() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -5814,51 +2969,15 @@ async fn record_execution(
             Some(id) => Redirect::to(&format!("/executions/{id}")).into_response(),
             None => Redirect::to(&format!("/studies/{study_id}")).into_response(),
         },
-        Err(failure) => match motivo_para_o_formulario(&failure) {
-            Some(motivo) => match pagina_de_execucao(&state, &member, study_id, Some(motivo)).await
-            {
-                Ok(resposta) => resposta,
-                Err(failure) => failure_response(&failure),
-            },
-            None => failure_response(&failure),
-        },
+        Err(failure) => failure_response(&failure),
     }
 }
 
 // ── Execução e resultado ─────────────────────────────────────────────────
 
-async fn execution_detail(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(execution_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let (execution, study, results) = match cadeia_da_execucao(&state, &member, execution_id).await
-    {
-        Ok(tudo) => tudo,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let pode_criar = pode_criar_no_ambiente(&state, &member, &study).await;
-    let viewer = viewer(&state, &member).await;
-    shell_page(
-        "Execução",
-        &viewer,
-        Screen::Ideas,
-        vec![
-            Crumb::to(Screen::Ideas),
-            Crumb {
-                label: "Estudo".to_owned(),
-                href: format!("/studies/{}", text_de(&study, "id")),
-            },
-        ],
-        ui::screens::science::execucao(ui::screens::science::ExecucaoView {
-            execution,
-            study,
-            results,
-            may_create: pode_criar,
-        }),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn execution_detail() -> Response {
+    interface_pending()
 }
 
 /// Uma execução, o estudo a que pertence, e o que ela produziu.
@@ -5919,43 +3038,9 @@ fn text_de(valor: &Value, chave: &str) -> String {
         .to_owned()
 }
 
-async fn new_result(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(execution_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    match pagina_de_resultado(&state, &member, execution_id, None).await {
-        Ok(resposta) => resposta,
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-async fn pagina_de_resultado(
-    state: &WorkspaceState,
-    member: &Member,
-    execution_id: Uuid,
-    message: Option<String>,
-) -> Result<Response, api::ApiFailure> {
-    let (execution, study, _) = cadeia_da_execucao(state, member, execution_id).await?;
-    let viewer = viewer(state, member).await;
-    Ok(shell_page(
-        "Registar resultado",
-        &viewer,
-        Screen::Ideas,
-        vec![
-            Crumb::to(Screen::Ideas),
-            Crumb {
-                label: "Execução".to_owned(),
-                href: format!("/executions/{execution_id}"),
-            },
-        ],
-        ui::screens::science::novo_resultado(ui::screens::science::NovoResultadoView {
-            execution,
-            study,
-            message,
-        }),
-    ))
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_result() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -6007,22 +3092,8 @@ async fn create_result(
             Some(id) => Redirect::to(&format!("/results/{id}")).into_response(),
             None => Redirect::to(&format!("/executions/{execution_id}")).into_response(),
         },
-        Err(failure) => match motivo_para_o_formulario(&failure) {
-            Some(motivo) => {
-                match pagina_de_resultado(&state, &member, execution_id, Some(motivo)).await {
-                    Ok(resposta) => resposta,
-                    Err(failure) => failure_response(&failure),
-                }
-            }
-            None => failure_response(&failure),
-        },
+        Err(failure) => failure_response(&failure),
     }
-}
-
-/// O sentido da linhagem que se está a ver.
-#[derive(serde::Deserialize)]
-struct LineageQuery {
-    direction: Option<String>,
 }
 
 /// Campos de uma validação.
@@ -6038,17 +3109,9 @@ struct ValidationForm {
     note: String,
 }
 
-/// O formulário de validação de um resultado.
-async fn validate_result_form(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(result_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    match validation_page(&state, &member, result_id, None).await {
-        Ok(response) => response,
-        Err(failure) => failure_response(&failure),
-    }
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn validate_result_form() -> Response {
+    interface_pending()
 }
 
 /// Regista a afirmação, em nome de quem a faz.
@@ -6083,205 +3146,32 @@ async fn record_validation(
     .await
     {
         Ok(_) => Redirect::to(&format!("/results/{result_id}")).into_response(),
-        Err(failure) => {
-            // A recusa do Core volta ao formulário, com o que ele disse. Um
-            // ecrã de erro genérico perderia a razão — e a razão aqui é a
-            // parte útil: falta a execução, ou falta a autoridade.
-            // Só as recusas que a pessoa pode resolver voltam ao formulário:
-            // falta a prova, ou falta a autoridade. Uma avaria, uma sessão
-            // caída ou um recurso inalcançável não são coisas que se corrijam
-            // preenchendo o campo outra vez.
-            let motivo = match &failure {
-                api::ApiFailure::Rejected(mensagem) => Some(mensagem.clone()),
-                api::ApiFailure::Forbidden => Some(
-                    "Validar ou dar por reproduzido um resultado exige liderança do \
-                     ambiente ou gestão da unidade."
-                        .to_owned(),
-                ),
-                _ => None,
-            };
-
-            match motivo {
-                Some(motivo) => {
-                    match validation_page(&state, &member, result_id, Some(motivo)).await {
-                        Ok(response) => response,
-                        Err(failure) => failure_response(&failure),
-                    }
-                }
-                None => failure_response(&failure),
-            }
-        }
+        Err(failure) => failure_response(&failure),
     }
-}
-
-/// O ecrã de validação, com o resultado e as execuções que servem de prova.
-async fn validation_page(
-    state: &WorkspaceState,
-    member: &Member,
-    result_id: Uuid,
-    message: Option<String>,
-) -> Result<Response, api::ApiFailure> {
-    let result = api::get::<Value>(
-        state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/results/{result_id}"),
-    )
-    .await?;
-
-    // As execuções que podem servir de prova são as do estudo que produziu
-    // este resultado. Sem execução de origem não há estudo conhecido, e a
-    // lista fica vazia — que é o que o ecrã precisa de saber para explicar
-    // porque a reprodução não está disponível.
-    let executions = match result.get("execution_id").and_then(Value::as_str) {
-        Some(execution_id) => {
-            let execution =
-                optional(state, member, &format!("/api/v1/executions/{execution_id}")).await;
-            match execution.get("study_id").and_then(Value::as_str) {
-                Some(study_id) => {
-                    optional(
-                        state,
-                        member,
-                        &format!("/api/v1/studies/{study_id}/executions"),
-                    )
-                    .await
-                }
-                None => Value::Null,
-            }
-        }
-        None => Value::Null,
-    };
-
-    let viewer = viewer(state, member).await;
-    let trail = vec![
-        Crumb::to(Screen::Ideas),
-        Crumb {
-            label: "Resultado".to_owned(),
-            href: format!("/results/{result_id}"),
-        },
-    ];
-
-    Ok(shell_page(
-        "Validar resultado",
-        &viewer,
-        Screen::Ideas,
-        trail,
-        ui::screens::science::validate_result(ui::screens::science::ValidateView {
-            result,
-            executions,
-            message,
-        }),
-    ))
 }
 
 // ── Conhecimento ─────────────────────────────────────────────────────────
 
-async fn knowledge(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    // Os três contadores que têm entidade no Core passam a contar de verdade.
-    // «Resultados» não entra aqui: não há tabela nem consulta, e o ecrã
-    // declara-o em vez de mostrar zero.
-    let (bibliography, documents, datasets, recent, ai) = tokio::join!(
-        optional(&state, &member, "/api/v1/sources?page_size=1"),
-        optional(&state, &member, "/api/v1/documents?page_size=1"),
-        optional(&state, &member, "/api/v1/datasets?page_size=1"),
-        optional(&state, &member, "/api/v1/search?q=a&page_size=10"),
-        optional(&state, &member, "/api/v1/ai/status"),
-    );
-
-    let content = ui::screens::knowledge::knowledge(ui::screens::knowledge::KnowledgeCounts {
-        bibliography,
-        documents,
-        datasets,
-        recent,
-        inference_available: inference_available(&ai),
-        may_use_assistance: viewer.can(ocinye_contracts::Permission::AiUse),
-    });
-
-    shell_page(
-        crate::i18n::t("nav.knowledge"),
-        &viewer,
-        Screen::Knowledge,
-        Vec::new(),
-        content,
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn knowledge() -> Response {
+    interface_pending()
 }
 
 // ── Inteligência ─────────────────────────────────────────────────────────
 
-async fn ai_hub(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let (status, models, agents, conversations) = tokio::join!(
-        optional(&state, &member, "/api/v1/ai/status"),
-        optional(&state, &member, "/api/v1/ai/models"),
-        optional(&state, &member, "/api/v1/ai/agents"),
-        optional(&state, &member, "/api/v1/ai/conversations"),
-    );
-
-    shell_page(
-        "Ocinye AI",
-        &viewer,
-        Screen::Ai,
-        Vec::new(),
-        ui::screens::ai::hub(&status, &models, &agents, &conversations),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn ai_hub() -> Response {
+    interface_pending()
 }
 
-async fn new_agent(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let models = optional(&state, &member, "/api/v1/ai/models").await;
-
-    shell_page(
-        "Criar Agente IA",
-        &viewer,
-        Screen::Agents,
-        agent_trail(),
-        ui::screens::ai::new_agent(&models, None),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_agent() -> Response {
+    interface_pending()
 }
 
-fn agent_trail() -> Vec<Crumb> {
-    vec![Crumb::to(Screen::Agents)]
-}
-
-/// `GET /ai/agents/{id}` — o detalhe de um agente: a sua definição.
-///
-/// Um agente é definível e persistido sem nó de IA; o detalhe mostra o que ele
-/// é (capacidade, âmbito, tecto de classificação, fontes) e o seu estado real,
-/// derivado da disponibilidade. Abrir por identificador reautoriza pela
-/// visibilidade no Core — um agente que não se pode ver dá 404 (F-15).
-async fn agent_detail(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(agent_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let agent = match api::get::<Value>(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/ai/agents/{agent_id}"),
-    )
-    .await
-    {
-        Ok(agent) => agent,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let viewer = viewer(&state, &member).await;
-    shell_page(
-        "Agente IA",
-        &viewer,
-        Screen::Agents,
-        agent_trail(),
-        ui::screens::ai::agent_detail(&agent),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn agent_detail() -> Response {
+    interface_pending()
 }
 
 /// Campos do construtor de agentes.
@@ -6319,7 +3209,6 @@ async fn create_agent(
     Form(form): Form<NewAgentForm>,
 ) -> Response {
     let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
 
     let body = serde_json::json!({
         "name": form.name,
@@ -6348,68 +3237,13 @@ async fn create_agent(
     {
         Ok(_) => Redirect::to("/ai/agents").into_response(),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => {
-            let models = optional(&state, &member, "/api/v1/ai/models").await;
-            (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                shell_page(
-                    "Criar Agente IA",
-                    &viewer,
-                    Screen::Agents,
-                    agent_trail(),
-                    ui::screens::ai::new_agent(&models, Some(failure.to_string())),
-                ),
-            )
-                .into_response()
-        }
+        Err(failure) => failure_response(&failure),
     }
 }
 
-#[derive(Deserialize)]
-struct PromptQuery {
-    #[serde(default)]
-    workspace: Option<Uuid>,
-}
-
-async fn prompt(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(query): Query<PromptQuery>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let status = optional(&state, &member, "/api/v1/ai/status").await;
-
-    // Quando o prompt é aberto de dentro de um Research Workspace, o contexto
-    // é resolvido e mostrado — não presumido a partir do URL.
-    let context = if let Some(id) = query.workspace {
-        let path = format!("/api/v1/workspaces/{id}");
-        let overview = optional(&state, &member, &path).await;
-        overview.get("workspace").map(|w| {
-            (
-                w.get("code")
-                    .and_then(Value::as_str)
-                    .unwrap_or("—")
-                    .to_owned(),
-                w.get("unit_code")
-                    .and_then(Value::as_str)
-                    .unwrap_or("—")
-                    .to_owned(),
-            )
-        })
-    } else {
-        None
-    };
-
-    let content =
-        ui::screens::prompt::prompt(ui::screens::prompt::context_from(&status, context), None);
-    shell_page(
-        "Prompt Ocinye",
-        &viewer,
-        Screen::Prompt,
-        Vec::new(),
-        content,
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn prompt() -> Response {
+    interface_pending()
 }
 
 /// O pedido submetido no Prompt Ocinye.
@@ -6417,8 +3251,6 @@ async fn prompt(
 struct PromptForm {
     #[serde(default)]
     prompt: String,
-    #[serde(default)]
-    workspace: Option<String>,
     /// A capacidade escolhida na barra (`GENERAL`, `CODING`, …).
     #[serde(default)]
     capability: Option<String>,
@@ -6437,34 +3269,8 @@ async fn submit_prompt(
     Form(form): Form<PromptForm>,
 ) -> Response {
     let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let status = optional(&state, &member, "/api/v1/ai/status").await;
-
-    let context = match form.workspace.as_deref().filter(|id| !id.is_empty()) {
-        Some(id) => {
-            let path = format!("/api/v1/workspaces/{id}");
-            let overview = optional(&state, &member, &path).await;
-            overview.get("workspace").map(|w| {
-                (
-                    w.get("code")
-                        .and_then(Value::as_str)
-                        .unwrap_or("—")
-                        .to_owned(),
-                    w.get("unit_code")
-                        .and_then(Value::as_str)
-                        .unwrap_or("—")
-                        .to_owned(),
-                )
-            })
-        }
-        None => None,
-    };
-
-    // Um pedido vazio não é um turno: nada foi pedido. Volta ao estado vazio
-    // sem inventar uma resposta.
-    let exchange = if form.prompt.trim().is_empty() {
-        None
-    } else {
+    // Um pedido vazio não é um turno: nada foi pedido, e nada vai ao Core.
+    if !form.prompt.trim().is_empty() {
         let mut body = serde_json::json!({ "prompt": form.prompt });
         if let Some(capability) = form.capability.as_deref().filter(|c| !c.is_empty()) {
             body["capability"] = Value::String(capability.to_owned());
@@ -6477,206 +3283,23 @@ async fn submit_prompt(
             &body,
         )
         .await;
-
-        match outcome {
-            // O caminho normal desta instalação: 200 com o envelope tipado.
-            Ok(value) => Some(exchange_from_envelope(&form.prompt, &value)),
-            Err(ApiFailure::Unauthorised) => return Redirect::to("/login").into_response(),
-            // O membro não pode usar IA: uma resposta de sistema honesta, com o
-            // seu código-máquina — não uma falha silenciosa.
-            Err(ApiFailure::Forbidden | ApiFailure::Denied) => {
-                Some(ui::screens::prompt::PromptExchange {
-                    prompt: form.prompt.clone(),
-                    origin: "SYSTEM".to_owned(),
-                    status: "DEGRADED".to_owned(),
-                    reason_code: Some("AI_PERMISSION_DENIED".to_owned()),
-                    model: None,
-                    content: "Não tem autorização para utilizar as capacidades de IA nesta \
-                              instalação do Ocinye OS."
-                        .to_owned(),
-                    capability: None,
-                })
-            }
-            // Qualquer outra recusa do Core chega ao membro nas palavras que o
-            // Core deu, ainda como turno de sistema.
-            Err(failure) => Some(ui::screens::prompt::PromptExchange {
-                prompt: form.prompt.clone(),
-                origin: "SYSTEM".to_owned(),
-                status: "DEGRADED".to_owned(),
-                reason_code: None,
-                model: None,
-                content: failure.to_string(),
-                capability: None,
-            }),
+        if let Err(ApiFailure::Unauthorised) = outcome {
+            return Redirect::to("/login").into_response();
         }
-    };
-
-    // A resposta diz com que capacidade foi pedida (D13, Q-30).
-    let exchange = exchange.map(|mut e| {
-        e.capability = form.capability.clone();
-        e
-    });
-    let content = ui::screens::prompt::prompt(
-        ui::screens::prompt::context_from(&status, context),
-        exchange,
-    );
-
-    shell_page(
-        "Prompt Ocinye",
-        &viewer,
-        Screen::Prompt,
-        Vec::new(),
-        content,
-    )
-}
-
-/// Constrói o turno de conversa a partir do envelope tipado do Core.
-///
-/// Lê os campos tal como o Core os deu — `origin`, `status`, `reason_code`,
-/// `model`, `content`. Nunca infere um modelo: se o Core disse `origin=SYSTEM`,
-/// é do sistema.
-fn exchange_from_envelope(prompt: &str, value: &Value) -> ui::screens::prompt::PromptExchange {
-    let field = |key: &str| value.get(key).and_then(Value::as_str).map(str::to_owned);
-    ui::screens::prompt::PromptExchange {
-        prompt: prompt.to_owned(),
-        origin: field("origin").unwrap_or_else(|| "SYSTEM".to_owned()),
-        status: field("status").unwrap_or_else(|| "DEGRADED".to_owned()),
-        reason_code: field("reason_code"),
-        model: field("model"),
-        content: field("content").unwrap_or_default(),
-        capability: None,
     }
+    interface_pending()
 }
 
-/// Termo de pesquisa.
-#[derive(Deserialize)]
-struct SearchQuery {
-    #[serde(default)]
-    q: String,
-}
-
-/// `GET /search`
-///
-/// O Ocinye Core serve `/api/v1/search` desde sempre; até esta auditoria não
-/// havia por onde lá chegar a partir do Workspace.
-async fn search(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(query): Query<SearchQuery>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    // Sem termo não se pesquisa: uma consulta vazia devolveria tudo o que o
-    // membro pode ver, o que não é uma pesquisa e custa uma varredura.
-    let results = if query.q.trim().is_empty() {
-        Value::Null
-    } else {
-        let path = format!(
-            "/api/v1/search?q={}&page_size=25",
-            urlencoding_minimal(query.q.trim())
-        );
-        optional(&state, &member, &path).await
-    };
-
-    // O corpo dos ficheiros, ao lado dos títulos. Duas consultas porque são
-    // duas afirmações diferentes, e não uma que se possa ordenar com a outra.
-    let corpos = if query.q.trim().is_empty() {
-        Value::Null
-    } else {
-        let path = format!(
-            "/api/v1/search/bodies?q={}&page_size=10",
-            urlencoding_minimal(query.q.trim())
-        );
-        optional(&state, &member, &path).await
-    };
-
-    let semantic = optional(&state, &member, "/api/v1/search/semantic-availability").await;
-
-    shell_page(
-        crate::i18n::t("nav.search"),
-        &viewer,
-        Screen::Search,
-        Vec::new(),
-        ui::screens::search::search(&query.q, &results, &corpos, &semantic),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn search() -> Response {
+    interface_pending()
 }
 
 // ── A Universal Command Surface ──────────────────────────────────────────
 
-#[derive(Deserialize)]
-struct AskQuery {
-    #[serde(default)]
-    q: Option<String>,
-    #[serde(default)]
-    intent: Option<String>,
-}
-
-/// `Search · Ask · Act`, numa só superfície.
-///
-/// Sem termo, mostra o campo. Com termo, chama o Core — que responde à
-/// pesquisa deterministicamente e declara indisponível o que precisa de um
-/// modelo (briefing §29, §66).
-async fn ask(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(query): Query<AskQuery>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let term = query.q.unwrap_or_default();
-
-    // Sem escolha explícita, a superfície lê a frase. O membro escreve
-    // naturalmente — «Cria uma pasta X dentro de Y» — e os três modos ficam
-    // como controlo e como reserva.
-    let detected = ocinye_contracts::agentic::Intent::detect(&term);
-    let intent = query
-        .intent
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| detected.as_str().to_owned());
-
-    let outcome = if term.trim().is_empty() {
-        Value::Null
-    } else {
-        let body = serde_json::json!({
-            "utterance": term.trim(),
-            "intent": intent,
-        });
-
-        match api::post(
-            &state,
-            &member.session.access_token,
-            &member.correlation_id,
-            "/api/v1/agentic/invoke",
-            &body,
-        )
-        .await
-        {
-            Ok(outcome) => outcome,
-            Err(ApiFailure::Unauthorised) => return Redirect::to("/login").into_response(),
-            // Uma recusa do Core é renderizada como estado do ecrã, não como
-            // página de erro: o membro continua a poder escrever outra coisa.
-            Err(failure) => serde_json::json!({
-                "kind": "unavailable",
-                "reason": failure.to_string(),
-                "alternative": "A navegação e as acções do Workspace continuam disponíveis.",
-            }),
-        }
-    };
-
-    shell_page(
-        "Pesquisar, perguntar ou executar",
-        &viewer,
-        Screen::Ask,
-        Vec::new(),
-        ui::screens::ask::ask(&ui::screens::ask::AskView {
-            query: term,
-            intent,
-            outcome,
-            may_use_ai: viewer.can(ocinye_contracts::Permission::AiUse),
-        }),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn ask() -> Response {
+    interface_pending()
 }
 
 /// Confirma e executa um plano.
@@ -6757,76 +3380,23 @@ fn urlencoding_minimal(value: &str) -> String {
         .collect()
 }
 
-async fn compute(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let (status, nodes) = tokio::join!(
-        optional(&state, &member, "/api/v1/compute/status"),
-        optional(&state, &member, "/api/v1/compute/nodes"),
-    );
-
-    shell_page(
-        "Computação",
-        &viewer,
-        Screen::Compute,
-        Vec::new(),
-        ui::screens::compute::compute(&status, &nodes),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn compute() -> Response {
+    interface_pending()
 }
 
 // ── Institucional ────────────────────────────────────────────────────────
 
-/// O feed institucional.
-///
-/// # `required`, e não `optional`
-///
-/// O feed é o conteúdo do ecrã, e era lido com `optional` — que transforma uma
-/// falha do Core em `null`. O ecrã renderizava isso como zero acontecimentos:
-/// «não se passou nada na instituição» quando o que se passou foi o Core não
-/// responder.
-///
-/// São dois factos opostos e tinham o mesmo aspecto. Um convida a fechar a
-/// página; o outro pede que se avise alguém.
-async fn activity(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let payload = match required(&state, &member, "/api/v1/activity?page_size=100").await {
-        Ok(payload) => payload,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    shell_page(
-        "Actividade",
-        &viewer,
-        Screen::Activity,
-        Vec::new(),
-        ui::screens::activity::activity(&payload),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn activity() -> Response {
+    interface_pending()
 }
 
 // ── Criar ideia ──────────────────────────────────────────────────────────
 
-/// Os workspaces onde o membro pode criar, para os selectores de destino.
-///
-/// Uma chamada só, partilhada pelos dois formulários: a pergunta é a mesma, e a
-/// política que a responde também.
-async fn creation_destinations(state: &WorkspaceState, member: &Member) -> Value {
-    optional(state, member, "/api/v1/workspaces?page_size=200").await
-}
-
-async fn new_source_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let destinos = creation_destinations(&state, &member).await;
-    let trail = vec![Crumb::to(Screen::Bibliography)];
-    shell_page(
-        "Nova Referência",
-        &viewer,
-        Screen::Bibliography,
-        trail,
-        ui::screens::lists::new_source(&destinos, None),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_source_form() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -6890,33 +3460,13 @@ async fn create_source(
     {
         Ok(_) => Redirect::to("/bibliography").into_response(),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => {
-            let viewer = viewer(&state, &member).await;
-            let destinos = creation_destinations(&state, &member).await;
-            let trail = vec![Crumb::to(Screen::Bibliography)];
-            shell_page(
-                "Nova Referência",
-                &viewer,
-                Screen::Bibliography,
-                trail,
-                ui::screens::lists::new_source(&destinos, Some(failure.to_string())),
-            )
-        }
+        Err(failure) => failure_response(&failure),
     }
 }
 
-async fn new_dataset_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let destinos = creation_destinations(&state, &member).await;
-    let trail = vec![Crumb::to(Screen::Datasets)];
-    shell_page(
-        "Novo Dataset",
-        &viewer,
-        Screen::Datasets,
-        trail,
-        ui::screens::lists::new_dataset(&destinos, None),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_dataset_form() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -6971,33 +3521,13 @@ async fn create_dataset(
     {
         Ok(_) => Redirect::to("/datasets").into_response(),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => {
-            let viewer = viewer(&state, &member).await;
-            let destinos = creation_destinations(&state, &member).await;
-            let trail = vec![Crumb::to(Screen::Datasets)];
-            shell_page(
-                "Novo Dataset",
-                &viewer,
-                Screen::Datasets,
-                trail,
-                ui::screens::lists::new_dataset(&destinos, Some(failure.to_string())),
-            )
-        }
+        Err(failure) => failure_response(&failure),
     }
 }
 
-async fn new_task_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let destinos = creation_destinations(&state, &member).await;
-    let trail = vec![Crumb::to(Screen::MyWork)];
-    shell_page(
-        "Nova Tarefa",
-        &viewer,
-        Screen::MyWork,
-        trail,
-        ui::screens::lists::new_task(&destinos, None),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_task_form() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -7044,111 +3574,18 @@ async fn create_task(
         // A tarefa vive no ambiente que a governa; abre-se lá, onde é listada.
         Ok(_) => Redirect::to(&format!("/workspaces/{}", form.workspace_id)).into_response(),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => {
-            let viewer = viewer(&state, &member).await;
-            let destinos = creation_destinations(&state, &member).await;
-            let trail = vec![Crumb::to(Screen::MyWork)];
-            shell_page(
-                "Nova Tarefa",
-                &viewer,
-                Screen::MyWork,
-                trail,
-                ui::screens::lists::new_task(&destinos, Some(failure.to_string())),
-            )
-        }
+        Err(failure) => failure_response(&failure),
     }
 }
 
-/// O detalhe de uma tarefa: o que é, o seu estado, e as acções sobre ela.
-/// `GET /datasets/{id}` — o detalhe de um dataset: metadados de governança e as
-/// suas versões. O Core reautoriza pela posse e pela classificação do próprio
-/// dataset (`data::get_dataset`), pelo que um dataset escondido da lista não é
-/// alcançável por identificador.
-async fn dataset_detail(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(dataset_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let dataset = match api::get::<Value>(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/datasets/{dataset_id}"),
-    )
-    .await
-    {
-        Ok(dataset) => dataset,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    // As versões são o material do dataset; a lista já é autorizada pelo Core.
-    let versions = optional(
-        &state,
-        &member,
-        &format!("/api/v1/datasets/{dataset_id}/versions"),
-    )
-    .await;
-
-    let viewer = viewer(&state, &member).await;
-    let trail = vec![Crumb::to(Screen::Datasets)];
-    shell_page(
-        "Dataset",
-        &viewer,
-        Screen::Datasets,
-        trail,
-        ui::screens::workspaces::dataset_detail(&dataset, &versions),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn dataset_detail() -> Response {
+    interface_pending()
 }
 
-async fn task_detail(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(task_id): Path<Uuid>,
-    Query(aviso): Query<AvisoQuery>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let task = match api::get::<Value>(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/tasks/{task_id}"),
-    )
-    .await
-    {
-        Ok(task) => task,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    // O ambiente dá o título, os membros (para o responsável) e a autoridade.
-    let workspace_id = task
-        .get("workspace_id")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_owned();
-    let overview = optional(
-        &state,
-        &member,
-        &format!("/api/v1/workspaces/{workspace_id}"),
-    )
-    .await;
-
-    let viewer = viewer(&state, &member).await;
-    let trail = vec![Crumb::to(Screen::MyWork)];
-    shell_page(
-        "Tarefa",
-        &viewer,
-        Screen::MyWork,
-        trail,
-        ui::screens::workspaces::task_detail(
-            &task,
-            &overview,
-            aviso.ok.as_deref(),
-            aviso.erro.as_deref(),
-        ),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn task_detail() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -7228,69 +3665,14 @@ async fn task_action_redirect(
     }
 }
 
-/// O resultado de uma mudança de imagem de perfil, tal como volta do redirect.
-#[derive(Debug, Default, Deserialize)]
-struct AvatarOutcome {
-    /// Presente quando a operação correu bem.
-    avatar: Option<String>,
-    /// A razão, quando não correu.
-    avatar_erro: Option<String>,
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn settings_account() -> Response {
+    interface_pending()
 }
 
-async fn settings_account(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(outcome): Query<AvatarOutcome>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let (me, organisation) = tokio::join!(
-        optional(&state, &member, "/api/v1/me"),
-        optional(&state, &member, "/api/v1/organisation"),
-    );
-    shell_page(
-        "Definições",
-        &viewer,
-        Screen::Settings,
-        Vec::new(),
-        ui::screens::settings::moldura(
-            "/settings",
-            ui::screens::settings::account(
-                &me,
-                &organisation,
-                &viewer.avatar,
-                outcome.avatar_erro,
-                outcome.avatar.as_deref() == Some("ok"),
-            ),
-        ),
-    )
-}
-
-/// O que a página de idioma recebe de volta de uma gravação.
-#[derive(Deserialize)]
-struct LanguageOutcome {
-    #[serde(default)]
-    ok: Option<String>,
-}
-
-/// `Definições → Idioma e região`.
-async fn settings_language(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(outcome): Query<LanguageOutcome>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    shell_page(
-        crate::i18n::t("settings.title"),
-        &viewer,
-        Screen::Settings,
-        Vec::new(),
-        ui::screens::settings::moldura(
-            "/settings/language",
-            ui::screens::settings::language(outcome.ok.as_deref() == Some("1")),
-        ),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn settings_language() -> Response {
+    interface_pending()
 }
 
 /// A escolha de idioma submetida.
@@ -7323,51 +3705,14 @@ async fn set_language(
     resposta
 }
 
-/// `Definições → Aplicações`: gerir o conjunto de aplicações fixadas.
-async fn settings_apps(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(outcome): Query<LanguageOutcome>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    shell_page(
-        crate::i18n::t("settings.title"),
-        &viewer,
-        Screen::Settings,
-        Vec::new(),
-        ui::screens::settings::moldura(
-            "/settings/apps",
-            ui::screens::settings::apps(&viewer, outcome.ok.as_deref() == Some("1")),
-        ),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn settings_apps() -> Response {
+    interface_pending()
 }
 
-/// `Administração › Instância`: o perfil e as aplicações activas (ADR-0014).
-///
-/// A página é do Core: sem `organisation.view` o Core recusa, e a recusa
-/// mostra-se como recusa.
-async fn admin_instance(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(outcome): Query<LanguageOutcome>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let payload = match required(&state, &member, "/api/v1/instance/applications").await {
-        Ok(payload) => payload,
-        Err(failure) => return failure_response(&failure),
-    };
-    shell_page(
-        crate::i18n::t("admin.instance.title"),
-        &viewer,
-        Screen::Admin,
-        Vec::new(),
-        ui::screens::administration::moldura(
-            ui::screens::administration::SeccaoAdmin::Instancia,
-            ui::screens::administration::instance(&payload, outcome.ok.as_deref() == Some("1")),
-        ),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn admin_instance() -> Response {
+    interface_pending()
 }
 
 /// Grava o perfil e o estado de cada aplicação opcional que mudou.
@@ -7397,7 +3742,7 @@ async fn save_instance(
             // O id entra no caminho de um pedido ao Core: só um id que o registo
             // conhece, nunca o texto do formulário tal como veio (um `../` levaria
             // o pedido a outra rota).
-            if ui::apps::by_id(id).is_none() {
+            if experience::apps::by_id(id).is_none() {
                 continue;
             }
             let pedido = match valor.as_ref() {
@@ -7481,14 +3826,14 @@ async fn save_apps(
     let mut repor = false;
     for (chave, valor) in url::form_urlencoded::parse(&corpo) {
         match chave.as_ref() {
-            "pinned" if ui::apps::is_pinnable(&valor) => marcadas.push(valor.into_owned()),
+            "pinned" if experience::apps::is_pinnable(&valor) => marcadas.push(valor.into_owned()),
             "action" if valor == "reset" => repor = true,
             _ => {}
         }
     }
 
     let nova = if repor {
-        ui::apps::default_pins()
+        experience::apps::default_pins()
     } else {
         // Preserva a ordem actual para as que ficam, e junta as novas ao fim.
         let atuais: Vec<String> = api::get::<Value>(
@@ -7536,51 +3881,14 @@ async fn save_apps(
     Redirect::to("/settings/apps?ok=1").into_response()
 }
 
-/// A ajuda do Workspace.
-///
-/// Conteúdo, não consulta: não chama o Core, e por isso não pode falhar por
-/// causa dele. Quem vem aqui porque alguma coisa não funcionou merece encontrar
-/// a página de pé.
-async fn help(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    shell_page(
-        "Ajuda",
-        &viewer,
-        Screen::Help,
-        Vec::new(),
-        ui::screens::help::help(),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn help() -> Response {
+    interface_pending()
 }
 
-/// O Ocinye Terminal (ADR-0312).
-///
-/// A página é a casca; cada linha vai ao Core por [`terminal_exec`].
-async fn terminal(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    // `membro@instância`: a primeira palavra do nome, como num prompt; a
-    // instância pelo nome que o Core deu. Só apresentação.
-    let who = viewer
-        .name
-        .split_whitespace()
-        .next()
-        .unwrap_or("")
-        .to_lowercase();
-    let instance = viewer
-        .organisation
-        .split_whitespace()
-        .next()
-        .unwrap_or("ocinye")
-        .to_lowercase();
-    let vista = ui::screens::terminal::TerminalView { who, instance };
-    shell_page(
-        crate::i18n::t("terminal.app"),
-        &viewer,
-        Screen::Terminal,
-        Vec::new(),
-        ui::screens::terminal::terminal(&vista),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn terminal() -> Response {
+    interface_pending()
 }
 
 /// `POST /terminal/exec` — leva uma linha ao Core e devolve-a localizada.
@@ -7850,107 +4158,21 @@ async fn own_avatar(
     }
 }
 
-/// `Definições → Segurança`.
-async fn settings_security(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let sessions = match required(&state, &member, "/api/v1/auth/sessions").await {
-        Ok(payload) => payload,
-        Err(failure) => return failure_response(&failure),
-    };
-    shell_page(
-        "Definições",
-        &viewer,
-        Screen::Settings,
-        Vec::new(),
-        ui::screens::settings::moldura(
-            "/settings/security",
-            ui::screens::settings::security(Some(&sessions), None, None),
-        ),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn settings_security() -> Response {
+    interface_pending()
 }
 
-/// `GET /settings/mfa` — regenerar códigos de recuperação.
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn settings_mfa() -> Response {
+    interface_pending()
+}
+
+/// Acção retirada no apagamento da UI; espera o Claude Design.
 ///
-/// O modo vem do Core: `challenge` numa sessão activa significa que o segundo
-/// factor está enrolado. Nada aqui infere por heurística.
-async fn settings_mfa(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let estado = optional(&state, &member, "/api/v1/auth/mfa").await;
-    let activo = estado.get("mfa_mode").and_then(Value::as_str) == Some("challenge");
-    shell_page(
-        "Definições",
-        &viewer,
-        Screen::Settings,
-        Vec::new(),
-        ui::screens::settings::moldura(
-            "/settings/security",
-            ui::screens::settings::mfa_recovery(activo, None, None),
-        ),
-    )
-}
-
-/// Corpo do formulário de regeneração.
-#[derive(Deserialize)]
-struct RegenerarForm {
-    password: String,
-    code: String,
-}
-
-/// `POST /settings/mfa/regenerate` — reautentica e emite dez códigos novos.
-async fn settings_mfa_regenerate(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<RegenerarForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let body = serde_json::json!({ "password": form.password, "code": form.code });
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/auth/mfa/recovery/regenerate",
-        &body,
-    )
-    .await
-    {
-        Ok(payload) => {
-            let codigos: Vec<String> = payload
-                .get("recovery_codes")
-                .and_then(Value::as_array)
-                .map(|itens| {
-                    itens
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .map(str::to_owned)
-                        .collect()
-                })
-                .unwrap_or_default();
-            shell_page(
-                "Definições",
-                &viewer,
-                Screen::Settings,
-                Vec::new(),
-                ui::screens::settings::moldura(
-                    "/settings/security",
-                    ui::screens::settings::mfa_recovery(true, Some(&codigos), None),
-                ),
-            )
-        }
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => shell_page(
-            "Definições",
-            &viewer,
-            Screen::Settings,
-            Vec::new(),
-            ui::screens::settings::moldura(
-                "/settings/security",
-                ui::screens::settings::mfa_recovery(true, None, Some(failure.to_string())),
-            ),
-        ),
-    }
+/// Produz um segredo que se mostra uma única vez; sem ecrã, perdia-se.
+async fn settings_mfa_regenerate() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -8030,26 +4252,7 @@ async fn change_password(
                 .into_response()
         }
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => {
-            let viewer = viewer(&state, &member).await;
-            let sessions = required(&state, &member, "/api/v1/auth/sessions")
-                .await
-                .ok();
-            shell_page(
-                "Definições",
-                &viewer,
-                Screen::Settings,
-                Vec::new(),
-                ui::screens::settings::moldura(
-                    "/settings/security",
-                    ui::screens::settings::security(
-                        sessions.as_ref(),
-                        Some(failure.to_string()),
-                        None,
-                    ),
-                ),
-            )
-        }
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -8090,65 +4293,13 @@ async fn revoke_session(
             }
             Redirect::to("/login").into_response()
         }
-        Err(failure) => {
-            let viewer = viewer(&state, &member).await;
-            let sessions = required(&state, &member, "/api/v1/auth/sessions")
-                .await
-                .ok();
-            shell_page(
-                "Definições",
-                &viewer,
-                Screen::Settings,
-                Vec::new(),
-                ui::screens::settings::moldura(
-                    "/settings/security",
-                    ui::screens::settings::security(
-                        sessions.as_ref(),
-                        Some(failure.to_string()),
-                        None,
-                    ),
-                ),
-            )
-        }
+        Err(failure) => failure_response(&failure),
     }
 }
 
-/// O selector de promoção de uma ideia a projecto.
-///
-/// Não existe `POST /projects` no Core: um projecto nasce da promoção de uma
-/// ideia. O selector pede ao Core as ideias que a promoção aceitaria hoje
-/// (`?promotable=true`) em vez de repetir essa regra aqui — e o Core valida
-/// outra vez quando a promoção chega.
-async fn new_project_form(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let candidatas = match required(
-        &state,
-        &member,
-        "/api/v1/workspaces?kind=idea&promotable=true&page_size=100",
-    )
-    .await
-    {
-        Ok(payload) => payload,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let trail = vec![Crumb::to(Screen::Projects)];
-    shell_page(
-        "Novo Projecto",
-        &viewer,
-        Screen::Projects,
-        trail,
-        ui::screens::lists::new_project(
-            &candidatas,
-            params.get("workspace").map(String::as_str),
-            None,
-        ),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_project_form() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -8206,45 +4357,13 @@ async fn promote_idea(
     {
         Ok(_) => Redirect::to(&format!("/workspaces/{}", form.workspace_id)).into_response(),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => {
-            // A recusa vem do Core tal como veio. Uma ideia pode ter mudado de
-            // estado entre a listagem e a submissão, e o membro tem de ver isso
-            // dito, não um erro genérico.
-            let viewer = viewer(&state, &member).await;
-            let candidatas = optional(
-                &state,
-                &member,
-                "/api/v1/workspaces?kind=idea&promotable=true&page_size=100",
-            )
-            .await;
-            let trail = vec![Crumb::to(Screen::Projects)];
-            shell_page(
-                "Novo Projecto",
-                &viewer,
-                Screen::Projects,
-                trail,
-                ui::screens::lists::new_project(&candidatas, None, Some(failure.to_string())),
-            )
-        }
+        Err(failure) => failure_response(&failure),
     }
 }
 
-/// O formulário de criação de uma unidade.
-///
-/// Existia no Core desde sempre (`POST /api/v1/units`) e não tinha ecrã: numa
-/// instalação nova não havia como criar a primeira unidade, e sem unidade não
-/// há onde nascer uma ideia. A aplicação não se conseguia povoar por si.
-async fn new_unit_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let trail = vec![Crumb::to(Screen::Units)];
-    shell_page(
-        "Nova Unidade",
-        &viewer,
-        Screen::Units,
-        trail,
-        ui::screens::lists::new_unit(None),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_unit_form() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -8291,19 +4410,7 @@ async fn create_unit(
     {
         Ok(_) => Redirect::to("/units").into_response(),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => {
-            // A recusa vem do Core e é mostrada tal como veio: um nome inválido
-            // tem de ser legível a quem o escreveu.
-            let viewer = viewer(&state, &member).await;
-            let trail = vec![Crumb::to(Screen::Units)];
-            shell_page(
-                "Nova Unidade",
-                &viewer,
-                Screen::Units,
-                trail,
-                ui::screens::lists::new_unit(Some(failure.to_string())),
-            )
-        }
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -8342,35 +4449,9 @@ async fn unit_code_suggestion(
     }
 }
 
-/// `GET /units/{id}/edit` — the edit form, pre-filled with the current unit.
-async fn edit_unit_form(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(unit_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let unit = match api::get::<Value>(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/units/{unit_id}"),
-    )
-    .await
-    {
-        Ok(unit) => unit,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let viewer = viewer(&state, &member).await;
-    let trail = vec![Crumb::to(Screen::Units)];
-    shell_page(
-        "Editar Unidade",
-        &viewer,
-        Screen::Units,
-        trail,
-        ui::screens::lists::edit_unit(&unit, None),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn edit_unit_form() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -8382,8 +4463,6 @@ struct EditUnitForm {
     research_areas: String,
     // Round-trips for the read-only display only; never sent to the Core. Lets
     // an error re-render show the code without a second fetch.
-    #[serde(default)]
-    code: String,
 }
 
 /// `POST /units/{id}/edit` — apply the edit through the Core's `PUT /units/{id}`.
@@ -8414,41 +4493,13 @@ async fn update_unit(
     {
         Ok(_) => Redirect::to(&format!("/units/{unit_id}")).into_response(),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => {
-            // Re-render the edit form with the Core's message and what was typed.
-            let unit = serde_json::json!({
-                "id": unit_id.to_string(),
-                "code": form.code,
-                "name": form.name,
-                "description": blank_to_none(form.description),
-                "research_areas": parse_research_areas(&form.research_areas),
-            });
-            let viewer = viewer(&state, &member).await;
-            let trail = vec![Crumb::to(Screen::Units)];
-            shell_page(
-                "Editar Unidade",
-                &viewer,
-                Screen::Units,
-                trail,
-                ui::screens::lists::edit_unit(&unit, Some(failure.to_string())),
-            )
-        }
+        Err(failure) => failure_response(&failure),
     }
 }
 
-async fn new_idea_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let units = optional(&state, &member, "/api/v1/units").await;
-
-    let trail = vec![Crumb::to(Screen::Ideas)];
-    shell_page(
-        "Nova Ideia",
-        &viewer,
-        Screen::Ideas,
-        trail,
-        ui::screens::lists::new_idea(&units, None),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_idea_form() -> Response {
+    interface_pending()
 }
 
 #[derive(Deserialize)]
@@ -8525,68 +4576,15 @@ async fn create_idea(
             Redirect::to(&format!("/workspaces/{workspace_id}")).into_response()
         }
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => {
-            // O formulário volta com a mensagem do próprio Core: o membro vê
-            // porque foi recusado, não uma falha genérica.
-            let viewer = viewer(&state, &member).await;
-            let units = optional(&state, &member, "/api/v1/units").await;
-            let trail = vec![Crumb::to(Screen::Ideas)];
-            shell_page(
-                "Nova Ideia",
-                &viewer,
-                Screen::Ideas,
-                trail,
-                ui::screens::lists::new_idea(&units, Some(failure.to_string())),
-            )
-        }
+        Err(failure) => failure_response(&failure),
     }
 }
 
 // ── Notas pessoais ───────────────────────────────────────────────────────
 
-/// A consulta da lista de notas: filtros opcionais por etiqueta e por pasta.
-#[derive(Deserialize)]
-struct NotesListQuery {
-    #[serde(default)]
-    tag: Option<String>,
-    #[serde(default)]
-    folder: Option<String>,
-}
-
-/// A lista das notas do membro, com os filtros por etiqueta e por pasta.
-async fn notes_list(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(query): Query<NotesListQuery>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let tag = query.tag.as_deref().filter(|t| !t.is_empty());
-    let folder = query.folder.as_deref().filter(|f| !f.is_empty());
-
-    // `required`, não `optional`: uma falha do Core mostra a razão. Uma lista
-    // vazia por engano diria «não há notas», que é uma afirmação, e não um erro.
-    let mut path = "/api/v1/me/notes?page_size=100".to_owned();
-    if let Some(tag) = tag {
-        path.push_str(&format!("&tag={}", urlencoding_minimal(tag)));
-    }
-    if let Some(folder) = folder {
-        path.push_str(&format!("&folder={}", urlencoding_minimal(folder)));
-    }
-    let payload = match required(&state, &member, &path).await {
-        Ok(payload) => payload,
-        Err(failure) => return failure_response(&failure),
-    };
-    // As pastas para a barra de filtros — secundárias: se falharem, a lista
-    // ainda serve, sem barra de pastas.
-    let folders = optional(&state, &member, "/api/v1/me/folders").await;
-    shell_page(
-        crate::i18n::t("nav.notes"),
-        &viewer,
-        Screen::Notes,
-        Vec::new(),
-        ui::screens::notes::notes_list(&viewer, &payload, &folders, tag, folder),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn notes_list() -> Response {
+    interface_pending()
 }
 
 /// Cria uma nota vazia e leva o membro ao editor dela.
@@ -8621,120 +4619,14 @@ async fn create_personal_note(State(state): State<WorkspaceState>, headers: Head
     }
 }
 
-/// O editor de uma nota.
-///
-/// A vista depende do acesso que o Core resolve — `owner`, `editor` ou `viewer`
-/// (ADR-0413 §9). O dono vê o painel de partilha e o selector de pasta; um
-/// editor vê a superfície de edição sem eles; quem só tem leitura vê o corpo
-/// derivado, sem editor. As pastas, as partilhas e as pessoas só se procuram
-/// quando servem a vista, e nunca são a autoridade — o Core recusa o que não
-/// deve.
-async fn note_editor(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(note_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let note = match required(&state, &member, &format!("/api/v1/me/notes/{note_id}")).await {
-        Ok(note) => note,
-        Err(failure) => return failure_response(&failure),
-    };
-    let access = note
-        .get("access")
-        .and_then(Value::as_str)
-        .unwrap_or("owner");
-    let is_owner = access == "owner";
-    let can_write = matches!(access, "owner" | "editor");
-    // As pastas, o painel de partilha e a lista de pessoas só interessam ao
-    // dono, e só se procuram para ele — secundárias todas: sem elas a nota abre
-    // à mesma. O histórico interessa a quem pode escrever (restaura). Um leitor
-    // não recebe nenhuma destas.
-    let shares_path = format!("/api/v1/me/notes/{note_id}/shares");
-    let revisions_path = format!("/api/v1/me/notes/{note_id}/revisions");
-    let activity_path = format!("/api/v1/me/notes/{note_id}/activity");
-    let (folders, shares, people, revisions, activity) = if is_owner {
-        let (folders, shares, people, revisions, activity) = tokio::join!(
-            optional(&state, &member, "/api/v1/me/folders"),
-            optional(&state, &member, &shares_path),
-            optional(&state, &member, "/api/v1/people?page_size=200"),
-            optional(&state, &member, &revisions_path),
-            optional(&state, &member, &activity_path),
-        );
-        (folders, shares, people, revisions, activity)
-    } else if can_write {
-        // Um editor partilhado: sem pastas nem partilha, mas com histórico e
-        // actividade — vê o que aconteceu à nota que ajuda a escrever.
-        let (revisions, activity) = tokio::join!(
-            optional(&state, &member, &revisions_path),
-            optional(&state, &member, &activity_path),
-        );
-        (Value::Null, Value::Null, Value::Null, revisions, activity)
-    } else {
-        (
-            Value::Null,
-            Value::Null,
-            Value::Null,
-            Value::Null,
-            Value::Null,
-        )
-    };
-    let trail = vec![Crumb::to(Screen::Notes)];
-    shell_page(
-        crate::i18n::t("notes.editor.title"),
-        &viewer,
-        Screen::Notes,
-        trail,
-        ui::screens::notes::note_editor(
-            &viewer, &note, &folders, &shares, &people, &revisions, &activity,
-        ),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn note_editor() -> Response {
+    interface_pending()
 }
 
-/// A pré-visualização de uma revisão antiga de uma nota, em leitura, com a opção
-/// de a restaurar. O corpo é o HTML que o Core derivou dessa revisão exacta.
-async fn note_revision_preview(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path((note_id, revision)): Path<(Uuid, i64)>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    // A revisão pedida, e a nota corrente — esta para saber a revisão base que o
-    // restauro apresenta, e se quem vê pode escrever.
-    let rev_path = format!("/api/v1/me/notes/{note_id}/revisions/{revision}");
-    let note_path = format!("/api/v1/me/notes/{note_id}");
-    let (rev, note) = tokio::join!(
-        required(&state, &member, &rev_path),
-        required(&state, &member, &note_path),
-    );
-    let rev = match rev {
-        Ok(rev) => rev,
-        Err(failure) => return failure_response(&failure),
-    };
-    let note = match note {
-        Ok(note) => note,
-        Err(failure) => return failure_response(&failure),
-    };
-    let can_write = matches!(
-        note.get("access").and_then(Value::as_str),
-        Some("owner") | Some("editor")
-    );
-    let base_revision = note.get("revision").and_then(Value::as_i64).unwrap_or(0);
-    let trail = vec![Crumb::to(Screen::Notes)];
-    shell_page(
-        "Revisão",
-        &viewer,
-        Screen::Notes,
-        trail,
-        ui::screens::notes::revision_preview(
-            &viewer,
-            &note_id.to_string(),
-            &rev,
-            base_revision,
-            can_write,
-        ),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn note_revision_preview() -> Response {
+    interface_pending()
 }
 
 /// O formulário de restauro de uma revisão.
@@ -8765,40 +4657,14 @@ async fn restore_note_revision_route(
     Redirect::to(&format!("/notes/{note_id}")).into_response()
 }
 
-/// A lista das notas que outra pessoa partilhou com o membro.
-async fn shared_notes_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let payload = match required(&state, &member, "/api/v1/me/shared-notes?page_size=100").await {
-        Ok(payload) => payload,
-        Err(failure) => return failure_response(&failure),
-    };
-    let trail = vec![Crumb::to(Screen::Notes)];
-    shell_page(
-        crate::i18n::t("notes.shared_with_me"),
-        &viewer,
-        Screen::Notes,
-        trail,
-        ui::screens::notes::shared_notes_list(&viewer, &payload),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn shared_notes_page() -> Response {
+    interface_pending()
 }
 
-/// O Lixo: as notas apagadas do membro, com restaurar e eliminar.
-async fn notes_trash_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let payload = match required(&state, &member, "/api/v1/me/deleted-notes?page_size=100").await {
-        Ok(payload) => payload,
-        Err(failure) => return failure_response(&failure),
-    };
-    let trail = vec![Crumb::to(Screen::Notes)];
-    shell_page(
-        crate::i18n::t("notes.trash"),
-        &viewer,
-        Screen::Notes,
-        trail,
-        ui::screens::notes::notes_trash(&viewer, &payload),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn notes_trash_page() -> Response {
+    interface_pending()
 }
 
 /// Apaga uma nota (leva-a ao Lixo) e volta à lista. Do dono; o Core recusa a
@@ -9333,79 +5199,14 @@ async fn move_personal_note(
 
 // ── Autenticação ─────────────────────────────────────────────────────────
 
-/// Mostra o ecrã de início de sessão.
-///
-/// Sob o ADR-0103 o Workspace deixou de encaminhar para um fornecedor externo:
-/// apresenta o formulário e envia as credenciais ao Ocinye Core, que é a
-/// autoridade de autenticação. O Workspace nunca vê um verificador nem decide
-/// se alguém entra.
-async fn login(State(state): State<WorkspaceState>, Query(q): Query<LoginQuery>) -> Response {
-    // O Core respondeu não significa que o Core está pronto.
-    //
-    // Isto lia `core_ready(...).is_ok()` — sucesso de transporte. Um `/ready`
-    // que responde 503 a dizer que a persistência caiu chegava aqui como
-    // «operacional», e o formulário de entrada convidava alguém a autenticar-se
-    // num sistema que não podia autenticar ninguém.
-    //
-    // O que decide é o corpo.
-    let porta = porta(&state).await;
-    let ready = porta.core == Some(true);
-    // D12 / D13: o cartão de fim de sessão. `expired` detecta-o o próprio
-    // Workspace (cookie de sessão que já não conhece); `revoked` espera o
-    // motivo do Core (G-27).
-    let fim = match q.reason.as_deref() {
-        Some("expired") => Some(ui::screens::login::FimDeSessao::Expirada),
-        Some("revoked") => Some(ui::screens::login::FimDeSessao::Revogada),
-        _ => None,
-    };
-    if let Some(motivo) = fim {
-        return page(
-            "Entrar",
-            ui::screens::login::fim_de_sessao(motivo, &porta, None),
-        );
-    }
-    page(
-        "Entrar",
-        ui::screens::login::login_na_porta(ready, None, &porta),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn login() -> Response {
+    interface_pending()
 }
 
-/// `?reason=` do início de sessão (D12 / D13).
-#[derive(Deserialize)]
-struct LoginQuery {
-    #[serde(default)]
-    reason: Option<String>,
-}
-
-/// O que a porta mostra da Instância (D7, G-31): nome e perfil do Core
-/// (`GET /instance/branding`, público) e o anfitrião da URL pública configurada
-/// — não o cabeçalho `Host`, que é o cliente que o escolhe. O estado do Core é
-/// o da sonda a `/ready` (`boot::probe`), medido agora e não presumido.
-async fn porta(state: &WorkspaceState) -> ui::screens::login::Porta {
-    let core = Some(crate::boot::probe(state).await.state.may_hand_off());
-    let (nome, perfil) = api::instance_door(state)
-        .await
-        .map_or((None, None), |(n, p)| (Some(n), p));
-    let host = state
-        .config
-        .public_url
-        .split("://")
-        .nth(1)
-        .map(|resto| resto.split('/').next().unwrap_or(resto).to_owned())
-        .filter(|h| !h.is_empty());
-    ui::screens::login::Porta {
-        nome,
-        perfil,
-        host,
-        core,
-    }
-}
-
-/// `GET /password/recover` — D10. O envio (`POST`, G-26) ainda não existe no
-/// Core: a vista recebe `disponivel=false` e não submete nada.
-async fn password_recover(State(state): State<WorkspaceState>) -> Response {
-    let porta = porta(&state).await;
-    page("Entrar", ui::screens::login::recover(false, false, &porta))
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn password_recover() -> Response {
+    interface_pending()
 }
 
 /// A escolha de idioma à porta, antes de haver sessão (G-30).
@@ -9469,16 +5270,8 @@ async fn login_submit(
             // A mensagem vem do Core e é a mesma para todas as falhas de
             // credencial. O Workspace não a enriquece: fazê-lo reintroduziria o
             // oráculo que o Core evita (briefing §35).
-            let porta = porta(&state).await;
-            let ready = porta.core == Some(true);
-            return (
-                StatusCode::UNAUTHORIZED,
-                page(
-                    "Entrar",
-                    ui::screens::login::login_na_porta(ready, Some(failure.to_string()), &porta),
-                ),
-            )
-                .into_response();
+            let _ = failure;
+            return (StatusCode::UNAUTHORIZED, "invalid_credentials").into_response();
         }
     };
 
@@ -9564,26 +5357,9 @@ impl CoreSession {
     }
 }
 
-/// Ecrã de primeiro acesso: definir a palavra-passe definitiva.
-async fn first_access(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let Some(member) = current_member(&state, &headers) else {
-        return Redirect::to("/login").into_response();
-    };
-
-    // Quem já tem palavra-passe definitiva não tem nada a fazer aqui.
-    if !member.session.must_change_password {
-        return Redirect::to("/").into_response();
-    }
-
-    page(
-        "Defina a sua palavra-passe",
-        ui::screens::first_access::first_access_na_porta(
-            &member.session.display_name,
-            &member.session.email,
-            None,
-            &porta(&state).await,
-        ),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn first_access() -> Response {
+    interface_pending()
 }
 
 /// Nova palavra-passe submetida.
@@ -9621,23 +5397,7 @@ async fn first_access_submit(
         Ok(session) => session,
         Err(failure) => {
             // A sessão restrita expirou a meio: recomeçar é o único caminho.
-            if matches!(failure, ApiFailure::Unauthorised) {
-                return Redirect::to("/login").into_response();
-            }
-            let message = failure.to_string();
-            return (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                page(
-                    "Defina a sua palavra-passe",
-                    ui::screens::first_access::first_access_na_porta(
-                        &member.session.display_name,
-                        &member.session.email,
-                        Some(message),
-                        &porta(&state).await,
-                    ),
-                ),
-            )
-                .into_response();
+            return failure_response(&failure);
         }
     };
 
@@ -9685,201 +5445,22 @@ async fn first_access_submit(
 
 // ── Segundo factor (ADR-0107) ───────────────────────────────────────────────
 
-/// Query do ecrã de MFA: `?show_key=1` revela a chave manual.
-///
-/// A ligação que o ecrã emite é `?show_key=1` — um valor de bandeira, à maneira
-/// de um formulário HTML, e não o literal `true` que o `bool` de serde exige. Um
-/// `bool` directo recusava o próprio link que a Experience mostra, com um erro de
-/// desserialização. Aceita-se a bandeira: presente e igual a `1` ou `true` revela;
-/// tudo o resto, incluindo a ausência, não revela.
-#[derive(Deserialize)]
-struct MfaQuery {
-    #[serde(default, deserialize_with = "flag_presente")]
-    show_key: bool,
-}
-
-/// Lê uma bandeira de query no estilo de formulário: `1`/`true` é verdadeiro, o
-/// resto é falso. Nunca falha a desserialização por um valor inesperado — uma
-/// bandeira ou está ligada ou não está.
-fn flag_presente<'de, D>(deserializer: D) -> Result<bool, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let bruto = String::deserialize(deserializer)?;
-    Ok(matches!(bruto.as_str(), "1" | "true"))
-}
-
 /// Um código submetido — de autenticador ou de recuperação.
 #[derive(Deserialize)]
 struct MfaCodeForm {
     code: String,
 }
 
-/// `GET /mfa` — o ecrã certo, decidido pelo Core, nunca por heurística.
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn mfa_page() -> Response {
+    interface_pending()
+}
+
+/// Acção retirada no apagamento da UI; espera o Claude Design.
 ///
-/// O Core diz o modo em `mfa_mode`: enrolar ou desafiar. Uma sessão que já não
-/// precisa de MFA não fica presa aqui.
-async fn mfa_page(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    axum::extract::Query(query): axum::extract::Query<MfaQuery>,
-) -> Response {
-    let Some(member) = current_member(&state, &headers) else {
-        return Redirect::to("/login").into_response();
-    };
-    if !member.session.mfa_required {
-        return Redirect::to("/").into_response();
-    }
-
-    let estado = optional(&state, &member, "/api/v1/auth/mfa").await;
-    let modo = estado
-        .get("mfa_mode")
-        .and_then(Value::as_str)
-        .unwrap_or("challenge");
-    let nome = member.session.display_name.clone();
-
-    match modo {
-        "not_required" => Redirect::to("/").into_response(),
-        "challenge" => page(
-            "Segundo factor",
-            ui::screens::mfa::challenge_na_porta(&nome, None, &porta(&state).await),
-        ),
-        _ => {
-            // Enrolamento: o QR (e, se pedida, a chave manual) vêm do Core, que
-            // devolve sempre o mesmo seed por confirmar.
-            // `reveal=true`, e não `reveal=1`: a query do Core desserializa um
-            // `bool` canónico, e a bandeira de estilo de formulário (`show_key=1`)
-            // pertence à ligação que o ecrã emite, não à chamada interna à API.
-            let caminho = if query.show_key {
-                "/api/v1/auth/mfa/enroll?reveal=true"
-            } else {
-                "/api/v1/auth/mfa/enroll"
-            };
-            match api::post(
-                &state,
-                &member.session.access_token,
-                &member.correlation_id,
-                caminho,
-                &serde_json::json!({}),
-            )
-            .await
-            {
-                Ok(payload) => {
-                    let otpauth = payload
-                        .get("otpauth_uri")
-                        .and_then(Value::as_str)
-                        .unwrap_or("");
-                    let manual = payload.get("secret_base32").and_then(Value::as_str);
-                    page(
-                        "Configurar MFA",
-                        ui::screens::mfa::enrollment_na_porta(
-                            &nome,
-                            otpauth,
-                            manual,
-                            None,
-                            &porta(&state).await,
-                        ),
-                    )
-                }
-                Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-                Err(failure) => page(
-                    "Configurar MFA",
-                    ui::screens::mfa::enrollment_na_porta(
-                        &nome,
-                        "",
-                        None,
-                        Some(failure.to_string()),
-                        &porta(&state).await,
-                    ),
-                ),
-            }
-        }
-    }
-}
-
-/// Re-renderiza o ecrã de enrolamento com uma recusa do Core, buscando de novo o
-/// mesmo seed por confirmar.
-async fn reenrolar_com_erro(state: &WorkspaceState, member: &Member, message: String) -> Response {
-    let nome = member.session.display_name.clone();
-    match api::post(
-        state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/auth/mfa/enroll",
-        &serde_json::json!({}),
-    )
-    .await
-    {
-        Ok(payload) => {
-            let otpauth = payload
-                .get("otpauth_uri")
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            page(
-                "Configurar MFA",
-                ui::screens::mfa::enrollment_na_porta(
-                    &nome,
-                    otpauth,
-                    None,
-                    Some(message),
-                    &porta(state).await,
-                ),
-            )
-        }
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(_) => page(
-            "Configurar MFA",
-            ui::screens::mfa::enrollment_na_porta(
-                &nome,
-                "",
-                None,
-                Some(message),
-                &porta(state).await,
-            ),
-        ),
-    }
-}
-
-/// `POST /mfa/confirm` — confirma o enrolamento e mostra os códigos de
-/// recuperação. Ainda não fecha o portão: a sessão continua a exigir MFA até o
-/// acknowledgement.
-async fn mfa_confirm(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<MfaCodeForm>,
-) -> Response {
-    let Some(member) = current_member(&state, &headers) else {
-        return Redirect::to("/login").into_response();
-    };
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/auth/mfa/enroll/confirm",
-        &serde_json::json!({ "code": form.code }),
-    )
-    .await
-    {
-        Ok(payload) => {
-            let codigos: Vec<String> = payload
-                .get("recovery_codes")
-                .and_then(Value::as_array)
-                .map(|itens| {
-                    itens
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .map(str::to_owned)
-                        .collect()
-                })
-                .unwrap_or_default();
-            page(
-                "Códigos de recuperação",
-                ui::screens::mfa::recovery_codes_na_porta(&codigos, &porta(&state).await),
-            )
-        }
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => reenrolar_com_erro(&state, &member, failure.to_string()).await,
-    }
+/// Produz um segredo que se mostra uma única vez; sem ecrã, perdia-se.
+async fn mfa_confirm() -> Response {
+    interface_pending()
 }
 
 /// Troca a sessão-portão pela sessão nova, `active` e assegurada, que o Core
@@ -9966,14 +5547,7 @@ async fn mfa_challenge(
     {
         Ok(payload) => trocar_sessao(&state, &headers, member.session.email.clone(), payload),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => page(
-            "Segundo factor",
-            ui::screens::mfa::challenge_na_porta(
-                &member.session.display_name,
-                Some(failure.to_string()),
-                &porta(&state).await,
-            ),
-        ),
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -9997,14 +5571,7 @@ async fn mfa_recovery(
     {
         Ok(payload) => trocar_sessao(&state, &headers, member.session.email.clone(), payload),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => page(
-            "Segundo factor",
-            ui::screens::mfa::challenge_na_porta(
-                &member.session.display_name,
-                Some(failure.to_string()),
-                &porta(&state).await,
-            ),
-        ),
+        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -10354,123 +5921,6 @@ mod router_tests {
             "`/logout` passou a aceitar `GET`"
         );
     }
-    /// Cada formulário renderizado submete para uma rota que existe, no método
-    /// que ele próprio declara.
-    ///
-    /// A varredura de ligações mortas cobre os `href`. Não cobria os `action`,
-    /// e é aí que vivem as operações: criar uma unidade, mudar a palavra-passe,
-    /// revogar uma sessão, terminar sessão. Um `action` para uma rota ausente
-    /// não se nota a olho — o botão carrega, a página recarrega, e nada
-    /// acontece.
-    ///
-    /// O método conta. Uma acção não fica provada por existir um `GET` com o
-    /// mesmo caminho: `POST /logout` e `GET /logout` são operações diferentes,
-    /// e só uma delas devia existir.
-    #[tokio::test]
-    async fn cada_formulario_renderizado_submete_para_uma_rota_real() {
-        let mut mortas: Vec<String> = Vec::new();
-
-        for (ecra, html) in crate::ui::link_tests::catalogue() {
-            for pedaco in html.split("<form").skip(1) {
-                let abertura = pedaco.split('>').next().unwrap_or_default();
-
-                let Some(action) = atributo(abertura, "action") else {
-                    continue;
-                };
-                // Formulários de pesquisa e destinos externos ficam de fora: o
-                // primeiro é navegação, e o segundo não é nosso.
-                if !action.starts_with('/') || action.starts_with("//") {
-                    continue;
-                }
-
-                let metodo = match atributo(abertura, "method").as_deref() {
-                    Some("post") | Some("POST") => Method::POST,
-                    _ => Method::GET,
-                };
-                let caminho = action.split('?').next().unwrap_or(&action).to_owned();
-                let caminho = concretizar(&caminho);
-
-                let estado = probe(metodo.clone(), &caminho).await;
-                if estado == SENTINELA {
-                    mortas.push(format!("{ecra}: {metodo} {caminho} — rota inexistente"));
-                } else if estado == StatusCode::METHOD_NOT_ALLOWED {
-                    mortas.push(format!("{ecra}: {metodo} {caminho} — método não aceite"));
-                }
-            }
-        }
-
-        assert!(
-            mortas.is_empty(),
-            "formulários que submetem para lado nenhum:\n  {}",
-            mortas.join("\n  "),
-        );
-    }
-
-    /// Lê um atributo de uma abertura de etiqueta.
-    fn atributo(abertura: &str, nome: &str) -> Option<String> {
-        abertura
-            .split(&format!("{nome}=\""))
-            .nth(1)
-            .and_then(|resto| resto.split('"').next())
-            .map(str::to_owned)
-    }
-}
-
-#[cfg(test)]
-mod pagination_tests {
-    use super::*;
-
-    /// A página junta-se ao caminho sem o partir.
-    #[test]
-    fn a_pagina_junta_se_ao_caminho_do_core() {
-        assert_eq!(com_pagina("/api/v1/units", None), "/api/v1/units");
-        assert_eq!(com_pagina("/api/v1/units", Some(1)), "/api/v1/units");
-        assert_eq!(com_pagina("/api/v1/units", Some(2)), "/api/v1/units?page=2");
-        assert_eq!(
-            com_pagina("/api/v1/sources?page_size=50", Some(3)),
-            "/api/v1/sources?page_size=50&page=3"
-        );
-    }
-
-    /// O recorte sobrevive à mudança de página.
-    ///
-    /// # Porque isto importa
-    ///
-    /// Um `?page=2` que esquecesse `mine=true` devolveria a segunda página da
-    /// instituição inteira, e quem a lesse concluiria que participa em coisas
-    /// em que não participa. A paginação muda de lugar dentro de um conjunto
-    /// autorizado; nunca muda o conjunto.
-    #[test]
-    fn o_recorte_sobrevive_a_mudanca_de_pagina() {
-        let vazio = ListSlice::default();
-        let minhas = ListSlice {
-            mine: true,
-            ..ListSlice::default()
-        };
-        let unidade = ListSlice {
-            unit_id: Some(Uuid::nil()),
-            ..ListSlice::default()
-        };
-
-        let sem = com_pagina(&workspace_list_path("idea", &vazio), Some(2));
-        let com = com_pagina(&workspace_list_path("idea", &minhas), Some(2));
-        let da_unidade = com_pagina(&workspace_list_path("idea", &unidade), Some(2));
-
-        assert!(sem.contains("kind=idea") && sem.contains("page=2"));
-        assert!(!sem.contains("mine=true"));
-
-        assert!(
-            com.contains("mine=true"),
-            "a segunda página perdeu o recorte: {com}"
-        );
-        assert!(com.contains("kind=idea") && com.contains("page=2"));
-
-        // E a unidade escolhida viaja tipada, do mesmo modo.
-        assert!(
-            da_unidade.contains(&format!("unit_id={}", Uuid::nil())),
-            "a segunda página perdeu a unidade escolhida: {da_unidade}"
-        );
-    }
 }
 
 // ── Calendário ──────────────────────────────────────────────────────────
@@ -10479,215 +5929,14 @@ mod pagination_tests {
 // que ele devolveu. Nenhuma das quatro vistas consulta nada por si — recebem
 // todas o mesmo conjunto autorizado (ADR-0410).
 
-/// Que vista e que dia.
-#[derive(Deserialize, Default)]
-struct CalendarQuery {
-    #[serde(default)]
-    view: Option<String>,
-    #[serde(default)]
-    on: Option<chrono::NaiveDate>,
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn calendar_page() -> Response {
+    interface_pending()
 }
 
-/// O intervalo que uma vista precisa, a partir do dia âncora.
-///
-/// Calculado aqui e enviado ao Core: a vista escolhe **quanto tempo** quer ver,
-/// e o Core decide **o que** dele é visível. Se a vista também decidisse o
-/// segundo, teríamos quatro políticas de visibilidade.
-fn calendar_range(
-    view: ui::screens::calendar::CalendarView,
-    anchor: chrono::NaiveDate,
-    zona: ocinye_contracts::temporal::TimeZoneName,
-) -> (chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>) {
-    use chrono::{Datelike, Duration, TimeZone, Utc};
-    use ui::screens::calendar::{month_grid_start, week_start, CalendarView};
-
-    let inicio = match view {
-        CalendarView::Day => anchor,
-        CalendarView::Week => week_start(anchor),
-        CalendarView::Month => month_grid_start(anchor),
-        // O ano inteiro numa consulta só. O tecto do Core são 366 dias, e é
-        // exactamente o que um ano pede — doze consultas mensais dariam a mesma
-        // resposta doze vezes mais devagar, e trinta e uma vezes mais se
-        // alguém as fizesse por dia.
-        CalendarView::Year => {
-            chrono::NaiveDate::from_ymd_opt(anchor.year(), 1, 1).unwrap_or(anchor)
-        }
-        CalendarView::Agenda => anchor,
-    };
-    // A meia-noite **civil**, e não a de Greenwich.
-    //
-    // O que se pede ao Core é o instante em que o dia começa onde a pessoa
-    // está. Com a meia-noite de UTC, a primeira hora de cada dia civil a leste
-    // caía fora do pedido, e as margens de doze e vinte e quatro horas abaixo
-    // existiam para o tapar — tapavam o sintoma e mantinham o defeito.
-    let meia_noite = |d: chrono::NaiveDate| {
-        ocinye_contracts::temporal::resolve_local(d.and_hms_opt(0, 0, 0).unwrap_or_default(), zona)
-            .unwrap_or_else(|_| {
-                // Uma meia-noite que não existe acontece: em algumas zonas o
-                // relógio salta de 23:59 para 01:00. Nesse dia o dia civil
-                // começa uma hora depois, e insistir na hora que não existe
-                // seria pedir um instante que nunca houve.
-                Utc.from_utc_datetime(&d.and_hms_opt(0, 0, 0).unwrap_or_default())
-            })
-    };
-
-    // O Ano pede exactamente o ano, e sem margens.
-    //
-    // # Porque é o único caso especial
-    //
-    // As margens — doze horas antes e vinte e quatro depois — existem para
-    // apanhar o que cai nas fronteiras quando o fuso de quem marcou não é o de
-    // quem olha. O Ano já está ancorado em 1 de Janeiro e acaba em 1 de Janeiro
-    // seguinte: as fronteiras são exactas e a margem não acrescenta dia nenhum
-    // que a grelha mostre.
-    //
-    // O que ela acrescentava era um erro: 366 dias de ano bissexto mais 36 horas
-    // de margem são 367 dias e meio, e o Core recusa acima de 366. A vista
-    // devolvia «Não foi possível ler a agenda» com um 422 por baixo — uma falha
-    // de leitura que na verdade era um pedido impossível.
-    if view == CalendarView::Year {
-        let ano = inicio.year();
-        let fim = chrono::NaiveDate::from_ymd_opt(ano + 1, 1, 1).unwrap_or(inicio);
-        return (meia_noite(inicio), meia_noite(fim));
-    }
-
-    let de = meia_noite(inicio) - Duration::hours(12);
-    let ate = de + Duration::days(view.span_days()) + Duration::hours(24);
-    (de, ate)
-}
-
-/// Um instante RFC 3339 dentro de uma query string.
-///
-/// Sem dependência nova: um instante só tem dois caracteres que a query string
-/// interpreta — os dois-pontos da hora e o mais do fuso.
-fn escape_instant(value: &str) -> String {
-    value.replace(':', "%3A").replace('+', "%2B")
-}
-
-async fn calendar_agenda(
-    state: &WorkspaceState,
-    member: &Member,
-    de: chrono::DateTime<chrono::Utc>,
-    ate: chrono::DateTime<chrono::Utc>,
-) -> Result<Value, ApiFailure> {
-    api::get(
-        state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!(
-            "/api/v1/calendar/agenda?from={}&to={}",
-            escape_instant(&de.to_rfc3339()),
-            escape_instant(&ate.to_rfc3339())
-        ),
-    )
-    .await
-}
-
-async fn calendar_page(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(query): Query<CalendarQuery>,
-) -> Response {
-    use ui::screens::calendar::{calendar, items_from, CalendarPage, CalendarView};
-
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    // O Mês é a vista por omissão: é a que responde à pergunta com que a maior
-    // parte das pessoas abre um calendário — «o que tenho este mês».
-    let view = CalendarView::parse(query.view.as_deref().unwrap_or("month"));
-    // «Hoje» é hoje onde a pessoa está, e não em Greenwich.
-    //
-    // Com `Utc::now().date_naive()`, quem abrisse o Calendário às 00:30 em
-    // Lisboa via o dia anterior — e o compromisso que tinha acabado de marcar
-    // para «hoje» não estava lá.
-    let anchor = query
-        .on
-        .unwrap_or_else(|| ui::tempo::hoje_civil(chrono::Utc::now(), member.zona));
-    let (de, ate) = calendar_range(view, anchor, member.zona);
-
-    // Erro e vazio não se dizem da mesma maneira. Uma consulta falhada que
-    // aparecesse como «nenhuma actividade» faria alguém faltar a uma reunião.
-    let (items, failure) = match calendar_agenda(&state, &member, de, ate).await {
-        Ok(payload) => (items_from(&payload), None),
-        Err(ApiFailure::Unauthorised) => return Redirect::to("/login").into_response(),
-        Err(erro) => (Vec::new(), Some(erro.to_string())),
-    };
-
-    let trail = vec![Crumb::to(Screen::Calendar)];
-    shell_page(
-        crate::i18n::t("calendar.title"),
-        &viewer,
-        Screen::Calendar,
-        trail,
-        calendar(&CalendarPage {
-            view,
-            anchor,
-            items: &items,
-            may_create: viewer.can(ocinye_contracts::Permission::CalendarCreate),
-            failure,
-            zona: member.zona,
-        }),
-    )
-}
-
-/// O contexto temporal que o Calendário pode trazer consigo.
-///
-/// # Porque é um parâmetro e não estado
-///
-/// Uma data escolhida no Calendário é uma decisão de apresentação de quem está a
-/// olhar: não pertence à instituição, não se persiste, e não sobrevive à sessão.
-/// Viaja no endereço, é validada aqui, e morre quando o formulário fecha.
-#[derive(serde::Deserialize)]
-struct ContextoDaCriacao {
-    /// O dia escolhido no Mês ou no Ano.
-    on: Option<chrono::NaiveDate>,
-    /// A hora escolhida numa faixa da Semana ou do Dia.
-    at: Option<String>,
-}
-
-async fn new_event_form(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(contexto): Query<ContextoDaCriacao>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-    let (units, workspaces, pessoas) = tokio::join!(
-        optional(&state, &member, "/api/v1/units"),
-        optional(&state, &member, "/api/v1/workspaces"),
-        // O universo de participantes, tal como o Core o autoriza a quem marca.
-        optional(&state, &member, "/api/v1/people"),
-    );
-
-    // A precedência: hora explícita, depois dia escolhido, depois agora.
-    //
-    // Uma data escolhida no Calendário não é substituída pela data de hoje —
-    // quem carregou no dia 28 quer marcar no dia 28. O que a política de
-    // omissão decide, quando só há dia, é a hora.
-    let agora = chrono::Utc::now().naive_utc();
-    let hora = contexto
-        .at
-        .as_deref()
-        .and_then(|h| chrono::NaiveTime::parse_from_str(h, "%H:%M").ok());
-    let proposto = ui::screens::calendar::horario_do_editor(contexto.on, hora, agora);
-
-    let trail = vec![Crumb::to(Screen::Calendar)];
-    shell_page(
-        "Nova actividade",
-        &viewer,
-        Screen::Calendar,
-        trail,
-        ui::screens::calendar::event_form(
-            None,
-            &units,
-            &workspaces,
-            None,
-            Some(proposto),
-            &pessoas,
-            member.zona,
-        ),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn new_event_form() -> Response {
+    interface_pending()
 }
 
 /// O que o formulário envia.
@@ -10772,7 +6021,7 @@ async fn create_calendar_event(
 
     let ocorrencia = match form.occurrence() {
         Ok(valor) => valor,
-        Err(motivo) => return event_form_error(&state, &member, None, motivo).await,
+        Err(_) => return (StatusCode::UNPROCESSABLE_ENTITY, "rejected").into_response(),
     };
 
     let mut body = serde_json::json!({
@@ -10809,136 +6058,18 @@ async fn create_calendar_event(
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         // A mensagem é a do Core, e não uma genérica: uma hora que não existe
         // por causa da mudança de hora tem de ser dita com essas palavras.
-        Err(falha) => event_form_error(&state, &member, None, falha.to_string()).await,
-    }
-}
-
-async fn event_form_error(
-    state: &WorkspaceState,
-    member: &Member,
-    editing: Option<&ui::screens::calendar::Item>,
-    motivo: String,
-) -> Response {
-    let viewer = viewer(state, member).await;
-    let (units, workspaces) = tokio::join!(
-        optional(state, member, "/api/v1/units"),
-        optional(state, member, "/api/v1/workspaces"),
-    );
-    let trail = vec![Crumb::to(Screen::Calendar)];
-    shell_page(
-        "Nova actividade",
-        &viewer,
-        Screen::Calendar,
-        trail,
-        ui::screens::calendar::event_form(
-            editing,
-            &units,
-            &workspaces,
-            Some(motivo),
-            None,
-            &serde_json::Value::Null,
-            member.zona,
-        ),
-    )
-}
-
-async fn event_detail_page(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(event_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    match api::get(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/calendar/events/{event_id}"),
-    )
-    .await
-    {
-        Ok(evento) => {
-            let trail = vec![Crumb::to(Screen::Calendar)];
-            shell_page(
-                "Actividade",
-                &viewer,
-                Screen::Calendar,
-                trail,
-                ui::screens::calendar::event_detail(
-                    &evento,
-                    viewer.can(ocinye_contracts::Permission::CalendarEdit),
-                    member.zona,
-                ),
-            )
-        }
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         Err(falha) => failure_response(&falha),
     }
 }
 
-async fn edit_event_form(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(event_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn event_detail_page() -> Response {
+    interface_pending()
+}
 
-    let evento: Value = match api::get(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/calendar/events/{event_id}"),
-    )
-    .await
-    {
-        Ok(valor) => valor,
-        Err(ApiFailure::Unauthorised) => return Redirect::to("/login").into_response(),
-        Err(falha) => return failure_response(&falha),
-    };
-
-    let item = ui::screens::calendar::Item {
-        kind: "event".to_owned(),
-        id: event_id.to_string(),
-        title: evento
-            .get("title")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned(),
-        all_day: evento
-            .get("all_day")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-        starts_at: None,
-        ends_at: None,
-        timezone: None,
-        starts_on: None,
-        ends_before: None,
-        state: String::new(),
-        classification: String::new(),
-    };
-
-    let (units, workspaces) = tokio::join!(
-        optional(&state, &member, "/api/v1/units"),
-        optional(&state, &member, "/api/v1/workspaces"),
-    );
-    let trail = vec![Crumb::to(Screen::Calendar)];
-    shell_page(
-        "Alterar actividade",
-        &viewer,
-        Screen::Calendar,
-        trail,
-        ui::screens::calendar::event_form(
-            Some(&item),
-            &units,
-            &workspaces,
-            None,
-            None,
-            &serde_json::Value::Null,
-            member.zona,
-        ),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn edit_event_form() -> Response {
+    interface_pending()
 }
 
 async fn update_calendar_event(
@@ -10972,7 +6103,7 @@ async fn update_calendar_event(
     {
         Ok(_) => Redirect::to(&format!("/calendar/events/{event_id}")).into_response(),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(falha) => event_form_error(&state, &member, None, falha.to_string()).await,
+        Err(falha) => failure_response(&falha),
     }
 }
 
@@ -11011,31 +6142,9 @@ async fn notifications_recent(State(state): State<WorkspaceState>, headers: Head
     axum::Json(resposta).into_response()
 }
 
-async fn notifications_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let (payload, failure) = match api::get(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/notifications",
-    )
-    .await
-    {
-        Ok(valor) => (valor, None),
-        Err(ApiFailure::Unauthorised) => return Redirect::to("/login").into_response(),
-        Err(falha) => (Value::Null, Some(falha.to_string())),
-    };
-
-    let trail = vec![Crumb::to(Screen::Home)];
-    shell_page(
-        "Notificações",
-        &viewer,
-        Screen::Home,
-        trail,
-        ui::screens::calendar::notifications(&payload, failure),
-    )
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn notifications_page() -> Response {
+    interface_pending()
 }
 
 async fn mark_notification_read(
@@ -11055,90 +6164,6 @@ async fn mark_notification_read(
     Redirect::to("/notifications").into_response()
 }
 
-#[cfg(test)]
-mod intervalos_do_calendario {
-
-    /// A zona destes testes, declarada e não herdada da máquina.
-    fn zona_de_teste() -> ocinye_contracts::temporal::TimeZoneName {
-        "UTC".to_owned().try_into().expect("fuso conhecido")
-    }
-    use super::*;
-    use chrono::Datelike;
-    use ui::screens::calendar::CalendarView;
-
-    /// O tecto que o Core impõe a uma consulta de agenda.
-    ///
-    /// Repetido aqui de propósito, e não importado: o Core é um serviço, e a
-    /// Experience fala com ele por HTTP. O que este número faz é dizer, deste
-    /// lado, qual é o contrato — e falhar aqui em vez de deixar a pessoa
-    /// descobrir por um `422` disfarçado de «não foi possível ler a agenda».
-    const TECTO_DO_CORE: i64 = 366;
-
-    fn dia(a: i32, m: u32, d: u32) -> chrono::NaiveDate {
-        chrono::NaiveDate::from_ymd_opt(a, m, d).expect("data válida")
-    }
-
-    /// Nenhuma vista pede mais tempo do que o Core aceita responder.
-    ///
-    /// # O defeito que isto fecha
-    ///
-    /// O Ano pedia `366 dias` de âmbito mais `12h` antes e `24h` depois — as
-    /// margens que apanham o que cai nas fronteiras noutros fusos. São 367 dias
-    /// e meio, e o Core recusa acima de 366. A vista mostrava «Não foi possível
-    /// ler a agenda», que é a mensagem de uma leitura falhada, quando na verdade
-    /// o pedido é que era impossível.
-    ///
-    /// Um ano bissexto é o caso que aperta, e por isso está aqui.
-    #[test]
-    fn nenhuma_vista_pede_mais_do_que_o_core_aceita() {
-        let ancoras = [
-            dia(2026, 1, 1),
-            dia(2026, 8, 26),
-            dia(2026, 12, 31),
-            // Bissextos, nos dois sentidos.
-            dia(2028, 1, 1),
-            dia(2028, 2, 29),
-            dia(2028, 12, 31),
-        ];
-
-        for vista in CalendarView::all() {
-            for ancora in ancoras {
-                let (de, ate) = calendar_range(vista, ancora, zona_de_teste());
-                assert!(
-                    ate > de,
-                    "{vista:?} em {ancora}: o intervalo acaba antes de começar"
-                );
-
-                let duracao = ate - de;
-                assert!(
-                    duracao <= chrono::Duration::days(TECTO_DO_CORE),
-                    "{vista:?} em {ancora} pede {} dias, e o Core aceita {TECTO_DO_CORE}",
-                    duracao.num_days()
-                );
-            }
-        }
-    }
-
-    /// E o Ano cobre o ano inteiro, incluindo o dia a mais dos bissextos.
-    ///
-    /// Caber no tecto não chega: caberia também um intervalo de um dia. O que
-    /// esta vista promete é o ano, e é isso que se verifica.
-    #[test]
-    fn o_ano_cobre_o_ano_inteiro() {
-        for (ancora, dias) in [(dia(2026, 6, 15), 365), (dia(2028, 6, 15), 366)] {
-            let (de, ate) = calendar_range(CalendarView::Year, ancora, zona_de_teste());
-            assert_eq!(
-                (ate - de).num_days(),
-                dias,
-                "o ano de {} devia cobrir {dias} dias",
-                ancora.year()
-            );
-            assert_eq!(de.date_naive(), dia(ancora.year(), 1, 1));
-            assert_eq!(ate.date_naive(), dia(ancora.year() + 1, 1, 1));
-        }
-    }
-}
-
 // ── Ficheiros institucionais ─────────────────────────────────────────────
 //
 // > **Uma pasta é uma estrutura de navegação dentro de um contentor de
@@ -11153,285 +6178,9 @@ mod intervalos_do_calendario {
 /// O mesmo limite do Core, mais o envelope multipart.
 const FILE_BODY_LIMIT_BYTES: usize = 640 * 1024 * 1024 + 64 * 1024;
 
-/// O maior conteúdo que a pré-visualização lê.
-///
-/// Não é o limite do ficheiro: é o limite do que faz sentido desenhar numa
-/// página. Acima disto a página diz que é grande de mais, que é verdade, em vez
-/// de mostrar um pedaço e deixar acreditar que é o todo.
-const PREVIEW_LIMIT_BYTES: usize = 256 * 1024;
-
-#[derive(Deserialize)]
-struct FilesQuery {
-    #[serde(default)]
-    workspace: Option<Uuid>,
-    /// A versão exacta a abrir, quando se chega por uma citação.
-    ///
-    /// # Porque não basta abrir o ficheiro
-    ///
-    /// Porque uma citação que diga «v2, p. 14» e abra a v4 mente. A resposta
-    /// foi construída sobre bytes que já não são os correntes, e clicar tem de
-    /// levar aos bytes que foram lidos — senão a citação é decoração.
-    #[serde(default)]
-    version: Option<Uuid>,
-    /// O sítio dentro da versão, quando o formato tem coordenadas.
-    #[serde(default)]
-    page: Option<i64>,
-    #[serde(default)]
-    folder: Option<Uuid>,
-    /// O ficheiro pessoal a gerir (mudar nome, mover), quando aberto do painel.
-    #[serde(default)]
-    file: Option<Uuid>,
-    /// «1» abre o Lixo dos ficheiros pessoais.
-    #[serde(default)]
-    trash: Option<String>,
-    /// A vista pessoal: `favourites` ou `recents`. Ausente é a navegação normal.
-    #[serde(default)]
-    view: Option<String>,
-    #[serde(default)]
-    ok: Option<String>,
-    #[serde(default)]
-    erro: Option<String>,
-}
-
-/// Os ambientes que este membro alcança, em pares `(id, nome)`.
-fn ambientes(payload: &Value) -> Vec<(String, String)> {
-    payload
-        .get("items")
-        .and_then(Value::as_array)
-        .or_else(|| payload.as_array())
-        .map(|linhas| {
-            linhas
-                .iter()
-                .filter_map(|linha| {
-                    let id = linha.get("id").and_then(Value::as_str)?;
-                    let nome = linha
-                        .get("title")
-                        .and_then(Value::as_str)
-                        .unwrap_or("Ambiente");
-                    Some((id.to_owned(), nome.to_owned()))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-/// Navegar nos ficheiros de um ambiente.
-async fn files_browse(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(query): Query<FilesQuery>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let lista = optional(&state, &member, "/api/v1/workspaces?page_size=100").await;
-    let workspaces = ambientes(&lista);
-
-    // Sem ambiente indicado: a vista agregada, que é o que o módulo é. O espaço
-    // pessoal vem sempre — todo o membro activo o tem —, e os ambientes
-    // institucionais juntam-se-lhe quando existem.
-    let Some(workspace_id) = query.workspace else {
-        let tudo = optional(&state, &member, "/api/v1/files").await;
-        // A vista pessoal: favoritos ou recentes atravessam pastas; fora disso,
-        // é a navegação por pasta. Só uma destas alimenta o pedido.
-        let vista = match query.view.as_deref() {
-            Some("favourites") => Some("favourites"),
-            Some("recents") => Some("recents"),
-            _ => None,
-        };
-        let caminho_meu = match vista {
-            Some(v) => format!("/api/v1/me/files?view={v}"),
-            None => query.folder.map_or_else(
-                || "/api/v1/me/files".to_owned(),
-                |f| format!("/api/v1/me/files?folder={f}"),
-            ),
-        };
-        let meu = optional(&state, &member, &caminho_meu).await;
-        let armazenamento = meu.get("storage");
-        let ficheiros_pessoais = meu
-            .get("files")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        let pastas_pessoais = meu
-            .get("folders")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        // A pasta aberta, resolvida contra as pastas que o Core devolveu — nunca
-        // um nome vindo do URL.
-        let open_folder = query.folder.and_then(|id| {
-            pastas_pessoais.iter().find_map(|p| {
-                (p.get("id").and_then(Value::as_str) == Some(id.to_string().as_str())).then(|| {
-                    (
-                        id.to_string(),
-                        p.get("name")
-                            .and_then(Value::as_str)
-                            .unwrap_or("Pasta")
-                            .to_owned(),
-                    )
-                })
-            })
-        });
-        // O ficheiro a gerir, encontrado na lista devolvida — e não construído
-        // a partir do URL.
-        let managed_file = query.file.and_then(|id| {
-            ficheiros_pessoais
-                .iter()
-                .find(|f| f.get("id").and_then(Value::as_str) == Some(id.to_string().as_str()))
-                .cloned()
-        });
-        // O Lixo, só quando pedido: uma consulta a mais em cada visita seria um
-        // custo por uma vista que raramente se abre.
-        let viewing_trash = query.trash.as_deref() == Some("1");
-        let trash_files = if viewing_trash {
-            optional(&state, &member, "/api/v1/me/files/trash")
-                .await
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        };
-        let content = ui::screens::files::all_files(ui::screens::files::AllFilesView {
-            personal_files: ficheiros_pessoais.clone(),
-            personal_folders: pastas_pessoais,
-            // Numa vista de favoritos ou recentes não se está «dentro» de uma
-            // pasta — a lista atravessa-as.
-            open_folder: if vista.is_some() { None } else { open_folder },
-            view_mode: vista.unwrap_or_default().to_owned(),
-            managed_file,
-            viewing_trash,
-            trash_files,
-            storage_used: armazenamento
-                .and_then(|s| s.get("used_bytes"))
-                .and_then(Value::as_i64)
-                .unwrap_or(0),
-            storage_limit: armazenamento
-                .and_then(|s| s.get("limit_bytes"))
-                .and_then(Value::as_i64)
-                .unwrap_or(0),
-            files: tudo
-                .get("items")
-                .and_then(Value::as_array)
-                .cloned()
-                .unwrap_or_default(),
-            total: tudo.get("total").and_then(Value::as_i64).unwrap_or(0),
-            destinos: tudo
-                .get("destinations")
-                .and_then(Value::as_array)
-                .map(|linhas| {
-                    linhas
-                        .iter()
-                        .filter_map(|d| {
-                            Some((
-                                d.get("id").and_then(Value::as_str)?.to_owned(),
-                                d.get("label").and_then(Value::as_str)?.to_owned(),
-                            ))
-                        })
-                        .collect()
-                })
-                .unwrap_or_default(),
-            notice: aviso_de(query.ok.as_deref(), query.erro.as_deref()),
-        });
-        return shell_page(
-            crate::i18n::t("files.title"),
-            &viewer,
-            Screen::Files,
-            vec![Crumb::to(Screen::Files)],
-            content,
-        );
-    };
-
-    let caminho = query.folder.map_or_else(
-        || format!("/api/v1/workspaces/{workspace_id}/files"),
-        |folder| format!("/api/v1/workspaces/{workspace_id}/files?folder={folder}"),
-    );
-
-    // A navegação é a leitura que autoriza. Se o ambiente não é alcançável, a
-    // resposta é a mesma que daria um identificador inventado.
-    let conteudo = match api::get::<Value>(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &caminho,
-    )
-    .await
-    {
-        Ok(conteudo) => conteudo,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let nome = workspaces
-        .iter()
-        .find(|(id, _)| id == &workspace_id.to_string())
-        .map_or_else(|| "Ambiente".to_owned(), |(_, nome)| nome.clone());
-
-    let listagem = |chave: &str| {
-        conteudo
-            .get(chave)
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default()
-    };
-
-    let content = ui::screens::files::files(ui::screens::files::FilesView {
-        workspaces,
-        workspace_id: Some(workspace_id.to_string()),
-        workspace_name: nome,
-        folder_id: query.folder.map(|f| f.to_string()),
-        path: listagem("path"),
-        folders: listagem("folders"),
-        files: listagem("files"),
-        // A resposta do Core, e não a lista institucional do `/me`: o direito
-        // de carregar é do ambiente, e quem gere uma unidade tem-no lá sem o ter
-        // à escala da instituição.
-        may_upload: conteudo
-            .get("may_create")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-        notice: aviso_de(query.ok.as_deref(), query.erro.as_deref()),
-    });
-
-    shell_page(
-        crate::i18n::t("files.title"),
-        &viewer,
-        Screen::Files,
-        vec![Crumb::to(Screen::Files)],
-        content,
-    )
-}
-
-/// Traduz o resultado da operação anterior numa mensagem.
-///
-/// Vem da barra de endereço porque a operação anterior foi um POST que
-/// redireccionou, e o estado que sobrevive a um redireccionamento é o que vai
-/// no caminho. O que **não** vai por aqui é conteúdo institucional: só um
-/// código que esta função conhece.
-fn aviso_de(ok: Option<&str>, erro: Option<&str>) -> Option<(bool, String)> {
-    match (ok, erro) {
-        (Some("lixo_vazio"), _) => Some((true, crate::i18n::t("files.trash.emptied").to_owned())),
-        (Some("carregado"), _) => Some((true, "Ficheiro carregado.".to_owned())),
-        (Some("pasta"), _) => Some((true, "Pasta criada.".to_owned())),
-        (Some("versao"), _) => Some((true, "Nova versão carregada.".to_owned())),
-        (_, Some("vazio")) => Some((false, "Escolha um ficheiro antes de confirmar.".to_owned())),
-        (_, Some("nome")) => Some((
-            false,
-            "A pasta precisa de um nome. Já existe uma pasta com esse nome aqui?".to_owned(),
-        )),
-        (_, Some("recusado")) => Some((
-            false,
-            "O Core recusou esta operação. Não tem acesso a este ambiente, \
-             ou a classificação escolhida não lhe está disponível."
-                .to_owned(),
-        )),
-        (_, Some("armazenamento")) => Some((
-            false,
-            "O armazenamento institucional não está a responder. O ficheiro não foi guardado."
-                .to_owned(),
-        )),
-        _ => None,
-    }
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn files_browse() -> Response {
+    interface_pending()
 }
 
 /// Lê o ficheiro e os campos de um multipart.
@@ -11627,7 +6376,7 @@ async fn apps_set_pins(
     let limpos: Vec<String> = pedido
         .pinned
         .into_iter()
-        .filter(|id| ui::apps::is_pinnable(id) && vistos.insert(id.clone()))
+        .filter(|id| experience::apps::is_pinnable(id) && vistos.insert(id.clone()))
         .collect();
     encaminhar(
         api::put(
@@ -12420,208 +7169,9 @@ async fn me_files_purge_all(State(state): State<WorkspaceState>, headers: Header
     }
 }
 
-/// A página de um ficheiro.
-async fn file_detail(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(file_id): Path<Uuid>,
-    Query(query): Query<FilesQuery>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let viewer = viewer(&state, &member).await;
-
-    let file = match api::get::<Value>(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/files/{file_id}"),
-    )
-    .await
-    {
-        Ok(file) => file,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let versions = optional(
-        &state,
-        &member,
-        &format!("/api/v1/files/{file_id}/versions"),
-    )
-    .await
-    .as_array()
-    .cloned()
-    .unwrap_or_default();
-
-    // Se a chegada foi por citação, a versão citada é a que se mostra.
-    //
-    // Resolve-se contra a lista que o Core acabou de autorizar: um identificador
-    // que não esteja aqui não é uma versão deste ficheiro, e é tratado como se
-    // não tivesse sido indicado — nunca como um atalho para outro recurso.
-    let citada = query.version.and_then(|pedida| {
-        versions
-            .iter()
-            .find(|v| {
-                v.get("id")
-                    .and_then(Value::as_str)
-                    .and_then(|id| Uuid::parse_str(id).ok())
-                    == Some(pedida)
-            })
-            .cloned()
-    });
-
-    let mostrada = citada.clone().or_else(|| versions.first().cloned());
-    let preview = previsualizar(&state, &member, mostrada.as_ref()).await;
-
-    let citada_view = citada.as_ref().map(|v| ui::screens::files::VersaoCitada {
-        sequence: v.get("sequence").and_then(Value::as_i64).unwrap_or(1),
-        page: query.page,
-        corrente: versions
-            .first()
-            .and_then(|c| c.get("id").and_then(Value::as_str))
-            == v.get("id").and_then(Value::as_str),
-    });
-
-    let may_upload = file
-        .get("may_write")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-
-    let extraction = match file.get("extraction_status").and_then(Value::as_str) {
-        Some("AVAILABLE") => ui::screens::files::Extraccao::Pesquisavel(
-            file.get("extraction_chunks")
-                .and_then(Value::as_i64)
-                .unwrap_or(0),
-        ),
-        Some("QUEUED" | "PROCESSING") => ui::screens::files::Extraccao::AProcessar,
-        Some("UNSUPPORTED") => ui::screens::files::Extraccao::SemLeitor,
-        Some("FAILED") => ui::screens::files::Extraccao::Falhou,
-        _ => ui::screens::files::Extraccao::Nenhuma,
-    };
-
-    let content = ui::screens::files::file_detail(ui::screens::files::FileDetailView {
-        file,
-        versions,
-        preview,
-        // O que se está a ver, quando não é a versão corrente. A página tem de
-        // o dizer: alguém que chegou por uma citação e vê a v2 sem aviso
-        // conclui que é o estado actual do ficheiro.
-        citada: citada_view,
-        extraction,
-        // Do Core, pela mesma razão do ecrã de navegação: o direito de
-        // acrescentar uma versão é deste ficheiro, não da instituição.
-        may_upload,
-        notice: aviso_de(query.ok.as_deref(), query.erro.as_deref()),
-    });
-
-    shell_page(
-        "Ficheiro",
-        &viewer,
-        Screen::Files,
-        vec![Crumb::to(Screen::Files)],
-        content,
-    )
-}
-
-/// O que se pode honestamente mostrar do conteúdo.
-///
-/// Só texto, e só até um limite. Uma imagem exigiria que a `Content-Security-
-/// Policy` desta aplicação — hoje `img-src 'self' data:` — passasse a aceitar o
-/// host do armazenamento, que é configurável e pode ser externo. Essa é uma
-/// decisão de segurança, e não uma consequência de alguém querer ver uma
-/// miniatura.
-async fn previsualizar(
-    state: &WorkspaceState,
-    member: &Member,
-    versao: Option<&Value>,
-) -> ui::screens::files::Preview {
-    use ui::screens::files::Preview;
-
-    let Some(corrente) = versao else {
-        return Preview::Unavailable("Este ficheiro ainda não tem versões.".to_owned());
-    };
-
-    // A pré-visualização é **da versão que se está a ver**, e não da corrente.
-    // Uma citação que abra a v2 e mostre o texto da v4 é a mesma mentira, só
-    // que mais difícil de notar.
-    let version_id = corrente
-        .get("id")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_owned();
-
-    let tipo = corrente
-        .get("content_type")
-        .and_then(Value::as_str)
-        .unwrap_or("application/octet-stream")
-        .to_owned();
-    let tamanho = corrente
-        .get("size_bytes")
-        .and_then(Value::as_i64)
-        .unwrap_or(0);
-
-    // As imagens vêm por `/files/{id}/preview`, na origem desta aplicação. O
-    // navegador pede-as sozinho, com a sessão que já tem, e o Core volta a
-    // decidir — pelo que não há aqui nenhuma leitura antecipada de bytes.
-    // A lista de tipos que se mostram inline é do Core, e chega como um campo.
-    // O Workspace não a recalcula: seria uma segunda opinião sobre uma decisão
-    // de segurança, e as duas divergiriam no dia em que uma mudasse.
-    if corrente
-        .get("previewable")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-    {
-        return Preview::Image {
-            src: format!("/file-versions/{version_id}/preview"),
-            alt: "Pré-visualização do ficheiro".to_owned(),
-        };
-    }
-
-    // O texto vem da **extracção**, e não de uma segunda leitura dos bytes.
-    //
-    // Antes, a pesquisa lia pelo extractor e a pré-visualização descarregava o
-    // ficheiro e descodificava-o outra vez. Dois caminhos para o mesmo texto
-    // divergem, e o dia em que divergissem era o dia em que alguém via no ecrã
-    // uma coisa diferente da que a pesquisa tinha encontrado.
-    //
-    // Isto também torna um PDF pré-visualizável: o que se mostra é exactamente
-    // o que se pesquisa.
-    match api::get::<Value>(
-        state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/file-versions/{version_id}/content"),
-    )
-    .await
-    {
-        Ok(resposta) => {
-            if let Some(texto) = resposta.get("text").and_then(Value::as_str) {
-                if tamanho > PREVIEW_LIMIT_BYTES as i64 {
-                    return Preview::TooLarge(tamanho);
-                }
-                return Preview::Text(texto.to_owned());
-            }
-        }
-        Err(_) => {
-            return Preview::Unavailable(
-                "O Core não autorizou a leitura do conteúdo agora.".to_owned(),
-            )
-        }
-    }
-
-    // Sem extracção não há texto para mostrar. Distinguir «ainda não foi lido»
-    // de «não tem leitor» é trabalho do painel de estado ao lado, que já o faz.
-    let e_texto = tipo.starts_with("text/")
-        || matches!(
-            tipo.as_str(),
-            "application/json" | "application/xml" | "application/x-yaml" | "application/yaml"
-        );
-
-    // Sem extracção não há texto, e não se vai buscar os bytes para tentar
-    // outra vez: era esse o segundo caminho, e é ele que desaparece aqui.
-    // Porque não há texto — ainda não foi lido, ou não tem leitor — di-lo o
-    // painel de estado ao lado, que sabe distinguir as duas coisas.
-    let _ = (e_texto, tamanho);
-    Preview::UnsupportedType(tipo)
+/// Página retirada no apagamento da UI; espera o Claude Design.
+async fn file_detail() -> Response {
+    interface_pending()
 }
 
 /// Carrega uma versão nova de um ficheiro que já existe.
@@ -12878,71 +7428,6 @@ struct MembroDaUnidade {
     person_id: Uuid,
     #[serde(default)]
     role: String,
-}
-
-/// O resultado da última operação, de volta pelo endereço.
-///
-/// Uma struct própria e não `FilesQuery`: o ecrã da unidade reaproveita-a, mas
-/// os seus campos são de ficheiros — versão, página, pasta — e nada disso tem
-/// significado numa alteração de pertença.
-#[derive(Deserialize)]
-struct AvisoQuery {
-    #[serde(default)]
-    ok: Option<String>,
-    #[serde(default)]
-    erro: Option<String>,
-}
-
-/// Traduz o resultado de uma alteração de participação num ambiente.
-fn aviso_de_participacao(ok: Option<&str>, erro: Option<&str>) -> Option<(bool, String)> {
-    match (ok, erro) {
-        (Some("adicionado"), _) => Some((true, "Pessoa adicionada ao ambiente.".to_owned())),
-        (Some("removido"), _) => Some((true, "Pessoa removida do ambiente.".to_owned())),
-        (_, Some("autoridade")) => Some((
-            false,
-            "Não tem autoridade para gerir quem participa neste ambiente.".to_owned(),
-        )),
-        // Um ambiente sem ninguém que o lidere fica ingovernável, e a recusa
-        // que o impede merece a sua própria mensagem: quem a lê tem de
-        // perceber o que fazer a seguir.
-        (_, Some("ultimo")) => Some((
-            false,
-            "Esta é a última pessoa que lidera o ambiente. Nomeie outro líder \
-             antes de a remover."
-                .to_owned(),
-        )),
-        (_, Some(_)) => Some((
-            false,
-            "A alteração não foi aceite pelo Ocinye Core.".to_owned(),
-        )),
-        _ => None,
-    }
-}
-
-/// Traduz o resultado de uma alteração de pertença numa mensagem.
-fn aviso_de_pertenca(ok: Option<&str>, erro: Option<&str>) -> Option<(bool, String)> {
-    match (ok, erro) {
-        (Some("adicionado"), _) => Some((true, "Pessoa adicionada à unidade.".to_owned())),
-        (Some("papel"), _) => Some((true, "Papel alterado.".to_owned())),
-        (Some("removido"), _) => Some((true, "Pessoa removida da unidade.".to_owned())),
-        (_, Some("autoridade")) => Some((
-            false,
-            "Não tem autoridade para gerir quem pertence a esta unidade.".to_owned(),
-        )),
-        // A recusa que protege a unidade de ficar ingovernável merece a sua
-        // própria mensagem: quem a lê tem de perceber o que fazer a seguir.
-        (_, Some("ultimo")) => Some((
-            false,
-            "Esta é a última pessoa que gere a unidade. Nomeie outro gestor \
-             antes de a remover."
-                .to_owned(),
-        )),
-        (_, Some(_)) => Some((
-            false,
-            "A alteração não foi aceite pelo Ocinye Core.".to_owned(),
-        )),
-        _ => None,
-    }
 }
 
 fn de_volta_ao_ambiente(workspace_id: Uuid, sufixo: &str) -> Response {

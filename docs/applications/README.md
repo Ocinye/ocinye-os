@@ -23,7 +23,7 @@ Três superfícies, com responsabilidades distintas:
 ## O registo é a fonte única
 
 A identidade e os metadados de cada aplicação existem **uma vez**, no registo
-[`apps/workspace/src/ui/apps.rs`](../../apps/workspace/src/ui/apps.rs). Cada
+[`apps/workspace/src/experience/apps.rs`](../../apps/workspace/src/experience/apps.rs). Cada
 `Application` apoia-se num [`Screen`] tipado — de onde herda `id`, rota, rótulo,
 ícone e o direito que a revela — e acrescenta o que é próprio da camada de
 aplicações: a **categoria**, a descrição, as palavras de pesquisa e a política de
@@ -70,11 +70,11 @@ ficha do Prompt por não haver fornecedor (briefing §54).
 
 ## Prova
 
-- Guardas do registo em [`apps.rs`](../../apps/workspace/src/ui/apps.rs): cada
+- Guardas do registo em [`apps.rs`](../../apps/workspace/src/experience/apps.rs): cada
   aplicação tem rota registada, rótulo e descrição no catálogo, identificador
   único, categoria com aplicações, e política de fixação coerente; a superfície
   de comando (`Search`/`Ask`) não é uma aplicação do lançador.
-- Testes de renderização em [`shell.rs`](../../apps/workspace/src/ui/shell.rs): o
+- Testes de renderização em [`shell.rs`](../../apps/workspace/src/experience/navigation.rs): o
   lançador está presente com pesquisa, filtros e grelha; esconde o que o membro
   não pode abrir; e o Prompt aparece a quem tem `ai.use` mesmo sem GPU.
 - Completude `pt`/`en`/`fr` de todas as chaves pelo portão de completude do

@@ -42,7 +42,7 @@ com_fixture() {
     local fixture="$1"
     local temporario
     temporario=$(mktemp)
-    sed "s#^UI Contract|.*#UI Contract|$FIXTURES/$fixture|test result: ok. 5 passed#" \
+    sed "s#^Runtime Boundary|.*#Runtime Boundary|$FIXTURES/$fixture|test result: ok. 2 passed#" \
         "$CORREDOR" > "$temporario"
     chmod +x "$temporario"
     bash "$temporario" 2>&1
@@ -91,7 +91,7 @@ worktree=$(mktemp -d)
 rm -rf "$worktree"
 if git worktree add --detach --quiet "$worktree" HEAD 2>/dev/null; then
     copia=$(mktemp)
-    sed "s#^UI Contract|.*#UI Contract|$FIXTURES/muta-a-arvore.sh|test result: ok. 5 passed#" \
+    sed "s#^Runtime Boundary|.*#Runtime Boundary|$FIXTURES/muta-a-arvore.sh|test result: ok. 2 passed#" \
         "$CORREDOR" > "$copia"
     chmod +x "$copia"
     if (cd "$worktree" && bash "$copia" >/dev/null 2>&1); then
@@ -119,7 +119,7 @@ exige "zero propriedades observadas" "zero-observacoes.sh"
 # Um portão que não corre não é um portão que passou.
 provas=$((provas + 1))
 temporario=$(mktemp)
-grep -v '^UI Contract|' "$CORREDOR" > "$temporario"
+grep -v '^Runtime Boundary|' "$CORREDOR" > "$temporario"
 chmod +x "$temporario"
 saida=$(bash "$temporario" 2>&1)
 estado=$?

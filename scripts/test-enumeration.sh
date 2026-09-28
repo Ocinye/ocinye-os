@@ -258,7 +258,11 @@ suites() {
 #   126 testes                                                   125 marcas
 # 126 → 127 testes e 125 → 126 marcas em 2026-09-27: o Terminal executa pelo
 # Core e desenha só texto (ADR-0312, D14) — uma viagem, um levantamento.
-viagens-de-browser|127|-p ocinye-workspace --test browser|VIAGEM LEVANTADA|126
+# 127 → fora em 2026-09-28: apagamento da UI. A UI inteira saiu à espera do
+# código do Claude Design, e as 127 viagens com ela: conduziam ecrãs que deixaram
+# de existir. Os nomes e o contrato de cada uma estão em
+# `docs/ui/UI_WIPE_REPORT.md`, para voltarem quando houver ecrãs. A suite sai da
+# tabela por decisão, e não por ter encolhido sozinha.
 paridade|7|-p ocinye-core-server --test parity
 # O Terminal (ocsh, ADR-0312): whoami, contexto reautorizado e alheio recusado,
 # sintaxe do anfitrião e comandos desconhecidos sem execução, ajuda filtrada pela

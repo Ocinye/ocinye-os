@@ -29,7 +29,7 @@ RAIZ = pathlib.Path(__file__).resolve().parent.parent
 CONFRONTOS = [
     ("caminhos-core", r"(\d+) caminhos e \d+ operações", "caminhos sob /api/v1"),
     ("operacoes-core", r"\d+ caminhos e (\d+) operações", "operações HTTP"),
-    ("ecras-workspace", r"\*\* (\d+) ecrãs em Leptos SSR", "ecrãs do Workspace"),
+    ("paginas-pendentes", r"\*\*(\d+) páginas\*\* respondem `503 interface_pending`", "páginas à espera de interface"),
     ("migrations", r"\*\*(\d+) migrations\*\*", "migrations"),
     ("tabelas", r"aplicáveis de base vazia; (\d+) tabelas", "tabelas"),
     ("permissoes", r"`IMPLEMENTED`\.\*\* (\d+) permissões", "permissões"),

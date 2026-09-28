@@ -8,7 +8,7 @@
 
 ## Context
 
-O dossier de design do Ocinye Workspace (em [`design/`](../../design/README.md))
+O dossier de design do Ocinye Workspace (em `design/`, retirado no apagamento da UI de 2026-09-28)
 especifica 20 ecrãs de alta fidelidade com interactividade real: command palette
 `⌘K`, sidebar colapsável com persistência, menu `+ Criar`, tabs contextuais,
 alternância de densidade das tabelas e estados de hover.
