@@ -257,7 +257,7 @@ sem que nada falhe.
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
 - **Ocinye Workspace: `IMPLEMENTED` como BFF, com a interface Claude Design
-  D001.2.1 nesta árvore (ramo `feat/design-d001-2-1`, por empurrar).** A UI foi apagada
+  D001.2.1 em `main` (PR #181, merge `7c20f8d`, 2026-09-29).** A UI foi apagada
   a 2026-09-28 ([apagamento](docs/ui/UI_WIPE_REPORT.md)) e voltou com o código
   do Design, aplicado sem alterações ([registo](docs/ui/design-integration.json)):
   arranque, login em dois passos, fim de sessão, primeiro acesso, MFA, a casca
@@ -266,8 +266,9 @@ sem que nada falhe.
   falha de identidade (503), gravada no Core
   (`GET`/`PUT /api/v1/me/desktop`, concorrência optimista). As aplicações ainda
   sem ecrã do Design abrem a janela `app_pending` dentro da casca:
-  **0 páginas** respondem `503 interface_pending`. Produção continua em `os.ocinye.com`, com
-  a UI anterior ao apagamento, até ao próximo deploy.
+  **0 páginas** respondem `503 interface_pending`. **Ainda não deployada:**
+  produção (`os.ocinye.com`) continua em `4f8d048`, com a UI anterior ao
+  apagamento, por decisão do Fidel, até à D002 ou a um deploy pedido.
 - **Gestor de Aplicações: `IMPLEMENTED` e em produção** (§45-A,
   [docs/applications](docs/applications/README.md)). As aplicações são entidades
   de primeira classe: um **registo autoritativo** único alimenta o **lançador**
