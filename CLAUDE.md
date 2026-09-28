@@ -95,7 +95,7 @@ sem que nada falhe.
   4 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`) e 1
   aplicação (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 230 caminhos e 275 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 232 caminhos e 278 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -255,15 +255,17 @@ sem que nada falhe.
 - **Bootstrap do primeiro administrador: `IMPLEMENTED`.**
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
-- **Ocinye Workspace: `IMPLEMENTED` como BFF, sem interface nesta árvore.** A
-  UI foi apagada por inteiro a 2026-09-28, à espera do código do Claude Design
-  ([apagamento](docs/ui/UI_WIPE_REPORT.md)): ecrãs, shell, CSS, `app.js`, o
-  editor de notas, o compositor, o Quick Look e a página do Terminal. Ficam a
-  sessão BFF com os tokens no servidor, as rotas, as acções contra o Core e o
-  que serve bytes ou JSON; **80 páginas** respondem `503 interface_pending`.
-  Onde esta secção descreve uma superfície humana, descreve o que existia até
-  `2923bae` e o que a produção ainda corre — não esta árvore. Produção continua
-  em `os.ocinye.com`, com a UI que tinha.
+- **Ocinye Workspace: `IMPLEMENTED` como BFF, com a interface Claude Design
+  D001 nesta árvore (ramo `feat/design-d001`, por empurrar).** A UI foi apagada
+  a 2026-09-28 ([apagamento](docs/ui/UI_WIPE_REPORT.md)) e voltou com o código
+  do Design, aplicado sem alterações ([registo](docs/ui/design-integration.json)):
+  arranque, login em dois passos, fim de sessão, primeiro acesso, MFA, a casca
+  (barra de cima, menu da conta, barra de aplicações, lançador, paleta) e o
+  Desktop com 14 widgets e personalização, gravada no Core
+  (`GET`/`PUT /api/v1/me/desktop`, concorrência optimista). As aplicações ainda
+  sem ecrã do Design abrem a janela `app_pending` dentro da casca:
+  **0 páginas** respondem `503 interface_pending`. Produção continua em `os.ocinye.com`, com
+  a UI anterior ao apagamento, até ao próximo deploy.
 - **Gestor de Aplicações: `IMPLEMENTED` e em produção** (§45-A,
   [docs/applications](docs/applications/README.md)). As aplicações são entidades
   de primeira classe: um **registo autoritativo** único alimenta o **lançador**
@@ -342,7 +344,7 @@ sem que nada falhe.
   capacidade, e a superfície de Administração de recursos.
   `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão distinto de `OCINYE_AI_READY`, e
   **não** torna a IA disponível.
-- **58 migrations**, aplicáveis de base vazia; 92 tabelas.
+- **59 migrations**, aplicáveis de base vazia; 93 tabelas.
 - **Ocinye Terminal e ocsh: `IMPLEMENTED` (fundação), por fazer merge**
   ([ADR-0312](docs/adrs/0312-ocsh-governed-command-shell.md)). Uma linha de
   comandos governada que **não é uma shell do anfitrião**: o parse é
@@ -560,14 +562,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1338 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1409 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **558 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **576 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
