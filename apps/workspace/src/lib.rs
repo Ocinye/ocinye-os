@@ -18,11 +18,12 @@
 //!
 //! # Rendering
 //!
-//! Leptos in server-side rendering, implementing the design dossier in
-//! [`design/`](../../../design/README.md). A single, bounded progressive
-//! enhancement layer (`static/app.js`) provides the command palette, the
-//! collapsible sidebar and the create menu — DOM behaviour only, never data and
-//! never an authorization decision (ADR-0602).
+//! Leptos in server-side rendering. The views in [`ui`] are Claude Design's
+//! code (revision D001, `docs/ui/DESIGN_LOCK.md`): pure functions of a view
+//! model. [`controllers`] fills those view models from the Core; routes wire the
+//! two. Progressive enhancement lives in `static/oc-*.js`, bound by `data-oc`
+//! attributes — DOM behaviour only, never data and never an authorization
+//! decision (ADR-0602).
 //!
 //! Hydration remains the declared destination; the components are already
 //! Leptos, so adopting it is a build-chain change rather than a rewrite.
@@ -52,6 +53,7 @@
 pub mod api;
 pub mod boot;
 pub mod config;
+pub mod controllers;
 pub mod experience;
 pub mod i18n;
 pub mod routes;

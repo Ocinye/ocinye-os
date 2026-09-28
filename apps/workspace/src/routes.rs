@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use axum::extract::{DefaultBodyLimit, Form, Multipart, Path, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
-use axum::response::{IntoResponse, Redirect, Response};
+use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::Deserialize;
@@ -19,8 +19,15 @@ use tower_http::services::ServeDir;
 use uuid::Uuid;
 
 use crate::api::{self, ApiFailure};
+use crate::controllers::{self, Caller, Shell, ShellContext};
 use crate::experience;
+use crate::experience::navigation::Screen;
 use crate::session::{self, Session};
+use crate::ui;
+use crate::ui::view_models::{
+    DocumentVm, FirstAccessVm, LoginVm, MfaChallengeVm, MfaCodesVm, MfaSetupVm, RecoverVm,
+    SessionEndReason, SessionEndVm, Surface, Theme,
+};
 use crate::WorkspaceState;
 
 /// Todos os caminhos que o Workspace serve.
@@ -150,6 +157,8 @@ pub const ROUTES: &[&str] = &[
     "/files/personal-upload",
     "/files/upload-preflight",
     "/apps/pins",
+    "/me/desktop",
+    "/me/desktop/restore",
     "/files/uploads/{session_id}",
     "/files/uploads/{session_id}/parts/{part_number}",
     "/files/uploads/{session_id}/complete",
@@ -189,6 +198,7 @@ pub const ROUTES: &[&str] = &[
     "/activity",
     "/admin",
     "/admin/instance",
+    "/admin/monitor",
     "/admin/members/new",
     "/admin/members/{person_id}",
     "/admin/members/{person_id}/position",
@@ -479,6 +489,9 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/files/personal-upload", post(upload_begin_personal))
         .route("/files/upload-preflight", post(upload_preflight))
         .route("/apps/pins", put(apps_set_pins))
+        .route("/me/desktop", put(desktop_save))
+        .route("/me/desktop/restore", post(desktop_restore))
+        .route("/admin/monitor", get(admin_monitor))
         .route(
             "/files/uploads/{session_id}",
             get(upload_status).delete(upload_cancel),
@@ -1039,9 +1052,60 @@ async fn not_found() -> Response {
 
 // ── Arranque ─────────────────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn boot_screen() -> Response {
-    interface_pending()
+/// O que o arranque recebe de quem o pede.
+#[derive(Deserialize)]
+struct BootQuery {
+    /// Para onde seguir quando o Core deixar.
+    #[serde(default)]
+    return_to: Option<String>,
+}
+
+/// `GET /boot` — o arranque institucional, como o `/ready` o disse.
+///
+/// Quem já tem sessão válida numa Instância pronta não está a entrar: segue
+/// directamente para onde ia (a ligação profunda que o portão guardou), em vez
+/// de passar pelo «Continuar para o início de sessão» do ecrã de arranque.
+async fn boot_screen(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(query): Query<BootQuery>,
+) -> Response {
+    let destino = query
+        .return_to
+        .as_deref()
+        .and_then(|d| crate::boot::safe_return_target(d, ROUTES))
+        .unwrap_or_else(|| "/".to_owned());
+    let (vm, segue) = controllers::boot(&state).await;
+
+    let mut resposta = if segue && current_member(&state, &headers).is_some() {
+        Redirect::to(&destino).into_response()
+    } else {
+        let titulo = if segue {
+            "auth.boot.ready_title"
+        } else {
+            "auth.boot.blocked_title"
+        };
+        html(
+            crate::i18n::t(titulo),
+            Surface::Auth,
+            ui::screens::auth::boot::boot(&vm),
+        )
+    };
+    // Uma prontidão em cache é uma resposta sobre um sistema que já não existe.
+    resposta.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store, no-cache, must-revalidate"),
+    );
+    // O marcador só se grava quando houve por onde seguir: gravá-lo num arranque
+    // bloqueado faria a tentativa seguinte saltar um problema que continua lá.
+    if segue {
+        if let Ok(valor) =
+            HeaderValue::from_str(&crate::boot::marker_cookie(state.config.cookie_secure))
+        {
+            resposta.headers_mut().append(header::SET_COOKIE, valor);
+        }
+    }
+    resposta
 }
 
 /// Macro de guarda: sem sessão, vai para o login.
@@ -1066,21 +1130,189 @@ macro_rules! member_or_login {
     };
 }
 
+// ── Interface (Claude Design D001) ─────────────────────────────────────────
+
+/// Um documento do Design: a superfície decide o CSS e o JS, e o tema.
+fn html(title: &str, surface: Surface, body: impl leptos::IntoView + 'static) -> Response {
+    let theme = match surface {
+        Surface::Auth => Theme::Dark,
+        Surface::Shell => Theme::Light,
+    };
+    let doc = DocumentVm {
+        title: title.to_owned(),
+        surface,
+        theme,
+    };
+    Html(ui::document::render(&doc, body)).into_response()
+}
+
+fn caller(member: &Member) -> Caller<'_> {
+    Caller {
+        session: &member.session,
+        correlation_id: &member.correlation_id,
+    }
+}
+
+/// A identidade da sessão ficou por estabelecer: o Core não deu resposta
+/// autoritária ao `/me`. Falha fechado — nenhuma casca autenticada, só a
+/// referência para o administrador. O Design ainda não desenhou esta superfície
+/// (CODE_FEEDBACK: MISSING_DESIGN_STATE); usa-se o componente de erro do Core.
+fn identity_indeterminate(reference: &str) -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        html(
+            crate::i18n::t("auth.product"),
+            Surface::Auth,
+            ui::components::core_error(reference),
+        ),
+    )
+        .into_response()
+}
+
+/// O Core já não reconhece o token desta sessão: a sessão acabou.
+fn session_ended(state: &WorkspaceState, headers: &HeaderMap) -> Response {
+    if let Some(id) =
+        session::session_id_from_cookies(headers.get(header::COOKIE).and_then(|v| v.to_str().ok()))
+    {
+        state.sessions.remove(&id);
+    }
+    (
+        [(
+            header::SET_COOKIE,
+            session::clear_cookie_header(state.config.cookie_secure),
+        )],
+        Redirect::to("/login?reason=expired"),
+    )
+        .into_response()
+}
+
+/// Se a aplicação deste ecrã se oferece a este membro. Um ecrã fora do registo
+/// de aplicações (Home, pesquisa, notificações) é de toda a gente.
+fn screen_open(ctx: &ShellContext, screen: Screen) -> bool {
+    experience::apps::APPLICATIONS
+        .iter()
+        .find(|a| a.screen == screen)
+        .is_none_or(|a| a.visible_to(&ctx.viewer, ctx.core))
+}
+
+/// Uma rota de aplicação cujo ecrã o Design ainda não entregou (D002+).
+///
+/// A janela `app_pending` na casca, para que nenhuma ligação fique morta. Quem
+/// não pode ver a aplicação recebe o mesmo que para uma rota inexistente: a
+/// grelha não anuncia o que o membro não abre, e a rota escrita à mão também não.
+async fn app_page(state: &WorkspaceState, headers: &HeaderMap, screen: Screen) -> Response {
+    let title = screen.label().to_owned();
+    pending_page(state, headers, Some(screen), title, screen.path()).await
+}
+
+async fn pending_page(
+    state: &WorkspaceState,
+    headers: &HeaderMap,
+    gate: Option<Screen>,
+    title: String,
+    href: &'static str,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let quem = caller(&member);
+    match controllers::shell(state, &quem, href, title.clone()).await {
+        Shell::Ready(ctx) => {
+            if gate.is_some_and(|screen| !screen_open(&ctx, screen)) {
+                return not_found().await;
+            }
+            let page_title = title.clone();
+            html(
+                &page_title,
+                Surface::Shell,
+                ui::shell::app_pending(&ctx.vm, title, href),
+            )
+        }
+        Shell::SignIn => session_ended(state, headers),
+        Shell::Indeterminate(reference) => identity_indeterminate(&reference),
+    }
+}
+
+// ── Desktop (D001 · FG-017) ────────────────────────────────────────────────
+
+/// `PUT /me/desktop` — grava a disposição no Core. O Core valida e decide; o
+/// Workspace só traduz o conflito para o `409` que o Desktop espera.
+async fn desktop_save(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    axum::Json(pedido): axum::Json<Value>,
+) -> Response {
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return nao_autenticado();
+    };
+    let resultado = api::put(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/me/desktop",
+        &pedido,
+    )
+    .await;
+    match resultado {
+        Err(ApiFailure::Conflict(mensagem)) => (
+            StatusCode::CONFLICT,
+            axum::Json(serde_json::json!({ "message": mensagem })),
+        )
+            .into_response(),
+        outro => encaminhar(outro),
+    }
+}
+
+/// `POST /me/desktop/restore` — repõe a predefinição. Com JS (`Accept: JSON`)
+/// responde a disposição; sem JS, volta ao Desktop.
+async fn desktop_restore(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return nao_autenticado();
+    };
+    let resultado = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/me/desktop/restore",
+        &serde_json::json!({}),
+    )
+    .await;
+    if aceita_json(&headers) {
+        return encaminhar(resultado);
+    }
+    match resultado {
+        Ok(_) => Redirect::to("/").into_response(),
+        Err(falha) => failure_response(&falha),
+    }
+}
+
 // ── Pessoal ──────────────────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn home() -> Response {
-    interface_pending()
+/// `GET /` — o Desktop (D001): a disposição do membro e os 14 widgets.
+async fn home(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let member = member_or_login!(state, headers);
+    let quem = caller(&member);
+    let crumb = Screen::Home.label().to_owned();
+    match controllers::shell(&state, &quem, "/", crumb).await {
+        Shell::Ready(ctx) => {
+            let vm = controllers::desktop::desktop(*ctx, &quem, &state).await;
+            html(
+                crate::i18n::t("desk.title"),
+                Surface::Shell,
+                ui::screens::home::home(&vm),
+            )
+        }
+        Shell::SignIn => session_ended(&state, &headers),
+        Shell::Indeterminate(reference) => identity_indeterminate(&reference),
+    }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn my_work() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn my_work(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::MyWork).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn meus_recursos() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn meus_recursos(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Resources).await
 }
 
 // ── Correio ──────────────────────────────────────────────────────────────
@@ -1138,19 +1370,19 @@ async fn mail_sync(
     .into_response()
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn mail() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn mail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Mail).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn mail_mailbox() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn mail_mailbox(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Mail).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn mail_message() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn mail_message(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Mail).await
 }
 
 #[derive(Deserialize)]
@@ -1201,9 +1433,9 @@ async fn mail_flags(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn compose() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn compose(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Mail).await
 }
 
 /// O formulário do composer, tal como chega das duas rotas que o submetem.
@@ -1489,21 +1721,24 @@ async fn draft_attachment_remove(
     resposta_de_rascunho(resultado)
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn mail_settings() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn mail_settings(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Mail).await
 }
 
 // ── Mensagens ────────────────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn messaging() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn messaging(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Messaging).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn messaging_conversation() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn messaging_conversation(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+) -> Response {
+    app_page(&state, &headers, Screen::Messaging).await
 }
 
 #[derive(Deserialize)]
@@ -2121,41 +2356,41 @@ async fn mail_disconnect(
 
 // ── Listas ───────────────────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn units() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn units(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Units).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn ideas() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn ideas(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Ideas).await
 }
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn projects() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn projects(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn datasets() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn datasets(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Datasets).await
 }
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn agents() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn agents(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Agents).await
 }
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn admin() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn admin(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Admin).await
 }
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn audit() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn audit(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Audit).await
 }
 
 // ── Administração de membros ─────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_member() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_member(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Admin).await
 }
 
 /// Acção retirada no apagamento da UI; espera o Claude Design.
@@ -2165,9 +2400,9 @@ async fn create_member() -> Response {
     interface_pending()
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn member_detail() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn member_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Admin).await
 }
 
 /// Corpo do formulário de atribuição de unidade a um membro.
@@ -2614,14 +2849,14 @@ async fn provision_member() -> Response {
     interface_pending()
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn bibliography() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn bibliography(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Bibliography).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn bibliography_tools() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn bibliography_tools(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Bibliography).await
 }
 
 /// Acção retirada no apagamento da UI; espera o Claude Design.
@@ -2633,14 +2868,14 @@ async fn review_bibliography() -> Response {
 
 // ── Investigação ─────────────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn unit_detail() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn unit_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Units).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn idea_workspace() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn idea_workspace(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Ideas).await
 }
 
 #[derive(Deserialize)]
@@ -2690,35 +2925,35 @@ async fn transition_idea(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn project_workspace() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn project_workspace(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn research_workspace() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn research_workspace(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
 // ── Ciência ──────────────────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn scientific_chain() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn scientific_chain(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn result_detail() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn result_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
 // ── Construir a cadeia ───────────────────────────────────────────────────
 
 // ── Hipótese ─────────────────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_hypothesis() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_hypothesis(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
 #[derive(Deserialize)]
@@ -2760,9 +2995,9 @@ async fn create_hypothesis(
 
 // ── Metodologia e versões ────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_methodology() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_methodology(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
 #[derive(Deserialize)]
@@ -2811,14 +3046,14 @@ async fn create_methodology(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn methodology_detail() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn methodology_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_version() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_version(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
 #[derive(Deserialize)]
@@ -2854,9 +3089,9 @@ async fn publish_version(
 
 // ── Estudo e execuções ───────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_study() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_study(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
 #[derive(Deserialize)]
@@ -2908,14 +3143,14 @@ async fn create_study(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn study_detail() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn study_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_execution() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_execution(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
 #[derive(Deserialize)]
@@ -2975,9 +3210,9 @@ async fn record_execution(
 
 // ── Execução e resultado ─────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn execution_detail() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn execution_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
 /// Uma execução, o estudo a que pertence, e o que ela produziu.
@@ -3038,9 +3273,9 @@ fn text_de(valor: &Value, chave: &str) -> String {
         .to_owned()
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_result() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_result(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
 #[derive(Deserialize)]
@@ -3109,9 +3344,9 @@ struct ValidationForm {
     note: String,
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn validate_result_form() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn validate_result_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
 /// Regista a afirmação, em nome de quem a faz.
@@ -3152,26 +3387,26 @@ async fn record_validation(
 
 // ── Conhecimento ─────────────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn knowledge() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn knowledge(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Knowledge).await
 }
 
 // ── Inteligência ─────────────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn ai_hub() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn ai_hub(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Ai).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_agent() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_agent(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Agents).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn agent_detail() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn agent_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Agents).await
 }
 
 /// Campos do construtor de agentes.
@@ -3241,9 +3476,9 @@ async fn create_agent(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn prompt() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn prompt(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Prompt).await
 }
 
 /// O pedido submetido no Prompt Ocinye.
@@ -3290,16 +3525,16 @@ async fn submit_prompt(
     interface_pending()
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn search() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn search(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Search).await
 }
 
 // ── A Universal Command Surface ──────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn ask() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn ask(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Ask).await
 }
 
 /// Confirma e executa um plano.
@@ -3380,23 +3615,23 @@ fn urlencoding_minimal(value: &str) -> String {
         .collect()
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn compute() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn compute(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Compute).await
 }
 
 // ── Institucional ────────────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn activity() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn activity(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Activity).await
 }
 
 // ── Criar ideia ──────────────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_source_form() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_source_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Bibliography).await
 }
 
 #[derive(Deserialize)]
@@ -3464,9 +3699,9 @@ async fn create_source(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_dataset_form() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_dataset_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Datasets).await
 }
 
 #[derive(Deserialize)]
@@ -3525,9 +3760,9 @@ async fn create_dataset(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_task_form() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_task_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::MyWork).await
 }
 
 #[derive(Deserialize)]
@@ -3578,14 +3813,14 @@ async fn create_task(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn dataset_detail() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn dataset_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Datasets).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn task_detail() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn task_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::MyWork).await
 }
 
 #[derive(Deserialize)]
@@ -3665,14 +3900,14 @@ async fn task_action_redirect(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn settings_account() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn settings_account(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Settings).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn settings_language() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn settings_language(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Settings).await
 }
 
 /// A escolha de idioma submetida.
@@ -3705,14 +3940,14 @@ async fn set_language(
     resposta
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn settings_apps() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn settings_apps(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Settings).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn admin_instance() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn admin_instance(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Admin).await
 }
 
 /// Grava o perfil e o estado de cada aplicação opcional que mudou.
@@ -3881,14 +4116,14 @@ async fn save_apps(
     Redirect::to("/settings/apps?ok=1").into_response()
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn help() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn help(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Help).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn terminal() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn terminal(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Terminal).await
 }
 
 /// `POST /terminal/exec` — leva uma linha ao Core e devolve-a localizada.
@@ -4158,14 +4393,14 @@ async fn own_avatar(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn settings_security() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn settings_security(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Settings).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn settings_mfa() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn settings_mfa(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Settings).await
 }
 
 /// Acção retirada no apagamento da UI; espera o Claude Design.
@@ -4297,9 +4532,9 @@ async fn revoke_session(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_project_form() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_project_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Projects).await
 }
 
 #[derive(Deserialize)]
@@ -4361,9 +4596,9 @@ async fn promote_idea(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_unit_form() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_unit_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Units).await
 }
 
 #[derive(Deserialize)]
@@ -4449,9 +4684,9 @@ async fn unit_code_suggestion(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn edit_unit_form() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn edit_unit_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Units).await
 }
 
 #[derive(Deserialize)]
@@ -4497,9 +4732,9 @@ async fn update_unit(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_idea_form() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_idea_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Ideas).await
 }
 
 #[derive(Deserialize)]
@@ -4582,9 +4817,9 @@ async fn create_idea(
 
 // ── Notas pessoais ───────────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn notes_list() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn notes_list(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Notes).await
 }
 
 /// Cria uma nota vazia e leva o membro ao editor dela.
@@ -4619,14 +4854,17 @@ async fn create_personal_note(State(state): State<WorkspaceState>, headers: Head
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn note_editor() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn note_editor(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Notes).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn note_revision_preview() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn note_revision_preview(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+) -> Response {
+    app_page(&state, &headers, Screen::Notes).await
 }
 
 /// O formulário de restauro de uma revisão.
@@ -4657,14 +4895,14 @@ async fn restore_note_revision_route(
     Redirect::to(&format!("/notes/{note_id}")).into_response()
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn shared_notes_page() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn shared_notes_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Notes).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn notes_trash_page() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn notes_trash_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Notes).await
 }
 
 /// Apaga uma nota (leva-a ao Lixo) e volta à lista. Do dono; o Core recusa a
@@ -5199,14 +5437,66 @@ async fn move_personal_note(
 
 // ── Autenticação ─────────────────────────────────────────────────────────
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn login() -> Response {
-    interface_pending()
+/// `?reason=` do início de sessão (D12 / D13).
+#[derive(Deserialize)]
+struct LoginQuery {
+    #[serde(default)]
+    reason: Option<String>,
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn password_recover() -> Response {
-    interface_pending()
+/// `GET /login` — a porta (D001), ou o fim de sessão com `?reason=`.
+///
+/// Sob o ADR-0103 o Workspace apresenta o formulário e envia as credenciais ao
+/// Core, que é a autoridade de autenticação. Quem já tem sessão válida não tem
+/// nada a fazer à porta.
+async fn login(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(q): Query<LoginQuery>,
+) -> Response {
+    if q.reason.is_none()
+        && current_member(&state, &headers)
+            .is_some_and(|m| !m.session.must_change_password && !m.session.mfa_required)
+    {
+        return Redirect::to("/").into_response();
+    }
+    let door = controllers::door(&state).await;
+    let fim = match q.reason.as_deref() {
+        Some("expired") => Some((SessionEndReason::Expired, "auth.end.expired_title")),
+        // G-27: o Core ainda não diz o motivo de uma revogação.
+        Some("revoked") => Some((SessionEndReason::Revoked, "auth.end.revoked_title")),
+        _ => None,
+    };
+    match fim {
+        Some((reason, titulo)) => html(
+            crate::i18n::t(titulo),
+            Surface::Auth,
+            ui::screens::auth::login::session_end(&SessionEndVm { door, reason }),
+        ),
+        None => html(
+            crate::i18n::t("auth.login.title"),
+            Surface::Auth,
+            ui::screens::auth::login::login(&LoginVm {
+                door,
+                error: None,
+                email: String::new(),
+            }),
+        ),
+    }
+}
+
+/// `GET /password/recover` — D10. O envio (G-26) ainda não existe no Core: a
+/// vista recebe `available=false` e não submete nada.
+async fn password_recover(State(state): State<WorkspaceState>) -> Response {
+    html(
+        crate::i18n::t("auth.recover.title"),
+        Surface::Auth,
+        ui::screens::auth::login::recover(&RecoverVm {
+            door: controllers::door(&state).await,
+            available: false,
+            sent: false,
+        }),
+    )
 }
 
 /// A escolha de idioma à porta, antes de haver sessão (G-30).
@@ -5267,11 +5557,24 @@ async fn login_submit(
     let session = match outcome.and_then(CoreSession::from_payload) {
         Ok(session) => session,
         Err(failure) => {
-            // A mensagem vem do Core e é a mesma para todas as falhas de
-            // credencial. O Workspace não a enriquece: fazê-lo reintroduziria o
-            // oráculo que o Core evita (briefing §35).
-            let _ = failure;
-            return (StatusCode::UNAUTHORIZED, "invalid_credentials").into_response();
+            // Uma só mensagem para todas as falhas de credencial: o Workspace não
+            // a enriquece, que reintroduziria o oráculo que o Core evita
+            // (briefing §35). É a recusa do Core (`SIGN_IN_REFUSED`), na língua
+            // da porta — o Core só a escreve em português.
+            tracing::info!(detail = %failure, "sign-in refused");
+            return (
+                StatusCode::UNAUTHORIZED,
+                html(
+                    crate::i18n::t("auth.login.title"),
+                    Surface::Auth,
+                    ui::screens::auth::login::login(&LoginVm {
+                        door: controllers::door(&state).await,
+                        error: Some(crate::i18n::t("auth.refused.sign_in").to_owned()),
+                        email: form.email,
+                    }),
+                ),
+            )
+                .into_response();
         }
     };
 
@@ -5357,10 +5660,58 @@ impl CoreSession {
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn first_access() -> Response {
-    interface_pending()
+/// `GET /first-access` — definir a palavra-passe definitiva (D001).
+async fn first_access(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return Redirect::to("/login").into_response();
+    };
+    // Quem já tem palavra-passe definitiva não tem nada a fazer aqui.
+    if !member.session.must_change_password {
+        return Redirect::to("/").into_response();
+    }
+    first_access_view(&state, &member, None).await
 }
+
+/// O ecrã de primeiro acesso, com a recusa do Core quando a houve.
+async fn first_access_view(
+    state: &WorkspaceState,
+    member: &Member,
+    error: Option<String>,
+) -> Response {
+    // O mínimo vem do Core (`minimum_password_length`); a vista não o fixa.
+    let (door, sessao) = tokio::join!(
+        controllers::door(state),
+        optional(state, member, "/api/v1/auth/session"),
+    );
+    let vm = FirstAccessVm {
+        door,
+        display_name: member.session.display_name.clone(),
+        email: member.session.email.clone(),
+        min_length: sessao
+            .get("minimum_password_length")
+            .and_then(Value::as_u64)
+            .and_then(|n| u32::try_from(n).ok())
+            .unwrap_or(FALLBACK_MIN_PASSWORD_LENGTH),
+        error,
+    };
+    let estado = if vm.error.is_some() {
+        StatusCode::UNPROCESSABLE_ENTITY
+    } else {
+        StatusCode::OK
+    };
+    (
+        estado,
+        html(
+            crate::i18n::t("auth.first.title"),
+            Surface::Auth,
+            ui::screens::auth::first_access::first_access(&vm),
+        ),
+    )
+        .into_response()
+}
+
+/// O mínimo do ADR-0104, só para quando o Core não respondeu ao pedir a sessão.
+const FALLBACK_MIN_PASSWORD_LENGTH: u32 = 15;
 
 /// Nova palavra-passe submetida.
 #[derive(Deserialize)]
@@ -5395,10 +5746,13 @@ async fn first_access_submit(
 
     let session = match outcome.and_then(CoreSession::from_payload) {
         Ok(session) => session,
-        Err(failure) => {
-            // A sessão restrita expirou a meio: recomeçar é o único caminho.
-            return failure_response(&failure);
+        // A sessão restrita expirou a meio: recomeçar é o único caminho.
+        Err(ApiFailure::Unauthorised) => return Redirect::to("/login").into_response(),
+        // A recusa do Core (a política da palavra-passe), ao lado do campo.
+        Err(ApiFailure::Rejected(mensagem)) => {
+            return first_access_view(&state, &member, Some(mensagem)).await;
         }
+        Err(failure) => return failure_response(&failure),
     };
 
     // O Core revogou a sessão antiga e emitiu outra. A sessão local segue-a:
@@ -5451,16 +5805,175 @@ struct MfaCodeForm {
     code: String,
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn mfa_page() -> Response {
-    interface_pending()
+/// `?show_key=1`: a chave manual só vem a pedido (ADR-0107).
+#[derive(Deserialize)]
+struct MfaQuery {
+    #[serde(default)]
+    show_key: Option<String>,
 }
 
-/// Acção retirada no apagamento da UI; espera o Claude Design.
-///
-/// Produz um segredo que se mostra uma única vez; sem ecrã, perdia-se.
-async fn mfa_confirm() -> Response {
-    interface_pending()
+/// `GET /mfa` — o ecrã certo, decidido pelo Core (`mfa_mode`), nunca por
+/// heurística: configurar (D8a) ou o desafio (D8).
+async fn mfa_page(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(query): Query<MfaQuery>,
+) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return Redirect::to("/login").into_response();
+    };
+    if !member.session.mfa_required {
+        return Redirect::to("/").into_response();
+    }
+    let estado = optional(&state, &member, "/api/v1/auth/mfa").await;
+    match estado
+        .get("mfa_mode")
+        .and_then(Value::as_str)
+        .unwrap_or("challenge")
+    {
+        "not_required" => Redirect::to("/").into_response(),
+        "challenge" => mfa_challenge_view(&state, None, false).await,
+        _ => {
+            let mostrar = matches!(query.show_key.as_deref(), Some("1" | "true"));
+            mfa_setup_view(&state, &member, mostrar, None).await
+        }
+    }
+}
+
+/// D8a: o QR (e, a pedido, a chave manual) do seed por confirmar que o Core
+/// devolve — sempre o mesmo até ser confirmado.
+async fn mfa_setup_view(
+    state: &WorkspaceState,
+    member: &Member,
+    show_key: bool,
+    error: Option<String>,
+) -> Response {
+    // `reveal=true`, e não `reveal=1`: a query do Core lê um `bool` canónico.
+    let caminho = if show_key {
+        "/api/v1/auth/mfa/enroll?reveal=true"
+    } else {
+        "/api/v1/auth/mfa/enroll"
+    };
+    let corpo = serde_json::json!({});
+    let (door, inscricao) = tokio::join!(
+        controllers::door(state),
+        api::post(
+            state,
+            &member.session.access_token,
+            &member.correlation_id,
+            caminho,
+            &corpo,
+        ),
+    );
+    let (otpauth_uri, manual_key, error) = match inscricao {
+        Ok(payload) => (
+            payload
+                .get("otpauth_uri")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            payload
+                .get("secret_base32")
+                .and_then(Value::as_str)
+                .filter(|_| show_key)
+                .unwrap_or_default()
+                .to_owned(),
+            error,
+        ),
+        Err(ApiFailure::Unauthorised) => return Redirect::to("/login").into_response(),
+        Err(failure) => (
+            String::new(),
+            String::new(),
+            error.or(Some(failure.to_string())),
+        ),
+    };
+    html(
+        crate::i18n::t("auth.mfa.setup_title"),
+        Surface::Auth,
+        ui::screens::auth::mfa::setup(&MfaSetupVm {
+            door,
+            otpauth_uri,
+            manual_key,
+            error,
+        }),
+    )
+}
+
+/// D8: o desafio do segundo factor, com a recusa do Core quando a houve.
+async fn mfa_challenge_view(
+    state: &WorkspaceState,
+    error: Option<String>,
+    recovery_open: bool,
+) -> Response {
+    let estado = if error.is_some() {
+        StatusCode::UNAUTHORIZED
+    } else {
+        StatusCode::OK
+    };
+    (
+        estado,
+        html(
+            crate::i18n::t("auth.mfa.challenge_title"),
+            Surface::Auth,
+            ui::screens::auth::mfa::challenge(&MfaChallengeVm {
+                door: controllers::door(state).await,
+                error,
+                recovery_open,
+            }),
+        ),
+    )
+        .into_response()
+}
+
+/// `POST /mfa/confirm` — confirma o enrolamento e mostra os códigos de
+/// recuperação (D8b), uma única vez, nesta resposta. Ainda não fecha o portão:
+/// a sessão continua a exigir MFA até o acknowledgement.
+async fn mfa_confirm(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<MfaCodeForm>,
+) -> Response {
+    let Some(member) = current_member(&state, &headers) else {
+        return Redirect::to("/login").into_response();
+    };
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/auth/mfa/enroll/confirm",
+        &serde_json::json!({ "code": form.code }),
+    )
+    .await
+    {
+        Ok(payload) => {
+            let codes = payload
+                .get("recovery_codes")
+                .and_then(Value::as_array)
+                .map(|itens| {
+                    itens
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default();
+            let mut resposta = html(
+                crate::i18n::t("auth.mfa.codes_title"),
+                Surface::Auth,
+                ui::screens::auth::mfa::codes(&MfaCodesVm {
+                    door: controllers::door(&state).await,
+                    codes,
+                }),
+            );
+            // Os códigos são segredos de uso único: nunca em cache.
+            resposta
+                .headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            resposta
+        }
+        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
+        Err(failure) => mfa_setup_view(&state, &member, false, Some(failure.to_string())).await,
+    }
 }
 
 /// Troca a sessão-portão pela sessão nova, `active` e assegurada, que o Core
@@ -5547,7 +6060,7 @@ async fn mfa_challenge(
     {
         Ok(payload) => trocar_sessao(&state, &headers, member.session.email.clone(), payload),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => failure_response(&failure),
+        Err(failure) => mfa_challenge_view(&state, Some(failure.to_string()), false).await,
     }
 }
 
@@ -5571,7 +6084,7 @@ async fn mfa_recovery(
     {
         Ok(payload) => trocar_sessao(&state, &headers, member.session.email.clone(), payload),
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => failure_response(&failure),
+        Err(failure) => mfa_challenge_view(&state, Some(failure.to_string()), true).await,
     }
 }
 
@@ -5929,14 +6442,14 @@ mod router_tests {
 // que ele devolveu. Nenhuma das quatro vistas consulta nada por si — recebem
 // todas o mesmo conjunto autorizado (ADR-0410).
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn calendar_page() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn calendar_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Calendar).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn new_event_form() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn new_event_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Calendar).await
 }
 
 /// O que o formulário envia.
@@ -6062,14 +6575,14 @@ async fn create_calendar_event(
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn event_detail_page() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn event_detail_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Calendar).await
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn edit_event_form() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn edit_event_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Calendar).await
 }
 
 async fn update_calendar_event(
@@ -6142,9 +6655,17 @@ async fn notifications_recent(State(state): State<WorkspaceState>, headers: Head
     axum::Json(resposta).into_response()
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn notifications_page() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn notifications_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let title = crate::i18n::t("shell.notifications").to_owned();
+    pending_page(&state, &headers, None, title, "/notifications").await
+}
+
+/// O Monitor (destino do Estado do sistema para administradores): sem ecrã
+/// entregue pelo Design, a janela `app_pending`, com a visibilidade da
+/// Administração.
+async fn admin_monitor(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Admin).await
 }
 
 async fn mark_notification_read(
@@ -6178,9 +6699,9 @@ async fn mark_notification_read(
 /// O mesmo limite do Core, mais o envelope multipart.
 const FILE_BODY_LIMIT_BYTES: usize = 640 * 1024 * 1024 + 64 * 1024;
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn files_browse() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn files_browse(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Files).await
 }
 
 /// Lê o ficheiro e os campos de um multipart.
@@ -7169,9 +7690,9 @@ async fn me_files_purge_all(State(state): State<WorkspaceState>, headers: Header
     }
 }
 
-/// Página retirada no apagamento da UI; espera o Claude Design.
-async fn file_detail() -> Response {
-    interface_pending()
+/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
+async fn file_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    app_page(&state, &headers, Screen::Files).await
 }
 
 /// Carrega uma versão nova de um ficheiro que já existe.

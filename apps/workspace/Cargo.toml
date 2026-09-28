@@ -36,6 +36,21 @@ url = { workspace = true }
 
 [dev-dependencies]
 ocinye-observability = { workspace = true }
+# As viagens D001 (`tests/d001_journeys.rs`) levantam um Core a sério, em
+# processo, e o Workspace à frente dele: provam que uma pessoa entra, vê o
+# Desktop e o grava, pelo caminho real. `test-fixtures` traz a guarda que recusa
+# escrever fixtures numa base com a organização canónica. Só em testes: o
+# binário enviado não leva o Core consigo (`architecture_boundaries.py`).
+ocinye-core = { workspace = true, features = ["test-fixtures"] }
+ocinye-core-server = { workspace = true }
+sqlx = { workspace = true }
+# A sonda de credencial de correio do Core é um trait assíncrono.
+async-trait = { workspace = true }
+# O código TOTP do seed de teste, para satisfazer o desafio de MFA pelo fluxo
+# real, como um autenticador faria.
+hmac = { workspace = true }
+sha1 = { workspace = true }
+data-encoding = { workspace = true }
 # Só para a sonda de rotas: leva pedidos ao `Router` real em memória, sem abrir
 # socket nenhum. É a peça mínima que prova que `ROUTES` descreve o servidor que
 # a aplicação constrói, e não o servidor que julgamos ter construído.

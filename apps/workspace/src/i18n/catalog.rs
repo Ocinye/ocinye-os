@@ -486,11 +486,32 @@ const DS_TERMINAL_ENGINE: &[Entry] = catalogo! {
     "ocsh.ok.context_workspace": { pt: "Contexto: {code}", en: "Context: {code}", fr: "Contexte : {code}" },
 };
 
+/// Os componentes do arranque (`/ready`), pelo nome que a pessoa lê. O Design
+/// (D001) desenha a linha de cada componente mas não traz os nomes; são do
+/// sistema, e por isso vivem aqui e não em `ui_auth`.
+const BOOT_COMPONENTS: &[Entry] = catalogo! {
+    "boot.component.core": { pt: "Núcleo institucional", en: "Institutional core", fr: "Noyau institutionnel" },
+    "boot.component.persistence": { pt: "Persistência", en: "Persistence", fr: "Persistance" },
+    "boot.component.identity": { pt: "Identidade", en: "Identity", fr: "Identité" },
+    "boot.component.compatibility": { pt: "Compatibilidade", en: "Compatibility", fr: "Compatibilité" },
+    "boot.component.storage": { pt: "Armazenamento", en: "Storage", fr: "Stockage" },
+    "boot.component.mail": { pt: "Correio", en: "Mail", fr: "Courrier" },
+    "boot.component.intelligence": { pt: "Inteligência", en: "Intelligence", fr: "Intelligence" },
+    "boot.component.compute": { pt: "Computação", en: "Compute", fr: "Calcul" },
+    "boot.component.calendar": { pt: "Calendário", en: "Calendar", fr: "Calendrier" },
+    "boot.component.realtime": { pt: "Tempo real", en: "Real time", fr: "Temps réel" },
+    // A recusa do início de sessão do Core (`SIGN_IN_REFUSED`), a mesma para
+    // todas as falhas de credencial. O Core escreve-a só em português; a porta
+    // fala a língua escolhida.
+    "auth.refused.sign_in": { pt: "Endereço ou palavra-passe inválidos.", en: "Invalid address or password.", fr: "Adresse ou mot de passe invalide." },
+};
+
 pub const GROUPS: &[&[Entry]] = &[
     DS_TERMINAL,
     DS_TERMINAL_ENGINE,
     NAV,
     APPS,
+    BOOT_COMPONENTS,
     super::ui_auth::UI_AUTH,
     super::ui_base::UI_BASE,
     super::ui_shell::UI_SHELL,

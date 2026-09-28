@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "design_revision": "D001",
+  "design_base_sha": "c99cbdac2402c6fed16fbcd0d69690fa51e57358",
+  "integrated_on": "2026-09-28",
+  "integration_branch": "feat/design-d001",
+  "integration_status": "INTEGRATED_VISUAL_PARITY_PARTIAL",
+  "integration_commit": "see `git log --grep 'D001'` on feat/design-d001 (application, wiring, certification)",
+  "package": {
+    "path": "ocinye-design-complete-D001",
+    "checksums": "105/105 OK (sha256)",
+    "application_method": "patch/canonical-ui.patch (git apply --check clean) + ocinye-logo.png copied + reference copied as apply.sh does; cargo fmt",
+    "implementation_files_identical_to_package": 30,
+    "design_files_changed_by_integration": 0
+  },
+  "areas_integrated": {
+    "auth": {
+      "boot": "GET /boot -> ui::screens::auth::boot (BootVm from /ready); signed-in member on a ready Instance continues to the deep link",
+      "login": "GET /login -> login(LoginVm); refused POST /login re-renders login with the error and the address (401)",
+      "session_end": "GET /login?reason=expired|revoked -> session_end",
+      "recover": "GET /password/recover -> recover(available=false) (G-26)",
+      "first_access": "GET /first-access -> first_access(min_length from Core); refused POST re-renders with the Core message (422)",
+      "mfa": "GET /mfa -> setup (server QR, manual key only with ?show_key=1) or challenge; POST /mfa/confirm -> codes (no-store); refused challenge/recovery re-render challenge",
+      "logout": "POST /logout (unchanged)"
+    },
+    "shell": {
+      "top_bar": "ShellVm from /me, /organisation (Distribution), /notifications (unread), /me/apps/pins, /ai/status, /ready, /me/desktop (wallpaper, dim)",
+      "account_menu": "live name, email, Distribution; Lock drawn disabled with its reason (FG-001)",
+      "app_bar_and_launcher": "experience::apps registry filtered by visible_to (permissions, modules, inactive apps); pins via PUT /apps/pins -> Core",
+      "palette": "GET /search (app_pending until D002)",
+      "fail_closed": "a technical failure of /me renders no shell (503 with a reference), never a normal session"
+    },
+    "desktop": {
+      "route": "GET / -> ui::screens::home::home(DesktopVm)",
+      "hierarchy": "System Default per Distribution (registry::system_default) -> Instance Default (FG-014, not designed: none) -> Member Layout (Core)",
+      "persistence": "Core: member_desktop_layouts (migration 0059), GET/PUT /api/v1/me/desktop (optimistic version, 409), POST /api/v1/me/desktop/restore; validated against ocinye_contracts::desktop (pinned to the Design registry by a test)",
+      "widgets": {
+        "kpis": "units active (/units), ideas and projects in progress (/workspaces?in_progress=true, new Core filter), datasets (/datasets total)",
+        "notice": "Unavailable (FG-013: no institutional notices in the Core)",
+        "continue": "own personal notes and files by last change, <= 7, <= 30 days (ideas/projects/datasets: FG-015 remaining)",
+        "tasks": "/tasks?mine=true&open_only=true",
+        "calendar": "/calendar/agenda for today in the member time zone",
+        "notes": "/me/notes",
+        "files": "/me/files?view=recents",
+        "mail": "/mail/status, first connected mailbox, unread inbox messages; Unavailable without a linked mailbox",
+        "activity": "/activity",
+        "projects": "list: /workspaces?kind=project&mine=true; count (1 column): projects in progress",
+        "ideas": "count: ideas in progress",
+        "datasets": "count: /datasets total",
+        "storage": "/me/files storage used/limit",
+        "health": "Unavailable (FG-016: no backup run record in the Core)"
+      }
+    },
+    "window_frame_and_app_pending": "every application GET route without a Design screen renders shell::app_pending inside the shell; apps the member cannot open answer 404 (/admin, /audit, /admin/monitor for non-admins)"
+  },
+  "functional_gaps_total": 23,
+  "functional_gaps_resolved": ["FG-017", "FG-018"],
+  "functional_gaps_partially_resolved": ["FG-015"],
+  "functional_gaps_remaining": {
+    "CORE_CONTRACT_REQUIRED": ["FG-002", "FG-003", "FG-013", "FG-014", "FG-015 (ideas/projects/datasets)", "FG-016"],
+    "WAITING_FOR_LATER_SCOPE": ["FG-001", "FG-004", "FG-005", "FG-006", "FG-007", "FG-008", "FG-009", "FG-010", "FG-011", "FG-012", "FG-019", "FG-020", "FG-021", "FG-022", "FG-023"]
+  },
+  "functional_gap_notes": {
+    "FG-005": "bell and unread counter wired to the Core; the popover is reference-only",
+    "FG-021": "D001 obligation met: every app route serves app_pending; the apps themselves arrive in D002+"
+  },
+  "backend_added_for_d001": [
+    "ocinye_contracts::desktop (widget rules, wallpapers, validation)",
+    "migration 0059_member_desktop_layouts",
+    "Core identity::desktop + GET/PUT /me/desktop + POST /me/desktop/restore",
+    "Core: in_progress filter on GET /workspaces (KPI and counter widgets)",
+    "Workspace controllers/ (door, boot, fail-closed shell, Desktop and widget adapters)",
+    "Workspace i18n: boot component names and the localized sign-in refusal (Code-owned)"
+  ],
+  "visual_parity": {
+    "reference_viewport": "924x540",
+    "auth": "MATCH (identical geometry and size; the reference capture sits 28px lower because the prototype document overflowed 540px)",
+    "shell_top_bar": "MATCH (clock weekday not abbreviated in pt-PT: see CODE_FEEDBACK)",
+    "account_menu": "MATCH_STRUCTURE (opaque instead of glass)",
+    "launcher": "MATCH_D001_SCOPE (grid, search, pins); categories/favourites/recents are FG-008",
+    "desktop_924x540": "MISMATCH from Design CSS: 2 columns under 1100px (reference: 4) and .oc-shell min-height lets the page grow (dock below the fold)",
+    "desktop_1440x900": "MATCH_STRUCTURE (4 columns, 107px Indicators, system default order)",
+    "app_pending": "MATCH_D001_SCOPE",
+    "widget_collapse_button": "DEFECT in Design code (browser button chrome, title shows {name})"
+  },
+  "design_limitations": {
+    "DESKTOP_DARK_DESIGN": "PENDING_DESIGN",
+    "DESKTOP_SYSTEM_DESIGN": "PENDING_DESIGN",
+    "screenshots_other_distributions": "NOT_AVAILABLE (Business/Personal/Education verified by tests, not by reference image)",
+    "screenshots_en_fr_beyond_login": "NOT_AVAILABLE",
+    "tablet_mobile": "NOT_AVAILABLE"
+  },
+  "feedback": "docs/ui/CODE_FEEDBACK.md"
+}

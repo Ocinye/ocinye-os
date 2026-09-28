@@ -118,11 +118,11 @@ DEV = {
     # alvos de teste, e só para uma função que o binário não contém. O portão
     # «Isolamento do fornecedor de teste» confirma-o em cada corrida.
     "ocinye-core-server": {"ocinye-core"},
-    # O harness de browser levantava um Core em processo e por isso ligava
-    # `ocinye-core` e `ocinye-core-server` em teste. Saiu com a UI a 2026-09-28
-    # (`docs/ui/UI_WIPE_REPORT.md`), e as duas arestas com ele; voltam quando
-    # voltar a haver viagens.
-    "ocinye-workspace": {"ocinye-observability"},
+    # As viagens D001 (`apps/workspace/tests/d001_journeys.rs`) levantam um
+    # Core em processo e o Workspace à frente dele, como o harness de browser
+    # fazia antes do apagamento da UI (2026-09-28). As duas arestas voltaram com
+    # elas — só em teste: o binário enviado não leva o Core consigo.
+    "ocinye-workspace": {"ocinye-observability", "ocinye-core", "ocinye-core-server"},
 }
 
 
@@ -144,8 +144,14 @@ EXPERIENCE_RUNTIME = {
     "anyhow",
     "axum",
     "chrono",
+    # As vistas do Claude Design (D001) são Leptos em SSR: funções puras de um
+    # ViewModel para HTML. Presentation pura; não alcança estado institucional.
+    "leptos",
     "ocinye-contracts",
     "ocinye-observability",
+    # Renderiza o QR do enrolamento de MFA para SVG (D001, D8a). Presentation
+    # pura: recebe o texto do otpauth e devolve marcação.
+    "qrcode",
     "rand",
     "reqwest",
     "serde",
