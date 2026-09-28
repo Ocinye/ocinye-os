@@ -17,7 +17,7 @@ nativa, `ocinye://`, Gestor de Janelas no cliente, nem navegador integrado.
 | Sessão | BFF em memória; o token do Core nunca sai do processo | `apps/workspace/src/session.rs:30,65-79` |
 | Cookie de sessão | `ocinye_session`: `HttpOnly; SameSite=Lax; Secure` (forçado em produção) | `session.rs:189-197`, `config.rs:167-171` |
 | CSRF | `same_origin_only` + `origin_is_ours` (Origin = URL pública) | `routes.rs:835,903` |
-| CSP do Workspace | `default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'` | `routes.rs:761-810` |
+| CSP do Workspace | `default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'` | `routes.rs:761-810` |
 | Outros cabeçalhos | `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, `COOP: same-origin`, `Permissions-Policy: geolocation=(), microphone=(), camera=()`, `Cache-Control: no-store` em tudo, HSTS em produção; sem COEP | `routes.rs:761-810`; testes em `apps/workspace/tests/security_headers.rs` |
 | CORS | só no Core, vazio por omissão (`OCINYE_CORS_ALLOWED_ORIGINS`); o Workspace não tem | `services/core-server/src/routes/mod.rs:161-178` |
 | Estáticos | `/static/*` por `ServeDir`, **sem versão no URL** e com `no-store` | `routes.rs:611,799` |

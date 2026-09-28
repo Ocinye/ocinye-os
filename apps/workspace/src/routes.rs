@@ -805,8 +805,8 @@ async fn security_headers(
             "content-security-policy",
             "default-src 'none'; \
              script-src 'self'; \
-             style-src 'self' https://fonts.googleapis.com; \
-             font-src https://fonts.gstatic.com; \
+             style-src 'self'; \
+             font-src 'self'; \
              img-src 'self' data:; \
              connect-src 'self'; \
              frame-src 'self'; \

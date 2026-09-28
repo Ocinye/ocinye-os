@@ -114,3 +114,15 @@ nasceram privados no GHCR, e a API do GitHub não muda a visibilidade de um
 pacote. Por isso o Compose, a CI e a imagem de backup usam a origem por digest;
 tornar os espelhos públicos é um gesto de quem administra a organização, e só
 então passam a ser consumíveis sem autenticação.
+
+## IBM Plex — fontes do Workspace
+
+Servidas pelo próprio Workspace (`apps/workspace/static/fonts/`), e não por uma
+CDN: a CSP é `font-src 'self'`, e nenhum terceiro vê quem abre o Ocinye OS.
+
+| | Plex Sans | Plex Mono |
+|---|---|---|
+| Origem | pacote npm `@ibm/plex-sans@1.1.0`, `fonts/complete/woff2` | `@ibm/plex-mono@2.5.0`, idem |
+| Pesos | 400, 400 itálico, 500, 600, 700 | 400, 500, 600 |
+| Licença | SIL Open Font License 1.1 — `static/fonts/LICENSE.txt`, intacta | idem |
+| Modificações | nenhuma | nenhuma |

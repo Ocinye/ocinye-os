@@ -112,6 +112,10 @@ async fn a_politica_de_conteudo_continua_fechada() {
         "form-action 'self'",
         "base-uri 'none'",
         "frame-ancestors 'none'",
+        // As fontes (IBM Plex, OFL) e os estilos são servidos pelo próprio
+        // Workspace: nenhum terceiro vê quem abre o Ocinye OS.
+        "style-src 'self';",
+        "font-src 'self';",
         // Aberto de propósito para o Quick Look mostrar um PDF pessoal numa
         // `iframe` da própria origem — só `'self'`, nunca de outra origem nem
         // `*`. O PDF é desenhado pelo visualizador do browser, fora do processo
@@ -124,7 +128,7 @@ async fn a_politica_de_conteudo_continua_fechada() {
         );
     }
 
-    for proibido in ["unsafe-inline", "unsafe-eval", "*"] {
+    for proibido in ["unsafe-inline", "unsafe-eval", "*", "googleapis", "gstatic"] {
         assert!(
             !politica.contains(proibido),
             "a política ganhou `{proibido}`, que a abre: {politica}"

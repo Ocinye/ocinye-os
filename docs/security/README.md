@@ -203,9 +203,10 @@ Core: `nosniff`, `x-frame-options: DENY`, `no-referrer`,
 CSP `default-src 'none'; frame-ancestors 'none'`, `no-store`,
 `cross-origin-opener-policy` e `cross-origin-resource-policy` a `same-origin`.
 
-Workspace: `default-src 'none'; script-src 'self'; style-src 'self' + Google
-Fonts; font-src Google Fonts; img-src 'self' data:; connect-src 'self';
-form-action 'self'; base-uri 'none'; frame-ancestors 'none'`.
+Workspace: `default-src 'none'; script-src 'self'; style-src 'self';
+font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self';
+form-action 'self'; base-uri 'none'; frame-ancestors 'none'`. As fontes são
+servidas pelo próprio Workspace (IBM Plex, OFL).
 
 Sem `unsafe-inline` e sem `unsafe-eval`. O único script é `static/app.js`, que
 faz comportamento de DOM — palette, sidebar, menu de criação — e nunca dados nem
