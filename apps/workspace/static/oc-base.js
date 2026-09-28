@@ -18,8 +18,13 @@
       els.forEach((el) => {
         if (el.dataset.format === 'short') {
           // «Seg 28 set» + «15:17» (barra de cima)
-          const cap = (s) => s.replace('.', '').replace(/^./, (c) => c.toUpperCase());
-          const date = cap(d.toLocaleDateString(lang, { weekday: 'short' })) + ' ' + d.getDate() + ' ' + d.toLocaleDateString(lang, { month: 'short' }).replace('.', '');
+          // D001.1: forma curta determinística (pt «Seg 28 set», en «Mon 28 Sep»,
+          // fr «Lun 28 sept»). O Intl de pt-PT devolve «segunda» para weekday:'short':
+          // o dia fica sempre com 3 letras; o mês é o curto do Intl, sem ponto.
+          const bare = (s) => s.replace(/[.,]/g, '').trim();
+          const wdS = Array.from(bare(d.toLocaleDateString(lang, { weekday: 'short' }))).slice(0, 3).join('').replace(/^./, (c) => c.toUpperCase());
+          const moS = bare(d.toLocaleDateString(lang, { month: 'short' }));
+          const date = wdS + ' ' + d.getDate() + ' ' + moS;
           const dEl = el.querySelector('[data-part="clock-date"]');
           const tEl = el.querySelector('[data-part="clock-time"]');
           if (dEl) dEl.textContent = date;

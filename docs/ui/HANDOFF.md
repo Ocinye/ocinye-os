@@ -430,3 +430,7 @@ Nenhum ecrã de destino é desta fatia. Até cada ecrã chegar, **a rota respond
 | Estado do sistema | — | `/admin/monitor` (só admin) | P8 (Monitor) |
 | Menu da conta | `/account`, `/settings`, `/help` | — | P3 |
 | Barra de cima | `/search`, `/notifications` | — | P3 |
+
+
+## D001.1 · correcções de paridade e estados em falta
+Contratos: `DesktopDefault.source` (`DefaultSource::System | Instance`), `Backup::Unknown`, `ErrorKind`/`ErrorVm`, `IdentityFailVm`. Novas vistas: `screens::error::{in_shell, at_door}` e `screens::auth::identity::identity_unavailable`. O registo de widgets não muda. Detalhe: HANDOFF.md do pacote D001.1, §0.

@@ -23,8 +23,8 @@
         const v = user.value.trim();
         emailEl.textContent = v;
         initEl.textContent = (v[0] || '').toUpperCase();
-        if (focus) pass.focus();
-      } else if (focus) user.focus();
+        if (focus) pass.focus({ preventScroll: true });
+      } else if (focus) user.focus({ preventScroll: true });
     };
     form.setAttribute('data-ready', '');
     go(pass.value || (user.value && form.querySelector('[role="alert"]')) ? 'pw' : 'id', false);

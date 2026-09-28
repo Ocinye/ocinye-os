@@ -15,8 +15,8 @@ use crate::i18n::{t, tf, tp};
 use crate::ui::components::{core_error, icon};
 use crate::ui::shell::shell;
 use crate::ui::view_models::{
-    Ago, Backup, ContinueItem, DeskWidget, DesktopDefault, DesktopVm, Health, HealthVm, Load,
-    Wallpaper, WidgetContent, WidgetItem, WidgetKind,
+    Ago, Backup, ContinueItem, DefaultSource, DeskWidget, DesktopDefault, DesktopVm, Health,
+    HealthVm, Load, Wallpaper, WidgetContent, WidgetItem, WidgetKind,
 };
 use registry::{diff, spec, Category, DeskDiff, KINDS};
 
@@ -134,6 +134,7 @@ fn health_line(h: &HealthVm) -> String {
         Backup::Date(d) => tf("health.backup.date", &[("date", d)]),
         Backup::Failed => t("health.backup.failed").to_owned(),
         Backup::Never => t("health.backup.none").to_owned(),
+        Backup::Unknown => t("health.backup.unknown").to_owned(),
     };
     [Some(t("health.core").to_owned()), nodes, Some(backup)]
         .into_iter()
@@ -264,7 +265,7 @@ fn widget(w: &DeskWidget) -> impl IntoView {
                             data-oc="dw-min"
                             aria-expanded=if w.placed.minimized { "false" } else { "true" }
                             aria-label=tf(key, &[("name", title)])
-                            title=t(key)
+                            title=tf(key, &[("name", title)])
                             data-label-collapse=tf("desk.collapse", &[("name", title)])
                             data-label-expand=tf("desk.expand", &[("name", title)])
                         >
@@ -431,20 +432,37 @@ fn restore(vm: &DesktopVm, def: &DesktopDefault) -> impl IntoView {
     let current: Vec<_> = vm.widgets.iter().map(|w| w.placed.clone()).collect();
     let look = def.wallpaper != vm.shell.wallpaper || def.dim != vm.shell.dim;
     let d = diff(&current, &def.widgets, look);
-    let meta = tf(
-        "desk.restore.meta",
-        &[
-            ("version", &def.version.to_string()),
-            ("date", &def.published),
-        ],
-    );
+    let dist = vm.shell.distribution.map_or(String::new(), |d| {
+        t(&format!("dist.{}", d.as_str())).to_owned()
+    });
+    let (source, origin, name, meta) = match def.source {
+        DefaultSource::System => (
+            "system",
+            t("desk.restore.origin.system"),
+            tf("desk.restore.system_name", &[("distribution", &dist)]),
+            t("desk.restore.system_meta").to_owned(),
+        ),
+        DefaultSource::Instance => (
+            "instance",
+            t("desk.restore.origin.instance"),
+            def.name.clone(),
+            tf(
+                "desk.restore.meta",
+                &[
+                    ("version", &def.version.to_string()),
+                    ("date", &def.published),
+                ],
+            ),
+        ),
+    };
     view! {
         <dialog class="oc-sheet oc-sheet--narrow" data-part="desk-restore" aria-labelledby="desk-restore-title">
             <header class="oc-sheet__head">
                 <h2 id="desk-restore-title">{t("desk.restore.title")}</h2>
                 <button type="button" class="oc-round-btn" data-oc="dialog-close" aria-label=t("shell.close")>{icon("close")}</button>
             </header>
-            <p class="oc-sheet__lead"><strong>{def.name.clone()}</strong>" · "{meta}</p>
+            <p class="oc-sheet__origin" data-source=source>{origin}</p>
+            <p class="oc-sheet__lead"><strong>{name}</strong>" · "{meta}</p>
             {if d.is_empty() {
                 view! { <p class="oc-sheet__lead">{t("desk.restore.same")}</p> }.into_any()
             } else {
@@ -461,7 +479,9 @@ fn restore(vm: &DesktopVm, def: &DesktopDefault) -> impl IntoView {
 
 /// `GET /` — o Desktop.
 pub fn home(vm: &DesktopVm) -> impl IntoView {
+    // Só uma publicação da administração pode ser «nova» (D001.1).
     let newer = match (&vm.default, vm.base_version) {
+        (Some(d), _) if d.source == DefaultSource::System => false,
         (Some(d), Some(b)) => d.version > b,
         (Some(_), None) => true,
         _ => false,
@@ -588,6 +608,7 @@ mod tests {
                 },
             ],
             default: Some(DesktopDefault {
+                source: DefaultSource::Instance,
                 name: "Research Desktop Default".into(),
                 version: 5,
                 published: "27/09/2026".into(),
@@ -649,6 +670,55 @@ mod tests {
         assert_contracts(&html);
         assert!(!html.contains(r#"data-oc="desk-edit""#) && !html.contains("<dialog"));
         assert!(html.contains(r#"aria-describedby="home-customise-policy""#));
+    }
+
+    #[test]
+    fn recolher_nao_mostra_o_modelo_cru() {
+        let html = home(&vm()).to_html();
+        assert!(!html.contains("{name}"));
+        assert!(html.contains(&format!(
+            r#"title="{}""#,
+            tf("desk.collapse", &[("name", t("desk.w.tasks"))])
+        )));
+    }
+
+    #[test]
+    fn a_predefinicao_do_sistema_nao_parece_publicada() {
+        let mut v = vm();
+        v.shell.distribution = Some(Distribution::Research);
+        if let Some(d) = v.default.as_mut() {
+            d.source = DefaultSource::System;
+            d.published = String::new();
+        }
+        let html = home(&v).to_html();
+        assert_contracts(&html);
+        assert!(
+            html.contains(r#"data-source="system""#)
+                && html.contains(t("desk.restore.system_meta"))
+        );
+        assert!(
+            !html.contains("oc-desk-notice"),
+            "sem publicação não há «nova predefinição»"
+        );
+        let pub_word = tf("desk.restore.meta", &[("version", "1"), ("date", "")]);
+        assert!(!html.contains(pub_word.trim()));
+        assert!(home(&vm()).to_html().contains(r#"data-source="instance""#));
+    }
+
+    #[test]
+    fn copia_sem_registo_nao_afirma_exito_nem_falha() {
+        let html = body(&WidgetContent::Health(Load::Ready(HealthVm {
+            state: HealthVm::derive_state(true, 0, 0, true),
+            nodes_up: 0,
+            nodes_total: 0,
+            backup: Backup::Unknown,
+            admin_href: None,
+        })))
+        .to_html();
+        assert!(html.contains(t("health.backup.unknown")));
+        assert!(
+            !html.contains(t("health.backup.failed")) && !html.contains(t("health.backup.none"))
+        );
     }
 
     #[test]
@@ -829,6 +899,11 @@ mod tests {
             "health.backup.failed",
             "health.backup.none",
             "health.open",
+            "health.backup.unknown",
+            "desk.restore.origin.system",
+            "desk.restore.origin.instance",
+            "desk.restore.system_name",
+            "desk.restore.system_meta",
         ] {
             assert!(crate::i18n::has(k), "{k}");
         }

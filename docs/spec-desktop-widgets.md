@@ -75,6 +75,7 @@ Estado (`Health`, via `HealthVm::derive_state`): o pior entre nós e cópia.
 | `health.backup.date` | cópia {date} | backup {date} | sauvegarde {date} |
 | `health.backup.failed` | cópia falhou | backup failed | échec de sauvegarde |
 | `health.backup.none` | sem cópia | no backup | aucune sauvegarde |
+| `health.backup.unknown` (D001.1: the Core has no record) | cópia sem registo | backup not recorded | sauvegarde non enregistrée |
 | `health.open` | Abrir o Monitor | Open Monitor | Ouvrir le Moniteur |
 
 Visível a todos os membros. Administrador: `admin_href` preenchido, e o widget é um link para o Monitor. Membro: `None`, e o widget não é clicável.

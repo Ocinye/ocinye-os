@@ -531,14 +531,28 @@ pub struct DeskWidget {
     pub content: WidgetContent,
 }
 
-/// A predefinição publicada pelo administrador para a distribuição.
+/// De onde vem a predefinição que «Repor» aplica (D001.1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum DefaultSource {
+    /// A predefinição do sistema para a Distribuição (`registry::system_default`).
+    /// Não houve publicação: `name`, `version` e `published` não se mostram.
+    #[default]
+    System,
+    /// Publicada pela administração da Instância (FG-014).
+    Instance,
+}
+
+/// A predefinição que «Repor» aplica: a da Instância, se a administração a
+/// publicou; senão, a do sistema para a Distribuição.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DesktopDefault {
-    /// O nome («Research Desktop Default»).
+    /// A origem. Com `System` a folha não mostra versão nem data.
+    pub source: DefaultSource,
+    /// O nome dado pela administração (só `Instance`).
     pub name: String,
-    /// A versão publicada.
+    /// A versão publicada (só `Instance`; com `System`, a versão do registo).
     pub version: u32,
-    /// A data de publicação, já formatada.
+    /// A data de publicação, já formatada (só `Instance`; com `System`, vazia).
     pub published: String,
     /// O fundo.
     pub wallpaper: Wallpaper,
@@ -664,6 +678,10 @@ pub enum Backup {
     Failed,
     /// Nunca houve cópia.
     Never,
+    /// O Core não tem registo de cópias (D001.1). Não afirma êxito nem falha.
+    /// Para `derive_state`, passe `backup_fresh = true`: a ausência de registo
+    /// não degrada o estado.
+    Unknown,
 }
 
 /// O widget «Estado do sistema».
@@ -719,4 +737,61 @@ pub struct DesktopVm {
     pub is_admin: bool,
     /// A política permite personalizar. `false`: «Personalizar» desactivado com a razão.
     pub can_customise: bool,
+}
+
+// ── Erros e identidade por confirmar (D001.1) ──────────────────────────────
+
+/// O tipo de erro que a página mostra. O estado HTTP é do servidor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ErrorKind {
+    /// 404: não existe, ou está escondido de propósito.
+    NotFound,
+    /// 403: autenticado, mas sem permissão.
+    Forbidden,
+    /// 502: o Core ou outra dependência falhou.
+    Upstream,
+}
+
+impl ErrorKind {
+    /// O código mostrado («404»).
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::NotFound => "404",
+            Self::Forbidden => "403",
+            Self::Upstream => "502",
+        }
+    }
+
+    /// O identificador em `data-kind`.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::NotFound => "not-found",
+            Self::Forbidden => "forbidden",
+            Self::Upstream => "upstream",
+        }
+    }
+}
+
+/// Uma página de erro.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ErrorVm {
+    /// O tipo.
+    pub kind: ErrorKind,
+    /// A referência para o administrador (`OC-…`), nunca detalhe técnico.
+    pub reference: Option<String>,
+    /// Para «Tentar de novo» (só `Upstream`): a rota pedida.
+    pub retry_href: Option<String>,
+}
+
+/// Sessão existe, mas o Core não confirmou a identidade do membro: falha fechado.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct IdentityFailVm {
+    /// A porta.
+    pub door: DoorVm,
+    /// A referência para o administrador.
+    pub reference: Option<String>,
+    /// A rota pedida, para «Tentar de novo».
+    pub retry_href: String,
 }

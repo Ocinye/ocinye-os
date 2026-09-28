@@ -84,4 +84,6 @@ pub const UI_AUTH: &[Entry] = crate::catalogo! {
     "auth.boot.degraded": { pt: "Com limitações", en: "Limited", fr: "Limité" },
     "auth.boot.down": { pt: "Sem resposta", en: "Not responding", fr: "Sans réponse" },
     "auth.boot.continue": { pt: "Continuar para o início de sessão", en: "Continue to sign in", fr: "Continuer vers la connexion" },
+    "auth.identity.title": { pt: "Não foi possível confirmar a sua identidade", en: "Your identity could not be confirmed", fr: "Impossible de confirmer votre identité" },
+    "auth.identity.body": { pt: "A sua sessão continua aberta, mas o Ocinye OS não conseguiu confirmar quem é neste momento. Por segurança, o seu espaço de trabalho não é mostrado.", en: "Your session is still open, but Ocinye OS could not confirm who you are right now. For your security, your workspace is not shown.", fr: "Votre session est toujours ouverte, mais Ocinye OS n’a pas pu confirmer votre identité pour le moment. Par sécurité, votre espace de travail n’est pas affiché." },
 };

@@ -29,6 +29,9 @@
 .oc-dw__icon .oc-icon { width: 13px; height: 13px; }
 .oc-dw__all { width: 24px; height: 24px; flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--dw-fg3); }
 .oc-dw__all:hover { background: var(--dw-fill); color: var(--dw-fg); }
+/* D001.1 · «Recolher» é um <button>: sem a aparência do browser. */
+button.oc-dw__all { -webkit-appearance: none; appearance: none; margin: 0; padding: 0; border: 0; background: transparent; font: inherit; cursor: pointer; }
+button.oc-dw__all:focus-visible { outline: 2px solid var(--oc-gold-500); outline-offset: 2px; }
 .oc-dw__all .oc-icon { width: 13px; height: 13px; }
 .oc-dw__body { flex: 1; min-height: 0; overflow: auto; padding: 0 16px 14px; }
 .oc-dw[data-bare] .oc-dw__body { padding: 0; overflow: visible; }
@@ -187,16 +190,21 @@
 .oc-toast__btn { height: 28px; padding: 0 12px; border: 0; border-radius: 14px; background: rgba(255, 255, 255, .12); color: #FFFFFF; font: 600 12px var(--oc-sans); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .oc-toast__btn .oc-icon { width: 13px; height: 13px; }
 
-@media (max-width: 1100px) {
+/* D001.1 · A grelha responde à largura da área de trabalho (não à janela):
+   4 colunas até a área ter menos de 640px (a 924×540 a área tem ~800px),
+   2 colunas até 400px, 1 coluna abaixo. */
+@container oc-desk-main (max-width: 639px) {
   .oc-dgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .oc-dw--c3, .oc-dw--c4 { grid-column: span 2; }
   .oc-dw[data-kind="kpis"] { grid-row: span 9; }
 }
-@media (max-width: 640px) {
+@container oc-desk-main (max-width: 399px) {
   .oc-dgrid { grid-template-columns: minmax(0, 1fr); }
   .oc-dw--c2, .oc-dw--c3, .oc-dw--c4 { grid-column: span 1; }
   .oc-dw[data-kind="kpis"] { grid-row: span 9; }
   .oc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
   .oc-walls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -218,3 +226,7 @@
 .oc-dw__skel li:nth-child(3) { width: 60%; }
 @keyframes oc-skel { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .oc-dw__skel li { animation: none; } }
+
+/* D001.1 · Folha «Repor predefinição»: origem da predefinição */
+.oc-sheet__origin { margin: 0; display: flex; align-items: center; gap: 8px; font: 500 10.5px var(--oc-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--oc-ink-4); }
+.oc-sheet__origin[data-source="instance"] { color: #8A6110; }

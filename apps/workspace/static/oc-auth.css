@@ -2,7 +2,7 @@
    Fundo navy, cartão de vidro 360px (720px em D8a/D8b), controlos em cápsula
    com a acção dourada dentro do campo. Cabe em 1440×900 sem scroll. */
 
-.oc-auth { position: relative; min-height: 100vh; display: flex; flex-direction: column; overflow: hidden; color: #FFFFFF; background: radial-gradient(1100px 700px at 72% 8%, var(--oc-navy-700) 0%, var(--oc-navy-900) 42%, var(--oc-navy-950) 100%); }
+.oc-auth { position: relative; height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; color: #FFFFFF; background: radial-gradient(1100px 700px at 72% 8%, var(--oc-navy-700) 0%, var(--oc-navy-900) 42%, var(--oc-navy-950) 100%); }
 .oc-auth::before, .oc-auth::after { content: ""; position: absolute; border-radius: 50%; pointer-events: none; }
 .oc-auth::before { left: -220px; top: -120px; width: 760px; height: 760px; border: 1px solid rgba(224, 167, 49, .14); }
 .oc-auth::after { right: -300px; bottom: -360px; width: 900px; height: 900px; border: 1px solid rgba(255, 255, 255, .06); }
@@ -104,6 +104,7 @@
 
 /* MFA · duas colunas */
 .oc-auth__cols { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 24px; }
+.oc-auth__cols > * { min-width: 0; }
 .oc-auth__panel { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 18px; border-radius: 18px; background: rgba(4, 16, 28, .28); border: .5px solid rgba(255, 255, 255, .1); }
 .oc-auth__main { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .oc-auth__qr { padding: 10px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 10px 26px rgba(7, 30, 51, .35); }
@@ -117,9 +118,9 @@
 .oc-auth__key > summary .oc-icon { width: 14px; height: 14px; }
 .oc-auth__key[open] > summary { display: none; }
 .oc-auth__key-row { display: flex; align-items: center; gap: 6px; }
-.oc-auth__key-row code { flex: 1; min-width: 0; height: 32px; display: flex; align-items: center; padding: 0 12px; border-radius: 16px; background: rgba(4, 16, 28, .45); border: .5px solid rgba(255, 255, 255, .12); font: 500 12px var(--oc-mono); letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.oc-auth__codes { margin: 0; padding: 0; width: 100%; list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
-.oc-auth__codes li { height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: rgba(255, 255, 255, .05); font: 500 12.5px var(--oc-mono); }
+.oc-auth__key-row code { flex: 1; min-width: 0; height: 32px; display: flex; align-items: center; padding: 0 12px; border-radius: 16px; background: rgba(4, 16, 28, .45); border: .5px solid rgba(255, 255, 255, .12); font: 500 12px/1.5 var(--oc-mono); letter-spacing: .04em; min-height: 32px; height: auto; padding-top: 6px; padding-bottom: 6px; white-space: normal; overflow-wrap: anywhere; word-break: break-all; user-select: all; }
+.oc-auth__codes { margin: 0; padding: 0; width: 100%; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(18.5ch, 1fr)); gap: 8px 10px; font: 500 12px var(--oc-mono); }
+.oc-auth__codes li { height: 28px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: rgba(255, 255, 255, .05); font: inherit; letter-spacing: .02em; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .oc-auth__row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .oc-auth__label { font: 500 12px var(--oc-sans); color: rgba(255, 255, 255, .62); text-align: left; }
 .oc-check { display: flex; align-items: flex-start; gap: 9px; font: 400 12.5px/1.5 var(--oc-sans); color: rgba(255, 255, 255, .78); cursor: pointer; text-align: left; }
@@ -178,3 +179,9 @@
   .oc-auth__card { padding: 20px 18px 14px; }
   .oc-auth__foot { flex-wrap: wrap; }
 }
+
+/* D001.1 · Identidade por confirmar e erros à porta */
+.oc-auth__actions { display: flex; flex-direction: column; gap: 8px; }
+.oc-auth__ref { margin: 0; font: 400 11px var(--oc-mono); color: rgba(255, 255, 255, .45); }
+.oc-auth__icon[data-state="identity"], .oc-auth__icon[data-state="upstream"] { background: rgba(179, 38, 30, .2); color: #F29089; }
+.oc-auth__icon[data-state="forbidden"] { background: rgba(224, 167, 49, .14); color: var(--oc-gold-500); }

@@ -187,4 +187,9 @@ pub const UI_SHELL: &[Entry] = crate::catalogo! {
     "health.backup.none": { pt: "sem cópia", en: "no backup", fr: "aucune sauvegarde" },
     "health.open": { pt: "Abrir o Monitor", en: "Open Monitor", fr: "Ouvrir le Moniteur" },
     "shell.app.pending": { pt: "Este ecrã ainda não está disponível nesta versão do Ocinye OS.", en: "This screen is not available in this version of Ocinye OS yet.", fr: "Cet écran n’est pas encore disponible dans cette version d’Ocinye OS." },
+    "desk.restore.origin.system": { pt: "PREDEFINIÇÃO DO SISTEMA", en: "SYSTEM DEFAULT", fr: "VALEUR PAR DÉFAUT DU SYSTÈME" },
+    "desk.restore.origin.instance": { pt: "PREDEFINIÇÃO DA INSTÂNCIA", en: "INSTANCE DEFAULT", fr: "VALEUR PAR DÉFAUT DE L’INSTANCE" },
+    "desk.restore.system_name": { pt: "Disposição {distribution} do Ocinye OS", en: "Ocinye OS {distribution} layout", fr: "Disposition {distribution} d’Ocinye OS" },
+    "desk.restore.system_meta": { pt: "Incluída no Ocinye OS. A administração da Instância ainda não publicou uma predefinição própria.", en: "Included with Ocinye OS. The Instance administration has not published its own default.", fr: "Incluse dans Ocinye OS. L’administration de l’instance n’a pas encore publié sa propre valeur par défaut." },
+    "health.backup.unknown": { pt: "cópia sem registo", en: "backup not recorded", fr: "sauvegarde non enregistrée" },
 };

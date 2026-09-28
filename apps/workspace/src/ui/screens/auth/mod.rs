@@ -12,6 +12,7 @@ use crate::ui::view_models::{Distribution, DoorVm, Health};
 
 pub mod boot;
 pub mod first_access;
+pub mod identity;
 pub mod login;
 pub mod mfa;
 
