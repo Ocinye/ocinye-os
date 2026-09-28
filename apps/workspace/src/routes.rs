@@ -9348,8 +9348,8 @@ async fn login(State(state): State<WorkspaceState>, Query(q): Query<LoginQuery>)
     // num sistema que não podia autenticar ninguém.
     //
     // O que decide é o corpo.
-    let ready = crate::boot::probe(&state).await.state.may_hand_off();
     let porta = porta(&state).await;
+    let ready = porta.core == Some(true);
     // D12 / D13: o cartão de fim de sessão. `expired` detecta-o o próprio
     // Workspace (cookie de sessão que já não conhece); `revoked` espera o
     // motivo do Core (G-27).
@@ -9379,8 +9379,10 @@ struct LoginQuery {
 
 /// O que a porta mostra da Instância (D7, G-31): nome e perfil do Core
 /// (`GET /instance/branding`, público) e o anfitrião da URL pública configurada
-/// — não o cabeçalho `Host`, que é o cliente que o escolhe.
+/// — não o cabeçalho `Host`, que é o cliente que o escolhe. O estado do Core é
+/// o da sonda a `/ready` (`boot::probe`), medido agora e não presumido.
 async fn porta(state: &WorkspaceState) -> ui::screens::login::Porta {
+    let core = Some(crate::boot::probe(state).await.state.may_hand_off());
     let (nome, perfil) = api::instance_door(state)
         .await
         .map_or((None, None), |(n, p)| (Some(n), p));
@@ -9391,7 +9393,12 @@ async fn porta(state: &WorkspaceState) -> ui::screens::login::Porta {
         .nth(1)
         .map(|resto| resto.split('/').next().unwrap_or(resto).to_owned())
         .filter(|h| !h.is_empty());
-    ui::screens::login::Porta { nome, perfil, host }
+    ui::screens::login::Porta {
+        nome,
+        perfil,
+        host,
+        core,
+    }
 }
 
 /// `GET /password/recover` — D10. O envio (`POST`, G-26) ainda não existe no
@@ -9462,8 +9469,8 @@ async fn login_submit(
             // A mensagem vem do Core e é a mesma para todas as falhas de
             // credencial. O Workspace não a enriquece: fazê-lo reintroduziria o
             // oráculo que o Core evita (briefing §35).
-            let ready = crate::boot::probe(&state).await.state.may_hand_off();
             let porta = porta(&state).await;
+            let ready = porta.core == Some(true);
             return (
                 StatusCode::UNAUTHORIZED,
                 page(
@@ -9570,10 +9577,11 @@ async fn first_access(State(state): State<WorkspaceState>, headers: HeaderMap) -
 
     page(
         "Defina a sua palavra-passe",
-        ui::screens::first_access::first_access(
+        ui::screens::first_access::first_access_na_porta(
             &member.session.display_name,
             &member.session.email,
             None,
+            &porta(&state).await,
         ),
     )
 }
@@ -9621,10 +9629,11 @@ async fn first_access_submit(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 page(
                     "Defina a sua palavra-passe",
-                    ui::screens::first_access::first_access(
+                    ui::screens::first_access::first_access_na_porta(
                         &member.session.display_name,
                         &member.session.email,
                         Some(message),
+                        &porta(&state).await,
                     ),
                 ),
             )
@@ -9731,7 +9740,10 @@ async fn mfa_page(
 
     match modo {
         "not_required" => Redirect::to("/").into_response(),
-        "challenge" => page("Segundo factor", ui::screens::mfa::challenge(&nome, None)),
+        "challenge" => page(
+            "Segundo factor",
+            ui::screens::mfa::challenge_na_porta(&nome, None, &porta(&state).await),
+        ),
         _ => {
             // Enrolamento: o QR (e, se pedida, a chave manual) vêm do Core, que
             // devolve sempre o mesmo seed por confirmar.
@@ -9760,13 +9772,25 @@ async fn mfa_page(
                     let manual = payload.get("secret_base32").and_then(Value::as_str);
                     page(
                         "Configurar MFA",
-                        ui::screens::mfa::enrollment(&nome, otpauth, manual, None),
+                        ui::screens::mfa::enrollment_na_porta(
+                            &nome,
+                            otpauth,
+                            manual,
+                            None,
+                            &porta(&state).await,
+                        ),
                     )
                 }
                 Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
                 Err(failure) => page(
                     "Configurar MFA",
-                    ui::screens::mfa::enrollment(&nome, "", None, Some(failure.to_string())),
+                    ui::screens::mfa::enrollment_na_porta(
+                        &nome,
+                        "",
+                        None,
+                        Some(failure.to_string()),
+                        &porta(&state).await,
+                    ),
                 ),
             }
         }
@@ -9793,13 +9817,25 @@ async fn reenrolar_com_erro(state: &WorkspaceState, member: &Member, message: St
                 .unwrap_or("");
             page(
                 "Configurar MFA",
-                ui::screens::mfa::enrollment(&nome, otpauth, None, Some(message)),
+                ui::screens::mfa::enrollment_na_porta(
+                    &nome,
+                    otpauth,
+                    None,
+                    Some(message),
+                    &porta(state).await,
+                ),
             )
         }
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         Err(_) => page(
             "Configurar MFA",
-            ui::screens::mfa::enrollment(&nome, "", None, Some(message)),
+            ui::screens::mfa::enrollment_na_porta(
+                &nome,
+                "",
+                None,
+                Some(message),
+                &porta(state).await,
+            ),
         ),
     }
 }
@@ -9838,7 +9874,7 @@ async fn mfa_confirm(
                 .unwrap_or_default();
             page(
                 "Códigos de recuperação",
-                ui::screens::mfa::recovery_codes(&codigos),
+                ui::screens::mfa::recovery_codes_na_porta(&codigos, &porta(&state).await),
             )
         }
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
@@ -9932,7 +9968,11 @@ async fn mfa_challenge(
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         Err(failure) => page(
             "Segundo factor",
-            ui::screens::mfa::challenge(&member.session.display_name, Some(failure.to_string())),
+            ui::screens::mfa::challenge_na_porta(
+                &member.session.display_name,
+                Some(failure.to_string()),
+                &porta(&state).await,
+            ),
         ),
     }
 }
@@ -9959,7 +9999,11 @@ async fn mfa_recovery(
         Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
         Err(failure) => page(
             "Segundo factor",
-            ui::screens::mfa::challenge(&member.session.display_name, Some(failure.to_string())),
+            ui::screens::mfa::challenge_na_porta(
+                &member.session.display_name,
+                Some(failure.to_string()),
+                &porta(&state).await,
+            ),
         ),
     }
 }
