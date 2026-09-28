@@ -16,6 +16,8 @@ name = "ocinye-workspace"
 path = "src/main.rs"
 
 [dependencies]
+leptos = { workspace = true }
+qrcode = { workspace = true }
 ocinye-contracts = { workspace = true }
 ocinye-observability = { workspace = true }
 

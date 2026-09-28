@@ -486,7 +486,15 @@ const DS_TERMINAL_ENGINE: &[Entry] = catalogo! {
     "ocsh.ok.context_workspace": { pt: "Contexto: {code}", en: "Context: {code}", fr: "Contexte : {code}" },
 };
 
-pub const GROUPS: &[&[Entry]] = &[DS_TERMINAL, DS_TERMINAL_ENGINE, NAV, APPS];
+pub const GROUPS: &[&[Entry]] = &[
+    DS_TERMINAL,
+    DS_TERMINAL_ENGINE,
+    NAV,
+    APPS,
+    super::ui_auth::UI_AUTH,
+    super::ui_base::UI_BASE,
+    super::ui_shell::UI_SHELL,
+];
 
 /// Um grupo só de teste, para exercitar a queda ao canónico (briefing i18n §77).
 #[cfg(test)]

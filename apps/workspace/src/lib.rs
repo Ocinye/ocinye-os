@@ -57,6 +57,7 @@ pub mod i18n;
 pub mod routes;
 pub mod session;
 pub mod terminal;
+pub mod ui;
 
 use crate::config::WorkspaceConfig;
 use crate::session::SessionStore;
