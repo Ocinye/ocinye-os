@@ -37,7 +37,7 @@ descrevem o mesmo sistema: quando divergirem, é defeito, e corrige-se nas duas.
 desta secção re-verificados em **2026-09-10** no repositório (as contagens saem
 sempre da árvore, por `./scripts/repository-facts.sh`, e não se escrevem à mão).
 O **deploy** foi re-verificado em **2026-09-27**: o Workspace, o Core e o Worker
-correm o release `18eb8248db1b` (o `main @ 18eb824`, antes `f0fef6d72071`) — com o
+correm o release `4f8d0489f54e` (o `main @ 4f8d048`; antes `18eb8248db1b` e `f0fef6d72071`) — com o
 instalador, a actualização e o restauro das Partes 9 a 16 da generalização, e o
 armazenamento já no Garage —, com o `/ready` a reportar os componentes críticos
 disponíveis e o Workspace a responder em `os.ocinye.com`. A aceitação
@@ -236,9 +236,10 @@ sem que nada falhe.
   objecto a objecto e reversível. A produção passou a 2026-09-27, no deploy de
   `18eb8248db1b`: 5 objectos, somas recalculadas a ler do Garage; o MinIO ficou
   parado, com o volume intacto.
-- **Linha de base do Ocinye OS de uso geral: certificada a 2026-09-27**
+- **Portão `OCINYE_GENERAL_OS_BASELINE_READY` — declarado a 2026-09-27**
   ([evidência](docs/certification/release-baseline.md)). Os 33 passos da jornada
-  têm prova própria, e o release que os cumpre é o que corre em produção.
+  têm prova própria; a produção corre o release que os cumpre (`4f8d0489f54e`),
+  no Garage, com escritas novas observadas e o backup a chegar ao cofre externo.
 - **Nenhuma rota do Core responde sem sessão: `IMPLEMENTED`**
   ([fronteiras de confiança](docs/security/trust-boundaries.md)). Uma varredura
   lê o inventário do próprio código das rotas — o mesmo número que os factos do
@@ -543,7 +544,9 @@ sem que nada falhe.
   usa o `rclone` ([artefactos de terceiros](docs/deployment/third-party-artifacts.md)).
   A execução agendada de 2026-09-27 03:00 UTC, já com o `rclone`, produziu o
   conjunto local completo e **falhou a cópia externa**: o `rclone` pedia
-  `CreateBucket`, que a chave do R2 recusa; corrigido com `no_check_bucket`. Até à
+  `CreateBucket`, que a chave do R2 recusa; corrigido com `no_check_bucket`, e a
+  execução da mesma unidade às 07:46 UTC levou o conjunto ao cofre, confirmado por
+  leitura de volta. Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
 - **95 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
@@ -638,10 +641,11 @@ sem que nada falhe.
 - **Nenhum backup periódico verde está provado.** O mecanismo está completo e
   provado — cifra, destino externo confirmado por leitura de volta, retenção nas
   duas pontas, restauro verificado nas três dimensões —, e o agendador está
-  instalado em produção, mas as execuções agendadas falhavam (acima). Enquanto
-  uma não passar, não existe cópia da instituição garantida em qualquer momento
-  dado. O RPO é *desde o último conjunto que
-  alguém produziu à mão*, **3-2-1 não existe**, e a rotação da chave de selagem
+  instalado em produção e dispara (2026-09-27 03:00 UTC), mas essa execução
+  falhou a cópia externa; a correcção levou um conjunto ao cofre às 07:46 UTC, por
+  uma execução **manual** da mesma unidade. Enquanto uma execução agendada não
+  passar inteira, o portão de activação continua fechado. O RPO é *desde o último
+  conjunto que chegou ao cofre*, **3-2-1 não existe**, e a rotação da chave de selagem
   não está escrita. O portão de activação está em
   [`docs/backups/`](docs/backups/README.md), e exige uma execução **disparada
   pelo agendador** — nem manual, nem uma imitação manual.
