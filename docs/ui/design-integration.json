@@ -1,54 +1,45 @@
 {
   "schema_version": 1,
-  "design_revision": "D001.1",
-  "based_on": "D001",
+  "design_revision": "D001.2",
+  "based_on": "D001.1",
   "design_base_sha": "c99cbdac2402c6fed16fbcd0d69690fa51e57358",
   "integrated_on": "2026-09-29",
-  "integration_branch": "feat/design-d001-1 (from feat/design-d001 @ a0b5357)",
-  "integration_status": "INTEGRATED_VISUAL_PARITY_PARTIAL",
-  "integration_commit": "1d4e77a (D001.1 application), cf9f47b (D001.1 wiring); certification commit follows",
+  "integration_branch": "feat/design-d001-2 (from feat/design-d001-1 @ 4293a81)",
+  "integration_status": "INTEGRATED_VISUAL_PARITY_ONE_RESIDUAL",
+  "integration_commit": "105c3ae (D001.2 application); records and CSS guards in the following commit",
   "package": {
-    "path": "ocinye-design-complete-D001.1",
-    "checksums": "107/107 OK (sha256); file list = checksum list",
-    "application_method": "copy of implementation/ over the D001 files, exactly apply.sh's copy step; apply.sh (byte-identical to D001's) not run because it refuses the untracked editor/node_modules, and its wiring step is a no-op on this tree; patch not used (base drift); cargo fmt",
-    "files_changed": 14,
-    "files_added": 2,
-    "differs_from_package_beyond_fmt": 0,
-    "references_and_screenshots_changed": false
+    "path": "ocinye-design-complete-D001.2",
+    "checksums": "109/109 OK (sha256)",
+    "files_changed_vs_d001_1": [
+      "apps/workspace/static/oc-shell.css",
+      "apps/workspace/static/oc-desk.css",
+      "docs/ui/HANDOFF.md (Design doc)"
+    ],
+    "application_method": "copy of the two changed CSS files and the Design HANDOFF from implementation/; the rest of the package already matched the tree (only the known cargo-fmt differences); d001.1-to-d001.2.patch read and checked against a minimal diff (it rewrites the two files whole)",
+    "unexpected_diffs": "NONE",
+    "references_changed": "auth-login-research-{pt,en,fr} captures archived as superseded; design/claude-design/reference unchanged"
   },
-  "view_model_contract_changes": [
-    "DesktopDefault.source: DefaultSource {System, Instance}",
-    "Backup::Unknown",
-    "ErrorKind + ErrorVm",
-    "IdentityFailVm"
-  ],
-  "view_model_changes_additive_only": true,
+  "view_model_changes": "NONE",
   "widget_registry_changed": false,
+  "widget_default_changed": false,
   "core_contract_changes": "NONE",
-  "wiring": {
-    "desktop_default_source": "System for registry::system_default (no name, no date); Instance reserved for FG-014; base_version pin removed",
-    "backup_unknown": "Health widget Ready(HealthVm) from /ready, /compute/status and Backup::Unknown (backup_fresh = true); Monitor link only for administrators",
-    "errors": "404/403/502 render screens::error::in_shell with a confirmed member, at_door otherwise; status preserved; retry only on a GET 502",
-    "identity_failure": "technical failure of /me -> screens::auth::identity::identity_unavailable, HTTP 503, retry the requested route, sign out, reference",
-    "door": "/ready degraded -> OPERACIONAL unchanged (FG-024, CORE_STATUS_CONTRACT_FOLLOWUP)"
-  },
   "visual_parity": {
-    "reference_viewport": "924x540, Research, pt, light",
-    "grid_924": "FIXED: 4 columns (188px with the app bar shown, 207.5px hidden); Indicators 107px",
-    "app_bar_924": "FIXED: document height 540; app bar at y 139-440; hidden state reveal tile at 22,466",
-    "collapse_button": "FIXED: appearance none, no background or border",
-    "tooltip": "FIXED: widget name interpolated in pt, en, fr",
-    "mfa_key": "FIXED: real 32-character key wraps inside its box; document width 924",
-    "recovery_codes": "FIXED: 10 real codes, one line each, no overflow",
-    "login_focus": "FIXED: step 2 focus keeps the status bar at y 0 (preventScroll)",
-    "account_menu": "FIXED: glass rgba(255,255,255,.72), blur 28px, radius 20px",
-    "weekday": "FIXED: Ter 29 set / Tue 29 Sep / Mar 29 sept",
-    "restore_copy": "FIXED: PREDEFINIÇÃO DO SISTEMA, no version or date",
-    "auth_924": "MATCH horizontally and in size; 28px vertical offset from the reference capture (see CODE_FEEDBACK)",
-    "shell_924": "MISMATCH: CORE·IA chip transparent; the reference shows the pill",
-    "desktop_924": "NEAR_MATCH: vertical geometry and row heights identical; 18px left inset difference in the hidden app bar state; 1-column titles truncate",
-    "desktop_1440": "NO_REGRESSION",
-    "breakpoints": "NO_OVERFLOW at 1100, 899, 760, 639, 375 (Desktop) and 760, 520, 375 (auth); Indicators wrap 3+1 at 639"
+    "reference_viewport": "924x540, Research, pt, light, registry default (no member layout; restore returns layout null)",
+    "login_924": "MATCH: logo 52px at x=436, card 360px at x=282, centred, no overflow (the canonical geometry; old captures superseded)",
+    "shell_924": "MATCH: CORE/IA pill #F3F6F9 without hover; hover/open, pressed and gold focus states present",
+    "desktop_924": "MATCH: 2 columns of 420px (app bar hidden), grid at x=36, Indicators 107px, tiles at x 37/254/470/687 vs reference 36/253/470/687, y=71 both; titles readable on one line",
+    "desktop_924_app_bar_shown": "2 columns of 390px from x=96, app bar inside the viewport, no clipping",
+    "desktop_1440": "NO_REGRESSION: 4 columns, Indicators 107px",
+    "grid_container_rule": "work area 970px -> 4 columns, 930px -> 2, 335px -> 1",
+    "indicators": "4 in a row at work area >= 644px; 2 + 2 at <= 639px; 3 + 1 with the 4th tile clipped at 640-643px (see CODE_FEEDBACK)",
+    "titles": "no ellipsis at any tested width; Calendário and Armazenamento on one line at 924",
+    "reveal_tile_hidden_app_bar": "the reference's bottom-left tile (x 22-73, y 486-537) is the FG-007 auto-hide reveal button (reference only); the implemented manual show button sits at y 466-518 and is not held to it",
+    "d001_1_regressions": "NONE: collapse button, tooltips, account menu glass, weekday, restore copy, MFA key, recovery codes, login focus, 404 in the shell"
+  },
+  "tests": {
+    "design_view_tests": "50/50",
+    "css_contract_tests": "4/4 (tests/d001_css_contract.rs; the pill test fails when the pill is reverted)",
+    "journeys": "19/19 against a real Core"
   },
   "functional_gaps_total": 25,
   "functional_gaps_resolved": [
@@ -97,6 +88,106 @@
   },
   "feedback": "docs/ui/CODE_FEEDBACK.md",
   "history": [
+    {
+      "schema_version": 1,
+      "design_revision": "D001.1",
+      "based_on": "D001",
+      "design_base_sha": "c99cbdac2402c6fed16fbcd0d69690fa51e57358",
+      "integrated_on": "2026-09-29",
+      "integration_branch": "feat/design-d001-1 (from feat/design-d001 @ a0b5357)",
+      "integration_status": "INTEGRATED_VISUAL_PARITY_PARTIAL",
+      "integration_commit": "1d4e77a (application), cf9f47b (wiring), 4293a81 (records)",
+      "package": {
+        "path": "ocinye-design-complete-D001.1",
+        "checksums": "107/107 OK (sha256); file list = checksum list",
+        "application_method": "copy of implementation/ over the D001 files, exactly apply.sh's copy step; apply.sh (byte-identical to D001's) not run because it refuses the untracked editor/node_modules, and its wiring step is a no-op on this tree; patch not used (base drift); cargo fmt",
+        "files_changed": 14,
+        "files_added": 2,
+        "differs_from_package_beyond_fmt": 0,
+        "references_and_screenshots_changed": false
+      },
+      "view_model_contract_changes": [
+        "DesktopDefault.source: DefaultSource {System, Instance}",
+        "Backup::Unknown",
+        "ErrorKind + ErrorVm",
+        "IdentityFailVm"
+      ],
+      "view_model_changes_additive_only": true,
+      "widget_registry_changed": false,
+      "core_contract_changes": "NONE",
+      "wiring": {
+        "desktop_default_source": "System for registry::system_default (no name, no date); Instance reserved for FG-014; base_version pin removed",
+        "backup_unknown": "Health widget Ready(HealthVm) from /ready, /compute/status and Backup::Unknown (backup_fresh = true); Monitor link only for administrators",
+        "errors": "404/403/502 render screens::error::in_shell with a confirmed member, at_door otherwise; status preserved; retry only on a GET 502",
+        "identity_failure": "technical failure of /me -> screens::auth::identity::identity_unavailable, HTTP 503, retry the requested route, sign out, reference",
+        "door": "/ready degraded -> OPERACIONAL unchanged (FG-024, CORE_STATUS_CONTRACT_FOLLOWUP)"
+      },
+      "visual_parity": {
+        "reference_viewport": "924x540, Research, pt, light",
+        "grid_924": "FIXED: 4 columns (188px with the app bar shown, 207.5px hidden); Indicators 107px",
+        "app_bar_924": "FIXED: document height 540; app bar at y 139-440; hidden state reveal tile at 22,466",
+        "collapse_button": "FIXED: appearance none, no background or border",
+        "tooltip": "FIXED: widget name interpolated in pt, en, fr",
+        "mfa_key": "FIXED: real 32-character key wraps inside its box; document width 924",
+        "recovery_codes": "FIXED: 10 real codes, one line each, no overflow",
+        "login_focus": "FIXED: step 2 focus keeps the status bar at y 0 (preventScroll)",
+        "account_menu": "FIXED: glass rgba(255,255,255,.72), blur 28px, radius 20px",
+        "weekday": "FIXED: Ter 29 set / Tue 29 Sep / Mar 29 sept",
+        "restore_copy": "FIXED: PREDEFINIÇÃO DO SISTEMA, no version or date",
+        "auth_924": "MATCH horizontally and in size; 28px vertical offset from the reference capture (see CODE_FEEDBACK)",
+        "shell_924": "MISMATCH: CORE·IA chip transparent; the reference shows the pill",
+        "desktop_924": "NEAR_MATCH: vertical geometry and row heights identical; 18px left inset difference in the hidden app bar state; 1-column titles truncate",
+        "desktop_1440": "NO_REGRESSION",
+        "breakpoints": "NO_OVERFLOW at 1100, 899, 760, 639, 375 (Desktop) and 760, 520, 375 (auth); Indicators wrap 3+1 at 639"
+      },
+      "functional_gaps_total": 25,
+      "functional_gaps_resolved": [
+        "FG-017",
+        "FG-018",
+        "FG-025"
+      ],
+      "functional_gaps_partially_resolved": [
+        "FG-015",
+        "FG-016 (Backup::Unknown until the Core records backups)"
+      ],
+      "functional_gaps_remaining": {
+        "CORE_CONTRACT_REQUIRED": [
+          "FG-002",
+          "FG-003",
+          "FG-013",
+          "FG-014",
+          "FG-015 (ideas/projects/datasets)",
+          "FG-016 (backup record)",
+          "FG-024 (CORE_STATUS_CONTRACT_FOLLOWUP)"
+        ],
+        "WAITING_FOR_LATER_SCOPE": [
+          "FG-001",
+          "FG-004",
+          "FG-005",
+          "FG-006",
+          "FG-007",
+          "FG-008",
+          "FG-009",
+          "FG-010",
+          "FG-011",
+          "FG-012",
+          "FG-019",
+          "FG-020",
+          "FG-021",
+          "FG-022",
+          "FG-023"
+        ]
+      },
+      "design_limitations": {
+        "DESKTOP_DARK_DESIGN": "PENDING_DESIGN",
+        "DESKTOP_SYSTEM_DESIGN": "PENDING_DESIGN",
+        "screenshots_other_distributions": "NOT_AVAILABLE (Business/Personal/Education verified by tests, not by reference image)",
+        "screenshots_en_fr_beyond_login": "NOT_AVAILABLE",
+        "tablet_mobile": "NOT_AVAILABLE"
+      },
+      "feedback": "docs/ui/CODE_FEEDBACK.md",
+      "correction_by_d001_2": "The grid_924 entry above recorded 4 columns at 924x540 as FIXED. That reading of the reference was wrong: the 924x540 reference is a 2-column composition (Design re-audit, D001.2). Kept as history, not as a parity target."
+    },
     {
       "schema_version": 1,
       "design_revision": "D001",

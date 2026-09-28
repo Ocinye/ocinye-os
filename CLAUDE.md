@@ -256,7 +256,7 @@ sem que nada falhe.
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
 - **Ocinye Workspace: `IMPLEMENTED` como BFF, com a interface Claude Design
-  D001.1 nesta árvore (ramo `feat/design-d001-1`, por empurrar).** A UI foi apagada
+  D001.2 nesta árvore (ramo `feat/design-d001-2`, por empurrar).** A UI foi apagada
   a 2026-09-28 ([apagamento](docs/ui/UI_WIPE_REPORT.md)) e voltou com o código
   do Design, aplicado sem alterações ([registo](docs/ui/design-integration.json)):
   arranque, login em dois passos, fim de sessão, primeiro acesso, MFA, a casca
@@ -563,7 +563,7 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1421 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1425 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
@@ -585,7 +585,7 @@ sem que nada falhe.
 **Continua a não existir:**
 
 - **Nenhum ecrã de aplicação nesta árvore.** A casca, a autenticação e o
-  Desktop do Claude Design (D001.1) estão ligados; as aplicações abrem a
+  Desktop do Claude Design (D001.2) estão ligados; as aplicações abrem a
   janela `app_pending` até o Design as entregar (D002+). As viagens de browser
   com Chrome saíram com a UI antiga; as de HTTP contra um Core real voltaram
   (`apps/workspace/tests/d001_journeys.rs`). As provas de instalação,
