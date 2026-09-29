@@ -260,6 +260,14 @@ struct PlanView {
     /// Derived from the state, so an interface never offers a control the Core
     /// would refuse (briefing §66).
     open: bool,
+    /// The digest of what this plan does, re-derived and checked by the Core.
+    ///
+    /// Published so an interface can confirm that what the member saw is what
+    /// they are approving: a confirmation form carries the digest it showed,
+    /// and a mismatch is refused before anything is approved (D003 · NYE-07).
+    /// The approval itself is still bound to the Core's own digest, never to
+    /// one a caller sends.
+    digest: String,
 }
 
 impl From<lifecycle::PlanDetail> for PlanView {
@@ -277,6 +285,7 @@ impl From<lifecycle::PlanDetail> for PlanView {
             requires_approval: detail.requires_approval,
             approved: detail.approved,
             approval_expires_at: detail.approval_expires_at,
+            digest: detail.stored.digest,
         }
     }
 }
