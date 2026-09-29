@@ -253,6 +253,8 @@ pub struct WorkspaceSummary {
     pub project_id: Option<Uuid>,
     /// O estado do projecto.
     pub project_state: Option<String>,
+    /// O código do projecto (`PRJ-2026-014`).
+    pub project_code: Option<String>,
     /// O nome do responsável pelo projecto.
     pub responsible_name: Option<String>,
     /// O nome da unidade.
@@ -276,7 +278,7 @@ pub async fn workspace_summaries<'e>(
     let linhas = sqlx::query_as::<_, WorkspaceSummary>(
         "SELECT w.id AS workspace_id,
                 i.id AS idea_id, i.state AS idea_state,
-                p.id AS project_id, p.state AS project_state,
+                p.id AS project_id, p.state AS project_state, p.code AS project_code,
                 r.full_name AS responsible_name,
                 u.name AS unit_name,
                 GREATEST(i.updated_at, p.updated_at) AS updated_at

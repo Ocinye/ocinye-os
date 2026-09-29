@@ -304,7 +304,8 @@ async fn projectos_filtros_pessoas_e_transicoes() {
     let marca = Uuid::new_v4().simple().to_string()[..6].to_owned();
     let ia = ideia(&s, &ca, u, &format!("Projecto A {marca}"), "INTERNAL").await;
     candidata(&s, &ca, &ia).await;
-    let pa = promover(&s, &ca, &ia, &codigo()).await;
+    let codigo_a = codigo();
+    let pa = promover(&s, &ca, &ia, &codigo_a).await;
     let ib = ideia(&s, &cb, ub, &format!("Projecto B {marca}"), "INTERNAL").await;
     candidata(&s, &cb, &ib).await;
     let pb = promover(&s, &cb, &ib, &codigo()).await;
@@ -332,6 +333,9 @@ async fn projectos_filtros_pessoas_e_transicoes() {
         html.contains(&format!("Projecto A {marca}"))
             && html.contains(&format!("Projecto B {marca}"))
     );
+    // A linha mostra o código do projecto, e abrir guarda o filtro da lista.
+    assert!(html.contains(&codigo_a), "o código do projecto não está na lista");
+    assert!(html.contains(&format!(r#"href="/projects/{pa}?nav=all""#)));
     // «Em curso» é `active`: um projecto acabado de nascer é rascunho.
     let (_, html) = s.html("/projects?nav=in_progress", &ca).await;
     assert!(!html.contains(&format!("Projecto A {marca}")));
@@ -781,7 +785,8 @@ async fn conhecimento_fonte_hostil_e_dado_e_nao_autoridade() {
     let (_, html) = s.html("/knowledge/sources?q=Vento", &c).await;
     let lista = &html[html.find(r#"data-part="res-list""#).expect("a lista")..];
     let lista = &lista[..lista.find("</table>").unwrap_or(lista.len())];
-    assert!(lista.contains(&format!(r#"href="/knowledge/sources/{src}""#)));
+    // Abrir a entrada guarda a pesquisa da lista.
+    assert!(lista.contains(&format!(r#"href="/knowledge/sources/{src}?q=Vento""#)));
     assert!(!lista.contains(r#"href="/projects/"#) && !lista.contains(r#"href="/ideas/"#));
 }
 

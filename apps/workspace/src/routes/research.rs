@@ -117,14 +117,29 @@ fn creatable(list: &[Value], selected: Option<&str>) -> Vec<ResOptionVm> {
         .collect()
 }
 
+/// O filtro por ambiente: «Todos» primeiro, e os ambientes que o membro vê.
 fn filter_options(list: &[Value], selected: Option<&str>) -> Vec<ResOptionVm> {
-    list.iter()
-        .map(|w| ResOptionVm {
-            value: text(w, "id").to_owned(),
-            label: text(w, "title").to_owned(),
-            selected: Some(text(w, "id")) == selected,
-        })
-        .collect()
+    let mut o = vec![ResOptionVm {
+        value: String::new(),
+        label: t("res.filter.all").to_owned(),
+        selected: selected.is_none(),
+    }];
+    o.extend(list.iter().map(|w| ResOptionVm {
+        value: text(w, "id").to_owned(),
+        label: text(w, "title").to_owned(),
+        selected: Some(text(w, "id")) == selected,
+    }));
+    o
+}
+
+/// As linhas abrem o recurso **com os filtros da lista**: abrir um item não
+/// muda o que a lista mostra ao lado.
+fn keep_filters(items: &mut [crate::ui::view_models::ResItemVm], list_href: &str) {
+    if let Some((_, q)) = list_href.split_once('?') {
+        for i in items {
+            i.href = format!("{}?{q}", i.href);
+        }
+    }
 }
 
 /// O ambiente como ligação canónica: o projecto, ou a ideia.
@@ -136,7 +151,7 @@ fn workspace_link(overview: &Value) -> Option<ResLinkVm> {
             kind: ResKind::Project,
             kind_label: None,
             title,
-            meta: Some(text(w, "code").to_owned()),
+            meta: Some(text(p, "code").to_owned()),
             relation: None,
             by_operation: false,
             href: Some(format!("/projects/{}", text(p, "id"))),
@@ -365,6 +380,8 @@ async fn projects_view(
     if let Some(e) = action_error(q.err.as_deref()) {
         project_error = Some(e);
     }
+    let mut items = items;
+    keep_filters(&mut items, &pj::list_href(f));
     let vm = ProjectsVm {
         nav: pj::navigation(f),
         list: ResListVm {
@@ -503,8 +520,8 @@ async fn project_detail(
             .and_then(|m| m.iter().find(|x| text(x, "person_id") == responsavel))
             .map(|x| text(x, "full_name").to_owned())
             .or_else(|| resumo.and_then(|s| rs::opt(s, "responsible_name"))),
-        started: instant(&p, "started_at").map(|at| clock.when(at)),
-        completed: instant(&p, "completed_at").map(|at| clock.when(at)),
+        started: instant(&p, "started_at").map(|at| rs::day(at, clock)),
+        completed: instant(&p, "completed_at").map(|at| rs::day(at, clock)),
         origin_idea: origem,
         members: rs::people(&ov),
         tasks: tarefas,
@@ -639,6 +656,8 @@ async fn work_view(
     let dirty = form
         .as_ref()
         .and_then(|_| dirty_for(&w, "work", "work.new", "work.create"));
+    let mut items = items;
+    keep_filters(&mut items, &wk::list_href(f, ambiente));
     let vm = WorkVm {
         nav: wk::navigation(f, ambiente),
         workspace_filter: filter_options(&ambientes, ambiente),
@@ -1060,6 +1079,8 @@ async fn ideas_view(
     let dirty = form
         .as_ref()
         .and_then(|_| dirty_for(&w, "ideas", "ideas.new", "ideas.create"));
+    let mut items = items;
+    keep_filters(&mut items, &id::list_href(g));
     let vm = IdeasVm {
         nav: id::navigation(g),
         list: ResListVm {
@@ -1428,6 +1449,8 @@ async fn datasets_view(
     let dirty = form
         .as_ref()
         .and_then(|_| dirty_for(&w, "datasets", "data.new", "data.create"));
+    let mut items = items;
+    keep_filters(&mut items, &ds::list_href(ambiente));
     let vm = DatasetsVm {
         workspace_filter: filter_options(&ambientes, ambiente),
         list: ResListVm {
@@ -1852,6 +1875,8 @@ async fn knowledge_view(
     let dirty = form
         .as_ref()
         .and_then(|_| dirty_for(&w, "knowledge", "know.new", "know.create"));
+    let mut items = items;
+    keep_filters(&mut items, &base.clone());
     let vm = KnowledgeVm {
         section: s,
         nav: kn::navigation(s),

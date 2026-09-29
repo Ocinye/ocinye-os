@@ -48,6 +48,17 @@ pub fn date(v: &str) -> Option<String> {
         .map(|d| d.format("%d/%m/%Y").to_string())
 }
 
+/// Um instante como data no fuso do membro (`DD/MM/AAAA`).
+#[must_use]
+pub(crate) fn day(
+    at: chrono::DateTime<chrono::Utc>,
+    clock: &crate::controllers::desktop::Clock,
+) -> String {
+    at.with_timezone(&clock.zone.zone())
+        .format("%d/%m/%Y")
+        .to_string()
+}
+
 /// As palavras-chave de um campo `keywords` (lista de texto).
 #[must_use]
 pub fn keywords(v: &Value) -> Vec<String> {

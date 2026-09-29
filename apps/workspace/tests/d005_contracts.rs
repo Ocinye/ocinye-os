@@ -54,3 +54,28 @@ fn nenhuma_regra_das_aplicacoes_sai_do_espaco_oc() {
         assert!(s.contains(".oc-"), "selector fora do espaço .oc-: {s}");
     }
 }
+
+/// `oc-apps.js` só tem o ajudante `$$` (lista). Um `$(` solto é um
+/// `ReferenceError` a cada aplicação ligada: o teclado do `reslist` não
+/// funcionava e a excepção cortava o `init` a meio (D005, corrigido pela Code).
+#[test]
+fn o_script_das_aplicacoes_nao_chama_um_ajudante_que_nao_existe() {
+    let js = ler("static/oc-apps.js");
+    let definido = js.contains("const $ =") || js.contains("function $(");
+    let bytes = js.as_bytes();
+    let soltos: Vec<usize> = js
+        .match_indices("$(")
+        .map(|(i, _)| i)
+        .filter(|&i| {
+            i == 0
+                || !(bytes[i - 1] == b'$'
+                    || bytes[i - 1].is_ascii_alphanumeric()
+                    || bytes[i - 1] == b'_')
+        })
+        .collect();
+    assert!(
+        definido || soltos.is_empty(),
+        "`$(` sem `$` definido em {} sítio(s)",
+        soltos.len()
+    );
+}

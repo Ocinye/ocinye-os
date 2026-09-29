@@ -189,11 +189,11 @@
   // ── D005 · listas densas: ↑/↓ entre linhas, Home/End; Enter abre (é um elo) ──
   // O foco anda; a selecção não muda (foco ≠ selecção ≠ aberto).
   function reslist(app) {
-    $('[data-oc="res-list"]', app).forEach((tbl) => {
+    $$('[data-oc="res-list"]', app).forEach((tbl) => {
       tbl.addEventListener('keydown', (e) => {
         const a = e.target.closest('[data-part="res-open"]');
         if (!a) return;
-        const l = $('[data-part="res-open"]', tbl), i = l.indexOf(a);
+        const l = $$('[data-part="res-open"]', tbl), i = l.indexOf(a);
         let n = -1;
         if (e.key === 'ArrowDown') n = Math.min(l.length - 1, i + 1);
         else if (e.key === 'ArrowUp') n = Math.max(0, i - 1);
@@ -205,7 +205,7 @@
       });
     });
     // O filtro por ambiente submete ao mudar; o botão fica para quem não tem JS.
-    $('.oc-res-filter select', app).forEach((s) => s.addEventListener('change', () => s.form && s.form.requestSubmit()));
+    $$('.oc-res-filter select', app).forEach((s) => s.addEventListener('change', () => s.form && s.form.requestSubmit()));
   }
 
   // D004.1 · D4-J1: idempotente e por raiz — `OcApps.init(root)` liga só as aplicações

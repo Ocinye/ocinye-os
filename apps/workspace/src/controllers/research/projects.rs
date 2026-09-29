@@ -115,7 +115,8 @@ pub(crate) fn items(list: &[Value], open: Option<&str>, clock: &Clock) -> Vec<Re
             }
             Some(ResItemVm {
                 title: text(w, "title").to_owned(),
-                code: Some(text(w, "code").to_owned()).filter(|c| !c.is_empty()),
+                // O código do projecto, não o do ambiente.
+                code: super::opt(s, "project_code"),
                 state: status(text(s, "project_state")).map(state_vm),
                 cells: vec![
                     super::opt(s, "unit_name"),
