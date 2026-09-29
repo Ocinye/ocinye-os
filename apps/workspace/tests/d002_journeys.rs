@@ -357,6 +357,55 @@ async fn fechar_com_trabalho_por_guardar_pede_a_decisao_e_executa_a_confirmada()
     assert!(ids(&janelas(&s, &c).await).is_empty());
 }
 
+/// O fim do `<div>` que abre em `start` (etiquetas equilibradas).
+fn end_of_div(html: &str, start: usize) -> usize {
+    let mut depth = 0usize;
+    let mut i = start;
+    loop {
+        let open = html[i..].find("<div").map(|p| p + i);
+        let close = html[i..].find("</div>").map(|p| p + i).expect("</div>");
+        match open {
+            Some(o) if o < close => {
+                depth += 1;
+                i = o + 4;
+            }
+            _ => {
+                depth -= 1;
+                i = close + 6;
+                if depth == 0 {
+                    return i;
+                }
+            }
+        }
+    }
+}
+
+/// O diálogo de fechar é uma camada global: desenhado depois da casca, fora
+/// do `.oc-desk` (`isolation: isolate`) e da camada das janelas, cobre tudo
+/// (D002.1 · DIRTY_CLOSE_GLOBAL_LAYER = VERIFIED_ALREADY_GLOBAL).
+#[tokio::test]
+async fn o_dialogo_de_fechar_fica_fora_do_desktop_e_das_janelas() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (_, c) = membro(&s).await;
+    s.html("/notes", &c).await;
+    let w = ids(&janelas(&s, &c).await)[0].clone();
+    s.escrever(reqwest::Method::POST, &format!("/wm/{w}/state"), &c)
+        .form(&[("dirty", "true"), ("can_save", "false")])
+        .send()
+        .await
+        .unwrap();
+    let (_, html) = s.html(&format!("/notes?close={w}"), &c).await;
+    let shell_start = html[..html.find(r#"class="oc-shell""#).unwrap()]
+        .rfind("<div")
+        .unwrap();
+    let shell_end = end_of_div(&html, shell_start);
+    let dialog = html.find(r#"data-oc="dirty-close""#).expect("diálogo");
+    assert!(dialog > shell_end, "o diálogo entrou na casca");
+    assert_eq!(html.matches(r#"data-oc="dirty-close""#).count(), 1);
+}
+
 // ── Autoridade e isolamento ───────────────────────────────────────────────
 
 #[tokio::test]
