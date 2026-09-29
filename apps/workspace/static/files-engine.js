@@ -203,12 +203,17 @@
       li.appendChild(b);
     };
     if (busy) btn('files-up-cancel', 'close', s.cancel);
-    if (job.state === 'failed' || job.state === 'cancelled') btn('files-up-retry', 'refresh', s.retry);
+    /* Uma recusa de tipo não muda por tentar de novo: sem «tentar de novo». */
+    if ((job.state === 'failed' && !job.final) || job.state === 'cancelled') btn('files-up-retry', 'refresh', s.retry);
   }
 
   function settle() {
     const all = Array.from(jobs.values());
     if (all.some((j) => j.state === 'queued' || j.state === 'checking' || j.state === 'sending')) return;
+    /* Recarregar mostra os ficheiros novos — mas apagaria a linha de um envio
+     * que falhou, e com ela a razão e o «tentar de novo». Com uma falha ou um
+     * cancelamento na fila, a fila fica; a lista actualiza-se na próxima vista. */
+    if (all.some((j) => j.state === 'failed' || j.state === 'cancelled')) return;
     if (all.some((j) => j.state === 'done')) setTimeout(() => location.reload(), 600);
   }
 
@@ -219,7 +224,7 @@
   }
 
   async function run(job) {
-    job.state = 'checking'; job.done = 0; job.sent = 0; job.message = ''; job.cancelled = false;
+    job.state = 'checking'; job.final = false; job.done = 0; job.sent = 0; job.message = ''; job.cancelled = false;
     render(job);
     const json = { 'Content-Type': 'application/json', Accept: 'application/json' };
     try {
@@ -232,7 +237,12 @@
       const body = { filename: job.file.name, content_type: job.file.type || 'application/octet-stream', size_bytes: job.file.size };
       if (job.folder && job.folder !== 'root') body.folder_id = job.folder;
       const open = await fetch('/files/personal-upload', { method: 'POST', headers: json, body: JSON.stringify(body) });
-      if (!open.ok) { job.state = 'failed'; render(job); return settle(); }
+      if (!open.ok) {
+        job.state = 'failed';
+        if (open.status === 422) { job.final = true; job.message = T().type; }
+        render(job);
+        return settle();
+      }
       const sess = await open.json();
       job.session = sess.session_id;
       job.total = sess.total_parts;

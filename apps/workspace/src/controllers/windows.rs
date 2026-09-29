@@ -192,9 +192,15 @@ fn wm_vm(desk: &Desk, allowed: impl Fn(ApplicationId) -> bool) -> Option<WmVm> {
                 h: w.geometry.h,
             },
             dirty: w.dirty,
-            // Nenhuma aplicação tem ainda ecrã do Design (FG-021): a janela
-            // mostra o estado honesto do `app_pending`.
-            content: WindowContent::Pending,
+            // Uma aplicação com ecrã do Design (D003 Nye, D004 Ficheiros, Notas,
+            // Calendário, Correio) carrega o corpo por `?frame=1`; as outras
+            // mostram o estado honesto do `app_pending`. A janela da rota pedida
+            // passa a `Ready` no handler que a desenha.
+            content: if has_screen(w.app) {
+                WindowContent::Loading
+            } else {
+                WindowContent::Pending
+            },
         })
         .collect();
     let multi_window_apps = ocinye_contracts::application::MANIFESTS
@@ -207,6 +213,19 @@ fn wm_vm(desk: &Desk, allowed: impl Fn(ApplicationId) -> bool) -> Option<WmVm> {
         switcher_hint: Some(SWITCHER_HINT.to_owned()),
         multi_window_apps,
     })
+}
+
+/// As aplicações cujo corpo existe e responde a `?frame=1`.
+#[must_use]
+pub fn has_screen(app: ApplicationId) -> bool {
+    matches!(
+        app,
+        ApplicationId::Files
+            | ApplicationId::Notes
+            | ApplicationId::Calendar
+            | ApplicationId::Mail
+            | ApplicationId::Prompt
+    )
 }
 
 /// A confirmação de fechar, quando a janela existe e tem trabalho por guardar.
@@ -283,10 +302,17 @@ mod tests {
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].app_id, "mail");
         assert_eq!((vm.windows[0].z, vm.windows[1].z), (1, 2));
+        // D004: Ficheiros e Correio têm ecrã — o corpo chega por `?frame=1`.
         assert!(vm
             .windows
             .iter()
-            .all(|w| w.content == WindowContent::Pending));
+            .all(|w| w.content == WindowContent::Loading));
+        // Uma aplicação sem ecrã do Design continua a dizer `app_pending`.
+        d.open(ApplicationId::Datasets, "/datasets", SingleInstance, false)
+            .unwrap();
+        let vm = wm_vm(&d, |a| a != ApplicationId::Notes).unwrap();
+        let datasets = vm.windows.iter().find(|w| w.app_id == "datasets").unwrap();
+        assert_eq!(datasets.content, WindowContent::Pending);
         // Notas aceita várias janelas, mas não é visível: não se oferece.
         assert_eq!(vm.multi_window_apps, ["files"]);
         assert_eq!(vm.switcher_hint.as_deref(), Some(SWITCHER_HINT));

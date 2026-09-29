@@ -332,7 +332,9 @@ impl Desk {
     /// - `SingleInstance`: a janela da aplicação é focada e passa a mostrar
     ///   `href`.
     /// - `MultiWindow`: a rota da aplicação sem recurso foca a janela mais
-    ///   recente dela; um recurso novo, ou `new_window`, abre outra.
+    ///   recente dela; um recurso novo (outro caminho), ou `new_window`, abre
+    ///   outra. A pergunta é estado da vista: o mesmo caminho com outra
+    ///   pergunta fica na janela que o mostra.
     /// - `new_window` numa aplicação de uma janela é ignorado: a política é do
     ///   registo, não do pedido.
     ///
@@ -355,6 +357,20 @@ impl Desk {
             .filter(|w| !force_new && w.app == app && w.href == href)
             .max_by_key(|w| w.z)
             .map(|w| w.id.clone());
+        // A pergunta é estado da vista (`?item=`, `?folder=`, `?sort=`, `?q=`),
+        // não um recurso: navegar dentro de uma janela fica nela (D004).
+        let path = |h: &str| h.split_once('?').map_or(h, |(p, _)| p).to_owned();
+        let same = same.or_else(|| {
+            (!force_new && policy == LaunchPolicy::MultiWindow)
+                .then(|| {
+                    self.windows
+                        .iter()
+                        .filter(|w| w.app == app && path(&w.href) == path(href))
+                        .max_by_key(|w| w.z)
+                        .map(|w| w.id.clone())
+                })
+                .flatten()
+        });
         let reuse = same.or_else(|| {
             let latest = || {
                 self.windows
@@ -641,6 +657,28 @@ mod tests {
         assert_eq!(bare, Opened::Existing(a.id().to_owned()));
         assert!(matches!(new, Opened::New(_)));
         assert_eq!(d.windows().len(), 3);
+    }
+
+    #[test]
+    fn a_pergunta_e_estado_da_vista_e_fica_na_mesma_janela() {
+        let mut d = Desk::default();
+        let a = d.open(A::Files, "/files", Multi, false).unwrap();
+        let item = d.open(A::Files, "/files?item=f.x", Multi, false).unwrap();
+        let pasta = d
+            .open(A::Files, "/files?folder=d.y&sort=name", Multi, false)
+            .unwrap();
+        assert_eq!(item, Opened::Existing(a.id().to_owned()));
+        assert_eq!(pasta, Opened::Existing(a.id().to_owned()));
+        assert_eq!(d.windows().len(), 1);
+        assert_eq!(d.windows()[0].href, "/files?folder=d.y&sort=name");
+        // Outro caminho é outro recurso; «Nova janela» abre sempre outra.
+        let nota = d.open(A::Notes, "/notes/n1", Multi, false).unwrap();
+        let outra = d.open(A::Notes, "/notes/n2", Multi, false).unwrap();
+        assert_ne!(nota.id(), outra.id());
+        assert!(matches!(
+            d.open(A::Files, "/files?item=f.z", Multi, true).unwrap(),
+            Opened::New(_)
+        ));
     }
 
     #[test]

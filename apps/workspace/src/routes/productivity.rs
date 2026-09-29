@@ -117,8 +117,12 @@ pub(super) async fn open_app(
             .flatten();
     }
     ctx.vm.wm = controllers::windows::view(&state.sessions, &member.session_id, &ctx);
-    if let Some(wm) = ctx.vm.wm.as_mut() {
-        for w in wm.windows.iter_mut().filter(|w| w.app_id == app.as_str()) {
+    // Só a janela deste pedido recebe o corpo; as outras da mesma aplicação
+    // (Ficheiros, Notas e Correio abrem várias) carregam o seu por `?frame=1`.
+    // O corpo vai para a primeira janela `Ready` — marcar todas punha o
+    // conteúdo de uma janela noutra.
+    if let (Some(wm), Some(id)) = (ctx.vm.wm.as_mut(), window.as_deref()) {
+        if let Some(w) = wm.windows.iter_mut().find(|w| w.id == id) {
             w.content = WindowContent::Ready;
         }
     }
@@ -1073,6 +1077,7 @@ fn upload_strings() -> AnyView {
             data-cancelled=t("files.up.cancelled")
             data-failed=t("app.err.upload.title")
             data-full=t("prod.files.up.full")
+            data-type=t("prod.files.up.type")
             data-cancel=t("files.up.cancel")
             data-retry=t("files.up.retry")
             data-uploads=t("files.uploads")

@@ -280,4 +280,45 @@
   let pulse = null;
   try { pulse = sessionStorage.getItem('oc-wm-pulse'); sessionStorage.removeItem('oc-wm-pulse'); } catch (_) { pulse = null; }
   if (pulse && WIN.test(pulse) && winEl(pulse)) window.OcWm.pulse(pulse);
+
+  /* D004 · O corpo das outras janelas (WindowContent::Loading). O servidor só
+     desenha o da janela do pedido; as outras aplicações com ecrã pedem o seu
+     por «?frame=1» — o endereço da janela, que o servidor guarda. Um corpo que
+     não chega (erro, sessão acabada, recusa) não entra: a janela passa a ser
+     uma ligação para o seu endereço, onde o servidor diz porquê. */
+  const frameOf = (href) => href + (href.includes('?') ? '&' : '?') + 'frame=1';
+  const wire = (body) => {
+    /* O init do Design (oc-apps.js) liga todas as aplicações da página. As
+       que já estão ligadas escondem-se durante a chamada, para não receberem
+       os ouvintes duas vezes (CODE_FEEDBACK D004: pedir init(root)). */
+    if (!window.OcApps || !body.querySelector('[data-oc="app"]')) return;
+    const wired = Array.from(document.querySelectorAll('[data-oc="app"]')).filter((a) => !body.contains(a));
+    wired.forEach((a) => a.setAttribute('data-oc', 'app-wired'));
+    try { window.OcApps.init(); } finally { wired.forEach((a) => a.setAttribute('data-oc', 'app')); }
+  };
+  layer.querySelectorAll('[data-oc="win"]').forEach((w) => {
+    const body = w.querySelector('[data-part="win-body"]');
+    const href = w.dataset.href || '';
+    if (!body || !body.querySelector('.oc-win__loading') || !href.startsWith('/') || href.startsWith('//')) return;
+    const fallback = () => {
+      const a = document.createElement('a');
+      a.className = 'oc-win__state';
+      a.href = href;
+      const t = w.querySelector('.oc-win__title, [data-part="win-title"]');
+      a.textContent = (t && t.textContent.trim()) || href;
+      body.replaceChildren(a);
+    };
+    fetch(frameOf(href), { credentials: 'same-origin', headers: { Accept: 'text/html' }, redirect: 'manual' })
+      .then(async (r) => {
+        const html = r.ok && r.type !== 'opaqueredirect' ? await r.text() : '';
+        /* Um corpo de janela, e não uma página inteira (um erro vem na casca). */
+        if (!html || /<html[\s>]/i.test(html)) return fallback();
+        const tpl = document.createElement('template');
+        tpl.innerHTML = html;
+        tpl.content.querySelectorAll('template[data-part="win-title"]').forEach((x) => x.remove());
+        body.replaceChildren(tpl.content);
+        wire(body);
+      })
+      .catch(fallback);
+  });
 })();

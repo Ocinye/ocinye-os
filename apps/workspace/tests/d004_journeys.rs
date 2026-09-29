@@ -1340,3 +1340,54 @@ async fn nye_a_referencia_de_uma_aplicacao_so_diz_o_que_o_membro_pode_ver() {
     assert!(!html.contains(&format!("cofre-{marca}")));
     assert!(!html.contains("Sobre o ficheiro"));
 }
+
+// ── Janelas com ecrã ─────────────────────────────────────────────────────
+
+/// Com duas aplicações abertas, só a janela do pedido traz o corpo; a outra
+/// vem `Loading` (não o `app_pending`, que seria falso) e o seu corpo chega
+/// por `?frame=1` — um corpo de janela, sem casca. Navegar dentro da mesma
+/// aplicação por pergunta (`?view=`) fica na mesma janela.
+#[tokio::test]
+async fn janelas_as_outras_carregam_por_frame_e_a_pergunta_nao_abre_outra() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (_, c, t) = membro(&s).await;
+    let id = nota(&s, &t, "Caderno", "texto").await;
+    let (status, _) = s.html("/files", &c).await;
+    assert_eq!(status, 200);
+    let (status, _) = s.html("/notes", &c).await;
+    assert_eq!(status, 200);
+    let (status, html) = s.html(&format!("/notes/{id}"), &c).await;
+    assert_eq!(status, 200);
+    // Duas janelas; o corpo de Notas uma vez, e o de Ficheiros por carregar.
+    let hrefs: Vec<&str> = html
+        .split("data-href=\"")
+        .skip(1)
+        .map(|x| x.split('"').next().unwrap())
+        .collect();
+    assert_eq!(html.matches(r#"data-oc="win""#).count(), 3, "{hrefs:?}");
+    // O corpo vai para a janela deste pedido, e não para a outra das Notas.
+    let janela = html
+        .split(r#"data-oc="win""#)
+        .find(|w| w.contains(&format!(r#"data-href="/notes/{id}""#)))
+        .expect("a janela da nota");
+    assert!(
+        janela.contains(r#"data-oc="app""#),
+        "o corpo está noutra janela"
+    );
+    // Um só corpo de aplicação na página: o das Notas.
+    assert_eq!(html.matches(r#"data-oc="app""#).count(), 1);
+    assert!(html.contains(r#"data-part="notes-editor""#) || html.contains("oc-notes"));
+    assert!(html.contains("oc-win__loading"));
+    assert!(!html.contains("oc-pending oc-win__state"));
+    // O corpo de Ficheiros por `?frame=1`: sem casca, com o ecrã.
+    let (status, frame) = s.html("/files?frame=1", &c).await;
+    assert_eq!(status, 200);
+    assert_eq!(frame.matches(r#"data-oc="app""#).count(), 1);
+    assert!(frame.contains(r#"data-part="files-drop""#));
+    assert!(!frame.contains("<html") && !frame.contains(r#"data-oc="win""#));
+    // A pergunta é estado da vista: continua a haver duas janelas.
+    let (_, html) = s.html("/files?view=grid", &c).await;
+    assert_eq!(html.matches(r#"data-oc="win""#).count(), 3);
+}

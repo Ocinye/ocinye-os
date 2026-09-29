@@ -32,6 +32,7 @@ const NAV: &[Entry] = catalogo! {
     "prod.files.recent": { pt: "Recentes", en: "Recent", fr: "Récents" },
     "prod.files.favourites": { pt: "Favoritos", en: "Starred", fr: "Favoris" },
     "prod.files.folder": { pt: "Pasta", en: "Folder", fr: "Dossier" },
+    "prod.files.up.type": { pt: "Este tipo de ficheiro não é aceite.", en: "This file type is not accepted.", fr: "Ce type de fichier n’est pas accepté." },
     "prod.files.up.full": { pt: "Sem espaço para este ficheiro", en: "Not enough space for this file", fr: "Pas assez d’espace pour ce fichier" },
     "prod.files.err.download_many": { pt: "Descarregar vários ficheiros de uma vez ainda não está disponível. Descarregue um de cada vez.", en: "Downloading several files at once is not available yet. Download them one at a time.", fr: "Le téléchargement de plusieurs fichiers à la fois n’est pas encore disponible. Téléchargez-les un par un." },
     "prod.files.err.purge_confirmation": { pt: "Eliminar para sempre ainda não está disponível: falta a confirmação. Nada foi eliminado.", en: "Deleting forever is not available yet: the confirmation is missing. Nothing was deleted.", fr: "La suppression définitive n’est pas encore disponible : la confirmation manque. Rien n’a été supprimé." },
