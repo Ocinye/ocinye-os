@@ -13,6 +13,7 @@
 pub mod desktop;
 pub mod nye;
 pub mod panels;
+pub mod productivity;
 pub mod windows;
 
 use serde_json::Value;

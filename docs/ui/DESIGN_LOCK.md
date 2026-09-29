@@ -1,3 +1,15 @@
+# DESIGN_LOCK — Design revision D004.1
+
+Re-locked: `static/oc-apps.css` (`files` container + column priority; ≤ 640 target block; sticky Notes save), `static/oc-apps.js` (`init(root)`), `ui/apps/{files,mail,mod}.rs`, `AppError` in `view_models.rs` (+NotConnected), `i18n/ui_apps.rs`. Code must not: give secondary Files columns a width that squeezes Nome below 200 px, re-enable a purge submit without a governed confirmation, map `connected = false` to `Unavailable`, shrink ≤ 640 hit areas below 44 px. All D001–D004 locks stay.
+
+---
+
+# DESIGN_LOCK — Design revision D004
+
+New locks: `src/ui/apps/{mod,files,notes,calendar,mail}.rs`, `static/oc-apps.css`, `static/oc-apps.js`, `src/i18n/ui_apps.rs`, D004 block of `view_models.rs`. Re-locked: `wm/mod.rs` (`dirty_close` save_label/save_form), `oc-wm.js` (`bindDirty`), `document.rs` (+oc-apps assets, last), `ui/mod.rs`. All D001–D003.1 locks stay. Ownership: Design = rendering, layout, states, client mechanics; Code = routes, VM filling, formatting, upload engine, dirty template, persistence; Core = authorisation, storage, revisions, mail transport, calendar data. Code must not: render message/note HTML, expose storage identifiers, add a second chatbot, add a second confirmation dialog, invent collections or counts, or cap uploads at a fixed size.
+
+---
+
 # DESIGN_LOCK — Design revision D003.1
 
 Re-locked: `static/oc-nye.js` (initial filter via the shell's `input` filter; modal trap + `inert`; two-step Esc; focus restoration), `static/oc-nye.css` (`--oc-nye-touch` block ≤ 640), `src/ui/nye/mod.rs` (`data-part="nye-empty"`, 2 tests). Code must not add a second app filter, remove `aria-modal`, or shrink the ≤ 640 hit areas below 44 px. All D003 locks stay.

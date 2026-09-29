@@ -59,6 +59,7 @@ pub mod i18n;
 pub mod routes;
 pub mod session;
 pub mod terminal;
+pub mod text;
 pub mod ui;
 pub mod window_manager;
 

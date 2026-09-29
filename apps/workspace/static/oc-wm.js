@@ -251,8 +251,10 @@
    * D002.1 · só controlos realmente focáveis: «[href]» apanhava o <use href> do
    * ícone SVG, e o laço Tab/Shift+Tab partia-se. */
   const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-  function dirty() {
-    const d = document.querySelector('[data-oc="dirty-close"]');
+  // D004 · `dirty(el)`: o mesmo comportamento para um diálogo montado por uma
+  // aplicação (oc-apps.js) a partir do `wm::dirty_close` do servidor.
+  function dirty(el) {
+    const d = el || document.querySelector('[data-oc="dirty-close"]');
     if (!d) return;
     const focusables = () => $$(FOCUSABLE, d).filter((el) =>
       el.getAttribute('aria-disabled') !== 'true' && !el.closest('[hidden], [inert]') && el.getClientRects().length > 0);
@@ -277,7 +279,7 @@
     });
   }
 
-  window.OcWm = { apply, snap, size, pulse, announce, openSwitcher, closeSwitcher };
+  window.OcWm = { apply, snap, size, pulse, announce, openSwitcher, closeSwitcher, bindDirty: dirty };
   const init = () => { presentation(); controls(); gestures(); switcher(); dockApps(); deskMenu(); dirty(); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

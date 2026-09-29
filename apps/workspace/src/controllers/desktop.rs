@@ -142,17 +142,17 @@ impl Clock {
             .format("%H:%M")
             .to_string()
     }
-    fn ddmm(&self, at: DateTime<Utc>) -> String {
+    pub(crate) fn ddmm(&self, at: DateTime<Utc>) -> String {
         at.with_timezone(&self.zone.zone())
             .format("%d/%m")
             .to_string()
     }
-    fn is_today(&self, at: DateTime<Utc>) -> bool {
+    pub(crate) fn is_today(&self, at: DateTime<Utc>) -> bool {
         let z = self.zone.zone();
         at.with_timezone(&z).date_naive() == self.now.with_timezone(&z).date_naive()
     }
     /// «14:05» hoje, «22/09» nos outros dias.
-    fn when(&self, at: DateTime<Utc>) -> String {
+    pub(crate) fn when(&self, at: DateTime<Utc>) -> String {
         if self.is_today(at) {
             self.hhmm(at)
         } else {
@@ -164,7 +164,7 @@ impl Clock {
         Ago::from_secs(secs, || self.ddmm(at))
     }
     /// «há 5 min», «ontem», «22/09» (chaves `time.*` do Design).
-    fn relative(&self, at: DateTime<Utc>) -> String {
+    pub(crate) fn relative(&self, at: DateTime<Utc>) -> String {
         let secs = (self.now - at).num_seconds().max(0);
         match secs {
             0..60 => t("time.now").to_owned(),
@@ -178,12 +178,18 @@ impl Clock {
 }
 
 /// «12,4 GB», com a vírgula ou o ponto do idioma.
-fn bytes(n: u64) -> String {
-    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+pub(crate) fn bytes(n: u64) -> String {
+    // O francês conta em octetos: «Ko», «Mo», «Go».
+    let fr = crate::i18n::current() == ocinye_contracts::Locale::Fr;
+    let units: [&str; 5] = if fr {
+        ["o", "Ko", "Mo", "Go", "To"]
+    } else {
+        ["B", "KB", "MB", "GB", "TB"]
+    };
     #[allow(clippy::cast_precision_loss, reason = "uma apresentação arredondada")]
     let mut v = n as f64;
     let mut u = 0;
-    while v >= 1024.0 && u < UNITS.len() - 1 {
+    while v >= 1024.0 && u < units.len() - 1 {
         v /= 1024.0;
         u += 1;
     }
@@ -197,7 +203,7 @@ fn bytes(n: u64) -> String {
     } else {
         s.replace('.', ",")
     };
-    format!("{s} {}", UNITS[u])
+    format!("{s} {}", units[u])
 }
 
 fn extension(name: &str) -> String {
@@ -822,5 +828,15 @@ mod tests {
             };
             assert_eq!(layout.validate(false), Ok(()), "{d:?}");
         }
+    }
+
+    #[tokio::test]
+    async fn em_frances_os_tamanhos_contam_em_octetos() {
+        let fr =
+            crate::i18n::with_locale(ocinye_contracts::Locale::Fr, async { bytes(2_150) }).await;
+        assert_eq!(fr, "2,1 Ko");
+        let en =
+            crate::i18n::with_locale(ocinye_contracts::Locale::En, async { bytes(2_150) }).await;
+        assert_eq!(en, "2.1 KB");
     }
 }

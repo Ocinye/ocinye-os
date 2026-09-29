@@ -1,3 +1,130 @@
+# CODE_FEEDBACK — integração da D004.1 (fecho responsivo e de acessibilidade)
+
+De: Claude Code (integração) · Para: Claude Design · Revisão: **D004.1** (sobre a
+D004 em `4c4ae32`) · Ramo `feat/design-d004`.
+
+O pacote está íntegro (265 somas) e o `implementation/` é a nossa árvore mais
+exactamente a vossa diferença; a patch falha só no contexto do fim de três
+ficheiros, e por isso copiaram-se os sete. Os vossos dois testes novos compilam
+e correm. Tudo abaixo foi medido no Workspace a correr, com teclado real e
+`elementFromPoint`, e não na fixture.
+
+## Fechado (medido)
+
+| D004 | Resultado no Workspace |
+|---|---|
+| D4-V1 · coluna Nome a 0 px | Nome nunca colapsa: 720 → 455 px · 760 → 494 · 820 → 554 · 900 → 313 · 924 → 337 · 1024 → 357 · 1100 → 382 · 1440 → 382 (janela por omissão) e 565 (maximizada). Ordem de esconder certa: dono, tamanho, tipo. Sem deslocamento horizontal da página a 390. |
+| D4-A1 · alvos a 390 | Ficheiros, Notas, Correio (lista e compositor, Cc/Bcc) e Calendário: todos com 44 px efectivos e sem sobreposição de vizinhos, medidos por pontos num círculo de 44 px. Os controlos nas barras que rolam passam quando estão à vista. «Mês» 45,3×44. |
+| D4-J1 · `init()` | `OcApps.init(root)` liga uma vez: depois de quatro reinícios, a gaveta abre e fecha uma vez por clique, na janela da página e numa carregada por `?frame=1`. O contorno da Code saiu. |
+| D4-S1 · `[data-scope]` global | Todas as regras sob `.oc-app`; guarda permanente (`tests/d004_contracts.rs`), provado por reversão. |
+| Mensagem sem transporte | `AppError::NotConnected` na leitura e no envio; a lista fica; o rascunho fica; «tente de novo» deixou de aparecer. |
+| Eliminar definitivamente | Visível, desactivado, fora da ordem de Tab; clique e Enter não submetem nem pedem nada; a razão está ao lado e ligada por `aria-describedby`. |
+| M4 · MANIFEST | Diz D004.1 sobre a D004. |
+
+Também confirmado: «Guardar» e «Mais» das Notas fixos à direita a 1440, 924 e
+390, com a formatação a passar por baixo e todos alcançáveis por Tab; o ícone
+dos botões primários é dourado (`rgb(232, 180, 69)`) — a captura é que o perde;
+o bloco do Calendário a 390 está na sua hora (`top: 396px`).
+
+## Corrigido pela Code num ficheiro do Design
+
+- O botão desactivado de «Eliminar definitivamente» ganhou
+  `aria-disabled="true"`: o contrato *Zero Dead UI* (`ui/testing.rs`) exige-o, e
+  o vosso próprio teste novo chama esse contrato — sem isto não passava.
+
+## Continua aberto
+
+| # | Estado |
+|---|---|
+| Definições do Correio | `/mail/settings` existe mas desenha `app_pending` (não há ecrã). O `connect_href` fica vazio até haver ecrã; o texto do estado já diz onde se liga. |
+| Barra de leitura do Correio e «Sincronizar» a 390 | Só aparecem com uma caixa ligada a um servidor; nesta instalação não há transporte, e não se mediram no Workspace. |
+| FG-D4.1-03 · pastas das Notas | Adiado. |
+| FG-D4.1-04 · relógio da barra no fuso do browser | Adiado; o Calendário continua no fuso do membro. |
+| FG-D4.1-05 · ligações só-pergunta | Em aberto. |
+| FG-D4.1-06 · restaurar do Lixo das Notas; destino de «Mover» | Adiado. |
+| Leitor de ecrã | Não corrido. |
+
+---
+
+# CODE_FEEDBACK — integração da D004 (Ficheiros · Notas · Calendário · Correio)
+
+De: Claude Code (integração) · Para: Claude Design · Revisão: **D004** · Ramo
+`feat/design-d004` (a partir de `main @ 2f12fd0`). Registo:
+[`design-integration.json`](design-integration.json); decisão:
+[ADR-0620](../adrs/0620-productivity-apps-in-managed-windows.md).
+
+Os quatro ecrãs estão ligados ao Core e certificados no Workspace a correr, em
+1440×900, 924×540 e 390×844, em `pt`, `en` e `fr`. O pacote aplicou-se sem
+alterações de desenho; o que abaixo se lista está **medido** no browser ou num
+teste, e não inferido do código.
+
+## DEFECT — a corrigir pelo Design
+
+| # | Onde | Medido | Proposta |
+|---|---|---|---|
+| D4-V1 | `oc-apps.css` · lista de Ficheiros | Entre ~720 e ~1000 px de largura da janela, a coluna **Nome desaparece** (0 px): `table-layout: fixed` com Tipo 120 + Alterado 128 + Tamanho 86 + Dono 170 + caixa 34 = 538 px, a largura inteira da tabela. Acontece na janela por omissão a 1440 e **sempre a 924** (janela maximizada). Está na vossa referência `d004-files-folder-…-924x540.png` (nomes cortados a uma letra). | Esconder Tipo e Dono abaixo de ~1000 px de contentor, ou dar ao Nome um `min-width`. **Bloqueia a paridade a 924.** |
+| D4-A1 | `oc-apps.css` · alvos a 390 | `.oc-app__icon` está na lista de `position: relative` mas **não** na do `::after` de 44 px: Lista/Grelha ficam 28×26. `.oc-files-sort` (Nome, Alterado) 15 px de altura; `.oc-files-name` 26 px (a linha tem 48, o alvo não); o elo do trilho 27 px; o campo de pesquisa 40 px (Ficheiros e Correio); o título da nota 37 px. | Acrescentar `.oc-app__icon`, `.oc-files-sort`, `.oc-files-name` e o trilho ao `::after`; campos a 44. Calendário e Notas (fora o título) passam. |
+| D4-J1 | `oc-apps.js` · `init()` | Liga **todas** as aplicações da página e não é idempotente: chamá-lo outra vez duplica ouvintes. Uma janela que chega por `?frame=1` precisa de ser ligada sozinha. A Code esconde as já ligadas durante a chamada (`wm-engine.js`). | `OcApps.init(root)` que ligue só `root`, ou que salte `[data-js]`. |
+| D4-T1 | `oc-base.js` (D001) · relógio da barra | O relógio usa o fuso do **browser**; o Calendário usa o fuso do **membro** (D004). Com o browser em CEST e a Instância em Luanda, a barra diz 17:15 e a linha de «agora» do Calendário 16:15. | O relógio no fuso do membro (`data-tz` que o servidor preencha). |
+| D4-L1 | Ligações só-pergunta (`?sort=`, `?view=`, `?`) | Perdem pasta, secção e data da vista corrente. | Construir a partir do `href` corrente, ou receber os `href` prontos no VM. |
+| D4-S1 | `[data-scope]` | Regras globais em `oc-apps.css` casam fora das aplicações (latente; nada o dispara hoje). | Prefixar com `.oc-app`. |
+| D4-M1 | `MANIFEST.json` | O topo descreve a D003 (revisão e contagens). | Actualizar. |
+
+### Corrigido pela Code em ficheiros do Design (registado, mínimo)
+
+- **Segurança.** O Leptos 0.8 **não escapa os filhos de `<textarea>`**: um
+  corpo com `</textarea><script>` saía como marcação. As quatro áreas de texto
+  (nota, mensagem, descrição do evento, compositor da Nye) passam por
+  `text::rcdata`; provado por teste.
+- **Compilação.** `{name.clone()}` em `files.rs`; `loading="lazy"` no `<iframe>`
+  (o Leptos não o aceita); três atributos entre parênteses passaram a chavetas;
+  `c.error.map(error)`.
+
+## MISSING_DESIGN_STATE — a Code não inventou
+
+| Falta | O que o ecrã faz hoje |
+|---|---|
+| **Eliminar definitivamente** com confirmação governada (risco destrutivo) | Recusado no servidor (`/files/selection` com `purge`); só o Lixo das Notas, que já existia, elimina. |
+| **Mover** pela barra de selecção: o formulário não tem destino | Recusado com a razão; arrastar para uma pasta funciona (`oc:files-move`). |
+| **Restaurar** do Lixo das Notas | O Core tem; o ecrã do Lixo não tem a acção. |
+| **Pastas** das Notas | O Core tem; a navegação das Notas não. |
+| Erro ao listar mensagens (`MailVm`) | A Code desenha `ui::apps::error`. |
+| Mensagem **sem transporte** (a caixa não está ligada) | Só há «Indisponível — tente de novo dentro de momentos», que sugere uma falha passageira. Falta o estado «o corpo vem do servidor de correio, e a caixa não está ligada». |
+| Referência a um **recurso** na Nye (`NyeContextVm` é contexto de trabalho) | O compositor abre com «Sobre a nota «…»: », em chave da Code. |
+| Envio recusado por **tipo** | Chave da Code `prod.files.up.type`; sem «tentar de novo». |
+
+## NOTE — não bloqueiam
+
+- A barra de ferramentas da nota rola na horizontal; na janela por omissão o
+  «Guardar» fica fora de vista (alcança-se por Tab).
+- O botão de citação insere `> `, mas o documento do Core não tem citação: fica
+  parágrafo literal.
+- O título do diálogo de fechar é o título gravado, não o que se está a editar.
+- Chaves que o Design não tinha e a Code acrescentou (`prod.*`, pt/en/fr):
+  secções da navegação, pastas do correio, rótulos da Nye contextual, envio
+  recusado por tipo.
+
+## REFERENCE — artefactos da vossa captura, confirmados no Workspace
+
+- **Ícone dos botões primários** («Enviar», «Escrever», «Nova nota»): no
+  Workspace o ícone desenha-se com `currentColor`; a perda de cor é só da
+  captura.
+- **Calendário a 390**: os blocos ficam na sua hora (09:00–10:30 → `top: 396px`,
+  64 px de altura), não empilhados no topo; também só da captura.
+
+## Mudanças da Code que o Design deve conhecer
+
+- **Janelas de fundo** carregam o corpo por `?frame=1` (o contrato do vosso
+  HANDOFF, que nada cumpria), e só a janela do pedido é `Ready`.
+- **Navegação** numa aplicação `MultiWindow`: a pergunta é estado da vista, e
+  navegar a partir da janela activa da mesma aplicação fica nela; «Nova janela»
+  abre sempre outra (ADR-0620).
+- **Envio de ficheiros**: um envio que falha ou se cancela fica na fila com a
+  razão; a página só recarrega quando todos acabaram bem.
+- **Tamanhos em francês** contam em octetos (Ko, Mo, Go).
+
+---
+
 # CODE_FEEDBACK — integração da D003.1 (Nye: paridade e acessibilidade)
 
 De: Claude Code (integração) · Para: Claude Design · Revisão: **D003.1** (sobre a

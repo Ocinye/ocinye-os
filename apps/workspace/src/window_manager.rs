@@ -332,7 +332,11 @@ impl Desk {
     /// - `SingleInstance`: a janela da aplicação é focada e passa a mostrar
     ///   `href`.
     /// - `MultiWindow`: a rota da aplicação sem recurso foca a janela mais
-    ///   recente dela; um recurso novo, ou `new_window`, abre outra.
+    ///   recente dela; um recurso novo (outro caminho) vindo de fora da
+    ///   aplicação, ou `new_window`, abre outra. A pergunta é estado da vista:
+    ///   o mesmo caminho com outra pergunta fica na janela que o mostra; e
+    ///   navegar a partir da janela activa da mesma aplicação fica nela (D004,
+    ///   ADR-0620).
     /// - `new_window` numa aplicação de uma janela é ignorado: a política é do
     ///   registo, não do pedido.
     ///
@@ -355,6 +359,29 @@ impl Desk {
             .filter(|w| !force_new && w.app == app && w.href == href)
             .max_by_key(|w| w.z)
             .map(|w| w.id.clone());
+        // A pergunta é estado da vista (`?item=`, `?folder=`, `?sort=`, `?q=`),
+        // não um recurso: navegar dentro de uma janela fica nela (D004).
+        let path = |h: &str| h.split_once('?').map_or(h, |(p, _)| p).to_owned();
+        let same = same.or_else(|| {
+            (!force_new && policy == LaunchPolicy::MultiWindow)
+                .then(|| {
+                    self.windows
+                        .iter()
+                        .filter(|w| w.app == app && path(&w.href) == path(href))
+                        .max_by_key(|w| w.z)
+                        .map(|w| w.id.clone())
+                })
+                .flatten()
+        });
+        // Navegar a partir da janela activa da mesma aplicação (a lista das
+        // Notas, a pasta dos Ficheiros, o redireccionamento depois de gravar)
+        // fica nela: o membro está a trabalhar ali. Uma ligação de fora — o
+        // Desktop, a pesquisa, outra aplicação — abre uma janela por recurso.
+        let same = same.or_else(|| {
+            (!force_new && policy == LaunchPolicy::MultiWindow)
+                .then(|| self.active().filter(|w| w.app == app).map(|w| w.id.clone()))
+                .flatten()
+        });
         let reuse = same.or_else(|| {
             let latest = || {
                 self.windows
@@ -631,6 +658,8 @@ mod tests {
     fn varias_janelas_abrem_uma_por_recurso() {
         let mut d = Desk::default();
         let a = d.open(A::Files, "/files", Multi, false).unwrap();
+        // Um recurso vindo de fora da aplicação (aqui, com o Correio à frente).
+        d.open(A::Mail, "/mail", Single, false).unwrap();
         let b = d.open(A::Files, "/files/x", Multi, false).unwrap();
         let again = d.open(A::Files, "/files/x", Multi, false).unwrap();
         let bare = d.open(A::Files, "/files", Multi, false).unwrap();
@@ -640,7 +669,33 @@ mod tests {
         // A rota sem recurso foca a mais recente, que é a de /files (a própria).
         assert_eq!(bare, Opened::Existing(a.id().to_owned()));
         assert!(matches!(new, Opened::New(_)));
-        assert_eq!(d.windows().len(), 3);
+        assert_eq!(d.windows().len(), 4);
+    }
+
+    #[test]
+    fn a_pergunta_e_estado_da_vista_e_fica_na_mesma_janela() {
+        let mut d = Desk::default();
+        let a = d.open(A::Files, "/files", Multi, false).unwrap();
+        let item = d.open(A::Files, "/files?item=f.x", Multi, false).unwrap();
+        let pasta = d
+            .open(A::Files, "/files?folder=d.y&sort=name", Multi, false)
+            .unwrap();
+        assert_eq!(item, Opened::Existing(a.id().to_owned()));
+        assert_eq!(pasta, Opened::Existing(a.id().to_owned()));
+        assert_eq!(d.windows().len(), 1);
+        assert_eq!(d.windows()[0].href, "/files?folder=d.y&sort=name");
+        // Dentro da janela activa das Notas, abrir outra nota fica nela; de
+        // fora (os Ficheiros à frente), outra nota abre outra janela.
+        let nota = d.open(A::Notes, "/notes/n1", Multi, false).unwrap();
+        let na_mesma = d.open(A::Notes, "/notes/n2", Multi, false).unwrap();
+        assert_eq!(na_mesma.id(), nota.id());
+        d.focus(a.id()).unwrap();
+        let de_fora = d.open(A::Notes, "/notes/n3", Multi, false).unwrap();
+        assert_ne!(de_fora.id(), nota.id());
+        assert!(matches!(
+            d.open(A::Files, "/files?item=f.z", Multi, true).unwrap(),
+            Opened::New(_)
+        ));
     }
 
     #[test]
@@ -730,7 +785,8 @@ mod tests {
     fn fechar_limpa_fecha_e_suja_pede_decisao() {
         let mut d = Desk::default();
         let a = d.open(A::Notes, "/notes/1", Multi, false).unwrap();
-        let b = d.open(A::Notes, "/notes/2", Multi, false).unwrap();
+        // Uma segunda janela da mesma aplicação é «Nova janela» (ADR-0620).
+        let b = d.open(A::Notes, "/notes/2", Multi, true).unwrap();
         assert_eq!(d.close(a.id(), None), Ok(Closed::Closed));
         d.report(b.id(), true, false).unwrap();
         assert_eq!(d.close(b.id(), None), Err(WmError::Dirty));
@@ -766,15 +822,15 @@ mod tests {
     fn a_mesa_tem_limite_e_os_identificadores_nao_se_repetem() {
         let mut d = Desk::default();
         for i in 0..MAX_WINDOWS {
-            d.open(A::Files, &format!("/files/{i}"), Multi, false)
+            d.open(A::Files, &format!("/files/{i}"), Multi, true)
                 .unwrap();
         }
         assert_eq!(
-            d.open(A::Files, "/files/mais", Multi, false),
+            d.open(A::Files, "/files/mais", Multi, true),
             Err(WmError::TooMany)
         );
         d.close("w1", None).unwrap();
-        let n = d.open(A::Files, "/files/mais", Multi, false).unwrap();
+        let n = d.open(A::Files, "/files/mais", Multi, true).unwrap();
         assert_eq!(n.id(), format!("w{}", MAX_WINDOWS + 1));
     }
 

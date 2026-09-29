@@ -281,6 +281,7 @@ pub fn dock_label(wm: Option<&WmVm>, app_id: &str, label: &str) -> (String, usiz
 /// Fechar com trabalho por guardar: Guardar · Não guardar · Cancelar.
 /// Só para trabalho por guardar numa aplicação; nunca para operações destrutivas.
 pub fn dirty_close(vm: &DirtyCloseVm) -> impl IntoView {
+    let save_label = vm.save_label.unwrap_or("wm.dirty.save");
     view! {
         <div class="oc-overlay oc-overlay--center" data-open="" data-oc="dirty-close" data-win=vm.window_id.clone() role="alertdialog" aria-modal="true" aria-labelledby="oc-dirty-title" aria-describedby="oc-dirty-body">
             <form class="oc-dialog" method="post" action=format!("/wm/{}/close", vm.window_id)>
@@ -293,9 +294,11 @@ pub fn dirty_close(vm: &DirtyCloseVm) -> impl IntoView {
                     <span class="oc-dialog__spacer"></span>
                     <button type="submit" class="oc-btn-line oc-btn-line--danger" name="decision" value="discard">{t("wm.dirty.discard")}</button>
                     {if vm.can_save {
-                        view! { <button type="submit" class="oc-btn-gold" name="decision" value="save" data-oc="dirty-save">{t("wm.dirty.save")}</button> }.into_any()
+                        // D004 · Com `save_form`, «Guardar» submete o formulário da
+                        // aplicação (o texto que só existe no editor), com `then=close`.
+                        view! { <button type="submit" class="oc-btn-gold" name=if vm.save_form.is_some() { "then" } else { "decision" } value=if vm.save_form.is_some() { "close" } else { "save" } form=vm.save_form.clone() data-oc="dirty-save">{t(save_label)}</button> }.into_any()
                     } else {
-                        view! { <button type="button" class="oc-btn-gold" aria-disabled="true" aria-describedby="oc-dirty-nosave">{t("wm.dirty.save")}</button> }.into_any()
+                        view! { <button type="button" class="oc-btn-gold" aria-disabled="true" aria-describedby="oc-dirty-nosave">{t(save_label)}</button> }.into_any()
                     }}
                 </div>
             </form>
@@ -602,6 +605,8 @@ pub(crate) mod tests {
             window_id: "b".into(),
             title: "Notas".into(),
             can_save: true,
+            save_label: None,
+            save_form: None,
         })
         .to_html();
         assert_contracts(&html);
@@ -615,6 +620,8 @@ pub(crate) mod tests {
             window_id: "b".into(),
             title: "Notas".into(),
             can_save: false,
+            save_label: None,
+            save_form: None,
         })
         .to_html();
         assert!(!no.contains(r#"value="save""#) && no.contains(t("wm.dirty.cannot_save")));

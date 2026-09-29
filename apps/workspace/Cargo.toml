@@ -55,3 +55,6 @@ data-encoding = { workspace = true }
 # socket nenhum. É a peça mínima que prova que `ROUTES` descreve o servidor que
 # a aplicação constrói, e não o servidor que julgamos ter construído.
 tower = { workspace = true }
+# A soma SHA-256 das partes e do ficheiro inteiro, nas viagens do envio por
+# partes de Ficheiros (D004): o mesmo protocolo que o motor do browser segue.
+sha2 = { workspace = true }

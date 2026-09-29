@@ -372,7 +372,9 @@ async fn as_aplicacoes_sem_ecra_sao_janelas_honestas_e_as_fechadas_nao_existem()
     // D002: uma aplicação abre numa janela gerida, com o estado `app_pending`
     // dentro (HANDOFF D002 · «app_pending now lives inside the managed
     // window»); uma página que não é aplicação continua a janela D001.
-    for rota in ["/notes", "/files", "/my-work", "/calendar", "/help"] {
+    // D004: Notas, Ficheiros, Calendário e Correio têm o ecrã do Design
+    // (`d004_journeys.rs`); as outras continuam `app_pending`.
+    for rota in ["/my-work", "/help"] {
         let (status, html) = s.html(rota, &cookie).await;
         assert_eq!(status, 200, "{rota}");
         assert!(

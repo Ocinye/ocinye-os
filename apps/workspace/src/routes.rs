@@ -267,8 +267,10 @@ pub fn router(state: WorkspaceState) -> Router {
         )
         .route("/messages/{conversation}/leave", post(messaging_leave))
         .route("/messages/{conversation}/remove", post(messaging_remove))
-        .route("/mail", get(mail))
-        .route("/mail/compose", get(compose))
+        .route("/mail", get(productivity::mail_page))
+        .route("/mail/compose", get(productivity::mail_compose_page))
+        .route("/mail/compose/save", post(productivity::mail_compose_save))
+        .route("/mail/compose/send", post(productivity::mail_compose_send))
         .route("/mail/people", get(mail_people))
         .route("/mail/assist", post(assist))
         .route("/mail/send", post(send_mail))
@@ -294,7 +296,14 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/mail/connect", post(mail_connect_own))
         .route("/mail/{mailbox_id}/connect", post(mail_connect))
         .route("/mail/{mailbox_id}/disconnect", post(mail_disconnect))
-        .route("/mail/message/{message_id}", get(mail_message))
+        .route(
+            "/mail/message/{message_id}",
+            get(productivity::mail_message_page),
+        )
+        .route(
+            "/mail/message/{message_id}/op",
+            post(productivity::mail_message_op),
+        )
         .route("/mail/message/{message_id}/flags", post(mail_flags))
         // Declarada depois das anteriores: `/mail/compose` tem de bater na
         // rota literal, não em `{mailbox_id}`.
@@ -322,19 +331,22 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/units/{unit_id}/members/role", post(unit_member_role))
         .route("/units/{unit_id}/members/remove", post(unit_member_remove))
         .route("/ideas", get(ideas))
-        .route("/calendar", get(calendar_page))
+        .route("/calendar", get(productivity::calendar_page))
         .route(
             "/calendar/events/new",
-            get(new_event_form).post(create_calendar_event),
+            get(productivity::new_event_form).post(productivity::create_calendar_event),
         )
-        .route("/calendar/events/{event_id}", get(event_detail_page))
+        .route(
+            "/calendar/events/{event_id}",
+            get(productivity::event_detail_page),
+        )
         .route(
             "/calendar/events/{event_id}/edit",
-            get(edit_event_form).post(update_calendar_event),
+            get(productivity::edit_event_form).post(productivity::update_calendar_event),
         )
         .route(
             "/calendar/events/{event_id}/cancel",
-            post(cancel_calendar_event),
+            post(productivity::cancel_calendar_event),
         )
         .route("/notifications", get(notifications_page))
         .route("/notifications/recent", get(notifications_recent))
@@ -345,24 +357,29 @@ pub fn router(state: WorkspaceState) -> Router {
         )
         // Notas pessoais. A criação e a lista partilham o caminho: `GET /notes`
         // mostra as notas, `POST /notes` cria uma e leva o membro ao editor.
-        .route("/notes", get(notes_list).post(create_personal_note))
+        .route(
+            "/notes",
+            get(productivity::notes_list).post(create_personal_note),
+        )
         // A criação a partir do «+ Criar» global tem o seu próprio caminho: o
         // formulário do menu vive na barra de topo de todas as páginas, e um
         // `action="/notes"` colidiria, no DOM, com o formulário de criação da
         // própria lista de Notas. Mesmo efeito, caminho distinto.
         .route("/notes/new", post(create_personal_note))
         // As notas que outra pessoa partilhou com o membro — a vista de leitura.
-        .route("/notes/partilhadas", get(shared_notes_page))
+        .route("/notes/partilhadas", get(productivity::shared_notes_page))
         // O Lixo: as notas apagadas, de onde se restauram ou se eliminam de vez.
-        .route("/notes/lixo", get(notes_trash_page))
-        .route("/notes/{note_id}", get(note_editor))
+        .route("/notes/lixo", get(productivity::notes_trash_page))
+        .route("/notes/{note_id}", get(productivity::note_editor))
         // Apagar (leva ao Lixo), restaurar e eliminar definitivamente — do dono.
         .route("/notes/{note_id}/apagar", post(delete_note_route))
         .route("/notes/{note_id}/restaurar", post(restore_note_route))
         .route("/notes/{note_id}/eliminar", post(purge_note_route))
-        // O autosave: um POST em JSON, respondido em JSON (não uma página). A
-        // fronteira same-origin protege-o como a qualquer outra escrita.
-        .route("/notes/{note_id}/gravar", post(save_personal_note))
+        // Gravar (D004): o formulário do editor, com a revisão em que abriu.
+        .route(
+            "/notes/{note_id}/gravar",
+            post(productivity::save_personal_note),
+        )
         // Mover uma nota para uma pasta: fetch em JSON, do editor.
         .route("/notes/{note_id}/mover", post(move_personal_note))
         // Partilha: conceder acesso a uma pessoa e revogá-lo. Formulários, do
@@ -492,7 +509,9 @@ pub fn router(state: WorkspaceState) -> Router {
             get(bibliography_tools).post(review_bibliography),
         )
         .route("/datasets", get(datasets))
-        .route("/files", get(files_browse))
+        .route("/files", get(productivity::files_page))
+        .route("/files/selection", post(productivity::files_selection))
+        .route("/files/{file_id}/rename", post(productivity::files_rename))
         .route("/files/uploads", post(upload_begin))
         .route("/files/personal-upload", post(upload_begin_personal))
         .route("/files/upload-preflight", post(upload_preflight))
@@ -516,7 +535,7 @@ pub fn router(state: WorkspaceState) -> Router {
             "/files/upload",
             post(files_upload).layer(DefaultBodyLimit::max(FILE_BODY_LIMIT_BYTES)),
         )
-        .route("/files/folder", post(files_new_folder))
+        .route("/files/folder", post(productivity::files_new_folder))
         .route("/files/{file_id}", get(file_detail))
         .route(
             "/files/{file_id}/version",
@@ -1436,7 +1455,12 @@ fn shell_page(
         // (D002_CONTRACT_GAP em CODE_FEEDBACK): entra no fim do `<head>`, com
         // `defer`, depois do `oc-wm.js` de que depende.
         if let Some(at) = page.find("</head>") {
-            page.insert_str(at, r#"<script src="/static/wm-engine.js" defer></script>"#);
+            // D004: o motor de envio e de mover de Ficheiros, também de Code; só
+            // age quando a aplicação Ficheiros está na página.
+            page.insert_str(
+                at,
+                r#"<script src="/static/wm-engine.js" defer></script><script src="/static/files-engine.js" defer></script>"#,
+            );
         }
     }
     Html(page).into_response()
@@ -1882,19 +1906,9 @@ async fn mail_sync(
     .into_response()
 }
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn mail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Mail).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn mail_mailbox(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Mail).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn mail_message(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Mail).await
+/// `GET /mail/{id}`: a caixa, na aplicação Correio (D004).
+async fn mail_mailbox(Path(mailbox_id): Path<Uuid>) -> Response {
+    Redirect::to(&format!("/mail?box={mailbox_id}")).into_response()
 }
 
 #[derive(Deserialize)]
@@ -1943,11 +1957,6 @@ async fn mail_flags(
         Ok(_) | Err(ApiFailure::Denied) => Redirect::to(&destino).into_response(),
         Err(failure) => failure_response(&failure),
     }
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn compose(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Mail).await
 }
 
 /// O formulário do composer, tal como chega das duas rotas que o submetem.
@@ -4002,6 +4011,11 @@ struct NyeAppQuery {
     /// Modo de voz.
     #[serde(default)]
     voice: Option<String>,
+    /// D004 · A referência tipada de uma aplicação (`note:<id>`, `event:<id>`,
+    /// `file:<id>`, `message:<id>`). Só contexto: relê-se com a sessão do
+    /// membro, e o que ele não pode ver não aparece.
+    #[serde(default)]
+    r#ref: Option<String>,
 }
 
 /// `GET /ai/prompt` (D003 · FG-D3-41): a aplicação Nye, numa janela gerida de
@@ -4098,7 +4112,15 @@ async fn prompt(
         conversations,
         conv_query: query.cq.clone().unwrap_or_default(),
         current,
-        composer: controllers::nye::composer(open_id, availability.ask),
+        composer: {
+            let mut c = controllers::nye::composer(open_id, availability.ask);
+            if let Some(about) =
+                productivity::nye_reference(&state, &member, query.r#ref.as_deref()).await
+            {
+                c.text = about;
+            }
+            c
+        },
         voice: (query.voice.as_deref() == Some("1")).then(|| NyeVoiceVm {
             state: match availability.voice_input {
                 ui::view_models::NyeAvail::Available => NyeVoiceState::Idle,
@@ -5724,11 +5746,6 @@ async fn create_idea(
 
 // ── Notas pessoais ───────────────────────────────────────────────────────
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn notes_list(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Notes).await
-}
-
 /// Cria uma nota vazia e leva o membro ao editor dela.
 ///
 /// Uma nota nova nasce com um título neutro e um documento vazio; o membro
@@ -5759,11 +5776,6 @@ async fn create_personal_note(State(state): State<WorkspaceState>, headers: Head
         }
         Err(failure) => failure_response(&failure),
     }
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn note_editor(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Notes).await
 }
 
 /// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
@@ -5800,16 +5812,6 @@ async fn restore_note_revision_route(
     )
     .await;
     Redirect::to(&format!("/notes/{note_id}")).into_response()
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn shared_notes_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Notes).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn notes_trash_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Notes).await
 }
 
 /// Apaga uma nota (leva-a ao Lixo) e volta à lista. Do dono; o Core recusa a
@@ -5908,52 +5910,6 @@ async fn revoke_note_share_route(
     )
     .await;
     Redirect::to(&format!("/notes/{note_id}")).into_response()
-}
-
-/// O autosave de uma nota — em JSON, para o editor no browser.
-///
-/// Devolve `{revision}` a 200 quando o Core confirma, e responde `409` ao
-/// conflito de revisão base e `502` a uma avaria — sem redirecção. Isto é
-/// deliberado: um `fetch` segue uma redirecção em silêncio, e um 3xx para o
-/// login virava uma página 200 que o editor leria como «Guardado». Uma sessão
-/// que já não serve falha aqui fechada, com `401`, e o editor mantém o conteúdo
-/// (ADR-0413 §7). O Core valida tudo — dono, documento, revisão —, e o BFF é só
-/// o canal.
-async fn save_personal_note(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(note_id): Path<Uuid>,
-    axum::Json(body): axum::Json<Value>,
-) -> Response {
-    // Resolução manual, sem a macro: uma sessão anómala responde 401, nunca uma
-    // redirecção que o editor confundiria com sucesso.
-    let member = match current_member(&state, &headers) {
-        Some(member) if !member.session.must_change_password && !member.session.mfa_required => {
-            member
-        }
-        _ => return StatusCode::UNAUTHORIZED.into_response(),
-    };
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/me/notes/{note_id}"),
-        &body,
-    )
-    .await
-    {
-        Ok(updated) => {
-            let revision = updated
-                .get("revision")
-                .and_then(Value::as_i64)
-                .unwrap_or_default();
-            axum::Json(serde_json::json!({ "revision": revision })).into_response()
-        }
-        Err(ApiFailure::Unauthorised) => StatusCode::UNAUTHORIZED.into_response(),
-        Err(ApiFailure::Conflict(_)) => StatusCode::CONFLICT.into_response(),
-        Err(_) => StatusCode::BAD_GATEWAY.into_response(),
-    }
 }
 
 /// Carrega uma imagem para uma nota — fetch, respondido em JSON.
@@ -7349,206 +7305,6 @@ mod router_tests {
 // que ele devolveu. Nenhuma das quatro vistas consulta nada por si — recebem
 // todas o mesmo conjunto autorizado (ADR-0410).
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn calendar_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Calendar).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn new_event_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Calendar).await
-}
-
-/// O que o formulário envia.
-///
-/// # Porque a hora vem sem zona
-///
-/// Porque a zona vem no seu próprio campo, e é o Core que junta as duas para
-/// calcular o instante. Enviar um instante já convertido daria ao browser o
-/// direito de decidir o que significa «14:00 em Paris».
-#[derive(Deserialize)]
-struct EventForm {
-    title: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    location: String,
-    #[serde(default)]
-    all_day: Option<String>,
-    #[serde(default)]
-    starts_at: String,
-    #[serde(default)]
-    ends_at: String,
-    #[serde(default)]
-    timezone: String,
-    #[serde(default)]
-    starts_on: String,
-    #[serde(default)]
-    ends_on: String,
-    #[serde(default)]
-    scope: String,
-    #[serde(default)]
-    unit_id: String,
-    #[serde(default)]
-    workspace_id: String,
-}
-
-impl EventForm {
-    /// A ocorrência, como o Core a espera.
-    ///
-    /// O último dia que a pessoa escreve é **inclusivo**; a base guarda o dia
-    /// seguinte, exclusivo. A conversão é nossa: ninguém deve ter de saber que
-    /// um evento de 24 de Agosto se guarda como `24 → 25`.
-    fn occurrence(&self) -> Result<Value, String> {
-        if self.all_day.is_some() {
-            let inicio = chrono::NaiveDate::parse_from_str(&self.starts_on, "%Y-%m-%d")
-                .map_err(|_| "Indique o primeiro dia.".to_owned())?;
-            let ultimo =
-                chrono::NaiveDate::parse_from_str(&self.ends_on, "%Y-%m-%d").unwrap_or(inicio);
-            let fim = ultimo
-                .succ_opt()
-                .ok_or_else(|| "A data de fim não é válida.".to_owned())?;
-            Ok(serde_json::json!({
-                "kind": "all_day",
-                "starts_on": inicio,
-                "ends_before": fim,
-            }))
-        } else {
-            let limpar = |valor: &str| valor.trim().to_owned();
-            if limpar(&self.starts_at).is_empty() || limpar(&self.ends_at).is_empty() {
-                return Err("Indique a hora de início e de fim.".to_owned());
-            }
-            Ok(serde_json::json!({
-                "kind": "timed",
-                "starts_at": format!("{}:00", limpar(&self.starts_at)),
-                "ends_at": format!("{}:00", limpar(&self.ends_at)),
-                "timezone": if self.timezone.trim().is_empty() {
-                    "UTC".to_owned()
-                } else {
-                    limpar(&self.timezone)
-                },
-            }))
-        }
-    }
-}
-
-async fn create_calendar_event(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<EventForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let ocorrencia = match form.occurrence() {
-        Ok(valor) => valor,
-        Err(_) => return (StatusCode::UNPROCESSABLE_ENTITY, "rejected").into_response(),
-    };
-
-    let mut body = serde_json::json!({
-        "scope": if form.scope.is_empty() { "personal" } else { &form.scope },
-        "title": form.title,
-        "description": blank_to_none(form.description.clone()),
-        "location": blank_to_none(form.location.clone()),
-        "occurrence": ocorrencia,
-    });
-    if !form.unit_id.is_empty() && form.scope == "unit" {
-        body["unit_id"] = Value::String(form.unit_id.clone());
-    }
-    if !form.workspace_id.is_empty() && form.scope == "research_workspace" {
-        body["workspace_id"] = Value::String(form.workspace_id.clone());
-    }
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/calendar/events",
-        &body,
-    )
-    .await
-    {
-        Ok(criado) => {
-            let id = criado
-                .get("id")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned();
-            Redirect::to(&format!("/calendar/events/{id}")).into_response()
-        }
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        // A mensagem é a do Core, e não uma genérica: uma hora que não existe
-        // por causa da mudança de hora tem de ser dita com essas palavras.
-        Err(falha) => failure_response(&falha),
-    }
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn event_detail_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Calendar).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn edit_event_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Calendar).await
-}
-
-async fn update_calendar_event(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(event_id): Path<Uuid>,
-    Form(form): Form<EventForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    // Só o que `EventEdit` aceita. O âmbito, o dono, o contentor e a
-    // classificação não vão daqui porque a operação não os muda — e oferecer o
-    // campo daria a entender que o pedido faria alguma coisa.
-    let mut body = serde_json::json!({
-        "title": form.title,
-        "description": blank_to_none(form.description.clone()),
-        "location": blank_to_none(form.location.clone()),
-    });
-    if let Ok(ocorrencia) = form.occurrence() {
-        body["occurrence"] = ocorrencia;
-    }
-
-    match api::patch(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/calendar/events/{event_id}"),
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&format!("/calendar/events/{event_id}")).into_response(),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(falha) => failure_response(&falha),
-    }
-}
-
-async fn cancel_calendar_event(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(event_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/calendar/events/{event_id}/cancel"),
-        &serde_json::json!({}),
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&format!("/calendar/events/{event_id}")).into_response(),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(falha) => failure_response(&falha),
-    }
-}
-
 /// As notificações recentes, para o painel do sino.
 ///
 /// # Porque uma rota própria e não a página
@@ -7640,11 +7396,6 @@ async fn mark_notification_read(
 ///
 /// O mesmo limite do Core, mais o envelope multipart.
 const FILE_BODY_LIMIT_BYTES: usize = 640 * 1024 * 1024 + 64 * 1024;
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn files_browse(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Files).await
-}
 
 /// Lê o ficheiro e os campos de um multipart.
 async fn ler_carregamento(
@@ -8141,55 +7892,6 @@ fn recusa_de_carregamento(
         (estado, axum::Json(serde_json::json!({ "erro": erro }))).into_response()
     } else {
         regresso(campos, &format!("erro={erro}"))
-    }
-}
-
-#[derive(Deserialize)]
-struct NewFolderForm {
-    workspace_id: Uuid,
-    #[serde(default)]
-    parent_id: String,
-    name: String,
-    #[serde(default)]
-    return_to: String,
-}
-
-/// Cria uma pasta.
-async fn files_new_folder(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<NewFolderForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let mut campos = std::collections::HashMap::new();
-    campos.insert("return_to".to_owned(), form.return_to);
-
-    if form.name.trim().is_empty() {
-        return regresso(&campos, "erro=nome");
-    }
-
-    let mut corpo = serde_json::json!({ "name": form.name.trim() });
-    if let Ok(pai) = Uuid::parse_str(&form.parent_id) {
-        corpo["parent_id"] = serde_json::json!(pai);
-    }
-
-    let workspace_id = form.workspace_id;
-    let resultado = api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/workspaces/{workspace_id}/folders"),
-        &corpo,
-    )
-    .await;
-
-    match resultado {
-        Ok(_) => regresso(&campos, "ok=pasta"),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        // Um nome repetido entre irmãs é a recusa mais provável, e a mensagem
-        // di-lo em vez de falar de restrições da base.
-        Err(_) => regresso(&campos, "erro=nome"),
     }
 }
 
@@ -9177,3 +8879,6 @@ mod carregamento_tests {
         );
     }
 }
+
+// D004 · As aplicações de produtividade. Declarado no fim: usa `member_or_login!`.
+mod productivity;

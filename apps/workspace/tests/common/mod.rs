@@ -81,7 +81,7 @@ pub fn core_state_with(
         config: Arc::new(config),
         verifier,
         authenticator,
-        store: None,
+        store: armazenamento(),
         embeddings: None,
         inference,
         mail_registry,
@@ -92,6 +92,28 @@ pub fn core_state_with(
         ),
         organisation_id,
     }
+}
+
+/// O armazenamento de objectos de teste (Garage), quando o ambiente o dá.
+/// Sem ele, o Core não tem onde guardar bytes, como numa instalação sem
+/// armazenamento; as viagens que precisam dele dizem que saltaram.
+///
+/// Sem tecto fixo de envio: o do Core por omissão (5 TiB), para que a prova do
+/// envio por partes não assente num limite que a aplicação não tem.
+pub fn armazenamento() -> Option<Arc<ocinye_core::storage::ObjectStore>> {
+    ocinye_core::storage::ObjectStore::new(ocinye_core::config::StorageConfig {
+        endpoint_url: std::env::var("OCINYE_TEST_STORAGE_ENDPOINT").ok()?,
+        region: "us-east-1".to_owned(),
+        access_key: std::env::var("OCINYE_TEST_STORAGE_ACCESS_KEY").ok()?,
+        secret_key: std::env::var("OCINYE_TEST_STORAGE_SECRET_KEY").ok()?,
+        bucket: std::env::var("OCINYE_TEST_STORAGE_BUCKET")
+            .unwrap_or_else(|_| "ocinye-test-artifacts".to_owned()),
+        backend_code: "ocinye-test-default".to_owned(),
+        location_label: "test".to_owned(),
+        residency: ocinye_contracts::storage::Residency::Undeclared,
+        max_upload_bytes: 5 * 1024 * 1024 * 1024 * 1024,
+    })
+    .map(Arc::new)
 }
 
 /// Esta instalação não tem correio: a sonda nunca é chamada.

@@ -104,6 +104,11 @@ struct TemporalItemView {
     ends_before: Option<NaiveDate>,
     state: String,
     classification: String,
+    /// O âmbito de um evento (dá o tom no calendário); ausente num prazo.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scope: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    location: Option<String>,
 }
 
 impl From<calendar::TemporalItem> for TemporalItemView {
@@ -140,6 +145,8 @@ impl From<calendar::TemporalItem> for TemporalItemView {
             ends_before,
             state: item.state,
             classification: item.classification.as_str().to_owned(),
+            scope: item.scope,
+            location: item.location,
         }
     }
 }
