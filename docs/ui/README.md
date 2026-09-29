@@ -9,7 +9,11 @@ IA, perguntar e agir dizem porquê não estão, e a voz está indisponível.
 **A D004 — Ficheiros, Notas, Calendário e Correio —, com o fecho responsivo e
 de acessibilidade da D004.1, está no ramo `feat/design-d004`, por fazer merge**
 ([ADR-0620](../adrs/0620-productivity-apps-in-managed-windows.md)); os defeitos
-e as faltas do Design estão no topo do [`CODE_FEEDBACK.md`](CODE_FEEDBACK.md).
+e as faltas do Design estão no [`CODE_FEEDBACK.md`](CODE_FEEDBACK.md).
+**A D005 — Projectos, O Meu Trabalho, Ideias, Dados e Conhecimento — está no
+ramo `feat/design-d005`, feito sobre o da D004 e por fazer merge depois dela**
+([ADR-0621](../adrs/0621-research-apps-typed-relations-and-deep-links.md)); a
+secção dela está no topo do `CODE_FEEDBACK.md`.
 O código de interface é do Design e está fechado
 ([`DESIGN_LOCK.md`](DESIGN_LOCK.md)); o contrato detalhado de rotas e
 ViewModels está em [`HANDOFF.md`](HANDOFF.md).
@@ -27,7 +31,10 @@ ViewModels está em [`HANDOFF.md`](HANDOFF.md).
   conversas do próprio membro. Da D004 (no ramo): os quatro ecrãs como corpos
   de janela, o motor de envio de ficheiros (Code), o Markdown restrito das
   Notas, o fuso do membro no Calendário e o rascunho que sobrevive a um envio
-  falhado.
+  falhado. Da D005 (no ramo): os cinco ecrãs de investigação e trabalho como
+  corpos de janela, com relações lidas pela linhagem (as duas pontas
+  autorizadas), um endereço canónico por recurso, transições só do Core e
+  referências tipadas para o Nye.
 - **Registo da integração:** [`design-integration.json`](design-integration.json).
 - **O que o Design precisa de saber:** [`CODE_FEEDBACK.md`](CODE_FEEDBACK.md).
 - **Referência visual (só referência):** `design/claude-design/reference/`.
