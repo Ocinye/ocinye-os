@@ -247,11 +247,22 @@ async fn as_conversas_sao_do_membro_e_continuam() {
     };
     let (_, c, _) = membro(&s).await;
     let (_, outro, _) = membro(&s).await;
+    // O campo é o que o compositor da página envia, e não um nome que o
+    // teste escolha: um nome diferente do do Design passava aqui e falhava no
+    // browser.
+    let (_, app) = s.html("/ai/prompt", &c).await;
+    let form = &app[app.find(r#"data-oc="nye-composer""#).expect("compositor")..];
+    let campo = form[form.find("<textarea").expect("campo")..]
+        .split("name=\"")
+        .nth(1)
+        .and_then(|r| r.split('"').next())
+        .expect("nome do campo")
+        .to_owned();
     // Criar: o pedido vai ao Core, que o guarda na conversa (com a conclusão
     // degradada, porque não há inferência).
     let r = s
         .escrever(reqwest::Method::POST, "/ai/prompt", &c)
-        .form(&[("prompt", "Qual é o estado do projecto Solander?")])
+        .form(&[(campo.as_str(), "Qual é o estado do projecto Solander?")])
         .send()
         .await
         .unwrap();
@@ -262,7 +273,7 @@ async fn as_conversas_sao_do_membro_e_continuam() {
     // Continuar na mesma conversa.
     let r = s
         .escrever(reqwest::Method::POST, &destino, &c)
-        .form(&[("prompt", "E das tarefas?")])
+        .form(&[(campo.as_str(), "E das tarefas?")])
         .send()
         .await
         .unwrap();

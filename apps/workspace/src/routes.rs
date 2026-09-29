@@ -4135,11 +4135,11 @@ async fn prompt(
     shell_page(&title, engine, body, None)
 }
 
-/// O pedido escrito na Nye.
+/// O pedido escrito na Nye: o campo `q` do compositor do Design.
 #[derive(Deserialize)]
 struct PromptForm {
     #[serde(default)]
-    prompt: String,
+    q: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -4162,8 +4162,8 @@ async fn submit_prompt(
         .c
         .map_or_else(|| "/ai/prompt".to_owned(), |c| format!("/ai/prompt?c={c}"));
     // Um pedido vazio não é um turno: nada foi pedido, e nada vai ao Core.
-    if !form.prompt.trim().is_empty() {
-        let mut body = serde_json::json!({ "prompt": form.prompt });
+    if !form.q.trim().is_empty() {
+        let mut body = serde_json::json!({ "prompt": form.q });
         if let Some(c) = query.c {
             body["conversation_id"] = Value::String(c.to_string());
         }
