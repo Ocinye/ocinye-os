@@ -183,16 +183,28 @@ async fn minimizar_restaurar_maximizar_encaixar_e_fechar() {
     let (notas, trabalho) = (ids(&v)[0].clone(), ids(&v)[1].clone());
     assert_eq!(activa(&v), trabalho, "a última aberta é a activa");
 
-    // 4 · Minimizar: vai para a prateleira, e o foco passa à seguinte.
+    // 4 · Minimizar: o foco passa à seguinte, e a janela continua ao alcance —
+    // na barra de aplicações e no alternador (D003: já não há prateleira).
     let (status, v) = operar(&s, &c, &trabalho, &[("op", "minimize")]).await;
     assert_eq!(status, 200);
     assert_eq!(janela(&v, &trabalho)["state"], "minimized");
     assert_eq!(activa(&v), notas);
     assert_eq!(v["href"], "/notes", "o endereço segue a janela activa");
     let (_, html) = s.html("/notes", &c).await;
+    assert!(!html.contains("oc-shelf"), "a prateleira voltou");
     assert!(
-        html.contains(&format!(r#"data-win="{trabalho}" data-state="minimized""#)),
-        "a prateleira não mostra a minimizada"
+        html.contains(&format!(
+            r#"data-oc="wm-focus" data-win="{trabalho}" data-part="switcher-item""#
+        )),
+        "o alternador não mostra a minimizada"
+    );
+    let app = janela(&v, &trabalho)["app_id"]
+        .as_str()
+        .expect("aplicação")
+        .to_owned();
+    assert!(
+        html.contains(&format!(r#"data-app="{app}" data-windows="1""#)),
+        "a barra de aplicações não diz que a minimizada está aberta"
     );
 
     // 5 · Restaurar: volta, à frente e activa.
@@ -767,8 +779,9 @@ fn abaixo_de_1100px_as_janelas_estao_sempre_maximizadas_e_sem_gestos() {
 
 #[test]
 fn ate_640px_ha_uma_aplicacao_activa_em_ecra_cheio() {
-    // 17 · Uma superfície de cada vez, «Voltar ao Desktop», o alternador, e
-    // sem prateleira; o estado das janelas é o mesmo, só a apresentação muda.
+    // 17 · Uma superfície de cada vez, «Voltar ao Desktop» e o alternador; o
+    // estado das janelas é o mesmo, só a apresentação muda. (Desde a D003 não
+    // há prateleira em nenhuma largura.)
     let mobile = WM_CSS
         .split("@media (max-width: 640px) {")
         .nth(1)
@@ -779,7 +792,7 @@ fn ate_640px_ha_uma_aplicacao_activa_em_ecra_cheio() {
     assert!(mobile.contains(
         ".oc-win__back, .oc-win__switch { display: inline-flex; width: 44px; height: 44px; }"
     ));
-    assert!(mobile.contains(".oc-shelf { display: none; }"));
+    assert!(!WM_CSS.contains(".oc-shelf"), "a prateleira voltou ao CSS");
 }
 
 #[test]

@@ -242,8 +242,24 @@ fn top_bar(vm: &ShellVm) -> impl IntoView {
     }
 }
 
+/// A barra de aplicações. D003 · É o único sítio onde as janelas abertas
+/// aparecem (não há prateleira em baixo): primeiro as fixadas; depois, a seguir
+/// a um separador, as aplicações em execução que não estão fixadas (Nye, …),
+/// pela ordem do registo. Fechada a última janela, a não fixada desaparece.
 fn dock(vm: &ShellVm) -> impl IntoView {
+    let running = |id: &str| {
+        vm.wm
+            .as_ref()
+            .is_some_and(|wm| wm.windows.iter().any(|w| w.app_id == id))
+    };
     let pinned: Vec<_> = vm.apps.iter().filter(|a| a.pinned).cloned().collect();
+    let extra: Vec<_> = vm
+        .apps
+        .iter()
+        .filter(|a| !a.pinned && running(a.id))
+        .cloned()
+        .collect();
+    let has_extra = !extra.is_empty();
     view! {
         <nav class="oc-dock" data-oc="dock" aria-label=t("shell.dock")>
             <a class="oc-dock__btn" href="/" aria-label=t("shell.dock.home") aria-current=vm.apps.iter().any(|a| a.active && a.href == "/").then_some("page")>{icon("home")}</a>
@@ -264,6 +280,27 @@ fn dock(vm: &ShellVm) -> impl IntoView {
                         data-oc=(n > 0).then_some("dock-app")
                         data-app=a.id
                         data-windows=(n > 0).then(|| n.to_string())
+                    >
+                        {icon(app_icon(a.href))}
+                        {run}
+                    </a>
+                }
+            }).collect_view()}
+            {has_extra.then(|| view! { <span class="oc-dock__sep" data-part="dock-running" aria-hidden="true"></span> })}
+            {extra.into_iter().map(|a| {
+                let (label, n) = wm::dock_label(vm.wm.as_ref(), a.id, &a.label);
+                let run = wm::dock_run(vm.wm.as_ref(), a.id);
+                view! {
+                    <a
+                        class="oc-dock__btn"
+                        href=a.href
+                        aria-label=label.clone()
+                        title=label
+                        aria-current=a.active.then_some("page")
+                        data-oc="dock-app"
+                        data-app=a.id
+                        data-windows=n.to_string()
+                        data-running=""
                     >
                         {icon(app_icon(a.href))}
                         {run}
@@ -656,5 +693,9 @@ pub(crate) mod tests {
             "Nye fora do .oc-desk, antes do alternador"
         );
         assert!(html.contains(r#"aria-describedby="oc-voice-pending""#));
+        assert!(
+            !html.contains("oc-shelf"),
+            "sem prateleira: janelas só na barra de aplicações"
+        );
     }
 }

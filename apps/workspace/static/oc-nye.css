@@ -323,7 +323,7 @@ a.oc-nye-src__link:hover { background: var(--oc-muted); text-decoration: none; c
 }
 
 /* ── D · voz ────────────────────────────────────────────────────────── */
-.oc-nye-voice { max-width: 520px; margin: 0 auto; padding: 5vh 24px 24px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+.oc-nye-voice { max-width: 520px; margin: 0 auto; padding: clamp(16px, 4vh, 40px) 24px 24px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
 .oc-nye-voice__rec { margin: 0; display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border-radius: 14px; background: var(--oc-muted); font-size: 12.5px; color: var(--oc-ink-2); }
 .oc-nye-voice__dot { width: 8px; height: 8px; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 1.5px var(--oc-ink-4); }
 .oc-nye-voice__rec[data-on] { background: #FCF0EF; color: #8C2019; font-weight: 500; }
@@ -360,6 +360,11 @@ a.oc-nye-src__link:hover { background: var(--oc-muted); text-decoration: none; c
   .oc-nye-hit { min-height: 48px; }
 }
 
+@media (max-height: 760px) {
+  .oc-nye-ptt__ring { width: 88px; height: 88px; }
+  .oc-nye-ptt__ring .oc-icon { width: 30px; height: 30px; }
+  .oc-nye-voice { gap: 10px; }
+}
 @media (max-height: 600px) {
   .oc-nye-kv[data-long] dd { max-height: 96px; }
   .oc-dialog.oc-nye-confirm { padding: 18px 20px 16px; gap: 8px; }

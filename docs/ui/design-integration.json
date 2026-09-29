@@ -27,7 +27,15 @@
     ],
     "reference_added": "design/claude-design/reference/d003/ (fixture, REFERENCE_ONLY)",
     "compile_fixes": "4 use-after-move inside view! in ui/nye/mod.rs (id clones, selected by value); i18n group wiring (mod ui_nye, GROUPS); no visual change",
-    "unexpected_diffs": "NONE"
+    "unexpected_diffs": "NONE",
+    "revision_2": {
+      "path": "ocinye-design-complete-D003 2",
+      "checksums": "183/183 OK (sha256)",
+      "application_method": "package delta (old D003 -> D003 2) applied: ui/shell/mod.rs by patch over the formatted tree; ui/wm/mod.rs, oc-nye.css, oc-nye.js, oc-wm.css copied (identical to the first package in the tree); HANDOFF, DESIGN_LOCK and the d003 fixture copied",
+      "change": "D002_COMPONENT_EXTENSION: shelf removed; open windows only in the app bar (pinned keep the running dot; unpinned running apps after a separator, gone with their last window; several windows -> chooser); maximised windows take the full height; voice screen: only the log scrolls to the end, smaller circle on short screens",
+      "tests_changed": "d002_journeys: minimised window reachable from the switcher and the app bar (was: the shelf), no shelf in the CSS at any width; proven by reversion",
+      "browser": "924: no shelf, Nye after the separator with the running dot, maximised window 818x474 (was 414 high), voice status visible at the top; 390: no horizontal scroll; closing the last Nye window removes it and the separator; Ficheiros with 2 windows -> «2 janelas abertas» and the chooser lists both"
+    }
   },
   "phase_a": "nye: None with the D003 package applied: d002_d001_equivalence 2/2 (oc-nye asset tags declared as additions), d001/d002 journeys green",
   "view_model_changes": "ADDITIVE (Design): ShellVm.nye and the Nye* view models",
@@ -870,7 +878,7 @@
     ],
     "notes": [
       "units and ideas grouped under «Outros» (no Unit/Idea kind in the Design vocabulary)",
-      "voice panel at 924x540 with the availability banner opens scrolled to the end, the unavailable status above the fold"
+      "voice panel scrolling fixed by D003 2"
     ]
   },
   "accessibility": {

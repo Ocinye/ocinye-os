@@ -127,7 +127,8 @@
     const live = app.querySelector('[data-part="nye-live"]');
     $$('[data-oc="nye-stream"]', app).forEach((b) => stream(b, live));
     const sc = app.querySelector('[data-part="nye-scroll"]');
-    if (sc) sc.scrollTop = sc.scrollHeight;
+    // Só a conversa desce até à última mensagem; a voz e o início ficam no topo.
+    if (sc && sc.querySelector('.oc-nye-log')) sc.scrollTop = sc.scrollHeight;
   });
   $$('[data-oc="palette"] [data-oc="nye-stream"]').forEach((b) => stream(b, null));
 

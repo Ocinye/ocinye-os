@@ -1,3 +1,16 @@
+# HANDOFF — Ocinye OS canonical UI · Design revision D003
+
+### D003 · Prateleira removida (decisão do membro, 29 set)
+A prateleira de janelas em baixo do Desktop (D002 `wm::shelf`, `.oc-shelf`) foi retirada. As janelas abertas vivem só na barra de aplicações lateral: fixadas com o ponto de execução (1/2); aplicações em execução não fixadas (ex.: Nye) aparecem depois de um separador (`data-part="dock-running"`, `data-running`) e saem quando a última janela fecha. Várias janelas da mesma aplicação: a escolha (`.oc-chooser`) do clique na barra; todas as janelas: o alternador (Alt+W / ícone na barra da janela). `--shelf-h` fica 0. Classe: D002_COMPONENT_EXTENSION (WM presentation). Ficheiros: `ui/wm/mod.rs`, `ui/shell/mod.rs` (dock), `static/oc-wm.css`. Chaves `wm.shelf`/`wm.shelf.all` ficam no catálogo sem uso.
+
+**THIS PACKAGE IS THE COMPLETE CANONICAL OCINYE UI HANDOFF.
+DO NOT RECREATE THE DESIGN.
+APPLY THE PROVIDED VISUAL IMPLEMENTATION AND CONNECT REAL LOGIC.**
+
+Cumulative: D003 contains D001 → D002.1 unchanged plus Nye. Nothing outside this package is needed.
+
+---
+
 # D003 · Nye — Search · Ask · Act
 
 Base observed: branch `fix/wasmtime-rustsec-2026-0314` @ `55c3e22faf0054dc1d66e84764dbcfd3b0630571` (read from the local checkout). It is `origin/main` @ `b3cbc8e5b9939542f2f517b71b6202b50d36be98` plus one dependency commit (wasmtime 48.0.3, RUSTSEC-2026-0314/0315/0316). The reflog shows the checkout moved from `feat/design-d002` @ `56fb765` to `b3cbc8e`, and the working tree already contains `ui/wm`, `controllers/windows.rs` and the D002.1 switcher placement, so the D002.1 integration is on main. The D003 files were derived from this tree (the Rust files differ from the D002.1 package only by `cargo fmt`). Not reset to `56fb765`.
@@ -10,7 +23,7 @@ Base observed: branch `fix/wasmtime-rustsec-2026-0314` @ `55c3e22faf0054dc1d66e8
 |---|---|---|
 | `COMMAND_PALETTE_DECISION` | `EXTEND_INTO_NYE_UNIVERSAL_SURFACE` | One global command surface. The D001 palette becomes the Nye universal surface; with `ShellVm.nye = None` it is byte-for-byte the D001 palette. |
 | `D001_COMPONENT_EXTENSION` | Command Palette → Nye Universal Surface | see §3 |
-| `D002_COMPONENT_EXTENSION` | none to the window manager, top-bar layout or overlay z-indexes. Top bar: the Nye bar microphone becomes a link to `/ai/prompt?voice=1` only when `voice_input` is `Available`; otherwise the D001 disabled control. | minimal |
+| `D002_COMPONENT_EXTENSION` | window shelf removed; open windows only in the side app bar (running unpinned apps after a separator). No overlay z-index change. Top bar: the Nye bar microphone becomes a link to `/ai/prompt?voice=1` only when `voice_input` is `Available`; otherwise the D001 disabled control. | minimal |
 | Full application | the existing registry entry `ApplicationId::Prompt` (`/ai/prompt`, `SingleInstance`), presented as **Nye**, as the body of a D002 managed window (`WindowContent::Ready`). Conversations live inside the app. | registry already single-instance; Design does not invent policy |
 | `DESKTOP_WIDGET_DECISION` | **A · deferred.** The widget registry (`screens/home/registry.rs`, `ocinye_contracts::desktop`) has no Nye kind. `WIDGET_REGISTRY_CHANGE_REQUIRED = FALSE`. | registry rules are Core-bound |
 | Shortcut | ⌘K / Ctrl K stays (already defined by `oc-shell.js`). The label in the surface comes from `NyeSurfaceVm.shortcut` (runtime-provided; `None` hides it). Alt + W stays the switcher. | no conflict |
@@ -41,7 +54,7 @@ Preserved: `#oc-palette`, `data-oc="palette"`, `.oc-overlay`/`.oc-overlay__scrim
 
 All global overlays are `.oc-overlay` (z 200) outside `.oc-desk` (`isolation: isolate`); later in the tree wins:
 
-    .oc-desk (isolated: Desktop → windows → shelf/chooser)
+    .oc-desk (isolated: Desktop → windows → chooser)
       ↓ .oc-top (z 50)
       ↓ launcher        (shell_with_window)
       ↓ Nye surface     (shell_with_window · palette slot)
@@ -105,451 +118,414 @@ Full classification: `FUNCTIONAL_GAPS.md` § D003.
 ---
 
 
-# HANDOFF · UI completa do Ocinye OS (Claude Design)
+# Previous revisions (kept)
 
-Base: `chore/ui-wipe` @ `c99cbda`. Entrega por partes; o `apply.sh` é cumulativo e a última parte deixa a UI inteira.
+**THIS PACKAGE IS THE COMPLETE CANONICAL OCINYE UI HANDOFF.
+DO NOT RECREATE THE DESIGN.
+APPLY THE PROVIDED VISUAL IMPLEMENTATION AND CONNECT REAL LOGIC.**
 
-## Partes
-| Parte | Conteúdo | Estado |
+This package (D003) replaces D002.1, D002, D001.2.1 and every earlier Design delivery. It is cumulative, and nothing outside this ZIP is needed. D001.1 is a corrective revision: visual parity and missing presentation states. It adds no product scope; everything listed as D002 stays deferred.
+
+---
+
+## D002.1 · windowing parity and accessibility hotfix
+
+Based on D002 as integrated on `feat/design-d002` (Code's compile fixes and `cargo fmt` included; read from the local checkout). Source of the defects: `docs/ui/CODE_FEEDBACK.md` and `docs/ui/design-integration.json` (D002 record). Three defects, three fixes, nothing else.
+
+**Contract freeze.** No change to the window-manager engine, lifecycle, launch policy, App Registry, persistence, Core contracts, Workspace WM routes, view models or the responsive model. `wm::switcher` becomes `pub` (a presentation function, same markup, same ids and `data-oc` hooks); `wm::layer` no longer draws it.
+
+### 1 · Switcher layering (D002_VISUAL_PARITY_DEFECT 1)
+Cause: `layer()` drew `#oc-switcher` inside `.oc-desk__work`. `.oc-desk` (D001) has `isolation: isolate`, so everything inside it (Desktop, windows, shelf, chooser, and the switcher's z 200) composites as one plane under `.oc-top` (z 50). The top bar stayed above the scrim and clickable.
+
+Fix (tree order, not z-index): `shell_with_window` draws `{vm.wm.as_ref().map(wm::switcher)}` after `{palette(vm)}`, a sibling of the launcher and palette, outside `.oc-desk`. The existing `.oc-overlay` z 200 and `.oc-overlay__scrim` (inset 0) then apply in the shell's context:
+
+    .oc-desk (isolated: Desktop → windows → shelf/chooser)
+      ↓ .oc-top (z 50)
+      ↓ switcher scrim (.oc-overlay__scrim, full viewport, dims and takes pointer)
+      ↓ switcher card (.oc-switcher, z 1 inside the overlay)
+
+No new z-index. With `wm: None` nothing is drawn (D001 unchanged). `oc-wm.js` already finds the switcher at document level; the `#oc-switcher` anchors and the engine's `Alt + W` are unaffected. The fixture that produced `d002-switcher` already drew it there, so the reference stands.
+
+### 2 · Closed top-bar controls (D002_VISUAL_PARITY_DEFECT 2)
+Cause: in D001 the status pill, bell and clock are flex items of `.oc-top`, so they are blockified (`inline-flex` → `flex`). Inside `<details>` the `<summary>` is a block, and an `inline-flex` summary (pill) or an `inline-flex` child (clock) sits on a text line aligned by baseline: pill +0.25px, clock +1px.
+
+Fix: `.oc-panel-menu > summary { display: flex; align-items: center; }`. No text line, the clock face is blockified as in D001. `details/summary` stays the control (keyboard, Enter/Space, expanded state). At ≤ 640px the D001 rule hides `.oc-status`; the panel wrapper follows it (`.oc-panel-menu:has(> .oc-status) { display: none; }`), so no empty flex item adds a gap.
+
+### 3 · Dirty-close focus trap (D002_A11Y_DEFECT)
+Cause: focusables were `button:not([aria-disabled="true"]), [href]`; `[href]` matched the icon's `<use href>`.
+
+Fix in `oc-wm.js · dirty()`: `a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])`, then filtered: not `aria-disabled="true"`, not inside `[hidden]`/`[inert]`, rendered. Tab from the last wraps to the first, Shift+Tab from the first wraps to the last (also when focus is outside the list). Unchanged: initial focus on «Guardar» (first enabled button when saving is not possible), Esc = «Cancelar». New: when the dialog closes without a navigation (removed, `hidden`, or `data-open` dropped by the engine), focus returns to the control that had it before, or to the window's close button. A form submission navigates, as in D002.
+
+### 4 · Dirty-close dialog: already a global overlay (verified, no code change)
+The dirty-close dialog is not inside `.oc-desk` in the integrated tree. `routes.rs · shell_page` renders `{body}{dialog.map(ui::wm::dirty_close)}`, and `body` is the complete shell (`home` / `app_pending` → `shell_with_window`). The dialog is therefore a sibling after `.oc-shell`, at `<body>` level, outside every shell stacking context. `.oc-shell` sets no z-index, so the `.oc-overlay` z 200 of the dialog sits above `.oc-top` (z 50) and the isolated `.oc-desk`. An earlier D002.1 note said the dialog was inside `.oc-desk`; that was wrong.
+
+Locked placement: `wm::dirty_close` is rendered after the shell (or as the shell's last child), never inside `.oc-desk` or `.oc-wm`. Order: `.oc-desk` → `.oc-top` → launcher/palette → switcher → dirty close. Moving the call into `shell_with_window` would change the signatures of `shell_with_window`, `app_pending` and `home` and the Code call sites in `routes.rs` without changing the result, so D002.1 leaves it where it is.
+
+Verified in `reference/d002.1/validate.html` (dialog placed as `shell_page` places it): a click on the top bar or on a window hits the dialog backdrop; a click on «Guardar» reaches the button; Tab and Shift+Tab stay inside; Esc = Cancelar; after closing without navigation, focus returns.
+
+### Not changed
+White app glyph: verified white in the real browser; the dark glyph in the captures is **REFERENCE_RENDERING_LIMITATION** (annotated in `reference/screenshots/INDEX.json`). Production CSS unchanged. Tablet and mobile compositions unchanged.
+
+---
+
+## D002 · Windowing and shell interactions
+
+The baseline is **D001.2.1, certified and frozen**. It was read from the local checkout: HEAD = `feat/design-d001-2-1` @ `e579d3c99b4dd34bd88127cbe90b8d2cd4e363df`. `main` @ `7c20f8d` could **not** be seen locally: `packed-refs` shows `main` 4f8d048 and `origin/main` 8a62438, both older. D002 is built on the files integrated in `e579d3c`. The only differences between those files and the D001.2.1 package are `cargo fmt` formatting.
+
+### Model
+- Applications open in **Ocinye-managed windows**: `<section class="oc-win">` inside `.oc-wm`, over the work area. There is no `window.open`, no popup and no generic modal. The model works in Web, Desktop and Dedicated alike: it has no host API or host chrome, and full-workspace mode stays possible because the layer only occupies `.oc-desk__work`.
+- **The window manager owns presentation; the Core owns authority.** Design renders; Code decides focus, order, geometry, snapping, persistence, launch policy (single or multi-instance) and RBAC.
+- **Pinned ≠ running ≠ active ≠ minimised.**
+  - The app bar holds pinned apps. A running app gets one white dot; several windows get two dots. The active app keeps the D001 blue background, and its dots turn gold.
+  - The **Window Shelf** (bottom centre, glass) lists every open window: active in blue with white text, visible in neutral, minimised with a dashed outline and ink-3 name. Unsaved work shows as a gold dot.
+  - The app bar is not the taskbar.
+- **Zones**
+  - The window owns minimise, maximise/restore and close.
+  - The shelf owns switching between windows and "All windows".
+  - The app bar owns launching, focusing and choosing among an app's windows.
+  - The top bar owns the status, notification and clock panels.
+  - The Desktop owns its context menu.
+  - Application content owns its own resources.
+  - No control is duplicated across zones.
+
+### Components (`apps/workspace/src/ui/wm/mod.rs`, `static/oc-wm.css`, `static/oc-wm.js`)
+| Component | Rust | Typed inputs |
 |---|---|---|
-| P0 | Fundação: documento, ViewModels comuns, componentes, `oc-base.css/js`, `icons.svg`, `i18n/ui_base.rs` | entregue · correcções do P0 incluídas (ver abaixo) |
-| P1 | `screens/auth`: arranque, login, recuperar, fim de sessão, primeiro acesso, MFA (configurar, códigos, desafio) | entregue · compila, clippy limpo; 2 testes corrigidos |
-| **P2** | `shell/` (barra de cima, barra de aplicações, lançador, paleta, «+ Criar», notificações, Nye, estado Core·IA, janela de aplicação) + `screens/home` | **esta entrega** |
-| **P2.3** | Desktop do protótipo: widgets móveis e redimensionáveis, biblioteca, fundo, escurecimento, repor predefinição com diferenças e «Anular» (G-02/03/04) | **esta entrega** |
-| P3 | settings, help, search, notifications | |
-| P4 | files, notes | |
-| P5 | mail, messages, calendar | |
-| P6 | research, science, knowledge | |
-| P7 | ai, terminal | |
-| P8 | admin | |
+| AppWindow + TitleBar + Controls + Content | `wm::window(&WindowVm, Option<AnyView>)` | `WindowVm { id, app_id, app_href, href, title, subtitle, state: WindowState, active, z, geometry: WindowGeometry, dirty, content: WindowContent }` |
+| Window layer (windows, snap preview, shelf, choosers, switcher, live region) | `wm::layer(&WmVm, active_body)` | `WmVm { windows, switcher_hint: Option<String>, multi_window_apps }` |
+| RunningAppIndicator | `wm::dock_run`, `wm::dock_label` | computed from `WmVm` by `app_id` (`AppTile` is unchanged) |
+| MultiWindowChooser | inside `layer` (apps with ≥ 2 windows) | «Nova janela» only if `multi_window_apps` contains the app |
+| WindowSwitcher + WindowPreview | inside `layer` (`#oc-switcher`) | the preview is a representative drawing (app icon and lines), never a capture |
+| SnapPreview | inside `layer` | `OcWm.snap('left'\|'right'\|'max'\|null)` |
+| DirtyCloseDialog | `wm::dirty_close(&DirtyCloseVm)` | `{ window_id, title, can_save }` |
+| DesktopContextMenu | `wm::desktop_menu(can_customise, has_default)`, placed in `home()` | reuses the D001 controls (library, background, customise, restore) |
+| SystemStatusPanel | `wm::status_panel(&StatusPanelVm)` | `{ overall, capabilities: [CapabilityVm { kind: Core\|Compute\|Backup\|Ai, required, state: Option<Health>, detail }], storage, detail_href }` |
+| NotificationsPanel | `wm::notifications_panel(&NotificationsPanelVm)` | `{ items: Load<Vec<NotificationItem { id, title, body, when: Ago, read, href }>> }` |
+| ClockPanel | `wm::clock_panel(&ClockPanelVm)` | `{ today: (y, m, d), first_weekday, days_in_month, agenda: Load<Vec<WidgetItem>> }` |
+| Shell with windows | `shell::shell_with_window(&ShellVm, desk, active_body)` | `ShellVm.wm: Option<WmVm>`, `ShellVm.panels: TopPanels` |
 
-### Correcções do P0 (pedidas)
-1. `document.rs`: `r#as="font"` nas duas `<link rel="preload">`.
-2. `ui/testing.rs::assert_contracts` passa a ser usado (testes do documento e de todas as vistas de P1).
-3. `qrcode` só entra no `Cargo.toml` quando existe `ui/screens/auth/mfa.rs` (P1, que o usa).
+### Window states (`data-*`, set by the engine)
+- `data-state`: `normal`, `maximized` (fills the Ocinye work area, 8px margin, above the shelf; never the host screen), `minimized` (hidden, stays on the shelf), `snap-left` or `snap-right` (halves).
+- `data-active`: active or inactive. Active has a white bar, ink title, full icon and the long shadow with a blue hairline. Inactive has a `#F3F6F9` bar, ink-3 title, 72% icon and a short shadow. Inactive windows stay clickable and are never shown as disabled.
+- `data-dragging`: solid and lifted, no scale, `grabbing` cursor. This keeps it distinct from a widget being edited, which is dashed and shrinks.
+- `data-resizing`: blue outline plus a «W × H» badge (`OcWm.size`). `data-at-min` turns the outline amber at 360 × 240.
+- `data-loading`: progress strip under the title plus a skeleton.
+- `data-pulse`: gold ring once. Use it when a single-instance app is launched again: focus the existing window and announce «Esta aplicação já estava aberta.» (`OcWm.pulse(id)`).
+- `z` (`data-z`): stacking. Front and back are distinguished by the bar (colour and contrast) as well as the shadow, not by shadow alone.
+- Content: `Ready`, `Loading`, `Pending` (the D001 app_pending language, now inside the window), `Failed(ref)`, `Denied`, `Unavailable`.
+- Snap: dragging near the left, right or top edge of the work area (16px) shows the preview (left half, right half, maximise). Quarter snaps were left out on purpose.
 
-## Ficheiros (P0 + P1)
-- `src/ui/mod.rs`, `document.rs`, `view_models.rs`, `testing.rs`, `components/mod.rs`
-- `src/ui/screens/mod.rs`, `screens/auth/{mod,login,first_access,mfa,boot}.rs`
-- `src/i18n/ui_base.rs` (`UI_BASE`), `src/i18n/ui_auth.rs` (`UI_AUTH`)
-- `static/oc-base.css`, `oc-base.js`, `oc-auth.css`, `oc-auth.js`, `icons.svg`, `ocinye-logo.png`
+### Deep links, refresh, restore
+- `GET /files/abc` renders the shell with the window layer. The deep-linked window has `content: Ready` and its body; the other open windows have `Loading` and are fetched by the engine with `?frame=1`.
+- The Desktop sits underneath: on `/` it is the D001 Desktop; on an app route it is the wallpaper only.
+- Visual state lives in `data-*` set by the server, so a refresh or a restored session renders the same thing. Nothing depends on an animation.
+- Without JS, only the active window is shown, maximised. Controls `POST /wm/{id}`; the switcher opens by anchor and every window is a link.
 
-## Como uma rota usa a interface
+### Responsive (the D001 shell widths: 1100 and 640)
+- **≥ 1100px**: free windows, drag, resize, snap.
+- **641–1099px (tablet, which includes the 924×540 baseline)**: windows are always maximised. No drag, resize or snap, and the maximise control is hidden, since it would be a dead control. Switching is through the shelf or the switcher.
+- **≤ 640px (mobile)**: one app surface at a time, full screen. A 48px bar with «Voltar ao Desktop» (minimise), the name and resource, the switcher button (44px) and close. The shelf is hidden; the D001 app bar stays at the bottom.
+
+### Keyboard and accessibility
+- Everything is a real button, link or form.
+- Every control has an aria-label with the app name (`wm.minimize` and similar take `{name}`).
+- The switcher is `role=dialog`: arrows and Tab move, Enter opens, Esc leaves.
+- The chooser: Esc closes it, and focus goes to the first item.
+- The Desktop context menu is `role=menu`: right-click, the Menu key or Shift+F10; arrows; Esc returns focus to the Desktop.
+- The dirty-close dialog is `role=alertdialog` with the focus trapped inside it: Esc = Cancel, and focus starts on «Guardar».
+- The live region announces snap targets and the single-instance focus.
+- `prefers-reduced-motion` removes every animation. `forced-colors` is supported.
+- **Shortcuts:** Design fixes none. `WmVm.switcher_hint` carries the platform text, and Code maps the keys and calls `OcWm.openSwitcher()`.
+
+### Motion
+- Open: 200ms, fade plus 6px rise. Mobile: 12px slide.
+- Switcher: fade plus scale .98. Shelf item arriving: 8px rise.
+- Snap preview: 150ms on its edges. Single-instance focus: 600ms gold ring.
+- Minimise and restore are instant (`display`), so they never delay work.
+- There is no blur on windows. Blur is used only on the shelf, switcher, chooser, context menu and panels, so it stays light with 8–12 windows open.
+
+### Dirty close
+- Clean → close immediately. Dirty → `dirty_close` with «Guardar» (gold, main action), «Não guardar» (danger outline) and «Cancelar».
+- The form is `POST /wm/{id}/close` with `decision=save|discard|cancel`.
+- If `can_save = false`, «Guardar» is drawn unavailable with its reason.
+- This dialog is for unsaved application work only. It is never for deleting records or other destructive operations.
+
+### Top-bar panels (D001_COMPONENT_EXTENSION)
+- With `ShellVm.panels.{status, notifications, clock} = None`, each control stays the D001 link, byte for byte. With `Some`, the control opens its `<details>` panel, using the D001 menu behaviour and glass.
+- **Status panel.** The overall state counts **required capabilities only**. Required capabilities are listed first, then optional ones. When AI is not Operational the panel says «Sem IA, o Ocinye OS continua a funcionar…». A missing record shows as «Sem registo», which claims neither success nor failure. Storage is shown as a `<meter>`. «Estado detalhado» appears only when `detail_href` is set (administration).
+- **Notifications panel.** Up to 6 items, with a dot for unread. «Marcar todas como lidas» is `POST /notifications/read-all`. «Ver todas» goes to `/notifications`.
+- **Clock panel.** The month (no navigation) and up to 3 of today's events, then «Abrir o Calendário». It is not a second Calendar.
+- The account menu is D001 and unchanged. The distribution badge and «+ Criar» are also unchanged.
+
+### D001_COMPONENT_EXTENSION (additive, and D001 output is unchanged when `wm = None` and `panels = default`)
+| Component | Change | Why |
+|---|---|---|
+| `shell::shell` | Delegates to `shell_with_window`. With `wm`, `main` goes into `.oc-desk__work` next to the layer, and `.oc-desk` gets `data-wm`. | The windows need a layer over the work area that doesn't scroll with the Desktop. |
+| `shell::dock` | Pinned apps get `data-oc="dock-app"`, `data-windows` and `.oc-dock__run`, plus an aria-label with the window count, **only when they have windows** | Running must be distinguishable from pinned. |
+| `shell::top_bar` | CORE·IA, the bell and the clock open panels when `panels.*` is set | These are the missing top-bar panels (FG-004/005/006). |
+| `shell::app_pending` | With `wm`, returns only the shell; the window arrives with `WindowContent::Pending`. Returns `AnyView`. | app_pending now lives inside the managed window. |
+| `home::home` | Adds `wm::desktop_menu` at the end | The Desktop context menu (FG-009) |
+| `document.rs` | Shell surface loads `oc-wm.css` and `oc-wm.js` | New assets |
+| `icons.svg` | Adds `win-min`, `win-max`, `win-restore` and `windows` | Window controls |
+
+**D001_REGRESSION_CHANGES = NONE expected.** With `wm: None` and `panels: TopPanels::default()`, the shell, Desktop, auth and error pages render the D001.2.1 markup (a test in `shell` pins this). No D001 screenshot changes. The new stylesheet only targets new classes, apart from `.oc-dock__btn { position: relative }`, which is neutral in D001.
+
+### VIEW_MODEL_CHANGES (additive)
+- `ShellVm.wm: Option<WmVm>` and `ShellVm.panels: TopPanels` are new fields. `ShellVm` derives `Default`, but **controllers that build `ShellVm { … }` without `..Default::default()` must add `wm: None, panels: TopPanels::default()`**.
+- New types: `WindowState`, `WindowContent`, `WindowGeometry`, `WINDOW_MIN`, `WindowVm`, `WmVm`, `DirtyCloseVm`, `Capability`, `CapabilityVm`, `StatusPanelVm`, `NotificationItem`, `NotificationsPanelVm`, `ClockPanelVm`, `TopPanels`.
+- No change to the widget registry, widget identifiers, desktop persistence, auth or error pages.
+- CORE_CONTRACT_CHANGES = NONE. The BFF contracts that are needed are in FUNCTIONAL_GAPS FG-010 and FG-026 to FG-031.
+
+### CSP note
+`oc-wm.js` writes geometry with `element.style.setProperty('--x', …)` (CSSOM). CSP `style-src 'self'` blocks `style=` attributes and inline `<style>` blocks, but **not** CSSOM. The server HTML still carries no `style=` (the tests check this).
+
+## 000. D001.2.1: Indicators hotfix (CSS only)
+- `.oc-kpis` changes from `repeat(auto-fit, minmax(150px, 1fr))` to `repeat(4, minmax(0, 1fr))`. Only 4 or 2 columns exist, so 3 + 1 is impossible by construction.
+- The 2 + 2 threshold moves from 639px to 643.98px of work area. 4 tiles need 4 × 150 + 3 × 14 = 642px inside the widget, and the widget's transparent border takes 1px on each side, so the work area needs ≥ 644px.
+- Work area 639, 640, 641, 642 or 643px → 2 + 2. Work area ≥ 644px → 4 in a row, each tile ≥ 150px. No clipping, no overflow.
+- Only `oc-desk.css` changes (delta: `patch/d001.2-to-d001.2.1.patch`). No Rust, view models, registry, defaults, i18n or contracts change.
+- The reveal tile at the bottom left is still FG-007 (reference only).
+
+## 00. D001.2: closing D001 visual parity
+
+The input was `docs/ui/CODE_FEEDBACK.md` and `docs/ui/design-integration.json` (D001.1, `feat/design-d001-1`). D001.2 changes CSS only, plus two reference corrections. No Rust, no JS, no i18n.
+
+### Correction to the D001.1 premise: the reference is a 2-column composition
+The prototype that produced every Desktop reference picks its columns like this: `cols = W < 1100 ? 2 : W < 1500 ? 3 : 4` (see `reference/Ocinye OS.dc.html`). The 924×540 capture is therefore a **2-column grid**. The Indicators span the full width (4 in a row, 107px). Calendar and Tasks are **1×2**, each half the width.
+
+We both read the capture as "4 columns, with Calendar and Tasks at 2×2" in D001 and D001.1. That was wrong, and it is the root of defects 3 and 4 and of the Calendar/Tasks ambiguity.
+
+D001's real defect was never "2 columns" as such. It was Indicators growing to 259px and the page growing. D001.1 fixed the page growth, which stays fixed.
+
+### RESEARCH_DEFAULT_LAYOUT_DECISION = REGISTRY_IS_CANONICAL
+- `registry::system_default(Research)` is unchanged: Calendar 1×2, Tasks 1×2.
+- The reference shows exactly that default, in the 2-column state of an 854px work area. **No reference file needs correcting** for this. The Desktop screenshots stay as they are (`REFERENCE_CORRECTION` = none for the layout).
+- Code: delete the layout you saved by hand through `PUT /me/desktop` (Calendar and Tasks at 2×2), or press «Repor predefinição», and compare with the default.
+- WIDGET_DEFAULT_CONTRACT_CHANGE = FALSE.
+
+### LOGIN_VERTICAL_REFERENCE_DECISION = IMPLEMENTATION_CANONICAL_REFERENCE_CORRECTED
+- The three `auth-login-*` captures came from a prototype document taller than 540px: they have a scrollbar and a 28px offset. They move to `archive/screenshots-superseded/` as DO_NOT_USE_FOR_PARITY. Their horizontal and size information is still right.
+- Canonical auth at 924×540 is the implementation as integrated: logo 52px at x=436, card 360px at x=282, centred vertically with no overflow, status bar at y=0.
+- The production login does **not** move.
+
+### Fixes
+| # | Defect | Fix | File |
+|---|---|---|---|
+| 1 | The CORE·IA chip was transparent | Base pill `#F3F6F9` (the reference value). Hover and open `#EAEFF4`, pressed `#E1E8F0`, gold focus ring. Status semantics are unchanged. | `oc-shell.css` |
+| 2 | Left inset 18px with the app bar hidden | `.oc-desk[data-dock="hidden"] .oc-desk__main { padding-left: 30px }`. With the bar hidden the work area gets the Desktop's own margin, and the grid starts at 6 + 30 = x=36. With the bar visible the 12px joint to the bar stays. This is not tied to one width. | `oc-shell.css` |
+| 3 | 1-column titles were cut | (a) Columns: the grid has 4 columns only when the work area is ≥ 960px (1-column widgets ≥ 225px). From 400 to 959px it has 2 columns (≥ 193px), and below 400px, 1. At 924px, titles sit in about 420px (hidden bar) or about 390px (visible bar). (b) Titles are never truncated. They break onto a second line at a word boundary (`line-clamp: 2`, `text-wrap: balance`, 1.2 line height), and the subtitle wraps too. The header gap goes from 9 to 8px. Checked for every widget title and subtitle, the longest being «Continuar trabalho», «Armazenamento», «Estado do sistema» and «ATRIBUÍDAS A MIM»: they fit on one line at ≥ 225px and wrap cleanly below that. | `oc-desk.css` |
+| 4 | Indicators 3 + 1 at 639px | Indicators stay 4 in a row while the work area is ≥ 640px (107px). Below that they go 2 + 2 across two rows (the widget takes 9 rows, 259px). 3 + 1 no longer exists. | `oc-desk.css` |
+
+### Responsive table (Desktop, app bar visible / hidden; work area ≈ viewport − 130 / − 70)
+| Viewport | Columns | Indicators |
+|---|---|---|
+| 1440 | 4 / 4 | 4 in a row |
+| 1100 | 4 / 4 | 4 in a row |
+| 924 | 2 / 2 | 4 in a row, 107px (the reference) |
+| 899 | 2 / 2 | 4 in a row |
+| 760 | 2 / 2 | 4 in a row (visible bar: 2 + 2 once the area drops below 640) |
+| 640 | 2 / 2 | 2 + 2 (4 in a row only from a 644px work area) |
+| 639 (mobile shell: bar at the bottom, 14px padding) | 2 | 2 + 2 |
+| 520 | 2 | 2 + 2 |
+| 375 | 1 | 2 + 2 |
+
+### D001.1 checklist item "4 columns at 924×540"
+Superseded by the correction above: **2 columns at 924×540 is the reference.** Everything D001.1 actually fixed stays fixed:
+- Indicators at 107px, no page growth, the app bar in view;
+- collapse chrome and tooltip, MFA key, recovery codes, login focus;
+- account-menu glass, weekday, restore copy;
+- `Backup::Unknown`, identity failure, 404, 403 and 502.
+
+### Contract report
+`VIEW_MODEL_CHANGES = NONE` · `WIDGET_REGISTRY_CHANGES = NONE` (`registry.rs` is byte-identical to D001) · `WIDGET_DEFAULT_CHANGES = NONE` · `CORE_CONTRACT_CHANGES = NONE`. Status semantics are unchanged (OPERACIONAL; CORE_STATUS_CONTRACT_FOLLOWUP stays with Code).
+
+---
+
+## 0. D001.1: what changed and what you must do (still valid, except the "4 columns at 924" premise, which §00 corrects)
+
+The input was `docs/ui/CODE_FEEDBACK.md` and `docs/ui/design-integration.json`, read from the repository.
+
+### CONTRACT_CHANGES_FROM_D001
+View-model additions only. There is no change to the widget registry, to widget identifiers, sizes or mandatory flags, to the Desktop persistence or versioning, to auth or shell contracts, or to any Core/BFF API.
+
+| Change | Kind | Why it was unavoidable | What Code does |
+|---|---|---|---|
+| `DesktopDefault.source: DefaultSource { System, Instance }` (new field; `Default` = `System`) | view model | The restore sheet must tell a built-in Distribution default apart from an administrator publication without inventing a version or a date. No existing field could carry that honestly. | Set `System` for `registry::system_default`, with `published` left empty. The sheet shows «PREDEFINIÇÃO DO SISTEMA · Disposição Research do Ocinye OS · Incluída no Ocinye OS…». `Instance` is only for FG-014 publications. With `System`, the «nova predefinição» notice never shows, whatever `base_version` is, so the `base_version` pin workaround can go. |
+| `Backup::Unknown` (new variant) | view model | The Core has no backup record. `Never` and `Failed` would both be false. | Use `Backup::Unknown` and pass `backup_fresh = true` to `derive_state`, so a missing record doesn't degrade the state. The widget can be `Ready` instead of `Unavailable`. |
+| `ErrorKind`, `ErrorVm { kind, reference, retry_href }` (new) | view model | New error pages | Render `screens::error::in_shell(&ShellVm, &ErrorVm)` when there is a member, and `screens::error::at_door(&DoorVm, &ErrorVm)` when there isn't, with HTTP 404, 403 or 502. `retry_href` is used only for 502. |
+| `IdentityFailVm { door, reference, retry_href }` (new) | view model | The fail-closed identity page | When `/me` fails technically, render `screens::auth::identity::identity_unavailable(&vm)` with 503, replacing the bare `core_error`. |
+
+Widget registry: CONTRACT_CHANGE_REQUIRED = **NONE**. The Core test that pins `ocinye_contracts::desktop` to `registry::KINDS` stays green.
+
+### Fixes
+| # | Defect | Fix | File |
+|---|---|---|---|
+| 1 | 2 columns below 1100 px (the reference shows 4 at 924×540) | The grid answers to the **width of the work area** (a container query on `.oc-desk__main`): 4 columns down to a 640 px area, 2 down to 400 px, 1 below that. At 924 px the area is about 800 px, so 4 columns. At 1440 px, still 4. Indicators keep 107 px. | `oc-desk.css`, `oc-shell.css` |
+| 2 | The page grew and the app bar fell below the fold | `.oc-shell` has height `100dvh` (fallback `100vh`) and `overflow: hidden`. `.oc-desk__main` scrolls internally (`min-height: 0`). | `oc-shell.css` |
+| 3 | The collapse button had native chrome | `button.oc-dw__all` resets `appearance`, border, background and font, and uses the gold focus ring | `oc-desk.css` |
+| 4 | The tooltip showed «Recolher {name}» | `title` uses `tf` with the name in pt, en and fr. A test forbids a raw `{name}`. | `home/mod.rs` |
+| 5 | The 32-character MFA key overflowed | The columns get `min-width: 0`. The key wraps at any character, is never clipped, keeps 12 px mono, is `user-select: all`, and copies the raw key. | `oc-auth.css` |
+| 6 | 17-character recovery codes wrapped | `repeat(auto-fill, minmax(18.5ch, 1fr))` + `nowrap` + tabular figures: one code per line, and the column count adapts | `oc-auth.css` |
+| 7 | Focusing step 2 scrolled the page | `.oc-auth` has height `100dvh`, and the stage scrolls internally. `focus({ preventScroll: true })`. The focus itself is kept. | `oc-auth.css`, `oc-auth.js` |
+| 8 | The account menu was opaque | The generic `.oc-menu__pop` rule came later and overwrote the glass. Glass (72 % white, blur 28 px, radius 20 px) now lives in the base rule. This is a real mismatch with the reference. | `oc-shell.css` |
+| 9 | «Segunda» | The weekday is always 3 letters and the month is the Intl short form without a dot: pt «Seg 28 set», en «Mon 28 Sep», fr «Lun 28 sept». Checked against Intl. | `oc-base.js` |
+| 10 | The built-in default looked published | `DefaultSource`: an origin label plus honest copy, with no version or date for `System` | `home/mod.rs`, `oc-desk.css`, `ui_shell.rs` |
+
+### New presentation states
+- **Backup with no record**: «cópia sem registo» / «backup not recorded» / «sauvegarde non enregistrée». Neutral text, and the state dot follows only the Core and the nodes.
+- **Identity could not be confirmed**: the auth frame with no shell. Red shield. «Não foi possível confirmar a sua identidade» and an explanation that the workspace is hidden for security. «Tentar de novo» (`retry_href`), «Terminar sessão» (`POST /logout`), and the reference only.
+- **404 / 403 / 502**: a glass card in the work area, or the auth frame when there is no member. It carries the code, an icon (search, lock, warning), a title, one sentence, «Voltar ao Desktop» (or «Iniciar sessão» at the door), «Tentar de novo» for 502 only, and the reference. Never an endpoint name, trace or host. Keys: `error.*`.
+
+### PRODUCT_DECISION · door status
+The door shows **OPERACIONAL whenever every mandatory capability is healthy.** Optional capabilities, AI above all, never change the door: Ocinye must work without AI. Their state belongs to the CORE·IA chip and to «Estado do sistema».
+- **DEGRADADA** is reserved for a *mandatory* capability working with limits. **INDISPONÍVEL** is shown when a mandatory capability fails, or when `/ready` doesn't answer or reports `blocked`.
+- The current integration (`degraded` → OPERACIONAL) is correct for today.
+- **CORE_STATUS_CONTRACT_FOLLOWUP**: `/ready` should report mandatory and optional components separately, so that «DEGRADADA» can appear when it is true. Until then the door never shows it.
+
+### Accepted as is (from CODE_FEEDBACK)
+- End of session: the D001 code wins over the reference card; no unit is shown (§34.3).
+- G-27: always `expired` until the Core gives the reason.
+- Recovery with `available = true`: FG-002, D002.
+
+### Deferred
+`DESKTOP_DARK_DESIGN`, `DESKTOP_SYSTEM_DESIGN`, and everything listed as D002 (§1, §10).
+
+---
+
+## 1. Read this first: what is implemented and what is reference only
+
+The Design exists in two forms. Know which one you are looking at.
+
+| Form | Where | What it is | Your action |
+|---|---|---|---|
+| **Visual implementation** (Rust + Leptos SSR, CSS, static JS) | `implementation/` | Production code for the repository's real stack. Covers: auth, the shell, the Desktop, the app window frame. | APPLY, then WIRE to real data |
+| **Golden visual reference** (interactive HTML prototype) | `reference/Ocinye OS.dc.html` (+ `Ocinye OS Apps.dc.html`) | The whole designed product: every app, window manager, Nye, lock screen, admin, setup. | REFERENCE_ONLY. Not code to copy. |
+
+**Visual implementation is complete for** boot, login, recovery, end of session, first access, MFA, the shell (top bar, app bar, launcher, palette, menus), the Desktop with all 14 widgets and full customisation, and the app window frame.
+
+**Visual implementation is NOT yet written for** the 29 applications, Nye, the lock screen, the setup wizard and the window preview `/preview/{kind}/{id}`. Since D002 the window manager, the top-bar panels (status, notifications, clock) and the Desktop context menu are implemented. They exist only in the reference. See `EXPORT_LIMITATIONS` (§10) and `FUNCTIONAL_GAPS.md`. Do not build these by hand from screenshots. They will arrive as further `implementation/` files in later Design revisions (D002+), each cumulative like this one.
+
+"VISUAL IMPLEMENTATION COMPLETE" and "FUNCTIONAL IMPLEMENTATION COMPLETE" are tracked separately per component in `COMPONENT_INVENTORY.md`.
+
+## 2. Repository baseline (observed)
+
+- D001 was integrated on `feat/design-d001`, based on `c99cbda`. D001.1 applies on top of it: its files replace the D001 files one for one.
+
+- Repository: `ocinye-os` (local checkout). Remote name: UNKNOWN.
+- Observed commit: `c99cbdac2402c6fed16fbcd0d69690fa51e57358` (detached HEAD; branch name UNKNOWN, earlier referred to as `chore/ui-wipe`).
+- The baseline contains **no** `apps/workspace/src/ui/` directory. This package creates it.
+- Crate: `apps/workspace` (`ocinye-workspace`, lib `ocinye_workspace`). Axum BFF + Leptos 0.8 SSR (`to_html`), no hydration. Static assets are served from `/static/`.
+- Package manager: cargo. There is no JS toolchain. Static JS is hand-written and has no build step.
+- i18n: `crate::catalogo!` entries (`pt`/`en`/`fr`) in `src/i18n/*.rs`, collected in `catalog.rs::GROUPS`. Resolved with `t`, `tf` and `tp`. The locale comes from a task-local.
+- Root `Cargo.toml` already declares `leptos 0.8 (ssr)` and `qrcode 0.14 (svg)` in `[workspace.dependencies]`.
+
+## 3. Architecture of the Design code
+
+```
+apps/workspace/src/ui/
+  mod.rs              module root
+  document.rs         <html>/<head>: CSS/JS per Surface (Auth | Shell), runtime.js first
+  view_models.rs      ALL view models. The only contract between routes and views
+  components/mod.rs   icon(), app_icon(), core_error(), pending()
+  testing.rs          assert_contracts(): CSP and a11y checks used by every view test
+  shell/mod.rs        shell(), top_bar, dock, launcher, palette, app_window(), app_pending()
+  screens/auth/*      boot, login (+recover, session_end), first_access, mfa
+  screens/home/*      Desktop (home()) + registry (widget kinds, sizes, system defaults, diff)
+apps/workspace/src/i18n/ui_auth.rs · ui_base.rs · ui_shell.rs   (all Design copy, pt/en/fr)
+apps/workspace/static/oc-*.css · oc-*.js · icons.svg · ocinye-logo.png
+```
+
+Rules the code already follows. Keep them when you wire:
+- **CSP `style-src 'self'`**: no inline styles and no `style=` attributes. `assert_contracts` fails a view test if one appears.
+- **Behaviour** comes only from static JS bound by `data-oc="…"` / `data-part="…"`. JS never decides authorisation and never stores member data (the one exception is the `sessionStorage` dock-hidden preference).
+- **Everything works without JS.** JS only enhances: the launcher and palette open by `:target` anchors, and restoring the Desktop is a real `POST`.
+- **Views only read view models.** `Option::None` means "Core did not answer". The view then shows an honest state and never an invented `0`. `Load<T>` = `Ready | Loading | Empty | Failed(ref) | Denied | Unavailable | Inactive`, and every view draws every branch.
+
+## 4. Ownership
+
+- **DESIGN owns** everything under `implementation/`: markup, CSS, static JS, i18n copy, the widget registry and view-model shapes. See `DESIGN_LOCK.md`.
+- **CLAUDE CODE owns** routes, controllers, Core/BFF calls, filling the view models, sessions, RBAC, persistence, tests beyond the view tests, and deletion of obsolete UI.
+- Changing a view model's **shape** is a Design decision. If the Core cannot supply a field, map it in the route and record the gap. Do not reshape the view.
+
+## 5. How a route uses the UI
+
 ```rust
-let doc = DocumentVm { title: t("auth.login.title").into(), surface: Surface::Auth, theme: Theme::Dark };
-Html(ui::document::render(&doc, ui::screens::auth::login::login(&vm)))
+use ocinye_workspace::ui::{document, screens, view_models::*};
+let vm: DesktopVm = /* filled from the Core */;
+let html = document::render(
+    &DocumentVm { title: t("desk.title").into(), surface: Surface::Shell, theme: Theme::Light },
+    screens::home::home(&vm),
+);
 ```
+Full route → view → view-model tables: `implementation/docs/ui/HANDOFF.md` (sections "Rota → vista → ViewModel" for P1, P2 and P2.3, plus "11a · O que o BFF preenche"). That document is the detailed contract log and ships in this ZIP. §7 below summarises it.
 
-## Páginas da P1: rota → vista → ViewModel
-| Rota | Vista | ViewModel | Formulários |
+**Two server behaviours are required** for auth to work:
+1. A refused `POST /login` must render `login(&LoginVm { error, email, .. })`, not the plain text `invalid_credentials`.
+2. `POST /mfa/confirm` must render `codes(&MfaCodesVm)`.
+
+## 6. Canonical terminology (binding)
+
+- **Ocinye** = the company. **Ocinye OS** = the product. **Ocinye Instance** = one concrete installation. **Ocinye Distribution** = Research | Business | Personal | Education.
+- The Distribution belongs to the Instance. A Profile belongs to the Member. The Personal Space is a Context. Runtime = Web | Desktop | Dedicated.
+- Never "Instance Profile". The Core still calls the distribution `profile` (`InstanceProfile`); convert it in the route (`view_models::Distribution`). This is marked `BACKEND_TERMINOLOGY_MIGRATION_REQUIRED`.
+- Login copy (in `ui_auth.rs`, verified):
+  - `auth.instance.operational` = «INSTÂNCIA OCINYE OS · OPERACIONAL» / «OCINYE OS INSTANCE · OPERATIONAL» / «INSTANCE OCINYE OS · OPÉRATIONNELLE»
+  - `auth.secure_access` = «Acesso seguro à sua Instância Ocinye OS» / «Secure access to your Ocinye OS Instance» / «Accès sécurisé à votre instance Ocinye OS»
+- Distribution badges show only `Research`, `Business`, `Personal`, `Education` (keys `dist.*`).
+- «Instância» is capitalised in pt and en.
+
+## 7. Decisions that previously existed only in conversation (now binding)
+
+Login and access
+- Login has two steps in the browser only, and is always a single `POST /login`. There is no request between the steps (no account oracle).
+- The door shows **no** passkey ("Usar chave de acesso"), no SSO button and no "choose workspace" step. The Apps prototype still carries unused `passkey`/`sso`/`ws` strings: DO_NOT_IMPLEMENT.
+- The door shows the logo, «OCINYE OS» and the distribution (code + name). It shows **no** Instance name or address.
+- MFA setup (D8a) and recovery codes (D8b) use two columns. The QR is generated server-side (`qrcode`). The manual key appears only with `/mfa?show_key=1`.
+- Password recovery (D10) is unavailable (G-26). The neutral confirmation is designed.
+
+Context and the Desktop's global state
+- **No context selector and no global active unit** (CLAUDE.md §34.3). This supersedes the reference wherever it still shows a unit, for example window titles «Ficheiros · UENR-001» or the terminal banner «contexto UENR-001»: do not render the unit there.
+
+Desktop
+- The grid has 4 columns and 16.333px rows with a 14px gap. A 1-row widget is 168px, a 2-row widget 350px, Indicators 107px. Maximum width 1480px.
+- Every Desktop widget is glass (`.oc-dw`, `--dw-*` variables). On light wallpapers (mist, sand) the text turns dark automatically.
+- There is no greeting. There is an `<h1>` for screen readers only. «Personalizar» is a round pencil in the corner.
+- Nye is not a widget. It lives in the top bar and the floating panel.
+- Widget subtitles are fixed registry text, never the unit.
+- **Continue working**: shows everything the member can reach, since the Desktop has no active space. The member's own open/write events on idea/project/file/note/dataset. Up to 7 items, deduplicated, at most 30 days old. Meta is `TYPE · time`, projects `TYPE · 65% · time` (65% = done / (total − cancelled) tasks). Full rules: `implementation/docs/spec-desktop-widgets.md`.
+- **System status**: visible to every member. The state is the worst of Core, compute nodes and backup (`HealthVm::derive_state`). Compute nodes are GPU/CPU nodes by heartbeat; with 0 nodes the segment is hidden. Backup times use the member's time zone. Only administrators get `admin_href` (the Monitor link).
+- The system default is per Distribution (`registry::system_default`). There is no difference by account role, apart from admin-only widgets. At present there are none, since System status is for everyone.
+- Restoring the default changes only the layout, never widget data. A 409 on `PUT /me/desktop` means another session saved first; the Desktop shows the conflict state.
+
+Visual language
+- Pill controls (radius = half the height), round icon buttons, cards 20px, the auth card 24px.
+- One active navigation state: Ocinye blue background with white text, and no gold underline.
+- One gold per screen: the main action.
+- Top-bar logo: 32px circle (image 44px).
+
+## 8. Integration order
+
+Follow `APPLY_PLAN.md`. It is deterministic and needs no decisions from you.
+
+## 9. Parity verification
+
+1. `cargo clippy -p ocinye-workspace --all-targets -- -D warnings`, then `cargo test -p ocinye-workspace`. The view tests include CSP and a11y contracts and every-state rendering.
+2. Open `reference/Ocinye OS.dc.html` in a browser (it runs as is, with `support.js` beside it). Compare against the running Workspace at the same viewport.
+   - Research distribution, pt, light theme.
+   - Use `?scene=1` for a clean Desktop. Add `&launcher=1`, `&user=1`, `&nye=1`, `&lock=1`, `&open=<app>`, `&open=<app>&max=1` or `&overview=1` for other states.
+3. Screenshots in `reference/screenshots/` (index: `reference/screenshots/INDEX.json`, at 924×540) show the targets. Where code exists, it must match them. Where it does not, they are what later revisions deliver.
+
+## 10. EXPORT_LIMITATIONS
+
+| What is missing | Why | Exists in Design? | What Claude Code needs |
 |---|---|---|---|
-| `GET /boot` | `auth::boot::boot` | `BootVm` | — (ligações `/boot`, `/login`) |
-| `GET /login` · `POST /login` recusado | `auth::login::login` | `LoginVm` | `POST /login {email, password}` · `POST /login/language {lang, return_to=/login}` |
-| `GET /login?reason=expired\|revoked` | `auth::login::session_end` | `SessionEndVm` | `POST /login/language` |
-| `GET /password/recover` | `auth::login::recover` | `RecoverVm` | `POST /password/recover {email}` (só com `available`) · `POST /login/language {return_to=/password/recover}` |
-| `GET /first-access` · `POST` recusado | `auth::first_access::first_access` | `FirstAccessVm` | `POST /first-access {password, confirmation}` · `POST /logout` |
-| `GET /mfa` (por configurar) | `auth::mfa::setup` | `MfaSetupVm` | `POST /mfa/confirm {code}` · `POST /logout` |
-| resposta a `POST /mfa/confirm` | `auth::mfa::codes` | `MfaCodesVm` | `POST /mfa/acknowledge {acknowledged=1}` · `POST /logout` |
-| `GET /mfa` (configurado) | `auth::mfa::challenge` | `MfaChallengeVm` | `POST /mfa/challenge {code}` · `POST /mfa/recovery {code}` · `POST /logout` |
-
-Título do documento: `auth.login.title`, `auth.recover.title`, `auth.first.title`, `auth.mfa.setup_title`, `auth.mfa.codes_title`, `auth.mfa.challenge_title`, `auth.boot.*_title`, `auth.end.*_title`. `Surface::Auth`, `Theme::Dark`.
-
-## ViewModels da P1
-| Tipo | Campo | Tipo | Significado |
-|---|---|---|---|
-| `DoorVm` | `distribution` | `Option<Distribution>` | de `GET /api/v1/instance/branding` (`profile` no Core; converter na rota) |
-| | `core` | `Option<Health>` | estado sondado neste pedido; `None` não mostra nada |
-| `LoginVm` | `door` · `error` · `email` | `DoorVm` · `Option<String>` · `String` | a mensagem do Core (igual para todas as falhas) e o endereço escrito, para o preservar |
-| `RecoverVm` | `door` · `available` · `sent` | `DoorVm` · `bool` · `bool` | `available=false` enquanto G-26; `sent=true` mostra a confirmação neutra |
-| `SessionEndVm` | `door` · `reason` | `DoorVm` · `SessionEndReason` | `Expired` (cookie desconhecido) ou `Revoked` (G-27) |
-| `FirstAccessVm` | `door` · `display_name` · `email` · `min_length` · `error` | … · `u32` · `Option<String>` | `min_length` do Core |
-| `MfaSetupVm` | `door` · `otpauth_uri` · `manual_key` · `error` | … | o QR é gerado no servidor (`qrcode`); nunca vai para a URL |
-| `MfaCodesVm` | `door` · `codes` | `Vec<String>` | só na resposta a `/mfa/confirm` |
-| `MfaChallengeVm` | `door` · `error` · `recovery_open` | … · `bool` | `recovery_open` abre a secção de código de recuperação (após erro nela) |
-| `BootVm` | `door` · `state` · `components` · `reference` | … · `BootState` · `Vec<BootComponent>` · `Option<String>` | `BootComponent { name, health, note }`, já traduzidos |
-
-## Comportamento JS
-| `data-oc` / `data-part` | Ficheiro | O que faz |
-|---|---|---|
-| `clock` | `oc-base.js` | «SEGUNDA-FEIRA, 28/09 · 12:20» no idioma do `<html lang>` |
-| `copy` + `data-copy-target` | `oc-base.js` | copia o texto; marca `data-copied` 1,6 s |
-| `login-steps`, `login-next`, `login-change`, `step-id`, `step-pw`, `login-email`, `login-initial` | `oc-auth.js` | endereço → palavra-passe no browser; um único `POST /login`. Se a palavra-passe chegar preenchida (gestor) ou houver erro com endereço, abre no passo 2 |
-| `otp`, `otp-input`, `otp-cell` | `oc-auth.js` | espelha o campo único `name="code"` nas seis células e realça a seguinte |
-| `reveal` + `data-oc-target`, `data-label-show/hide`, `reveal-label` | `oc-auth.js` | mostra/oculta a palavra-passe nova (só no primeiro acesso) |
-| `save-codes` + `data-codes`, `data-filename` | `oc-auth.js` | descarrega os códigos num `.txt` local (nada sai do browser) |
-
-## Estados desenhados (P1)
-| Página | Estados |
-|---|---|
-| login | normal · erro do Core (mensagem + endereço preservado) · Instância em baixo (faixa, entrar desactivado) |
-| recuperar | indisponível (G-26: campo e botão desactivados, razão por `aria-describedby`) · confirmação neutra (`sent`) |
-| fim de sessão | expirada · revogada (sem formulário de entrada) |
-| primeiro acesso | normal · erro de validação do Core |
-| MFA | configurar (QR ou falha do QR → chave manual) · erro de código · códigos (confirmação obrigatória) · desafio · recuperação |
-| arranque | a arrancar · pronta · parada (componente + referência) |
-
-## Lacunas
-- **G-26** recuperar palavra-passe: `RecoverVm.available=false`; a confirmação neutra está desenhada.
-- **G-27** motivo da revogação: `SessionEndReason::Revoked` mostra texto genérico, sem motivo.
-- Chave de acesso e SSO: fora do login (decisão do Fidel).
-
-## P2 · casca e Home
-### Ficheiros
-`src/ui/shell/mod.rs` (`shell`, `app_window`), `src/ui/screens/home/mod.rs` (`home`), `src/i18n/ui_shell.rs` (`UI_SHELL`), `static/oc-shell.css`, `static/oc-shell.js`, `components::app_icon(href)`.
-
-### Rota → vista → ViewModel
-| Rota | Vista | ViewModel |
-|---|---|---|
-| `GET /` | `screens::home::home` | `HomeVm { shell, greeting, widgets }` |
-| todas as páginas autenticadas (P3–P8) | `shell::shell(&ShellVm, main)` + `shell::app_window(title, href, body)` | `ShellVm` |
-
-Documento: `Surface::Shell`, `Theme` do membro.
-
-### ViewModels
-| Tipo | Campo | Tipo | Significado |
-|---|---|---|---|
-| `ShellVm` | `display_name`, `email` | `String` | do membro |
-| | `contexts` | `Vec<ContextItem{name, kind, href, current}>` | selector de espaço; vazio = sem selector. Nunca contém distribuições |
-| | `apps` | `Vec<AppTile{href, label, description, pinned, active}>` | `experience::apps::visible_to` + `pinned_visible`; `label`/`description` de `name_key`/`description_key`; o ícone sai de `app_icon(href)` |
-| | `unread` | `Option<u32>` | `None` = Core não respondeu (sem número) |
-| | `core`, `ai` | `Option<Health>` | G-09; `ai = Unavailable` = sem nó |
-| | `privileged` | `bool` | faixa «Sessão privilegiada» |
-| | `query` | `String` | preserva a pesquisa |
-| `HomeVm` | `greeting` | `String` | «Boa tarde, Fidel», já traduzida |
-| | `widgets` | `Vec<Widget{title, href, items: Load<Vec<WidgetItem{title, meta, href}>>}>` | pela ordem da distribuição |
-
-### Formulários e ligações
-`GET /search?q=` (barra e paleta) · `POST /logout` · `/settings`, `/settings/language`, `/help`, `/notifications`, `/activity` (estado), `/ask` (Nye) · «+ Criar»: `/tasks/new`, `/ideas/new`, `/projects/new`, `/calendar/events/new`, `/mail/compose`, `/bibliography/new`, `/datasets/new` · contextos: `/workspaces/{id}`.
-
-### Comportamento JS (oc-shell.js)
-| `data-oc` / `data-part` | O que faz |
-|---|---|
-| `menu` | um `<details>` aberto de cada vez; fecha fora e com Esc |
-| `launcher`, `launcher-open`, `launcher-q`, `launcher-item`, `launcher-empty` | abre (⌘J ou botão), filtra por `data-search` (pt/en/fr já no texto), Esc fecha. Sem JS: `#oc-launcher` + `:target` |
-| `palette`, `palette-q`, `palette-item` | ⌘K; filtra; Enter pesquisa em `/search`. Sem JS: `#oc-palette` |
-| `dock`, `dock-toggle` | esconder/mostrar a barra (duplo clique esconde); preferência visual em `sessionStorage` |
-
-### Estados
-Casca: contador só com `unread: Some(n>0)`; estado CORE·IA só com sonda; faixa privilegiada. Home: cada widget desenha `Ready` · `Empty` · `Failed` (referência) · `Denied` · `Unavailable` · `Inactive`.
-
-### Lacunas (P2)
-- **G-01** bloquear ecrã: item do menu com `aria-disabled` e a razão.
-- **G-02/03/04** Desktop e widgets persistentes: disposição fixa; «Personalizar» desactivado com a razão.
-- **G-05** janelas: as aplicações abrem como página inteira dentro da área de trabalho (`app_window`).
-- **G-06** recentes: não mostrados.
-- **G-07** voz do Nye e **G-08** monitor de actividade: não aparecem na casca.
-- **G-09** estado CORE·IA: mostrado só se a rota sondar.
-- Fixar/desafixar: **não é lacuna** — `PUT /apps/pins` (JS, `data-oc="pin"`); sem JS, ligação para `/settings/apps`.
-
-### Correcções da P2.1
-1. `shell/mod.rs`: `r##"href="#oc-launcher""##`.
-2. Login: `data-oc="login-change"` tem `data-part="step-pw"`, fica `hidden` até ao passo 2 (o JS só o mostra em `data-step="pw"`) e `.oc-auth__who[hidden]{display:none}`.
-3. MFA (ADR-0107): sem `manual_key`, «Mostrar chave manual» é uma ligação para `/mfa?show_key=1`; sem `<details>` nem `<code>` no documento. Com `manual_key`, a chave e «Copiar».
-
-### Fixar aplicações
-`AppTile` ganhou `id: &'static str` (`ApplicationId`) e `pinnable: bool` (`Application::can_pin`). Cada tile fixável tem `<button data-oc="pin" data-app=id aria-pressed>`. O JS envia `PUT /apps/pins` com `{"pinned": [ids fixados]}` e recarrega; em falha repõe o estado. Sem JS: «Gerir aplicações fixadas» → `/settings/apps`.
-
-### Selector de espaço
-Navegação pura: `ContextItem.current` só é `true` quando a página é `/workspaces/{id}` desse contexto; a vista não guarda nem sugere um espaço activo global (CLAUDE.md §34.3). Nas outras páginas o botão mostra só o ícone e «Espaço de trabalho».
-
-### Saudação
-`home::defaults::greeting_key(hora_local)`: 05–11 `home.greeting.morning` («Bom dia, {name}»), 12–19 `.afternoon` («Boa tarde, {name}»), 20–04 `.evening` («Boa noite, {name}»). Hora da Instância; `{name}` = primeiro nome.
-
-### Widgets
-`home::defaults::widgets_for(Distribution) -> &[WidgetSpec{kind, title_key, href}]`.
-
-| Distribuição | Widgets, por ordem |
-|---|---|
-| Research | Tasks · Projects · Ideas · Notes · Files · Datasets · Activity |
-| Business | Tasks · Mail · Calendar · Files · Projects · Messages · Activity |
-| Education | Calendar · Tasks · Notes · Files · Messages |
-| Personal | Notes · Tasks · Files · Calendar · Mail |
-
-| Widget | Título / «ver tudo» | Dados (até 5) | `title` | `meta` | `href` |
-|---|---|---|---|---|---|
-| Tasks | `home.w.tasks` · `/my-work` | tarefas atribuídas ao membro, abertas, por prazo | título | prazo `dd/mm` (ou sem prazo) | `/tasks/{id}` |
-| Projects | `home.w.projects` · `/projects` | projectos em que participa, por actualização | nome | código · estado | `/projects/{id}` |
-| Ideas | `home.w.ideas` · `/ideas` | ideias do contexto, mais recentes | título | código · estado | `/ideas/{id}` |
-| Notes | `home.w.notes` · `/notes` | notas do membro, por edição | título | `hh:mm` hoje ou `dd/mm` | `/notes/{id}` |
-| Files | `home.w.files` · `/files` | ficheiros alterados pelo membro | nome | tipo · tamanho | `/files/{id}` |
-| Datasets | `home.w.datasets` · `/datasets` | datasets do contexto, recentes | nome | formato · tamanho | `/datasets/{id}` |
-| Mail | `home.w.mail` · `/mail` | mensagens por ler (Inbox) | assunto | remetente · `hh:mm` | `/mail/message/{id}` |
-| Calendar | `home.w.calendar` · `/calendar` | eventos de hoje, por hora | título | `hh:mm` · local | `/calendar/events/{id}` |
-| Messages | `home.w.messages` · `/messages` | conversas com actividade recente | nome da conversa | `hh:mm` da última | `/messages/{conversation}` |
-| Activity | `home.w.activity` · `/activity` | acontecimentos recentes do contexto | descrição | «há X» | ligação ao objecto |
-
-Correio sem conta configurada → `Load::Unavailable`; aplicação inactiva na Instância → `Load::Inactive`; lista vazia → `Load::Empty`; o Core não respondeu → `Load::Failed`.
-
-### Tempo relativo (Actividade e outros «há X»)
-Chaves em `ui_base`, via `tp`: `time.now` (< 1 min) · `time.minutes` (< 60 min) · `time.hours` (hoje, < 24 h) · `time.yesterday` · `time.days` (2–6 dias) · a partir de 7 dias, `dd/mm`.
-
-### Metas ajustados à ligação (aceites pelo Design)
-Projectos/Ideias: meta = código, ligação `/workspaces/{id}`. Datasets: código · estado, por código. Calendário: só a hora. Ficheiros pessoais: ligação `/files`. Actividade: tempo relativo acima.
-
-## P2.3 · Desktop (G-02/03/04)
-### Ficheiros
-`ui/screens/home/mod.rs` (`home(&DesktopVm)`), `ui/screens/home/registry.rs` (registo de widgets, predefinições do sistema, `diff`, `greeting_key`; substitui `defaults.rs`), `static/oc-desk.css`, `static/oc-desk.js` (carregados na superfície `Shell`), chaves `desk.*` em `ui_shell.rs`. A casca ganhou `ShellVm.wallpaper` e `ShellVm.dim` (o fundo vale em todas as páginas).
-
-### O contrato proposto: o que muda
-O protótipo **não posiciona por x,y**: é uma grelha de 4 colunas em que a ordem é a posição e cada widget tem um tamanho de entre os permitidos do seu tipo. Também **não tem densidade nem widgets minimizados**; tem **escurecimento** do fundo (0–60 %). Proposta:
-
-```
-GET /me/desktop → 200
-{
-  "version": 7,                       // concorrência optimista
-  "wallpaper": "org",                 // ocinye|dusk|org|mist|slate|sand
-  "fit": "fill",                      // reservado para «photo» (ainda sem contrato)
-  "dim": 20,                          // 0–60, passos de 5
-  "widgets": [ { "id": "tasks", "kind": "tasks", "w": 1, "h": 2 }, … ],   // ordem = posição
-  "base_version": 4,                  // versão da predefinição de onde veio (null = sistema)
-  "can_customise": true,              // política da Instância
-  "default": {                        // a predefinição publicada para a distribuição (ou null)
-    "name": "Research Desktop Default", "version": 5, "published_at": "2026-09-27",
-    "wallpaper": "org", "dim": 20, "widgets": [ … ]
-  }
-}
-
-PUT /me/desktop {version, wallpaper, fit, dim, widgets} → 200 {mesma forma que o GET}
-  409 se version ≠ actual · 422 se inválido (tipo desconhecido, tamanho não permitido,
-  obrigatório em falta, admin_only sem papel, id repetido, dim fora de 0–60)
-POST /me/desktop/restore → copia a predefinição para o membro; 200 {GET} com
-  Accept: application/json, 303 → / sem JS. base_version passa a default.version.
-```
-- Retirar do contrato: `x`, `y`, `minimized`, `density`. Acrescentar: `dim`, `base_version`, `can_customise`, `default`.
-- Validação no Core com a mesma tabela de `registry::KINDS` (tamanhos, `mandatory`, `admin_only`); se preferir, mova-a para `ocinye-contracts` e eu importo-a na vista.
-- «Anular» depois de repor não precisa de rota: o JS guarda a disposição anterior e faz `PUT`.
-- Os dados de cada widget não fazem parte deste contrato: a rota de `/` pede-os ao Core por tipo (tabela «Widgets» acima; `kpis`, `notice`, `storage`, `health`, `continue` são novos).
-
-### Rota → vista → ViewModel
-`GET /` → `screens::home::home` → `DesktopVm`. **Substitui** `HomeVm` e `Widget` da P2.
-
-| Campo | Tipo | Significado |
-|---|---|---|
-| `shell` | `ShellVm` | inclui `wallpaper: Wallpaper` e `dim: u8` |
-| `greeting` | `String` | `tf(registry::greeting_key(hora), {name})` |
-| `version` | `u32` | de `GET /me/desktop` |
-| `widgets` | `Vec<DeskWidget{placed: PlacedWidget{id, kind, w, h}, content: WidgetContent}>` | pela ordem do contrato |
-| `default` | `Option<DesktopDefault{name, version, published, wallpaper, dim, widgets}>` | `published` já formatada |
-| `base_version` | `Option<u32>` | aviso «nova predefinição» quando `default.version > base_version` |
-| `is_admin` | `bool` | mostra `health` na biblioteca |
-| `can_customise` | `bool` | `false`: «Personalizar» desactivado com a razão; sem folhas |
-
-`WidgetContent`: `List(Load<Vec<WidgetItem>>)` (tasks, calendar, notes, files, mail, activity, projects, ideas, datasets, notice, continue) · `Metrics(Load<Vec<Metric{label, value, href}>>)` (kpis, health) · `Storage(Load<StorageUse{used, total, percent}>)` · `Nye` (sem dados; formulário `GET /ask?q=`).
-
-Predefinição do sistema por distribuição: `registry::system_default(Distribution)` (usar quando o administrador ainda não publicou).
-
-### Comportamento JS (oc-desk.js)
-| `data-oc` | O que faz |
-|---|---|
-| `desk` (+ `data-version`) | raiz; `data-editing` em edição |
-| `desk-edit`, `desk-edit-done` | entra/sai de Personalizar (Esc também sai) |
-| `dw-left`, `dw-right` | move por teclado; arrastar com o rato faz o mesmo |
-| `dw-resize` | percorre `data-sizes` do widget |
-| `dw-remove` | retira (não existe nos obrigatórios) |
-| `desk-lib-open`, `lib-cat`, `lib-add` | biblioteca: categorias, pesquisa, acrescentar (grava e recarrega para trazer os dados) |
-| `desk-bg-open`, `bg-wall`, `bg-dim` | fundo e escurecimento em directo (`data-wall`, `--oc-dim` por CSSOM) |
-| `desk-restore-open`, `desk-restore-form` | folha com as diferenças; `POST /me/desktop/restore` |
-| `desk-undo` | «Anular» durante 10 s depois de repor |
-| `dialog-close` | fecha a folha |
-Cada alteração grava com `PUT /me/desktop` (450 ms de espera); estado em `desk-status` (a guardar · guardado · falhou · conflito).
-
-### Estados
-Cada widget: `Ready` · `Empty` · `Failed` (referência) · `Denied` · `Unavailable` · `Inactive`. Política fechada: sem Personalizar. Nova predefinição publicada: aviso com «Ver alterações». Repor sem diferenças: botão desactivado e «já está igual». Conflito 409: mensagem para recarregar.
-
-### Lacunas que ficam
-- Fundo com fotografia própria: precisa de contrato de carregamento; a folha diz que ainda não está disponível.
-- G-05 janelas: entrega seguinte.
-
-## P2.5 · Desktop igual ao protótipo
-1. **Nye fora da grelha.** No protótipo a Nye vive na barra de cima (e na janela flutuante), não é um widget. `WidgetKind::Nye`, `WidgetContent::Nye` e a categoria IA saem; `system_default` já não a inclui. Se o Core guardar `kind: "nye"`, trate-o como desconhecido (422) ou retire-o na migração.
-2. **Indicadores.** `Metric { icon, label, value, qualifier, href }`. Os quatro, por ordem, estão em `registry::KPIS`: (título, qualificativo, ícone, rota) — Unidades·activas·`/units`, Ideias·em investigação·`/ideas`, Projectos·em execução·`/projects`, Datasets·catalogados·`/datasets`. O qualificativo concorda com o número: `tp(qualifier_key, n)` (`desk.kpi.*_q.one/.other`). Números por estado vêm do Core; sem resposta, `Load::Failed`.
-3. **Linhas compactas.** Grelha de `16.333px` com 14px de intervalo: widget de 1 linha = 168px, de 2 = 350px, Indicadores = 107px; largura máxima 1480px.
-4. **Barra de cima.** Logótipo (menu da conta) · distintivo da distribuição (código em ouro, com o painel «DISTRIBUIÇÃO DA INSTÂNCIA» e «Definido pela administração da Instância.») · selector de contexto · trilho «/ {crumb}» · barra da Nye ao centro (`GET /ask?q=`) com microfone (G-07: `aria-disabled` e razão) e ⌘K · «Criar» · CORE·IA · notificações · data curta «Seg 28 set» + «15:17» (`data-oc="clock" data-format="short"`). `ShellVm` ganha `distribution: Option<Distribution>` e `crumb: String` (ex.: `t("apps.home")`).
-5. **Sem saudação.** `DesktopVm.greeting` sai; há um `<h1>` só para leitores de ecrã. «Personalizar» é um lápis redondo no canto (opacidade .35, 1 com foco/rato).
-6. **Listas e contadores** como no protótipo: uma linha por item (título à esquerda, meta em mono à direita, traço fino entre linhas); Tarefas com caixa (decorativa), Actividade/Correio/Projectos com ponto de cor, Calendário com hora à esquerda e faixa de cor, Avisos em caixa. Contadores (`WidgetContent::Count(Load<Count{value, qualifier}>)`): Ideias («12 em investigação»), Datasets («23 catalogados»), Projectos a 1 coluna («6 em execução»), Estado do sistema («OK · Core · 4 nós · cópia 03:00»). Armazenamento: «155 GB de 250 GB» com barra. Projectos a 2 colunas = lista.
-- `DeskWidget.subtitle: Option<String>`: a linha mono por baixo do título («UENR-001 · ATRIBUÍDAS A MIM»).
-
-## P2.6 · sem selector de contexto; recolher; o que falta para «igual ao protótipo»
-### Feito nesta entrega (protótipo e código)
-- **Selector de contexto retirado** da barra de cima, da barra lateral do protótipo, do título das janelas e do painel da Nye (CLAUDE.md §34.3). `ContextItem` e `ShellVm.contexts` saem.
-- **Subtítulos sem unidade**: Tarefas «ATRIBUÍDAS A MIM», Avisos «ORGANIZAÇÃO · OBRIGATÓRIO», Estado do sistema «INSTÂNCIA»; os restantes sem subtítulo.
-- **Recolher/expandir** em cada widget (`data-oc="dw-min"`, sempre disponível, `aria-expanded`), como no protótipo: recolhido ocupa 2 linhas finas e mostra só o cabeçalho. **Correcção ao contrato do Core**: `minimized: bool` volta a `widgets[]` em `GET/PUT /me/desktop` (eu tinha-o retirado por engano; o protótipo tem-no).
-- **Faixa de sessão privilegiada retirada** (não existe no protótipo); `ShellVm.privileged` sai.
-
-### Ainda não igual ao protótipo (entregas seguintes, cumulativas)
-1. **Casca, passagem de fidelidade**: barra de aplicações, lançador e paleta ao pormenor do protótipo; menu da conta com «Conta», «Definições», «Aparência do Desktop», «Ajuda», «Bloquear ecrã ⌘L» (G-01), «Terminar sessão»; painéis de notificações, estado CORE·IA e relógio.
-2. **Widgets**: Calendário da semana (o protótipo tem a vista da semana com cores); Continuar trabalho com o tipo de cada item; estado «sem permissão» desenhado (o protótipo mostra-o em Datasets).
-3. **Predefinições por conta** (superadmin, admin, membro): o protótipo tem uma predefinição por distribuição e só o Estado do sistema é de administração; confirmo a tabela no HANDOFF quando entregar.
-4. **Janelas de aplicação (G-05)** e **todas as aplicações do lançador** (P3–P8).
-
-## P2.7
-- **Subtítulos**: texto fixo do registo (`KindSpec.subtitle_key`), não dados. Tarefas `desk.sub.tasks` «ATRIBUÍDAS A MIM»; Avisos `desk.sub.notice` «ORGANIZAÇÃO · OBRIGATÓRIO»; Estado do sistema `desk.sub.health` «INSTÂNCIA». Os outros não têm. `DeskWidget.subtitle` sai (a rota não o preenche).
-- **Teste do lápis** verifica `oc-desk-pencil` e `data-oc="desk-edit"` em separado.
-- **Menu da conta** como no protótipo: iniciais em ouro, nome, endereço, «OCINYE OS · RESEARCH»; Conta · Definições · Aparência do Desktop (abre a folha Fundo; fora do Desktop vai a `/#appearance`) · Ajuda · Bloquear ecrã ⌘L (G-01, desactivado com a razão) · Terminar sessão. Menus em vidro claro (raio 20px, itens em cápsula).
-- **Sem permissão** (`Load::Denied`): caixa tracejada com cadeado e «Sem permissão para ver este conteúdo. Peça acesso ao coordenador.» (`desk.denied`).
-- **Calendário e Continuar trabalho**: o desenho já é o do protótipo (hora à esquerda e faixa de cor; título e meta). O «tipo» de Continuar trabalho vem no `meta` («IDEIA · 2 h», «65%», «1 d»), como no protótipo.
-- **Predefinições por conta**: no protótipo não há diferença entre superadmin, admin e membro na predefinição; a única diferença é que o Estado do sistema só existe na biblioteca para administradores (`DesktopVm.is_admin`). A predefinição é por distribuição (`system_default`).
-
-## Contratos alterados
-- `HomeVm` e `Widget` **substituídos** por `DesktopVm`, `DeskWidget`, `PlacedWidget`, `WidgetContent`, `Metric`, `StorageUse`, `DesktopDefault`, `Wallpaper`, `WidgetKind` (P2.3). `home::defaults` passa a `home::registry` (`greeting_key` mantém-se; `widgets_for` → `system_default`).
-- `ShellVm`: novos `wallpaper` e `dim`; P2.5: `distribution` e `crumb`.
-- P2.7: `DeskWidget.subtitle` sai (subtítulos fixos no registo).
-- P2.6: `PlacedWidget.minimized` entra; `ContextItem`, `ShellVm.contexts` e `ShellVm.privileged` saem.
-- P2.5: `DesktopVm.greeting` sai; `DeskWidget.subtitle` entra; `Metric` ganha `icon` e `qualifier`; novo `Count` e `WidgetContent::Count`; `WidgetKind::Nye` e `WidgetContent::Nye` saem.
-- `AppTile`: **novos campos** `id: &'static str` e `pinnable: bool` (P2.1), para fixar a sério.
-**O servidor tem de mudar dois comportamentos para a P1 funcionar:** `POST /login` recusado deve renderizar `login(&LoginVm { error, email, .. })` em vez de responder texto `invalid_credentials`; `POST /mfa/confirm` deve renderizar `codes(&MfaCodesVm)`.
-
-## Por decidir
-- Os estados «INSTÂNCIA OCINYE OS · DEGRADADA / INDISPONÍVEL» seguem a fórmula aprovada para «OPERACIONAL»; confirmar.
-- `min_length` do primeiro acesso: vem do Core (`minimum_password_length`, hoje 15); a vista não o fixa.
-
-
-## 11a · Desktop: fecho dos widgets (cumulativo sobre c99cbda)
-
-Regras e chaves: `docs/spec-desktop-widgets.md`. Contratos alterados em `view_models.rs`:
-
-- `Load<T>`: **novo ramo `Loading`** (bloco ainda à espera do Core). Todos os widgets o desenham (esqueleto, `aria-busy`).
-- `WidgetContent`: **novos ramos** `Continue(Load<Vec<ContinueItem>>)` e `Health(Load<HealthVm>)`. «Continuar trabalho» e «Estado do sistema» deixam de usar `List`/`Count` com strings: a vista compõe a meta e a linha a partir de dados tipados.
-- Novos tipos: `ContinueKind`, `Ago`, `ContinueItem`, `Backup`, `HealthVm`. O estado usa o `Health` já existente (`Operational`/`Degraded`/`Unavailable`).
-- Registo: `Health` deixa de ser `admin_only` (todos o vêem) e deixa de ter «Ver tudo»; o link para o Monitor é `HealthVm::admin_href`, só para administradores.
-
-### O que o BFF preenche
-
-**ContinueItem** (até 7, por último toque desc.)
-| campo | tipo | origem |
-|---|---|---|
-| kind | ContinueKind (`idea`/`project`/`file`/`note`/`dataset`) | tipo do objecto |
-| title | String | nome do objecto |
-| href | String | ficha/editor; sem a app no perfil: `/preview/{kind}/{id}` (G-05, 11d) |
-| progress | Option<u8> | só `project`: round(100 × concluídas / (total − canceladas)); `None` sem tarefas |
-| when | Ago | `Ago::from_secs(agora − último toque, || dd/mm no idioma)` |
-
-Estados: `Loading`, `Empty` (texto próprio `desk.cont.empty`), `Failed(ref)`, `Unavailable` (registo de actividade desligado).
-
-**HealthVm**
-| campo | tipo | origem |
-|---|---|---|
-| state | Health | `HealthVm::derive_state(quorum, nodes_up, nodes_total, backup_fresh)` |
-| nodes_up / nodes_total | u16 | nós do Core |
-| backup | Backup | última cópia com êxito: `Today(hh:mm)` / `Yesterday(hh:mm)` / `Date(dd/mm)`; `Failed` se a última tentativa falhou; `Never` |
-| admin_href | Option<String> | `Some("/admin/monitor")` só para administradores |
-
-`backup_fresh` = última cópia com êxito há < 24 h e última tentativa não falhou. Core sem quórum mas o BFF responde: `Ready` com `state: Unavailable`. O BFF não chega ao Core: `Failed(ref)`.
-
-### 11a.2 · respostas
-- Âmbito de «Continuar trabalho»: tudo o que o membro alcança. Não há espaço activo no Desktop; `?unit_id=`/`?personal=true` ficam para as aplicações.
-- Nós: são os de computação (batimento). `nodes_total = 0` esconde o segmento e não degrada o estado. `derive_state(core_ok, …)` (antes `quorum`).
-- Hora da cópia: zona do membro.
-- Teste do Estado do sistema: verifica a classe e o estado em separado (como em 379b6c5).
-
-
-## 14 · Inventário do Desktop
-
-Tudo o que o Desktop do protótipo mostra ou faz, contra o código. **Feito** = no código e ligado. **14a** = este pacote. **14b–14e** = fatias seguintes, por esta ordem. **P3–P8** = aplicações.
-
-Fatias: **14b** Administração: avisos e publicar a predefinição do Desktop · **14c** casca ao pormenor (barra de cima, barra de aplicações, lançador, menu de contexto, bloqueio) · **14d** janelas G-05 e pré-visualização · **14e** Nye (painel, bolha, voz).
-
-### Barra de cima
-| elemento | estado | dados do Core/BFF |
-|---|---|---|
-| Logótipo → menu da conta (Conta, Definições, Aparência, Ajuda, Bloquear ⌘L, Terminar sessão) | feito (Bloquear: 14c) | `ShellVm.display_name`, `email`, `distribution` |
-| Distintivo da distribuição + painel | feito | `ShellVm.distribution` |
-| Trilho «/ {aplicação}» | feito; com janelas, mostra a janela da frente: 14d | `ShellVm.crumb` |
-| Barra da Nye (anexar, microfone, enviar, ⌘K) | feito como `GET /ask?q=`; painel no sítio: 14e; microfone G-07 | contrato da Nye (14e) |
-| «+ Criar» com atalho por item | feito; atalhos por item: 14c | rotas `/…/new` |
-| CORE · IA | feito | `ShellVm.core`, `ai` |
-| Painel «Estado do sistema» (Core: versão, Instância, serviços; IA: estado, descrição, meta; «Ver opções de IA», «Estado detalhado») | 14c | **novo** `StatusVm { core_version, instance_code, services_active: Option<u32>, ai: Health, ai_detail: Option<String> }` |
-| Notificações: botão e contador | feito | `ShellVm.unread` |
-| Painel das notificações (lista, por ler, «Marcar todas como lidas», «Ver todas») | 14c | **novo** `GET /notifications?limit=6` → `[{id, icon, title, body, at, read, href}]`; `POST /notifications/read-all`; `POST /notifications/{id}/read` |
-| Relógio «Seg 28 set · 15:17» | feito | — (browser) |
-| Painel do relógio (dia por extenso, mês, «Abrir Calendário») | 14c | — (browser) |
-
-### Barra de aplicações
-| elemento | estado | dados |
-|---|---|---|
-| Home / «Mostrar Desktop» | feito como link; minimizar todas: 14d | — |
-| Lançador | feito | `ShellVm.apps` |
-| «Todas as janelas» | 14d | — (cliente) |
-| Aplicações fixadas, activa | feito | `AppTile.pinned`, `active` |
-| Ponto «aberta» e janelas abertas não fixadas | 14d | — (cliente) |
-| Lixo (vazio/cheio) | 14c botão; aplicação Lixo: P3 | **novo** `ShellVm.trash_count: Option<u32>` |
-| Esconder sozinha após 5 s; botão para a trazer com n.º de janelas | esconder à mão: feito; automático e contador: 14c | — |
-| Dicas ao passar o rato | 14c | — |
-
-### Lançador
-| elemento | estado | dados |
-|---|---|---|
-| Título, contagem, ESC, pesquisa ⌘J | feito (contagem e chips: 14c) | — |
-| Separadores por categoria com contagem | 14c | **novo** `AppTile.category` (do manifesto) |
-| Secções, descrições, estado «Aberto · 2 janelas» / «Várias janelas» | descrições feitas; resto 14c/14d | `AppTile.multi_window: bool` (manifesto) |
-| Fixar/desafixar | feito (`PUT /apps/pins`) | — |
-| Vazio / sem resultados / erro / sem permissão | sem resultados feito; resto 14c | `Load` em `ShellVm.apps` |
-
-### Paleta
-No protótipo, ⌘K abre o painel da Nye, que faz de paleta: sugestões, abrir aplicações, acções com confirmação e anular, pesquisa. O código tem uma paleta de aplicações com `GET /search`, que fica até à **14e**, quando o painel da Nye a substitui.
-
-### Área do Desktop
-| elemento | estado | dados |
-|---|---|---|
-| Grelha e os 14 widgets com dados reais | feito | 11a, P2.3–P2.7 |
-| Fundo, motivo institucional, escurecimento | feito; fotografia: lacuna (contrato de carregamento) | `wallpaper`, `dim`, `fit` |
-| Menu de contexto (botão direito): Adicionar widget, Mudar fundo, Todas as janelas, Organizar widgets, Repor disposição, Definições do Desktop | 14c | — |
-| Aviso «nova predefinição» com Ver / Usar / Dispensar | «Ver» feito; «Usar» e «Dispensar»: 14c | **novo** `DesktopVm.dismissed_default: Option<u32>` e `POST /me/desktop/dismiss {version}` |
-| Toast com «Anular» | feito | — |
-| Bloqueio de ecrã (⌘L; hora, data, iniciais, palavra-passe, erro, Terminar sessão) | 14c (G-01) | **novo** `POST /session/lock` → 204; `POST /session/unlock {password}` → 204 / 401; sessão bloqueada responde `/lock` a qualquer rota |
-
-### Personalizar
-| elemento | estado |
-|---|---|
-| Entrar e sair, barra de edição | feito |
-| Arrastar, ← →, tamanho, retirar (obrigatórios com cadeado), recolher | feito |
-| Biblioteca: pesquisa, categorias, acrescentar | feito |
-| Fundo e escurecimento | feito |
-| Repor predefinição com diferenças e «Anular» | feito |
-| A guardar / guardado / falhou / conflito 409 | feito |
-| Política sem personalização | feito |
-| **Publicar a predefinição** (administração) | não existe no protótipo; desenho na **14b** (Administração › Desktop predefinido) |
-
-### Janelas (G-05) · 14d
-Abrir (e várias janelas nas aplicações que o permitem), focar, mover, redimensionar, minimizar para a barra, maximizar e restaurar (também com duplo clique no título), ecrã inteiro (saída com Esc e botão que aparece no topo), fechar, encaixar nas bordas (metades, quartos, máximo) com pré-visualização, «Todas as janelas» (⌃↑ / F3), alternar (⌘/Ctrl/Alt+Tab), «Mostrar Desktop», abrir o Terminal com ⌃⇧`. Em tablet e telemóvel (< 1024 px) as janelas ocupam a área toda e não se arrastam. Pré-visualização `/preview/{kind}/{id}`. Contrato proposto: **qualquer rota de aplicação aceita `?frame=1`** e devolve só o corpo da janela (sem casca), com o título em `<template data-part="win-title">`. Sem JS, a mesma rota sem `frame` abre em página inteira (`app_window`, já existe). A disposição das janelas fica no browser (`sessionStorage`), não no Core. Pormenor em 14d.
-
-### Nye · 14e
-Painel (sugestões, mensagens por tipo: acção, armazenamento, resposta, política, recusa, confirmação, progresso, pesquisa; «Anular»; «Nova conversa»; abrir completa), bolha flutuante que se arrasta, voz (G-07). Contrato do BFF na 14e.
-
-### Destinos dos widgets
-Nenhum ecrã de destino é desta fatia. Até cada ecrã chegar, **a rota responde `shell::app_pending(&shell, título, rota)`** (novo na 14a): a janela com «Este ecrã ainda não está disponível nesta versão do Ocinye OS.» (`shell.app.pending`). Assim nenhuma ligação fica morta.
-
-| widget | «Ver tudo» | itens | ecrã em |
-|---|---|---|---|
-| Indicadores | — | `/units`, `/ideas`, `/projects`, `/datasets` | P4 (investigação) |
-| Avisos | `/notifications` | aviso | P3 |
-| Continuar trabalho | `/files` | ficha/editor ou `/preview/{kind}/{id}` | ficheiros e notas P3; pré-visualização 14d; ideias/projectos/datasets P4 |
-| Tarefas | `/my-work` | `/tasks/{id}` | P3 |
-| Calendário | `/calendar` | `/calendar/events/{id}` | P5 |
-| Notas | `/notes` | `/notes/{id}` | P3 |
-| Ficheiros | `/files` | `/files/{id}` | P3 |
-| Correio | `/mail` | `/mail/{id}` | P5 |
-| Actividade | `/activity` | origem do evento | P3 |
-| Projectos | `/projects` | `/projects/{id}` | P4 |
-| Ideias | `/ideas` | — | P4 |
-| Datasets | `/datasets` | — | P4 |
-| Armazenamento | `/files` | — | P3 |
-| Estado do sistema | — | `/admin/monitor` (só admin) | P8 (Monitor) |
-| Menu da conta | `/account`, `/settings`, `/help` | — | P3 |
-| Barra de cima | `/search`, `/notifications` | — | P3 |
-
-
-## D001.1 · correcções de paridade e estados em falta
-Contratos: `DesktopDefault.source` (`DefaultSource::System | Instance`), `Backup::Unknown`, `ErrorKind`/`ErrorVm`, `IdentityFailVm`. Novas vistas: `screens::error::{in_shell, at_door}` e `screens::auth::identity::identity_unavailable`. O registo de widgets não muda. Detalhe: HANDOFF.md do pacote D001.1, §0.
-
-## D001.2 · fecho da paridade da D001
-Só CSS (`oc-shell.css`, `oc-desk.css`): a pastilha CORE·IA; a margem de 30px sem a barra; 4 colunas só com a área ≥ 960px (a referência a 924 tem 2 colunas); títulos em até duas linhas; Indicadores 4 numa linha ou 2 + 2. Decisões: REGISTRY_IS_CANONICAL e IMPLEMENTATION_CANONICAL_REFERENCE_CORRECTED. Detalhe: HANDOFF.md do pacote, §00.
-
-## D002 · janelas e interacções da casca
-Ver HANDOFF.md do pacote D002 (§ D002): componentes, estados, contratos WM-1…WM-5, painéis e responsivo.
-
-
-## D002.1 · correcção (paridade e acessibilidade)
-- Alternador: desenhado por `shell_with_window` depois da paleta, fora do `.oc-desk` (`isolation: isolate`); o véu cobre e bloqueia a barra de cima. `wm::switcher` é público; `wm::layer` já não o desenha.
-- Painéis fechados: `.oc-panel-menu > summary { display: flex }`; pastilha, sino e relógio nas posições da D001.2.1.
-- Diálogo de alterações: só controlos focáveis reais (sem `<use href>`); Tab e Shift+Tab dão a volta; o foco volta ao controlo anterior quando o diálogo fecha sem navegar.
+| Leptos implementation of the 29 applications (Work, Notes, Files, Calendar, Tasks, History, Resources, Mail, Messages, Units, Ideas, Projects, Datasets, Results, Knowledge, Bibliography, Nye, Ocinye AI, Agents, Compute, Activity, Monitor, Administration, Audit log, Settings, Help, Trash, Terminal, Browser) | Not yet authored as production code. They exist only as the interactive prototype. | Yes: `reference/Ocinye OS Apps.dc.html`, screenshots `app-*` | Nothing now. Serve `shell::app_pending` on those routes until D002+ delivers them. |
+| Window preview `/preview/{kind}/{id}` (FG-011) | Not in D002 scope | Yes: reference | Later revision |
+| Nye panel, floating bubble, voice | Not yet authored as production code | Yes: screenshot `desktop-nye-panel` | FG-020 |
+| Lock screen (G-01), dock auto-hide (FG-007), launcher categories/favourites/recents (FG-008) | Not in D002 scope | Yes (reference) | Later revisions |
+| Setup wizard (setup → distribution → apps → AI → initialise → ready) | Not yet authored as production code. The prototype enters it through an internal flow that can't be reached through a URL, so no screenshot exists. | Yes: `reference/Ocinye OS Apps.dc.html` (`screen` prop: `setup`, `setupProfile`, `setupApps`, `setupAi`, `setupInit`, `setupReady`) | Open the Apps prototype and set the `screen` prop, or wait for D002+ |
+| Dark theme for the shell, Desktop and apps | Designed only inside the app prototype (`theme` prop). Not in production CSS apart from auth and a few shell rules. | Partly | MISSING_DESIGN_STATE for Desktop dark. The Desktop is wallpaper-driven glass. |
+| Theme "system" | Never designed | No | MISSING_DESIGN_STATE. Map it to the OS preference only once designed. |
+| Screenshots of Business, Personal and Education, EN/FR beyond login, dark, tablet and mobile | The capture tool renders one viewport (924×540). Other distributions need a prop change and weren't captured. | Yes, via the prototype props | Change the `distribution` prop in the reference and compare manually |
+| Photo wallpaper | No upload contract exists. The sheet says it is not yet available. | Designed as unavailable | FG-003 |
+| Font binaries | Not needed: IBM Plex already ships in the repository (`apps/workspace/static/fonts/`, with LICENSE) | n/a | none |

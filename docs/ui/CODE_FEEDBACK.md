@@ -37,6 +37,16 @@ Nenhum defeito do Design. O conteúdo de modelo chega em blocos de texto (nunca
 HTML); a confirmação devolve o digest mostrado e o Workspace recusa (`409`) o
 que não for o do plano; a voz nunca pede o microfone.
 
+## D003 2 — prateleira retirada (aplicada)
+
+Checksums 183/183. Aplicada sobre a árvore sem mudanças vossas: sem
+prateleira em nenhuma largura; a Nye aparece depois do separador enquanto
+tiver janela e sai com a última; com duas janelas de Ficheiros a barra diz
+«2 janelas abertas» e o clique abre a escolha; maximizada ocupa a altura toda
+(818×474 a 924×540). O motor do Code não precisou de mudar: fechar e
+minimizar redesenham a página com a vossa marcação. As chaves `wm.shelf` e
+`wm.shelf.all` ficam no catálogo sem uso, como disseram.
+
 ## VISUAL
 
 Certificado no browser (build D003 e D002.1 lado a lado, o mesmo Core):
@@ -55,9 +65,8 @@ elementos a 1440 e 1023 a 924; só o rótulo «Nye» no lançador).
 2. **Unidades e ideias em «Outros».** O vocabulário `NyeKind` não tem `Unit`
    nem `Idea`; o Core indexa as duas. Se quiserem grupos próprios, precisamos
    das duas variantes.
-3. **Voz a 924×540 com o aviso de disponibilidade**: o painel abre no fim, e
-   «A voz não está disponível» fica acima da dobra; o círculo do microfone fica
-   em destaque.
+3. **Voz a 924×540** — fechado pela D003 2: o estado «A voz não está
+   disponível» fica no topo, visível.
 4. A referência a 1440 está guardada a 924×540 com escala não uniforme
    (0,642 × 0,600); não serve de alvo ao píxel.
 

@@ -138,45 +138,6 @@ pub fn window(w: &WindowVm, body: Option<AnyView>) -> impl IntoView {
     }
 }
 
-fn shelf(wm: &WmVm) -> impl IntoView {
-    let mut ws: Vec<&WindowVm> = wm.windows.iter().collect();
-    ws.sort_by_key(|w| (w.app_id, w.id.clone()));
-    view! {
-        <nav class="oc-shelf" data-oc="shelf" aria-label=t("wm.shelf")>
-            <a class="oc-shelf__all" href="#oc-switcher" data-oc="switcher-open" aria-label=t("wm.shelf.all") title=t("wm.shelf.all")>{icon("windows")}</a>
-            <ul class="oc-shelf__list">
-                {ws.into_iter().map(|w| {
-                    let min = w.state == WindowState::Minimized;
-                    let label = match (&w.subtitle, min) {
-                        (Some(s), false) => format!("{} · {}", w.title, s),
-                        (Some(s), true) => format!("{} · {} · {}", w.title, s, t("wm.state.minimized")),
-                        (None, true) => format!("{} · {}", w.title, t("wm.state.minimized")),
-                        (None, false) => w.title.clone(),
-                    };
-                    view! {
-                        <li>
-                            <a
-                                class="oc-shelf__item"
-                                href=w.href.clone()
-                                data-oc="wm-focus"
-                                data-win=w.id.clone()
-                                data-state=w.state.as_str()
-                                aria-current=w.active.then_some("true")
-                                aria-label=label.clone()
-                                title=label
-                            >
-                                {icon(app_icon(w.app_href))}
-                                <span class="oc-shelf__name">{w.subtitle.clone().unwrap_or_else(|| w.title.clone())}</span>
-                                {w.dirty.then(|| view! { <span class="oc-shelf__dirty" aria-hidden="true"></span> })}
-                            </a>
-                        </li>
-                    }
-                }).collect_view()}
-            </ul>
-        </nav>
-    }
-}
-
 /// D002.1 · O alternador é uma camada global da casca (como o lançador e a
 /// paleta): desenha-se fora do `.oc-desk` (`isolation: isolate`), para que o
 /// véu cubra a barra de cima. `shell_with_window` chama-o depois de `palette`.
@@ -266,7 +227,6 @@ pub fn layer(wm: &WmVm, active_body: Option<AnyView>) -> impl IntoView {
     let mut body = active_body;
     let mut ws: Vec<&WindowVm> = wm.windows.iter().collect();
     ws.sort_by_key(|w| w.z);
-    let has = !ws.is_empty();
     let count = ws.len().to_string();
     view! {
         <div class="oc-wm" data-oc="wm-layer" data-windows=count>
@@ -275,7 +235,6 @@ pub fn layer(wm: &WmVm, active_body: Option<AnyView>) -> impl IntoView {
                 window(w, b)
             }).collect_view()}
             <div class="oc-snap" data-part="snap-preview" aria-hidden="true" hidden></div>
-            {has.then(|| shelf(wm))}
             {choosers(wm)}
             <p class="oc-wm__live oc-sr" data-part="wm-live" role="status" aria-live="polite"></p>
             <template data-part="wm-strings">
@@ -602,7 +561,8 @@ pub(crate) mod tests {
                 && html.contains(r#"value="maximize""#)
         );
         assert!(html.contains("corpo") && html.contains(t("shell.app.pending")));
-        assert!(html.contains(r#"data-oc="shelf""#));
+        // D003 · sem prateleira: as janelas abertas vivem só na barra de aplicações.
+        assert!(!html.contains("oc-shelf"));
         assert!(
             !html.contains(r#"id="oc-switcher""#),
             "D002.1: o alternador não pertence à camada das janelas"
