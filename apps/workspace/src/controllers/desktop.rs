@@ -142,17 +142,17 @@ impl Clock {
             .format("%H:%M")
             .to_string()
     }
-    fn ddmm(&self, at: DateTime<Utc>) -> String {
+    pub(crate) fn ddmm(&self, at: DateTime<Utc>) -> String {
         at.with_timezone(&self.zone.zone())
             .format("%d/%m")
             .to_string()
     }
-    fn is_today(&self, at: DateTime<Utc>) -> bool {
+    pub(crate) fn is_today(&self, at: DateTime<Utc>) -> bool {
         let z = self.zone.zone();
         at.with_timezone(&z).date_naive() == self.now.with_timezone(&z).date_naive()
     }
     /// «14:05» hoje, «22/09» nos outros dias.
-    fn when(&self, at: DateTime<Utc>) -> String {
+    pub(crate) fn when(&self, at: DateTime<Utc>) -> String {
         if self.is_today(at) {
             self.hhmm(at)
         } else {
@@ -164,7 +164,7 @@ impl Clock {
         Ago::from_secs(secs, || self.ddmm(at))
     }
     /// «há 5 min», «ontem», «22/09» (chaves `time.*` do Design).
-    fn relative(&self, at: DateTime<Utc>) -> String {
+    pub(crate) fn relative(&self, at: DateTime<Utc>) -> String {
         let secs = (self.now - at).num_seconds().max(0);
         match secs {
             0..60 => t("time.now").to_owned(),
@@ -178,7 +178,7 @@ impl Clock {
 }
 
 /// «12,4 GB», com a vírgula ou o ponto do idioma.
-fn bytes(n: u64) -> String {
+pub(crate) fn bytes(n: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     #[allow(clippy::cast_precision_loss, reason = "uma apresentação arredondada")]
     let mut v = n as f64;

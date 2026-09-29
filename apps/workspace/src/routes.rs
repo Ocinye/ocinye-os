@@ -345,24 +345,29 @@ pub fn router(state: WorkspaceState) -> Router {
         )
         // Notas pessoais. A criação e a lista partilham o caminho: `GET /notes`
         // mostra as notas, `POST /notes` cria uma e leva o membro ao editor.
-        .route("/notes", get(notes_list).post(create_personal_note))
+        .route(
+            "/notes",
+            get(productivity::notes_list).post(create_personal_note),
+        )
         // A criação a partir do «+ Criar» global tem o seu próprio caminho: o
         // formulário do menu vive na barra de topo de todas as páginas, e um
         // `action="/notes"` colidiria, no DOM, com o formulário de criação da
         // própria lista de Notas. Mesmo efeito, caminho distinto.
         .route("/notes/new", post(create_personal_note))
         // As notas que outra pessoa partilhou com o membro — a vista de leitura.
-        .route("/notes/partilhadas", get(shared_notes_page))
+        .route("/notes/partilhadas", get(productivity::shared_notes_page))
         // O Lixo: as notas apagadas, de onde se restauram ou se eliminam de vez.
-        .route("/notes/lixo", get(notes_trash_page))
-        .route("/notes/{note_id}", get(note_editor))
+        .route("/notes/lixo", get(productivity::notes_trash_page))
+        .route("/notes/{note_id}", get(productivity::note_editor))
         // Apagar (leva ao Lixo), restaurar e eliminar definitivamente — do dono.
         .route("/notes/{note_id}/apagar", post(delete_note_route))
         .route("/notes/{note_id}/restaurar", post(restore_note_route))
         .route("/notes/{note_id}/eliminar", post(purge_note_route))
-        // O autosave: um POST em JSON, respondido em JSON (não uma página). A
-        // fronteira same-origin protege-o como a qualquer outra escrita.
-        .route("/notes/{note_id}/gravar", post(save_personal_note))
+        // Gravar (D004): o formulário do editor, com a revisão em que abriu.
+        .route(
+            "/notes/{note_id}/gravar",
+            post(productivity::save_personal_note),
+        )
         // Mover uma nota para uma pasta: fetch em JSON, do editor.
         .route("/notes/{note_id}/mover", post(move_personal_note))
         // Partilha: conceder acesso a uma pessoa e revogá-lo. Formulários, do
@@ -5724,11 +5729,6 @@ async fn create_idea(
 
 // ── Notas pessoais ───────────────────────────────────────────────────────
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn notes_list(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Notes).await
-}
-
 /// Cria uma nota vazia e leva o membro ao editor dela.
 ///
 /// Uma nota nova nasce com um título neutro e um documento vazio; o membro
@@ -5759,11 +5759,6 @@ async fn create_personal_note(State(state): State<WorkspaceState>, headers: Head
         }
         Err(failure) => failure_response(&failure),
     }
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn note_editor(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Notes).await
 }
 
 /// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
@@ -5800,16 +5795,6 @@ async fn restore_note_revision_route(
     )
     .await;
     Redirect::to(&format!("/notes/{note_id}")).into_response()
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn shared_notes_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Notes).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn notes_trash_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Notes).await
 }
 
 /// Apaga uma nota (leva-a ao Lixo) e volta à lista. Do dono; o Core recusa a
@@ -5908,52 +5893,6 @@ async fn revoke_note_share_route(
     )
     .await;
     Redirect::to(&format!("/notes/{note_id}")).into_response()
-}
-
-/// O autosave de uma nota — em JSON, para o editor no browser.
-///
-/// Devolve `{revision}` a 200 quando o Core confirma, e responde `409` ao
-/// conflito de revisão base e `502` a uma avaria — sem redirecção. Isto é
-/// deliberado: um `fetch` segue uma redirecção em silêncio, e um 3xx para o
-/// login virava uma página 200 que o editor leria como «Guardado». Uma sessão
-/// que já não serve falha aqui fechada, com `401`, e o editor mantém o conteúdo
-/// (ADR-0413 §7). O Core valida tudo — dono, documento, revisão —, e o BFF é só
-/// o canal.
-async fn save_personal_note(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(note_id): Path<Uuid>,
-    axum::Json(body): axum::Json<Value>,
-) -> Response {
-    // Resolução manual, sem a macro: uma sessão anómala responde 401, nunca uma
-    // redirecção que o editor confundiria com sucesso.
-    let member = match current_member(&state, &headers) {
-        Some(member) if !member.session.must_change_password && !member.session.mfa_required => {
-            member
-        }
-        _ => return StatusCode::UNAUTHORIZED.into_response(),
-    };
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/me/notes/{note_id}"),
-        &body,
-    )
-    .await
-    {
-        Ok(updated) => {
-            let revision = updated
-                .get("revision")
-                .and_then(Value::as_i64)
-                .unwrap_or_default();
-            axum::Json(serde_json::json!({ "revision": revision })).into_response()
-        }
-        Err(ApiFailure::Unauthorised) => StatusCode::UNAUTHORIZED.into_response(),
-        Err(ApiFailure::Conflict(_)) => StatusCode::CONFLICT.into_response(),
-        Err(_) => StatusCode::BAD_GATEWAY.into_response(),
-    }
 }
 
 /// Carrega uma imagem para uma nota — fetch, respondido em JSON.
@@ -9177,3 +9116,6 @@ mod carregamento_tests {
         );
     }
 }
+
+// D004 · As aplicações de produtividade. Declarado no fim: usa `member_or_login!`.
+mod productivity;
