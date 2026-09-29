@@ -42,7 +42,9 @@ const NAV: &[Entry] = catalogo! {
     "nav.activity": { pt: "Actividade", en: "Activity", fr: "Activité" },
     "nav.admin": { pt: "Administração", en: "Administration", fr: "Administration" },
     "nav.audit": { pt: "Audit Log", en: "Audit Log", fr: "Journal d’audit" },
-    "nav.prompt": { pt: "Prompt Ocinye", en: "Ocinye Prompt", fr: "Prompt Ocinye" },
+    // D003: o nome visível é Nye; o identificador (`prompt`), a rota
+    // (`/ai/prompt`) e o manifesto ficam estáveis (ADR-0619).
+    "nav.prompt": { pt: "Nye", en: "Nye", fr: "Nye" },
     "nav.search": { pt: "Pesquisar", en: "Search", fr: "Rechercher" },
     "nav.ask": {
         pt: "Pesquisar, perguntar ou executar",
@@ -170,9 +172,9 @@ const APPS: &[Entry] = catalogo! {
         fr: "Explorez et gérez les jeux de données."
     },
     "apps.desc.prompt": {
-        pt: "Interaja com a inteligência do Ocinye.",
-        en: "Interact with Ocinye's intelligence.",
-        fr: "Interagissez avec l'intelligence d'Ocinye."
+        pt: "Pesquise, pergunte e aja no Ocinye OS.",
+        en: "Search, ask and act across Ocinye OS.",
+        fr: "Recherchez, demandez et agissez dans Ocinye OS."
     },
     "apps.desc.ai": {
         pt: "O estado da inteligência do Ocinye OS.",

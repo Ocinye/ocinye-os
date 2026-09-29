@@ -11,6 +11,7 @@
 //! Core recusa ou devolve, e a interface mostra o que ele disse.
 
 pub mod desktop;
+pub mod nye;
 pub mod panels;
 pub mod windows;
 
@@ -379,8 +380,17 @@ pub async fn shell(
         // portão da aplicação; sem janelas, `None` é a casca D001.
         wm: None,
         panels: top_panels,
-        // D003 fase A: sem Nye, a paleta é a D001 e a casca é a D002.1.
-        nye: None,
+        // D003: a superfície da Nye, fechada, com a disponibilidade real.
+        nye: Some(nye::surface(
+            nye::availability(
+                nye::may_use_ai(&viewer),
+                core.operational(),
+                ai.as_ref().ok(),
+            ),
+            "",
+            None,
+            false,
+        )),
     };
 
     Shell::Ready(Box::new(ShellContext {
