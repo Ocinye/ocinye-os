@@ -78,6 +78,19 @@ fn enc(q: &str) -> String {
 
 // ── A superfície universal ────────────────────────────────────────────────
 
+/// Só os resultados da superfície (sem o grupo de aplicações): o Desktop por
+/// baixo também liga às notas recentes do membro, e uma ligação lá não prova
+/// nada sobre a pesquisa.
+fn resultados(html: &str) -> &str {
+    let from = html
+        .find(r#"<ul class="oc-nye-groups">"#)
+        .expect("a superfície tem resultados");
+    let to = html[from..]
+        .find(r#"data-part="nye-apps""#)
+        .map_or(html.len(), |i| from + i);
+    &html[from..to]
+}
+
 #[tokio::test]
 async fn a_superficie_esta_em_todas_as_paginas_fechada_e_honesta() {
     let Some(s) = Sistema::levantar("research").await else {
@@ -120,7 +133,7 @@ async fn sem_ia_a_pesquisa_encontra_e_abre_so_o_que_o_membro_pode_ver() {
         .await;
     assert_eq!(status, 200);
     assert!(
-        html.contains(&format!(r#"href="/notes/{minha}""#)),
+        resultados(&html).contains(&format!(r#"href="/notes/{minha}""#)),
         "a nota do membro não apareceu"
     );
     // 1 · Um recurso escondido não aparece na pesquisa da Nye.
@@ -135,7 +148,7 @@ async fn sem_ia_a_pesquisa_encontra_e_abre_so_o_que_o_membro_pode_ver() {
     let (_, html) = s
         .html(&format!("/ask?q={}&intent=search", enc(&marca)), &outro_c)
         .await;
-    assert!(html.contains(&alheia) && !html.contains(&minha));
+    assert!(resultados(&html).contains(&alheia) && !html.contains(&minha));
 }
 
 #[tokio::test]
@@ -161,7 +174,7 @@ async fn perguntar_sem_inferencia_diz_porque_e_continua_a_pesquisar() {
         "uma resposta da Nye sem inferência"
     );
     // A mesma pergunta continua a encontrar o que o membro tem.
-    assert!(html.contains(&format!(r#"href="/notes/{minha}""#)));
+    assert!(resultados(&html).contains(&format!(r#"href="/notes/{minha}""#)));
 }
 
 #[tokio::test]
@@ -314,6 +327,34 @@ async fn sem_ai_use_nao_ha_nye_nem_perguntas() {
     let (status, html) = s.html("/ask?q=teste&intent=ask", &c).await;
     assert_eq!(status, 200);
     assert!(html.contains(crate_t("nye.reason.permission_denied")));
+}
+
+/// Sem `ai.use`, o Core recusa o `invoke` inteiro — pesquisa incluída. A
+/// pesquisa da Nye tem de continuar, pela rota determinística, com a mesma
+/// autorização; nunca «sem resultados» por causa da recusa.
+#[tokio::test]
+async fn sem_ai_use_a_pesquisa_continua_a_encontrar() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (_, email, password) = s.pessoa(&[TechnicalRole::Collaborator]).await;
+    let (_, _, c) = s.entrar(&email, &password).await;
+    let t = token(&s, &email, &password).await;
+    let (_, _, outro_t) = membro(&s).await;
+    let marca = format!("vento{}", Uuid::new_v4().simple());
+    let minha = nota(&s, &t, &format!("Medições {marca}")).await;
+    let alheia = nota(&s, &outro_t, &format!("Reservado {marca}")).await;
+
+    for intent in ["", "&intent=search", "&intent=ask"] {
+        let (status, html) = s.html(&format!("/ask?q={}{intent}", enc(&marca)), &c).await;
+        assert_eq!(status, 200);
+        assert!(
+            resultados(&html).contains(&format!(r#"href="/notes/{minha}""#)),
+            "sem ai.use a pesquisa não encontrou a nota do membro ({intent})"
+        );
+        assert!(!html.contains(&alheia), "a nota de outra pessoa apareceu");
+        assert!(html.contains(crate_t("nye.reason.permission_denied")));
+    }
 }
 
 #[tokio::test]

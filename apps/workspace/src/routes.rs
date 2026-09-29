@@ -4230,6 +4230,30 @@ async fn nye_invoke(
     .await
 }
 
+/// A pesquisa determinística do Core (`GET /search`), com a autorização dele:
+/// os mesmos campos que as fontes do `invoke`.
+async fn nye_search(
+    state: &WorkspaceState,
+    member: &Member,
+    text: &str,
+) -> Result<Vec<Value>, ApiFailure> {
+    let page = api::get::<Value>(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!(
+            "/api/v1/search?q={}&page_size=36",
+            urlencoding_minimal(text.trim())
+        ),
+    )
+    .await?;
+    Ok(page
+        .get("items")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default())
+}
+
 /// O que o Core diz de um plano do membro, reavaliado agora.
 async fn plan_detail(
     state: &WorkspaceState,
@@ -4323,14 +4347,21 @@ async fn ask(
                     let off = ui::view_models::NyeAvail::Unavailable(reason);
                     availability.ask = off;
                     availability.act = off;
-                    // A pesquisa continua a funcionar sem inferência.
-                    if let Ok(found) = nye_invoke(&state, &member, &text, Some("search")).await {
-                        hits = controllers::nye::hits(
-                            found
-                                .get("sources")
-                                .and_then(Value::as_array)
-                                .map_or(&[][..], Vec::as_slice),
-                        );
+                    // A pesquisa continua a funcionar sem inferência — e sem
+                    // `ai.use`: o `invoke` recusa tudo a quem não pode usar a
+                    // assistência, pesquisa incluída, por isso a pesquisa sai
+                    // da rota determinística do Core, com a mesma autorização.
+                    match nye_search(&state, &member, &text).await {
+                        Ok(items) => hits = controllers::nye::hits(&items),
+                        Err(ApiFailure::Unauthorised) => {
+                            return session_ended(&state, &headers);
+                        }
+                        Err(failure) => {
+                            tracing::warn!(correlation_id = %member.correlation_id, %failure, "nye search failed");
+                            availability.search = ui::view_models::NyeAvail::Unavailable(
+                                ui::view_models::NyeReason::CoreUnavailable,
+                            );
+                        }
                     }
                 }
                 _ => {}
