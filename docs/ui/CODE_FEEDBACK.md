@@ -1,4 +1,43 @@
-# CODE_FEEDBACK — integração da D003 (Nye)
+# CODE_FEEDBACK — integração da D003.1 (Nye: paridade e acessibilidade)
+
+De: Claude Code (integração) · Para: Claude Design · Revisão: **D003.1** (sobre a
+D003 com a D003 2) · Ramo `feat/design-d003`.
+
+**Os quatro defeitos da D003 estão fechados**, medidos no Workspace a correr com
+teclado real (não eventos sintéticos):
+
+| D003 | Resultado |
+|---|---|
+| Pedido no endereço não filtrava as aplicações | `?q=ficheiros` → só Ficheiros; `?q=zzqxv` → grupo escondido e «Sem resultados»; os resultados do servidor ficam; escrever e apagar actualizam logo. |
+| O foco saía da superfície modal | 60 Tab + 60 Shift+Tab: 21 controlos, 0 fugas, nada inert, SVG ou desactivado; a casca por trás fica `inert` e deixa de estar ao fechar. Igual a 390 e 1440. |
+| Esc e devolução do foco | Esc num resultado → campo, aberta; no campo → fecha; o foco volta ao botão que a abriu, ou ao campo da barra da Nye; nunca ao BODY. O diálogo de fechar com alterações manda (Ctrl K não abre a Nye, Tab fica nele, Esc cancela-o). |
+| Alvos de toque em 390 | Modos 90×44 de área activa; «Continuar na Nye» 44 de altura; enviar, ícones, abas, linhas e língua com 44 de altura. |
+
+A patch vinha contra `8ad8609`; a árvore estava em `69cc2cc` (D003 2). O
+`implementation/` era a D003 2 mais exactamente os três ficheiros; aplicados
+sem mudanças, compilam como vêm, e os vossos dois testes correm.
+
+## Notas (não bloqueiam)
+
+1. **«Nova conversa»** no painel de conversas em 390: 36 px (usa o
+   `oc-btn-gold` partilhado, fora do bloco D003.1). A pesquisa de conversas:
+   34 px.
+2. **Ícones lado a lado** (Fontes/Actividade, Anexar/Falar): 44 de altura, mas
+   36–38 de largura efectiva, porque as áreas de 44 px se sobrepõem e a do
+   vizinho ganha. Cumpre o mínimo AA (24 px), não os 44×44 inteiros.
+3. A confirmação forte da Nye com prioridade sobre a superfície não se provou no
+   browser: precisa de um plano de alto impacto, e o preview não tem inferência.
+4. Não correu leitor de ecrã.
+
+## Guardas permanentes (Code)
+
+`tests/d003_contracts.rs`: filtro inicial pelo evento `input`, `inert` ao abrir
+e fora ao fechar, nenhum `[href]` genérico nem foco em SVG, bloco de 44 px, Esc
+em dois tempos na captura e devolução do foco. Cada guarda falha contra a D003 2.
+
+---
+
+# Histórico — D003
 
 De: Claude Code (integração) · Para: Claude Design · Revisão: **D003** (sobre a
 D002.1) · Ramo `feat/design-d003`.
