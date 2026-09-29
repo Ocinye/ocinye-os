@@ -1,4 +1,46 @@
-# HANDOFF — Ocinye OS canonical UI · Design revision D003
+# HANDOFF — Ocinye OS canonical UI · Design revision D003.1
+
+# D003.1 · Nye universal surface — parity & accessibility hotfix
+
+Based on D003 as integrated by Code: `feat/design-d003` @ `8ad860936ee84d4b5756d10842eedb7daed6b0eb`. The package's `ui/nye/mod.rs` is Code's integrated file (the 4 compile fixes, `cargo fmt`) plus D003.1; Code-owned fixes (search without ai.use, composer field `q`, journey assertions) are not touched.
+
+1. **Initial query filter.** One filter: the `oc-shell.js` palette filter (on `input`). `oc-nye.js` dispatches that same `input` event when the surface opens with a value (server `/ask?q=` or reopen), never a second implementation. «Sem resultados» (`data-part="nye-empty"`, server) hides once an app matches or the field changes; the app group hides when empty. Server result groups are never touched.
+2. **Real modality.** `aria-modal="true"` kept. While open: focus starts in the field; Tab/Shift+Tab wrap inside the form over visible, enabled, non-inert controls (SVG elements excluded); every other shell subtree up to `body` gets `inert` (blocking dialogs excluded) and is released on close; a `focusin` guard pulls stray focus back.
+3. **Esc in two steps.** Capture-phase handler: focus on any control other than the field → back to the field, surface stays; focus in the field → the existing `oc-shell.js` close. A blocking dialog (dirty close, Nye confirmation) keeps priority: the handler stands aside. Launcher/switcher unchanged.
+4. **Focus restoration.** The opener is captured on open; on close without navigation focus returns to it if still visible, else to the first focusable control of `.oc-nyebar` (the canonical invocation). Never BODY.
+5. **Touch targets ≤ 640.** `--oc-nye-touch: 44px`: transparent centred `::after` hit areas on mode pills, send/stop, icon buttons (mic, attach, panels, drawer), `.oc-nye-btn`, tabs, attachment remove, context chip; min-height 44 on «Continuar na Nye», suggestions, voice language select, details/activity summaries, conversation rows. Visual geometry changes only where a block grew (listed in REFERENCE_CHANGES). D002 app-bar and window controls untouched.
+
+Contracts: VIEW_MODEL / CORE / AI_FABRIC / WORKSPACE / WINDOW / APP_REGISTRY / WIDGET_REGISTRY changes = NONE. Markup: one attribute (`data-part="nye-empty"`).
+
+### Validation (D003.1)
+| # | Check (fixture `reference/d003/fixture.html`, production `oc-shell.js` + `oc-nye.js` + CSS, synthetic DOM events) | Viewport | Result |
+|---|---|---|---|
+| A1 | Opened by the server with `q=nota`: only «Notas» visible | 924×540 | PASS |
+| A2 | «Sem resultados» hidden when an app matches | 924×540 | PASS |
+| A3 | Clearing the field restores all 8 apps and hides «Sem resultados» | 924×540 | PASS |
+| A4 | Typing a no-match hides the app group | 924×540 | PASS |
+| A5 | Opened with `q=xyzzy`: app group hidden, «Sem resultados» shown | 924×540 | PASS |
+| A6 | Server-provided deterministic groups (3) stay visible | 1440×900 | PASS |
+| B1 | Initial focus in the field | 924×540 | PASS |
+| B2 | `.oc-top` and `.oc-desk` are `inert` while open | 924×540 | PASS |
+| B3 / B4 | Tab from last → first; Shift+Tab from first → last | 924×540 | PASS |
+| B5 | No SVG element in the focus order | 924×540 | PASS |
+| B6 | A control behind (app bar) cannot take focus | 924×540 | PASS |
+| B7 | `inert` removed after close | 924×540 | PASS |
+| B8 | Trap wraps at desktop | 1440×900 | PASS |
+| C1 | Esc on a result → field, surface stays open | 924×540 | PASS |
+| C2 | Esc in the field closes | 924×540 | PASS |
+| D1 | Server-opened then closed: focus goes to the top-bar Nye field (never BODY) | 924×540 | PASS |
+| D2 | ⌘K from an app-bar button opens with focus in the field | 924×540 | PASS |
+| D3 | Esc restores focus to that app-bar button | 924×540 | PASS |
+| D4 | Ctrl K from the top-bar Nye field; Esc restores focus to it | 924×540 | PASS |
+| E1 | Mode pills: visual 28 px, hit 90×44 | 390×844 | PASS |
+| E2 | «Continuar na Nye» 44 px; submit 44×44; result rows 48 px | 390×844 | PASS |
+| E3 | No horizontal overflow in the surface | 390×844 | PASS |
+
+Keys were dispatched as synthetic `KeyboardEvent`s: the trap's own wrap logic was exercised; native Tab movement between middle elements and a real screen reader were not. Rust not compiled here: `nye::tests` +2 (`d003_1_…`) are Code's first gate.
+
+---
 
 ### D003 · Prateleira removida (decisão do membro, 29 set)
 A prateleira de janelas em baixo do Desktop (D002 `wm::shelf`, `.oc-shelf`) foi retirada. As janelas abertas vivem só na barra de aplicações lateral: fixadas com o ponto de execução (1/2); aplicações em execução não fixadas (ex.: Nye) aparecem depois de um separador (`data-part="dock-running"`, `data-running`) e saem quando a última janela fecha. Várias janelas da mesma aplicação: a escolha (`.oc-chooser`) do clique na barra; todas as janelas: o alternador (Alt+W / ícone na barra da janela). `--shelf-h` fica 0. Classe: D002_COMPONENT_EXTENSION (WM presentation). Ficheiros: `ui/wm/mod.rs`, `ui/shell/mod.rs` (dock), `static/oc-wm.css`. Chaves `wm.shelf`/`wm.shelf.all` ficam no catálogo sem uso.

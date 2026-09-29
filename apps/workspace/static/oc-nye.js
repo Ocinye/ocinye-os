@@ -19,7 +19,10 @@
  * Sem ouvinte (nenhum preventDefault), os botões de voz não fazem nada além do
  * estado visual e ficam honestos: o servidor só os desenha activos quando
  * NyeAvailability.voice_input == Available.
- * Nada é guardado em localStorage. */
+ * Nada é guardado em localStorage.
+ *
+ * D003.1: filtro inicial = filtro interactivo; modal verdadeira (foco preso,
+ * resto inert); Esc em dois tempos; foco devolvido a quem abriu. */
 (() => {
   'use strict';
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -59,7 +62,15 @@
     set();
     // Grupo de aplicações (D001) desaparece quando o filtro não deixa nenhuma.
     const apps = form.querySelector('[data-part="nye-apps"]');
-    const syncApps = () => { if (apps) apps.hidden = !$$('[data-part="palette-item"]', apps).some((li) => !li.hidden); };
+    // D003.1 · «Sem resultados» (do servidor) só vale para o pedido que o
+    // servidor viu; some se aparecer uma aplicação ou se o campo mudar.
+    const empty = form.querySelector('[data-part="nye-empty"]');
+    const served = q ? q.value : '';
+    const syncApps = () => {
+      const anyApp = !!apps && $$('[data-part="palette-item"]', apps).some((li) => !li.hidden);
+      if (apps) apps.hidden = !anyApp;
+      if (empty) empty.hidden = anyApp || !q || !q.value.trim() || q.value !== served;
+    };
     if (q) q.addEventListener('input', () => setTimeout(syncApps, 0));
     // ↓/↑: do campo para os resultados e entre eles; Esc no resultado volta ao campo.
     const hits = () => $$('[data-part="nye-hit"]', form).filter(visible);
@@ -73,9 +84,89 @@
       if (e.key === 'ArrowDown') (list[i + 1] || list[0]).focus();
       else if (i <= 0) { if (q) q.focus(); } else list[i - 1].focus();
     });
-    // Aberta pelo servidor (GET /ask?q=…): foco no campo, sem apagar o pedido.
+    // D003.1 · Estado inicial = estado interactivo: um só filtro, o do
+    // oc-shell.js (que ouve «input»). Com texto vindo do servidor, dispara-se o
+    // mesmo evento em vez de filtrar aqui outra vez. Os resultados do servidor
+    // (grupos sem palette-item) não são tocados.
+    const refilter = () => { if (q) q.dispatchEvent(new Event('input', { bubbles: true })); };
+    if (q && q.value.trim()) refilter(); else syncApps();
     const ov = form.closest('[data-oc="palette"]');
-    if (ov && ov.hasAttribute('data-open') && q) setTimeout(() => { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }, 0);
+    if (ov) trap(ov, form, q, refilter);
+  }
+
+  /* ── D003.1 · modal verdadeira: foco preso, Esc em dois tempos, foco devolvido ──
+   * Aberta: o foco começa no campo; Tab/Shift+Tab circulam só pelos controlos
+   * válidos da superfície (visíveis, activos, sem inert; <use> do SVG nunca);
+   * o resto da casca fica inert. Esc: num resultado ou noutro controlo → volta ao
+   * campo; no campo → fecha. Fechada sem navegar: o foco volta a quem abriu
+   * (se ainda visível) ou ao campo da barra da Nye. Nunca fica no BODY.
+   * Um diálogo bloqueante (alterações por guardar, confirmação) manda sempre. */
+  const FOCUSABLE_UI = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  const focusables = (root) => $$(FOCUSABLE_UI, root).filter((el) => el.getAttribute('aria-disabled') !== 'true' && !(el instanceof SVGElement) && visible(el));
+  // O controlo canónico de invocação: o campo da barra da Nye (nunca um <use href> do SVG).
+  const invoker = () => focusables(document.querySelector('.oc-nyebar') || document.createElement('div'))[0] || null;
+  function trap(ov, form, q, refilter) {
+    let opener = null;
+    let inerted = [];
+    const isOpen = () => ov.hasAttribute('data-open') || (location.hash === '#' + ov.id);
+    const siblingsToInert = () => {
+      const out = [];
+      let node = ov;
+      while (node && node.parentElement && node !== document.body) {
+        Array.from(node.parentElement.children).forEach((s) => { if (s !== node && s.tagName !== 'SCRIPT' && !s.hasAttribute('inert') && !s.matches('[data-oc="dirty-close"], [data-oc="nye-confirm"]')) out.push(s); });
+        node = node.parentElement;
+      }
+      return out;
+    };
+    const onOpen = () => {
+      const a = document.activeElement;
+      opener = a && a !== document.body && !ov.contains(a) ? a : opener;
+      inerted = siblingsToInert();
+      inerted.forEach((s) => s.setAttribute('inert', ''));
+      setTimeout(() => {
+        if (!isOpen()) return;
+        if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+        if (q && q.value.trim()) refilter();
+      }, 0);
+    };
+    const onClose = () => {
+      inerted.forEach((s) => s.removeAttribute('inert'));
+      inerted = [];
+      const back = opener && document.contains(opener) && visible(opener) ? opener : invoker();
+      opener = null;
+      setTimeout(() => {
+        const a = document.activeElement;
+        if (!a || a === document.body || ov.contains(a)) { if (back && back.focus) back.focus(); }
+      }, 0);
+    };
+    let was = isOpen();
+    if (was) onOpen();
+    new MutationObserver(() => {
+      const now = isOpen();
+      if (now && !was) onOpen();
+      else if (!now && was) onClose();
+      was = now;
+    }).observe(ov, { attributes: true, attributeFilter: ['data-open'] });
+    window.addEventListener('hashchange', () => { const now = isOpen(); if (now && !was) onOpen(); else if (!now && was) onClose(); was = now; });
+    // A casca (oc-shell.js) fecha com Esc em document; isto corre antes, na fase
+    // de captura, e só deixa passar o Esc que deve fechar.
+    window.addEventListener('keydown', (e) => {
+      if (!isOpen() || blocking()) return;
+      if (e.key === 'Escape') {
+        const a = document.activeElement;
+        if (a && form.contains(a) && a !== q) { e.preventDefault(); e.stopImmediatePropagation(); if (q) q.focus(); }
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const l = focusables(form);
+      if (!l.length) return;
+      const i = l.indexOf(document.activeElement);
+      if (i === -1) { e.preventDefault(); (e.shiftKey ? l[l.length - 1] : l[0]).focus(); }
+      else if (e.shiftKey && i === 0) { e.preventDefault(); l[l.length - 1].focus(); }
+      else if (!e.shiftKey && i === l.length - 1) { e.preventDefault(); l[0].focus(); }
+    }, true);
+    // Rede de segurança: foco que chegue por fora (clique, leitor) volta para dentro.
+    document.addEventListener('focusin', (e) => { if (isOpen() && !blocking() && !ov.contains(e.target) && q) q.focus(); });
   }
   $$('[data-oc="nye-surface"]').forEach(surface);
 

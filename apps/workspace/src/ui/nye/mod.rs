@@ -826,7 +826,7 @@ pub fn surface(vm: &ShellVm, n: &NyeSurfaceVm) -> impl IntoView {
                         </li>
                     </ul>
                     {(asked && !has_hits && n.answer.is_none()).then(|| view! {
-                        <p class="oc-nye-empty" role="status">{tf("nye.results.none", &[("q", n.query.as_str())])}</p>
+                        <p class="oc-nye-empty" role="status" data-part="nye-empty">{tf("nye.results.none", &[("q", n.query.as_str())])}</p>
                     })}
                 </div>
                 <p class="oc-palette__foot oc-nyeu__foot">
@@ -1359,5 +1359,55 @@ mod tests {
         assert_contracts(&html);
         assert!(html.contains(r#"data-oc="nye-ptt""#) && html.contains(r#"aria-pressed="false""#));
         assert!(!html.contains("wake"));
+    }
+
+    /// D003.1 · Estado inicial com pedido: o servidor desenha o pedido e a lista
+    /// completa de aplicações (o filtro é um só, no cliente, o mesmo do `input`);
+    /// os ganchos que o `oc-nye.js` usa para filtrar ao abrir, prender o foco e
+    /// escalonar o Esc têm de existir; a superfície continua modal.
+    #[test]
+    fn d003_1_a_superficie_aberta_com_pedido_tem_os_ganchos_de_filtro_e_foco() {
+        let mut vm = crate::ui::shell::tests::vm();
+        let mut n = surf(false);
+        n.query = "nota".into();
+        n.hits = vec![];
+        vm.nye = Some(n);
+        let html = surface(&vm, vm.nye.as_ref().unwrap()).to_html();
+        assert_contracts(&html);
+        assert!(html.contains(r#"aria-modal="true""#) && html.contains(r#"role="dialog""#));
+        assert!(html.contains(r#"data-open="""#));
+        assert!(html.contains(r#"value="nota""#));
+        for hook in [
+            r#"data-oc="nye-surface""#,
+            r#"data-part="palette-q""#,
+            r#"data-part="nye-apps""#,
+            r#"data-part="palette-item""#,
+            r#"data-part="nye-empty""#,
+            r#"data-part="nye-results""#,
+        ] {
+            assert!(html.contains(hook), "gancho D003.1 {hook}");
+        }
+    }
+
+    /// D003.1 · Contrato dos alvos de toque em ecrã estreito (≤ 640): 44 px de
+    /// área activa nos controlos da Nye, sem mudar o desenho compacto.
+    #[test]
+    fn d003_1_alvos_de_toque_de_44px_no_ecra_estreito() {
+        let css = include_str!("../../../static/oc-nye.css");
+        let block = css
+            .split("D003.1 · alvos de toque")
+            .nth(1)
+            .expect("bloco D003.1 de alvos de toque");
+        for sel in [
+            ".oc-nye-mode",
+            ".oc-nyeu__continue",
+            ".oc-nye-send",
+            ".oc-nye-icon-btn",
+            ".oc-nye-btn",
+            ".oc-nye-tab",
+        ] {
+            assert!(block.contains(sel), "alvo de toque {sel}");
+        }
+        assert!(block.contains("--oc-nye-touch: 44px"));
     }
 }

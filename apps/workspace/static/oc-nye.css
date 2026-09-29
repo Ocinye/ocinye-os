@@ -370,6 +370,24 @@ a.oc-nye-src__link:hover { background: var(--oc-muted); text-decoration: none; c
   .oc-dialog.oc-nye-confirm { padding: 18px 20px 16px; gap: 8px; }
 }
 
+/* D003.1 · alvos de toque (≤ 640). O desenho compacto fica; a área activa
+ * cresce até 44×44 com um ::after transparente centrado no controlo (o clique
+ * no ::after é um clique no próprio controlo). Onde o controlo já é um bloco
+ * (Continuar na Nye, sugestões, select), sobe a altura mínima. */
+@media (max-width: 640px) {
+  .oc-nye { --oc-nye-touch: 44px; }
+  .oc-nyeu { --oc-nye-touch: 44px; }
+  .oc-nye-mode, .oc-nye-send, .oc-nye-icon-btn, .oc-nye-btn, .oc-nye-tab, .oc-nye-att__x, .oc-nye-ctx__btn, .oc-nyeu__go { position: relative; }
+  .oc-nye-mode::after, .oc-nye-send::after, .oc-nye-icon-btn::after, .oc-nye-btn::after, .oc-nye-tab::after, .oc-nye-att__x::after, .oc-nye-ctx__btn::after {
+    content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, var(--oc-nye-touch)); height: max(100%, var(--oc-nye-touch)); transform: translate(-50%, -50%);
+  }
+  .oc-palette__foot a.oc-nyeu__continue { min-height: var(--oc-nye-touch); padding-inline: 16px; }
+  .oc-nye-sug { min-height: var(--oc-nye-touch); }
+  .oc-nye-voice__lang select { height: var(--oc-nye-touch); }
+  .oc-nye-prop__details > summary, .oc-nye-acts__sum { min-height: var(--oc-nye-touch); }
+  .oc-nye-conv { min-height: var(--oc-nye-touch); justify-content: center; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .oc-nye-caret { animation: none; }
   .oc-nye__rail { transition: none; }

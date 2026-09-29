@@ -1,3 +1,9 @@
+# DESIGN_LOCK — Design revision D003.1
+
+Re-locked: `static/oc-nye.js` (initial filter via the shell's `input` filter; modal trap + `inert`; two-step Esc; focus restoration), `static/oc-nye.css` (`--oc-nye-touch` block ≤ 640), `src/ui/nye/mod.rs` (`data-part="nye-empty"`, 2 tests). Code must not add a second app filter, remove `aria-modal`, or shrink the ≤ 640 hit areas below 44 px. All D003 locks stay.
+
+---
+
 # DESIGN_LOCK — Design revision D003
 
 ### D003 · Prateleira removida (decisão do membro, 29 set)
