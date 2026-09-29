@@ -4,7 +4,7 @@
 //!
 //! As referências em `tests/golden/d001_2_1/` foram geradas por este mesmo
 //! ficheiro na árvore da D001.2.1 (`main` @ `ca5cbde`, árvore igual a
-//! `e579d3c`), com `OCINYE_D001_GOLDEN_WRITE=1`. Aqui a saída da D002 é
+//! `e579d3c`), com `OCINYE_TEST_D001_GOLDEN_WRITE=1`. Aqui a saída da D002 é
 //! comparada byte a byte depois de retirar só as três adições que a D002
 //! declara neutras para a D001 (HANDOFF «D001_COMPONENT_EXTENSION»):
 //!
@@ -406,7 +406,7 @@ fn d001_view(d002: &str) -> String {
 #[test]
 fn sem_janelas_nem_paineis_a_d002_e_a_d001_2_1() {
     let dir = golden_dir();
-    if std::env::var_os("OCINYE_D001_GOLDEN_WRITE").is_some() {
+    if std::env::var_os("OCINYE_TEST_D001_GOLDEN_WRITE").is_some() {
         std::fs::create_dir_all(&dir).unwrap();
         for (name, html) in scenes() {
             std::fs::write(dir.join(format!("{name}.html")), html).unwrap();
