@@ -12,6 +12,10 @@
 //! 2. `data-app` em cada aplicação fixada na barra de aplicações;
 //! 3. o menu de contexto do Desktop (`data-oc="desk-ctx"`, `hidden`) no fim de `home`.
 //!
+//! A D003 declara mais uma adição ao documento da casca: `oc-nye.css` e
+//! `oc-nye.js` (a superfície da Nye). Com `nye: None` a marcação é a mesma; o
+//! CSS carregado prova-se sem fuga no browser, contra a D002.1 a correr.
+//!
 //! Os dois lados passam por [`canonical`]: atributos por ordem alfabética e sem
 //! os marcadores `<!>`, que não mudam o DOM que o CSS e o JS vêem.
 //!
@@ -400,6 +404,8 @@ fn drop_desk_ctx(html: &str) -> String {
 fn d001_view(d002: &str) -> String {
     let s = drop_tag(d002, r#"href="/static/oc-wm.css""#);
     let s = drop_tag(&s, r#"src="/static/oc-wm.js""#);
+    let s = drop_tag(&s, r#"href="/static/oc-nye.css""#);
+    let s = drop_tag(&s, r#"src="/static/oc-nye.js""#);
     canonical(&drop_desk_ctx(&drop_dock_data_app(&s)))
 }
 
@@ -454,6 +460,7 @@ fn as_adicoes_retiradas_estao_mesmo_la() {
         .unwrap()
         .1;
     assert!(desk.contains("/static/oc-wm.css") && desk.contains("/static/oc-wm.js"));
+    assert!(desk.contains("/static/oc-nye.css") && desk.contains("/static/oc-nye.js"));
     assert!(desk.contains(r#"data-oc="desk-ctx""#));
     assert!(desk.contains(r#"<a href="/files" aria-label="Ficheiros" title="Ficheiros" data-app="files" class="oc-dock__btn">"#));
     let door = &all.iter().find(|(n, _)| n == "error-door-404").unwrap().1;
