@@ -983,5 +983,18 @@
       },
       "feedback": "docs/ui/CODE_FEEDBACK.md"
     }
-  ]
+  ],
+  "release": {
+    "target_branch": "main",
+    "target_head_before": "db625e8",
+    "divergence": "none",
+    "pull_request": 185,
+    "merge_commit": "ae8bf1d",
+    "merge_strategy": "merge commit (no squash)",
+    "ci": "green on PR #185: 6 pass, 1 skipped (Postura do branch canónico), 0 failing",
+    "pre_merge_verify": "PASS on d4fa844 (verify.sh exit 0, tree unchanged)",
+    "deployed": false,
+    "production_revision": "4f8d048",
+    "deploy_decision": "deferred until explicitly requested"
+  }
 }
