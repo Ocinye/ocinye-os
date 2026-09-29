@@ -103,8 +103,9 @@ async fn uma_aplicacao_de_uma_janela_abre_uma_e_volta_a_focar_a_mesma() {
     };
     let (_, c) = membro(&s).await;
 
-    // 1 · Abrir: uma janela, com o estado honesto do `app_pending` dentro.
-    let (status, html) = s.html("/my-work", &c).await;
+    // 1 · Abrir: uma janela, com o estado honesto do `app_pending` dentro
+    // (Unidades: O Meu Trabalho ganhou o seu ecrã na D005).
+    let (status, html) = s.html("/units", &c).await;
     assert_eq!(status, 200);
     assert!(html.contains(r#"data-oc="wm-layer""#) && html.contains(r#"data-oc="win""#));
     assert!(
@@ -120,12 +121,12 @@ async fn uma_aplicacao_de_uma_janela_abre_uma_e_volta_a_focar_a_mesma() {
     let w1 = ids(&v)[0].clone();
 
     // 2 · Lançar de novo, pela rota ou pelo motor: foca a mesma.
-    let (status, _) = s.html("/my-work", &c).await;
+    let (status, _) = s.html("/units", &c).await;
     assert_eq!(status, 200);
     let r = s
         .escrever(reqwest::Method::POST, "/wm", &c)
         .header("accept", "application/json")
-        .form(&[("app_id", "work"), ("href", "/my-work"), ("window", "new")])
+        .form(&[("app_id", "units"), ("href", "/units"), ("window", "new")])
         .send()
         .await
         .expect("POST /wm");

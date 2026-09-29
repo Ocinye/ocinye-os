@@ -923,22 +923,32 @@ pub(super) async fn idea_new_page(
     .await
 }
 
-/// As unidades onde o membro pode registar uma ideia: as suas, pelo nome.
+/// As unidades onde o membro pode registar uma ideia, pelo nome: é a mesma
+/// pergunta que o Core faz (`Action::Create` na unidade) — gerir a unidade,
+/// ou administrar a organisation. Ser membro da unidade não chega.
 async fn my_units(
     state: &WorkspaceState,
     quem: &controllers::Caller<'_>,
     selected: &str,
 ) -> Vec<ResOptionVm> {
-    let minhas: Vec<String> = quem
-        .get(state, "/api/v1/me")
-        .await
-        .ok()
-        .and_then(|me| me.get("units").and_then(Value::as_array).cloned())
+    let Ok(me) = quem.get(state, "/api/v1/me").await else {
+        return Vec::new();
+    };
+    let admin = me.get("roles").and_then(Value::as_array).is_some_and(|r| {
+        r.iter()
+            .filter_map(Value::as_str)
+            .any(|x| x == "organisation_admin" || x == "platform_admin")
+    });
+    let geridas: Vec<String> = me
+        .get("units")
+        .and_then(Value::as_array)
+        .cloned()
         .unwrap_or_default()
         .iter()
+        .filter(|u| text(u, "role") == "manager")
         .map(|u| text(u, "id").to_owned())
         .collect();
-    if minhas.is_empty() {
+    if !admin && geridas.is_empty() {
         return Vec::new();
     }
     let todas = quem
@@ -948,7 +958,7 @@ async fn my_units(
         .unwrap_or_default();
     todas
         .iter()
-        .filter(|u| minhas.iter().any(|m| m == text(u, "id")))
+        .filter(|u| admin || geridas.iter().any(|m| m == text(u, "id")))
         .map(|u| ResOptionVm {
             value: text(u, "id").to_owned(),
             label: text(u, "name").to_owned(),

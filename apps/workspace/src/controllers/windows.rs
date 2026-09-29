@@ -225,6 +225,11 @@ pub fn has_screen(app: ApplicationId) -> bool {
             | ApplicationId::Calendar
             | ApplicationId::Mail
             | ApplicationId::Prompt
+            | ApplicationId::Projects
+            | ApplicationId::Work
+            | ApplicationId::Ideas
+            | ApplicationId::Datasets
+            | ApplicationId::Knowledge
     )
 }
 
@@ -307,12 +312,17 @@ mod tests {
             .windows
             .iter()
             .all(|w| w.content == WindowContent::Loading));
-        // Uma aplicação sem ecrã do Design continua a dizer `app_pending`.
+        // Uma aplicação sem ecrã do Design continua a dizer `app_pending`
+        // (os Dados ganharam o seu na D005; a Computação ainda não tem).
+        d.open(ApplicationId::Compute, "/compute", SingleInstance, false)
+            .unwrap();
         d.open(ApplicationId::Datasets, "/datasets", SingleInstance, false)
             .unwrap();
         let vm = wm_vm(&d, |a| a != ApplicationId::Notes).unwrap();
-        let datasets = vm.windows.iter().find(|w| w.app_id == "datasets").unwrap();
-        assert_eq!(datasets.content, WindowContent::Pending);
+        let computacao = vm.windows.iter().find(|w| w.app_id == "compute").unwrap();
+        assert_eq!(computacao.content, WindowContent::Pending);
+        let dados = vm.windows.iter().find(|w| w.app_id == "datasets").unwrap();
+        assert_eq!(dados.content, WindowContent::Loading);
         // Notas aceita várias janelas, mas não é visível: não se oferece.
         assert_eq!(vm.multi_window_apps, ["files"]);
         assert_eq!(vm.switcher_hint.as_deref(), Some(SWITCHER_HINT));
