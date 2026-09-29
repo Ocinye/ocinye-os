@@ -703,6 +703,19 @@ pub async fn mark_notification_read<'e>(
     super::delivery::mark_read(executor, principal.person_id, notification_id).await
 }
 
+/// Marca como lidas todas as notificações por ler desta pessoa (o painel das
+/// notificações, D002 · FG-005).
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn mark_all_notifications_read<'e>(
+    executor: impl PgExecutor<'e>,
+    principal: &Principal,
+) -> CoreResult<u64> {
+    super::delivery::mark_all_read(executor, principal.person_id).await
+}
+
 /// Quantos itens a agenda tem no intervalo.
 ///
 /// Chama o mesmo predicado da listagem, e é por isso que existe como função e

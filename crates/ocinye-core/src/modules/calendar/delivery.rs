@@ -229,6 +229,28 @@ pub async fn deliver_due(pool: &PgPool) -> CoreResult<usize> {
     }
 }
 
+/// Marca como lidas todas as notificações por ler de uma pessoa.
+///
+/// Só as dela: o destinatário é a condição inteira, e não há outro filtro que
+/// um pedido possa alargar. Devolve quantas mudaram.
+///
+/// # Errors
+///
+/// Devolve erro quando a escrita falha.
+pub async fn mark_all_read<'e>(
+    executor: impl PgExecutor<'e>,
+    recipient_id: Uuid,
+) -> CoreResult<u64> {
+    let done = sqlx::query(
+        "UPDATE notifications SET read_at = now()
+          WHERE recipient_id = $1 AND read_at IS NULL",
+    )
+    .bind(recipient_id)
+    .execute(executor)
+    .await?;
+    Ok(done.rows_affected())
+}
+
 /// Marca uma notificação como lida.
 ///
 /// # Errors

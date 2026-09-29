@@ -119,6 +119,7 @@ pub const ROUTES: &[&str] = &[
     "/calendar/events/{event_id}/cancel",
     "/notifications",
     "/notifications/recent",
+    "/notifications/read-all",
     "/notifications/{notification_id}/read",
     "/help",
     "/terminal",
@@ -337,6 +338,7 @@ pub fn router(state: WorkspaceState) -> Router {
         )
         .route("/notifications", get(notifications_page))
         .route("/notifications/recent", get(notifications_recent))
+        .route("/notifications/read-all", post(notifications_read_all))
         .route(
             "/notifications/{notification_id}/read",
             post(mark_notification_read),
@@ -7160,6 +7162,41 @@ async fn notifications_page(State(state): State<WorkspaceState>, headers: Header
 /// Administração.
 async fn admin_monitor(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
     app_page(&state, &headers, Screen::Admin).await
+}
+
+/// `POST /notifications/read-all` (D002 · FG-005): «Marcar todas como lidas»
+/// no painel. Só as do membro — o Core põe o destinatário na condição — e
+/// volta à página de onde veio, se for deste Workspace.
+async fn notifications_read_all(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let resultado = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/notifications/read-all",
+        &serde_json::json!({}),
+    )
+    .await;
+    if let Err(falha) = resultado {
+        return failure_response(&falha);
+    }
+    Redirect::to(&voltar_a(&state, &headers)).into_response()
+}
+
+/// A página de onde o formulário veio, só se for deste Workspace; senão, o
+/// Desktop. Nunca um endereço de fora (o `Referer` é do browser).
+fn voltar_a(state: &WorkspaceState, headers: &HeaderMap) -> String {
+    let origem = state.config.public_url.trim_end_matches('/');
+    headers
+        .get(header::REFERER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|r| r.strip_prefix(origem))
+        .filter(|p| p.starts_with('/') && !p.starts_with("//"))
+        .and_then(|p| crate::boot::safe_return_target(p, ROUTES))
+        .unwrap_or_else(|| "/".to_owned())
 }
 
 async fn mark_notification_read(

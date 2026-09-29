@@ -44,6 +44,7 @@ pub fn routes() -> Router<AppState> {
             post(cancel_reminder),
         )
         .route("/notifications", get(list_notifications))
+        .route("/notifications/read-all", post(mark_all_read))
         .route("/notifications/{notification_id}/read", post(mark_read))
 }
 
@@ -603,6 +604,17 @@ async fn list_notifications(
             .collect(),
         unread,
     }))
+}
+
+async fn mark_all_read(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Ids(ids): Ids,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let marked = calendar::mark_all_notifications_read(&state.pool, &principal)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
+    Ok(Json(serde_json::json!({ "marked": marked })))
 }
 
 async fn mark_read(
