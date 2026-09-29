@@ -873,7 +873,7 @@ fn composer(c: &NyeComposerVm, a: &NyeAvailability) -> impl IntoView {
                 </ul>
             })}
             <label class="oc-sr" for="oc-nye-input">{t("nye.comp.label")}</label>
-            <textarea id="oc-nye-input" name="q" rows="1" data-part="nye-input" placeholder=t("nye.comp.placeholder") aria-describedby="oc-nye-comp-hint">{c.text.clone()}</textarea>
+            <textarea id="oc-nye-input" name="q" rows="1" data-part="nye-input" placeholder=t("nye.comp.placeholder") aria-describedby="oc-nye-comp-hint">{crate::text::rcdata(&c.text)}</textarea>
             <div class="oc-nye-comp__bar">
                 {if attach_ok {
                     view! { <a class="oc-nye-icon-btn" href=c.attach_href.clone().unwrap_or_default() aria-label=t("nye.comp.attach") title=t("nye.comp.attach")>{icon("attach")}</a> }.into_any()

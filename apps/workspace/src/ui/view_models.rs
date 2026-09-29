@@ -933,6 +933,12 @@ pub struct DirtyCloseVm {
     pub title: String,
     /// É possível guardar agora (senão «Guardar» fica indisponível com a razão).
     pub can_save: bool,
+    /// D004 · O rótulo de «Guardar» quando a aplicação o nomeia («Guardar rascunho»).
+    /// `None` = `wm.dirty.save`.
+    pub save_label: Option<&'static str>,
+    /// D004 · O formulário da aplicação que «Guardar» submete (`form=`), para
+    /// guardar o texto que ainda só existe no editor. `None` = POST ao gestor.
+    pub save_form: Option<String>,
 }
 
 /// Uma capacidade no painel de estado.
@@ -1866,4 +1872,782 @@ pub struct NyeSurfaceVm {
     pub shortcut: Option<String>,
     /// Abre já (resposta a `GET /ask?q=…`).
     pub open: bool,
+}
+
+// ── D004 · Aplicações de produtividade: Ficheiros · Notas · Calendário · Correio ──
+//
+// Só forma. Os dados chegam do Core já autorizados; a vista não filtra por
+// permissões, não guarda nada e não conhece o armazenamento (sem bucket, chave
+// de objecto ou caminho do anfitrião). Datas, horas, números e tamanhos chegam
+// já formatados na língua e no fuso do membro (`String`), para que a vista
+// nunca formate por si.
+
+/// O estado do conteúdo de uma vista de aplicação.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AppLoad {
+    /// Pronto (a lista pode estar vazia: ver o estado vazio de cada aplicação).
+    Ready,
+    /// A carregar (esqueleto parcial, nunca um spinner da aplicação inteira).
+    Loading,
+    /// Falhou, por esta razão.
+    Failed(AppError),
+}
+
+/// Erros tipados, partilhados pelas quatro aplicações (e pelas seguintes).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AppError {
+    /// O serviço não responde.
+    Unavailable,
+    /// O Core recusou.
+    PermissionDenied,
+    /// Não existe (ou não existe para si: nunca se distingue).
+    NotFound,
+    /// Alguém alterou entretanto (revisão mudou).
+    Conflict,
+    /// A sincronização com o serviço externo falhou.
+    SyncFailed,
+    /// Não foi possível guardar.
+    SaveFailed,
+    /// O envio de um ficheiro falhou.
+    UploadFailed,
+    /// O servidor de correio não aceitou ou não foi alcançado.
+    TransportFailed,
+    /// O acesso foi retirado depois de a vista abrir.
+    Revoked,
+    /// A ligação ao Core caiu e está a ser restabelecida.
+    Reconnecting,
+}
+
+impl AppError {
+    /// A chave de catálogo do título e do texto (`…​.title` / `…​.body`).
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Unavailable => "app.err.unavailable",
+            Self::PermissionDenied => "app.err.denied",
+            Self::NotFound => "app.err.not_found",
+            Self::Conflict => "app.err.conflict",
+            Self::SyncFailed => "app.err.sync",
+            Self::SaveFailed => "app.err.save",
+            Self::UploadFailed => "app.err.upload",
+            Self::TransportFailed => "app.err.transport",
+            Self::Revoked => "app.err.revoked",
+            Self::Reconnecting => "app.err.reconnecting",
+        }
+    }
+}
+
+/// Uma entrada da navegação lateral de uma aplicação.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AppNavVm {
+    /// O rótulo, já traduzido.
+    pub label: String,
+    /// O ícone (`icons.svg`).
+    pub icon: &'static str,
+    /// Onde leva.
+    pub href: String,
+    /// Uma contagem real do Core (por ler, rascunhos). `None` = não se mostra.
+    pub count: Option<u32>,
+    /// A secção actual.
+    pub active: bool,
+}
+
+/// Paginação por cursor (listas grandes: nunca 10 000 linhas no DOM).
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct AppPageVm {
+    /// «Mostrar mais» (o cursor seguinte), quando há.
+    pub more_href: Option<String>,
+    /// «N de M», quando o Core o sabe.
+    pub summary: Option<String>,
+}
+
+/// O estado de gravação de um documento (Notas, rascunho de Correio).
+/// A aplicação reporta-o; o fecho com alterações é o do gestor de janelas (D002).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AppSaveState {
+    /// Nada por guardar.
+    Clean,
+    /// Há alterações por guardar.
+    Dirty,
+    /// A guardar.
+    Saving,
+    /// Guardado (quando, formatado).
+    Saved(String),
+    /// Falhou; o texto continua no editor.
+    Failed(AppError),
+}
+
+/// A ligação contextual à Nye: abre a Nye canónica com uma referência tipada.
+/// A referência não concede autoridade; o Core decide o que a Nye pode ler.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AppNyeVm {
+    /// `/ai/prompt?ref=…​&q=…` (ou `/ask?…`), construído pelo Code.
+    pub href: String,
+    /// A chave do rótulo («Perguntar à Nye sobre este ficheiro»).
+    pub label_key: &'static str,
+}
+
+// ── Ficheiros ──
+
+/// A secção de Ficheiros (as que o Core serve: `/me/files`, favoritos, lixo).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FilesSection {
+    /// Os meus ficheiros (pastas pessoais).
+    Mine,
+    /// Recentes.
+    Recent,
+    /// Favoritos.
+    Favourites,
+    /// Partilhados comigo.
+    Shared,
+    /// Ficheiros de projectos e unidades.
+    Workspaces,
+    /// Lixo (restaurar, eliminar definitivamente).
+    Trash,
+}
+
+/// Lista ou grelha. A preferência é guardada pelo Code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum FilesView {
+    /// Lista densa com colunas.
+    #[default]
+    List,
+    /// Grelha com miniaturas.
+    Grid,
+}
+
+/// A coluna de ordenação.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FilesSortKey {
+    /// Nome.
+    Name,
+    /// Alterado.
+    Modified,
+    /// Tamanho.
+    Size,
+    /// Tipo.
+    Kind,
+}
+
+/// O tipo de um item de Ficheiros (escolhe o ícone e a pré-visualização).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileKind {
+    /// Pasta.
+    Folder,
+    /// Imagem.
+    Image,
+    /// PDF.
+    Pdf,
+    /// Texto.
+    Text,
+    /// Código.
+    Code,
+    /// Folha de cálculo ou dados tabulares.
+    Data,
+    /// Documento de escritório.
+    Document,
+    /// Arquivo comprimido.
+    Archive,
+    /// Áudio ou vídeo.
+    Media,
+    /// Outro binário.
+    Other,
+}
+
+/// Um ficheiro ou uma pasta, como o Core o autoriza a ver.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileItemVm {
+    /// Identificador opaco para os formulários (nunca uma chave de objecto).
+    pub id: String,
+    /// O nome.
+    pub name: String,
+    /// O tipo.
+    pub kind: FileKind,
+    /// O tipo legível («PDF», «Imagem PNG»).
+    pub kind_label: String,
+    /// O tamanho formatado. `None` para pastas.
+    pub size: Option<String>,
+    /// Alterado, formatado.
+    pub modified: String,
+    /// Dono ou contexto («Projeto Solander»), quando não é o próprio.
+    pub context: Option<String>,
+    /// Abrir (pasta ou detalhe).
+    pub href: String,
+    /// Miniatura (mesma origem), quando o Core a tem.
+    pub thumb: Option<String>,
+    /// Favorito.
+    pub favourite: bool,
+    /// Partilhado.
+    pub shared: bool,
+    /// Seleccionado (não é o mesmo que ter o foco nem estar aberto).
+    pub selected: bool,
+    /// Aberto no inspector.
+    pub open: bool,
+}
+
+/// Um passo do caminho (nunca um caminho do anfitrião).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CrumbVm {
+    /// O nome.
+    pub label: String,
+    /// Onde leva.
+    pub href: String,
+}
+
+/// A pré-visualização, segura e só de leitura.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FilePreviewVm {
+    /// Imagem (`/me/files/{v}/inline`).
+    Image {
+        /// A origem.
+        src: String,
+    },
+    /// PDF num leitor do browser, com sandbox.
+    Pdf {
+        /// A origem.
+        src: String,
+    },
+    /// Texto ou código, truncado pelo Core (`/text`).
+    Text {
+        /// O texto (nunca interpretado).
+        text: String,
+        /// A linguagem, quando se sabe.
+        lang: Option<String>,
+        /// O Core cortou o conteúdo.
+        truncated: bool,
+    },
+    /// Sem pré-visualização para este tipo.
+    Unsupported,
+}
+
+/// Uma versão de um ficheiro.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileVersionVm {
+    /// «Versão 3».
+    pub label: String,
+    /// Quando.
+    pub at: String,
+    /// Quem.
+    pub author: Option<String>,
+    /// O tamanho.
+    pub size: String,
+    /// Descarregar esta versão.
+    pub download_href: String,
+    /// Tornar actual (POST), quando o Core o permite.
+    pub restore_action: Option<String>,
+    /// A actual.
+    pub current: bool,
+}
+
+/// O inspector de um item.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileDetailsVm {
+    /// O item.
+    pub item: FileItemVm,
+    /// Criado.
+    pub created: Option<String>,
+    /// O dono.
+    pub owner: Option<String>,
+    /// As versões. `None` = o Core não as serve para este item.
+    pub versions: Option<Vec<FileVersionVm>>,
+    /// A pré-visualização.
+    pub preview: Option<FilePreviewVm>,
+    /// Descarregar.
+    pub download_href: Option<String>,
+    /// Com quem está partilhado (nomes), quando autorizado.
+    pub shared_with: Vec<String>,
+    /// A Nye sobre este item.
+    pub nye: Option<AppNyeVm>,
+}
+
+/// O estado de um envio. O progresso só existe quando o envio multipart o mede.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum UploadState {
+    /// Em fila.
+    Queued,
+    /// A verificar (hash incremental), sem fim conhecido.
+    Checking,
+    /// A enviar: bytes enviados e total, formatados, e a fracção real.
+    Sending {
+        /// «1,2 GB de 4,8 GB».
+        text: String,
+        /// Partes concluídas (`done`, `total`).
+        parts: (u32, u32),
+    },
+    /// Concluído.
+    Done,
+    /// Já existe um ficheiro com este nome.
+    Conflict,
+    /// Falhou.
+    Failed(AppError),
+    /// Cancelado pelo membro.
+    Cancelled,
+}
+
+/// Um envio na bandeja.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UploadVm {
+    /// Identificador da sessão (para o JS actualizar a linha).
+    pub id: String,
+    /// O nome.
+    pub name: String,
+    /// O tamanho, formatado.
+    pub size: String,
+    /// O estado.
+    pub state: UploadState,
+}
+
+/// A aplicação Ficheiros.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FilesVm {
+    /// A secção.
+    pub section: FilesSection,
+    /// A navegação lateral (só as secções que o Core serve).
+    pub nav: Vec<AppNavVm>,
+    /// O caminho, desde a raiz da secção.
+    pub crumbs: Vec<CrumbVm>,
+    /// Lista ou grelha.
+    pub view: FilesView,
+    /// Ordenação e sentido (`true` = descendente).
+    pub sort: (FilesSortKey, bool),
+    /// A pesquisa desta pasta (âmbito: Ficheiros).
+    pub query: String,
+    /// Os itens desta página.
+    pub items: Vec<FileItemVm>,
+    /// O estado.
+    pub load: AppLoad,
+    /// Paginação.
+    pub page: AppPageVm,
+    /// O inspector aberto.
+    pub details: Option<FileDetailsVm>,
+    /// A bandeja de envios.
+    pub uploads: Vec<UploadVm>,
+    /// A pasta actual (para enviar e criar pasta), quando se pode escrever.
+    pub folder_id: Option<String>,
+    /// O Core permite escrever aqui.
+    pub can_write: bool,
+    /// Pré-visualização em ecrã inteiro (móvel e `?preview=1`).
+    pub preview_open: bool,
+}
+
+// ── Notas ──
+
+/// Uma nota na lista.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NoteItemVm {
+    /// O título (ou «Sem título», traduzido pelo Code).
+    pub title: String,
+    /// Alterada, formatado.
+    pub modified: String,
+    /// A pasta ou o contexto, quando ajuda.
+    pub context: Option<String>,
+    /// Abrir.
+    pub href: String,
+    /// A aberta.
+    pub active: bool,
+    /// Partilhada.
+    pub shared: bool,
+}
+
+/// O editor de uma nota. Modelo: texto estruturado (Markdown restrito) num
+/// `textarea`; a barra insere sintaxe. Nunca HTML guardado ou interpretado.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NoteEditorVm {
+    /// Identificador (para o formulário).
+    pub id: String,
+    /// O título.
+    pub title: String,
+    /// O texto.
+    pub body: String,
+    /// A revisão em que o editor abriu (`base_revision`).
+    pub revision: i32,
+    /// Onde guardar (POST).
+    pub save_action: String,
+    /// O estado de gravação.
+    pub save: AppSaveState,
+    /// Só leitura (partilhada sem escrita, ou no lixo).
+    pub read_only: bool,
+    /// Mover para o lixo (POST), quando o Core o permite.
+    pub trash_action: Option<String>,
+    /// Revisões, quando o Core as serve.
+    pub revisions_href: Option<String>,
+    /// A Nye sobre esta nota.
+    pub nye: Option<AppNyeVm>,
+    /// O rodapé factual («1 240 palavras»), formatado pelo Code.
+    pub stats: Option<String>,
+}
+
+/// A aplicação Notas.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NotesVm {
+    /// A navegação (As minhas, Partilhadas, Lixo).
+    pub nav: Vec<AppNavVm>,
+    /// A pesquisa (âmbito: Notas).
+    pub query: String,
+    /// A lista.
+    pub items: Vec<NoteItemVm>,
+    /// O estado da lista.
+    pub load: AppLoad,
+    /// Paginação.
+    pub page: AppPageVm,
+    /// A nota aberta.
+    pub editor: Option<NoteEditorVm>,
+    /// O erro da nota aberta (revogada, não existe).
+    pub editor_error: Option<AppError>,
+    /// Criar (POST `/notes/new`), quando se pode.
+    pub create_action: Option<String>,
+}
+
+// ── Calendário ──
+
+/// A vista do calendário.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CalView {
+    /// Mês.
+    Month,
+    /// Semana.
+    Week,
+    /// Dia.
+    Day,
+    /// Agenda (lista; a vista por omissão no móvel).
+    Agenda,
+}
+
+/// O âmbito de um evento (`ocinye_contracts::calendar::EventScope`): dá o tom.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CalScope {
+    /// Pessoal.
+    Personal,
+    /// Unidade.
+    Unit,
+    /// Espaço de investigação.
+    Workspace,
+    /// Instituição.
+    Institution,
+}
+
+/// Um evento posicionado. As posições são calculadas pelo Code no fuso do
+/// membro (a vista não converte fusos).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CalEventVm {
+    /// Identificador.
+    pub id: String,
+    /// O título.
+    pub title: String,
+    /// «09:30–10:30» ou «Todo o dia».
+    pub time: String,
+    /// O local.
+    pub location: Option<String>,
+    /// O âmbito.
+    pub scope: CalScope,
+    /// Cancelado (fica riscado; não desaparece).
+    pub cancelled: bool,
+    /// Todo o dia.
+    pub all_day: bool,
+    /// Semana/Dia: minuto de início (0–1439) e duração em minutos.
+    pub span: Option<(u16, u16)>,
+    /// Semana/Dia: coluna de sobreposição (`lane`, `lanes`).
+    pub lane: (u8, u8),
+    /// Abrir.
+    pub href: String,
+    /// O fuso original, quando difere do do membro («Europe/Lisbon · 10:30»).
+    pub origin_tz: Option<String>,
+}
+
+/// Um dia de uma grelha (mês) ou uma coluna (semana/dia).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CalDayVm {
+    /// «29», ou «Ter 29» nas colunas.
+    pub label: String,
+    /// A data para o leitor de ecrã («terça-feira, 29 de setembro»).
+    pub full: String,
+    /// Hoje.
+    pub today: bool,
+    /// Fora do mês mostrado.
+    pub outside: bool,
+    /// Seleccionado.
+    pub selected: bool,
+    /// Os eventos (o mês mostra até 3 e «+N»).
+    pub events: Vec<CalEventVm>,
+    /// Quantos não cabem («+2»), no mês.
+    pub more: u16,
+    /// Abrir o dia.
+    pub href: String,
+    /// Criar neste dia.
+    pub new_href: Option<String>,
+}
+
+/// O detalhe de um evento.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CalEventDetailsVm {
+    /// O evento.
+    pub event: CalEventVm,
+    /// A data longa.
+    pub date: String,
+    /// A descrição (texto simples).
+    pub description: Option<String>,
+    /// Participantes (nomes).
+    pub participants: Vec<String>,
+    /// O contexto (projecto, unidade).
+    pub context: Option<String>,
+    /// Editar, quando se pode.
+    pub edit_href: Option<String>,
+    /// Cancelar o evento (POST), quando se pode.
+    pub cancel_action: Option<String>,
+    /// A Nye sobre este evento.
+    pub nye: Option<AppNyeVm>,
+}
+
+/// O formulário de criação/edição.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CalFormVm {
+    /// Para onde envia (POST).
+    pub action: String,
+    /// Valores (`datetime-local` / `date`), no fuso do membro.
+    pub title: String,
+    /// Início.
+    pub start: String,
+    /// Fim.
+    pub end: String,
+    /// Todo o dia.
+    pub all_day: bool,
+    /// O local.
+    pub location: String,
+    /// A descrição.
+    pub description: String,
+    /// Os âmbitos em que o membro pode criar (valor, rótulo).
+    pub scopes: Vec<(String, String)>,
+    /// O âmbito escolhido.
+    pub scope: String,
+    /// Erro de validação (chave de catálogo).
+    pub error: Option<&'static str>,
+}
+
+/// A aplicação Calendário.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CalendarVm {
+    /// A vista.
+    pub view: CalView,
+    /// O título do intervalo («setembro de 2026», «28 set – 4 out»).
+    pub range_label: String,
+    /// Anterior / seguinte / hoje.
+    pub prev_href: String,
+    /// Seguinte.
+    pub next_href: String,
+    /// Hoje.
+    pub today_href: String,
+    /// Os cabeçalhos dos dias da semana (mês), já na língua e no primeiro dia local.
+    pub weekdays: Vec<String>,
+    /// Os dias (mês: 35 ou 42; semana: 7; dia: 1).
+    pub days: Vec<CalDayVm>,
+    /// Agenda: grupos (data, eventos).
+    pub agenda: Vec<(String, Vec<CalEventVm>)>,
+    /// Semana/Dia: minuto actual, quando hoje está visível.
+    pub now_minute: Option<u16>,
+    /// Semana/Dia: as horas mostradas (primeira, última).
+    pub hours: (u8, u8),
+    /// O fuso do membro («Africa/Luanda · WAT»), mostrado quando é relevante.
+    pub timezone: Option<String>,
+    /// O estado.
+    pub load: AppLoad,
+    /// O evento aberto.
+    pub details: Option<CalEventDetailsVm>,
+    /// O formulário aberto.
+    pub form: Option<CalFormVm>,
+    /// Criar, quando se pode.
+    pub new_href: Option<String>,
+}
+
+// ── Correio ──
+
+/// Uma pasta de correio (`ocinye_contracts::mail::MailFolder`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MailFolderVm {
+    /// Entrada.
+    Inbox,
+    /// Favoritos.
+    Starred,
+    /// Rascunhos.
+    Drafts,
+    /// Enviados.
+    Sent,
+    /// Arquivados.
+    Archive,
+    /// Spam.
+    Spam,
+    /// Lixo.
+    Trash,
+}
+
+/// Uma caixa de correio ligada (`MailboxKind`: pessoal ou partilhada).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MailboxVm {
+    /// O nome ou endereço.
+    pub label: String,
+    /// As pastas, com contagens reais.
+    pub folders: Vec<(MailFolderVm, AppNavVm)>,
+    /// Sincronizar (POST), quando se pode.
+    pub sync_action: Option<String>,
+    /// A última sincronização, formatada.
+    pub synced: Option<String>,
+}
+
+/// Uma mensagem na lista.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MailItemVm {
+    /// Identificador.
+    pub id: String,
+    /// O remetente (ou os destinatários, em Enviados).
+    pub from: String,
+    /// O assunto.
+    pub subject: String,
+    /// O início do texto, em texto simples.
+    pub snippet: String,
+    /// Quando, formatado.
+    pub at: String,
+    /// Por ler.
+    pub unread: bool,
+    /// Favorito.
+    pub starred: bool,
+    /// Tem anexos.
+    pub attachments: bool,
+    /// Seleccionada (caixa).
+    pub selected: bool,
+    /// Aberta no painel de leitura.
+    pub open: bool,
+    /// Abrir.
+    pub href: String,
+    /// Destinatário externo à instituição (`RecipientScope`).
+    pub external: bool,
+}
+
+/// Um anexo.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MailAttachmentVm {
+    /// O nome.
+    pub name: String,
+    /// O tamanho.
+    pub size: String,
+    /// O tipo.
+    pub kind: FileKind,
+    /// Descarregar (mensagem) ou retirar (POST, rascunho).
+    pub href: Option<String>,
+    /// Retirar (POST), no rascunho.
+    pub remove_action: Option<String>,
+    /// Guardar em Ficheiros (POST), na mensagem.
+    pub save_action: Option<String>,
+}
+
+/// Uma mensagem aberta. O corpo é conteúdo externo não confiável: chega
+/// já sanitizado pelo Code como blocos de texto; imagens remotas bloqueadas por
+/// omissão (`RemoteContentPolicy`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MailMessageVm {
+    /// O assunto.
+    pub subject: String,
+    /// O remetente («Nome <endereço>»).
+    pub from: String,
+    /// Para.
+    pub to: Vec<String>,
+    /// Cc.
+    pub cc: Vec<String>,
+    /// A data longa.
+    pub date: String,
+    /// Parágrafos em texto simples (nunca HTML).
+    pub body: Vec<String>,
+    /// Há conteúdo remoto bloqueado.
+    pub remote_blocked: bool,
+    /// Mostrar o conteúdo remoto (GET), quando a política o permite.
+    pub remote_href: Option<String>,
+    /// Anexos.
+    pub attachments: Vec<MailAttachmentVm>,
+    /// Responder, Responder a todos, Reencaminhar (`ComposeAction`).
+    pub reply_href: Option<String>,
+    /// Responder a todos.
+    pub reply_all_href: Option<String>,
+    /// Reencaminhar.
+    pub forward_href: Option<String>,
+    /// Marcar por ler / favorito / arquivar / lixo (POST `/flags`).
+    pub flags_action: Option<String>,
+    /// A Nye sobre esta mensagem.
+    pub nye: Option<AppNyeVm>,
+}
+
+/// O estado de envio (`OutboxState`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MailSendState {
+    /// Nada enviado.
+    Idle,
+    /// Na fila do Core.
+    Queued,
+    /// A entregar ao servidor.
+    Sending,
+    /// Enviado.
+    Sent,
+    /// Não enviado (o rascunho fica).
+    Failed,
+}
+
+/// O compositor.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MailComposeVm {
+    /// O rascunho, quando já existe.
+    pub draft_id: Option<String>,
+    /// Guardar rascunho (POST).
+    pub save_action: String,
+    /// Enviar (POST): passa pela capacidade de comunicação externa do Core.
+    pub send_action: String,
+    /// Para, Cc, Bcc, Assunto, Texto.
+    pub to: String,
+    /// Cc.
+    pub cc: String,
+    /// Bcc.
+    pub bcc: String,
+    /// Assunto.
+    pub subject: String,
+    /// O texto (Markdown restrito, como Notas).
+    pub body: String,
+    /// Anexos.
+    pub attachments: Vec<MailAttachmentVm>,
+    /// Escolher de Ficheiros (superfície interna).
+    pub attach_href: Option<String>,
+    /// O estado do rascunho.
+    pub save: AppSaveState,
+    /// O estado de envio.
+    pub send: MailSendState,
+    /// Destinatários externos à instituição (aviso factual).
+    pub external_count: u32,
+    /// A Nye pode preparar o texto (abre a Nye; nunca envia).
+    pub nye: Option<AppNyeVm>,
+    /// O erro de envio, quando falhou.
+    pub error: Option<AppError>,
+}
+
+/// A aplicação Correio.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MailVm {
+    /// As caixas ligadas. Vazio = nenhuma caixa (ligar em Definições).
+    pub mailboxes: Vec<MailboxVm>,
+    /// Ligar uma caixa (quando não há nenhuma).
+    pub connect_href: Option<String>,
+    /// A pasta actual.
+    pub folder: MailFolderVm,
+    /// O nome da pasta actual, já traduzido.
+    pub folder_label: String,
+    /// A pesquisa (âmbito: esta caixa).
+    pub query: String,
+    /// A lista.
+    pub items: Vec<MailItemVm>,
+    /// O estado da lista.
+    pub load: AppLoad,
+    /// Paginação.
+    pub page: AppPageVm,
+    /// A mensagem aberta.
+    pub message: Option<MailMessageVm>,
+    /// O erro da mensagem aberta.
+    pub message_error: Option<AppError>,
+    /// O compositor aberto.
+    pub compose: Option<MailComposeVm>,
+    /// Escrever.
+    pub compose_href: String,
 }

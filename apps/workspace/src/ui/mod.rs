@@ -11,6 +11,7 @@
 //! - cada `<button>` submete, tem `data-oc` ou `aria-disabled="true"`;
 //! - comportamento só em `static/*.js`, ligado por `data-oc` e `data-part`.
 
+pub mod apps;
 pub mod components;
 pub mod document;
 pub mod nye;

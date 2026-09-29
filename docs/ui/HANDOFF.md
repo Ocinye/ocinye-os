@@ -1,3 +1,41 @@
+# HANDOFF — Ocinye OS canonical UI · Design revision D004
+
+Cumulative: D001 → D003.1 unchanged plus D004.
+
+# D004 · Core productivity applications — Files · Notes · Calendar · Mail
+
+Observed repository: `feat/design-d003` @ `d4fa8443630468914b46acfb465e37619a0c2cd6` (D003/D003.1 integration by Code). D004 files derive from that tree; not reset.
+
+**Core governs; applications implement.** The four applications are view functions over typed VMs. They never authorise, never format dates themselves, never show storage (no bucket, object key, S3/Garage, host path), never render message or note HTML, and every AI entry point is a link to canonical Nye.
+
+## 1 · Shared application system (`ui/apps/mod.rs`, `oc-apps.css`, `oc-apps.js`)
+`frame(app, label, toolbar, side?, main, inspector?)` → `.oc-app` (toolbar `role="toolbar"`, optional side nav, main, optional inspector, polite live region). Helpers: `nav`, `search` (scope written in the placeholder: «Pesquisar nesta pasta / em Notas / nesta caixa»; ⌘K stays the global Nye search), `primary` (the app's own creation), `nye` (canonical Nye link), `save_state` (Clean/Dirty/Saving/Saved/Failed, inline, not a toast), `error` (10 typed `AppError`s, one language for all apps), `empty`, `skeleton` (partial, never a full-app spinner), `load_state`, `more` (cursor pagination: never 10 000 rows in the DOM), `doc_form_id`.
+Layout by container queries on the window body: < 720 side nav is a drawer and the inspector replaces the main pane; ≥ 720 side fixed (Mail: two panes); ≥ 1100 inspector beside the list (Mail: three panes). 1440 = D002 normal window, 924 = D002 maximised, 390 = D002 full screen. No engine of its own.
+Focus / selected / open are distinct: gold focus ring; selected = light-blue fill + checkbox; open = navy ring/inset.
+Touch ≤ 640: `--oc-app-touch: 44px` + transparent `::after` hit areas (D003.1 pattern) on icon buttons, buttons, segmented options, checkboxes; 44 px rows.
+
+## 2 · Files (`ui/apps/files.rs`)
+Sections from the Core: My files, Recent, Starred, Shared with me (gap), Projects and units, Trash. Crumbs (never host paths). List (sortable `aria-sort` columns Name/Type/Modified/Size/Owner·context, fixed layout) or Grid (thumbnails). Multi-selection (checkbox, Space, Shift+↑/↓) with a selection bar (Download, Move, Star, Trash; in Trash: Restore, Delete permanently). Inspector: safe read-only preview (image; PDF in a sandboxed iframe; text/code as text, truncated; unsupported state), download, Ask Nye, details, rename, versions (download/make current; «no version history» when `None`). Upload: button (file picker) and drop zone emit the same `oc:files-upload {files, folder}`; Code runs multipart + incremental hash + capacity preflight — **no fixed 512 MB limit**; progress is `<progress max=parts value=done>` only when measured, indeterminate while checking; tray states queued/checking/sending/done/conflict (keep both / new version)/failed (retry)/cancelled (retry). Dragging an Ocinye item onto a folder emits `oc:files-move {id, target}`; Move is always also a form. Trash note states that permanent deletion cannot be undone (Code must add the governed confirmation, FG-D4-18).
+
+## 3 · Notes (`ui/apps/notes.rs`)
+`NOTES_EDITOR_MODEL` = restricted Markdown text in a `textarea` (the Core stores note text with revisions; no block model exists, so no Notion clone). Toolbar inserts syntax (heading, bold, italic, list, link, code, quote). White sheet on the grey app ground. Explicit Save with `base_revision`; Conflict is a typed failure that keeps the text. **No autosave** (the Core has none; FG-D4-26). List with active note (surface card), shared marker, scoped search, empty/no-match states. Narrow: list is the screen without an open note; with a note, the sheet (list in the drawer).
+
+## 4 · Calendar (`ui/apps/calendar.rs`)
+Month (7-column grid, today, outside days, selected, up to 3 chips + «+N»), Week and Day (time scale, all-day row, overlapping lanes, current-time marker), Agenda (default on mobile). Positions (start minute, duration, lane/lanes) are computed by Code **in the member's time zone** and written as `data-*`; `oc-apps.js` turns them into CSS variables (CSP: nothing inline). Without JS, events list in the day. Time zone chip in the toolbar; the event inspector shows the original time zone when it differs. Colours only by Core `EventScope` (personal/unit/workspace/institution). Create/edit in the inspector (no popup); cancelled events stay, struck through. No drag-reschedule. No external calendars implied.
+
+## 5 · Mail (`ui/apps/mail.rs`)
+Mailbox/folders (Core `MailFolder`: Inbox, Starred, Drafts, Sent, Archive, Spam, Trash; counts only from the Core), list (unread dot + weight, sender, subject, snippet, time, attachment/star/external flags, selection), reading pane (headers, remote content blocked by default, **body as plain-text paragraphs inside a frame labelled «Conteúdo da mensagem»** — untrusted, never HTML, never able to confirm or authorise anything), attachments (download, save to Files). Composer: To, Cc/Bcc, Subject, Markdown-restricted body, formatting, attachments from Files, external-recipient notice, Save draft, Send (`formaction` → governed external-communication capability; Core confirmation when required), draft/send states from `OutboxState`; failed send keeps the draft. No mailbox connected → state with «Connect a mailbox». Narrow: list → message/compose with back.
+
+## 6 · Dirty close (D002 reuse) — D002_COMPONENT_EXTENSION (minimal)
+`DirtyCloseVm` += `save_label: Option<&'static str>` («Guardar rascunho» for Mail) and `save_form: Option<String>` (the app form «Guardar» submits with `then=close`, so text that only exists in the editor is saved). `oc-wm.js`: `dirty()` accepts an element and is exported as `OcWm.bindDirty`. Flow: `oc-apps.js` marks the window `data-dirty` on input; clicking the window's close on a dirty window mounts the server-rendered `<template data-part="app-dirty" data-win>` (containing `wm::dirty_close`) after `.oc-shell` (the usual global slot) and binds it. Cancel removes it; Don't save posts `/wm/{id}/close decision=discard`. Existing `DirtyCloseVm` literals need the two fields (`None`).
+
+## 7 · Registry / policy
+Unchanged: Notes and Files `MultiWindow`, Calendar and Mail `SingleInstance` (Code's registry). App names stay Code's catalogue (`nav.*`). APP_REGISTRY_CHANGE_REQUIRED = FALSE.
+
+## 8 · Contracts: FILES-01…10, NOTES-01…08, CAL-01…08, MAIL-01…10 — see FUNCTIONAL_GAPS § D004 (53 rows).
+
+---
+
 # HANDOFF — Ocinye OS canonical UI · Design revision D003.1
 
 # D003.1 · Nye universal surface — parity & accessibility hotfix

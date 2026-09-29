@@ -219,6 +219,8 @@ pub fn dirty_close(sessions: &SessionStore, session_id: &str, id: &str) -> Optio
                 title: application(w.app)
                     .map_or_else(|| w.app.as_str().to_owned(), |a| a.label().to_owned()),
                 can_save: w.can_save,
+                save_label: None,
+                save_form: None,
             })
         })
         .flatten()
