@@ -219,6 +219,30 @@
     }
   });
 
+  /* O diálogo de fechar (FG-026): a decisão vai ao servidor sem recarregar.
+     «Cancelar» tira o diálogo no lugar, e o oc-wm.js devolve o foco ao
+     controlo anterior (ou ao fechar da janela); as outras decisões voltam a
+     desenhar a página com o estado que o servidor decidiu. Sem JavaScript, o
+     formulário faz o mesmo por POST/redirect. */
+  document.addEventListener('submit', (e) => {
+    const d = e.target.closest('[data-oc="dirty-close"]');
+    if (!d || !WIN.test(d.dataset.win || '')) return;
+    const b = e.submitter;
+    const decision = b && b.name === 'decision' ? b.value : null;
+    if (!['save', 'discard', 'cancel'].includes(decision)) return;
+    e.preventDefault();
+    send('/wm/' + encodeURIComponent(d.dataset.win) + '/close', { decision }).then((r) => {
+      if (r.status !== 200 || !r.data) { location.reload(); return; }
+      // O diálogo sai sempre: «Guardar» espera que a aplicação guarde (a janela
+      // fecha quando ela o disser), e «Não guardar» fecha já.
+      d.remove();
+      const u = new URL(location.href);
+      u.searchParams.delete('close');
+      history.replaceState(null, '', u.pathname + u.search);
+      if (decision !== 'cancel') reconcile(r.data);
+    }, () => location.reload());
+  });
+
   /* O atalho do alternador (FG-028): Alt + W, a mesma tecla física em todos os
      teclados. Fora de campos de escrita, para nunca roubar uma letra. */
   document.addEventListener('keydown', (e) => {
