@@ -60,6 +60,7 @@ pub mod routes;
 pub mod session;
 pub mod terminal;
 pub mod ui;
+pub mod window_manager;
 
 use crate::config::WorkspaceConfig;
 use crate::session::SessionStore;

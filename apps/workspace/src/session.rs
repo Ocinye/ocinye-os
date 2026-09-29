@@ -19,6 +19,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use rand::rngs::SysRng;
+
+use crate::window_manager::Desk;
 use rand::TryRng;
 
 /// Name of the session cookie.
@@ -69,6 +71,9 @@ pub struct SessionStore {
 #[derive(Default)]
 struct Inner {
     sessions: HashMap<String, Session>,
+    /// As janelas de cada sessão (D002, ADR-0618), com a vida da sessão:
+    /// saem com ela em [`SessionStore::remove`] e [`SessionStore::sweep`].
+    desks: HashMap<String, Desk>,
 }
 
 impl SessionStore {
@@ -139,15 +144,35 @@ impl SessionStore {
 
     /// End a session.
     pub fn remove(&self, id: &str) {
-        self.registo().sessions.remove(id);
+        let mut inner = self.registo();
+        inner.sessions.remove(id);
+        inner.desks.remove(id);
     }
 
     /// Drop everything that has expired.
     pub fn sweep(&self) {
         let now = Instant::now();
-        self.registo()
+        let mut inner = self.registo();
+        inner.sessions.retain(|_, session| session.expires_at > now);
+        let Inner { sessions, desks } = &mut *inner;
+        desks.retain(|id, _| sessions.contains_key(id));
+    }
+
+    /// Lê e muda a mesa de janelas de uma sessão viva, atomicamente.
+    ///
+    /// `None` quando a sessão não existe (ou expirou): nunca se cria uma mesa
+    /// para um identificador que não é uma sessão, para que o registo não
+    /// cresça com pedidos de quem não entrou.
+    pub fn with_desk<T>(&self, id: &str, f: impl FnOnce(&mut Desk) -> T) -> Option<T> {
+        let mut inner = self.registo();
+        let live = inner
             .sessions
-            .retain(|_, session| session.expires_at > now);
+            .get(id)
+            .is_some_and(|s| s.expires_at > Instant::now());
+        if !live {
+            return None;
+        }
+        Some(f(inner.desks.entry(id.to_owned()).or_default()))
     }
 
     /// Sweep periodically in the background.

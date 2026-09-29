@@ -19,7 +19,6 @@
 
 use std::path::PathBuf;
 
-use leptos::prelude::*;
 use ocinye_workspace::ui::document;
 use ocinye_workspace::ui::screens::{error, home, home::registry};
 use ocinye_workspace::ui::shell;

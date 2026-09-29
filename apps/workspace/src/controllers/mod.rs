@@ -11,6 +11,7 @@
 //! Core recusa ou devolve, e a interface mostra o que ele disse.
 
 pub mod desktop;
+pub mod windows;
 
 use serde_json::Value;
 

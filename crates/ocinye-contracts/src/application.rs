@@ -441,6 +441,19 @@ pub enum Lifecycle {
     Native,
 }
 
+/// Quantas janelas a aplicação aceita no Gestor de Janelas (D002, ADR-0618).
+///
+/// É política do registo, nunca da vista: o Design desenha «Nova janela» só
+/// para as aplicações que o motor lhe diz aceitarem mais de uma.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LaunchPolicy {
+    /// Uma janela: lançar de novo foca a que já está aberta.
+    SingleInstance,
+    /// Várias janelas: cada recurso pode abrir na sua.
+    MultiWindow,
+}
+
 /// O manifesto de uma aplicação: o contrato do Ocinye OS com ela.
 ///
 /// Diz quem é, como se apresenta, que rotas da API são suas, o que pede ao
@@ -475,6 +488,8 @@ pub struct ApplicationManifest {
     pub can_pin: bool,
     /// Se começa fixada para quem nunca escolheu.
     pub default_pin: bool,
+    /// Uma janela ou várias (D002).
+    pub launch: LaunchPolicy,
 }
 
 impl ApplicationManifest {
@@ -521,6 +536,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: true,
+        launch: LaunchPolicy::MultiWindow,
     },
     ApplicationManifest {
         id: ApplicationId::Calendar,
@@ -536,6 +552,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Work,
@@ -553,6 +570,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         // de investigação fixa-a por omissão (`default_pins_for`).
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Home,
@@ -568,6 +586,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: false,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Mail,
@@ -583,6 +602,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Mail,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Messages,
@@ -598,6 +618,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Files,
@@ -613,6 +634,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Storage,
         can_pin: true,
         default_pin: true,
+        launch: LaunchPolicy::MultiWindow,
     },
     ApplicationManifest {
         id: ApplicationId::Knowledge,
@@ -628,6 +650,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Bibliography,
@@ -643,6 +666,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Units,
@@ -658,6 +682,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Ideas,
@@ -673,6 +698,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Projects,
@@ -688,6 +714,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: true,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Datasets,
@@ -703,6 +730,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Storage,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Prompt,
@@ -722,6 +750,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Intelligence,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Ai,
@@ -737,6 +766,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Intelligence,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Agents,
@@ -752,6 +782,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Intelligence,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Compute,
@@ -767,6 +798,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Compute,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Resources,
@@ -782,6 +814,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Activity,
@@ -797,6 +830,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Administration,
@@ -812,6 +846,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Audit,
@@ -827,6 +862,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Settings,
@@ -842,6 +878,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     ApplicationManifest {
         id: ApplicationId::Help,
@@ -857,6 +894,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
     // O Terminal não traz autoridade própria: cada comando invoca uma
     // capability, autorizada pelo Core (ADR-0312). O prefixo é o da execução.
@@ -874,6 +912,7 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         health: HealthSource::Core,
         can_pin: true,
         default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
     },
 ];
 
@@ -911,6 +950,19 @@ pub fn application_of_api_path(path: &str) -> Option<ApplicationId> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// As aplicações de documentos abrem um recurso por janela; todas as
+    /// outras têm uma janela só. Mudar uma política é uma decisão de produto,
+    /// e este teste obriga a que seja deliberada (ADR-0618).
+    #[test]
+    fn so_ficheiros_e_notas_aceitam_varias_janelas() {
+        let multi: Vec<_> = MANIFESTS
+            .iter()
+            .filter(|m| m.launch == LaunchPolicy::MultiWindow)
+            .map(|m| m.id)
+            .collect();
+        assert_eq!(multi, [ApplicationId::Notes, ApplicationId::Files]);
+    }
 
     #[test]
     fn os_identificadores_sao_unicos_e_voltam_a_si_mesmos() {
