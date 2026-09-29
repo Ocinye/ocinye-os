@@ -307,7 +307,10 @@ pub fn app(vm: &FilesVm) -> AnyView {
             })}
             {trash.then(|| view! {
                 <button type="submit" class="oc-app-btn" name="op" value="restore">{icon("restart")}<span>{t("files.restore")}</span></button>
-                <button type="submit" class="oc-app-btn oc-app-btn--danger" name="op" value="purge">{icon("trash")}<span>{t("files.purge")}</span></button>
+                // D004.1: sem fluxo governado de eliminação definitiva no Core — a acção
+                // mostra-se indisponível, sem `name`/`value`, e nunca submete.
+                <button type="button" class="oc-app-btn oc-app-btn--danger" disabled="" aria-disabled="true" aria-describedby="oc-files-purge-why" data-part="files-purge-unavailable">{icon("trash")}<span>{t("files.purge")}</span></button>
+                <span id="oc-files-purge-why" class="oc-files-sel__why">{t("files.purge.unavailable")}</span>
             })}
             <span class="oc-app__spacer"></span>
             <button type="button" class="oc-app-btn" data-oc="files-sel-clear">{t("files.sel.clear")}</button>
@@ -444,5 +447,18 @@ mod tests {
         let html = app(&v).to_html();
         assert!(html.contains(r#"max="12" value="3""#));
         assert!(html.contains(r#"<progress aria-label="x"></progress>"#));
+    }
+
+    #[test]
+    fn d004_1_eliminar_definitivamente_nunca_submete() {
+        let mut v = vm();
+        v.section = FilesSection::Trash;
+        let html = app(&v).to_html();
+        assert_contracts(&html);
+        assert!(!html.contains(r#"value="purge""#));
+        assert!(
+            html.contains(r#"data-part="files-purge-unavailable""#)
+                && html.contains(t("files.purge.unavailable"))
+        );
     }
 }

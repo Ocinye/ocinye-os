@@ -1916,6 +1916,9 @@ pub enum AppError {
     Revoked,
     /// A ligação ao Core caiu e está a ser restabelecida.
     Reconnecting,
+    /// D004.1 · A conta existe no Core mas não está ligada (`connected = false`):
+    /// há dados guardados, mas não se lê nem envia. Não é uma falha passageira.
+    NotConnected,
 }
 
 impl AppError {
@@ -1933,6 +1936,7 @@ impl AppError {
             Self::TransportFailed => "app.err.transport",
             Self::Revoked => "app.err.revoked",
             Self::Reconnecting => "app.err.reconnecting",
+            Self::NotConnected => "app.err.not_connected",
         }
     }
 }

@@ -186,10 +186,20 @@
     if (allday) allday.addEventListener('change', () => $$('[data-part="cal-dt"]', app).forEach((i) => { const v = i.value; i.type = allday.checked ? 'date' : 'datetime-local'; if (allday.checked) i.value = v.slice(0, 10); }));
   }
 
-  const init = () => $$('[data-oc="app"]').forEach((app) => {
+  // D004.1 · D4-J1: idempotente e por raiz — `OcApps.init(root)` liga só as aplicações
+  // dentro de `root` (ou `root` ele próprio) e nunca liga a mesma duas vezes.
+  const bound = new WeakSet();
+  const bind = (app) => {
+    if (bound.has(app)) return;
+    bound.add(app);
     app.setAttribute('data-js', '');
     drawer(app); docs(app); files(app); calendar(app);
-  });
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+  };
+  const init = (root) => {
+    const r = root && root.querySelectorAll ? root : document;
+    if (r.matches && r.matches('[data-oc="app"]')) bind(r);
+    $$('[data-oc="app"]', r).forEach(bind);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => init()); else init();
   window.OcApps = { init };
 })();

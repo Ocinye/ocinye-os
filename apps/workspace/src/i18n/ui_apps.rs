@@ -1,4 +1,4 @@
-//! Textos das aplicações de produtividade (D004). Claude Design.
+//! Textos das aplicações de produtividade (D004, D004.1). Claude Design.
 //!
 //! Português europeu canónico; en e fr completos. Os nomes das aplicações
 //! (`nav.files`, `nav.notes`, `nav.calendar`, `nav.mail`) ficam no catálogo do Code.
@@ -16,6 +16,8 @@ pub const UI_APPS: &[Entry] = crate::catalogo! {
     "app.err.denied.body": { pt: "O Core não autoriza este acesso.", en: "The Core does not authorise this access.", fr: "Le Core n’autorise pas cet accès." },
     "app.err.not_found.title": { pt: "Não encontrado", en: "Not found", fr: "Introuvable" },
     "app.err.not_found.body": { pt: "Este item não existe ou já não está disponível para si.", en: "This item does not exist or is no longer available to you.", fr: "Cet élément n’existe pas ou ne vous est plus accessible." },
+    "app.err.not_connected.title": { pt: "Caixa de correio não ligada", en: "Mailbox not connected", fr: "Boîte aux lettres non connectée" },
+    "app.err.not_connected.body": { pt: "Esta caixa não está ligada. Ligue-a ou configure-a nas definições do Correio para ler ou enviar mensagens.", en: "This mailbox is not connected. Connect or configure it in Mail settings to read or send messages.", fr: "Cette boîte aux lettres n’est pas connectée. Connectez-la ou configurez-la dans les paramètres de la messagerie pour lire ou envoyer des messages." },
     "app.err.reconnecting.title": { pt: "A restabelecer a ligação", en: "Reconnecting", fr: "Reconnexion" },
     "app.err.reconnecting.body": { pt: "O Core não responde. O que está no ecrã ainda não foi guardado.", en: "The Core is not responding. What is on screen has not been saved yet.", fr: "Le Core ne répond pas. Ce qui est à l’écran n’est pas encore enregistré." },
     "app.err.revoked.title": { pt: "Acesso retirado", en: "Access revoked", fr: "Accès retiré" },
@@ -90,6 +92,7 @@ pub const UI_APPS: &[Entry] = crate::catalogo! {
     "files.preview.none": { pt: "Sem pré-visualização para este tipo de ficheiro. Pode descarregá-lo.", en: "No preview for this file type. You can download it.", fr: "Pas d’aperçu pour ce type de fichier. Vous pouvez le télécharger." },
     "files.preview.truncated": { pt: "Mostra-se o início do ficheiro.", en: "The beginning of the file is shown.", fr: "Le début du fichier est affiché." },
     "files.purge": { pt: "Eliminar definitivamente", en: "Delete permanently", fr: "Supprimer définitivement" },
+    "files.purge.unavailable": { pt: "A eliminação definitiva ainda não está disponível.", en: "Permanent deletion is not available yet.", fr: "La suppression définitive n’est pas encore disponible." },
     "files.rename": { pt: "Nome", en: "Name", fr: "Nom" },
     "files.rename.do": { pt: "Mudar o nome", en: "Rename", fr: "Renommer" },
     "files.restore": { pt: "Restaurar", en: "Restore", fr: "Restaurer" },
@@ -101,7 +104,7 @@ pub const UI_APPS: &[Entry] = crate::catalogo! {
     "files.shared": { pt: "Partilhado", en: "Shared", fr: "Partagé" },
     "files.shared_with": { pt: "Partilhado com", en: "Shared with", fr: "Partagé avec" },
     "files.to_trash": { pt: "Para o lixo", en: "Move to trash", fr: "Mettre à la corbeille" },
-    "files.trash.note": { pt: "Os itens no lixo podem ser restaurados. «Eliminar definitivamente» não pode ser desfeito.", en: "Items in the trash can be restored. “Delete permanently” cannot be undone.", fr: "Les éléments de la corbeille peuvent être restaurés. « Supprimer définitivement » est irréversible." },
+    "files.trash.note": { pt: "Os itens no lixo podem ser restaurados. A eliminação definitiva ainda não está disponível.", en: "Items in the trash can be restored. Permanent deletion is not available yet.", fr: "Les éléments de la corbeille peuvent être restaurés. La suppression définitive n’est pas encore disponible." },
     "files.up.cancel": { pt: "Cancelar o envio de {name}", en: "Cancel uploading {name}", fr: "Annuler l’envoi de {name}" },
     "files.up.cancelled": { pt: "Cancelado", en: "Cancelled", fr: "Annulé" },
     "files.up.checking": { pt: "A verificar…", en: "Checking…", fr: "Vérification…" },
@@ -154,6 +157,7 @@ pub const UI_APPS: &[Entry] = crate::catalogo! {
     "mail.remote_show": { pt: "Mostrar", en: "Show", fr: "Afficher" },
     "mail.reply": { pt: "Responder", en: "Reply", fr: "Répondre" },
     "mail.reply_all": { pt: "Responder a todos", en: "Reply all", fr: "Répondre à tous" },
+    "mail.settings": { pt: "Definições do Correio", en: "Mail settings", fr: "Paramètres de la messagerie" },
     "mail.search": { pt: "Pesquisar nesta caixa", en: "Search this mailbox", fr: "Rechercher dans cette boîte" },
     "mail.select": { pt: "Seleccionar «{s}»", en: "Select “{s}”", fr: "Sélectionner « {s} »" },
     "mail.send": { pt: "Enviar", en: "Send", fr: "Envoyer" },

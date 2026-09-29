@@ -144,6 +144,7 @@ pub fn error(e: AppError) -> impl IntoView {
     let ic = match e {
         AppError::PermissionDenied | AppError::Revoked => "lock",
         AppError::Reconnecting => "refresh",
+        AppError::NotConnected => "link",
         _ => "warning",
     };
     view! {
@@ -240,6 +241,7 @@ mod tests {
             AppError::TransportFailed,
             AppError::Revoked,
             AppError::Reconnecting,
+            AppError::NotConnected,
         ] {
             let html = error(e).to_html();
             assert!(

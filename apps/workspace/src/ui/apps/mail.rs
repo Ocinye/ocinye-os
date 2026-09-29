@@ -16,7 +16,8 @@ use super::{
 use crate::i18n::{t, tf};
 use crate::ui::components::icon;
 use crate::ui::view_models::{
-    AppNavVm, AppSaveState, MailAttachmentVm, MailComposeVm, MailMessageVm, MailSendState, MailVm,
+    AppError, AppNavVm, AppSaveState, MailAttachmentVm, MailComposeVm, MailMessageVm,
+    MailSendState, MailVm,
 };
 
 fn attachment(a: &MailAttachmentVm) -> impl IntoView {
@@ -213,6 +214,15 @@ pub fn app(vm: &MailVm) -> AnyView {
     };
     let reading = match (&vm.compose, &vm.message, vm.message_error) {
         (Some(c), _, _) => compose(c).into_any(),
+        // D004.1 · caixa não ligada: o estado tipado e, se o VM o trouxer, o caminho
+        // para as definições do Correio. Nunca «tente de novo».
+        (None, _, Some(AppError::NotConnected)) => view! {
+            <div class="oc-mail-nc">
+                {error(AppError::NotConnected)}
+                {vm.connect_href.clone().map(|h| view! { <p class="oc-mail-connect"><a class="oc-app-btn" href=h data-part="mail-connect">{icon("settings")}<span>{t("mail.settings")}</span></a></p> })}
+            </div>
+        }
+        .into_any(),
         (None, _, Some(e)) => error(e).into_any(),
         (None, Some(m), None) => message(m).into_any(),
         (None, None, None) => empty("mail", "mail.none_open", None).into_any(),
@@ -291,5 +301,20 @@ mod tests {
         v.mailboxes.clear();
         v.connect_href = Some("/mail/settings".into());
         assert!(app(&v).to_html().contains(t("mail.none.title")));
+    }
+
+    #[test]
+    fn caixa_nao_ligada_nao_promete_tentar_de_novo() {
+        let mut v = vm();
+        v.message = None;
+        v.message_error = Some(AppError::NotConnected);
+        v.connect_href = Some("/mail/settings".into());
+        let html = app(&v).to_html();
+        assert_contracts(&html);
+        assert!(html.contains("data-error=\"app.err.not_connected\""));
+        assert!(
+            html.contains(t("app.err.not_connected.title")) && html.contains(t("mail.settings"))
+        );
+        assert!(!html.contains(t("app.err.unavailable.body")));
     }
 }

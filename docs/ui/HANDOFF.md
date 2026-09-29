@@ -1,3 +1,39 @@
+# HANDOFF — Ocinye OS canonical UI · Design revision D004.1
+
+Cumulative: D001 → D004 unchanged plus D004.1. Supersedes D004. Based on `feat/design-d004` @ `4c4ae32` (Code's D004 integration). Hotfix only; no architecture reopened. D005 not started.
+
+## Apply
+`git apply patch/d004-to-d004.1.patch` on 4c4ae32 (7 files), or copy those 7 files from implementation/. Every other implementation file is byte-identical to Code's tree at 4c4ae32 (copied back in, so `apply.sh` no longer reverts Code's fixes). Then `cargo fmt`, clippy, `cargo test` (new: `files::tests::d004_1_eliminar_definitivamente_nunca_submete`, `mail::tests::caixa_nao_ligada_nao_promete_tentar_de_novo`; `apps::tests` now iterates 11 errors).
+
+## Code tasks
+1. **MAILBOX_NOT_CONNECTED.** When the selected mailbox has `connected = false` (`controllers/productivity/mail.rs` already reads it): message open → `message_error = Some(AppError::NotConnected)` (the list stays: stored data is shown); send → `compose.error = Some(AppError::NotConnected)`, draft kept; fill `connect_href` with the Mail settings route if one exists, otherwise leave `None` (the text alone says where to go). Do not map it to `Unavailable`. `AppError` is `Copy`; any exhaustive `match` on it in Code gains one arm.
+2. **Permanent delete.** Nothing to wire. The button never submits; keep refusing `op=purge` on the server until a governed flow exists (FG-D4.1-02).
+3. **OcApps.init(root).** The `?frame=1` workaround in `wm-engine.js` can call `OcApps.init(frameRoot)` directly; calling `init()` again is harmless.
+
+## Files column priority (D4-V1)
+Measured on the table's own container (`.oc-files-drop`), so the inspector and sidebar are already subtracted:
+| Table width | Columns |
+|---|---|
+| ≥ 900 | ☐ · Nome · Tipo 120 · Alterado 128 · Tamanho 86 · Dono 170 |
+| 680–899 | ☐ · Nome · Tipo 104 · Alterado 116 · Tamanho 80 |
+| 560–679 | ☐ · Nome · Tipo · Alterado |
+| < 560 | ☐ · Nome · Alterado |
+Priority: Nome > Alterado > Tipo > Tamanho > Dono. Alterado ranks above Tipo because the D004 mobile model already kept it (the icon already shows the kind). Grid view unchanged.
+
+## Notes toolbar
+«Guardar» (sticky, `right: touch + 2px`) and «Mais acções» (sticky, `right: 0`) stay in view; formatting scrolls under them. No overflow menu, no markup change. The save-state text may pass under «Guardar» while scrolled; the live region still announces it.
+
+## Not changed (frozen)
+Files/Notes/Calendar/Mail architecture, WM contracts, dirty close (Notes «Guardar», Mail «Guardar rascunho» via the global D002 dialog), upload protocol (multipart, real part progress, no fixed cap), Notes Markdown model, Mail transport, Calendar timezone model and mobile geometry, App Registry, Core/storage/Nye contracts.
+
+## Recorded, not fixed here
+- **Top Bar clock timezone (D4-T1):** cross-shell follow-up (FG-D4.1-04). Calendar stays authoritative to the member/Instance zone.
+- **Notes folders:** functional gap, deferred (FG-D4.1-03).
+- **Query-only links (D4-L1):** `?sort=`/`?view=` lose folder/section; needs ready `href`s in the VM (FG-D4.1-05).
+- **Reference artefacts:** primary-button icons render dark in captures (gold in the browser), and `d004-cal-mobile-day` shows blocks stacked — both REFERENCE_RENDERING_LIMITATION; production CSS unchanged.
+
+---
+
 # HANDOFF — Ocinye OS canonical UI · Design revision D004
 
 Cumulative: D001 → D003.1 unchanged plus D004.
