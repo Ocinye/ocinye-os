@@ -1,8 +1,8 @@
 # Interface do Workspace
 
-**Estado: Claude Design D003 (Nye) integrada no ramo `feat/design-d003`**,
-sobre a D002.1 em `main` (PR #183; nenhuma deployada, produção continua em
-`4f8d048`). A D001 e a D002 estão fechadas. A D003 traz o Nye: a superfície
+**Estado: Claude Design D003.1 (Nye) em `main`** (PR #185, merge `ae8bf1d`;
+nenhuma deployada, produção continua em `4f8d048`). A D001, a D002 e a D003
+estão fechadas. A D003 traz o Nye: a superfície
 universal em todas as páginas e a aplicação Nye, ligadas ao Core
 ([ADR-0619](../adrs/0619-nye-universal-surface.md)); a pesquisa funciona sem
 IA, perguntar e agir dizem porquê não estão, e a voz está indisponível. O código de interface é do Design e está fechado

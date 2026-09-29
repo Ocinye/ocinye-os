@@ -257,8 +257,8 @@ sem que nada falhe.
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
 - **Ocinye Workspace: `IMPLEMENTED` como BFF, com a interface Claude Design
-  D001.2.1 e a D002.1 em `main` (PR #181 e #183, 2026-09-29) e a D003 (Nye)
-  no ramo `feat/design-d003` (por empurrar).** A UI foi apagada
+  D001.2.1, a D002.1 e a D003.1 (Nye) em `main` (PR #181, #183 e #185,
+  2026-09-29).** A UI foi apagada
   a 2026-09-28 ([apagamento](docs/ui/UI_WIPE_REPORT.md)) e voltou com o código
   do Design, aplicado sem alterações ([registo](docs/ui/design-integration.json)):
   arranque, login em dois passos, fim de sessão, primeiro acesso, MFA, a casca
