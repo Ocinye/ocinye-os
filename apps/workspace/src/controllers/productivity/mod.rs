@@ -4,6 +4,7 @@
 
 pub mod calendar;
 pub mod files;
+pub mod mail;
 pub mod note_markdown;
 pub mod notes;
 

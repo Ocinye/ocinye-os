@@ -267,8 +267,10 @@ pub fn router(state: WorkspaceState) -> Router {
         )
         .route("/messages/{conversation}/leave", post(messaging_leave))
         .route("/messages/{conversation}/remove", post(messaging_remove))
-        .route("/mail", get(mail))
-        .route("/mail/compose", get(compose))
+        .route("/mail", get(productivity::mail_page))
+        .route("/mail/compose", get(productivity::mail_compose_page))
+        .route("/mail/compose/save", post(productivity::mail_compose_save))
+        .route("/mail/compose/send", post(productivity::mail_compose_send))
         .route("/mail/people", get(mail_people))
         .route("/mail/assist", post(assist))
         .route("/mail/send", post(send_mail))
@@ -294,7 +296,14 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/mail/connect", post(mail_connect_own))
         .route("/mail/{mailbox_id}/connect", post(mail_connect))
         .route("/mail/{mailbox_id}/disconnect", post(mail_disconnect))
-        .route("/mail/message/{message_id}", get(mail_message))
+        .route(
+            "/mail/message/{message_id}",
+            get(productivity::mail_message_page),
+        )
+        .route(
+            "/mail/message/{message_id}/op",
+            post(productivity::mail_message_op),
+        )
         .route("/mail/message/{message_id}/flags", post(mail_flags))
         // Declarada depois das anteriores: `/mail/compose` tem de bater na
         // rota literal, não em `{mailbox_id}`.
@@ -1897,19 +1906,9 @@ async fn mail_sync(
     .into_response()
 }
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn mail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Mail).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn mail_mailbox(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Mail).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn mail_message(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Mail).await
+/// `GET /mail/{id}`: a caixa, na aplicação Correio (D004).
+async fn mail_mailbox(Path(mailbox_id): Path<Uuid>) -> Response {
+    Redirect::to(&format!("/mail?box={mailbox_id}")).into_response()
 }
 
 #[derive(Deserialize)]
@@ -1958,11 +1957,6 @@ async fn mail_flags(
         Ok(_) | Err(ApiFailure::Denied) => Redirect::to(&destino).into_response(),
         Err(failure) => failure_response(&failure),
     }
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn compose(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Mail).await
 }
 
 /// O formulário do composer, tal como chega das duas rotas que o submetem.
@@ -4017,6 +4011,11 @@ struct NyeAppQuery {
     /// Modo de voz.
     #[serde(default)]
     voice: Option<String>,
+    /// D004 · A referência tipada de uma aplicação (`note:<id>`, `event:<id>`,
+    /// `file:<id>`, `message:<id>`). Só contexto: relê-se com a sessão do
+    /// membro, e o que ele não pode ver não aparece.
+    #[serde(default)]
+    r#ref: Option<String>,
 }
 
 /// `GET /ai/prompt` (D003 · FG-D3-41): a aplicação Nye, numa janela gerida de
@@ -4113,7 +4112,15 @@ async fn prompt(
         conversations,
         conv_query: query.cq.clone().unwrap_or_default(),
         current,
-        composer: controllers::nye::composer(open_id, availability.ask),
+        composer: {
+            let mut c = controllers::nye::composer(open_id, availability.ask);
+            if let Some(about) =
+                productivity::nye_reference(&state, &member, query.r#ref.as_deref()).await
+            {
+                c.text = about;
+            }
+            c
+        },
         voice: (query.voice.as_deref() == Some("1")).then(|| NyeVoiceVm {
             state: match availability.voice_input {
                 ui::view_models::NyeAvail::Available => NyeVoiceState::Idle,

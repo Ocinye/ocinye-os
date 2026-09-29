@@ -418,7 +418,7 @@ pub(crate) fn details(
         preview,
         download_href: (!version.is_empty()).then(|| format!("/me/files/{version}/download")),
         shared_with: Vec::new(),
-        nye: Some(super::nye("file", text(raw, "id"), "prod.nye.file")),
+        nye: (!version.is_empty()).then(|| super::nye("file", version, "prod.nye.file")),
     }
 }
 

@@ -882,10 +882,8 @@ async fn ficheiros_lista_inspector_e_accoes_pelo_core() {
     assert!(html.contains("&lt;script&gt;x&lt;/script&gt;") && !html.contains("<script>x"));
     let v = texto["version_id"].as_str().unwrap();
     assert!(html.contains(&format!(r#"href="/me/files/{v}/download""#)));
-    assert!(html.contains(&format!(
-        "/ai/prompt?ref=file:{}",
-        texto["file_id"].as_str().unwrap()
-    )));
+    // A referência à Nye é a versão: é por ela que o Core responde ao dono.
+    assert!(html.contains(&format!("/ai/prompt?ref=file:{v}")));
     assert!(
         html.contains(crate_t("files.versions.none")),
         "versões inventadas"
@@ -1034,4 +1032,311 @@ async fn ficheiros_os_de_outra_pessoa_nao_se_veem_nem_se_mudam() {
         .await
         .unwrap();
     assert!(!r.status().is_success());
+}
+
+// ── Correio ──────────────────────────────────────────────────────────────
+
+/// Uma caixa pessoal ligada, como o `connect_own` a deixaria — sem fornecedor
+/// de correio nesta instalação, que é o estado real: o índice lê-se, o
+/// transporte não existe.
+async fn caixa(s: &Sistema, dono: Uuid) -> Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO mailboxes (organisation_id, address, display_name, kind, owner_id)
+         VALUES ($1, $2, 'Caixa de teste', 'personal', $3) RETURNING id",
+    )
+    .bind(s.organisation_id)
+    .bind(format!("m{}@ocinye.test", Uuid::new_v4().simple()))
+    .bind(dono)
+    .fetch_one(&s.pool)
+    .await
+    .expect("caixa")
+}
+
+async fn mensagem(s: &Sistema, caixa: Uuid, assunto: &str) -> Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO mail_messages (mailbox_id, provider_id, folder, from_address, from_display_name, subject, snippet, sent_at)
+         VALUES ($1, $2, 'inbox', 'ana@parceiro.ao', 'Ana', $3, 'Segue o relatório', now()) RETURNING id",
+    )
+    .bind(caixa)
+    .bind(Uuid::new_v4().to_string())
+    .bind(assunto)
+    .fetch_one(&s.pool)
+    .await
+    .expect("mensagem")
+}
+
+#[tokio::test]
+async fn correio_sem_caixa_diz_o_estado_real() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (_, c, _) = membro(&s).await;
+    let (status, html) = s.html("/mail", &c).await;
+    assert_eq!(status, 200);
+    assert!(html.contains(r#"data-app="mail""#) && html.contains(crate_t("mail.none.title")));
+    assert!(!html.contains("oc-pending oc-win__state"));
+    assert!(
+        !html.contains(r#"data-part="mail-compose""#),
+        "compositor sem caixa"
+    );
+}
+
+#[tokio::test]
+async fn correio_indice_pesquisa_e_leitura_sem_transporte() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (eu, c, _) = membro(&s).await;
+    let cx = caixa(&s, eu).await;
+    let m = mensagem(&s, cx, "Relatório da torre 2").await;
+    let _ = mensagem(&s, cx, "Outra coisa").await;
+    let (_, html) = s.html(&format!("/mail?box={cx}"), &c).await;
+    assert!(html.contains("Relatório da torre 2") && html.contains("Outra coisa"));
+    assert!(html.contains(crate_t("prod.mail.inbox")));
+    // Pesquisa nesta caixa (o índice do Core).
+    let (_, html) = s.html(&format!("/mail?box={cx}&q=torre"), &c).await;
+    assert!(html.contains("Relatório da torre 2") && !html.contains("Outra coisa"));
+    // Ler: o corpo está no fornecedor, e não há fornecedor — diz-se, sem inventar.
+    let (_, html) = s
+        .html(&format!("/mail/message/{m}?box={cx}&folder=inbox"), &c)
+        .await;
+    assert!(html.contains(r#"data-state="error""#));
+    assert!(!html.contains(r#"data-part="mail-message""#));
+}
+
+#[tokio::test]
+async fn correio_rascunho_fecho_com_guardar_rascunho_e_envio_que_falha_guarda_o_texto() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (eu, c, t) = membro(&s).await;
+    let cx = caixa(&s, eu).await;
+    let (status, html) = s.html(&format!("/mail/compose?box={cx}"), &c).await;
+    assert_eq!(status, 200);
+    assert!(html.contains(r#"data-part="mail-compose""#));
+    // O fecho D002 da janela do Correio diz «Guardar rascunho» e submete o compositor.
+    let tpl = &html[html
+        .find(r#"<template data-part="app-dirty""#)
+        .expect("modelo do fecho")..];
+    let tpl = &tpl[..tpl.find("</template>").unwrap()];
+    assert!(tpl.contains(crate_t("mail.draft.save")) && tpl.contains(r#"form="oc-mail-doc-new""#));
+    assert!(tpl.contains(r#"name="then" value="close""#));
+
+    // Guardar rascunho: fica no Core.
+    let texto = "Olá Ana,\n\nsegue o relatório.";
+    let r = s
+        .escrever(
+            reqwest::Method::POST,
+            &format!("/mail/compose/save?box={cx}"),
+            &c,
+        )
+        .form(&[
+            ("to", "ana@parceiro.ao"),
+            ("subject", "Relatório"),
+            ("body", texto),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        r.status().as_u16(),
+        303,
+        "{}",
+        r.text().await.unwrap_or_default()
+    );
+    let destino = location(&r);
+    let draft = destino
+        .split("draft=")
+        .nth(1)
+        .unwrap()
+        .split('&')
+        .next()
+        .unwrap()
+        .to_owned();
+    let (_, html) = s.html(&destino, &c).await;
+    assert!(html.contains("segue o relatório") && html.contains(r#"data-state="saved""#));
+
+    // Enviar: não há transporte nesta instalação. O envio falha com a razão, e
+    // o rascunho continua lá, com o texto intacto.
+    let r = s
+        .escrever(
+            reqwest::Method::POST,
+            &format!("/mail/compose/send?box={cx}&draft={draft}"),
+            &c,
+        )
+        .form(&[
+            ("to", "ana@parceiro.ao"),
+            ("subject", "Relatório"),
+            ("body", texto),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 502);
+    let html = r.text().await.unwrap();
+    assert!(
+        html.contains(r#"data-error="app.err.transport""#),
+        "o envio falhado não disse porquê"
+    );
+    assert!(
+        html.contains("segue o relatório"),
+        "o texto perdeu-se no envio falhado"
+    );
+    let rascunho: Value = s
+        .http
+        .get(format!("{}/api/v1/mail/drafts/{draft}", s.core_url))
+        .bearer_auth(&t)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        rascunho["body"], texto,
+        "o rascunho não sobreviveu ao envio falhado"
+    );
+
+    // «Guardar rascunho» do fecho: guarda e fecha a janela do Correio.
+    let r = s
+        .escrever(
+            reqwest::Method::POST,
+            &format!("/mail/compose/save?box={cx}&draft={draft}"),
+            &c,
+        )
+        .form(&[
+            ("to", "ana@parceiro.ao"),
+            ("subject", "Relatório"),
+            ("body", "versão final"),
+            ("then", "close"),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 303);
+    let janelas: Value = s
+        .get("/wm", &c)
+        .header("accept", "application/json")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(janelas["windows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|w| w["app_id"] != "mail"));
+}
+
+#[tokio::test]
+async fn correio_a_caixa_de_outra_pessoa_nao_se_le() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (_, c, _) = membro(&s).await;
+    let (outro, _, _) = membro(&s).await;
+    let cx = caixa(&s, outro).await;
+    let m = mensagem(&s, cx, "Assunto reservado").await;
+    let (_, html) = s.html(&format!("/mail?box={cx}"), &c).await;
+    assert!(!html.contains("Assunto reservado"));
+    let (_, html) = s.html(&format!("/mail/message/{m}?box={cx}"), &c).await;
+    assert!(!html.contains("Assunto reservado"));
+    // Um rascunho na caixa de outra pessoa é recusado pelo Core.
+    let r = s
+        .escrever(
+            reqwest::Method::POST,
+            &format!("/mail/compose/save?box={cx}"),
+            &c,
+        )
+        .form(&[("to", "x@y.ao"), ("subject", "intruso"), ("body", "x")])
+        .send()
+        .await
+        .unwrap();
+    assert_ne!(
+        r.status().as_u16(),
+        303,
+        "rascunho gravado na caixa de outra pessoa"
+    );
+}
+
+// ── Nye contextual ───────────────────────────────────────────────────────
+
+/// A referência que uma aplicação passa à Nye é contexto, nunca autoridade:
+/// relê-se com a sessão de quem abre, e o que ele não pode ver não aparece —
+/// nem o título. Uma nota e um ficheiro de outra pessoa são o caso a provar.
+#[tokio::test]
+async fn nye_a_referencia_de_uma_aplicacao_so_diz_o_que_o_membro_pode_ver() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (_, c, t) = membro(&s).await;
+    let (_, outro_c, outro_t) = membro(&s).await;
+    let marca = Uuid::new_v4().simple().to_string();
+    let minha = nota(&s, &t, &format!("Torre {marca}"), "texto").await;
+    let alheia = nota(&s, &outro_t, &format!("Segredo {marca}"), "texto").await;
+
+    // A nota abre a Nye com a referência dela.
+    let (status, html) = s.html(&format!("/notes/{minha}"), &c).await;
+    assert_eq!(status, 200);
+    assert!(html.contains(&format!("/ai/prompt?ref=note:{minha}")));
+
+    // A própria: o compositor abre a dizer de que nota se fala.
+    let (status, html) = s.html(&format!("/ai/prompt?ref=note:{minha}"), &c).await;
+    assert_eq!(status, 200);
+    assert!(
+        html.contains(&format!("Sobre a nota «Torre {marca}»: ")),
+        "a referência própria pré-preenche o compositor"
+    );
+
+    // A de outra pessoa: nada — nem o título, nem que existe.
+    let (status, html) = s.html(&format!("/ai/prompt?ref=note:{alheia}"), &c).await;
+    assert_eq!(status, 200);
+    assert!(!html.contains(&format!("Segredo {marca}")));
+    assert!(!html.contains("Sobre a nota"));
+
+    // Referências mal formadas ou de um tipo desconhecido não dão nada.
+    for r in [
+        "note:nao-e-uuid",
+        "cofre:00000000-0000-0000-0000-000000000000",
+        "note",
+    ] {
+        let (status, html) = s.html(&format!("/ai/prompt?ref={r}"), &c).await;
+        assert_eq!(status, 200, "{r}");
+        assert!(!html.contains("Sobre a"), "{r}");
+    }
+
+    if !com_armazenamento(&s).await {
+        return;
+    }
+    let meu = enviar(
+        &s,
+        &c,
+        &format!("plano-{marca}.txt"),
+        "text/plain",
+        b"ok",
+        None,
+    )
+    .await;
+    let dele = enviar(
+        &s,
+        &outro_c,
+        &format!("cofre-{marca}.txt"),
+        "text/plain",
+        b"x",
+        None,
+    )
+    .await;
+    let v = meu["version_id"].as_str().unwrap();
+    let (_, html) = s
+        .html(&format!("/files?item={}", referencia(&meu)), &c)
+        .await;
+    assert!(html.contains(&format!("/ai/prompt?ref=file:{v}")));
+    let (_, html) = s.html(&format!("/ai/prompt?ref=file:{v}"), &c).await;
+    assert!(html.contains(&format!("Sobre o ficheiro «plano-{marca}.txt»: ")));
+    let vd = dele["version_id"].as_str().unwrap();
+    let (_, html) = s.html(&format!("/ai/prompt?ref=file:{vd}"), &c).await;
+    assert!(!html.contains(&format!("cofre-{marca}")));
+    assert!(!html.contains("Sobre o ficheiro"));
 }

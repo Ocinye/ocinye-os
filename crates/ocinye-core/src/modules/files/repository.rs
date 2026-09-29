@@ -118,6 +118,33 @@ pub struct PersonalFileListing {
     pub favourite: bool,
 }
 
+/// O ficheiro pessoal de uma versão, com o nome — só quando é do dono.
+///
+/// A posse fecha-se na própria consulta: uma versão de outra pessoa, de um
+/// ambiente ou de outra organização não devolve linha nenhuma.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn personal_file_name<'e>(
+    executor: impl PgExecutor<'e>,
+    version_id: Uuid,
+    owner_id: Uuid,
+    organisation_id: Uuid,
+) -> CoreResult<Option<(Uuid, String)>> {
+    let linha = sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT f.id, f.name
+           FROM file_versions v JOIN files f ON f.id = v.file_id
+          WHERE v.id = $1 AND f.owner_id = $2 AND f.organisation_id = $3",
+    )
+    .bind(version_id)
+    .bind(owner_id)
+    .bind(organisation_id)
+    .fetch_optional(executor)
+    .await?;
+    Ok(linha)
+}
+
 /// Os ficheiros pessoais de uma pessoa — os que têm dono e nenhum ambiente.
 ///
 /// A autoridade é o dono, e a consulta fecha-se sobre `owner_id`: nunca devolve

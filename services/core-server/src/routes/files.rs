@@ -124,6 +124,9 @@ pub fn routes() -> Router<AppState> {
         // números reais (quota, reservado, disponível), para a Experience recusar
         // cedo e explicar — em vez de deixar a subida morrer no fim.
         .route("/me/files/uploads/preflight", post(preflight_my_upload))
+        // O nome de um ficheiro pessoal pela versão, só ao dono — a referência
+        // que uma aplicação passa à Nye relê-se por aqui (D004).
+        .route("/me/files/{version_id}", get(name_my_file))
         .route("/me/files/{version_id}/download", get(download_my_file))
         .route("/me/files/{version_id}/raw", get(raw_my_file))
         .route("/me/files/{version_id}/inline", get(inline_my_file))
@@ -1199,6 +1202,20 @@ async fn thumbnail_my_file(
 /// responde «não encontrado». Serve same-origin, como `text/plain` escapável
 /// pelo cliente — nunca se interpreta o conteúdo. Só tipos textuais e até um
 /// tecto de tamanho; fora disso, uma recusa tipada.
+async fn name_my_file(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(version_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut conn = state.pool.acquire().await.map_err(CoreError::from)?;
+    let (file_id, name) = files::personal_file_name(&mut conn, &principal, version_id).await?;
+    Ok(Json(serde_json::json!({
+        "file_id": file_id,
+        "version_id": version_id,
+        "name": name,
+    })))
+}
+
 async fn text_my_file(
     State(state): State<AppState>,
     CurrentPrincipal(principal): CurrentPrincipal,

@@ -1252,3 +1252,719 @@ pub(super) async fn files_selection(
         _ => failure_response(&ApiFailure::Rejected(String::new())),
     }
 }
+
+// ── Correio ──────────────────────────────────────────────────────────────
+
+#[derive(Deserialize, Default)]
+pub(super) struct MailQuery {
+    #[serde(default)]
+    r#box: Option<Uuid>,
+    #[serde(default)]
+    folder: Option<String>,
+    #[serde(default)]
+    q: Option<String>,
+    #[serde(default)]
+    draft: Option<Uuid>,
+    #[serde(default)]
+    saved: Option<String>,
+}
+
+/// O que o painel de leitura mostra.
+enum MailPane {
+    List,
+    Message(Uuid),
+    Compose,
+    /// O compositor devolvido depois de uma gravação ou de um envio que não
+    /// passou, com o que o membro escreveu.
+    Returned(Box<crate::ui::view_models::MailComposeVm>),
+}
+
+async fn mail_view(
+    state: &WorkspaceState,
+    headers: &HeaderMap,
+    query: MailQuery,
+    pane: MailPane,
+    status: StatusCode,
+) -> Response {
+    use crate::controllers::productivity::mail as ml;
+    use crate::ui::view_models::{MailComposeVm, MailSendState};
+    let w = match open_app(state, headers, Screen::Mail, ApplicationId::Mail).await {
+        Ok(w) => w,
+        Err(response) => return *response,
+    };
+    let quem = caller(&w.member);
+    let clock = clock_of(&w.ctx);
+    let (folder_vm, folder, folder_key) = ml::folder_of(query.folder.as_deref());
+    let boxes_raw = match quem.get(state, "/api/v1/mail/mailboxes").await {
+        Ok(v) => v.as_array().cloned().unwrap_or_default(),
+        Err(ApiFailure::Unauthorised) => return session_ended(state, headers),
+        // Uma recusa ou uma falha não é «nenhuma caixa»: diz-se o erro. O
+        // `MailVm` do Design não tem este estado (sem caixas é sempre «ligar
+        // uma caixa»), por isso desenha-se o erro tipado das aplicações.
+        Err(f) => {
+            return render_app(
+                state,
+                &w,
+                StatusCode::OK,
+                ui::apps::error(app_error(&f)).into_any(),
+                None,
+                None,
+            )
+        }
+    };
+    let current = query
+        .r#box
+        .map(|b| b.to_string())
+        .or_else(|| {
+            boxes_raw
+                .first()
+                .map(|b| controllers::desktop::text(b, "id").to_owned())
+        })
+        .unwrap_or_default();
+    let mailboxes = ml::mailboxes(&boxes_raw, &current, folder, &clock);
+    let q = query.q.clone().unwrap_or_default();
+    let open = match &pane {
+        MailPane::Message(id) => Some(id.to_string()),
+        _ => None,
+    };
+    let (items, load) = if current.is_empty() {
+        (Vec::new(), AppLoad::Ready)
+    } else {
+        let mut path = format!("/api/v1/mail/mailboxes/{current}/messages?folder={folder}");
+        if !q.trim().is_empty() {
+            path.push_str(&format!("&q={}", urlencoding_minimal(q.trim())));
+        }
+        match quem.get(state, &path).await {
+            Ok(v) => (
+                ml::items(
+                    v.get("items")
+                        .and_then(Value::as_array)
+                        .map_or(&[][..], Vec::as_slice),
+                    &current,
+                    folder,
+                    open.as_deref(),
+                    &clock,
+                ),
+                AppLoad::Ready,
+            ),
+            Err(ApiFailure::Unauthorised) => return session_ended(state, headers),
+            Err(f) => (Vec::new(), AppLoad::Failed(app_error(&f))),
+        }
+    };
+    let ctx = format!("box={current}&folder={folder}");
+    let mut message = None;
+    let mut message_error = None;
+    let mut compose = None;
+    match pane {
+        MailPane::List => {}
+        MailPane::Message(id) => {
+            match quem
+                .get(
+                    state,
+                    &format!("/api/v1/mail/messages/{id}?allow_remote=false"),
+                )
+                .await
+            {
+                Ok(m) => message = Some(message_vm(&m, &id, &ctx, &clock)),
+                Err(ApiFailure::Unauthorised) => return session_ended(state, headers),
+                Err(f) => message_error = Some(app_error(&f)),
+            }
+        }
+        MailPane::Returned(c) => compose = Some(*c),
+        MailPane::Compose => {
+            let base = |to: String, cc: String, bcc: String, subject: String, body: String| {
+                MailComposeVm {
+                    draft_id: query.draft.map(|d| d.to_string()),
+                    save_action: compose_action("save", &current, query.draft),
+                    send_action: compose_action("send", &current, query.draft),
+                    to,
+                    cc,
+                    bcc,
+                    subject,
+                    body,
+                    attachments: Vec::new(),
+                    attach_href: None,
+                    save: if query.saved.is_some() {
+                        AppSaveState::Saved(clock.hhmm(clock.now))
+                    } else {
+                        AppSaveState::Clean
+                    },
+                    send: MailSendState::Idle,
+                    external_count: 0,
+                    nye: None,
+                    error: None,
+                }
+            };
+            compose = Some(match query.draft {
+                None => base(
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                ),
+                Some(d) => match quem.get(state, &format!("/api/v1/mail/drafts/{d}")).await {
+                    Ok(v) => {
+                        let join = |k: &str| {
+                            v.get(k)
+                                .and_then(Value::as_array)
+                                .map(|a| {
+                                    a.iter()
+                                        .filter_map(Value::as_str)
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                })
+                                .unwrap_or_default()
+                        };
+                        base(
+                            join("to"),
+                            join("cc"),
+                            join("bcc"),
+                            controllers::desktop::text(&v, "subject").to_owned(),
+                            controllers::desktop::text(&v, "body").to_owned(),
+                        )
+                    }
+                    Err(ApiFailure::Unauthorised) => return session_ended(state, headers),
+                    Err(f) => {
+                        message_error = Some(app_error(&f));
+                        return render_mail(
+                            state,
+                            &w,
+                            status,
+                            &mailboxes,
+                            folder_vm,
+                            folder_key,
+                            q,
+                            items,
+                            load,
+                            None,
+                            message_error,
+                            None,
+                            &current,
+                        );
+                    }
+                },
+            });
+        }
+    }
+    render_mail(
+        state,
+        &w,
+        status,
+        &mailboxes,
+        folder_vm,
+        folder_key,
+        q,
+        items,
+        load,
+        message,
+        message_error,
+        compose,
+        &current,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_mail(
+    state: &WorkspaceState,
+    w: &AppWindow,
+    status: StatusCode,
+    mailboxes: &[crate::ui::view_models::MailboxVm],
+    folder: crate::ui::view_models::MailFolderVm,
+    folder_key: &str,
+    query: String,
+    items: Vec<crate::ui::view_models::MailItemVm>,
+    load: AppLoad,
+    message: Option<crate::ui::view_models::MailMessageVm>,
+    message_error: Option<AppError>,
+    compose: Option<crate::ui::view_models::MailComposeVm>,
+    current: &str,
+) -> Response {
+    // «Guardar rascunho» no fecho D002: submete o formulário do compositor.
+    let dirty = compose
+        .as_ref()
+        .zip(w.window.as_ref())
+        .map(|(c, win)| DirtyCloseVm {
+            window_id: win.clone(),
+            title: if c.subject.trim().is_empty() {
+                t("mail.compose").to_owned()
+            } else {
+                c.subject.clone()
+            },
+            can_save: true,
+            save_label: Some("mail.draft.save"),
+            save_form: Some(ui::apps::doc_form_id(
+                "mail",
+                c.draft_id.as_deref().unwrap_or("new"),
+            )),
+        });
+    let vm = crate::ui::view_models::MailVm {
+        mailboxes: mailboxes.to_vec(),
+        connect_href: None,
+        folder,
+        folder_label: t(folder_key).to_owned(),
+        query,
+        items,
+        load,
+        page: AppPageVm::default(),
+        message,
+        message_error,
+        compose,
+        compose_href: format!("/mail/compose?box={current}"),
+    };
+    let template = dirty.as_ref().map(dirty_template);
+    render_app(state, w, status, ui::apps::mail::app(&vm), template, dirty)
+}
+
+fn compose_action(what: &str, mailbox: &str, draft: Option<Uuid>) -> String {
+    match draft {
+        Some(d) => format!("/mail/compose/{what}?box={mailbox}&draft={d}"),
+        None => format!("/mail/compose/{what}?box={mailbox}"),
+    }
+}
+
+/// A mensagem aberta: cabeçalhos e o corpo como parágrafos de texto simples.
+/// Responder e reencaminhar não aparecem: o Core ainda não liga a resposta ao
+/// fio da conversa.
+fn message_vm(
+    m: &Value,
+    id: &Uuid,
+    ctx: &str,
+    clock: &controllers::desktop::Clock,
+) -> crate::ui::view_models::MailMessageVm {
+    use crate::controllers::desktop::{instant, text};
+    use crate::controllers::productivity::mail as ml;
+    let head = m.get("message").cloned().unwrap_or(Value::Null);
+    let list = |k: &str| {
+        m.get(k)
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let from = {
+        let (n, a) = (
+            text(&head, "from_display_name"),
+            text(&head, "from_address"),
+        );
+        if n.is_empty() {
+            a.to_owned()
+        } else {
+            format!("{n} <{a}>")
+        }
+    };
+    let blocked = m
+        .get("blocked_remote_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        > 0;
+    crate::ui::view_models::MailMessageVm {
+        subject: text(&head, "subject").to_owned(),
+        from,
+        to: list("to"),
+        cc: list("cc"),
+        date: instant(&head, "sent_at")
+            .map(|at| format!("{} · {}", clock.ddmm(at), clock.hhmm(at)))
+            .unwrap_or_default(),
+        body: ml::paragraphs(text(m, "body_html")),
+        remote_blocked: blocked,
+        remote_href: None,
+        attachments: Vec::new(),
+        reply_href: None,
+        reply_all_href: None,
+        forward_href: None,
+        flags_action: Some(format!("/mail/message/{id}/op?{ctx}")),
+        nye: Some(crate::controllers::productivity::nye(
+            "message",
+            &id.to_string(),
+            "prod.nye.message",
+        )),
+    }
+}
+
+/// `GET /mail`.
+pub(super) async fn mail_page(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(query): Query<MailQuery>,
+) -> Response {
+    mail_view(&state, &headers, query, MailPane::List, StatusCode::OK).await
+}
+
+/// `GET /mail/message/{id}`.
+pub(super) async fn mail_message_page(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(message_id): Path<Uuid>,
+    Query(query): Query<MailQuery>,
+) -> Response {
+    mail_view(
+        &state,
+        &headers,
+        query,
+        MailPane::Message(message_id),
+        StatusCode::OK,
+    )
+    .await
+}
+
+/// `GET /mail/compose`.
+pub(super) async fn mail_compose_page(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(query): Query<MailQuery>,
+) -> Response {
+    mail_view(&state, &headers, query, MailPane::Compose, StatusCode::OK).await
+}
+
+/// O formulário do compositor do Design.
+#[derive(Deserialize)]
+pub(super) struct ComposeForm {
+    #[serde(default)]
+    to: String,
+    #[serde(default)]
+    cc: String,
+    #[serde(default)]
+    bcc: String,
+    #[serde(default)]
+    subject: String,
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    then: Option<String>,
+}
+
+/// Grava o rascunho no Core (novo ou o existente) e devolve o seu id.
+async fn save_draft(
+    state: &WorkspaceState,
+    member: &Member,
+    mailbox: Uuid,
+    draft: Option<Uuid>,
+    f: &ComposeForm,
+) -> Result<String, ApiFailure> {
+    use crate::controllers::productivity::mail::addresses;
+    let body = serde_json::json!({
+        "mailbox_id": mailbox,
+        "to": addresses(&f.to),
+        "cc": addresses(&f.cc),
+        "bcc": addresses(&f.bcc),
+        "subject": f.subject,
+        "body": f.body,
+    });
+    let result = match draft {
+        Some(d) => {
+            api::put(
+                state,
+                &member.session.access_token,
+                &member.correlation_id,
+                &format!("/api/v1/mail/drafts/{d}"),
+                &body,
+            )
+            .await
+        }
+        None => {
+            api::post(
+                state,
+                &member.session.access_token,
+                &member.correlation_id,
+                "/api/v1/mail/drafts",
+                &body,
+            )
+            .await
+        }
+    }?;
+    Ok(result.get("id").and_then(Value::as_str).map_or_else(
+        || draft.map(|d| d.to_string()).unwrap_or_default(),
+        str::to_owned,
+    ))
+}
+
+/// O compositor devolvido com o que o membro escreveu.
+fn returned(
+    f: ComposeForm,
+    mailbox: Uuid,
+    draft: Option<Uuid>,
+    save: AppSaveState,
+    send: crate::ui::view_models::MailSendState,
+    error: Option<AppError>,
+) -> crate::ui::view_models::MailComposeVm {
+    crate::ui::view_models::MailComposeVm {
+        draft_id: draft.map(|d| d.to_string()),
+        save_action: compose_action("save", &mailbox.to_string(), draft),
+        send_action: compose_action("send", &mailbox.to_string(), draft),
+        to: f.to,
+        cc: f.cc,
+        bcc: f.bcc,
+        subject: f.subject,
+        body: f.body,
+        attachments: Vec::new(),
+        attach_href: None,
+        save,
+        send,
+        external_count: 0,
+        nye: None,
+        error,
+    }
+}
+
+/// `POST /mail/compose/save`: guardar o rascunho. Com `then=close` (o fecho
+/// D002), a janela fecha depois de guardado.
+pub(super) async fn mail_compose_save(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(query): Query<MailQuery>,
+    Form(form): Form<ComposeForm>,
+) -> Response {
+    use crate::ui::view_models::MailSendState;
+    let member = member_or_login!(state, headers);
+    let Some(mailbox) = query.r#box else {
+        return failure_response(&ApiFailure::Denied);
+    };
+    match save_draft(&state, &member, mailbox, query.draft, &form).await {
+        Ok(_) if form.then.as_deref() == Some("close") => {
+            let next = state
+                .sessions
+                .with_desk(&member.session_id, |d| {
+                    let ids: Vec<String> = d
+                        .windows()
+                        .iter()
+                        .filter(|w| w.app == ApplicationId::Mail)
+                        .map(|w| w.id.clone())
+                        .collect();
+                    for id in ids {
+                        let _ = d.report(&id, false, true);
+                        let _ = d.close(&id, None);
+                    }
+                    d.current_href().to_owned()
+                })
+                .unwrap_or_else(|| "/".to_owned());
+            Redirect::to(&next).into_response()
+        }
+        Ok(id) => {
+            Redirect::to(&format!("/mail/compose?box={mailbox}&draft={id}&saved=1")).into_response()
+        }
+        Err(ApiFailure::Unauthorised) => session_ended(&state, &headers),
+        Err(f) => {
+            let err = app_error(&f);
+            let c = returned(
+                form,
+                mailbox,
+                query.draft,
+                AppSaveState::Failed(AppError::SaveFailed),
+                MailSendState::Idle,
+                Some(err),
+            );
+            mail_view(
+                &state,
+                &headers,
+                MailQuery {
+                    r#box: Some(mailbox),
+                    ..MailQuery::default()
+                },
+                MailPane::Returned(Box::new(c)),
+                StatusCode::UNPROCESSABLE_ENTITY,
+            )
+            .await
+        }
+    }
+}
+
+/// `POST /mail/compose/send`: guarda o rascunho e envia pelo Core. Se o envio
+/// falhar, o rascunho fica, com o texto do membro — nunca se perde.
+pub(super) async fn mail_compose_send(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(query): Query<MailQuery>,
+    Form(form): Form<ComposeForm>,
+) -> Response {
+    use crate::controllers::productivity::mail::addresses;
+    use crate::ui::view_models::MailSendState;
+    let member = member_or_login!(state, headers);
+    let Some(mailbox) = query.r#box else {
+        return failure_response(&ApiFailure::Denied);
+    };
+    let draft = match save_draft(&state, &member, mailbox, query.draft, &form).await {
+        Ok(id) => Uuid::parse_str(&id).ok(),
+        Err(ApiFailure::Unauthorised) => return session_ended(&state, &headers),
+        Err(f) => {
+            let err = app_error(&f);
+            let c = returned(
+                form,
+                mailbox,
+                query.draft,
+                AppSaveState::Failed(AppError::SaveFailed),
+                MailSendState::Failed,
+                Some(err),
+            );
+            return mail_view(
+                &state,
+                &headers,
+                MailQuery {
+                    r#box: Some(mailbox),
+                    ..MailQuery::default()
+                },
+                MailPane::Returned(Box::new(c)),
+                StatusCode::UNPROCESSABLE_ENTITY,
+            )
+            .await;
+        }
+    };
+    let body = serde_json::json!({
+        "mailbox_id": mailbox,
+        "to": addresses(&form.to),
+        "cc": addresses(&form.cc),
+        "bcc": addresses(&form.bcc),
+        "subject": form.subject,
+        "body": form.body,
+        "draft_id": draft,
+        "confirmed": false,
+    });
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/mail/send",
+        &body,
+    )
+    .await
+    {
+        Ok(_) => {
+            if let Some(d) = draft {
+                let _ = api::delete(
+                    &state,
+                    &member.session.access_token,
+                    &member.correlation_id,
+                    &format!("/api/v1/mail/drafts/{d}"),
+                )
+                .await;
+            }
+            Redirect::to(&format!("/mail?box={mailbox}&folder=sent")).into_response()
+        }
+        Err(ApiFailure::Unauthorised) => session_ended(&state, &headers),
+        Err(f) => {
+            let err = match f {
+                ApiFailure::Unavailable(_) | ApiFailure::Failed(_) => AppError::TransportFailed,
+                ref other => app_error(other),
+            };
+            let saved = AppSaveState::Saved(clock_now_hhmm(&state, &member).await);
+            let c = returned(
+                form,
+                mailbox,
+                draft,
+                saved,
+                MailSendState::Failed,
+                Some(err),
+            );
+            mail_view(
+                &state,
+                &headers,
+                MailQuery {
+                    r#box: Some(mailbox),
+                    ..MailQuery::default()
+                },
+                MailPane::Returned(Box::new(c)),
+                StatusCode::BAD_GATEWAY,
+            )
+            .await
+        }
+    }
+}
+
+async fn clock_now_hhmm(state: &WorkspaceState, member: &Member) -> String {
+    let zone = member_zone(state, member).await;
+    chrono::Utc::now()
+        .with_timezone(&zone.zone())
+        .format("%H:%M")
+        .to_string()
+}
+
+#[derive(Deserialize)]
+pub(super) struct MailOpForm {
+    #[serde(default)]
+    op: String,
+}
+
+/// `POST /mail/message/{id}/op`: as acções da mensagem aberta. Marcar por ler
+/// é uma marca do Core; arquivar e pôr no lixo ainda não têm contrato no Core,
+/// e dizem-no em vez de fingir.
+pub(super) async fn mail_message_op(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(message_id): Path<Uuid>,
+    Query(query): Query<MailQuery>,
+    Form(form): Form<MailOpForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let back = format!(
+        "/mail?box={}&folder={}",
+        query.r#box.map(|b| b.to_string()).unwrap_or_default(),
+        query.folder.as_deref().unwrap_or("inbox")
+    );
+    match form.op.as_str() {
+        "unread" => match api::post(
+            &state,
+            &member.session.access_token,
+            &member.correlation_id,
+            &format!("/api/v1/mail/messages/{message_id}/flags"),
+            &serde_json::json!({ "read": false }),
+        )
+        .await
+        {
+            Ok(_) => Redirect::to(&back).into_response(),
+            Err(ApiFailure::Unauthorised) => session_ended(&state, &headers),
+            Err(f) => failure_response(&f),
+        },
+        _ => failure_response(&ApiFailure::Rejected(t("prod.mail.err.move").to_owned())),
+    }
+}
+
+// ── Nye contextual ───────────────────────────────────────────────────────
+
+/// O texto com que a Nye abre a partir de uma aplicação («Sobre a nota
+/// «Torre 2»: »). A referência relê-se com a sessão do membro: uma nota, um
+/// evento, um ficheiro ou uma mensagem que ele não pode ver não dá texto
+/// nenhum — nem o nome. A referência não concede nada; o Core decide de novo a
+/// cada pedido que a Nye faça.
+pub(super) async fn nye_reference(
+    state: &WorkspaceState,
+    member: &Member,
+    reference: Option<&str>,
+) -> Option<String> {
+    use crate::controllers::desktop::text;
+    let (kind, id) = reference?.split_once(':')?;
+    let id = Uuid::parse_str(id).ok()?;
+    let quem = caller(member);
+    let (path, field, key) = match kind {
+        "note" => (
+            format!("/api/v1/me/notes/{id}"),
+            "title",
+            "prod.nye.about.note",
+        ),
+        "event" => (
+            format!("/api/v1/calendar/events/{id}"),
+            "title",
+            "prod.nye.about.event",
+        ),
+        "file" => (
+            format!("/api/v1/me/files/{id}"),
+            "name",
+            "prod.nye.about.file",
+        ),
+        "message" => (
+            format!("/api/v1/mail/messages/{id}?allow_remote=false&mark_read=false"),
+            "subject",
+            "prod.nye.about.message",
+        ),
+        _ => return None,
+    };
+    let v = quem.get(state, &path).await.ok()?;
+    let name = match kind {
+        "message" => text(v.get("message")?, field).to_owned(),
+        _ => text(&v, field).to_owned(),
+    };
+    (!name.trim().is_empty()).then(|| crate::i18n::tf(key, &[("name", name.trim())]))
+}

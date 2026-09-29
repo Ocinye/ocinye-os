@@ -1475,6 +1475,30 @@ pub async fn owns_personal_file_version(
     Ok(owner == Some(principal.person_id))
 }
 
+/// O nome de um ficheiro pessoal, pela versão — só ao dono.
+///
+/// É o que a Nye precisa para dizer de que ficheiro se fala quando uma
+/// aplicação lhe passa uma referência: o nome e mais nada. Uma versão de outra
+/// pessoa, de um ambiente ou inexistente responde o mesmo «não encontrado».
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] quando a versão não é de um ficheiro pessoal do dono.
+pub async fn personal_file_name(
+    executor: &mut sqlx::PgConnection,
+    principal: &Principal,
+    version_id: Uuid,
+) -> CoreResult<(Uuid, String)> {
+    repo::personal_file_name(
+        &mut *executor,
+        version_id,
+        principal.person_id,
+        principal.organisation_id,
+    )
+    .await?
+    .ok_or_else(|| CoreError::NotFound("Ficheiro não encontrado.".to_owned()))
+}
+
 // ── Meus ficheiros ──────────────────────────────────────────────────────
 //
 // > **Todo o membro activo tem um espaço de ficheiros pessoal.** Não exige
