@@ -1,4 +1,6 @@
-//! D004 · Aplicações de produtividade. DESIGN_LOCKED.
+//! D004 · Aplicações de produtividade. D005 · Investigação e trabalho
+//! ([`projects`], [`work`], [`ideas`], [`datasets`], [`knowledge`], peças em
+//! [`res`]). DESIGN_LOCKED.
 //!
 //! O sistema de aplicação partilhado (a moldura, a barra, a navegação lateral,
 //! o inspector, a pesquisa de âmbito, os estados vazio/a carregar/erro, o estado
@@ -23,9 +25,15 @@ use crate::ui::view_models::{
 };
 
 pub mod calendar;
+pub mod datasets;
 pub mod files;
+pub mod ideas;
+pub mod knowledge;
 pub mod mail;
 pub mod notes;
+pub mod projects;
+pub mod res;
+pub mod work;
 
 /// O ícone de um tipo de ficheiro.
 #[must_use]

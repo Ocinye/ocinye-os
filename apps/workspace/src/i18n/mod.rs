@@ -27,6 +27,7 @@ mod ui_apps;
 mod ui_auth;
 mod ui_base;
 mod ui_nye;
+mod ui_research;
 mod ui_shell;
 
 #[cfg(test)]
