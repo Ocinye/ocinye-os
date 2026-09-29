@@ -39,6 +39,7 @@ I/O. Declara, por aplicação:
 | `requested_resources` | que recursos governados consome |
 | `health` | de onde vem a sua disponibilidade |
 | `can_pin`, `default_pin` | política de fixação |
+| `launch` | uma janela ou várias no Gestor de Janelas (`SingleInstance`, `MultiWindow`; [ADR-0618](0618-window-manager.md)) |
 | versão do contrato, ciclo de vida | `1`; `Native` |
 
 **2. Pedir não é receber.** Um manifesto declara o que a aplicação precisa; o
