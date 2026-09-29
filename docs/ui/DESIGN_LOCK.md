@@ -1,50 +1,66 @@
-# DESIGN_LOCK
+# DESIGN_LOCK — Design revision D003.1
 
-Implementação visual canónica do Ocinye OS, escrita pelo Claude Design. O que está `LOCKED` não se reestrutura, não se re-estiliza e não se «simplifica»; a integração faz-se à volta, pelos ViewModels.
+Re-locked: `static/oc-nye.js` (initial filter via the shell's `input` filter; modal trap + `inert`; two-step Esc; focus restoration), `static/oc-nye.css` (`--oc-nye-touch` block ≤ 640), `src/ui/nye/mod.rs` (`data-part="nye-empty"`, 2 tests). Code must not add a second app filter, remove `aria-modal`, or shrink the ≤ 640 hit areas below 44 px. All D003 locks stay.
 
-- Base: `chore/ui-wipe` @ `c99cbda`
-- Referência de aceitação: `design/claude-design/reference/` («Ocinye OS», «Ocinye OS Apps», «Ocinye OS Proposta»)
+---
 
-## Linguagem visual
-- Controlos em cápsula (raio = metade da altura); botões de ícone quadrados em círculo; cartões 20px; cartão de autenticação 24px.
-- Navegação activa: um só estado, fundo azul Ocinye e texto branco. Sem sublinhado dourado.
-- Um só dourado por ecrã (acção principal).
-- Tudo o que está no Desktop é vidro: fundo translúcido, contorno fino claro, desfoque, texto branco. Qualquer widget novo herda-o de `.oc-dw` (variáveis `--dw-*` na `.oc-desk`); em fundos claros o texto passa a escuro automaticamente.
-- «Instância» sempre com maiúscula em pt e en.
+# DESIGN_LOCK — Design revision D003
 
-## LOCKED
-| Componente | Implementação | Parte |
-|---|---|---|
-| Documento base | `ui/document.rs` | P0 |
-| Tokens, fontes, reposição, foco, estados | `static/oc-base.css` | P0 |
-| Relógio, copiar | `static/oc-base.js` | P0 |
-| Sprite de ícones | `static/icons.svg` | P0 |
-| Peças partilhadas | `ui/components/mod.rs` | P0 |
-| Moldura de autenticação (barra, identidade, rodapé) | `ui/screens/auth/mod.rs` · `static/oc-auth.css` | P1 |
-| Início de sessão (dois passos) · Recuperar (G-26) · Fim de sessão | `ui/screens/auth/login.rs` · `static/oc-auth.js` | P1 |
-| Primeiro acesso | `ui/screens/auth/first_access.rs` | P1 |
-| MFA · configurar (duas colunas) · códigos (duas colunas) · desafio | `ui/screens/auth/mfa.rs` | P1 |
-| Arranque | `ui/screens/auth/boot.rs` | P1 |
-| Casca: barra de cima, barra de aplicações, lançador, paleta, «+ Criar», menus, estado | `ui/shell/mod.rs` · `static/oc-shell.css` · `static/oc-shell.js` | P2 |
-| Janela de aplicação (página inteira, G-05) | `ui/shell/mod.rs::app_window` | P2 |
-| Desktop: grelha, widgets, edição, biblioteca, fundo, escurecimento, repor | `ui/screens/home/mod.rs` · `static/oc-desk.css` · `static/oc-desk.js` | P2.3 |
-| Registo de widgets e predefinições do sistema | `ui/screens/home/registry.rs` | P2.3 |
-| Ícone por aplicação | `ui/components::app_icon` | P2 |
+### D003 · Prateleira removida (decisão do membro, 29 set)
+A prateleira de janelas em baixo do Desktop (D002 `wm::shelf`, `.oc-shelf`) foi retirada. As janelas abertas vivem só na barra de aplicações lateral: fixadas com o ponto de execução (1/2); aplicações em execução não fixadas (ex.: Nye) aparecem depois de um separador (`data-part="dock-running"`, `data-running`) e saem quando a última janela fecha. Várias janelas da mesma aplicação: a escolha (`.oc-chooser`) do clique na barra; todas as janelas: o alternador (Alt+W / ícone na barra da janela). `--shelf-h` fica 0. Classe: D002_COMPONENT_EXTENSION (WM presentation). Ficheiros: `ui/wm/mod.rs`, `ui/shell/mod.rs` (dock), `static/oc-wm.css`. Chaves `wm.shelf`/`wm.shelf.all` ficam no catálogo sem uso.
 
-## Decisões aprovadas (valem para as partes seguintes)
-- Login em dois passos só no browser; um único `POST /login`.
-- Sem chave de acesso nem SSO à porta; sem «escolher espaço».
-- D8a/D8b em duas colunas; D10 indisponível (G-26), com a confirmação neutra desenhada.
-- À porta: logótipo, «OCINYE OS» e a distribuição (código + nome). Sem nome da Instância nem endereço (decisão do Fidel).
+D003 adds and locks the Nye components below and re-locks `shell/mod.rs` (palette dispatch, Nye bar microphone), `document.rs` (loads `oc-nye.css`/`oc-nye.js` last), `ui/mod.rs`, `view_models.rs` (append-only) and `icons.svg` (+ `stop`, `volume`). Every D001/D002/D002.1 lock below stays.
 
+| Component | Package path (`implementation/…`) | Rev | Owner of logic |
+|---|---|---|---|
+| Nye universal surface (palette extension): field, modes, availability, context chip, results, compact answer/proposal, footer | `apps/workspace/src/ui/nye/mod.rs` (`surface`), `static/oc-nye.css`, `static/oc-nye.js` | D003 | Code (routes, VMs) · Core (search, intent, availability) |
+| Messages, safe blocks, sources, activity, processing/egress, grounding | `nye/mod.rs` (`message`, `sources`, `activity`) | D003 | Core / AI Fabric supply data |
+| Proposal, execution states, risk/state tags | `nye/mod.rs` (`proposal`) | D003 | Core decides authorisation, confirmation, state |
+| Strong confirmation dialog | `nye/mod.rs` (`confirm_dialog`) | D003 | Core; Workspace checks digest |
+| Nye application (rail, bar, status chip, log, composer, side panel, drawers, container-query layout) | `nye/mod.rs` (`app`) | D003 | Code (persistence via Core) |
+| Voice (push-to-talk) | `nye/mod.rs` (`voice`), `oc-nye.js` (`oc:nye` intents) | D003 | Runtime + AI Fabric (STT/TTS) |
+| Nye view models | `src/ui/view_models.rs` (D003 block) | D003 | shapes locked; filled by Code |
+| Nye copy pt/en/fr | `src/i18n/ui_nye.rs` | D003 | Design |
+| Shell palette dispatch + Nye bar mic | `src/ui/shell/mod.rs` | D003 | — |
 
-## D002
-`src/ui/wm/mod.rs`, `static/oc-wm.css`, `static/oc-wm.js` (só a apresentação; o motor é do Code) e a extensão da casca em `src/ui/shell/mod.rs`. Detalhe: HANDOFF.md do pacote D002.
+Placement lock (D003): the Nye surface is the palette slot of `shell_with_window` (after the launcher, before the switcher), outside `.oc-desk`. `nye::confirm_dialog` is rendered by the route after the shell (the `dirty_close` slot), never inside `.oc-desk`, `.oc-wm`, the Nye surface or the Nye window. At most one blocking dialog per response. No new z-index.
 
+Claude Code must not: show model or provider names in the normal UI; render model HTML; show prompts, system messages or reasoning in activity; infer authorisation or confirmation on the client; persist conversations, confirmations, capabilities or results in localStorage; add wake-word or always-listening voice; render a destructive capability that the Core does not publish.
 
-## D002.1
-| Componente | Implementação | Revisão |
-|---|---|---|
-| Alternador como camada global da casca (depois da paleta, fora do `.oc-desk`) | `ui/shell/mod.rs`, `ui/wm/mod.rs` | D002.1 |
-| Resumo dos painéis fechados em flex | `static/oc-wm.css` | D002.1 |
-| Laço de foco do diálogo de alterações | `static/oc-wm.js` | D002.1 |
+---
+
+# DESIGN_LOCK — Design revision D002.1
+
+D002.1 re-locks four files (rows below marked D002.1): `static/oc-wm.css`, `static/oc-wm.js`, `src/ui/wm/mod.rs`, `src/ui/shell/mod.rs`. Also locked: the switcher is a global shell overlay drawn after the palette, outside `.oc-desk`; it must not move back into `.oc-desk` or `.oc-wm`. The dirty-close dialog (`wm::dirty_close`) is rendered after the shell (as today by `routes.rs · shell_page`) or as its last child, never inside `.oc-desk` or `.oc-wm`. Order: `.oc-desk` → `.oc-top` → launcher/palette → switcher → dirty close. Closed panel summaries are `display: flex`.
+
+Claude Code must NOT redesign, restyle, simplify, substitute icons, change typography or spacing, replace the design system, resurrect old UI, approximate components, or recreate anything from screenshots. Integrate around the locked code through the view models.
+
+Locked visual properties, for every row below: hierarchy, layout, dimensions, spacing, typography (IBM Plex Sans/Mono), colours and tokens, borders, radius, shadows, glass treatment, icons (`static/icons.svg`), animations and reduced-motion rules, responsive breakpoints, focus styles and a11y attributes.
+
+| Component | Package path (`implementation/…`) | Repository path | Rev |
+|---|---|---|---|
+| Base document | `apps/workspace/src/ui/document.rs` | same | D001 |
+| Tokens, reset, focus, common states | `apps/workspace/static/oc-base.css` | same | D001 |
+| Clock, copy | `apps/workspace/static/oc-base.js` | same | D001 |
+| Icon sprite | `apps/workspace/static/icons.svg` | same | D001 |
+| Logo | `apps/workspace/static/ocinye-logo.png` | same | D001 |
+| Shared parts: `icon`, `app_icon`, `core_error`, `pending` | `apps/workspace/src/ui/components/mod.rs` | same | D001 |
+| Auth frame: bar, identity, footer, language | `apps/workspace/src/ui/screens/auth/mod.rs`, `static/oc-auth.css` | same | D001 |
+| Login (2 steps), Recover (G-26), End of session | `…/screens/auth/login.rs`, `static/oc-auth.js` | same | D001 |
+| First access | `…/screens/auth/first_access.rs` | same | D001 |
+| MFA: setup (2 columns), codes (2 columns), challenge | `…/screens/auth/mfa.rs` | same | D001 |
+| Boot | `…/screens/auth/boot.rs` | same | D001 |
+| Shell: top bar (logo 32px, account menu, distribution badge, crumb, Nye bar, «+ Criar», CORE·IA, notifications, clock), app bar, launcher, palette | `…/ui/shell/mod.rs`, `static/oc-shell.css`, `static/oc-shell.js` | same | D001 |
+| App window frame (full page, pre-G-05) and `app_pending` | `…/ui/shell/mod.rs` (`app_window`, `app_pending`) | same | D001 |
+| Desktop: grid, 14 widgets, glass, customise bar, drag and move, resize, remove, collapse, library, background and dimming sheet, restore with diff, undo toast, save states | `…/screens/home/mod.rs`, `static/oc-desk.css`, `static/oc-desk.js` | same | D001 |
+| Widget registry: kinds, sizes, categories, mandatory, subtitles, system defaults per Distribution, diff | `…/screens/home/registry.rs` | same | D001 |
+| Error pages 404/403/502 (shell and door) | `apps/workspace/src/ui/screens/error.rs`, `static/oc-shell.css` (`.oc-error`), `static/oc-auth.css` | same | D001.1 |
+| Identity could not be confirmed | `apps/workspace/src/ui/screens/auth/identity.rs` | same | D001.1 |
+| Window manager: window, controls, content states, layer, shelf, running indicator, chooser, switcher, snap preview, dirty close, Desktop context menu, status/notifications/clock panels | `apps/workspace/src/ui/wm/mod.rs`, `static/oc-wm.css`, `static/oc-wm.js` (presentation part only; the engine is Code's) | same | D002.1 |
+| Shell extension (window layer, running dots, panels) | `apps/workspace/src/ui/shell/mod.rs` | same | D002.1 |
+| View-model shapes | `…/ui/view_models.rs` | same | D001 |
+| All Design copy pt/en/fr | `…/src/i18n/ui_auth.rs`, `ui_base.rs`, `ui_shell.rs` | same | D001 |
+
+Locked by reference, not yet implemented: every screen in `reference/` that has no row above. They are locked in the sense that nobody implements them outside Design (see `HANDOFF.md` §10).
+
+Approved decisions: `HANDOFF.md` §7.

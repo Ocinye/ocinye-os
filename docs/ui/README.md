@@ -1,11 +1,11 @@
 # Interface do Workspace
 
-**Estado: Claude Design D002.1 integrada no ramo `feat/design-d002`**, sobre a
-D001.2.1 em `main` (PR #181, merge `7c20f8d`; nenhuma das duas deployada,
-produção continua em `4f8d048`). A D001 e a D002 estão fechadas: a D002.1
-corrige a camada do alternador, o alinhamento dos controlos da barra de cima e
-o foco do diálogo de fechar, e a paridade visual, a acessibilidade e a
-certificação funcional ficaram provadas no Workspace a correr. O código de interface é do Design e está fechado
+**Estado: Claude Design D003 (Nye) integrada no ramo `feat/design-d003`**,
+sobre a D002.1 em `main` (PR #183; nenhuma deployada, produção continua em
+`4f8d048`). A D001 e a D002 estão fechadas. A D003 traz o Nye: a superfície
+universal em todas as páginas e a aplicação Nye, ligadas ao Core
+([ADR-0619](../adrs/0619-nye-universal-surface.md)); a pesquisa funciona sem
+IA, perguntar e agir dizem porquê não estão, e a voz está indisponível. O código de interface é do Design e está fechado
 ([`DESIGN_LOCK.md`](DESIGN_LOCK.md)); o contrato detalhado de rotas e
 ViewModels está em [`HANDOFF.md`](HANDOFF.md).
 
@@ -17,7 +17,9 @@ ViewModels está em [`HANDOFF.md`](HANDOFF.md).
   janelas geridas (janela, prateleira, alternador, escolha entre janelas,
   encaixe, fechar com trabalho por guardar), o menu de contexto do Desktop e os
   painéis de estado, notificações e relógio. O motor é de Code
-  ([ADR-0618](../adrs/0618-window-manager.md)).
+  ([ADR-0618](../adrs/0618-window-manager.md)). Da D003: o Nye — pesquisar,
+  perguntar, agir, propostas com confirmação ligada ao digest do plano,
+  conversas do próprio membro.
 - **Registo da integração:** [`design-integration.json`](design-integration.json).
 - **O que o Design precisa de saber:** [`CODE_FEEDBACK.md`](CODE_FEEDBACK.md).
 - **Referência visual (só referência):** `design/claude-design/reference/`.

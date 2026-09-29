@@ -370,6 +370,11 @@ struct PromptRequest {
     /// institutional content until they say otherwise.
     #[serde(default)]
     classification: Option<String>,
+    /// The conversation to continue (D003 · NYE-02). One the member does not
+    /// own is treated as absent: the turn starts a new conversation, and
+    /// nothing about the other one is revealed.
+    #[serde(default)]
+    conversation_id: Option<Uuid>,
 }
 
 /// `POST /ai/prompt`
@@ -428,7 +433,15 @@ async fn submit_prompt(
     {
         Routing::NoCandidate(reason_code) => {
             return Ok(Json(
-                degraded(&state, &principal, capability, reason_code, &request.prompt).await,
+                degraded(
+                    &state,
+                    &principal,
+                    capability,
+                    reason_code,
+                    &request.prompt,
+                    request.conversation_id,
+                )
+                .await,
             ));
         }
         Routing::Candidates {
@@ -456,6 +469,7 @@ async fn submit_prompt(
                     capability,
                     AiReasonCode::AiProviderUnhealthy,
                     &request.prompt,
+                    request.conversation_id,
                 )
                 .await,
             ));
@@ -472,6 +486,7 @@ async fn submit_prompt(
                     capability,
                     AiReasonCode::AiResourceQuotaExceeded,
                     &request.prompt,
+                    request.conversation_id,
                 )
                 .await,
             ));
@@ -485,6 +500,7 @@ async fn submit_prompt(
                     capability,
                     AiReasonCode::AiProviderUnhealthy,
                     &request.prompt,
+                    request.conversation_id,
                 )
                 .await,
             ));
@@ -588,10 +604,10 @@ async fn submit_prompt(
             .await;
             // Persist the conversation turn with full model provenance, in the
             // same transaction, so history and usage land together.
-            let _ = intelligence::record_interaction(
+            let conversation_id = intelligence::record_interaction(
                 &mut tx,
                 &principal,
-                None,
+                request.conversation_id,
                 None,
                 &request.prompt,
                 &intelligence::ResponseTurn {
@@ -604,7 +620,8 @@ async fn submit_prompt(
                     content: &response.text,
                 },
             )
-            .await;
+            .await
+            .ok();
             let _ = tx.commit().await;
 
             Ok(Json(AiInteractionResponse {
@@ -615,12 +632,21 @@ async fn submit_prompt(
                 provider: Some(response.model.provider),
                 compute_node: model.node_id.map(|id| id.to_string()),
                 content: response.text,
+                conversation_id,
             }))
         }
         Err(reason_code) => {
             drop(tx); // release: a failed request charges nothing
             Ok(Json(
-                degraded(&state, &principal, capability, reason_code, &request.prompt).await,
+                degraded(
+                    &state,
+                    &principal,
+                    capability,
+                    reason_code,
+                    &request.prompt,
+                    request.conversation_id,
+                )
+                .await,
             ))
         }
     }
@@ -639,8 +665,9 @@ async fn degraded(
     capability: AiCapability,
     reason_code: AiReasonCode,
     prompt: &str,
+    conversation_id: Option<Uuid>,
 ) -> AiInteractionResponse {
-    let response = AiInteractionResponse::degraded(reason_code, degraded_prompt_content());
+    let mut response = AiInteractionResponse::degraded(reason_code, degraded_prompt_content());
     if let Ok(mut tx) = state.pool.begin().await {
         let _ = intelligence::record_rejected_job(
             &mut tx,
@@ -651,10 +678,10 @@ async fn degraded(
             reason_code.as_str(),
         )
         .await;
-        let _ = intelligence::record_interaction(
+        let recorded = intelligence::record_interaction(
             &mut tx,
             principal,
-            None,
+            conversation_id,
             None,
             prompt,
             &intelligence::ResponseTurn {
@@ -667,8 +694,11 @@ async fn degraded(
                 content: &response.content,
             },
         )
-        .await;
-        let _ = tx.commit().await;
+        .await
+        .ok();
+        if tx.commit().await.is_ok() {
+            response.conversation_id = recorded;
+        }
     }
     response
 }

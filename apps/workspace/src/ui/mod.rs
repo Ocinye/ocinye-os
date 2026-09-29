@@ -13,6 +13,7 @@
 
 pub mod components;
 pub mod document;
+pub mod nye;
 pub mod screens;
 pub mod shell;
 pub mod view_models;

@@ -14,6 +14,7 @@ use leptos::prelude::*;
 
 use crate::i18n::t;
 use crate::ui::components::{app_icon, icon};
+use crate::ui::nye;
 use crate::ui::view_models::{Distribution, Health, ShellVm};
 use crate::ui::wm;
 
@@ -222,8 +223,7 @@ fn top_bar(vm: &ShellVm) -> impl IntoView {
                 <label class="oc-sr" for="oc-q">{t("shell.search.ask")}</label>
                 {icon("nye")}
                 <input id="oc-q" name="q" type="search" value=vm.query.clone() placeholder=t("shell.search.placeholder") autocomplete="off" />
-                <button type="button" class="oc-nyebar__mic" aria-disabled="true" aria-describedby="oc-voice-pending" aria-label=t("shell.voice") title=t("shell.voice_pending")>{icon("mic")}</button>
-                <span class="oc-sr" id="oc-voice-pending">{t("shell.voice_pending")}</span>
+                {nyebar_mic(vm)}
                 <kbd class="oc-kbd" aria-hidden="true">"⌘K"</kbd>
             </form>
             <details class="oc-menu oc-create" data-oc="menu">
@@ -242,8 +242,24 @@ fn top_bar(vm: &ShellVm) -> impl IntoView {
     }
 }
 
+/// A barra de aplicações. D003 · É o único sítio onde as janelas abertas
+/// aparecem (não há prateleira em baixo): primeiro as fixadas; depois, a seguir
+/// a um separador, as aplicações em execução que não estão fixadas (Nye, …),
+/// pela ordem do registo. Fechada a última janela, a não fixada desaparece.
 fn dock(vm: &ShellVm) -> impl IntoView {
+    let running = |id: &str| {
+        vm.wm
+            .as_ref()
+            .is_some_and(|wm| wm.windows.iter().any(|w| w.app_id == id))
+    };
     let pinned: Vec<_> = vm.apps.iter().filter(|a| a.pinned).cloned().collect();
+    let extra: Vec<_> = vm
+        .apps
+        .iter()
+        .filter(|a| !a.pinned && running(a.id))
+        .cloned()
+        .collect();
+    let has_extra = !extra.is_empty();
     view! {
         <nav class="oc-dock" data-oc="dock" aria-label=t("shell.dock")>
             <a class="oc-dock__btn" href="/" aria-label=t("shell.dock.home") aria-current=vm.apps.iter().any(|a| a.active && a.href == "/").then_some("page")>{icon("home")}</a>
@@ -264,6 +280,27 @@ fn dock(vm: &ShellVm) -> impl IntoView {
                         data-oc=(n > 0).then_some("dock-app")
                         data-app=a.id
                         data-windows=(n > 0).then(|| n.to_string())
+                    >
+                        {icon(app_icon(a.href))}
+                        {run}
+                    </a>
+                }
+            }).collect_view()}
+            {has_extra.then(|| view! { <span class="oc-dock__sep" data-part="dock-running" aria-hidden="true"></span> })}
+            {extra.into_iter().map(|a| {
+                let (label, n) = wm::dock_label(vm.wm.as_ref(), a.id, &a.label);
+                let run = wm::dock_run(vm.wm.as_ref(), a.id);
+                view! {
+                    <a
+                        class="oc-dock__btn"
+                        href=a.href
+                        aria-label=label.clone()
+                        title=label
+                        aria-current=a.active.then_some("page")
+                        data-oc="dock-app"
+                        data-app=a.id
+                        data-windows=n.to_string()
+                        data-running=""
                     >
                         {icon(app_icon(a.href))}
                         {run}
@@ -329,7 +366,33 @@ fn launcher(vm: &ShellVm) -> impl IntoView {
     }
 }
 
-fn palette(vm: &ShellVm) -> impl IntoView {
+/// D003 · Com voz disponível (NYE-11), o microfone abre a Nye em modo de voz;
+/// sem ela, é o controlo D001 com a razão.
+fn nyebar_mic(vm: &ShellVm) -> AnyView {
+    let voice = vm
+        .nye
+        .as_ref()
+        .is_some_and(|n| n.availability.voice_input.is_available());
+    if voice {
+        return view! {
+            <a class="oc-nyebar__mic" href="/ai/prompt?voice=1" aria-label=t("shell.voice") title=t("shell.voice")>{icon("mic")}</a>
+        }
+        .into_any();
+    }
+    view! {
+        <button type="button" class="oc-nyebar__mic" aria-disabled="true" aria-describedby="oc-voice-pending" aria-label=t("shell.voice") title=t("shell.voice_pending")>{icon("mic")}</button>
+        <span class="oc-sr" id="oc-voice-pending">{t("shell.voice_pending")}</span>
+    }
+    .into_any()
+}
+
+/// A paleta de comandos. D003 · D001_COMPONENT_EXTENSION: com `vm.nye` é a
+/// superfície universal da Nye (`nye::surface`), que preserva os ganchos, o
+/// filtro de aplicações, ⌘K e Esc; com `None` é exactamente a paleta D001.
+fn palette(vm: &ShellVm) -> AnyView {
+    if let Some(n) = &vm.nye {
+        return nye::surface(vm, n).into_any();
+    }
     view! {
         <div class="oc-overlay" id="oc-palette" data-oc="palette" role="dialog" aria-modal="true" aria-label=t("shell.palette")>
             <a class="oc-overlay__scrim" href="#" aria-label=t("shell.close")></a>
@@ -356,6 +419,7 @@ fn palette(vm: &ShellVm) -> impl IntoView {
             </form>
         </div>
     }
+    .into_any()
 }
 
 /// A casca com `main` dentro. `title` e `icon_name` desenham a barra da janela
@@ -424,7 +488,7 @@ pub fn app_pending(vm: &ShellVm, title: String, href: &'static str) -> AnyView {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::ui::testing::assert_contracts;
     use crate::ui::view_models::AppTile;
@@ -574,5 +638,64 @@ mod tests {
         for (href, _, _) in CREATE {
             assert!(html.contains(&format!(r#"href="{href}""#)));
         }
+    }
+
+    /// D003 · contrato de regressão: sem Nye, a paleta é a D001; com Nye, a
+    /// mesma âncora, os mesmos ganchos e a mesma ordem das camadas globais.
+    #[test]
+    fn a_nye_alarga_a_paleta_sem_mudar_as_camadas() {
+        use crate::ui::view_models::{
+            NyeAvail, NyeAvailability, NyeLink, NyeReason, NyeSurfaceVm, WindowState, WmVm,
+        };
+        let base = shell(&vm(), ().into_any()).to_html();
+        assert!(base.contains(r#"action="/search""#) && !base.contains("data-nye"));
+        let mut v = vm();
+        v.nye = Some(NyeSurfaceVm {
+            availability: NyeAvailability {
+                search: NyeAvail::Available,
+                ask: NyeAvail::Unavailable(NyeReason::NoInference),
+                act: NyeAvail::Unavailable(NyeReason::NoInference),
+                voice_input: NyeAvail::Unavailable(NyeReason::VoiceUnavailable),
+                voice_output: NyeAvail::Unavailable(NyeReason::VoiceUnavailable),
+                attachments: NyeAvail::Unavailable(NyeReason::CapabilityUnavailable),
+                link: NyeLink::Connected,
+            },
+            intent: None,
+            detected: None,
+            query: String::new(),
+            hits: vec![],
+            answer: None,
+            context: None,
+            continue_href: "/ai/prompt".into(),
+            shortcut: None,
+            open: false,
+        });
+        v.wm = Some(WmVm {
+            windows: vec![crate::ui::wm::tests::win(
+                "a",
+                "files",
+                "/files",
+                true,
+                WindowState::Normal,
+                1,
+            )],
+            ..Default::default()
+        });
+        let html = shell_with_window(&v, ().into_any(), None).to_html();
+        assert_contracts(&html);
+        assert_eq!(html.matches(r#"id="oc-palette""#).count(), 1);
+        assert!(html.contains(r#"data-oc="palette""#) && html.contains(r#"data-part="palette-q""#));
+        let desk = html.find(r#"class="oc-desk""#).expect("oc-desk");
+        let pal = html.find(r#"id="oc-palette""#).expect("palette");
+        let sw = html.find(r#"id="oc-switcher""#).expect("switcher");
+        assert!(
+            desk < pal && pal < sw,
+            "Nye fora do .oc-desk, antes do alternador"
+        );
+        assert!(html.contains(r#"aria-describedby="oc-voice-pending""#));
+        assert!(
+            !html.contains("oc-shelf"),
+            "sem prateleira: janelas só na barra de aplicações"
+        );
     }
 }

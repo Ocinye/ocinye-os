@@ -257,8 +257,8 @@ sem que nada falhe.
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
 - **Ocinye Workspace: `IMPLEMENTED` como BFF, com a interface Claude Design
-  D001.2.1 em `main` (PR #181, merge `7c20f8d`, 2026-09-29) e a D002.1 no ramo
-  `feat/design-d002` (por empurrar).** A UI foi apagada
+  D001.2.1 e a D002.1 em `main` (PR #181 e #183, 2026-09-29) e a D003 (Nye)
+  no ramo `feat/design-d003` (por empurrar).** A UI foi apagada
   a 2026-09-28 ([apagamento](docs/ui/UI_WIPE_REPORT.md)) e voltou com o código
   do Design, aplicado sem alterações ([registo](docs/ui/design-integration.json)):
   arranque, login em dois passos, fim de sessão, primeiro acesso, MFA, a casca
@@ -269,11 +269,16 @@ sem que nada falhe.
   o Gestor de Janelas ([ADR-0618](docs/adrs/0618-window-manager.md)): janelas
   geridas por sessão, uma ou várias por aplicação segundo o manifesto,
   prateleira, alternador, encaixe, fechar com trabalho por guardar, o menu do
-  Desktop e os painéis de estado, notificações e relógio. As aplicações ainda
+  Desktop e os painéis de estado, notificações e relógio. A D003 acrescenta o
+  Nye ([ADR-0619](docs/adrs/0619-nye-universal-surface.md)): a superfície
+  universal em todas as páginas (pesquisa sem IA; perguntar e agir com a razão
+  da indisponibilidade; propostas cuja confirmação se liga ao digest do plano)
+  e a aplicação Nye — o antigo «Prompt Ocinye», com o mesmo `id` e rota — com
+  as conversas do próprio membro; voz indisponível. As aplicações ainda
   sem ecrã do Design abrem numa janela com o estado `app_pending`:
   **0 páginas** respondem `503 interface_pending`. **Ainda não deployada:**
   produção (`os.ocinye.com`) continua em `4f8d048`, com a UI anterior ao
-  apagamento, por decisão do Fidel, até à D002 ou a um deploy pedido.
+  apagamento, por decisão do Fidel, até a um deploy pedido.
 - **Gestor de Aplicações: `IMPLEMENTED` e em produção** (§45-A,
   [docs/applications](docs/applications/README.md)). As aplicações são entidades
   de primeira classe: um **registo autoritativo** único alimenta o **lançador**
@@ -555,7 +560,7 @@ sem que nada falhe.
   leitura de volta. Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **96 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
+- **97 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
   **53 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -572,14 +577,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1477 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1510 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **601 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **612 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
@@ -598,7 +603,7 @@ sem que nada falhe.
   aplicações abrem numa janela com o estado `app_pending` até o Design as
   entregar. As viagens de browser com Chrome saíram com a UI antiga; as de HTTP
   contra um Core real voltaram (`apps/workspace/tests/d001_journeys.rs`,
-  `d002_journeys.rs`). As provas de instalação,
+  `d002_journeys.rs`, `d003_journeys.rs`, `d003_act_journeys.rs`). As provas de instalação,
   actualização, restauro e hardware continuam em `NOT_RUN`
   ([apagamento](docs/ui/UI_WIPE_REPORT.md)).
 

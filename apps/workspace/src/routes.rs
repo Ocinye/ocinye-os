@@ -1394,9 +1394,13 @@ async fn pending_page(
                 }
                 ctx.vm.wm = controllers::windows::view(&state.sessions, &member.session_id, &ctx);
             }
-            let dialog = q.close.as_deref().and_then(|id| {
-                controllers::windows::dirty_close(&state.sessions, &member.session_id, id)
-            });
+            let dialog = q
+                .close
+                .as_deref()
+                .and_then(|id| {
+                    controllers::windows::dirty_close(&state.sessions, &member.session_id, id)
+                })
+                .map(|d| dirty_dialog(&d));
             let engine = ctx.vm.wm.is_some();
             let page_title = title.clone();
             let body = ui::shell::app_pending(&ctx.vm, title, href);
@@ -1415,10 +1419,12 @@ fn shell_page(
     title: &str,
     engine: bool,
     body: impl leptos::IntoView + 'static,
-    dialog: Option<ui::view_models::DirtyCloseVm>,
+    dialog: Option<leptos::prelude::AnyView>,
 ) -> Response {
     use leptos::prelude::*;
-    let body = view! { {body}{dialog.map(|d| ui::wm::dirty_close(&d))} };
+    // Um diálogo bloqueante por resposta, depois da casca: o de fechar com
+    // trabalho por guardar ou a confirmação da Nye (HANDOFF D003 §4).
+    let body = view! { {body}{dialog} };
     let doc = DocumentVm {
         title: title.to_owned(),
         surface: Surface::Shell,
@@ -1434,6 +1440,12 @@ fn shell_page(
         }
     }
     Html(page).into_response()
+}
+
+/// O diálogo de fechar com trabalho por guardar, como diálogo da página.
+fn dirty_dialog(d: &ui::view_models::DirtyCloseVm) -> leptos::prelude::AnyView {
+    use leptos::prelude::*;
+    ui::wm::dirty_close(d).into_any()
 }
 
 /// `GET {rota}?frame=1` (WM-4): só o corpo da janela, com o título num
@@ -1784,9 +1796,13 @@ async fn home(State(state): State<WorkspaceState>, headers: HeaderMap) -> Respon
             // D002: o Desktop fica por baixo das janelas abertas.
             ctx.vm.wm = controllers::windows::view(&state.sessions, &member.session_id, &ctx);
             let q = controllers::windows::page_query("/");
-            let dialog = q.close.as_deref().and_then(|id| {
-                controllers::windows::dirty_close(&state.sessions, &member.session_id, id)
-            });
+            let dialog = q
+                .close
+                .as_deref()
+                .and_then(|id| {
+                    controllers::windows::dirty_close(&state.sessions, &member.session_id, id)
+                })
+                .map(|d| dirty_dialog(&d));
             let engine = ctx.vm.wm.is_some();
             let vm = controllers::desktop::desktop(*ctx, &quem, &state).await;
             shell_page(
@@ -3972,53 +3988,204 @@ async fn create_agent(
     }
 }
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn prompt(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Prompt).await
+#[derive(Deserialize, Default)]
+struct NyeAppQuery {
+    /// A conversa aberta.
+    #[serde(default)]
+    c: Option<Uuid>,
+    /// Filtro da lista de conversas.
+    #[serde(default)]
+    cq: Option<String>,
+    /// `sources` | `activity`.
+    #[serde(default)]
+    panel: Option<String>,
+    /// Modo de voz.
+    #[serde(default)]
+    voice: Option<String>,
 }
 
-/// O pedido submetido no Prompt Ocinye.
+/// `GET /ai/prompt` (D003 · FG-D3-41): a aplicação Nye, numa janela gerida de
+/// uma só instância. As conversas vêm do Core e são do membro; uma conversa
+/// que não é dele não abre (o Core responde como se não existisse).
+async fn prompt(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(query): Query<NyeAppQuery>,
+) -> Response {
+    use leptos::prelude::*;
+    use ui::view_models::{NyeLang, NyePanel, NyeVoiceState, NyeVoiceVm, WindowContent};
+
+    let member = member_or_login!(state, headers);
+    let quem = caller(&member);
+    let title = Screen::Prompt.label().to_owned();
+    let href = Screen::Prompt.path();
+    let mut ctx = match controllers::shell(&state, &quem, href, title.clone()).await {
+        Shell::Ready(ctx) => ctx,
+        Shell::SignIn => return session_ended(&state, &headers),
+        Shell::Indeterminate(reference) => {
+            return identity_indeterminate(&state, reference, href).await
+        }
+    };
+    if !screen_open(&ctx, Screen::Prompt) {
+        let vm = ErrorVm {
+            kind: ErrorKind::NotFound,
+            reference: None,
+            retry_href: None,
+        };
+        return (
+            StatusCode::NOT_FOUND,
+            html(
+                error_title(vm.kind),
+                Surface::Shell,
+                ui::screens::error::in_shell(&ctx.vm, &vm),
+            ),
+        )
+            .into_response();
+    }
+    let page = controllers::windows::page_query(href);
+    // A conversa é estado da aplicação, não da janela: a janela da Nye é uma
+    // só, e mostra a rota da aplicação.
+    let _ = controllers::windows::open(
+        &state.sessions,
+        &member.session_id,
+        ApplicationId::Prompt,
+        href,
+        false,
+    );
+    ctx.vm.wm = controllers::windows::view(&state.sessions, &member.session_id, &ctx);
+    if let Some(wm) = ctx.vm.wm.as_mut() {
+        for w in wm.windows.iter_mut().filter(|w| w.app_id == "prompt") {
+            w.content = WindowContent::Ready;
+        }
+    }
+    let clock = controllers::desktop::Clock {
+        now: chrono::Utc::now(),
+        zone: ctx.zone,
+        core_ok: ctx.core.operational(),
+        is_admin: ctx.is_admin,
+    };
+    let availability = match ctx.vm.nye.as_ref() {
+        Some(n) => n.availability,
+        None => return failure_response(&ApiFailure::Unavailable(None)),
+    };
+    let current_id = query.c.map(|c| c.to_string());
+    let (list, current) = tokio::join!(quem.get(&state, "/api/v1/ai/conversations"), async {
+        match query.c {
+            Some(id) => Some(
+                quem.get(&state, &format!("/api/v1/ai/conversations/{id}"))
+                    .await,
+            ),
+            None => None,
+        }
+    });
+    let conversations = list.ok().map(|l| {
+        controllers::nye::conversations(
+            &l,
+            current_id.as_deref(),
+            query.cq.as_deref().unwrap_or_default(),
+            &clock,
+        )
+    });
+    // Uma conversa que não abre (de outra pessoa, ou que já não existe) é uma
+    // conversa nova: não se diz porquê.
+    let current = current
+        .and_then(Result::ok)
+        .map(|v| controllers::nye::conversation(&v, &clock));
+    let open_id = current.as_ref().and(current_id.as_deref());
+    let app = ui::view_models::NyeAppVm {
+        availability,
+        context: None,
+        conversations,
+        conv_query: query.cq.clone().unwrap_or_default(),
+        current,
+        composer: controllers::nye::composer(open_id, availability.ask),
+        voice: (query.voice.as_deref() == Some("1")).then(|| NyeVoiceVm {
+            state: match availability.voice_input {
+                ui::view_models::NyeAvail::Available => NyeVoiceState::Idle,
+                ui::view_models::NyeAvail::Unavailable(r) => NyeVoiceState::Unavailable(r),
+            },
+            lang: match crate::i18n::current() {
+                ocinye_contracts::Locale::En => NyeLang::En,
+                ocinye_contracts::Locale::Fr => NyeLang::Fr,
+                _ => NyeLang::Pt,
+            },
+            lang_detected: false,
+            transcript: None,
+            replay: false,
+        }),
+        panel: match query.panel.as_deref() {
+            Some("sources") => NyePanel::Sources,
+            Some("activity") => NyePanel::Activity,
+            _ => NyePanel::None,
+        },
+        panel_sources: Vec::new(),
+        panel_steps: Vec::new(),
+        suggestions: Vec::new(),
+    };
+    if page.frame {
+        let body = view! {
+            <template data-part="win-title">{title.clone()}</template>
+            {ui::nye::app(&app)}
+        };
+        return ([(header::CACHE_CONTROL, "no-store")], Html(body.to_html())).into_response();
+    }
+    let engine = ctx.vm.wm.is_some();
+    let body =
+        ui::shell::shell_with_window(&ctx.vm, ().into_any(), Some(ui::nye::app(&app).into_any()));
+    shell_page(&title, engine, body, None)
+}
+
+/// O pedido escrito na Nye: o campo `q` do compositor do Design.
 #[derive(Deserialize)]
 struct PromptForm {
     #[serde(default)]
-    prompt: String,
-    /// A capacidade escolhida na barra (`GENERAL`, `CODING`, …).
-    #[serde(default)]
-    capability: Option<String>,
+    q: String,
 }
 
-/// `POST /ai/prompt`
-///
-/// O Prompt é uma superfície de comando: aceita o pedido sempre que o Core está
-/// saudável e o membro tem autorização. A resposta do Core — hoje uma conclusão
-/// de sistema, `origin=SYSTEM`, `status=DEGRADED`, porque não há inferência —
-/// aparece como um turno de conversa, com a origem explícita, nunca disfarçada
-/// de resposta de modelo (M5 §5, §8, §12).
+#[derive(Deserialize, Default)]
+struct PromptQuery {
+    #[serde(default)]
+    c: Option<Uuid>,
+}
+
+/// `POST /ai/prompt` (D003 · NYE-02, NYE-03): o pedido vai ao Core, que o
+/// guarda na conversa do membro (a aberta, se for dele) e responde — com uma
+/// resposta de modelo ou com a conclusão degradada tipada. Volta à conversa.
 async fn submit_prompt(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
+    Query(query): Query<PromptQuery>,
     Form(form): Form<PromptForm>,
 ) -> Response {
     let member = member_or_login!(state, headers);
+    let mut back = query
+        .c
+        .map_or_else(|| "/ai/prompt".to_owned(), |c| format!("/ai/prompt?c={c}"));
     // Um pedido vazio não é um turno: nada foi pedido, e nada vai ao Core.
-    if !form.prompt.trim().is_empty() {
-        let mut body = serde_json::json!({ "prompt": form.prompt });
-        if let Some(capability) = form.capability.as_deref().filter(|c| !c.is_empty()) {
-            body["capability"] = Value::String(capability.to_owned());
+    if !form.q.trim().is_empty() {
+        let mut body = serde_json::json!({ "prompt": form.q });
+        if let Some(c) = query.c {
+            body["conversation_id"] = Value::String(c.to_string());
         }
-        let outcome = api::post(
+        match api::post(
             &state,
             &member.session.access_token,
             &member.correlation_id,
             "/api/v1/ai/prompt",
             &body,
         )
-        .await;
-        if let Err(ApiFailure::Unauthorised) = outcome {
-            return Redirect::to("/login").into_response();
+        .await
+        {
+            Ok(reply) => {
+                if let Some(c) = reply.get("conversation_id").and_then(Value::as_str) {
+                    back = format!("/ai/prompt?c={c}");
+                }
+            }
+            Err(ApiFailure::Unauthorised) => return session_ended(&state, &headers),
+            Err(failure) => return failure_response(&failure),
         }
     }
-    interface_pending()
+    Redirect::to(&back).into_response()
 }
 
 /// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
@@ -4028,18 +4195,260 @@ async fn search(State(state): State<WorkspaceState>, headers: HeaderMap) -> Resp
 
 // ── A Universal Command Surface ──────────────────────────────────────────
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn ask(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Ask).await
+#[derive(Deserialize, Default)]
+struct AskQuery {
+    #[serde(default)]
+    q: Option<String>,
+    #[serde(default)]
+    intent: Option<String>,
+    /// Mostrar este plano (depois de executar ou recusar).
+    #[serde(default)]
+    plan: Option<Uuid>,
+    /// Pedir a confirmação forte deste plano.
+    #[serde(default)]
+    confirm: Option<Uuid>,
 }
 
-/// Confirma e executa um plano.
+/// Um pedido à Nye: `POST /agentic/invoke` em nome do membro.
+async fn nye_invoke(
+    state: &WorkspaceState,
+    member: &Member,
+    text: &str,
+    intent: Option<&str>,
+) -> Result<Value, ApiFailure> {
+    let mut body = serde_json::json!({ "utterance": text.trim() });
+    if let Some(i) = intent {
+        body["intent"] = Value::String(i.to_owned());
+    }
+    api::post(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/agentic/invoke",
+        &body,
+    )
+    .await
+}
+
+/// A pesquisa determinística do Core (`GET /search`), com a autorização dele:
+/// os mesmos campos que as fontes do `invoke`.
+async fn nye_search(
+    state: &WorkspaceState,
+    member: &Member,
+    text: &str,
+) -> Result<Vec<Value>, ApiFailure> {
+    let page = api::get::<Value>(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!(
+            "/api/v1/search?q={}&page_size=36",
+            urlencoding_minimal(text.trim())
+        ),
+    )
+    .await?;
+    Ok(page
+        .get("items")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default())
+}
+
+/// O que o Core diz de um plano do membro, reavaliado agora.
+async fn plan_detail(
+    state: &WorkspaceState,
+    member: &Member,
+    plan_id: Uuid,
+) -> Result<Value, ApiFailure> {
+    api::get::<Value>(
+        state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/agentic/plans/{plan_id}"),
+    )
+    .await
+}
+
+/// `GET /ask` (D003 · NYE-04, NYE-06): a superfície universal da Nye aberta
+/// por cima do Desktop.
+///
+/// Pesquisar vai ao Core (`POST /agentic/invoke`, determinístico, filtrado
+/// para quem pergunta); perguntar e agir também, e o Core responde com um
+/// plano ou com a razão tipada por que não pode. Sem inferência, a pesquisa
+/// continua: o mesmo pedido é respondido como pesquisa.
+async fn ask(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(query): Query<AskQuery>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let quem = caller(&member);
+    let crumb = Screen::Home.label().to_owned();
+    let mut ctx = match controllers::shell(&state, &quem, "/", crumb).await {
+        Shell::Ready(ctx) => ctx,
+        Shell::SignIn => return session_ended(&state, &headers),
+        Shell::Indeterminate(reference) => {
+            return identity_indeterminate(&state, reference, "/ask").await
+        }
+    };
+    ctx.vm.wm = controllers::windows::view(&state.sessions, &member.session_id, &ctx);
+    let clock = controllers::desktop::Clock {
+        now: chrono::Utc::now(),
+        zone: ctx.zone,
+        core_ok: ctx.core.operational(),
+        is_admin: ctx.is_admin,
+    };
+    let text = query.q.clone().unwrap_or_default();
+    let intent = controllers::nye::intent_of(query.intent.as_deref());
+    let base = ctx.vm.nye.as_ref().map(|n| n.availability);
+    let Some(mut availability) = base else {
+        return failure_response(&ApiFailure::Unavailable(None));
+    };
+    let mut hits = Vec::new();
+    let mut answer = None;
+    let mut dialog = None;
+
+    if !text.trim().is_empty() {
+        match nye_invoke(
+            &state,
+            &member,
+            &text,
+            intent.map(ui::view_models::NyeIntent::as_str),
+        )
+        .await
+        {
+            Ok(outcome) => match outcome.get("kind").and_then(Value::as_str) {
+                Some("results") => {
+                    hits = controllers::nye::hits(
+                        outcome
+                            .get("sources")
+                            .and_then(Value::as_array)
+                            .map_or(&[][..], Vec::as_slice),
+                    );
+                }
+                Some("planned" | "executed") => {
+                    let requires = outcome
+                        .get("requires_approval")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    if let Some(plan) = outcome.get("plan") {
+                        answer = Some(controllers::nye::proposals_message(vec![
+                            controllers::nye::proposal(plan, requires, &clock),
+                        ]));
+                    }
+                }
+                Some("unavailable") => {
+                    let reason = controllers::nye::reason_of(
+                        outcome
+                            .get("reason_code")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default(),
+                    );
+                    let off = ui::view_models::NyeAvail::Unavailable(reason);
+                    availability.ask = off;
+                    availability.act = off;
+                    // A pesquisa continua a funcionar sem inferência — e sem
+                    // `ai.use`: o `invoke` recusa tudo a quem não pode usar a
+                    // assistência, pesquisa incluída, por isso a pesquisa sai
+                    // da rota determinística do Core, com a mesma autorização.
+                    match nye_search(&state, &member, &text).await {
+                        Ok(items) => hits = controllers::nye::hits(&items),
+                        Err(ApiFailure::Unauthorised) => {
+                            return session_ended(&state, &headers);
+                        }
+                        Err(failure) => {
+                            tracing::warn!(correlation_id = %member.correlation_id, %failure, "nye search failed");
+                            availability.search = ui::view_models::NyeAvail::Unavailable(
+                                ui::view_models::NyeReason::CoreUnavailable,
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            },
+            Err(ApiFailure::Unauthorised) => return session_ended(&state, &headers),
+            Err(failure) => {
+                tracing::warn!(correlation_id = %member.correlation_id, %failure, "nye invoke failed");
+                let down = ui::view_models::NyeAvail::Unavailable(
+                    ui::view_models::NyeReason::CoreUnavailable,
+                );
+                availability.search = down;
+            }
+        }
+    }
+
+    // Um plano pedido pelo endereço: sempre o que o Core diz agora, e só se
+    // for do membro (um plano de outra pessoa lê-se como inexistente).
+    if let Some(plan_id) = query.confirm.or(query.plan) {
+        if let Ok(plan) = plan_detail(&state, &member, plan_id).await {
+            let requires = plan
+                .get("requires_approval")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let p = controllers::nye::proposal(&plan, requires, &clock);
+            let open = plan.get("open").and_then(Value::as_bool) == Some(true);
+            if query.confirm.is_some() && open && requires && p.risk.high_impact() {
+                dialog = Some(nye_confirm_dialog(&p));
+            }
+            answer = Some(controllers::nye::proposals_message(vec![p]));
+        }
+    }
+
+    let mut surface = controllers::nye::surface(availability, &text, intent, true);
+    surface.hits = hits;
+    surface.answer = answer;
+    ctx.vm.nye = Some(surface);
+    let engine = ctx.vm.wm.is_some();
+    let vm = controllers::desktop::desktop(*ctx, &quem, &state).await;
+    shell_page(
+        crate::i18n::t("nye.surface.label"),
+        engine,
+        ui::screens::home::home(&vm),
+        dialog,
+    )
+}
+
+fn nye_confirm_dialog(p: &ui::view_models::NyeProposalVm) -> leptos::prelude::AnyView {
+    use leptos::prelude::*;
+    ui::nye::confirm_dialog(p).into_any()
+}
+
+#[derive(Deserialize)]
+struct ExecuteForm {
+    #[serde(default)]
+    digest: Option<String>,
+}
+
+/// Confirma e executa um plano (D003 · NYE-07, NYE-08).
+///
+/// A confirmação vale para o que o membro viu: o formulário traz o `digest`
+/// que foi mostrado, e um plano que já não é esse (ou um pedido sem ele) é
+/// recusado antes de se pedir ao Core que aprove. A aprovação continua ligada
+/// ao `digest` do próprio Core; esta verificação só impede que um formulário
+/// antigo confirme outra coisa.
 async fn execute_plan(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
     Path(plan_id): Path<Uuid>,
+    Form(form): Form<ExecuteForm>,
 ) -> Response {
     let member = member_or_login!(state, headers);
+    let back = format!("/ask?plan={plan_id}");
+
+    let plan = match plan_detail(&state, &member, plan_id).await {
+        Ok(plan) => plan,
+        Err(ApiFailure::Unauthorised) => return session_ended(&state, &headers),
+        Err(failure) => return failure_response(&failure),
+    };
+    let current = plan
+        .get("digest")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let shown = form.digest.as_deref().unwrap_or_default();
+    if current.is_empty() || shown != current {
+        tracing::warn!(correlation_id = %member.correlation_id, %plan_id, "confirmation does not match the plan");
+        return (StatusCode::CONFLICT, Redirect::to(&back)).into_response();
+    }
 
     // Confirmar e executar são dois pedidos ao Core, nesta ordem: a
     // confirmação liga-se ao digest do plano, e a execução verifica-a. Um só
@@ -4067,7 +4476,7 @@ async fn execute_plan(
     )
     .await
     {
-        Ok(_) | Err(ApiFailure::Denied) => Redirect::to("/ask").into_response(),
+        Ok(_) | Err(ApiFailure::Denied) => Redirect::to(&back).into_response(),
         Err(failure) => failure_response(&failure),
     }
 }
@@ -4090,7 +4499,9 @@ async fn reject_plan(
     )
     .await
     {
-        Ok(_) | Err(ApiFailure::Denied) => Redirect::to("/ask").into_response(),
+        Ok(_) | Err(ApiFailure::Denied) => {
+            Redirect::to(&format!("/ask?plan={plan_id}")).into_response()
+        }
         Err(failure) => failure_response(&failure),
     }
 }

@@ -34,6 +34,20 @@ pub fn sealing_key() -> &'static ocinye_core::password::sealed::SealingKey {
 }
 
 pub fn core_state(pool: PgPool, organisation_id: Uuid) -> AppState {
+    core_state_with(
+        pool,
+        organisation_id,
+        Arc::new(ocinye_core::modules::intelligence::NoProvider),
+    )
+}
+
+/// O Core com o fornecedor de inferência dado (nos testes, o
+/// `FixtureProvider` do Core, que só existe com `test-fixtures`).
+pub fn core_state_with(
+    pool: PgPool,
+    organisation_id: Uuid,
+    inference: Arc<dyn ocinye_core::modules::intelligence::InferenceProvider>,
+) -> AppState {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
         // SAFETY: uma escrita, antes de qualquer viagem começar trabalho.
@@ -69,7 +83,7 @@ pub fn core_state(pool: PgPool, organisation_id: Uuid) -> AppState {
         authenticator,
         store: None,
         embeddings: None,
-        inference: Arc::new(ocinye_core::modules::intelligence::NoProvider),
+        inference,
         mail_registry,
         realtime: Arc::new(ocinye_core::realtime::Realtime::ausente()),
         mail_probe: Arc::new(SemCorreio),
@@ -148,6 +162,18 @@ pub async fn pool() -> Option<PgPool> {
 
 impl Sistema {
     pub async fn levantar(profile: &str) -> Option<Self> {
+        Self::levantar_com(
+            profile,
+            Arc::new(ocinye_core::modules::intelligence::NoProvider),
+        )
+        .await
+    }
+
+    /// Um sistema cujo Core usa o fornecedor de inferência dado.
+    pub async fn levantar_com(
+        profile: &str,
+        inference: Arc<dyn ocinye_core::modules::intelligence::InferenceProvider>,
+    ) -> Option<Self> {
         let pool = pool().await?;
         let organisation_id: Uuid = sqlx::query_scalar(
             "INSERT INTO organisations (slug, name, profile) VALUES ($1, $2, $3) RETURNING id",
@@ -166,7 +192,7 @@ impl Sistema {
             "http://127.0.0.1:{}",
             core_listener.local_addr().expect("endereço").port()
         );
-        let core = core_state(pool.clone(), organisation_id);
+        let core = core_state_with(pool.clone(), organisation_id, inference);
         tokio::spawn(async move {
             let _ = axum::serve(core_listener, ocinye_core_server::routes::router(core)).await;
         });

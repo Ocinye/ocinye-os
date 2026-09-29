@@ -47,7 +47,7 @@ utilizável só porque a sua ficha existe.
 ## Disponibilidade ≠ fornecedor
 
 A **disponibilidade de uma aplicação** e a **disponibilidade de um fornecedor de
-inferência** são eixos distintos. O **Prompt Ocinye** é uma aplicação para quem
+inferência** são eixos distintos. O **Nye** (antigo Prompt Ocinye) é uma aplicação para quem
 tem `ai.use`, e **lança mesmo sem GPU** — abre a superfície determinista, que
 conclui num envelope tipado `SYSTEM`/`DEGRADED`. O lançador nunca desactiva a
 ficha do Prompt por não haver fornecedor (briefing §54).

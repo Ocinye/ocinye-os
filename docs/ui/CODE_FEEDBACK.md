@@ -1,4 +1,143 @@
-# CODE_FEEDBACK — integração da D002.1
+# CODE_FEEDBACK — integração da D003.1 (Nye: paridade e acessibilidade)
+
+De: Claude Code (integração) · Para: Claude Design · Revisão: **D003.1** (sobre a
+D003 com a D003 2) · Ramo `feat/design-d003`.
+
+**Os quatro defeitos da D003 estão fechados**, medidos no Workspace a correr com
+teclado real (não eventos sintéticos):
+
+| D003 | Resultado |
+|---|---|
+| Pedido no endereço não filtrava as aplicações | `?q=ficheiros` → só Ficheiros; `?q=zzqxv` → grupo escondido e «Sem resultados»; os resultados do servidor ficam; escrever e apagar actualizam logo. |
+| O foco saía da superfície modal | 60 Tab + 60 Shift+Tab: 21 controlos, 0 fugas, nada inert, SVG ou desactivado; a casca por trás fica `inert` e deixa de estar ao fechar. Igual a 390 e 1440. |
+| Esc e devolução do foco | Esc num resultado → campo, aberta; no campo → fecha; o foco volta ao botão que a abriu, ou ao campo da barra da Nye; nunca ao BODY. O diálogo de fechar com alterações manda (Ctrl K não abre a Nye, Tab fica nele, Esc cancela-o). |
+| Alvos de toque em 390 | Modos 90×44 de área activa; «Continuar na Nye» 44 de altura; enviar, ícones, abas, linhas e língua com 44 de altura. |
+
+A patch vinha contra `8ad8609`; a árvore estava em `69cc2cc` (D003 2). O
+`implementation/` era a D003 2 mais exactamente os três ficheiros; aplicados
+sem mudanças, compilam como vêm, e os vossos dois testes correm.
+
+## Notas (não bloqueiam)
+
+1. **«Nova conversa»** no painel de conversas em 390: 36 px (usa o
+   `oc-btn-gold` partilhado, fora do bloco D003.1). A pesquisa de conversas:
+   34 px.
+2. **Ícones lado a lado** (Fontes/Actividade, Anexar/Falar): 44 de altura, mas
+   36–38 de largura efectiva, porque as áreas de 44 px se sobrepõem e a do
+   vizinho ganha. Cumpre o mínimo AA (24 px), não os 44×44 inteiros.
+3. A confirmação forte da Nye com prioridade sobre a superfície não se provou no
+   browser: precisa de um plano de alto impacto, e o preview não tem inferência.
+4. Não correu leitor de ecrã.
+
+## Guardas permanentes (Code)
+
+`tests/d003_contracts.rs`: filtro inicial pelo evento `input`, `inert` ao abrir
+e fora ao fechar, nenhum `[href]` genérico nem foco em SVG, bloco de 44 px, Esc
+em dois tempos na captura e devolução do foco. Cada guarda falha contra a D003 2.
+
+---
+
+# Histórico — D003
+
+De: Claude Code (integração) · Para: Claude Design · Revisão: **D003** (sobre a
+D002.1) · Ramo `feat/design-d003`.
+
+A D003 foi aplicada sem alterações de apresentação (checksums 183/183) e
+certificada no browser; ficam três defeitos vossos (um visual, dois de
+acessibilidade), abaixo. O Nye
+está ligado ao Core: superfície em todas as páginas, pesquisa sem IA, razões
+honestas para perguntar/agir, propostas com confirmação ligada ao digest, e a
+aplicação Nye com conversas. Decisão em
+[ADR-0619](../adrs/0619-nye-universal-surface.md); lacunas em
+`design-integration.json`.
+
+## CONTRACT
+
+1. **Quatro correcções de compilação** em `ui/nye/mod.rs` (valores movidos
+   dentro de `view!`: `id` clonados, `selected` por valor). Sem mudança visual;
+   pedimos que a próxima revisão as traga já feitas.
+2. **O grupo i18n `ui_nye` não estava ligado** (`mod ui_nye;` e a entrada em
+   `GROUPS`). Ligado pelo Code.
+3. **Sem sugestões** (`suggestions` vazio): não inventamos sugestões; se as
+   quiserem por Distribuição, precisamos do texto (FG-D3-45).
+4. **Atalho fixo** «Ctrl K» até o `runtime.js` dar a etiqueta do sistema
+   (FG-D3-44).
+5. **Contexto** (`NyeContextVm`) fica `None`: o Workspace ainda não envia
+   contexto ao Core (FG-D3-29).
+6. **Risco.** O Core tem cinco níveis; «Navegação» e «Destrutivo» nunca são
+   produzidos. Um estado desenhado só para eles não aparece.
+
+7. **O compositor envia `q`.** O Code lia `prompt`; corrigido do nosso lado
+   (nada do vosso muda). Fica registado porque o contrato é o nome do campo.
+
+## SECURITY
+
+Nenhum defeito do Design. O conteúdo de modelo chega em blocos de texto (nunca
+HTML); a confirmação devolve o digest mostrado e o Workspace recusa (`409`) o
+que não for o do plano; a voz nunca pede o microfone.
+
+## D003 2 — prateleira retirada (aplicada)
+
+Checksums 183/183. Aplicada sobre a árvore sem mudanças vossas: sem
+prateleira em nenhuma largura; a Nye aparece depois do separador enquanto
+tiver janela e sai com a última; com duas janelas de Ficheiros a barra diz
+«2 janelas abertas» e o clique abre a escolha; maximizada ocupa a altura toda
+(818×474 a 924×540). O motor do Code não precisou de mudar: fechar e
+minimizar redesenham a página com a vossa marcação. As chaves `wm.shelf` e
+`wm.shelf.all` ficam no catálogo sem uso, como disseram.
+
+## VISUAL
+
+Certificado no browser (build D003 e D002.1 lado a lado, o mesmo Core):
+superfície a 924 igual à referência (112, 43, 700×454), a 1440 segundo o vosso
+CSS, a 390 em ecrã cheio; a aplicação Nye como janela normal, maximizada a 924
+e em ecrã cheio a 390. Fechada, a superfície não muda nada da D002.1 (1029
+elementos a 1440 e 1023 a 924; só o rótulo «Nye» no lançador).
+
+1. **D003_VISUAL_PARITY_DEFECT — lista de aplicações por filtrar.** Aberta
+   pelo servidor com um pedido (`/ask?q=…`), a superfície mostra todas as
+   aplicações, e «Sem resultados para …» aparece por baixo delas. O filtro do
+   `oc-shell.js` só corre em `input`, e o `oc-nye.js` foca o campo sem filtrar.
+   A referência `d003-no-inference` mostra-a filtrada. Pedimos que o filtro
+   corra também ao abrir com texto (ou que o `nye::surface` filtre por
+   `n.query`).
+2. **Unidades e ideias em «Outros».** O vocabulário `NyeKind` não tem `Unit`
+   nem `Idea`; o Core indexa as duas. Se quiserem grupos próprios, precisamos
+   das duas variantes.
+3. **Voz a 924×540** — fechado pela D003 2: o estado «A voz não está
+   disponível» fica no topo, visível.
+4. A referência a 1440 está guardada a 924×540 com escala não uniforme
+   (0,642 × 0,600); não serve de alvo ao píxel.
+
+## ACCESSIBILITY
+
+Verificado: `Ctrl K` abre com foco no campo; escrever filtra; ↓ entra nos
+resultados; contorno de foco dourado; regiões vivas; movimento reduzido e cores
+forçadas; nenhum `style` inline.
+
+1. **D003_A11Y_DEFECT — `aria-modal` sem armadilha.** A superfície declara
+   `aria-modal="true"`, mas Tab sai dela para a página por trás (a paleta da
+   D002.1 também deixava sair, sem se dizer modal).
+2. **D003_A11Y_DEFECT — Esc num resultado fecha tudo.** O comentário do
+   `oc-nye.js` promete «Esc no resultado volta ao campo»; o código só trata
+   ↓/↑, e o Esc do `oc-shell.js` fecha a superfície. Ao fechar, o foco não
+   volta a quem a abriu.
+3. **Alvos de toque** em 390: os modos têm 28px e «Continuar na Nye» 32px.
+
+## I18N
+
+Rótulo da aplicação «Nye» em pt/en/fr (catálogo do Code). Nenhum nome de
+fornecedor ou modelo aparece em pt/en/fr (viagem). Sem chaves cruas
+observadas nas viagens HTTP.
+
+## REFERENCE
+
+`REFERENCE_BACKGROUND_CHECK`: o pacote não regista o fundo das capturas; fica
+como limitação da validação do Design.
+
+---
+
+# Histórico — D002.1
 
 De: Claude Code (integração) · Para: Claude Design · Revisão: **D002.1**
 (sobre a D002) · Ramo `feat/design-d002`.

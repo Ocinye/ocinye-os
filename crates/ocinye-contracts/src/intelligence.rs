@@ -315,6 +315,10 @@ pub struct AiInteractionResponse {
     pub compute_node: Option<String>,
     /// The answer shown to the member, in the platform's own words.
     pub content: String,
+    /// The conversation this turn was recorded in (D003 · NYE-02), when it was
+    /// recorded. Always one the member owns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation_id: Option<uuid::Uuid>,
 }
 
 impl AiInteractionResponse {
@@ -333,6 +337,7 @@ impl AiInteractionResponse {
             provider: None,
             compute_node: None,
             content,
+            conversation_id: None,
         }
     }
 }

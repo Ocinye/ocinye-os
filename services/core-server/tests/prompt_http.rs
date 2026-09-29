@@ -593,3 +593,68 @@ impl ocinye_core::modules::mail::provider::CredentialProbe for SondaDoHarness {
         Ok(())
     }
 }
+
+/// Uma conversa continua-se pelo identificador, e só a do próprio membro
+/// (D003 · NYE-02). Um identificador de outra pessoa começa uma conversa nova
+/// e não revela nada da outra.
+#[tokio::test]
+async fn uma_conversa_continua_se_e_so_a_do_proprio() {
+    let pool = pool!();
+    let organisation_id = organisation(&pool).await;
+    let state = nucleo(pool.clone(), organisation_id);
+    let (ana, token_ana) = membro(&pool, organisation_id).await;
+    let (_, token_rui) = membro(&pool, organisation_id).await;
+
+    let (status, primeira) =
+        submit(&state, &token_ana, json!({ "prompt": "Primeiro pedido." })).await;
+    assert_eq!(status, StatusCode::OK, "{primeira}");
+    let conversa = primeira["conversation_id"]
+        .as_str()
+        .expect("conversa")
+        .to_owned();
+
+    let (_, segunda) = submit(
+        &state,
+        &token_ana,
+        json!({ "prompt": "Segundo pedido.", "conversation_id": conversa }),
+    )
+    .await;
+    assert_eq!(
+        segunda["conversation_id"],
+        conversa.as_str(),
+        "não continuou"
+    );
+    let turnos: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM ai_conversation_turns WHERE conversation_id = $1::uuid",
+    )
+    .bind(&conversa)
+    .fetch_one(&pool)
+    .await
+    .expect("turnos");
+    assert_eq!(turnos, 4, "dois pedidos e duas respostas na mesma conversa");
+
+    // O Rui não continua a conversa da Ana: começa uma sua.
+    let (_, alheia) = submit(
+        &state,
+        &token_rui,
+        json!({ "prompt": "Intromissão.", "conversation_id": conversa }),
+    )
+    .await;
+    let dele = alheia["conversation_id"].as_str().expect("conversa nova");
+    assert_ne!(dele, conversa);
+    let dono: Uuid =
+        sqlx::query_scalar("SELECT owner_id FROM ai_conversations WHERE id = $1::uuid")
+            .bind(&conversa)
+            .fetch_one(&pool)
+            .await
+            .expect("dono");
+    assert_eq!(dono, ana);
+    let turnos: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM ai_conversation_turns WHERE conversation_id = $1::uuid",
+    )
+    .bind(&conversa)
+    .fetch_one(&pool)
+    .await
+    .expect("turnos");
+    assert_eq!(turnos, 4, "a conversa da Ana ganhou turnos do Rui");
+}

@@ -63,7 +63,7 @@ Os quatro primeiros são apurados em tempo real pelo Core e servidos em
 | **Resposta do Prompt com citações** | execução de inferência não activada | — | sem nó de IA | `PLANNED` |
 | **Agentes de IA** | implementado | lista, criação | não requer nó | `AVAILABLE` |
 | **Execução de agentes** | — | estado derivado | sem nó de IA | `NO_RESOURCE` |
-| **Prompt Ocinye** | endpoint implementado | implementado | sem nó de IA | `NO_RESOURCE` |
+| **Nye** (antigo Prompt Ocinye) | endpoint implementado | implementado | sem nó de IA | `NO_RESOURCE` |
 | **Inferência (IA geral/coding/reasoning)** | Gateway preparado | integrado | sem nó de IA | `NO_RESOURCE` |
 | **Embeddings** | contrato próprio, exercido por provider determinístico | — | sem provider real | `NOT_CONFIGURED` |
 | **Correio — modelo, permissões, política** | implementado | n/a | n/a | `AVAILABLE` |

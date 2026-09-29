@@ -11,7 +11,6 @@
 /* ── Camada ─────────────────────────────────────────────────────────────── */
 .oc-desk__work { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; }
 .oc-wm { --shelf-h: 0px; position: absolute; inset: 0; z-index: 10; pointer-events: none; overflow: hidden; }
-.oc-wm:has(.oc-shelf) { --shelf-h: 60px; }
 .oc-wm > * { pointer-events: auto; }
 
 /* ── Janela ─────────────────────────────────────────────────────────────── */
@@ -115,37 +114,14 @@
 .oc-snap[data-zone="right"] { right: 8px; width: calc(50% - 12px); }
 .oc-snap[data-zone="max"] { left: 8px; right: 8px; }
 
-/* ── Prateleira (janelas; a barra de aplicações é das fixadas) ──────────── */
-.oc-shelf {
-  position: absolute; left: 50%; bottom: 10px; z-index: 9995; transform: translateX(-50%); max-width: calc(100% - 140px);
-  height: 44px; padding: 4px; border-radius: 22px; display: flex; align-items: center; gap: 4px;
-  background: rgba(255, 255, 255, .72); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, .6); box-shadow: 0 10px 30px -10px rgba(4, 16, 28, .45);
-}
-.oc-shelf__all { width: 36px; height: 36px; flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--oc-ink-2); }
-.oc-shelf__all:hover { background: rgba(11, 45, 74, .08); color: var(--oc-ink); text-decoration: none; }
-.oc-shelf__list { margin: 0; padding: 0; list-style: none; display: flex; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-.oc-shelf__item {
-  position: relative; height: 36px; max-width: 200px; padding: 0 14px 0 10px; border-radius: 18px; display: inline-flex; align-items: center; gap: 8px;
-  color: var(--oc-ink); font: 500 12.5px var(--oc-sans); white-space: nowrap; border: 1px solid transparent;
-  transition: background var(--oc-fast), color var(--oc-fast);
-}
-.oc-shelf__item:hover { background: rgba(11, 45, 74, .07); color: var(--oc-ink); text-decoration: none; }
-.oc-shelf__item .oc-icon { width: 15px; height: 15px; color: var(--oc-navy-800); }
-.oc-shelf__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* activa: o único estado activo do sistema (azul, texto branco) */
-.oc-shelf__item[aria-current="true"] { background: linear-gradient(180deg, var(--oc-blue-500), var(--oc-blue-600)); color: #FFFFFF; }
-.oc-shelf__item[aria-current="true"] .oc-icon { color: #FFFFFF; }
-/* minimizada: continua lá, com contorno tracejado e o nome em tinta 3 */
-.oc-shelf__item[data-state="minimized"] { border: 1px dashed rgba(11, 45, 74, .28); color: var(--oc-ink-3); }
-.oc-shelf__item[data-state="minimized"] .oc-icon { color: var(--oc-ink-3); }
-.oc-shelf__dirty { width: 6px; height: 6px; border-radius: 50%; background: var(--oc-gold-500); }
-.oc-shelf__item:focus-visible, .oc-shelf__all:focus-visible { outline: 2px solid var(--oc-gold-500); outline-offset: 2px; }
-.oc-shelf__item[data-arrived] { animation: oc-shelf-in .25s var(--oc-ease); }
-@keyframes oc-shelf-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+/* D003 · Sem prateleira. As janelas abertas vivem só na barra de aplicações:
+ * fixadas com ponto de execução; não fixadas em execução depois do separador
+ * [data-part="dock-running"]. --shelf-h fica 0 (mantido para não mexer nas regras). */
 
 /* ── Barra de aplicações: em execução (ponto), várias janelas (dois) ────── */
 .oc-dock__btn { position: relative; }
+.oc-dock__btn[data-running] { animation: oc-dock-in .2s var(--oc-ease); }
+@keyframes oc-dock-in { from { transform: scale(.85); opacity: 0; } to { transform: none; opacity: 1; } }
 .oc-dock__run { position: absolute; left: 50%; bottom: 3px; transform: translateX(-50%); display: flex; gap: 3px; }
 .oc-dock__run::before, .oc-dock__run[data-n="2"]::after { content: ""; width: 4px; height: 4px; border-radius: 50%; background: rgba(255, 255, 255, .85); }
 .oc-dock__run[data-active]::before, .oc-dock__run[data-active]::after { background: var(--oc-gold-400); }
@@ -306,7 +282,6 @@
   .oc-win__ctl[data-op="minimize"] { display: none; }
   .oc-win__icon { display: none; }
   .oc-win__names { flex-direction: column; gap: 0; }
-  .oc-shelf { display: none; }
   .oc-chooser { left: 8px; right: 8px; top: auto; bottom: 76px; width: auto; }
   .oc-switcher { border-radius: 20px; padding: 14px; }
   .oc-switcher__list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -318,12 +293,13 @@
 @keyframes oc-win-slide { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .oc-win, .oc-win[data-active], .oc-shelf__item[data-arrived], .oc-switcher, .oc-ctx, .oc-win[data-pulse] { animation: none; }
-  .oc-win, .oc-snap, .oc-shelf__item { transition: none; }
+  .oc-dock__btn[data-running] { animation: none; }
+  .oc-win, .oc-win[data-active], .oc-switcher, .oc-ctx, .oc-win[data-pulse] { animation: none; }
+  .oc-win, .oc-snap { transition: none; }
   .oc-win[data-loading] .oc-win__bar::after, .oc-win__skel { animation: none; }
 }
 @media (forced-colors: active) {
   .oc-win { border: 1px solid CanvasText; }
   .oc-win[data-active] .oc-win__bar { border-bottom: 2px solid Highlight; }
-  .oc-shelf__item[aria-current="true"], .oc-chooser__item[aria-current="true"] { outline: 2px solid Highlight; }
+  .oc-chooser__item[aria-current="true"] { outline: 2px solid Highlight; }
 }

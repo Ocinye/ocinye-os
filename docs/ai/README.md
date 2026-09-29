@@ -188,7 +188,7 @@ que o criador consegue ler, e verificado outra vez na recuperação de contexto.
 Um `PlatformAdmin` **não** detém nenhuma destas: administração técnica não é
 acesso científico (`CLAUDE.md` §34).
 
-## Prompt Ocinye sem nó
+## Nye (antigo Prompt Ocinye) sem nó
 
 `POST /api/v1/ai/prompt` existe e responde. Sem capacidade disponível devolve
 **503 `capability_unavailable`** com a razão institucional, que o Workspace

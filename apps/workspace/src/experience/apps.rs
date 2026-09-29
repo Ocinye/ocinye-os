@@ -323,6 +323,7 @@ pub const APPLICATIONS: &[Application] = &[
     Application {
         screen: Screen::Prompt,
         keywords: &[
+            "nye",
             "prompt",
             "ai",
             "ia",

@@ -234,6 +234,7 @@ A interface humana.
 - [ADR-0616](0616-browser-page-context-for-nye.md) — Páginas do Browser como contexto do Nye: explícito, limitado, não confiável
 - [ADR-0617](0617-pwa-and-service-worker-policy.md) — PWA: identidade instalável, sem cache de estado autenticado
 - [ADR-0618](0618-window-manager.md) — O Gestor de Janelas: estado por sessão no Workspace, autoridade no Core
+- [ADR-0619](0619-nye-universal-surface.md) — O Nye: a superfície universal apresenta, o Core decide e executa
 
 ### 0700–0799 · Deployment, rede, operação e resiliência
 
@@ -338,6 +339,7 @@ preencher.
 | [0616](0616-browser-page-context-for-nye.md) | Páginas do Browser como contexto do Nye: explícito, limitado, não confiável | Workspace | `HIGH` | Proposed |
 | [0617](0617-pwa-and-service-worker-policy.md) | PWA: identidade instalável, sem cache de estado autenticado | Workspace | `MEDIUM` | Proposed |
 | [0618](0618-window-manager.md) | O Gestor de Janelas: estado por sessão no Workspace, autoridade no Core | Workspace | `HIGH` | Accepted |
+| [0619](0619-nye-universal-surface.md) | O Nye: a superfície universal apresenta, o Core decide e executa | Workspace | `HIGH` | Accepted |
 | [0700](0700-institutional-continuity-and-portability.md) | Continuidade institucional e portabilidade entre servidores | Operations | `FOUNDATIONAL` | Accepted |
 | [0701](0701-release-bundle-and-host-installer.md) | O pacote de release e o instalador de anfitrião | Operations | `HIGH` | Accepted |
 | [0702](0702-desktop-shell-technology.md) | A casca Ocinye Desktop: Tauri 2 sobre o WebView do sistema | Operations | `HIGH` | Proposed |
