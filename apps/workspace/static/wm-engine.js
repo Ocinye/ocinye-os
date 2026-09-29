@@ -226,8 +226,30 @@
     const t = e.target;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
     e.preventDefault();
+    remember();
     window.OcWm.openSwitcher();
   });
+
+  /* Foco devolvido: ao fechar o alternador (Esc, fundo, escolha), o foco
+     volta ao controlo que o tinha antes de ele abrir, e não fica num
+     elemento escondido. O controlo anterior guarda-se no momento de abrir
+     (atalho ou controlo do Design), e não por eventos de foco. */
+  const sw = document.querySelector('[data-oc="switcher"]');
+  let before = null;
+  const remember = () => {
+    const a = document.activeElement;
+    if (sw && a && a !== document.body && !sw.contains(a)) before = a;
+  };
+  if (sw) {
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('[data-oc="switcher-open"], a[href="#oc-switcher"]')) remember();
+    }, true);
+    new MutationObserver(() => {
+      if (sw.hasAttribute('data-open')) return;
+      const lost = !document.activeElement || document.activeElement === document.body || sw.contains(document.activeElement);
+      if (lost && before && before.isConnected) before.focus();
+    }).observe(sw, { attributes: true, attributeFilter: ['data-open'] });
+  }
 
   /* Uma aplicação de uma janela lançada de novo: a janela que já estava aberta
      pisca uma vez e anuncia-se (HANDOFF «data-pulse»). */
