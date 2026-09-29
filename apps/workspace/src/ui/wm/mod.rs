@@ -177,7 +177,10 @@ fn shelf(wm: &WmVm) -> impl IntoView {
     }
 }
 
-fn switcher(wm: &WmVm) -> impl IntoView {
+/// D002.1 · O alternador é uma camada global da casca (como o lançador e a
+/// paleta): desenha-se fora do `.oc-desk` (`isolation: isolate`), para que o
+/// véu cubra a barra de cima. `shell_with_window` chama-o depois de `palette`.
+pub fn switcher(wm: &WmVm) -> impl IntoView {
     let mut ws: Vec<&WindowVm> = wm.windows.iter().collect();
     ws.sort_by_key(|w| std::cmp::Reverse(w.z));
     let hint = wm
@@ -282,7 +285,6 @@ pub fn layer(wm: &WmVm, active_body: Option<AnyView>) -> impl IntoView {
                 <span data-key="snap-max">{t("wm.snap.max")}</span>
             </template>
         </div>
-        {switcher(wm)}
     }
 }
 
@@ -600,8 +602,14 @@ pub(crate) mod tests {
                 && html.contains(r#"value="maximize""#)
         );
         assert!(html.contains("corpo") && html.contains(t("shell.app.pending")));
-        assert!(html.contains(r#"id="oc-switcher""#) && html.contains(r#"data-oc="shelf""#));
-        assert!(!html.contains("{name}") && !html.contains("{keys}"));
+        assert!(html.contains(r#"data-oc="shelf""#));
+        assert!(
+            !html.contains(r#"id="oc-switcher""#),
+            "D002.1: o alternador não pertence à camada das janelas"
+        );
+        let sw = switcher(&wm()).to_html();
+        assert!(sw.contains(r#"id="oc-switcher""#) && sw.contains(r#"role="dialog""#));
+        assert!(!html.contains("{name}") && !sw.contains("{keys}"));
     }
 
     #[test]

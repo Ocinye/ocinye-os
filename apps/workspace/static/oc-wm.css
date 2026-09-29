@@ -170,6 +170,14 @@
 .oc-chooser__new { margin-top: 4px; border-top: 1px solid var(--oc-line-2); border-radius: 0 0 14px 14px; color: var(--oc-navy-900); }
 
 /* ── Alternador ─────────────────────────────────────────────────────────── */
+/* D002.1 · Camadas. O .oc-desk (D001) tem isolation: isolate: tudo o que está
+ * dentro dele (Desktop, janelas z 1…n, prateleira, escolha) compõe-se num único
+ * plano que fica por baixo de .oc-top (z 50). O alternador desenha-se fora do
+ * .oc-desk, irmão do lançador e da paleta, com a z 200 de .oc-overlay:
+ *   Desktop / janelas (.oc-desk, isolado) → barra de cima (z 50)
+ *   → véu do alternador (.oc-overlay__scrim, inset 0) → cartão .oc-switcher (z 1 no overlay).
+ * O véu cobre todo o viewport Ocinye, escurece a barra e recebe os cliques.
+ * Sem z-index novo: a ordem vem da posição na árvore (ver shell_with_window). */
 .oc-overlay--center { align-items: center; padding-top: 20px; }
 .oc-switcher {
   position: relative; z-index: 1; width: min(880px, 100%); max-height: calc(100vh - 80px); overflow: auto; padding: 18px 20px 16px; border-radius: 24px;
@@ -224,7 +232,14 @@
 .oc-ctx .oc-menu__note { margin: 6px 10px; }
 
 /* ── Painéis da barra de cima ───────────────────────────────────────────── */
-.oc-panel-menu > summary { list-style: none; cursor: pointer; }
+/* D002.1 · Paridade D001.2.1 com os painéis fechados. Na D001 a pastilha, o sino
+ * e o relógio são itens flex de .oc-top (logo blockificados: display flex). Dentro
+ * de <details> o <summary> é um bloco e um filho inline-flex cria uma linha de
+ * texto com alinhamento pela base: a pastilha descia 0,3px e o relógio 1px.
+ * O summary passa a flex (sem linha de texto); o relógio, filho dele, fica
+ * blockificado (flex), exactamente como na D001. O details continua o controlo
+ * semântico (teclado, Enter/Espaço, aria-expanded implícito). */
+.oc-panel-menu > summary { list-style: none; cursor: pointer; display: flex; align-items: center; }
 .oc-panel-menu > summary::-webkit-details-marker { display: none; }
 .oc-panel-menu[open] > .oc-status { background: #EAEFF4; }
 .oc-panel-menu[open] > .oc-round-btn { background: rgba(11, 45, 74, .07); }
@@ -297,6 +312,8 @@
   .oc-switcher__list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .oc-switch__preview { height: 88px; }
   .oc-panel__pop { position: fixed; left: 8px; right: 8px; top: 52px; width: auto; }
+  /* D002.1 · a regra D001 esconde .oc-status ≤ 640px; o summary flex não a pode vencer */
+  .oc-panel-menu > .oc-status, .oc-panel-menu:has(> .oc-status) { display: none; }
 }
 @keyframes oc-win-slide { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 

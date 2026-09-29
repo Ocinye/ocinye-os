@@ -440,3 +440,9 @@ Só CSS (`oc-shell.css`, `oc-desk.css`): a pastilha CORE·IA; a margem de 30px s
 
 ## D002 · janelas e interacções da casca
 Ver HANDOFF.md do pacote D002 (§ D002): componentes, estados, contratos WM-1…WM-5, painéis e responsivo.
+
+
+## D002.1 · correcção (paridade e acessibilidade)
+- Alternador: desenhado por `shell_with_window` depois da paleta, fora do `.oc-desk` (`isolation: isolate`); o véu cobre e bloqueia a barra de cima. `wm::switcher` é público; `wm::layer` já não o desenha.
+- Painéis fechados: `.oc-panel-menu > summary { display: flex }`; pastilha, sino e relógio nas posições da D001.2.1.
+- Diálogo de alterações: só controlos focáveis reais (sem `<use href>`); Tab e Shift+Tab dão a volta; o foco volta ao controlo anterior quando o diálogo fecha sem navegar.

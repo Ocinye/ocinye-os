@@ -391,6 +391,7 @@ pub fn shell_with_window(
             </div>
             {launcher(vm)}
             {palette(vm)}
+            {vm.wm.as_ref().map(wm::switcher)}
         </div>
     }
 }
@@ -510,6 +511,15 @@ mod tests {
                 && html.contains("oc-dock__run")
         );
         assert!(html.contains("oc-panel__pop") && html.contains(t("wm.status.overall.ok")));
+        // D002.1 · o alternador vem depois do .oc-desk (fora do isolation: isolate)
+        let desk = html.find(r#"class="oc-desk""#).expect("oc-desk");
+        let palette = html.find(r#"data-oc="palette""#).expect("palette");
+        let sw = html.find(r#"id="oc-switcher""#).expect("switcher");
+        assert!(
+            sw > desk && sw > palette,
+            "alternador fora do .oc-desk, depois da paleta"
+        );
+        assert_eq!(html.matches(r#"id="oc-switcher""#).count(), 1);
         assert!(
             !html.contains(r#"class="oc-window""#),
             "sem a janela D001 de página inteira"

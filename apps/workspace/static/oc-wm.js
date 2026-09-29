@@ -1,4 +1,4 @@
-/* Ocinye OS · D002 · janelas geridas (Claude Design). Só apresentação.
+/* Ocinye OS · D002.1 · janelas geridas (Claude Design). Só apresentação.
  *
  * O MOTOR NÃO ESTÁ AQUI. Ordem, foco, geometria, encaixe, persistência,
  * política de lançamento e autorização são do Claude Code. Este ficheiro:
@@ -247,20 +247,33 @@
     if (!main.hasAttribute('tabindex')) main.setAttribute('tabindex', '-1');
   }
 
-  /* 3d · diálogo de alterações: foco preso no diálogo, Esc = Cancelar */
+  /* 3d · diálogo de alterações: foco preso no diálogo, Esc = Cancelar.
+   * D002.1 · só controlos realmente focáveis: «[href]» apanhava o <use href> do
+   * ícone SVG, e o laço Tab/Shift+Tab partia-se. */
+  const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
   function dirty() {
     const d = document.querySelector('[data-oc="dirty-close"]');
     if (!d) return;
-    const focusables = () => $$('button:not([aria-disabled="true"]), [href]', d);
+    const focusables = () => $$(FOCUSABLE, d).filter((el) =>
+      el.getAttribute('aria-disabled') !== 'true' && !el.closest('[hidden], [inert]') && el.getClientRects().length > 0);
+    const win = d.dataset.win ? document.querySelector('[data-oc="win"][data-win="' + CSS.escape(d.dataset.win) + '"]') : null;
+    const before = document.activeElement;
+    const prior = before && before !== document.body && !d.contains(before) ? before
+      : (win && win.querySelector('[data-op="close"]')) || null;
+    const restore = () => { if (prior && prior.isConnected) prior.focus({ preventScroll: true }); };
+    const mo = new MutationObserver(() => {
+      if (!d.isConnected || d.hidden || !d.hasAttribute('data-open')) { mo.disconnect(); restore(); }
+    });
+    mo.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'data-open'] });
     const save = d.querySelector('[data-oc="dirty-save"]') || focusables()[0];
     if (save) save.focus();
     d.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); const c = d.querySelector('[data-oc="dirty-cancel"]'); if (c) c.click(); }
       if (e.key !== 'Tab') return;
-      const f = focusables(); if (!f.length) return;
-      const first = f[0], last = f[f.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      const f = focusables(); if (!f.length) { e.preventDefault(); return; }
+      const first = f[0], last = f[f.length - 1], i = f.indexOf(document.activeElement);
+      if (e.shiftKey && (i <= 0)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && (i === -1 || i === f.length - 1)) { e.preventDefault(); first.focus(); }
     });
   }
 
