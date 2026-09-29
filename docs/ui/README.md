@@ -5,7 +5,12 @@ nenhuma deployada, produção continua em `4f8d048`). A D001, a D002 e a D003
 estão fechadas. A D003 traz o Nye: a superfície
 universal em todas as páginas e a aplicação Nye, ligadas ao Core
 ([ADR-0619](../adrs/0619-nye-universal-surface.md)); a pesquisa funciona sem
-IA, perguntar e agir dizem porquê não estão, e a voz está indisponível. O código de interface é do Design e está fechado
+IA, perguntar e agir dizem porquê não estão, e a voz está indisponível.
+**A D004 — Ficheiros, Notas, Calendário e Correio — está no ramo
+`feat/design-d004`, por fazer merge**
+([ADR-0620](../adrs/0620-productivity-apps-in-managed-windows.md)); os defeitos
+e as faltas do Design estão no topo do [`CODE_FEEDBACK.md`](CODE_FEEDBACK.md).
+O código de interface é do Design e está fechado
 ([`DESIGN_LOCK.md`](DESIGN_LOCK.md)); o contrato detalhado de rotas e
 ViewModels está em [`HANDOFF.md`](HANDOFF.md).
 
@@ -19,7 +24,10 @@ ViewModels está em [`HANDOFF.md`](HANDOFF.md).
   painéis de estado, notificações e relógio. O motor é de Code
   ([ADR-0618](../adrs/0618-window-manager.md)). Da D003: o Nye — pesquisar,
   perguntar, agir, propostas com confirmação ligada ao digest do plano,
-  conversas do próprio membro.
+  conversas do próprio membro. Da D004 (no ramo): os quatro ecrãs como corpos
+  de janela, o motor de envio de ficheiros (Code), o Markdown restrito das
+  Notas, o fuso do membro no Calendário e o rascunho que sobrevive a um envio
+  falhado.
 - **Registo da integração:** [`design-integration.json`](design-integration.json).
 - **O que o Design precisa de saber:** [`CODE_FEEDBACK.md`](CODE_FEEDBACK.md).
 - **Referência visual (só referência):** `design/claude-design/reference/`.

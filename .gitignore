@@ -19,6 +19,10 @@ secrets/
 # the sealing and the rules around it (ADR-0110).
 !crates/ocinye-core/src/modules/secrets/
 
+# JavaScript dependencies. A leftover `node_modules` under `apps/workspace/editor`
+# (the pre-wipe ProseMirror build) entered a commit through `git add -A`.
+node_modules/
+
 # Rust tooling leftovers
 *.rs.bk
 
