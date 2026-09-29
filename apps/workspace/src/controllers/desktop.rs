@@ -179,11 +179,17 @@ impl Clock {
 
 /// «12,4 GB», com a vírgula ou o ponto do idioma.
 pub(crate) fn bytes(n: u64) -> String {
-    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    // O francês conta em octetos: «Ko», «Mo», «Go».
+    let fr = crate::i18n::current() == ocinye_contracts::Locale::Fr;
+    let units: [&str; 5] = if fr {
+        ["o", "Ko", "Mo", "Go", "To"]
+    } else {
+        ["B", "KB", "MB", "GB", "TB"]
+    };
     #[allow(clippy::cast_precision_loss, reason = "uma apresentação arredondada")]
     let mut v = n as f64;
     let mut u = 0;
-    while v >= 1024.0 && u < UNITS.len() - 1 {
+    while v >= 1024.0 && u < units.len() - 1 {
         v /= 1024.0;
         u += 1;
     }
@@ -197,7 +203,7 @@ pub(crate) fn bytes(n: u64) -> String {
     } else {
         s.replace('.', ",")
     };
-    format!("{s} {}", UNITS[u])
+    format!("{s} {}", units[u])
 }
 
 fn extension(name: &str) -> String {
@@ -822,5 +828,15 @@ mod tests {
             };
             assert_eq!(layout.validate(false), Ok(()), "{d:?}");
         }
+    }
+
+    #[tokio::test]
+    async fn em_frances_os_tamanhos_contam_em_octetos() {
+        let fr =
+            crate::i18n::with_locale(ocinye_contracts::Locale::Fr, async { bytes(2_150) }).await;
+        assert_eq!(fr, "2,1 Ko");
+        let en =
+            crate::i18n::with_locale(ocinye_contracts::Locale::En, async { bytes(2_150) }).await;
+        assert_eq!(en, "2.1 KB");
     }
 }

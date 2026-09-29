@@ -110,7 +110,9 @@
   }
 
   function bytes(n) {
-    const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+    /* O francês conta em octetos: «Ko», «Mo», «Go». */
+    const fr = (document.documentElement.lang || 'pt').slice(0, 2) === 'fr';
+    const u = fr ? ['o', 'Ko', 'Mo', 'Go', 'To'] : ['B', 'KB', 'MB', 'GB', 'TB'];
     let v = Number(n) || 0;
     let i = 0;
     while (v >= 1024 && i < u.length - 1) { v /= 1024; i += 1; }
