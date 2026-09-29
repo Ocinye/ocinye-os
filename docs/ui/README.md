@@ -1,10 +1,11 @@
 # Interface do Workspace
 
-**Estado: Claude Design D002 integrada no ramo `feat/design-d002`**, sobre a
+**Estado: Claude Design D002.1 integrada no ramo `feat/design-d002`**, sobre a
 D001.2.1 em `main` (PR #181, merge `7c20f8d`; nenhuma das duas deployada,
-produção continua em `4f8d048`). A D001 está fechada; a D002 está ligada ao
-motor e funcionalmente certificada, com a paridade visual por fechar (dois
-defeitos devolvidos ao Design). O código de interface é do Design e está fechado
+produção continua em `4f8d048`). A D001 e a D002 estão fechadas: a D002.1
+corrige a camada do alternador, o alinhamento dos controlos da barra de cima e
+o foco do diálogo de fechar, e a paridade visual, a acessibilidade e a
+certificação funcional ficaram provadas no Workspace a correr. O código de interface é do Design e está fechado
 ([`DESIGN_LOCK.md`](DESIGN_LOCK.md)); o contrato detalhado de rotas e
 ViewModels está em [`HANDOFF.md`](HANDOFF.md).
 

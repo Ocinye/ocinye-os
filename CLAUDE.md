@@ -257,7 +257,7 @@ sem que nada falhe.
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
 - **Ocinye Workspace: `IMPLEMENTED` como BFF, com a interface Claude Design
-  D001.2.1 em `main` (PR #181, merge `7c20f8d`, 2026-09-29) e a D002 no ramo
+  D001.2.1 em `main` (PR #181, merge `7c20f8d`, 2026-09-29) e a D002.1 no ramo
   `feat/design-d002` (por empurrar).** A UI foi apagada
   a 2026-09-28 ([apagamento](docs/ui/UI_WIPE_REPORT.md)) e voltou com o código
   do Design, aplicado sem alterações ([registo](docs/ui/design-integration.json)):
@@ -572,14 +572,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1473 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1477 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **600 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **601 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
