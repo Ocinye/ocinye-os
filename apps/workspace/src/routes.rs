@@ -44,6 +44,19 @@ use ocinye_contracts::ApplicationId;
 pub const ROUTES: &[&str] = &[
     "/",
     "/my-work",
+    "/my-work/new",
+    "/my-work/{task_id}",
+    "/my-work/{task_id}/transitions",
+    "/my-work/{task_id}/assignee",
+    "/ideas/{idea_id}/transitions",
+    "/ideas/{idea_id}/promotion",
+    "/projects/{project_id}/transitions",
+    "/datasets/{dataset_id}/versions",
+    "/datasets/{dataset_id}/versions/{version_id}/files",
+    "/datasets/{dataset_id}/versions/{version_id}/publish",
+    "/knowledge/sources/new",
+    "/knowledge/{section}",
+    "/knowledge/{section}/{item_id}",
     "/resources",
     "/notes",
     "/notes/new",
@@ -102,7 +115,6 @@ pub const ROUTES: &[&str] = &[
     "/units/{unit_id}/members/role",
     "/units/{unit_id}/members/remove",
     "/ideas",
-    "/ideas/{idea_id}/transition",
     "/units/new",
     "/projects/new",
     "/bibliography/new",
@@ -110,8 +122,6 @@ pub const ROUTES: &[&str] = &[
     "/datasets/{dataset_id}",
     "/tasks/new",
     "/tasks/{task_id}",
-    "/tasks/{task_id}/transition",
-    "/tasks/{task_id}/assignee",
     "/calendar",
     "/calendar/events/new",
     "/calendar/events/{event_id}",
@@ -248,7 +258,17 @@ pub fn router(state: WorkspaceState) -> Router {
     Router::new()
         // Pessoal
         .route("/", get(home))
-        .route("/my-work", get(my_work))
+        .route("/my-work", get(research::work_page))
+        .route(
+            "/my-work/new",
+            get(research::task_new_page).post(research::task_create),
+        )
+        .route("/my-work/{task_id}", get(research::task_page))
+        .route(
+            "/my-work/{task_id}/transitions",
+            post(research::task_transition),
+        )
+        .route("/my-work/{task_id}/assignee", post(research::task_assign))
         .route("/resources", get(meus_recursos))
         // Correio
         // ── Mensagens ───────────────────────────────────────────────────
@@ -330,7 +350,7 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/units/{unit_id}/members", post(unit_member_add))
         .route("/units/{unit_id}/members/role", post(unit_member_role))
         .route("/units/{unit_id}/members/remove", post(unit_member_remove))
-        .route("/ideas", get(ideas))
+        .route("/ideas", get(research::ideas_page))
         .route("/calendar", get(productivity::calendar_page))
         .route(
             "/calendar/events/new",
@@ -416,17 +436,27 @@ pub fn router(state: WorkspaceState) -> Router {
             get(preview_personal_note_file),
         )
         .route("/units/new", get(new_unit_form).post(create_unit))
-        .route("/projects/new", get(new_project_form).post(promote_idea))
+        .route("/projects/new", get(research::project_new_entry))
+        .route("/bibliography/new", get(research::bibliography_new_entry))
         .route(
-            "/bibliography/new",
-            get(new_source_form).post(create_source),
+            "/datasets/new",
+            get(research::dataset_new_page).post(research::dataset_create),
         )
-        .route("/datasets/new", get(new_dataset_form).post(create_dataset))
-        .route("/datasets/{dataset_id}", get(dataset_detail))
-        .route("/tasks/new", get(new_task_form).post(create_task))
-        .route("/tasks/{task_id}", get(task_detail))
-        .route("/tasks/{task_id}/transition", post(task_transition))
-        .route("/tasks/{task_id}/assignee", post(task_assign))
+        .route("/datasets/{dataset_id}", get(research::dataset_page))
+        .route(
+            "/datasets/{dataset_id}/versions",
+            post(research::dataset_version_create),
+        )
+        .route(
+            "/datasets/{dataset_id}/versions/{version_id}/files",
+            post(research::dataset_file_add).layer(DefaultBodyLimit::max(FILE_BODY_LIMIT_BYTES)),
+        )
+        .route(
+            "/datasets/{dataset_id}/versions/{version_id}/publish",
+            post(research::dataset_version_publish),
+        )
+        .route("/tasks/new", get(|| async { Redirect::to("/my-work/new") }))
+        .route("/tasks/{task_id}", get(research::task_legacy))
         .route("/help", get(help))
         .route("/terminal", get(terminal))
         .route("/terminal/exec", post(terminal_exec))
@@ -454,12 +484,23 @@ pub fn router(state: WorkspaceState) -> Router {
             "/settings/sessions/{session_id}/revoke",
             post(revoke_session),
         )
-        .route("/ideas/new", get(new_idea_form).post(create_idea))
-        .route("/ideas/{idea_id}", get(idea_workspace))
-        .route("/ideas/{idea_id}/transition", post(transition_idea))
-        .route("/projects", get(projects))
-        .route("/projects/{project_id}", get(project_workspace))
-        .route("/workspaces/{workspace_id}", get(research_workspace))
+        .route(
+            "/ideas/new",
+            get(research::idea_new_page).post(research::idea_create),
+        )
+        .route("/ideas/{idea_id}", get(research::idea_page))
+        .route(
+            "/ideas/{idea_id}/transitions",
+            post(research::idea_transition),
+        )
+        .route("/ideas/{idea_id}/promotion", post(research::idea_promote))
+        .route("/projects", get(research::projects_page))
+        .route("/projects/{project_id}", get(research::project_page))
+        .route(
+            "/projects/{project_id}/transitions",
+            post(research::project_transition),
+        )
+        .route("/workspaces/{workspace_id}", get(research::workspace_entry))
         // A cadeia científica do ambiente, e um resultado com a sua
         // proveniência. `/results/{id}` é raiz e não está debaixo do
         // ambiente: um resultado é citável, e um caminho que exigisse saber
@@ -502,13 +543,22 @@ pub fn router(state: WorkspaceState) -> Router {
             get(validate_result_form).post(record_validation),
         )
         // Conhecimento
-        .route("/knowledge", get(knowledge))
-        .route("/bibliography", get(bibliography))
+        .route("/knowledge", get(research::knowledge_root))
+        .route(
+            "/knowledge/sources/new",
+            get(research::source_new_page).post(research::source_create),
+        )
+        .route("/knowledge/{section}", get(research::knowledge_section))
+        .route(
+            "/knowledge/{section}/{item_id}",
+            get(research::knowledge_item),
+        )
+        .route("/bibliography", get(research::bibliography_entry))
         .route(
             "/bibliography/tools",
             get(bibliography_tools).post(review_bibliography),
         )
-        .route("/datasets", get(datasets))
+        .route("/datasets", get(research::datasets_page))
         .route("/files", get(productivity::files_page))
         .route("/files/selection", post(productivity::files_selection))
         .route("/files/{file_id}/rename", post(productivity::files_rename))
@@ -1842,11 +1892,6 @@ async fn home(State(state): State<WorkspaceState>, headers: HeaderMap) -> Respon
 }
 
 /// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn my_work(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::MyWork).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
 async fn meus_recursos(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
     app_page(&state, &headers, Screen::Resources).await
 }
@@ -2883,18 +2928,6 @@ async fn units(State(state): State<WorkspaceState>, headers: HeaderMap) -> Respo
 }
 
 /// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn ideas(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Ideas).await
-}
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn projects(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Projects).await
-}
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn datasets(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Datasets).await
-}
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
 async fn agents(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
     app_page(&state, &headers, Screen::Agents).await
 }
@@ -3371,11 +3404,6 @@ async fn provision_member() -> Response {
 }
 
 /// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn bibliography(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Bibliography).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
 async fn bibliography_tools(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
     app_page(&state, &headers, Screen::Bibliography).await
 }
@@ -3392,68 +3420,6 @@ async fn review_bibliography() -> Response {
 /// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
 async fn unit_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
     app_page(&state, &headers, Screen::Units).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn idea_workspace(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Ideas).await
-}
-
-#[derive(Deserialize)]
-struct TransitionForm {
-    state: String,
-    #[serde(default)]
-    outcome_note: String,
-}
-
-/// Move uma ideia na sua vida — avançar de estado, marcá-la candidata a
-/// projecto, ou fechá-la (rejeitar/arquivar, com a razão).
-///
-/// Proxy para `POST /api/v1/ideas/{id}/transitions`. O ciclo de vida é do
-/// domínio: a interface só oferece os estados que o Core devolveu como legais
-/// para esta ideia, e o Core reautoriza e revalida a transição.
-async fn transition_idea(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(idea_id): Path<Uuid>,
-    Form(form): Form<TransitionForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let body = serde_json::json!({
-        "state": form.state,
-        "outcome_note": blank_to_none(form.outcome_note),
-    });
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/ideas/{idea_id}/transitions"),
-        &body,
-    )
-    .await
-    {
-        // A ideia abre no seu ambiente, onde o novo estado já se vê.
-        Ok(_) => Redirect::to(&format!("/ideas/{idea_id}")).into_response(),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        // A recusa (transição ilegal, falta de autoridade) volta ao ambiente da
-        // ideia com a razão do Core, em vez de ser engolida.
-        Err(failure) => {
-            let motivo = urlencoding_minimal(&failure.to_string());
-            Redirect::to(&format!("/ideas/{idea_id}?erro={motivo}")).into_response()
-        }
-    }
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn project_workspace(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Projects).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn research_workspace(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Projects).await
 }
 
 // ── Ciência ──────────────────────────────────────────────────────────────
@@ -3907,11 +3873,6 @@ async fn record_validation(
 }
 
 // ── Conhecimento ─────────────────────────────────────────────────────────
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn knowledge(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Knowledge).await
-}
 
 // ── Inteligência ─────────────────────────────────────────────────────────
 
@@ -4559,277 +4520,6 @@ async fn activity(State(state): State<WorkspaceState>, headers: HeaderMap) -> Re
 // ── Criar ideia ──────────────────────────────────────────────────────────
 
 /// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn new_source_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Bibliography).await
-}
-
-#[derive(Deserialize)]
-struct NewSourceForm {
-    workspace_id: Uuid,
-    title: String,
-    #[serde(default)]
-    authors: String,
-    #[serde(default)]
-    year: String,
-    #[serde(default)]
-    container_title: String,
-    #[serde(default)]
-    doi: String,
-    #[serde(default)]
-    abstract_text: String,
-    #[serde(default)]
-    classification: String,
-}
-
-async fn create_source(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<NewSourceForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let authors: Vec<String> = form
-        .authors
-        .split(';')
-        .map(str::trim)
-        .filter(|a| !a.is_empty())
-        .map(ToOwned::to_owned)
-        .collect();
-
-    let mut body = serde_json::json!({
-        "title": form.title,
-        "authors": authors,
-        "container_title": blank_to_none(form.container_title),
-        "doi": blank_to_none(form.doi),
-        "abstract_text": blank_to_none(form.abstract_text),
-    });
-    if let Some(year) = blank_to_none(form.year).and_then(|y| y.parse::<i32>().ok()) {
-        body["year"] = Value::from(year);
-    }
-    if let Some(classification) = blank_to_none(form.classification) {
-        body["classification"] = Value::String(classification);
-    }
-
-    // O workspace vai no caminho, e é o Core que decide se este membro pode
-    // criar lá. O selector filtrou por conveniência; um identificador escrito à
-    // mão chega aqui exactamente como qualquer outro.
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/workspaces/{}/sources", form.workspace_id),
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to("/bibliography").into_response(),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn new_dataset_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Datasets).await
-}
-
-#[derive(Deserialize)]
-struct NewDatasetForm {
-    workspace_id: Uuid,
-    code: String,
-    title: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    keywords: String,
-    #[serde(default)]
-    usage_restrictions: String,
-    #[serde(default)]
-    classification: String,
-}
-
-async fn create_dataset(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<NewDatasetForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let keywords: Vec<String> = form
-        .keywords
-        .split(',')
-        .map(str::trim)
-        .filter(|k| !k.is_empty())
-        .map(ToOwned::to_owned)
-        .collect();
-
-    let mut body = serde_json::json!({
-        "code": form.code,
-        "title": form.title,
-        "description": blank_to_none(form.description),
-        "usage_restrictions": blank_to_none(form.usage_restrictions),
-        "keywords": keywords,
-    });
-    if let Some(classification) = blank_to_none(form.classification) {
-        body["classification"] = Value::String(classification);
-    }
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/workspaces/{}/datasets", form.workspace_id),
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to("/datasets").into_response(),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn new_task_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::MyWork).await
-}
-
-#[derive(Deserialize)]
-struct NewTaskForm {
-    workspace_id: Uuid,
-    title: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    priority: String,
-    #[serde(default)]
-    due_on: String,
-}
-
-async fn create_task(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<NewTaskForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let mut body = serde_json::json!({
-        "title": form.title,
-        "description": blank_to_none(form.description),
-    });
-    // Só se enviam quando têm valor: um campo vazio não é uma escolha, e o Core
-    // aplica os seus próprios defaults (prioridade normal, sem prazo).
-    if let Some(priority) = blank_to_none(form.priority) {
-        body["priority"] = Value::String(priority);
-    }
-    if let Some(due_on) = blank_to_none(form.due_on) {
-        body["due_on"] = Value::String(due_on);
-    }
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/workspaces/{}/tasks", form.workspace_id),
-        &body,
-    )
-    .await
-    {
-        // A tarefa vive no ambiente que a governa; abre-se lá, onde é listada.
-        Ok(_) => Redirect::to(&format!("/workspaces/{}", form.workspace_id)).into_response(),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn dataset_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Datasets).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn task_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::MyWork).await
-}
-
-#[derive(Deserialize)]
-struct TaskTransitionForm {
-    state: String,
-}
-
-/// `POST /tasks/{id}/transition` — muda o estado da tarefa (proxy ao Core).
-async fn task_transition(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(task_id): Path<Uuid>,
-    Form(form): Form<TaskTransitionForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let body = serde_json::json!({ "state": form.state });
-    task_action_redirect(
-        &state,
-        &member,
-        task_id,
-        &format!("/api/v1/tasks/{task_id}/transitions"),
-        &body,
-    )
-    .await
-}
-
-#[derive(Deserialize)]
-struct TaskAssignForm {
-    #[serde(default)]
-    assignee_id: String,
-}
-
-/// `POST /tasks/{id}/assignee` — atribui (ou limpa) o responsável.
-async fn task_assign(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(task_id): Path<Uuid>,
-    Form(form): Form<TaskAssignForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    // Vazio significa «sem responsável»: envia-se `null`, não uma string vazia.
-    let assignee = blank_to_none(form.assignee_id);
-    let body = serde_json::json!({ "assignee_id": assignee });
-    task_action_redirect(
-        &state,
-        &member,
-        task_id,
-        &format!("/api/v1/tasks/{task_id}/assignee"),
-        &body,
-    )
-    .await
-}
-
-/// Submete uma acção sobre a tarefa ao Core e volta ao seu detalhe, com o aviso.
-async fn task_action_redirect(
-    state: &WorkspaceState,
-    member: &Member,
-    task_id: Uuid,
-    path: &str,
-    body: &Value,
-) -> Response {
-    match api::post(
-        state,
-        &member.session.access_token,
-        &member.correlation_id,
-        path,
-        body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&format!("/tasks/{task_id}")).into_response(),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => {
-            let motivo = urlencoding_minimal(&failure.to_string());
-            Redirect::to(&format!("/tasks/{task_id}?erro={motivo}")).into_response()
-        }
-    }
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
 async fn settings_account(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
     app_page(&state, &headers, Screen::Settings).await
 }
@@ -5462,70 +5152,6 @@ async fn revoke_session(
 }
 
 /// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn new_project_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Projects).await
-}
-
-#[derive(Deserialize)]
-struct PromotionForm {
-    workspace_id: Uuid,
-    code: String,
-    #[serde(default)]
-    title: String,
-    #[serde(default)]
-    objectives: String,
-}
-
-async fn promote_idea(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<PromotionForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    // O selector devolve o workspace; a promoção age sobre a ideia que ele
-    // contém. Uma volta ao Core resolve isso — e é ele que decide se o membro
-    // pode sequer ler esse workspace.
-    let workspace = match required(
-        &state,
-        &member,
-        &format!("/api/v1/workspaces/{}", form.workspace_id),
-    )
-    .await
-    {
-        Ok(payload) => payload,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let idea_id = workspace
-        .get("idea")
-        .and_then(|idea| idea.get("id"))
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_owned();
-
-    let body = serde_json::json!({
-        "code": form.code,
-        "title": blank_to_none(form.title),
-        "objectives": blank_to_none(form.objectives),
-    });
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/ideas/{idea_id}/promotion"),
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&format!("/workspaces/{}", form.workspace_id)).into_response(),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
 async fn new_unit_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
     app_page(&state, &headers, Screen::Units).await
 }
@@ -5661,87 +5287,9 @@ async fn update_unit(
     }
 }
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn new_idea_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Ideas).await
-}
-
-#[derive(Deserialize)]
-struct NewIdeaForm {
-    unit_id: Uuid,
-    title: String,
-    #[serde(default)]
-    summary: String,
-    #[serde(default)]
-    research_question: String,
-    #[serde(default)]
-    hypothesis: String,
-    #[serde(default)]
-    motivation: String,
-    #[serde(default)]
-    keywords: String,
-    #[serde(default)]
-    classification: String,
-}
-
 fn blank_to_none(value: String) -> Option<String> {
     let trimmed = value.trim();
     (!trimmed.is_empty()).then(|| trimmed.to_owned())
-}
-
-/// Cria uma ideia.
-///
-/// Uma submissão de outra origem chega sem sessão, porque o cookie é
-/// `SameSite=Lax`, e é encaminhada para o login em vez de ser executada.
-async fn create_idea(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<NewIdeaForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let keywords: Vec<String> = form
-        .keywords
-        .split(',')
-        .map(str::trim)
-        .filter(|k| !k.is_empty())
-        .map(ToOwned::to_owned)
-        .collect();
-
-    let mut body = serde_json::json!({
-        "unit_id": form.unit_id,
-        "title": form.title,
-        "summary": blank_to_none(form.summary),
-        "research_question": blank_to_none(form.research_question),
-        "hypothesis": blank_to_none(form.hypothesis),
-        "motivation": blank_to_none(form.motivation),
-        "keywords": keywords,
-    });
-    if let Some(classification) = blank_to_none(form.classification) {
-        body["classification"] = Value::String(classification);
-    }
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/ideas",
-        &body,
-    )
-    .await
-    {
-        Ok(created) => {
-            let workspace_id = created
-                .get("workspace")
-                .and_then(|w| w.get("id"))
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned();
-            Redirect::to(&format!("/workspaces/{workspace_id}")).into_response()
-        }
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => failure_response(&failure),
-    }
 }
 
 // ── Notas pessoais ───────────────────────────────────────────────────────
@@ -7269,10 +6817,20 @@ mod router_tests {
             (Method::POST, "/logout".to_owned()),
             (Method::POST, "/units/new".to_owned()),
             (Method::POST, "/ideas/new".to_owned()),
-            (Method::POST, "/projects/new".to_owned()),
-            (Method::POST, "/bibliography/new".to_owned()),
+            // D005: os formulários de criação e as acções das cinco aplicações.
+            (Method::POST, format!("/ideas/{NADA}/transitions")),
+            (Method::POST, format!("/ideas/{NADA}/promotion")),
+            (Method::POST, format!("/projects/{NADA}/transitions")),
+            (Method::POST, "/knowledge/sources/new".to_owned()),
             (Method::POST, "/datasets/new".to_owned()),
-            (Method::POST, "/tasks/new".to_owned()),
+            (Method::POST, format!("/datasets/{NADA}/versions")),
+            (
+                Method::POST,
+                format!("/datasets/{NADA}/versions/{NADA}/publish"),
+            ),
+            (Method::POST, "/my-work/new".to_owned()),
+            (Method::POST, format!("/my-work/{NADA}/transitions")),
+            (Method::POST, format!("/my-work/{NADA}/assignee")),
             (Method::POST, "/settings/password".to_owned()),
             (Method::POST, format!("/settings/sessions/{NADA}/revoke")),
             (Method::POST, "/login".to_owned()),
@@ -8882,3 +8440,4 @@ mod carregamento_tests {
 
 // D004 · As aplicações de produtividade. Declarado no fim: usa `member_or_login!`.
 mod productivity;
+mod research;
