@@ -500,3 +500,446 @@ pub(super) async fn save_personal_note(
         }
     }
 }
+
+// ── Calendário ───────────────────────────────────────────────────────────
+
+#[derive(Deserialize, Default)]
+pub(super) struct CalendarQuery {
+    #[serde(default)]
+    view: Option<String>,
+    #[serde(default)]
+    date: Option<String>,
+}
+
+/// O que o inspector do Calendário mostra.
+enum CalInspector {
+    None,
+    Event(Uuid),
+    New,
+    Edit(Uuid),
+    /// Um formulário devolvido com um erro de validação (o que o membro
+    /// escreveu volta tal como estava).
+    Invalid(crate::ui::view_models::CalFormVm),
+}
+
+async fn calendar_view(
+    state: &WorkspaceState,
+    headers: &HeaderMap,
+    query: CalendarQuery,
+    inspector: CalInspector,
+    status: StatusCode,
+) -> Response {
+    use crate::controllers::productivity::calendar as cal;
+    let w = match open_app(state, headers, Screen::Calendar, ApplicationId::Calendar).await {
+        Ok(w) => w,
+        Err(response) => return *response,
+    };
+    let quem = caller(&w.member);
+    let clock = clock_of(&w.ctx);
+    let view = cal::view_of(query.view.as_deref());
+    let (today, day) = cal::anchor(query.date.as_deref(), &clock);
+    let (start, n) = cal::days_of(view, day);
+    let (laid, load) = match quem
+        .get(state, &cal::agenda_path(start, n, clock.zone))
+        .await
+    {
+        Ok(v) => (
+            cal::lay_out(view, day, today, controllers::desktop::items(&v), &clock),
+            AppLoad::Ready,
+        ),
+        Err(ApiFailure::Unauthorised) => return session_ended(state, headers),
+        Err(f) => (
+            cal::lay_out(view, day, today, &[], &clock),
+            AppLoad::Failed(app_error(&f)),
+        ),
+    };
+    let (prev_href, next_href, today_href) = cal::nav_hrefs(view, day, today);
+
+    let mut details = None;
+    let mut form = None;
+    let mut error = None;
+    match inspector {
+        CalInspector::None => {}
+        CalInspector::New => form = Some(cal::form(None, day, &clock)),
+        CalInspector::Invalid(f) => form = Some(f),
+        CalInspector::Event(id) | CalInspector::Edit(id) => {
+            match quem
+                .get(state, &format!("/api/v1/calendar/events/{id}"))
+                .await
+            {
+                Ok(e) if matches!(inspector, CalInspector::Edit(_)) => {
+                    form = Some(cal::form(Some(&e), day, &clock));
+                }
+                Ok(e) => details = Some(event_details(state, &quem, &e, &clock, &query).await),
+                Err(ApiFailure::Unauthorised) => return session_ended(state, headers),
+                Err(f) => error = Some(app_error(&f)),
+            }
+        }
+    }
+    let vm = crate::ui::view_models::CalendarVm {
+        view,
+        range_label: cal::range_label(view, day),
+        prev_href,
+        next_href,
+        today_href,
+        weekdays: laid.weekdays,
+        days: laid.days,
+        agenda: laid.agenda,
+        now_minute: laid.now_minute,
+        hours: (0, 24),
+        timezone: Some(clock.zone.as_str().to_owned()),
+        load: match (load, error) {
+            (AppLoad::Ready, Some(e)) => AppLoad::Failed(e),
+            (l, _) => l,
+        },
+        details,
+        form,
+        new_href: Some(format!(
+            "/calendar/events/new?date={}",
+            day.format("%Y-%m-%d")
+        )),
+    };
+    render_app(state, &w, status, ui::apps::calendar::app(&vm), None, None)
+}
+
+/// O detalhe de um evento, com o nome do contexto (unidade ou espaço) quando
+/// o Core o deixa ler.
+async fn event_details(
+    state: &WorkspaceState,
+    quem: &Caller<'_>,
+    e: &Value,
+    clock: &controllers::desktop::Clock,
+    query: &CalendarQuery,
+) -> crate::ui::view_models::CalEventDetailsVm {
+    use crate::controllers::desktop::text;
+    use crate::controllers::productivity::calendar as cal;
+    let id = text(e, "id").to_owned();
+    let mut item = e.clone();
+    item["kind"] = Value::String("event".to_owned());
+    let day = e
+        .get("starts_on")
+        .and_then(Value::as_str)
+        .and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+        .or_else(|| {
+            controllers::desktop::instant(e, "starts_at")
+                .map(|at| at.with_timezone(&clock.zone.zone()).date_naive())
+        })
+        .unwrap_or_else(|| clock.now.date_naive());
+    let laid = cal::lay_out(
+        crate::ui::view_models::CalView::Day,
+        day,
+        day,
+        std::slice::from_ref(&item),
+        clock,
+    );
+    let mut event = laid
+        .days
+        .into_iter()
+        .next()
+        .and_then(|d| d.events.into_iter().next())
+        .unwrap_or_else(|| crate::ui::view_models::CalEventVm {
+            id: id.clone(),
+            title: text(e, "title").to_owned(),
+            time: String::new(),
+            location: None,
+            scope: crate::ui::view_models::CalScope::Personal,
+            cancelled: false,
+            all_day: false,
+            span: None,
+            lane: (0, 1),
+            href: String::new(),
+            origin_tz: None,
+        });
+    event.href = format!("/calendar/events/{id}");
+    let context = if let Some(u) = e.get("unit_id").and_then(Value::as_str) {
+        quem.get(state, &format!("/api/v1/units/{u}"))
+            .await
+            .ok()
+            .map(|v| text(&v, "name").to_owned())
+    } else if let Some(ws) = e.get("workspace_id").and_then(Value::as_str) {
+        quem.get(state, &format!("/api/v1/workspaces/{ws}"))
+            .await
+            .ok()
+            .map(|v| text(&v, "title").to_owned())
+    } else {
+        None
+    }
+    .filter(|c| !c.is_empty());
+    let cancelled = event.cancelled;
+    let ctx = format!(
+        "?view={}&date={}",
+        query.view.as_deref().unwrap_or("month"),
+        query.date.as_deref().unwrap_or("")
+    );
+    crate::ui::view_models::CalEventDetailsVm {
+        date: cal::full_date(day),
+        description: e
+            .get("description")
+            .and_then(Value::as_str)
+            .filter(|d| !d.is_empty())
+            .map(str::to_owned),
+        // O Core guarda os participantes mas ainda não os devolve.
+        participants: Vec::new(),
+        context,
+        edit_href: (!cancelled).then(|| format!("/calendar/events/{id}/edit{ctx}")),
+        cancel_action: (!cancelled).then(|| format!("/calendar/events/{id}/cancel")),
+        nye: Some(crate::controllers::productivity::nye(
+            "event",
+            &id,
+            "prod.nye.event",
+        )),
+        event,
+    }
+}
+
+/// `GET /calendar`.
+pub(super) async fn calendar_page(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(query): Query<CalendarQuery>,
+) -> Response {
+    calendar_view(&state, &headers, query, CalInspector::None, StatusCode::OK).await
+}
+
+/// `GET /calendar/events/new`.
+pub(super) async fn new_event_form(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(query): Query<CalendarQuery>,
+) -> Response {
+    calendar_view(&state, &headers, query, CalInspector::New, StatusCode::OK).await
+}
+
+/// `GET /calendar/events/{id}`.
+pub(super) async fn event_detail_page(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(event_id): Path<Uuid>,
+    Query(query): Query<CalendarQuery>,
+) -> Response {
+    calendar_view(
+        &state,
+        &headers,
+        query,
+        CalInspector::Event(event_id),
+        StatusCode::OK,
+    )
+    .await
+}
+
+/// `GET /calendar/events/{id}/edit`.
+pub(super) async fn edit_event_form(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(event_id): Path<Uuid>,
+    Query(query): Query<CalendarQuery>,
+) -> Response {
+    calendar_view(
+        &state,
+        &headers,
+        query,
+        CalInspector::Edit(event_id),
+        StatusCode::OK,
+    )
+    .await
+}
+
+/// O formulário do Design (`CalFormVm`).
+#[derive(Deserialize)]
+pub(super) struct CalEventForm {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    all_day: Option<String>,
+    #[serde(default)]
+    start: String,
+    #[serde(default)]
+    end: String,
+    #[serde(default)]
+    location: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    scope: String,
+}
+
+/// O fuso do membro (o da Instância, pelo `/me`), para interpretar as horas
+/// que ele escreveu. Nunca UTC por omissão silenciosa quando o `/me` responde.
+async fn member_zone(
+    state: &WorkspaceState,
+    member: &Member,
+) -> ocinye_contracts::temporal::TimeZoneName {
+    let utc = ocinye_contracts::temporal::TimeZoneName::parse("UTC").expect("UTC");
+    caller(member)
+        .get(state, "/api/v1/me")
+        .await
+        .ok()
+        .and_then(|me| {
+            me.get("timezone")
+                .and_then(Value::as_str)
+                .and_then(|z| ocinye_contracts::temporal::TimeZoneName::parse(z).ok())
+        })
+        .unwrap_or(utc)
+}
+
+fn invalid_form(
+    f: &CalEventForm,
+    action: String,
+    key: &'static str,
+) -> crate::ui::view_models::CalFormVm {
+    crate::ui::view_models::CalFormVm {
+        action,
+        title: f.title.clone(),
+        start: f.start.clone(),
+        end: f.end.clone(),
+        all_day: f.all_day.is_some(),
+        location: f.location.clone(),
+        description: f.description.clone(),
+        scopes: vec![(
+            "personal".to_owned(),
+            t("prod.cal.scope.personal").to_owned(),
+        )],
+        scope: "personal".to_owned(),
+        error: Some(key),
+    }
+}
+
+/// `POST /calendar/events/new`: um evento pessoal, no fuso do membro.
+pub(super) async fn create_calendar_event(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<CalEventForm>,
+) -> Response {
+    use crate::controllers::productivity::calendar as cal;
+    let member = member_or_login!(state, headers);
+    let zone = member_zone(&state, &member).await;
+    let occurrence = match cal::occurrence(form.all_day.is_some(), &form.start, &form.end, zone) {
+        Ok(o) => o,
+        Err(key) => {
+            let f = invalid_form(&form, "/calendar/events/new".to_owned(), key);
+            return calendar_view(
+                &state,
+                &headers,
+                CalendarQuery::default(),
+                CalInspector::Invalid(f),
+                StatusCode::UNPROCESSABLE_ENTITY,
+            )
+            .await;
+        }
+    };
+    // Só o âmbito pessoal se oferece; outro valor não se aceita pelo formulário.
+    if form.scope != "personal" {
+        return (StatusCode::UNPROCESSABLE_ENTITY, "scope").into_response();
+    }
+    let body = serde_json::json!({
+        "scope": "personal",
+        "title": form.title.trim(),
+        "description": (!form.description.trim().is_empty()).then(|| form.description.clone()),
+        "location": (!form.location.trim().is_empty()).then(|| form.location.clone()),
+        "occurrence": occurrence,
+    });
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/calendar/events",
+        &body,
+    )
+    .await
+    {
+        Ok(created) => {
+            let id = created
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            Redirect::to(&format!("/calendar/events/{id}")).into_response()
+        }
+        Err(ApiFailure::Unauthorised) => session_ended(&state, &headers),
+        Err(ApiFailure::Rejected(_)) => {
+            let f = invalid_form(
+                &form,
+                "/calendar/events/new".to_owned(),
+                "prod.cal.err.dates",
+            );
+            calendar_view(
+                &state,
+                &headers,
+                CalendarQuery::default(),
+                CalInspector::Invalid(f),
+                StatusCode::UNPROCESSABLE_ENTITY,
+            )
+            .await
+        }
+        Err(f) => failure_response(&f),
+    }
+}
+
+/// `POST /calendar/events/{id}/edit`: título, local, descrição e ocorrência.
+/// O âmbito não muda depois de criado.
+pub(super) async fn update_calendar_event(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(event_id): Path<Uuid>,
+    Form(form): Form<CalEventForm>,
+) -> Response {
+    use crate::controllers::productivity::calendar as cal;
+    let member = member_or_login!(state, headers);
+    let zone = member_zone(&state, &member).await;
+    let action = format!("/calendar/events/{event_id}/edit");
+    let occurrence = match cal::occurrence(form.all_day.is_some(), &form.start, &form.end, zone) {
+        Ok(o) => o,
+        Err(key) => {
+            let f = invalid_form(&form, action, key);
+            return calendar_view(
+                &state,
+                &headers,
+                CalendarQuery::default(),
+                CalInspector::Invalid(f),
+                StatusCode::UNPROCESSABLE_ENTITY,
+            )
+            .await;
+        }
+    };
+    let body = serde_json::json!({
+        "title": form.title.trim(),
+        "description": if form.description.trim().is_empty() { Value::Null } else { Value::String(form.description.clone()) },
+        "location": if form.location.trim().is_empty() { Value::Null } else { Value::String(form.location.clone()) },
+        "occurrence": occurrence,
+    });
+    match api::patch(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/calendar/events/{event_id}"),
+        &body,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!("/calendar/events/{event_id}")).into_response(),
+        Err(ApiFailure::Unauthorised) => session_ended(&state, &headers),
+        Err(f) => failure_response(&f),
+    }
+}
+
+/// `POST /calendar/events/{id}/cancel`: o evento fica, riscado (o Core não o
+/// apaga), e volta-se ao detalhe.
+pub(super) async fn cancel_calendar_event(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(event_id): Path<Uuid>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        &format!("/api/v1/calendar/events/{event_id}/cancel"),
+        &serde_json::json!({}),
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!("/calendar/events/{event_id}")).into_response(),
+        Err(ApiFailure::Unauthorised) => session_ended(&state, &headers),
+        Err(f) => failure_response(&f),
+    }
+}

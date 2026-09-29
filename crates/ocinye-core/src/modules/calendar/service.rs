@@ -562,6 +562,8 @@ pub async fn agenda<'e>(
             classification: evento.classification(),
             workspace_id: evento.workspace_id,
             unit_id: evento.unit_id,
+            scope: Some(evento.scope.clone()),
+            location: evento.location.clone(),
         })
         .collect();
 
@@ -580,6 +582,8 @@ pub async fn agenda<'e>(
             Classification::parse(&prazo.classification).unwrap_or(Classification::Internal),
         workspace_id: Some(prazo.workspace_id),
         unit_id: Some(prazo.unit_id),
+        scope: None,
+        location: None,
     }));
 
     let referencia = ocinye_contracts::temporal::TimeZoneName::utc();

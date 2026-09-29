@@ -382,3 +382,194 @@ async fn notas_o_conteudo_e_texto_nunca_html() {
     let content = doc["document"]["blocks"][0]["content"].as_array().unwrap();
     assert!(content.iter().all(|i| i["type"] != "link"));
 }
+
+// ── Calendário ───────────────────────────────────────────────────────────
+
+async fn fuso(s: &Sistema, token: &str) -> String {
+    s.http
+        .get(format!("{}/api/v1/me", s.core_url))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap()["timezone"]
+        .as_str()
+        .unwrap_or("UTC")
+        .to_owned()
+}
+
+#[tokio::test]
+async fn calendario_cria_no_fuso_do_membro_abre_edita_e_cancela() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    // Um fuso que não é UTC, para que «o fuso do membro» e «UTC por omissão»
+    // não se confundam: 09:30 em Luanda são 08:30 UTC.
+    sqlx::query(
+        "INSERT INTO instance_settings (organisation_id, timezone) VALUES ($1, 'Africa/Luanda')
+         ON CONFLICT (organisation_id) DO UPDATE SET timezone = EXCLUDED.timezone",
+    )
+    .bind(s.organisation_id)
+    .execute(&s.pool)
+    .await
+    .expect("fuso da Instância");
+    let (_, c, t) = membro(&s).await;
+    let marca = format!("reuniao{}", Uuid::new_v4().simple());
+    // O formulário do Design: nomes `start`/`end`, hora local, âmbito pessoal.
+    let (status, html) = s.html("/calendar/events/new?date=2026-10-07", &c).await;
+    assert_eq!(status, 200);
+    assert!(html.contains(r#"name="start""#) && html.contains(r#"name="scope""#));
+    let r = s
+        .escrever(reqwest::Method::POST, "/calendar/events/new", &c)
+        .form(&[
+            ("title", marca.as_str()),
+            ("start", "2026-10-07T09:30"),
+            ("end", "2026-10-07T10:30"),
+            ("location", "Sala 2"),
+            ("scope", "personal"),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        r.status().as_u16(),
+        303,
+        "{}",
+        r.text().await.unwrap_or_default()
+    );
+    let destino = location(&r);
+    let id = destino.trim_start_matches("/calendar/events/").to_owned();
+    // No Core: a hora que o membro escreveu, no fuso dele (nunca UTC às cegas).
+    let evento: Value = s
+        .http
+        .get(format!("{}/api/v1/calendar/events/{id}", s.core_url))
+        .bearer_auth(&t)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let zona = fuso(&s, &t).await;
+    assert_eq!(zona, "Africa/Luanda");
+    assert_eq!(evento["timezone"], "Africa/Luanda");
+    assert_eq!(
+        evento["starts_at"], "2026-10-07T08:30:00Z",
+        "a hora local não foi lida no fuso do membro"
+    );
+    // Mês, semana e dia mostram-no no dia e à hora locais.
+    for (vista, marca_vista) in [
+        ("month", "oc-cal-month"),
+        ("week", "oc-cal-tl"),
+        ("day", "oc-cal-tl"),
+        ("agenda", "oc-cal-agenda"),
+    ] {
+        let (status, html) = s
+            .html(&format!("/calendar?view={vista}&date=2026-10-07"), &c)
+            .await;
+        assert_eq!(status, 200, "{vista}");
+        assert!(html.contains(marca_vista), "{vista}");
+        assert!(html.contains(&marca), "{vista} sem o evento");
+    }
+    let (_, html) = s.html("/calendar?view=day&date=2026-10-07", &c).await;
+    assert!(
+        html.contains(r#"data-start="570" data-dur="60""#),
+        "não está às 09:30 locais"
+    );
+    assert!(html.contains(r#"data-scope="personal""#));
+    // O detalhe no inspector, com o local e a ligação à Nye.
+    let (_, html) = s.html(&destino, &c).await;
+    assert!(html.contains(r#"data-part="cal-details""#) && html.contains("Sala 2"));
+    assert!(html.contains(&format!(r#"href="/ai/prompt?ref=event:{id}""#)));
+    // Editar: a hora muda, o evento é o mesmo.
+    let r = s
+        .escrever(
+            reqwest::Method::POST,
+            &format!("/calendar/events/{id}/edit"),
+            &c,
+        )
+        .form(&[
+            ("title", marca.as_str()),
+            ("start", "2026-10-07T14:00"),
+            ("end", "2026-10-07T15:00"),
+            ("location", ""),
+            ("scope", "personal"),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 303);
+    let (_, html) = s.html("/calendar?view=day&date=2026-10-07", &c).await;
+    assert!(html.contains(r#"data-start="840" data-dur="60""#));
+    // Cancelar: fica, riscado.
+    let r = s
+        .escrever(
+            reqwest::Method::POST,
+            &format!("/calendar/events/{id}/cancel"),
+            &c,
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 303);
+    let (_, html) = s.html("/calendar?view=day&date=2026-10-07", &c).await;
+    assert!(html.contains(&marca) && html.contains("data-cancelled"));
+}
+
+#[tokio::test]
+async fn calendario_datas_invalidas_voltam_ao_formulario_com_o_erro() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (_, c, _) = membro(&s).await;
+    let r = s
+        .escrever(reqwest::Method::POST, "/calendar/events/new", &c)
+        .form(&[
+            ("title", "Ao contrário"),
+            ("start", "2026-10-07T11:00"),
+            ("end", "2026-10-07T10:00"),
+            ("scope", "personal"),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 422);
+    let html = r.text().await.unwrap();
+    assert!(html.contains(crate_t("prod.cal.err.order")));
+    assert!(
+        html.contains(r#"value="Ao contrário""#),
+        "o que o membro escreveu perdeu-se"
+    );
+}
+
+#[tokio::test]
+async fn calendario_o_evento_pessoal_de_outra_pessoa_nao_existe() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (_, c, _) = membro(&s).await;
+    let (_, outro_c, _) = membro(&s).await;
+    let r = s
+        .escrever(reqwest::Method::POST, "/calendar/events/new", &outro_c)
+        .form(&[
+            ("title", "Consulta privada"),
+            ("start", "2026-10-08T09:00"),
+            ("end", "2026-10-08T10:00"),
+            ("scope", "personal"),
+        ])
+        .send()
+        .await
+        .unwrap();
+    let alheio = location(&r);
+    let (_, html) = s.html(&alheio, &c).await;
+    assert!(!html.contains("Consulta privada"));
+    assert!(html.contains(r#"data-error="app.err.not_found""#));
+    let (_, html) = s.html("/calendar?view=week&date=2026-10-08", &c).await;
+    assert!(!html.contains("Consulta privada"));
+}
+
+fn crate_t(key: &str) -> &'static str {
+    ocinye_workspace::i18n::t(key)
+}

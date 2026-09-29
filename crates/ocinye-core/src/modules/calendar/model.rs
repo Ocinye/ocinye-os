@@ -161,6 +161,10 @@ pub struct TemporalItem {
     pub workspace_id: Option<Uuid>,
     /// Unidade de origem, quando existe.
     pub unit_id: Option<Uuid>,
+    /// O âmbito do evento (`personal`, `unit`, …); `None` para um prazo.
+    pub scope: Option<String>,
+    /// O local do evento, quando o tem.
+    pub location: Option<String>,
 }
 
 /// O prazo de uma tarefa, como o calendário o vê.

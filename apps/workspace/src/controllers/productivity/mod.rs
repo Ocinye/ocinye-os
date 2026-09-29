@@ -2,6 +2,7 @@
 //! Correio. Traduzem o que o Core devolve para os ViewModels do Design; não
 //! decidem autorização, não guardam nada e não conhecem o armazenamento.
 
+pub mod calendar;
 pub mod note_markdown;
 pub mod notes;
 

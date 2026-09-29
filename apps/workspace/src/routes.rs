@@ -322,19 +322,22 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/units/{unit_id}/members/role", post(unit_member_role))
         .route("/units/{unit_id}/members/remove", post(unit_member_remove))
         .route("/ideas", get(ideas))
-        .route("/calendar", get(calendar_page))
+        .route("/calendar", get(productivity::calendar_page))
         .route(
             "/calendar/events/new",
-            get(new_event_form).post(create_calendar_event),
+            get(productivity::new_event_form).post(productivity::create_calendar_event),
         )
-        .route("/calendar/events/{event_id}", get(event_detail_page))
+        .route(
+            "/calendar/events/{event_id}",
+            get(productivity::event_detail_page),
+        )
         .route(
             "/calendar/events/{event_id}/edit",
-            get(edit_event_form).post(update_calendar_event),
+            get(productivity::edit_event_form).post(productivity::update_calendar_event),
         )
         .route(
             "/calendar/events/{event_id}/cancel",
-            post(cancel_calendar_event),
+            post(productivity::cancel_calendar_event),
         )
         .route("/notifications", get(notifications_page))
         .route("/notifications/recent", get(notifications_recent))
@@ -7287,206 +7290,6 @@ mod router_tests {
 // O Workspace não decide o que é visível: pede o intervalo ao Core e desenha o
 // que ele devolveu. Nenhuma das quatro vistas consulta nada por si — recebem
 // todas o mesmo conjunto autorizado (ADR-0410).
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn calendar_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Calendar).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn new_event_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Calendar).await
-}
-
-/// O que o formulário envia.
-///
-/// # Porque a hora vem sem zona
-///
-/// Porque a zona vem no seu próprio campo, e é o Core que junta as duas para
-/// calcular o instante. Enviar um instante já convertido daria ao browser o
-/// direito de decidir o que significa «14:00 em Paris».
-#[derive(Deserialize)]
-struct EventForm {
-    title: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    location: String,
-    #[serde(default)]
-    all_day: Option<String>,
-    #[serde(default)]
-    starts_at: String,
-    #[serde(default)]
-    ends_at: String,
-    #[serde(default)]
-    timezone: String,
-    #[serde(default)]
-    starts_on: String,
-    #[serde(default)]
-    ends_on: String,
-    #[serde(default)]
-    scope: String,
-    #[serde(default)]
-    unit_id: String,
-    #[serde(default)]
-    workspace_id: String,
-}
-
-impl EventForm {
-    /// A ocorrência, como o Core a espera.
-    ///
-    /// O último dia que a pessoa escreve é **inclusivo**; a base guarda o dia
-    /// seguinte, exclusivo. A conversão é nossa: ninguém deve ter de saber que
-    /// um evento de 24 de Agosto se guarda como `24 → 25`.
-    fn occurrence(&self) -> Result<Value, String> {
-        if self.all_day.is_some() {
-            let inicio = chrono::NaiveDate::parse_from_str(&self.starts_on, "%Y-%m-%d")
-                .map_err(|_| "Indique o primeiro dia.".to_owned())?;
-            let ultimo =
-                chrono::NaiveDate::parse_from_str(&self.ends_on, "%Y-%m-%d").unwrap_or(inicio);
-            let fim = ultimo
-                .succ_opt()
-                .ok_or_else(|| "A data de fim não é válida.".to_owned())?;
-            Ok(serde_json::json!({
-                "kind": "all_day",
-                "starts_on": inicio,
-                "ends_before": fim,
-            }))
-        } else {
-            let limpar = |valor: &str| valor.trim().to_owned();
-            if limpar(&self.starts_at).is_empty() || limpar(&self.ends_at).is_empty() {
-                return Err("Indique a hora de início e de fim.".to_owned());
-            }
-            Ok(serde_json::json!({
-                "kind": "timed",
-                "starts_at": format!("{}:00", limpar(&self.starts_at)),
-                "ends_at": format!("{}:00", limpar(&self.ends_at)),
-                "timezone": if self.timezone.trim().is_empty() {
-                    "UTC".to_owned()
-                } else {
-                    limpar(&self.timezone)
-                },
-            }))
-        }
-    }
-}
-
-async fn create_calendar_event(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<EventForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let ocorrencia = match form.occurrence() {
-        Ok(valor) => valor,
-        Err(_) => return (StatusCode::UNPROCESSABLE_ENTITY, "rejected").into_response(),
-    };
-
-    let mut body = serde_json::json!({
-        "scope": if form.scope.is_empty() { "personal" } else { &form.scope },
-        "title": form.title,
-        "description": blank_to_none(form.description.clone()),
-        "location": blank_to_none(form.location.clone()),
-        "occurrence": ocorrencia,
-    });
-    if !form.unit_id.is_empty() && form.scope == "unit" {
-        body["unit_id"] = Value::String(form.unit_id.clone());
-    }
-    if !form.workspace_id.is_empty() && form.scope == "research_workspace" {
-        body["workspace_id"] = Value::String(form.workspace_id.clone());
-    }
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/calendar/events",
-        &body,
-    )
-    .await
-    {
-        Ok(criado) => {
-            let id = criado
-                .get("id")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned();
-            Redirect::to(&format!("/calendar/events/{id}")).into_response()
-        }
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        // A mensagem é a do Core, e não uma genérica: uma hora que não existe
-        // por causa da mudança de hora tem de ser dita com essas palavras.
-        Err(falha) => failure_response(&falha),
-    }
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn event_detail_page(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Calendar).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn edit_event_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Calendar).await
-}
-
-async fn update_calendar_event(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(event_id): Path<Uuid>,
-    Form(form): Form<EventForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    // Só o que `EventEdit` aceita. O âmbito, o dono, o contentor e a
-    // classificação não vão daqui porque a operação não os muda — e oferecer o
-    // campo daria a entender que o pedido faria alguma coisa.
-    let mut body = serde_json::json!({
-        "title": form.title,
-        "description": blank_to_none(form.description.clone()),
-        "location": blank_to_none(form.location.clone()),
-    });
-    if let Ok(ocorrencia) = form.occurrence() {
-        body["occurrence"] = ocorrencia;
-    }
-
-    match api::patch(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/calendar/events/{event_id}"),
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&format!("/calendar/events/{event_id}")).into_response(),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(falha) => failure_response(&falha),
-    }
-}
-
-async fn cancel_calendar_event(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(event_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/calendar/events/{event_id}/cancel"),
-        &serde_json::json!({}),
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&format!("/calendar/events/{event_id}")).into_response(),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(falha) => failure_response(&falha),
-    }
-}
 
 /// As notificações recentes, para o painel do sino.
 ///
