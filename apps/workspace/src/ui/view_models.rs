@@ -2655,3 +2655,901 @@ pub struct MailVm {
     /// Escrever.
     pub compose_href: String,
 }
+
+// ═════════════════════════════════════════════════════════════════════════
+// D005 · Investigação e trabalho: Projectos · O Meu Trabalho (tarefas) ·
+// Ideias · Dados · Conhecimento (documentos e bibliografia). Aditivo.
+//
+// A vista mostra o que o Core já autorizou e só as acções que ele devolve
+// (`available_transitions`, `may_create`). Estar num ambiente não dá
+// autoridade; um identificador nunca aparece ao membro.
+// ═════════════════════════════════════════════════════════════════════════
+
+/// A classificação de um recurso (`ocinye_contracts::Classification`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResClassification {
+    /// Público.
+    Public,
+    /// Interno.
+    Internal,
+    /// Confidencial.
+    Confidential,
+    /// Restrito.
+    Restricted,
+}
+
+impl ResClassification {
+    /// A chave de catálogo.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Public => "res.class.public",
+            Self::Internal => "res.class.internal",
+            Self::Confidential => "res.class.confidential",
+            Self::Restricted => "res.class.restricted",
+        }
+    }
+}
+
+/// O tom de um estado: dá a cor, nunca o significado (o texto vai sempre).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResTone {
+    /// Ainda não começou (rascunho, por fazer, descoberta).
+    Neutral,
+    /// Em curso.
+    Progress,
+    /// Precisa de atenção (bloqueada, em espera, em revisão).
+    Attention,
+    /// Concluído ou publicado.
+    Done,
+    /// Fechado sem desfecho positivo (cancelada, rejeitada, arquivada, retirada).
+    Closed,
+}
+
+/// Um estado, já com rótulo e tom.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ResStateVm {
+    /// A chave do rótulo (`res.project.state.active`…).
+    pub key: &'static str,
+    /// O tom.
+    pub tone: ResTone,
+}
+
+/// O tipo de um recurso ligado. Escolhe o ícone e o rótulo do tipo.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResKind {
+    /// Projecto.
+    Project,
+    /// Ideia.
+    Idea,
+    /// Tarefa.
+    Task,
+    /// Dataset.
+    Dataset,
+    /// Versão de um dataset.
+    DatasetVersion,
+    /// Entrada bibliográfica / fonte.
+    Source,
+    /// Documento.
+    Document,
+    /// Nota.
+    Note,
+    /// Ficheiro.
+    File,
+    /// Qualquer outro objecto científico (resultado, estudo…), pelo rótulo do Code.
+    Other,
+}
+
+/// A relação tipada (`research_links.relation`, vocabulário fechado).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResRelation {
+    /// cites
+    Cites,
+    /// supports
+    Supports,
+    /// refutes
+    Refutes,
+    /// derived_from
+    DerivedFrom,
+    /// uses
+    Uses,
+    /// produces
+    Produces,
+    /// relates_to
+    RelatesTo,
+    /// tests
+    Tests,
+    /// follows
+    Follows,
+    /// input_to
+    InputTo,
+    /// produced_by
+    ProducedBy,
+    /// executed_on
+    ExecutedOn,
+    /// validates
+    Validates,
+    /// reproduces
+    Reproduces,
+    /// supersedes
+    Supersedes,
+}
+
+impl ResRelation {
+    /// A chave do rótulo, no sentido de quem lê (`res.rel.cites`).
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Cites => "res.rel.cites",
+            Self::Supports => "res.rel.supports",
+            Self::Refutes => "res.rel.refutes",
+            Self::DerivedFrom => "res.rel.derived_from",
+            Self::Uses => "res.rel.uses",
+            Self::Produces => "res.rel.produces",
+            Self::RelatesTo => "res.rel.relates_to",
+            Self::Tests => "res.rel.tests",
+            Self::Follows => "res.rel.follows",
+            Self::InputTo => "res.rel.input_to",
+            Self::ProducedBy => "res.rel.produced_by",
+            Self::ExecutedOn => "res.rel.executed_on",
+            Self::Validates => "res.rel.validates",
+            Self::Reproduces => "res.rel.reproduces",
+            Self::Supersedes => "res.rel.supersedes",
+        }
+    }
+}
+
+/// Uma ligação a um recurso canónico de outra aplicação (ou da mesma).
+///
+/// Só existe se o Core resolveu **as duas pontas** para este membro
+/// (ADR-0306): uma aresta cujo extremo não se alcança não chega à vista.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResLinkVm {
+    /// O tipo.
+    pub kind: ResKind,
+    /// O rótulo do tipo, quando `kind` é `Other` («Resultado»), já traduzido.
+    pub kind_label: Option<String>,
+    /// O título.
+    pub title: String,
+    /// Uma linha de metadata curta («v3 · publicada», «Em curso»).
+    pub meta: Option<String>,
+    /// A relação, quando vem de `research_links`.
+    pub relation: Option<ResRelation>,
+    /// A relação foi declarada por uma pessoa (`declared`) ou pela operação.
+    pub by_operation: bool,
+    /// A ligação profunda canónica. `None` = o recurso existe mas não tem ecrã.
+    pub href: Option<String>,
+}
+
+/// Uma transição permitida agora (`available_transitions` do Core).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResTransitionVm {
+    /// O valor enviado (`state=done`).
+    pub value: &'static str,
+    /// O rótulo do botão («Concluir», «Reabrir», «Pôr em espera»).
+    pub label_key: &'static str,
+    /// Exige um motivo registado (fechar uma ideia).
+    pub requires_note: bool,
+    /// A acção principal (uma só por recurso).
+    pub primary: bool,
+}
+
+/// O bloco de transições de um recurso: um formulário, POST ao Core.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResTransitionsVm {
+    /// Para onde envia (`/tasks/{id}/transitions`, pela BFF).
+    pub action: String,
+    /// As transições.
+    pub options: Vec<ResTransitionVm>,
+}
+
+/// Uma pessoa, pelo nome (nunca pelo identificador).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResPersonVm {
+    /// O nome.
+    pub name: String,
+    /// O papel no ambiente, já traduzido («Responsável», «Membro», «Leitura»).
+    pub role: Option<String>,
+}
+
+/// Uma opção de um selector governado (ambiente, unidade, pessoa candidata).
+/// A lista vem do Core já filtrada: o browser nunca enumera sozinho.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResOptionVm {
+    /// O valor opaco do formulário.
+    pub value: String,
+    /// O rótulo.
+    pub label: String,
+    /// Escolhida.
+    pub selected: bool,
+}
+
+/// A vista em duas partes das cinco aplicações: lista e detalhe.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResPane {
+    /// A lista (em janela estreita, é o ecrã).
+    List,
+    /// O detalhe ou o formulário (em janela estreita, é o ecrã).
+    Detail,
+}
+
+/// Uma linha de uma lista das cinco aplicações.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResItemVm {
+    /// O título.
+    pub title: String,
+    /// O código institucional (`PRJ-2026-014`), quando o domínio o tem.
+    pub code: Option<String>,
+    /// O estado.
+    pub state: Option<ResStateVm>,
+    /// Colunas curtas, já formatadas, pela ordem de `ResListVm.columns`.
+    pub cells: Vec<Option<String>>,
+    /// Uma data vencida (tarefas): o texto já o diz; isto dá o tom.
+    pub overdue: bool,
+    /// A prioridade (tarefas), com texto e ícone, nunca só cor.
+    pub priority: Option<TaskPriorityLevel>,
+    /// Onde abre (a mesma janela; ADR-0620).
+    pub href: String,
+    /// É o que está aberto.
+    pub active: bool,
+}
+
+/// Uma lista densa: colunas com prioridade. A primeira é sempre o título.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResListVm {
+    /// As chaves dos cabeçalhos das colunas extra, por prioridade decrescente.
+    pub columns: Vec<&'static str>,
+    /// As linhas.
+    pub items: Vec<ResItemVm>,
+    /// O estado da lista.
+    pub load: AppLoad,
+    /// Paginação (o Core pagina por página; o Code faz de `page+1` o cursor).
+    pub page: AppPageVm,
+}
+
+// ── Projectos ──
+
+/// `ocinye_contracts::ProjectState`, na vista.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProjectStatus {
+    /// draft
+    Draft,
+    /// active
+    Active,
+    /// on_hold
+    OnHold,
+    /// completed
+    Completed,
+    /// archived
+    Archived,
+}
+
+/// O projecto aberto.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProjectVm {
+    /// Código.
+    pub code: String,
+    /// Título.
+    pub title: String,
+    /// Estado.
+    pub state: ProjectStatus,
+    /// Classificação efectiva.
+    pub classification: ResClassification,
+    /// Resumo (texto simples; nunca HTML).
+    pub summary: Option<String>,
+    /// Objectivos (texto simples).
+    pub objectives: Option<String>,
+    /// A unidade.
+    pub unit: Option<String>,
+    /// O responsável.
+    pub responsible: Option<String>,
+    /// Início, já formatado.
+    pub started: Option<String>,
+    /// Conclusão, já formatada.
+    pub completed: Option<String>,
+    /// A ideia de origem (linhagem; nunca reescrita).
+    pub origin_idea: Option<ResLinkVm>,
+    /// Os membros do ambiente (só leitura aqui).
+    pub members: Vec<ResPersonVm>,
+    /// As tarefas em aberto do ambiente (as primeiras; o resto em «O Meu Trabalho»).
+    pub tasks: Vec<ResLinkVm>,
+    /// Todas as tarefas do projecto (`/my-work?workspace=…`).
+    pub tasks_href: Option<String>,
+    /// Criar uma tarefa neste projecto (quando `may_create`).
+    pub new_task_href: Option<String>,
+    /// Os datasets do ambiente.
+    pub datasets: Vec<ResLinkVm>,
+    /// Bibliografia e documentos do ambiente.
+    pub knowledge: Vec<ResLinkVm>,
+    /// Relações tipadas (`research_links`).
+    pub links: Vec<ResLinkVm>,
+    /// As transições permitidas.
+    pub transitions: Option<ResTransitionsVm>,
+    /// A Nye contextual.
+    pub nye: Option<AppNyeVm>,
+}
+
+/// A aplicação Projectos.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProjectsVm {
+    /// Em curso · Os meus · Todos (filtros reais de `/workspaces?kind=project`).
+    pub nav: Vec<AppNavVm>,
+    /// A lista.
+    pub list: ResListVm,
+    /// O que se mostra em janela estreita.
+    pub pane: ResPane,
+    /// O projecto aberto.
+    pub project: Option<ProjectVm>,
+    /// O erro do projecto aberto (revogado, não encontrado).
+    pub project_error: Option<AppError>,
+    /// As Ideias, onde um projecto nasce (promoção), quando o membro as vê.
+    pub ideas_href: Option<String>,
+    /// A lista, com os filtros correntes (o «voltar» da janela estreita).
+    pub list_href: String,
+}
+
+// ── O Meu Trabalho (tarefas) ──
+
+/// `ocinye_contracts::TaskState`, na vista.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskStatus {
+    /// todo
+    Todo,
+    /// in_progress
+    InProgress,
+    /// blocked
+    Blocked,
+    /// in_review
+    InReview,
+    /// done
+    Done,
+    /// cancelled
+    Cancelled,
+}
+
+/// A prioridade de uma tarefa.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskPriorityLevel {
+    /// low
+    Low,
+    /// normal
+    Normal,
+    /// high
+    High,
+    /// critical
+    Critical,
+}
+
+impl TaskPriorityLevel {
+    /// A chave do rótulo.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Low => "work.prio.low",
+            Self::Normal => "work.prio.normal",
+            Self::High => "work.prio.high",
+            Self::Critical => "work.prio.critical",
+        }
+    }
+}
+
+/// Atribuir: só entre candidatos que o Core devolveu (membros do ambiente).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TaskAssignVm {
+    /// Para onde envia.
+    pub action: String,
+    /// Os candidatos (e «Ninguém», com valor vazio, se retirar for permitido).
+    pub candidates: Vec<ResOptionVm>,
+}
+
+/// A tarefa aberta.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TaskVm {
+    /// Título.
+    pub title: String,
+    /// Estado.
+    pub state: TaskStatus,
+    /// Prioridade.
+    pub priority: TaskPriorityLevel,
+    /// Classificação.
+    pub classification: ResClassification,
+    /// Descrição (texto simples).
+    pub description: Option<String>,
+    /// O prazo (uma data, no fuso do membro), já formatado.
+    pub due: Option<String>,
+    /// Vencida (o Code decide no fuso do membro).
+    pub overdue: bool,
+    /// A pessoa atribuída.
+    pub assignee: Option<String>,
+    /// O ambiente (projecto ou ideia) a que pertence.
+    pub workspace: Option<ResLinkVm>,
+    /// Fechada em, já formatado.
+    pub closed: Option<String>,
+    /// Transições.
+    pub transitions: Option<ResTransitionsVm>,
+    /// Atribuir.
+    pub assign: Option<TaskAssignVm>,
+    /// Relações.
+    pub links: Vec<ResLinkVm>,
+    /// Nye.
+    pub nye: Option<AppNyeVm>,
+}
+
+/// Criar uma tarefa (`POST /workspaces/{id}/tasks`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TaskFormVm {
+    /// Para onde envia (a BFF escolhe o ambiente a partir de `workspace`).
+    pub action: String,
+    /// Os ambientes onde o membro pode criar (`may_create`).
+    pub workspaces: Vec<ResOptionVm>,
+    /// Título (devolvido em caso de erro).
+    pub title: String,
+    /// Descrição.
+    pub description: String,
+    /// Prioridade escolhida.
+    pub priority: TaskPriorityLevel,
+    /// Prazo (`AAAA-MM-DD`).
+    pub due: String,
+    /// O erro de validação/gravação.
+    pub error: Option<AppError>,
+    /// Cancelar (volta à lista).
+    pub cancel_href: String,
+}
+
+/// A aplicação O Meu Trabalho.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WorkVm {
+    /// Atribuídas a mim · Em aberto · Todas as que vejo.
+    pub nav: Vec<AppNavVm>,
+    /// Filtrar por ambiente (`workspace_id`), só ambientes autorizados.
+    pub workspace_filter: Vec<ResOptionVm>,
+    /// A lista.
+    pub list: ResListVm,
+    /// O painel em janela estreita.
+    pub pane: ResPane,
+    /// A tarefa aberta.
+    pub task: Option<TaskVm>,
+    /// O erro da tarefa aberta.
+    pub task_error: Option<AppError>,
+    /// O formulário de criação aberto.
+    pub form: Option<TaskFormVm>,
+    /// «Nova tarefa», quando há pelo menos um ambiente `may_create`.
+    pub new_href: Option<String>,
+    /// A lista, com os filtros correntes (o «voltar» da janela estreita).
+    pub list_href: String,
+}
+
+// ── Ideias ──
+
+/// `ocinye_contracts::IdeaState`, na vista.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IdeaStage {
+    /// discovery
+    Discovery,
+    /// exploration
+    Exploration,
+    /// concept
+    Concept,
+    /// review
+    Review,
+    /// project_candidate
+    ProjectCandidate,
+    /// promoted
+    Promoted,
+    /// rejected
+    Rejected,
+    /// archived
+    Archived,
+}
+
+/// Promover a projecto: cria o projecto no **mesmo** ambiente; a ideia fica.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IdeaPromotionVm {
+    /// Para onde envia.
+    pub action: String,
+    /// Responsáveis possíveis (membros do ambiente).
+    pub responsible: Vec<ResOptionVm>,
+}
+
+/// A ideia aberta.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IdeaVm {
+    /// Título.
+    pub title: String,
+    /// Estado.
+    pub state: IdeaStage,
+    /// Classificação.
+    pub classification: ResClassification,
+    /// A unidade.
+    pub unit: Option<String>,
+    /// Resumo.
+    pub summary: Option<String>,
+    /// Pergunta de investigação.
+    pub research_question: Option<String>,
+    /// Hipótese.
+    pub hypothesis: Option<String>,
+    /// Motivação.
+    pub motivation: Option<String>,
+    /// Palavras-chave.
+    pub keywords: Vec<String>,
+    /// O motivo registado ao rejeitar/arquivar.
+    pub outcome_note: Option<String>,
+    /// O projecto em que foi promovida.
+    pub promoted_project: Option<ResLinkVm>,
+    /// Transições.
+    pub transitions: Option<ResTransitionsVm>,
+    /// Promover (só `promotable`).
+    pub promotion: Option<IdeaPromotionVm>,
+    /// Membros do ambiente.
+    pub members: Vec<ResPersonVm>,
+    /// Relações.
+    pub links: Vec<ResLinkVm>,
+    /// Nye.
+    pub nye: Option<AppNyeVm>,
+    /// Criada por / quando, já formatado.
+    pub created: Option<String>,
+}
+
+/// Registar uma ideia (`POST /ideas`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IdeaFormVm {
+    /// Para onde envia.
+    pub action: String,
+    /// As unidades onde pode registar.
+    pub units: Vec<ResOptionVm>,
+    /// As classificações que pode escolher.
+    pub classifications: Vec<ResOptionVm>,
+    /// Título.
+    pub title: String,
+    /// Resumo.
+    pub summary: String,
+    /// Pergunta.
+    pub research_question: String,
+    /// Hipótese.
+    pub hypothesis: String,
+    /// Motivação.
+    pub motivation: String,
+    /// Palavras-chave, separadas por vírgulas.
+    pub keywords: String,
+    /// Erro.
+    pub error: Option<AppError>,
+    /// Cancelar.
+    pub cancel_href: String,
+}
+
+/// A aplicação Ideias.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IdeasVm {
+    /// Em desenvolvimento · Candidatas · Promovidas · Encerradas · As minhas.
+    pub nav: Vec<AppNavVm>,
+    /// A lista.
+    pub list: ResListVm,
+    /// O painel.
+    pub pane: ResPane,
+    /// A ideia aberta.
+    pub idea: Option<IdeaVm>,
+    /// Erro.
+    pub idea_error: Option<AppError>,
+    /// Formulário.
+    pub form: Option<IdeaFormVm>,
+    /// «Nova ideia».
+    pub new_href: Option<String>,
+    /// A lista, com os filtros correntes (o «voltar» da janela estreita).
+    pub list_href: String,
+}
+
+// ── Dados ──
+
+/// `datasets.state`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DatasetStatus {
+    /// draft
+    Draft,
+    /// active
+    Active,
+    /// deprecated
+    Deprecated,
+    /// archived
+    Archived,
+}
+
+/// `dataset_versions.status`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DatasetVersionStatus {
+    /// draft
+    Draft,
+    /// published
+    Published,
+    /// withdrawn
+    Withdrawn,
+}
+
+/// Um ficheiro de uma versão: caminho lógico, nunca a chave do objecto.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DatasetFileVm {
+    /// O caminho lógico dentro do dataset (`medicoes/2026-09.csv`).
+    pub path: String,
+    /// O tamanho, já formatado na língua.
+    pub size: Option<String>,
+    /// O recurso canónico de Ficheiros, quando existe (`None` hoje: FG).
+    pub href: Option<String>,
+}
+
+/// Uma versão do dataset (não é a versão de um ficheiro).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DatasetVersionVm {
+    /// «v3».
+    pub label: String,
+    /// Estado.
+    pub status: DatasetVersionStatus,
+    /// Publicada em, já formatado.
+    pub published: Option<String>,
+    /// Notas da versão.
+    pub notes: Option<String>,
+    /// Como foi produzida (texto de proveniência).
+    pub provenance: Option<String>,
+    /// De que versão deriva.
+    pub derived_from: Option<String>,
+    /// Motivo da retirada.
+    pub withdrawn_reason: Option<String>,
+    /// «4 ficheiros · 1,2 GB».
+    pub totals: Option<String>,
+    /// Os ficheiros (os primeiros; paginação no Code).
+    pub files: Vec<DatasetFileVm>,
+    /// Acrescentar ficheiros (só versão em rascunho e `may_create`).
+    pub add_file_action: Option<String>,
+    /// Publicar (só rascunho).
+    pub publish_action: Option<String>,
+    /// É a versão mostrada.
+    pub open: bool,
+    /// Onde abre.
+    pub href: String,
+}
+
+/// O dataset aberto.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DatasetVm {
+    /// Código.
+    pub code: String,
+    /// Título.
+    pub title: String,
+    /// Estado.
+    pub state: DatasetStatus,
+    /// Classificação.
+    pub classification: ResClassification,
+    /// Descrição.
+    pub description: Option<String>,
+    /// A origem, já traduzida («Recolhido pelo Ocinye», «Derivado»…).
+    pub origin: String,
+    /// Licença.
+    pub licence: Option<String>,
+    /// Restrições de uso (texto humano).
+    pub usage_restrictions: Option<String>,
+    /// Palavras-chave.
+    pub keywords: Vec<String>,
+    /// Responsável.
+    pub responsible: Option<String>,
+    /// Data de aquisição.
+    pub acquired: Option<String>,
+    /// O ambiente.
+    pub workspace: Option<ResLinkVm>,
+    /// As versões, da mais recente para a mais antiga.
+    pub versions: Vec<DatasetVersionVm>,
+    /// Nova versão (`POST …/versions`).
+    pub new_version_action: Option<String>,
+    /// Relações.
+    pub links: Vec<ResLinkVm>,
+    /// Nye.
+    pub nye: Option<AppNyeVm>,
+}
+
+/// Registar um dataset (`POST /workspaces/{id}/datasets`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DatasetFormVm {
+    /// Para onde envia.
+    pub action: String,
+    /// Ambientes `may_create`.
+    pub workspaces: Vec<ResOptionVm>,
+    /// As origens (vocabulário fechado, traduzido).
+    pub origins: Vec<ResOptionVm>,
+    /// Código.
+    pub code: String,
+    /// Título.
+    pub title: String,
+    /// Descrição.
+    pub description: String,
+    /// Licença.
+    pub licence: String,
+    /// Restrições de uso.
+    pub usage_restrictions: String,
+    /// Palavras-chave.
+    pub keywords: String,
+    /// Erro.
+    pub error: Option<AppError>,
+    /// Cancelar.
+    pub cancel_href: String,
+}
+
+/// A aplicação Dados.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DatasetsVm {
+    /// Filtrar por ambiente.
+    pub workspace_filter: Vec<ResOptionVm>,
+    /// A lista.
+    pub list: ResListVm,
+    /// O painel.
+    pub pane: ResPane,
+    /// O dataset aberto.
+    pub dataset: Option<DatasetVm>,
+    /// Erro.
+    pub dataset_error: Option<AppError>,
+    /// Formulário.
+    pub form: Option<DatasetFormVm>,
+    /// «Novo dataset».
+    pub new_href: Option<String>,
+    /// A lista, com os filtros correntes (o «voltar» da janela estreita).
+    pub list_href: String,
+}
+
+// ── Conhecimento ──
+
+/// A secção de Conhecimento. A aplicação Bibliografia abre a mesma vista em `Sources`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KnowledgeSection {
+    /// Documentos (afirmações sobre um ficheiro).
+    Documents,
+    /// Bibliografia (`sources`).
+    Sources,
+}
+
+/// `sources.content_right`: a base legal para guardar conteúdo integral.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContentRight {
+    /// metadata_only
+    MetadataOnly,
+    /// open_licence
+    OpenLicence,
+    /// institutional_licence
+    InstitutionalLicence,
+    /// authored_by_ocinye
+    AuthoredByOcinye,
+    /// public_domain
+    PublicDomain,
+    /// permission_granted
+    PermissionGranted,
+}
+
+/// Uma entrada bibliográfica aberta.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourceVm {
+    /// O tipo, já traduzido («Artigo»).
+    pub source_type: String,
+    /// Título (texto externo: dados).
+    pub title: String,
+    /// Autores.
+    pub authors: Vec<String>,
+    /// Ano.
+    pub year: Option<String>,
+    /// Publicação.
+    pub container_title: Option<String>,
+    /// Editora.
+    pub publisher: Option<String>,
+    /// DOI.
+    pub doi: Option<String>,
+    /// ISBN.
+    pub isbn: Option<String>,
+    /// URL externo (mostrado como texto; abre fora do Ocinye).
+    pub url: Option<String>,
+    /// Resumo (texto externo não confiável; nunca HTML).
+    pub abstract_text: Option<String>,
+    /// Palavras-chave.
+    pub keywords: Vec<String>,
+    /// Licença.
+    pub licence: Option<String>,
+    /// Base legal.
+    pub content_right: ContentRight,
+    /// O documento com o texto integral, quando há base legal.
+    pub full_text: Option<ResLinkVm>,
+    /// Chave de citação.
+    pub citation_key: Option<String>,
+    /// Origem do registo («Importado de BibTeX»).
+    pub origin: Option<String>,
+    /// Classificação.
+    pub classification: ResClassification,
+    /// O ambiente.
+    pub workspace: Option<ResLinkVm>,
+    /// O que cita, apoia ou refuta esta fonte, e o que ela apoia.
+    pub links: Vec<ResLinkVm>,
+    /// Nye.
+    pub nye: Option<AppNyeVm>,
+}
+
+/// Um documento aberto. O conteúdo não viaja: metadata e transferência.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KnowledgeDocumentVm {
+    /// Título.
+    pub title: String,
+    /// O tipo, já traduzido.
+    pub kind: String,
+    /// Descrição.
+    pub description: Option<String>,
+    /// Data do documento.
+    pub date: Option<String>,
+    /// O nome original do ficheiro.
+    pub filename: String,
+    /// O tipo de conteúdo, legível («PDF»).
+    pub content_type: String,
+    /// O tamanho, já formatado.
+    pub size: Option<String>,
+    /// SHA-256 abreviado (verificável, não secreto).
+    pub checksum: Option<String>,
+    /// Classificação (a do ficheiro).
+    pub classification: ResClassification,
+    /// O ficheiro canónico (Ficheiros), quando tem ecrã.
+    pub file: Option<ResLinkVm>,
+    /// Transferir (`/documents/{id}/download`, pela BFF).
+    pub download_href: Option<String>,
+    /// O ambiente.
+    pub workspace: Option<ResLinkVm>,
+    /// Relações.
+    pub links: Vec<ResLinkVm>,
+    /// Nye.
+    pub nye: Option<AppNyeVm>,
+}
+
+/// Registar uma referência (`POST /workspaces/{id}/sources`), sempre `metadata_only`
+/// salvo decisão de uma pessoa com base legal.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourceFormVm {
+    /// Para onde envia.
+    pub action: String,
+    /// Ambientes `may_create`.
+    pub workspaces: Vec<ResOptionVm>,
+    /// Tipos (vocabulário do Core, traduzido).
+    pub types: Vec<ResOptionVm>,
+    /// Bases legais que esta pessoa pode registar.
+    pub rights: Vec<ResOptionVm>,
+    /// Título.
+    pub title: String,
+    /// Autores, um por linha.
+    pub authors: String,
+    /// Ano.
+    pub year: String,
+    /// Publicação.
+    pub container_title: String,
+    /// DOI.
+    pub doi: String,
+    /// URL.
+    pub url: String,
+    /// Erro.
+    pub error: Option<AppError>,
+    /// Cancelar.
+    pub cancel_href: String,
+}
+
+/// A aplicação Conhecimento (e Bibliografia).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KnowledgeVm {
+    /// A secção.
+    pub section: KnowledgeSection,
+    /// Documentos · Bibliografia.
+    pub nav: Vec<AppNavVm>,
+    /// A pesquisa de âmbito, quando o Code a serve (`None` = sem campo).
+    pub query: Option<String>,
+    /// A lista.
+    pub list: ResListVm,
+    /// O painel.
+    pub pane: ResPane,
+    /// A fonte aberta.
+    pub source: Option<SourceVm>,
+    /// O documento aberto.
+    pub document: Option<KnowledgeDocumentVm>,
+    /// O erro do que está aberto.
+    pub open_error: Option<AppError>,
+    /// Formulário de referência.
+    pub form: Option<SourceFormVm>,
+    /// «Nova referência» (secção Bibliografia).
+    pub new_href: Option<String>,
+    /// A lista, com os filtros correntes (o «voltar» da janela estreita).
+    pub list_href: String,
+}

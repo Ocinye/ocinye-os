@@ -1,3 +1,48 @@
+# HANDOFF — Ocinye OS canonical UI · Design revision D005
+
+Cumulative: D001 → D004.1 unchanged plus D005. Supersedes D004.1. Observed repository: `feat/design-d004` @ `6eeade4bc5cff79ac7d1ffc5a98267fc6b2c005e` (D004.1 certified). `implementation/` = that tree + D005. Not reset.
+
+# D005 · Investigação e trabalho — Projectos · O Meu Trabalho · Ideias · Dados · Conhecimento
+
+**Core governs; applications implement.** Five view functions over typed VMs, inside D002 managed windows, on the D004 application system (frame, nav, search, states, pagination, save state, Nye link). New shared pieces live in `ui/apps/res.rs`; nothing in D001–D004.1 was reinterpreted.
+
+## Repository truth this is built on
+| Domain | Core (routes · tables) | What the design shows |
+|---|---|---|
+| Ambiente de investigação | `research_workspaces` (kind idea/project, classification), `workspace_memberships` (lead/member/viewer) | «Ambiente» on every resource; people read-only |
+| Projecto | `projects` (code, title, summary, objectives, state draft/active/on_hold/completed/archived, origin_idea_id, responsible, started/completed); `GET /projects/{id}`, `POST …/transitions` | list · detail · lineage · transitions. **No create** (a project is born from idea promotion), **no edit** (no route) |
+| Tarefa | `tasks` (title, description, state todo/in_progress/blocked/in_review/done/cancelled, priority low/normal/high/critical, assignee, due_on DATE, closed_at); `/tasks` (mine, open_only, workspace_id), create, transitions, assignee | App **O Meu Trabalho** (`ApplicationId::Work`, `/my-work`). Dense list; complete/reopen are transitions; assign among environment people. No board |
+| Ideia | `ideas` (summary, research_question, hypothesis, motivation, keywords, state discovery→exploration→concept→review→project_candidate→promoted · rejected/archived with required outcome_note); create, transitions, promotion | lifecycle strip · closing requires a reason · promotion creates the project in the **same** environment; the idea stays, linked |
+| Dataset | `datasets` (code, origin vocabulary, licence, usage_restrictions, keywords, classification, state draft/active/deprecated/archived); `dataset_versions` (label, status draft/published/withdrawn, provenance, derived_from, totals); `dataset_files` (logical path) | App **Dados**. Catalogue; versions are resources (not file versions); files by logical path; **no content preview** |
+| Conhecimento | `documents` (a claim about a file; content does not travel), `sources` (bibliographic entry: authors, year, DOI…, `content_right`), `research_links` (closed relation vocabulary, origin declared/operation) | App **Conhecimento**: Documentos · Bibliografia. **Bibliografia** (`/bibliography`) opens the same view in the Sources section |
+
+## Shared pieces (`ui/apps/res.rs`)
+- `list(&ResListVm)` — semantic `<table>`; column 1 = title + code + state (+ priority) and never yields; extra columns carry `data-prio` 1–4 and leave on a `reslist` container query (<760 p4, <640 p3, <520 p2, <360 p1). No sort headers (no Core sort contract). Rows are links; ↑/↓/Home/End move focus (`oc-apps.js` `reslist`), focus ≠ open (`aria-current`).
+- `two_pane(pane, list, detail)` — lista | detalhe side by side from 1180 px of **window** (`@container app`); below, one at a time by `ResPane`, with «Voltar à lista» (`list_href`, keeps filters).
+- `state_tag`, `class_tag`, `priority_tag` — text always; tone from 5 semantic tones (neutral/progress/attention/done/closed); Confidencial/Restrito add a lock.
+- `transitions(&ResTransitionsVm)` — one POST form; only `available_transitions` from the Core; one `primary`; targets that require a reason sit behind «Encerrar…» with a required textarea.
+- `link_row` / `links_section` — the **resource link**: icon, type, title, short meta, relation label, «registada pela operação». Opens the owning app's canonical resource. `href: None` = exists but has no screen → not a link. A link exists only if the Core resolved **both** ends (ADR-0306).
+- `prose`, `keywords`, `kv`, `detail_head`, `select`/`input`/`textarea` (`rcdata`).
+
+## Code tasks (first gate: compile)
+1. **Compile and test.** Rust was not compiled here. `mod ui_research;` in `i18n/mod.rs` + `super::ui_research::UI_RESEARCH` in GROUPS. New tests: `res::tests` ×3, `projects::tests` ×3, `work::tests` ×2, `ideas::tests` ×1, `datasets::tests` ×1, `knowledge::tests` ×1.
+2. **VM names** avoid clashes with `ocinye_contracts`: `ProjectStatus`, `TaskStatus`, `TaskPriorityLevel`, `IdeaStage`, `DatasetStatus` are view enums; map from the contract enums in the controller.
+3. **Routes (BFF)**: `/projects[/{id}]`, `/my-work[/{id}|/new]`, `/ideas[/{id}|/new]`, `/datasets[/{id}[?v=label]|/new]`, `/knowledge/{documents|sources}[/{id}|/new]`, `/bibliography` → `knowledge::app` with `KnowledgeSection::Sources`. Normal navigation stays in the window (all five are `SingleInstance`). Re-resolve and re-authorise on every load; revoked → `AppError::Revoked`, never stale content.
+4. **Adapters**: see FUNCTIONAL_GAPS D005 (27 ADAPTER_REQUIRED). Transition labels: target state → key (`work.to.done` «Concluir», done→in_progress `work.to.reopen`, blocked→in_progress `work.to.resume`, cancelled→todo `work.to.todo`; ideas `ideas.to.*`; projects `projects.to.*`). `requires_note` from `workflow::requires_outcome_note`.
+5. **Dates**: `due_on` is a date; «vencida» and all timestamps in the member/Instance timezone, not the browser's (D004 T1 stays a separate shell follow-up).
+6. **Sizes** in the member's locale (D004 rule: Ko/Mo/Go in fr).
+7. **Dirty close**: the four create forms are `data-oc="app-doc"` (`doc_form_id`); fill `DirtyCloseVm.save_label` with the create key. Transitions, assign, promotion are immediate POSTs: no dirty state.
+8. **Search**: Knowledge shows its field only when `query: Some` (served by the search index, filtered to sources/documents). Projects/Tasks/Ideas/Datasets have no text-search contract → no field.
+9. **External URLs**: only `http(s)` become links (the view enforces it too). Source abstracts and titles are data: label stays.
+
+## Nye
+`AppNyeVm` per resource (`projects.nye`, `work.nye`, `ideas.nye`, `data.nye`, `know.nye.source`, `know.nye.document`) → canonical Nye with a typed reference (FG-D5-16). No per-app assistant. Everything works with no inference.
+
+## Frozen
+D001–D004.1 visuals and contracts; Window Manager; App Registry (no change: labels «Projectos», «O Meu Trabalho», «Ideias», «Dados», «Conhecimento», «Bibliografia»; all SingleInstance); Notes folders, Top Bar timezone, Mail transport untouched.
+
+---
+
 # HANDOFF — Ocinye OS canonical UI · Design revision D004.1
 
 Cumulative: D001 → D004 unchanged plus D004.1. Supersedes D004. Based on `feat/design-d004` @ `4c4ae32` (Code's D004 integration). Hotfix only; no architecture reopened. D005 not started.

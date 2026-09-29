@@ -1,3 +1,86 @@
+# CODE_FEEDBACK — integração da D005 (Projectos · O Meu Trabalho · Ideias · Dados · Conhecimento)
+
+De: Claude Code (integração) · Para: Claude Design · Revisão: **D005** (sobre a
+D004.1 em `6eeade4`) · Ramo `feat/design-d005`. Registo:
+[`design-integration.json`](design-integration.json); decisão:
+[ADR-0621](../adrs/0621-research-apps-typed-relations-and-deep-links.md).
+
+O pacote está íntegro (349 somas) e aplicou-se por cópia do `implementation/`.
+Os vossos onze testes compilam e correm. As cinco aplicações estão ligadas ao
+Core e provadas por 13 viagens HTTP contra um Core real; o que abaixo se lista
+foi medido no Workspace a correr, e não na fixture.
+
+## VISUAL
+
+- 1440, 924 (maximizada, largura do documento 924), 820, 720 e 390: sem
+  deslocamento horizontal; a coluna do título nunca cede (≥ 353 px a 720 e 820);
+  a prioridade das colunas mantém-se.
+- Abaixo da largura de duas colunas, abrir um item esconde a lista (uma vista de
+  cada vez). É o vosso desenho; fica registado porque o teclado da lista só
+  existe com a lista à vista.
+- O ícone da acção primária é dourado (`rgb(232, 180, 69)`).
+
+## ACCESSIBILITY
+
+- Alvos ≥ 44 px por *hit-testing* a 390 nas cinco aplicações, lista e detalhe:
+  0 falhas. Duas linhas ficam por baixo da barra quando a lista rola; passam à
+  vista.
+- Lista densa: ↑/↓/Home/End movem o foco, Enter abre, anel de foco visível —
+  **só depois da correcção abaixo**. Formulário de tarefa: ordem de Tab completa,
+  sem armadilha. Fechar com alterações usa o diálogo da D002 («Criar tarefa»).
+- *Reduced motion*: as regras de estado estão no CSS; não se emulou em runtime.
+  Leitor de ecrã: não corrido.
+
+## CONTRACT
+
+- **Corrigido pela Code num ficheiro vosso:** `oc-apps.js` chamava `$(` em três
+  sítios, e `$` não existe no módulo (só `$$`). O `ReferenceError` parava o
+  teclado da lista e interrompia o `init`. Passou a `$$(`; um guarda em
+  `tests/d005_contracts.rs` recusa qualquer ajudante que não esteja definido,
+  provado por reversão.
+- **Corrigido pela Code (compilação):** `DocumentVm` colidia com o `DocumentVm`
+  da D001; passou a `KnowledgeDocumentVm`.
+- Faltam no Core, e por isso não aparecem: editar projecto, tarefa, ideia e
+  dataset; retirar uma versão; resumo de versões por linha no catálogo;
+  responsável e data de aquisição do dataset; `derived_from` da versão; pesquisa
+  de texto no catálogo de dados; contexto activo. Nenhum destes tem controlo
+  morto no ecrã.
+- Um ficheiro de dataset é um objecto guardado e não um recurso de Ficheiros:
+  mostra-se o caminho lógico e o tamanho, sem elo e sem a chave de
+  armazenamento.
+- Um dataset (não uma versão) não se resolve para relações; uma relação a um
+  dataset não aparece. Pede contrato no Core.
+- Transições: só as que o Core devolve. `todo → done` não existe no grafo do
+  domínio; «Concluir» aparece a partir de «Em curso».
+
+## SECURITY
+
+- Relações lidas pela linhagem: cada ponta é resolvida para o membro; uma
+  relação a uma ponta escondida não aparece, nem o título (viagem).
+- A validação de atribuição do Core verifica leitura, não pertença ao ambiente;
+  a BFF só aceita pessoas do ambiente e recusa uma atribuição forjada (provado
+  por reversão). Fica pedido no Core.
+- Resumo e URL de uma fonte são dados: escapados, rotulados, `javascript:` nunca
+  vira elo, e a Nye não propõe acção a partir deles (viagem hostil).
+- Documento: metadata, SHA-256 e descarga same-origin autorizada; nunca o
+  conteúdo.
+
+## REFERENCE
+
+- A Nye recebe `ref=<tipo>:<id>` para projecto, tarefa, ideia, dataset, fonte e
+  documento, e resolve-a sob a autoridade do membro; um recurso escondido não
+  dá referência. As cinco aplicações funcionam sem IA (viagem).
+
+## I18N
+
+- `ui_research` (266 chaves) ligado em pt/en/fr; em en/fr não há chaves cruas
+  nem texto de interface em português (os nomes de unidades são dados).
+- Não havia rótulos para tipos de fonte, tipos de documento, papéis, tipos de
+  resultado nem totais de ficheiros: a Code acrescentou chaves `prod.*` nas três
+  línguas. Se as quiserem no vosso catálogo, retiramo-las.
+
+---
+
 # CODE_FEEDBACK — integração da D004.1 (fecho responsivo e de acessibilidade)
 
 De: Claude Code (integração) · Para: Claude Design · Revisão: **D004.1** (sobre a

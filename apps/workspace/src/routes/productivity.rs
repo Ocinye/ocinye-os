@@ -2013,11 +2013,44 @@ pub(super) async fn nye_reference(
             "subject",
             "prod.nye.about.message",
         ),
+        // D005 · Os recursos de investigação, cada um pela sua leitura
+        // autorizada: um identificador não abre nada que o membro não veja.
+        "project" => (
+            format!("/api/v1/projects/{id}"),
+            "title",
+            "prod.nye.about.project",
+        ),
+        "task" => (
+            format!("/api/v1/tasks/{id}"),
+            "title",
+            "prod.nye.about.task",
+        ),
+        "idea" => (
+            format!("/api/v1/ideas/{id}"),
+            "title",
+            "prod.nye.about.idea",
+        ),
+        "dataset" => (
+            format!("/api/v1/datasets/{id}"),
+            "title",
+            "prod.nye.about.dataset",
+        ),
+        "source" => (
+            format!("/api/v1/sources/{id}"),
+            "title",
+            "prod.nye.about.source",
+        ),
+        "document" => (
+            format!("/api/v1/documents/{id}"),
+            "title",
+            "prod.nye.about.document",
+        ),
         _ => return None,
     };
     let v = quem.get(state, &path).await.ok()?;
     let name = match kind {
         "message" => text(v.get("message")?, field).to_owned(),
+        "idea" => text(v.get("idea")?, field).to_owned(),
         _ => text(&v, field).to_owned(),
     };
     (!name.trim().is_empty()).then(|| crate::i18n::tf(key, &[("name", name.trim())]))

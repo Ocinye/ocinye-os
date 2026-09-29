@@ -186,6 +186,28 @@
     if (allday) allday.addEventListener('change', () => $$('[data-part="cal-dt"]', app).forEach((i) => { const v = i.value; i.type = allday.checked ? 'date' : 'datetime-local'; if (allday.checked) i.value = v.slice(0, 10); }));
   }
 
+  // ── D005 · listas densas: ↑/↓ entre linhas, Home/End; Enter abre (é um elo) ──
+  // O foco anda; a selecção não muda (foco ≠ selecção ≠ aberto).
+  function reslist(app) {
+    $$('[data-oc="res-list"]', app).forEach((tbl) => {
+      tbl.addEventListener('keydown', (e) => {
+        const a = e.target.closest('[data-part="res-open"]');
+        if (!a) return;
+        const l = $$('[data-part="res-open"]', tbl), i = l.indexOf(a);
+        let n = -1;
+        if (e.key === 'ArrowDown') n = Math.min(l.length - 1, i + 1);
+        else if (e.key === 'ArrowUp') n = Math.max(0, i - 1);
+        else if (e.key === 'Home') n = 0;
+        else if (e.key === 'End') n = l.length - 1;
+        if (n < 0) return;
+        e.preventDefault();
+        l[n].focus();
+      });
+    });
+    // O filtro por ambiente submete ao mudar; o botão fica para quem não tem JS.
+    $$('.oc-res-filter select', app).forEach((s) => s.addEventListener('change', () => s.form && s.form.requestSubmit()));
+  }
+
   // D004.1 · D4-J1: idempotente e por raiz — `OcApps.init(root)` liga só as aplicações
   // dentro de `root` (ou `root` ele próprio) e nunca liga a mesma duas vezes.
   const bound = new WeakSet();
@@ -193,7 +215,7 @@
     if (bound.has(app)) return;
     bound.add(app);
     app.setAttribute('data-js', '');
-    drawer(app); docs(app); files(app); calendar(app);
+    drawer(app); docs(app); files(app); calendar(app); reslist(app);
   };
   const init = (root) => {
     const r = root && root.querySelectorAll ? root : document;

@@ -1,3 +1,10 @@
+# DESIGN_LOCK — Design revision D005
+
+New locks (Design-owned): `ui/apps/{res,projects,work,ideas,datasets,knowledge}.rs`, D005 block of `view_models.rs`, D005 block of `oc-apps.css`, `reslist` in `oc-apps.js`, `i18n/ui_research.rs`. Locked patterns: list | detail two panes (1180 px of window), title column never yields, `data-prio` column order, transitions only from the Core list, closing an idea requires a reason, promotion keeps the idea, dataset versions ≠ file versions, no dataset content preview, source text labelled as data, http(s)-only external links, resource link = canonical deep link.
+Code-owned: routes, adapters, VM filling, label mapping of transitions, timezone/locale formatting, search, persistence, dirty template. Core-owned: authorisation, membership, transitions, promotion, classification, provenance, link resolution. Code must not: add a Kanban/board, fake a completion checkbox, enumerate members outside the environment, render source HTML, show storage identifiers, add sort headers without a Core sort, or add a per-app assistant. All D001–D004.1 locks stay.
+
+---
+
 # DESIGN_LOCK — Design revision D004.1
 
 Re-locked: `static/oc-apps.css` (`files` container + column priority; ≤ 640 target block; sticky Notes save), `static/oc-apps.js` (`init(root)`), `ui/apps/{files,mail,mod}.rs`, `AppError` in `view_models.rs` (+NotConnected), `i18n/ui_apps.rs`. Code must not: give secondary Files columns a width that squeezes Nome below 200 px, re-enable a purge submit without a governed confirmation, map `connected = false` to `Unavailable`, shrink ≤ 640 hit areas below 44 px. All D001–D004 locks stay.

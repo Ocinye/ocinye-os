@@ -165,6 +165,24 @@ pub async fn list_workspaces(
     Ok((workspaces, total))
 }
 
+/// Os resumos (estado, responsável, unidade) dos ambientes de uma página que
+/// [`list_workspaces`] já devolveu a este membro.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn workspace_summaries(
+    pool: &PgPool,
+    principal: &Principal,
+    workspaces: &[ResearchWorkspace],
+) -> CoreResult<Vec<repo::WorkspaceSummary>> {
+    let ids: Vec<Uuid> = workspaces.iter().map(|w| w.id).collect();
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    repo::workspace_summaries(pool, principal.organisation_id, &ids).await
+}
+
 /// Details of a new idea.
 #[derive(Debug, Clone)]
 pub struct NewIdea {

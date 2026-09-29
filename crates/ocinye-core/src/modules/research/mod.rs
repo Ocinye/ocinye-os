@@ -23,10 +23,11 @@ mod repository;
 mod service;
 
 pub use model::{Idea, Project, ResearchWorkspace, WorkspaceMember};
-pub use repository::WorkspaceQuery;
+pub use repository::{WorkspaceQuery, WorkspaceSummary};
 pub use service::{
     add_workspace_member, artefact_context, create_idea, get_idea, get_project, get_workspace,
     get_workspace_overview, list_workspaces, promote_idea, readable_artefact_workspace,
     reclassify_workspace, remove_workspace_member, transition_idea, transition_project,
-    update_idea, workspace_context, IdeaRevision, NewIdea, Promotion, WorkspaceOverview,
+    update_idea, workspace_context, workspace_summaries, IdeaRevision, NewIdea, Promotion,
+    WorkspaceOverview,
 };

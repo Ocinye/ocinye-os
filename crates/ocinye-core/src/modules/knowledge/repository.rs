@@ -1311,3 +1311,26 @@ pub async fn count_accessible_documents<'e>(
     .await?;
     Ok(total)
 }
+
+/// O ficheiro institucional de que um documento é afirmação (`documents.file_id`).
+///
+/// Não autoriza: quem chama já resolveu o documento com [`super::get_document`].
+/// A descarga passa pelo ficheiro, same-origin, e o Core volta a decidir lá.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn document_file_id<'e>(
+    executor: impl PgExecutor<'e>,
+    document_id: Uuid,
+    organisation_id: Uuid,
+) -> CoreResult<Option<Uuid>> {
+    let id = sqlx::query_scalar::<_, Uuid>(
+        "SELECT file_id FROM documents WHERE id = $1 AND organisation_id = $2",
+    )
+    .bind(document_id)
+    .bind(organisation_id)
+    .fetch_optional(executor)
+    .await?;
+    Ok(id)
+}

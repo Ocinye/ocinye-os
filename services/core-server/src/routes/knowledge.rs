@@ -27,7 +27,12 @@ pub fn routes() -> Router<AppState> {
         // que há neste ambiente», e este responde «o que alcanço em todos».
         // Não é um substantivo novo nem um endpoint só para um componente.
         .route("/sources", get(list_accessible_sources))
+        // D005 · A leitura de uma entrada e de um documento, pela mesma
+        // autoridade das listas (`readable_artefact_workspace`): conhecer o
+        // identificador não abre nada.
+        .route("/sources/{source_id}", get(show_source))
         .route("/documents", get(list_accessible_documents))
+        .route("/documents/{document_id}", get(show_document))
         .route(
             "/sources/{source_id}/full-text",
             post(attach_full_text).layer(DefaultBodyLimit::max(super::UPLOAD_BODY_LIMIT_BYTES)),
@@ -1324,4 +1329,104 @@ async fn list_links(
 /// everywhere rather than each surface writing its own.
 pub(super) async fn read_upload_public(multipart: Multipart) -> Result<UploadPart, CoreError> {
     read_upload(multipart).await
+}
+
+// --- D005: leitura de uma fonte e de um documento --------------------------
+
+/// Uma entrada bibliográfica inteira. O resumo e os campos bibliográficos são
+/// **dados externos**: viajam como texto e não carregam autoridade nenhuma.
+#[derive(Serialize)]
+struct SourceDetailView {
+    id: Uuid,
+    workspace_id: Uuid,
+    source_type: String,
+    title: String,
+    authors: Vec<String>,
+    year: Option<i32>,
+    container_title: Option<String>,
+    publisher: Option<String>,
+    doi: Option<String>,
+    isbn: Option<String>,
+    url: Option<String>,
+    abstract_text: Option<String>,
+    keywords: Vec<String>,
+    licence: Option<String>,
+    content_right: String,
+    origin: Option<String>,
+    citation_key: Option<String>,
+    classification: String,
+    full_text_document_id: Option<Uuid>,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+async fn show_source(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(source_id): Path<Uuid>,
+) -> Result<Json<SourceDetailView>, ApiError> {
+    let (s, _) = knowledge::get_source(&state.pool, &principal, source_id).await?;
+    Ok(Json(SourceDetailView {
+        id: s.id,
+        workspace_id: s.workspace_id,
+        source_type: s.source_type,
+        title: s.title,
+        authors: s.authors,
+        year: s.year,
+        container_title: s.container_title,
+        publisher: s.publisher,
+        doi: s.doi,
+        isbn: s.isbn,
+        url: s.url,
+        abstract_text: s.abstract_text,
+        keywords: s.keywords,
+        licence: s.licence,
+        content_right: s.content_right,
+        origin: s.origin,
+        citation_key: s.citation_key,
+        classification: s.classification,
+        full_text_document_id: s.full_text_document_id,
+        created_at: s.created_at,
+    }))
+}
+
+/// Um documento: a afirmação sobre um ficheiro, sem o conteúdo. Os bytes saem
+/// pelo ficheiro (`/files/{file_id}/raw`), onde o Core volta a decidir.
+#[derive(Serialize)]
+struct DocumentDetailView {
+    id: Uuid,
+    workspace_id: Uuid,
+    file_id: Option<Uuid>,
+    kind: String,
+    title: String,
+    description: Option<String>,
+    document_date: Option<chrono::NaiveDate>,
+    original_filename: String,
+    content_type: String,
+    size_bytes: i64,
+    checksum_sha256: String,
+    classification: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+async fn show_document(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+    Path(document_id): Path<Uuid>,
+) -> Result<Json<DocumentDetailView>, ApiError> {
+    let (d, file_id) = knowledge::document_file(&state.pool, &principal, document_id).await?;
+    Ok(Json(DocumentDetailView {
+        id: d.id,
+        workspace_id: d.workspace_id,
+        file_id,
+        kind: d.kind,
+        title: d.title,
+        description: d.description,
+        document_date: d.document_date,
+        original_filename: d.original_filename,
+        content_type: d.content_type,
+        size_bytes: d.size_bytes,
+        checksum_sha256: d.checksum_sha256,
+        classification: d.classification,
+        created_at: d.created_at,
+    }))
 }

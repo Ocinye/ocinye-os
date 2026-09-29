@@ -123,6 +123,10 @@ pub struct WorkspaceQuery<'a> {
     /// Uma lista vazia significa «participo em nenhum», e devolve nada — não
     /// tudo. `None` é que significa «sem este recorte».
     pub member_of: Option<&'a [Uuid]>,
+    /// Restringe aos ambientes cuja ideia está num destes estados (D005: os
+    /// grupos da aplicação Ideias). Os valores já vêm validados contra
+    /// `IdeaState`; uma lista vazia não devolve nada.
+    pub idea_states: Option<&'a [ocinye_contracts::IdeaState]>,
 }
 
 /// Restringe aos ambientes indicados, quando o recorte é pedido.
@@ -130,6 +134,25 @@ pub struct WorkspaceQuery<'a> {
 /// Uma lista vazia rende `FALSE`, e é a resposta certa: quem não participa em
 /// nenhum ambiente não participa em nenhum. Deixar passar tudo nesse caso seria
 /// o erro clássico de um `IN ()` vazio tratado como «sem filtro».
+/// Restringe pelo estado da ideia do ambiente, quando o recorte é pedido. Os
+/// valores são do vocabulário fechado de `IdeaState`, nunca texto do cliente.
+fn idea_state_predicate(states: Option<&[ocinye_contracts::IdeaState]>) -> String {
+    match states {
+        None => "TRUE".to_owned(),
+        Some([]) => "FALSE".to_owned(),
+        Some(states) => {
+            let lista = states
+                .iter()
+                .map(|e| format!("'{}'", e.as_str()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "EXISTS (SELECT 1 FROM ideas i WHERE i.workspace_id = research_workspaces.id AND i.state IN ({lista}))"
+            )
+        }
+    }
+}
+
 fn membership_predicate(ids: Option<&[Uuid]>) -> String {
     match ids {
         None => "TRUE".to_owned(),
@@ -157,6 +180,7 @@ pub async fn list_workspaces<'e>(
     let promotable = promotable_predicate(query.promotable_only);
     let em_curso = in_progress_predicate(query.in_progress_only);
     let participacao = membership_predicate(query.member_of);
+    let estado_ideia = idea_state_predicate(query.idea_states);
     let workspaces = sqlx::query_as::<_, ResearchWorkspace>(&format!(
         "SELECT {WORKSPACE_COLUMNS} FROM research_workspaces
           WHERE organisation_id = $1
@@ -165,6 +189,7 @@ pub async fn list_workspaces<'e>(
             AND {promotable}
             AND {em_curso}
             AND {participacao}
+            AND {estado_ideia}
             AND {predicate}
           ORDER BY created_at DESC
           LIMIT $4 OFFSET $5"
@@ -194,6 +219,7 @@ pub async fn count_workspaces<'e>(
     let promotable = promotable_predicate(query.promotable_only);
     let em_curso = in_progress_predicate(query.in_progress_only);
     let participacao = membership_predicate(query.member_of);
+    let estado_ideia = idea_state_predicate(query.idea_states);
     let total = sqlx::query_scalar::<_, i64>(&format!(
         "SELECT COUNT(*) FROM research_workspaces
           WHERE organisation_id = $1
@@ -202,6 +228,7 @@ pub async fn count_workspaces<'e>(
             AND {promotable}
             AND {em_curso}
             AND {participacao}
+            AND {estado_ideia}
             AND {predicate}"
     ))
     .bind(organisation_id)
@@ -210,6 +237,63 @@ pub async fn count_workspaces<'e>(
     .fetch_one(executor)
     .await?;
     Ok(total)
+}
+
+/// O resumo de um ambiente que a lista mostra ao lado dele: o estado da ideia
+/// e do projecto, o responsável e a unidade (D005).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct WorkspaceSummary {
+    /// O ambiente.
+    pub workspace_id: Uuid,
+    /// A ideia do ambiente.
+    pub idea_id: Option<Uuid>,
+    /// O estado da ideia.
+    pub idea_state: Option<String>,
+    /// O projecto do ambiente, depois da promoção.
+    pub project_id: Option<Uuid>,
+    /// O estado do projecto.
+    pub project_state: Option<String>,
+    /// O código do projecto (`PRJ-2026-014`).
+    pub project_code: Option<String>,
+    /// O nome do responsável pelo projecto.
+    pub responsible_name: Option<String>,
+    /// O nome da unidade.
+    pub unit_name: Option<String>,
+    /// A última alteração da ideia ou do projecto.
+    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Os resumos dos ambientes indicados — que o chamador **já** filtrou pela
+/// visibilidade: isto não decide o que se vê, só acrescenta a cada linha o que
+/// o seu próprio ambiente diz.
+///
+/// # Errors
+///
+/// Devolve erro quando a consulta falha.
+pub async fn workspace_summaries<'e>(
+    executor: impl PgExecutor<'e>,
+    organisation_id: Uuid,
+    ids: &[Uuid],
+) -> CoreResult<Vec<WorkspaceSummary>> {
+    let linhas = sqlx::query_as::<_, WorkspaceSummary>(
+        "SELECT w.id AS workspace_id,
+                i.id AS idea_id, i.state AS idea_state,
+                p.id AS project_id, p.state AS project_state, p.code AS project_code,
+                r.full_name AS responsible_name,
+                u.name AS unit_name,
+                GREATEST(i.updated_at, p.updated_at) AS updated_at
+           FROM research_workspaces w
+           LEFT JOIN ideas i ON i.workspace_id = w.id
+           LEFT JOIN projects p ON p.workspace_id = w.id
+           LEFT JOIN people r ON r.id = p.responsible_person_id AND r.organisation_id = w.organisation_id
+           LEFT JOIN units u ON u.id = w.unit_id
+          WHERE w.organisation_id = $1 AND w.id = ANY($2)",
+    )
+    .bind(organisation_id)
+    .bind(ids)
+    .fetch_all(executor)
+    .await?;
+    Ok(linhas)
 }
 
 /// Next workspace code within a unit, for example `AI-IDEA-004`.

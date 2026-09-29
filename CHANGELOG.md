@@ -7,6 +7,23 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Interface D005 — Projectos, O Meu Trabalho, Ideias, Dados e Conhecimento — 2026-09-29 (ramo `feat/design-d005`, por fazer merge)
+
+- Os cinco ecrãs do Claude Design ligados ao Core como corpos de janela
+  ([ADR-0621](docs/adrs/0621-research-apps-typed-relations-and-deep-links.md)):
+  relações lidas pela linhagem com as duas pontas autorizadas, um endereço
+  canónico por recurso, transições só as do Core, referências tipadas para o
+  Nye, e tudo a funcionar sem IA. 13 viagens HTTP contra um Core real
+  (`apps/workspace/tests/d005_journeys.rs`).
+- **Core:** `GET /api/v1/sources/{id}` e `GET /api/v1/documents/{id}`; um resumo
+  por ambiente (estado da ideia e do projecto, código, responsável, unidade) e o
+  filtro `?idea_state=` em `/workspaces`; `started_at`, `completed_at` e
+  `available_transitions` no projecto.
+- **Corrigido (ficheiro do Design):** `oc-apps.js` chamava um `$` que não
+  existe; o `ReferenceError` parava o teclado das listas.
+- **Em aberto:** a validação de atribuição do Core verifica leitura, não
+  pertença ao ambiente (a BFF recusa); um dataset não se resolve para relações.
+
 ### Generalização, Partes 15 a 17 e Garage em produção — 2026-09-27
 
 - **Garage em produção** ([ADR-0208](docs/adrs/0208-maintained-object-store.md),
