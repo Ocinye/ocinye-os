@@ -6,8 +6,8 @@ estão fechadas. A D003 traz o Nye: a superfície
 universal em todas as páginas e a aplicação Nye, ligadas ao Core
 ([ADR-0619](../adrs/0619-nye-universal-surface.md)); a pesquisa funciona sem
 IA, perguntar e agir dizem porquê não estão, e a voz está indisponível.
-**A D004 — Ficheiros, Notas, Calendário e Correio — está no ramo
-`feat/design-d004`, por fazer merge**
+**A D004 — Ficheiros, Notas, Calendário e Correio —, com o fecho responsivo e
+de acessibilidade da D004.1, está no ramo `feat/design-d004`, por fazer merge**
 ([ADR-0620](../adrs/0620-productivity-apps-in-managed-windows.md)); os defeitos
 e as faltas do Design estão no topo do [`CODE_FEEDBACK.md`](CODE_FEEDBACK.md).
 O código de interface é do Design e está fechado
