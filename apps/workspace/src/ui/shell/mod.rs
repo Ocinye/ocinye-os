@@ -15,6 +15,7 @@ use leptos::prelude::*;
 use crate::i18n::t;
 use crate::ui::components::{app_icon, icon};
 use crate::ui::view_models::{Distribution, Health, ShellVm};
+use crate::ui::wm;
 
 /// «+ Criar»: só rotas GET que existem.
 const CREATE: &[(&str, &str, &str)] = &[
@@ -56,6 +57,86 @@ fn health_chip(core: Option<Health>, ai: Option<Health>) -> impl IntoView {
             </a>
         }
     })
+}
+
+/// D002 · Com painel, a pastilha abre-o; sem painel, é a ligação D001.
+fn status_control(vm: &ShellVm) -> AnyView {
+    match &vm.panels.status {
+        None => health_chip(vm.core, vm.ai).into_any(),
+        Some(p) => {
+            let part = |h: Option<Health>, label: &'static str| {
+                h.map(|h| {
+                    let state = match h {
+                        Health::Operational => "ok",
+                        Health::Degraded => "warn",
+                        Health::Unavailable => "down",
+                    };
+                    view! {
+                        <span class="oc-status__part" data-state=state>
+                            <span class="oc-status__dot" aria-hidden="true"></span>
+                            {t(label)}
+                        </span>
+                    }
+                })
+            };
+            view! {
+                <details class="oc-menu oc-panel-menu" data-oc="menu">
+                    <summary class="oc-status" aria-label=t("wm.status.title") title=t("shell.status.title")>
+                        {part(vm.core, "shell.status.core")}
+                        {part(vm.ai, "shell.status.ai")}
+                    </summary>
+                    <div class="oc-menu__pop oc-panel__pop" role="dialog" aria-label=t("wm.status.title")>{wm::status_panel(p)}</div>
+                </details>
+            }
+            .into_any()
+        }
+    }
+}
+
+/// D002 · O sino abre o painel quando existe; sem painel, a ligação D001.
+fn bell(vm: &ShellVm) -> AnyView {
+    let badge = vm
+        .unread
+        .filter(|n| *n > 0)
+        .map(|n| view! { <span class="oc-badge">{n.to_string()}</span> });
+    match &vm.panels.notifications {
+        None => view! {
+            <a class="oc-round-btn" href="/notifications" aria-label=t("shell.notifications")>
+                {icon("bell")}
+                {badge}
+            </a>
+        }
+        .into_any(),
+        Some(p) => view! {
+            <details class="oc-menu oc-panel-menu" data-oc="menu">
+                <summary class="oc-round-btn" aria-label=t("shell.notifications")>{icon("bell")}{badge}</summary>
+                <div class="oc-menu__pop oc-panel__pop" role="dialog" aria-label=t("wm.notif.title")>{wm::notifications_panel(p)}</div>
+            </details>
+        }
+        .into_any(),
+    }
+}
+
+/// D002 · O relógio abre o painel do mês quando existe.
+fn clock(vm: &ShellVm) -> AnyView {
+    let face = || {
+        view! {
+            <span class="oc-clock" data-oc="clock" data-format="short">
+                <span data-part="clock-date"></span>
+                <span data-part="clock-time"></span>
+            </span>
+        }
+    };
+    match &vm.panels.clock {
+        None => face().into_any(),
+        Some(p) => view! {
+            <details class="oc-menu oc-panel-menu" data-oc="menu">
+                <summary class="oc-clock-btn" aria-label=t("wm.clock.title")>{face()}</summary>
+                <div class="oc-menu__pop oc-panel__pop" role="dialog" aria-label=t("wm.clock.title")>{wm::clock_panel(p)}</div>
+            </details>
+        }
+        .into_any(),
+    }
 }
 
 fn distribution_key(d: Distribution) -> (&'static str, &'static str) {
@@ -106,7 +187,6 @@ fn top_bar(vm: &ShellVm) -> impl IntoView {
             <span class="oc-crumb oc-crumb--app">{vm.crumb.clone()}</span>
         }
     });
-    let unread = vm.unread;
     view! {
         <header class="oc-top">
             <details class="oc-menu" data-oc="menu">
@@ -155,15 +235,9 @@ fn top_bar(vm: &ShellVm) -> impl IntoView {
                     }).collect_view()}
                 </div>
             </details>
-            {health_chip(vm.core, vm.ai)}
-            <a class="oc-round-btn" href="/notifications" aria-label=t("shell.notifications")>
-                {icon("bell")}
-                {unread.filter(|n| *n > 0).map(|n| view! { <span class="oc-badge">{n.to_string()}</span> })}
-            </a>
-            <span class="oc-clock" data-oc="clock" data-format="short">
-                <span data-part="clock-date"></span>
-                <span data-part="clock-time"></span>
-            </span>
+            {status_control(vm)}
+            {bell(vm)}
+            {clock(vm)}
         </header>
     }
 }
@@ -176,10 +250,23 @@ fn dock(vm: &ShellVm) -> impl IntoView {
             <a class="oc-dock__btn oc-dock__brand" href="#oc-launcher" data-oc="launcher-open" aria-label=t("shell.launcher")>{icon("apps-brand-dark")}</a>
             <span class="oc-dock__sep" aria-hidden="true"></span>
             {pinned.into_iter().map(|a| {
-                let label = a.label.clone();
+                // D002: fixada ≠ em execução ≠ activa. O ponto diz «em execução»;
+                // dois pontos, várias janelas; o fundo azul continua a ser «activa».
+                let (label, n) = wm::dock_label(vm.wm.as_ref(), a.id, &a.label);
+                let run = wm::dock_run(vm.wm.as_ref(), a.id);
                 view! {
-                    <a class="oc-dock__btn" href=a.href aria-label=label.clone() title=label aria-current=a.active.then_some("page")>
+                    <a
+                        class="oc-dock__btn"
+                        href=a.href
+                        aria-label=label.clone()
+                        title=label
+                        aria-current=a.active.then_some("page")
+                        data-oc=(n > 0).then_some("dock-app")
+                        data-app=a.id
+                        data-windows=(n > 0).then(|| n.to_string())
+                    >
                         {icon(app_icon(a.href))}
+                        {run}
                     </a>
                 }
             }).collect_view()}
@@ -274,12 +361,33 @@ fn palette(vm: &ShellVm) -> impl IntoView {
 /// A casca com `main` dentro. `title` e `icon_name` desenham a barra da janela
 /// da aplicação (G-05: sem janelas, a aplicação ocupa a área de trabalho).
 pub fn shell(vm: &ShellVm, main: AnyView) -> impl IntoView {
+    shell_with_window(vm, main, None)
+}
+
+/// D002 · A casca com o gestor de janelas: `desk` fica por baixo (o Desktop, ou
+/// só o fundo numa ligação profunda) e `active_body` é o corpo da janela
+/// `Ready`. Com `vm.wm = None` o resultado é exactamente o D001.
+pub fn shell_with_window(
+    vm: &ShellVm,
+    desk: AnyView,
+    active_body: Option<AnyView>,
+) -> impl IntoView {
+    let work = match &vm.wm {
+        None => view! { <main class="oc-desk__main" id="oc-main">{desk}</main> }.into_any(),
+        Some(w) => view! {
+            <div class="oc-desk__work">
+                <main class="oc-desk__main" id="oc-main">{desk}</main>
+                {wm::layer(w, active_body)}
+            </div>
+        }
+        .into_any(),
+    };
     view! {
         <div class="oc-shell">
             {top_bar(vm)}
-            <div class="oc-desk" data-wall=vm.wallpaper.as_str() data-dim=(vm.dim.min(60) / 5 * 5).to_string()>
+            <div class="oc-desk" data-wall=vm.wallpaper.as_str() data-dim=(vm.dim.min(60) / 5 * 5).to_string() data-wm=vm.wm.is_some().then_some("")>
                 {dock(vm)}
-                <main class="oc-desk__main" id="oc-main">{main}</main>
+                {work}
             </div>
             {launcher(vm)}
             {palette(vm)}
@@ -304,9 +412,14 @@ pub fn app_window(title: String, href: &'static str, body: AnyView) -> impl Into
 
 /// Uma aplicação cujo ecrã ainda não foi entregue: a janela com o estado honesto,
 /// para que nenhum «Ver tudo» ou item leve a uma ligação morta (HANDOFF · «14»).
-pub fn app_pending(vm: &ShellVm, title: String, href: &'static str) -> impl IntoView {
+/// D002: com o gestor de janelas, a janela da aplicação vem em `vm.wm` com
+/// `WindowContent::Pending`, e esta página só dá a casca por baixo.
+pub fn app_pending(vm: &ShellVm, title: String, href: &'static str) -> AnyView {
+    if vm.wm.is_some() {
+        return shell(vm, ().into_any()).into_any();
+    }
     let body = crate::ui::components::pending("oc-app-pending", "shell.app.pending").into_any();
-    shell(vm, app_window(title, href, body).into_any())
+    shell(vm, app_window(title, href, body).into_any()).into_any()
 }
 
 #[cfg(test)]
@@ -345,6 +458,62 @@ mod tests {
             query: String::new(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn sem_gestor_de_janelas_a_casca_e_a_d001() {
+        let html = shell(&vm(), ().into_any()).to_html();
+        assert!(
+            !html.contains("oc-desk__work")
+                && !html.contains("data-wm")
+                && !html.contains("oc-dock__run")
+        );
+        assert!(html.contains(r#"href="/notifications""#) && html.contains(r#"href="/activity""#));
+    }
+
+    #[test]
+    fn com_janelas_a_barra_mostra_execucao_e_os_paineis_abrem() {
+        use crate::ui::view_models::{
+            Capability, CapabilityVm, StatusPanelVm, TopPanels, WindowState, WmVm,
+        };
+        let mut v = vm();
+        let mut w = crate::ui::wm::tests::win("a", "files", "/files", true, WindowState::Normal, 1);
+        w.content = crate::ui::view_models::WindowContent::Pending;
+        v.wm = Some(WmVm {
+            windows: vec![w],
+            ..Default::default()
+        });
+        v.panels = TopPanels {
+            status: Some(StatusPanelVm {
+                overall: Health::Operational,
+                capabilities: vec![CapabilityVm {
+                    kind: Capability::Core,
+                    required: true,
+                    state: Some(Health::Operational),
+                    detail: None,
+                }],
+                storage: None,
+                detail_href: None,
+            }),
+            ..Default::default()
+        };
+        let html = app_pending(&v, "Ficheiros".into(), "/files").to_html();
+        assert_contracts(&html);
+        assert!(
+            html.contains("oc-desk__work")
+                && html.contains(r#"data-oc="win""#)
+                && html.contains(t("shell.app.pending"))
+        );
+        assert!(
+            html.contains(r#"data-oc="dock-app""#)
+                && html.contains(r#"data-windows="1""#)
+                && html.contains("oc-dock__run")
+        );
+        assert!(html.contains("oc-panel__pop") && html.contains(t("wm.status.overall.ok")));
+        assert!(
+            !html.contains(r#"class="oc-window""#),
+            "sem a janela D001 de página inteira"
+        );
     }
 
     #[test]

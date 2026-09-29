@@ -534,6 +534,7 @@ pub fn home(vm: &DesktopVm) -> impl IntoView {
             {can.then(|| library(vm))}
             {can.then(|| background(vm))}
             {vm.default.as_ref().filter(|_| can).map(|d| restore(vm, d))}
+            {crate::ui::wm::desktop_menu(can, vm.default.is_some())}
         </div>
     }
     .into_any();

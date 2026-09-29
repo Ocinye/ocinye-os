@@ -21,7 +21,8 @@ use crate::experience::navigation::{CoreStatus, ResolucaoSessao, Viewer};
 use crate::i18n::t;
 use crate::session::Session;
 use crate::ui::view_models::{
-    AppTile, BootComponent, BootState, BootVm, Distribution, DoorVm, Health, ShellVm, Wallpaper,
+    AppTile, BootComponent, BootState, BootVm, Distribution, DoorVm, Health, ShellVm, TopPanels,
+    Wallpaper,
 };
 use crate::WorkspaceState;
 
@@ -348,6 +349,9 @@ pub async fn shell(
         crumb,
         wallpaper,
         dim,
+        // D002 fase A: sem gestor de janelas nem painéis, a casca é a D001.2.1.
+        wm: None,
+        panels: TopPanels::default(),
     };
 
     Shell::Ready(Box::new(ShellContext {

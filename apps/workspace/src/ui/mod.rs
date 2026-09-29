@@ -16,6 +16,7 @@ pub mod document;
 pub mod screens;
 pub mod shell;
 pub mod view_models;
+pub mod wm;
 
 #[cfg(test)]
 pub(crate) mod testing;

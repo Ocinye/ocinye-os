@@ -437,3 +437,6 @@ Contratos: `DesktopDefault.source` (`DefaultSource::System | Instance`), `Backup
 
 ## D001.2 · fecho da paridade da D001
 Só CSS (`oc-shell.css`, `oc-desk.css`): a pastilha CORE·IA; a margem de 30px sem a barra; 4 colunas só com a área ≥ 960px (a referência a 924 tem 2 colunas); títulos em até duas linhas; Indicadores 4 numa linha ou 2 + 2. Decisões: REGISTRY_IS_CANONICAL e IMPLEMENTATION_CANONICAL_REFERENCE_CORRECTED. Detalhe: HANDOFF.md do pacote, §00.
+
+## D002 · janelas e interacções da casca
+Ver HANDOFF.md do pacote D002 (§ D002): componentes, estados, contratos WM-1…WM-5, painéis e responsivo.
