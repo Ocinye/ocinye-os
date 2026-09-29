@@ -1353,6 +1353,7 @@ async fn um_conjunto_de_participacoes_vazio_estreita_para_zero() {
         &inst.forasteiro,
         research::WorkspaceQuery {
             member_of: Some(&membros_de),
+            idea_states: None,
             ..Default::default()
         },
         PageRequest::default(),
@@ -1378,6 +1379,7 @@ async fn um_conjunto_de_participacoes_vazio_estreita_para_zero() {
         &inst.membro,
         research::WorkspaceQuery {
             member_of: Some(&seus),
+            idea_states: None,
             ..Default::default()
         },
         PageRequest::default(),

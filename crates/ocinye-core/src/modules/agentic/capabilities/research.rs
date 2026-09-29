@@ -896,6 +896,7 @@ impl CapabilityHandler for ListWorkspaces {
             research::WorkspaceQuery {
                 kind,
                 member_of: mine.then_some(meus.as_slice()),
+                idea_states: None,
                 ..Default::default()
             },
             ocinye_contracts::page::PageRequest {

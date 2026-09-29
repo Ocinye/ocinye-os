@@ -2448,6 +2448,7 @@ async fn a_listagem_separa_ideias_de_projectos_e_a_contagem_acompanha() {
             promotable_only: false,
             in_progress_only: false,
             member_of: None,
+            idea_states: None,
         },
         pagina,
     )
@@ -2463,6 +2464,7 @@ async fn a_listagem_separa_ideias_de_projectos_e_a_contagem_acompanha() {
             promotable_only: false,
             in_progress_only: false,
             member_of: None,
+            idea_states: None,
         },
         pagina,
     )
@@ -2478,6 +2480,7 @@ async fn a_listagem_separa_ideias_de_projectos_e_a_contagem_acompanha() {
             promotable_only: false,
             in_progress_only: false,
             member_of: None,
+            idea_states: None,
         },
         pagina,
     )
@@ -2884,6 +2887,7 @@ async fn o_selector_de_promocao_oferece_apenas_ideias_promoviveis() {
             promotable_only: true,
             in_progress_only: false,
             member_of: None,
+            idea_states: None,
         },
         pagina,
     )
@@ -2908,6 +2912,7 @@ async fn o_selector_de_promocao_oferece_apenas_ideias_promoviveis() {
             promotable_only: false,
             in_progress_only: false,
             member_of: None,
+            idea_states: None,
         },
         pagina,
     )
@@ -2993,6 +2998,7 @@ async fn o_recorte_por_participacao_distingue_ver_de_participar() {
         &world.insider,
         WorkspaceQuery {
             member_of: Some(&meus),
+            idea_states: None,
             ..WorkspaceQuery::default()
         },
         pagina,
@@ -3020,6 +3026,7 @@ async fn o_recorte_por_participacao_distingue_ver_de_participar() {
         &world.insider,
         WorkspaceQuery {
             member_of: Some(&[]),
+            idea_states: None,
             ..WorkspaceQuery::default()
         },
         pagina,
@@ -3065,6 +3072,7 @@ async fn participar_nao_dispensa_a_politica_de_visibilidade() {
         &world.insider,
         WorkspaceQuery {
             member_of: Some(&meus),
+            idea_states: None,
             ..WorkspaceQuery::default()
         },
         pagina,
@@ -3102,6 +3110,7 @@ async fn participar_nao_dispensa_a_politica_de_visibilidade() {
         &insider,
         WorkspaceQuery {
             member_of: Some(&meus),
+            idea_states: None,
             ..WorkspaceQuery::default()
         },
         pagina,

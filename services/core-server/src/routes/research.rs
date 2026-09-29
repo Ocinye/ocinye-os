@@ -87,6 +87,35 @@ struct WorkspaceView {
     /// `transition_idea` faz — `Action::Transition` — para o controlo não
     /// aparecer a quem o Core recusaria.
     may_transition: bool,
+    /// D005 · Só na lista: o estado da ideia e do projecto, o responsável e a
+    /// unidade, para a linha dizer o que o ambiente é sem outro pedido.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<WorkspaceSummaryView>,
+}
+
+#[derive(Serialize)]
+struct WorkspaceSummaryView {
+    idea_id: Option<Uuid>,
+    idea_state: Option<String>,
+    project_id: Option<Uuid>,
+    project_state: Option<String>,
+    responsible_name: Option<String>,
+    unit_name: Option<String>,
+    updated_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<&research::WorkspaceSummary> for WorkspaceSummaryView {
+    fn from(r: &research::WorkspaceSummary) -> Self {
+        Self {
+            idea_id: r.idea_id,
+            idea_state: r.idea_state.clone(),
+            project_id: r.project_id,
+            project_state: r.project_state.clone(),
+            responsible_name: r.responsible_name.clone(),
+            unit_name: r.unit_name.clone(),
+            updated_at: r.updated_at,
+        }
+    }
 }
 
 impl From<&research::ResearchWorkspace> for WorkspaceView {
@@ -103,6 +132,7 @@ impl From<&research::ResearchWorkspace> for WorkspaceView {
             may_create: false,
             may_manage_members: false,
             may_transition: false,
+            summary: None,
         }
     }
 }
@@ -175,6 +205,11 @@ struct ListWorkspacesQuery {
     /// que ele alcança.
     #[serde(default)]
     mine: Option<bool>,
+    /// Restringe aos ambientes cuja ideia está num destes estados, separados
+    /// por vírgulas (`discovery,exploration`). Um valor fora do vocabulário é
+    /// recusado — nunca ignorado, que devolveria mais do que se pediu.
+    #[serde(default)]
+    idea_state: Option<String>,
     #[serde(default)]
     page: Option<u32>,
     #[serde(default)]
@@ -197,6 +232,23 @@ async fn list_workspaces(
     // Os ambientes onde este membro tem papel. Saem do principal, que já os
     // transporta: não é preciso ir à base de dados perguntá-lo outra vez.
     let meus = principal.workspace_ids();
+    let estados = match query.idea_state.as_deref() {
+        None => None,
+        Some(lista) => Some(
+            lista
+                .split(',')
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(|v| {
+                    ocinye_contracts::IdeaState::parse(v).ok_or_else(|| {
+                        ApiError::from(CoreError::Validation(format!(
+                            "Estado de ideia desconhecido: {v}."
+                        )))
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
+    };
     let (workspaces, total) = research::list_workspaces(
         &state.pool,
         &principal,
@@ -206,14 +258,25 @@ async fn list_workspaces(
             promotable_only: query.promotable.unwrap_or(false),
             in_progress_only: query.in_progress.unwrap_or(false),
             member_of: query.mine.unwrap_or(false).then_some(meus.as_slice()),
+            idea_states: estados.as_deref(),
         },
         page,
     )
     .await?;
+    // D005 · o estado, o responsável e a unidade de cada linha, dos ambientes
+    // que a lista já filtrou pela visibilidade.
+    let resumos = research::workspace_summaries(&state.pool, &principal, &workspaces).await?;
     Ok(Json(Page::new(
         workspaces
             .iter()
-            .map(|w| WorkspaceView::for_principal(w, &principal))
+            .map(|w| {
+                let mut v = WorkspaceView::for_principal(w, &principal);
+                v.summary = resumos
+                    .iter()
+                    .find(|r| r.workspace_id == w.id)
+                    .map(WorkspaceSummaryView::from);
+                v
+            })
             .collect(),
         page,
         total,
@@ -301,11 +364,29 @@ struct ProjectView {
     /// Which idea originated this project.
     origin_idea_id: Option<Uuid>,
     responsible_person_id: Option<Uuid>,
+    /// D005 · Quando começou e quando terminou.
+    started_at: Option<chrono::DateTime<chrono::Utc>>,
+    completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// D005 · Os estados para onde o ciclo de vida deixa ir agora, do grafo do
+    /// domínio (`project_targets_from`), como em `TaskView`: a interface nunca
+    /// escreve a matriz. Quem pode transitar decide-o o Core no pedido.
+    available_transitions: Vec<String>,
 }
 
 impl From<research::Project> for ProjectView {
     fn from(project: research::Project) -> Self {
+        let available_transitions = ocinye_contracts::ProjectState::parse(&project.state)
+            .map(|current| {
+                ocinye_domain::workflow::project_targets_from(current)
+                    .iter()
+                    .map(|t| t.as_str().to_owned())
+                    .collect()
+            })
+            .unwrap_or_default();
         Self {
+            started_at: project.started_at,
+            completed_at: project.completed_at,
+            available_transitions,
             id: project.id,
             workspace_id: project.workspace_id,
             code: project.code,

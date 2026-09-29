@@ -1636,6 +1636,24 @@ pub async fn get_document(
     Ok((document, workspace))
 }
 
+/// O ficheiro institucional de um documento que o chamador pode ler (D005).
+///
+/// Autoriza primeiro, pela mesma regra de [`get_document`]; só depois lê o
+/// `file_id`. A descarga continua a decidir sozinha, no ficheiro.
+///
+/// # Errors
+///
+/// [`CoreError::NotFound`] quando o documento não existe ou não é legível.
+pub async fn document_file(
+    pool: &PgPool,
+    principal: &Principal,
+    document_id: Uuid,
+) -> CoreResult<(Document, Option<Uuid>)> {
+    let (document, _) = get_document(pool, principal, document_id).await?;
+    let file_id = repo::document_file_id(pool, document.id, principal.organisation_id).await?;
+    Ok((document, file_id))
+}
+
 /// Load one bibliographic source, with the workspace that governs it.
 ///
 /// # Errors
