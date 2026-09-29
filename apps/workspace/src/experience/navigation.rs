@@ -55,7 +55,7 @@ pub enum Screen {
     Admin,
     /// Registo de auditoria.
     Audit,
-    /// Prompt Ocinye.
+    /// Nye (o antigo Prompt Ocinye; o `id` continua `prompt`).
     Prompt,
     /// Pesquisa institucional.
     Search,
