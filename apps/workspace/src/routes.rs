@@ -28,7 +28,9 @@ use crate::ui::view_models::{
     DocumentVm, ErrorKind, ErrorVm, FirstAccessVm, IdentityFailVm, LoginVm, MfaChallengeVm,
     MfaCodesVm, MfaSetupVm, RecoverVm, SessionEndReason, SessionEndVm, Surface, Theme,
 };
+use crate::window_manager;
 use crate::WorkspaceState;
+use ocinye_contracts::ApplicationId;
 
 /// Todos os caminhos que o Workspace serve.
 ///
@@ -117,6 +119,7 @@ pub const ROUTES: &[&str] = &[
     "/calendar/events/{event_id}/cancel",
     "/notifications",
     "/notifications/recent",
+    "/notifications/read-all",
     "/notifications/{notification_id}/read",
     "/help",
     "/terminal",
@@ -217,6 +220,10 @@ pub const ROUTES: &[&str] = &[
     "/admin/members/{person_id}/grants",
     "/admin/members/{person_id}/grants/{grant_id}/revoke",
     "/admin/members/{person_id}/sessions/{session_id}/revoke",
+    "/wm",
+    "/wm/{window_id}",
+    "/wm/{window_id}/close",
+    "/wm/{window_id}/state",
     "/audit",
     "/search",
     "/ask",
@@ -331,6 +338,7 @@ pub fn router(state: WorkspaceState) -> Router {
         )
         .route("/notifications", get(notifications_page))
         .route("/notifications/recent", get(notifications_recent))
+        .route("/notifications/read-all", post(notifications_read_all))
         .route(
             "/notifications/{notification_id}/read",
             post(mark_notification_read),
@@ -609,6 +617,11 @@ pub fn router(state: WorkspaceState) -> Router {
             "/admin/members/{person_id}/sessions/{session_id}/revoke",
             post(member_session_revoke),
         )
+        // O Gestor de Janelas (D002).
+        .route("/wm", get(wm_list).post(wm_open))
+        .route("/wm/{window_id}", post(wm_op))
+        .route("/wm/{window_id}/close", post(wm_close))
+        .route("/wm/{window_id}/state", post(wm_report))
         .route("/audit", get(audit))
         .route("/search", get(search))
         // A Universal Command Surface.
@@ -644,6 +657,8 @@ pub fn router(state: WorkspaceState) -> Router {
         // construir: assim `t(...)` lê a língua certa em toda a renderização, sem
         // ser fiado por centenas de assinaturas (i18n §5).
         .layer(axum::middleware::from_fn(locale_layer))
+        // A rota real do pedido, para a janela que a página abre (D002).
+        .layer(axum::middleware::from_fn(request_layer))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             same_origin_only,
@@ -685,6 +700,15 @@ fn interface_pending() -> Response {
 async fn locale_layer(request: axum::extract::Request, next: axum::middleware::Next) -> Response {
     let locale = locale_do_pedido(request.headers());
     crate::i18n::with_locale(locale, next.run(request)).await
+}
+
+/// Põe o caminho e a pergunta do pedido ao alcance do Gestor de Janelas.
+async fn request_layer(request: axum::extract::Request, next: axum::middleware::Next) -> Response {
+    let path_and_query = request.uri().path_and_query().map_or_else(
+        || request.uri().path().to_owned(),
+        |p| p.as_str().to_owned(),
+    );
+    controllers::windows::with_request(path_and_query, next.run(request)).await
 }
 
 /// A língua que este pedido deve falar: a escolhida, ou o canónico.
@@ -963,6 +987,9 @@ async fn health() -> &'static str {
 /// O membro activo.
 struct Member {
     session: Session,
+    /// O identificador opaco da sessão no registo do Workspace: a chave da
+    /// mesa de janelas. Nunca sai deste processo senão no cookie.
+    session_id: String,
     correlation_id: String,
 }
 
@@ -988,6 +1015,7 @@ fn current_member(state: &WorkspaceState, headers: &HeaderMap) -> Option<Member>
     let session = state.sessions.get(&id)?;
     Some(Member {
         session,
+        session_id: id,
         correlation_id: Uuid::new_v4().to_string(),
     })
 }
@@ -1320,7 +1348,7 @@ async fn pending_page(
     let member = member_or_login!(state, headers);
     let quem = caller(&member);
     match controllers::shell(state, &quem, href, title.clone()).await {
-        Shell::Ready(ctx) => {
+        Shell::Ready(mut ctx) => {
             if gate.is_some_and(|screen| !screen_open(&ctx, screen)) {
                 let vm = ErrorVm {
                     kind: ErrorKind::NotFound,
@@ -1337,15 +1365,357 @@ async fn pending_page(
                 )
                     .into_response();
             }
+            // D002: uma rota de aplicação abre (ou foca) a sua janela. Só
+            // depois do portão acima — uma aplicação escondida nunca ganha
+            // janela — e só para ecrãs que são aplicações do registo.
+            let app = gate
+                .and_then(controllers::windows::application_of)
+                .and_then(|a| a.id().parse::<ApplicationId>().ok());
+            let q = controllers::windows::page_query(href);
+            let mut status = StatusCode::OK;
+            if let Some(app) = app {
+                if q.frame {
+                    return window_frame(title);
+                }
+                let opened = controllers::windows::open(
+                    &state.sessions,
+                    &member.session_id,
+                    app,
+                    &q.href,
+                    q.new_window,
+                );
+                if matches!(opened, Some(Err(window_manager::WmError::TooMany))) {
+                    status = StatusCode::CONFLICT;
+                } else if q.new_window {
+                    // «Nova janela» é uma acção, não um endereço: depois de a
+                    // abrir, o endereço passa a ser o da janela, para que
+                    // recarregar não abra outra (POST/redirect/GET).
+                    return Redirect::to(&q.href).into_response();
+                }
+                ctx.vm.wm = controllers::windows::view(&state.sessions, &member.session_id, &ctx);
+            }
+            let dialog = q.close.as_deref().and_then(|id| {
+                controllers::windows::dirty_close(&state.sessions, &member.session_id, id)
+            });
+            let engine = ctx.vm.wm.is_some();
             let page_title = title.clone();
-            html(
-                &page_title,
-                Surface::Shell,
-                ui::shell::app_pending(&ctx.vm, title, href),
-            )
+            let body = ui::shell::app_pending(&ctx.vm, title, href);
+            (status, shell_page(&page_title, engine, body, dialog)).into_response()
         }
         Shell::SignIn => session_ended(state, headers),
         Shell::Indeterminate(reference) => identity_indeterminate(state, reference, href).await,
+    }
+}
+
+/// Uma página da casca. Com janelas, carrega também o motor (`wm-engine.js`,
+/// de Code) depois dos scripts do Design; sem janelas, é exactamente o
+/// documento D001. `dialog` é a confirmação de fechar uma janela com trabalho
+/// por guardar (FG-026).
+fn shell_page(
+    title: &str,
+    engine: bool,
+    body: impl leptos::IntoView + 'static,
+    dialog: Option<ui::view_models::DirtyCloseVm>,
+) -> Response {
+    use leptos::prelude::*;
+    let body = view! { {body}{dialog.map(|d| ui::wm::dirty_close(&d))} };
+    let doc = DocumentVm {
+        title: title.to_owned(),
+        surface: Surface::Shell,
+        theme: Theme::Light,
+    };
+    let mut page = ui::document::render(&doc, body);
+    if engine {
+        // `document.rs` é do Design e não tem lugar para um script de Code
+        // (D002_CONTRACT_GAP em CODE_FEEDBACK): entra no fim do `<head>`, com
+        // `defer`, depois do `oc-wm.js` de que depende.
+        if let Some(at) = page.find("</head>") {
+            page.insert_str(at, r#"<script src="/static/wm-engine.js" defer></script>"#);
+        }
+    }
+    Html(page).into_response()
+}
+
+/// `GET {rota}?frame=1` (WM-4): só o corpo da janela, com o título num
+/// `<template>`. As aplicações ainda sem ecrã do Design dão o estado
+/// `app_pending`.
+fn window_frame(title: String) -> Response {
+    use leptos::prelude::*;
+    let body = view! {
+        <template data-part="win-title">{title}</template>
+        {ui::components::pending("oc-app-pending", "shell.app.pending")}
+    };
+    ([(header::CACHE_CONTROL, "no-store")], Html(body.to_html())).into_response()
+}
+
+// ── Gestor de Janelas (D002 · FG-010, FG-026, FG-027) ─────────────────────
+//
+// O motor decide; o JavaScript pede. Cada operação valida a janela (tem de ser
+// desta sessão), a operação e os números, e responde com o estado inteiro
+// (JS, `Accept: application/json`) ou volta à rota da janela activa (sem JS,
+// 303). Nenhuma operação autoriza nada: abrir passa pelo mesmo portão da rota
+// da aplicação, e o conteúdo de cada janela continua a ser pedido ao Core.
+
+/// A resposta de uma operação: o estado (JS) ou a rota activa (sem JS).
+fn wm_reply(headers: &HeaderMap, desk: &window_manager::Desk) -> Response {
+    if aceita_json(headers) {
+        return axum::Json(controllers::windows::state_json(desk)).into_response();
+    }
+    Redirect::to(desk.current_href()).into_response()
+}
+
+fn wm_refused(status: StatusCode, reason: &'static str) -> Response {
+    (status, axum::Json(serde_json::json!({ "reason": reason }))).into_response()
+}
+
+fn wm_error(
+    headers: &HeaderMap,
+    error: &window_manager::WmError,
+    desk: &window_manager::Desk,
+    id: &str,
+) -> Response {
+    use window_manager::WmError;
+    match error {
+        // Um identificador que não é desta sessão é igual a um que não existe.
+        WmError::NoSuchWindow => wm_refused(StatusCode::NOT_FOUND, "no_such_window"),
+        WmError::TooMany => wm_refused(StatusCode::CONFLICT, "too_many_windows"),
+        WmError::CannotSave => wm_refused(StatusCode::CONFLICT, "cannot_save"),
+        // Trabalho por guardar: a decisão é pedida onde a janela está.
+        WmError::Dirty => {
+            let confirm = with_close_param(desk.current_href(), id);
+            if aceita_json(headers) {
+                (
+                    StatusCode::CONFLICT,
+                    axum::Json(serde_json::json!({ "reason": "dirty", "confirm": confirm })),
+                )
+                    .into_response()
+            } else {
+                Redirect::to(&confirm).into_response()
+            }
+        }
+    }
+}
+
+/// A rota com `close={id}` acrescentado (o diálogo desenha-se nela).
+fn with_close_param(href: &str, id: &str) -> String {
+    let sep = if href.contains('?') { '&' } else { '?' };
+    format!("{href}{sep}close={id}")
+}
+
+/// `GET /wm` (WM-1): as janelas desta sessão.
+async fn wm_list(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return nao_autenticado();
+    };
+    match state
+        .sessions
+        .with_desk(&member.session_id, |d| controllers::windows::state_json(d))
+    {
+        Some(json) => axum::Json(json).into_response(),
+        None => nao_autenticado(),
+    }
+}
+
+#[derive(Deserialize)]
+struct WmOpenForm {
+    app_id: String,
+    #[serde(default)]
+    href: Option<String>,
+    #[serde(default)]
+    window: Option<String>,
+}
+
+/// `POST /wm` (WM-3): abrir, ou focar a janela que já existe (uma janela só,
+/// ou o mesmo recurso). A aplicação tem de ser visível a este membro — o mesmo
+/// portão da sua rota: uma escondida responde como inexistente.
+async fn wm_open(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<WmOpenForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let Ok(app) = form.app_id.parse::<ApplicationId>() else {
+        return wm_refused(StatusCode::NOT_FOUND, "no_such_application");
+    };
+    let href = form.href.unwrap_or_else(|| app.manifest().route.to_owned());
+    if !window_manager::valid_href(app, &href) {
+        return wm_refused(StatusCode::UNPROCESSABLE_ENTITY, "invalid_href");
+    }
+    let quem = caller(&member);
+    let ctx = match controllers::shell(&state, &quem, app.manifest().route, String::new()).await {
+        Shell::Ready(ctx) => ctx,
+        Shell::SignIn => return session_ended(&state, &headers),
+        Shell::Indeterminate(reference) => {
+            return identity_indeterminate(&state, reference, "/").await
+        }
+    };
+    let visible = controllers::windows::application_of_id(app)
+        .is_some_and(|a| a.visible_to(&ctx.viewer, ctx.core));
+    if !visible {
+        return wm_refused(StatusCode::NOT_FOUND, "no_such_application");
+    }
+    let new_window = form.window.as_deref() == Some("new");
+    let result =
+        controllers::windows::open(&state.sessions, &member.session_id, app, &href, new_window);
+    match result {
+        None => nao_autenticado(),
+        Some(Err(error)) => wm_refused(
+            StatusCode::CONFLICT,
+            if error == window_manager::WmError::TooMany {
+                "too_many_windows"
+            } else {
+                "refused"
+            },
+        ),
+        Some(Ok(opened)) => {
+            let existing = matches!(opened, window_manager::Opened::Existing(_));
+            if aceita_json(&headers) {
+                axum::Json(serde_json::json!({
+                    "id": opened.id(),
+                    "existing": existing,
+                    "href": href,
+                }))
+                .into_response()
+            } else {
+                Redirect::to(&href).into_response()
+            }
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct WmOpForm {
+    op: String,
+    #[serde(default)]
+    zone: Option<String>,
+    #[serde(default)]
+    x: Option<i32>,
+    #[serde(default)]
+    y: Option<i32>,
+    #[serde(default)]
+    w: Option<u32>,
+    #[serde(default)]
+    h: Option<u32>,
+    #[serde(default)]
+    area_w: Option<u32>,
+    #[serde(default)]
+    area_h: Option<u32>,
+}
+
+/// `POST /wm/{id}` (WM-2): focar, minimizar, maximizar, restaurar, fechar,
+/// encaixar, mover e redimensionar. Números que não são números, zonas e
+/// operações desconhecidas são recusados antes de tocar no estado.
+async fn wm_op(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Form(form): Form<WmOpForm>,
+) -> Response {
+    use window_manager::{Area, Geometry, Zone};
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return if aceita_json(&headers) {
+            nao_autenticado()
+        } else {
+            Redirect::to(destino_de_entrada(&headers)).into_response()
+        };
+    };
+    let area = match (form.area_w, form.area_h) {
+        (Some(w), Some(h)) => match Area::new(w, h) {
+            Some(a) => Some(a),
+            None => return wm_refused(StatusCode::UNPROCESSABLE_ENTITY, "invalid_area"),
+        },
+        (None, None) => None,
+        _ => return wm_refused(StatusCode::UNPROCESSABLE_ENTITY, "invalid_area"),
+    };
+    let zone = form.zone.as_deref().map(Zone::parse);
+    let result = state.sessions.with_desk(&member.session_id, |d| {
+        let outcome = match (form.op.as_str(), zone, form.x, form.y, form.w, form.h) {
+            ("focus", None, ..) => d.focus(&id).map(|()| None),
+            ("minimize", None, ..) => d.minimize(&id).map(|()| None),
+            ("maximize", None, ..) => d.maximize(&id).map(|()| None),
+            ("restore", None, ..) => d.restore(&id).map(|()| None),
+            ("close", None, ..) => d.close(&id, None).map(|_| None),
+            ("snap", Some(Some(z)), ..) => d.snap(&id, z).map(|()| None),
+            ("move", None, Some(x), Some(y), None, None) => {
+                d.move_to(&id, x, y, area).map(|()| None)
+            }
+            ("resize", None, Some(x), Some(y), Some(w), Some(h)) => {
+                d.resize(&id, Geometry { x, y, w, h }, area).map(|()| None)
+            }
+            _ => Ok(Some(())),
+        };
+        (outcome, d.clone())
+    });
+    let Some((outcome, desk)) = result else {
+        return nao_autenticado();
+    };
+    match outcome {
+        Ok(None) => wm_reply(&headers, &desk),
+        Ok(Some(())) => wm_refused(StatusCode::UNPROCESSABLE_ENTITY, "invalid_operation"),
+        Err(error) => wm_error(&headers, &error, &desk, &id),
+    }
+}
+
+#[derive(Deserialize)]
+struct WmCloseForm {
+    decision: String,
+}
+
+/// `POST /wm/{id}/close` (FG-026): a decisão do diálogo de fechar, executada
+/// exactamente como foi confirmada.
+async fn wm_close(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Form(form): Form<WmCloseForm>,
+) -> Response {
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return nao_autenticado();
+    };
+    let Some(decision) = window_manager::Decision::parse(&form.decision) else {
+        return wm_refused(StatusCode::UNPROCESSABLE_ENTITY, "invalid_decision");
+    };
+    let result = state.sessions.with_desk(&member.session_id, |d| {
+        (d.close(&id, Some(decision)), d.clone())
+    });
+    let Some((outcome, desk)) = result else {
+        return nao_autenticado();
+    };
+    match outcome {
+        Ok(_) => wm_reply(&headers, &desk),
+        Err(error) => wm_error(&headers, &error, &desk, &id),
+    }
+}
+
+#[derive(Deserialize)]
+struct WmReportForm {
+    dirty: bool,
+    #[serde(default)]
+    can_save: bool,
+}
+
+/// `POST /wm/{id}/state`: a aplicação diz se tem trabalho por guardar e se o
+/// pode guardar agora. É a única entrada do sinal «por guardar» (FG-026); o
+/// motor não o adivinha. Depois de «Guardar», a notícia de que já não há
+/// nada por guardar fecha a janela.
+async fn wm_report(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Form(form): Form<WmReportForm>,
+) -> Response {
+    let Some(member) = membro_ou_recusa(&state, &headers) else {
+        return nao_autenticado();
+    };
+    let result = state.sessions.with_desk(&member.session_id, |d| {
+        (d.report(&id, form.dirty, form.can_save), d.clone())
+    });
+    let Some((outcome, desk)) = result else {
+        return nao_autenticado();
+    };
+    match outcome {
+        Ok(_) => axum::Json(controllers::windows::state_json(&desk)).into_response(),
+        Err(error) => wm_error(&headers, &error, &desk, &id),
     }
 }
 
@@ -1410,12 +1780,20 @@ async fn home(State(state): State<WorkspaceState>, headers: HeaderMap) -> Respon
     let quem = caller(&member);
     let crumb = Screen::Home.label().to_owned();
     match controllers::shell(&state, &quem, "/", crumb).await {
-        Shell::Ready(ctx) => {
+        Shell::Ready(mut ctx) => {
+            // D002: o Desktop fica por baixo das janelas abertas.
+            ctx.vm.wm = controllers::windows::view(&state.sessions, &member.session_id, &ctx);
+            let q = controllers::windows::page_query("/");
+            let dialog = q.close.as_deref().and_then(|id| {
+                controllers::windows::dirty_close(&state.sessions, &member.session_id, id)
+            });
+            let engine = ctx.vm.wm.is_some();
             let vm = controllers::desktop::desktop(*ctx, &quem, &state).await;
-            html(
+            shell_page(
                 crate::i18n::t("desk.title"),
-                Surface::Shell,
+                engine,
                 ui::screens::home::home(&vm),
+                dialog,
             )
         }
         Shell::SignIn => session_ended(&state, &headers),
@@ -6784,6 +7162,41 @@ async fn notifications_page(State(state): State<WorkspaceState>, headers: Header
 /// Administração.
 async fn admin_monitor(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
     app_page(&state, &headers, Screen::Admin).await
+}
+
+/// `POST /notifications/read-all` (D002 · FG-005): «Marcar todas como lidas»
+/// no painel. Só as do membro — o Core põe o destinatário na condição — e
+/// volta à página de onde veio, se for deste Workspace.
+async fn notifications_read_all(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let resultado = api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/notifications/read-all",
+        &serde_json::json!({}),
+    )
+    .await;
+    if let Err(falha) = resultado {
+        return failure_response(&falha);
+    }
+    Redirect::to(&voltar_a(&state, &headers)).into_response()
+}
+
+/// A página de onde o formulário veio, só se for deste Workspace; senão, o
+/// Desktop. Nunca um endereço de fora (o `Referer` é do browser).
+fn voltar_a(state: &WorkspaceState, headers: &HeaderMap) -> String {
+    let origem = state.config.public_url.trim_end_matches('/');
+    headers
+        .get(header::REFERER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|r| r.strip_prefix(origem))
+        .filter(|p| p.starts_with('/') && !p.starts_with("//"))
+        .and_then(|p| crate::boot::safe_return_target(p, ROUTES))
+        .unwrap_or_else(|| "/".to_owned())
 }
 
 async fn mark_notification_read(

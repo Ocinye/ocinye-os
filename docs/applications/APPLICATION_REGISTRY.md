@@ -37,6 +37,14 @@
 | `settings` | `/settings` | Administração | — (qualquer membro) | sim | — |
 | `help` | `/help` | Administração | — (qualquer membro) | sim | — |
 
+## Janelas (D002, ADR-0618)
+
+A política de lançamento vem do manifesto (`launch`), nunca da vista.
+**Ficheiros** e **Notas** aceitam várias janelas (um documento por janela, lado
+a lado); todas as outras aplicações têm uma: lançar de novo foca a janela que
+já está aberta. O teste `so_ficheiros_e_notas_aceitam_varias_janelas` obriga a
+que mudar isto seja deliberado.
+
 ## Disponibilidade
 
 Nesta fatia, a visibilidade é binária e segue a barra lateral: uma aplicação

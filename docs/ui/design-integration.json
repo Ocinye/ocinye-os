@@ -1,96 +1,354 @@
 {
   "schema_version": 1,
-  "design_revision": "D001.2.1",
-  "based_on": "D001.2",
-  "design_base_sha": "c99cbdac2402c6fed16fbcd0d69690fa51e57358",
+  "design_revision": "D002.1",
+  "based_on": "D002",
+  "repository_head_before": "b8c7798 (feat/design-d002)",
   "integrated_on": "2026-09-29",
-  "integration_branch": "feat/design-d001-2-1 (from feat/design-d001-2 @ 5076c68)",
-  "integration_status": "INTEGRATED_VISUAL_PARITY_TRUE",
-  "integration_commit": "60d832d (D001.2.1 on feat/design-d001-2-1)",
+  "integration_branch": "feat/design-d002",
+  "integration_status": "INTEGRATED_VISUAL_PARITY_TRUE_ACCESSIBILITY_CERTIFIED_FUNCTIONALLY_CERTIFIED",
   "package": {
-    "path": "ocinye-design-complete-D001.2.1",
-    "checksums": "109/109 OK (sha256)",
-    "files_changed_vs_d001_2": [
-      "apps/workspace/static/oc-desk.css"
+    "path": "ocinye-design-complete-D002.1",
+    "checksums": "136/136 OK (sha256)",
+    "application_method": "Design files copied from implementation/ over the D002 integration; apply.sh and the patch not run; Code-owned files untouched",
+    "files_changed": [
+      "apps/workspace/src/ui/wm/mod.rs",
+      "apps/workspace/src/ui/shell/mod.rs",
+      "apps/workspace/static/oc-wm.css",
+      "apps/workspace/static/oc-wm.js",
+      "docs/ui/HANDOFF.md",
+      "docs/ui/DESIGN_LOCK.md"
     ],
-    "change": ".oc-kpis repeat(4, minmax(0, 1fr)) instead of auto-fit; 2 + 2 below a 644px work area (@container max-width 643.98px)",
-    "application_method": "copy of oc-desk.css from implementation/; the rest of the package already matched the tree",
+    "formatting_only": [
+      "apps/workspace/src/ui/view_models.rs"
+    ],
     "unexpected_diffs": "NONE"
   },
   "view_model_changes": "NONE",
-  "widget_registry_changed": false,
-  "widget_default_changed": false,
+  "window_contract_changes": "NONE",
   "core_contract_changes": "NONE",
-  "indicators_boundary": {
-    "measured_in": "running Workspace, app bar shown, work area = viewport - 130px; .oc-kpis width = work area - 2px",
-    "639": ".oc-kpis 637px: 2 + 2, no clipping, no overflow",
-    "640": ".oc-kpis 638px: 2 + 2, no clipping, no overflow",
-    "641": ".oc-kpis 639px: 2 + 2, no clipping, no overflow",
-    "642": ".oc-kpis 640px: 2 + 2, no clipping, no overflow",
-    "643": ".oc-kpis 641px: 2 + 2, no clipping, no overflow",
-    "644": ".oc-kpis 642px: 4 in a row (150px each), no clipping, no overflow",
-    "645": ".oc-kpis 643px: 4 in a row (150.25px), no clipping, no overflow"
+  "workspace_contract_changes": "NONE",
+  "code_changes": [
+    "static/wm-engine.js: dirty-close decisions sent without reloading, the dialog removed in place so the Design returns focus (no contract change)",
+    "tests/d002_contracts.rs (3 guards) and one d002 journey (dialog placement)"
+  ],
+  "switcher_layering": "FIXED by Design: #oc-switcher is a child of .oc-shell after the palette; while open, top bar, windows and dock hit the scrim, only the card receives its click (1440x900, 924x540, 390x844); no new z-index",
+  "topbar_control_alignment": "FIXED by Design: with panels closed the pill, bell and clock match D001.2.1 in position, size, display and padding at 924x540 and 1440x900 (0px); at <=640px the pill is hidden as in D001",
+  "dirty_close_focus_trap": "FIXED by Design: initial focus inside; Tab and Shift+Tab cycle only valid controls in both directions; disabled Save never focused; Esc = Cancel; focus back to the window's close control after cancel without navigation",
+  "dirty_close_global_layer": "VERIFIED_ALREADY_GLOBAL",
+  "d001_zero_regression": {
+    "guard": "d002_d001_equivalence 2/2 (22 scenes)",
+    "browser": "D001.2.1 and D002.1 side by side, no windows: 936 elements identical plus the three top-bar controls identical, 924x540 and 1440x900",
+    "result": "TRUE"
   },
   "visual_parity": {
-    "desktop_924": "MATCH (unchanged from D001.2): 2 columns, grid at x=36, tiles at x 37/254/470/687 y=71, Indicators 107px, pill #F3F6F9, no clipped title",
-    "desktop_1440": "NO_REGRESSION: 4 columns, Indicators 107px",
-    "auth_924": "MATCH (unchanged; no auth CSS in D001.2.1)",
-    "shell_924": "MATCH (unchanged; no shell CSS in D001.2.1)",
-    "result": "OCINYE_D001_VISUAL_PARITY = TRUE"
+    "1440": "TRUE",
+    "924": "TRUE",
+    "mobile_390": "TRUE",
+    "icon_white": "still white (color #FFFFFF)",
+    "result": "TRUE"
   },
-  "tests": {
-    "css_contract_tests": "5/5 (new: Indicators exactly 4 or 2; fails on the auto-fit rule)",
-    "design_view_tests": "50/50",
-    "unit_tests": "121/121",
-    "journeys": "19/19 against a real Core"
-  },
-  "functional_gaps_total": 25,
-  "functional_gaps_resolved": [
-    "FG-017",
-    "FG-018",
-    "FG-025"
-  ],
-  "functional_gaps_partially_resolved": [
-    "FG-015",
-    "FG-016 (Backup::Unknown until the Core records backups)"
-  ],
-  "functional_gaps_remaining": {
-    "CORE_CONTRACT_REQUIRED": [
-      "FG-002",
-      "FG-003",
-      "FG-013",
-      "FG-014",
-      "FG-015 (ideas/projects/datasets)",
-      "FG-016 (backup record)",
-      "FG-024 (CORE_STATUS_CONTRACT_FOLLOWUP)"
+  "accessibility": {
+    "verified": [
+      "dirty-close focus trap (Save enabled and disabled)",
+      "switcher arrows/Tab/Esc and focus restoration",
+      "Desktop context menu keyboard (unchanged, D002)",
+      "panel summaries: native, tab-reachable, named, toggle; global :focus-visible gold outline, not suppressed",
+      "reduced motion rule present (CSS contract)"
     ],
-    "WAITING_FOR_LATER_SCOPE": [
-      "FG-001",
-      "FG-004",
-      "FG-005",
-      "FG-006",
-      "FG-007",
-      "FG-008",
-      "FG-009",
-      "FG-010",
-      "FG-011",
-      "FG-012",
-      "FG-019",
-      "FG-020",
-      "FG-021",
-      "FG-022",
-      "FG-023"
-    ]
+    "result": "CERTIFIED"
   },
-  "design_limitations": {
-    "DESKTOP_DARK_DESIGN": "PENDING_DESIGN",
-    "DESKTOP_SYSTEM_DESIGN": "PENDING_DESIGN",
-    "screenshots_other_distributions": "NOT_AVAILABLE (Business/Personal/Education verified by tests, not by reference image)",
-    "screenshots_en_fr_beyond_login": "NOT_AVAILABLE",
-    "tablet_mobile": "NOT_AVAILABLE"
+  "pt_en_fr": "switcher, dirty-close and panel control labels clean in pt, en and fr",
+  "tests": {
+    "design_and_unit": "147/147",
+    "d002_contracts": "3/3 (each proven by reversion)",
+    "d002_journeys": "18/18 (17 + dialog placement)",
+    "d001_journeys": "19/19",
+    "d001_css_contract": "5/5",
+    "d001_equivalence": "2/2"
   },
+  "functional_gaps": "unchanged from D002 (see history): 13 resolved, 3 partial, 15 remaining of 31",
+  "verify_sh": "run on the exact commit that carries this record; the outcome is in the D002.1 report",
   "feedback": "docs/ui/CODE_FEEDBACK.md",
   "history": [
+    {
+      "design_revision": "D002",
+      "based_on": "D001.2.1",
+      "design_base_sha": "e579d3c99b4dd34bd88127cbe90b8d2cd4e363df",
+      "repository_head_before": "ca5cbde (main: 7c20f8d + #182 documentation)",
+      "tree_drift": "main differs from the Design base e579d3c only by documentation (#182: CLAUDE.md, docs/ui/README.md, docs/ui/design-integration.json); D002 applied on main",
+      "integrated_on": "2026-09-29",
+      "integration_branch": "feat/design-d002 (from main @ ca5cbde)",
+      "integration_status": "INTEGRATED_FUNCTIONALLY_CERTIFIED_VISUAL_PARITY_FALSE",
+      "package": {
+        "path": "ocinye-design-complete-D002",
+        "checksums": "134/134 OK (sha256)",
+        "files_added": [
+          "apps/workspace/src/ui/wm/mod.rs",
+          "apps/workspace/static/oc-wm.css",
+          "apps/workspace/static/oc-wm.js"
+        ],
+        "files_changed": [
+          "apps/workspace/src/ui/view_models.rs",
+          "apps/workspace/src/ui/shell/mod.rs",
+          "apps/workspace/src/ui/screens/home/mod.rs",
+          "apps/workspace/src/ui/document.rs",
+          "apps/workspace/src/ui/mod.rs",
+          "apps/workspace/src/i18n/ui_shell.rs",
+          "apps/workspace/static/icons.svg",
+          "docs/ui/HANDOFF.md",
+          "docs/ui/DESIGN_LOCK.md"
+        ],
+        "reference_added": "design/claude-design/reference/d002/ (fixture, REFERENCE_ONLY)",
+        "unexpected_diffs": "NONE",
+        "apply_sh": "not run (it is the D001 script); files copied by hand, crate wiring already present",
+        "compile_fixes": "3 use-after-move inside view! in ui/wm/mod.rs, 1 clippy lint (sort_by -> sort_by_key); no visual change"
+      },
+      "view_model_changes": "ADDITIVE: ShellVm.wm, ShellVm.panels; WindowState, WindowContent, WindowGeometry, WINDOW_MIN, WindowVm, WmVm, DirtyCloseVm, Capability, CapabilityVm, StatusPanelVm, NotificationItem, NotificationsPanelVm, ClockPanelVm, TopPanels",
+      "i18n": "+90 wm.* keys pt/en/fr (package); all rendered without mixed languages",
+      "core_contract_changes": [
+        "POST /api/v1/notifications/read-all (the caller's own unread notifications; FG-005)"
+      ],
+      "contracts_changes": [
+        "ApplicationManifest.launch: LaunchPolicy (SingleInstance | MultiWindow); Files and Notes are MultiWindow"
+      ],
+      "workspace_contract_changes": [
+        "GET /wm",
+        "POST /wm",
+        "POST /wm/{id}",
+        "POST /wm/{id}/close",
+        "POST /wm/{id}/state",
+        "GET {app route}?frame=1",
+        "GET {route}?close={id}",
+        "GET {app route}?window=new -> 303",
+        "POST /notifications/read-all"
+      ],
+      "adr": "docs/adrs/0618-window-manager.md",
+      "d001_zero_regression": {
+        "guard": "apps/workspace/tests/d002_d001_equivalence.rs: 22 scenes byte-for-byte against goldens generated on the D001.2.1 tree, after removing only the three declared additions; proven by reversion",
+        "browser": "D001.2.1 and D002 (wm: None, panels default) side by side on the same Core: every element's geometry and computed style identical in 6 states x 2 sizes (Desktop, launcher, palette, account menu, app_pending, 404; 924x540 and 1440x900), apart from the declared neutral position: relative on dock buttons",
+        "result": "TRUE"
+      },
+      "engine": {
+        "state": "one Desk per Workspace session in the SessionStore (same lifetime); no Core table",
+        "launch_policy": "from the application manifest",
+        "active": "computed: front-most non-minimized",
+        "geometry": "server-validated: non-numbers 422, out-of-area clamped, 360x240 minimum, grip reachable",
+        "authority": "routes and POST /wm behind the application visibility gate; windows of apps no longer visible closed before every page (fail closed); window ids per session",
+        "client": "static/wm-engine.js (Code): validates oc:wm intents, asks the server, reconciles from its answer; Alt + W opens the switcher"
+      },
+      "visual_parity": {
+        "tablet_924": "MATCH: maximized windows at x 92, y 52, 818x414 as d002-tablet-windowing; no maximize control, no gestures",
+        "free_1440": "windows, controls, shelf (active/visible/minimized dashed, dirty dot), chooser, snap halves, dirty-close dialog and panels match the d002 references in composition; references use resource subtitles, ours show the app name (pending apps have no resource)",
+        "mobile_390": "MATCH in composition: one active application, back and switcher at 44px, no shelf, D001 app bar below",
+        "icon_white": "VERIFIED white in the real browser (color #FFFFFF, symbols stroke=currentColor): reference capture limitation",
+        "defects": [
+          "D002_VISUAL_PARITY_DEFECT: switcher rendered inside .oc-desk (isolation: isolate), the top bar stays above its scrim",
+          "D002_VISUAL_PARITY_DEFECT: with panels on and closed, the CORE-IA pill moves 0.3px and the clock 1px against D001.2.1"
+        ],
+        "result": "FALSE (2 Design defects returned in CODE_FEEDBACK.md)"
+      },
+      "accessibility": {
+        "verified": [
+          "every control a real button, link or form with a named aria-label",
+          "switcher role=dialog: arrows, Tab, Esc; focus returned on close (engine)",
+          "Desktop context menu role=menu: right-click, Shift+F10, arrows, Esc returns focus; only on the Desktop background",
+          "dirty-close role=alertdialog: initial focus on Guardar, Esc = Cancelar",
+          "reduced motion and forced colors rules (CSS contract test)"
+        ],
+        "defects": [
+          "D002_A11Y_DEFECT: dirty-close focus trap selector [href] matches the icon's <use href>; Tab from Guardar stays, Shift+Tab from Cancelar escapes"
+        ],
+        "result": "PARTIAL"
+      },
+      "tests": {
+        "design_view_tests": "wm 7 + shell 2 new, all pass",
+        "engine_unit_tests": "window_manager 10, controllers::windows 3, controllers::panels 4",
+        "d002_journeys": "17/17 (14 HTTP against a real Core + 3 CSS contracts); two authority guards proven by reversion",
+        "d001_journeys": "19/19 (the app_pending journey updated to the D002 contract)",
+        "d001_css_contract": "5/5",
+        "equivalence": "2/2",
+        "core": "calendar_http 7/7 including read-all isolation, proven by reversion"
+      },
+      "functional_gaps_total": 31,
+      "functional_gaps": {
+        "FG-001": "CORE_CONTRACT_REQUIRED / DEFERRED (lock screen)",
+        "FG-002": "CORE_CONTRACT_REQUIRED (recovery)",
+        "FG-003": "CORE_CONTRACT_REQUIRED / DEFERRED (photo wallpaper)",
+        "FG-004": "RESOLVED (ADAPTER_REQUIRED): status panel from /ready, /compute/status, /ai/status, /me/files; CORE_STATUS_CONTRACT_FOLLOWUP",
+        "FG-005": "RESOLVED (WORKSPACE_CONTRACT_REQUIRED + Core read-all)",
+        "FG-006": "RESOLVED (ADAPTER_REQUIRED): month in the member time zone, agenda from /calendar/agenda",
+        "FG-007": "DEFERRED (reference only)",
+        "FG-008": "DEFERRED (reference only)",
+        "FG-009": "RESOLVED (ALREADY_AVAILABLE): reuses the D001 controls",
+        "FG-010": "RESOLVED (WORKSPACE_CONTRACT_REQUIRED): WM-1..WM-5",
+        "FG-011": "DEFERRED (reference only)",
+        "FG-012": "CORE_CONTRACT_REQUIRED",
+        "FG-013": "CORE_CONTRACT_REQUIRED (not designed)",
+        "FG-014": "CORE_CONTRACT_REQUIRED (not designed)",
+        "FG-015": "PARTIAL (ideas/projects/datasets need an activity record)",
+        "FG-016": "PARTIAL (Backup::Unknown until the Core records backups)",
+        "FG-017": "RESOLVED (D001)",
+        "FG-018": "RESOLVED (D001)",
+        "FG-019": "D003+ (Nye voice)",
+        "FG-020": "D003+ (Nye)",
+        "FG-021": "DEFERRED (the 29 applications; each opens in a window with app_pending)",
+        "FG-022": "DEFERRED (setup wizard)",
+        "FG-023": "DEFERRED (MISSING_DESIGN_STATE: Desktop dark/system theme)",
+        "FG-024": "PARTIAL (decision applied; CORE_STATUS_CONTRACT_FOLLOWUP)",
+        "FG-025": "RESOLVED (D001.1)",
+        "FG-026": "RESOLVED (WORKSPACE_CONTRACT_REQUIRED): dirty close with POST /wm/{id}/state for apps to report",
+        "FG-027": "RESOLVED (ADAPTER_REQUIRED): ApplicationManifest.launch",
+        "FG-028": "RESOLVED: Alt + W, platform-neutral hint",
+        "FG-029": "RESOLVED (ALREADY_AVAILABLE, verified in the browser)",
+        "FG-030": "DEFERRED (not in D002)",
+        "FG-031": "RESOLVED as specified: no minimise-all; mobile back minimises the active window"
+      },
+      "functional_gaps_resolved": [
+        "FG-004",
+        "FG-005",
+        "FG-006",
+        "FG-009",
+        "FG-010",
+        "FG-017",
+        "FG-018",
+        "FG-025",
+        "FG-026",
+        "FG-027",
+        "FG-028",
+        "FG-029",
+        "FG-031"
+      ],
+      "functional_gaps_partially_resolved": [
+        "FG-015",
+        "FG-016",
+        "FG-024"
+      ],
+      "functional_gaps_remaining": [
+        "FG-001",
+        "FG-002",
+        "FG-003",
+        "FG-007",
+        "FG-008",
+        "FG-011",
+        "FG-012",
+        "FG-013",
+        "FG-014",
+        "FG-019",
+        "FG-020",
+        "FG-021",
+        "FG-022",
+        "FG-023",
+        "FG-030"
+      ],
+      "verify_sh": "run on the exact commit that carries this record (a record cannot contain its own result); the outcome is in the D002 integration report",
+      "feedback": "docs/ui/CODE_FEEDBACK.md"
+    },
+    {
+      "design_revision": "D001.2.1",
+      "based_on": "D001.2",
+      "design_base_sha": "c99cbdac2402c6fed16fbcd0d69690fa51e57358",
+      "integrated_on": "2026-09-29",
+      "integration_branch": "feat/design-d001-2-1 (from feat/design-d001-2 @ 5076c68)",
+      "integration_status": "INTEGRATED_VISUAL_PARITY_TRUE",
+      "integration_commit": "60d832d (D001.2.1 on feat/design-d001-2-1)",
+      "package": {
+        "path": "ocinye-design-complete-D001.2.1",
+        "checksums": "109/109 OK (sha256)",
+        "files_changed_vs_d001_2": [
+          "apps/workspace/static/oc-desk.css"
+        ],
+        "change": ".oc-kpis repeat(4, minmax(0, 1fr)) instead of auto-fit; 2 + 2 below a 644px work area (@container max-width 643.98px)",
+        "application_method": "copy of oc-desk.css from implementation/; the rest of the package already matched the tree",
+        "unexpected_diffs": "NONE"
+      },
+      "view_model_changes": "NONE",
+      "widget_registry_changed": false,
+      "widget_default_changed": false,
+      "core_contract_changes": "NONE",
+      "indicators_boundary": {
+        "measured_in": "running Workspace, app bar shown, work area = viewport - 130px; .oc-kpis width = work area - 2px",
+        "639": ".oc-kpis 637px: 2 + 2, no clipping, no overflow",
+        "640": ".oc-kpis 638px: 2 + 2, no clipping, no overflow",
+        "641": ".oc-kpis 639px: 2 + 2, no clipping, no overflow",
+        "642": ".oc-kpis 640px: 2 + 2, no clipping, no overflow",
+        "643": ".oc-kpis 641px: 2 + 2, no clipping, no overflow",
+        "644": ".oc-kpis 642px: 4 in a row (150px each), no clipping, no overflow",
+        "645": ".oc-kpis 643px: 4 in a row (150.25px), no clipping, no overflow"
+      },
+      "visual_parity": {
+        "desktop_924": "MATCH (unchanged from D001.2): 2 columns, grid at x=36, tiles at x 37/254/470/687 y=71, Indicators 107px, pill #F3F6F9, no clipped title",
+        "desktop_1440": "NO_REGRESSION: 4 columns, Indicators 107px",
+        "auth_924": "MATCH (unchanged; no auth CSS in D001.2.1)",
+        "shell_924": "MATCH (unchanged; no shell CSS in D001.2.1)",
+        "result": "OCINYE_D001_VISUAL_PARITY = TRUE"
+      },
+      "tests": {
+        "css_contract_tests": "5/5 (new: Indicators exactly 4 or 2; fails on the auto-fit rule)",
+        "design_view_tests": "50/50",
+        "unit_tests": "121/121",
+        "journeys": "19/19 against a real Core"
+      },
+      "functional_gaps_total": 25,
+      "functional_gaps_resolved": [
+        "FG-017",
+        "FG-018",
+        "FG-025"
+      ],
+      "functional_gaps_partially_resolved": [
+        "FG-015",
+        "FG-016 (Backup::Unknown until the Core records backups)"
+      ],
+      "functional_gaps_remaining": {
+        "CORE_CONTRACT_REQUIRED": [
+          "FG-002",
+          "FG-003",
+          "FG-013",
+          "FG-014",
+          "FG-015 (ideas/projects/datasets)",
+          "FG-016 (backup record)",
+          "FG-024 (CORE_STATUS_CONTRACT_FOLLOWUP)"
+        ],
+        "WAITING_FOR_LATER_SCOPE": [
+          "FG-001",
+          "FG-004",
+          "FG-005",
+          "FG-006",
+          "FG-007",
+          "FG-008",
+          "FG-009",
+          "FG-010",
+          "FG-011",
+          "FG-012",
+          "FG-019",
+          "FG-020",
+          "FG-021",
+          "FG-022",
+          "FG-023"
+        ]
+      },
+      "design_limitations": {
+        "DESKTOP_DARK_DESIGN": "PENDING_DESIGN",
+        "DESKTOP_SYSTEM_DESIGN": "PENDING_DESIGN",
+        "screenshots_other_distributions": "NOT_AVAILABLE (Business/Personal/Education verified by tests, not by reference image)",
+        "screenshots_en_fr_beyond_login": "NOT_AVAILABLE",
+        "tablet_mobile": "NOT_AVAILABLE"
+      },
+      "feedback": "docs/ui/CODE_FEEDBACK.md",
+      "release": {
+        "target_branch": "main",
+        "target_head_before": "8a62438",
+        "divergence": "1 documentation-only commit on main (#180), merged without conflicts as e579d3c",
+        "pull_request": 181,
+        "merge_commit": "7c20f8d",
+        "merge_strategy": "merge commit (no squash)",
+        "ci": "green on PR #181 and on main 7c20f8d",
+        "post_merge_verify": "PASS on 7c20f8d (verify.sh exit 0, tree unchanged; member_desktop_layouts 5/5, d001_css_contract 5/5, d001_journeys 19/19)",
+        "deployed": false,
+        "production_revision": "4f8d048",
+        "deploy_decision": "merge now, deploy later (Fidel, 2026-09-29): production keeps the pre-wipe UI until D002 or an explicit deploy",
+        "production_smoke": "NOT_RUN"
+      }
+    },
     {
       "schema_version": 1,
       "design_revision": "D001.2",
@@ -403,19 +661,5 @@
       },
       "feedback": "docs/ui/CODE_FEEDBACK.md"
     }
-  ],
-  "release": {
-    "target_branch": "main",
-    "target_head_before": "8a62438",
-    "divergence": "1 documentation-only commit on main (#180), merged without conflicts as e579d3c",
-    "pull_request": 181,
-    "merge_commit": "7c20f8d",
-    "merge_strategy": "merge commit (no squash)",
-    "ci": "green on PR #181 and on main 7c20f8d",
-    "post_merge_verify": "PASS on 7c20f8d (verify.sh exit 0, tree unchanged; member_desktop_layouts 5/5, d001_css_contract 5/5, d001_journeys 19/19)",
-    "deployed": false,
-    "production_revision": "4f8d048",
-    "deploy_decision": "merge now, deploy later (Fidel, 2026-09-29): production keeps the pre-wipe UI until D002 or an explicit deploy",
-    "production_smoke": "NOT_RUN"
-  }
+  ]
 }

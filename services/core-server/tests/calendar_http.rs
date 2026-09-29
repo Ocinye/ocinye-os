@@ -555,6 +555,7 @@ async fn o_calendario_exige_sessao() {
         ),
         ("POST", "/api/v1/calendar/events"),
         ("GET", "/api/v1/notifications"),
+        ("POST", "/api/v1/notifications/read-all"),
     ] {
         let request = Request::builder()
             .method(metodo)
@@ -682,6 +683,56 @@ async fn lembretes_e_notificacoes_pelo_http() {
         depois["unread"], 0,
         "marcar como lida não baixou o contador"
     );
+}
+
+/// Uma notificação entregue a quem é dono do lembrete.
+async fn notificar(pool: &PgPool, quem: &Principal) {
+    let mut tx = pool.begin().await.expect("tx");
+    let pendente = ocinye_core::modules::calendar::create_reminder(
+        &mut tx,
+        quem,
+        &CorrelationIds::generate(),
+        ocinye_core::modules::calendar::NewReminder {
+            event_id: None,
+            task_id: None,
+            note: Some("agora".to_owned()),
+            trigger_at: chrono::Utc::now() - chrono::Duration::minutes(1),
+        },
+    )
+    .await
+    .expect("lembrete");
+    ocinye_core::modules::calendar::delivery::deliver_in_app(&mut tx, &pendente)
+        .await
+        .expect("entrega");
+    tx.commit().await.expect("commit");
+}
+
+/// «Marcar todas como lidas» (D002 · painel das notificações) só toca nas
+/// notificações de quem pede: o destinatário é a condição inteira.
+#[tokio::test]
+async fn marcar_todas_como_lidas_so_toca_nas_minhas() {
+    let (pool, org, state) = institution!();
+    let (_, ana, token_ana) = unidade_com_gestor(&pool, org).await;
+    let (_, rui, token_rui) = unidade_com_gestor(&pool, org).await;
+    notificar(&pool, &ana).await;
+    notificar(&pool, &ana).await;
+    notificar(&pool, &rui).await;
+
+    let (status, feito) = pedir(
+        &state,
+        &token_ana,
+        "POST",
+        "/api/v1/notifications/read-all",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{feito}");
+    assert_eq!(feito["marked"], 2);
+
+    let (_, dela) = pedir(&state, &token_ana, "GET", "/api/v1/notifications", None).await;
+    assert_eq!(dela["unread"], 0);
+    let (_, dele) = pedir(&state, &token_rui, "GET", "/api/v1/notifications", None).await;
+    assert_eq!(dele["unread"], 1, "marcou as de outra pessoa");
 }
 
 /// A sonda do harness: aceita, porque não há servidor de correio para

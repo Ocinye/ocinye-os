@@ -11,6 +11,8 @@
 //! Core recusa ou devolve, e a interface mostra o que ele disse.
 
 pub mod desktop;
+pub mod panels;
+pub mod windows;
 
 use serde_json::Value;
 
@@ -21,7 +23,8 @@ use crate::experience::navigation::{CoreStatus, ResolucaoSessao, Viewer};
 use crate::i18n::t;
 use crate::session::Session;
 use crate::ui::view_models::{
-    AppTile, BootComponent, BootState, BootVm, Distribution, DoorVm, Health, ShellVm, Wallpaper,
+    AppTile, BootComponent, BootState, BootVm, Distribution, DoorVm, Health, ShellVm, TopPanels,
+    Wallpaper,
 };
 use crate::WorkspaceState;
 
@@ -195,7 +198,7 @@ pub async fn shell(
     active_href: &str,
     crumb: String,
 ) -> Shell {
-    let (me, organisation, notifications, pins, desktop, probe, ai) = tokio::join!(
+    let (me, organisation, notifications, pins, desktop, probe, ai, compute, storage) = tokio::join!(
         caller.get(state, "/api/v1/me"),
         caller.get(state, "/api/v1/organisation"),
         caller.get(state, "/api/v1/notifications"),
@@ -203,6 +206,8 @@ pub async fn shell(
         caller.get(state, "/api/v1/me/desktop"),
         crate::boot::probe(state),
         caller.get(state, "/api/v1/ai/status"),
+        caller.get(state, "/api/v1/compute/status"),
+        caller.get(state, "/api/v1/me/files?view=recents&limit=1"),
     );
     let me = match me {
         Ok(me) => me,
@@ -318,6 +323,34 @@ pub async fn shell(
         .and_then(|d| u8::try_from(d).ok())
         .unwrap_or(SYSTEM_DIM);
 
+    // D002: os painéis da barra de cima, com os factos que o Core já deu.
+    let core_health = instance_health(&probe.state);
+    let ai_health = ai.as_ref().ok().map(|s| {
+        if s.get("available").and_then(Value::as_bool) == Some(true) {
+            Health::Operational
+        } else {
+            Health::Unavailable
+        }
+    });
+    let clock = desktop::Clock {
+        now: chrono::Utc::now(),
+        zone,
+        core_ok: core.operational(),
+        is_admin,
+    };
+    let agenda = desktop::agenda_today(caller, state, &clock, panels::AGENDA).await;
+    let top_panels = TopPanels {
+        status: Some(panels::status(
+            core_health,
+            &compute,
+            ai_health,
+            &storage,
+            is_admin,
+        )),
+        notifications: Some(panels::notifications(&notifications, &clock)),
+        clock: Some(panels::clock(&clock, agenda)),
+    };
+
     let vm = ShellVm {
         display_name: me
             .get("display_name")
@@ -335,19 +368,17 @@ pub async fn shell(
             .and_then(|n| n.get("unread"))
             .and_then(Value::as_u64)
             .and_then(|n| u32::try_from(n).ok()),
-        core: Some(instance_health(&probe.state)),
-        ai: ai.as_ref().ok().map(|s| {
-            if s.get("available").and_then(Value::as_bool) == Some(true) {
-                Health::Operational
-            } else {
-                Health::Unavailable
-            }
-        }),
+        core: Some(core_health),
+        ai: ai_health,
         query: String::new(),
         distribution,
         crumb,
         wallpaper,
         dim,
+        // As janelas entram por página (controllers::windows), depois do
+        // portão da aplicação; sem janelas, `None` é a casca D001.
+        wm: None,
+        panels: top_panels,
     };
 
     Shell::Ready(Box::new(ShellContext {

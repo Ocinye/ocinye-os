@@ -15,6 +15,7 @@ fn stylesheets(surface: Surface) -> &'static [&'static str] {
             "/static/oc-base.css",
             "/static/oc-shell.css",
             "/static/oc-desk.css",
+            "/static/oc-wm.css",
         ],
     }
 }
@@ -27,6 +28,7 @@ fn scripts(surface: Surface) -> &'static [&'static str] {
             "/static/oc-base.js",
             "/static/oc-shell.js",
             "/static/oc-desk.js",
+            "/static/oc-wm.js",
         ],
     }
 }

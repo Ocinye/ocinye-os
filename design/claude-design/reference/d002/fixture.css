@@ -1,0 +1,11 @@
+/* REFERENCE_ONLY · conteúdo de exemplo das janelas (não é o desenho das aplicações). */
+.fx-files { padding: 10px 14px; display: flex; flex-direction: column; }
+.fx-row { height: 38px; display: grid; grid-template-columns: 20px minmax(0, 1fr) 80px 70px; align-items: center; gap: 10px; border-bottom: 1px solid var(--oc-line-2); font-size: 13px; }
+.fx-row small { color: var(--oc-ink-4); font-size: 12px; }
+.fx-note { max-width: 560px; margin: 0 auto; padding: 26px 30px; }
+.fx-note h3 { margin: 0 0 10px; font: 600 18px var(--oc-sans); }
+.fx-note p { margin: 0 0 10px; color: var(--oc-ink-2); }
+.fx-term { margin: 0; min-height: 100%; padding: 14px 16px; background: #0B1520; color: #CFE3F5; font: 13px/1.6 var(--oc-mono); }
+.fx-desk-empty { height: 100%; }
+/* captura: o motor de captura não herda currentColor dentro de <use> nestes blocos */
+.oc-win__icon .oc-icon, .oc-switch__glyph .oc-icon { color: #FFFFFF; stroke: #FFFFFF; }

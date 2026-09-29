@@ -36,3 +36,15 @@ Implementação visual canónica do Ocinye OS, escrita pelo Claude Design. O que
 - Sem chave de acesso nem SSO à porta; sem «escolher espaço».
 - D8a/D8b em duas colunas; D10 indisponível (G-26), com a confirmação neutra desenhada.
 - À porta: logótipo, «OCINYE OS» e a distribuição (código + nome). Sem nome da Instância nem endereço (decisão do Fidel).
+
+
+## D002
+`src/ui/wm/mod.rs`, `static/oc-wm.css`, `static/oc-wm.js` (só a apresentação; o motor é do Code) e a extensão da casca em `src/ui/shell/mod.rs`. Detalhe: HANDOFF.md do pacote D002.
+
+
+## D002.1
+| Componente | Implementação | Revisão |
+|---|---|---|
+| Alternador como camada global da casca (depois da paleta, fora do `.oc-desk`) | `ui/shell/mod.rs`, `ui/wm/mod.rs` | D002.1 |
+| Resumo dos painéis fechados em flex | `static/oc-wm.css` | D002.1 |
+| Laço de foco do diálogo de alterações | `static/oc-wm.js` | D002.1 |

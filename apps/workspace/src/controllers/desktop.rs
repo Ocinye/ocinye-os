@@ -91,7 +91,7 @@ fn failed(detail: &str) -> CoreError {
 }
 
 /// Uma recusa do Core no estado que a vista desenha.
-fn load_of<T>(what: &str, failure: &ApiFailure) -> Load<T> {
+pub(crate) fn load_of<T>(what: &str, failure: &ApiFailure) -> Load<T> {
     match failure {
         ApiFailure::Forbidden | ApiFailure::Denied => Load::Denied,
         ApiFailure::Unavailable(_) => Load::Unavailable,
@@ -100,7 +100,7 @@ fn load_of<T>(what: &str, failure: &ApiFailure) -> Load<T> {
     }
 }
 
-fn list<T>(items: Vec<T>) -> Load<Vec<T>> {
+pub(crate) fn list<T>(items: Vec<T>) -> Load<Vec<T>> {
     if items.is_empty() {
         Load::Empty
     } else {
@@ -108,7 +108,7 @@ fn list<T>(items: Vec<T>) -> Load<Vec<T>> {
     }
 }
 
-fn items(v: &Value) -> &[Value] {
+pub(crate) fn items(v: &Value) -> &[Value] {
     v.get("items")
         .or_else(|| v.get("files"))
         .and_then(Value::as_array)
@@ -116,11 +116,11 @@ fn items(v: &Value) -> &[Value] {
         .map_or(&[], Vec::as_slice)
 }
 
-fn text<'a>(v: &'a Value, k: &str) -> &'a str {
+pub(crate) fn text<'a>(v: &'a Value, k: &str) -> &'a str {
     v.get(k).and_then(Value::as_str).unwrap_or_default()
 }
 
-fn instant(v: &Value, k: &str) -> Option<DateTime<Utc>> {
+pub(crate) fn instant(v: &Value, k: &str) -> Option<DateTime<Utc>> {
     v.get(k)
         .and_then(Value::as_str)
         .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
@@ -129,15 +129,15 @@ fn instant(v: &Value, k: &str) -> Option<DateTime<Utc>> {
 
 /// O que os widgets partilham: o relógio e a zona do membro, e o que a casca
 /// já apurou sobre o Core e sobre a autoridade de quem vê.
-struct Clock {
-    now: DateTime<Utc>,
-    zone: ocinye_contracts::temporal::TimeZoneName,
-    core_ok: bool,
-    is_admin: bool,
+pub(crate) struct Clock {
+    pub(crate) now: DateTime<Utc>,
+    pub(crate) zone: ocinye_contracts::temporal::TimeZoneName,
+    pub(crate) core_ok: bool,
+    pub(crate) is_admin: bool,
 }
 
 impl Clock {
-    fn hhmm(&self, at: DateTime<Utc>) -> String {
+    pub(crate) fn hhmm(&self, at: DateTime<Utc>) -> String {
         at.with_timezone(&self.zone.zone())
             .format("%H:%M")
             .to_string()
@@ -159,7 +159,7 @@ impl Clock {
             self.ddmm(at)
         }
     }
-    fn ago(&self, at: DateTime<Utc>) -> Ago {
+    pub(crate) fn ago(&self, at: DateTime<Utc>) -> Ago {
         let secs = u64::try_from((self.now - at).num_seconds().max(0)).unwrap_or(0);
         Ago::from_secs(secs, || self.ddmm(at))
     }
@@ -283,6 +283,17 @@ async fn tasks(caller: &Caller<'_>, state: &WorkspaceState) -> WidgetContent {
 }
 
 async fn calendar(caller: &Caller<'_>, state: &WorkspaceState, clock: &Clock) -> WidgetContent {
+    WidgetContent::List(agenda_today(caller, state, clock, LIST_LIMIT).await)
+}
+
+/// Os eventos de hoje no fuso do membro, sem os cancelados: o widget do
+/// Calendário e o painel do relógio (D002) mostram a mesma agenda.
+pub(crate) async fn agenda_today(
+    caller: &Caller<'_>,
+    state: &WorkspaceState,
+    clock: &Clock,
+    limit: usize,
+) -> Load<Vec<WidgetItem>> {
     let z = clock.zone.zone();
     let today = clock.now.with_timezone(&z).date_naive();
     let start = ocinye_contracts::temporal::resolve_local(
@@ -296,12 +307,12 @@ async fn calendar(caller: &Caller<'_>, state: &WorkspaceState, clock: &Clock) ->
         start.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         end.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
     );
-    WidgetContent::List(match caller.get(state, &path).await {
+    match caller.get(state, &path).await {
         Ok(v) => list(
             items(&v)
                 .iter()
                 .filter(|e| text(e, "state") != "cancelled")
-                .take(LIST_LIMIT)
+                .take(limit)
                 .map(|e| WidgetItem {
                     title: text(e, "title").to_owned(),
                     meta: instant(e, "starts_at")
@@ -313,7 +324,7 @@ async fn calendar(caller: &Caller<'_>, state: &WorkspaceState, clock: &Clock) ->
                 .collect(),
         ),
         Err(f) => load_of("calendar", &f),
-    })
+    }
 }
 
 async fn notes(caller: &Caller<'_>, state: &WorkspaceState, clock: &Clock) -> WidgetContent {

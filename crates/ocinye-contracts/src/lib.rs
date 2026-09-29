@@ -49,7 +49,7 @@ pub use access::{AccountStatus, CredentialKind, CredentialState, Permission, Sco
 pub use agentic::{AgenticExposure, OperationId, TrustBoundary};
 pub use application::{
     ApplicationCategory, ApplicationClass, ApplicationId, ApplicationManifest, InstanceProfile,
-    UnknownApplication, UnknownProfile,
+    LaunchPolicy, UnknownApplication, UnknownProfile,
 };
 pub use avatar::{AvatarChoice, AVATAR_PRESETS};
 pub use classification::Classification;

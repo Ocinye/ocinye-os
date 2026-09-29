@@ -309,6 +309,10 @@ pub struct ShellVm {
     pub wallpaper: Wallpaper,
     /// Escurecimento do fundo, 0–60 (%), em passos de 5.
     pub dim: u8,
+    /// D002 · As janelas abertas. `None` = sem gestor de janelas (comportamento D001).
+    pub wm: Option<WmVm>,
+    /// D002 · Painéis da barra de cima. Cada `None` mantém o controlo D001 (ligação).
+    pub panels: TopPanels,
 }
 
 /// Um elemento de um widget da Home.
@@ -794,4 +798,236 @@ pub struct IdentityFailVm {
     pub reference: Option<String>,
     /// A rota pedida, para «Tentar de novo».
     pub retry_href: String,
+}
+
+// ── D002 · Janelas e painéis da casca ───────────────────────────────────────
+//
+// Só apresentação. O motor (ordem, geometria, persistência, política de
+// lançamento, RBAC) é do Claude Code; estes tipos são o que a vista desenha.
+
+/// Como uma janela está apresentada.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum WindowState {
+    /// Livre, com a geometria dada.
+    #[default]
+    Normal,
+    /// Ocupa a área de trabalho do Ocinye (nunca o ecrã do sistema anfitrião).
+    Maximized,
+    /// Fora da vista; continua na prateleira.
+    Minimized,
+    /// Encaixada na metade esquerda.
+    SnappedLeft,
+    /// Encaixada na metade direita.
+    SnappedRight,
+}
+
+impl WindowState {
+    /// O valor de `data-state`.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Normal => "normal",
+            Self::Maximized => "maximized",
+            Self::Minimized => "minimized",
+            Self::SnappedLeft => "snap-left",
+            Self::SnappedRight => "snap-right",
+        }
+    }
+}
+
+/// O que a janela mostra no corpo.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub enum WindowContent {
+    /// O corpo vem na resposta (a janela da rota pedida).
+    Ready,
+    /// O corpo é carregado depois (`?frame=1`), ou a aplicação está a abrir.
+    #[default]
+    Loading,
+    /// O ecrã da aplicação ainda não foi entregue (D001 `app_pending`).
+    Pending,
+    /// A aplicação falhou; mostra só a referência.
+    Failed(CoreError),
+    /// Sem permissão (sem revelar se o recurso existe).
+    Denied,
+    /// A aplicação está indisponível nesta Instância.
+    Unavailable,
+}
+
+/// Posição e tamanho em px, relativos à área de trabalho.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowGeometry {
+    /// Esquerda.
+    pub x: i32,
+    /// Cima.
+    pub y: i32,
+    /// Largura (≥ `WINDOW_MIN.0`).
+    pub w: u32,
+    /// Altura (≥ `WINDOW_MIN.1`).
+    pub h: u32,
+}
+
+/// O tamanho mínimo de uma janela livre (px). Abaixo disto a vista não encolhe.
+pub const WINDOW_MIN: (u32, u32) = (360, 240);
+
+impl Default for WindowGeometry {
+    fn default() -> Self {
+        Self {
+            x: 48,
+            y: 32,
+            w: 760,
+            h: 480,
+        }
+    }
+}
+
+/// Uma janela gerida pelo Ocinye.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct WindowVm {
+    /// Identificador estável da janela (vários por aplicação são possíveis).
+    pub id: String,
+    /// A aplicação (`ApplicationId`).
+    pub app_id: &'static str,
+    /// A rota da aplicação (escolhe o ícone).
+    pub app_href: &'static str,
+    /// A rota actual da janela (ligação profunda: `/files/abc`).
+    pub href: String,
+    /// O nome da aplicação, já traduzido.
+    pub title: String,
+    /// O recurso aberto («Relatório Q3.pdf»), se a aplicação o disser.
+    pub subtitle: Option<String>,
+    /// Apresentação.
+    pub state: WindowState,
+    /// Tem o foco.
+    pub active: bool,
+    /// Ordem de empilhamento (maior = à frente). Só para `data-z`.
+    pub z: u16,
+    /// Geometria em `Normal` (e a de regresso ao restaurar).
+    pub geometry: WindowGeometry,
+    /// Há trabalho por guardar (fechar pede confirmação).
+    pub dirty: bool,
+    /// O corpo.
+    pub content: WindowContent,
+}
+
+/// O gestor de janelas desta página.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct WmVm {
+    /// As janelas, por qualquer ordem (a vista usa `z`).
+    pub windows: Vec<WindowVm>,
+    /// A dica do atalho do alternador, já no formato da plataforma («⌥ Tab»);
+    /// `None` = não mostrar dica.
+    pub switcher_hint: Option<String>,
+    /// Aplicações que aceitam mais de uma janela (mostra «Nova janela»).
+    pub multi_window_apps: Vec<&'static str>,
+}
+
+/// Confirmação ao fechar uma janela com trabalho por guardar.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DirtyCloseVm {
+    /// A janela.
+    pub window_id: String,
+    /// O nome do documento ou da aplicação.
+    pub title: String,
+    /// É possível guardar agora (senão «Guardar» fica indisponível com a razão).
+    pub can_save: bool,
+}
+
+/// Uma capacidade no painel de estado.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Capability {
+    /// O Core do Ocinye OS.
+    Core,
+    /// Nós de computação.
+    Compute,
+    /// Cópias de segurança.
+    Backup,
+    /// Nós de IA (opcional: a falta não torna o Ocinye OS indisponível).
+    Ai,
+}
+
+impl Capability {
+    /// A chave do nome.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Core => "wm.status.cap.core",
+            Self::Compute => "wm.status.cap.compute",
+            Self::Backup => "wm.status.cap.backup",
+            Self::Ai => "wm.status.cap.ai",
+        }
+    }
+}
+
+/// O estado de uma capacidade.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CapabilityVm {
+    /// Qual.
+    pub kind: Capability,
+    /// Obrigatória para o Ocinye OS funcionar.
+    pub required: bool,
+    /// `None` = sem registo (não afirma êxito nem falha).
+    pub state: Option<Health>,
+    /// Uma linha já traduzida («3/4 nós», «cópia 03:00»), sem detalhe técnico.
+    pub detail: Option<String>,
+}
+
+/// O painel que abre da pastilha CORE·IA.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StatusPanelVm {
+    /// O estado do Ocinye OS: só as obrigatórias contam.
+    pub overall: Health,
+    /// As capacidades, obrigatórias primeiro.
+    pub capabilities: Vec<CapabilityVm>,
+    /// Armazenamento pessoal (usado, limite) em bytes, se conhecido.
+    pub storage: Option<(u64, u64)>,
+    /// «Estado detalhado» (só administração: o Monitor).
+    pub detail_href: Option<&'static str>,
+}
+
+/// Uma notificação no painel.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NotificationItem {
+    /// Identificador (para marcar como lida).
+    pub id: String,
+    /// Título.
+    pub title: String,
+    /// Uma linha, já traduzida.
+    pub body: String,
+    /// Há quanto tempo.
+    pub when: Ago,
+    /// Já lida.
+    pub read: bool,
+    /// Para onde leva.
+    pub href: String,
+}
+
+/// O painel das notificações (até 6).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NotificationsPanelVm {
+    /// As últimas.
+    pub items: Load<Vec<NotificationItem>>,
+}
+
+/// O painel do relógio: o mês de hoje e a agenda de hoje.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClockPanelVm {
+    /// Ano, mês (1–12) e dia de hoje no fuso do membro.
+    pub today: (i32, u8, u8),
+    /// Dia da semana do dia 1 (0 = segunda … 6 = domingo).
+    pub first_weekday: u8,
+    /// Dias do mês.
+    pub days_in_month: u8,
+    /// Até 3 eventos de hoje (`/calendar/agenda`).
+    pub agenda: Load<Vec<WidgetItem>>,
+}
+
+/// Os painéis da barra de cima.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct TopPanels {
+    /// Estado do sistema.
+    pub status: Option<StatusPanelVm>,
+    /// Notificações.
+    pub notifications: Option<NotificationsPanelVm>,
+    /// Relógio.
+    pub clock: Option<ClockPanelVm>,
 }

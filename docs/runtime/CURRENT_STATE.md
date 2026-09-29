@@ -9,7 +9,8 @@
 
 O Ocinye OS tem hoje **um** runtime: a Web. O Workspace é Leptos SSR com
 melhoria progressiva (`app.js`), atrás de uma sessão BFF; não há PWA, casca
-nativa, `ocinye://`, Gestor de Janelas no cliente, nem navegador integrado.
+nativa, `ocinye://`, nem navegador integrado. O Gestor de Janelas existe desde a
+D002 (ADR-0618), no servidor, por sessão.
 
 | Área | Estado | Evidência |
 |---|---|---|
@@ -27,7 +28,7 @@ nativa, `ocinye://`, Gestor de Janelas no cliente, nem navegador integrado.
 | Notificações | Core + sino (`/notifications/recent` ao abrir); sem Web Notifications nem Push | `app.js:161` |
 | Ligações profundas | rotas HTTPS canónicas (`ROUTES`, `routes.rs:36-224`); `ocinye://` **ausente** | — |
 | Registo de aplicações | `ApplicationManifest` sem campo de runtime | `crates/ocinye-contracts/src/application.rs:438-465` |
-| Gestor de Janelas (D5) | **ausente** no código; `docs/ui/D5_WINDOWS.md` é proposta (G-05) | — |
+| Gestor de Janelas (D002) | janelas geridas por sessão do Workspace; política de lançamento no manifesto; autoridade no Core (ADR-0618) | `apps/workspace/src/window_manager.rs`, `tests/d002_journeys.rs` |
 | Desktop (D4) | layout fixo servido em `GET /` | `ui/screens/home.rs` |
 | Nye | `/ask`, planos do Core agentic | `routes.rs:597`, `ui/screens/ask.rs` |
 | Terminal / ocsh | em `feat/ocsh-terminal` (`283cacc`): `/terminal`, `/terminal/exec`, Core `POST /api/v1/commands/exec` | ADR-0312 |
@@ -64,5 +65,5 @@ nativa, `ocinye://`, Gestor de Janelas no cliente, nem navegador integrado.
   constitucional como viagem única, o manifesto PWA e o identificador de build.
 - O Browser na Web só pode usar `iframe` com *sandbox* e recurso honesto; a CSP
   já tem `frame-src 'self'` e precisa de `https:` só na página do Browser.
-- O Gestor de Janelas (D5) não existe: o Browser nasce como aplicação em página,
-  como o Terminal, até G-05.
+- O Gestor de Janelas existe (D002, ADR-0618); o Browser e o Terminal ainda não
+  têm ecrã do Design, e abrem numa janela com o estado `app_pending`.
