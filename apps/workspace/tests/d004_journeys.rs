@@ -1346,7 +1346,8 @@ async fn nye_a_referencia_de_uma_aplicacao_so_diz_o_que_o_membro_pode_ver() {
 /// Com duas aplicações abertas, só a janela do pedido traz o corpo; a outra
 /// vem `Loading` (não o `app_pending`, que seria falso) e o seu corpo chega
 /// por `?frame=1` — um corpo de janela, sem casca. Navegar dentro da mesma
-/// aplicação por pergunta (`?view=`) fica na mesma janela.
+/// aplicação — por pergunta (`?view=`) ou a partir da sua janela activa —
+/// fica na mesma janela (ADR-0620).
 #[tokio::test]
 async fn janelas_as_outras_carregam_por_frame_e_a_pergunta_nao_abre_outra() {
     let Some(s) = Sistema::levantar("research").await else {
@@ -1358,6 +1359,8 @@ async fn janelas_as_outras_carregam_por_frame_e_a_pergunta_nao_abre_outra() {
     assert_eq!(status, 200);
     let (status, _) = s.html("/notes", &c).await;
     assert_eq!(status, 200);
+    // Uma segunda janela das Notas só por «Nova janela» (ADR-0620).
+    let _ = s.html(&format!("/notes/{id}?window=new"), &c).await;
     let (status, html) = s.html(&format!("/notes/{id}"), &c).await;
     assert_eq!(status, 200);
     // Duas janelas; o corpo de Notas uma vez, e o de Ficheiros por carregar.
@@ -1390,4 +1393,11 @@ async fn janelas_as_outras_carregam_por_frame_e_a_pergunta_nao_abre_outra() {
     // A pergunta é estado da vista: continua a haver duas janelas.
     let (_, html) = s.html("/files?view=grid", &c).await;
     assert_eq!(html.matches(r#"data-oc="win""#).count(), 3);
+    // Abrir outra nota a partir da janela activa das Notas fica nela.
+    let outra = nota(&s, &t, "Outra", "texto").await;
+    let _ = s.html(&format!("/notes/{id}"), &c).await;
+    let (_, html) = s.html(&format!("/notes/{outra}"), &c).await;
+    assert_eq!(html.matches(r#"data-oc="win""#).count(), 3);
+    assert!(html.contains(&format!(r#"data-href="/notes/{outra}""#)));
+    assert!(!html.contains(&format!(r#"data-href="/notes/{id}""#)));
 }
