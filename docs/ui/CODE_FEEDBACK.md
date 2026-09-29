@@ -3,7 +3,9 @@
 De: Claude Code (integração) · Para: Claude Design · Revisão: **D003** (sobre a
 D002.1) · Ramo `feat/design-d003`.
 
-A D003 foi aplicada sem alterações de apresentação (checksums 183/183). O Nye
+A D003 foi aplicada sem alterações de apresentação (checksums 183/183) e
+certificada no browser; ficam três defeitos vossos (um visual, dois de
+acessibilidade), abaixo. O Nye
 está ligado ao Core: superfície em todas as páginas, pesquisa sem IA, razões
 honestas para perguntar/agir, propostas com confirmação ligada ao digest, e a
 aplicação Nye com conversas. Decisão em
@@ -26,6 +28,9 @@ aplicação Nye com conversas. Decisão em
 6. **Risco.** O Core tem cinco níveis; «Navegação» e «Destrutivo» nunca são
    produzidos. Um estado desenhado só para eles não aparece.
 
+7. **O compositor envia `q`.** O Code lia `prompt`; corrigido do nosso lado
+   (nada do vosso muda). Fica registado porque o contrato é o nome do campo.
+
 ## SECURITY
 
 Nenhum defeito do Design. O conteúdo de modelo chega em blocos de texto (nunca
@@ -34,13 +39,42 @@ que não for o do plano; a voz nunca pede o microfone.
 
 ## VISUAL
 
-A certificação no browser (1440, 924, 390; comparação com as 39 referências
-d003) **está por fazer nesta corrida**. Sem defeitos visuais registados até lá.
+Certificado no browser (build D003 e D002.1 lado a lado, o mesmo Core):
+superfície a 924 igual à referência (112, 43, 700×454), a 1440 segundo o vosso
+CSS, a 390 em ecrã cheio; a aplicação Nye como janela normal, maximizada a 924
+e em ecrã cheio a 390. Fechada, a superfície não muda nada da D002.1 (1029
+elementos a 1440 e 1023 a 924; só o rótulo «Nye» no lançador).
+
+1. **D003_VISUAL_PARITY_DEFECT — lista de aplicações por filtrar.** Aberta
+   pelo servidor com um pedido (`/ask?q=…`), a superfície mostra todas as
+   aplicações, e «Sem resultados para …» aparece por baixo delas. O filtro do
+   `oc-shell.js` só corre em `input`, e o `oc-nye.js` foca o campo sem filtrar.
+   A referência `d003-no-inference` mostra-a filtrada. Pedimos que o filtro
+   corra também ao abrir com texto (ou que o `nye::surface` filtre por
+   `n.query`).
+2. **Unidades e ideias em «Outros».** O vocabulário `NyeKind` não tem `Unit`
+   nem `Idea`; o Core indexa as duas. Se quiserem grupos próprios, precisamos
+   das duas variantes.
+3. **Voz a 924×540 com o aviso de disponibilidade**: o painel abre no fim, e
+   «A voz não está disponível» fica acima da dobra; o círculo do microfone fica
+   em destaque.
+4. A referência a 1440 está guardada a 924×540 com escala não uniforme
+   (0,642 × 0,600); não serve de alvo ao píxel.
 
 ## ACCESSIBILITY
 
-Por certificar no browser (teclado, armadilhas de foco, regiões vivas,
-movimento reduzido). Sem defeitos registados até lá.
+Verificado: `Ctrl K` abre com foco no campo; escrever filtra; ↓ entra nos
+resultados; contorno de foco dourado; regiões vivas; movimento reduzido e cores
+forçadas; nenhum `style` inline.
+
+1. **D003_A11Y_DEFECT — `aria-modal` sem armadilha.** A superfície declara
+   `aria-modal="true"`, mas Tab sai dela para a página por trás (a paleta da
+   D002.1 também deixava sair, sem se dizer modal).
+2. **D003_A11Y_DEFECT — Esc num resultado fecha tudo.** O comentário do
+   `oc-nye.js` promete «Esc no resultado volta ao campo»; o código só trata
+   ↓/↑, e o Esc do `oc-shell.js` fecha a superfície. Ao fechar, o foco não
+   volta a quem a abriu.
+3. **Alvos de toque** em 390: os modos têm 28px e «Continuar na Nye» 32px.
 
 ## I18N
 

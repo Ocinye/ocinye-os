@@ -5,7 +5,7 @@
   "repository_head_before": "db625e8 (main: D002.1 #183 + wasmtime #184)",
   "integrated_on": "2026-09-29",
   "integration_branch": "feat/design-d003 (from main @ db625e8)",
-  "integration_status": "INTEGRATED_DETERMINISTIC_NYE_CERTIFIED_CAPABILITY_EXECUTION_CERTIFIED_BROWSER_CERTIFICATION_PENDING",
+  "integration_status": "INTEGRATED_DETERMINISTIC_NYE_CERTIFIED_CAPABILITY_EXECUTION_CERTIFIED_VISUAL_PARITY_FALSE_ACCESSIBILITY_NOT_CERTIFIED",
   "package": {
     "path": "ocinye-design-complete-D003",
     "checksums": "183/183 OK (sha256)",
@@ -61,10 +61,25 @@
   "capability_execution": "knowledge.note.create in a named workspace: proposal -> digest-bound confirmation -> approve -> execute -> completed; note created; audit plan_created, plan_approved, plan_executed (Core FixtureProvider, test builds only)",
   "inference": "NOT_CERTIFIED: no real model ran; production has no provider",
   "voice": "HONESTLY_UNAVAILABLE",
-  "browser_certification": "PENDING: authenticated browser session not established in this run (see report)",
+  "browser_certification": {
+    "session": "preview Workspace on the D003 build and the D002.1 build (origin/main db625e8) side by side on the same Core",
+    "surface_924": "card 112,43,700x454: identical to d003-surface-empty and d003-no-inference",
+    "surface_1440": "card 370,72,700x756 per the Design CSS (min(700px), min(84vh,760px)); the 1440 reference image is stored at 924x540 with non-uniform scaling, so it is not a pixel target",
+    "surface_390": "full screen 0,0,390x844, no horizontal scroll",
+    "search_no_ai": "PESQUISA DETERMINÍSTICA · SEM IA with the unit hit; reason texts match the references (no inference; permission)",
+    "nye_app_1440": "normal managed window 760x480 (rail as drawer below 860px, per HANDOFF); maximised: rail fixed 252px, new conversation, conversation search, empty state, archive note",
+    "nye_app_924": "D002 maximised at 92,52,818x414",
+    "nye_app_390": "full screen with back, title, composer and the D001 app bar, as d003-mobile",
+    "conversation": "sent from the browser: new conversation titled by the prompt; the Nye turn shows the typed reason as a failure, never as a model answer",
+    "voice": "?voice=1: «A voz não está disponível», no push-to-talk, microphone aria-disabled",
+    "d002_regression_closed": "1440x900: 1029 elements, 1027 identical in geometry and computed style, 2 = the Prompt launcher tile renamed Nye (declared); 924x540: 1023 elements identical with that tile excluded",
+    "pt_en_fr": "surface and Nye app clean in en and fr: no Portuguese left, no raw keys, lang attribute follows",
+    "console": "no errors and no CSP violations from the pages",
+    "not_reproducible": "proposal, confirmation, execution, streaming, sources, context, delegation, egress, revoked, mic states: no inference in the preview (proposal/confirmation/execution proven over HTTP by d003_act_journeys)"
+  },
   "tests": {
     "workspace_lib": "160/160 (incl. 4 controllers::nye)",
-    "d003_journeys": "9/9 (9 execution marks)",
+    "d003_journeys": "10/10 (10 execution marks); search without ai.use and the composer field proven by reversion",
     "d003_act_journeys": "2/2 (2 execution marks); digest guard proven by reversion",
     "d002_journeys": "18/18",
     "d002_contracts": "3/3",
@@ -85,7 +100,7 @@
     "FG-D3-08": "REMAINING (WORKSPACE_CONTRACT_REQUIRED): no SSE; streaming honestly absent",
     "FG-D3-09": "REMAINING (AI_FABRIC_REQUIRED)",
     "FG-D3-10": "PARTIAL: paragraphs and lists as NyeBlock, no HTML ever; citations [n] not mapped (no Ask sources without inference)",
-    "FG-D3-11": "RESOLVED (ADAPTER): invoke Results{sources} grouped by the six routed types, <=6 per group; types without a route excluded",
+    "FG-D3-11": "RESOLVED (ADAPTER): invoke Results{sources} grouped by the six routed types, <=6 per group; types without a route excluded; members without ai.use fall back to GET /search",
     "FG-D3-12": "REMAINING (ADAPTER): apps and commands as hits not wired (the D001 palette app filter remains)",
     "FG-D3-13": "REMAINING (CORE_CONTRACT_REQUIRED)",
     "FG-D3-14": "RESOLVED (ALREADY_IMPLEMENTED): Intent::detect shown as the detected intent",
@@ -842,5 +857,36 @@
       },
       "feedback": "docs/ui/CODE_FEEDBACK.md"
     }
-  ]
+  ],
+  "code_fixes_from_browser": [
+    "Search for members without ai.use: the Core refuses the whole invoke (search included); the surface now falls back to GET /search with the same authorisation instead of showing «no results» (journey, proven by reversion)",
+    "POST /ai/prompt reads the Design composer field q (it read prompt, so a browser send reached nothing); the journey posts the field the rendered composer names (proven by reversion)",
+    "Search journeys look only at the surface results: the Desktop underneath links to recent notes and let a broken search pass"
+  ],
+  "visual_parity": {
+    "result": "FALSE",
+    "defects": [
+      "D003_VISUAL_PARITY_DEFECT: a surface opened by the server with a query (/ask?q=…) lists every application unfiltered, and «no results» appears below them; the filter only runs on input events"
+    ],
+    "notes": [
+      "units and ideas grouped under «Outros» (no Unit/Idea kind in the Design vocabulary)",
+      "voice panel at 924x540 with the availability banner opens scrolled to the end, the unavailable status above the fold"
+    ]
+  },
+  "accessibility": {
+    "result": "NOT_CERTIFIED",
+    "verified": [
+      "Ctrl K opens with focus in the field",
+      "typing filters, ↓ moves into the results",
+      "gold focus outline visible",
+      "live regions (role=status) for availability and results",
+      "reduced-motion and forced-colors rules",
+      "no inline style"
+    ],
+    "defects": [
+      "D003_A11Y_DEFECT: the surface declares aria-modal=true but Tab leaves it for the page behind (the D002.1 palette also escaped, without claiming modal)",
+      "D003_A11Y_DEFECT: Esc on a result closes the surface instead of returning to the field (the oc-nye.js comment promises the latter); closing never returns focus to the opener",
+      "D003_A11Y_NOTE: mobile mode pills 28px and «Continuar na Nye» 32px tall, below 44px"
+    ]
+  }
 }
