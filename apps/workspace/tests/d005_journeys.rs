@@ -334,7 +334,10 @@ async fn projectos_filtros_pessoas_e_transicoes() {
             && html.contains(&format!("Projecto B {marca}"))
     );
     // A linha mostra o código do projecto, e abrir guarda o filtro da lista.
-    assert!(html.contains(&codigo_a), "o código do projecto não está na lista");
+    assert!(
+        html.contains(&codigo_a),
+        "o código do projecto não está na lista"
+    );
     assert!(html.contains(&format!(r#"href="/projects/{pa}?nav=all""#)));
     // «Em curso» é `active`: um projecto acabado de nascer é rascunho.
     let (_, html) = s.html("/projects?nav=in_progress", &ca).await;
