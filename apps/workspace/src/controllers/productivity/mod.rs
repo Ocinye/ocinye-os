@@ -3,6 +3,7 @@
 //! decidem autorização, não guardam nada e não conhecem o armazenamento.
 
 pub mod calendar;
+pub mod files;
 pub mod note_markdown;
 pub mod notes;
 

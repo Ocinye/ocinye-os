@@ -500,7 +500,9 @@ pub fn router(state: WorkspaceState) -> Router {
             get(bibliography_tools).post(review_bibliography),
         )
         .route("/datasets", get(datasets))
-        .route("/files", get(files_browse))
+        .route("/files", get(productivity::files_page))
+        .route("/files/selection", post(productivity::files_selection))
+        .route("/files/{file_id}/rename", post(productivity::files_rename))
         .route("/files/uploads", post(upload_begin))
         .route("/files/personal-upload", post(upload_begin_personal))
         .route("/files/upload-preflight", post(upload_preflight))
@@ -524,7 +526,7 @@ pub fn router(state: WorkspaceState) -> Router {
             "/files/upload",
             post(files_upload).layer(DefaultBodyLimit::max(FILE_BODY_LIMIT_BYTES)),
         )
-        .route("/files/folder", post(files_new_folder))
+        .route("/files/folder", post(productivity::files_new_folder))
         .route("/files/{file_id}", get(file_detail))
         .route(
             "/files/{file_id}/version",
@@ -1444,7 +1446,12 @@ fn shell_page(
         // (D002_CONTRACT_GAP em CODE_FEEDBACK): entra no fim do `<head>`, com
         // `defer`, depois do `oc-wm.js` de que depende.
         if let Some(at) = page.find("</head>") {
-            page.insert_str(at, r#"<script src="/static/wm-engine.js" defer></script>"#);
+            // D004: o motor de envio e de mover de Ficheiros, também de Code; só
+            // age quando a aplicação Ficheiros está na página.
+            page.insert_str(
+                at,
+                r#"<script src="/static/wm-engine.js" defer></script><script src="/static/files-engine.js" defer></script>"#,
+            );
         }
     }
     Html(page).into_response()
@@ -7383,11 +7390,6 @@ async fn mark_notification_read(
 /// O mesmo limite do Core, mais o envelope multipart.
 const FILE_BODY_LIMIT_BYTES: usize = 640 * 1024 * 1024 + 64 * 1024;
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn files_browse(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Files).await
-}
-
 /// Lê o ficheiro e os campos de um multipart.
 async fn ler_carregamento(
     mut multipart: Multipart,
@@ -7883,55 +7885,6 @@ fn recusa_de_carregamento(
         (estado, axum::Json(serde_json::json!({ "erro": erro }))).into_response()
     } else {
         regresso(campos, &format!("erro={erro}"))
-    }
-}
-
-#[derive(Deserialize)]
-struct NewFolderForm {
-    workspace_id: Uuid,
-    #[serde(default)]
-    parent_id: String,
-    name: String,
-    #[serde(default)]
-    return_to: String,
-}
-
-/// Cria uma pasta.
-async fn files_new_folder(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<NewFolderForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let mut campos = std::collections::HashMap::new();
-    campos.insert("return_to".to_owned(), form.return_to);
-
-    if form.name.trim().is_empty() {
-        return regresso(&campos, "erro=nome");
-    }
-
-    let mut corpo = serde_json::json!({ "name": form.name.trim() });
-    if let Ok(pai) = Uuid::parse_str(&form.parent_id) {
-        corpo["parent_id"] = serde_json::json!(pai);
-    }
-
-    let workspace_id = form.workspace_id;
-    let resultado = api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/workspaces/{workspace_id}/folders"),
-        &corpo,
-    )
-    .await;
-
-    match resultado {
-        Ok(_) => regresso(&campos, "ok=pasta"),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        // Um nome repetido entre irmãs é a recusa mais provável, e a mensagem
-        // di-lo em vez de falar de restrições da base.
-        Err(_) => regresso(&campos, "erro=nome"),
     }
 }
 

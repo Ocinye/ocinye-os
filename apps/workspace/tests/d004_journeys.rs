@@ -573,3 +573,465 @@ async fn calendario_o_evento_pessoal_de_outra_pessoa_nao_existe() {
 fn crate_t(key: &str) -> &'static str {
     ocinye_workspace::i18n::t(key)
 }
+
+// ── Ficheiros ────────────────────────────────────────────────────────────
+
+use sha2::{Digest, Sha256};
+
+fn hex(d: &[u8]) -> String {
+    d.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+async fn com_armazenamento(s: &Sistema) -> bool {
+    if armazenamento().is_some() {
+        // O Core guarda cada objecto num backend registado; o de teste é o que
+        // o `ObjectStore` do harness diz ser.
+        sqlx::query(
+            "INSERT INTO storage_backends
+                 (code, kind, display_name, location_label, bucket, is_default, is_active)
+             VALUES ('ocinye-test-default', 's3_compatible', 'Test', 'test', 'ocinye-test-artifacts', TRUE, TRUE)
+             ON CONFLICT DO NOTHING",
+        )
+        .execute(&s.pool)
+        .await
+        .expect("backend de teste");
+        return true;
+    }
+    assert!(
+        std::env::var("CI").is_err(),
+        "sem armazenamento, Ficheiros não se prova; defina OCINYE_TEST_STORAGE_ENDPOINT"
+    );
+    eprintln!("skipping: OCINYE_TEST_STORAGE_ENDPOINT is not set");
+    false
+}
+
+async fn json_post(s: &Sistema, cookie: &str, path: &str, body: &Value) -> reqwest::Response {
+    s.escrever(reqwest::Method::POST, path, cookie)
+        .header("content-type", "application/json")
+        .header("accept", "application/json")
+        .body(body.to_string())
+        .send()
+        .await
+        .unwrap()
+}
+
+/// O envio por partes, exactamente como o `files-engine.js` o faz: preflight,
+/// sessão pessoal, cada parte com a sua soma, fecho com a soma do todo.
+async fn enviar(
+    s: &Sistema,
+    cookie: &str,
+    nome: &str,
+    tipo: &str,
+    bytes: &[u8],
+    pasta: Option<&str>,
+) -> Value {
+    let r = json_post(
+        s,
+        cookie,
+        "/files/upload-preflight",
+        &json!({ "size_bytes": bytes.len() }),
+    )
+    .await;
+    assert!(r.status().is_success(), "preflight {}", r.status());
+    let mut abertura = json!({ "filename": nome, "content_type": tipo, "size_bytes": bytes.len() });
+    if let Some(p) = pasta {
+        abertura["folder_id"] = json!(p);
+    }
+    let r = json_post(s, cookie, "/files/personal-upload", &abertura).await;
+    let status = r.status();
+    let corpo = r.text().await.unwrap_or_default();
+    assert!(status.is_success(), "abertura {status} {corpo}");
+    let sessao: Value = serde_json::from_str(&corpo).unwrap();
+    let id = sessao["session_id"].as_str().unwrap().to_owned();
+    let parte = usize::try_from(sessao["chunk_size_bytes"].as_u64().unwrap()).unwrap();
+    let total = sessao["total_parts"].as_u64().unwrap();
+    let mut todo = Sha256::new();
+    for (n, pedaco) in bytes.chunks(parte.max(1)).enumerate() {
+        todo.update(pedaco);
+        let r = s
+            .escrever(
+                reqwest::Method::PUT,
+                &format!(
+                    "/files/uploads/{id}/parts/{}?sha256={}",
+                    n + 1,
+                    hex(&Sha256::digest(pedaco))
+                ),
+                cookie,
+            )
+            .header("content-type", "application/octet-stream")
+            .body(pedaco.to_vec())
+            .send()
+            .await
+            .unwrap();
+        assert!(r.status().is_success(), "parte {} {}", n + 1, r.status());
+    }
+    let r = json_post(
+        s,
+        cookie,
+        &format!("/files/uploads/{id}/complete"),
+        &json!({ "sha256": hex(&todo.finalize()) }),
+    )
+    .await;
+    let status = r.status();
+    if !status.is_success() {
+        panic!("fecho {status} {}", r.text().await.unwrap_or_default());
+    }
+    let mut feito: Value = r.json().await.unwrap();
+    feito["total_parts"] = json!(total);
+    feito
+}
+
+/// O identificador opaco de um ficheiro na página (`f.<ficheiro>.<versão>`).
+fn referencia(feito: &Value) -> String {
+    format!(
+        "f.{}.{}",
+        feito["file_id"].as_str().unwrap(),
+        feito["version_id"].as_str().unwrap()
+    )
+}
+
+#[tokio::test]
+async fn ficheiros_envio_por_partes_sem_limite_fixo_e_com_a_soma_do_todo() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    if !com_armazenamento(&s).await {
+        return;
+    }
+    let (_, c, _) = membro(&s).await;
+    // Sem tecto fixo de 512 MB: quem diz o que cabe é o preflight do Core.
+    let r = json_post(
+        &s,
+        &c,
+        "/files/upload-preflight",
+        &json!({ "size_bytes": 600u64 * 1024 * 1024 }),
+    )
+    .await;
+    let cap: Value = r.json().await.unwrap();
+    assert!(
+        cap["effective_max_uploadable_bytes"].as_u64().unwrap_or(0) > 512 * 1024 * 1024,
+        "{cap}"
+    );
+    // Um ficheiro de duas partes (as partes do Core são de 32 MiB).
+    let bytes: Vec<u8> = (0..(32 * 1024 * 1024 + 4096))
+        .map(|i| (i % 251) as u8)
+        .collect();
+    let nome = format!("serie-{}.txt", Uuid::new_v4().simple());
+    let feito = enviar(&s, &c, &nome, "text/plain", &bytes, None).await;
+    assert_eq!(feito["total_parts"], 2);
+    let (_, html) = s.html("/files", &c).await;
+    assert!(
+        html.contains(&nome),
+        "o ficheiro enviado não aparece nos meus ficheiros"
+    );
+    assert!(
+        html.contains("/static/files-engine.js"),
+        "o motor de envio não está na página"
+    );
+}
+
+#[tokio::test]
+async fn ficheiros_cancelar_aborta_e_intencoes_malformadas_sao_recusadas() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    if !com_armazenamento(&s).await {
+        return;
+    }
+    let (_, c, _) = membro(&s).await;
+    let (_, outro_c, _) = membro(&s).await;
+    let dados = b"linha 1\nlinha 2\n".to_vec();
+    let abrir = |nome: &str| json!({ "filename": nome, "content_type": "text/plain", "size_bytes": dados.len() });
+    // Cancelar: a sessão aborta, e o fecho depois disso não cria nada.
+    let r = json_post(&s, &c, "/files/personal-upload", &abrir("cancelado.txt")).await;
+    let id = r.json::<Value>().await.unwrap()["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let r = s
+        .escrever(reqwest::Method::DELETE, &format!("/files/uploads/{id}"), &c)
+        .send()
+        .await
+        .unwrap();
+    assert!(r.status().is_success(), "{}", r.status());
+    let r = json_post(
+        &s,
+        &c,
+        &format!("/files/uploads/{id}/complete"),
+        &json!({ "sha256": hex(&Sha256::digest(&dados)) }),
+    )
+    .await;
+    assert!(!r.status().is_success());
+    // Uma parte com a soma errada é recusada.
+    let r = json_post(&s, &c, "/files/personal-upload", &abrir("errado.txt")).await;
+    let id = r.json::<Value>().await.unwrap()["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let r = s
+        .escrever(
+            reqwest::Method::PUT,
+            &format!("/files/uploads/{id}/parts/1?sha256={}", "0".repeat(64)),
+            &c,
+        )
+        .header("content-type", "application/octet-stream")
+        .body(dados.clone())
+        .send()
+        .await
+        .unwrap();
+    assert!(!r.status().is_success(), "parte com soma errada aceite");
+    // A soma do todo que não bate recusa o fecho.
+    let r = s
+        .escrever(
+            reqwest::Method::PUT,
+            &format!(
+                "/files/uploads/{id}/parts/1?sha256={}",
+                hex(&Sha256::digest(&dados))
+            ),
+            &c,
+        )
+        .header("content-type", "application/octet-stream")
+        .body(dados.clone())
+        .send()
+        .await
+        .unwrap();
+    assert!(r.status().is_success());
+    let r = json_post(
+        &s,
+        &c,
+        &format!("/files/uploads/{id}/complete"),
+        &json!({ "sha256": "0".repeat(64) }),
+    )
+    .await;
+    assert!(!r.status().is_success(), "fecho com a soma errada aceite");
+    // A sessão de outra pessoa não se usa; a pasta de outra pessoa não é destino.
+    let r = s
+        .escrever(
+            reqwest::Method::DELETE,
+            &format!("/files/uploads/{id}"),
+            &outro_c,
+        )
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        !r.status().is_success(),
+        "a sessão de outra pessoa foi cancelada"
+    );
+    let r = s
+        .escrever(reqwest::Method::POST, "/files/folder", &outro_c)
+        .form(&[("name", "Dela"), ("parent", "root")])
+        .send()
+        .await
+        .unwrap();
+    let pasta_alheia = location(&r).trim_start_matches("/files?folder=").to_owned();
+    let mut pedido = abrir("intruso.txt");
+    pedido["folder_id"] = json!(pasta_alheia);
+    let r = json_post(&s, &c, "/files/personal-upload", &pedido).await;
+    assert!(
+        !r.status().is_success(),
+        "enviou para a pasta de outra pessoa"
+    );
+    let (_, html) = s.html("/files", &c).await;
+    assert!(
+        !html.contains("cancelado.txt")
+            && !html.contains("errado.txt")
+            && !html.contains("intruso.txt")
+    );
+}
+
+#[tokio::test]
+async fn ficheiros_lista_inspector_e_accoes_pelo_core() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    if !com_armazenamento(&s).await {
+        return;
+    }
+    let (_, c, _) = membro(&s).await;
+    let texto = enviar(
+        &s,
+        &c,
+        "leituras.txt",
+        "text/plain",
+        b"vento 12 m/s\n<script>x</script>",
+        None,
+    )
+    .await;
+    let png: &[u8] = &[
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f,
+        0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8,
+        0xcf, 0xc0, 0xf0, 0x1f, 0x00, 0x05, 0x00, 0x01, 0xff, 0x89, 0x99, 0x3d, 0x1d, 0x00, 0x00,
+        0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ];
+    let imagem = enviar(&s, &c, "anemometro.png", "image/png", png, None).await;
+    let (rt, ri) = (referencia(&texto), referencia(&imagem));
+
+    // A lista e o inspector: o texto escapado (nunca executado), a imagem pela
+    // origem do Workspace, descarregar, e a Nye com a referência do ficheiro.
+    let (_, html) = s.html("/files", &c).await;
+    assert!(
+        html.contains(r#"data-app="files""#)
+            && html.contains("leituras.txt")
+            && html.contains("anemometro.png")
+    );
+    assert!(!html.contains("oc-pending oc-win__state"));
+    let (_, html) = s.html(&format!("/files?item={rt}"), &c).await;
+    assert!(html.contains(r#"data-part="files-details""#) && html.contains("vento 12 m/s"));
+    assert!(html.contains("&lt;script&gt;x&lt;/script&gt;") && !html.contains("<script>x"));
+    let v = texto["version_id"].as_str().unwrap();
+    assert!(html.contains(&format!(r#"href="/me/files/{v}/download""#)));
+    assert!(html.contains(&format!(
+        "/ai/prompt?ref=file:{}",
+        texto["file_id"].as_str().unwrap()
+    )));
+    assert!(
+        html.contains(crate_t("files.versions.none")),
+        "versões inventadas"
+    );
+    let (_, html) = s.html(&format!("/files?item={ri}"), &c).await;
+    assert!(html.contains(&format!(
+        r#"src="/me/files/{}/inline""#,
+        imagem["version_id"].as_str().unwrap()
+    )));
+
+    // Pasta nova, mudar o nome.
+    let r = s
+        .escrever(reqwest::Method::POST, "/files/folder", &c)
+        .form(&[("name", "Campanha"), ("parent", "root")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 303);
+    let (_, html) = s.html("/files", &c).await;
+    assert!(html.contains("Campanha") && html.contains(r#"data-kind="folder""#));
+    let r = s
+        .escrever(reqwest::Method::POST, &format!("/files/{rt}/rename"), &c)
+        .form(&[("name", "leituras-torre2.txt")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 303);
+    let (_, html) = s.html("/files", &c).await;
+    assert!(html.contains("leituras-torre2.txt"));
+
+    // Favorito, lixo e restaurar, pela barra de selecção (cada item pelo Core).
+    let sel = |op: &str, item: &str| format!("op={op}&item={item}");
+    let post_sel = |body: String| {
+        s.escrever(reqwest::Method::POST, "/files/selection", &c)
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(body)
+            .send()
+    };
+    assert_eq!(
+        post_sel(sel("favourite", &rt))
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        303
+    );
+    let (_, html) = s.html("/files?section=favourites", &c).await;
+    assert!(html.contains("leituras-torre2.txt"));
+    assert_eq!(
+        post_sel(format!("{}&item={ri}", sel("trash", &rt)))
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        303
+    );
+    let (_, html) = s.html("/files?section=trash", &c).await;
+    assert!(html.contains("leituras-torre2.txt") && html.contains("anemometro.png"));
+    assert_eq!(
+        post_sel(sel("restore", &ri))
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        303
+    );
+    let (_, html) = s.html("/files", &c).await;
+    assert!(html.contains("anemometro.png") && !html.contains("leituras-torre2.txt"));
+
+    // Eliminar para sempre: sem confirmação desenhada, recusa-se, e nada se apaga.
+    let r = post_sel(sel("purge", &rt)).await.unwrap();
+    assert!(!r.status().is_success() && r.status().as_u16() != 303);
+    let (_, html) = s.html("/files?section=trash", &c).await;
+    assert!(
+        html.contains("leituras-torre2.txt"),
+        "eliminado sem confirmação"
+    );
+    // Mover pela barra precisa de destino: recusado, nada muda.
+    let r = post_sel(sel("move", &ri)).await.unwrap();
+    assert!(!r.status().is_success());
+    // Descarregar um: a descarga da versão exacta.
+    let r = post_sel(sel("download", &ri)).await.unwrap();
+    assert_eq!(
+        location(&r),
+        format!(
+            "/me/files/{}/download",
+            imagem["version_id"].as_str().unwrap()
+        )
+    );
+}
+
+#[tokio::test]
+async fn ficheiros_os_de_outra_pessoa_nao_se_veem_nem_se_mudam() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    if !com_armazenamento(&s).await {
+        return;
+    }
+    let (_, c, _) = membro(&s).await;
+    let (_, outro_c, _) = membro(&s).await;
+    let alheio = enviar(
+        &s,
+        &outro_c,
+        "confidencial.txt",
+        "text/plain",
+        b"segredo",
+        None,
+    )
+    .await;
+    let ra = referencia(&alheio);
+    // Pelo endereço, com a referência certa: não há inspector, nem conteúdo.
+    let (_, html) = s.html(&format!("/files?item={ra}"), &c).await;
+    assert!(!html.contains("confidencial.txt") && !html.contains("segredo"));
+    assert!(!html.contains(r#"data-part="files-details""#));
+    // Mudar-lhe o nome ou pô-lo no lixo: o Core recusa, e o ficheiro fica.
+    let r = s
+        .escrever(reqwest::Method::POST, &format!("/files/{ra}/rename"), &c)
+        .form(&[("name", "meu.txt")])
+        .send()
+        .await
+        .unwrap();
+    assert!(!r.status().is_success() && r.status().as_u16() != 303);
+    let r = s
+        .escrever(reqwest::Method::POST, "/files/selection", &c)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(format!("op=trash&item={ra}"))
+        .send()
+        .await
+        .unwrap();
+    assert!(!r.status().is_success() && r.status().as_u16() != 303);
+    let (_, html) = s.html("/files", &outro_c).await;
+    assert!(
+        html.contains("confidencial.txt"),
+        "o ficheiro de outra pessoa mudou"
+    );
+    // Um identificador que não é uma referência (um caminho) é recusado.
+    let r = s
+        .escrever(
+            reqwest::Method::POST,
+            "/files/..%2F..%2Fetc%2Fpasswd/rename",
+            &c,
+        )
+        .form(&[("name", "x")])
+        .send()
+        .await
+        .unwrap();
+    assert!(!r.status().is_success());
+}

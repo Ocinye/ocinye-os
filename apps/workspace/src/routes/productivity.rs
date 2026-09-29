@@ -943,3 +943,312 @@ pub(super) async fn cancel_calendar_event(
         Err(f) => failure_response(&f),
     }
 }
+
+// ── Ficheiros ────────────────────────────────────────────────────────────
+
+#[derive(Deserialize, Default)]
+pub(super) struct FilesQuery {
+    #[serde(default)]
+    section: Option<String>,
+    #[serde(default)]
+    folder: Option<Uuid>,
+    #[serde(default)]
+    item: Option<String>,
+    #[serde(default)]
+    sort: Option<String>,
+    #[serde(default)]
+    dir: Option<String>,
+    #[serde(default)]
+    view: Option<String>,
+    #[serde(default)]
+    q: Option<String>,
+    #[serde(default)]
+    preview: Option<String>,
+}
+
+/// `GET /files`: o espaço pessoal (secção, pasta, item aberto no inspector).
+pub(super) async fn files_page(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Query(query): Query<FilesQuery>,
+) -> Response {
+    use crate::controllers::productivity::files as fl;
+    use crate::ui::view_models::{FilePreviewVm, FilesSection, FilesView, FilesVm};
+    let w = match open_app(&state, &headers, Screen::Files, ApplicationId::Files).await {
+        Ok(w) => w,
+        Err(response) => return *response,
+    };
+    let quem = caller(&w.member);
+    let clock = clock_of(&w.ctx);
+    let section = fl::section_of(query.section.as_deref());
+    let folder = query.folder.filter(|_| section == FilesSection::Mine);
+    let sort = fl::sort_of(query.sort.as_deref(), query.dir.as_deref());
+    let q = query.q.clone().unwrap_or_default();
+    let (listing, load) = match quem.get(&state, &fl::list_api(section, folder)).await {
+        Ok(v) => (v, AppLoad::Ready),
+        Err(ApiFailure::Unauthorised) => return session_ended(&state, &headers),
+        Err(f) => (Value::Null, AppLoad::Failed(app_error(&f))),
+    };
+    let open = query.item.as_deref();
+    let items = fl::items(&listing, section, folder, open, sort, &q, &clock);
+    // O inspector: só um ficheiro que esta listagem (do Core, agora) contém.
+    let mut details = None;
+    if let (Some(id), Some(raw)) = (open, open.and_then(|id| fl::raw_of(&listing, id))) {
+        let version = raw.get("version_id").and_then(Value::as_str).unwrap_or("");
+        let name = raw.get("name").and_then(Value::as_str).unwrap_or("");
+        let ct = raw
+            .get("content_type")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let size = raw.get("size_bytes").and_then(Value::as_i64).unwrap_or(0);
+        let preview = match fl::preview_for(ct, name, version) {
+            Some(p) => Some(p),
+            None if size > 512 * 1024 => Some(FilePreviewVm::Unsupported),
+            None => match api::bytes(
+                &state,
+                &w.member.session.access_token,
+                &w.member.correlation_id,
+                &format!("/api/v1/me/files/{version}/text"),
+            )
+            .await
+            {
+                Ok((_, body)) => Some(match String::from_utf8(body) {
+                    Ok(text) => FilePreviewVm::Text {
+                        text,
+                        lang: None,
+                        truncated: false,
+                    },
+                    Err(_) => FilePreviewVm::Unsupported,
+                }),
+                Err(_) => Some(FilePreviewVm::Unsupported),
+            },
+        };
+        if let Some(item) = items.iter().find(|i| i.id == id) {
+            details = Some(fl::details(item, raw, preview, &clock));
+        }
+    }
+    let can_write = section == FilesSection::Mine;
+    let vm = FilesVm {
+        section,
+        nav: fl::nav(section),
+        crumbs: fl::crumbs(section, folder, &listing),
+        view: if query.view.as_deref() == Some("grid") {
+            FilesView::Grid
+        } else {
+            FilesView::List
+        },
+        sort,
+        query: q,
+        items,
+        load,
+        page: AppPageVm::default(),
+        details,
+        uploads: Vec::new(),
+        // A pasta onde se envia e cria: `root` na raiz (o motor de envio e o
+        // formulário de «Nova pasta» traduzem-no para «sem pasta»).
+        folder_id: can_write.then(|| folder.map_or_else(|| "root".to_owned(), |f| f.to_string())),
+        can_write,
+        preview_open: query.preview.as_deref() == Some("1"),
+    };
+    let strings = upload_strings();
+    render_app(
+        &state,
+        &w,
+        StatusCode::OK,
+        ui::apps::files::app(&vm),
+        Some(strings),
+        None,
+    )
+}
+
+/// Os textos da bandeja de envios, na língua do membro, para o motor de envio
+/// (`files-engine.js`), que não traduz: um elemento inerte com `data-*`.
+fn upload_strings() -> AnyView {
+    view! {
+        <template
+            data-part="files-up-strings"
+            data-queued=t("files.up.queued")
+            data-checking=t("files.up.checking")
+            data-done=t("files.up.done")
+            data-cancelled=t("files.up.cancelled")
+            data-failed=t("app.err.upload.title")
+            data-full=t("prod.files.up.full")
+            data-cancel=t("files.up.cancel")
+            data-retry=t("files.up.retry")
+            data-uploads=t("files.uploads")
+        ></template>
+    }
+    .into_any()
+}
+
+#[derive(Deserialize)]
+pub(super) struct NewFolderForm {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    parent: String,
+}
+
+/// `POST /files/folder`: uma pasta pessoal nova (as pastas pessoais são
+/// planas; `parent` só diz de onde se veio).
+pub(super) async fn files_new_folder(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Form(form): Form<NewFolderForm>,
+) -> Response {
+    let member = member_or_login!(state, headers);
+    let name = form.name.trim();
+    if name.is_empty() {
+        return Redirect::to("/files").into_response();
+    }
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/me/folders",
+        &serde_json::json!({ "name": name }),
+    )
+    .await
+    {
+        Ok(created) => {
+            let id = created
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let _ = form.parent;
+            Redirect::to(&format!("/files?folder={id}")).into_response()
+        }
+        Err(ApiFailure::Unauthorised) => session_ended(&state, &headers),
+        Err(f) => failure_response(&f),
+    }
+}
+
+#[derive(Deserialize)]
+pub(super) struct RenameForm {
+    #[serde(default)]
+    name: String,
+}
+
+/// `POST /files/{id}/rename`: mudar o nome de um ficheiro do próprio.
+pub(super) async fn files_rename(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    Path(file_id): Path<String>,
+    Form(form): Form<RenameForm>,
+) -> Response {
+    use crate::controllers::productivity::files as fl;
+    let member = member_or_login!(state, headers);
+    let item = file_id;
+    let Some(fl::Ref::File(file, _)) = fl::parse_ref(&item) else {
+        return failure_response(&ApiFailure::Denied);
+    };
+    match api::post(
+        &state,
+        &member.session.access_token,
+        &member.correlation_id,
+        "/api/v1/me/files/rename",
+        &serde_json::json!({ "file_id": file, "name": form.name.trim() }),
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!("/files?item={item}")).into_response(),
+        Err(ApiFailure::Unauthorised) => session_ended(&state, &headers),
+        Err(f) => failure_response(&f),
+    }
+}
+
+/// `POST /files/selection`: uma acção sobre os itens seleccionados. Cada item é
+/// autorizado pelo Core, um a um; a selecção não autoriza nada.
+pub(super) async fn files_selection(
+    State(state): State<WorkspaceState>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
+    use crate::controllers::productivity::files as fl;
+    let member = member_or_login!(state, headers);
+    // `item` repete-se: lê-se o corpo à mão (o `Form` do axum não junta chaves).
+    let pairs: Vec<(String, String)> = url::form_urlencoded::parse(&body).into_owned().collect();
+    let op = pairs
+        .iter()
+        .find(|(k, _)| k == "op")
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default();
+    let refs: Vec<fl::Ref> = pairs
+        .iter()
+        .filter(|(k, _)| k == "item")
+        .filter_map(|(_, v)| fl::parse_ref(v))
+        .collect();
+    let files: Vec<(Uuid, Uuid)> = refs
+        .iter()
+        .filter_map(|r| match r {
+            fl::Ref::File(f, v) => Some((*f, *v)),
+            fl::Ref::Folder(_) => None,
+        })
+        .collect();
+    let call = |path: &'static str, id: Uuid| {
+        let state = state.clone();
+        let token = member.session.access_token.clone();
+        let corr = member.correlation_id.clone();
+        async move {
+            api::post(
+                &state,
+                &token,
+                &corr,
+                path,
+                &serde_json::json!({ "file_id": id }),
+            )
+            .await
+        }
+    };
+    let back = match op.as_str() {
+        "restore" | "purge" => "/files?section=trash",
+        _ => "/files",
+    };
+    match op.as_str() {
+        "download" => match files.as_slice() {
+            [(_, v)] => Redirect::to(&format!("/me/files/{v}/download")).into_response(),
+            _ => failure_response(&ApiFailure::Rejected(
+                t("prod.files.err.download_many").to_owned(),
+            )),
+        },
+        "favourite" | "trash" | "restore" => {
+            let path = match op.as_str() {
+                "favourite" => "/api/v1/me/files/favourite",
+                "trash" => "/api/v1/me/files/delete",
+                _ => "/api/v1/me/files/restore",
+            };
+            for (f, _) in &files {
+                match call(path, *f).await {
+                    Err(ApiFailure::Unauthorised) => return session_ended(&state, &headers),
+                    Err(e) => return failure_response(&e),
+                    Ok(_) => {}
+                }
+            }
+            if op == "trash" {
+                for r in &refs {
+                    if let fl::Ref::Folder(d) = r {
+                        let _ = api::delete(
+                            &state,
+                            &member.session.access_token,
+                            &member.correlation_id,
+                            &format!("/api/v1/me/folders/{d}"),
+                        )
+                        .await;
+                    }
+                }
+            }
+            Redirect::to(back).into_response()
+        }
+        // Eliminar para sempre não se faz sem uma confirmação, e o Design ainda
+        // não a desenhou (MISSING_DESIGN_STATE): recusa-se, e nada se apaga.
+        "purge" => failure_response(&ApiFailure::Rejected(
+            t("prod.files.err.purge_confirmation").to_owned(),
+        )),
+        // Mover pela barra precisa de um destino, e o formulário do Design não o
+        // tem; mover faz-se arrastando para uma pasta.
+        "move" => failure_response(&ApiFailure::Rejected(
+            t("prod.files.err.move_target").to_owned(),
+        )),
+        _ => failure_response(&ApiFailure::Rejected(String::new())),
+    }
+}
