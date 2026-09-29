@@ -287,14 +287,10 @@
      não chega (erro, sessão acabada, recusa) não entra: a janela passa a ser
      uma ligação para o seu endereço, onde o servidor diz porquê. */
   const frameOf = (href) => href + (href.includes('?') ? '&' : '?') + 'frame=1';
+  /* O init do Design (oc-apps.js, D004.1) liga só as aplicações dentro da
+     raiz e nunca a mesma duas vezes. */
   const wire = (body) => {
-    /* O init do Design (oc-apps.js) liga todas as aplicações da página. As
-       que já estão ligadas escondem-se durante a chamada, para não receberem
-       os ouvintes duas vezes (CODE_FEEDBACK D004: pedir init(root)). */
-    if (!window.OcApps || !body.querySelector('[data-oc="app"]')) return;
-    const wired = Array.from(document.querySelectorAll('[data-oc="app"]')).filter((a) => !body.contains(a));
-    wired.forEach((a) => a.setAttribute('data-oc', 'app-wired'));
-    try { window.OcApps.init(); } finally { wired.forEach((a) => a.setAttribute('data-oc', 'app')); }
+    if (window.OcApps && body.querySelector('[data-oc="app"]')) window.OcApps.init(body);
   };
   layer.querySelectorAll('[data-oc="win"]').forEach((w) => {
     const body = w.querySelector('[data-part="win-body"]');

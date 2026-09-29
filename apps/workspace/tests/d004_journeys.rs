@@ -942,6 +942,25 @@ async fn ficheiros_lista_inspector_e_accoes_pelo_core() {
     );
     let (_, html) = s.html("/files?section=trash", &c).await;
     assert!(html.contains("leituras-torre2.txt") && html.contains("anemometro.png"));
+    // D004.1 · «Eliminar definitivamente» está à vista, desactivado, e a página
+    // não tem nenhum controlo que submeta `op=purge`: é decisão de produto, não
+    // só estado visual. A razão está escrita ao lado.
+    assert!(
+        !html.contains(r#"value="purge""#),
+        "um controlo submete o purge"
+    );
+    let marca = html
+        .find(r#"data-part="files-purge-unavailable""#)
+        .expect("o controlo indisponível");
+    let inicio = html[..marca].rfind("<button").expect("<button");
+    let botao = &html[inicio..marca + html[marca..].find('>').unwrap()];
+    assert!(
+        botao.contains(r#"type="button""#)
+            && botao.contains("disabled")
+            && !botao.contains("name="),
+        "{botao}"
+    );
+    assert!(html.contains(crate_t("files.purge.unavailable")));
     assert_eq!(
         post_sel(sel("restore", &ri))
             .await
@@ -1111,6 +1130,20 @@ async fn correio_rascunho_fecho_com_guardar_rascunho_e_envio_que_falha_guarda_o_
     };
     let (eu, c, t) = membro(&s).await;
     let cx = caixa(&s, eu).await;
+    // Uma caixa ligada: o envio chega ao transporte, que nesta instalação não
+    // existe — é a falha de transporte que se prova aqui (a caixa por ligar é
+    // `NotConnected`, noutra viagem).
+    // «Ligada» é ter credencial: uma credencial de teste, opaca, que o
+    // fornecedor por configurar nunca chega a abrir.
+    sqlx::query(
+        "INSERT INTO mailbox_credentials (mailbox_id, username, nonce, ciphertext, connected_by)
+         VALUES ($1, 'teste', decode(repeat('00', 12), 'hex'), decode('00', 'hex'), $2)",
+    )
+    .bind(cx)
+    .bind(eu)
+    .execute(&s.pool)
+    .await
+    .unwrap();
     let (status, html) = s.html(&format!("/mail/compose?box={cx}"), &c).await;
     assert_eq!(status, 200);
     assert!(html.contains(r#"data-part="mail-compose""#));
@@ -1230,6 +1263,68 @@ async fn correio_rascunho_fecho_com_guardar_rascunho_e_envio_que_falha_guarda_o_
         .all(|w| w["app_id"] != "mail"));
 }
 
+/// D004.1 · Uma caixa do membro por ligar: a lista do índice fica à vista; ler
+/// o corpo e enviar dizem `NotConnected` (e não «tente de novo»), e o rascunho
+/// fica.
+#[tokio::test]
+async fn correio_caixa_por_ligar_mostra_a_lista_e_diz_porque_nao_le_nem_envia() {
+    let Some(s) = Sistema::levantar("research").await else {
+        return;
+    };
+    let (eu, c, t) = membro(&s).await;
+    let cx = caixa(&s, eu).await;
+    let m = mensagem(&s, cx, "Relatório indexado").await;
+    // A · a lista continua.
+    let (status, html) = s.html(&format!("/mail?box={cx}"), &c).await;
+    assert_eq!(status, 200);
+    assert!(html.contains("Relatório indexado"));
+    assert!(!html.contains("app.err.not_connected"));
+    // B · ler o corpo: `NotConnected`, com a lista ainda ao lado.
+    let (_, html) = s
+        .html(&format!("/mail/message/{m}?box={cx}&folder=inbox"), &c)
+        .await;
+    assert!(html.contains(r#"data-error="app.err.not_connected""#));
+    assert!(html.contains(crate_t("app.err.not_connected.title")));
+    assert!(!html.contains(crate_t("app.err.unavailable.body")));
+    assert!(html.contains("Relatório indexado"), "a lista desapareceu");
+    // As definições do Correio não têm ecrã do Design: não há ligação para lá.
+    assert!(!html.contains(r#"data-part="mail-connect""#));
+    // C · enviar: `NotConnected`, o rascunho guardado e o texto intacto.
+    let r = s
+        .escrever(
+            reqwest::Method::POST,
+            &format!("/mail/compose/send?box={cx}"),
+            &c,
+        )
+        .form(&[
+            ("to", "ana@parceiro.ao"),
+            ("subject", "Assunto por ligar"),
+            ("body", "texto a guardar"),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 409);
+    let html = r.text().await.unwrap();
+    assert!(html.contains(r#"data-error="app.err.not_connected""#));
+    assert!(!html.contains(r#"data-error="app.err.transport""#));
+    assert!(html.contains("texto a guardar"));
+    let rascunhos: Value = s
+        .http
+        .get(format!("{}/api/v1/mail/drafts?mailbox_id={cx}", s.core_url))
+        .bearer_auth(&t)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        rascunhos.to_string().contains("Assunto por ligar"),
+        "o rascunho não ficou: {rascunhos}"
+    );
+}
+
 #[tokio::test]
 async fn correio_a_caixa_de_outra_pessoa_nao_se_le() {
     let Some(s) = Sistema::levantar("research").await else {
@@ -1243,6 +1338,9 @@ async fn correio_a_caixa_de_outra_pessoa_nao_se_le() {
     assert!(!html.contains("Assunto reservado"));
     let (_, html) = s.html(&format!("/mail/message/{m}?box={cx}"), &c).await;
     assert!(!html.contains("Assunto reservado"));
+    // A caixa de outra pessoa, por ligar, não diz «não ligada» a quem não a
+    // tem: isso revelaria que existe (D004.1).
+    assert!(!html.contains("app.err.not_connected"));
     // Um rascunho na caixa de outra pessoa é recusado pelo Core.
     let r = s
         .escrever(

@@ -1327,6 +1327,14 @@ async fn mail_view(
         })
         .unwrap_or_default();
     let mailboxes = ml::mailboxes(&boxes_raw, &current, folder, &clock);
+    // D004.1 · Uma caixa do membro sem credenciais ligadas tem índice e
+    // rascunhos, mas o corpo e o envio vêm do servidor de correio: isso é
+    // `NotConnected`, e não uma falha passageira. Uma caixa que não é do membro
+    // não tem estado aqui — vai ao Core, que a recusa.
+    let connected = boxes_raw
+        .iter()
+        .find(|b| controllers::desktop::text(b, "id") == current)
+        .map(|b| b.get("connected").and_then(Value::as_bool).unwrap_or(false));
     let q = query.q.clone().unwrap_or_default();
     let open = match &pane {
         MailPane::Message(id) => Some(id.to_string()),
@@ -1362,6 +1370,9 @@ async fn mail_view(
     let mut compose = None;
     match pane {
         MailPane::List => {}
+        MailPane::Message(_) if connected == Some(false) => {
+            message_error = Some(AppError::NotConnected);
+        }
         MailPane::Message(id) => {
             match quem
                 .get(
@@ -1601,6 +1612,20 @@ pub(super) async fn mail_page(
 }
 
 /// `GET /mail/message/{id}`.
+/// Se a caixa do membro está ligada ao servidor de correio; `None` quando não
+/// é uma caixa do membro (ou a lista falhou) — aí decide o Core.
+async fn mailbox_connected(state: &WorkspaceState, member: &Member, mailbox: Uuid) -> Option<bool> {
+    let list = caller(member)
+        .get(state, "/api/v1/mail/mailboxes")
+        .await
+        .ok()?;
+    let id = mailbox.to_string();
+    list.as_array()?
+        .iter()
+        .find(|b| controllers::desktop::text(b, "id") == id)
+        .map(|b| b.get("connected").and_then(Value::as_bool).unwrap_or(false))
+}
+
 pub(super) async fn mail_message_page(
     State(state): State<WorkspaceState>,
     headers: HeaderMap,
@@ -1818,6 +1843,30 @@ pub(super) async fn mail_compose_send(
             .await;
         }
     };
+    // D004.1 · Sem ligação ao servidor de correio não há envio: diz-se
+    // `NotConnected`, o rascunho acabado de guardar fica, e o Core nem é chamado.
+    if mailbox_connected(&state, &member, mailbox).await == Some(false) {
+        let saved = AppSaveState::Saved(clock_now_hhmm(&state, &member).await);
+        let c = returned(
+            form,
+            mailbox,
+            draft,
+            saved,
+            MailSendState::Failed,
+            Some(AppError::NotConnected),
+        );
+        return mail_view(
+            &state,
+            &headers,
+            MailQuery {
+                r#box: Some(mailbox),
+                ..MailQuery::default()
+            },
+            MailPane::Returned(Box::new(c)),
+            StatusCode::CONFLICT,
+        )
+        .await;
+    }
     let body = serde_json::json!({
         "mailbox_id": mailbox,
         "to": addresses(&form.to),
