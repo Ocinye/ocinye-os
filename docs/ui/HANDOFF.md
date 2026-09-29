@@ -1,3 +1,110 @@
+# D003 · Nye — Search · Ask · Act
+
+Base observed: branch `fix/wasmtime-rustsec-2026-0314` @ `55c3e22faf0054dc1d66e84764dbcfd3b0630571` (read from the local checkout). It is `origin/main` @ `b3cbc8e5b9939542f2f517b71b6202b50d36be98` plus one dependency commit (wasmtime 48.0.3, RUSTSEC-2026-0314/0315/0316). The reflog shows the checkout moved from `feat/design-d002` @ `56fb765` to `b3cbc8e`, and the working tree already contains `ui/wm`, `controllers/windows.rs` and the D002.1 switcher placement, so the D002.1 integration is on main. The D003 files were derived from this tree (the Rust files differ from the D002.1 package only by `cargo fmt`). Not reset to `56fb765`.
+
+**One assistant, many agents, one authority: the Core.** Nye is the human-facing surface. It owns no authority, decides no permission, never shows model reasoning and never names a model or provider in the normal UI. Everything it shows is supplied by the Core (or the AI Fabric through the Core) through typed view models.
+
+## 1 · Decisions
+
+| Decision | Value | Why |
+|---|---|---|
+| `COMMAND_PALETTE_DECISION` | `EXTEND_INTO_NYE_UNIVERSAL_SURFACE` | One global command surface. The D001 palette becomes the Nye universal surface; with `ShellVm.nye = None` it is byte-for-byte the D001 palette. |
+| `D001_COMPONENT_EXTENSION` | Command Palette → Nye Universal Surface | see §3 |
+| `D002_COMPONENT_EXTENSION` | none to the window manager, top-bar layout or overlay z-indexes. Top bar: the Nye bar microphone becomes a link to `/ai/prompt?voice=1` only when `voice_input` is `Available`; otherwise the D001 disabled control. | minimal |
+| Full application | the existing registry entry `ApplicationId::Prompt` (`/ai/prompt`, `SingleInstance`), presented as **Nye**, as the body of a D002 managed window (`WindowContent::Ready`). Conversations live inside the app. | registry already single-instance; Design does not invent policy |
+| `DESKTOP_WIDGET_DECISION` | **A · deferred.** The widget registry (`screens/home/registry.rs`, `ocinye_contracts::desktop`) has no Nye kind. `WIDGET_REGISTRY_CHANGE_REQUIRED = FALSE`. | registry rules are Core-bound |
+| Shortcut | ⌘K / Ctrl K stays (already defined by `oc-shell.js`). The label in the surface comes from `NyeSurfaceVm.shortcut` (runtime-provided; `None` hides it). Alt + W stays the switcher. | no conflict |
+| Voice | push-to-talk only. No wake word, no passive listening. | brief §43–45 |
+| Risk vocabulary | Core `RiskLevel` is canonical. `NyeRisk` maps it: `read_only`→ReadOnly, `low_impact`→ReversibleWrite, `material_mutation`→InstitutionalChange, `external_effect`→ExternalCommunication, `privileged`→Privileged. `Navigation` = opening by deep link (no plan). `Destructive` has **no Core source today** (no definitive deletion is a capability): the presentation exists, the capability does not. | do not invent Core policy |
+| Confirmation | from the Core only (`requires_approval` → `NyeAuth::ConfirmationRequired`). The risk class chooses the *presentation*: card button for ReadOnly…InstitutionalChange; the global confirmation dialog for External/Privileged/Destructive. | brief §15–18 |
+| Theme | Light, on the existing Ocinye tokens (`oc-base.css`). No new colours outside the state ramps already in D001/D002. | brief §104 |
+
+Note on the bound Industry design system: D001/D002 lock the Ocinye tokens (IBM Plex, navy/gold, capsule controls). D003 follows the lock; nothing from Industry enters production code.
+
+## 2 · Surfaces
+
+**A · Universal surface** (`nye::surface`, drawn by `shell::palette` when `vm.nye` is `Some`). Field, four modes (Automático / Pesquisar / Perguntar / Executar, a native radio group sent as `intent`, empty = Core `Intent::detect`), context chip when it matters, availability line, «Lido como: …» after a request, deterministic results grouped by type (the D001 app list stays as the «Aplicações» group, filtered client-side), an optional compact answer or proposal, and «Continuar na Nye». Submits `GET /ask?q=…&intent=…`; the route answers with `NyeSurfaceVm.open = true`. Ask/Act radios are `disabled` with the typed reason when `ask`/`act` are unavailable; Search never is.
+
+**B · Compact overlay** = A. It holds short answers (`message(…, compact)`) and single proposals. Anything longer offers «Continuar na Nye» (`continue_href`), which opens the app with the same request.
+
+**C · Nye application** (`nye::app`). Conversation list (rail), title, context chip, compact status chip (Pesquisa · Respostas · Voz — not the D002 status panel), Sources/Activity toggles, availability banner, the log, the composer, and the side panel with two tabs: **Fontes** («what supports this») and **Actividade** («what Nye did»). Layout by **container queries on the window body** — no responsive engine: < 860 px the rail is a drawer; ≥ 860 px the rail is fixed; ≥ 1180 px the side panel is a column, below it an overlay drawer; ≤ 560 px compact bar. Desktop 1440: a normal managed window. Tablet < 1100: D002 maximizes it. Mobile ≤ 640: D002's one full-screen surface.
+
+**D · Voice** (`nye::voice`, shown in the app when `NyeAppVm.voice` is `Some`). Recording indicator (dot + text, red only while `Listening`), a 112 px push-to-talk button with `aria-pressed`, hold-to-talk or tap-to-toggle, stop speaking, replay (only with `voice_output`), language pt/en/fr (backend may report `lang_detected`), «Voltar ao texto», and the privacy line «O áudio não é guardado…». `oc-nye.js` emits `oc:nye` intents (`voice-start`, `voice-stop`, `voice-stop-speaking`, `voice-replay`, `voice-lang`) and exposes `OcNye.voiceState(state, text)`; recording, STT and TTS are Code/runtime. Leaving voice mode or `pagehide` always emits `voice-stop`.
+
+**E · Desktop widget**: deferred (§1).
+
+## 3 · D001 component extension report — Command Palette → Nye Universal Surface
+
+Preserved: `#oc-palette`, `data-oc="palette"`, `.oc-overlay`/`.oc-overlay__scrim`, `data-part="palette-q"`, `data-part="palette-item"` + `data-search` (client filter by `oc-shell.js`, unchanged), ⌘K/Ctrl K open, Esc close, `:target` no-JS open, the scrim link. New: `data-nye`, `data-open` when the server opens it, form `action="/ask"` (was `/search`) with `intent`, modes, availability, context, server results, compact answer/proposal, ↓/↑ navigation between results (`oc-nye.js`), footer «Continuar na Nye». Files: `ui/shell/mod.rs` (palette dispatch + `nyebar_mic`), new `ui/nye/mod.rs`, `static/oc-nye.css`, `static/oc-nye.js`. Visual change only while open; closed, the shell is D002.1 (regression test `a_nye_alarga_a_paleta_sem_mudar_as_camadas`, reference `d003-closed-regression`). Contract change: `ShellVm.nye: Option<NyeSurfaceVm>` (default `None`).
+
+## 4 · Overlay priority (stacking model, no new z-index)
+
+All global overlays are `.oc-overlay` (z 200) outside `.oc-desk` (`isolation: isolate`); later in the tree wins:
+
+    .oc-desk (isolated: Desktop → windows → shelf/chooser)
+      ↓ .oc-top (z 50)
+      ↓ launcher        (shell_with_window)
+      ↓ Nye surface     (shell_with_window · palette slot)
+      ↓ switcher        (shell_with_window)
+      ↓ blocking dialog (routes.rs · shell_page, after .oc-shell): dirty close OR Nye confirmation
+
+Rules: at most one blocking dialog per response (the route renders `wm::dirty_close` or `nye::confirm_dialog`, never both; a pending dirty close wins and the Nye confirmation is re-offered after). While a blocking dialog is open, ⌘K/⌘J are swallowed (`oc-nye.js`, capture phase). Opening the switcher closes the Nye surface. The launcher and the Nye surface are mutually exclusive (existing `oc-shell.js`). A confirmation can never be under Nye because it is drawn after the shell.
+
+## 5 · Act: proposal → confirmation → execution
+
+`nye::proposal` shows kicker, risk, state, title, target, scope, parameters (`NyeField`, long values as a block), affected items (`NyeLine`, with per-item result after execution), consequences, the Core decision line, external-content note, superseded note, execution summary/error, and «Detalhes» (capability id, audit reference, time, confirmation expiry). Actions only when `auth == ConfirmationRequired && state == AwaitingConfirmation && !superseded`:
+- low/medium impact: `POST /ask/plans/{id}/execute` with hidden `digest` (existing route: approve then execute);
+- high impact: «Rever e confirmar» → `?confirm={id}` → the route renders `nye::confirm_dialog` after the shell. The dialog: risk, «Confirma esta acção?», title, target, scope, all fields (full message body), consequences, irreversible note for Destructive, immutability note + expiry; Cancel = `formaction …/reject`, Confirm = `…/execute` with `digest`. Initial focus on Cancel, focus trapped, Esc = Cancel, focus restored.
+- «Alterar» (`edit_href`) creates a new proposal; the old one renders `superseded` and cannot be confirmed.
+- Retry appears only when `NyeExecutionVm.retry_allowed` and a `retry_action` exist. Progress (`meter`) only when the executor supplies `(done, total)`.
+
+Content never confirms: the only confirmation path is a member-submitted form. `cites_external` adds the explicit note.
+
+## 6 · Ask, sources, activity
+
+Messages render `NyeBlock` (paragraph with citations, heading, list, steps, code, quote, table). **No model HTML**: Code converts the answer into blocks. Streaming: `data-oc="nye-stream"` + `data-src` (same-origin SSE; events `delta {text}`, `done`, `error {code}`); text enters by `textContent`, on `done` the page reloads the server version. Live region: one `role="status"` per app announcing «A responder…» / «Resposta concluída.», never tokens; the streaming body is `aria-busy`. Stop and «Responder de novo» are POST forms (inference only; never an action). Grounding: `Ungrounded` shows «Sem fontes do Ocinye…», `Revoked` shows the removal note, and revoked sources render as «Fonte já não disponível» with no title, context or link (`a_fonte_revogada_nao_mostra_conteudo`). External sources carry «Conteúdo externo · não verificado» and the trust note. Activity is steps (domain, label, state, factual detail): searches, capabilities, results — never prompts, reasoning or system messages. Domain agents appear only as a domain label on a step («A trabalhar com Projectos…»); there is one avatar, one name.
+
+Processing location (`NyeProcessing`) is shown only when supplied: Local / External chips; Blocked by policy note; ApprovalRequired offers «Só nesta Instância» / «Aprovar o envio» (POST `egress_action`).
+
+## 7 · Availability, no inference, connectivity
+
+`NyeAvailability { search, ask, act, voice_input, voice_output, attachments, link }` — never «AI on/off». No inference → «Respostas da IA indisponíveis. A Nye continua a pesquisar, abrir e executar comandos determinísticos.» with the typed reason; Search keeps working (`d003-no-inference`, `d003-search-no-ai`). The word «offline» is never used for missing AI (test). `link`: `Reconnecting` (warn) and `CoreUnavailable` (alert) are distinct from «no inference» (`d003-core-down`).
+
+## 8 · View models (`ui/view_models.rs`, appended)
+
+`NyeIntent`, `NyeReason` (19 typed reasons → `nye.reason.*`), `NyeAvail`, `NyeLink`, `NyeAvailability`, `NyeContextKind`/`State`/`Vm`, `NyeKind`, `NyeHitVm`, `NyeHitGroupVm`, `NyeTrust`, `NyeSourceVm`, `NyeStepState`, `NyeStepVm`, `NyeRisk`, `NyeAuth`, `NyeExecState`, `NyeField`, `NyeLine`, `NyeExecutionVm`, `NyeProposalVm`, `NyeRole`, `NyeBlock`, `NyeMsgState`, `NyeGrounding`, `NyeProcessing`, `NyeAttachmentVm`, `NyeMessageVm`, `NyeConvItemVm`, `NyeConversationVm`, `NyeComposerState`, `NyeComposerVm`, `NyeVoiceState`, `NyeLang`, `NyeVoiceVm`, `NyePanel`, `NyeAppVm`, `NyeSurfaceVm`; `ShellVm.nye`. No executable authority in any of them; `plan_id` + `digest` identify, the Core authorises.
+
+## 9 · Semantic contracts (existing first)
+
+| Group | Existing | Needed |
+|---|---|---|
+| NYE-01 availability | `GET /ai/status`, `GET /search/semantic-availability`, `AgenticOutcome::Unavailable{reason_code}` | map to `NyeAvailability`; voice/attachment flags |
+| NYE-02 conversations | `GET /ai/conversations`, `GET /ai/conversations/{id}` (migration 0044, owner-scoped) | create/rename/archive/search |
+| NYE-03 send / stream | `POST /ai/prompt` (non-streaming), `POST /agentic/invoke` | same-origin SSE stream |
+| NYE-04 search | `GET /search`, `invoke` → `Results{sources}`, `Intent::detect` | app/setting/command hits (Workspace registry) |
+| NYE-05 sources | `ContextSource` (entity, title, locator, classification) | deep-link resolution; re-authorisation on every render |
+| NYE-06 proposal | `invoke` → `Planned{plan, requires_approval}`, `ActionPlan{steps, digest}` | structured, labelled parameters per capability |
+| NYE-07 confirmation | `/agentic/plans/{id}/approve`, Workspace `/ask/plans/{id}/execute` | digest check in the Workspace route; expiry exposed |
+| NYE-08 execution | `/execute`, `Executed{plan, summary}`, `GET /agentic/plans/{id}`, `PlanState` | `retry_allowed`, audit reference per plan |
+| NYE-09 context | `invoke{module, workspace_id, resource_*}` | per-conversation context envelope (no global active unit, CLAUDE.md §34.3) |
+| NYE-10 attachments | — (`PLANNED` in docs/ai) | attach Ocinye files by reference |
+| NYE-11 STT · NYE-12 TTS | — | AI Fabric capabilities + RuntimeCapabilities (microphone) |
+| NYE-13 cancel | plan `reject` | stop a running answer; cancel a running plan |
+| NYE-14 activity | plan steps and results | retrieval/assembly steps for Ask; domain label |
+
+Full classification: `FUNCTIONAL_GAPS.md` § D003.
+
+## 10 · What Code wires (summary; order in APPLY_PLAN)
+
+1. `/ask`: build `NyeSurfaceVm` from `POST /agentic/invoke` (or `GET /search` when `intent=search`) and render the shell with `nye.open = true`; `?confirm={id}` renders `nye::confirm_dialog` after the shell (same slot as `dirty_close`).
+2. Every shell page: `ShellVm.nye = Some(NyeSurfaceVm { open: false, … })` with availability (cheap, cached per request).
+3. `/ai/prompt`: the Nye window (`WindowContent::Ready(nye::app(&vm))`), SingleInstance through the D002 engine; `?panel=`, `?voice=`, `?new=`, `?cq=`, `?q=` are presentation parameters.
+4. Execute route: check `digest` equals the plan's before approving.
+5. Rename the app label: `nav.prompt` «Prompt Ocinye» → «Nye» (and `apps.desc.prompt`), in `catalog.rs` (Code-owned file). `nav.ai` «Ocinye AI» stays the infrastructure app (AI Hub), not Nye.
+
+---
+
+
 # HANDOFF · UI completa do Ocinye OS (Claude Design)
 
 Base: `chore/ui-wipe` @ `c99cbda`. Entrega por partes; o `apply.sh` é cumulativo e a última parte deixa a UI inteira.

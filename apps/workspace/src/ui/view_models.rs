@@ -313,6 +313,9 @@ pub struct ShellVm {
     pub wm: Option<WmVm>,
     /// D002 · Painéis da barra de cima. Cada `None` mantém o controlo D001 (ligação).
     pub panels: TopPanels,
+    /// D003 · A superfície universal da Nye (Pesquisar · Perguntar · Executar).
+    /// `None` = a paleta D001, sem alterações (contrato de regressão D003).
+    pub nye: Option<NyeSurfaceVm>,
 }
 
 /// Um elemento de um widget da Home.
@@ -1030,4 +1033,837 @@ pub struct TopPanels {
     pub notifications: Option<NotificationsPanelVm>,
     /// Relógio.
     pub clock: Option<ClockPanelVm>,
+}
+
+// ── D003 · Nye: Search · Ask · Act ───────────────────────────────────────
+//
+// Só forma de apresentação. Autorização, risco, necessidade de confirmação,
+// estado de execução e disponibilidade chegam do Core (ou do AI Fabric através
+// do Core) já decididos; a vista nunca os infere. Nenhum destes tipos transporta
+// autoridade executável: um `plan_id` e um `digest` identificam uma proposta,
+// não a autorizam. Nenhum nome de modelo ou fornecedor aparece aqui.
+
+/// O que o membro pediu (`ocinye_contracts::agentic::Intent`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeIntent {
+    /// Encontrar. Determinístico; não precisa de modelo.
+    Search,
+    /// Uma pergunta respondida por inferência, com fontes.
+    Ask,
+    /// Uma acção proposta através de capacidades tipadas.
+    Act,
+}
+
+impl NyeIntent {
+    /// Valor do formulário (`intent` em `POST /agentic/invoke`).
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Search => "search",
+            Self::Ask => "ask",
+            Self::Act => "act",
+        }
+    }
+}
+
+/// Porque uma parte da Nye não está disponível, ou porque um pedido parou.
+/// Tipado: nunca «algo correu mal» quando há uma razão mais precisa.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeReason {
+    /// Nenhum modelo registado serve a capacidade (`capability_unavailable`).
+    NoCompatibleModel,
+    /// Nenhum recurso de inferência nesta Instância (`NO_RESOURCE`).
+    NoInference,
+    /// Há recurso, mas não responde agora.
+    InferenceUnavailable,
+    /// O fornecedor escolhido pelo Router falhou (`AI_PROVIDER_UNHEALTHY`).
+    ProviderUnavailable,
+    /// A política exclui todos os candidatos (`AI_POLICY_BLOCKED`).
+    PolicyBlocked,
+    /// Excedeu o prazo do Core.
+    Timeout,
+    /// O membro parou.
+    Cancelled,
+    /// O Core recusou (403).
+    PermissionDenied,
+    /// O contexto deixou de existir ou de estar acessível.
+    ContextUnavailable,
+    /// A capacidade não existe ou não está publicada no registry.
+    CapabilityUnavailable,
+    /// O Planner rejeitou a saída do modelo.
+    MalformedProposal,
+    /// O executor devolveu erro.
+    ExecutionFailed,
+    /// Alguns passos concluíram e outros não.
+    PartialExecution,
+    /// O Core não responde.
+    CoreUnavailable,
+    /// A ligação caiu e está a ser restabelecida.
+    Reconnecting,
+    /// O dispositivo ou o runtime não tem microfone.
+    MicUnavailable,
+    /// O membro, ou o browser, recusou o microfone.
+    MicDenied,
+    /// Sem STT/TTS nesta Instância.
+    VoiceUnavailable,
+    /// Uma fonte deixou de estar autorizada.
+    SourceRevoked,
+}
+
+impl NyeReason {
+    /// A chave de catálogo da frase que a explica.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::NoCompatibleModel => "nye.reason.no_compatible_model",
+            Self::NoInference => "nye.reason.no_inference",
+            Self::InferenceUnavailable => "nye.reason.inference_unavailable",
+            Self::ProviderUnavailable => "nye.reason.provider_unavailable",
+            Self::PolicyBlocked => "nye.reason.policy_blocked",
+            Self::Timeout => "nye.reason.timeout",
+            Self::Cancelled => "nye.reason.cancelled",
+            Self::PermissionDenied => "nye.reason.permission_denied",
+            Self::ContextUnavailable => "nye.reason.context_unavailable",
+            Self::CapabilityUnavailable => "nye.reason.capability_unavailable",
+            Self::MalformedProposal => "nye.reason.malformed_proposal",
+            Self::ExecutionFailed => "nye.reason.execution_failed",
+            Self::PartialExecution => "nye.reason.partial_execution",
+            Self::CoreUnavailable => "nye.reason.core_unavailable",
+            Self::Reconnecting => "nye.reason.reconnecting",
+            Self::MicUnavailable => "nye.reason.mic_unavailable",
+            Self::MicDenied => "nye.reason.mic_denied",
+            Self::VoiceUnavailable => "nye.reason.voice_unavailable",
+            Self::SourceRevoked => "nye.reason.source_revoked",
+        }
+    }
+}
+
+/// Disponibilidade de uma capacidade da Nye. Sem `Default`: quem preenche
+/// tem de saber (a ausência de resposta do Core é `Unavailable(CoreUnavailable)`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeAvail {
+    /// Pode ser usada agora.
+    Available,
+    /// Não pode, por esta razão.
+    Unavailable(NyeReason),
+}
+
+impl NyeAvail {
+    /// Se está disponível.
+    #[must_use]
+    pub const fn is_available(self) -> bool {
+        matches!(self, Self::Available)
+    }
+}
+
+/// O estado da ligação da Nye ao Core.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeLink {
+    /// Ligada.
+    Connected,
+    /// A restabelecer (o Workspace perdeu o Core há pouco).
+    Reconnecting,
+    /// O Core não responde.
+    CoreUnavailable,
+}
+
+/// NYE-01 · O que a Nye pode fazer agora. Nunca «IA ligada/desligada».
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NyeAvailability {
+    /// Pesquisa determinística, navegação e comandos determinísticos.
+    pub search: NyeAvail,
+    /// Respostas por inferência.
+    pub ask: NyeAvail,
+    /// Propostas de acção (o Planner precisa de inferência hoje).
+    pub act: NyeAvail,
+    /// Entrada de voz (STT + microfone do runtime).
+    pub voice_input: NyeAvail,
+    /// Saída de voz (TTS).
+    pub voice_output: NyeAvail,
+    /// Anexar ficheiros do Ocinye.
+    pub attachments: NyeAvail,
+    /// A ligação ao Core.
+    pub link: NyeLink,
+}
+
+/// O tipo de contexto (`CLAUDE.md` · o Espaço Pessoal é um contexto, não uma Distribuição).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeContextKind {
+    /// A organização.
+    Organization,
+    /// Uma unidade.
+    Unit,
+    /// Uma equipa.
+    Team,
+    /// Um projecto.
+    Project,
+    /// O Espaço Pessoal.
+    Personal,
+}
+
+/// O estado do contexto de trabalho.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeContextState {
+    /// Em uso.
+    Active,
+    /// Mudou nesta conversa (as permissões não mudam com ele).
+    Changed,
+    /// Deixou de existir ou de estar acessível. `label` vem vazio: nunca se revela o nome.
+    Unavailable,
+}
+
+/// NYE-09 · O envelope de contexto, pelo nome humano (nunca um identificador).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeContextVm {
+    /// O tipo.
+    pub kind: NyeContextKind,
+    /// «Projeto Solander». Vazio quando `Unavailable`.
+    pub label: String,
+    /// «Unidade de Investigação», quando ajuda a distinguir.
+    pub parent: Option<String>,
+    /// O estado.
+    pub state: NyeContextState,
+    /// Onde mudar de contexto, quando o Workspace o permite.
+    pub change_href: Option<String>,
+}
+
+/// O tipo de um resultado ou de uma fonte.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeKind {
+    /// Aplicação.
+    App,
+    /// Ficheiro.
+    File,
+    /// Pasta.
+    Folder,
+    /// Nota.
+    Note,
+    /// Projecto.
+    Project,
+    /// Tarefa.
+    Task,
+    /// Pessoa (quando autorizado).
+    Member,
+    /// Definição.
+    Setting,
+    /// Comando determinístico.
+    Action,
+    /// Dataset.
+    Dataset,
+    /// Mensagem de correio.
+    Mail,
+    /// Evento do calendário.
+    Event,
+    /// Conversa da Nye.
+    Conversation,
+    /// Conteúdo web externo (não confiável).
+    Web,
+    /// Outro registo do Ocinye.
+    Other,
+}
+
+/// NYE-04 · Um resultado da pesquisa determinística.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeHitVm {
+    /// O tipo.
+    pub kind: NyeKind,
+    /// O nome.
+    pub title: String,
+    /// Onde vive («Projetos / Solander»), para distinguir nomes iguais.
+    pub context: String,
+    /// «Alterado há 2 h», «2,4 MB».
+    pub meta: Option<String>,
+    /// A aplicação dona («Ficheiros»).
+    pub app: Option<String>,
+    /// Ligação profunda canónica do Ocinye.
+    pub href: String,
+}
+
+/// Um grupo de resultados, pela ordem do Core.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeHitGroupVm {
+    /// O tipo do grupo.
+    pub kind: NyeKind,
+    /// Os resultados.
+    pub hits: Vec<NyeHitVm>,
+}
+
+/// Confiança de uma fonte.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeTrust {
+    /// Um registo do Ocinye, lido com a política do membro.
+    Ocinye,
+    /// Conteúdo externo: dados, nunca instrução.
+    External,
+}
+
+/// NYE-05 · Uma fonte de uma resposta. Nunca inventada.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeSourceVm {
+    /// O número da referência no texto (`[1]`).
+    pub n: u16,
+    /// O tipo.
+    pub kind: NyeKind,
+    /// O título. Vazio quando `available == false` (não se mostra conteúdo protegido).
+    pub title: String,
+    /// Onde vive. Vazio quando indisponível.
+    pub context: String,
+    /// Secção ou página, quando o Core a tem.
+    pub locator: Option<String>,
+    /// Quando, se for significativo.
+    pub at: Option<String>,
+    /// Ligação profunda do Ocinye. Nunca um caminho do anfitrião.
+    pub href: Option<String>,
+    /// `false` quando a autorização foi revogada depois da resposta.
+    pub available: bool,
+    /// Confiança.
+    pub trust: NyeTrust,
+}
+
+/// O estado de um passo de actividade.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeStepState {
+    /// Em fila.
+    Queued,
+    /// A correr.
+    Running,
+    /// À espera de uma dependência externa.
+    Waiting,
+    /// Concluído.
+    Done,
+    /// Falhou.
+    Failed,
+    /// Não chegou a correr.
+    Skipped,
+    /// À espera de confirmação do membro.
+    AwaitingConfirmation,
+}
+
+/// NYE-14 · Um passo do que a Nye fez (acções, capacidades, resultados).
+/// Nunca raciocínio, prompts ou mensagens de sistema.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeStepVm {
+    /// O domínio que o serviu («Projetos»), quando houve delegação.
+    pub domain: Option<String>,
+    /// «Encontrou 4 notas», «Criou 3 tarefas».
+    pub label: String,
+    /// O estado.
+    pub state: NyeStepState,
+    /// Um detalhe factual. Nunca um segredo.
+    pub detail: Option<String>,
+}
+
+/// A classe de risco, para explicar a acção. Não decide a confirmação.
+/// Mapeamento do Core (`RiskLevel`): `read_only` → `ReadOnly`; `low_impact` →
+/// `ReversibleWrite`; `material_mutation` → `InstitutionalChange`;
+/// `external_effect` → `ExternalCommunication`; `privileged` → `Privileged`.
+/// `Navigation` é abrir por ligação profunda (sem plano). `Destructive` não tem
+/// origem no Core hoje (nenhuma eliminação definitiva é capacidade).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeRisk {
+    /// Lê.
+    ReadOnly,
+    /// Abre.
+    Navigation,
+    /// Alteração pequena e reversível.
+    ReversibleWrite,
+    /// Alteração institucional material.
+    InstitutionalChange,
+    /// Sai da instituição ou chega a alguém fora dela.
+    ExternalCommunication,
+    /// Privilegiada ou sensível.
+    Privileged,
+    /// Irreversível.
+    Destructive,
+}
+
+impl NyeRisk {
+    /// Valor de `data-risk`.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read_only",
+            Self::Navigation => "navigation",
+            Self::ReversibleWrite => "reversible_write",
+            Self::InstitutionalChange => "institutional",
+            Self::ExternalCommunication => "external",
+            Self::Privileged => "privileged",
+            Self::Destructive => "destructive",
+        }
+    }
+
+    /// Se a apresentação de confirmação é a forte (diálogo). A exigência de
+    /// confirmação continua a ser do Core (`NyeAuth::ConfirmationRequired`).
+    #[must_use]
+    pub const fn high_impact(self) -> bool {
+        matches!(
+            self,
+            Self::ExternalCommunication | Self::Privileged | Self::Destructive
+        )
+    }
+}
+
+/// A decisão do Core sobre a proposta.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeAuth {
+    /// Autorizada; não precisa de confirmação.
+    Authorized,
+    /// Autorizada se o membro confirmar (`requires_approval`).
+    ConfirmationRequired,
+    /// Recusada.
+    Denied,
+    /// A capacidade não está disponível.
+    Unavailable,
+    /// Bloqueada pela política da Instância.
+    PolicyBlocked,
+}
+
+/// O estado de execução (`ocinye_contracts::agentic::PlanState`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeExecState {
+    /// Proposta.
+    Proposed,
+    /// Aguarda confirmação.
+    AwaitingConfirmation,
+    /// Confirmada, ainda não corre.
+    Authorized,
+    /// A correr.
+    Running,
+    /// Concluída.
+    Completed,
+    /// Parcialmente concluída.
+    Partial,
+    /// Falhou.
+    Failed,
+    /// Cancelada.
+    Cancelled,
+    /// Bloqueada (recusa ou política).
+    Blocked,
+    /// Recusada pelo membro.
+    Rejected,
+    /// A janela de aprovação fechou.
+    Expired,
+}
+
+impl NyeExecState {
+    /// Valor de `data-state`.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Proposed => "proposed",
+            Self::AwaitingConfirmation => "awaiting",
+            Self::Authorized => "authorized",
+            Self::Running => "running",
+            Self::Completed => "completed",
+            Self::Partial => "partial",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+            Self::Blocked => "blocked",
+            Self::Rejected => "rejected",
+            Self::Expired => "expired",
+        }
+    }
+}
+
+/// Um parâmetro legível da proposta («Prazo» · «10 out»).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeField {
+    /// O nome.
+    pub label: String,
+    /// O valor.
+    pub value: String,
+    /// Texto longo (corpo de mensagem): desenhado em bloco.
+    pub long: bool,
+}
+
+/// Um item afectado (uma tarefa, um destinatário, um resultado).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeLine {
+    /// O nome.
+    pub title: String,
+    /// A linha secundária.
+    pub meta: Option<String>,
+    /// Depois da execução: `Some(true)` concluído, `Some(false)` falhou.
+    pub ok: Option<bool>,
+    /// Ligação profunda para o resultado.
+    pub href: Option<String>,
+}
+
+/// NYE-08 · O resultado da execução. Sem percentagens inventadas.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeExecutionVm {
+    /// A frase factual do Core.
+    pub summary: Option<String>,
+    /// A razão, quando falhou.
+    pub error: Option<NyeReason>,
+    /// O detalhe do erro, sem dados técnicos.
+    pub error_detail: Option<String>,
+    /// `retry_allowed` do executor. Sem isto não há «Tentar de novo».
+    pub retry_allowed: bool,
+    /// Onde repetir (POST), quando permitido.
+    pub retry_action: Option<String>,
+    /// A referência de auditoria.
+    pub audit_ref: Option<String>,
+    /// Quando.
+    pub at: Option<String>,
+    /// Progresso real (`feitos`, `total`), só se o executor o fornece.
+    pub progress: Option<(u32, u32)>,
+}
+
+/// NYE-06 · Uma proposta de capacidade, legível. Imutável depois de mostrada.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeProposalVm {
+    /// O plano (`ActionPlan.id`).
+    pub plan_id: String,
+    /// `ActionPlan.digest`: a confirmação liga-se a este valor.
+    pub digest: String,
+    /// «Criar 3 tarefas no Projeto Solander».
+    pub title: String,
+    /// O identificador da capacidade (só em «Detalhes»).
+    pub capability: String,
+    /// O alvo exacto.
+    pub target: String,
+    /// O âmbito (contexto).
+    pub scope: Option<String>,
+    /// Parâmetros importantes.
+    pub fields: Vec<NyeField>,
+    /// Itens afectados.
+    pub lines: Vec<NyeLine>,
+    /// Consequências relevantes, em frases.
+    pub consequences: Vec<String>,
+    /// Classe de risco (do registry, nunca do modelo).
+    pub risk: NyeRisk,
+    /// A decisão do Core.
+    pub auth: NyeAuth,
+    /// O estado.
+    pub state: NyeExecState,
+    /// Se a proposta aceita alterações (que criam uma NOVA proposta).
+    pub edit_href: Option<String>,
+    /// Substituída por outra proposta: já não se confirma.
+    pub superseded: bool,
+    /// A proposta refere conteúdo externo.
+    pub cites_external: bool,
+    /// Até quando a confirmação vale (aprovação de 15 minutos).
+    pub expires_at: Option<String>,
+    /// O resultado, quando há.
+    pub execution: Option<NyeExecutionVm>,
+}
+
+/// Quem fala.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeRole {
+    /// O membro.
+    Member,
+    /// A Nye.
+    Nye,
+}
+
+/// Um bloco de conteúdo seguro (nunca HTML do modelo). O Workspace converte o
+/// texto da resposta nestes blocos (ADAPTER_REQUIRED).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NyeBlock {
+    /// Parágrafo, com as referências a fontes.
+    Para {
+        /// O texto.
+        text: String,
+        /// Números de fonte citados.
+        cites: Vec<u16>,
+    },
+    /// Título.
+    Heading(String),
+    /// Lista.
+    List(Vec<String>),
+    /// Lista numerada.
+    Steps(Vec<String>),
+    /// Código.
+    Code {
+        /// A linguagem, se declarada.
+        lang: Option<String>,
+        /// O código.
+        text: String,
+    },
+    /// Citação de uma fonte.
+    Quote {
+        /// O excerto.
+        text: String,
+        /// A fonte.
+        cite: Option<u16>,
+    },
+    /// Tabela.
+    Table {
+        /// Cabeçalho.
+        head: Vec<String>,
+        /// Linhas.
+        rows: Vec<Vec<String>>,
+    },
+}
+
+/// O estado de uma mensagem.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeMsgState {
+    /// Completa.
+    Complete,
+    /// A chegar (NYE-03).
+    Streaming,
+    /// Parada pelo membro ou pela ligação.
+    Interrupted,
+    /// Falhou, por esta razão.
+    Failed(NyeReason),
+}
+
+/// O fundamento de uma resposta.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeGrounding {
+    /// Apoia-se nas fontes listadas.
+    Sourced,
+    /// Sem fontes do Ocinye: fica dito.
+    Ungrounded,
+    /// Fontes revogadas depois da resposta: o conteúdo dependente foi retirado.
+    Revoked,
+    /// Mensagem do membro, ou resultados determinísticos.
+    NotApplicable,
+}
+
+/// Onde o pedido foi processado, quando a política o torna relevante.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeProcessing {
+    /// Nesta Instância.
+    Local,
+    /// Por um fornecedor externo permitido pela política.
+    External,
+    /// Bloqueado pela política (os dados não podem sair).
+    Blocked,
+    /// A política exige aprovação do membro para sair.
+    ApprovalRequired,
+}
+
+/// Um anexo do Ocinye (NYE-10).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeAttachmentVm {
+    /// O nome.
+    pub name: String,
+    /// O tipo.
+    pub kind: NyeKind,
+    /// O tamanho, formatado.
+    pub size: Option<String>,
+    /// Onde vive no Ocinye.
+    pub context: String,
+    /// O valor que o composer reenvia (`attachment`), e o de «retirar».
+    pub value: String,
+}
+
+/// Uma mensagem de uma conversa.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeMessageVm {
+    /// Identificador.
+    pub id: String,
+    /// Quem fala.
+    pub role: NyeRole,
+    /// Quando, formatado.
+    pub at: String,
+    /// O conteúdo.
+    pub blocks: Vec<NyeBlock>,
+    /// O estado.
+    pub state: NyeMsgState,
+    /// O fundamento.
+    pub grounding: NyeGrounding,
+    /// Onde foi processada (só quando a política o torna relevante).
+    pub processing: Option<NyeProcessing>,
+    /// As fontes.
+    pub sources: Vec<NyeSourceVm>,
+    /// O que a Nye fez.
+    pub steps: Vec<NyeStepVm>,
+    /// Resultados determinísticos.
+    pub hits: Vec<NyeHitGroupVm>,
+    /// Propostas de acção.
+    pub proposals: Vec<NyeProposalVm>,
+    /// Anexos (mensagens do membro).
+    pub attachments: Vec<NyeAttachmentVm>,
+    /// NYE-03 · A fonte do fluxo (SSE, mesma origem) quando `Streaming`.
+    pub stream_src: Option<String>,
+    /// NYE-13 · Onde parar (POST).
+    pub stop_action: Option<String>,
+    /// Onde repetir a resposta (POST). Só inferência; nunca uma acção.
+    pub retry_action: Option<String>,
+    /// Onde aprovar a saída para um fornecedor externo, quando a política o pede.
+    pub egress_action: Option<String>,
+}
+
+/// Uma conversa na lista (NYE-02).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeConvItemVm {
+    /// O título.
+    pub title: String,
+    /// Quando, formatado.
+    pub at: String,
+    /// Onde abre.
+    pub href: String,
+    /// A actual.
+    pub active: bool,
+}
+
+/// A conversa aberta.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeConversationVm {
+    /// O título.
+    pub title: String,
+    /// As mensagens, por ordem.
+    pub messages: Vec<NyeMessageVm>,
+}
+
+/// O estado do composer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeComposerState {
+    /// Pronto.
+    Idle,
+    /// A enviar.
+    Submitting,
+    /// Uma resposta está a chegar.
+    Streaming,
+    /// Há uma proposta à espera de decisão.
+    ProposalPending,
+    /// Indisponível (só pesquisa e comandos determinísticos).
+    Unavailable(NyeReason),
+}
+
+/// O composer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeComposerVm {
+    /// Para onde envia (POST).
+    pub action: String,
+    /// O texto por enviar (preservado depois de um erro).
+    pub text: String,
+    /// Os anexos.
+    pub attachments: Vec<NyeAttachmentVm>,
+    /// O estado.
+    pub state: NyeComposerState,
+    /// Onde parar a resposta em curso (POST).
+    pub stop_action: Option<String>,
+    /// Onde escolher um ficheiro do Ocinye para anexar.
+    pub attach_href: Option<String>,
+}
+
+/// O estado da voz (NYE-11/12). Premir para falar; nunca escuta contínua.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeVoiceState {
+    /// Pronta; microfone desligado.
+    Idle,
+    /// A pedir permissão ao runtime.
+    RequestingPermission,
+    /// A gravar (só enquanto o membro prime, ou até parar).
+    Listening,
+    /// A transcrever.
+    Transcribing,
+    /// A preparar a resposta.
+    Processing,
+    /// A falar.
+    Speaking,
+    /// Parada.
+    Stopped,
+    /// Indisponível, por esta razão.
+    Unavailable(NyeReason),
+    /// Erro, por esta razão.
+    Error(NyeReason),
+}
+
+/// A língua da voz.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NyeLang {
+    /// Português.
+    Pt,
+    /// Inglês.
+    En,
+    /// Francês.
+    Fr,
+}
+
+impl NyeLang {
+    /// Código BCP 47 curto.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pt => "pt",
+            Self::En => "en",
+            Self::Fr => "fr",
+        }
+    }
+}
+
+/// O modo de voz.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeVoiceVm {
+    /// O estado.
+    pub state: NyeVoiceState,
+    /// A língua de entrada.
+    pub lang: NyeLang,
+    /// `true` quando a língua foi detectada pelo backend (não pela interface).
+    pub lang_detected: bool,
+    /// A transcrição parcial ou final.
+    pub transcript: Option<String>,
+    /// Se há resposta para repetir.
+    pub replay: bool,
+}
+
+/// O painel lateral da aplicação.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum NyePanel {
+    /// Nenhum.
+    #[default]
+    None,
+    /// Fontes («o que apoia isto»).
+    Sources,
+    /// Actividade («o que a Nye fez»).
+    Activity,
+}
+
+/// A aplicação Nye, dentro de uma janela gerida (D002).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeAppVm {
+    /// NYE-01.
+    pub availability: NyeAvailability,
+    /// O contexto de trabalho.
+    pub context: Option<NyeContextVm>,
+    /// NYE-02 · As conversas. `None` = sem persistência no Core (lacuna honesta).
+    pub conversations: Option<Vec<NyeConvItemVm>>,
+    /// A pesquisa na lista de conversas.
+    pub conv_query: String,
+    /// A conversa aberta. `None` = conversa nova.
+    pub current: Option<NyeConversationVm>,
+    /// O composer.
+    pub composer: NyeComposerVm,
+    /// O modo de voz, quando aberto.
+    pub voice: Option<NyeVoiceVm>,
+    /// O painel aberto.
+    pub panel: NyePanel,
+    /// Todas as fontes da conversa.
+    pub panel_sources: Vec<NyeSourceVm>,
+    /// Toda a actividade da conversa.
+    pub panel_steps: Vec<NyeStepVm>,
+    /// Sugestões da Distribuição para a conversa nova (texto do pedido).
+    pub suggestions: Vec<String>,
+}
+
+/// A superfície universal (D001_COMPONENT_EXTENSION da paleta de comandos).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NyeSurfaceVm {
+    /// NYE-01.
+    pub availability: NyeAvailability,
+    /// A escolha explícita do membro. `None` = automático.
+    pub intent: Option<NyeIntent>,
+    /// Como o Core leu o pedido (`Intent::detect`), quando houve pedido.
+    pub detected: Option<NyeIntent>,
+    /// O pedido.
+    pub query: String,
+    /// Resultados determinísticos (NYE-04).
+    pub hits: Vec<NyeHitGroupVm>,
+    /// Uma resposta ou proposta curta.
+    pub answer: Option<NyeMessageVm>,
+    /// O contexto, quando importa.
+    pub context: Option<NyeContextVm>,
+    /// «Continuar na Nye» (a aplicação completa, com o pedido).
+    pub continue_href: String,
+    /// O atalho, como o runtime o declara («⌘K», «Ctrl K»). `None` = não se mostra.
+    pub shortcut: Option<String>,
+    /// Abre já (resposta a `GET /ask?q=…`).
+    pub open: bool,
 }

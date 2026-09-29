@@ -1,3 +1,5 @@
+# D003 · Nye — locked: `src/ui/nye/mod.rs`, `static/oc-nye.css`, `static/oc-nye.js`, `src/i18n/ui_nye.rs`, Nye block of `view_models.rs`. Surface = palette slot; confirmation = after the shell. See the package DESIGN_LOCK.md.
+
 # DESIGN_LOCK
 
 Implementação visual canónica do Ocinye OS, escrita pelo Claude Design. O que está `LOCKED` não se reestrutura, não se re-estiliza e não se «simplifica»; a integração faz-se à volta, pelos ViewModels.

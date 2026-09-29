@@ -25,6 +25,7 @@
 mod catalog;
 mod ui_auth;
 mod ui_base;
+mod ui_nye;
 mod ui_shell;
 
 #[cfg(test)]

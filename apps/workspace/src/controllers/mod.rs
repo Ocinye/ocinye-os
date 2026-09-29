@@ -379,6 +379,8 @@ pub async fn shell(
         // portão da aplicação; sem janelas, `None` é a casca D001.
         wm: None,
         panels: top_panels,
+        // D003 fase A: sem Nye, a paleta é a D001 e a casca é a D002.1.
+        nye: None,
     };
 
     Shell::Ready(Box::new(ShellContext {

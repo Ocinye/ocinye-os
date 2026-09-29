@@ -515,6 +515,7 @@ pub const GROUPS: &[&[Entry]] = &[
     super::ui_auth::UI_AUTH,
     super::ui_base::UI_BASE,
     super::ui_shell::UI_SHELL,
+    super::ui_nye::UI_NYE,
 ];
 
 /// Um grupo só de teste, para exercitar a queda ao canónico (briefing i18n §77).
