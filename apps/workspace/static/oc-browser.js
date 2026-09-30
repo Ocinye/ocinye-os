@@ -64,6 +64,12 @@
       if (c.kind === 'invalid') { show(fill(tpl('invalid'), { text: c.text })); return; }
       const url = c.url;
       if (runtime() === 'web') {
+        // Code (D008): o servidor desenha a página externa com o cromado inteiro
+        // (a faixa «Conteúdo externo · origem», a origem, o recurso honesto). No
+        // cliente, da Nova aba esse cromado não existe, e numa página externa a
+        // faixa ficava com a origem anterior. O endereço já validado segue pelo
+        // formulário (GET /browser?url=), que o reclassifica.
+        if (addr) { field.value = url.href; addr.submit(); return; }
         // A aba conhece o endereço pedido — e só esse.
         const frame = tpl('frame'); if (!frame) return;
         const ifr = frame.tagName === 'IFRAME' ? frame : $('iframe', frame);

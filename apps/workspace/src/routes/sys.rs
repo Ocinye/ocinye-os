@@ -99,7 +99,7 @@ async fn ask_nye(state: &WorkspaceState, member: &Member, question: &str) -> (u8
     match reply {
         Ok(r) => term::nye_reply(&r),
         Err(ApiFailure::Forbidden | ApiFailure::Denied) => {
-            refusal(77, TermTone::Deny, "ocsh.denied")
+            refusal(77, TermTone::Deny, "nye.reason.permission_denied")
         }
         Err(_) => refusal(69, TermTone::Warn, "ocsh.err.unavailable"),
     }

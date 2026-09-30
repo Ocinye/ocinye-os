@@ -1139,6 +1139,8 @@ a.oc-res-link:hover { background: #F7F9FB; text-decoration: none; }
   .oc-brw-addr__label { display: none; }
   .oc-brw-site { max-width: 58%; height: 44px; }
   .oc-brw-addr__go { height: 44px; }
+  /* Code (D008): o campo também chega aos 44 px, como o resto do cromado. */
+  .oc-brw-addr input { height: 44px; }
   .oc-brw-switch .oc-app-btn, .oc-brw-switch .oc-app-primary { min-height: 44px; justify-content: center; }
   .oc-brw-addr[data-mobile-compact] input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .oc-brw-addr[data-mobile-compact] .oc-brw-site { max-width: none; flex: 1; justify-content: flex-start; }

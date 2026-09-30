@@ -342,6 +342,11 @@ async fn a_nye_so_pela_ponte_explicita() {
         assert_eq!(v["blocks"][0]["text"], pt("nye.reason.no_inference"), "{v}");
         assert!(v["capability"].is_null());
     }
+    // Quem não pode usar IA ouve a recusa do Core, com o motivo da Nye.
+    let (_, colab) = s.membro_com_sessao(&[TechnicalRole::Collaborator]).await;
+    let v = linha(&s, &colab, "? o que tenho hoje").await;
+    assert_eq!(v["exit"], 77, "{v}");
+    assert_eq!(v["blocks"][0]["text"], pt("nye.reason.permission_denied"));
     // Um contexto que a pessoa não alcança volta ao pessoal, e diz-se.
     let r = s
         .escrever(reqwest::Method::POST, "/terminal/exec", &c)
