@@ -312,7 +312,7 @@ async fn um_resultado_e_as_suas_ligacoes_so_se_leem_com_autoridade() {
         return;
     };
     let u = unidade(&s).await;
-    let (_, gestor) = com_papel_na_unidade(&s, u, "manager").await;
+    let (gestor_id, gestor) = com_papel_na_unidade(&s, u, "manager").await;
     let (_, membro) = com_papel_na_unidade(&s, u, "member").await;
     let m = marca();
     // Um ambiente de ideia na unidade.
@@ -356,6 +356,22 @@ async fn um_resultado_e_as_suas_ligacoes_so_se_leem_com_autoridade() {
         Some(restrito),
     )
     .await;
+    // Uma validação fica com o nome de quem a registou.
+    sqlx::query(
+        "INSERT INTO result_validations (organisation_id, result_id, kind, outcome, performed_by_id)
+         VALUES ($1, $2, 'validation', 'confirmed', $3)",
+    )
+    .bind(s.organisation_id)
+    .bind(visivel)
+    .bind(gestor_id)
+    .execute(&s.pool)
+    .await
+    .expect("validação");
+    let nome_gestor: String = sqlx::query_scalar("SELECT full_name FROM people WHERE id = $1")
+        .bind(gestor_id)
+        .fetch_one(&s.pool)
+        .await
+        .expect("nome");
     // O membro vê o interno na lista e no detalhe; o restrito não sai da base,
     // nem pela lista, nem pelo endereço, nem como substituto.
     let (status, html) = s.html("/results", &membro).await;
@@ -374,6 +390,10 @@ async fn um_resultado_e_as_suas_ligacoes_so_se_leem_com_autoridade() {
     let d = regiao(&html, r#"data-part="result""#, "</article>");
     assert!(!d.contains(&format!("Restrito {m}")) && !d.contains(&restrito.to_string()));
     assert!(!d.contains(r#"data-part="result-superseded""#));
+    assert!(
+        d.contains(&nome_gestor),
+        "a validação não diz quem a registou"
+    );
     // Sem «Novo resultado», e «Registar validação» sem formulário desenhado.
     assert!(!html.contains("/results/new") && !d.contains(pt("results.validate")));
     for rota in [
