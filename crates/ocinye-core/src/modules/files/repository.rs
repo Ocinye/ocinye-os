@@ -116,6 +116,10 @@ pub struct PersonalFileListing {
     pub updated_at: chrono::DateTime<chrono::Utc>,
     /// Se o dono o marcou como favorito.
     pub favourite: bool,
+    /// Quando foi para o Lixo — só na lista do Lixo (D007.1 · TR-01).
+    #[sqlx(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// O ficheiro pessoal de uma versão, com o nome — só quando é do dono.
@@ -329,7 +333,7 @@ pub async fn list_personal_trash<'e>(
         "SELECT f.id, v.version_id, f.name, f.folder_id,
                 o.content_type, o.size_bytes,
                 (SELECT count(*) FROM file_versions x WHERE x.file_id = f.id) AS versions,
-                f.updated_at, FALSE AS favourite
+                f.updated_at, FALSE AS favourite, f.deleted_at
            FROM files f
            JOIN LATERAL (
                SELECT fv.id AS version_id, fv.storage_object_id

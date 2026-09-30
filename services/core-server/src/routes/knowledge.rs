@@ -655,6 +655,9 @@ struct PersonalNoteSummary {
     revision: i32,
     excerpt: String,
     updated_at: String,
+    /// Quando foi para o Lixo — só nas apagadas (D007.1 · TR-01).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deleted_at: Option<String>,
 }
 
 /// Length of the plain-text excerpt shown in the note list, in characters.
@@ -671,6 +674,7 @@ impl From<knowledge::Note> for PersonalNoteSummary {
             revision: note.revision,
             excerpt,
             updated_at: note.updated_at.to_rfc3339(),
+            deleted_at: note.deleted_at.map(|d| d.to_rfc3339()),
         }
     }
 }

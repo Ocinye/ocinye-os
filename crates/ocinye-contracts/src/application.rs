@@ -72,6 +72,13 @@ pub enum ApplicationId {
     Help,
     /// O Terminal (ocsh, ADR-0312).
     Terminal,
+    /// O Monitor de Actividade: consumo e estado operacional da Instância
+    /// (D007.1; administração da plataforma).
+    Monitor,
+    /// Os resultados que o trabalho produziu (D007.1).
+    Results,
+    /// O Lixo pessoal: ficheiros e notas que o membro apagou (D007.1).
+    Trash,
 }
 
 /// Se uma aplicação pode ser desactivada numa Instância.
@@ -86,7 +93,7 @@ pub enum ApplicationClass {
 
 impl ApplicationId {
     /// Todas, na ordem do registo.
-    pub const ALL: [ApplicationId; 24] = [
+    pub const ALL: [ApplicationId; 27] = [
         Self::Notes,
         Self::Calendar,
         Self::Work,
@@ -111,6 +118,9 @@ impl ApplicationId {
         Self::Settings,
         Self::Help,
         Self::Terminal,
+        Self::Monitor,
+        Self::Results,
+        Self::Trash,
     ];
 
     /// O identificador técnico — o que se persiste.
@@ -141,6 +151,9 @@ impl ApplicationId {
             Self::Settings => "settings",
             Self::Help => "help",
             Self::Terminal => "terminal",
+            Self::Monitor => "monitor",
+            Self::Results => "results",
+            Self::Trash => "trash",
         }
     }
 
@@ -157,7 +170,9 @@ impl ApplicationId {
             | Self::Resources
             | Self::Administration
             | Self::Settings
-            | Self::Help => ApplicationClass::Essential,
+            | Self::Help
+            | Self::Monitor
+            | Self::Trash => ApplicationClass::Essential,
             _ => ApplicationClass::Optional,
         }
     }
@@ -516,7 +531,7 @@ use crate::intelligence::AiCapability;
 use crate::resource::ResourceType;
 
 /// Os manifestos de todas as aplicações nativas, na ordem do registo.
-pub const MANIFESTS: [ApplicationManifest; 24] = [
+pub const MANIFESTS: [ApplicationManifest; 27] = [
     ApplicationManifest {
         id: ApplicationId::Notes,
         category: ApplicationCategory::Productivity,
@@ -910,6 +925,55 @@ pub const MANIFESTS: [ApplicationManifest; 24] = [
         ai_capabilities: &[],
         requested_resources: &[],
         health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
+    },
+    // ── D007.1 ───────────────────────────────────────────────────────────
+    ApplicationManifest {
+        id: ApplicationId::Monitor,
+        category: ApplicationCategory::Administration,
+        route: "/admin/monitor",
+        name_key: "nav.monitor",
+        description_key: "apps.desc.monitor",
+        api_prefixes: &[],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Results,
+        category: ApplicationCategory::Research,
+        route: "/results",
+        name_key: "nav.results",
+        description_key: "apps.desc.results",
+        api_prefixes: &[],
+        storage: StorageUse::None,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Core,
+        can_pin: true,
+        default_pin: false,
+        launch: LaunchPolicy::SingleInstance,
+    },
+    ApplicationManifest {
+        id: ApplicationId::Trash,
+        category: ApplicationCategory::Productivity,
+        route: "/trash",
+        name_key: "nav.trash",
+        description_key: "apps.desc.trash",
+        api_prefixes: &[],
+        storage: StorageUse::Personal,
+        network: NetworkUse::None,
+        ai_capabilities: &[],
+        requested_resources: &[],
+        health: HealthSource::Storage,
         can_pin: true,
         default_pin: false,
         launch: LaunchPolicy::SingleInstance,
