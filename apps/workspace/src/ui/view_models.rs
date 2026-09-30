@@ -5666,3 +5666,426 @@ pub struct TrashVm {
     /// Recusa.
     pub refusal: Option<TrashRefusal>,
 }
+
+// ═══ D008 · Interfaces de sistema — modelos de vista (anexar a ui/view_models.rs) ═══
+// ADITIVO. Nenhum campo de D001–D007.1 muda. Sem handles de processo, sem ponteiros
+// de webview, sem tokens: só o que se desenha.
+
+// ── D008-A · Terminal (ocsh) ─────────────────────────────────────────────
+
+/// O Terminal: uma sessão por janela (SingleInstance; separadores DEFERRED, HANDOFF §T-10).
+#[derive(Debug, Clone)]
+pub struct TerminalVm {
+    /// O contexto activo, como o Core o resolveu (`ocsh::wire::ContextView`).
+    pub context: TermContextVm,
+    /// `false` → prompt desactivado, «Sem ligação ao Core» (nada é enviado).
+    pub core_online: bool,
+    /// A versão do ocsh (`crate::terminal::OCSH_VERSION`).
+    pub version: &'static str,
+    /// Descoberta: os comandos que o registo mostra a esta pessoa (`Audience`),
+    /// para ajuda imediata e autocompletar. **Não é autorização**: o Core decide.
+    pub registry: Vec<TermRegistryEntryVm>,
+    /// SSR desenha a sessão nova (boas-vindas); as respostas desenham-se no cliente.
+    /// Preenchido só num percurso sem JS (HANDOFF §T-06).
+    pub scrollback: Vec<TermEntryVm>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TermContextVm {
+    /// `None` = pessoal.
+    pub id: Option<String>,
+    /// `pessoal` / código do ambiente (`WSUENR01`). Texto de dados.
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TermGroup {
+    Shell,
+    Workspace,
+    Work,
+    Ai,
+    System,
+    Admin,
+}
+
+impl TermGroup {
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Shell => "ocsh.group.shell",
+            Self::Workspace => "ocsh.group.workspace",
+            Self::Work => "ocsh.group.work",
+            Self::Ai => "ocsh.group.ai",
+            Self::System => "ocsh.group.system",
+            Self::Admin => "ocsh.group.admin",
+        }
+    }
+}
+
+/// Uma linha da ajuda/autocompletar, derivada de `ocsh::registry::COMMANDS`.
+#[derive(Debug, Clone)]
+pub struct TermRegistryEntryVm {
+    /// `context use <target>` — sintaxe canónica, nunca traduzida.
+    pub usage: String,
+    /// `context use` — o que o autocompletar escreve.
+    pub completion: String,
+    /// `ocsh.cmd.context.use`.
+    pub help_key: &'static str,
+    pub group: TermGroup,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TermTone {
+    Ok,
+    Info,
+    Warn,
+    Err,
+    Deny,
+}
+
+impl TermTone {
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Info => "info",
+            Self::Warn => "warn",
+            Self::Err => "err",
+            Self::Deny => "deny",
+        }
+    }
+    #[must_use]
+    pub const fn icon(self) -> &'static str {
+        match self {
+            Self::Ok => "check",
+            Self::Info => "status",
+            Self::Warn | Self::Err => "warning",
+            Self::Deny => "lock",
+        }
+    }
+    /// O tom de um código de saída do ocsh (`ocsh::ExitCode`).
+    #[must_use]
+    pub const fn of_exit(code: u8) -> Self {
+        match code {
+            0 => Self::Ok,
+            2 | 69 | 127 => Self::Warn,
+            77 | 126 => Self::Deny,
+            130 => Self::Info,
+            _ => Self::Err,
+        }
+    }
+}
+
+/// Uma linha executada e o que o Core devolveu.
+#[derive(Debug, Clone)]
+pub struct TermEntryVm {
+    /// A linha **redigida** (`ocsh::redact`). Nunca a linha crua.
+    pub echo: String,
+    pub context_label: String,
+    /// `None` = à espera de confirmação.
+    pub exit: Option<u8>,
+    pub ms: Option<u64>,
+    /// A capability que correu (transparência; não é controlo).
+    pub capability: Option<String>,
+    pub blocks: Vec<TermBlockVm>,
+}
+
+/// Blocos de saída, já localizados pelo Workspace (`crate::terminal::localize`).
+#[derive(Debug, Clone)]
+pub enum TermBlockVm {
+    Note {
+        tone: TermTone,
+        title: String,
+        body: Option<String>,
+        suggestions: Vec<String>,
+    },
+    Table {
+        columns: Vec<String>,
+        rows: Vec<Vec<String>>,
+        pipeline: Option<String>,
+        empty: Option<String>,
+    },
+    Facts {
+        rows: Vec<(String, String)>,
+    },
+    Help {
+        groups: Vec<(String, Vec<(String, String)>)>,
+        footer: Option<String>,
+    },
+    /// TERMINAL-13 · contrato futuro: `ocsh::wire::Block::Link` ainda não existe.
+    Links {
+        items: Vec<TermLinkVm>,
+        note: String,
+    },
+    /// A ponte explícita `nye ask` / `? …`. Só resposta e fontes — nunca raciocínio.
+    Nye {
+        paragraphs: Vec<String>,
+        sources: Vec<String>,
+    },
+    /// TERMINAL-11 · contrato futuro.
+    Receipt(TermReceiptVm),
+}
+
+#[derive(Debug, Clone)]
+pub struct TermLinkVm {
+    pub title: String,
+    /// A rota canónica da aplicação dona (que reautoriza). Nunca um token.
+    pub href: String,
+    pub icon: &'static str,
+    pub app_label: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct TermReceiptVm {
+    pub id: String,
+    pub at: String,
+    pub capability: String,
+    pub audit_href: Option<String>,
+}
+
+/// TERMINAL-11 · o plano congelado que a confirmação mostra (`ActionPlan` de um passo).
+#[derive(Debug, Clone)]
+pub struct TermPlanVm {
+    pub id: String,
+    pub id_short: String,
+    pub action_label: String,
+    /// A linha redigida que originou o plano — só para mostrar; o Core não a relê.
+    pub echo: String,
+    pub capability: String,
+    /// `ocinye_contracts::agentic::RiskLevel` (os cinco níveis do Core; nenhum novo).
+    pub risk: ocinye_contracts::agentic::RiskLevel,
+    pub context_label: String,
+    pub target_label: String,
+    pub valid_until: String,
+}
+
+/// A chave i18n de um nível de risco do Core.
+#[must_use]
+pub const fn risk_key(r: ocinye_contracts::agentic::RiskLevel) -> &'static str {
+    use ocinye_contracts::agentic::RiskLevel as R;
+    match r {
+        R::ReadOnly => "term.risk.read_only",
+        R::LowImpact => "term.risk.low_impact",
+        R::MaterialMutation => "term.risk.material_mutation",
+        R::ExternalEffect => "term.risk.external_effect",
+        R::Privileged => "term.risk.privileged",
+    }
+}
+
+// ── D008-B · Browser ─────────────────────────────────────────────────────
+
+/// O runtime declarado ao Workspace (`ocinye_contracts::runtime::RuntimeMode`).
+/// Sem aperto de mão da casca (ADR-0704), é sempre `Web`.
+pub type BrowserRuntime = ocinye_contracts::runtime::RuntimeMode;
+
+#[derive(Debug, Clone)]
+pub struct BrowserVm {
+    pub runtime: BrowserRuntime,
+    /// Abas por id interno (nunca o URL).
+    pub tabs: Vec<BrowserTabVm>,
+    pub active: usize,
+    pub navigation: BrowserNavigationVm,
+    pub page: BrowserPageStateVm,
+    /// Linhas de cromado entre a barra e o conteúdo (sempre acima da fronteira).
+    pub notices: Vec<BrowserNoticeVm>,
+    pub side: Option<BrowserSideVm>,
+    /// `true` só quando o runtime entrega transferências (Desktop/Dedicado).
+    pub downloads_supported: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrowserTabState {
+    New,
+    Ready,
+    Loading,
+    Failed,
+}
+
+#[derive(Debug, Clone)]
+pub struct BrowserTabVm {
+    pub id: String,
+    /// Texto de dados (título da página ou host). Escapado; nunca HTML.
+    pub title: String,
+    pub origin: Option<String>,
+    pub state: BrowserTabState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrowserSecurity {
+    Https,
+    Http,
+    Blocked,
+}
+
+#[derive(Debug, Clone)]
+pub struct BrowserNavigationVm {
+    /// `None` na Web: o histórico do site não é observável, os botões não se desenham.
+    pub can_back: Option<bool>,
+    pub can_forward: Option<bool>,
+    pub loading: bool,
+    /// Web: o endereço **pedido**. Desktop: o endereço actual do webview.
+    pub url: String,
+    /// Host normalizado pelo parser WHATWG/runtime (punycode quando é o caso).
+    pub host: Option<String>,
+    pub security: Option<BrowserSecurity>,
+    /// O texto escrito, quando a pessoa escreveu algo que não navegou.
+    pub typed: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum BrowserPageStateVm {
+    NewTab,
+    /// Há uma página externa. `origin` = `https://host[:porta]`.
+    External {
+        origin: String,
+    },
+    WebMayBeBlocked {
+        url: String,
+    },
+    Invalid {
+        text: String,
+    },
+    BlockedScheme {
+        scheme: String,
+    },
+    Failed {
+        host: String,
+    },
+    Certificate {
+        host: String,
+    },
+    Crashed,
+    Loading {
+        host: String,
+    },
+    /// Desktop/Dedicado declarado, mas sem ponte `browser.*` — nunca sucesso simulado.
+    NoRuntime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrowserPermissionKind {
+    Microphone,
+    Camera,
+    Location,
+    Notifications,
+    Clipboard,
+}
+
+impl BrowserPermissionKind {
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Microphone => "brw.perm.mic",
+            Self::Camera => "brw.perm.cam",
+            Self::Location => "brw.perm.geo",
+            Self::Notifications => "brw.perm.notif",
+            Self::Clipboard => "brw.perm.clip",
+        }
+    }
+    #[must_use]
+    pub const fn icon(self) -> &'static str {
+        match self {
+            Self::Microphone => "ob-mic",
+            Self::Camera => "ob-cam",
+            Self::Location => "ob-geo",
+            Self::Notifications => "ob-bell",
+            Self::Clipboard => "copy",
+        }
+    }
+}
+
+/// Um pedido de permissão de um site. Permissão do site, nunca do Ocinye.
+#[derive(Debug, Clone)]
+pub struct BrowserPermissionVm {
+    pub request_id: String,
+    pub origin: String,
+    pub kind: BrowserPermissionKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum BrowserNoticeVm {
+    WebLimits { url: String },
+    WebOpened { origin: String },
+    WebPermissions,
+    WebDownloads,
+    Permission(BrowserPermissionVm),
+    PopupTab { origin: String },
+    PopupBlocked { origin: String },
+    FullscreenDenied { origin: String },
+    Idn { host: String },
+}
+
+#[derive(Debug, Clone)]
+pub enum BrowserSideVm {
+    Nye(BrowserNyeVm),
+    Downloads(Vec<BrowserDownloadVm>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrowserExtractionKind {
+    Selection,
+    Main,
+}
+
+/// BROWSER-17 · o que seria enviado à Nye, antes de enviar. Limitado e com proveniência.
+#[derive(Debug, Clone)]
+pub struct BrowserExtractionVm {
+    pub url: String,
+    pub title: String,
+    pub kind: BrowserExtractionKind,
+    pub chars: usize,
+    /// O limite da política (o do Context Engine; não um número inventado aqui).
+    pub max_chars: usize,
+    pub read_at: String,
+    /// Um excerto do texto extraído, para a pessoa ver o que vai.
+    pub excerpt: String,
+    /// Chave i18n da descrição da política de egresso que o roteamento de IA aplicou.
+    pub egress_key: &'static str,
+}
+
+#[derive(Debug, Clone)]
+pub enum BrowserNyeVm {
+    WebUnavailable,
+    NoAi,
+    Preview {
+        extraction: BrowserExtractionVm,
+        question: String,
+    },
+    /// `mentions_instructions` vem do envelope da resposta; é aviso, não garantia.
+    Answer {
+        paragraphs: Vec<String>,
+        mentions_instructions: bool,
+        extraction: BrowserExtractionVm,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrowserDownloadState {
+    Pending,
+    Downloading,
+    Complete,
+    Failed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone)]
+pub enum BrowserDownloadDest {
+    Host,
+    Files { folder: String },
+}
+
+#[derive(Debug, Clone)]
+pub struct BrowserDownloadVm {
+    pub id: String,
+    /// O nome **saneado** (sem separadores, `..`, reservados, controlo, bidi; NFC).
+    pub file_name: String,
+    /// O nome que o site sugeriu, quando foi alterado (mostrado com caracteres visíveis).
+    pub suggested: Option<String>,
+    pub origin: String,
+    pub state: BrowserDownloadState,
+    pub done: Option<String>,
+    pub total: Option<String>,
+    /// Só quando o runtime dá bytes totais. Nunca inventado.
+    pub pct: Option<u8>,
+    pub destination: Option<BrowserDownloadDest>,
+}

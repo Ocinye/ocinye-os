@@ -28,6 +28,7 @@ use crate::ui::view_models::{
 };
 
 pub mod admin;
+pub mod browser;
 pub mod calendar;
 pub mod datasets;
 pub mod fabric;
@@ -45,6 +46,7 @@ pub mod org;
 pub mod projects;
 pub mod res;
 pub mod results;
+pub mod terminal;
 pub mod trash;
 pub mod units;
 pub mod work;

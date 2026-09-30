@@ -1,3 +1,314 @@
+D008 MUST NOT BE INTEGRATED UNTIL D007 + D007.1 IS MERGED INTO MAIN.
+
+# HANDOFF · D008 — System Interfaces & Runtime (Ocinye Terminal / ocsh · Ocinye Browser)
+
+```
+DEPLOY = NOT_PERFORMED
+DEPLOY_AUTHORIZATION = NOT_GIVEN
+```
+
+Merge não autoriza deploy. Deploy exige uma instrução explícita e nova do utilizador.
+Não inferir autorização de CI verde, merge, main actualizada, «complete D008», «continue»
+nem de autorizações anteriores.
+
+## 0 · Precondição e ponto de partida
+
+1. D007 + D007.1 (uma integração, um merge) com certificação completa, `verify.sh` PASS,
+   push, CI obrigatória verde, merge em `main` e HEAD de `main` confirmado.
+2. Só então:
+   ```
+   git checkout main
+   git pull --ff-only
+   git checkout -b feat/design-d008
+   ```
+   A partir da `main` resultante — **nunca** de `feat/design-d007`.
+3. Observado pelo Design (não alterado): `feat/design-d007` @ `b96b93197ee570ddacf54448a59173489d2a1f18`
+   (ORIG_HEAD `2f5c5676ee023d5bd986bee1067bc6c6d3a68dcd`). As âncoras dos blocos D008 referem esse
+   estado; reconciliar com a `main` depois do merge.
+
+## 1 · Primeira porta da Code (antes de qualquer ligação funcional)
+
+1. `sha256sum -c checksums/SHA256SUMS.txt` (MANIFEST.json não entra no conjunto).
+2. Reconciliar a árvore: `FILE_MAP.md` → ficheiros novos copiam-se; ficheiros alterados
+   aplicam-se pelos **blocos ancorados** em `patch/` (nunca substituir `view_models.rs`,
+   `oc-apps.css`, `catalog.rs`, `ui/apps/mod.rs` inteiros por cima da `main`).
+3. `cargo fmt --all --check` · `cargo build --workspace` · `cargo clippy --workspace -- -D warnings`
+   · testes de Design (`ui::apps::terminal::tests`, `ui::apps::browser::tests`, paridade i18n,
+   `experience::apps::tests` com 28).
+4. Só depois: rotas, BFF, runtime.
+
+`IMPLEMENTATION_RUNTIME_VALIDATION = PARTIAL` — o Rust **não foi compilado** pelo Design.
+
+## 2 · Canónico
+
+> **ocsh is the native governed command shell of Ocinye OS.**
+> **ocsh does not expose unrestricted host shell access. It operates Ocinye capabilities through the Core.**
+
+> **Browser chrome = trusted Ocinye UI. External web content = UNTRUSTED.**
+
+Core governa; aplicações implementam. Terminal, Browser, runtime Desktop e ponte nativa
+não são autoridade. **Não existe ponte de execução comum** entre Terminal e Browser
+(ADR-0623): `OcshCapabilityRuntime ≠ BrowserRuntime`.
+
+## 3 · Verdade do repositório (discovery D008)
+
+| Facto | Onde |
+|---|---|
+| Registo com **27** aplicações; Terminal registado; Browser **ausente** | `apps/workspace/src/experience/apps.rs` (teste `== 27`), `ocinye-contracts/src/application.rs` |
+| Terminal: `terminal`, `System`, `/terminal`, sem direito próprio, `SingleInstance`, `api_prefixes ["/commands"]`; ecrã = `app_pending` | `application.rs:914-931`, `navigation.rs:458-460`, `routes.rs` `terminal()` |
+| ocsh: lexer/parser/registo/fio em `ocinye-contracts::ocsh`; `redact()`; códigos 0/1/2/69/77/126/127/130 | `crates/ocinye-contracts/src/ocsh/` |
+| Execução: Workspace `POST /terminal/exec` → Core `POST /api/v1/commands/exec` | `routes.rs`, `services/core-server/src/routes/terminal.rs` |
+| Registo v1: `help clear history exit whoami context(show/list/use) tasks list nodes list(Operator) nye ask` | `ocsh/registry.rs` |
+| `RiskLevel` = 5 níveis (`ReadOnly…Privileged`) — nenhum novo | `ocinye-contracts/src/agentic.rs:310` |
+| `RuntimeCapabilities` / `window.ocinyeRuntime` (só Web em R1) | `ocinye-contracts/src/runtime.rs`, `static/runtime.js` |
+| Casca nativa **ausente** (sem tauri/wry) | `docs/runtime/CURRENT_STATE.md` |
+| ADRs existentes: 0312, 0611, 0612, 0613, 0614, 0615, 0616, 0702–0705 | `docs/adrs/` |
+
+## 4 · D008-A · Terminal — o que aplicar
+
+- `ui/apps/terminal.rs` (novo) + blocos de `view_models` (`TerminalVm`, `TermEntryVm`, `TermBlockVm`,
+  `TermPlanVm`, `risk_key`) + `static/oc-terminal.js` (novo, só em `/terminal`) + CSS D008-A.
+- `routes.rs::terminal` desenha o ecrã (deixa `app_page`); `vm.registry` = `COMMANDS` visíveis por
+  `Audience`; `terminal_exec` acrescenta `"echo": ocsh::redact(&body.line)` (T-06).
+- Uma sessão por janela (SingleInstance). Separadores/painéis: DEFERRED.
+- Unknown command → 127 «Comando não encontrado» + corpo «não é enviado à Nye». **Nunca** fallback de IA.
+- `bash sh zsh sudo ssh exec eval…` → 126; `docker psql curl env cat …` → 127. Sintaxe `; && || > < \` $( ${ $VAR` → 126 antes do parse.
+- `|` só para operações tipadas (`filter sort head count export`) — já na gramática v1.
+- Confirmação de alto impacto: diálogo partilhado D006 sobre o **plano congelado** (TERMINAL-11, contrato
+  futuro). Confirmar envia só `plan`; a linha não é relida; sem «escreva SIM/REVOGAR» (ver emenda ADR-0312).
+- Histórico: memória da janela, só `echo` redigido; `history` mostra-o; `clear` limpa o ecrã, não o histórico
+  nem a auditoria. Sem `localStorage`.
+- Colar várias linhas: nada executa; a primeira vai para a linha, as restantes ficam à espera (pôr na linha / descartar).
+- Saída: nós de texto; C0/C1/ESC/bidi visíveis (`␛`, `⟨U+202E⟩`), nunca interpretados (`terminal::visible` = `oc-terminal.js visible`).
+- Nye: `nye ask` / `? …` — resposta + fontes + nota «não executa nada»; **nunca** raciocínio escondido.
+
+### T-06 · forma JSON que `oc-terminal.js` desenha (alinhar `crate::terminal::localize`)
+
+```
+{ exit, ms, capability, echo, context:{id,label,title},
+  blocks:[ {kind:"note", tone, text, detail?, suggestions[]}
+         | {kind:"table", columns:[{id,label}], rows, pipeline?, empty?}
+         | {kind:"facts", rows:[[label,value]]}
+         | {kind:"help", entries:[{group}|{usage,text}]}
+         | {kind:"links", items:[{title,href,icon,app_label}]}        // TERMINAL-13 futuro
+         | {kind:"nye", paragraphs[], sources[]}
+         | {kind:"json", value} | {kind:"client", action} ],
+  plan?: {id,id_short,action_label,echo,capability,risk_label,context_label,target_label,valid_until} }  // TERMINAL-11 futuro
+```
+
+## 5 · D008-B · Browser — o que aplicar
+
+- **APP_REGISTRY_CHANGE_REQUIRED = TRUE** — `patch/d008-registry-and-routes.block.rs`:
+  `ApplicationId::Browser`, `System`, `/browser`, `browser.app`, `browser.app.desc`, `NetworkUse::ClientWeb`,
+  `SingleInstance`, `can_pin true`, `default_pin false`, sem direito próprio, activo em todos os perfis;
+  `Screen::Browser`; `APPLICATIONS` + teste 27 → **28**. Nada mais entra no registo.
+- `ui/apps/browser.rs` (novo) + blocos de VM + `static/oc-browser.js` (novo, só em `/browser`) + CSS D008-B.
+- CSP: `frame-src https:` **só** em `/browser`. Web: `<iframe sandbox="allow-scripts allow-forms allow-popups
+  allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" allow="">` — sem `allow-same-origin`, sem
+  `allow-top-navigation` (constante `WEB_SANDBOX`, testada).
+- Web: só «Endereço pedido»; sem recuar/avançar/título; «Abrir num separador do navegador» (`noopener noreferrer`)
+  sempre disponível; estado «pode recusar» quando o Browser Manager o supõe. Nunca proxy.
+- Desktop/Dedicado: estados desenhados e marcados `DESKTOP_RUNTIME_REQUIRED`; sem ponte → `NoRuntime`, nunca sucesso simulado.
+- Esquemas: só `http`/`https` (WHATWG `URL`); `javascript: data: file: blob:` e próprios → «Endereço bloqueado».
+  Texto que não é endereço → «Não é um endereço» (sem motor de pesquisa).
+- Fronteira: tudo o que é Ocinye fica acima da faixa «Conteúdo externo · origem» ou num painel lateral do
+  cromado; nada do Ocinye dentro de `.oc-brw-view`.
+- Permissões: origem exacta; «Permitir desta vez» / «Recusar»; permissão do site ≠ permissão do Ocinye. Web: negadas por construção.
+- Transferências: destino escolhido pela pessoa (computador / Ficheiros); nome saneado + nome sugerido visível; sem «abrir».
+- Nye: explícito; pré-visualização do que vai (endereço, título, tipo, tamanho vs limite da política, hora, excerto,
+  o que nunca vai, política de egresso); texto da página é dado não confiável. Web: indisponível.
+- Ctrl/Cmd+W fecha a **aba** activa; fechar a última aba deixa uma «Nova aba» — nunca fecha a janela do Ocinye.
+  Web: atalhos do navegador anfitrião não se interceptam. Conflito D002: os atalhos do Browser só valem com o foco
+  no cromado do Browser; os do Gestor de Janelas mantêm-se fora dele.
+
+## 6 · Certificação de runtime (Code)
+
+**Terminal:** parse determinista · nenhuma fuga para shell (matriz §176–177 do brief) · mapeamento tipado ·
+reautorização no Core · confirmação imutável · replay · redacção no histórico e nos logs · nenhum fallback de IA ·
+ponte `nye` explícita · funcionamento em Web.
+
+**Browser — por runtime, separadamente** (nenhum PASS de fixture certifica os três):
+- WEB: incorporação + recurso honesto; `hostile-page.html` servido de outra origem: `document.cookie` vazio,
+  `localStorage` lança, `parent`/`top` inacessíveis, fetch same-origin sem sessão.
+- DESKTOP: isolamento de webview, partição, ausência de ponte, foco, transferências — **`NOT_CERTIFIED / DESKTOP_RUNTIME_REQUIRED`** até existir casca.
+- DEDICATED: mesma semântica.
+
+Teclado real, leitor de ecrã (`SCREEN_READER_TEST = NOT_RUN` no Design), toque real.
+Regressão: D007+D007.1, D006, D005, D004, D003, D002, D001.
+
+## 7 · Fecho
+
+```
+verify.sh PASS → push → PR → CI green → merge → confirm main HEAD → STOP
+DEPLOY = NOT_PERFORMED
+DEPLOY_AUTHORIZATION = NOT_GIVEN
+```
+Não começar a fatia seguinte.
+
+## 8 · Relatório final D008 (Design)
+
+```
+DESIGN_REVISION = D008
+OBSERVED_REPOSITORY_BRANCH = feat/design-d007
+OBSERVED_REPOSITORY_SHA = b96b93197ee570ddacf54448a59173489d2a1f18
+BASED_ON = D007.1 package + repository @ feat/design-d007 b96b931 (D007+D007.1 integration, unmerged)
+PACKAGE_CUMULATIVE = TRUE
+PACKAGE_SELF_CONTAINED = TRUE
+APP_REGISTRY_BEFORE = 27
+APP_REGISTRY_AFTER_EXPECTED = 28
+TERMINAL_REGISTRY_STATE = REGISTERED (screen app_pending → designed in D008)
+TERMINAL_REGISTRY_ID = terminal
+TERMINAL_ROUTE = /terminal (+ POST /terminal/exec)
+TERMINAL_PERMISSION = none (screen_permission None; every command authorised by Core)
+TERMINAL_LAUNCH_POLICY = SingleInstance
+BROWSER_REGISTRY_STATE = ABSENT
+BROWSER_REGISTRY_CHANGE_REQUIRED = TRUE
+BROWSER_PROPOSED_ID = browser
+BROWSER_PROPOSED_ROUTE = /browser
+BROWSER_PROPOSED_PERMISSION = none (Instance may deactivate, ADR-0014)
+BROWSER_PROPOSED_CATEGORY = System
+BROWSER_PROPOSED_LAUNCH_POLICY = SingleInstance (tabs inside)
+TERMINAL_DESIGN = COMPLETE (reference + Rust/CSS/JS/i18n)
+BROWSER_DESIGN = COMPLETE (reference + Rust/CSS/JS/i18n); Desktop states runtime-required
+TERMINAL_DESKTOP = 1440×900 + windows 720/820/900
+TERMINAL_TABLET = 924×540 maximized
+TERMINAL_MOBILE = 390×844 + keyboard-open 390×520
+BROWSER_DESKTOP = 1440×900 + windows 720/760/820/900
+BROWSER_TABLET = 924×540 maximized
+BROWSER_MOBILE = 390×844 (origin chip, tab count, switcher, bottom bar)
+OCSH_ARCHITECTURE = line → Workspace BFF → Core lexer/parser/registry → capability executor → typed blocks
+OCSH_COMMAND_REGISTRY_MODEL = ocsh::registry::COMMANDS (existing; one list for parse/help/completion/exec)
+OCSH_PARSER_MODEL = existing deterministic lexer+parser in ocinye-contracts; authoritative parse in Core
+OCSH_CAPABILITY_MODEL = Binding::Capability(id) in agentic registry; risk from capability
+OCSH_CURRENT_CONTEXT_MODEL = personal | workspace(id), re-authorised per request; context use
+OCSH_OUTPUT_MODEL = typed blocks note/table/facts/help/json/client (+links, plan future)
+OCSH_HISTORY_MODEL = per-window memory, member-only, not persisted (server history STORAGE_REQUIRED)
+OCSH_HISTORY_REDACTION = ocsh::redact echo from Workspace; client stores only echo
+OCSH_COMPLETION_MODEL = registry families/subcommands visible to the person; resources CORE_CONTRACT_REQUIRED
+OCSH_HELP_MODEL = derived from registry (Block::Help from Core; SSR registry template)
+OCSH_RISK_MODEL = Core RiskLevel (5); no new level
+OCSH_CONFIRMATION_MODEL = shared D006 dialog over frozen ActionPlan; plan id only (TERMINAL-11 future)
+OCSH_NYE_BRIDGE = explicit nye ask / ? ; Nye proposes; no hidden reasoning
+OCSH_UNKNOWN_COMMAND_BEHAVIOR = 127 command not found (+did-you-mean from registry); never AI
+OCSH_HOST_SHELL_POLICY = none; host words 126/127; operator host console = separate future subsystem
+OCSH_FILESYSTEM_POLICY = Ocinye Files capabilities only (~/files namespace); no host paths
+OCSH_NETWORK_POLICY = none (no curl/wget/nc/ping)
+OCSH_DATABASE_POLICY = none (no sql/psql)
+OCSH_SECRET_POLICY = no secret commands; sensitive options redacted before history/logs/audit
+BROWSER_MANAGER_MODEL = client Browser Manager (oc-browser.js, ADR-0612); native adapter via browser.* bridge
+BROWSER_TAB_MODEL = tabs inside one Browser window; internal tab id; strip + «All tabs (n)» at >8
+BROWSER_NEW_TAB_MODEL = address field + honest note (no search, no bookmarks/history)
+BROWSER_NAVIGATION_MODEL = Web: requested address + reload; Desktop: back/forward/reload/stop from webview
+BROWSER_ADDRESS_MODEL = WHATWG URL; http/https only; non-URL text not searched
+WEB_RUNTIME_MODEL = sandboxed iframe without allow-same-origin/top-navigation; honest external-tab fallback
+DESKTOP_RUNTIME_MODEL = isolated external webviews per tab (DESKTOP_RUNTIME_REQUIRED)
+DEDICATED_RUNTIME_MODEL = same product semantics; shell adapter (DESKTOP_RUNTIME_REQUIRED)
+BROWSER_EXTERNAL_WEBVIEW_MODEL = one untrusted webview per tab in browser:<instance> partition
+BROWSER_SESSION_PARTITION_MODEL = ocinye:<instance> | browser:<instance> | private:<window> (ADR-0703)
+BROWSER_TRUSTED_CHROME_BOUNDARY = chrome above «External content · origin» band; nothing Ocinye inside view
+BROWSER_NATIVE_BRIDGE_POLICY = none for external pages
+BROWSER_JAVASCRIPT_INJECTION_POLICY = none
+BROWSER_DOM_API_POLICY = none
+BROWSER_POPUP_POLICY = permitted → new Browser tab; otherwise blocked with notice
+BROWSER_SCHEME_POLICY = https/http; javascript:/data:/file:/blob:/custom blocked
+BROWSER_DOWNLOAD_MODEL = Web: host browser; Desktop: person-chosen destination (save dialog / Files upload session)
+BROWSER_UPLOAD_MODEL = normal file input; Ocinye Files picker DEFERRED
+BROWSER_PERMISSION_MODEL = origin-specific; allow once / deny; Web denied by construction
+BROWSER_SITE_PERMISSION_STORAGE = DEFERRED (runtime-owned, member-private)
+BROWSER_HISTORY_MODEL = STORAGE_REQUIRED (not designed)
+BROWSER_BOOKMARK_MODEL = DEFERRED
+BROWSER_PRIVATE_MODE_MODEL = DESKTOP_RUNTIME_REQUIRED / DEFERRED
+BROWSER_NYE_PAGE_CONTEXT = explicit action; preview before send; Desktop only
+BROWSER_BOUNDED_EXTRACTION_MODEL = URL, title, selection or readable main text, bounded by policy limit
+BROWSER_EXTRACTION_PROVENANCE = URL + title + extraction kind + read time
+BROWSER_UNTRUSTED_CONTENT_MODEL = page text is data; never authorises/confirms/grants
+BROWSER_AI_EGRESS_POLICY = AI routing policy (ADR-0311) decides; Browser works without AI
+BROWSER_EXTERNAL_LINK_ROUTING = Desktop → Ocinye Browser; Web → new browser tab (current safe fallback kept); ocinye links stay routes
+BROWSER_WEB_EMBEDDING_FALLBACK = «Open in a browser tab» (noopener, noreferrer), always available
+TERMINAL_BROWSER_SHARED_EXECUTION_BRIDGE = NONE
+TERMINAL_CONTRACTS_REQUIRED = TERMINAL-06 echo, TERMINAL-11 plan, TERMINAL-13 link, TERMINAL-09 resource completion, T-07 history storage, T-14 files capabilities, T-16 streaming
+BROWSER_CONTRACTS_REQUIRED = BROWSER-01 registry, CSP /browser, BROWSER-09 desktop webview + browser.* bridge, partitions, downloads, permissions, BROWSER-17/18 extraction + /browser/nye, BROWSER-19 link routing
+APP_REGISTRY_CHANGES = +1 Browser (proposed; Code applies)
+WINDOW_CONTRACT_CHANGES = NONE (Browser SingleInstance; tabs are not D002 windows)
+CORE_CONTRACT_CHANGES = NONE made; 6 required
+RUNTIME_CONTRACT_CHANGES = NONE made; 2 required
+DESKTOP_RUNTIME_CHANGES = NONE made; 14 gaps DESKTOP_RUNTIME_REQUIRED
+WEB_RUNTIME_CHANGES = CSP frame-src https: on /browser only (proposed)
+STORAGE_CONTRACT_CHANGES = NONE (2 STORAGE_REQUIRED)
+EXTERNAL_SERVICE_CHANGES = NONE (search provider EXTERNAL_SERVICE_REQUIRED)
+VIEW_MODEL_CHANGES = ADDITIVE: Terminal*, Term*, Browser*, risk_key
+SHARED_COMPONENT_CHANGES = NONE (reuses frame, org-confirm dialog, oc-res-link, oc-app-btn/primary)
+FILES_ADDED = 14 source/doc + 72 captures + INDEX.json (see FILE_MAP)
+FILES_CHANGED = 4 (view_models.rs, ui/apps/mod.rs, i18n/catalog.rs, static/oc-apps.css)
+ASSETS_ADDED = NONE (icons already in icons.svg)
+I18N_CHANGED = +195 keys (ui_sys) × pt/en/fr
+PT_EN_FR = PASS (fixture renders pt/en/fr; no raw keys)
+ACCESSIBILITY_VALIDATION = synthetic (names, labels, focus trap, Esc, roles); real keyboard by Code
+MOBILE_TOUCH_TARGETS = PASS ≥44 at 390 (trusted chrome)
+REDUCED_MOTION = PASS (no chrome animation)
+SCREEN_READER_TEST = NOT_RUN
+SECURITY_MODEL = governed capability shell + untrusted-content browser; separate boundaries (ADR-0623)
+SECURITY_SENSITIVE_GAPS = 30
+FUNCTIONAL_GAPS_TOTAL = 56
+FUNCTIONAL_GAPS_BY_CLASS = DESKTOP_RUNTIME_REQUIRED 14 · ADAPTER_REQUIRED 12 · DEFERRED 7 · CORE_CONTRACT_REQUIRED 6 · ALREADY_IMPLEMENTED 5 · HONESTLY_UNAVAILABLE 3 · WORKSPACE_CONTRACT_REQUIRED 2 · STORAGE_REQUIRED 2 · RUNTIME_CONTRACT_REQUIRED 2 · WEB_RUNTIME_LIMITATION 2 · EXTERNAL_SERVICE_REQUIRED 1
+REFERENCE_COUNT = 72 states (33 Terminal, 38 Browser, 1 regression)
+REFERENCE_BROWSER_CHECKS = 72/72 PASS (reference/d008/validate.html)
+IMPLEMENTATION_RUNTIME_VALIDATION = PARTIAL (Rust not compiled)
+DESKTOP_WEBVIEW_RUNTIME_VALIDATION = NOT_CERTIFIED / DESKTOP_RUNTIME_REQUIRED
+OCSH_EXECUTION_RUNTIME_VALIDATION = NOT_RUN by Design (Core path exists; Code certifies)
+EXPORT_LIMITATIONS = captures are DOM re-renders scaled to preview; external pages are inert drawings; iframe/webview behaviour not captured
+REGISTERED_APPS_WITH_REAL_DESIGN_AFTER_D008 = 28 of 28 after Browser registration (per docs/application-design-coverage.md)
+REGISTERED_APPS_STILL_PROVISIONAL_AFTER_D008 = 0
+OCINYE_D008_READY_FOR_CODE = TRUE
+```
+
+
+---
+
+# Histórico (D007.1 e anteriores)
+
+# HANDOFF — Ocinye OS canonical UI · Design revision D007.1
+
+Cumulative: D001 → D007 unchanged plus D007.1. Observed repository: `feat/design-d007` @ `9723041075136398be1d6b080c7feb1fb463bcba` (Code integrating D007; merge into main not observed). Design did not reset, check out or write to the repository.
+
+**PROCESS.** Do **not** integrate D007.1 until D007 is certified, verify.sh PASS, pushed, PR green and **merged into main**. Then: `git checkout main && git pull --ff-only && git switch -c feat/design-d007-1`, run `bash apply.sh .`, then cargo fmt, cargo check, cargo clippy -D warnings, cargo test (new tests: monitor ×3, results ×3, trash ×3). After certification: verify.sh PASS → push → PR → CI green → merge → confirm main HEAD → **STOP**.
+
+DEPLOY = NOT_PERFORMED · DEPLOY_AUTHORIZATION = NOT_GIVEN
+
+# D007.1 · Conclusão do registo
+
+## What the repository says
+- `ApplicationId::ALL` has 24 entries; `apps.rs` asserts 24. The 30-card list is the prototype's `MODS`. See `docs/application-design-coverage.md` (30 rows).
+- **Tarefas**: `/tasks/new` → `/my-work/new`, `/tasks/{id}` → `/my-work/{id}` (`research::task_legacy`). Same Task domain as O Meu Trabalho. TASKS_ALIAS_OR_LEGACY = TRUE. Recommendation: keep the redirects; do not register an app.
+- **Histórico**: no recency store; opens are not recorded; `GET /activity` has no actor filter. Not designed (HI-01…03).
+- **Resultados**: `results` + `result_validations` (migration 0019); Core `/workspaces/{id}/results`, `/results/{id}`, `/results/{id}/validations` (validation is non-delegable), `/lineage/{kind}/{id}`. No cross-workspace list; no status-transition route.
+- **Monitor**: `/admin/monitor` → `app_page(Screen::Admin)` (= `app_pending`). Core `GET /system/operations` (Administer on Platform): node health, AI provider health, application activity, storage pressure counts. Node heartbeat reports `memory_used_bytes` / `storage_used_bytes` (optional). No CPU/network/GPU utilisation, no service inventory, no stop operation. G-08 remains PROPOSED.
+- **Lixo**: personal files (`files.deleted_at`, 0045) and personal notes (`notes.deleted_at`, `deleted_by_id`, 0037). Core list/restore/purge exist for both; no retention and no automatic purge.
+- **Browser**: not in `ApplicationId`; `docs/browser/` only. D008.
+
+## Designed
+| App | Route | Gate | Design |
+|---|---|---|---|
+| Monitor de Actividade | `/admin/monitor` | Core: Administer on Platform (fix MON-01) | summary from `/system/operations` · consumption by node for the planes the nodes report (Memória, Disco) with unreported planes named · last-signal time and stale state · link to each node in Computação · services section honestly unavailable · boundary note (no shell). Contract-gated (not rendered today): service list, protected/stoppable, shared confirmation `OrgActionKind::StopService`, async receipt, typed refusals, GPU plane |
+| Resultados | `/results`, `/results/{id}` | per result (Core) | list with state and environment filters · detail: conclusion, state, classification, origin (environment, project, execution), superseded-by, validations with real outcomes, lineage · «Registar validação» only with `validate_href` · no «Novo resultado» (recorded from the execution) |
+| Lixo | `/trash` | personal | Tudo · Ficheiros · Notas · detail with deletion time, origin, size · «fica no Lixo até o restaurar» (no invented deadline) · file still counts to storage · Restaurar via existing routes · Eliminar definitivamente disabled with reason (D004.1 precedent) |
+
+## Code tasks
+1. After D007 merge, `bash apply.sh .` (copies monitor/results/trash/ui_reg; anchored edits in view_models, org, mod, catalog, oc-apps.css).
+2. Registry (REG-01, APP_REGISTRY_CHANGE_PROPOSED): add `ApplicationId::{Monitor, Results, Trash}` and manifests — monitor: Administration, `/admin/monitor`, SingleInstance, not default-pinned; results: Research, `/results`, SingleInstance; trash: Productivity, `/trash`, SingleInstance. Add Screen variants, move `nav.monitor/results/trash` to NAV, add keywords, update the 24 → 27 assertions.
+3. Routes: replace `admin_monitor` with `monitor::app`; add `GET /results` and `GET /trash`; render `/results/{id}` with `results::app`; redirect restore POSTs back to `/trash?ok=restored|refused=gone|conflict` when they came from Lixo.
+4. Adapters per FUNCTIONAL_GAPS D007.1. Never fall back to generated telemetry. `Freshness::Stale` only from Core node status/last_seen.
+5. `?frame=1` + `OcApps.init(root)` unchanged (no new JS). Background frames must not draw the confirmation (D006 rule).
+
+## Security tests Code must add
+- Monitor: non-admin direct route → denied, no data · forged/stale/replayed/cross-node stop · protected service refused by Core · direct POST without confirmation · no command line, env or secrets in any VM · no shell vocabulary.
+- Lixo: another member's item · another context · forged id → not found · restore after authority removed · restore race · permanent delete absent · hostile names.
+- Resultados: forged id · inaccessible project/file/execution relation hidden · invalid validation · author enumeration · hostile title/note.
+- Tarefas: `/tasks/{id}` redirect reauthorises in O Meu Trabalho.
+- Histórico: not built.
+
+---
+
 # HANDOFF — Ocinye OS canonical UI · Design revision D007
 
 Cumulative: D001 → D006 unchanged plus D007. Observed repository: `feat/design-d006` @ `89404f76b630b07af522f9e206f105fde3b1a55a` (Code's D006 integration in progress; not merged to main). The D007-touched files in `implementation/` are taken from that tree.

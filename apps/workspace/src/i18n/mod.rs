@@ -32,6 +32,7 @@ mod ui_org;
 mod ui_reg;
 mod ui_research;
 mod ui_shell;
+mod ui_sys;
 
 #[cfg(test)]
 mod completeness;
