@@ -842,7 +842,10 @@ async fn a_auditoria_so_mostra_metadata_da_lista_branca_e_nao_muda() {
     assert!(html.contains(r#"<option value="idea""#));
     let (status, html2) = s.html("/audit?resource_type=nao_existe%27%3E", &c).await;
     assert_eq!(status, 200);
-    assert!(!html2.contains(r#"value="nao_existe"#), "um tipo forjado virou opção");
+    assert!(
+        !html2.contains(r#"value="nao_existe"#),
+        "um tipo forjado virou opção"
+    );
     // Um identificador forjado não abre nada.
     let (status, html) = s.html(&format!("/audit?open={}", Uuid::new_v4()), &c).await;
     assert_eq!(status, 404);
