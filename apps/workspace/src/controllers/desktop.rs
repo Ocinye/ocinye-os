@@ -671,7 +671,11 @@ pub async fn desktop(ctx: ShellContext, caller: &Caller<'_>, state: &WorkspaceSt
         now: Utc::now(),
         zone: ctx.zone,
         core_ok: ctx.core.operational(),
-        is_admin: ctx.viewer.capabilities.iter().any(|c| c == "platform.administer"),
+        is_admin: ctx
+            .viewer
+            .capabilities
+            .iter()
+            .any(|c| c == "platform.administer"),
     };
     // Um futuro por tipo, todos em paralelo: um Desktop tem no máximo um de cada.
     let find = |k: WidgetKind| placed.iter().find(|p| p.kind == k);

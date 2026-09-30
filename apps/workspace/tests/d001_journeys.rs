@@ -416,10 +416,9 @@ async fn as_aplicacoes_sem_ecra_sao_janelas_honestas_e_as_fechadas_nao_existem()
     };
     let (status, html) = s.html("/admin/monitor", &admin_cookie).await;
     assert_eq!(status, 200);
-    // D002: o Monitor abre na janela da Administração, com o `app_pending`.
-    assert!(
-        html.contains(r#"data-app="administration""#) && html.contains("oc-pending oc-win__state")
-    );
+    // D007.1: o Monitor é uma aplicação registada, com o ecrã do Design, e
+    // já não o `app_pending` na janela da Administração.
+    assert!(html.contains(r#"data-app="monitor""#) && !html.contains("oc-pending oc-win__state"));
 }
 
 /// Um Core falso: `/ready` com o `overall` dado, e 500 em tudo o resto. Serve

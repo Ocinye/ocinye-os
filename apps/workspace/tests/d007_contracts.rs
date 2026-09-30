@@ -261,3 +261,53 @@ fn as_nove_sao_de_uma_janela_e_o_terminal_espera() {
         ApplicationId::Terminal
     ));
 }
+
+/// D007.1 · Nenhum caminho do Workspace elimina definitivamente sem uma
+/// confirmação governada: os três que o faziam, sem ecrã que os usasse, saíram.
+#[test]
+fn nao_ha_eliminacao_definitiva_sem_confirmacao() {
+    let routes = read("src/routes.rs");
+    for rota in [
+        "/notes/{note_id}/eliminar",
+        "/me/files/purge",
+        "/files/trash/empty",
+    ] {
+        assert!(!routes.contains(&format!("\"{rota}\"")), "{rota} voltou");
+    }
+    let src = production(&routes);
+    for chamada in [
+        "/api/v1/me/files/purge",
+        "/api/v1/me/notes/{note_id}/purge",
+        "/purge\"",
+    ] {
+        assert!(!src.contains(chamada), "o Workspace chama {chamada}");
+    }
+}
+
+/// D007.1 · O registo tem 27 aplicações; o Browser é da D008, e Tarefas e
+/// Histórico não são aplicações.
+#[test]
+fn o_registo_e_o_da_d007_1() {
+    use ocinye_contracts::ApplicationId;
+    assert_eq!(ApplicationId::ALL.len(), 27);
+    for fora in ["browser", "tasks", "history"] {
+        assert!(
+            fora.parse::<ApplicationId>().is_err(),
+            "{fora} está registado"
+        );
+    }
+    for id in [
+        ApplicationId::Monitor,
+        ApplicationId::Results,
+        ApplicationId::Trash,
+    ] {
+        assert!(
+            ocinye_workspace::controllers::windows::has_screen(id),
+            "{id:?}"
+        );
+        assert_eq!(
+            id.manifest().launch,
+            ocinye_contracts::application::LaunchPolicy::SingleInstance
+        );
+    }
+}
