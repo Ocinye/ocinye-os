@@ -109,8 +109,8 @@ fn o_catalogo_de_papeis_so_vem_do_core() {
     for f in files {
         let src = production(&std::fs::read_to_string(&f).expect("ler"));
         // Construções, não a definição do tipo.
-        let construcoes = src.matches("OrgRoleDefVm {").count()
-            - src.matches("struct OrgRoleDefVm {").count();
+        let construcoes =
+            src.matches("OrgRoleDefVm {").count() - src.matches("struct OrgRoleDefVm {").count();
         if construcoes > 0 {
             sitios.push(f.display().to_string());
         }

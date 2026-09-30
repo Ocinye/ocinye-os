@@ -75,8 +75,7 @@ fn pane(open: bool) -> ResPane {
 }
 
 /// Desenha a aplicação: a confirmação partilhada vai **depois da casca**, como
-/// o diálogo de fechar com trabalho por guardar; numa janela carregada por
-/// `?frame=1`, vai no corpo, e o `OcApps.init(root)` liga-a lá.
+/// o diálogo de fechar com trabalho por guardar, e só para a janela do pedido.
 fn render_org(
     _state: &WorkspaceState,
     w: &AppWindow,
@@ -86,14 +85,15 @@ fn render_org(
     dirty: Option<DirtyCloseVm>,
 ) -> Response {
     let extra = dirty.as_ref().map(dirty_template);
-    let dialog = confirm.map(|c| ui::apps::org::confirm(c).into_any());
     if w.page.frame {
+        // Um corpo por `?frame=1` é uma janela de fundo a ser reposta: uma
+        // confirmação privilegiada pertence só à janela do pedido, e nunca se
+        // repõe (o seu fundo cobriria a mesa por cima da janela da frente).
         let title = w.title.clone();
         let body = view! {
             <template data-part="win-title">{title}</template>
             {content}
             {extra}
-            {dialog}
         };
         return (
             status,
@@ -102,6 +102,7 @@ fn render_org(
         )
             .into_response();
     }
+    let dialog = confirm.map(|c| ui::apps::org::confirm(c).into_any());
     let engine = w.ctx.vm.wm.is_some();
     let body = ui::shell::shell_with_window(
         &w.ctx.vm,
@@ -162,6 +163,26 @@ fn after(
             },
         },
     }
+}
+
+/// O parâmetro que identifica o alvo de cada acção no endereço.
+const fn param_name(k: OrgActionKind) -> &'static str {
+    match k {
+        OrgActionKind::GrantRole | OrgActionKind::RevokeRole => "role",
+        OrgActionKind::RevokeGrant => "grant",
+        OrgActionKind::RevokeSession => "session",
+        _ => "person",
+    }
+}
+
+/// «Cancelar» volta ao recurso com `from` = a pergunta da acção que abriu a
+/// confirmação, para o foco lhe voltar (A-11).
+fn back_to(base: &str, k: OrgActionKind, param: Option<(&str, &str)>) -> String {
+    let mut from = format!("confirm={}", og::confirm_code(k));
+    if let Some((n, v)) = param {
+        from.push_str(&format!("&{n}={}", rs::encode(v)));
+    }
+    format!("{base}?from={}", rs::encode(&from))
 }
 
 fn confirm_error(v: Option<&str>) -> Option<AppError> {
@@ -375,6 +396,7 @@ async fn member_vm(
             )?;
             c.refusal = q.refused.as_deref().and_then(og::refusal);
             c.error = confirm_error(q.err.as_deref());
+            c.cancel_href = back_to(&base, k, param.map(|v| (param_name(k), v)));
             Some(c)
         });
     let vm = OrgMemberVm {
@@ -1384,6 +1406,7 @@ async fn unit_vm(
             )?;
             c.refusal = q.refused.as_deref().and_then(og::refusal);
             c.error = confirm_error(q.err.as_deref());
+            c.cancel_href = back_to(&base, k, q.person.as_deref().map(|v| ("person", v)));
             Some(c)
         });
     let vm = UnitVm {

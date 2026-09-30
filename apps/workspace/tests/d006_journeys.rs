@@ -833,6 +833,24 @@ async fn unidades_e_administracao_funcionam_sem_ia_e_por_frame() {
         assert!(frame.contains(r#"data-part="win-title""#), "{rota} frame");
         assert!(!frame.contains("oc-top"), "{rota}: o frame trouxe a casca");
     }
+    // Uma janela de fundo reposta por frame nunca traz a confirmação: ela só
+    // pertence à janela do pedido.
+    let (alvo, _) = s.membro_com_sessao(&[TechnicalRole::ResearchMember]).await;
+    let (_, frame) = s
+        .html(
+            &format!("/admin/members/{alvo}?confirm=suspend&frame=1"),
+            &c,
+        )
+        .await;
+    assert!(frame.contains(r#"data-part="member""#));
+    assert!(
+        !frame.contains(r#"data-oc="org-confirm""#),
+        "o frame trouxe a confirmação"
+    );
+    let (_, pagina) = s
+        .html(&format!("/admin/members/{alvo}?confirm=suspend"), &c)
+        .await;
+    assert!(pagina.contains(r#"data-oc="org-confirm""#));
     // Nenhuma ligação de administração à Nye.
     let (_, html) = s.html("/admin", &c).await;
     assert!(!html.contains("/ai/prompt?ref="));
