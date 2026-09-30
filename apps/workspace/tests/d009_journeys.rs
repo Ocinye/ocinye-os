@@ -531,6 +531,14 @@ async fn a_autoridade_filtra_fixacoes_e_widgets() {
         !ws.iter().find(|(id, _)| id == "calendar").unwrap().1,
         "controlo positivo"
     );
+    // G9-09 · Tarefas vive de O Meu Trabalho: sem Projectos, continua.
+    assert!(
+        !ws.iter()
+            .find(|(id, _)| id == "tasks")
+            .expect("na disposição")
+            .1,
+        "Tarefas escondeu-se por faltar Projectos"
+    );
     // Nada foi gravado em nome do membro, e a predefinição é a mesma.
     let pins: i64 = sqlx::query_scalar("SELECT count(*) FROM member_app_pins WHERE person_id = $1")
         .bind(id)
@@ -647,5 +655,41 @@ async fn sem_ia_nem_gpu_o_ponto_de_partida_funciona() {
         .unwrap_or(0);
     assert_eq!(nodes, 0);
     let _ = Uuid::nil();
+    s.descartar().await;
+}
+
+/// G9-09 · Os Indicadores numa Business (sem Ideias nem Dados activas) mostram
+/// Unidades e Projectos; não desaparecem por faltar uma aplicação, e não
+/// oferecem ligação a uma que não abre.
+#[tokio::test]
+async fn os_indicadores_largam_so_as_metricas_que_o_membro_nao_ve() {
+    let Some(s) = Sistema::provisionar(InstanceProfile::Business).await else {
+        return;
+    };
+    let (_, email, password) = s.pessoa(&[TechnicalRole::ResearchMember]).await;
+    let (_, _, c) = s.entrar(&email, &password).await;
+    let corpo = json!({
+        "version": 0, "fit": "fill", "wallpaper": "module", "dim": 20,
+        "widgets": [
+            { "id": "kpis", "kind": "kpis", "w": 4, "h": 1, "minimized": false },
+        ],
+    });
+    assert_eq!(gravar(&s, &c, &corpo).await, 200);
+    let (_, html) = s.html("/", &c).await;
+    assert_eq!(widgets(&html), [("kpis".to_owned(), false)]);
+    let metricas: Vec<&str> = html
+        .split(r#"<a href=""#)
+        .skip(1)
+        .filter(|x| x.split('>').next().unwrap_or_default().contains("oc-kpi\""))
+        .filter_map(|x| x.split('"').next())
+        .collect();
+    assert_eq!(metricas, ["/units", "/projects"]);
+    // Um colaborador (sem Unidades nem Projectos) não vê nenhuma: escondido,
+    // e continua na disposição.
+    let (_, email, password) = s.pessoa(&[TechnicalRole::Collaborator]).await;
+    let (_, _, c) = s.entrar(&email, &password).await;
+    assert_eq!(gravar(&s, &c, &corpo).await, 200);
+    let (_, html) = s.html("/", &c).await;
+    assert_eq!(widgets(&html), [("kpis".to_owned(), true)]);
     s.descartar().await;
 }

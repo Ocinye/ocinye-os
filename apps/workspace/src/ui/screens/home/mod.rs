@@ -323,13 +323,14 @@ fn widget(w: &DeskWidget) -> impl IntoView {
     }
 }
 
-/// Code (D009 · G9-10): a biblioteca só oferece um widget cujas aplicações
-/// este membro vê (activas na Instância e autorizadas — `shell.apps`). Um
-/// widget que se desenharia escondido não é uma escolha.
+/// Code (D009 · G9-10): a biblioteca só oferece um widget que se desenharia
+/// para este membro — a mesma regra do Desktop
+/// (`distribution::widget_shown`, sobre `shell.apps`). Um widget que ficaria
+/// escondido não é uma escolha.
 fn offered(vm: &DesktopVm, kind: WidgetKind) -> bool {
-    crate::experience::distribution::widget_apps(kind)
-        .iter()
-        .all(|a| vm.shell.apps.iter().any(|t| t.id == a.as_str()))
+    crate::experience::distribution::widget_shown(kind, |a| {
+        vm.shell.apps.iter().any(|t| t.id == a.as_str())
+    })
 }
 
 fn library(vm: &DesktopVm) -> impl IntoView {

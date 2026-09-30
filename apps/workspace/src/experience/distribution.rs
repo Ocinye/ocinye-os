@@ -18,6 +18,18 @@
 //!   ?? predefinição do sistema      (SYSTEM_FALLBACK: sem widgets, fixações do manifesto)
 //! ```
 //!
+//! # D009 R2 · uma Instância, uma ou várias Distribuições
+//!
+//! As predefinições são indexadas pelo **tipo** de Distribuição, nunca pela
+//! Instância: uma Instância pode activar uma, algumas ou as quatro, e cada uma
+//! traz o seu ponto de partida. Hoje o Core guarda um só perfil por Instância e
+//! uma só disposição/lista de fixações por membro (`member_desktop_layouts`,
+//! `member_app_pins`, chave `person_id`). Esse âmbito é compatível só enquanto
+//! houver uma Distribuição activa; o âmbito-alvo é **membro + Instância +
+//! Distribuição** (D010, contrato bloqueante G9-30/31). **Não codificar uma
+//! Distribuição por Instância** em código novo: receber sempre a Distribuição
+//! activa como argumento.
+//!
 //! Nada aqui é lido de um ficheiro, de um caminho ou de JSON: um valor de
 //! Distribuição desconhecido nunca vira modelo nem caminho (§154–155) — cai na
 //! predefinição do sistema, e não em Research (§116).
@@ -275,7 +287,9 @@ pub fn default_pins(d: Option<Distribution>) -> Vec<String> {
 pub enum Provenance {
     /// O membro personalizou (há linha gravada no Core).
     Member,
-    /// Segue a predefinição publicada pela Instância (FG-014: ainda não existe).
+    /// Segue a predefinição publicada pela Instância **para esta Distribuição**
+    /// (FG-014: ainda não existe; alvo: Instância + Distribuição, nunca uma só
+    /// para todas).
     Instance,
     /// Segue a predefinição da Distribuição, nesta versão.
     Distribution(Distribution, u32),
@@ -327,6 +341,17 @@ pub const fn widget_apps(k: K) -> &'static [A] {
         K::Ideas => &[A::Ideas],
         K::Datasets => &[A::Datasets],
     }
+}
+
+/// Code (D009 · G9-09/G9-10): um widget desenha-se — e oferece-se na
+/// biblioteca — quando o membro vê **pelo menos uma** das suas aplicações.
+/// Um widget de várias (Indicadores, Tarefas, Continuar) não desaparece por
+/// faltar uma: os Indicadores largam só a métrica dessa. Um sem aplicação
+/// (Saúde) segue a sua própria regra.
+#[must_use]
+pub fn widget_shown(k: K, sees: impl Fn(A) -> bool) -> bool {
+    let apps = widget_apps(k);
+    apps.is_empty() || apps.iter().any(|a| sees(*a))
 }
 
 #[cfg(test)]

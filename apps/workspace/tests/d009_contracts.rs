@@ -318,3 +318,32 @@ fn os_indicadores_usam_o_icone_da_sua_aplicacao() {
         );
     }
 }
+
+/// G9-09 · Um widget de várias aplicações não desaparece por faltar uma: os
+/// Indicadores de Business (sem Ideias nem Dados) continuam; Tarefas vive de
+/// O Meu Trabalho sem Projectos; só sem nenhuma o widget fica escondido.
+#[test]
+fn um_widget_de_varias_aplicacoes_basta_ver_uma() {
+    use ocinye_workspace::ui::view_models::WidgetKind as K;
+    let business = |a: ApplicationId| InstanceProfile::Business.activates(a);
+    assert!(distribution::widget_shown(K::Kpis, business));
+    assert!(distribution::widget_shown(K::Tasks, |a| a == ApplicationId::Work));
+    assert!(!distribution::widget_shown(K::Kpis, |_| false));
+    assert!(!distribution::widget_shown(K::Projects, |a| a != ApplicationId::Projects));
+    assert!(
+        distribution::widget_shown(K::Health, |_| false),
+        "sem aplicação: regra própria"
+    );
+    // A ordem dos indicadores é a das suas aplicações.
+    let apps = distribution::widget_apps(K::Kpis);
+    for ((_, _, _, rota), a) in ocinye_workspace::ui::screens::home::registry::KPIS
+        .iter()
+        .zip(apps)
+    {
+        assert_eq!(*rota, a.manifest().route, "{a:?}");
+    }
+    assert_eq!(
+        apps.len(),
+        ocinye_workspace::ui::screens::home::registry::KPIS.len()
+    );
+}

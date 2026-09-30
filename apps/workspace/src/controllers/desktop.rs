@@ -74,6 +74,13 @@ pub fn fallback_default() -> DesktopDefault {
     }
 }
 
+/// A predefinição efectiva para a Distribuição activa: a dela, ou — sem
+/// Distribuição conhecida — a mínima do sistema. Nunca a de Research (§116).
+#[must_use]
+pub fn default_for(distribution: Option<Distribution>) -> DesktopDefault {
+    distribution.map_or_else(fallback_default, system_default)
+}
+
 /// A disposição gravada, lida do JSON do Core. Tipos que o registo já não
 /// conhece caem; o resto fica pela ordem gravada.
 fn placed_from(layout: &Value) -> Vec<PlacedWidget> {
@@ -262,28 +269,44 @@ fn count(n: i64, qualifier_key: &str) -> Count {
     }
 }
 
-async fn kpis(caller: &Caller<'_>, state: &WorkspaceState) -> WidgetContent {
+/// Code (D009 · G9-09): cada indicador é de uma aplicação
+/// (`distribution::widget_apps(Kpis)`, pela ordem de `KPIS`). Um que o membro
+/// não vê — inactiva na Instância ou sem autorização — nem se pede nem se
+/// desenha, e o Core a recusar um só larga esse; o widget só fica recusado
+/// quando não sobra nenhum.
+async fn kpis(caller: &Caller<'_>, state: &WorkspaceState, sees: &Sees<'_>) -> WidgetContent {
+    let apps = crate::experience::distribution::widget_apps(WidgetKind::Kpis);
+    let on = |i: usize| apps.get(i).is_some_and(|a| sees(*a));
     let (units, ideas, projects, datasets) = tokio::join!(
-        active_units(caller, state),
-        total(caller, state, IDEAS_IN_PROGRESS),
-        total(caller, state, PROJECTS_IN_PROGRESS),
-        total(caller, state, DATASETS),
+        async { on(0).then_some(active_units(caller, state).await) },
+        async { on(1).then_some(total(caller, state, IDEAS_IN_PROGRESS).await) },
+        async { on(2).then_some(total(caller, state, PROJECTS_IN_PROGRESS).await) },
+        async { on(3).then_some(total(caller, state, DATASETS).await) },
     );
     let mut metrics = Vec::with_capacity(KPIS.len());
+    let mut refused = None;
     for (&(label, qualifier, icon, href), n) in KPIS.iter().zip([units, ideas, projects, datasets])
     {
         match n {
-            Ok(n) => metrics.push(Metric {
+            None => {}
+            Some(Ok(n)) => metrics.push(Metric {
                 icon,
                 label: t(label).to_owned(),
                 value: n.to_string(),
                 qualifier: tp(qualifier, n),
                 href: href.to_owned(),
             }),
-            Err(f) => return WidgetContent::Metrics(load_of("kpis", &f)),
+            Some(Err(
+                f @ (ApiFailure::Forbidden | ApiFailure::Denied | ApiFailure::ApplicationInactive),
+            )) => refused = Some(f),
+            Some(Err(f)) => return WidgetContent::Metrics(load_of("kpis", &f)),
         }
     }
-    WidgetContent::Metrics(Load::Ready(metrics))
+    match (metrics.is_empty(), refused) {
+        (true, Some(f)) => WidgetContent::Metrics(load_of("kpis", &f)),
+        (true, None) => WidgetContent::Metrics(Load::Denied),
+        (false, _) => WidgetContent::Metrics(Load::Ready(metrics)),
+    }
 }
 
 async fn tasks(caller: &Caller<'_>, state: &WorkspaceState) -> WidgetContent {
@@ -634,9 +657,10 @@ async fn content(
     caller: &Caller<'_>,
     state: &WorkspaceState,
     clock: &Clock,
+    sees: &Sees<'_>,
 ) -> WidgetContent {
     match placed.kind {
-        WidgetKind::Kpis => kpis(caller, state).await,
+        WidgetKind::Kpis => kpis(caller, state, sees).await,
         // Os avisos institucionais ainda não existem no Core (FG-013).
         WidgetKind::Notice => WidgetContent::List(Load::Unavailable),
         WidgetKind::Continue => continue_working(caller, state, clock).await,
@@ -653,6 +677,9 @@ async fn content(
         WidgetKind::Health => health(caller, state, clock).await,
     }
 }
+
+/// Se o membro vê uma aplicação (activa e autorizada).
+type Sees<'a> = dyn Fn(ocinye_contracts::ApplicationId) -> bool + Sync + 'a;
 
 /// O mesmo tipo de conteúdo, recusado: `Inactive` quando a aplicação não está
 /// activa na Instância, `Denied` quando o membro não a pode abrir.
@@ -686,7 +713,7 @@ pub async fn desktop(ctx: ShellContext, caller: &Caller<'_>, state: &WorkspaceSt
             .and_then(|(_, p)| p)
             .and_then(|p| super::distribution_of(p.as_str())),
     };
-    let default = distribution.map_or_else(fallback_default, system_default);
+    let default = default_for(distribution);
     let (version, placed, can_customise) = match &ctx.desktop {
         Ok(d) => {
             let version = d
@@ -714,13 +741,15 @@ pub async fn desktop(ctx: ShellContext, caller: &Caller<'_>, state: &WorkspaceSt
             .iter()
             .any(|c| c == "platform.administer"),
     };
+    // As aplicações que este membro vê (activas e autorizadas, `shell.apps`).
+    let sees = |a: ocinye_contracts::ApplicationId| ctx.vm.apps.iter().any(|t| t.id == a.as_str());
     // Um futuro por tipo, todos em paralelo: um Desktop tem no máximo um de cada.
     let find = |k: WidgetKind| placed.iter().find(|p| p.kind == k);
     macro_rules! slot {
         ($k:expr) => {
             async {
                 match find($k) {
-                    Some(p) => Some(content(p, caller, state, &clock).await),
+                    Some(p) => Some(content(p, caller, state, &clock, &sees).await),
                     None => None,
                 }
             }
@@ -762,16 +791,17 @@ pub async fn desktop(ctx: ShellContext, caller: &Caller<'_>, state: &WorkspaceSt
     .filter_map(|(k, c)| c.map(|c| (k, c)))
     .collect();
 
-    // Code (D009 · DIST-14): um widget cuja aplicação este membro não vê — não
-    // activa na Instância ou sem autorização — não se desenha, mesmo quando os
-    // dados vêm (a lista de ambientes de um colaborador, por exemplo). Fica na
-    // disposição, escondido, para que gravar não o apague.
-    let visible =
-        |a: &ocinye_contracts::ApplicationId| ctx.vm.apps.iter().any(|t| t.id == a.as_str());
+    // Code (D009 · DIST-14, G9-09): um widget de que este membro não vê
+    // nenhuma aplicação — inactivas na Instância ou sem autorização — não se
+    // desenha, mesmo quando os dados vêm (a lista de ambientes de um
+    // colaborador, por exemplo). Fica na disposição, escondido, para que gravar
+    // não o apague. Basta ver uma: Tarefas vive de O Meu Trabalho sem Projectos.
     for (k, content) in &mut by_kind {
-        let apps = crate::experience::distribution::widget_apps(*k);
-        if let Some(a) = apps.iter().find(|a| !visible(a)) {
-            let inactive = ctx.viewer.inactive_apps.iter().any(|i| i == a.as_str());
+        if !crate::experience::distribution::widget_shown(*k, sees) {
+            let apps = crate::experience::distribution::widget_apps(*k);
+            let inactive = apps
+                .iter()
+                .all(|a| ctx.viewer.inactive_apps.iter().any(|i| i == a.as_str()));
             *content = withhold(content, inactive);
         }
     }
@@ -814,7 +844,15 @@ mod tests {
         assert_eq!(d.version, SYSTEM_DEFAULT_VERSION);
         assert_eq!(d.widgets, registry::system_default(Distribution::Business));
         assert_eq!((d.wallpaper, d.dim), (Wallpaper::Module, 20));
-        let f = fallback_default();
+        for d in [
+            Distribution::Research,
+            Distribution::Business,
+            Distribution::Personal,
+            Distribution::Education,
+        ] {
+            assert_eq!(default_for(Some(d)), system_default(d), "{d:?}");
+        }
+        let f = default_for(None);
         assert_eq!(
             (f.source, f.wallpaper),
             (DefaultSource::System, Wallpaper::Ocinye)
