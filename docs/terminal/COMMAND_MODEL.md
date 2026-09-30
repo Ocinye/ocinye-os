@@ -68,8 +68,24 @@ execução. Um comando não pode declarar-se mais seguro do que a acção que fa
 | Capability | Terminal |
 |---|---|
 | `ReadOnly`, `LowImpact` com `Approval::Never` | executa |
-| aprovação `Once`/`Always`, ou `MaterialMutation` | pré-visualização do Core + `[s/N]` (plano) |
-| `ExternalEffect`, `Privileged`, irreversível | pré-visualização + palavra escrita + recibo (plano) |
+| aprovação `Once`/`Always`, ou `MaterialMutation` | plano congelado do Core + confirmação partilhada do Ocinye OS + recibo |
+| `ExternalEffect`, `Privileged`, irreversível | plano congelado + confirmação partilhada + recibo e auditoria |
+
+**Sem palavra escrita.** O ocsh nunca pede para escrever `SIM`, `CONFIRMAR`,
+`REVOGAR` ou equivalente: a confirmação é a partilhada, sobre o plano imutável
+(D008; a ADR-0312 §5 fica emendada). Uma futura Consola do Anfitrião para
+operadores pode ter uma cerimónia própria — e não é o ocsh. Hoje nenhum comando
+v1 exige confirmação; um que a exigisse seria recusado (77) até o plano chegar
+ao Terminal (TERMINAL-11).
+
+## `|` — composição tipada, não pipe da shell
+
+**Sem pipes da shell; a composição tipada é permitida.** Cada etapa depois de
+`|` resolve-se num registo fechado (`filter <texto>`, `sort <coluna> [--desc]`,
+`head <n>`, `count`, `export json`), é validada estruturalmente pelo parser e
+opera sobre as linhas que o Core já autorizou e devolveu. Não há stdout a
+passar a um processo, executáveis a resolver, `/bin/sh` nem texto convertido em
+comando. Uma etapa desconhecida é erro de uso (2).
 | capability não-delegável | não é comando do ocsh; a UI é o caminho |
 
 ## Códigos de saída
@@ -89,15 +105,15 @@ Estáveis e documentados; não espelham o HTTP.
 
 ## Contexto
 
-Cada sessão de terminal (um separador) tem um envelope:
+Cada sessão do Terminal (uma por janela; sem separadores) tem um envelope:
 `{actor, instance, context: personal | workspace(id), locale, timezone, session}`.
 O actor e a instância vêm da sessão do Workspace; o contexto viaja em cada
 pedido e o Core **reautoriza** que o actor lhe chega, sempre. `context use`
-muda o contexto do separador só depois de o Core o aceitar.
+muda o contexto da sessão só depois de o Core o aceitar.
 
 ## Espaço de nomes
 
-`~` é o contexto activo. `~/files` é o armazenamento do Ocinye nesse contexto
+`PLANNED` — não há ainda família `files` (T-14). `~` é o contexto activo. `~/files` é o armazenamento do Ocinye nesse contexto
 (pessoal: «Meus ficheiros»; ambiente: os ficheiros do ambiente). Caminhos
 resolvem para IDs de pasta pela API de Ficheiros. `..`, codificações, NUL e
 caminhos absolutos do anfitrião (`/etc`, `/home`) não saem do espaço: ou
@@ -129,7 +145,7 @@ que vierem a pedir usam uma entrada mascarada separada.
 | `files pwd/ls/cd/mkdir/rename/mv/trash/restore/info` | `files.personal.*` | **a criar** (leitura e `LowImpact`) |
 | `files open` / `files download` | navegação same-origin | — |
 | `notes list` | `knowledge.note.list` | a criar (leitura) |
-| `nye ask` / `? …` | invocação explícita da Superfície Universal | existe (`/agentic/invoke`) |
+| `nye ask` / `? …` | ponte explícita: o Core lê a pergunta (`Block::Ask`) e o Workspace leva-a a `POST /api/v1/ai/prompt`, onde o Core decide de novo | existe (D008) |
 
 Fora da v1, por falta de contrato: `window *`, `desktop *` (G-05), `session
 elevate` (G-14), `backup *` (sem API), `members *` mutáveis (não-delegáveis),

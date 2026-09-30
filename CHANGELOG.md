@@ -7,6 +7,27 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Interface D008 — Ocinye Terminal (ocsh) e Ocinye Browser — 2026-09-30 (ramo `feat/design-d008`, por fazer merge)
+
+- **Terminal:** o ecrã do Claude Design em `/terminal`, uma sessão por janela;
+  a descoberta é a ajuda do Core para a pessoa; a resposta leva a linha
+  redigida (`ocsh::redact`) e, sem JavaScript, desenha-se no servidor. `exit`
+  fecha a janela. `nye ask` / `? …` vão à Nye pelo caminho canónico
+  (`/ai/prompt`); sem inferência, 69 com o motivo. «Quis dizer» só com
+  comandos que existem e que a pessoa vê.
+- **Browser:** registado (`browser`, 27 → 28 aplicações, `NetworkUse::ClientWeb`);
+  no runtime Web, uma moldura isolada só `https:`, CSP de molduras só em
+  `/browser`, esquemas perigosos bloqueados, recurso honesto sempre à vista.
+  Desktop e Dedicado: `DESKTOP_RUNTIME_REQUIRED`.
+- **Decisões:** ADR-0623 aceite (Terminal ≠ Browser, sem camada de execução
+  partilhada, imposto por `architecture_boundaries.py`); ADR-0312 emendada
+  (confirmação partilhada sem palavra escrita; `|` é composição tipada, não
+  pipe da shell); ADR-0612 emendada (registo e runtime Web).
+- Saíram 171 chaves obsoletas do catálogo do Terminal (separadores, painéis,
+  elevação, inspector, preferências, palavra escrita).
+- 9 viagens HTTP contra um Core real (`d008_journeys.rs`) e 6 guardas
+  estáticas (`d008_contracts.rs`).
+
 ### Interface D007.1 — Monitor de Actividade, Resultados e Lixo; registo completo — 2026-09-30 (no mesmo ramo da D007, por fazer merge)
 
 - O registo passa a 27 aplicações: Monitor de Actividade (`/admin/monitor`,

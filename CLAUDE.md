@@ -293,13 +293,14 @@ sem que nada falhe.
   prova por lista branca e as instruções de um agente só para quem o criou
   ([ADR-0622](docs/adrs/0622-completion-apps-history-evidence-and-agent-authority.md))
   — e a revisão correctiva D007.1 — Monitor de Actividade, Resultados e Lixo,
-  com o registo a passar a **27 aplicações** e sem eliminação definitiva sem
-  confirmação governada — estão no ramo `feat/design-d007`, **por fazer merge**
-  (um só merge). Tarefas é o alias de O Meu Trabalho; Histórico e o Browser
-  não estão registados. Equipas não existem:
-  sem domínio, sem desenho, sem aplicação. Só o Terminal continua sem ecrã do
-  Design (D008) e abre numa janela com o estado `app_pending`:
-  **0 páginas** respondem `503 interface_pending`. **Ainda não deployada:**
+  sem eliminação definitiva sem confirmação governada — estão em `main`
+  (#190). A D008 — o **Ocinye Terminal** (ocsh) e o **Ocinye Browser**, duas
+  fronteiras sem ponte comum
+  ([ADR-0623](docs/adrs/0623-terminal-and-browser-separate-boundaries.md)) —
+  está no ramo `feat/design-d008`, **por fazer merge**; o registo passa a **28
+  aplicações** e **nenhuma fica provisória**. Tarefas é o alias de O Meu
+  Trabalho; Histórico não está registado. Equipas não existem: sem domínio,
+  sem desenho, sem aplicação. **0 páginas** respondem `503 interface_pending`. **Ainda não deployada:**
   produção (`os.ocinye.com`) continua em `4f8d048`, com a UI anterior ao
   apagamento, por decisão do Fidel, até a um deploy pedido.
 - **Gestor de Aplicações: `IMPLEMENTED` e em produção** (§45-A,
@@ -381,15 +382,28 @@ sem que nada falhe.
   `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão distinto de `OCINYE_AI_READY`, e
   **não** torna a IA disponível.
 - **59 migrations**, aplicáveis de base vazia; 93 tabelas.
-- **Ocinye Terminal e ocsh: `IMPLEMENTED` (fundação), por fazer merge**
-  ([ADR-0312](docs/adrs/0312-ocsh-governed-command-shell.md)). Uma linha de
-  comandos governada que **não é uma shell do anfitrião**: o parse é
-  determinístico e acontece no Core, cada comando invoca uma capability pelo
-  executor agentic (`POST /api/v1/commands/exec`), sintaxe do anfitrião
-  (`;`, `&&`, `$(…)`, `>`) e `sudo`/`bash` são recusados com código 126, e um
-  comando desconhecido nunca vai para o Nye. A página `/terminal` desenha só
-  texto; o histórico vive na memória do separador e nunca guarda o valor de uma
-  opção sensível. Ainda não há confirmações, streaming nem ponte para o Nye.
+- **Ocinye Terminal e ocsh: `IMPLEMENTED`, com o ecrã do Design (D008), por
+  fazer merge** ([ADR-0312](docs/adrs/0312-ocsh-governed-command-shell.md),
+  emendada na D008). Uma linha de comandos governada que **não é uma shell do
+  anfitrião**: o parse é determinístico e acontece no Core, cada comando invoca
+  uma capability pelo executor agentic (`POST /api/v1/commands/exec`), sintaxe
+  do anfitrião (`;`, `&&`, `$(…)`, `>`) e `sudo`/`bash` são recusados com código
+  126, e um comando desconhecido é 127 e nunca vai para a Nye. `|` é
+  **composição tipada** (`filter`, `sort`, `head`, `count`, `export json`),
+  nunca um pipe da shell. A Nye só pela ponte explícita (`nye ask` / `? …` →
+  `POST /api/v1/ai/prompt`). A página `/terminal` desenha só texto; uma sessão
+  por janela; o histórico vive na memória da janela e guarda só a linha
+  redigida. Confirmações de alto impacto seriam a confirmação partilhada sobre
+  o plano (sem palavra escrita); nenhum comando v1 a exige. Sem streaming.
+- **Ocinye Browser: `IMPLEMENTED` no runtime Web, por fazer merge**
+  ([ADR-0612](docs/adrs/0612-browser-manager.md), emendada;
+  [ADR-0623](docs/adrs/0623-terminal-and-browser-separate-boundaries.md)).
+  `/browser` mostra um endereço `https:` numa moldura `sandbox` sem
+  `allow-same-origin` nem `allow-top-navigation`, só nesta resposta a CSP
+  aceita molduras `https:`, e o recurso honesto «Abrir num separador do
+  navegador» está sempre lá; `javascript:`, `data:`, `file:` e `blob:` são
+  bloqueados. **Desktop e Dedicado: `DESKTOP_RUNTIME_REQUIRED`**
+  (`DESKTOP_WEBVIEW_RUNTIME_VALIDATION = NOT_CERTIFIED`) — não há casca.
 - **Ficheiros institucionais: `IMPLEMENTED`, com superfície humana.**
   Um documento deixou de apontar para **um** objecto guardado: aponta para um
   **ficheiro**, que tem identidade estável e uma história imutável de versões
@@ -583,7 +597,7 @@ sem que nada falhe.
   leitura de volta. Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **101 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
+- **102 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
   **53 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -600,14 +614,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1723 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1759 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **693 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **702 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
@@ -624,19 +638,20 @@ sem que nada falhe.
 - **Nem todas as aplicações têm ecrã.** Em `main`: a casca, a autenticação, o
   Desktop, as janelas (D001.2.1, D002), a Nye (D003), Ficheiros, Notas,
   Calendário e Correio (D004) e Projectos, O Meu Trabalho, Ideias, Dados e
-  Conhecimento (D005), Unidades e Administração (D006); as nove da conclusão
-  (D007) e Monitor de Actividade, Resultados e Lixo (D007.1) no ramo
-  `feat/design-d007`, por fazer merge; o Terminal abre numa
-  janela com o estado `app_pending` até à D008. As viagens de browser com Chrome saíram com a UI antiga; as de HTTP
+  Conhecimento (D005), Unidades e Administração (D006), as nove da conclusão
+  (D007) e Monitor de Actividade, Resultados e Lixo (D007.1); o Terminal e o
+  Browser (D008) no ramo `feat/design-d008`, por fazer merge. As viagens de browser com Chrome saíram com a UI antiga; as de HTTP
   contra um Core real voltaram (`apps/workspace/tests/d001_journeys.rs`,
   `d002_journeys.rs`, `d003_journeys.rs`, `d003_act_journeys.rs`,
-  `d004_journeys.rs`, `d005_journeys.rs`, `d006_journeys.rs`; e, no ramo da
-  D007, `d007_journeys.rs` e `d007_1_journeys.rs`). As provas de instalação,
+  `d004_journeys.rs`, `d005_journeys.rs`, `d006_journeys.rs`,
+  `d007_journeys.rs`, `d007_1_journeys.rs`; e, no ramo da D008,
+  `d008_journeys.rs`). As provas de instalação,
   actualização, restauro e hardware continuam em `NOT_RUN`
   ([apagamento](docs/ui/UI_WIPE_REPORT.md)).
 
 - **Nenhum runtime além da Web.** Não há PWA, casca Ocinye Desktop, posto
-  Dedicated, `ocinye://` nem Ocinye Browser: estão decididos (§45-B,
+  Dedicated nem `ocinye://`; o Ocinye Browser existe só no runtime Web (D008).
+  Estão decididos (§45-B,
   ADR-0018, ADR-0611 a ADR-0617, ADR-0702 a ADR-0705) e são `PLANNED`. Existe
   só a declaração de runtime (ADR-0611): `ocinye_contracts::runtime` e
   `static/runtime.js`, que hoje diz sempre `web`.

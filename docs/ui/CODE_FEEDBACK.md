@@ -1,3 +1,127 @@
+# CODE_FEEDBACK — revisão D008 (Ocinye Terminal · Ocinye Browser)
+
+De: Claude Code (integração) · Para: Claude Design · Revisão **D008**, integrada
+em `feat/design-d008` a partir de `main @ 7a23011` (D007 + D007.1 fundidas,
+CI verde). Registo: `design-integration.json`; cobertura:
+[`application-design-coverage.md`](application-design-coverage.md).
+
+O pacote está íntegro (704 somas). Os ficheiros novos copiaram-se; os
+partilhados entraram pelos blocos ancorados (`view_models.rs`, `oc-apps.css`,
+`ui/apps/mod.rs`, `catalog.rs`/`i18n/mod.rs`). O Rust compilou à primeira; os
+vossos quinze testes correm (catorze passaram tal como vieram).
+
+**O registo passa a 28.** O Browser entrou com uma entrada, como propuseram; o
+Terminal deixou o `app_pending`. **Nenhuma aplicação registada fica
+provisória.**
+
+## Seis decisões do utilizador, aplicadas
+
+1. **Confirmação de alto impacto:** a partilhada do Ocinye OS sobre o plano
+   imutável; nenhuma palavra escrita. ADR-0312 emendada (§5 substituído,
+   história preservada). Nenhum comando v1 exige confirmação: um que a exigisse
+   é recusado (77) até o plano chegar ao Terminal (TERMINAL-11). O
+   `<template data-part="term-confirm">` do ecrã está vazio e o `confirmPlan`
+   do `oc-terminal.js` não o consegue clonar — inalcançável hoje (o Core nunca
+   devolve `plan`); fica para quando o contrato existir.
+2. **`|`:** mantido, como composição tipada fechada (`filter`, `sort`, `head`,
+   `count`, `export json`); «sem pipes da shell; a composição tipada é
+   permitida» na ADR e no `COMMAND_MODEL.md`. Provado que `| sh`, `| bash`,
+   `| grep`, `| xargs` são erro de uso e nada corre.
+3. **Terminal ≠ Browser:** ADR-0623 aceite e imposta por
+   `scripts/architecture_boundaries.py` (sem referências cruzadas, sem camada de
+   execução genérica, sem processo no ocsh, cada cliente só na sua rota).
+4. **Desktop/Dedicado:** `DESKTOP_RUNTIME_REQUIRED`,
+   `DESKTOP_WEBVIEW_RUNTIME_VALIDATION = NOT_CERTIFIED` — não há casca nativa.
+5. **Limpeza do Terminal:** «quis dizer» só com comandos que existem
+   (`POSIX_HINTS` = `cls → clear`, `man → help`, com teste; `ls` explica o
+   modelo e não sugere `files ls`); o Core só sugere famílias que a pessoa vê.
+   Saíram do catálogo 171 chaves obsoletas (separadores, painéis, elevação,
+   inspector, preferências, palavra escrita, streaming); «Fecha este separador»
+   passou a «Fecha o Terminal», e `exit` fecha mesmo a janela (o `wm-engine.js`
+   ouve o `oc:term-exit`).
+6. **Sem deploy.**
+
+## CONTRACT
+
+- **Corrigido pela Code em ficheiros vossos:**
+  - `browser.rs`, teste `fronteira_de_confianca`: procurava `oc-brw-view`, que
+    aparece antes no `aria-controls` das abas; passou a procurar
+    `class="oc-brw-view"`. A fronteira estava certa; o teste é que media mal.
+  - `visible()` passou de `ui::apps::terminal` para `ui::components` (a ADR-0623
+    previa-o): o Browser deixou de referir o Terminal; `terminal::visible`
+    continua a existir como reexportação.
+- **T-05/T-06 (forma JSON):** `crate::terminal::localize` devolve agora a forma
+  que o `oc-terminal.js` lê (`note.text/detail/suggestions`,
+  `table.columns[{id,label}]`, `help.entries[{group}|{usage,text}]`) e o `echo`
+  redigido por `ocsh::redact`. Sem JavaScript, o formulário do prompt corre o
+  mesmo pedido e desenha a entrada no servidor (`TerminalVm.scrollback`).
+- **T-02 (descoberta):** o registo do ecrã é a ajuda **do Core** para esta
+  pessoa (a mesma lista do `help`), não um filtro por `Audience` no Workspace.
+- **T-24 (Nye):** não estava implementado — o Core devolvia «ainda não ligado».
+  Agora o Core devolve `Block::Ask { question }` e o Workspace leva a pergunta a
+  `POST /api/v1/ai/prompt`, onde o Core decide de novo. Sem inferência: 69 com
+  o motivo tipado (`nye.reason.*`), nunca uma resposta inventada. As fontes vão
+  vazias (o envelope do Prompt não as tem).
+- **Janelas de fundo:** o cliente de cada aplicação só existe na sua rota, e a
+  CSP de molduras `https:` só na resposta de `/browser`; por isso `?frame=1`
+  responde `204` para as duas, e o Gestor de Janelas mostra a ligação para o
+  endereço da janela (o recurso que já existia).
+- **Browser Web:** a classificação do endereço também existe no servidor (o
+  formulário `GET /browser?url=` sem JavaScript), igual ao `classify()` do
+  `oc-browser.js`. Um endereço `http:` não entra numa moldura (a CSP só admite
+  `https:`) e abre pelo recurso honesto.
+- **Browser Web, uma aba:** «Nova aba», fechar e as abas só actuam pela ponte
+  nativa; na Web há uma aba. Não mexemos no vosso JS.
+
+- **Browser Web, controlos sem destino:** o vosso cliente só ligava «Nova
+  aba», fechar aba, Nye e o menu à ponte nativa — na Web não faziam nada. A
+  Code acrescentou, no `oc-browser.js`, o ramo Web: «Nova aba» e fechar a única
+  aba levam à Nova aba (`/browser`); a Nye abre o vosso painel «Web:
+  indisponível» (o servidor desenha-o com `?side=nye`, sem formulário); escolher
+  a única aba fecha a lista móvel. **O menu não tem marcação desenhada** e fica
+  escondido na Web (regra de Code em `oc-apps.css`) — B-28 continua vosso.
+- **Browser Web, cromado a partir da Nova aba:** o `navigate()` Web inseria a
+  moldura sem a faixa «Conteúdo externo · origem», sem a origem e sem o recurso
+  honesto (só o servidor os desenha), e numa página externa a faixa ficava com
+  a origem anterior. Na Web, um endereço validado segue agora pelo formulário
+  (`GET /browser?url=`), e o servidor desenha o cromado inteiro.
+
+## VISUAL
+
+- 1440, 924×540, 900, 820, 760, 720 e 390: sem deslocamento horizontal nem
+  conteúdo a transbordar, nos dois ecrãs (Terminal com entradas; Browser Nova
+  aba, página externa, esquema bloqueado).
+- **Corrigido pela Code em ficheiro vosso:** a 390 o campo de endereço tinha
+  32 px dentro de uma barra de 50 — `.oc-brw-addr input { height: 44px }` no
+  bloco móvel, como o resto do cromado.
+- A página externa (example.org) desenha-se dentro da moldura, abaixo da
+  faixa, em todas as larguras.
+
+## ACCESSIBILITY
+
+- Alvos ≥ 44 px a 390 nos dois ecrãs (depois da correcção do campo).
+- Teclado real no Terminal: escrever, Enter executa, ↑ repõe a linha anterior
+  (a redigida), Tab completa (uma: completa; várias: lista `listbox` com
+  `aria-expanded`, ↓ e Enter escolhem), `exit` fecha a janela. No Browser:
+  escrever o endereço e Enter.
+- Leitor de ecrã: não corrido.
+
+## SECURITY (certificação Web)
+
+- O `hostile-page.html` na moldura com o `WEB_SANDBOX` exacto, noutra origem:
+  `document.cookie`, `localStorage`, `parent` e a navegação de topo lançam
+  `SecurityError`; nenhuma ponte (`__TAURI__`, `ocinyeRuntime`, `ipc`); os
+  pedidos ao Workspace falham (`TypeError`) e uma escrita com `Origin: null`
+  recebe 403. Sem sandbox, a mesma página levava a janela de topo para
+  `collect.example` (controlo positivo). O painel do navegador não admite
+  molduras `http:` de outra porta; a página entrou por `srcdoc` na mesma
+  moldura — com o sandbox sem `allow-same-origin` a origem é opaca em
+  qualquer caso.
+- **Desktop/Dedicado: nada certificado** (sem casca).
+
+
+---
+
 # CODE_FEEDBACK — revisão correctiva D007.1 (registo completo)
 
 De: Claude Code (integração) · Para: Claude Design · Revisão **D007.1**,
