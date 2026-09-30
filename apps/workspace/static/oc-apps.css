@@ -603,3 +603,115 @@ a.oc-res-link:hover { background: #F7F9FB; text-decoration: none; }
   .oc-files-row[aria-selected="true"] td, .oc-mail-item[aria-selected="true"] { outline: 1px solid Highlight; }
   .oc-files-row[data-open] td, .oc-mail-item[data-open], .oc-app-nav__item[aria-current="page"] { outline: 2px solid Highlight; }
 }
+
+/* ═══ D006 · Organização e Administração (Unidades · Administração) ═══
+ * Tudo sob prefixos .oc-org-* (e o que já existia de .oc-res-*): nenhum seletor
+ * global de [data-role], [data-status], table, button ou input. A confirmação
+ * partilhada vive fora de .oc-app (desenhada depois da casca) e usa só
+ * .oc-org-confirm. O papel técnico tem um único tom: nada sugere hierarquia. */
+.oc-org-status .oc-icon { width: 11px; height: 11px; margin-right: 3px; flex: none; }
+.oc-org-role { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; min-height: 22px; padding: 2px 8px; line-height: 1.3; max-width: 100%; border-radius: 6px; background: #EEF3F8; color: var(--oc-navy-900); font: 500 12px var(--oc-sans); }
+.oc-org-role__id { font: 400 10.5px var(--oc-mono); color: var(--oc-ink-3); }
+.oc-org-urole { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--oc-line); font: 500 11px var(--oc-sans); color: var(--oc-ink-2); white-space: nowrap; }
+.oc-org-urole[data-role="manager"] { color: var(--oc-navy-900); box-shadow: inset 0 0 0 1px #C9D6E3; }
+.oc-org-av { flex: none; width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; background: #E3EAF1; color: var(--oc-navy-900); font: 600 11.5px var(--oc-sans); letter-spacing: .02em; }
+.oc-org-av img { width: 100%; height: 100%; object-fit: cover; }
+.oc-res-head > .oc-org-av { width: 44px; height: 44px; font-size: 14px; margin-top: 2px; }
+.oc-org-person { display: flex; flex-direction: row; align-items: center; gap: 10px; min-width: 0; color: var(--oc-ink); }
+.oc-org-person:hover { text-decoration: none; }
+.oc-org-person__text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.oc-org-person__email { font: 400 11.5px var(--oc-mono); color: var(--oc-ink-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.oc-org-table .oc-res-name { justify-content: flex-start; }
+.oc-org-self { display: inline-flex; align-items: center; height: 18px; margin-left: 6px; padding: 0 6px; border-radius: 9px; background: var(--oc-muted); font: 500 10.5px var(--oc-sans); color: var(--oc-ink-2); vertical-align: 1px; }
+.oc-org-refusal strong, .oc-org-done strong { font-weight: 600; }
+.oc-org-done { background: #E6F2EC; color: #2E6E4E; }
+.oc-org-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; border-top: 1px solid var(--oc-line-2); }
+.oc-org-list__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 44px; padding: 6px 4px; border-bottom: 1px solid var(--oc-line-2); font-size: 13px; }
+.oc-org-grant, .oc-org-session { align-items: flex-start; }
+.oc-org-grant__main, .oc-org-session__main { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.oc-org-grant__meta { display: flex; flex-wrap: wrap; gap: 0 10px; font-size: 11.5px; color: var(--oc-ink-4); }
+.oc-org-grant__reason { font-size: 12.5px; color: var(--oc-ink-2); overflow-wrap: anywhere; }
+.oc-org-session__agent { font-weight: 500; }
+.oc-org-perm { font: 400 11.5px var(--oc-mono); color: var(--oc-ink-2); overflow-wrap: anywhere; }
+.oc-org-perms > summary { list-style: none; align-self: flex-start; }
+.oc-org-perms > summary::-webkit-details-marker { display: none; }
+.oc-org-perms[open] { display: flex; flex-direction: column; gap: 8px; }
+.oc-org-perms__table, .oc-org-apps__table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.oc-org-perms__table caption { caption-side: top; text-align: left; padding-bottom: 6px; }
+.oc-org-perms__table th, .oc-org-apps__table th { text-align: left; font: 500 11px var(--oc-sans); color: var(--oc-ink-3); padding: 6px 8px; border-bottom: 1px solid var(--oc-line); }
+.oc-org-perms__table td, .oc-org-apps__table td, .oc-org-apps__table tbody th { padding: 6px 8px; border-bottom: 1px solid var(--oc-line-2); vertical-align: middle; }
+.oc-org-apps__table tbody th { font: 500 13px var(--oc-sans); color: var(--oc-ink); }
+.oc-org-apps { display: flex; flex-direction: column; gap: 10px; overflow-x: auto; }
+.oc-org-app { display: inline-flex; align-items: center; gap: 8px; }
+.oc-org-app .oc-icon { width: 15px; height: 15px; color: var(--oc-navy-800); }
+.oc-org-app__choice select { min-height: 32px; max-width: 100%; padding: 0 8px; border: 1px solid var(--oc-line); border-radius: var(--oc-radius-control); background: var(--oc-surface); font: 400 12.5px var(--oc-sans); color: var(--oc-ink); }
+.oc-org-muted { font-size: 12px; color: var(--oc-ink-3); }
+.oc-org-wide { max-width: 980px; }
+.oc-app[data-app="admin"] .oc-app__main > .oc-res-doc { overflow: auto; }
+.oc-org-roles { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0; border-top: 1px solid var(--oc-line-2); border-left: 1px solid var(--oc-line-2); }
+.oc-org-roles__item { padding: 12px; border-right: 1px solid var(--oc-line-2); border-bottom: 1px solid var(--oc-line-2); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.oc-org-roles__name { margin: 0; }
+.oc-org-roles__name .oc-org-role { flex-direction: column; align-items: flex-start; padding: 5px 8px; }
+.oc-org-perm-list { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.oc-org-umember .oc-org-person { flex: 1 1 200px; }
+.oc-org-umember__acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.oc-org-umember__acts:empty { display: none; }
+.oc-org-add { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 12px; border: 1px solid var(--oc-line-2); border-radius: 10px; background: var(--oc-bg); }
+.oc-org-add .oc-res-sub { margin: 0; }
+.oc-org-add__search { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.oc-org-add__search .oc-app-field { flex: 1 1 220px; }
+.oc-org-add__pick { display: flex; flex-direction: column; gap: 8px; }
+.oc-org-cands { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; border-top: 1px solid var(--oc-line-2); }
+.oc-org-cands legend { padding: 0 0 6px; }
+.oc-org-cand { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 6px; border-bottom: 1px solid var(--oc-line-2); font-size: 13px; cursor: pointer; }
+.oc-org-cand:hover { background: #F7F9FB; }
+.oc-org-cand input { width: 16px; height: 16px; accent-color: var(--oc-navy-900); }
+.oc-org-cand:has(input:checked) { background: #E9EFF5; }
+.oc-org-readonly { margin: 0; min-height: 34px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 10px; border: 1px dashed var(--oc-line); border-radius: 9px; font-size: 12px; color: var(--oc-ink-3); }
+.oc-org-readonly code { font: 500 13px var(--oc-mono); color: var(--oc-ink); }
+.oc-org-suggest { margin: -4px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; font-size: 12px; color: var(--oc-ink-3); }
+.oc-org-suggest code { font: 500 12.5px var(--oc-mono); color: var(--oc-navy-900); }
+.oc-app-kv dd[data-expired] { color: #8C2019; }
+.oc-org-cred { max-width: 620px; padding: 16px 20px 28px; display: flex; flex-direction: column; gap: 12px; }
+.oc-org-cred__head { display: flex; align-items: center; gap: 12px; }
+.oc-org-cred__head .oc-res-head__title { margin: 0; }
+.oc-org-cred__ic { width: 40px; height: 40px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; background: #FDF6E7; color: #8A6110; flex: none; }
+.oc-org-cred__ic .oc-icon { width: 20px; height: 20px; }
+.oc-org-cred__who { margin: 2px 0 0; font-size: 13px; color: var(--oc-ink-2); }
+.oc-org-cred__field { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.oc-org-cred__field .oc-app-field { flex: 1 1 240px; }
+.oc-org-cred__field input { font: 500 15px var(--oc-mono); letter-spacing: .04em; }
+.oc-org-cred__facts { margin: 0; padding: 0 0 0 18px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--oc-ink-2); }
+.oc-org-confirm::before { content: ""; position: absolute; inset: 0; background: rgba(4, 16, 28, .38); }
+.oc-org-confirm__box { width: min(480px, 100%); max-height: calc(100vh - 40px); overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+.oc-org-confirm__facts { margin: 0; padding: 8px 10px; border: 1px solid var(--oc-line-2); border-radius: 10px; }
+.oc-org-confirm__facts dd { overflow-wrap: anywhere; }
+.oc-org-confirm__reason textarea { min-height: 60px; }
+.oc-org-confirm__hint { font-size: 11.5px; color: var(--oc-ink-4); }
+.oc-org-confirm__box[aria-busy="true"] [data-oc="org-confirm-ok"] { opacity: .6; pointer-events: none; }
+.oc-org-confirm a.oc-btn-plain { display: inline-flex; align-items: center; text-decoration: none; }
+@container app (max-width: 719px) {
+  .oc-org-cred { padding: 12px 14px 24px; }
+  .oc-org-cred .oc-app-btn > span, .oc-org-cred .oc-app-primary > span, .oc-org-add .oc-app-btn > span, .oc-org-umember__acts .oc-app-btn > span { display: inline; }
+  .oc-org-apps__table thead { display: none; }
+  .oc-org-apps__table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 8px 0; border-bottom: 1px solid var(--oc-line-2); }
+  .oc-org-apps__table td, .oc-org-apps__table tbody th { padding: 0; border: 0; }
+  .oc-org-apps__table td:last-child { grid-column: 1 / -1; }
+  .oc-org-app__choice select { width: 100%; }
+}
+@media (max-width: 640px) {
+  .oc-org-list__row, .oc-org-cand { min-height: 48px; }
+  .oc-org-umember__acts { gap: 10px; width: 100%; }
+  .oc-org-app__choice select, .oc-org-perms > summary { min-height: 44px; }
+  .oc-org-confirm .oc-btn-plain, .oc-org-confirm .oc-btn-gold, .oc-org-confirm .oc-btn-line { min-height: 44px; }
+  .oc-org-confirm { padding: 12px; align-items: flex-end; }
+  .oc-org-confirm__box { width: 100%; padding: 18px 16px 16px; }
+  .oc-org-cred__field .oc-app-btn { min-height: 44px; }
+  .oc-org-apps .oc-app-primary, .oc-org-cred .oc-app-primary { min-height: 44px; }
+  .oc-org-list__row > .oc-org-person { min-height: 44px; }
+  .oc-org-cand { min-height: 48px; }
+  .oc-app[data-app="admin"] .oc-app-more .oc-app-btn, .oc-app[data-app="units"] .oc-app-more .oc-app-btn { min-height: 44px; }
+}
+@media (forced-colors: active) {
+  .oc-org-role, .oc-org-urole, .oc-org-self { border: 1px solid CanvasText; }
+}

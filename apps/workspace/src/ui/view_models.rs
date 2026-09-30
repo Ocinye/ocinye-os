@@ -3553,3 +3553,931 @@ pub struct KnowledgeVm {
     /// A lista, com os filtros correntes (o «voltar» da janela estreita).
     pub list_href: String,
 }
+
+// ═════════════════════════════════════════════════════════════════════════
+// D006 · Organização · pertença · administração (Unidades, Administração →
+// Membros, Papéis, Instância). Aditivo.
+//
+// O Core governa; a vista apresenta. Nenhum tipo desta secção transporta um
+// segredo, um verificador, um token ou um identificador de sessão, com UMA
+// excepção deliberada e estreita: `OrgCredentialOnceVm`, a credencial
+// temporária que o Core devolve uma única vez na resposta de criar, repor ou
+// dar acesso (docs/identity). Nunca se guarda, nunca aparece numa lista.
+// As acções só existem quando o VM as traz; ter um papel ou pertencer a uma
+// unidade não dá autoridade na vista.
+// ═════════════════════════════════════════════════════════════════════════
+
+/// Estado da conta (`ocinye_contracts::AccountStatus`): os quatro do Core.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrgAccountStatus {
+    /// Criada por um administrador; só existe credencial temporária.
+    Invited,
+    /// Normal.
+    Active,
+    /// Não autentica; sessões revogadas; reversível.
+    Suspended,
+    /// Identidade histórica permanente; nunca apagada.
+    Disabled,
+}
+
+impl OrgAccountStatus {
+    /// A chave do rótulo.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Invited => "org.status.invited",
+            Self::Active => "org.status.active",
+            Self::Suspended => "org.status.suspended",
+            Self::Disabled => "org.status.disabled",
+        }
+    }
+    /// O valor estável enviado ao Core.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Invited => "invited",
+            Self::Active => "active",
+            Self::Suspended => "suspended",
+            Self::Disabled => "disabled",
+        }
+    }
+}
+
+/// Papel técnico (`ocinye_contracts::TechnicalRole`). Papéis de sistema,
+/// definidos no código; a vista não cria nem edita nenhum.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrgTechRole {
+    /// platform_admin
+    PlatformAdmin,
+    /// organisation_admin
+    OrganisationAdmin,
+    /// unit_manager
+    UnitManager,
+    /// research_lead
+    ResearchLead,
+    /// research_member
+    ResearchMember,
+    /// collaborator
+    Collaborator,
+    /// external_collaborator
+    ExternalCollaborator,
+    /// auditor
+    Auditor,
+}
+
+impl OrgTechRole {
+    /// O identificador estável (mostrado em mono, ao lado do rótulo).
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::PlatformAdmin => "platform_admin",
+            Self::OrganisationAdmin => "organisation_admin",
+            Self::UnitManager => "unit_manager",
+            Self::ResearchLead => "research_lead",
+            Self::ResearchMember => "research_member",
+            Self::Collaborator => "collaborator",
+            Self::ExternalCollaborator => "external_collaborator",
+            Self::Auditor => "auditor",
+        }
+    }
+    /// A chave do rótulo.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::PlatformAdmin => "org.role.platform_admin",
+            Self::OrganisationAdmin => "org.role.organisation_admin",
+            Self::UnitManager => "org.role.unit_manager",
+            Self::ResearchLead => "org.role.research_lead",
+            Self::ResearchMember => "org.role.research_member",
+            Self::Collaborator => "org.role.collaborator",
+            Self::ExternalCollaborator => "org.role.external_collaborator",
+            Self::Auditor => "org.role.auditor",
+        }
+    }
+}
+
+/// Papel numa unidade (`UnitRole`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrgUnitRole {
+    /// Gere a unidade.
+    Manager,
+    /// Pertence à unidade.
+    Member,
+}
+
+impl OrgUnitRole {
+    /// A chave do rótulo.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Manager => "org.unit_role.manager",
+            Self::Member => "org.unit_role.member",
+        }
+    }
+    /// O valor estável enviado ao Core.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Manager => "manager",
+            Self::Member => "member",
+        }
+    }
+}
+
+/// Papel num ambiente de investigação (`WorkspaceRole`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrgWorkspaceRole {
+    /// lead
+    Lead,
+    /// member
+    Member,
+    /// viewer
+    Viewer,
+}
+
+impl OrgWorkspaceRole {
+    /// A chave do rótulo.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Lead => "org.ws_role.lead",
+            Self::Member => "org.ws_role.member",
+            Self::Viewer => "org.ws_role.viewer",
+        }
+    }
+}
+
+/// Posição institucional (`InstitutionalPosition`). Registo; não concede nada.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrgPosition {
+    /// founder
+    Founder,
+    /// director
+    Director,
+    /// unit_lead
+    UnitLead,
+    /// principal_investigator
+    PrincipalInvestigator,
+    /// researcher
+    Researcher,
+    /// engineer
+    Engineer,
+    /// fellow
+    Fellow,
+    /// student
+    Student,
+    /// external_collaborator
+    ExternalCollaborator,
+}
+
+impl OrgPosition {
+    /// A chave do rótulo.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Founder => "org.pos.founder",
+            Self::Director => "org.pos.director",
+            Self::UnitLead => "org.pos.unit_lead",
+            Self::PrincipalInvestigator => "org.pos.principal_investigator",
+            Self::Researcher => "org.pos.researcher",
+            Self::Engineer => "org.pos.engineer",
+            Self::Fellow => "org.pos.fellow",
+            Self::Student => "org.pos.student",
+            Self::ExternalCollaborator => "org.pos.external_collaborator",
+        }
+    }
+}
+
+/// A origem de uma permissão (`GET /administration/members/{id}/access`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrgPermissionSource {
+    /// technical_role
+    TechnicalRole,
+    /// unit_membership
+    UnitMembership,
+    /// workspace_membership
+    WorkspaceMembership,
+    /// explicit_grant
+    ExplicitGrant,
+}
+
+impl OrgPermissionSource {
+    /// A chave do rótulo.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::TechnicalRole => "org.source.technical_role",
+            Self::UnitMembership => "org.source.unit_membership",
+            Self::WorkspaceMembership => "org.source.workspace_membership",
+            Self::ExplicitGrant => "org.source.explicit_grant",
+        }
+    }
+}
+
+/// A representação de uma pessoa. Iniciais calculadas pelo Code a partir do
+/// nome que o Core devolve (o mesmo cálculo do avatar `initials`); imagem só
+/// servida pelo Core (preset do produto ou objecto governado), nunca um URL
+/// externo.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgAvatarVm {
+    /// Uma ou duas letras.
+    pub initials: String,
+    /// `/me/avatar/{v}` ou o asset do preset; `None` = iniciais.
+    pub image_href: Option<String>,
+}
+
+/// Uma unidade a que alguém pertence (`PersonUnit` + papel quando se sabe).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgUnitRefVm {
+    /// O código institucional.
+    pub code: String,
+    /// O nome.
+    pub name: String,
+    /// O papel nessa unidade, quando o contrato o traz.
+    pub role: Option<OrgUnitRole>,
+    /// `/units/{id}` — reautorizado ao abrir.
+    pub href: Option<String>,
+}
+
+/// Um ambiente de investigação a que alguém pertence.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgWorkspaceRefVm {
+    /// O título que o Core resolve para quem vê; `None` = o ambiente existe e
+    /// não é legível por quem vê (mostra-se «Ambiente sem acesso»).
+    pub title: Option<String>,
+    /// O papel.
+    pub role: OrgWorkspaceRole,
+    /// A ligação canónica (Projectos/Ideias), quando legível.
+    pub href: Option<String>,
+}
+
+/// O tipo de uma acção organizacional: dá o rótulo, o tom e o texto da
+/// confirmação partilhada. A semântica é a do Core (docs/identity,
+/// docs/authorization, organisation::service).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrgActionKind {
+    /// status → suspended
+    Suspend,
+    /// status → disabled
+    Disable,
+    /// status → active
+    Reactivate,
+    /// password-reset (emite credencial temporária)
+    ResetPassword,
+    /// provision (dá acesso a quem existe sem credencial)
+    Provision,
+    /// provision, quando a temporária expirou
+    Reissue,
+    /// DELETE de um convite nunca aceite
+    DeleteInvite,
+    /// conceder um papel técnico
+    GrantRole,
+    /// revogar um papel técnico
+    RevokeRole,
+    /// revogar um grant explícito
+    RevokeGrant,
+    /// revogar uma sessão
+    RevokeSession,
+    /// mudar o papel numa unidade (gestor ↔ membro)
+    ChangeUnitRole,
+    /// retirar a pertença a uma unidade
+    RemoveUnitMember,
+    /// arquivar uma unidade
+    ArchiveUnit,
+}
+
+impl OrgActionKind {
+    /// O prefixo das chaves (`org.act.suspend` → `.label`, `.title`, `.body`, `.do`).
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Suspend => "org.act.suspend",
+            Self::Disable => "org.act.disable",
+            Self::Reactivate => "org.act.reactivate",
+            Self::ResetPassword => "org.act.reset",
+            Self::Provision => "org.act.provision",
+            Self::Reissue => "org.act.reissue",
+            Self::DeleteInvite => "org.act.delete",
+            Self::GrantRole => "org.act.grant_role",
+            Self::RevokeRole => "org.act.revoke_role",
+            Self::RevokeGrant => "org.act.revoke_grant",
+            Self::RevokeSession => "org.act.revoke_session",
+            Self::ChangeUnitRole => "org.act.unit_role",
+            Self::RemoveUnitMember => "org.act.unit_remove",
+            Self::ArchiveUnit => "org.act.archive_unit",
+        }
+    }
+    /// Retira acesso ou apaga: o botão final é de perigo e nunca tem o foco.
+    #[must_use]
+    pub const fn reduces_access(self) -> bool {
+        matches!(
+            self,
+            Self::Suspend
+                | Self::Disable
+                | Self::DeleteInvite
+                | Self::RevokeRole
+                | Self::RevokeGrant
+                | Self::RevokeSession
+                | Self::RemoveUnitMember
+                | Self::ArchiveUnit
+        )
+    }
+    /// A operação devolve uma credencial temporária, mostrada uma vez.
+    #[must_use]
+    pub const fn issues_credential(self) -> bool {
+        matches!(self, Self::ResetPassword | Self::Provision | Self::Reissue)
+    }
+}
+
+/// Uma acção disponível agora: abre a confirmação partilhada (`?confirm=…`,
+/// GET). A operação só corre no POST da confirmação, e o Core reautoriza.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgActionVm {
+    /// O tipo.
+    pub kind: OrgActionKind,
+    /// Onde abre a confirmação.
+    pub href: String,
+}
+
+/// O motivo que a operação exige (só quando o Core o exige ou aceita).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrgReason {
+    /// Sem motivo.
+    None,
+    /// Aceite, não obrigatório (conceder papel).
+    Optional,
+    /// Obrigatório, com o mínimo de caracteres que o Core aplica.
+    Required(u8),
+}
+
+/// A confirmação partilhada das acções privilegiadas (SHARED_CONFIRMATION_EXTENSION).
+/// Desenhada pela rota depois da casca, como `wm::dirty_close` e
+/// `nye::confirm_dialog`. Confirmar não autoriza: o Core volta a decidir.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgConfirmVm {
+    /// A acção.
+    pub kind: OrgActionKind,
+    /// O alvo, pelo nome («Marta Quintas», «UENR-001 · Unidade de Energia»).
+    pub target: String,
+    /// O contexto, quando existe («na Unidade de Energia», o papel).
+    pub context: Option<String>,
+    /// Actual → proposto (mudança de papel), já traduzidos.
+    pub change: Option<(String, String)>,
+    /// POST (a rota BFF que já existe).
+    pub action: String,
+    /// Campos escondidos (papel, estado de destino).
+    pub hidden: Vec<(&'static str, String)>,
+    /// O motivo.
+    pub reason: OrgReason,
+    /// Voltar sem fazer nada.
+    pub cancel_href: String,
+    /// O Core recusou esta tentativa (fica aberta com a razão).
+    pub refusal: Option<OrgRefusal>,
+    /// Falhou por outra razão.
+    pub error: Option<AppError>,
+}
+
+/// Recusas tipadas das invariantes do Core. O Code mapeia a resposta; a vista
+/// nunca as calcula. Nenhuma revela o que o membro não pode ver.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrgRefusal {
+    /// Suspender ou desactivar a própria conta.
+    SelfLockout,
+    /// Deixaria a instituição sem Platform Admin capaz de entrar.
+    LastPlatformAdmin,
+    /// Deixaria a unidade sem gestor.
+    LastUnitManager,
+    /// Conceder o que não detém.
+    CannotGrantUnheld,
+    /// Só um convite nunca aceite se apaga.
+    NotDeletable,
+    /// O estado mudou entretanto; a vista foi relida.
+    StaleState,
+    /// A opção escolhida já não está disponível.
+    OptionUnavailable,
+}
+
+impl OrgRefusal {
+    /// A chave do texto.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::SelfLockout => "org.refusal.self",
+            Self::LastPlatformAdmin => "org.refusal.last_admin",
+            Self::LastUnitManager => "org.refusal.last_manager",
+            Self::CannotGrantUnheld => "org.refusal.unheld",
+            Self::NotDeletable => "org.refusal.not_deletable",
+            Self::StaleState => "org.refusal.stale",
+            Self::OptionUnavailable => "org.refusal.option",
+        }
+    }
+}
+
+/// O que acabou de acontecer (uma linha discreta, não um toast).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrgNotice {
+    /// Estado da conta alterado.
+    StatusChanged,
+    /// Papel concedido.
+    RoleGranted,
+    /// Papel revogado.
+    RoleRevoked,
+    /// Grant revogado.
+    GrantRevoked,
+    /// Sessão revogada.
+    SessionRevoked,
+    /// Posição alterada.
+    PositionChanged,
+    /// Membro acrescentado à unidade.
+    MemberAdded,
+    /// Pertença retirada.
+    MemberRemoved,
+    /// Papel na unidade alterado.
+    UnitRoleChanged,
+    /// Unidade guardada.
+    UnitSaved,
+    /// Unidade arquivada.
+    UnitArchived,
+    /// Configuração da Instância guardada.
+    SettingsSaved,
+}
+
+impl OrgNotice {
+    /// A chave do texto.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::StatusChanged => "org.done.status",
+            Self::RoleGranted => "org.done.role_granted",
+            Self::RoleRevoked => "org.done.role_revoked",
+            Self::GrantRevoked => "org.done.grant_revoked",
+            Self::SessionRevoked => "org.done.session_revoked",
+            Self::PositionChanged => "org.done.position",
+            Self::MemberAdded => "org.done.member_added",
+            Self::MemberRemoved => "org.done.member_removed",
+            Self::UnitRoleChanged => "org.done.unit_role",
+            Self::UnitSaved => "org.done.unit_saved",
+            Self::UnitArchived => "org.done.unit_archived",
+            Self::SettingsSaved => "org.done.settings",
+        }
+    }
+}
+
+/// A credencial temporária, devolvida UMA vez pelo Core (criar, repor, dar
+/// acesso). O único VM com um segredo. Nunca numa lista, nunca guardado; a
+/// resposta que o traz vai com `Cache-Control: no-store`. Nada foi enviado por
+/// correio: o administrador entrega-a por canal seguro.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgCredentialOnceVm {
+    /// O que a emitiu.
+    pub origin: OrgActionKind,
+    /// A pessoa.
+    pub name: String,
+    /// O endereço institucional com que entra.
+    pub email: String,
+    /// O segredo em claro (`temporary_password`).
+    pub secret: String,
+    /// Válida até (formatado).
+    pub expires: String,
+    /// Concluir (para o detalhe do membro).
+    pub done_href: String,
+}
+
+/// Uma linha do roster administrativo (`GET /administration/members`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgMemberRowVm {
+    /// O nome (`full_name`).
+    pub name: String,
+    /// O endereço institucional (o roster administrativo trá-lo).
+    pub email: Option<String>,
+    /// Avatar.
+    pub avatar: OrgAvatarVm,
+    /// Estado da conta.
+    pub status: OrgAccountStatus,
+    /// Posição institucional.
+    pub position: Option<OrgPosition>,
+    /// Códigos das unidades (sem unidade «principal»: o Core não a infere).
+    pub units: Vec<String>,
+    /// Registo (`created_at`), formatado.
+    pub joined: Option<String>,
+    /// Última actividade (`last_seen_at`), formatada.
+    pub last_seen: Option<String>,
+    /// `/admin/members/{id}`.
+    pub href: String,
+    /// É o que está aberto.
+    pub active: bool,
+    /// É a conta de quem vê.
+    pub is_self: bool,
+}
+
+/// O roster.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgMembersListVm {
+    /// As linhas.
+    pub rows: Vec<OrgMemberRowVm>,
+    /// Estado.
+    pub load: AppLoad,
+    /// Paginação (página → cursor, pelo Code).
+    pub page: AppPageVm,
+}
+
+/// Um papel técnico detido, com a revogação quando o actor a pode fazer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgRoleHeldVm {
+    /// O papel.
+    pub role: OrgTechRole,
+    /// Revogar (abre a confirmação).
+    pub revoke: Option<OrgActionVm>,
+}
+
+/// Um grant explícito vivo.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgGrantVm {
+    /// A permissão (identificador estável, `documents.view`).
+    pub permission: String,
+    /// O âmbito, já traduzido e resolvido («Unidade · UENR-001»).
+    pub scope: String,
+    /// O motivo registado.
+    pub reason: String,
+    /// Quem concedeu.
+    pub granted_by: Option<String>,
+    /// Caduca (formatado); `None` = sem data.
+    pub expires: Option<String>,
+    /// Revogar.
+    pub revoke: Option<OrgActionVm>,
+}
+
+/// Uma permissão efectiva à escala institucional, com a origem.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgPermissionVm {
+    /// Identificador estável.
+    pub permission: String,
+    /// Origem.
+    pub source: OrgPermissionSource,
+}
+
+/// O acesso de uma pessoa (`/access`, exige `RolesView` para outrem).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgAccessVm {
+    /// Papéis técnicos.
+    pub roles: Vec<OrgRoleHeldVm>,
+    /// Grants explícitos.
+    pub grants: Vec<OrgGrantVm>,
+    /// Permissões institucionais e a sua origem.
+    pub permissions: Vec<OrgPermissionVm>,
+    /// Conceder um papel: as opções vêm do Core (papéis ainda não detidos que o
+    /// actor pode conceder). `None` = o actor não gere papéis.
+    pub grant: Option<OrgRoleGrantVm>,
+}
+
+/// O formulário de conceder papel (abre a confirmação com o papel escolhido).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgRoleGrantVm {
+    /// GET que abre a confirmação (`?confirm=grant_role`).
+    pub action: String,
+    /// Papéis concedíveis (valor estável + rótulo).
+    pub options: Vec<ResOptionVm>,
+}
+
+/// A credencial temporária existente (sem o segredo: só a validade).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgTempCredVm {
+    /// A data, formatada.
+    pub expires: String,
+    /// Já passou.
+    pub expired: bool,
+}
+
+/// Uma sessão viva (metadata; nunca o identificador opaco).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgSessionVm {
+    /// Emitida (formatado).
+    pub issued: String,
+    /// Última actividade (formatado).
+    pub last_seen: String,
+    /// Expira (formatado).
+    pub expires: String,
+    /// O agente, resumido pelo Code («Firefox · macOS»).
+    pub agent: Option<String>,
+    /// O prefixo de rede que o Core guarda.
+    pub ip_prefix: Option<String>,
+    /// Sessão restrita (mudança de palavra-passe obrigatória).
+    pub restricted: bool,
+    /// Revogar.
+    pub revoke: Option<OrgActionVm>,
+}
+
+/// A segurança da conta (`/security`): metadata segura, nunca a credencial.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgSecurityVm {
+    /// Já definiu palavra-passe própria.
+    pub has_permanent_password: bool,
+    /// Quando (formatado).
+    pub password_changed: Option<String>,
+    /// A temporária que existe.
+    pub temporary: Option<OrgTempCredVm>,
+    /// Última entrada com sucesso.
+    pub last_sign_in: Option<String>,
+    /// Tentativas falhadas recentes.
+    pub recent_failures: u32,
+    /// O segundo factor é exigido a esta pessoa (regra do Core).
+    pub mfa_required: bool,
+    /// Tem TOTP confirmado.
+    pub mfa_enrolled: bool,
+    /// Sessões vivas.
+    pub sessions: Vec<OrgSessionVm>,
+}
+
+/// A posição institucional, quando o actor a pode mudar.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgPositionFormVm {
+    /// POST `/admin/members/{id}/position`.
+    pub action: String,
+    /// As nove posições + «Sem posição» (valor vazio).
+    pub options: Vec<ResOptionVm>,
+}
+
+/// Um membro aberto na Administração.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgMemberVm {
+    /// O nome.
+    pub name: String,
+    /// O endereço institucional.
+    pub email: Option<String>,
+    /// Avatar.
+    pub avatar: OrgAvatarVm,
+    /// Estado.
+    pub status: OrgAccountStatus,
+    /// Posição.
+    pub position: Option<OrgPosition>,
+    /// É a própria conta de quem vê.
+    pub is_self: bool,
+    /// Registo.
+    pub joined: Option<String>,
+    /// Última actividade.
+    pub last_seen: Option<String>,
+    /// Unidades.
+    pub units: Vec<OrgUnitRefVm>,
+    /// Ambientes de investigação.
+    pub workspaces: Vec<OrgWorkspaceRefVm>,
+    /// Acesso (`None` = o actor não tem `RolesView`: a secção não aparece).
+    pub access: Option<OrgAccessVm>,
+    /// Segurança (`None` = sem `MembersManage`).
+    pub security: Option<OrgSecurityVm>,
+    /// Acções de conta que o Core permite ao actor, já filtradas pelo estado.
+    pub account_actions: Vec<OrgActionVm>,
+    /// Mudar a posição.
+    pub position_form: Option<OrgPositionFormVm>,
+    /// Uma recusa da última tentativa.
+    pub refusal: Option<OrgRefusal>,
+    /// O que acabou de acontecer.
+    pub notice: Option<OrgNotice>,
+}
+
+/// Criar um membro (`POST /administration/members`): conta `invited` com
+/// credencial temporária. Não é um convite por correio.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgNewMemberVm {
+    /// POST `/admin/members/new`.
+    pub action: String,
+    /// Valores já escritos (depois de uma recusa).
+    pub full_name: String,
+    /// Endereço institucional.
+    pub email: String,
+    /// Posições (opcional).
+    pub positions: Vec<ResOptionVm>,
+    /// Papéis que o actor pode conceder (o Core recusa `platform_admin` a quem
+    /// não o detém; o Code só o oferece a quem o detém).
+    pub roles: Vec<ResOptionVm>,
+    /// Unidades legíveis (opcional).
+    pub units: Vec<ResOptionVm>,
+    /// Falha.
+    pub error: Option<AppError>,
+    /// Recusa.
+    pub refusal: Option<OrgRefusal>,
+}
+
+/// Um papel de sistema no catálogo (`GET /administration/roles`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgRoleDefVm {
+    /// O papel.
+    pub role: OrgTechRole,
+    /// As permissões que concede, identificadores estáveis.
+    pub permissions: Vec<String>,
+}
+
+/// Uma aplicação da Instância (`GET /instance/applications`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgAppStateVm {
+    /// Identificador técnico (`app:<id>` no formulário).
+    pub id: String,
+    /// O rótulo, já traduzido.
+    pub label: String,
+    /// O ícone.
+    pub icon: &'static str,
+    /// Essencial (não se desactiva).
+    pub essential: bool,
+    /// Activa agora.
+    pub active: bool,
+    /// Decisão explícita da Instância (senão, o perfil).
+    pub explicit: bool,
+    /// O que o perfil diria.
+    pub profile_default: bool,
+}
+
+/// A Instância (`/admin/instance`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgInstanceVm {
+    /// O nome da Instância.
+    pub name: String,
+    /// A distribuição (perfil). Mostrada, não editada na D006.
+    pub distribution: Distribution,
+    /// Língua por omissão (rótulo).
+    pub default_locale: String,
+    /// Fuso IANA configurado.
+    pub timezone: String,
+    /// Última alteração da configuração.
+    pub updated: Option<String>,
+    /// As aplicações.
+    pub apps: Vec<OrgAppStateVm>,
+    /// POST `/admin/instance` (as decisões por aplicação); `None` = só leitura.
+    pub apps_action: Option<String>,
+    /// Estado.
+    pub load: AppLoad,
+    /// Acabou de guardar.
+    pub notice: Option<OrgNotice>,
+}
+
+/// A secção da Administração.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AdminSection {
+    /// Membros (roster, detalhe, criar).
+    Members,
+    /// Papéis (catálogo, só leitura).
+    Roles,
+    /// Instância (informação, aplicações).
+    Instance,
+}
+
+/// A aplicação Administração (`/admin`, `members.manage`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdminVm {
+    /// A secção.
+    pub section: AdminSection,
+    /// Membros · Papéis · Instância (só as que o Core abre).
+    pub nav: Vec<AppNavVm>,
+    /// A aplicação inteira recusada (ligação directa, privilégio perdido).
+    pub error: Option<AppError>,
+    /// O roster.
+    pub members: OrgMembersListVm,
+    /// Lista | detalhe.
+    pub pane: ResPane,
+    /// O membro aberto.
+    pub member: Option<OrgMemberVm>,
+    /// O erro do membro pedido.
+    pub member_error: Option<AppError>,
+    /// Criar membro.
+    pub new_member: Option<OrgNewMemberVm>,
+    /// A credencial acabada de emitir.
+    pub credential: Option<OrgCredentialOnceVm>,
+    /// «Novo membro» (`members.create`).
+    pub new_href: Option<String>,
+    /// O catálogo de papéis.
+    pub roles: Vec<OrgRoleDefVm>,
+    /// A Instância.
+    pub instance: Option<OrgInstanceVm>,
+    /// O roster, com a página corrente (o «voltar»).
+    pub list_href: String,
+}
+
+/// O estado de uma unidade (`active` | `archived`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrgUnitStatus {
+    /// Activa.
+    Active,
+    /// Arquivada (história; nunca apagada).
+    Archived,
+}
+
+/// Um membro de uma unidade (`GET /units/{id}/members`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnitMemberVm {
+    /// O nome.
+    pub name: String,
+    /// Avatar.
+    pub avatar: OrgAvatarVm,
+    /// Papel na unidade.
+    pub role: OrgUnitRole,
+    /// O membro na Administração — só quando quem vê tem `members.manage`.
+    pub href: Option<String>,
+    /// Passar a gestor / a membro (abre a confirmação).
+    pub change_role: Option<OrgActionVm>,
+    /// Retirar da unidade (abre a confirmação).
+    pub remove: Option<OrgActionVm>,
+}
+
+/// Acrescentar um membro à unidade: selector governado.
+///
+/// Os candidatos vêm do Core (CORE_CONTRACT_REQUIRED: candidatos elegíveis com
+/// pesquisa). O browser nunca enumera; forjar um identificador falha no Core.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnitAddMemberVm {
+    /// GET da pesquisa de candidatos.
+    pub search_action: String,
+    /// O texto pesquisado.
+    pub query: String,
+    /// `None` = ainda não pesquisou; `Some(vec![])` = sem resultados.
+    pub candidates: Option<Vec<ResOptionVm>>,
+    /// POST `/units/{id}/members`.
+    pub add_action: String,
+    /// `manager` | `member`.
+    pub roles: Vec<ResOptionVm>,
+    /// Sem contrato de candidatos: o bloco aparece desactivado, com a razão.
+    pub unavailable: bool,
+}
+
+/// Uma unidade aberta.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnitVm {
+    /// Código institucional (imutável).
+    pub code: String,
+    /// Nome.
+    pub name: String,
+    /// Estado.
+    pub status: OrgUnitStatus,
+    /// Descrição (texto simples).
+    pub description: Option<String>,
+    /// Áreas de investigação declaradas.
+    pub areas: Vec<String>,
+    /// Membros.
+    pub members: Vec<UnitMemberVm>,
+    /// Estado da lista de membros.
+    pub members_load: AppLoad,
+    /// `may_manage_members` do Core.
+    pub may_manage: bool,
+    /// Editar (nome, descrição, áreas).
+    pub edit_href: Option<String>,
+    /// Arquivar.
+    pub archive: Option<OrgActionVm>,
+    /// Acrescentar membro.
+    pub add: Option<UnitAddMemberVm>,
+    /// Nye contextual (a referência `unit` já existe na D003).
+    pub nye: Option<AppNyeVm>,
+    /// Recusa.
+    pub refusal: Option<OrgRefusal>,
+    /// O que acabou de acontecer.
+    pub notice: Option<OrgNotice>,
+}
+
+/// Criar ou editar uma unidade.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnitFormVm {
+    /// POST `/units/new` ou `/units/{id}/edit`.
+    pub action: String,
+    /// Criar (senão, editar).
+    pub is_new: bool,
+    /// Editar: o código, só leitura.
+    pub code: Option<String>,
+    /// Criar: a sugestão indicativa (`/units/code-suggestion`).
+    pub code_suggestion: Option<String>,
+    /// Nome.
+    pub name: String,
+    /// Descrição.
+    pub description: String,
+    /// Áreas, separadas por vírgulas.
+    pub areas: String,
+    /// Falha.
+    pub error: Option<AppError>,
+}
+
+/// A secção de Unidades.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnitsSection {
+    /// Activas.
+    Active,
+    /// Arquivadas (`include_archived`).
+    Archived,
+}
+
+/// A aplicação Unidades (`/units`, `units.view`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnitsVm {
+    /// A secção.
+    pub section: UnitsSection,
+    /// Activas · Arquivadas.
+    pub nav: Vec<AppNavVm>,
+    /// A lista (título = nome; código e estado no título).
+    pub list: ResListVm,
+    /// Lista | detalhe.
+    pub pane: ResPane,
+    /// A unidade aberta.
+    pub unit: Option<UnitVm>,
+    /// O erro do que foi pedido.
+    pub unit_error: Option<AppError>,
+    /// Criar/editar.
+    pub form: Option<UnitFormVm>,
+    /// «Nova unidade» (quando o Core deixa criar).
+    pub new_href: Option<String>,
+    /// A lista corrente.
+    pub list_href: String,
+}

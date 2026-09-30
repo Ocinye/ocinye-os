@@ -38,6 +38,23 @@ pub enum CoreError {
     #[error("{0}")]
     Conflict(String),
 
+    /// An institutional invariant refused the operation.
+    ///
+    /// `reason` is a stable, machine-readable code that travels in the error
+    /// envelope's `details.reason`, so a client maps the refusal without
+    /// reading the prose; `code` keeps the HTTP class each call site already
+    /// had. Narrow on purpose: only invariants a client must explain get one
+    /// (`last_platform_admin`, `last_unit_manager`, `self_lockout`).
+    #[error("{message}")]
+    Invariant {
+        /// The envelope code (and so the HTTP status).
+        code: ErrorCode,
+        /// Stable reason, never translated.
+        reason: &'static str,
+        /// The explanation for people.
+        message: String,
+    },
+
     /// The application the operation belongs to is not active in this
     /// Instance (ADR-0014). Its data is intact; an administrator can activate it.
     #[error("{0}")]
@@ -85,6 +102,7 @@ impl CoreError {
             Self::Unauthenticated(_) => ErrorCode::AuthenticationRequired,
             Self::PermissionDenied(_) => ErrorCode::PermissionDenied,
             Self::Conflict(_) => ErrorCode::Conflict,
+            Self::Invariant { code, .. } => *code,
             Self::ApplicationInactive(_) => ErrorCode::ApplicationInactive,
             Self::CapabilityUnavailable(_) => ErrorCode::CapabilityUnavailable,
             Self::StorageUnavailable(_) => ErrorCode::StorageUnavailable,
@@ -126,6 +144,9 @@ impl CoreError {
                 .with_detail("from", serde_json::Value::from(*from))
                 .with_detail("to", serde_json::Value::from(*to));
         }
+        if let Self::Invariant { reason, .. } = self {
+            body = body.with_detail("reason", serde_json::Value::from(*reason));
+        }
         body.with_ids(request_id, correlation_id)
     }
 
@@ -145,9 +166,36 @@ impl CoreError {
     }
 }
 
+/// The stable reasons carried by [`CoreError::Invariant`].
+pub mod refusal {
+    /// It would leave the institution without a platform administrator able to
+    /// sign in.
+    pub const LAST_PLATFORM_ADMIN: &str = "last_platform_admin";
+    /// It would leave a unit without a live manager.
+    pub const LAST_UNIT_MANAGER: &str = "last_unit_manager";
+    /// The actor would bar their own account.
+    pub const SELF_LOCKOUT: &str = "self_lockout";
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_invariant_keeps_its_code_and_carries_a_stable_reason() {
+        let error = CoreError::Invariant {
+            code: ErrorCode::Conflict,
+            reason: refusal::LAST_UNIT_MANAGER,
+            message: "Nomeie outro gestor primeiro.".to_owned(),
+        };
+        assert_eq!(error.code(), ErrorCode::Conflict);
+        let body = error.to_body(None, None);
+        assert_eq!(
+            body.details.get("reason"),
+            Some(&serde_json::Value::from("last_unit_manager"))
+        );
+        assert_eq!(error.public_message(), "Nomeie outro gestor primeiro.");
+    }
 
     #[test]
     fn database_failures_do_not_leak_detail() {

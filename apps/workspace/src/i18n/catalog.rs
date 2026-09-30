@@ -62,6 +62,14 @@ const NAV: &[Entry] = catalogo! {
     "prod.know.kind.other": { pt: "Outro", en: "Other", fr: "Autre" },
     "prod.data.totals.one": { pt: "{n} ficheiro · {size}", en: "{n} file · {size}", fr: "{n} fichier · {size}" },
     "prod.data.totals.other": { pt: "{n} ficheiros · {size}", en: "{n} files · {size}", fr: "{n} fichiers · {size}" },
+    "prod.org.scope.institution": { pt: "Instituição", en: "Institution", fr: "Institution" },
+    "prod.org.scope.unit": { pt: "Unidade", en: "Unit", fr: "Unité" },
+    "prod.org.scope.research_workspace": { pt: "Ambiente de investigação", en: "Research environment", fr: "Environnement de recherche" },
+    "prod.org.scope.resource": { pt: "Recurso", en: "Resource", fr: "Ressource" },
+    "prod.org.locale.pt": { pt: "Português", en: "Portuguese", fr: "Portugais" },
+    "prod.org.locale.en": { pt: "Inglês", en: "English", fr: "Anglais" },
+    "prod.org.locale.fr": { pt: "Francês", en: "French", fr: "Français" },
+    "prod.org.unit.none": { pt: "Sem unidade", en: "No unit", fr: "Aucune unité" },
     "prod.work.nobody": { pt: "Ninguém", en: "Nobody", fr: "Personne" },
     "prod.files.up.type": { pt: "Este tipo de ficheiro não é aceite.", en: "This file type is not accepted.", fr: "Ce type de fichier n’est pas accepté." },
     "prod.files.up.full": { pt: "Sem espaço para este ficheiro", en: "Not enough space for this file", fr: "Pas assez d’espace pour ce fichier" },
@@ -595,6 +603,7 @@ pub const GROUPS: &[&[Entry]] = &[
     super::ui_nye::UI_NYE,
     super::ui_apps::UI_APPS,
     super::ui_research::UI_RESEARCH,
+    super::ui_org::UI_ORG,
 ];
 
 /// Um grupo só de teste, para exercitar a queda ao canónico (briefing i18n §77).

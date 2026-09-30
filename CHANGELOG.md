@@ -7,6 +7,22 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Interface D006 — Unidades e Administração (Membros, Papéis, Instância) — 2026-09-30 (ramo `feat/design-d006`, por fazer merge)
+
+- Os ecrãs do Claude Design ligados ao Core: roster e membro compostos das
+  leituras que o actor pode fazer, criar membro com a credencial temporária só
+  na resposta que a emite, estado da conta, papéis e grants pela confirmação
+  partilhada, catálogo de papéis do Core, Instância só de leitura com as
+  decisões por aplicação, e Unidades com lista, detalhe, criar, editar, arquivar
+  e mudar o papel ou retirar um membro. Equipas não existem.
+- **Core (ADR-0111):** despromover o último gestor de uma unidade era aceite e
+  retirar o último contava gestores retirados — ambos recusados agora, com a
+  unidade trancada; o último administrador da plataforma protegido também sob
+  concorrência; `active → invited` e `disabled → active` recusados; recusas com
+  `details.reason`; `may_archive` e `GET /units/capabilities`.
+- 15 viagens HTTP contra um Core real (`apps/workspace/tests/d006_journeys.rs`)
+  e 8 testes das invariantes (`crates/ocinye-core/tests/organisation_invariants.rs`).
+
 ### Interface D005 — Projectos, O Meu Trabalho, Ideias, Dados e Conhecimento — 2026-09-29 (ramo `feat/design-d005`, por fazer merge)
 
 - Os cinco ecrãs do Claude Design ligados ao Core como corpos de janela

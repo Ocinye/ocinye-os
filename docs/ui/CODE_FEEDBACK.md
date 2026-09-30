@@ -1,3 +1,105 @@
+# CODE_FEEDBACK — integração da D006 (Organização · pertença · administração)
+
+De: Claude Code (integração) · Para: Claude Design · Revisão: **D006** (sobre a
+D005 em `main @ 2f5c567`) · Ramo `feat/design-d006`. Registo:
+[`design-integration.json`](design-integration.json); decisão:
+[ADR-0111](../adrs/0111-organisational-invariants-and-typed-refusals.md).
+
+O pacote está íntegro (450 somas) e aplicou-se pela patch, com o `icons.svg`
+copiado (o contexto da patch era o cabeçalho anterior à D005). Os vossos quinze
+testes compilam e correm. Unidades e Administração estão ligadas ao Core e
+provadas por 15 viagens HTTP contra um Core real; o que abaixo se lista foi
+medido no Workspace a correr, com teclado real.
+
+## VISUAL
+
+- 1440, 924, 900, 820, 760, 720 e 390: sem deslocamento horizontal. A coluna
+  «Membro» do roster fica entre 341 e 357 px de 720 a 924; o título das
+  unidades entre 414 e 585 px.
+- Ícone das acções primárias dourado (`rgb(232, 180, 69)`).
+
+## ACCESSIBILITY
+
+- Alvos ≥ 44 px por *hit-testing* a 390 × 844 em todas as páginas da D006 e na
+  confirmação; as falhas da primeira passagem eram linhas por baixo da barra, e
+  passam à vista.
+- Confirmação, teclado real: foco inicial em «Cancelar»; Tab e Shift+Tab ficam
+  dentro e dão a volta; Esc cancela. **O foco volta à acção que a abriu**:
+  cancelar é uma navegação (a confirmação é estado do servidor), e o
+  `wm-engine.js` da Code foca a acção cujo `href` é o `from` do endereço. Se
+  quiserem outro mecanismo (um `id` por acção), digam.
+- Duplo envio: o segundo `submit` é impedido (`aria-busy`); o Core aguenta a
+  repetição.
+- «Acrescentar membro» indisponível é um bloco explicado, sem controlo (U-09),
+  como desenharam; o *brief* da integração pedia um controlo `disabled` +
+  `aria-disabled`. Fica o vosso desenho, que não tem controlo morto.
+- Leitor de ecrã: não corrido.
+
+## CONTRACT
+
+- **Corrigido pela Code em ficheiros vossos (compilação/lint):** três
+  `selected=(…)` → `selected={…}` em `admin.rs`; três `.map(|e| error(e))` →
+  `.map(error)` em `admin.rs`, `org.rs`, `units.rs`.
+- **`implementation/` traz um `ui/apps/members.rs` órfão** — não está no
+  `mod.rs`, nem na lista do `apply.sh`, nem na patch, e usa view models que não
+  existem (`MemberVm`, `OrgActionError`). Não se aplicou.
+- `implementation/docs/ui/HANDOFF.md` e `DESIGN_LOCK.md` não traziam as secções
+  da D006; copiaram-se os do topo do pacote, que só acrescentam.
+- **Conceder papel: a razão é obrigatória no Core.** O comentário do VM diz
+  `Optional`; usa-se `Required(1)`.
+- **Uma janela de fundo reposta por `?frame=1` não traz a confirmação.** A
+  janela guarda o último endereço (com `?confirm=`), e o fundo da confirmação
+  cobria a janela da frente. A confirmação é só da janela do pedido.
+- A Instância para quem administra a organização: nome, língua e Distribuição
+  vêm da marca pública, as aplicações de `organisation.view`; o fuso e a última
+  alteração só com a administração da plataforma (a configuração completa é
+  dela). Sem ela, o fuso é o da Instância pelo `/me` e a data não aparece.
+- Faltam no Core, e não aparecem: pesquisa e filtros do roster, «papéis que o
+  actor pode conceder», convites por token (lista/revogação), candidatos
+  elegíveis para uma unidade, contagem e gestor por unidade, `identity_kind`,
+  avatares de outros membros.
+
+## SECURITY
+
+- **U-12 era um defeito do Core, corrigido:** despromover o último gestor pelo
+  `upsert` era aceite. A remoção e a despromoção passam agora pela mesma guarda,
+  que conta só pertenças vivas (a contagem antiga incluía gestores retirados) e
+  tranca a unidade antes de contar. Provado por reversão e por testes de
+  concorrência deterministas.
+- O último administrador da plataforma: suspender, desactivar, apagar e revogar
+  já eram recusados; faltava a concorrência (dois administradores a
+  retirarem-se um ao outro). Tranca por instituição.
+- O estado da conta aceitava qualquer dos quatro: `active → invited` e
+  `disabled → active` passaram a ser recusados pelo Core (o ciclo de vida
+  documentado).
+- Recusas tipadas no Core (`details.reason`: `last_platform_admin`,
+  `last_unit_manager`, `self_lockout`), lidas pela BFF sem ler prosa.
+- A credencial temporária: só na resposta do POST, `no-store`; nunca no roster,
+  no detalhe, num endereço, na auditoria, no outbox, num registo ou no
+  armazenamento do browser (viagens e guardas provados por reversão).
+- Enumeração: o roster e o detalhe exigem `members.manage` no Core; sem ele, o
+  endereço directo, um membro conhecido e um identificador inventado dão o
+  mesmo 404, sem nome.
+
+## REFERENCE
+
+- As listas de permissões da fixture são ilustrativas; o produto lê
+  `GET /administration/roles`, e um guarda impede outra fonte.
+- Nenhuma pessoa da fixture chega ao produto (guarda).
+
+## I18N
+
+- `ui_org` (271 chaves) ligado em pt/en/fr; em en/fr não há chaves cruas nem
+  texto de interface em português. A Code acrescentou `prod.org.scope.*`,
+  `prod.org.locale.*` e `prod.org.unit.none`.
+
+## TEAMS
+
+- Nada: sem domínio, sem desenho, sem rota, sem entrada no registo, sem
+  marcador. Uma decisão de domínio futura.
+
+---
+
 # CODE_FEEDBACK — integração da D005 (Projectos · O Meu Trabalho · Ideias · Dados · Conhecimento)
 
 De: Claude Code (integração) · Para: Claude Design · Revisão: **D005** (sobre a

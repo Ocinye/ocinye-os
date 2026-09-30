@@ -1,19 +1,17 @@
 # Interface do Workspace
 
-**Estado: Claude Design D003.1 (Nye) em `main`** (PR #185, merge `ae8bf1d`;
-nenhuma deployada, produção continua em `4f8d048`). A D001, a D002 e a D003
-estão fechadas. A D003 traz o Nye: a superfície
-universal em todas as páginas e a aplicação Nye, ligadas ao Core
-([ADR-0619](../adrs/0619-nye-universal-surface.md)); a pesquisa funciona sem
-IA, perguntar e agir dizem porquê não estão, e a voz está indisponível.
-**A D004 — Ficheiros, Notas, Calendário e Correio —, com o fecho responsivo e
-de acessibilidade da D004.1, está no ramo `feat/design-d004`, por fazer merge**
-([ADR-0620](../adrs/0620-productivity-apps-in-managed-windows.md)); os defeitos
-e as faltas do Design estão no [`CODE_FEEDBACK.md`](CODE_FEEDBACK.md).
-**A D005 — Projectos, O Meu Trabalho, Ideias, Dados e Conhecimento — está no
-ramo `feat/design-d005`, feito sobre o da D004 e por fazer merge depois dela**
-([ADR-0621](../adrs/0621-research-apps-typed-relations-and-deep-links.md)); a
-secção dela está no topo do `CODE_FEEDBACK.md`.
+**Estado: Claude Design D001 a D005 em `main`** (a D004.1 no PR #187, a D005
+no PR #188; nenhuma deployada, produção continua em `4f8d048`). A D003 traz o
+Nye ([ADR-0619](../adrs/0619-nye-universal-surface.md)); a D004 Ficheiros,
+Notas, Calendário e Correio
+([ADR-0620](../adrs/0620-productivity-apps-in-managed-windows.md)); a D005
+Projectos, O Meu Trabalho, Ideias, Dados e Conhecimento
+([ADR-0621](../adrs/0621-research-apps-typed-relations-and-deep-links.md)).
+**A D006 — Unidades e Administração (Membros, Papéis, Instância) — está no ramo
+`feat/design-d006`, por fazer merge**
+([ADR-0111](../adrs/0111-organisational-invariants-and-typed-refusals.md)); a
+secção dela está no topo do [`CODE_FEEDBACK.md`](CODE_FEEDBACK.md). Equipas não
+existem: sem domínio, sem desenho, sem aplicação.
 O código de interface é do Design e está fechado
 ([`DESIGN_LOCK.md`](DESIGN_LOCK.md)); o contrato detalhado de rotas e
 ViewModels está em [`HANDOFF.md`](HANDOFF.md).
@@ -34,7 +32,10 @@ ViewModels está em [`HANDOFF.md`](HANDOFF.md).
   falhado. Da D005 (no ramo): os cinco ecrãs de investigação e trabalho como
   corpos de janela, com relações lidas pela linhagem (as duas pontas
   autorizadas), um endereço canónico por recurso, transições só do Core e
-  referências tipadas para o Nye.
+  referências tipadas para o Nye. Da D006 (no ramo): Unidades e Administração
+  como corpos de janela, a confirmação partilhada das acções privilegiadas (só
+  para acções que o Core oferece, com o foco a voltar à acção) e a credencial
+  temporária só na resposta que a emite.
 - **Registo da integração:** [`design-integration.json`](design-integration.json).
 - **O que o Design precisa de saber:** [`CODE_FEEDBACK.md`](CODE_FEEDBACK.md).
 - **Referência visual (só referência):** `design/claude-design/reference/`.

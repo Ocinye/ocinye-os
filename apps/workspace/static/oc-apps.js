@@ -15,6 +15,8 @@
  *      único caminho); cancelar/tentar de novo → oc:files-upload-cancel|retry;
  *   5. Calendário: posições das semanas/dias a partir de data-* (CSP: nada
  *      inline no HTML; aqui é CSSOM), rolagem inicial para a hora actual.
+ * D006: credencial temporária (Mostrar/Copiar, sem guardar) e a confirmação
+ * partilhada das acções privilegiadas (foco em Cancelar, Tab contido, Esc).
  * Eventos: CustomEvent em document, cancelável, com detail tipado. Sem
  * localStorage. */
 (() => {
@@ -208,6 +210,46 @@
     $$('.oc-res-filter select', app).forEach((s) => s.addEventListener('change', () => s.form && s.form.requestSubmit()));
   }
 
+
+  // ── D006 · a credencial temporária (Mostrar/Copiar) e a confirmação partilhada ──
+  // Nada se guarda: nem localStorage, nem sessionStorage, nem o histórico.
+  function credential(app) {
+    $$('[data-oc="org-secret-show"]', app).forEach((b) => b.addEventListener('click', () => {
+      const i = document.getElementById(b.getAttribute('aria-controls')); if (!i) return;
+      const on = i.type === 'password'; i.type = on ? 'text' : 'password';
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      const l = b.querySelector('span'); if (l) l.textContent = on ? (b.dataset.hide || l.textContent) : (b.dataset.show || l.textContent);
+    }));
+    $$('[data-oc="org-secret-copy"]', app).forEach((b) => b.addEventListener('click', async () => {
+      const i = document.getElementById(b.getAttribute('aria-controls')); if (!i) return;
+      try { await navigator.clipboard.writeText(i.value); say(app, b.dataset.done || ''); }
+      catch (_) { const was = i.type; i.type = 'text'; i.select(); i.type = was; }
+    }));
+  }
+  const confirms = new WeakSet();
+  function confirmDlg(dlg) {
+    if (confirms.has(dlg)) return;
+    confirms.add(dlg);
+    const box = dlg.querySelector('form');
+    const cancel = dlg.querySelector('[data-oc="org-confirm-cancel"]');
+    const focusables = () => $$('a[href], button:not([disabled]), textarea, input:not([type="hidden"]), select', dlg).filter((el) => el.getClientRects().length);
+    // Foco inicial: «Cancelar» (nunca o botão que retira acesso).
+    if (cancel) setTimeout(() => cancel.focus(), 0);
+    dlg.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && cancel) { e.preventDefault(); cancel.click(); return; }
+      if (e.key !== 'Tab') return;
+      const f = focusables(); if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+    // Um envio só: o Core é quem garante a idempotência; isto evita o duplo clique.
+    if (box) box.addEventListener('submit', (e) => {
+      if (box.getAttribute('aria-busy') === 'true') { e.preventDefault(); return; }
+      box.setAttribute('aria-busy', 'true');
+    });
+  }
+
   // D004.1 · D4-J1: idempotente e por raiz — `OcApps.init(root)` liga só as aplicações
   // dentro de `root` (ou `root` ele próprio) e nunca liga a mesma duas vezes.
   const bound = new WeakSet();
@@ -215,12 +257,15 @@
     if (bound.has(app)) return;
     bound.add(app);
     app.setAttribute('data-js', '');
-    drawer(app); docs(app); files(app); calendar(app); reslist(app);
+    drawer(app); docs(app); files(app); calendar(app); reslist(app); credential(app);
   };
   const init = (root) => {
     const r = root && root.querySelectorAll ? root : document;
     if (r.matches && r.matches('[data-oc="app"]')) bind(r);
     $$('[data-oc="app"]', r).forEach(bind);
+    // D006 · a confirmação é desenhada fora das aplicações (depois da casca).
+    if (r.matches && r.matches('[data-oc="org-confirm"]')) confirmDlg(r);
+    $$('[data-oc="org-confirm"]', r).forEach(confirmDlg);
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => init()); else init();
   window.OcApps = { init };

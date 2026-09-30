@@ -317,4 +317,22 @@
       })
       .catch(fallback);
   });
+
+  /* D006 · A-11: cancelar uma confirmação privilegiada volta à página (é um
+     estado do servidor), e o foco volta à acção que a abriu. O endereço traz
+     `from` — a pergunta dessa acção —, que só se compara com o `href` de cada
+     acção: nunca entra num selector nem num HTML. */
+  try {
+    const from = new URLSearchParams(location.search).get('from');
+    if (from) {
+      const want = location.pathname + '?' + from;
+      const acts = [...document.querySelectorAll('[data-part="org-action"]')];
+      const a = acts.find((x) => x.getAttribute('href') === want);
+      const pick = from.startsWith('confirm=grant_role')
+        ? document.querySelector('[data-part="role-grant"] select')
+        : null;
+      const target = a || pick;
+      if (target) target.focus();
+    }
+  } catch (_) { /* sem foco: fica o do documento */ }
 })();

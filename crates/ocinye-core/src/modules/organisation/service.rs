@@ -1,6 +1,6 @@
 //! Organisation application layer.
 
-use ocinye_contracts::{Classification, InstanceProfile, UnitRole};
+use ocinye_contracts::{Classification, ErrorCode, InstanceProfile, UnitRole};
 use ocinye_domain::identifiers::{unit_code_stem, validate_unit_code};
 use ocinye_domain::policy::{authorize, Action, ResourceContext, ResourceKind};
 use ocinye_domain::Principal;
@@ -11,7 +11,7 @@ use uuid::Uuid;
 use super::model::{Organisation, Unit, UnitMember};
 use super::repository as repo;
 use crate::audit::{self, action, AuditEntry};
-use crate::error::{CoreError, CoreResult};
+use crate::error::{refusal, CoreError, CoreResult};
 use crate::modules::search;
 use crate::Tx;
 
@@ -737,6 +737,13 @@ pub async fn add_unit_member(
         return Err(CoreError::NotFound("Person not found.".to_owned()));
     }
 
+    // Passar a membro é retirar a gestão: o último gestor não se despromove,
+    // tal como não se remove (U-12). Sem isto, o `upsert` deixava a unidade sem
+    // quem a governe por um caminho que a remoção já fechava.
+    if role != UnitRole::Manager {
+        ensure_keeps_a_manager(tx, unit.id, person_id).await?;
+    }
+
     let membership_id =
         repo::upsert_member(&mut **tx, unit.id, person_id, role, principal.person_id).await?;
 
@@ -775,36 +782,8 @@ pub async fn revoke_unit_member(
     authorize(principal, Action::ManageMembers, &unit_context(&unit))
         .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
 
-    // Uma unidade não pode ficar sem quem a governe.
-    //
-    // Gerir membros exige `ManageMembers` no contexto da unidade, e esse
-    // direito vem de ser gestor dela. Remover o último gestor produziria uma
-    // unidade que ninguém pode voltar a gerir — o mesmo beco que o bootstrap na
-    // criação fechou, aberto pelo outro lado.
-    //
-    // A recusa é explícita e diz o que fazer, porque quem está a remover pode
-    // legitimamente querer sair: nomeia-se outro gestor primeiro.
-    let ultimo_gestor: bool = sqlx::query_scalar(
-        "SELECT EXISTS (
-             SELECT 1 FROM unit_memberships
-              WHERE unit_id = $1 AND person_id = $2 AND role = 'manager'
-         ) AND (
-             SELECT count(*) FROM unit_memberships
-              WHERE unit_id = $1 AND role = 'manager'
-         ) = 1",
-    )
-    .bind(unit.id)
-    .bind(person_id)
-    .fetch_one(&mut **tx)
-    .await?;
-
-    if ultimo_gestor {
-        return Err(CoreError::Conflict(
-            "Esta é a última pessoa que gere a unidade. Nomeie outro gestor \
-             antes de a remover."
-                .to_owned(),
-        ));
-    }
+    // Uma unidade não pode ficar sem quem a governe (ver `ensure_keeps_a_manager`).
+    ensure_keeps_a_manager(tx, unit.id, person_id).await?;
 
     if !repo::revoke_member(&mut **tx, unit.id, person_id, principal.person_id).await? {
         return Err(CoreError::NotFound(
@@ -822,5 +801,50 @@ pub async fn revoke_unit_member(
             .detail("event", "revoked"),
     )
     .await?;
+    Ok(())
+}
+
+/// Recusa a mudança que deixaria a unidade sem nenhum gestor vivo.
+///
+/// Gerir membros exige `ManageMembers` no contexto da unidade, e esse direito
+/// vem de ser gestor dela: sem gestor, a unidade fica sem ninguém que a possa
+/// voltar a gerir — o mesmo beco que o bootstrap na criação fecha, aberto pelo
+/// outro lado. Vale para as duas formas de o fazer: remover e despromover.
+///
+/// Conta só as pertenças vivas (`revoked_at IS NULL`): um gestor retirado fica na
+/// tabela como memória, e não governa nada. E tranca a linha da unidade antes de
+/// contar, para que duas mudanças em simultâneo — cada gestor a despromover o
+/// outro — se sigam uma à outra, e a segunda leia o que a primeira gravou.
+async fn ensure_keeps_a_manager(tx: &mut Tx<'_>, unit_id: Uuid, person_id: Uuid) -> CoreResult<()> {
+    sqlx::query("SELECT 1 FROM units WHERE id = $1 FOR UPDATE")
+        .bind(unit_id)
+        .execute(&mut **tx)
+        .await?;
+
+    let ultimo_gestor: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1 FROM unit_memberships
+              WHERE unit_id = $1 AND person_id = $2 AND role = 'manager'
+                AND revoked_at IS NULL
+         ) AND NOT EXISTS (
+             SELECT 1 FROM unit_memberships
+              WHERE unit_id = $1 AND person_id <> $2 AND role = 'manager'
+                AND revoked_at IS NULL
+         )",
+    )
+    .bind(unit_id)
+    .bind(person_id)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    if ultimo_gestor {
+        return Err(CoreError::Invariant {
+            code: ErrorCode::Conflict,
+            reason: refusal::LAST_UNIT_MANAGER,
+            message: "Esta é a última pessoa que gere a unidade. Nomeie outro gestor \
+                      antes de a remover ou de lhe retirar a gestão."
+                .to_owned(),
+        });
+    }
     Ok(())
 }

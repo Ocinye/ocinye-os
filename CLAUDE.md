@@ -95,7 +95,7 @@ sem que nada falhe.
   4 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`) e 1
   aplicação (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 236 caminhos e 282 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 237 caminhos e 283 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -123,7 +123,11 @@ sem que nada falhe.
   ([ADR-0101](docs/adrs/0101-permissions-scopes-and-grants.md)). Nenhuma operação
   de administração pode deixar a instituição sem um administrador da plataforma
   capaz de entrar: suspender, desactivar ou revogar o papel do último é recusado
-  ([docs/authorization](docs/authorization/README.md)).
+  ([docs/authorization](docs/authorization/README.md)), e duas mudanças em
+  simultâneo não o contornam. Uma unidade também não fica sem gestor vivo —
+  nem por remoção, nem por despromoção —, o estado de uma conta segue o ciclo
+  de vida documentado, e estas recusas levam um motivo estável em
+  `details.reason` ([ADR-0111](docs/adrs/0111-organisational-invariants-and-typed-refusals.md)).
 - **Instância: `IMPLEMENTED`** ([ADR-0013](docs/adrs/0013-general-purpose-os-instance-and-node.md)).
   Cada instalação serve uma Instância, registada no singleton
   `instance_identity` (migração 0052), cujo `id` é a identidade durável que
@@ -257,8 +261,8 @@ sem que nada falhe.
   `ocinye-core-server bootstrap-admin`, corre uma única vez, com credencial
   temporária. **Não existe credencial por omissão em lado nenhum.**
 - **Ocinye Workspace: `IMPLEMENTED` como BFF, com a interface Claude Design
-  D001.2.1, a D002.1 e a D003.1 (Nye) em `main` (PR #181, #183 e #185,
-  2026-09-29).** A UI foi apagada
+  D001.2.1, a D002.1, a D003.1 (Nye), a D004.1 e a D005 em `main` (PR #181,
+  #183, #185, #187 e #188, 2026-09-29/30).** A UI foi apagada
   a 2026-09-28 ([apagamento](docs/ui/UI_WIPE_REPORT.md)) e voltou com o código
   do Design, aplicado sem alterações ([registo](docs/ui/design-integration.json)):
   arranque, login em dois passos, fim de sessão, primeiro acesso, MFA, a casca
@@ -276,13 +280,16 @@ sem que nada falhe.
   e a aplicação Nye — o antigo «Prompt Ocinye», com o mesmo `id` e rota — com
   as conversas do próprio membro; voz indisponível. A D004 — Ficheiros,
   Notas, Calendário e Correio ligados ao Core
-  ([ADR-0620](docs/adrs/0620-productivity-apps-in-managed-windows.md)) —
-  está no ramo `feat/design-d004`, **por fazer merge**. A D005 — Projectos,
-  O Meu Trabalho, Ideias, Dados e Conhecimento
+  ([ADR-0620](docs/adrs/0620-productivity-apps-in-managed-windows.md)) — e a
+  D005 — Projectos, O Meu Trabalho, Ideias, Dados e Conhecimento
   ([ADR-0621](docs/adrs/0621-research-apps-typed-relations-and-deep-links.md)),
-  com relações lidas pela linhagem e as duas pontas autorizadas — está no ramo
-  `feat/design-d005`, feito sobre o da D004 e **por fazer merge depois dela**.
-  As aplicações ainda
+  com relações lidas pela linhagem e as duas pontas autorizadas — estão em
+  `main`. A D006 — Unidades e Administração (Membros, Papéis, Instância), com a
+  credencial temporária só na resposta que a emite e a confirmação partilhada
+  das acções privilegiadas
+  ([ADR-0111](docs/adrs/0111-organisational-invariants-and-typed-refusals.md))
+  — está no ramo `feat/design-d006`, **por fazer merge**. Equipas não existem:
+  sem domínio, sem desenho, sem aplicação. As aplicações ainda
   sem ecrã do Design abrem numa janela com o estado `app_pending`:
   **0 páginas** respondem `503 interface_pending`. **Ainda não deployada:**
   produção (`os.ocinye.com`) continua em `4f8d048`, com a UI anterior ao
@@ -568,7 +575,7 @@ sem que nada falhe.
   leitura de volta. Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **99 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
+- **100 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
   **53 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -585,14 +592,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1618 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1670 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **645 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **668 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
@@ -606,15 +613,16 @@ sem que nada falhe.
 
 **Continua a não existir:**
 
-- **Só a Nye tem ecrã de aplicação em `main`.** A casca, a autenticação, o
-  Desktop, as janelas (D001.2.1, D002) e a Nye (D003) estão ligados; Ficheiros,
-  Notas, Calendário e Correio (D004) estão no ramo `feat/design-d004`, e
-  Projectos, O Meu Trabalho, Ideias, Dados e Conhecimento (D005) no ramo
-  `feat/design-d005`, ambos por fazer merge; as outras aplicações abrem numa janela com o estado
-  `app_pending` até o Design as entregar. As viagens de browser com Chrome saíram com a UI antiga; as de HTTP
+- **Nem todas as aplicações têm ecrã.** Em `main`: a casca, a autenticação, o
+  Desktop, as janelas (D001.2.1, D002), a Nye (D003), Ficheiros, Notas,
+  Calendário e Correio (D004) e Projectos, O Meu Trabalho, Ideias, Dados e
+  Conhecimento (D005); Unidades e Administração (D006) no ramo
+  `feat/design-d006`, por fazer merge; as outras aplicações abrem numa janela
+  com o estado `app_pending` até o Design as entregar. As viagens de browser com Chrome saíram com a UI antiga; as de HTTP
   contra um Core real voltaram (`apps/workspace/tests/d001_journeys.rs`,
-  `d002_journeys.rs`, `d003_journeys.rs`, `d003_act_journeys.rs`; e, no ramo
-  da D004, `d004_journeys.rs`; no da D005, `d005_journeys.rs`). As provas de instalação,
+  `d002_journeys.rs`, `d003_journeys.rs`, `d003_act_journeys.rs`,
+  `d004_journeys.rs`, `d005_journeys.rs`; e, no ramo da D006,
+  `d006_journeys.rs`). As provas de instalação,
   actualização, restauro e hardware continuam em `NOT_RUN`
   ([apagamento](docs/ui/UI_WIPE_REPORT.md)).
 

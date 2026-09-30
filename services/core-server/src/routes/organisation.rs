@@ -24,6 +24,7 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/units", get(list_units).post(create_unit))
         .route("/units/code-suggestion", get(suggest_code))
+        .route("/units/capabilities", get(unit_capabilities))
         .route(
             "/units/{unit_id}",
             get(get_unit).put(update_unit).delete(archive_unit),
@@ -184,14 +185,50 @@ async fn get_unit(
     )
     .is_ok();
 
+    // Arquivar decide-se pela mesma política que `archive_unit` aplica. Sem isto
+    // a Experience teria de adivinhar quem arquiva a partir de papéis.
+    let may_archive = unit.status == "active"
+        && ocinye_domain::policy::authorize(
+            &principal,
+            ocinye_domain::policy::Action::Archive,
+            &ocinye_domain::policy::ResourceContext::unit(
+                ocinye_domain::policy::ResourceKind::Unit,
+                principal.organisation_id,
+                unit.id,
+            ),
+        )
+        .is_ok();
+
     let mut vista = serde_json::to_value(UnitView::from(unit)).unwrap_or_default();
     if let Some(objecto) = vista.as_object_mut() {
         objecto.insert(
             "may_manage_members".to_owned(),
             serde_json::Value::Bool(may_manage_members),
         );
+        objecto.insert(
+            "may_archive".to_owned(),
+            serde_json::Value::Bool(may_archive),
+        );
     }
     Ok(Json(vista))
+}
+
+/// `GET /units/capabilities` — o que o membro pode fazer com as unidades em
+/// geral: hoje, só criar. Resolvido pela mesma política que `create_unit`
+/// aplica; é cortesia de renderização, e a operação decide outra vez.
+async fn unit_capabilities(
+    CurrentPrincipal(principal): CurrentPrincipal,
+) -> Json<serde_json::Value> {
+    let may_create = ocinye_domain::policy::authorize(
+        &principal,
+        ocinye_domain::policy::Action::Create,
+        &ocinye_domain::policy::ResourceContext::organisation(
+            ocinye_domain::policy::ResourceKind::Unit,
+            principal.organisation_id,
+        ),
+    )
+    .is_ok();
+    Json(serde_json::json!({ "may_create": may_create }))
 }
 
 #[derive(Deserialize)]

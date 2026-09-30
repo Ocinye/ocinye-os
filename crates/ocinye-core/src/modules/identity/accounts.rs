@@ -8,7 +8,7 @@
 
 use chrono::{DateTime, Duration, Utc};
 use ocinye_contracts::{
-    AccountStatus, CredentialKind, InstitutionalPosition, SessionState, TechnicalRole,
+    AccountStatus, CredentialKind, ErrorCode, InstitutionalPosition, SessionState, TechnicalRole,
 };
 use ocinye_observability::CorrelationIds;
 use sqlx::PgPool;
@@ -18,7 +18,7 @@ use super::authentication::{Authenticator, IssuedSession, SESSION_LIFETIME_HOURS
 use super::model::Person;
 use super::{credentials as creds, repository as repo};
 use crate::audit::{self, action, AuditEntry};
-use crate::error::{CoreError, CoreResult};
+use crate::error::{refusal, CoreError, CoreResult};
 use crate::password::{generate, policy, Secret};
 use ocinye_domain::Principal;
 
@@ -623,6 +623,17 @@ pub(super) async fn ensure_not_sole_platform_admin(
         .await?
         .contains(&TechnicalRole::PlatformAdmin);
 
+    // Serialised per institution: two administrators barring each other at the
+    // same moment would each still see the other able to sign in, and both
+    // commits would empty the institution. The lock makes the second wait and
+    // re-read what the first committed.
+    sqlx::query(
+        "SELECT pg_advisory_xact_lock(hashtextextended('ocinye.platform_admin.' || $1::text, 0))",
+    )
+    .bind(person.organisation_id)
+    .execute(&mut **tx)
+    .await?;
+
     if holds_admin
         && person.account_status().may_authenticate()
         && !repo::other_authenticating_platform_admin_exists(
@@ -632,11 +643,13 @@ pub(super) async fn ensure_not_sole_platform_admin(
         )
         .await?
     {
-        return Err(CoreError::Validation(
-            "Não pode remover o último administrador da plataforma capaz de entrar. \
-             Promova ou reactive outro Platform Admin primeiro."
+        return Err(CoreError::Invariant {
+            code: ErrorCode::ValidationError,
+            reason: refusal::LAST_PLATFORM_ADMIN,
+            message: "Não pode remover o último administrador da plataforma capaz de entrar. \
+                      Promova ou reactive outro Platform Admin primeiro."
                 .to_owned(),
-        ));
+        });
     }
 
     Ok(())
@@ -662,9 +675,25 @@ pub async fn set_account_status(
     if person.id == actor.person_id && !status.may_authenticate() {
         // Locking yourself out is how an institution ends up with no
         // administrator and no way back in.
-        return Err(CoreError::Validation(
-            "Não pode suspender ou desactivar a sua própria conta.".to_owned(),
-        ));
+        return Err(CoreError::Invariant {
+            code: ErrorCode::ValidationError,
+            reason: refusal::SELF_LOCKOUT,
+            message: "Não pode suspender ou desactivar a sua própria conta.".to_owned(),
+        });
+    }
+
+    // O ciclo de vida documentado (docs/identity): `invited` só nasce da
+    // criação — não é um destino, e mandar para lá uma conta activa punha-a numa
+    // sessão restrita sem revogar nada —, e `disabled` é a identidade histórica
+    // permanente, de onde não se volta. Sem isto, o formulário de estado
+    // aceitava qualquer um dos quatro, e a interface era a única a recusar.
+    let from = person.account_status();
+    if status == AccountStatus::Invited || from == AccountStatus::Disabled {
+        return Err(ocinye_domain::DomainError::InvalidTransition {
+            from: from.as_str(),
+            to: status.as_str(),
+        }
+        .into());
     }
 
     let mut tx = pool.begin().await?;
@@ -796,9 +825,11 @@ pub async fn delete_member(
     ids: &CorrelationIds,
 ) -> CoreResult<()> {
     if person.id == actor.person_id {
-        return Err(CoreError::Validation(
-            "Não pode apagar a sua própria conta.".to_owned(),
-        ));
+        return Err(CoreError::Invariant {
+            code: ErrorCode::ValidationError,
+            reason: refusal::SELF_LOCKOUT,
+            message: "Não pode apagar a sua própria conta.".to_owned(),
+        });
     }
 
     if !person.never_activated() {

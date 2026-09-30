@@ -606,8 +606,16 @@ async fn an_administrator_cannot_lock_themselves_out() {
     )
     .await;
 
+    // A recusa é tipada (`self_lockout`), com o mesmo código de validação.
     assert!(
-        matches!(result, Err(CoreError::Validation(_))),
+        matches!(
+            result,
+            Err(CoreError::Invariant {
+                code: ocinye_contracts::ErrorCode::ValidationError,
+                reason: "self_lockout",
+                ..
+            })
+        ),
         "an administrator disabled their own account"
     );
 }
@@ -2132,7 +2140,14 @@ async fn deleting_your_own_account_is_refused() {
     let refused = identity::delete_member(&pool, &admin, &self_person, &ids)
         .await
         .expect_err("you cannot delete your own account");
-    assert!(matches!(refused, CoreError::Validation(_)));
+    assert!(matches!(
+        refused,
+        CoreError::Invariant {
+            code: ocinye_contracts::ErrorCode::ValidationError,
+            reason: "self_lockout",
+            ..
+        }
+    ));
 }
 
 /// Setting a position is recorded and grants nothing: the policy never reads the
