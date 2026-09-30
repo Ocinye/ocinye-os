@@ -1,224 +1,780 @@
 {
   "schema_version": 1,
-  "design_revision": "D007",
-  "based_on": "D006 (main @ 1e09b3f, merge of PR #189; Design observed feat/design-d006 @ 89404f7, identical tree)",
-  "repository_head_before": "1e09b3f",
+  "design_revision": "D008",
+  "based_on": "main @ 7a23011 (merge of PR #190, D007 + D007.1); Design observed feat/design-d007 @ b96b931 (same tree)",
+  "repository_head_before": "7a23011",
   "integrated_on": "2026-09-30",
-  "integration_branch": "feat/design-d007",
-  "integration_status": "INTEGRATED_WITH_D007_1_VISUAL_PARITY_TRUE_ACCESSIBILITY_CERTIFIED_FUNCTIONALLY_CERTIFIED",
-  "package": "ocinye-design-complete-D007: 548 checksums; 547 match directly, MANIFEST.json matches once its two self-declared late fields (file_count_total, checksum_set) are removed; cumulative, self-contained, 86 references",
-  "application_method": "git apply of patch/d006-to-d007.patch (10 files) — byte-identical to implementation/; ui_ops wired into the catalogue; HANDOFF.md and DESIGN_LOCK.md copied from the package top level (pure additions)",
-  "files_changed": [
-    "apps/workspace/src/ui/apps/{messages,fabric,ledger,member,ops}.rs (new)",
-    "apps/workspace/src/i18n/ui_ops.rs (new, 254 keys)",
-    "apps/workspace/src/ui/view_models.rs",
-    "apps/workspace/src/ui/apps/mod.rs",
-    "apps/workspace/static/oc-apps.css",
-    "apps/workspace/static/oc-apps.js"
+  "integration_branch": "feat/design-d008",
+  "integration_status": "INTEGRATED_VISUAL_PARITY_TRUE_ACCESSIBILITY_CERTIFIED_FUNCTIONALLY_CERTIFIED_WEB_RUNTIME; DESKTOP_RUNTIME_REQUIRED",
+  "package": "ocinye-design-complete-D008: 704/704 checksums; cumulative, self-contained; 72/72 reference checks (Design reference only — not Rust, ocsh runtime or Desktop WebView certification)",
+  "application_method": "new files copied (terminal.rs, browser.rs, ui_sys.rs, oc-terminal.js, oc-browser.js, ADR-0623, DESIGN_LOCK and HANDOFF prepends); anchored blocks appended to view_models.rs and oc-apps.css; pub mods, mod ui_sys and GROUPS by hand; D008-ADR-AMENDMENTS.md folded into ADR-0312/0612/0623; the package coverage doc not copied (the repository's is kept and updated)",
+  "raw_build": "compiled first time; clippy clean; 15 Design tests ran, 14 passed as delivered",
+  "code_fix_in_design_file": [
+    "browser.rs test fronteira_de_confianca looked for oc-brw-view, first found in the tabs' aria-controls; now class=\"oc-brw-view\"",
+    "visible() moved from ui::apps::terminal to ui::components (ADR-0623; terminal::visible re-exported)",
+    "oc-browser.js Web: validated address submits GET /browser?url= (server draws the whole trusted chrome); New tab / close tab / Nye / tab select wired on the Web",
+    "oc-apps.css: mobile address field 44 px; menu hidden on the Web (no designed markup)"
   ],
-  "unexpected_diffs": "implementation/ still carries the orphan ui/apps/members.rs (from D006; not in the patch, apply list or mod.rs); not applied",
-  "code_fix_in_design_file": "lint: two map_or_else identity closures → unwrap_or_else (fabric.rs), four .map(|e| error(e)) → .map(error) (fabric.rs, member.rs, messages.rs); member.rs: the MFA button only when MFA is required and not set up (no destination otherwise); view_models.rs: OrgActionKind gains LeaveConversation and RemoveParticipant (the package reuses the D006 confirmation but has no kinds or labels for them)",
-  "design_tests": [
-    "messages::corpo_hostil_fica_texto_e_o_rascunho_sobrevive_a_falha",
-    "fabric::ia_sem_inferencia_e_honesta_e_nao_e_uma_conversa",
-    "fabric::fornecedor_diz_que_tem_credencial_e_nunca_o_valor",
-    "ledger::evento_redigido_nao_mostra_classificacao_nem_alvo",
-    "ledger::auditoria_recusada_nao_tem_filtros_nem_linhas",
-    "member::definicoes_nao_editam_o_fuso_da_instancia",
-    "member::ajuda_escapa_a_pesquisa_e_nao_tem_conversa"
-  ],
-  "i18n": "ui_ops 254 keys × pt/en/fr; nav.audit pt «Registo de auditoria» (was «Audit Log»), en «Audit log»; Code keys for confirmations, roles, model states, compute vocabularies, activity kinds, shortcuts",
-  "applications": {
-    "messages": "REAL",
-    "ai": "REAL",
-    "agents": "REAL",
-    "compute": "REAL (read-only, no dispatch)",
-    "resources": "REAL (own storage)",
-    "activity": "REAL",
-    "audit": "REAL (read-only)",
-    "settings": "REAL (member layer)",
-    "help": "REAL (first-party)",
-    "terminal": "PROVISIONAL (D008)",
-    "browser": "NOT REGISTERED (D008)"
+  "architectural_decisions": {
+    "high_impact_confirmation": "shared governed confirmation over the frozen plan; no typed word (ADR-0312 §5 superseded, history kept)",
+    "pipe": "kept as closed typed ocsh composition (filter, sort, head, count, export json); never a shell pipe",
+    "terminal_browser": "ADR-0623 Accepted; no shared execution layer; enforced by scripts/architecture_boundaries.py",
+    "desktop_browser": "DESKTOP_RUNTIME_REQUIRED; DESKTOP_WEBVIEW_RUNTIME_VALIDATION = NOT_CERTIFIED (also Dedicated)",
+    "terminal_cleanup": "did-you-mean only registered and visible commands; 171 obsolete catalogue keys removed; exit closes the window",
+    "deploy": "NOT_PERFORMED"
+  },
+  "registry": {
+    "before": 27,
+    "added": [
+      "browser"
+    ],
+    "after": 28,
+    "provisional": [],
+    "terminal": "REGISTERED, real screen",
+    "browser": "REGISTERED, real in the Web runtime; Desktop/Dedicated DESKTOP_RUNTIME_REQUIRED"
   },
   "code_changes": [
-    "Core: participant roles on GET /messaging/conversations/{id}; excerpt empty for replies to withdrawn messages; advisory lock serialising same-key sends",
-    "Core: agent instructions only to the creator; GET /ai/agents/capabilities; AI status reason per capability and providers counted as providers; GET /audit/resource-types",
-    "Workspace: controllers/ops (pure mappings) and routes/ops (nine apps); legacy app_page handlers replaced; /messages/people removed; react route carries the message id",
-    "Workspace: experience::shortcuts as the single shortcut list; agent: Nye reference; has_screen gains the nine apps (Terminal stays pending)",
-    "wm-engine.js (Code): focus restore opens the enclosing <details>",
-    "tests: crates/ocinye-core/tests/d007_contracts.rs (5), apps/workspace/tests/d007_journeys.rs (16), d007_contracts.rs (8); D001/D002 pending example is Terminal"
+    "contracts: ApplicationId::Browser, NetworkUse::ClientWeb, manifest; ocsh POSIX_WORDS/POSIX_HINTS (registered targets only); wire Block::Ask",
+    "Core: nye ask → Block::Ask; did-you-mean filtered to visible families",
+    "Workspace: routes/sys.rs (terminal page, exec JSON + no-JS form, Nye bridge, browser page with its own CSP, ?frame=1 → 204); terminal.rs localize/entry; Screen::Browser; has_screen; shell_page_with (route-scoped client); wm-engine exit → close",
+    "catalogue: 171 obsolete Terminal keys removed; tab/admin-session wording fixed"
   ],
-  "reversion_proofs": [
-    "same-key send lock",
-    "instructions only for the creator",
-    "creatable scopes policy",
-    "AI reason per capability",
-    "audit types authority",
-    "sealed reply excerpt",
-    "participant roles",
-    "activity target re-read",
-    "activity stored summary not shown",
-    "audit allow-list (journey)",
-    "audit allow-list (contract)",
-    "remove only for governors",
-    "confirmation only when offered",
-    "shortcut handler guard",
-    "provider endpoint guard",
-    "directory route guard",
-    "Help reads no files",
-    "CSS .oc- scope (D007 block)",
-    "draft kept on failure",
-    "read marker before the list"
-  ],
-  "reversion_notes": [
-    "The Workspace scope gate on agent creation is defence in depth: reverted, the Core still refuses the forged scope (403) and the journey passes",
-    "The providers section gate: reverted, the Core refuses GET /ai/providers without ai.infrastructure.manage",
-    "A reversion helper restored files with an older mtime, so cargo reused the reverted build; every proof was re-run after touching the restored files"
-  ],
+  "tests": {
+    "d008_journeys": 9,
+    "d008_contracts": 6,
+    "updated": [
+      "d001_journeys",
+      "d002_journeys",
+      "d007_journeys",
+      "d007_1_journeys",
+      "d007_contracts",
+      "controllers::windows"
+    ]
+  },
+  "reversion_proofs": {
+    "run": 12,
+    "caught": 12,
+    "note": "R5 (a POSIX hint to files ls) is also neutralised by the Core's visibility filter, so the journey stays green; the contracts unit test cada_sugestao_posix_e_um_comando_registado catches it. Architecture guard: 8 injections, 8 caught (after fixing a test-module stripping gap found by reversion)."
+  },
   "browser_certification": {
-    "real_browser": "PASS",
-    "widths": {
-      "1440": "all nine, maximised: messages thread and group, AI status/providers, agents list/detail/form, compute node, resources, activity, audit list/detail, settings, help",
-      "924": "all nine: no page or window overflow (window 804 px)",
-      "900": "messages title 156 px, audit 514 px, agents 412 px",
-      "820": "agents/compute 333 px, activity 666 px",
-      "760": "messages 156 px, AI models 159 px, audit 376 px",
-      "720": "no overflow; messages 156 px, activity 567 px, audit 337 px",
-      "390": "no overflow; every control reaches 44×44 by hit-testing (::after hit area or label); drawer navigation 259×44"
-    },
-    "keyboard": "real keys: composer ⌘Enter sends once and clears; confirmation focus starts on Cancelar, Tab/Shift+Tab wrap, Esc cancels and focus returns to the invoking action (inside the reopened <details>); list ↓/End/Home move focus, Enter opens",
-    "frame": "background windows of all nine restored by ?frame=1 and bound by OcApps.init; journeys load every frame",
-    "i18n": "pt/en/fr on 23 pages: no raw keys; titles switch (Registo de auditoria / Audit log / Journal d’audit)",
-    "primary_icon": "rgb(232, 180, 69)",
-    "reduced_motion": "no D007 animation",
-    "no_ai": "preview and journeys without inference: AI honest reasons, agents configured, everything else works",
-    "screen_reader": "NOT_RUN"
+    "widths": "1440, 924×540, 900, 820, 760, 720, 390 — no horizontal overflow, no spill",
+    "touch_targets_390": "PASS after the address-field fix",
+    "real_keyboard": "Terminal: type/Enter, ↑ history (redacted), Tab completion (listbox, ↓/Enter), exit closes the window; Browser: address + Enter",
+    "pt_en_fr": "PASS (pages and Core-driven blocks, no raw keys)",
+    "web_isolation": "hostile-page.html in the exact WEB_SANDBOX: cookie/localStorage/parent/top SecurityError, no native bridge, Workspace requests fail, Origin null → 403 (via srcdoc: the pane refuses cross-port http frames)",
+    "screen_reader": "NOT_RUN",
+    "desktop_webview": "NOT_CERTIFIED / DESKTOP_RUNTIME_REQUIRED"
   },
-  "teams": {
-    "domain": "ABSENT",
-    "design": "NOT_DESIGNED",
-    "implementation": "NONE"
-  },
-  "functional_gaps_total": 69,
-  "functional_gaps_design": 56,
-  "functional_gaps_found_in_integration": 13,
+  "functional_gaps_total": 56,
   "functional_gaps": {
-    "MSG-01": "RESOLVED (ADAPTER): GET /messaging/conversations; unread, mentions, last excerpt, presence",
-    "MSG-02": "RESOLVED (ADAPTER) · SECURITY_SENSITIVE: thread + ?before= history (page of 50); forged/non-participant id → 404 without title/body/participants",
-    "MSG-03": "RESOLVED · SECURITY_SENSITIVE: idempotency key per draft; failed send re-renders with body and key; Core serialises same-key sends (advisory lock; the second returned a 500)",
-    "MSG-04": "RESOLVED: read marker on open, before the list is read (badge clears in the same response)",
-    "MSG-05": "RESOLVED · SECURITY_SENSITIVE: roles from the Core (new participant role field); remove only for owner/administrator and never self; leave; both through the D006 confirmation (new action kinds msg_leave/msg_remove)",
-    "MSG-06": "HONESTLY_UNAVAILABLE (CORE_CONTRACT_REQUIRED) · SECURITY_SENSITIVE: no eligible-people contract; «Nova conversa» explains; /messages/people directory search removed",
-    "MSG-07": "DEFERRED: named group form not designed; needs the same candidates contract",
-    "MSG-08": "DEFERRED (CORE_CONTRACT_REQUIRED): no edit/withdraw route; withdrawn messages shown as withdrawn, never offered",
-    "MSG-09": "DEFERRED (NOT_IN_DOMAIN) · SECURITY_SENSITIVE: no attachments in the domain; no attach UI (static guard)",
-    "MSG-10": "PARTIAL: toggling existing reactions RESOLVED; new-emoji picker DEFERRED",
-    "MSG-11": "DEFERRED: typing indicator not designed",
-    "MSG-12": "DEFERRED · SECURITY_SENSITIVE: draft assist not in D007 (one assistant: Nye)",
-    "AI-01": "RESOLVED (ADAPTER + CORE): per-capability typed reason from the same resolution a prompt runs; providers counts providers",
-    "AI-02": "RESOLVED (ADAPTER): model catalogue; provider label only when readable, else kind",
-    "AI-03": "RESOLVED · SECURITY_SENSITIVE: providers only with ai.infrastructure.manage; label, kind, residency, health, has_credential; never endpoint, secret reference or hint (static guard)",
-    "AI-04": "RESOLVED (ADAPTER): routing readout (preferred provider label, fallback) with the policy",
-    "AI-05": "DEFERRED · SECURITY_SENSITIVE: enable/disable provider needs a designed privileged confirmation (no labels in the package); state is shown, no control",
-    "AI-06": "DEFERRED · SECURITY_SENSITIVE: register provider/model, routing and policy editing need the write-only secret pattern",
-    "AI-07": "DEFERRED: no model detail screen",
-    "AG-01": "RESOLVED (ADAPTER): list and detail",
-    "AG-02": "RESOLVED (ADAPTER + CORE) · SECURITY_SENSITIVE: GET /ai/agents/capabilities (same policy as create); forged scope refused in the Workspace and by the Core",
-    "AG-03": "RESOLVED (CORE) · SECURITY_SENSITIVE: the Core returns instructions only to the creator (list and detail)",
-    "AG-04": "REMAINING (CORE_CONTRACT_REQUIRED): no enable/disable/archive route; state shown, no control",
-    "AG-05": "REMAINING (CORE_CONTRACT_REQUIRED): no execution history contract; not shown",
-    "AG-06": "RESOLVED: Nye handoff by the typed reference agent:<id>, only when ready",
-    "CP-01": "RESOLVED (ADAPTER): status and nodes",
-    "CP-02": "RESOLVED (ADAPTER): capacity lines; bar only with physical and consumed reported (CSSOM --pct)",
-    "CP-03": "REMAINING (CORE_CONTRACT_REQUIRED · NOT_IN_DOMAIN): no jobs; the node says dispatch does not exist",
-    "CP-04": "REMAINING (RUNTIME_CONTRACT_REQUIRED) · SECURITY_SENSITIVE: no submit/cancel; no command field (static guard)",
-    "CP-05": "DEFERRED · SECURITY_SENSITIVE: node registration/enrolment/reservation are operator flows",
-    "CP-06": "DEFERRED · SECURITY_SENSITIVE: job output only when jobs exist",
-    "RS-01": "RESOLVED (ADAPTER): own storage and entitlement parts; Files link; no person parameter",
-    "RS-02": "REMAINING (CORE_CONTRACT_REQUIRED): only storage is measured; said on screen",
-    "RS-03": "DEFERRED: not the domain of this app",
-    "AC-01": "RESOLVED (ADAPTER) · SECURITY_SENSITIVE: each target re-read with current authority; unreadable → redacted (no title, classification, context or link); stored Core summary never shown",
-    "AC-02": "RESOLVED: Core page/page_size; «Mais» when a page is full",
-    "AC-03": "DEFERRED: filter by type",
-    "AC-04": "DEFERRED: read state (not in domain)",
-    "AU-01": "RESOLVED · SECURITY_SENSITIVE: page pagination; the Core re-checks audit authority (denial = 404 → PermissionDenied page)",
-    "AU-02": "RESOLVED (ADAPTER + CORE): type (from GET /audit/resource-types), since, actor from a row",
-    "AU-03": "RESOLVED · SECURITY_SENSITIVE: positive allow-list, scalar values only, truncated; the rest counted (static guard + journey with password/tokens/secret/api_key/email/reason/nested)",
-    "AU-04": "RESOLVED · SECURITY_SENSITIVE: target link only when the viewer's read returns it",
-    "AU-05": "REMAINING (CORE_CONTRACT_REQUIRED): no action/outcome filter in AuditQuery; controls absent",
-    "AU-06": "DEFERRED · SECURITY_SENSITIVE: no governed export; none offered",
-    "ST-01": "RESOLVED: language cookie pt/en/fr (closed list)",
-    "ST-02": "REMAINING (CORE_CONTRACT_REQUIRED): member timezone; Instance timezone read-only",
-    "ST-03": "RESOLVED: pins save/reset; source member/instance/product",
-    "ST-04": "RESOLVED: avatar initials/preset/photo (the Design's field name photo accepted)",
-    "ST-05": "RESOLVED · SECURITY_SENSITIVE: password change (Design fields mapped; refusal re-renders), own sessions only (other member's session → Core 404)",
-    "ST-06": "DEFERRED: appearance, notifications, privacy",
-    "ST-07": "RESOLVED: four sections",
-    "HP-01": "RESOLVED: one topic per registry app from existing description keys (apps.desc.*)",
-    "HP-02": "RESOLVED (WORKSPACE CONTRACT): experience::shortcuts — one declared list, also read by the switcher hint and Nye; a test ties each entry to its JS handler",
-    "HP-03": "RESOLVED: server-side search over the first-party set",
-    "HP-04": "DEFERRED: troubleshooting, about",
-    "HP-05": "RESOLVED: Nye handoff (/ask?q= or /ai/prompt)",
-    "I7-01": "RESOLVED (CORE): participant roles were not returned",
-    "I7-02": "RESOLVED (CORE) · SECURITY_SENSITIVE: a reply quoted a withdrawn message",
-    "I7-03": "RESOLVED (CORE): same-key concurrent sends → 500",
-    "I7-04": "RESOLVED (CORE) · SECURITY_SENSITIVE: agent instructions went to every viewer",
-    "I7-05": "RESOLVED (CORE): no creatable-scopes contract",
-    "I7-06": "PARTIAL · SECURITY_SENSITIVE: the Core's /activity filters by the classification stored at write time; the Workspace re-reads each target; the Core-side filter by current authority remains",
-    "I7-07": "RESOLVED: Activity summaries were single-language Core prose quoting stale titles",
-    "I7-08": "RESOLVED: no confirmation labels for leave/remove in the package (Code keys)",
-    "I7-09": "RESOLVED · SECURITY_SENSITIVE: /messages/people enumerated the directory",
-    "I7-10": "REMAINING (CORE) · SECURITY_SENSITIVE: GET /messaging/presence has no messaging.use or relationship check (not used by the Workspace)",
-    "I7-11": "RESOLVED: MFA button without a destination (only 'set up' when required and missing)",
-    "I7-12": "RESOLVED: hand-written audit type list had drifted; now from the trail",
-    "I7-13": "RESOLVED: focus restore into a closed <details> (wm-engine.js)"
+    "T-01": {
+      "class": "RESOLVED",
+      "note": "/terminal draws ui::apps::terminal",
+      "security_sensitive": false
+    },
+    "T-02": {
+      "class": "RESOLVED",
+      "note": "discovery = the Core's help for the person (not an Audience filter in the Workspace)",
+      "security_sensitive": false
+    },
+    "T-03": {
+      "class": "ALREADY_IMPLEMENTED",
+      "note": "ocinye-contracts lexer/parser; host syntax 126 proved in d008_journeys",
+      "security_sensitive": true
+    },
+    "T-04": {
+      "class": "ALREADY_IMPLEMENTED",
+      "note": "POST /api/v1/commands/exec → executor → audit",
+      "security_sensitive": true
+    },
+    "T-05": {
+      "class": "RESOLVED",
+      "note": "crate::terminal::localize emits the Design shape",
+      "security_sensitive": false
+    },
+    "T-06": {
+      "class": "RESOLVED",
+      "note": "echo = ocsh::redact(line); JSON and no-JS form; proved by reversion",
+      "security_sensitive": true
+    },
+    "T-07": {
+      "class": "STORAGE_REQUIRED",
+      "note": "history is window memory only",
+      "security_sensitive": true
+    },
+    "T-08": {
+      "class": "RESOLVED",
+      "note": "POSIX_HINTS only name registered commands (test); Core suggests only visible families",
+      "security_sensitive": false
+    },
+    "T-09": {
+      "class": "CORE_CONTRACT_REQUIRED",
+      "note": "no Block::Link yet; links block not reachable",
+      "security_sensitive": true
+    },
+    "T-10": {
+      "class": "CORE_CONTRACT_REQUIRED",
+      "note": "no v1 command needs confirmation; one that did is refused (77) until TERMINAL-11",
+      "security_sensitive": true
+    },
+    "T-11": {
+      "class": "RESOLVED",
+      "note": "user decision: shared governed confirmation, no typed word (ADR-0312 amended)",
+      "security_sensitive": true
+    },
+    "T-12": {
+      "class": "ALREADY_IMPLEMENTED",
+      "note": "plan single use by conditional UPDATE",
+      "security_sensitive": true
+    },
+    "T-13": {
+      "class": "CORE_CONTRACT_REQUIRED",
+      "note": "resource completion",
+      "security_sensitive": true
+    },
+    "T-14": {
+      "class": "CORE_CONTRACT_REQUIRED",
+      "note": "files family and other proposed commands need capabilities",
+      "security_sensitive": false
+    },
+    "T-15": {
+      "class": "DEFERRED",
+      "note": "one session per window",
+      "security_sensitive": false
+    },
+    "T-16": {
+      "class": "RUNTIME_CONTRACT_REQUIRED",
+      "note": "streaming and Ctrl+C",
+      "security_sensitive": false
+    },
+    "T-17": {
+      "class": "DEFERRED",
+      "note": "session elevation (G-14)",
+      "security_sensitive": true
+    },
+    "T-18": {
+      "class": "ALREADY_IMPLEMENTED",
+      "note": "--json / | export json",
+      "security_sensitive": false
+    },
+    "T-19": {
+      "class": "RESOLVED",
+      "note": "171 obsolete keys removed; exit closes the window",
+      "security_sensitive": false
+    },
+    "T-20": {
+      "class": "DESKTOP_RUNTIME_REQUIRED",
+      "note": "native clipboard",
+      "security_sensitive": false
+    },
+    "T-21": {
+      "class": "HONESTLY_UNAVAILABLE",
+      "note": "operator host console is a separate subsystem, not ocsh",
+      "security_sensitive": true
+    },
+    "T-22": {
+      "class": "PARTIAL",
+      "note": "client history capped at 200; on-screen scrollback not capped (clear empties it)",
+      "security_sensitive": false
+    },
+    "T-23": {
+      "class": "DEFERRED",
+      "note": "VisualViewport keyboard handling not implemented; prompt stays above the dock at 390, not tested with a real mobile keyboard",
+      "security_sensitive": false
+    },
+    "T-24": {
+      "class": "RESOLVED",
+      "note": "was not implemented (Core answered pending); now Block::Ask → /ai/prompt; 69 with the typed reason without inference",
+      "security_sensitive": true
+    },
+    "B-01": {
+      "class": "RESOLVED",
+      "note": "registry 27 → 28",
+      "security_sensitive": false
+    },
+    "B-02": {
+      "class": "RESOLVED",
+      "note": "NetworkUse::ClientWeb",
+      "security_sensitive": false
+    },
+    "B-03": {
+      "class": "RESOLVED",
+      "note": "frame-src 'self' https: only on /browser; proved by reversion",
+      "security_sensitive": true
+    },
+    "B-04": {
+      "class": "RESOLVED",
+      "note": "sandboxed iframe, requested address, honest fallback; Web chrome controls wired (Code)",
+      "security_sensitive": true
+    },
+    "B-05": {
+      "class": "WEB_RUNTIME_LIMITATION",
+      "note": "embedding refusal not detectable; fallback always visible",
+      "security_sensitive": false
+    },
+    "B-06": {
+      "class": "WEB_RUNTIME_LIMITATION",
+      "note": "no back/forward/title on the Web",
+      "security_sensitive": false
+    },
+    "B-07": {
+      "class": "DESKTOP_RUNTIME_REQUIRED",
+      "note": "no native shell",
+      "security_sensitive": true
+    },
+    "B-08": {
+      "class": "DESKTOP_RUNTIME_REQUIRED",
+      "note": "no browser.* bridge",
+      "security_sensitive": true
+    },
+    "B-09": {
+      "class": "DESKTOP_RUNTIME_REQUIRED",
+      "note": "no partitions to prove",
+      "security_sensitive": true
+    },
+    "B-10": {
+      "class": "DESKTOP_RUNTIME_REQUIRED",
+      "note": "",
+      "security_sensitive": true
+    },
+    "B-11": {
+      "class": "DESKTOP_RUNTIME_REQUIRED",
+      "note": "",
+      "security_sensitive": true
+    },
+    "B-12": {
+      "class": "DESKTOP_RUNTIME_REQUIRED",
+      "note": "",
+      "security_sensitive": true
+    },
+    "B-13": {
+      "class": "DESKTOP_RUNTIME_REQUIRED",
+      "note": "",
+      "security_sensitive": true
+    },
+    "B-14": {
+      "class": "DEFERRED",
+      "note": "",
+      "security_sensitive": true
+    },
+    "B-15": {
+      "class": "DESKTOP_RUNTIME_REQUIRED",
+      "note": "Web: denied by construction (allow=\"\")",
+      "security_sensitive": true
+    },
+    "B-16": {
+      "class": "DEFERRED",
+      "note": "",
+      "security_sensitive": false
+    },
+    "B-17": {
+      "class": "STORAGE_REQUIRED",
+      "note": "",
+      "security_sensitive": true
+    },
+    "B-18": {
+      "class": "DEFERRED",
+      "note": "",
+      "security_sensitive": false
+    },
+    "B-19": {
+      "class": "DESKTOP_RUNTIME_REQUIRED",
+      "note": "",
+      "security_sensitive": true
+    },
+    "B-20": {
+      "class": "EXTERNAL_SERVICE_REQUIRED",
+      "note": "non-addresses say «Não é um endereço»",
+      "security_sensitive": false
+    },
+    "B-21": {
+      "class": "DESKTOP_RUNTIME_REQUIRED",
+      "note": "",
+      "security_sensitive": true
+    },
+    "B-22": {
+      "class": "CORE_CONTRACT_REQUIRED",
+      "note": "no /browser/nye; the Web panel says unavailable",
+      "security_sensitive": true
+    },
+    "B-23": {
+      "class": "PARTIAL",
+      "note": "Web keeps opening external links in a new browser tab; Desktop routing needs the shell",
+      "security_sensitive": true
+    },
+    "B-24": {
+      "class": "DESKTOP_RUNTIME_REQUIRED",
+      "note": "",
+      "security_sensitive": false
+    },
+    "B-25": {
+      "class": "DESKTOP_RUNTIME_REQUIRED",
+      "note": "Web: host shortcuts not intercepted",
+      "security_sensitive": false
+    },
+    "B-26": {
+      "class": "DEFERRED",
+      "note": "",
+      "security_sensitive": false
+    },
+    "B-27": {
+      "class": "HONESTLY_UNAVAILABLE",
+      "note": "",
+      "security_sensitive": false
+    },
+    "B-28": {
+      "class": "DEFERRED",
+      "note": "menu has no designed markup; hidden on the Web (Code)",
+      "security_sensitive": false
+    },
+    "B-29": {
+      "class": "HONESTLY_UNAVAILABLE",
+      "note": "",
+      "security_sensitive": false
+    },
+    "B-30": {
+      "class": "RUNTIME_CONTRACT_REQUIRED",
+      "note": "",
+      "security_sensitive": true
+    },
+    "X-01": {
+      "class": "RESOLVED",
+      "note": "architecture_boundaries.py: no cross-reference, no generic execution layer, no process in ocsh, each client on its route; proved by reversion",
+      "security_sensitive": true
+    },
+    "X-02": {
+      "class": "DESKTOP_RUNTIME_REQUIRED",
+      "note": "Dedicated",
+      "security_sensitive": false
+    }
   },
   "functional_gaps_by_class": {
-    "RESOLVED": 42,
-    "HONESTLY_UNAVAILABLE": 1,
-    "DEFERRED": 16,
+    "RESOLVED": 13,
+    "ALREADY_IMPLEMENTED": 4,
+    "STORAGE_REQUIRED": 2,
+    "CORE_CONTRACT_REQUIRED": 5,
+    "DEFERRED": 8,
+    "RUNTIME_CONTRACT_REQUIRED": 2,
+    "DESKTOP_RUNTIME_REQUIRED": 14,
+    "HONESTLY_UNAVAILABLE": 3,
     "PARTIAL": 2,
-    "REMAINING": 8
+    "WEB_RUNTIME_LIMITATION": 2,
+    "EXTERNAL_SERVICE_REQUIRED": 1
   },
-  "security_sensitive_gaps": {
-    "MSG-02": "RESOLVED",
-    "MSG-03": "RESOLVED",
-    "MSG-05": "RESOLVED",
-    "MSG-06": "HONESTLY_UNAVAILABLE",
-    "MSG-09": "DEFERRED",
-    "MSG-12": "DEFERRED",
-    "AI-03": "RESOLVED",
-    "AI-05": "DEFERRED",
-    "AI-06": "DEFERRED",
-    "AG-02": "RESOLVED",
-    "AG-03": "RESOLVED",
-    "CP-04": "REMAINING",
-    "CP-05": "DEFERRED",
-    "CP-06": "DEFERRED",
-    "AC-01": "RESOLVED",
-    "AU-01": "RESOLVED",
-    "AU-03": "RESOLVED",
-    "AU-04": "RESOLVED",
-    "AU-06": "DEFERRED",
-    "ST-05": "RESOLVED",
-    "I7-02": "RESOLVED",
-    "I7-04": "RESOLVED",
-    "I7-06": "PARTIAL",
-    "I7-09": "RESOLVED",
-    "I7-10": "REMAINING"
-  },
-  "security_sensitive_gaps_total": 25,
-  "security_sensitive_gaps_design": 20,
+  "security_sensitive_gaps_total": 30,
   "security_sensitive_gaps_open": [
-    "CP-04",
-    "I7-06",
-    "I7-10"
+    "B-07",
+    "B-08",
+    "B-09",
+    "B-10",
+    "B-11",
+    "B-12",
+    "B-13",
+    "B-14",
+    "B-15",
+    "B-17",
+    "B-19",
+    "B-21",
+    "B-22",
+    "B-23",
+    "B-30",
+    "T-07",
+    "T-09",
+    "T-10",
+    "T-13",
+    "T-17",
+    "T-21"
   ],
-  "verify_sh": "run on the exact commit that carries this record; the outcome is in the D007 report",
-  "feedback": "docs/ui/CODE_FEEDBACK.md (D007 section on top)",
-  "adr": "docs/adrs/0622-completion-apps-history-evidence-and-agent-authority.md",
+  "adr": [
+    "0623 (Accepted)",
+    "0312 (amended)",
+    "0612 (amended)"
+  ],
+  "feedback": "docs/ui/CODE_FEEDBACK.md (D008 section on top)",
+  "deploy": "NOT_PERFORMED",
+  "deploy_authorization": "NOT_GIVEN",
   "history": [
+    {
+      "schema_version": 1,
+      "design_revision": "D007",
+      "based_on": "D006 (main @ 1e09b3f, merge of PR #189; Design observed feat/design-d006 @ 89404f7, identical tree)",
+      "repository_head_before": "1e09b3f",
+      "integrated_on": "2026-09-30",
+      "integration_branch": "feat/design-d007",
+      "integration_status": "INTEGRATED_WITH_D007_1_VISUAL_PARITY_TRUE_ACCESSIBILITY_CERTIFIED_FUNCTIONALLY_CERTIFIED",
+      "package": "ocinye-design-complete-D007: 548 checksums; 547 match directly, MANIFEST.json matches once its two self-declared late fields (file_count_total, checksum_set) are removed; cumulative, self-contained, 86 references",
+      "application_method": "git apply of patch/d006-to-d007.patch (10 files) — byte-identical to implementation/; ui_ops wired into the catalogue; HANDOFF.md and DESIGN_LOCK.md copied from the package top level (pure additions)",
+      "files_changed": [
+        "apps/workspace/src/ui/apps/{messages,fabric,ledger,member,ops}.rs (new)",
+        "apps/workspace/src/i18n/ui_ops.rs (new, 254 keys)",
+        "apps/workspace/src/ui/view_models.rs",
+        "apps/workspace/src/ui/apps/mod.rs",
+        "apps/workspace/static/oc-apps.css",
+        "apps/workspace/static/oc-apps.js"
+      ],
+      "unexpected_diffs": "implementation/ still carries the orphan ui/apps/members.rs (from D006; not in the patch, apply list or mod.rs); not applied",
+      "code_fix_in_design_file": "lint: two map_or_else identity closures → unwrap_or_else (fabric.rs), four .map(|e| error(e)) → .map(error) (fabric.rs, member.rs, messages.rs); member.rs: the MFA button only when MFA is required and not set up (no destination otherwise); view_models.rs: OrgActionKind gains LeaveConversation and RemoveParticipant (the package reuses the D006 confirmation but has no kinds or labels for them)",
+      "design_tests": [
+        "messages::corpo_hostil_fica_texto_e_o_rascunho_sobrevive_a_falha",
+        "fabric::ia_sem_inferencia_e_honesta_e_nao_e_uma_conversa",
+        "fabric::fornecedor_diz_que_tem_credencial_e_nunca_o_valor",
+        "ledger::evento_redigido_nao_mostra_classificacao_nem_alvo",
+        "ledger::auditoria_recusada_nao_tem_filtros_nem_linhas",
+        "member::definicoes_nao_editam_o_fuso_da_instancia",
+        "member::ajuda_escapa_a_pesquisa_e_nao_tem_conversa"
+      ],
+      "i18n": "ui_ops 254 keys × pt/en/fr; nav.audit pt «Registo de auditoria» (was «Audit Log»), en «Audit log»; Code keys for confirmations, roles, model states, compute vocabularies, activity kinds, shortcuts",
+      "applications": {
+        "messages": "REAL",
+        "ai": "REAL",
+        "agents": "REAL",
+        "compute": "REAL (read-only, no dispatch)",
+        "resources": "REAL (own storage)",
+        "activity": "REAL",
+        "audit": "REAL (read-only)",
+        "settings": "REAL (member layer)",
+        "help": "REAL (first-party)",
+        "terminal": "PROVISIONAL (D008)",
+        "browser": "NOT REGISTERED (D008)"
+      },
+      "code_changes": [
+        "Core: participant roles on GET /messaging/conversations/{id}; excerpt empty for replies to withdrawn messages; advisory lock serialising same-key sends",
+        "Core: agent instructions only to the creator; GET /ai/agents/capabilities; AI status reason per capability and providers counted as providers; GET /audit/resource-types",
+        "Workspace: controllers/ops (pure mappings) and routes/ops (nine apps); legacy app_page handlers replaced; /messages/people removed; react route carries the message id",
+        "Workspace: experience::shortcuts as the single shortcut list; agent: Nye reference; has_screen gains the nine apps (Terminal stays pending)",
+        "wm-engine.js (Code): focus restore opens the enclosing <details>",
+        "tests: crates/ocinye-core/tests/d007_contracts.rs (5), apps/workspace/tests/d007_journeys.rs (16), d007_contracts.rs (8); D001/D002 pending example is Terminal"
+      ],
+      "reversion_proofs": [
+        "same-key send lock",
+        "instructions only for the creator",
+        "creatable scopes policy",
+        "AI reason per capability",
+        "audit types authority",
+        "sealed reply excerpt",
+        "participant roles",
+        "activity target re-read",
+        "activity stored summary not shown",
+        "audit allow-list (journey)",
+        "audit allow-list (contract)",
+        "remove only for governors",
+        "confirmation only when offered",
+        "shortcut handler guard",
+        "provider endpoint guard",
+        "directory route guard",
+        "Help reads no files",
+        "CSS .oc- scope (D007 block)",
+        "draft kept on failure",
+        "read marker before the list"
+      ],
+      "reversion_notes": [
+        "The Workspace scope gate on agent creation is defence in depth: reverted, the Core still refuses the forged scope (403) and the journey passes",
+        "The providers section gate: reverted, the Core refuses GET /ai/providers without ai.infrastructure.manage",
+        "A reversion helper restored files with an older mtime, so cargo reused the reverted build; every proof was re-run after touching the restored files"
+      ],
+      "browser_certification": {
+        "real_browser": "PASS",
+        "widths": {
+          "1440": "all nine, maximised: messages thread and group, AI status/providers, agents list/detail/form, compute node, resources, activity, audit list/detail, settings, help",
+          "924": "all nine: no page or window overflow (window 804 px)",
+          "900": "messages title 156 px, audit 514 px, agents 412 px",
+          "820": "agents/compute 333 px, activity 666 px",
+          "760": "messages 156 px, AI models 159 px, audit 376 px",
+          "720": "no overflow; messages 156 px, activity 567 px, audit 337 px",
+          "390": "no overflow; every control reaches 44×44 by hit-testing (::after hit area or label); drawer navigation 259×44"
+        },
+        "keyboard": "real keys: composer ⌘Enter sends once and clears; confirmation focus starts on Cancelar, Tab/Shift+Tab wrap, Esc cancels and focus returns to the invoking action (inside the reopened <details>); list ↓/End/Home move focus, Enter opens",
+        "frame": "background windows of all nine restored by ?frame=1 and bound by OcApps.init; journeys load every frame",
+        "i18n": "pt/en/fr on 23 pages: no raw keys; titles switch (Registo de auditoria / Audit log / Journal d’audit)",
+        "primary_icon": "rgb(232, 180, 69)",
+        "reduced_motion": "no D007 animation",
+        "no_ai": "preview and journeys without inference: AI honest reasons, agents configured, everything else works",
+        "screen_reader": "NOT_RUN"
+      },
+      "teams": {
+        "domain": "ABSENT",
+        "design": "NOT_DESIGNED",
+        "implementation": "NONE"
+      },
+      "functional_gaps_total": 69,
+      "functional_gaps_design": 56,
+      "functional_gaps_found_in_integration": 13,
+      "functional_gaps": {
+        "MSG-01": "RESOLVED (ADAPTER): GET /messaging/conversations; unread, mentions, last excerpt, presence",
+        "MSG-02": "RESOLVED (ADAPTER) · SECURITY_SENSITIVE: thread + ?before= history (page of 50); forged/non-participant id → 404 without title/body/participants",
+        "MSG-03": "RESOLVED · SECURITY_SENSITIVE: idempotency key per draft; failed send re-renders with body and key; Core serialises same-key sends (advisory lock; the second returned a 500)",
+        "MSG-04": "RESOLVED: read marker on open, before the list is read (badge clears in the same response)",
+        "MSG-05": "RESOLVED · SECURITY_SENSITIVE: roles from the Core (new participant role field); remove only for owner/administrator and never self; leave; both through the D006 confirmation (new action kinds msg_leave/msg_remove)",
+        "MSG-06": "HONESTLY_UNAVAILABLE (CORE_CONTRACT_REQUIRED) · SECURITY_SENSITIVE: no eligible-people contract; «Nova conversa» explains; /messages/people directory search removed",
+        "MSG-07": "DEFERRED: named group form not designed; needs the same candidates contract",
+        "MSG-08": "DEFERRED (CORE_CONTRACT_REQUIRED): no edit/withdraw route; withdrawn messages shown as withdrawn, never offered",
+        "MSG-09": "DEFERRED (NOT_IN_DOMAIN) · SECURITY_SENSITIVE: no attachments in the domain; no attach UI (static guard)",
+        "MSG-10": "PARTIAL: toggling existing reactions RESOLVED; new-emoji picker DEFERRED",
+        "MSG-11": "DEFERRED: typing indicator not designed",
+        "MSG-12": "DEFERRED · SECURITY_SENSITIVE: draft assist not in D007 (one assistant: Nye)",
+        "AI-01": "RESOLVED (ADAPTER + CORE): per-capability typed reason from the same resolution a prompt runs; providers counts providers",
+        "AI-02": "RESOLVED (ADAPTER): model catalogue; provider label only when readable, else kind",
+        "AI-03": "RESOLVED · SECURITY_SENSITIVE: providers only with ai.infrastructure.manage; label, kind, residency, health, has_credential; never endpoint, secret reference or hint (static guard)",
+        "AI-04": "RESOLVED (ADAPTER): routing readout (preferred provider label, fallback) with the policy",
+        "AI-05": "DEFERRED · SECURITY_SENSITIVE: enable/disable provider needs a designed privileged confirmation (no labels in the package); state is shown, no control",
+        "AI-06": "DEFERRED · SECURITY_SENSITIVE: register provider/model, routing and policy editing need the write-only secret pattern",
+        "AI-07": "DEFERRED: no model detail screen",
+        "AG-01": "RESOLVED (ADAPTER): list and detail",
+        "AG-02": "RESOLVED (ADAPTER + CORE) · SECURITY_SENSITIVE: GET /ai/agents/capabilities (same policy as create); forged scope refused in the Workspace and by the Core",
+        "AG-03": "RESOLVED (CORE) · SECURITY_SENSITIVE: the Core returns instructions only to the creator (list and detail)",
+        "AG-04": "REMAINING (CORE_CONTRACT_REQUIRED): no enable/disable/archive route; state shown, no control",
+        "AG-05": "REMAINING (CORE_CONTRACT_REQUIRED): no execution history contract; not shown",
+        "AG-06": "RESOLVED: Nye handoff by the typed reference agent:<id>, only when ready",
+        "CP-01": "RESOLVED (ADAPTER): status and nodes",
+        "CP-02": "RESOLVED (ADAPTER): capacity lines; bar only with physical and consumed reported (CSSOM --pct)",
+        "CP-03": "REMAINING (CORE_CONTRACT_REQUIRED · NOT_IN_DOMAIN): no jobs; the node says dispatch does not exist",
+        "CP-04": "REMAINING (RUNTIME_CONTRACT_REQUIRED) · SECURITY_SENSITIVE: no submit/cancel; no command field (static guard)",
+        "CP-05": "DEFERRED · SECURITY_SENSITIVE: node registration/enrolment/reservation are operator flows",
+        "CP-06": "DEFERRED · SECURITY_SENSITIVE: job output only when jobs exist",
+        "RS-01": "RESOLVED (ADAPTER): own storage and entitlement parts; Files link; no person parameter",
+        "RS-02": "REMAINING (CORE_CONTRACT_REQUIRED): only storage is measured; said on screen",
+        "RS-03": "DEFERRED: not the domain of this app",
+        "AC-01": "RESOLVED (ADAPTER) · SECURITY_SENSITIVE: each target re-read with current authority; unreadable → redacted (no title, classification, context or link); stored Core summary never shown",
+        "AC-02": "RESOLVED: Core page/page_size; «Mais» when a page is full",
+        "AC-03": "DEFERRED: filter by type",
+        "AC-04": "DEFERRED: read state (not in domain)",
+        "AU-01": "RESOLVED · SECURITY_SENSITIVE: page pagination; the Core re-checks audit authority (denial = 404 → PermissionDenied page)",
+        "AU-02": "RESOLVED (ADAPTER + CORE): type (from GET /audit/resource-types), since, actor from a row",
+        "AU-03": "RESOLVED · SECURITY_SENSITIVE: positive allow-list, scalar values only, truncated; the rest counted (static guard + journey with password/tokens/secret/api_key/email/reason/nested)",
+        "AU-04": "RESOLVED · SECURITY_SENSITIVE: target link only when the viewer's read returns it",
+        "AU-05": "REMAINING (CORE_CONTRACT_REQUIRED): no action/outcome filter in AuditQuery; controls absent",
+        "AU-06": "DEFERRED · SECURITY_SENSITIVE: no governed export; none offered",
+        "ST-01": "RESOLVED: language cookie pt/en/fr (closed list)",
+        "ST-02": "REMAINING (CORE_CONTRACT_REQUIRED): member timezone; Instance timezone read-only",
+        "ST-03": "RESOLVED: pins save/reset; source member/instance/product",
+        "ST-04": "RESOLVED: avatar initials/preset/photo (the Design's field name photo accepted)",
+        "ST-05": "RESOLVED · SECURITY_SENSITIVE: password change (Design fields mapped; refusal re-renders), own sessions only (other member's session → Core 404)",
+        "ST-06": "DEFERRED: appearance, notifications, privacy",
+        "ST-07": "RESOLVED: four sections",
+        "HP-01": "RESOLVED: one topic per registry app from existing description keys (apps.desc.*)",
+        "HP-02": "RESOLVED (WORKSPACE CONTRACT): experience::shortcuts — one declared list, also read by the switcher hint and Nye; a test ties each entry to its JS handler",
+        "HP-03": "RESOLVED: server-side search over the first-party set",
+        "HP-04": "DEFERRED: troubleshooting, about",
+        "HP-05": "RESOLVED: Nye handoff (/ask?q= or /ai/prompt)",
+        "I7-01": "RESOLVED (CORE): participant roles were not returned",
+        "I7-02": "RESOLVED (CORE) · SECURITY_SENSITIVE: a reply quoted a withdrawn message",
+        "I7-03": "RESOLVED (CORE): same-key concurrent sends → 500",
+        "I7-04": "RESOLVED (CORE) · SECURITY_SENSITIVE: agent instructions went to every viewer",
+        "I7-05": "RESOLVED (CORE): no creatable-scopes contract",
+        "I7-06": "PARTIAL · SECURITY_SENSITIVE: the Core's /activity filters by the classification stored at write time; the Workspace re-reads each target; the Core-side filter by current authority remains",
+        "I7-07": "RESOLVED: Activity summaries were single-language Core prose quoting stale titles",
+        "I7-08": "RESOLVED: no confirmation labels for leave/remove in the package (Code keys)",
+        "I7-09": "RESOLVED · SECURITY_SENSITIVE: /messages/people enumerated the directory",
+        "I7-10": "REMAINING (CORE) · SECURITY_SENSITIVE: GET /messaging/presence has no messaging.use or relationship check (not used by the Workspace)",
+        "I7-11": "RESOLVED: MFA button without a destination (only 'set up' when required and missing)",
+        "I7-12": "RESOLVED: hand-written audit type list had drifted; now from the trail",
+        "I7-13": "RESOLVED: focus restore into a closed <details> (wm-engine.js)"
+      },
+      "functional_gaps_by_class": {
+        "RESOLVED": 42,
+        "HONESTLY_UNAVAILABLE": 1,
+        "DEFERRED": 16,
+        "PARTIAL": 2,
+        "REMAINING": 8
+      },
+      "security_sensitive_gaps": {
+        "MSG-02": "RESOLVED",
+        "MSG-03": "RESOLVED",
+        "MSG-05": "RESOLVED",
+        "MSG-06": "HONESTLY_UNAVAILABLE",
+        "MSG-09": "DEFERRED",
+        "MSG-12": "DEFERRED",
+        "AI-03": "RESOLVED",
+        "AI-05": "DEFERRED",
+        "AI-06": "DEFERRED",
+        "AG-02": "RESOLVED",
+        "AG-03": "RESOLVED",
+        "CP-04": "REMAINING",
+        "CP-05": "DEFERRED",
+        "CP-06": "DEFERRED",
+        "AC-01": "RESOLVED",
+        "AU-01": "RESOLVED",
+        "AU-03": "RESOLVED",
+        "AU-04": "RESOLVED",
+        "AU-06": "DEFERRED",
+        "ST-05": "RESOLVED",
+        "I7-02": "RESOLVED",
+        "I7-04": "RESOLVED",
+        "I7-06": "PARTIAL",
+        "I7-09": "RESOLVED",
+        "I7-10": "REMAINING"
+      },
+      "security_sensitive_gaps_total": 25,
+      "security_sensitive_gaps_design": 20,
+      "security_sensitive_gaps_open": [
+        "CP-04",
+        "I7-06",
+        "I7-10"
+      ],
+      "verify_sh": "run on the exact commit that carries this record; the outcome is in the D007 report",
+      "feedback": "docs/ui/CODE_FEEDBACK.md (D007 section on top)",
+      "adr": "docs/adrs/0622-completion-apps-history-evidence-and-agent-authority.md",
+      "d007_1": {
+        "design_revision": "D007.1",
+        "kind": "corrective registry-completion revision, integrated on the unmerged D007 branch by explicit user decision (one verify, one PR, one merge for D007 + D007.1)",
+        "d007_head_before": "adad2fe",
+        "package": "ocinye-design-complete-D007.1: 615/615 checksums; cumulative, self-contained; 55/55 reference checks (reference only)",
+        "application_method": "apply.sh on the D007 tree: three screens and ui_reg copied; view_models block, OrgActionKind::StopService, pub mods, CSS block anchored; reference copies not committed",
+        "code_fix_in_design_file": "monitor.rs: MetricPlane import moved into the test module (unused in production)",
+        "design_tests": [
+          "monitor::sem_administracao_da_plataforma_nada_se_mostra",
+          "monitor::sem_inventario_nao_ha_botao_parar",
+          "monitor::plano_sem_uso_diz_nao_reportado_e_nunca_zero",
+          "results::nao_ha_novo_resultado_na_barra",
+          "results::validar_so_quando_o_core_oferece",
+          "results::recusa_nao_mostra_o_resultado",
+          "trash::sem_prazo_inventado",
+          "trash::restaurar_indisponivel_nao_submete",
+          "trash::eliminar_definitivamente_nunca_submete"
+        ],
+        "registry": {
+          "before": 24,
+          "added": [
+            "monitor",
+            "results",
+            "trash"
+          ],
+          "after": 27,
+          "not_registered": {
+            "tasks": "CANONICAL_ALIAS (/tasks/* → /my-work/*)",
+            "history": "DOMAIN_NOT_READY",
+            "browser": "RESERVED_FOR_D008"
+          },
+          "provisional": [
+            "terminal"
+          ],
+          "coverage": "docs/ui/application-design-coverage.md"
+        },
+        "applications": {
+          "monitor": "/admin/monitor · platform.administer · essential · SingleInstance",
+          "results": "/results · projects.view · optional (Research) · SingleInstance",
+          "trash": "/trash · personal · essential · SingleInstance"
+        },
+        "notes_destructive": {
+          "actual_semantics": "«Mover para o lixo» is a soft delete (restorable); purge is an irreversible Core delete (row, revisions and shares), owner-only, audited, replay → 404, with no governed confirmation",
+          "ui_offered": "never (no purge control in Notes)",
+          "workspace_paths": "POST /notes/{id}/eliminar (and /me/files/purge, /files/trash/empty) purged without confirmation and no screen used them",
+          "decision": "removed; permanent delete HONESTLY_UNAVAILABLE until a governed destructive capability exists"
+        },
+        "code_changes": [
+          "Core: registry +3; results list filtered by per-result readability; deleted_at in trash listings; result created_by_name/updated_at and validation performed_by_name",
+          "Workspace: controllers/reg + routes/reg; Monitor/Results/Trash wired; purge routes removed; Monitor links for platform administration only; Notes trash items open in Trash; result Nye reference; lineage links to /results",
+          "tests: apps/workspace/tests/d007_1_journeys.rs (4), 2 static guards in d007_contracts.rs; D001 Monitor assertion updated"
+        ],
+        "reversion_proofs": [
+          "results list filtered by per-result readability",
+          "Monitor gate platform.administer",
+          "unreported planes never offered",
+          "stale from the Core's node status",
+          "Monitor link only for platform administration",
+          "purge routes absent",
+          "Notes trash items open in Trash",
+          "no «Registar validação» without a form",
+          "(D007 proofs re-run on the combined tree: journeys pass)"
+        ],
+        "browser_certification": {
+          "1440": "Monitor (summary, memory/disk planes, stale reading, unreported planes named, no services, boundary), Results (list with state navigation, detail with conclusion, origin, validation author, superseded), Trash (list, detail, restore by keyboard with notice, disabled purge)",
+          "924": "no overflow (window 804 px)",
+          "720/820": "no overflow; primary column 144–435 px",
+          "390": "no overflow; every control ≥ 44×44 by hit-testing",
+          "keyboard": "Monitor planes Tab/Enter with visible focus; Trash ↓ and Enter restores; disabled purge not focusable",
+          "i18n": "pt/en/fr on 18 pages (D007.1 + D007 re-check): no raw keys; titles Lixo/Trash/Corbeille",
+          "screen_reader": "NOT_RUN"
+        },
+        "functional_gaps_total": 49,
+        "functional_gaps_design": 46,
+        "functional_gaps_found_in_integration": 3,
+        "functional_gaps": {
+          "REG-01": "RESOLVED (CORE_CONTRACT): ApplicationId::{Monitor, Results, Trash} + manifests; 27 apps; Screen, gates and launcher entries; 24 → 27 assertions",
+          "REG-02": "RESOLVED: Tarefas stays the /tasks/* → /my-work/* alias; not registered (TASKS_STANDALONE = NOT_REGISTERED)",
+          "REG-03": "DEFERRED: Histórico not registered (HISTORY_DOMAIN = NOT_READY)",
+          "REG-04": "DEFERRED: Browser not registered (D008)",
+          "REG-05": "RESOLVED: the manifest's categories prevail",
+          "REG-06": "RESOLVED: nav.audit pt «Registo de auditoria» (kept from D007)",
+          "MON-01": "RESOLVED · SECURITY_SENSITIVE: Monitor gate = platform.administer (the Core's rule for /system/operations); organisation admins and members → 404; Monitor links only for platform administration",
+          "MON-02": "RESOLVED: memory and disk from the typed heartbeat fields",
+          "MON-03": "RESOLVED: current consumption per node from /compute/nodes, with the canonical Compute link",
+          "MON-04": "HONESTLY_UNAVAILABLE: no time series; the screen says so",
+          "MON-05": "RUNTIME_FIX_REQUIRED: CPU, network and GPU utilisation are not reported; named as not reported, never zero",
+          "MON-06": "RUNTIME_FIX_REQUIRED · SECURITY_SENSITIVE: no typed service inventory; section honestly unavailable",
+          "MON-07": "RUNTIME_FIX_REQUIRED: no service state",
+          "MON-08": "CORE_FIX_REQUIRED · SECURITY_SENSITIVE: may_stop / protection not in the Core; no Stop control",
+          "MON-09": "CORE_FIX_REQUIRED · SECURITY_SENSITIVE: no typed stop intent; OrgActionKind::StopService exists but is not parseable from an address",
+          "MON-10": "CORE_FIX_REQUIRED: no asynchronous receipt",
+          "MON-11": "RESOLVED: stale = the Core's effective offline status (node_offline_after) with the last value; no threshold in the Workspace",
+          "MON-12": "CORE_FIX_REQUIRED · SECURITY_SENSITIVE: no stop audit (no stop)",
+          "MON-13": "RESOLVED: summary from /system/operations (counts, no member names)",
+          "MON-14": "DEFERRED · SECURITY_SENSITIVE: G-08 stays PROPOSED; no POST …/stop route (journey: 404/405)",
+          "RES-01": "PARTIAL (CORE_FIX_REQUIRED): no cross-workspace list; bounded read of the member's readable workspaces (first page of 100)",
+          "RES-02": "RESOLVED: /results/{id} → results::app",
+          "RES-03": "RESOLVED: validations with real kind and outcome, and who recorded them (Core field performed_by_name added)",
+          "RES-04": "DEFERRED · SECURITY_SENSITIVE: the Core says may_validate, but the validation form is not designed; no «Registar validação» without a destination",
+          "RES-05": "CORE_FIX_REQUIRED: no status-transition route",
+          "RES-06": "RESOLVED: lineage by /lineage/result/{id}, both ends resolved by the Core",
+          "RES-07": "RESOLVED · SECURITY_SENSITIVE: Core list now drops results above the reader's classification; environment, execution and superseded-by re-read; an unreadable link does not reach the view",
+          "RES-08": "RESOLVED: recorded from the execution (legacy route kept); no «Novo resultado»",
+          "RES-09": "RESOLVED: created_by_name and performed_by_name from the Core (additive)",
+          "RES-10": "RESOLVED: /results route and registry entry",
+          "RES-11": "RESOLVED: Nye reference result:<id>, re-read with the member's session",
+          "RES-12": "HONESTLY_UNAVAILABLE: no external publication links in the domain",
+          "TR-01": "RESOLVED: /me/files/trash + /me/deleted-notes, ordered by deleted_at (Core field added to both listings)",
+          "TR-02": "RESOLVED: /trash route and registry entry",
+          "TR-03": "RESOLVED · SECURITY_SENSITIVE: restore through /me/files/restore and /me/notes/{id}/restore; typed refusal (gone/denied/conflict); another member's item → refused, unchanged",
+          "TR-04": "HONESTLY_UNAVAILABLE: no retention; no deadline promised",
+          "TR-05": "HONESTLY_UNAVAILABLE · SECURITY_SENSITIVE: permanent delete disabled with the reason; the Notes/Files Workspace purge routes without confirmation were removed",
+          "TR-06": "RESOLVED · SECURITY_SENSITIVE: /files/trash/empty removed (no screen used it; it purged without confirmation)",
+          "TR-07": "PARTIAL: refusals are typed from the HTTP status (404 gone, 403 denied, 409 conflict); the Core has no reason field for restore",
+          "TR-08": "RESOLVED: navigation counts from the Core lists",
+          "TR-09": "HONESTLY_UNAVAILABLE: no personal soft delete beyond files and notes",
+          "TR-10": "RESOLVED: only the owner deletes and sees their trash: deleted_by is the member; not shown",
+          "TK-01": "RESOLVED: no second Tasks application",
+          "HI-01": "DEFERRED (CORE_CONTRACT_REQUIRED) · SECURITY_SENSITIVE: no personal recency record",
+          "HI-02": "DEFERRED (CORE_CONTRACT_REQUIRED): no actor = me filter on /activity",
+          "HI-03": "DEFERRED: Histórico application after HI-01/02",
+          "I71-01": "RESOLVED · SECURITY_SENSITIVE: the Monitor links (Home health widget, status panel) were shown to organisation admins whose gate would refuse; now only with platform.administer",
+          "I71-02": "RESOLVED: Notes trash items opened the editor (404 for a deleted note); they open in Trash",
+          "I71-03": "RESOLVED: a validation read «author no longer available» and «updated» repeated the creation date"
+        },
+        "functional_gaps_design_by_class": {
+          "RESOLVED": 24,
+          "DEFERRED": 7,
+          "HONESTLY_UNAVAILABLE": 5,
+          "RUNTIME_FIX_REQUIRED": 3,
+          "CORE_FIX_REQUIRED": 5,
+          "PARTIAL": 2
+        },
+        "security_sensitive_gaps": {
+          "MON-01": "RESOLVED",
+          "MON-06": "RUNTIME_FIX_REQUIRED",
+          "MON-08": "CORE_FIX_REQUIRED",
+          "MON-09": "CORE_FIX_REQUIRED",
+          "MON-12": "CORE_FIX_REQUIRED",
+          "MON-14": "DEFERRED",
+          "RES-04": "DEFERRED",
+          "RES-07": "RESOLVED",
+          "TR-03": "RESOLVED",
+          "TR-05": "HONESTLY_UNAVAILABLE",
+          "TR-06": "RESOLVED",
+          "HI-01": "DEFERRED",
+          "I71-01": "RESOLVED"
+        },
+        "security_sensitive_gaps_design": 12,
+        "security_sensitive_gaps_open": [
+          "MON-06",
+          "MON-08",
+          "MON-09",
+          "MON-12"
+        ],
+        "reversion_notes": [
+          "A first Monitor-link reversion targeted the agenda clock, not the status panel, and was not detected; re-aimed at the panel argument, it was"
+        ]
+      }
+    },
     {
       "schema_version": 1,
       "design_revision": "D006",
@@ -2129,165 +2685,5 @@
       },
       "feedback": "docs/ui/CODE_FEEDBACK.md"
     }
-  ],
-  "d007_1": {
-    "design_revision": "D007.1",
-    "kind": "corrective registry-completion revision, integrated on the unmerged D007 branch by explicit user decision (one verify, one PR, one merge for D007 + D007.1)",
-    "d007_head_before": "adad2fe",
-    "package": "ocinye-design-complete-D007.1: 615/615 checksums; cumulative, self-contained; 55/55 reference checks (reference only)",
-    "application_method": "apply.sh on the D007 tree: three screens and ui_reg copied; view_models block, OrgActionKind::StopService, pub mods, CSS block anchored; reference copies not committed",
-    "code_fix_in_design_file": "monitor.rs: MetricPlane import moved into the test module (unused in production)",
-    "design_tests": [
-      "monitor::sem_administracao_da_plataforma_nada_se_mostra",
-      "monitor::sem_inventario_nao_ha_botao_parar",
-      "monitor::plano_sem_uso_diz_nao_reportado_e_nunca_zero",
-      "results::nao_ha_novo_resultado_na_barra",
-      "results::validar_so_quando_o_core_oferece",
-      "results::recusa_nao_mostra_o_resultado",
-      "trash::sem_prazo_inventado",
-      "trash::restaurar_indisponivel_nao_submete",
-      "trash::eliminar_definitivamente_nunca_submete"
-    ],
-    "registry": {
-      "before": 24,
-      "added": [
-        "monitor",
-        "results",
-        "trash"
-      ],
-      "after": 27,
-      "not_registered": {
-        "tasks": "CANONICAL_ALIAS (/tasks/* → /my-work/*)",
-        "history": "DOMAIN_NOT_READY",
-        "browser": "RESERVED_FOR_D008"
-      },
-      "provisional": [
-        "terminal"
-      ],
-      "coverage": "docs/ui/application-design-coverage.md"
-    },
-    "applications": {
-      "monitor": "/admin/monitor · platform.administer · essential · SingleInstance",
-      "results": "/results · projects.view · optional (Research) · SingleInstance",
-      "trash": "/trash · personal · essential · SingleInstance"
-    },
-    "notes_destructive": {
-      "actual_semantics": "«Mover para o lixo» is a soft delete (restorable); purge is an irreversible Core delete (row, revisions and shares), owner-only, audited, replay → 404, with no governed confirmation",
-      "ui_offered": "never (no purge control in Notes)",
-      "workspace_paths": "POST /notes/{id}/eliminar (and /me/files/purge, /files/trash/empty) purged without confirmation and no screen used them",
-      "decision": "removed; permanent delete HONESTLY_UNAVAILABLE until a governed destructive capability exists"
-    },
-    "code_changes": [
-      "Core: registry +3; results list filtered by per-result readability; deleted_at in trash listings; result created_by_name/updated_at and validation performed_by_name",
-      "Workspace: controllers/reg + routes/reg; Monitor/Results/Trash wired; purge routes removed; Monitor links for platform administration only; Notes trash items open in Trash; result Nye reference; lineage links to /results",
-      "tests: apps/workspace/tests/d007_1_journeys.rs (4), 2 static guards in d007_contracts.rs; D001 Monitor assertion updated"
-    ],
-    "reversion_proofs": [
-      "results list filtered by per-result readability",
-      "Monitor gate platform.administer",
-      "unreported planes never offered",
-      "stale from the Core's node status",
-      "Monitor link only for platform administration",
-      "purge routes absent",
-      "Notes trash items open in Trash",
-      "no «Registar validação» without a form",
-      "(D007 proofs re-run on the combined tree: journeys pass)"
-    ],
-    "browser_certification": {
-      "1440": "Monitor (summary, memory/disk planes, stale reading, unreported planes named, no services, boundary), Results (list with state navigation, detail with conclusion, origin, validation author, superseded), Trash (list, detail, restore by keyboard with notice, disabled purge)",
-      "924": "no overflow (window 804 px)",
-      "720/820": "no overflow; primary column 144–435 px",
-      "390": "no overflow; every control ≥ 44×44 by hit-testing",
-      "keyboard": "Monitor planes Tab/Enter with visible focus; Trash ↓ and Enter restores; disabled purge not focusable",
-      "i18n": "pt/en/fr on 18 pages (D007.1 + D007 re-check): no raw keys; titles Lixo/Trash/Corbeille",
-      "screen_reader": "NOT_RUN"
-    },
-    "functional_gaps_total": 49,
-    "functional_gaps_design": 46,
-    "functional_gaps_found_in_integration": 3,
-    "functional_gaps": {
-      "REG-01": "RESOLVED (CORE_CONTRACT): ApplicationId::{Monitor, Results, Trash} + manifests; 27 apps; Screen, gates and launcher entries; 24 → 27 assertions",
-      "REG-02": "RESOLVED: Tarefas stays the /tasks/* → /my-work/* alias; not registered (TASKS_STANDALONE = NOT_REGISTERED)",
-      "REG-03": "DEFERRED: Histórico not registered (HISTORY_DOMAIN = NOT_READY)",
-      "REG-04": "DEFERRED: Browser not registered (D008)",
-      "REG-05": "RESOLVED: the manifest's categories prevail",
-      "REG-06": "RESOLVED: nav.audit pt «Registo de auditoria» (kept from D007)",
-      "MON-01": "RESOLVED · SECURITY_SENSITIVE: Monitor gate = platform.administer (the Core's rule for /system/operations); organisation admins and members → 404; Monitor links only for platform administration",
-      "MON-02": "RESOLVED: memory and disk from the typed heartbeat fields",
-      "MON-03": "RESOLVED: current consumption per node from /compute/nodes, with the canonical Compute link",
-      "MON-04": "HONESTLY_UNAVAILABLE: no time series; the screen says so",
-      "MON-05": "RUNTIME_FIX_REQUIRED: CPU, network and GPU utilisation are not reported; named as not reported, never zero",
-      "MON-06": "RUNTIME_FIX_REQUIRED · SECURITY_SENSITIVE: no typed service inventory; section honestly unavailable",
-      "MON-07": "RUNTIME_FIX_REQUIRED: no service state",
-      "MON-08": "CORE_FIX_REQUIRED · SECURITY_SENSITIVE: may_stop / protection not in the Core; no Stop control",
-      "MON-09": "CORE_FIX_REQUIRED · SECURITY_SENSITIVE: no typed stop intent; OrgActionKind::StopService exists but is not parseable from an address",
-      "MON-10": "CORE_FIX_REQUIRED: no asynchronous receipt",
-      "MON-11": "RESOLVED: stale = the Core's effective offline status (node_offline_after) with the last value; no threshold in the Workspace",
-      "MON-12": "CORE_FIX_REQUIRED · SECURITY_SENSITIVE: no stop audit (no stop)",
-      "MON-13": "RESOLVED: summary from /system/operations (counts, no member names)",
-      "MON-14": "DEFERRED · SECURITY_SENSITIVE: G-08 stays PROPOSED; no POST …/stop route (journey: 404/405)",
-      "RES-01": "PARTIAL (CORE_FIX_REQUIRED): no cross-workspace list; bounded read of the member's readable workspaces (first page of 100)",
-      "RES-02": "RESOLVED: /results/{id} → results::app",
-      "RES-03": "RESOLVED: validations with real kind and outcome, and who recorded them (Core field performed_by_name added)",
-      "RES-04": "DEFERRED · SECURITY_SENSITIVE: the Core says may_validate, but the validation form is not designed; no «Registar validação» without a destination",
-      "RES-05": "CORE_FIX_REQUIRED: no status-transition route",
-      "RES-06": "RESOLVED: lineage by /lineage/result/{id}, both ends resolved by the Core",
-      "RES-07": "RESOLVED · SECURITY_SENSITIVE: Core list now drops results above the reader's classification; environment, execution and superseded-by re-read; an unreadable link does not reach the view",
-      "RES-08": "RESOLVED: recorded from the execution (legacy route kept); no «Novo resultado»",
-      "RES-09": "RESOLVED: created_by_name and performed_by_name from the Core (additive)",
-      "RES-10": "RESOLVED: /results route and registry entry",
-      "RES-11": "RESOLVED: Nye reference result:<id>, re-read with the member's session",
-      "RES-12": "HONESTLY_UNAVAILABLE: no external publication links in the domain",
-      "TR-01": "RESOLVED: /me/files/trash + /me/deleted-notes, ordered by deleted_at (Core field added to both listings)",
-      "TR-02": "RESOLVED: /trash route and registry entry",
-      "TR-03": "RESOLVED · SECURITY_SENSITIVE: restore through /me/files/restore and /me/notes/{id}/restore; typed refusal (gone/denied/conflict); another member's item → refused, unchanged",
-      "TR-04": "HONESTLY_UNAVAILABLE: no retention; no deadline promised",
-      "TR-05": "HONESTLY_UNAVAILABLE · SECURITY_SENSITIVE: permanent delete disabled with the reason; the Notes/Files Workspace purge routes without confirmation were removed",
-      "TR-06": "RESOLVED · SECURITY_SENSITIVE: /files/trash/empty removed (no screen used it; it purged without confirmation)",
-      "TR-07": "PARTIAL: refusals are typed from the HTTP status (404 gone, 403 denied, 409 conflict); the Core has no reason field for restore",
-      "TR-08": "RESOLVED: navigation counts from the Core lists",
-      "TR-09": "HONESTLY_UNAVAILABLE: no personal soft delete beyond files and notes",
-      "TR-10": "RESOLVED: only the owner deletes and sees their trash: deleted_by is the member; not shown",
-      "TK-01": "RESOLVED: no second Tasks application",
-      "HI-01": "DEFERRED (CORE_CONTRACT_REQUIRED) · SECURITY_SENSITIVE: no personal recency record",
-      "HI-02": "DEFERRED (CORE_CONTRACT_REQUIRED): no actor = me filter on /activity",
-      "HI-03": "DEFERRED: Histórico application after HI-01/02",
-      "I71-01": "RESOLVED · SECURITY_SENSITIVE: the Monitor links (Home health widget, status panel) were shown to organisation admins whose gate would refuse; now only with platform.administer",
-      "I71-02": "RESOLVED: Notes trash items opened the editor (404 for a deleted note); they open in Trash",
-      "I71-03": "RESOLVED: a validation read «author no longer available» and «updated» repeated the creation date"
-    },
-    "functional_gaps_design_by_class": {
-      "RESOLVED": 24,
-      "DEFERRED": 7,
-      "HONESTLY_UNAVAILABLE": 5,
-      "RUNTIME_FIX_REQUIRED": 3,
-      "CORE_FIX_REQUIRED": 5,
-      "PARTIAL": 2
-    },
-    "security_sensitive_gaps": {
-      "MON-01": "RESOLVED",
-      "MON-06": "RUNTIME_FIX_REQUIRED",
-      "MON-08": "CORE_FIX_REQUIRED",
-      "MON-09": "CORE_FIX_REQUIRED",
-      "MON-12": "CORE_FIX_REQUIRED",
-      "MON-14": "DEFERRED",
-      "RES-04": "DEFERRED",
-      "RES-07": "RESOLVED",
-      "TR-03": "RESOLVED",
-      "TR-05": "HONESTLY_UNAVAILABLE",
-      "TR-06": "RESOLVED",
-      "HI-01": "DEFERRED",
-      "I71-01": "RESOLVED"
-    },
-    "security_sensitive_gaps_design": 12,
-    "security_sensitive_gaps_open": [
-      "MON-06",
-      "MON-08",
-      "MON-09",
-      "MON-12"
-    ],
-    "reversion_notes": [
-      "A first Monitor-link reversion targeted the agenda clock, not the status panel, and was not detected; re-aimed at the panel argument, it was"
-    ]
-  }
+  ]
 }

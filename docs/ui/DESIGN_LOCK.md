@@ -1,3 +1,26 @@
+# DESIGN_LOCK · D008
+
+D001–D007.1 mantêm os seus locks. A D008 fecha:
+
+**Terminal (D008-A):** cromado (título, contexto, estado do Core, Procurar, Limpar ecrã, Ajuda) · linha de comandos e contexto no prompt · entradas (eco redigido + estado com ícone, texto e código + duração + capability) · blocos (nota, tabela, factos, ajuda, ligações, Nye, recibo) · ajuda/autocompletar a partir do registo · confirmação por plano no diálogo partilhado D006 · colagem de várias linhas em espera · procurar no ecrã · modelo móvel (toolbar de ícones com nome, prompt fixo acima da doca, 44 px).
+
+**Browser (D008-B):** faixa de abas (id interno; compactação >8 + «Todas as abas») · barra (recuar/avançar só onde o runtime dá histórico; recarregar/parar; origem com estado de ligação; «Endereço pedido» na Web; runtime; Nye; transferências; menu) · linhas de aviso do cromado (Web, permissões, pop-ups, IDN, ecrã inteiro) · **faixa «Conteúdo externo · origem»** e moldura da vista · estados internos (nova aba, não é endereço, esquema bloqueado, falha, certificado, a carregar, aba falhou, pode recusar) · painéis laterais (Nye com pré-visualização do envio; transferências; ligação) · modelo móvel (chip de origem, contador de abas, lista de abas, barra inferior 48 px).
+
+Não se reinterpretam superfícies de outras aplicações. Os estados DESKTOP/DEDICATED estão fechados em forma; o comportamento depende do adaptador nativo.
+
+
+---
+
+# Histórico (D007.1 e anteriores)
+
+# DESIGN_LOCK — D007.1
+
+Locked: `ui/apps/monitor.rs`, `ui/apps/results.rs`, `ui/apps/trash.rs`, their VMs (D007.1 block), `.oc-mon-*`, `.oc-rsl-*`, `.oc-trash-*` and their responsive rules, the `org.act.stop_service` confirmation copy, `ui_reg` strings.
+Rules: Monitor never shows a value the runtime did not report, never shows zero for unreported, never shows a chart without a series, never offers Stop without a typed inventory and `may_stop`. Resultados has no creation in the toolbar. Lixo never promises a deadline and never submits permanent deletion until FG-D4.1-02 is resolved.
+Preserved: D001–D007 unchanged except the additive `StopService` variant and the `nav.audit` label. Not locked: Terminal, Browser.
+
+---
+
 # DESIGN_LOCK — Design revision D007
 
 Locked (additive; D001–D006 locks unchanged): `ui/apps/messages.rs`, `fabric.rs` (IA, Agentes, Computação), `ledger.rs` (Meus Recursos, Actividade, Auditoria), `member.rs` (Definições, Ajuda), `ops.rs`; the D007 block of `oc-apps.css` (.oc-msg-*, .oc-ops-*); `ops()` in `oc-apps.js`; `i18n/ui_ops.rs`. Rules: IA is not a chat; agents show the authority boundary; compute shows only reported numbers; activity redacts; audit is read-only with allow-listed metadata; settings edit only the member layer.

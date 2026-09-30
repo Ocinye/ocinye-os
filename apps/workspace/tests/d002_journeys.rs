@@ -103,14 +103,14 @@ async fn uma_aplicacao_de_uma_janela_abre_uma_e_volta_a_focar_a_mesma() {
     };
     let (_, c) = membro(&s).await;
 
-    // 1 · Abrir: uma janela, com o estado honesto do `app_pending` dentro
-    // (o Terminal: Meus Recursos ganhou o seu ecrã na D007).
+    // 1 · Abrir: uma janela, com o ecrã do Terminal dentro (D008; até lá era
+    // o `app_pending`).
     let (status, html) = s.html("/terminal", &c).await;
     assert_eq!(status, 200);
     assert!(html.contains(r#"data-oc="wm-layer""#) && html.contains(r#"data-oc="win""#));
     assert!(
-        html.contains("oc-pending oc-win__state"),
-        "a janela não tem o app_pending"
+        html.contains(r#"data-oc="term""#),
+        "a janela não tem o Terminal"
     );
     assert!(
         html.contains("/static/wm-engine.js"),

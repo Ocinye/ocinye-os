@@ -1,14 +1,15 @@
-# Application design coverage — D007 + D007.1
+# Application design coverage — D008
 
-Estado depois da integração da D007 e da revisão correctiva D007.1, no ramo `feat/design-d007`. Origem: o registo (`ocinye_contracts::ApplicationId::ALL` = `experience/apps.rs` `APPLICATIONS`), não o protótipo.
+Estado depois da integração da D008 (Ocinye Terminal e Ocinye Browser), no ramo `feat/design-d008`, sobre `main @ 7a23011` (D007 + D007.1). Origem: o registo (`ocinye_contracts::ApplicationId::ALL` = `experience/apps.rs` `APPLICATIONS`), não o protótipo.
 
 ## Realidade
 
-- **O registo tem 27 aplicações**: as 24 de antes e as três que a D007.1 registou (Monitor de Actividade, Resultados, Lixo). O teste `o_registo_tem_27_e_so_o_terminal_esta_pendente` (`apps/workspace/tests/d007_1_journeys.rs`) enumera-as, confirma ids e rotas únicos, nomes e descrições em pt/en/fr, e abre cada uma.
-- **Só o Terminal continua `app_pending`** (D008). O Browser não está registado (D008 regista-o).
+- **O registo tem 28 aplicações**: as 24 de antes da D007.1, as três que ela registou (Monitor de Actividade, Resultados, Lixo) e o Browser da D008. O teste `o_registo_tem_28_e_nenhuma_esta_pendente` (`apps/workspace/tests/d007_1_journeys.rs`) enumera-as, confirma ids e rotas únicos, nomes e descrições em pt/en/fr, e abre cada uma.
+- **Nenhuma aplicação registada fica provisória.** O Terminal deixou o `app_pending` (D008-A); o Browser entrou com uma entrada (D008-B).
+- **O Browser é real no runtime Web** (moldura isolada, só `https:`, recurso honesto). No Desktop e no Dedicado é `DESKTOP_RUNTIME_REQUIRED` (`DESKTOP_WEBVIEW_RUNTIME_VALIDATION = NOT_CERTIFIED`): não há casca nativa.
 - O protótipo de 30 fichas (`reference/Ocinye OS.dc.html`, `MODS`) é evidência histórica do Design, não verdade do produto: o Gestor de Aplicações deriva do registo e da autorização.
 - Tarefas não é uma aplicação: `/tasks/new` e `/tasks/{id}` redireccionam para O Meu Trabalho (o mesmo domínio). Histórico não existe: o Ocinye não regista o que cada membro abre, e a Actividade não o substitui.
-- Janelas: MultiWindow = Notas, Ficheiros; todas as outras SingleInstance.
+- Janelas: MultiWindow = Notas, Ficheiros; todas as outras SingleInstance. O Terminal e o Browser só se desenham na sua rota (o cliente de cada um e, no Browser, a política de molduras); numa janela de fundo mostram a ligação para o endereço.
 
 ## Matriz
 
@@ -40,9 +41,9 @@ Estado depois da integração da D007 e da revisão correctiva D007.1, no ramo `
 | 24 | audit | Registo de auditoria · Audit log · Journal d’audit | /audit | Administration | audit.view | D007 | REGISTERED | real screen |
 | 25 | settings | Definições · Settings · Paramètres | /settings | Administration | — | D007 | REGISTERED | real screen |
 | 26 | help | Ajuda · Help · Aide | /help | Administration | — | D007 | REGISTERED | real screen |
-| 27 | terminal | Terminal (ocsh) | /terminal | System | — | D008 | REGISTERED · RESERVED_FOR_D008 | app_pending (the only one) |
-| 28 | — | Tarefas (prototype) | /tasks/* → /my-work/* | — | — | — | PROTOTYPE_ONLY · CANONICAL_ALIAS / REDIRECT | redirect to O Meu Trabalho |
-| 29 | — | Histórico (prototype) | — | — | — | — | PROTOTYPE_ONLY · DOMAIN_NOT_READY | no route |
-| 30 | — | Browser (prototype) | — | — | — | D008 | PROTOTYPE_ONLY · RESERVED_FOR_D008 | not registered |
+| 27 | terminal | Terminal (ocsh) | /terminal | System | — (each command by the Core) | D008 | REGISTERED | real screen (D008-A) |
+| 28 | browser | Browser · Browser · Browser | /browser | System | — (Instance may deactivate) | D008 | REGISTERED_BY_D008 | real screen, Web runtime (Desktop: DESKTOP_RUNTIME_REQUIRED) |
+| 29 | — | Tarefas (prototype) | /tasks/* → /my-work/* | — | — | — | PROTOTYPE_ONLY · CANONICAL_ALIAS / REDIRECT | redirect to O Meu Trabalho |
+| 30 | — | Histórico (prototype) | — | — | — | — | PROTOTYPE_ONLY · DOMAIN_NOT_READY | no route |
 
-Legenda: REGISTERED — no registo, com ecrã; REGISTERED_BY_D007.1 — registado nesta revisão; PROTOTYPE_ONLY — só no protótipo; RESERVED_FOR_D008 — fica para a D008; CANONICAL_ALIAS / REDIRECT — um endereço que leva à aplicação canónica; DOMAIN_NOT_READY — o domínio não existe.
+Legenda: REGISTERED — no registo, com ecrã; REGISTERED_BY_D007.1 / REGISTERED_BY_D008 — registado nessa revisão; PROTOTYPE_ONLY — só no protótipo; CANONICAL_ALIAS / REDIRECT — um endereço que leva à aplicação canónica; DOMAIN_NOT_READY — o domínio não existe.

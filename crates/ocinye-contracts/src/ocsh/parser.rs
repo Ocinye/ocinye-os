@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use super::lexer::{lex, LexError, Token};
 use super::registry::{
     command, distance, family, CommandSpec, ValueKind, FAMILIES, HOST_SHELL_WORDS, POSIX_HINTS,
+    POSIX_WORDS,
 };
 use super::ExitCode;
 
@@ -412,12 +413,16 @@ fn stage(words: &[(String, bool)]) -> Result<Stage, ParseError> {
     }
 }
 
-/// «Quis dizer …?»: a palavra POSIX equivalente, ou a família mais próxima
-/// (distância ≤ 2).
+/// «Quis dizer …?»: o comando registado equivalente a uma palavra POSIX, ou a
+/// família mais próxima (distância ≤ 2). Nunca um comando que não existe; uma
+/// palavra POSIX sem equivalente não sugere nada (D008 · T-08).
 #[must_use]
 pub fn suggest(word: &str) -> Option<String> {
     if let Some((_, hint)) = POSIX_HINTS.iter().find(|(w, _)| *w == word) {
         return Some((*hint).to_owned());
+    }
+    if POSIX_WORDS.contains(&word) {
+        return None;
     }
     FAMILIES
         .iter()
@@ -480,12 +485,21 @@ mod tests {
             }
         );
         assert_eq!(e.exit(), ExitCode::NotFound);
+        // D008 · T-08: `ls` não tem equivalente registado — nada se sugere.
         let e = parse("ls -la").unwrap_err();
         assert_eq!(
             e,
             ParseError::UnknownCommand {
                 word: "ls".into(),
-                suggestion: Some("files ls".into())
+                suggestion: None
+            }
+        );
+        let e = parse("cls").unwrap_err();
+        assert_eq!(
+            e,
+            ParseError::UnknownCommand {
+                word: "cls".into(),
+                suggestion: Some("clear".into())
             }
         );
         let e = parse("resume este projecto por favor").unwrap_err();

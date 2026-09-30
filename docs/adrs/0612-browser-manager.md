@@ -75,3 +75,33 @@ aplicação na Web — nunca a esconde.
 - Na Web, «resumir esta página» não é prometido; a matriz diz `limitado`.
 - O comportamento do Browser na Web é testado com uma página de teste que
   recusa incorporação (viagem obrigatória).
+
+## Emenda — D008 (2026-09-30)
+
+A D008 implementou o runtime **Web** e registou a aplicação; o resto fica como
+especificação.
+
+1. **Registo.** `ApplicationId::Browser`, `System`, `/browser`,
+   `SingleInstance` (as abas vivem dentro da janela; `MultiWindow` só com
+   partições privadas reais), sem direito próprio, activo em todos os perfis. O
+   registo passou de 27 para 28 aplicações.
+2. **`NetworkUse::ClientWeb`** (variante nova do manifesto, ADR-0016): a
+   aplicação precisa da web **pelo cliente**; o Core não faz pedidos por conta
+   dela e não há proxy.
+3. **Web.** Uma moldura `<iframe sandbox="allow-scripts allow-forms
+   allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"
+   allow="">` — sem `allow-same-origin` nem `allow-top-navigation`. Só a
+   resposta de `/browser` aceita molduras, e só `https:`: um endereço `http:`
+   abre pelo recurso honesto (um separador do navegador). Sem recuar, avançar
+   nem título (não são observáveis entre origens); a barra diz «Endereço
+   pedido». «Abrir num separador do navegador» está sempre disponível. A recusa
+   de incorporação não se detecta com fiabilidade, e não se finge detectar.
+4. **Esquemas.** Só `http`/`https`; `javascript:`, `data:`, `file:`, `blob:` e
+   esquemas próprios são «Endereço bloqueado». Texto que não é endereço é «Não
+   é um endereço» — não há motor de pesquisa configurado.
+5. **Desktop e Dedicado** ficam `DESKTOP_RUNTIME_REQUIRED`
+   (`DESKTOP_WEBVIEW_RUNTIME_VALIDATION = NOT_CERTIFIED`): não há casca nativa
+   no repositório. Histórico e marcadores não existem; a navegação privada
+   precisa de uma partição efémera real (Desktop). O Nye sobre uma página
+   (ADR-0616) só existe no Desktop, com a pré-visualização do que vai.
+6. **Terminal ≠ Browser** ([ADR-0623](0623-terminal-and-browser-separate-boundaries.md)).

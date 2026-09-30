@@ -215,7 +215,10 @@ fn wm_vm(desk: &Desk, allowed: impl Fn(ApplicationId) -> bool) -> Option<WmVm> {
     })
 }
 
-/// As aplicações cujo corpo existe e responde a `?frame=1`.
+/// As aplicações com ecrã do Design: o corpo pede-se por `?frame=1`. O
+/// Terminal e o Browser respondem-lhe sem corpo (o cliente de cada um só
+/// existe na sua rota, ADR-0623), e a janela de fundo mostra a ligação para o
+/// seu endereço. Depois da D008 nenhuma aplicação registada fica `app_pending`.
 #[must_use]
 pub fn has_screen(app: ApplicationId) -> bool {
     matches!(
@@ -244,6 +247,8 @@ pub fn has_screen(app: ApplicationId) -> bool {
             | ApplicationId::Monitor
             | ApplicationId::Results
             | ApplicationId::Trash
+            | ApplicationId::Terminal
+            | ApplicationId::Browser
     )
 }
 
@@ -326,16 +331,16 @@ mod tests {
             .windows
             .iter()
             .all(|w| w.content == WindowContent::Loading));
-        // Uma aplicação sem ecrã do Design continua a dizer `app_pending`
-        // (os Dados ganharam o seu na D005, a Computação na D007; o Terminal
-        // fica para a D008).
+        // Depois da D008 nenhuma aplicação registada fica `app_pending`: o
+        // Terminal também pede o seu corpo (e responde-lhe sem corpo).
         d.open(ApplicationId::Terminal, "/terminal", SingleInstance, false)
             .unwrap();
         d.open(ApplicationId::Datasets, "/datasets", SingleInstance, false)
             .unwrap();
         let vm = wm_vm(&d, |a| a != ApplicationId::Notes).unwrap();
         let terminal = vm.windows.iter().find(|w| w.app_id == "terminal").unwrap();
-        assert_eq!(terminal.content, WindowContent::Pending);
+        assert_eq!(terminal.content, WindowContent::Loading);
+        assert!(has_screen(ApplicationId::Browser));
         let dados = vm.windows.iter().find(|w| w.app_id == "datasets").unwrap();
         assert_eq!(dados.content, WindowContent::Loading);
         // Notas aceita várias janelas, mas não é visível: não se oferece.

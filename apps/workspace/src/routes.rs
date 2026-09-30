@@ -132,6 +132,7 @@ pub const ROUTES: &[&str] = &[
     "/help",
     "/terminal",
     "/terminal/exec",
+    "/browser",
     "/settings",
     "/settings/security",
     "/settings/language",
@@ -463,8 +464,9 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/tasks/new", get(|| async { Redirect::to("/my-work/new") }))
         .route("/tasks/{task_id}", get(research::task_legacy))
         .route("/help", get(ops::help_page))
-        .route("/terminal", get(terminal))
-        .route("/terminal/exec", post(terminal_exec))
+        .route("/terminal", get(sys::terminal_page))
+        .route("/terminal/exec", post(sys::terminal_exec))
+        .route("/browser", get(sys::browser_page))
         .route("/settings", get(ops::settings_account))
         .route("/settings/security", get(ops::settings_security))
         .route(
@@ -912,17 +914,7 @@ async fn security_headers(
         ("x-frame-options", "DENY"),
         ("referrer-policy", "same-origin"),
         ("cross-origin-opener-policy", "same-origin"),
-        (
-            "content-security-policy",
-            "default-src 'none'; \
-             script-src 'self'; \
-             style-src 'self'; \
-             font-src 'self'; \
-             img-src 'self' data:; \
-             connect-src 'self'; \
-             frame-src 'self'; \
-             form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
-        ),
+        ("content-security-policy", CONTENT_SECURITY_POLICY),
         (
             "permissions-policy",
             "geolocation=(), microphone=(), camera=()",
@@ -941,6 +933,17 @@ async fn security_headers(
     }
     response
 }
+
+/// A política de conteúdo de todas as respostas. Uma resposta que precise de
+/// outra (só `/browser`, D008) põe a sua; esta entra onde nenhuma foi posta.
+pub(crate) const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; \
+     script-src 'self'; \
+     style-src 'self'; \
+     font-src 'self'; \
+     img-src 'self' data:; \
+     connect-src 'self'; \
+     frame-src 'self'; \
+     form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
 
 /// Recusa escritas que não venham desta origem.
 ///
@@ -1473,6 +1476,19 @@ fn shell_page(
     body: impl leptos::IntoView + 'static,
     dialog: Option<leptos::prelude::AnyView>,
 ) -> Response {
+    shell_page_with(title, engine, body, dialog, None)
+}
+
+/// A mesma página, com o cliente de **uma** aplicação que só existe na sua
+/// rota (D008 · ADR-0623): `oc-terminal.js` em `/terminal`, `oc-browser.js` em
+/// `/browser`. Entra depois dos scripts do Design, com `defer`.
+fn shell_page_with(
+    title: &str,
+    engine: bool,
+    body: impl leptos::IntoView + 'static,
+    dialog: Option<leptos::prelude::AnyView>,
+    client: Option<&'static str>,
+) -> Response {
     use leptos::prelude::*;
     // Um diálogo bloqueante por resposta, depois da casca: o de fechar com
     // trabalho por guardar ou a confirmação da Nye (HANDOFF D003 §4).
@@ -1495,6 +1511,9 @@ fn shell_page(
                 r#"<script src="/static/wm-engine.js" defer></script><script src="/static/files-engine.js" defer></script>"#,
             );
         }
+    }
+    if let (Some(src), Some(at)) = (client, page.find("</head>")) {
+        page.insert_str(at, &format!(r#"<script src="{src}" defer></script>"#));
     }
     Html(page).into_response()
 }
@@ -3802,61 +3821,6 @@ async fn save_apps(
     .await;
 
     Redirect::to("/settings/apps?ok=1").into_response()
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn terminal(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Terminal).await
-}
-
-/// `POST /terminal/exec` — leva uma linha ao Core e devolve-a localizada.
-///
-/// Não faz parse que conte nem decide nada: o Core faz os dois (ADR-0312 §2).
-/// O que volta é JSON para o `terminal.js`, que o desenha com nós de texto.
-async fn terminal_exec(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Json(body): Json<ocinye_contracts::ocsh::wire::ExecRequest>,
-) -> Response {
-    let Some(member) = current_member(&state, &headers) else {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({ "error": "sem sessão" })),
-        )
-            .into_response();
-    };
-    let pedido = serde_json::json!({ "line": body.line, "context": body.context });
-    let resposta = api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/commands/exec",
-        &pedido,
-    )
-    .await;
-    match resposta {
-        Ok(valor) => {
-            match serde_json::from_value::<ocinye_contracts::ocsh::wire::ExecResponse>(valor) {
-                Ok(r) => Json(crate::terminal::localize(&r)).into_response(),
-                Err(_) => {
-                    Json(crate::terminal::transport_failure("ocsh.err.failed", 1)).into_response()
-                }
-            }
-        }
-        Err(ApiFailure::Unauthorised) => (
-            StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({ "error": "sem sessão" })),
-        )
-            .into_response(),
-        Err(ApiFailure::ApplicationInactive | ApiFailure::Unavailable(_)) => Json(
-            crate::terminal::transport_failure("ocsh.err.unavailable", 69),
-        )
-        .into_response(),
-        Err(ApiFailure::Forbidden | ApiFailure::Denied) => {
-            Json(crate::terminal::transport_failure("ocsh.denied", 77)).into_response()
-        }
-        Err(_) => Json(crate::terminal::transport_failure("ocsh.err.network", 1)).into_response(),
-    }
 }
 
 /// Largest body the Workspace accepts for a profile photograph.
@@ -7218,3 +7182,4 @@ mod org;
 mod productivity;
 mod reg;
 mod research;
+mod sys;

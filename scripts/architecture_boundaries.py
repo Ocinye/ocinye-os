@@ -367,10 +367,128 @@ def contencao_do_runtime(problemas):
     return len(ficheiros)
 
 
+# ── Terminal ≠ Browser (ADR-0623) ──────────────────────────────────────────
+#
+# Duas fronteiras de confiança opostas: o ocsh recebe texto de um membro e
+# converte-o em capabilities do Core; o Browser recebe conteúdo hostil e não
+# lhe dá nada do Ocinye. Não há camada de execução partilhada, nem ponte entre
+# os dois, nem processo do anfitrião no caminho do ocsh.
+TERMINAL = (
+    "apps/workspace/static/oc-terminal.js",
+    "apps/workspace/src/ui/apps/terminal.rs",
+    "apps/workspace/src/terminal.rs",
+    "crates/ocinye-core/src/modules/terminal/mod.rs",
+)
+BROWSER = (
+    "apps/workspace/static/oc-browser.js",
+    "apps/workspace/src/ui/apps/browser.rs",
+)
+# O que o Terminal nunca nomeia do Browser, e o contrário.
+DO_BROWSER = (r"oc-browser", r"OcBrowser", r"ui::apps::browser", r"\bbrowser::", r"ocinyeRuntime\.browser")
+DO_TERMINAL = (r"oc-terminal", r"OcTerminal", r"ui::apps::terminal", r"\bterminal::", r"/terminal/exec", r"commands/exec")
+# Nenhuma camada genérica de execução, em lado nenhum da árvore de produção.
+EXECUCAO_GENERICA = r"\b(SystemRuntime|GenericExecutionRuntime|OcshBrowserBridge)\b|Runtime\.(execute|shell|native_call|webview_exec)\b"
+# Nenhum processo no caminho do ocsh.
+PROCESSO = r"std::process|tokio::process|Command::new|/bin/(ba|z)?sh\b"
+# Cada cliente só na sua rota: o literal do script existe num sítio só.
+CLIENTES = {
+    "/static/oc-terminal.js": "apps/workspace/src/routes/sys.rs",
+    "/static/oc-browser.js": "apps/workspace/src/routes/sys.rs",
+}
+
+
+def sem_testes(texto):
+    """O texto sem os módulos `#[cfg(test)] mod … {`, até à `}` da coluna 0.
+
+    Cortar no primeiro `#[cfg(test)]` deixava passar código de produção escrito
+    depois do módulo de testes, e contar chavetas engana-se com `'{'` dentro
+    dos testes do lexer (as duas provadas por reversão). O rustfmt fecha um
+    módulo de topo numa linha `}` sozinha."""
+    out, dentro = [], False
+    linhas = texto.split("\n")
+    for n, linha in enumerate(linhas):
+        if not dentro and linha.startswith("#[cfg(test)]") and n + 1 < len(linhas) \
+                and re.match(r"(pub )?mod \w+ \{$", linhas[n + 1]):
+            dentro = True
+            continue
+        if dentro:
+            if linha == "}":
+                dentro = False
+            continue
+        out.append(linha)
+    return "\n".join(out)
+
+
+def separacao_terminal_browser(problemas):
+    lidos = 0
+    for grupo, marca in ((TERMINAL, "ocsh"), (BROWSER, "brw")):
+        for f in grupo:
+            caminho = pathlib.Path(f)
+            if not caminho.exists() or marca not in caminho.read_text(encoding="utf-8"):
+                problemas.append(
+                    "SEPARAÇÃO TERMINAL/BROWSER NÃO VERIFICÁVEL:\n"
+                    "      %s não existe ou não nomeia `%s`.\n\n"
+                    "      Um universo vazio aprova tudo." % (f, marca)
+                )
+                return 0
+            lidos += 1
+    for grupo, proibidos, outro in ((TERMINAL, DO_BROWSER, "Browser"), (BROWSER, DO_TERMINAL, "Terminal")):
+        for f in grupo:
+            texto = pathlib.Path(f).read_text(encoding="utf-8")
+            for padrao in proibidos:
+                if re.search(padrao, texto):
+                    problemas.append(
+                        "PONTE ENTRE TERMINAL E BROWSER:\n"
+                        "      %s nomeia `%s` (do %s)\n\n"
+                        "      ADR-0623: duas fronteiras, nenhuma ponte e nenhuma\n"
+                        "      referência cruzada." % (f, padrao, outro)
+                    )
+    for raiz in ("apps/workspace/src", "apps/workspace/static", "crates", "services"):
+        for f in sorted(pathlib.Path(raiz).rglob("*")):
+            if f.suffix not in (".rs", ".js") or "/tests/" in str(f) or "target" in f.parts:
+                continue
+            texto = f.read_text(encoding="utf-8", errors="ignore")
+            m = re.search(EXECUCAO_GENERICA, texto)
+            if m:
+                problemas.append(
+                    "CAMADA DE EXECUÇÃO GENÉRICA:\n"
+                    "      %s nomeia `%s`\n\n"
+                    "      ADR-0623 §2: não existe Runtime.execute nem um\n"
+                    "      executor partilhado." % (f, m.group(0))
+                )
+    ocsh = [pathlib.Path(f) for f in TERMINAL] + sorted(
+        pathlib.Path("crates/ocinye-contracts/src/ocsh").glob("*.rs")
+    )
+    for f in ocsh:
+        # Os testes nomeiam `/bin/sh` para provar que é recusado: só conta o
+        # código que compila para produção.
+        m = re.search(PROCESSO, sem_testes(f.read_text(encoding="utf-8")))
+        if m:
+            problemas.append(
+                "PROCESSO NO CAMINHO DO OCSH:\n"
+                "      %s nomeia `%s`\n\n"
+                "      O ocsh nunca alcança o anfitrião (ADR-0312 §1)." % (f, m.group(0))
+            )
+    for literal, dono in CLIENTES.items():
+        donos = [
+            str(f)
+            for f in sorted(pathlib.Path("apps/workspace/src").rglob("*.rs"))
+            if literal in f.read_text(encoding="utf-8")
+        ]
+        if donos != [dono]:
+            problemas.append(
+                "CLIENTE FORA DA SUA ROTA:\n"
+                "      `%s` aparece em %s\n\n"
+                "      Esperado: só em %s (ADR-0623 §5)." % (literal, donos or "lado nenhum", dono)
+            )
+    return lidos
+
+
 def main():
     normais, dev, build = grafo()
     problemas = []
     lidos = contencao_do_runtime(problemas)
+    separados = separacao_terminal_browser(problemas)
 
     # A promoção silenciosa é verificada primeiro, e em separado, porque é a
     # que o nome da aresta esconde: `ocinye-workspace → ocinye-core` lê-se igual
@@ -460,6 +578,11 @@ def main():
         "  estão declaradas uma a uma.\n"
         "  Dentro do Core, o Runtime é nomeado num módulo só: os outros %d\n"
         "  ficheiros não conhecem o motor." % (len(EXPERIENCE_RUNTIME), lidos - 1)
+    )
+    print(
+        "  Terminal e Browser: %d ficheiros lidos, nenhuma referência cruzada,\n"
+        "  nenhuma camada de execução genérica, nenhum processo no ocsh (ADR-0623)."
+        % separados
     )
     return 0
 

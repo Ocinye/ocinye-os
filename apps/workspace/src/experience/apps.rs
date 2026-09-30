@@ -444,6 +444,19 @@ pub const APPLICATIONS: &[Application] = &[
             "ligne de commande",
         ],
     },
+    Application {
+        screen: Screen::Browser,
+        keywords: &[
+            "browser",
+            "navegador",
+            "navigateur",
+            "web",
+            "internet",
+            "site",
+            "página",
+            "page",
+        ],
+    },
 ];
 
 /// As aplicações visíveis a este membro, na ordem do registo.
@@ -595,10 +608,10 @@ mod tests {
             by_id("ask").is_none(),
             "Ask não é uma aplicação do lançador"
         );
-        // Vinte e nove ecrãs menos os dois da superfície de comando.
+        // Trinta ecrãs menos os dois da superfície de comando.
         assert_eq!(
             APPLICATIONS.len(),
-            27,
+            28,
             "o registo deixou de cobrir todos os ecrãs"
         );
     }

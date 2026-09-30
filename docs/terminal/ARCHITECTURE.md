@@ -28,7 +28,7 @@ atalhos, e não conhece o anfitrião.
 
 ```text
 Terminal (browser)
-  │  linha de texto + contexto do separador
+  │  linha de texto + contexto da sessão (uma por janela)
   ▼
 Workspace BFF  POST /terminal/exec        (sessão no servidor, Origin verificado)
   │
@@ -39,7 +39,7 @@ Core  POST /api/v1/commands/exec
   │  3. invocação tipada                  → CapabilityRequest
   │  4. executor agentic                  → autoridade fresca · política · esquema · risco · auditoria
   │     └ risco que exige confirmação     → ActionPlan (digest, pessoa, 15 min, uso único)
-  │  5. pipeline tipado (se houver)       → filter / sort / head / count sobre a saída
+  │  5. composição tipada `|` (se houver) → filter / sort / head / count / export sobre a saída
   ▼
 resultado estruturado  {exit, blocks[], capability, audit_id, ms}
   ▼
@@ -70,17 +70,32 @@ registo para ajuda e autocompletar imediatos, mas nunca decide o que executa.
 3. **Sem anfitrião.** Não há `sh -c`, `exec`, globbing, substituição de
    comandos, redirecção para ficheiros, nem variáveis do processo. `sudo`,
    `bash`, `ssh`, … são reconhecidos e recusados (`126`).
-4. **Confirmações = planos.** Risco médio/alto cria um `ActionPlan` de um passo;
-   a confirmação é a aprovação existente (pessoa + digest + 15 min) e a execução
-   é o `execute` existente (uso único por `UPDATE` condicional). A palavra
-   escrita (REVOGAR/REVOKE/RÉVOQUER) é exigida pelo Core, não pelo cliente.
-5. **Contexto por separador.** Cada sessão de terminal leva o seu contexto
-   (pessoal ou um ambiente); o Core reautoriza-o em cada comando.
+4. **Confirmações = planos, na confirmação partilhada.** Risco que exige
+   confirmação cria um `ActionPlan` de um passo; a confirmação é a aprovação
+   existente (pessoa + digest + 15 min), mostrada no **diálogo partilhado** do
+   Ocinye OS sobre o plano congelado, e a execução é o `execute` existente (uso
+   único por `UPDATE` condicional). **Não se escreve nenhuma palavra**
+   (`SIM`, `CONFIRMAR`, `REVOGAR`…): o Terminal não inventa uma segunda
+   autoridade de confirmação (D008, emenda à ADR-0312 §5). Nenhum comando do
+   registo v1 exige hoje confirmação; um que a exija é recusado (77) até o
+   plano chegar ao Terminal (TERMINAL-11).
+5. **Uma sessão por janela.** O Terminal é `SingleInstance`; a sessão leva o
+   seu contexto (pessoal ou um ambiente) e o Core reautoriza-o em cada comando.
+   Não há separadores, painéis divididos nem «sessão de administração»; `exit`
+   fecha a janela do Terminal.
 6. **Espaço de nomes virtual.** `~` é o contexto; `~/files` é o armazenamento do
    Ocinye resolvido por IDs. Nenhum caminho vira caminho do anfitrião.
 7. **Saída estruturada.** O Core devolve blocos tipados; o cliente nunca
    interpreta HTML vindo do Core.
-8. **Sem Gestor de Janelas não há `window`/`desktop`.** `open` navega para a
+8. **Sem pipes da shell; a composição tipada é permitida.** `|` é um operador
+   de composição do ocsh: cada etapa resolve-se num registo fechado de passos
+   tipados (`filter`, `sort`, `head`, `count`, `export json`) e opera sobre os
+   dados já devolvidos pelo Core. Nunca passa texto a um processo, nunca
+   resolve executáveis e nunca invoca `/bin/sh`, bash, zsh, PowerShell ou cmd.
+9. **Terminal ≠ Browser** ([ADR-0623](../adrs/0623-terminal-and-browser-separate-boundaries.md)):
+   nenhuma camada de execução partilhada, nenhuma ponte entre os dois, e um
+   guarda (`scripts/architecture_boundaries.py`) que o prova.
+10. **Sem Gestor de Janelas não há `window`/`desktop`.** `open` navega para a
    aplicação (nova janela do browser) até o G-05 existir.
 
 ## Fases (M0–M10)

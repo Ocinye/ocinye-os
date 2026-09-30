@@ -1031,9 +1031,9 @@ async fn as_nove_funcionam_sem_ia_numa_janela_e_por_frame() {
     assert_eq!(html.matches(r#"data-oc="win""#).count(), 1);
     let (_, html) = s.html("/help?q=notas", &c2).await;
     assert_eq!(html.matches(r#"data-oc="win""#).count(), 1);
-    // O Terminal continua à espera da D008.
+    // O Terminal deixou de esperar: a D008 deu-lhe o ecrã.
     let (_, html) = s.html("/terminal", &c).await;
-    assert!(html.contains("oc-pending"));
+    assert!(!html.contains("oc-pending") && html.contains(r#"data-oc="term""#));
 }
 
 #[tokio::test]

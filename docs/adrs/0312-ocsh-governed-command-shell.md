@@ -105,3 +105,52 @@ auditoria. Nenhum comando pede um segredo pela linha.
 - A shell não compõe processos; compõe dados tipados (pipelines).
 - Streaming, cancelamento e elevação de sessão ficam por decidir em ADRs
   próprias, sobre infra que ainda não existe.
+
+## Emenda — D008 (2026-09-30)
+
+Decidida pelo utilizador na integração da D008. A história acima fica como
+estava; o que muda diz-se aqui.
+
+1. **§5, a palavra escrita, fica substituída.** O ocsh **não** pede para
+   escrever `SIM`, `CONFIRMAR`, `REVOGAR` nem equivalente. As operações de alto
+   impacto seguem o modelo de confirmação governada comum do Ocinye OS:
+
+   ```text
+   comando lido → capability tipada → autorização e risco no Core
+   → plano imutável proposto → confirmação privilegiada partilhada
+   → execução exacta → recibo e auditoria
+   ```
+
+   A interface de confirmação é a partilhada com o resto do Ocinye OS (D006);
+   o Terminal não inventa uma segunda autoridade de confirmação. Uma futura
+   Consola do Anfitrião (break-glass) para operadores pode definir uma
+   cerimónia mais forte, e **não é o ocsh**. Hoje nenhum comando do registo v1
+   exige confirmação; um que a exigisse é recusado (77) até o plano chegar ao
+   Terminal (TERMINAL-11).
+2. **`|` fica, e diz-se o que é.** Onde se lia «sem pipes», lê-se: **sem pipes
+   da shell; a composição tipada do ocsh é permitida.** Cada etapa resolve-se
+   num registo fechado de passos tipados (`filter`, `sort`, `head`, `count`,
+   `export json`), é validada estruturalmente e opera sobre os dados que o Core
+   já autorizou. Nunca passa stdout a um processo, nunca resolve executáveis,
+   nunca invoca `/bin/sh`, bash, zsh, PowerShell ou cmd, nem transforma texto
+   em comando. Quando uma etapa desencadeia uma capability governada, a
+   autoridade do Core aplica-se.
+3. **«Quis dizer» só com comandos que existem.** As sugestões POSIX
+   (`POSIX_HINTS`) só apontam para comandos registados (`cls → clear`,
+   `man → help`), com um teste; as outras palavras POSIX (`ls`, `cd`, `rm`…)
+   explicam o modelo e não sugerem nada. O Core só sugere uma família que a
+   pessoa vê.
+4. **Uma sessão por janela.** O Terminal é `SingleInstance`: sem separadores,
+   painéis divididos nem «sessão de administração»; `exit` fecha a janela. O
+   texto do catálogo que falava de separadores, painéis, elevação, inspector e
+   preferências saiu.
+5. **A ponte da Nye.** `nye ask` / `? …` devolve do Core um bloco tipado
+   `Ask { question }`; o Workspace leva a pergunta ao caminho canónico
+   (`POST /api/v1/ai/prompt`), onde o Core decide de novo (permissão de IA,
+   política, disponibilidade). Um comando desconhecido continua `127` e nunca
+   chega à Nye.
+6. **O histórico** vive só na memória da janela e guarda só a linha redigida
+   (`echo`, de `ocsh::redact`, devolvido pelo Workspace).
+
+A separação entre o Terminal e o Browser é da
+[ADR-0623](0623-terminal-and-browser-separate-boundaries.md).
