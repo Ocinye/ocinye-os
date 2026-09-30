@@ -297,7 +297,7 @@ sem que nada falhe.
   (#190). A D008 — o **Ocinye Terminal** (ocsh) e o **Ocinye Browser**, duas
   fronteiras sem ponte comum
   ([ADR-0623](docs/adrs/0623-terminal-and-browser-separate-boundaries.md)) —
-  está no ramo `feat/design-d008`, **por fazer merge**; o registo passa a **28
+  está em `main` (#191, merge `ece29e9`); o registo passa a **28
   aplicações** e **nenhuma fica provisória**. Tarefas é o alias de O Meu
   Trabalho; Histórico não está registado. Equipas não existem: sem domínio,
   sem desenho, sem aplicação. **0 páginas** respondem `503 interface_pending`. **Ainda não deployada:**
@@ -382,8 +382,8 @@ sem que nada falhe.
   `OCINYE_RESOURCE_GOVERNANCE_READY` é um portão distinto de `OCINYE_AI_READY`, e
   **não** torna a IA disponível.
 - **59 migrations**, aplicáveis de base vazia; 93 tabelas.
-- **Ocinye Terminal e ocsh: `IMPLEMENTED`, com o ecrã do Design (D008), por
-  fazer merge** ([ADR-0312](docs/adrs/0312-ocsh-governed-command-shell.md),
+- **Ocinye Terminal e ocsh: `IMPLEMENTED`, com o ecrã do Design (D008), em
+  `main` (#191)** ([ADR-0312](docs/adrs/0312-ocsh-governed-command-shell.md),
   emendada na D008). Uma linha de comandos governada que **não é uma shell do
   anfitrião**: o parse é determinístico e acontece no Core, cada comando invoca
   uma capability pelo executor agentic (`POST /api/v1/commands/exec`), sintaxe
@@ -395,7 +395,7 @@ sem que nada falhe.
   por janela; o histórico vive na memória da janela e guarda só a linha
   redigida. Confirmações de alto impacto seriam a confirmação partilhada sobre
   o plano (sem palavra escrita); nenhum comando v1 a exige. Sem streaming.
-- **Ocinye Browser: `IMPLEMENTED` no runtime Web, por fazer merge**
+- **Ocinye Browser: `IMPLEMENTED` no runtime Web, em `main` (#191)**
   ([ADR-0612](docs/adrs/0612-browser-manager.md), emendada;
   [ADR-0623](docs/adrs/0623-terminal-and-browser-separate-boundaries.md)).
   `/browser` mostra um endereço `https:` numa moldura `sandbox` sem
@@ -640,12 +640,11 @@ sem que nada falhe.
   Calendário e Correio (D004) e Projectos, O Meu Trabalho, Ideias, Dados e
   Conhecimento (D005), Unidades e Administração (D006), as nove da conclusão
   (D007) e Monitor de Actividade, Resultados e Lixo (D007.1); o Terminal e o
-  Browser (D008) no ramo `feat/design-d008`, por fazer merge. As viagens de browser com Chrome saíram com a UI antiga; as de HTTP
+  Browser (D008), em `main` (#191). As viagens de browser com Chrome saíram com a UI antiga; as de HTTP
   contra um Core real voltaram (`apps/workspace/tests/d001_journeys.rs`,
   `d002_journeys.rs`, `d003_journeys.rs`, `d003_act_journeys.rs`,
   `d004_journeys.rs`, `d005_journeys.rs`, `d006_journeys.rs`,
-  `d007_journeys.rs`, `d007_1_journeys.rs`; e, no ramo da D008,
-  `d008_journeys.rs`). As provas de instalação,
+  `d007_journeys.rs`, `d007_1_journeys.rs`, `d008_journeys.rs`). As provas de instalação,
   actualização, restauro e hardware continuam em `NOT_RUN`
   ([apagamento](docs/ui/UI_WIPE_REPORT.md)).
 
