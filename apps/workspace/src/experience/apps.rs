@@ -227,6 +227,19 @@ pub const APPLICATIONS: &[Application] = &[
         keywords: &["note", "notes", "nota", "nota", "notas", "editor"],
     },
     Application {
+        screen: Screen::Trash,
+        keywords: &[
+            "trash",
+            "lixo",
+            "corbeille",
+            "reciclagem",
+            "apagado",
+            "deleted",
+            "restaurar",
+            "restore",
+        ],
+    },
+    Application {
         screen: Screen::Calendar,
         keywords: &[
             "calendar",
@@ -344,7 +357,35 @@ pub const APPLICATIONS: &[Application] = &[
         screen: Screen::Compute,
         keywords: &["compute", "computação", "calcul", "gpu", "nó", "node"],
     },
+    Application {
+        screen: Screen::Results,
+        keywords: &[
+            "result",
+            "results",
+            "resultado",
+            "resultados",
+            "résultat",
+            "validação",
+            "validation",
+            "evidência",
+        ],
+    },
     // ── Administração ────────────────────────────────────────────────────
+    Application {
+        screen: Screen::Monitor,
+        keywords: &[
+            "monitor",
+            "moniteur",
+            "actividade",
+            "activity",
+            "memória",
+            "memory",
+            "disco",
+            "disk",
+            "sistema",
+            "system",
+        ],
+    },
     Application {
         screen: Screen::Resources,
         keywords: &[
@@ -554,10 +595,10 @@ mod tests {
             by_id("ask").is_none(),
             "Ask não é uma aplicação do lançador"
         );
-        // Vinte e seis ecrãs menos os dois da superfície de comando.
+        // Vinte e nove ecrãs menos os dois da superfície de comando.
         assert_eq!(
             APPLICATIONS.len(),
-            24,
+            27,
             "o registo deixou de cobrir todos os ecrãs"
         );
     }

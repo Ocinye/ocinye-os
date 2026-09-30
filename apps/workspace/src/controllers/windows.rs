@@ -107,7 +107,7 @@ fn visible(ctx: &ShellContext, id: ApplicationId) -> bool {
 /// A dica do alternador. Neutra de plataforma de propósito: só o `runtime.js`
 /// pergunta ao ambiente (ADR-0611), e `Alt` + `W` é a mesma tecla física em
 /// todos os teclados (`KeyW`) e não está reservada por nenhum browser.
-pub const SWITCHER_HINT: &str = "Alt + W";
+pub const SWITCHER_HINT: &str = crate::experience::shortcuts::SWITCHER.keys;
 
 /// Abre `href` numa janela da aplicação (ou foca a que já o mostra).
 ///
@@ -232,6 +232,18 @@ pub fn has_screen(app: ApplicationId) -> bool {
             | ApplicationId::Knowledge
             | ApplicationId::Units
             | ApplicationId::Administration
+            | ApplicationId::Messages
+            | ApplicationId::Ai
+            | ApplicationId::Agents
+            | ApplicationId::Compute
+            | ApplicationId::Resources
+            | ApplicationId::Activity
+            | ApplicationId::Audit
+            | ApplicationId::Settings
+            | ApplicationId::Help
+            | ApplicationId::Monitor
+            | ApplicationId::Results
+            | ApplicationId::Trash
     )
 }
 
@@ -315,14 +327,15 @@ mod tests {
             .iter()
             .all(|w| w.content == WindowContent::Loading));
         // Uma aplicação sem ecrã do Design continua a dizer `app_pending`
-        // (os Dados ganharam o seu na D005; a Computação ainda não tem).
-        d.open(ApplicationId::Compute, "/compute", SingleInstance, false)
+        // (os Dados ganharam o seu na D005, a Computação na D007; o Terminal
+        // fica para a D008).
+        d.open(ApplicationId::Terminal, "/terminal", SingleInstance, false)
             .unwrap();
         d.open(ApplicationId::Datasets, "/datasets", SingleInstance, false)
             .unwrap();
         let vm = wm_vm(&d, |a| a != ApplicationId::Notes).unwrap();
-        let computacao = vm.windows.iter().find(|w| w.app_id == "compute").unwrap();
-        assert_eq!(computacao.content, WindowContent::Pending);
+        let terminal = vm.windows.iter().find(|w| w.app_id == "terminal").unwrap();
+        assert_eq!(terminal.content, WindowContent::Pending);
         let dados = vm.windows.iter().find(|w| w.app_id == "datasets").unwrap();
         assert_eq!(dados.content, WindowContent::Loading);
         // Notas aceita várias janelas, mas não é visível: não se oferece.

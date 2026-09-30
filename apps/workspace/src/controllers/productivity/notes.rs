@@ -91,7 +91,13 @@ pub(crate) fn items(
                     .map(|at| clock.when(at))
                     .unwrap_or_default(),
                 context: None,
-                href: format!("/notes/{id}"),
+                // Uma nota apagada não abre no editor (o Core já não a lê
+                // como viva): abre-se no Lixo, onde se restaura (D007.1).
+                href: if section == Section::Trash {
+                    format!("/trash?nav=notes&open=note:{id}")
+                } else {
+                    format!("/notes/{id}")
+                },
                 active: active == Some(id),
                 shared: section == Section::Shared,
             })

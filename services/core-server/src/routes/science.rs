@@ -240,6 +240,13 @@ struct ResultView {
     classification: String,
     superseded_by_id: Option<Uuid>,
     created_at: String,
+    /// Quando mudou pela última vez (D007.1).
+    updated_at: String,
+    /// Quem o registou — só na leitura de um resultado (D007.1 · RES-09).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    created_by_name: Option<String>,
+    #[serde(skip)]
+    created_by_id: Option<Uuid>,
     /// Se quem pergunta pode afirmar que este resultado se confirma.
     ///
     /// Avaliado aqui, com o contexto deste resultado, porque
@@ -267,6 +274,9 @@ impl From<science::Result> for ResultView {
             classification: r.classification,
             superseded_by_id: r.superseded_by_id,
             created_at: r.created_at.to_rfc3339(),
+            updated_at: r.updated_at.to_rfc3339(),
+            created_by_name: None,
+            created_by_id: r.created_by_id,
             may_validate: false,
         }
     }
@@ -308,6 +318,11 @@ struct ValidationView {
     methodology_version_id: Option<Uuid>,
     note: Option<String>,
     created_at: String,
+    /// Quem registou a validação — o nome dela fica no registo (ADR-0307).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    performed_by_name: Option<String>,
+    #[serde(skip)]
+    performed_by_id: Option<Uuid>,
 }
 
 impl From<science::ResultValidation> for ValidationView {
@@ -322,6 +337,8 @@ impl From<science::ResultValidation> for ValidationView {
             methodology_version_id: v.methodology_version_id,
             note: v.note,
             created_at: v.created_at.to_rfc3339(),
+            performed_by_name: None,
+            performed_by_id: v.performed_by_id,
         }
     }
 }
@@ -656,9 +673,9 @@ async fn get_result(
     Path(result_id): Path<Uuid>,
 ) -> Result<Json<ResultView>, ApiError> {
     let (result, workspace) = science::get_result(&state.pool, &principal, result_id).await?;
-    Ok(Json(ResultView::for_principal(
-        result, &workspace, &principal,
-    )))
+    let mut view = ResultView::for_principal(result, &workspace, &principal);
+    view.created_by_name = person_name(&state, view.created_by_id).await?;
+    Ok(Json(view))
 }
 
 async fn create_result(
@@ -691,7 +708,13 @@ async fn list_validations(
     Path(result_id): Path<Uuid>,
 ) -> Result<Json<Vec<ValidationView>>, ApiError> {
     let items = science::list_validations(&state.pool, &principal, result_id).await?;
-    Ok(Json(items.into_iter().map(ValidationView::from).collect()))
+    let mut out = Vec::with_capacity(items.len());
+    for v in items {
+        let mut view = ValidationView::from(v);
+        view.performed_by_name = person_name(&state, view.performed_by_id).await?;
+        out.push(view);
+    }
+    Ok(Json(out))
 }
 
 async fn record_validation(
@@ -757,4 +780,17 @@ async fn lineage(
     .await?;
 
     Ok(Json(linhagem))
+}
+
+/// O nome de uma pessoa da Instância que registou evidência (o nome fica no
+/// registo; quem lê o resultado lê quem o afirmou).
+async fn person_name(state: &AppState, id: Option<Uuid>) -> Result<Option<String>, ApiError> {
+    let Some(id) = id else { return Ok(None) };
+    Ok(sqlx::query_scalar::<_, String>(
+        "SELECT COALESCE(NULLIF(display_name, ''), full_name) FROM people WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(CoreError::from)?)
 }

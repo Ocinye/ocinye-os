@@ -12,9 +12,11 @@
 
 pub mod desktop;
 pub mod nye;
+pub mod ops;
 pub mod org;
 pub mod panels;
 pub mod productivity;
+pub mod reg;
 pub mod research;
 pub mod windows;
 
@@ -336,11 +338,15 @@ pub async fn shell(
             Health::Unavailable
         }
     });
+    // O Monitor é da administração da plataforma: só a ela o painel liga.
+    let monitor = strings(me.get("capabilities"))
+        .iter()
+        .any(|c| c == "platform.administer");
     let clock = desktop::Clock {
         now: chrono::Utc::now(),
         zone,
         core_ok: core.operational(),
-        is_admin,
+        is_admin: monitor,
     };
     let agenda = desktop::agenda_today(caller, state, &clock, panels::AGENDA).await;
     let top_panels = TopPanels {
@@ -349,7 +355,7 @@ pub async fn shell(
             &compute,
             ai_health,
             &storage,
-            is_admin,
+            monitor,
         )),
         notifications: Some(panels::notifications(&notifications, &clock)),
         clock: Some(panels::clock(&clock, agenda)),

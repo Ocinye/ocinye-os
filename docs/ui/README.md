@@ -1,17 +1,23 @@
 # Interface do Workspace
 
-**Estado: Claude Design D001 a D005 em `main`** (a D004.1 no PR #187, a D005
-no PR #188; nenhuma deployada, produção continua em `4f8d048`). A D003 traz o
-Nye ([ADR-0619](../adrs/0619-nye-universal-surface.md)); a D004 Ficheiros,
-Notas, Calendário e Correio
+**Estado: Claude Design D001 a D006 em `main`** (a D004.1 no PR #187, a D005
+no PR #188, a D006 no PR #189; nenhuma deployada, produção continua em
+`4f8d048`). A D003 traz o Nye ([ADR-0619](../adrs/0619-nye-universal-surface.md));
+a D004 Ficheiros, Notas, Calendário e Correio
 ([ADR-0620](../adrs/0620-productivity-apps-in-managed-windows.md)); a D005
 Projectos, O Meu Trabalho, Ideias, Dados e Conhecimento
-([ADR-0621](../adrs/0621-research-apps-typed-relations-and-deep-links.md)).
-**A D006 — Unidades e Administração (Membros, Papéis, Instância) — está no ramo
-`feat/design-d006`, por fazer merge**
-([ADR-0111](../adrs/0111-organisational-invariants-and-typed-refusals.md)); a
-secção dela está no topo do [`CODE_FEEDBACK.md`](CODE_FEEDBACK.md). Equipas não
-existem: sem domínio, sem desenho, sem aplicação.
+([ADR-0621](../adrs/0621-research-apps-typed-relations-and-deep-links.md)); a
+D006 Unidades e Administração
+([ADR-0111](../adrs/0111-organisational-invariants-and-typed-refusals.md)).
+**A D007 — Mensagens, IA, Agentes, Computação, Meus Recursos, Actividade,
+Auditoria, Definições e Ajuda — está no ramo `feat/design-d007`, por fazer
+merge** ([ADR-0622](../adrs/0622-completion-apps-history-evidence-and-agent-authority.md));
+com a revisão correctiva D007.1 (Monitor de Actividade, Resultados e Lixo; o
+registo passa a 27) no mesmo ramo; as secções estão no topo do
+[`CODE_FEEDBACK.md`](CODE_FEEDBACK.md), e a cobertura em
+[`application-design-coverage.md`](application-design-coverage.md). Só o
+Terminal continua `app_pending` (D008). Equipas não existem: sem domínio, sem
+desenho, sem aplicação.
 O código de interface é do Design e está fechado
 ([`DESIGN_LOCK.md`](DESIGN_LOCK.md)); o contrato detalhado de rotas e
 ViewModels está em [`HANDOFF.md`](HANDOFF.md).

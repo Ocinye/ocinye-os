@@ -147,6 +147,10 @@ pub struct CapabilityStatus {
     /// Configured model name, when one is mapped.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub configured_model: Option<String>,
+    /// Why it cannot be served now — the same typed reason a prompt for this
+    /// capability would receive. Absent when `available`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<AiReasonCode>,
 }
 
 /// Who authored an interaction turn.

@@ -199,6 +199,13 @@ pub fn kind_and_href(kind: &str, id: &str) -> (ResKind, Option<String>, Option<S
         // notas de ambiente e os ficheiros institucionais não têm ecrã.
         "dataset_version" => (ResKind::DatasetVersion, None, None),
         "note" => (ResKind::Note, None, None),
+        // D007.1 · os resultados ganharam ecrã: a ligação é a canónica, e a
+        // página relê o resultado com a autoridade de quem a abre.
+        "result" => (
+            ResKind::Other,
+            Some(format!("/results/{id}")),
+            Some(other_label("result")),
+        ),
         "file" | "file_version" => (ResKind::File, None, None),
         other => (ResKind::Other, None, Some(other_label(other))),
     }

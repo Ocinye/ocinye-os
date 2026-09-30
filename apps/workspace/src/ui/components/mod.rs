@@ -69,6 +69,10 @@ pub fn app_icon(href: &str) -> &'static str {
         "/settings" => "settings",
         "/help" => "help",
         "/terminal" => "terminal",
+        // D007.1 · os três que o registo ganhou.
+        "/admin/monitor" => "gauge",
+        "/results" => "results",
+        "/trash" => "trash",
         _ => "apps",
     }
 }

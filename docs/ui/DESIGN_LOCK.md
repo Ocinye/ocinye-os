@@ -1,3 +1,9 @@
+# DESIGN_LOCK — Design revision D007
+
+Locked (additive; D001–D006 locks unchanged): `ui/apps/messages.rs`, `fabric.rs` (IA, Agentes, Computação), `ledger.rs` (Meus Recursos, Actividade, Auditoria), `member.rs` (Definições, Ajuda), `ops.rs`; the D007 block of `oc-apps.css` (.oc-msg-*, .oc-ops-*); `ops()` in `oc-apps.js`; `i18n/ui_ops.rs`. Rules: IA is not a chat; agents show the authority boundary; compute shows only reported numbers; activity redacts; audit is read-only with allow-listed metadata; settings edit only the member layer.
+
+---
+
 # DESIGN_LOCK — Design revision D006
 
 Locked (D006-owned, additive; D001–D005 locks unchanged):

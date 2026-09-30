@@ -332,6 +332,10 @@
         ? document.querySelector('[data-part="role-grant"] select')
         : null;
       const target = a || pick;
+      // D007: a acção pode viver numa divulgação fechada (as pessoas de um
+      // grupo nas Mensagens); abre-se para o foco lá chegar.
+      const d = target && target.closest('details');
+      if (d && !d.open) d.open = true;
       if (target) target.focus();
     }
   } catch (_) { /* sem foco: fica o do documento */ }

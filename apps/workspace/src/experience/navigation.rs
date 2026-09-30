@@ -67,6 +67,12 @@ pub enum Screen {
     Help,
     /// O Terminal (ocsh).
     Terminal,
+    /// D007.1 · Monitor de Actividade.
+    Monitor,
+    /// D007.1 · Resultados.
+    Results,
+    /// D007.1 · Lixo pessoal.
+    Trash,
 }
 
 impl Screen {
@@ -104,6 +110,9 @@ impl Screen {
             Self::Settings => "settings",
             Self::Help => "help",
             Self::Terminal => "terminal",
+            Self::Monitor => "monitor",
+            Self::Results => "results",
+            Self::Trash => "trash",
         }
     }
 
@@ -137,6 +146,9 @@ impl Screen {
             Self::Settings => "/settings",
             Self::Help => "/help",
             Self::Terminal => "/terminal",
+            Self::Monitor => "/admin/monitor",
+            Self::Results => "/results",
+            Self::Trash => "/trash",
         }
     }
 
@@ -149,6 +161,9 @@ impl Screen {
         match self {
             Self::Help => "nav.help",
             Self::Terminal => "terminal.app",
+            Self::Monitor => "nav.monitor",
+            Self::Results => "nav.results",
+            Self::Trash => "nav.trash",
             Self::Settings => "nav.settings",
             Self::Home => "nav.home",
             Self::MyWork => "nav.my_work",
@@ -192,6 +207,9 @@ impl Screen {
         match self {
             Self::Help => Icon::Help,
             Self::Terminal => Icon::SystemStatus,
+            Self::Monitor => Icon::Activity,
+            Self::Results => Icon::Science,
+            Self::Trash => Icon::Trash,
             Self::Settings => Icon::Settings,
             Self::Home => Icon::Home,
             Self::MyWork => Icon::MyWork,
@@ -434,6 +452,9 @@ pub(crate) const fn screen_permission(screen: Screen) -> Option<Permission> {
         | Screen::Resources
         | Screen::Settings
         | Screen::Help
+        // O Lixo é do próprio membro: o Core lê os ficheiros e as notas que
+        // o principal apagou, e nada mais.
+        | Screen::Trash
         // O Terminal não precisa de direito próprio: cada comando é autorizado
         // pelo Core como a capability que invoca (ADR-0312).
         | Screen::Terminal => None,
@@ -465,6 +486,12 @@ pub(crate) const fn screen_permission(screen: Screen) -> Option<Permission> {
         // administra pessoas. Um investigador com `MembersView` deixa de a abrir.
         Screen::Admin => Some(Permission::MembersManage),
         Screen::Audit => Some(Permission::AuditView),
+        // O Monitor segue a regra do Core para `/system/operations`
+        // (administrar a plataforma), e não a da consola de pessoas.
+        Screen::Monitor => Some(Permission::PlatformAdminister),
+        // Os resultados vivem nos ambientes de projecto: quem não vê
+        // projectos não tem onde os ler. Cada resultado é autorizado pelo Core.
+        Screen::Results => Some(Permission::ProjectsView),
         // O Prompt não está na navegação lateral; o `AiUse` que o guarda é
         // verificado no ecrã que lá chega.
         Screen::Prompt => Some(Permission::AiUse),

@@ -85,12 +85,15 @@ pub fn action(a: &OrgActionVm) -> impl IntoView {
         OrgActionKind::Suspend | OrgActionKind::RevokeSession => "lock",
         OrgActionKind::Disable
         | OrgActionKind::RemoveUnitMember
+        | OrgActionKind::RemoveParticipant
+        | OrgActionKind::LeaveConversation
         | OrgActionKind::RevokeRole
         | OrgActionKind::RevokeGrant => "minus",
         OrgActionKind::Reactivate => "refresh",
         OrgActionKind::ResetPassword | OrgActionKind::Provision | OrgActionKind::Reissue => "key",
         OrgActionKind::DeleteInvite => "trash",
         OrgActionKind::ArchiveUnit => "archive",
+        OrgActionKind::StopService => "stop",
         OrgActionKind::GrantRole | OrgActionKind::ChangeUnitRole => "edit",
     };
     view! {

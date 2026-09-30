@@ -1,3 +1,5 @@
+//! D007 · Conclusão: [`messages`], [`fabric`] (IA, Agentes, Computação), [`ledger`]
+//! (Meus Recursos, Actividade, Auditoria), [`member`] (Definições, Ajuda), peças em [`ops`].
 //! D004 · Aplicações de produtividade. D005 · Investigação e trabalho
 //! ([`projects`], [`work`], [`ideas`], [`datasets`], [`knowledge`], peças em
 //! [`res`]). D006 · Organização e administração ([`units`], [`admin`], peças
@@ -28,14 +30,22 @@ use crate::ui::view_models::{
 pub mod admin;
 pub mod calendar;
 pub mod datasets;
+pub mod fabric;
 pub mod files;
 pub mod ideas;
 pub mod knowledge;
+pub mod ledger;
 pub mod mail;
+pub mod member;
+pub mod messages;
+pub mod monitor;
 pub mod notes;
+pub mod ops;
 pub mod org;
 pub mod projects;
 pub mod res;
+pub mod results;
+pub mod trash;
 pub mod units;
 pub mod work;
 

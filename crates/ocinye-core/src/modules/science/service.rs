@@ -1007,7 +1007,21 @@ pub async fn list_results(
     workspace_id: Uuid,
 ) -> CoreResult<Vec<ScientificResult>> {
     let workspace = get_workspace(pool, principal, workspace_id).await?;
-    repo::list_results(pool, workspace.id).await
+    // Ler o ambiente não é ler cada resultado: a classificação de cada um
+    // decide, como em `get_result`. Um resultado acima do que o membro lê
+    // não sai da base pela lista (D007.1 · RES-07).
+    Ok(repo::list_results(pool, workspace.id)
+        .await?
+        .into_iter()
+        .filter(|r| {
+            authorize(
+                principal,
+                Action::Read,
+                &artefact_context(&workspace, ResourceKind::Result, r.classification()),
+            )
+            .is_ok()
+        })
+        .collect())
 }
 
 /// What has been said about a result.
