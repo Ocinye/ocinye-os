@@ -693,3 +693,40 @@ async fn os_indicadores_largam_so_as_metricas_que_o_membro_nao_ve() {
     assert_eq!(widgets(&html), [("kpis".to_owned(), true)]);
     s.descartar().await;
 }
+
+/// G9-09 · Um indicador de uma aplicação que o membro não abre não se desenha,
+/// mesmo quando o Core devolve a contagem (a lista de ambientes de um
+/// colaborador é autorizada; `/projects` não lhe abre). Nenhuma ligação morta.
+#[tokio::test]
+async fn um_indicador_sem_aplicacao_visivel_nao_se_desenha() {
+    let Some(s) = Sistema::provisionar(InstanceProfile::Research).await else {
+        return;
+    };
+    let (_, email, password) = s.pessoa(&[TechnicalRole::Collaborator]).await;
+    let (_, _, c) = s.entrar(&email, &password).await;
+    let corpo = json!({
+        "version": 0, "fit": "fill", "wallpaper": "field", "dim": 20,
+        "widgets": [
+            { "id": "kpis", "kind": "kpis", "w": 4, "h": 1, "minimized": false },
+        ],
+    });
+    assert_eq!(gravar(&s, &c, &corpo).await, 200);
+    let (_, html) = s.html("/", &c).await;
+    let metricas: Vec<&str> = html
+        .split(r#"<a href=""#)
+        .skip(1)
+        .filter(|x| x.split('>').next().unwrap_or_default().contains("oc-kpi\""))
+        .filter_map(|x| x.split('"').next())
+        .collect();
+    // Um colaborador de Research não abre nenhuma das quatro: o widget
+    // esconde-se, e fica na disposição.
+    assert_eq!(widgets(&html), [("kpis".to_owned(), true)]);
+    let lancador = lancador(&html);
+    for m in &metricas {
+        assert!(
+            lancador.iter().any(|a| a == m),
+            "o indicador {m} liga a uma aplicação que o membro não abre"
+        );
+    }
+    s.descartar().await;
+}
