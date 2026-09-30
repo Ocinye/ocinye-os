@@ -79,6 +79,18 @@ pub enum ApiFailure {
     /// pessoa precisa de recarregar, não de tentar de novo às cegas. A mensagem
     /// foi escrita para quem a lê.
     Conflict(String),
+    /// O Core recusou por uma invariante institucional, e disse qual.
+    ///
+    /// Vem de `details.reason` no envelope de erro (`CoreError::Invariant`):
+    /// `last_platform_admin`, `last_unit_manager`, `self_lockout`. O motivo é
+    /// estável e não traduzido, para o Workspace o mapear sem ler a prosa; a
+    /// mensagem continua a ser a que o Core escreveu para a pessoa.
+    Refused {
+        /// O motivo estável.
+        reason: String,
+        /// A mensagem do Core.
+        message: String,
+    },
     /// Anything else.
     Failed(String),
 }
@@ -94,9 +106,10 @@ impl std::fmt::Display for ApiFailure {
             Self::ApplicationInactive => {
                 f.write_str("this application is not active in this Instance")
             }
-            Self::Conflict(message) | Self::Rejected(message) | Self::Failed(message) => {
-                f.write_str(message)
-            }
+            Self::Conflict(message)
+            | Self::Rejected(message)
+            | Self::Failed(message)
+            | Self::Refused { message, .. } => f.write_str(message),
         }
     }
 }
@@ -308,6 +321,22 @@ async fn interpret(response: reqwest::Response) -> Result<Value, ApiFailure> {
 /// original muda, que foi o que aconteceu: uma reversão que fazia o cliente
 /// deitar a razão fora não moveu nenhum portão.
 fn falha_de(status: u16, payload: &Value) -> Option<ApiFailure> {
+    if !(200..=299).contains(&status) {
+        if let Some(reason) = payload
+            .get("details")
+            .and_then(|d| d.get("reason"))
+            .and_then(Value::as_str)
+        {
+            return Some(ApiFailure::Refused {
+                reason: reason.to_owned(),
+                message: payload
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+            });
+        }
+    }
     match status {
         200..=299 => None,
         401 => Some(ApiFailure::Unauthorised),
@@ -792,6 +821,35 @@ mod rejection_tests {
             matches!(falha_de(500, &payload), Some(ApiFailure::Failed(_))),
             "um 500 tem de continuar a ser uma avaria"
         );
+    }
+}
+
+#[cfg(test)]
+mod refusal_tests {
+    use super::*;
+
+    /// Uma invariante do Core chega com o seu motivo estável, qualquer que seja
+    /// o código HTTP que a operação sempre teve (`422` ou `409`), e a mensagem
+    /// do Core viaja com ela. Sem motivo, uma recusa continua a ser a de antes.
+    #[test]
+    fn uma_invariante_do_core_chega_com_o_motivo() {
+        for status in [409, 422] {
+            let payload = serde_json::json!({
+                "code": "conflict",
+                "message": "Nomeie outro gestor primeiro.",
+                "details": { "reason": "last_unit_manager" }
+            });
+            match falha_de(status, &payload) {
+                Some(ApiFailure::Refused { reason, message }) => {
+                    assert_eq!(reason, "last_unit_manager");
+                    assert_eq!(message, "Nomeie outro gestor primeiro.");
+                }
+                other => panic!("{status}: {other:?}"),
+            }
+        }
+        let sem = serde_json::json!({ "message": "Isto mudou." });
+        assert!(matches!(falha_de(409, &sem), Some(ApiFailure::Conflict(_))));
+        assert!(falha_de(200, &serde_json::json!({ "details": { "reason": "x" } })).is_none());
     }
 }
 

@@ -18,7 +18,7 @@ pub fn app_error(failure: &ApiFailure) -> AppError {
     match failure {
         ApiFailure::Denied => AppError::NotFound,
         ApiFailure::Forbidden | ApiFailure::Unauthorised => AppError::PermissionDenied,
-        ApiFailure::Conflict(_) => AppError::Conflict,
+        ApiFailure::Conflict(_) | ApiFailure::Refused { .. } => AppError::Conflict,
         ApiFailure::Rejected(_) => AppError::SaveFailed,
         ApiFailure::Unavailable(_) | ApiFailure::ApplicationInactive | ApiFailure::Failed(_) => {
             AppError::Unavailable

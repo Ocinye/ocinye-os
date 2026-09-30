@@ -1228,7 +1228,7 @@ fn failure_response(failure: &ApiFailure) -> Response {
             (StatusCode::SERVICE_UNAVAILABLE, "application_inactive")
         }
         ApiFailure::Rejected(_) => (StatusCode::UNPROCESSABLE_ENTITY, "rejected"),
-        ApiFailure::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
+        ApiFailure::Conflict(_) | ApiFailure::Refused { .. } => (StatusCode::CONFLICT, "conflict"),
         ApiFailure::Failed(message) => {
             return error_marker(
                 StatusCode::BAD_GATEWAY,
