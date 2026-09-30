@@ -239,10 +239,12 @@ pub const fn confirm_code(k: OrgActionKind) -> &'static str {
         OrgActionKind::ChangeUnitRole => "unit_role",
         OrgActionKind::RemoveUnitMember => "unit_remove",
         OrgActionKind::ArchiveUnit => "archive_unit",
+        OrgActionKind::LeaveConversation => "msg_leave",
+        OrgActionKind::RemoveParticipant => "msg_remove",
     }
 }
 
-const ACTION_KINDS: [OrgActionKind; 14] = [
+const ACTION_KINDS: [OrgActionKind; 16] = [
     OrgActionKind::Suspend,
     OrgActionKind::Disable,
     OrgActionKind::Reactivate,
@@ -257,6 +259,8 @@ const ACTION_KINDS: [OrgActionKind; 14] = [
     OrgActionKind::ChangeUnitRole,
     OrgActionKind::RemoveUnitMember,
     OrgActionKind::ArchiveUnit,
+    OrgActionKind::LeaveConversation,
+    OrgActionKind::RemoveParticipant,
 ];
 
 /// A acção pelo valor de `?confirm=`.
@@ -796,7 +800,9 @@ pub fn member_confirm(
         }
         OrgActionKind::ChangeUnitRole
         | OrgActionKind::RemoveUnitMember
-        | OrgActionKind::ArchiveUnit => return None,
+        | OrgActionKind::ArchiveUnit
+        | OrgActionKind::LeaveConversation
+        | OrgActionKind::RemoveParticipant => return None,
     };
     Some(OrgConfirmVm {
         kind,

@@ -2020,6 +2020,13 @@ pub(super) async fn nye_reference(
             "title",
             "prod.nye.about.project",
         ),
+        // D007 · Um agente, pela sua leitura autorizada (o Core não devolve a
+        // quem não o vê, nem as instruções a quem não o criou).
+        "agent" => (
+            format!("/api/v1/ai/agents/{id}"),
+            "name",
+            "prod.nye.about.agent",
+        ),
         "task" => (
             format!("/api/v1/tasks/{id}"),
             "title",

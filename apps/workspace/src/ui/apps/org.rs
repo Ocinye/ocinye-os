@@ -85,6 +85,8 @@ pub fn action(a: &OrgActionVm) -> impl IntoView {
         OrgActionKind::Suspend | OrgActionKind::RevokeSession => "lock",
         OrgActionKind::Disable
         | OrgActionKind::RemoveUnitMember
+        | OrgActionKind::RemoveParticipant
+        | OrgActionKind::LeaveConversation
         | OrgActionKind::RevokeRole
         | OrgActionKind::RevokeGrant => "minus",
         OrgActionKind::Reactivate => "refresh",

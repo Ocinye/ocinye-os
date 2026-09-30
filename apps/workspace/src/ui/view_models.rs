@@ -3844,6 +3844,10 @@ pub enum OrgActionKind {
     RemoveUnitMember,
     /// arquivar uma unidade
     ArchiveUnit,
+    /// D007 · Sair de uma conversa de grupo (Mensagens).
+    LeaveConversation,
+    /// D007 · Retirar alguém de uma conversa de grupo (Mensagens).
+    RemoveParticipant,
 }
 
 impl OrgActionKind {
@@ -3865,6 +3869,8 @@ impl OrgActionKind {
             Self::ChangeUnitRole => "org.act.unit_role",
             Self::RemoveUnitMember => "org.act.unit_remove",
             Self::ArchiveUnit => "org.act.archive_unit",
+            Self::LeaveConversation => "org.act.msg_leave",
+            Self::RemoveParticipant => "org.act.msg_remove",
         }
     }
     /// Retira acesso ou apaga: o botão final é de perigo e nunca tem o foco.
@@ -3880,6 +3886,8 @@ impl OrgActionKind {
                 | Self::RevokeSession
                 | Self::RemoveUnitMember
                 | Self::ArchiveUnit
+                | Self::LeaveConversation
+                | Self::RemoveParticipant
         )
     }
     /// A operação devolve uma credencial temporária, mostrada uma vez.

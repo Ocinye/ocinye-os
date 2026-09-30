@@ -7,3 +7,4 @@
 pub mod apps;
 pub mod icon;
 pub mod navigation;
+pub mod shortcuts;

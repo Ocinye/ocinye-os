@@ -531,7 +531,7 @@ pub fn surface(
         answer: None,
         context: None,
         continue_href: "/ai/prompt".to_owned(),
-        shortcut: Some("Ctrl K".to_owned()),
+        shortcut: Some(crate::experience::shortcuts::NYE.keys.to_owned()),
         open,
     }
 }

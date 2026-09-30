@@ -80,10 +80,9 @@ pub const ROUTES: &[&str] = &[
     "/messages/{conversation}",
     "/messages/start",
     "/messages/assist",
-    "/messages/people",
     "/messages/{conversation}/typing",
     "/messages/{conversation}/send",
-    "/messages/{conversation}/react",
+    "/messages/{conversation}/messages/{message}/react",
     "/messages/{conversation}/read",
     "/messages/{conversation}/members",
     "/messages/{conversation}/leave",
@@ -208,6 +207,7 @@ pub const ROUTES: &[&str] = &[
     "/ai/agents/{agent_id}",
     "/ai/prompt",
     "/compute",
+    "/compute/nodes/{node_id}",
     "/activity",
     "/admin",
     "/admin/instance",
@@ -263,24 +263,29 @@ pub fn router(state: WorkspaceState) -> Router {
             post(research::task_transition),
         )
         .route("/my-work/{task_id}/assignee", post(research::task_assign))
-        .route("/resources", get(meus_recursos))
+        .route("/resources", get(ops::resources_page))
         // Correio
         // ── Mensagens ───────────────────────────────────────────────────
-        .route("/messages", get(messaging))
-        .route("/messages/{conversation}", get(messaging_conversation))
+        .route("/messages", get(ops::messages_page))
+        .route("/messages/{conversation}", get(ops::messages_thread))
         .route("/messages/start", post(messaging_start))
         .route("/messages/assist", post(messaging_assist))
-        .route("/messages/people", get(messaging_people))
         .route("/messages/{conversation}/typing", get(messaging_typing))
-        .route("/messages/{conversation}/send", post(messaging_send))
-        .route("/messages/{conversation}/react", post(messaging_react))
+        .route("/messages/{conversation}/send", post(ops::messages_send))
+        .route(
+            "/messages/{conversation}/messages/{message}/react",
+            post(ops::messages_react),
+        )
         .route("/messages/{conversation}/read", post(messaging_read))
         .route(
             "/messages/{conversation}/members",
             post(messaging_add_member),
         )
-        .route("/messages/{conversation}/leave", post(messaging_leave))
-        .route("/messages/{conversation}/remove", post(messaging_remove))
+        .route("/messages/{conversation}/leave", post(ops::messages_leave))
+        .route(
+            "/messages/{conversation}/remove",
+            post(ops::messages_remove),
+        )
         .route("/mail", get(productivity::mail_page))
         .route("/mail/compose", get(productivity::mail_compose_page))
         .route("/mail/compose/save", post(productivity::mail_compose_save))
@@ -457,19 +462,19 @@ pub fn router(state: WorkspaceState) -> Router {
         )
         .route("/tasks/new", get(|| async { Redirect::to("/my-work/new") }))
         .route("/tasks/{task_id}", get(research::task_legacy))
-        .route("/help", get(help))
+        .route("/help", get(ops::help_page))
         .route("/terminal", get(terminal))
         .route("/terminal/exec", post(terminal_exec))
-        .route("/settings", get(settings_account))
-        .route("/settings/security", get(settings_security))
+        .route("/settings", get(ops::settings_account))
+        .route("/settings/security", get(ops::settings_security))
         .route(
             "/settings/language",
-            get(settings_language).post(set_language),
+            get(ops::settings_language).post(set_language),
         )
-        .route("/settings/apps", get(settings_apps).post(save_apps))
-        .route("/settings/mfa", get(settings_mfa))
+        .route("/settings/apps", get(ops::settings_apps).post(save_apps))
+        .route("/settings/mfa", get(ops::settings_mfa))
         .route("/settings/mfa/regenerate", post(settings_mfa_regenerate))
-        .route("/settings/password", post(change_password))
+        .route("/settings/password", post(ops::change_password))
         .route("/settings/avatar/preset", post(choose_avatar_preset))
         .route(
             "/settings/avatar/photo",
@@ -622,14 +627,18 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/me/folders/rename", post(me_folder_rename))
         .route("/me/folders/delete", post(me_folder_delete))
         // Inteligência
-        .route("/ai", get(ai_hub))
-        .route("/ai/agents", get(agents))
-        .route("/ai/agents/new", get(new_agent).post(create_agent))
-        .route("/ai/agents/{agent_id}", get(agent_detail))
+        .route("/ai", get(ops::ai_page))
+        .route("/ai/agents", get(ops::agents_page))
+        .route(
+            "/ai/agents/new",
+            get(ops::agent_new_page).post(ops::agent_create),
+        )
+        .route("/ai/agents/{agent_id}", get(ops::agent_page))
         .route("/ai/prompt", get(prompt).post(submit_prompt))
-        .route("/compute", get(compute))
+        .route("/compute", get(ops::compute_page))
+        .route("/compute/nodes/{node_id}", get(ops::compute_node_page))
         // Institucional
-        .route("/activity", get(activity))
+        .route("/activity", get(ops::activity_page))
         // D006 · Administração (`routes/org.rs`). Só as operações que um ecrã
         // do Design usa: atribuir unidades e ambientes a partir do membro, e
         // criar grants explícitos, não têm ecrã (M-17), e não têm rota.
@@ -679,7 +688,7 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/wm/{window_id}", post(wm_op))
         .route("/wm/{window_id}/close", post(wm_close))
         .route("/wm/{window_id}/state", post(wm_report))
-        .route("/audit", get(audit))
+        .route("/audit", get(ops::audit_page))
         .route("/search", get(search))
         // A Universal Command Surface.
         .route("/ask", get(ask))
@@ -1863,11 +1872,6 @@ async fn home(State(state): State<WorkspaceState>, headers: HeaderMap) -> Respon
     }
 }
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn meus_recursos(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Resources).await
-}
-
 // ── Correio ──────────────────────────────────────────────────────────────
 //
 // Uma regra atravessa todos estes manipuladores: **apenas `send_mail` fala com
@@ -2266,19 +2270,6 @@ async fn mail_settings(State(state): State<WorkspaceState>, headers: HeaderMap) 
 
 // ── Mensagens ────────────────────────────────────────────────────────────
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn messaging(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Messaging).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn messaging_conversation(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-) -> Response {
-    app_page(&state, &headers, Screen::Messaging).await
-}
-
 #[derive(Deserialize)]
 struct StartForm {
     #[serde(default)]
@@ -2331,72 +2322,6 @@ async fn messaging_start(
 struct ProcuraDePessoas {
     #[serde(default)]
     q: String,
-}
-
-/// Procura pessoas da instituição para começar uma conversa.
-///
-/// # Porque filtra no servidor
-///
-/// Porque uma instituição não cabe num `select`, e carregá-la inteira para
-/// filtrar no browser seria mandar a lista de toda a gente para cada pessoa que
-/// abre as Mensagens. O universo continua a ser o que o Core autoriza — este
-/// caminho não alarga nada.
-async fn messaging_people(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Query(procura): Query<ProcuraDePessoas>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let termo = procura.q.trim().to_lowercase();
-    if termo.chars().count() < 2 {
-        // Duas letras é o mínimo. Com uma, a resposta seria metade da
-        // instituição, e a lista deixaria de ajudar a escolher.
-        return axum::Json(serde_json::json!({ "people": [] })).into_response();
-    }
-
-    let pagina = optional(&state, &member, "/api/v1/people?page_size=200").await;
-    let eu = eu_id(&state, &member).await;
-
-    let pessoas: Vec<Value> = pagina
-        .get("items")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|p| {
-            // Nunca a própria: uma conversa consigo mesmo não existe, e o Core
-            // recusa-a na mesma.
-            p.get("id").and_then(Value::as_str) != Some(&eu.to_string())
-                && p.get("status").and_then(Value::as_str) != Some("deactivated")
-        })
-        .filter(|p| {
-            let campo = |nome: &str| {
-                p.get(nome)
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_lowercase()
-            };
-            campo("full_name").contains(&termo)
-                || campo("display_name").contains(&termo)
-                || campo("email").contains(&termo)
-        })
-        .take(20)
-        .map(|p| {
-            serde_json::json!({
-                "id": p.get("id"),
-                "name": p
-                    .get("display_name")
-                    .and_then(Value::as_str)
-                    .filter(|n| !n.is_empty())
-                    .or_else(|| p.get("full_name").and_then(Value::as_str))
-                    .unwrap_or_default(),
-                "email": p.get("email"),
-            })
-        })
-        .collect();
-
-    axum::Json(serde_json::json!({ "people": pessoas })).into_response()
 }
 
 /// Quem se pode pôr num «Para».
@@ -2530,95 +2455,6 @@ async fn messaging_typing(
 }
 
 #[derive(Deserialize)]
-struct SendForm {
-    #[serde(default)]
-    body: String,
-    #[serde(default)]
-    reply_to: Option<Uuid>,
-    /// Identificadores separados por vírgula.
-    #[serde(default)]
-    mentions: String,
-    /// A chave que torna o envio idempotente.
-    ///
-    /// Vem do formulário porque é o cliente que sabe que **este** é o mesmo
-    /// envio que já tentou. Um duplo-clique traz a mesma, e o Core devolve a
-    /// mensagem que a primeira escreveu.
-    #[serde(default)]
-    idempotency_key: String,
-}
-
-/// Envia uma mensagem.
-async fn messaging_send(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(conversation): Path<String>,
-    Form(form): Form<SendForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let mencoes: Vec<Uuid> = form
-        .mentions
-        .split(',')
-        .filter_map(|parte| Uuid::parse_str(parte.trim()).ok())
-        .collect();
-
-    // O autor não vai daqui. Vai do principal, no Core.
-    let corpo = serde_json::json!({
-        "body": form.body,
-        "reply_to": form.reply_to,
-        "mentions": mencoes,
-        "idempotency_key": (!form.idempotency_key.trim().is_empty())
-            .then(|| form.idempotency_key.trim()),
-    });
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/messaging/conversations/{conversation}/messages"),
-        &corpo,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&format!("/messages/{conversation}")).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-#[derive(Deserialize)]
-struct ReactForm {
-    message: Uuid,
-    emoji: String,
-}
-
-/// Põe ou tira uma reacção.
-async fn messaging_react(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(conversation): Path<String>,
-    Form(form): Form<ReactForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let caminho = format!(
-        "/api/v1/messaging/conversations/{conversation}/messages/{}/reactions",
-        form.message
-    );
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &caminho,
-        &serde_json::json!({ "emoji": form.emoji }),
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&format!("/messages/{conversation}")).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-#[derive(Deserialize)]
 struct ReadForm {
     until: String,
 }
@@ -2674,31 +2510,6 @@ async fn messaging_add_member(
     }
 }
 
-/// Retira alguém do grupo.
-async fn messaging_remove(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(conversation): Path<String>,
-    Form(form): Form<MemberForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    match api::delete(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!(
-            "/api/v1/messaging/conversations/{conversation}/members/{}",
-            form.who
-        ),
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&format!("/messages/{conversation}")).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
 /// Quem está a agir, tal como o Core o identifica.
 async fn eu_id(state: &WorkspaceState, member: &Member) -> Uuid {
     quem_sou(&optional(state, member, "/api/v1/me").await)
@@ -2720,31 +2531,6 @@ fn quem_sou(me: &Value) -> Uuid {
         .and_then(Value::as_str)
         .and_then(|s| Uuid::parse_str(s).ok())
         .unwrap_or_default()
-}
-
-/// Sai do grupo.
-async fn messaging_leave(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(conversation): Path<String>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    match api::delete(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!(
-            "/api/v1/messaging/conversations/{conversation}/members/{}",
-            eu_id(&state, &member).await
-        ),
-    )
-    .await
-    {
-        // Depois de sair, a conversa deixa de existir para quem saiu.
-        Ok(_) => Redirect::to("/messages").into_response(),
-        Err(failure) => failure_response(&failure),
-    }
 }
 
 #[derive(Deserialize)]
@@ -2893,15 +2679,6 @@ async fn mail_disconnect(
 }
 
 // ── Listas ───────────────────────────────────────────────────────────────
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn agents(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Agents).await
-}
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn audit(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Audit).await
-}
 
 // ── Administração de membros ─────────────────────────────────────────────
 
@@ -3372,88 +3149,6 @@ async fn record_validation(
 // ── Conhecimento ─────────────────────────────────────────────────────────
 
 // ── Inteligência ─────────────────────────────────────────────────────────
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn ai_hub(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Ai).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn new_agent(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Agents).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn agent_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Agents).await
-}
-
-/// Campos do construtor de agentes.
-#[derive(Deserialize)]
-struct NewAgentForm {
-    #[serde(default)]
-    name: String,
-    #[serde(default)]
-    purpose: String,
-    #[serde(default)]
-    instructions: String,
-    #[serde(default)]
-    capability: String,
-    #[serde(default)]
-    scope: String,
-    #[serde(default)]
-    max_classification: String,
-    // Uma checkbox não marcada não é submetida: a ausência do campo é `false`.
-    #[serde(default)]
-    uses_bibliography: Option<String>,
-    #[serde(default)]
-    uses_documents: Option<String>,
-    #[serde(default)]
-    uses_datasets: Option<String>,
-}
-
-/// `POST /ai/agents/new`
-///
-/// Antes desta auditoria este caminho não existia: o formulário submetia e o
-/// Axum devolvia 405. Um agente é uma definição e guarda-se sem nó de IA; o que
-/// falta é onde correr, e o estado do agente di-lo.
-async fn create_agent(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<NewAgentForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let body = serde_json::json!({
-        "name": form.name,
-        "purpose": form.purpose,
-        "instructions": form.instructions,
-        "capability": if form.capability.is_empty() { "general".to_owned() } else { form.capability },
-        "scope": if form.scope.is_empty() { "personal".to_owned() } else { form.scope },
-        "max_classification": if form.max_classification.is_empty() {
-            "INTERNAL".to_owned()
-        } else {
-            form.max_classification
-        },
-        "uses_bibliography": form.uses_bibliography.is_some(),
-        "uses_documents": form.uses_documents.is_some(),
-        "uses_datasets": form.uses_datasets.is_some(),
-    });
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/ai/agents",
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to("/ai/agents").into_response(),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
 
 #[derive(Deserialize, Default)]
 struct NyeAppQuery {
@@ -4002,29 +3697,9 @@ fn urlencoding_minimal(value: &str) -> String {
         .collect()
 }
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn compute(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Compute).await
-}
-
 // ── Institucional ────────────────────────────────────────────────────────
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn activity(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Activity).await
-}
-
 // ── Criar ideia ──────────────────────────────────────────────────────────
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn settings_account(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Settings).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn settings_language(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Settings).await
-}
 
 /// A escolha de idioma submetida.
 #[derive(Deserialize)]
@@ -4054,11 +3729,6 @@ async fn set_language(
         resposta.headers_mut().insert(header::SET_COOKIE, valor);
     }
     resposta
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn settings_apps(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Settings).await
 }
 
 /// Grava o conjunto de aplicações fixadas, ou repõe as predefinições.
@@ -4135,11 +3805,6 @@ async fn save_apps(
     .await;
 
     Redirect::to("/settings/apps?ok=1").into_response()
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn help(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Help).await
 }
 
 /// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
@@ -4414,16 +4079,6 @@ async fn own_avatar(
     }
 }
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn settings_security(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Settings).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn settings_mfa(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Settings).await
-}
-
 /// Acção retirada no apagamento da UI; espera o Claude Design.
 ///
 /// Produz um segredo que se mostra uma única vez; sem ecrã, perdia-se.
@@ -4431,85 +4086,52 @@ async fn settings_mfa_regenerate() -> Response {
     interface_pending()
 }
 
-#[derive(Deserialize)]
-struct ChangePasswordForm {
-    current: String,
-    password: String,
-    confirmation: String,
-}
-
-/// A mudança de palavra-passe, e a rotação de sessão que a acompanha.
-///
-/// O Core revoga todas as sessões e emite uma nova. A sessão do Workspace é
-/// substituída aqui pela mesma razão: manter a antiga deixaria o membro com um
-/// identificador que o Core já não reconhece, e o próximo pedido cairia no
-/// início de sessão sem explicação nenhuma.
-async fn change_password(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<ChangePasswordForm>,
+/// Depois de a palavra-passe mudar: a sessão antiga sai, a nova entra no
+/// cookie, e uma identidade com MFA volta ao segundo factor (ADR-0107).
+fn password_changed(
+    state: &WorkspaceState,
+    headers: &HeaderMap,
+    member: &Member,
+    session: CoreSession,
 ) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let body = serde_json::json!({
-        "current": form.current,
-        "password": form.password,
-        "confirmation": form.confirmation,
-    });
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/auth/password/change",
-        &body,
-    )
-    .await
-    .and_then(CoreSession::from_payload)
-    {
-        Ok(session) => {
-            if let Some(id) = session::session_id_from_cookies(
-                headers
-                    .get(header::COOKIE)
-                    .and_then(|value| value.to_str().ok()),
-            ) {
-                state.sessions.remove(&id);
-            }
-            let session_id = state.sessions.create(Session {
-                access_token: session.token,
-                display_name: session.display_name,
-                email: member.session.email.clone(),
-                must_change_password: session.must_change_password,
-                mfa_required: session.mfa_required,
-                expires_at: Instant::now() + state.config.session_ttl,
-            });
-            // Uma identidade que exige MFA reautentica o segundo factor depois de
-            // mudar a palavra-passe — a sessão nova é um portão, não uma sessão
-            // pronta (ADR-0107).
-            let destino = if session.mfa_required {
-                "/mfa"
-            } else {
-                "/settings/security"
-            };
-            (
-                StatusCode::SEE_OTHER,
-                [
-                    (header::LOCATION, destino.to_owned()),
-                    (
-                        header::SET_COOKIE,
-                        session::cookie_header(
-                            &session_id,
-                            state.config.cookie_secure,
-                            state.config.session_ttl,
-                        ),
-                    ),
-                ],
-            )
-                .into_response()
-        }
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => failure_response(&failure),
+    if let Some(id) = session::session_id_from_cookies(
+        headers
+            .get(header::COOKIE)
+            .and_then(|value| value.to_str().ok()),
+    ) {
+        state.sessions.remove(&id);
     }
+    let session_id = state.sessions.create(Session {
+        access_token: session.token,
+        display_name: session.display_name,
+        email: member.session.email.clone(),
+        must_change_password: session.must_change_password,
+        mfa_required: session.mfa_required,
+        expires_at: Instant::now() + state.config.session_ttl,
+    });
+    // Uma identidade que exige MFA reautentica o segundo factor depois de
+    // mudar a palavra-passe — a sessão nova é um portão, não uma sessão
+    // pronta (ADR-0107).
+    let destino = if session.mfa_required {
+        "/mfa"
+    } else {
+        "/settings/security?ok=1"
+    };
+    (
+        StatusCode::SEE_OTHER,
+        [
+            (header::LOCATION, destino.to_owned()),
+            (
+                header::SET_COOKIE,
+                session::cookie_header(
+                    &session_id,
+                    state.config.cookie_secure,
+                    state.config.session_ttl,
+                ),
+            ),
+        ],
+    )
+        .into_response()
 }
 
 /// Terminar uma sessão própria.
@@ -7656,6 +7278,7 @@ mod carregamento_tests {
 }
 
 // D004 · As aplicações de produtividade. Declarado no fim: usa `member_or_login!`.
+mod ops;
 mod org;
 mod productivity;
 mod research;

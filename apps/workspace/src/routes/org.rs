@@ -76,7 +76,7 @@ fn pane(open: bool) -> ResPane {
 
 /// Desenha a aplicação: a confirmação partilhada vai **depois da casca**, como
 /// o diálogo de fechar com trabalho por guardar, e só para a janela do pedido.
-fn render_org(
+pub(super) fn render_org(
     _state: &WorkspaceState,
     w: &AppWindow,
     status: StatusCode,
