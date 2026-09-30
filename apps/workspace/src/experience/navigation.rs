@@ -67,6 +67,8 @@ pub enum Screen {
     Help,
     /// O Terminal (ocsh).
     Terminal,
+    /// D008 · O Ocinye Browser.
+    Browser,
     /// D007.1 · Monitor de Actividade.
     Monitor,
     /// D007.1 · Resultados.
@@ -110,6 +112,7 @@ impl Screen {
             Self::Settings => "settings",
             Self::Help => "help",
             Self::Terminal => "terminal",
+            Self::Browser => "browser",
             Self::Monitor => "monitor",
             Self::Results => "results",
             Self::Trash => "trash",
@@ -146,6 +149,7 @@ impl Screen {
             Self::Settings => "/settings",
             Self::Help => "/help",
             Self::Terminal => "/terminal",
+            Self::Browser => "/browser",
             Self::Monitor => "/admin/monitor",
             Self::Results => "/results",
             Self::Trash => "/trash",
@@ -161,6 +165,7 @@ impl Screen {
         match self {
             Self::Help => "nav.help",
             Self::Terminal => "terminal.app",
+            Self::Browser => "browser.app",
             Self::Monitor => "nav.monitor",
             Self::Results => "nav.results",
             Self::Trash => "nav.trash",
@@ -207,6 +212,7 @@ impl Screen {
         match self {
             Self::Help => Icon::Help,
             Self::Terminal => Icon::SystemStatus,
+            Self::Browser => Icon::Browser,
             Self::Monitor => Icon::Activity,
             Self::Results => Icon::Science,
             Self::Trash => Icon::Trash,
@@ -457,7 +463,11 @@ pub(crate) const fn screen_permission(screen: Screen) -> Option<Permission> {
         | Screen::Trash
         // O Terminal não precisa de direito próprio: cada comando é autorizado
         // pelo Core como a capability que invoca (ADR-0312).
-        | Screen::Terminal => None,
+        | Screen::Terminal
+        // O Browser também não: o conteúdo externo não recebe nada do Ocinye, e o
+        // que toca no Ocinye são capabilities já governadas (ADR-0623). A
+        // Instância pode desactivá-lo (ADR-0014).
+        | Screen::Browser => None,
         // O Calendário: a agenda pessoal é do próprio, e `CalendarView` é o que
         // dá acesso aos eventos de unidade, workspace e instituição.
         Screen::Calendar => Some(Permission::CalendarView),

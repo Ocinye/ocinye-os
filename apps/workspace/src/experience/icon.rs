@@ -24,6 +24,8 @@ pub enum Icon {
     Power,
     Restart,
     SystemStatus,
+    /// O Ocinye Browser (D008).
+    Browser,
     // Shell
     SidebarCollapse,
     ChevronUp,
@@ -96,6 +98,7 @@ impl Icon {
             Self::Power => "oc-power",
             Self::Restart => "oc-restart",
             Self::SystemStatus => "oc-system-status",
+            Self::Browser => "oc-browser",
             Self::SidebarCollapse => "oc-sidebar-collapse",
             Self::ChevronUp => "oc-chevron-up",
             Self::Search => "oc-search",

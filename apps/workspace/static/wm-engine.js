@@ -219,6 +219,18 @@
     }
   });
 
+  /* D008 · `exit` no Terminal fecha a janela do Terminal (uma sessão por
+     janela). O `oc-terminal.js` só anuncia; quem fecha é o motor, pela mesma
+     operação do botão de fechar. Sem janela, o Terminal é a página: volta-se
+     ao Desktop. */
+  document.addEventListener('oc:term-exit', (e) => {
+    const root = e.detail && e.detail.root;
+    const w = root && root.closest ? root.closest('[data-oc="win"]') : null;
+    e.preventDefault();
+    if (w && WIN.test(w.dataset.win || '')) op(w.dataset.win, { op: 'close' });
+    else location.assign('/');
+  });
+
   /* O diálogo de fechar (FG-026): a decisão vai ao servidor sem recarregar.
      «Cancelar» tira o diálogo no lugar, e o oc-wm.js devolve o foco ao
      controlo anterior (ou ao fechar da janela); as outras decisões voltam a

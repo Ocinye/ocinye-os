@@ -69,12 +69,39 @@ pub fn app_icon(href: &str) -> &'static str {
         "/settings" => "settings",
         "/help" => "help",
         "/terminal" => "terminal",
+        // D008 · o Browser.
+        "/browser" => "browser",
         // D007.1 · os três que o registo ganhou.
         "/admin/monitor" => "gauge",
         "/results" => "results",
         "/trash" => "trash",
         _ => "apps",
     }
+}
+
+/// Texto de dados com os caracteres de controlo (C0, C1, ESC, bidi) visíveis
+/// como símbolos, nunca interpretados. Igual a `visible()` em `oc-terminal.js`.
+///
+/// D008 · vive aqui, e não no Terminal, para que o Terminal e o Browser não se
+/// refiram um ao outro (ADR-0623 §5): é uma função pura de texto.
+#[must_use]
+pub fn visible(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            let n = c as u32;
+            match n {
+                0x1b => "␛".to_owned(),
+                0x00..=0x08 | 0x0b..=0x1f => {
+                    char::from_u32(0x2400 + n).map_or_else(String::new, String::from)
+                }
+                0x7f => "␡".to_owned(),
+                0x80..=0x9f | 0x200e | 0x200f | 0x202a..=0x202e | 0x2066..=0x2069 => {
+                    format!("⟨U+{n:04X}⟩")
+                }
+                _ => c.to_string(),
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
