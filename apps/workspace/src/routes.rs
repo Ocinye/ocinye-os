@@ -64,7 +64,6 @@ pub const ROUTES: &[&str] = &[
     "/notes/lixo",
     "/notes/{note_id}/apagar",
     "/notes/{note_id}/restaurar",
-    "/notes/{note_id}/eliminar",
     "/notes/{note_id}",
     "/notes/{note_id}/gravar",
     "/notes/{note_id}/mover",
@@ -160,7 +159,11 @@ pub const ROUTES: &[&str] = &[
     "/studies/{study_id}/executions/new",
     "/executions/{execution_id}",
     "/executions/{execution_id}/results/new",
+    "/results",
     "/results/{result_id}",
+    "/trash",
+    "/trash/files/restore",
+    "/trash/notes/restore",
     "/results/{result_id}/validate",
     "/knowledge",
     "/files",
@@ -193,8 +196,6 @@ pub const ROUTES: &[&str] = &[
     "/me/files/favourite",
     "/me/files/delete",
     "/me/files/restore",
-    "/me/files/purge",
-    "/files/trash/empty",
     "/me/folders",
     "/me/folders/rename",
     "/me/folders/delete",
@@ -399,7 +400,6 @@ pub fn router(state: WorkspaceState) -> Router {
         // Apagar (leva ao Lixo), restaurar e eliminar definitivamente — do dono.
         .route("/notes/{note_id}/apagar", post(delete_note_route))
         .route("/notes/{note_id}/restaurar", post(restore_note_route))
-        .route("/notes/{note_id}/eliminar", post(purge_note_route))
         // Gravar (D004): o formulário do editor, com a revisão em que abriu.
         .route(
             "/notes/{note_id}/gravar",
@@ -542,7 +542,11 @@ pub fn router(state: WorkspaceState) -> Router {
             "/executions/{execution_id}/results/new",
             get(new_result).post(create_result),
         )
-        .route("/results/{result_id}", get(result_detail))
+        .route("/results", get(reg::results_page))
+        .route("/results/{result_id}", get(reg::result_page))
+        .route("/trash", get(reg::trash_page))
+        .route("/trash/files/restore", post(reg::trash_restore_file))
+        .route("/trash/notes/restore", post(reg::trash_restore_note))
         .route(
             "/results/{result_id}/validate",
             get(validate_result_form).post(record_validation),
@@ -573,7 +577,7 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/apps/pins", put(apps_set_pins))
         .route("/me/desktop", put(desktop_save))
         .route("/me/desktop/restore", post(desktop_restore))
-        .route("/admin/monitor", get(admin_monitor))
+        .route("/admin/monitor", get(reg::monitor_page))
         .route(
             "/files/uploads/{session_id}",
             get(upload_status).delete(upload_cancel),
@@ -621,8 +625,6 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/me/files/favourite", post(me_file_favourite))
         .route("/me/files/delete", post(me_file_delete))
         .route("/me/files/restore", post(me_file_restore))
-        .route("/me/files/purge", post(me_file_purge))
-        .route("/files/trash/empty", post(me_files_purge_all))
         .route("/me/folders", post(me_folder_new))
         .route("/me/folders/rename", post(me_folder_rename))
         .route("/me/folders/delete", post(me_folder_delete))
@@ -2703,11 +2705,6 @@ async fn scientific_chain(State(state): State<WorkspaceState>, headers: HeaderMa
     app_page(&state, &headers, Screen::Projects).await
 }
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn result_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Projects).await
-}
-
 // ── Construir a cadeia ───────────────────────────────────────────────────
 
 // ── Hipótese ─────────────────────────────────────────────────────────────
@@ -4322,23 +4319,6 @@ async fn restore_note_route(
     Redirect::to("/notes").into_response()
 }
 
-/// Elimina definitivamente uma nota do Lixo e fica no Lixo.
-async fn purge_note_route(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(note_id): Path<Uuid>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let _ = api::delete(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/me/notes/{note_id}/purge"),
-    )
-    .await;
-    Redirect::to("/notes/lixo").into_response()
-}
-
 /// Concede acesso a uma pessoa — formulário do dono.
 #[derive(Deserialize)]
 struct ShareNoteForm {
@@ -5806,13 +5786,6 @@ async fn notifications_page(State(state): State<WorkspaceState>, headers: Header
     pending_page(&state, &headers, None, title, "/notifications").await
 }
 
-/// O Monitor (destino do Estado do sistema para administradores): sem ecrã
-/// entregue pelo Design, a janela `app_pending`, com a visibilidade da
-/// Administração.
-async fn admin_monitor(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Admin).await
-}
-
 /// `POST /notifications/read-all` (D002 · FG-005): «Marcar todas como lidas»
 /// no painel. Só as do membro — o Core põe o destinatário na condição — e
 /// volta à página de onde veio, se for deste Workspace.
@@ -6777,45 +6750,6 @@ async fn me_file_restore(
     .await
 }
 
-async fn me_file_purge(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<MeFileActionForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    me_file_action(
-        &state,
-        &member,
-        "/api/v1/me/files/purge",
-        form.file_id,
-        "/files?trash=1",
-        "ok=apagado",
-    )
-    .await
-}
-
-/// `POST /files/trash/empty` — esvazia o Lixo pessoal de uma vez.
-///
-/// Um só pedido ao Core, que apaga tudo o que é do próprio e devolve quantos. A
-/// confirmação vive no ecrã (um passo deliberado antes deste botão); a autoridade
-/// é reavaliada no Core, ficheiro a ficheiro.
-async fn me_files_purge_all(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    let member = member_or_login!(state, headers);
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/me/files/purge-all",
-        &serde_json::json!({}),
-    )
-    .await
-    {
-        Ok(_) => regresso_ficheiros("/files?trash=1", "ok=lixo_vazio"),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(_) => regresso_ficheiros("/files?trash=1", "erro=recusado"),
-    }
-}
-
 /// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
 async fn file_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
     app_page(&state, &headers, Screen::Files).await
@@ -7282,4 +7216,5 @@ mod carregamento_tests {
 mod ops;
 mod org;
 mod productivity;
+mod reg;
 mod research;

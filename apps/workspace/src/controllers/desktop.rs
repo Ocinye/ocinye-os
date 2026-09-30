@@ -133,6 +133,8 @@ pub(crate) struct Clock {
     pub(crate) now: DateTime<Utc>,
     pub(crate) zone: ocinye_contracts::temporal::TimeZoneName,
     pub(crate) core_ok: bool,
+    /// Quem vê pode abrir o Monitor de Actividade (`platform.administer`, a
+    /// regra do Core de `/system/operations`): só então há ligação a ele.
     pub(crate) is_admin: bool,
 }
 
@@ -669,7 +671,7 @@ pub async fn desktop(ctx: ShellContext, caller: &Caller<'_>, state: &WorkspaceSt
         now: Utc::now(),
         zone: ctx.zone,
         core_ok: ctx.core.operational(),
-        is_admin: ctx.is_admin,
+        is_admin: ctx.viewer.capabilities.iter().any(|c| c == "platform.administer"),
     };
     // Um futuro por tipo, todos em paralelo: um Desktop tem no máximo um de cada.
     let find = |k: WidgetKind| placed.iter().find(|p| p.kind == k);

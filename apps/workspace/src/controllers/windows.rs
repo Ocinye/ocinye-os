@@ -241,6 +241,9 @@ pub fn has_screen(app: ApplicationId) -> bool {
             | ApplicationId::Audit
             | ApplicationId::Settings
             | ApplicationId::Help
+            | ApplicationId::Monitor
+            | ApplicationId::Results
+            | ApplicationId::Trash
     )
 }
 

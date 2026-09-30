@@ -181,7 +181,7 @@ fn flag(overview: &Value, k: &str) -> bool {
 
 /// As relações tipadas de um recurso, pela linhagem (as duas pontas
 /// resolvidas pelo Core para este membro), nos dois sentidos.
-async fn relations(
+pub(super) async fn relations(
     state: &WorkspaceState,
     quem: &controllers::Caller<'_>,
     kind: &str,

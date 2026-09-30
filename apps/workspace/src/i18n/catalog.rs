@@ -119,6 +119,9 @@ const NAV: &[Entry] = catalogo! {
     "prod.help.k.launcher": { pt: "Abrir o lançador de aplicações", en: "Open the application launcher", fr: "Ouvrir le lanceur d’applications" },
     "prod.help.k.switcher": { pt: "Alternar entre janelas abertas", en: "Switch between open windows", fr: "Basculer entre les fenêtres ouvertes" },
     "prod.help.k.send": { pt: "Enviar a mensagem (Mensagens)", en: "Send the message (Messages)", fr: "Envoyer le message (Messages)" },
+    // D007.1 · Resultados.
+    "prod.results.execution_n": { pt: "Execução n.º {n}", en: "Execution no. {n}", fr: "Exécution n° {n}" },
+    "prod.nye.about.result": { pt: "Sobre o resultado «{name}»: ", en: "About the result “{name}”: ", fr: "À propos du résultat « {name} » : " },
     "prod.work.nobody": { pt: "Ninguém", en: "Nobody", fr: "Personne" },
     "prod.files.up.type": { pt: "Este tipo de ficheiro não é aceite.", en: "This file type is not accepted.", fr: "Ce type de fichier n’est pas accepté." },
     "prod.files.up.full": { pt: "Sem espaço para este ficheiro", en: "Not enough space for this file", fr: "Pas assez d’espace pour ce fichier" },

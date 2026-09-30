@@ -2027,6 +2027,12 @@ pub(super) async fn nye_reference(
             "name",
             "prod.nye.about.agent",
         ),
+        // D007.1 · Um resultado, pela sua leitura autorizada.
+        "result" => (
+            format!("/api/v1/results/{id}"),
+            "title",
+            "prod.nye.about.result",
+        ),
         "task" => (
             format!("/api/v1/tasks/{id}"),
             "title",
