@@ -5,7 +5,7 @@
   "repository_head_before": "1e09b3f",
   "integrated_on": "2026-09-30",
   "integration_branch": "feat/design-d007",
-  "integration_status": "INTEGRATED_VISUAL_PARITY_TRUE_ACCESSIBILITY_CERTIFIED_FUNCTIONALLY_CERTIFIED",
+  "integration_status": "INTEGRATED_WITH_D007_1_VISUAL_PARITY_TRUE_ACCESSIBILITY_CERTIFIED_FUNCTIONALLY_CERTIFIED",
   "package": "ocinye-design-complete-D007: 548 checksums; 547 match directly, MANIFEST.json matches once its two self-declared late fields (file_count_total, checksum_set) are removed; cumulative, self-contained, 86 references",
   "application_method": "git apply of patch/d006-to-d007.patch (10 files) — byte-identical to implementation/; ui_ops wired into the catalogue; HANDOFF.md and DESIGN_LOCK.md copied from the package top level (pure additions)",
   "files_changed": [
@@ -2129,5 +2129,165 @@
       },
       "feedback": "docs/ui/CODE_FEEDBACK.md"
     }
-  ]
+  ],
+  "d007_1": {
+    "design_revision": "D007.1",
+    "kind": "corrective registry-completion revision, integrated on the unmerged D007 branch by explicit user decision (one verify, one PR, one merge for D007 + D007.1)",
+    "d007_head_before": "adad2fe",
+    "package": "ocinye-design-complete-D007.1: 615/615 checksums; cumulative, self-contained; 55/55 reference checks (reference only)",
+    "application_method": "apply.sh on the D007 tree: three screens and ui_reg copied; view_models block, OrgActionKind::StopService, pub mods, CSS block anchored; reference copies not committed",
+    "code_fix_in_design_file": "monitor.rs: MetricPlane import moved into the test module (unused in production)",
+    "design_tests": [
+      "monitor::sem_administracao_da_plataforma_nada_se_mostra",
+      "monitor::sem_inventario_nao_ha_botao_parar",
+      "monitor::plano_sem_uso_diz_nao_reportado_e_nunca_zero",
+      "results::nao_ha_novo_resultado_na_barra",
+      "results::validar_so_quando_o_core_oferece",
+      "results::recusa_nao_mostra_o_resultado",
+      "trash::sem_prazo_inventado",
+      "trash::restaurar_indisponivel_nao_submete",
+      "trash::eliminar_definitivamente_nunca_submete"
+    ],
+    "registry": {
+      "before": 24,
+      "added": [
+        "monitor",
+        "results",
+        "trash"
+      ],
+      "after": 27,
+      "not_registered": {
+        "tasks": "CANONICAL_ALIAS (/tasks/* → /my-work/*)",
+        "history": "DOMAIN_NOT_READY",
+        "browser": "RESERVED_FOR_D008"
+      },
+      "provisional": [
+        "terminal"
+      ],
+      "coverage": "docs/ui/application-design-coverage.md"
+    },
+    "applications": {
+      "monitor": "/admin/monitor · platform.administer · essential · SingleInstance",
+      "results": "/results · projects.view · optional (Research) · SingleInstance",
+      "trash": "/trash · personal · essential · SingleInstance"
+    },
+    "notes_destructive": {
+      "actual_semantics": "«Mover para o lixo» is a soft delete (restorable); purge is an irreversible Core delete (row, revisions and shares), owner-only, audited, replay → 404, with no governed confirmation",
+      "ui_offered": "never (no purge control in Notes)",
+      "workspace_paths": "POST /notes/{id}/eliminar (and /me/files/purge, /files/trash/empty) purged without confirmation and no screen used them",
+      "decision": "removed; permanent delete HONESTLY_UNAVAILABLE until a governed destructive capability exists"
+    },
+    "code_changes": [
+      "Core: registry +3; results list filtered by per-result readability; deleted_at in trash listings; result created_by_name/updated_at and validation performed_by_name",
+      "Workspace: controllers/reg + routes/reg; Monitor/Results/Trash wired; purge routes removed; Monitor links for platform administration only; Notes trash items open in Trash; result Nye reference; lineage links to /results",
+      "tests: apps/workspace/tests/d007_1_journeys.rs (4), 2 static guards in d007_contracts.rs; D001 Monitor assertion updated"
+    ],
+    "reversion_proofs": [
+      "results list filtered by per-result readability",
+      "Monitor gate platform.administer",
+      "unreported planes never offered",
+      "stale from the Core's node status",
+      "Monitor link only for platform administration",
+      "purge routes absent",
+      "Notes trash items open in Trash",
+      "no «Registar validação» without a form",
+      "(D007 proofs re-run on the combined tree: journeys pass)"
+    ],
+    "browser_certification": {
+      "1440": "Monitor (summary, memory/disk planes, stale reading, unreported planes named, no services, boundary), Results (list with state navigation, detail with conclusion, origin, validation author, superseded), Trash (list, detail, restore by keyboard with notice, disabled purge)",
+      "924": "no overflow (window 804 px)",
+      "720/820": "no overflow; primary column 144–435 px",
+      "390": "no overflow; every control ≥ 44×44 by hit-testing",
+      "keyboard": "Monitor planes Tab/Enter with visible focus; Trash ↓ and Enter restores; disabled purge not focusable",
+      "i18n": "pt/en/fr on 18 pages (D007.1 + D007 re-check): no raw keys; titles Lixo/Trash/Corbeille",
+      "screen_reader": "NOT_RUN"
+    },
+    "functional_gaps_total": 49,
+    "functional_gaps_design": 46,
+    "functional_gaps_found_in_integration": 3,
+    "functional_gaps": {
+      "REG-01": "RESOLVED (CORE_CONTRACT): ApplicationId::{Monitor, Results, Trash} + manifests; 27 apps; Screen, gates and launcher entries; 24 → 27 assertions",
+      "REG-02": "RESOLVED: Tarefas stays the /tasks/* → /my-work/* alias; not registered (TASKS_STANDALONE = NOT_REGISTERED)",
+      "REG-03": "DEFERRED: Histórico not registered (HISTORY_DOMAIN = NOT_READY)",
+      "REG-04": "DEFERRED: Browser not registered (D008)",
+      "REG-05": "RESOLVED: the manifest's categories prevail",
+      "REG-06": "RESOLVED: nav.audit pt «Registo de auditoria» (kept from D007)",
+      "MON-01": "RESOLVED · SECURITY_SENSITIVE: Monitor gate = platform.administer (the Core's rule for /system/operations); organisation admins and members → 404; Monitor links only for platform administration",
+      "MON-02": "RESOLVED: memory and disk from the typed heartbeat fields",
+      "MON-03": "RESOLVED: current consumption per node from /compute/nodes, with the canonical Compute link",
+      "MON-04": "HONESTLY_UNAVAILABLE: no time series; the screen says so",
+      "MON-05": "RUNTIME_FIX_REQUIRED: CPU, network and GPU utilisation are not reported; named as not reported, never zero",
+      "MON-06": "RUNTIME_FIX_REQUIRED · SECURITY_SENSITIVE: no typed service inventory; section honestly unavailable",
+      "MON-07": "RUNTIME_FIX_REQUIRED: no service state",
+      "MON-08": "CORE_FIX_REQUIRED · SECURITY_SENSITIVE: may_stop / protection not in the Core; no Stop control",
+      "MON-09": "CORE_FIX_REQUIRED · SECURITY_SENSITIVE: no typed stop intent; OrgActionKind::StopService exists but is not parseable from an address",
+      "MON-10": "CORE_FIX_REQUIRED: no asynchronous receipt",
+      "MON-11": "RESOLVED: stale = the Core's effective offline status (node_offline_after) with the last value; no threshold in the Workspace",
+      "MON-12": "CORE_FIX_REQUIRED · SECURITY_SENSITIVE: no stop audit (no stop)",
+      "MON-13": "RESOLVED: summary from /system/operations (counts, no member names)",
+      "MON-14": "DEFERRED · SECURITY_SENSITIVE: G-08 stays PROPOSED; no POST …/stop route (journey: 404/405)",
+      "RES-01": "PARTIAL (CORE_FIX_REQUIRED): no cross-workspace list; bounded read of the member's readable workspaces (first page of 100)",
+      "RES-02": "RESOLVED: /results/{id} → results::app",
+      "RES-03": "RESOLVED: validations with real kind and outcome, and who recorded them (Core field performed_by_name added)",
+      "RES-04": "DEFERRED · SECURITY_SENSITIVE: the Core says may_validate, but the validation form is not designed; no «Registar validação» without a destination",
+      "RES-05": "CORE_FIX_REQUIRED: no status-transition route",
+      "RES-06": "RESOLVED: lineage by /lineage/result/{id}, both ends resolved by the Core",
+      "RES-07": "RESOLVED · SECURITY_SENSITIVE: Core list now drops results above the reader's classification; environment, execution and superseded-by re-read; an unreadable link does not reach the view",
+      "RES-08": "RESOLVED: recorded from the execution (legacy route kept); no «Novo resultado»",
+      "RES-09": "RESOLVED: created_by_name and performed_by_name from the Core (additive)",
+      "RES-10": "RESOLVED: /results route and registry entry",
+      "RES-11": "RESOLVED: Nye reference result:<id>, re-read with the member's session",
+      "RES-12": "HONESTLY_UNAVAILABLE: no external publication links in the domain",
+      "TR-01": "RESOLVED: /me/files/trash + /me/deleted-notes, ordered by deleted_at (Core field added to both listings)",
+      "TR-02": "RESOLVED: /trash route and registry entry",
+      "TR-03": "RESOLVED · SECURITY_SENSITIVE: restore through /me/files/restore and /me/notes/{id}/restore; typed refusal (gone/denied/conflict); another member's item → refused, unchanged",
+      "TR-04": "HONESTLY_UNAVAILABLE: no retention; no deadline promised",
+      "TR-05": "HONESTLY_UNAVAILABLE · SECURITY_SENSITIVE: permanent delete disabled with the reason; the Notes/Files Workspace purge routes without confirmation were removed",
+      "TR-06": "RESOLVED · SECURITY_SENSITIVE: /files/trash/empty removed (no screen used it; it purged without confirmation)",
+      "TR-07": "PARTIAL: refusals are typed from the HTTP status (404 gone, 403 denied, 409 conflict); the Core has no reason field for restore",
+      "TR-08": "RESOLVED: navigation counts from the Core lists",
+      "TR-09": "HONESTLY_UNAVAILABLE: no personal soft delete beyond files and notes",
+      "TR-10": "RESOLVED: only the owner deletes and sees their trash: deleted_by is the member; not shown",
+      "TK-01": "RESOLVED: no second Tasks application",
+      "HI-01": "DEFERRED (CORE_CONTRACT_REQUIRED) · SECURITY_SENSITIVE: no personal recency record",
+      "HI-02": "DEFERRED (CORE_CONTRACT_REQUIRED): no actor = me filter on /activity",
+      "HI-03": "DEFERRED: Histórico application after HI-01/02",
+      "I71-01": "RESOLVED · SECURITY_SENSITIVE: the Monitor links (Home health widget, status panel) were shown to organisation admins whose gate would refuse; now only with platform.administer",
+      "I71-02": "RESOLVED: Notes trash items opened the editor (404 for a deleted note); they open in Trash",
+      "I71-03": "RESOLVED: a validation read «author no longer available» and «updated» repeated the creation date"
+    },
+    "functional_gaps_design_by_class": {
+      "RESOLVED": 24,
+      "DEFERRED": 7,
+      "HONESTLY_UNAVAILABLE": 5,
+      "RUNTIME_FIX_REQUIRED": 3,
+      "CORE_FIX_REQUIRED": 5,
+      "PARTIAL": 2
+    },
+    "security_sensitive_gaps": {
+      "MON-01": "RESOLVED",
+      "MON-06": "RUNTIME_FIX_REQUIRED",
+      "MON-08": "CORE_FIX_REQUIRED",
+      "MON-09": "CORE_FIX_REQUIRED",
+      "MON-12": "CORE_FIX_REQUIRED",
+      "MON-14": "DEFERRED",
+      "RES-04": "DEFERRED",
+      "RES-07": "RESOLVED",
+      "TR-03": "RESOLVED",
+      "TR-05": "HONESTLY_UNAVAILABLE",
+      "TR-06": "RESOLVED",
+      "HI-01": "DEFERRED",
+      "I71-01": "RESOLVED"
+    },
+    "security_sensitive_gaps_design": 12,
+    "security_sensitive_gaps_open": [
+      "MON-06",
+      "MON-08",
+      "MON-09",
+      "MON-12"
+    ],
+    "reversion_notes": [
+      "A first Monitor-link reversion targeted the agenda clock, not the status panel, and was not detected; re-aimed at the panel argument, it was"
+    ]
+  }
 }

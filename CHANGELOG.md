@@ -7,6 +7,23 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Interface D007.1 — Monitor de Actividade, Resultados e Lixo; registo completo — 2026-09-30 (no mesmo ramo da D007, por fazer merge)
+
+- O registo passa a 27 aplicações: Monitor de Actividade (`/admin/monitor`,
+  administração da plataforma), Resultados (`/results`) e Lixo (`/trash`,
+  pessoal), com o ecrã do Claude Design. Tarefas continua o alias de O Meu
+  Trabalho; Histórico não se regista (sem domínio); o Browser é da D008. Só o
+  Terminal continua pendente.
+- Monitor: memória e disco reportados pelos nós, com a leitura antiga marcada;
+  CPU, rede e GPU nomeadas como não reportadas; sem serviços nem «Parar».
+- **Core:** a lista de resultados de um ambiente já não devolve resultados
+  acima da classificação de quem lê; autor do resultado, de cada validação e
+  data de alteração; `deleted_at` nas listas do Lixo.
+- **Eliminação definitiva:** saíram as rotas do Workspace que apagavam notas e
+  ficheiros de vez sem confirmação (`/notes/{id}/eliminar`, `/me/files/purge`,
+  `/files/trash/empty`); fica indisponível até haver uma capacidade governada.
+- 4 viagens HTTP contra um Core real (`apps/workspace/tests/d007_1_journeys.rs`).
+
 ### Interface D007 — Mensagens, IA, Agentes, Computação, Meus Recursos, Actividade, Auditoria, Definições e Ajuda — 2026-09-30 (ramo `feat/design-d007`, por fazer merge)
 
 - As nove aplicações que eram `app_pending` com o ecrã do Claude Design e dados

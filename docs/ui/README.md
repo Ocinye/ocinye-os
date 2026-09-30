@@ -12,7 +12,10 @@ D006 Unidades e Administração
 **A D007 — Mensagens, IA, Agentes, Computação, Meus Recursos, Actividade,
 Auditoria, Definições e Ajuda — está no ramo `feat/design-d007`, por fazer
 merge** ([ADR-0622](../adrs/0622-completion-apps-history-evidence-and-agent-authority.md));
-a secção dela está no topo do [`CODE_FEEDBACK.md`](CODE_FEEDBACK.md). Só o
+com a revisão correctiva D007.1 (Monitor de Actividade, Resultados e Lixo; o
+registo passa a 27) no mesmo ramo; as secções estão no topo do
+[`CODE_FEEDBACK.md`](CODE_FEEDBACK.md), e a cobertura em
+[`application-design-coverage.md`](application-design-coverage.md). Só o
 Terminal continua `app_pending` (D008). Equipas não existem: sem domínio, sem
 desenho, sem aplicação.
 O código de interface é do Design e está fechado

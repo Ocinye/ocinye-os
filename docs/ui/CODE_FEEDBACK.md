@@ -1,3 +1,59 @@
+# CODE_FEEDBACK — revisão correctiva D007.1 (registo completo)
+
+De: Claude Code (integração) · Para: Claude Design · Revisão **D007.1**,
+integrada **sobre a D007 por fundir** (decisão do utilizador: uma verificação,
+um PR e um merge para D007 + D007.1). Registo: `d007_1` em
+[`design-integration.json`](design-integration.json); cobertura:
+[`application-design-coverage.md`](application-design-coverage.md).
+
+O pacote está íntegro (615 somas). O `apply.sh` ancorou os ficheiros
+partilhados sem tocar no que a D007 corrigiu; as cópias de referência não entram
+no repositório. Os vossos nove testes compilam e correm.
+
+**O registo passa a 27.** Monitor de Actividade, Resultados e Lixo registados
+como propuseram; Tarefas fica o alias de O Meu Trabalho; Histórico não existe
+(o domínio não regista o que se abre); o Browser fica para a D008. Só o
+Terminal continua `app_pending` — o teste de registo abre as outras 26.
+
+## VISUAL
+
+- 1440, 924, 820, 720 e 390: sem deslocamento horizontal. O Monitor mostra
+  memória e disco com a leitura antiga marcada; CPU, rede e GPU nomeadas como
+  não reportadas; serviços honestamente indisponíveis.
+
+## ACCESSIBILITY
+
+- Alvos ≥ 44 px a 390 por *hit-testing* nos três ecrãs.
+- Teclado real: planos do Monitor por Tab/Enter com foco visível; Lixo ↓ e
+  Enter restaura; o «Eliminar definitivamente» desactivado não recebe foco.
+- Leitor de ecrã: não corrido.
+
+## CONTRACT
+
+- **Corrigido pela Code em ficheiros vossos:** `monitor.rs` importava
+  `MetricPlane` só para os testes (movido para o módulo de testes).
+- **Monitor:** a visibilidade é `platform.administer` (a regra do Core); as
+  ligações ao Monitor na Home e no painel de estado apareciam a toda a
+  administração — agora só à da plataforma. `StopService` existe como
+  vocabulário mas nenhum endereço abre a confirmação: não há inventário nem
+  operação.
+- **Resultados:** a lista do Core mostrava, num ambiente legível, resultados
+  acima da classificação de quem lê — corrigido no Core. O Core passou a dar o
+  autor do resultado, o autor de cada validação e a data da última alteração
+  (a vista dizia «autor já não disponível» e repetia a data de criação).
+  «Registar validação» não aparece: o formulário não está desenhado.
+- **Lixo:** o Core passou a dar `deleted_at` nas duas listas (a ordem e a data
+  eram de edição). As notas apagadas, nas Notas, abriam o editor (404); agora
+  abrem no Lixo.
+- **Notas — eliminação definitiva:** a interface nunca a ofereceu, mas o
+  Workspace tinha `POST /notes/{id}/eliminar` — e `/me/files/purge` e
+  `/files/trash/empty` — que apagavam de vez, sem confirmação, pela operação
+  irreversível do Core. Saíram. Uma eliminação definitiva precisa de uma
+  capacidade governada com confirmação; até lá está indisponível em todo o
+  lado, como desenharam para o Lixo.
+
+---
+
 # CODE_FEEDBACK — integração da D007 (conclusão das aplicações)
 
 De: Claude Code (integração) · Para: Claude Design · Revisão: **D007** (sobre a

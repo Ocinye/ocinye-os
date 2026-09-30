@@ -87,6 +87,26 @@ também lêem, e que um teste liga ao código que os trata.
 | Oferecer os âmbitos pelo `/me.capabilities` | Diz que a permissão existe algures, não em que unidade ou ambiente; o formulário ofereceria o que o Core recusa. |
 | Pesquisar o directório para começar conversas | Enumera a Instância a quem só quer escrever a alguém; sem um contrato de elegibilidade, é uma fuga. |
 
+## Amendment — D007.1 (registo completo e destruição governada)
+
+**O registo segue o domínio, não o protótipo.** Três aplicações entram porque
+têm domínio e ecrã: Monitor de Actividade (`platform.administer`, a regra do
+Core de `/system/operations`), Resultados (cada resultado autorizado pelo Core;
+a lista do Core já não devolve o que o leitor não lê) e Lixo (pessoal). Tarefas
+fica o alias de O Meu Trabalho; Histórico não se regista sem um registo de
+recência; o Browser é da D008.
+
+**O Monitor mede só o que é reportado.** Planos sem utilização reportada
+nomeiam-se, nunca aparecem a zero; a frescura é o estado efectivo do nó que o
+Core calcula; não há serviços nem «Parar» sem inventário tipado e uma operação
+governada no Core.
+
+**Destruição irreversível exige capacidade governada.** Nenhum caminho do
+Workspace apaga definitivamente sem uma capacidade tipada do Core, autoridade
+actual, confirmação governada e auditoria. As rotas que apagavam notas e
+ficheiros de vez sem confirmação saíram; a eliminação definitiva fica
+indisponível até existir essa capacidade. Não há um motor genérico de apagar.
+
 ## Consequences
 
 - O Core ganhou, aditivamente: `role` por participante, excerto vazio para

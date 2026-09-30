@@ -292,7 +292,11 @@ sem que nada falhe.
   Actividade, Auditoria, Definições e Ajuda, com a história que relê o alvo, a
   prova por lista branca e as instruções de um agente só para quem o criou
   ([ADR-0622](docs/adrs/0622-completion-apps-history-evidence-and-agent-authority.md))
-  — está no ramo `feat/design-d007`, **por fazer merge**. Equipas não existem:
+  — e a revisão correctiva D007.1 — Monitor de Actividade, Resultados e Lixo,
+  com o registo a passar a **27 aplicações** e sem eliminação definitiva sem
+  confirmação governada — estão no ramo `feat/design-d007`, **por fazer merge**
+  (um só merge). Tarefas é o alias de O Meu Trabalho; Histórico e o Browser
+  não estão registados. Equipas não existem:
   sem domínio, sem desenho, sem aplicação. Só o Terminal continua sem ecrã do
   Design (D008) e abre numa janela com o estado `app_pending`:
   **0 páginas** respondem `503 interface_pending`. **Ainda não deployada:**
@@ -596,14 +600,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1708 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1723 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **689 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **693 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
@@ -621,12 +625,13 @@ sem que nada falhe.
   Desktop, as janelas (D001.2.1, D002), a Nye (D003), Ficheiros, Notas,
   Calendário e Correio (D004) e Projectos, O Meu Trabalho, Ideias, Dados e
   Conhecimento (D005), Unidades e Administração (D006); as nove da conclusão
-  (D007) no ramo `feat/design-d007`, por fazer merge; o Terminal abre numa
+  (D007) e Monitor de Actividade, Resultados e Lixo (D007.1) no ramo
+  `feat/design-d007`, por fazer merge; o Terminal abre numa
   janela com o estado `app_pending` até à D008. As viagens de browser com Chrome saíram com a UI antiga; as de HTTP
   contra um Core real voltaram (`apps/workspace/tests/d001_journeys.rs`,
   `d002_journeys.rs`, `d003_journeys.rs`, `d003_act_journeys.rs`,
   `d004_journeys.rs`, `d005_journeys.rs`, `d006_journeys.rs`; e, no ramo da
-  D007, `d007_journeys.rs`). As provas de instalação,
+  D007, `d007_journeys.rs` e `d007_1_journeys.rs`). As provas de instalação,
   actualização, restauro e hardware continuam em `NOT_RUN`
   ([apagamento](docs/ui/UI_WIPE_REPORT.md)).
 
