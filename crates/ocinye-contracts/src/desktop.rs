@@ -41,10 +41,10 @@ const fn rule(id: &'static str, sizes: &'static [(u8, u8)]) -> WidgetKindRule {
 /// Os catorze tipos de widget, pela ordem do registo do Design.
 pub const WIDGET_KINDS: &[WidgetKindRule] = &[
     rule("kpis", &[(4, 1)]),
-    WidgetKindRule {
-        mandatory: true,
-        ..rule("notice", &[(2, 1)])
-    },
+    // D009: nenhum tipo é obrigatório. Os avisos ainda não têm fonte no Core
+    // (FG-013); um widget obrigatório sem dados seria um cartão morto em todos
+    // os Desktops. `mandatory` fica no contrato para quando houver política.
+    rule("notice", &[(2, 1)]),
     rule("continue", &[(2, 1), (2, 2)]),
     rule("tasks", &[(1, 2), (1, 1), (2, 2)]),
     rule("calendar", &[(1, 2), (2, 1), (2, 2)]),
@@ -61,7 +61,11 @@ pub const WIDGET_KINDS: &[WidgetKindRule] = &[
 
 /// Os fundos (lista fechada). A fotografia própria fica de fora até haver um
 /// contrato de carregamento de imagem.
-pub const WALLPAPERS: &[&str] = &["ocinye", "dusk", "org", "mist", "slate", "sand"];
+pub const WALLPAPERS: &[&str] = &[
+    "ocinye", "dusk", "org", "mist", "slate", "sand",
+    // D009 · um por Distribuição (Research, Business, Personal, Education).
+    "field", "module", "calm", "lattice",
+];
 
 /// Como a imagem de fundo ocupa o ecrã. Reservado para a fotografia.
 pub const FITS: &[&str] = &["fill", "fit"];
@@ -190,8 +194,10 @@ mod tests {
     }
 
     #[test]
-    fn o_obrigatorio_nao_pode_faltar() {
-        assert!(layout(&[("tasks", 1, 2)]).validate(false).is_err());
+    fn sem_obrigatorios_um_desktop_vazio_e_valido() {
+        assert_eq!(layout(&[("tasks", 1, 2)]).validate(false), Ok(()));
+        assert_eq!(layout(&[]).validate(false), Ok(()));
+        assert!(WIDGET_KINDS.iter().all(|r| !r.mandatory));
     }
 
     #[test]

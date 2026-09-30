@@ -44,39 +44,8 @@ pub fn pending(id: &'static str, text_key: &'static str) -> impl IntoView {
 /// O ícone de uma aplicação, pela sua rota. A escolha visual é do Design.
 #[must_use]
 pub fn app_icon(href: &str) -> &'static str {
-    match href {
-        "/" => "home",
-        "/my-work" => "work",
-        "/notes" => "notes",
-        "/calendar" => "calendar",
-        "/mail" => "mail",
-        "/messages" => "messages",
-        "/files" => "files",
-        "/knowledge" => "knowledge",
-        "/bibliography" => "bibliography",
-        "/units" => "units",
-        "/ideas" => "idea",
-        "/projects" => "project",
-        "/datasets" => "data",
-        "/ai/prompt" => "nye",
-        "/ai" => "ai",
-        "/ai/agents" => "agent",
-        "/compute" => "compute",
-        "/resources" => "workspace",
-        "/activity" => "activity",
-        "/admin" => "admin",
-        "/audit" => "shield",
-        "/settings" => "settings",
-        "/help" => "help",
-        "/terminal" => "terminal",
-        // D008 · o Browser.
-        "/browser" => "browser",
-        // D007.1 · os três que o registo ganhou.
-        "/admin/monitor" => "gauge",
-        "/results" => "results",
-        "/trash" => "trash",
-        _ => "apps",
-    }
+    // D009 · uma só fonte: `experience::iconography::APP_ICONS` (ICON-01).
+    crate::experience::iconography::for_route(href)
 }
 
 /// Texto de dados com os caracteres de controlo (C0, C1, ESC, bidi) visíveis

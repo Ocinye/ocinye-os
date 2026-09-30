@@ -16,7 +16,7 @@
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
-use super::{reference, Caller, ShellContext, SYSTEM_DIM, SYSTEM_WALLPAPER};
+use super::{reference, Caller, ShellContext};
 use crate::api::ApiFailure;
 use crate::i18n::{t, tp};
 use crate::ui::screens::home::registry::{self, KPIS};
@@ -29,7 +29,8 @@ use crate::WorkspaceState;
 
 /// A versão da predefinição do sistema. Sobe quando o Design mudar
 /// `registry::system_default`.
-pub const SYSTEM_DEFAULT_VERSION: u32 = 1;
+pub const SYSTEM_DEFAULT_VERSION: u32 =
+    crate::experience::distribution::DISTRIBUTION_DEFAULTS_VERSION;
 
 /// Quantos itens mostra uma lista de widget.
 const LIST_LIMIT: usize = 5;
@@ -38,21 +39,38 @@ const LIST_LIMIT: usize = 5;
 const CONTINUE_LIMIT: usize = 7;
 const CONTINUE_MAX_AGE_SECS: i64 = 30 * 86_400;
 
-/// A predefinição do sistema para a Distribuição (`DefaultSource::System`).
+/// A predefinição da Distribuição (`DefaultSource::Distribution`, D009).
 ///
-/// Ninguém a publicou: não tem nome dado pela administração nem data, e a
-/// folha «Repor predefinição» diz que vem com o Ocinye OS (D001.1). Quando a
-/// administração publicar uma (FG-014), essa é `DefaultSource::Instance`.
+/// Vem com o Ocinye OS e ninguém a publicou: sem nome dado pela administração
+/// nem data; a folha «Repor» mostra a versão. Quando a administração publicar
+/// uma (FG-014), essa é `DefaultSource::Instance` e ganha a esta.
 #[must_use]
 pub fn system_default(d: Distribution) -> DesktopDefault {
+    let (wallpaper, dim) = crate::experience::distribution::look(Some(d));
+    DesktopDefault {
+        source: DefaultSource::Distribution,
+        name: String::new(),
+        version: SYSTEM_DEFAULT_VERSION,
+        published: String::new(),
+        wallpaper,
+        dim,
+        widgets: registry::system_default(d),
+    }
+}
+
+/// A predefinição mínima do sistema (`DefaultSource::System`, D009): só
+/// quando a Distribuição não se conhece. Nunca a de Research (§116).
+#[must_use]
+pub fn fallback_default() -> DesktopDefault {
+    let (wallpaper, dim) = crate::experience::distribution::look(None);
     DesktopDefault {
         source: DefaultSource::System,
         name: String::new(),
         version: SYSTEM_DEFAULT_VERSION,
         published: String::new(),
-        wallpaper: SYSTEM_WALLPAPER,
-        dim: SYSTEM_DIM,
-        widgets: registry::system_default(d),
+        wallpaper,
+        dim,
+        widgets: crate::experience::distribution::widgets(None),
     }
 }
 
@@ -638,18 +656,17 @@ async fn content(
 
 /// `GET /`: o Desktop do membro, com os dados de cada widget.
 pub async fn desktop(ctx: ShellContext, caller: &Caller<'_>, state: &WorkspaceState) -> DesktopVm {
-    // Sem Distribuição (o Core não respondeu a `/organisation`), a predefinição
-    // é a da porta; e sem essa, a de investigação — o único caminho que não
-    // deixa o Desktop vazio. Com o Core a responder, nunca se chega aqui.
+    // Sem Distribuição (o Core não respondeu a `/organisation`), a da porta; e
+    // sem essa, a predefinição mínima do sistema — nunca Research por omissão
+    // (D009 §116). Com o Core a responder, nunca se chega aqui.
     let distribution = match ctx.distribution {
-        Some(d) => d,
+        Some(d) => Some(d),
         None => crate::api::instance_door(state)
             .await
             .and_then(|(_, p)| p)
-            .and_then(|p| super::distribution_of(p.as_str()))
-            .unwrap_or(Distribution::Research),
+            .and_then(|p| super::distribution_of(p.as_str())),
     };
-    let default = system_default(distribution);
+    let default = distribution.map_or_else(fallback_default, system_default);
     let (version, placed, can_customise) = match &ctx.desktop {
         Ok(d) => {
             let version = d
@@ -755,14 +772,23 @@ mod tests {
     #[test]
     fn a_predefinicao_do_sistema_nao_anuncia_uma_publicacao_da_administracao() {
         let d = system_default(Distribution::Business);
-        assert_eq!(d.source, DefaultSource::System);
+        assert_eq!(d.source, DefaultSource::Distribution);
         assert!(
             d.name.is_empty() && d.published.is_empty(),
             "uma data que ninguém publicou"
         );
         assert_eq!(d.version, SYSTEM_DEFAULT_VERSION);
         assert_eq!(d.widgets, registry::system_default(Distribution::Business));
-        assert_eq!((d.wallpaper, d.dim), (Wallpaper::Ocinye, 20));
+        assert_eq!((d.wallpaper, d.dim), (Wallpaper::Module, 20));
+        let f = fallback_default();
+        assert_eq!(
+            (f.source, f.wallpaper),
+            (DefaultSource::System, Wallpaper::Ocinye)
+        );
+        assert!(
+            f.widgets.is_empty(),
+            "sem Distribuição: nenhum widget, e não os de Research"
+        );
     }
 
     #[test]

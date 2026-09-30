@@ -12,7 +12,8 @@
 
 use leptos::prelude::*;
 
-use crate::i18n::t;
+use crate::experience::{distribution, iconography};
+use crate::i18n::{t, tf};
 use crate::ui::components::{app_icon, icon};
 use crate::ui::nye;
 use crate::ui::view_models::{Distribution, Health, ShellVm};
@@ -150,23 +151,50 @@ fn distribution_key(d: Distribution) -> (&'static str, &'static str) {
 }
 
 fn top_bar(vm: &ShellVm) -> impl IntoView {
+    // D009 · o distintivo leva o ícone da Distribuição (DIST-03), e o painel
+    // diz o que a Distribuição define — primeiros passos, fixações — e que
+    // isso não é autorização. Não abre sozinho: não há estado a gravar (§93).
     let dist = vm.distribution.map(|d| {
         let (name_key, desc_key) = distribution_key(d);
         let name = t(name_key);
-        let code: String = name.chars().take(2).collect();
+        let x = distribution::defaults(d);
+        let ic = iconography::dist_icon_id(d);
+        // Só o que este membro vê: uma fixação sem autorização não aparece (§37).
+        let visible = |ids: &[ocinye_contracts::ApplicationId]| -> Vec<(&'static str, String)> {
+            ids.iter()
+                .filter_map(|p| vm.apps.iter().find(|a| a.id == p.as_str()))
+                .map(|a| (app_icon(a.href), a.label.clone()))
+                .collect()
+        };
+        let pins = visible(x.pins);
+        let more = visible(x.recommended);
+        let chips = |list: Vec<(&'static str, String)>| view! {
+            <ul class="oc-dist-pins">
+                {list.into_iter().map(|(i, l)| view! { <li>{icon(i)}<span>{l}</span></li> }).collect_view()}
+            </ul>
+        };
         view! {
             <details class="oc-menu" data-oc="menu">
-                <summary class="oc-dist" aria-label=format!("{} · {}", t("auth.distribution"), name) title=name>{code.clone()}</summary>
-                <div class="oc-menu__pop oc-menu__pop--wide" role="dialog" aria-label=t("shell.dist.title")>
+                <summary class="oc-dist" data-distribution=d.as_str() aria-label=format!("{} · {}", t("auth.distribution"), name) title=name>{icon(ic)}</summary>
+                <div class="oc-menu__pop oc-menu__pop--wide oc-menu__pop--dist" role="dialog" aria-label=t("shell.dist.title")>
                     <div class="oc-dist-card">
-                        <span class="oc-dist oc-dist--lg" aria-hidden="true">{code}</span>
+                        <span class="oc-dist oc-dist--lg" aria-hidden="true">{icon(ic)}</span>
                         <span>
                             <span class="oc-menu__kicker">{t("shell.dist.title")}</span>
                             <strong>{name}</strong>
                         </span>
                     </div>
                     <p class="oc-menu__body">{t(desc_key)}</p>
-                    <p class="oc-menu__foot">{t("shell.dist.note")}</p>
+                    <p class="oc-dist-sub">{t(x.first_title_key)}</p>
+                    <ul class="oc-dist-first">
+                        <li>{icon("apps")}<span>{t(x.first_body_key)}</span></li>
+                        <li>{icon("edit")}<span>{t("dist.first.desk")}</span></li>
+                        <li>{icon("nye")}<span>{t("dist.first.nye")}</span></li>
+                    </ul>
+                    {(!pins.is_empty()).then(|| view! { <p class="oc-dist-sub">{t("dist.pins")}</p>{chips(pins)} })}
+                    {(!more.is_empty()).then(|| view! { <p class="oc-dist-sub">{t("dist.first.recommended")}</p>{chips(more)} })}
+                    <a class="oc-dist-go" href="#oc-launcher" data-oc="launcher-open">{icon("apps")}{t("dist.first.open_apps")}</a>
+                    <p class="oc-menu__foot">{t("dist.authority")}" "{t("shell.dist.note")}</p>
                 </div>
             </details>
         }
@@ -360,6 +388,12 @@ fn launcher(vm: &ShellVm) -> impl IntoView {
                     }).collect_view()}
                 </ul>
                 <p class="oc-launcher__empty" data-part="launcher-empty" hidden>{t("shell.launcher.none")}</p>
+                {vm.distribution.map(|d| view! {
+                    <p class="oc-launcher__dist">
+                        {icon(iconography::dist_icon_id(d))}
+                        <span>{tf("shell.launcher.dist", &[("distribution", t(distribution_key(d).0))])}" · "{t("dist.authority")}</span>
+                    </p>
+                })}
                 <p class="oc-launcher__note"><a href="/settings/apps">{t("shell.launcher.manage")}</a></p>
             </div>
         </div>

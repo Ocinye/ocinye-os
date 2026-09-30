@@ -28,6 +28,10 @@ fn wall_key(w: Wallpaper) -> &'static str {
         Wallpaper::Mist => "desk.wall.mist",
         Wallpaper::Slate => "desk.wall.slate",
         Wallpaper::Sand => "desk.wall.sand",
+        Wallpaper::Field => "desk.wall.field",
+        Wallpaper::Module => "desk.wall.module",
+        Wallpaper::Calm => "desk.wall.calm",
+        Wallpaper::Lattice => "desk.wall.lattice",
     }
 }
 
@@ -231,6 +235,23 @@ fn body(content: &WidgetContent) -> AnyView {
     }
 }
 
+/// D009 · Um widget cujo pedido o Core recusou (sem autorização) ou cuja
+/// aplicação a Instância desactivou não se desenha: um cartão morto não diz
+/// nada útil. Fica na disposição (`hidden`) para que gravar não o apague.
+fn withheld(c: &WidgetContent) -> bool {
+    fn no<T>(l: &Load<T>) -> bool {
+        matches!(l, Load::Denied | Load::Inactive)
+    }
+    match c {
+        WidgetContent::List(l) => no(l),
+        WidgetContent::Continue(l) => no(l),
+        WidgetContent::Health(l) => no(l),
+        WidgetContent::Metrics(l) => no(l),
+        WidgetContent::Count(l) => no(l),
+        WidgetContent::Storage(l) => no(l),
+    }
+}
+
 fn widget(w: &DeskWidget) -> impl IntoView {
     let s = spec(w.placed.kind);
     let title = t(s.title_key);
@@ -248,6 +269,8 @@ fn widget(w: &DeskWidget) -> impl IntoView {
             data-mandatory=s.mandatory.then_some("")
             data-bare=bare.then_some("")
             data-min=w.placed.minimized.then_some("")
+            data-withheld=withheld(&w.content).then_some("")
+            hidden=withheld(&w.content)
             aria-label=title
         >
             <header class="oc-dw__head">
@@ -436,11 +459,22 @@ fn restore(vm: &DesktopVm, def: &DesktopDefault) -> impl IntoView {
         t(&format!("dist.{}", d.as_str())).to_owned()
     });
     let (source, origin, name, meta) = match def.source {
+        // D009 · a predefinição mínima (Distribuição desconhecida).
         DefaultSource::System => (
             "system",
             t("desk.restore.origin.system"),
-            tf("desk.restore.system_name", &[("distribution", &dist)]),
-            t("desk.restore.system_meta").to_owned(),
+            t("desk.restore.system_fallback").to_owned(),
+            t("desk.restore.system_fallback_meta").to_owned(),
+        ),
+        // D009 · a predefinição da Distribuição, com a versão que o Ocinye OS traz.
+        DefaultSource::Distribution => (
+            "distribution",
+            t("desk.restore.origin.distribution"),
+            tf("desk.restore.distribution_name", &[("distribution", &dist)]),
+            tf(
+                "desk.restore.distribution_meta",
+                &[("version", &def.version.to_string())],
+            ),
         ),
         DefaultSource::Instance => (
             "instance",
@@ -468,7 +502,7 @@ fn restore(vm: &DesktopVm, def: &DesktopDefault) -> impl IntoView {
             } else {
                 diff_lines(&d).into_any()
             }}
-            <p class="oc-sheet__note">{t("desk.restore.keeps")}</p>
+            <p class="oc-sheet__note">{t("desk.restore.keeps")}" "{t("desk.restore.pins_kept")}</p>
             <form class="oc-sheet__actions" method="post" action="/me/desktop/restore" data-oc="desk-restore-form">
                 <button type="button" class="oc-btn-line" data-oc="dialog-close">{t("desk.cancel")}</button>
                 <button type="submit" class="oc-btn-solid" disabled=d.is_empty()>{icon("restart")}{t("desk.restore.confirm")}</button>
@@ -481,7 +515,7 @@ fn restore(vm: &DesktopVm, def: &DesktopDefault) -> impl IntoView {
 pub fn home(vm: &DesktopVm) -> impl IntoView {
     // Só uma publicação da administração pode ser «nova» (D001.1).
     let newer = match (&vm.default, vm.base_version) {
-        (Some(d), _) if d.source == DefaultSource::System => false,
+        (Some(d), _) if d.source != DefaultSource::Instance => false,
         (Some(d), Some(b)) => d.version > b,
         (Some(_), None) => true,
         _ => false,
@@ -643,15 +677,24 @@ mod tests {
         assert!(!html.contains("<h1>") || html.contains(r#"<h1 class="oc-sr">"#));
     }
 
+    /// D009 · Sem obrigatórios: os avisos retiram-se como os outros.
     #[test]
-    fn o_obrigatorio_nao_se_retira() {
+    fn os_avisos_ja_nao_sao_obrigatorios() {
         let html = home(&vm()).to_html();
         let notice = &html[html.find(r#"data-kind="notice""#).unwrap()..];
         let notice = &notice[..notice.find("</li>").unwrap()];
-        assert!(
-            !notice.contains(r#"data-oc="dw-remove""#)
-                && notice.contains(r#"aria-disabled="true""#)
-        );
+        assert!(notice.contains(r#"data-oc="dw-remove""#) && !notice.contains("data-mandatory"));
+    }
+
+    /// D009 · Um widget recusado pelo Core fica escondido, não morto.
+    #[test]
+    fn um_widget_sem_autorizacao_nao_se_desenha() {
+        let mut v = vm();
+        v.widgets[1].content = WidgetContent::Count(Load::Denied);
+        let html = home(&v).to_html();
+        let ideas = &html[html.find(r#"data-kind="ideas""#).unwrap()..];
+        let ideas = &ideas[..ideas.find(">").unwrap()];
+        assert!(ideas.contains("data-withheld") && ideas.contains("hidden"));
     }
 
     #[test]
@@ -695,7 +738,7 @@ mod tests {
         assert_contracts(&html);
         assert!(
             html.contains(r#"data-source="system""#)
-                && html.contains(t("desk.restore.system_meta"))
+                && html.contains(t("desk.restore.system_fallback_meta"))
         );
         assert!(
             !html.contains("oc-desk-notice"),

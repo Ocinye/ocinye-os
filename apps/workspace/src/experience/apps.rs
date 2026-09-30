@@ -498,11 +498,11 @@ pub fn default_pins() -> Vec<String> {
 /// (D12, Q-10). Uma escolha do membro, mesmo vazia, nunca passa por aqui.
 #[must_use]
 pub fn default_pins_for(perfil: Option<&str>) -> Vec<String> {
-    let mut pins = default_pins();
-    if perfil == Some("research") && !pins.iter().any(|p| p == "work") {
-        pins.insert(0, "work".to_owned());
-    }
-    pins
+    // D009 · as fixações por Distribuição vivem em `experience::distribution`.
+    // Um perfil fora do enum fechado cai nas do manifesto, nunca em Research.
+    crate::experience::distribution::default_pins(
+        perfil.and_then(crate::experience::distribution::parse),
+    )
 }
 
 /// Se uma aplicação existe **e** é fixável — o que o Workspace valida antes de
@@ -644,17 +644,50 @@ mod tests {
         assert_eq!(por_omissao, vec!["notes", "files", "projects"]);
     }
 
-    /// O perfil de investigação fixa «O Meu Trabalho» por omissão; os outros não.
+    /// D009 · as fixações por omissão são as da Distribuição
+    /// (`experience::distribution`); um perfil desconhecido ou ausente fica
+    /// com as do manifesto — nunca com as de Research.
     #[test]
-    fn o_meu_trabalho_vem_fixado_so_na_investigacao() {
+    fn as_fixacoes_por_omissao_sao_as_da_distribuicao() {
         assert_eq!(
             default_pins_for(Some("research")),
-            vec!["work", "notes", "files", "projects"]
+            vec![
+                "work",
+                "projects",
+                "ideas",
+                "datasets",
+                "results",
+                "knowledge",
+                "files",
+                "notes"
+            ]
         );
-        for perfil in [Some("business"), Some("personal"), Some("education"), None] {
-            assert!(
-                !default_pins_for(perfil).iter().any(|p| p == "work"),
-                "{perfil:?} fixou O Meu Trabalho"
+        assert_eq!(
+            default_pins_for(Some("business")),
+            vec!["work", "calendar", "mail", "messages", "projects", "files", "notes"]
+        );
+        assert_eq!(
+            default_pins_for(Some("personal")),
+            vec!["files", "notes", "calendar", "work", "resources", "trash"]
+        );
+        assert_eq!(
+            default_pins_for(Some("education")),
+            vec![
+                "work",
+                "units",
+                "projects",
+                "knowledge",
+                "bibliography",
+                "calendar",
+                "files",
+                "notes"
+            ]
+        );
+        for perfil in [None, Some("desconhecida"), Some("Research")] {
+            assert_eq!(
+                default_pins_for(perfil),
+                vec!["notes", "files", "projects"],
+                "{perfil:?}"
             );
         }
     }

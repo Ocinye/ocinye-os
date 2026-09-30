@@ -62,10 +62,10 @@ fn distribution_key(d: Distribution) -> &'static str {
 pub(crate) fn identity(door: &DoorVm) -> impl IntoView {
     let dist = door.distribution.map(|d| {
         let name = t(distribution_key(d));
-        let code: String = name.chars().take(2).collect();
+        // D009 · o ícone da Distribuição no lugar das duas letras (DIST-03).
         view! {
             <p class="oc-auth__dist" data-distribution=d.as_str() title=t("auth.distribution")>
-                <span class="oc-auth__dist-code" aria-hidden="true">{code}</span>
+                <span class="oc-auth__dist-code" aria-hidden="true">{icon(crate::experience::iconography::dist_icon_id(d))}</span>
                 <span class="oc-sr">{t("auth.distribution")}" "</span>
                 {name}
             </p>
@@ -177,7 +177,7 @@ mod tests {
         };
         let html = identity(&door).to_html();
         assert!(html.contains(r#"data-distribution="business""#));
-        assert!(html.contains(">Bu<"));
+        assert!(html.contains("icons.svg#dist-business"));
         assert!(html.contains("Business"));
         assert!(!html.contains("perfil") && !html.contains("Perfil"));
     }

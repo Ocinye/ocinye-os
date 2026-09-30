@@ -26,6 +26,7 @@ mod catalog;
 mod ui_apps;
 mod ui_auth;
 mod ui_base;
+mod ui_dist;
 mod ui_nye;
 mod ui_ops;
 mod ui_org;

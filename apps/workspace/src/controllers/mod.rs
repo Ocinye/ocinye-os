@@ -250,7 +250,15 @@ pub async fn shell(
                 .map(str::to_owned)
                 .collect()
         })
+        // D009 · sem escolha do membro: as fixações da Distribuição.
         .unwrap_or_else(|| apps::default_pins_for(perfil.as_deref()));
+    // D009 · o fundo de quem nunca personalizou é o da Distribuição (§59:
+    // um fundo escolhido pelo membro, gravado, nunca é substituído).
+    let (dist_wall, dist_dim) = crate::experience::distribution::look(
+        perfil
+            .as_deref()
+            .and_then(crate::experience::distribution::parse),
+    );
     let zone = me
         .get("timezone")
         .and_then(Value::as_str)
@@ -322,12 +330,12 @@ pub async fn shell(
         .and_then(|l| l.get("wallpaper"))
         .and_then(Value::as_str)
         .and_then(Wallpaper::parse)
-        .unwrap_or(SYSTEM_WALLPAPER);
+        .unwrap_or(dist_wall);
     let dim = layout
         .and_then(|l| l.get("dim"))
         .and_then(Value::as_u64)
         .and_then(|d| u8::try_from(d).ok())
-        .unwrap_or(SYSTEM_DIM);
+        .unwrap_or(dist_dim);
 
     // D002: os painéis da barra de cima, com os factos que o Core já deu.
     let core_health = instance_health(&probe.state);
