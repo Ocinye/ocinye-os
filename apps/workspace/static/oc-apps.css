@@ -1161,3 +1161,8 @@ a.oc-res-link:hover { background: #F7F9FB; text-decoration: none; }
   .oc-term-entry[data-hit] { outline-color: Highlight; }
 }
 @media (prefers-reduced-motion: reduce) { .oc-term-scroll { scroll-behavior: auto; } }
+
+/* Code (D008): o menu do Browser (copiar endereço, navegador do sistema,
+   transferências) não tem marcação desenhada; na Web não se mostra um botão
+   que não abre nada (B-28). */
+.oc-brw[data-runtime="web"] [data-oc="brw-menu"] { display: none; }

@@ -16,9 +16,9 @@ use super::productivity::{open_app, AppWindow};
 use super::*;
 use crate::terminal as term;
 use crate::ui::view_models::{
-    BrowserNavigationVm, BrowserNoticeVm, BrowserPageStateVm, BrowserRuntime, BrowserSecurity,
-    BrowserTabState, BrowserTabVm, BrowserVm, TermBlockVm, TermContextVm, TermEntryVm, TermTone,
-    TerminalVm,
+    BrowserNavigationVm, BrowserNoticeVm, BrowserNyeVm, BrowserPageStateVm, BrowserRuntime,
+    BrowserSecurity, BrowserSideVm, BrowserTabState, BrowserTabVm, BrowserVm, TermBlockVm,
+    TermContextVm, TermEntryVm, TermTone, TerminalVm,
 };
 use axum::body::Bytes;
 use ocinye_contracts::ocsh::wire::ExecResponse;
@@ -280,6 +280,9 @@ async fn terminal_form(
 pub(super) struct BrowserQuery {
     #[serde(default)]
     url: Option<String>,
+    /// `nye` abre o painel da Nye, que na Web diz porque não está disponível.
+    #[serde(default)]
+    side: Option<String>,
 }
 
 /// O que a pessoa escreveu na barra, classificado como o `classify()` do
@@ -414,7 +417,10 @@ pub(super) async fn browser_page(
         } else {
             vec![]
         },
-        side: None,
+        // Na Web a Nye não lê páginas (sem extracção fora da casca, ADR-0616):
+        // o painel diz porquê.
+        side: (q.side.as_deref() == Some("nye"))
+            .then_some(BrowserSideVm::Nye(BrowserNyeVm::WebUnavailable)),
         downloads_supported: false,
     };
     let mut response = page(&w, ui::apps::browser::browser(&vm), "/static/oc-browser.js");

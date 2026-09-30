@@ -127,3 +127,78 @@ fn o_browser_no_registo() {
         assert!(fora.parse::<ApplicationId>().is_err(), "{fora}");
     }
 }
+
+/// Zero Dead UI no runtime Web: cada controlo (`data-oc`) que o ecrã desenha
+/// tem quem o trate no cliente da sua rota — ou não se mostra na Web.
+#[test]
+fn nenhum_controlo_morto_na_web() {
+    use ocinye_workspace::ui::apps::{browser, terminal};
+    use ocinye_workspace::ui::view_models as vm;
+    let ops = |html: &str| -> Vec<String> {
+        let mut v: Vec<String> = html
+            .split("data-oc=\"")
+            .skip(1)
+            .filter_map(|x| x.split('"').next())
+            .map(str::to_owned)
+            .collect();
+        v.sort();
+        v.dedup();
+        v
+    };
+    let brw = browser::browser(&vm::BrowserVm {
+        runtime: vm::BrowserRuntime::Web,
+        tabs: vec![vm::BrowserTabVm {
+            id: "t0".into(),
+            title: "example.org".into(),
+            origin: Some("example.org".into()),
+            state: vm::BrowserTabState::Ready,
+        }],
+        active: 0,
+        navigation: vm::BrowserNavigationVm {
+            can_back: None,
+            can_forward: None,
+            loading: false,
+            url: "https://example.org/".into(),
+            host: Some("example.org".into()),
+            security: Some(vm::BrowserSecurity::Https),
+            typed: None,
+        },
+        page: vm::BrowserPageStateVm::External {
+            origin: "https://example.org".into(),
+        },
+        notices: vec![],
+        side: None,
+        downloads_supported: false,
+    });
+    let js = read("static/oc-browser.js");
+    let css = read("static/oc-apps.css");
+    for op in ops(&leptos::prelude::RenderHtml::to_html(brw)) {
+        let tratado = js.contains(&format!("'{op}'")) || js.contains(&format!("\"{op}\""));
+        let escondido = css.contains(&format!(
+            ".oc-brw[data-runtime=\"web\"] [data-oc=\"{op}\"] {{ display: none; }}"
+        ));
+        assert!(
+            tratado || escondido || matches!(op.as_str(), "app" | "brw"),
+            "Browser Web: `{op}` não tem quem o trate"
+        );
+    }
+    let term = terminal::terminal(&vm::TerminalVm {
+        context: vm::TermContextVm {
+            id: None,
+            label: "pessoal".into(),
+        },
+        core_online: true,
+        version: "1.0",
+        registry: vec![],
+        scrollback: vec![],
+    });
+    let js = read("static/oc-terminal.js");
+    for op in ops(&leptos::prelude::RenderHtml::to_html(term)) {
+        assert!(
+            js.contains(&format!("'{op}'"))
+                || js.contains(&format!("\"{op}\""))
+                || matches!(op.as_str(), "app" | "term"),
+            "Terminal: `{op}` não tem quem o trate"
+        );
+    }
+}

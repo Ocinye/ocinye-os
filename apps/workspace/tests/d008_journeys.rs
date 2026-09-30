@@ -391,6 +391,18 @@ async fn o_browser_e_real_e_so_ele_aceita_molduras() {
         assert!(p.contains("frame-src 'self';"), "{rota}: {p}");
         assert!(!p.contains("https:"), "{rota}: {p}");
     }
+    // Na Web a Nye não lê a página: o painel diz porquê, sem enviar nada.
+    let (_, html) = s
+        .html("/browser?url=https%3A%2F%2Fexample.org&side=nye", &c)
+        .await;
+    assert!(
+        html.contains(pt("brw.nye.web")),
+        "sem o painel da Nye na Web"
+    );
+    assert!(
+        !html.contains(r#"action="/browser/nye""#),
+        "um envio à Nye na Web"
+    );
     let r = s.get("/browser?frame=1", &c).send().await.expect("GET");
     assert_eq!(r.status().as_u16(), 204);
 }

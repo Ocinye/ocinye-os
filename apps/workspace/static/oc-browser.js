@@ -98,8 +98,14 @@
       if (op === 'brw-reload' && runtime() === 'web') { const f = $('iframe', view); if (f) { const s = f.src; f.src = 'about:blank'; f.src = s; } }
       else if (op === 'brw-edit') { const a = t.closest('[data-mobile-compact]'); if (a) { a.removeAttribute('data-mobile-compact'); if (field) { field.focus(); field.select(); } } }
       else if (op === 'brw-switcher') { const s = $('[data-part="brw-switch"]', root); if (s) { s.hidden = !s.hidden; t.setAttribute('aria-expanded', String(!s.hidden)); const body = $('[data-part="brw-body"]', root), edge = $('[data-part="brw-edge"]', root); if (body) body.hidden = !s.hidden; if (edge) edge.hidden = !s.hidden; const f = !s.hidden && $('button', s); if (f) f.focus(); } }
-      else if (op === 'brw-side') { const b = $('[data-part="brw-body"]', root); const side = $('[data-part="' + t.dataset.side + '"]', root); if (b && side) { const open = side.hidden; $$('.oc-brw-side', root).forEach((x) => { x.hidden = true; }); $$('[data-oc="brw-side"]', root).forEach((x) => x.setAttribute('aria-expanded', 'false')); side.hidden = !open; open ? b.setAttribute('data-side', '') : b.removeAttribute('data-side'); t.setAttribute('aria-expanded', String(open)); } }
+      else if (op === 'brw-side') { const b = $('[data-part="brw-body"]', root); const side = $('[data-part="' + t.dataset.side + '"]', root); if (b && side) { const open = side.hidden; $$('.oc-brw-side', root).forEach((x) => { x.hidden = true; }); $$('[data-oc="brw-side"]', root).forEach((x) => x.setAttribute('aria-expanded', 'false')); side.hidden = !open; open ? b.setAttribute('data-side', '') : b.removeAttribute('data-side'); t.setAttribute('aria-expanded', String(open)); }
+        // Code (D008): na Web o painel da Nye não vem desenhado; o servidor desenha-o (Web: indisponível).
+        else if (runtime() === 'web' && t.dataset.side === 'brw-nye') { const u = new URL(location.href); u.searchParams.set('side', 'nye'); location.assign(u.pathname + u.search); } }
       else if (native() && ['brw-back', 'brw-forward', 'brw-reload', 'brw-stop', 'brw-new', 'brw-close'].includes(op)) native()[op.slice(4)]({ tab: t.dataset.tab || activeTab() });
+      // Code (D008): na Web há uma aba; «Nova aba» e fechar a última deixam uma Nova aba.
+      else if (runtime() === 'web' && (op === 'brw-new' || op === 'brw-close')) location.assign('/browser');
+      // Na Web a única aba já é a activa: escolhê-la na lista fecha a lista e volta à página.
+      else if (runtime() === 'web' && op === 'brw-activate') { const sw = $('[data-part="brw-switch"]', root); if (sw && !sw.hidden) { sw.hidden = true; ['brw-body', 'brw-edge'].forEach((p) => { const x = $('[data-part="' + p + '"]', root); if (x) x.hidden = false; }); $$('[data-oc="brw-switcher"]', root).forEach((x) => x.setAttribute('aria-expanded', 'false')); if (field) field.focus(); } }
       else if (op === 'brw-perm') { if (native()) native().decidePermission({ tab: activeTab(), request: t.dataset.request, decision: t.dataset.decision }); }
     });
 
