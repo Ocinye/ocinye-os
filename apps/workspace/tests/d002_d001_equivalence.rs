@@ -20,6 +20,20 @@
 //! produtividade). Com as aplicações fechadas a marcação é a mesma, e o CSS está
 //! todo contido em `.oc-app` e nas classes de cada aplicação.
 //!
+//! A D009 (Distribuição) muda de propósito duas peças da D001 e declara-as
+//! aqui, retiradas dos dois lados: o distintivo e o painel da Distribuição na
+//! barra de cima (o ícone em vez das duas letras, e os primeiros passos) e o
+//! distintivo à porta; o widget recusado, que fica na disposição mas
+//! escondido (`data-withheld`, `hidden`); os avisos, que deixaram de ser
+//! obrigatórios (`data-mandatory`, o botão «Obrigatório»); e os itens da
+//! biblioteca de widgets, que passaram a ser só os das aplicações que o
+//! membro vê; os quatro fundos novos no seleccionador; a proveniência na
+//! folha «Repor» e a frase de que as fixações não mudam; a linha da
+//! Distribuição no lançador. E a iconografia canónica (`iconography::MIGRATION`): o
+//! ícone de uma aplicação desenhado na sua ligação passa ao símbolo novo — só
+//! aí; o mesmo símbolo antigo noutro papel (um widget) fica igual. Tudo o
+//! resto continua a ter de ser a D001.2.1.
+//!
 //! Os dois lados passam por [`canonical`]: atributos por ordem alfabética e sem
 //! os marcadores `<!>`, que não mudam o DOM que o CSS e o JS vêem.
 //!
@@ -91,7 +105,7 @@ fn content(kind: WidgetKind, i: usize) -> WidgetContent {
     match kind {
         K::Kpis => WidgetContent::Metrics(Load::Ready(vec![
             Metric {
-                icon: "units",
+                icon: "org-tree", // D009: o ícone canónico de Unidades
                 label: "Unidades".into(),
                 value: "4".into(),
                 qualifier: "activas".into(),
@@ -160,8 +174,62 @@ fn content(kind: WidgetKind, i: usize) -> WidgetContent {
     }
 }
 
+/// As disposições por omissão da D001.2.1, fixas: esta guarda compara
+/// marcação, não a escolha da predefinição (que a D009 mudou de propósito e
+/// prova em `d009_contracts.rs` e `d009_journeys.rs`).
+fn d001_layout(d: Distribution) -> Vec<ocinye_workspace::ui::view_models::PlacedWidget> {
+    use WidgetKind as K;
+    let list: &[(K, u8, u8)] = match d {
+        Distribution::Research => &[
+            (K::Kpis, 4, 1),
+            (K::Calendar, 1, 2),
+            (K::Notice, 2, 1),
+            (K::Continue, 2, 1),
+            (K::Tasks, 1, 2),
+            (K::Projects, 2, 1),
+            (K::Ideas, 1, 1),
+            (K::Storage, 1, 1),
+        ],
+        Distribution::Business => &[
+            (K::Kpis, 4, 1),
+            (K::Tasks, 1, 2),
+            (K::Notice, 2, 1),
+            (K::Mail, 1, 2),
+            (K::Continue, 2, 1),
+            (K::Calendar, 2, 1),
+            (K::Activity, 2, 2),
+        ],
+        Distribution::Education => &[
+            (K::Calendar, 1, 2),
+            (K::Notice, 2, 1),
+            (K::Tasks, 1, 2),
+            (K::Notes, 2, 1),
+            (K::Files, 2, 1),
+        ],
+        Distribution::Personal => &[
+            (K::Notes, 2, 1),
+            (K::Tasks, 1, 2),
+            (K::Calendar, 1, 2),
+            (K::Notice, 2, 1),
+            (K::Continue, 2, 1),
+            (K::Storage, 1, 1),
+        ],
+    };
+    list.iter()
+        .map(
+            |&(kind, w, h)| ocinye_workspace::ui::view_models::PlacedWidget {
+                id: kind.as_str().into(),
+                kind,
+                w,
+                h,
+                minimized: false,
+            },
+        )
+        .collect()
+}
+
 fn desktop(d: Distribution, admin: bool, can: bool, source: DefaultSource) -> DesktopVm {
-    let mut placed = registry::system_default(d);
+    let mut placed = d001_layout(d);
     // Todos os tipos do registo aparecem pelo menos uma vez.
     for spec in registry::KINDS {
         if !placed.iter().any(|p| p.kind == spec.kind) {
@@ -201,7 +269,7 @@ fn desktop(d: Distribution, admin: bool, can: bool, source: DefaultSource) -> De
             },
             wallpaper: Wallpaper::Ocinye,
             dim: 20,
-            widgets: registry::system_default(d),
+            widgets: d001_layout(d),
         }),
         base_version: None,
         is_admin: admin,
@@ -415,6 +483,124 @@ fn d001_view(d002: &str) -> String {
     canonical(&drop_desk_ctx(&drop_dock_data_app(&s)))
 }
 
+/// Retira o elemento `<tag …>…</tag>` cuja etiqueta de abertura tem `marca`,
+/// contando os `<tag` aninhados.
+fn drop_element(html: &str, tag: &str, marca: &str) -> String {
+    let mut out = html.to_owned();
+    let abre = format!("<{tag}");
+    let fecha = format!("</{tag}>");
+    let mut desde = 0;
+    while let Some(rel) = out[desde..].find(marca) {
+        let m = desde + rel;
+        let Some(ini) = out[..m].rfind(&abre) else {
+            break;
+        };
+        let mut nivel = 0usize;
+        let mut i = ini;
+        let fim = loop {
+            let prox_abre = out[i + 1..].find(&abre).map(|x| x + i + 1);
+            let prox_fecha = out[i + 1..].find(&fecha).map(|x| x + i + 1).expect("fecho");
+            match prox_abre {
+                Some(a) if a < prox_fecha => {
+                    nivel += 1;
+                    i = a;
+                }
+                _ => {
+                    if nivel == 0 {
+                        break prox_fecha + fecha.len();
+                    }
+                    nivel -= 1;
+                    i = prox_fecha;
+                }
+            }
+        };
+        out.replace_range(ini..fim, "");
+        desde = ini;
+    }
+    out
+}
+
+/// A referência D001.2.1 com os ícones de aplicação migrados: dentro de uma
+/// `<a href="{rota}">`, o primeiro `icons.svg#{antigo}` passa a `#{novo}`.
+fn icones_migrados(golden: &str) -> String {
+    let mut out = golden.to_owned();
+    for (rota, antigo, novo) in ocinye_workspace::experience::iconography::MIGRATION {
+        let ligacao = format!(r#"href="{rota}""#);
+        let velho = format!("icons.svg#{antigo}\"");
+        let mut desde = 0;
+        while let Some(rel) = out[desde..].find(&ligacao) {
+            let at = desde + rel;
+            let fim_a = out[at..].find("</a>").map_or(out.len(), |x| at + x);
+            if let Some(u) = out[at..fim_a].find(&velho) {
+                let i = at + u;
+                out.replace_range(i..i + velho.len(), &format!("icons.svg#{novo}\""));
+            }
+            desde = at + ligacao.len();
+        }
+    }
+    // O ícone do título de uma janela é sempre o de uma aplicação.
+    let marca = r#"class="oc-window__icon""#;
+    let mut desde = 0;
+    while let Some(rel) = out[desde..].find(marca) {
+        let at = desde + rel;
+        let fim = out[at..].find("</span>").map_or(out.len(), |x| at + x);
+        for (_, antigo, novo) in ocinye_workspace::experience::iconography::MIGRATION {
+            let velho = format!("icons.svg#{antigo}\"");
+            if let Some(u) = out[at..fim].find(&velho) {
+                let i = at + u;
+                out.replace_range(i..i + velho.len(), &format!("icons.svg#{novo}\""));
+                break;
+            }
+        }
+        desde = at + marca.len();
+    }
+    out
+}
+
+/// As peças da D001 que a D009 muda de propósito (ver o topo do ficheiro).
+fn sem_d009(html: &str) -> String {
+    let s = drop_element(html, "details", r#"class="oc-dist""#);
+    let s = drop_element(&s, "p", r#"class="oc-auth__dist""#);
+    // O botão «Obrigatório» (D001) e o «Retirar» dos avisos (D009) são o mesmo
+    // lugar: os avisos deixaram de ser obrigatórios.
+    let s = drop_element(&s, "button", r#"aria-label="Obrigatório nesta Instância""#);
+    let s = drop_element(
+        &s,
+        "button",
+        r#"aria-label="Retirar Avisos institucionais""#,
+    );
+    // A biblioteca só oferece widgets cujas aplicações o membro vê (G9-10):
+    // os itens dependem do registo da cena; a moldura da biblioteca, não.
+    let mut s = drop_element(&s, "li", r#"data-part="lib-item""#);
+    // A proveniência na folha «Repor» (a predefinição da Distribuição ou a
+    // mínima do sistema) é da D009.
+    s = drop_element(&s, "p", r#"class="oc-sheet__origin""#);
+    s = drop_element(&s, "p", r#"class="oc-sheet__lead""#);
+    // A linha da Distribuição no lançador.
+    s = drop_element(&s, "p", r#"class="oc-launcher__dist""#);
+    // E a nota da folha diz agora que as fixações não mudam.
+    let fixas = format!(
+        " {}",
+        ocinye_workspace::i18n::t_in(ocinye_contracts::Locale::Pt, "desk.restore.pins_kept")
+    );
+    s = s.replace(&fixas, "");
+    // Os quatro fundos novos, um por Distribuição, no fim do seleccionador.
+    for w in ["field", "module", "calm", "lattice"] {
+        s = drop_element(
+            &s,
+            "button",
+            &format!(r#"data-oc="bg-wall" data-wall="{w}""#),
+        );
+    }
+    // Um widget recusado fica na disposição, escondido (DIST-14); e nenhum
+    // tipo é obrigatório (os avisos deixaram de o ser).
+    s.replace(r#" data-mandatory="""#, "")
+        .replace(r#" data-withheld="""#, "")
+        .replace(r#"data-w="2" hidden>"#, r#"data-w="2">"#)
+        .replace(r#"data-w="1" hidden>"#, r#"data-w="1">"#)
+        .replace(r#"data-w="4" hidden>"#, r#"data-w="4">"#)
+}
+
 #[test]
 fn sem_janelas_nem_paineis_a_d002_e_a_d001_2_1() {
     let dir = golden_dir();
@@ -435,8 +621,8 @@ fn sem_janelas_nem_paineis_a_d002_e_a_d001_2_1() {
     for (name, html) in scenes {
         let golden = std::fs::read_to_string(dir.join(format!("{name}.html")))
             .unwrap_or_else(|e| panic!("referência D001.2.1 em falta para {name}: {e}"));
-        let now = d001_view(&html);
-        let golden = canonical(&golden);
+        let now = sem_d009(&d001_view(&html));
+        let golden = sem_d009(&icones_migrados(&canonical(&golden)));
         if now != golden {
             let at = now
                 .bytes()

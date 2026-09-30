@@ -154,9 +154,8 @@ async fn uma_disposicao_invalida_e_recusada_sem_gravar() {
     let quem = member(&pool).await;
 
     for errada in [
-        layout(&[("tasks", 1, 2)]),                    // sem o obrigatório
-        layout(&[("notice", 2, 1), ("nye", 1, 1)]),    // tipo desconhecido
-        layout(&[("notice", 2, 1), ("kpis", 1, 1)]),   // tamanho não permitido
+        layout(&[("notice", 2, 1), ("nye", 1, 1)]), // tipo desconhecido
+        layout(&[("notice", 2, 1), ("kpis", 1, 1)]), // tamanho não permitido
         layout(&[("notice", 2, 1), ("notice", 2, 1)]), // repetido
     ] {
         let r = identity::put_desktop(&pool, &quem, 0, &errada, false).await;
@@ -166,6 +165,19 @@ async fn uma_disposicao_invalida_e_recusada_sem_gravar() {
         identity::get_desktop(&pool, &quem).await.expect("ler"),
         None
     );
+}
+
+/// D009: nenhum tipo é obrigatório — um Desktop sem avisos, ou vazio, é válido.
+#[tokio::test]
+async fn sem_obrigatorios_um_desktop_vazio_grava() {
+    let Some(pool) = pool().await else { return };
+    let quem = member(&pool).await;
+    let v = identity::put_desktop(&pool, &quem, 0, &layout(&[("tasks", 1, 2)]), false)
+        .await
+        .expect("sem avisos");
+    identity::put_desktop(&pool, &quem, v, &layout(&[]), false)
+        .await
+        .expect("vazio");
 }
 
 /// Repor apaga a disposição própria; a gravação seguinte volta a ser a primeira.
