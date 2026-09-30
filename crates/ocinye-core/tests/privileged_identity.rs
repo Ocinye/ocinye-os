@@ -952,8 +952,15 @@ async fn nao_se_suspende_o_ultimo_administrador() {
     .await
     .expect_err("suspendeu o último administrador da plataforma");
     assert!(
-        matches!(erro, CoreError::Validation(_)),
-        "esperava recusa de validação, veio {erro:?}"
+        matches!(
+            erro,
+            CoreError::Invariant {
+                code: ocinye_contracts::ErrorCode::ValidationError,
+                reason: "last_platform_admin",
+                ..
+            }
+        ),
+        "esperava a recusa tipada do último administrador, veio {erro:?}"
     );
 
     // Um segundo administrador activo, e a mesma suspensão passa.
@@ -999,8 +1006,15 @@ async fn nao_se_revoga_o_papel_do_ultimo_administrador() {
         .await
         .expect_err("revogou o papel do último administrador");
     assert!(
-        matches!(erro, CoreError::Validation(_)),
-        "esperava recusa de validação, veio {erro:?}"
+        matches!(
+            erro,
+            CoreError::Invariant {
+                code: ocinye_contracts::ErrorCode::ValidationError,
+                reason: "last_platform_admin",
+                ..
+            }
+        ),
+        "esperava a recusa tipada do último administrador, veio {erro:?}"
     );
     drop(tx);
 
