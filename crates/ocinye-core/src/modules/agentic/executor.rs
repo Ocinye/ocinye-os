@@ -486,9 +486,12 @@ pub async fn execute(
         Err(CoreError::NotFound(reason)) => {
             refused(&descriptor, ExecutionStatus::ResourceNotFound, reason)
         }
-        Err(CoreError::Validation(reason) | CoreError::Invariant { message: reason, .. }) => {
-            refused(&descriptor, ExecutionStatus::ValidationFailed, reason)
-        }
+        Err(
+            CoreError::Validation(reason)
+            | CoreError::Invariant {
+                message: reason, ..
+            },
+        ) => refused(&descriptor, ExecutionStatus::ValidationFailed, reason),
         Err(CoreError::CapabilityUnavailable(reason)) => {
             refused(&descriptor, ExecutionStatus::CapabilityUnavailable, reason)
         }

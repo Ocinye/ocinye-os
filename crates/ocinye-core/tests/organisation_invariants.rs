@@ -391,3 +391,78 @@ async fn o_ultimo_administrador_nao_perde_o_papel() {
     e_motivo(result, refusal::LAST_PLATFORM_ADMIN);
     assert_eq!(admins_vivos(&pool, org).await, 1);
 }
+
+// ── O ciclo de vida da conta ─────────────────────────────────────────────
+
+async fn estado(pool: &PgPool, person: Uuid) -> String {
+    sqlx::query_scalar("SELECT status FROM people WHERE id = $1")
+        .bind(person)
+        .fetch_one(pool)
+        .await
+        .expect("estado")
+}
+
+async fn mudar(
+    pool: &PgPool,
+    actor: &Principal,
+    person: Uuid,
+    status: ocinye_contracts::AccountStatus,
+) -> Result<(), CoreError> {
+    let alvo = identity::person_by_id(pool, person)
+        .await
+        .expect("consulta")
+        .expect("pessoa");
+    identity::set_account_status(pool, actor, &alvo, status, "motivo de teste", &ids()).await
+}
+
+/// `invited` não é um destino, e `disabled` não tem volta (docs/identity). O
+/// formulário de estado aceitava qualquer um dos quatro; agora é o Core que diz
+/// não, com a transição tipada, e nada muda na base.
+#[tokio::test]
+async fn o_estado_da_conta_segue_o_ciclo_documentado() {
+    use ocinye_contracts::AccountStatus;
+    let pool = skip_without_database!();
+    let org = organizacao(&pool).await;
+    let admin = pessoa(&pool, org, &[TechnicalRole::PlatformAdmin]).await;
+    let alvo = pessoa(&pool, org, &[TechnicalRole::ResearchMember]).await;
+
+    let recusa = mudar(&pool, &admin, alvo.person_id, AccountStatus::Invited).await;
+    assert!(
+        matches!(
+            recusa,
+            Err(CoreError::Domain(
+                ocinye_domain::DomainError::InvalidTransition {
+                    from: "active",
+                    to: "invited"
+                }
+            ))
+        ),
+        "{recusa:?}"
+    );
+    assert_eq!(estado(&pool, alvo.person_id).await, "active");
+
+    mudar(&pool, &admin, alvo.person_id, AccountStatus::Suspended)
+        .await
+        .expect("suspender");
+    mudar(&pool, &admin, alvo.person_id, AccountStatus::Active)
+        .await
+        .expect("reactivar uma suspensa");
+    mudar(&pool, &admin, alvo.person_id, AccountStatus::Disabled)
+        .await
+        .expect("desactivar");
+
+    let recusa = mudar(&pool, &admin, alvo.person_id, AccountStatus::Active).await;
+    assert!(
+        matches!(
+            recusa,
+            Err(CoreError::Domain(
+                ocinye_domain::DomainError::InvalidTransition {
+                    from: "disabled",
+                    ..
+                }
+            ))
+        ),
+        "{recusa:?}"
+    );
+    assert_eq!(estado(&pool, alvo.person_id).await, "disabled");
+}

@@ -682,6 +682,20 @@ pub async fn set_account_status(
         });
     }
 
+    // O ciclo de vida documentado (docs/identity): `invited` só nasce da
+    // criação — não é um destino, e mandar para lá uma conta activa punha-a numa
+    // sessão restrita sem revogar nada —, e `disabled` é a identidade histórica
+    // permanente, de onde não se volta. Sem isto, o formulário de estado
+    // aceitava qualquer um dos quatro, e a interface era a única a recusar.
+    let from = person.account_status();
+    if status == AccountStatus::Invited || from == AccountStatus::Disabled {
+        return Err(ocinye_domain::DomainError::InvalidTransition {
+            from: from.as_str(),
+            to: status.as_str(),
+        }
+        .into());
+    }
+
     let mut tx = pool.begin().await?;
 
     // Barring someone else is exactly how you can still empty the institution
