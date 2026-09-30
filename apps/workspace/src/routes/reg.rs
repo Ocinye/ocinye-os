@@ -373,8 +373,10 @@ pub(super) async fn result_page(
                     project: None,
                     execution,
                     superseded_by,
-                    created_by: None,
-                    updated: created.clone(),
+                    created_by: rs::opt(&r, "created_by_name"),
+                    updated: crate::controllers::desktop::instant(&r, "updated_at")
+                        .map(|at| rs::day(at, &clock))
+                        .unwrap_or_else(|| created.clone()),
                     created,
                     validations,
                     lineage,

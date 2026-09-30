@@ -206,8 +206,8 @@ pub(crate) fn validation(v: &Value, clock: &Clock) -> Option<ResultValidationVm>
             "inconclusive" => ValidationOutcome::Inconclusive,
             _ => return None,
         },
-        // O Core não devolve quem registou a validação (RES-09).
-        by: None,
+        // Quem registou a validação, como o Core o guardou (ADR-0307).
+        by: rs::opt(v, "performed_by_name"),
         at: instant(v, "created_at")
             .map(|at| rs::day(at, clock))
             .unwrap_or_default(),
