@@ -240,6 +240,7 @@ A interface humana.
 - [ADR-0621](0621-research-apps-typed-relations-and-deep-links.md) — As aplicações de investigação: relações pela linhagem, ligações profundas canónicas e transições só do Core
 - [ADR-0622](0622-completion-apps-history-evidence-and-agent-authority.md) — As aplicações de conclusão: a história relê o alvo, a prova mostra-se por lista branca, e um agente não empresta a sua autoridade
 - [ADR-0623](0623-terminal-and-browser-separate-boundaries.md) — Terminal e Browser: duas fronteiras, nenhuma ponte de execução comum
+- [ADR-0624](0624-distribution-defaults.md) — Predefinições de Distribuição: configuração de produto tipada, versionada, abaixo da Instância e sem autoridade
 
 ### 0700–0799 · Deployment, rede, operação e resiliência
 
@@ -350,6 +351,7 @@ preencher.
 | [0621](0621-research-apps-typed-relations-and-deep-links.md) | As aplicações de investigação: relações pela linhagem, ligações profundas canónicas e transições só do Core | Workspace | `HIGH` | Accepted |
 | [0622](0622-completion-apps-history-evidence-and-agent-authority.md) | As aplicações de conclusão: a história relê o alvo, a prova mostra-se por lista branca, e um agente não empresta a sua autoridade | Workspace | `HIGH` | Accepted |
 | [0623](0623-terminal-and-browser-separate-boundaries.md) | Terminal e Browser: duas fronteiras, nenhuma ponte de execução comum | Workspace | `HIGH` | Accepted |
+| [0624](0624-distribution-defaults.md) | Predefinições de Distribuição: configuração de produto tipada, versionada, abaixo da Instância e sem autoridade | Workspace | `HIGH` | Accepted |
 | [0700](0700-institutional-continuity-and-portability.md) | Continuidade institucional e portabilidade entre servidores | Operations | `FOUNDATIONAL` | Accepted |
 | [0701](0701-release-bundle-and-host-installer.md) | O pacote de release e o instalador de anfitrião | Operations | `HIGH` | Accepted |
 | [0702](0702-desktop-shell-technology.md) | A casca Ocinye Desktop: Tauri 2 sobre o WebView do sistema | Operations | `HIGH` | Proposed |

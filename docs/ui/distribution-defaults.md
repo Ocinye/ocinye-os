@@ -3,6 +3,8 @@
 > **A Distribuição define o ponto de partida. O Core decide o que o membro pode fazer.**
 > `DEFAULT ≠ AUTHORITY` · `NOT DEFAULT ≠ FORBIDDEN` · `VISIBLE DEFAULT ≠ AUTHORIZED`
 
+> **D009 R2 (substitui a leitura «uma Instância → uma Distribuição»).** Uma Instância activa uma ou mais Distribuições; as predefinições abaixo são indexadas pelo **tipo** de Distribuição. Hierarquia efectiva para a Distribuição activa D: Membro[membro, Instância, D] ?? Instância[Instância, D] (futuro, FG-014) ?? Distribuição[D] ?? Sistema. **Âmbitos-alvo:** disposição, fixações e fundo por membro + Instância + Distribuição (hoje uma linha por membro em `member_desktop_layouts` e `member_app_pins` — compatível só com uma Distribuição activa; bloqueante D010 G9-30/31). «Repor» regressa à predefinição da Distribuição activa, nunca a de outra.
+
 Fonte de verdade: `apps/workspace/src/experience/distribution.rs` (tipada, sem JSON, sem caminhos). Repositório observado: `main @ ece29e98d688f366006833b3fe7267e7e1663cc0`.
 
 ## Hierarquia (DIST-11/12/13)
@@ -137,3 +139,33 @@ Nenhuma predefinição usa `notice` (sem fonte de dados), `continue`, `mail` (de
 ## Primeiros passos (FIRST-09)
 
 Sem assistente e sem estado gravado (não há contrato de persistência). O **painel da Distribuição** (distintivo na barra de cima) mostra: descrição, primeiros passos, as fixações por omissão **visíveis a este membro**, recomendadas, «Abrir aplicações» e a frase «A Distribuição define o ponto de partida…». Nada abre sozinho. Um Desktop vazio não mostra cartão nenhum (decisão do Fidel, 30 set 2026): o lápis no canto superior direito basta.
+
+## Integração (Code, D009)
+
+- **Ordem da barra:** a barra de aplicações desenha as fixações pela ordem
+  fixada (as do membro ou as da Distribuição), já filtrada pela autoridade
+  (`ShellVm.pin_order`); antes seguia a ordem do registo, e a ordem da
+  Distribuição perdia-se. O lançador continua pela ordem do registo.
+- **Widget escondido:** além de `Denied`/`Inactive` vindos do Core, um widget
+  de que o membro **não vê nenhuma** aplicação (não autorizadas ou inactivas)
+  também se esconde — mesmo que os dados venham (a lista de ambientes de um
+  colaborador, por exemplo, é autorizada, mas `/projects` não abre). Continua
+  na disposição e o cliente envia-o ao gravar. Basta ver uma: Tarefas vive de
+  O Meu Trabalho sem Projectos (`distribution::widget_shown`).
+- **Indicadores (G9-09):** cada métrica é de uma aplicação; uma que o membro
+  não vê não se pede nem se desenha, e uma recusa do Core larga só essa. Numa
+  Business (sem Ideias nem Dados) ficam Unidades e Projectos.
+- **Biblioteca de widgets:** só oferece o que se desenharia, pela mesma regra
+  (G9-10); os avisos institucionais já não se oferecem (sem fonte, G9-18).
+- **Uma Distribuição por Instância, hoje (R2):** `organisations.profile` é um
+  valor; não há como activar uma segunda (`SECOND_DISTRIBUTION_ENABLEMENT =
+  BLOCKED`). A disposição, o fundo e as fixações do membro são por
+  `person_id` (`MEMBER_ONLY`); o alvo — membro + Instância + Distribuição — é
+  D010 (G9-30/31). O código da D009 recebe sempre a Distribuição como
+  argumento.
+- **Provisionamento certificado** pelo caminho de `organisation::resolve_instance`
+  (o do `bootstrap-admin --profile`), uma base nova por Distribuição
+  (`apps/workspace/tests/d009_journeys.rs`).
+- **Distribuição desconhecida:** a base recusa um perfil fora das quatro
+  (`CHECK`), por isso não se constrói numa viagem; prova-se ao nível do código
+  (`d009_contracts.rs`, `controllers::desktop`), sem enfraquecer o enum.
