@@ -347,3 +347,42 @@ fn um_widget_de_varias_aplicacoes_basta_ver_uma() {
         ocinye_workspace::ui::screens::home::registry::KPIS.len()
     );
 }
+
+/// A 390 px o distintivo da Distribuição e «Abrir aplicações» recebem o toque
+/// em 44 px (medido no browser por *hit-testing*); o distintivo continua com
+/// 26 px à vista. Esta guarda impede que a regra desapareça.
+#[test]
+fn no_movel_o_distintivo_recebe_o_toque_em_44_px() {
+    let css = read("static/oc-shell.css");
+    let bloco = css
+        .split("@media (max-width: 640px)")
+        .find(|b| b.contains(".oc-dist::after"))
+        .expect("a regra móvel do distintivo");
+    let regra = bloco.split('}').take(4).collect::<Vec<_>>().join("}");
+    assert!(regra.contains("inset: -9px"), "26 + 2 × 9 = 44: {regra}");
+    assert!(regra.contains(".oc-dist-go { min-height: 44px"), "{regra}");
+    assert!(
+        css.contains(".oc-dist { width: 26px; height: 26px;"),
+        "o tamanho à vista não muda"
+    );
+}
+
+/// Fechar o lançador ou a paleta com Escape devolve o foco a quem os abriu
+/// (antes caía no `<body>`); só quando estavam abertos e o foco estava dentro.
+#[test]
+fn fechar_o_lancador_devolve_o_foco() {
+    let js = read("static/oc-shell.js");
+    let overlay = js
+        .split("function overlay(")
+        .nth(1)
+        .and_then(|x| x.split("function overlays(").next())
+        .expect("overlay()");
+    assert!(
+        overlay.contains("opener = document.activeElement"),
+        "{overlay}"
+    );
+    assert!(
+        overlay.contains("el.contains(document.activeElement)) opener.focus()"),
+        "{overlay}"
+    );
+}

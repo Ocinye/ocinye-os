@@ -237,3 +237,5 @@
 @media (max-width: 640px) { .oc-dock { justify-content: flex-start; scroll-snap-type: x proximity; } .oc-dock__btn { flex: none; width: 44px; height: 44px; scroll-snap-align: start; } .oc-dock__sep { flex: none; width: 1px; height: 30px; margin: 0 4px; } }
 /* o painel da Distribuição nunca sai do ecrã: rola por dentro */
 .oc-menu__pop--dist { max-height: calc(100vh - 76px); max-height: calc(100dvh - 76px); overflow-y: auto; overscroll-behavior: contain; }
+/* Code (D009 · alvos a 390): o distintivo continua com 26 px à vista, mas recebe o toque num quadrado de 44 — cabe entre o logótipo e a barra da Nye sem os cobrir; «Abrir aplicações» com 44 de altura */
+@media (max-width: 640px) { .oc-dist { position: relative; } .oc-dist::after { content: ""; position: absolute; inset: -9px; } .oc-dist-go { min-height: 44px; } }
