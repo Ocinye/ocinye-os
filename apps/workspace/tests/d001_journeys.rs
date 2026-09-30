@@ -216,16 +216,14 @@ async fn o_desktop_e_o_da_distribuicao_com_dados_reais() {
     let (status, html) = s.html("/", &cookie).await;
     assert_eq!(status, 200, "{html}");
     assert!(html.contains(r#"data-oc="desk""#) && html.contains(r#"data-version="0""#));
-    // A predefinição do sistema para Business, pela ordem do registo do Design.
-    assert_eq!(
-        kinds(&html),
-        ["kpis", "tasks", "notice", "mail", "continue", "calendar", "activity"]
-    );
+    // D009: a predefinição da Distribuição Business (docs/ui/distribution-defaults.md).
+    assert_eq!(kinds(&html), ["tasks", "calendar", "projects", "files"]);
+    assert_eq!(wall(&html), "module");
     // A casca: o distintivo da distribuição, o nome, o lançador e a paleta.
     assert!(html.contains(r##"href="#oc-launcher""##) && html.contains(r#"id="oc-palette""#));
     assert_eq!(text_of(&html, "oc-account__dist"), "OCINYE OS · BUSINESS");
-    // Os avisos não existem no Core: o widget diz indisponível, não «nenhum».
-    assert!(html.contains("Indisponível nesta Instância."));
+    // D009: os avisos não têm fonte no Core e não estão em nenhuma predefinição.
+    assert!(!kinds(&html).contains(&"notice".to_owned()));
 }
 
 #[tokio::test]
@@ -267,10 +265,10 @@ async fn o_desktop_grava_recusa_a_versao_obsoleta_e_repoe() {
     let (_, notas) = s.html("/notes", &cookie).await;
     assert_eq!(wall(&notas), "mist");
 
-    // Uma disposição sem o obrigatório é recusada pelo Core.
+    // D009: nenhum tipo é obrigatório — uma disposição sem avisos é válida.
     let mut sem_aviso = disposicao(1);
     sem_aviso["widgets"] = serde_json::json!([{"id": "notes", "kind": "notes", "w": 1, "h": 1}]);
-    assert_eq!(put(sem_aviso).await.expect("PUT").status().as_u16(), 422);
+    assert_eq!(put(sem_aviso).await.expect("PUT").status().as_u16(), 200);
 
     // Repor: volta à predefinição da distribuição.
     let r = s
@@ -281,10 +279,9 @@ async fn o_desktop_grava_recusa_a_versao_obsoleta_e_repoe() {
         .expect("repor");
     assert_eq!(r.status().as_u16(), 200);
     let (_, html) = s.html("/", &cookie).await;
-    assert_eq!(
-        kinds(&html),
-        ["kpis", "calendar", "notice", "continue", "tasks", "projects", "ideas", "storage"]
-    );
+    // D009: a predefinição da Distribuição Research.
+    assert_eq!(kinds(&html), ["kpis", "projects"]);
+    assert_eq!(wall(&html), "field");
     // Sem JS, repor é um formulário que volta ao Desktop.
     let r = s
         .escrever(reqwest::Method::POST, "/me/desktop/restore", &cookie)
@@ -312,7 +309,8 @@ async fn a_disposicao_de_um_membro_nao_e_a_de_outro() {
         .expect("PUT de A");
     assert_eq!(r.status().as_u16(), 200);
     let (_, html_b) = s.html("/", &b).await;
-    assert_eq!(wall(&html_b), "ocinye", "o Desktop de A apareceu a B");
+    // B segue a predefinição da Distribuição (D009: o fundo de Research).
+    assert_eq!(wall(&html_b), "field", "o Desktop de A apareceu a B");
     assert!(html_b.contains(r#"data-version="0""#));
 }
 
@@ -351,15 +349,12 @@ async fn as_notas_do_membro_chegam_aos_widgets() {
         .expect("criar nota");
     assert!(r.status().is_success(), "{}", r.status());
     let (_, html) = s.html("/", &cookie).await;
-    // Personal: Notas e Continuar trabalho estão na predefinição.
+    // Personal (D009): Notas está na predefinição; Continuar já não.
     assert!(kinds(&html).contains(&"notes".to_owned()));
+    assert!(!kinds(&html).contains(&"continue".to_owned()));
     assert!(
-        html.matches(&titulo).count() >= 2,
-        "a nota não chegou às Notas e ao Continuar"
-    );
-    assert!(
-        html.contains("NOTA"),
-        "o tipo do item de Continuar não se compôs"
+        html.contains(&titulo),
+        "a nota não chegou ao widget de Notas"
     );
 }
 
@@ -656,8 +651,10 @@ async fn a_predefinicao_do_sistema_nao_se_apresenta_como_publicada() {
     };
     let (_, cookie) = s.membro_com_sessao(&[TechnicalRole::ResearchMember]).await;
     let (_, html) = s.html("/", &cookie).await;
-    assert!(html.contains(r#"data-source="system""#));
-    assert!(html.contains("A administração da Instância ainda não publicou"));
+    // D009: a predefinição é a da Distribuição, versionada, que vem com o
+    // Ocinye OS — ninguém a publicou.
+    assert!(html.contains(r#"data-source="distribution""#));
+    assert!(html.contains("incluída no Ocinye OS"));
     assert!(!html.contains("publicada a") && !html.contains("Desktop Default"));
     assert!(!html.contains("A administração publicou uma nova predefinição"));
 }

@@ -33,8 +33,16 @@
       items.forEach((it) => { const hit = !v || (it.dataset.search || '').includes(v); it.hidden = !hit; if (hit) n += 1; });
       if (empty) empty.hidden = n > 0;
     };
-    const open = () => { el.setAttribute('data-open', ''); q.value = ''; filter(); setTimeout(() => q.focus(), 0); };
-    const close = () => { el.removeAttribute('data-open'); if (location.hash === '#' + el.id) history.replaceState(null, '', location.pathname + location.search); };
+    // Code (D009 · teclado): fechar devolve o foco a quem abriu, em vez de o largar no <body>.
+    let opener = null;
+    const open = () => { if (!el.hasAttribute('data-open')) opener = document.activeElement; el.setAttribute('data-open', ''); q.value = ''; filter(); setTimeout(() => q.focus(), 0); };
+    const close = () => {
+      const was = el.hasAttribute('data-open');
+      el.removeAttribute('data-open');
+      if (location.hash === '#' + el.id) history.replaceState(null, '', location.pathname + location.search);
+      if (was && opener && opener.isConnected && el.contains(document.activeElement)) opener.focus();
+      if (was) opener = null;
+    };
     q.addEventListener('input', filter);
     $$('a[href="#"]', el).forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); close(); }));
     return { el, open, close };

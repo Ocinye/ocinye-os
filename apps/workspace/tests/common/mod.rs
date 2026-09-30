@@ -160,6 +160,9 @@ pub struct Sistema {
     pub core_url: String,
     pub url: String,
     pub http: reqwest::Client,
+    /// `(URL da base de testes, nome)` de uma base criada por
+    /// [`Sistema::provisionar`], para a apagar no fim.
+    pub base_descartavel: Option<(String, String)>,
 }
 
 pub async fn pool() -> Option<PgPool> {
@@ -206,7 +209,81 @@ impl Sistema {
         .fetch_one(&pool)
         .await
         .expect("organização");
+        Some(Self::servir(pool, organisation_id, inference).await)
+    }
 
+    /// D009 · Uma Instância **nova**, numa base nova, criada pelo caminho de
+    /// produto (`organisation::resolve_instance` + o perfil de recursos por
+    /// omissão, o que o `bootstrap-admin --profile` faz): o perfil gravado, a
+    /// Instância registada, e as unidades iniciais só em Research. Sem dados
+    /// de exemplo. A base chama-se `d009_fresh_*` e sai com [`Self::descartar`].
+    pub async fn provisionar(profile: ocinye_contracts::InstanceProfile) -> Option<Self> {
+        let Ok(url) = std::env::var("OCINYE_TEST_DATABASE_URL") else {
+            assert!(
+                std::env::var("CI").is_err(),
+                "OCINYE_TEST_DATABASE_URL em falta em CI: as viagens D009 ficariam por correr"
+            );
+            eprintln!("SALTADA: sem OCINYE_TEST_DATABASE_URL");
+            return None;
+        };
+        let nome = format!(
+            "d009_fresh_{}_{}",
+            profile.as_str(),
+            &Uuid::new_v4().simple().to_string()[..8]
+        );
+        let admin = PgPool::connect(&url).await.expect("base de testes");
+        sqlx::query(&format!("CREATE DATABASE {nome}"))
+            .execute(&admin)
+            .await
+            .expect("base nova");
+        let (base, _) = url.rsplit_once('/').expect("URL da base");
+        let pool = PgPool::connect(&format!("{base}/{nome}"))
+            .await
+            .expect("a base nova responde");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("migrations");
+        let ids = ocinye_observability::CorrelationIds::generate();
+        let org = ocinye_core::modules::organisation::resolve_instance(
+            &pool,
+            Some(&format!("d009-{}", profile.as_str())),
+            Some("Instância nova"),
+            Some(profile),
+            &ids,
+        )
+        .await
+        .expect("provisionamento pelo caminho de produto");
+        ocinye_core::modules::resource::ensure_default_profile(&pool, org.id)
+            .await
+            .expect("perfil de recursos por omissão");
+        let mut s = Self::servir(
+            pool,
+            org.id,
+            Arc::new(ocinye_core::modules::intelligence::NoProvider),
+        )
+        .await;
+        s.base_descartavel = Some((url, nome));
+        Some(s)
+    }
+
+    /// Apaga a base de [`Self::provisionar`].
+    pub async fn descartar(self) {
+        if let Some((url, nome)) = &self.base_descartavel {
+            self.pool.close().await;
+            if let Ok(admin) = PgPool::connect(url).await {
+                let _ = sqlx::query(&format!("DROP DATABASE IF EXISTS {nome} WITH (FORCE)"))
+                    .execute(&admin)
+                    .await;
+            }
+        }
+    }
+
+    async fn servir(
+        pool: PgPool,
+        organisation_id: Uuid,
+        inference: Arc<dyn ocinye_core::modules::intelligence::InferenceProvider>,
+    ) -> Self {
         let core_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("porto do Core");
@@ -243,13 +320,14 @@ impl Sistema {
                 && http.get(format!("{url}/health")).send().await.is_ok()
             {
                 println!("VIAGEM LEVANTADA");
-                return Some(Self {
+                return Self {
                     pool,
                     organisation_id,
                     core_url,
                     url,
                     http,
-                });
+                    base_descartavel: None,
+                };
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }

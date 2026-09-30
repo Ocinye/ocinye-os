@@ -185,3 +185,7 @@
 .oc-auth__ref { margin: 0; font: 400 11px var(--oc-mono); color: rgba(255, 255, 255, .45); }
 .oc-auth__icon[data-state="identity"], .oc-auth__icon[data-state="upstream"] { background: rgba(179, 38, 30, .2); color: #F29089; }
 .oc-auth__icon[data-state="forbidden"] { background: rgba(224, 167, 49, .14); color: var(--oc-gold-500); }
+
+/* D009 · o distintivo da Distribuição à porta leva o ícone em vez das duas letras */
+.oc-auth__dist-code { display: inline-flex; align-items: center; justify-content: center; }
+.oc-auth__dist-code .oc-icon { width: 13px; height: 13px; color: var(--oc-navy-900); stroke-width: 1.6; }

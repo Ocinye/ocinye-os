@@ -101,3 +101,14 @@ semântica dos papéis. Fica fora desta ADR.
   `Auditor` passam a ver Ficheiros no lançador. Nenhum passa a ler nada que não
   lesse: o conteúdo continua governado pela posse e pela autorização.
 - `bootstrap-admin` exige `--profile` para criar uma Instância.
+
+## Emenda — D009 (2026-09-30)
+
+A activação por perfil **não muda**: continua `InstanceProfile::activates`, e um
+teste (`a_activacao_nao_mudou`, `apps/workspace/tests/d009_contracts.rs`) guarda
+a tabela. O que a D009 acrescenta é o **ponto de partida** de cada perfil —
+fixações, Desktop, fundo, primeiros passos — em `experience::distribution`
+([ADR-0624](0624-distribution-defaults.md)). Uma fixação por omissão não activa
+nada e não autoriza nada. Mudar o perfil depois da instalação (§1) mudaria as
+predefinições de quem não tem disposição nem fixações gravadas; a D009 não
+desenha essa mudança, que fica só de leitura na casca.

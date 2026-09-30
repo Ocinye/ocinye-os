@@ -16,7 +16,7 @@
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
-use super::{reference, Caller, ShellContext, SYSTEM_DIM, SYSTEM_WALLPAPER};
+use super::{reference, Caller, ShellContext};
 use crate::api::ApiFailure;
 use crate::i18n::{t, tp};
 use crate::ui::screens::home::registry::{self, KPIS};
@@ -29,7 +29,8 @@ use crate::WorkspaceState;
 
 /// A versão da predefinição do sistema. Sobe quando o Design mudar
 /// `registry::system_default`.
-pub const SYSTEM_DEFAULT_VERSION: u32 = 1;
+pub const SYSTEM_DEFAULT_VERSION: u32 =
+    crate::experience::distribution::DISTRIBUTION_DEFAULTS_VERSION;
 
 /// Quantos itens mostra uma lista de widget.
 const LIST_LIMIT: usize = 5;
@@ -38,22 +39,46 @@ const LIST_LIMIT: usize = 5;
 const CONTINUE_LIMIT: usize = 7;
 const CONTINUE_MAX_AGE_SECS: i64 = 30 * 86_400;
 
-/// A predefinição do sistema para a Distribuição (`DefaultSource::System`).
+/// A predefinição da Distribuição (`DefaultSource::Distribution`, D009).
 ///
-/// Ninguém a publicou: não tem nome dado pela administração nem data, e a
-/// folha «Repor predefinição» diz que vem com o Ocinye OS (D001.1). Quando a
-/// administração publicar uma (FG-014), essa é `DefaultSource::Instance`.
+/// Vem com o Ocinye OS e ninguém a publicou: sem nome dado pela administração
+/// nem data; a folha «Repor» mostra a versão. Quando a administração publicar
+/// uma (FG-014), essa é `DefaultSource::Instance` e ganha a esta.
 #[must_use]
 pub fn system_default(d: Distribution) -> DesktopDefault {
+    let (wallpaper, dim) = crate::experience::distribution::look(Some(d));
+    DesktopDefault {
+        source: DefaultSource::Distribution,
+        name: String::new(),
+        version: SYSTEM_DEFAULT_VERSION,
+        published: String::new(),
+        wallpaper,
+        dim,
+        widgets: registry::system_default(d),
+    }
+}
+
+/// A predefinição mínima do sistema (`DefaultSource::System`, D009): só
+/// quando a Distribuição não se conhece. Nunca a de Research (§116).
+#[must_use]
+pub fn fallback_default() -> DesktopDefault {
+    let (wallpaper, dim) = crate::experience::distribution::look(None);
     DesktopDefault {
         source: DefaultSource::System,
         name: String::new(),
         version: SYSTEM_DEFAULT_VERSION,
         published: String::new(),
-        wallpaper: SYSTEM_WALLPAPER,
-        dim: SYSTEM_DIM,
-        widgets: registry::system_default(d),
+        wallpaper,
+        dim,
+        widgets: crate::experience::distribution::widgets(None),
     }
+}
+
+/// A predefinição efectiva para a Distribuição activa: a dela, ou — sem
+/// Distribuição conhecida — a mínima do sistema. Nunca a de Research (§116).
+#[must_use]
+pub fn default_for(distribution: Option<Distribution>) -> DesktopDefault {
+    distribution.map_or_else(fallback_default, system_default)
 }
 
 /// A disposição gravada, lida do JSON do Core. Tipos que o registo já não
@@ -244,28 +269,44 @@ fn count(n: i64, qualifier_key: &str) -> Count {
     }
 }
 
-async fn kpis(caller: &Caller<'_>, state: &WorkspaceState) -> WidgetContent {
+/// Code (D009 · G9-09): cada indicador é de uma aplicação
+/// (`distribution::widget_apps(Kpis)`, pela ordem de `KPIS`). Um que o membro
+/// não vê — inactiva na Instância ou sem autorização — nem se pede nem se
+/// desenha, e o Core a recusar um só larga esse; o widget só fica recusado
+/// quando não sobra nenhum.
+async fn kpis(caller: &Caller<'_>, state: &WorkspaceState, sees: &Sees<'_>) -> WidgetContent {
+    let apps = crate::experience::distribution::widget_apps(WidgetKind::Kpis);
+    let on = |i: usize| apps.get(i).is_some_and(|a| sees(*a));
     let (units, ideas, projects, datasets) = tokio::join!(
-        active_units(caller, state),
-        total(caller, state, IDEAS_IN_PROGRESS),
-        total(caller, state, PROJECTS_IN_PROGRESS),
-        total(caller, state, DATASETS),
+        async { on(0).then_some(active_units(caller, state).await) },
+        async { on(1).then_some(total(caller, state, IDEAS_IN_PROGRESS).await) },
+        async { on(2).then_some(total(caller, state, PROJECTS_IN_PROGRESS).await) },
+        async { on(3).then_some(total(caller, state, DATASETS).await) },
     );
     let mut metrics = Vec::with_capacity(KPIS.len());
+    let mut refused = None;
     for (&(label, qualifier, icon, href), n) in KPIS.iter().zip([units, ideas, projects, datasets])
     {
         match n {
-            Ok(n) => metrics.push(Metric {
+            None => {}
+            Some(Ok(n)) => metrics.push(Metric {
                 icon,
                 label: t(label).to_owned(),
                 value: n.to_string(),
                 qualifier: tp(qualifier, n),
                 href: href.to_owned(),
             }),
-            Err(f) => return WidgetContent::Metrics(load_of("kpis", &f)),
+            Some(Err(
+                f @ (ApiFailure::Forbidden | ApiFailure::Denied | ApiFailure::ApplicationInactive),
+            )) => refused = Some(f),
+            Some(Err(f)) => return WidgetContent::Metrics(load_of("kpis", &f)),
         }
     }
-    WidgetContent::Metrics(Load::Ready(metrics))
+    match (metrics.is_empty(), refused) {
+        (true, Some(f)) => WidgetContent::Metrics(load_of("kpis", &f)),
+        (true, None) => WidgetContent::Metrics(Load::Denied),
+        (false, _) => WidgetContent::Metrics(Load::Ready(metrics)),
+    }
 }
 
 async fn tasks(caller: &Caller<'_>, state: &WorkspaceState) -> WidgetContent {
@@ -616,9 +657,10 @@ async fn content(
     caller: &Caller<'_>,
     state: &WorkspaceState,
     clock: &Clock,
+    sees: &Sees<'_>,
 ) -> WidgetContent {
     match placed.kind {
-        WidgetKind::Kpis => kpis(caller, state).await,
+        WidgetKind::Kpis => kpis(caller, state, sees).await,
         // Os avisos institucionais ainda não existem no Core (FG-013).
         WidgetKind::Notice => WidgetContent::List(Load::Unavailable),
         WidgetKind::Continue => continue_working(caller, state, clock).await,
@@ -636,20 +678,42 @@ async fn content(
     }
 }
 
+/// Se o membro vê uma aplicação (activa e autorizada).
+type Sees<'a> = dyn Fn(ocinye_contracts::ApplicationId) -> bool + Sync + 'a;
+
+/// O mesmo tipo de conteúdo, recusado: `Inactive` quando a aplicação não está
+/// activa na Instância, `Denied` quando o membro não a pode abrir.
+fn withhold(content: &WidgetContent, inactive: bool) -> WidgetContent {
+    fn l<T>(inactive: bool) -> Load<T> {
+        if inactive {
+            Load::Inactive
+        } else {
+            Load::Denied
+        }
+    }
+    match content {
+        WidgetContent::List(_) => WidgetContent::List(l(inactive)),
+        WidgetContent::Continue(_) => WidgetContent::Continue(l(inactive)),
+        WidgetContent::Health(_) => WidgetContent::Health(l(inactive)),
+        WidgetContent::Metrics(_) => WidgetContent::Metrics(l(inactive)),
+        WidgetContent::Count(_) => WidgetContent::Count(l(inactive)),
+        WidgetContent::Storage(_) => WidgetContent::Storage(l(inactive)),
+    }
+}
+
 /// `GET /`: o Desktop do membro, com os dados de cada widget.
 pub async fn desktop(ctx: ShellContext, caller: &Caller<'_>, state: &WorkspaceState) -> DesktopVm {
-    // Sem Distribuição (o Core não respondeu a `/organisation`), a predefinição
-    // é a da porta; e sem essa, a de investigação — o único caminho que não
-    // deixa o Desktop vazio. Com o Core a responder, nunca se chega aqui.
+    // Sem Distribuição (o Core não respondeu a `/organisation`), a da porta; e
+    // sem essa, a predefinição mínima do sistema — nunca Research por omissão
+    // (D009 §116). Com o Core a responder, nunca se chega aqui.
     let distribution = match ctx.distribution {
-        Some(d) => d,
+        Some(d) => Some(d),
         None => crate::api::instance_door(state)
             .await
             .and_then(|(_, p)| p)
-            .and_then(|p| super::distribution_of(p.as_str()))
-            .unwrap_or(Distribution::Research),
+            .and_then(|p| super::distribution_of(p.as_str())),
     };
-    let default = system_default(distribution);
+    let default = default_for(distribution);
     let (version, placed, can_customise) = match &ctx.desktop {
         Ok(d) => {
             let version = d
@@ -677,13 +741,15 @@ pub async fn desktop(ctx: ShellContext, caller: &Caller<'_>, state: &WorkspaceSt
             .iter()
             .any(|c| c == "platform.administer"),
     };
+    // As aplicações que este membro vê (activas e autorizadas, `shell.apps`).
+    let sees = |a: ocinye_contracts::ApplicationId| ctx.vm.apps.iter().any(|t| t.id == a.as_str());
     // Um futuro por tipo, todos em paralelo: um Desktop tem no máximo um de cada.
     let find = |k: WidgetKind| placed.iter().find(|p| p.kind == k);
     macro_rules! slot {
         ($k:expr) => {
             async {
                 match find($k) {
-                    Some(p) => Some(content(p, caller, state, &clock).await),
+                    Some(p) => Some(content(p, caller, state, &clock, &sees).await),
                     None => None,
                 }
             }
@@ -725,6 +791,21 @@ pub async fn desktop(ctx: ShellContext, caller: &Caller<'_>, state: &WorkspaceSt
     .filter_map(|(k, c)| c.map(|c| (k, c)))
     .collect();
 
+    // Code (D009 · DIST-14, G9-09): um widget de que este membro não vê
+    // nenhuma aplicação — inactivas na Instância ou sem autorização — não se
+    // desenha, mesmo quando os dados vêm (a lista de ambientes de um
+    // colaborador, por exemplo). Fica na disposição, escondido, para que gravar
+    // não o apague. Basta ver uma: Tarefas vive de O Meu Trabalho sem Projectos.
+    for (k, content) in &mut by_kind {
+        if !crate::experience::distribution::widget_shown(*k, sees) {
+            let apps = crate::experience::distribution::widget_apps(*k);
+            let inactive = apps
+                .iter()
+                .all(|a| ctx.viewer.inactive_apps.iter().any(|i| i == a.as_str()));
+            *content = withhold(content, inactive);
+        }
+    }
+
     let widgets = placed
         .into_iter()
         .filter_map(|p| {
@@ -755,14 +836,31 @@ mod tests {
     #[test]
     fn a_predefinicao_do_sistema_nao_anuncia_uma_publicacao_da_administracao() {
         let d = system_default(Distribution::Business);
-        assert_eq!(d.source, DefaultSource::System);
+        assert_eq!(d.source, DefaultSource::Distribution);
         assert!(
             d.name.is_empty() && d.published.is_empty(),
             "uma data que ninguém publicou"
         );
         assert_eq!(d.version, SYSTEM_DEFAULT_VERSION);
         assert_eq!(d.widgets, registry::system_default(Distribution::Business));
-        assert_eq!((d.wallpaper, d.dim), (Wallpaper::Ocinye, 20));
+        assert_eq!((d.wallpaper, d.dim), (Wallpaper::Module, 20));
+        for d in [
+            Distribution::Research,
+            Distribution::Business,
+            Distribution::Personal,
+            Distribution::Education,
+        ] {
+            assert_eq!(default_for(Some(d)), system_default(d), "{d:?}");
+        }
+        let f = default_for(None);
+        assert_eq!(
+            (f.source, f.wallpaper),
+            (DefaultSource::System, Wallpaper::Ocinye)
+        );
+        assert!(
+            f.widgets.is_empty(),
+            "sem Distribuição: nenhum widget, e não os de Research"
+        );
     }
 
     #[test]

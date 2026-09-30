@@ -204,3 +204,38 @@
 .oc-error__body { margin: 0; font: 400 13.5px/1.55 var(--oc-sans); color: var(--oc-ink-3); text-wrap: pretty; }
 .oc-error__actions { margin-top: 6px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .oc-error__ref { margin: 4px 0 0; font: 400 11px var(--oc-mono); color: var(--oc-ink-4); }
+
+/* ── D009 · Distribuições ──────────────────────────────────────────────────
+   Quatro fundos novos na lista fechada (field, module, calm, lattice), um por
+   Distribuição. Só CSS, sem imagens nem pedidos. Todos escuros: o vidro dos
+   widgets (--dw-*) e a barra de aplicações mantêm o contraste de ocinye/dusk. */
+.oc-desk[data-wall="field"], .oc-wall__swatch[data-wall="field"] { background: radial-gradient(900px 520px at 82% -8%, rgba(29, 79, 127, .75), transparent 62%), linear-gradient(rgba(255, 255, 255, .045) 1px, transparent 1px) 0 0 / 48px 48px, linear-gradient(90deg, rgba(255, 255, 255, .045) 1px, transparent 1px) 0 0 / 48px 48px, linear-gradient(170deg, var(--oc-navy-900) 0%, var(--oc-navy-950) 100%); }
+.oc-desk[data-wall="module"], .oc-wall__swatch[data-wall="module"] { background: linear-gradient(90deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px) 0 0 / 25% 100%, linear-gradient(180deg, rgba(255, 255, 255, .03) 0 1px, transparent 1px) 0 0 / 100% 33.34%, radial-gradient(800px 500px at 10% 0%, rgba(77, 110, 145, .35), transparent 60%), linear-gradient(160deg, #16283A 0%, #0D1B2A 100%); }
+.oc-desk[data-wall="calm"], .oc-wall__swatch[data-wall="calm"] { background: radial-gradient(900px 600px at 12% 108%, rgba(224, 167, 49, .16), transparent 62%), radial-gradient(700px 500px at 92% -10%, rgba(120, 140, 160, .16), transparent 60%), linear-gradient(165deg, #25282D 0%, #17191D 100%); }
+.oc-desk[data-wall="lattice"], .oc-wall__swatch[data-wall="lattice"] { background: repeating-linear-gradient(60deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 44px), repeating-linear-gradient(-60deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 44px), radial-gradient(900px 560px at 88% 110%, rgba(40, 120, 130, .28), transparent 62%), linear-gradient(170deg, #0C2B3F 0%, #081C2B 100%); }
+/* o distintivo da Distribuição passa a ícone (D009 · DIST-03); o nome continua no rótulo acessível */
+.oc-dist .oc-icon { width: 16px; height: 16px; color: var(--oc-navy-900); stroke-width: 1.5; }
+.oc-dist--lg .oc-icon { width: 22px; height: 22px; }
+/* painel da Distribuição: primeiros passos (sem assistente, sem estado gravado) */
+.oc-menu__pop--dist { width: 340px; }
+.oc-dist-first { margin: 0; padding: 0 10px 10px; display: grid; gap: 6px; list-style: none; font-size: 12.5px; line-height: 1.45; color: var(--oc-ink-2); }
+.oc-dist-first li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; align-items: start; }
+.oc-dist-first .oc-icon { width: 16px; height: 16px; margin-top: 1px; color: var(--oc-ink-3); }
+.oc-dist-pins { margin: 0; padding: 0 10px 10px; display: flex; flex-wrap: wrap; gap: 6px; list-style: none; }
+.oc-dist-pins li { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px 0 7px; border-radius: 13px; background: var(--oc-muted); font-size: 11.5px; color: var(--oc-ink-2); }
+.oc-dist-pins .oc-icon { width: 14px; height: 14px; }
+.oc-dist-sub { margin: 0; padding: 2px 10px 6px; font: 500 9.5px var(--oc-mono); letter-spacing: .14em; color: var(--oc-ink-4); text-transform: uppercase; }
+.oc-dist-go { margin: 0 10px 10px; height: 34px; display: inline-flex; align-items: center; gap: 7px; padding: 0 14px; border-radius: 17px; background: linear-gradient(180deg, var(--oc-navy-800), var(--oc-navy-900)); color: #FFFFFF; font: 600 12.5px var(--oc-sans); }
+.oc-dist-go:hover { text-decoration: none; color: #FFFFFF; filter: brightness(1.12); }
+.oc-dist-go:focus-visible { outline: 2px solid var(--oc-blue-500); outline-offset: 2px; }
+.oc-dist-go .oc-icon { width: 16px; height: 16px; }
+/* Gestor de Aplicações: uma linha discreta com a Distribuição — a autoridade é dita, não sugerida */
+.oc-launcher__dist { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--oc-ink-3); text-wrap: pretty; }
+.oc-launcher__dist .oc-icon { flex: none; width: 16px; height: 16px; color: var(--oc-ink-3); }
+@media (max-width: 640px) { .oc-menu__pop--dist { position: fixed; top: 58px; left: 12px; right: 12px; width: auto; } }
+/* D009 · no móvel a barra não encolhe os botões abaixo de 44 px: com mais fixações, rola dentro da barra */
+@media (max-width: 640px) { .oc-dock { justify-content: flex-start; scroll-snap-type: x proximity; } .oc-dock__btn { flex: none; width: 44px; height: 44px; scroll-snap-align: start; } .oc-dock__sep { flex: none; width: 1px; height: 30px; margin: 0 4px; } }
+/* o painel da Distribuição nunca sai do ecrã: rola por dentro */
+.oc-menu__pop--dist { max-height: calc(100vh - 76px); max-height: calc(100dvh - 76px); overflow-y: auto; overscroll-behavior: contain; }
+/* Code (D009 · alvos a 390): o distintivo continua com 26 px à vista, mas recebe o toque num quadrado de 44 — cabe entre o logótipo e a barra da Nye sem os cobrir; «Abrir aplicações» com 44 de altura */
+@media (max-width: 640px) { .oc-dist { position: relative; } .oc-dist::after { content: ""; position: absolute; inset: -9px; } .oc-dist-go { min-height: 44px; } }

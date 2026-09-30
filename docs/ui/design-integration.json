@@ -1,399 +1,867 @@
 {
   "schema_version": 1,
-  "design_revision": "D008",
-  "based_on": "main @ 7a23011 (merge of PR #190, D007 + D007.1); Design observed feat/design-d007 @ b96b931 (same tree)",
-  "repository_head_before": "7a23011",
+  "design_revision": "D009",
+  "package_revision": "R2",
+  "supersedes": "D009 R1 package (ocinye-design-complete-D009, 789 checksums), integrated first on this branch and reconciled onto R2 in place",
+  "based_on": "D008 (main @ ece29e9, merge of PR #191); Design observed main @ ece29e98",
+  "repository_head_before": "ece29e9",
   "integrated_on": "2026-09-30",
-  "integration_branch": "feat/design-d008",
-  "integration_status": "INTEGRATED_VISUAL_PARITY_TRUE_ACCESSIBILITY_CERTIFIED_FUNCTIONALLY_CERTIFIED_WEB_RUNTIME; DESKTOP_RUNTIME_REQUIRED",
-  "package": "ocinye-design-complete-D008: 704/704 checksums; cumulative, self-contained; 72/72 reference checks (Design reference only — not Rust, ocsh runtime or Desktop WebView certification)",
-  "application_method": "new files copied (terminal.rs, browser.rs, ui_sys.rs, oc-terminal.js, oc-browser.js, ADR-0623, DESIGN_LOCK and HANDOFF prepends); anchored blocks appended to view_models.rs and oc-apps.css; pub mods, mod ui_sys and GROUPS by hand; D008-ADR-AMENDMENTS.md folded into ADR-0312/0612/0623; the package coverage doc not copied (the repository's is kept and updated)",
-  "raw_build": "compiled first time; clippy clean; 15 Design tests ran, 14 passed as delivered",
-  "code_fix_in_design_file": [
-    "browser.rs test fronteira_de_confianca looked for oc-brw-view, first found in the tabs' aria-controls; now class=\"oc-brw-view\"",
-    "visible() moved from ui::apps::terminal to ui::components (ADR-0623; terminal::visible re-exported)",
-    "oc-browser.js Web: validated address submits GET /browser?url= (server draws the whole trusted chrome); New tab / close tab / Nye / tab select wired on the Web",
-    "oc-apps.css: mobile address field 44 px; menu hidden on the Web (no designed markup)"
-  ],
-  "architectural_decisions": {
-    "high_impact_confirmation": "shared governed confirmation over the frozen plan; no typed word (ADR-0312 §5 superseded, history kept)",
-    "pipe": "kept as closed typed ocsh composition (filter, sort, head, count, export json); never a shell pipe",
-    "terminal_browser": "ADR-0623 Accepted; no shared execution layer; enforced by scripts/architecture_boundaries.py",
-    "desktop_browser": "DESKTOP_RUNTIME_REQUIRED; DESKTOP_WEBVIEW_RUNTIME_VALIDATION = NOT_CERTIFIED (also Dedicated)",
-    "terminal_cleanup": "did-you-mean only registered and visible commands; 171 obsolete catalogue keys removed; exit closes the window",
-    "deploy": "NOT_PERFORMED"
-  },
-  "registry": {
-    "before": 27,
-    "added": [
-      "browser"
+  "integration_branch": "feat/design-d009",
+  "integration_status": "INTEGRATED_R2_VISUAL_CERTIFIED_ACCESSIBILITY_CERTIFIED_WITH_D001_TOUCH_FINDINGS_FUNCTIONALLY_CERTIFIED; MULTI_DISTRIBUTION_D010_REQUIRED",
+  "package": "ocinye-design-complete-D009 2 (R2): 817/817 checksums; 86 reference states, 86/86 Design reference checks (Design reference only — not Rust, persistence, authorization, provisioning or multi-Distribution runtime)",
+  "r1_to_r2_reconciliation": {
+    "package_files_changed": 25,
+    "screenshot_files_changed": 26,
+    "already_integrated_from_r1": "all runtime files (defaults, iconography, sprite fragment, CSS, i18n ui_dist base, tests)",
+    "r2_corrections_applied": [
+      "experience/distribution.rs: two doc comments (enabled Distributions [1..4]; FG-014 per Instance + Distribution)",
+      "docs/ui/distribution-defaults.md: R2 hierarchy note",
+      "ADR-0624: R2 amendment (R2.1–R2.4) plus R2.5 repository truth"
     ],
-    "after": 28,
-    "provisional": [],
-    "terminal": "REGISTERED, real screen",
-    "browser": "REGISTERED, real in the Web runtime; Desktop/Dedicated DESKTOP_RUNTIME_REQUIRED"
+    "documentation_added": [
+      "docs/ui/D010_SCOPE_PROPOSAL.md",
+      "docs/ui/missing-screen-audit.md"
+    ],
+    "d010_only_skipped": [
+      "i18n ui_dist: 26 keys dist.select/zero/bound/switch, endpoint.*, ctx.*, desk.target",
+      "oc-shell.css / oc-auth.css: .oc-dsel, .oc-auth__inst/__host/__stop, .oc-ctxsw, .oc-ctx-*, .oc-dist-sw, .oc-dist-bound"
+    ],
+    "reference_only": [
+      "reference/d009/fixture.js",
+      "validate.html",
+      "25 r2-* screenshots"
+    ],
+    "conflicts": 0
   },
-  "code_changes": [
-    "contracts: ApplicationId::Browser, NetworkUse::ClientWeb, manifest; ocsh POSIX_WORDS/POSIX_HINTS (registered targets only); wire Block::Ask",
-    "Core: nye ask → Block::Ask; did-you-mean filtered to visible families",
-    "Workspace: routes/sys.rs (terminal page, exec JSON + no-JS form, Nye bridge, browser page with its own CSP, ?frame=1 → 204); terminal.rs localize/entry; Screen::Browser; has_screen; shell_page_with (route-scoped client); wm-engine exit → close",
-    "catalogue: 171 obsolete Terminal keys removed; tab/admin-session wording fixed"
+  "proposal": {
+    "v3": "NOT_IN_PACKAGE (cited by README/HANDOFF; only archive/DO_NOT_IMPLEMENT-Ocinye OS Proposta.dc.html, byte-identical to R1, is shipped)",
+    "v2_superseded": "not shipped as a separate file",
+    "standalone_export": "STALE_NONCANONICAL (no deterministic exporter in the repository or package; not hand-written)",
+    "frame_portability": "PARTIAL (frames depend on package-adjacent pages; carried to D010 Design tooling)",
+    "repository": "proposals are not tracked in the repository"
+  },
+  "raw_build": "R1: compiled first time with one warning; R2: documentation-only Rust changes, compiled; clippy -D warnings clean",
+  "code_fix_in_design_file": [
+    "controllers/desktop.rs: unused SYSTEM_DIM/SYSTEM_WALLPAPER import (R1)",
+    "iconography.rs sprite test: xmlns false positive (R1)",
+    "distribution.rs: widget_shown (one rule for Desktop and library; G9-09/G9-10)",
+    "controllers/desktop.rs: KPIs drop only invisible/refused metrics; withhold only when no app is visible; default_for",
+    "ui/screens/home/mod.rs: library uses widget_shown",
+    "oc-shell.css: 44px mobile hit area for the badge; 44px Getting Started button",
+    "oc-shell.js: launcher/palette close returns focus to the opener"
   ],
-  "tests": {
-    "d008_journeys": 9,
-    "d008_contracts": 6,
-    "updated": [
-      "d001_journeys",
-      "d002_journeys",
-      "d007_journeys",
-      "d007_1_journeys",
-      "d007_contracts",
-      "controllers::windows"
+  "registry": {
+    "before": 28,
+    "after": 28,
+    "changed": false
+  },
+  "app_activation": {
+    "changed": false,
+    "proof": "a_activacao_nao_mudou (per-profile snapshot equal to ece29e9); Core and core-server untouched"
+  },
+  "defaults": {
+    "research": {
+      "desktop": [
+        "kpis",
+        "projects"
+      ],
+      "pins": [
+        "work",
+        "projects",
+        "ideas",
+        "datasets",
+        "results",
+        "knowledge",
+        "files",
+        "notes"
+      ],
+      "background": "field"
+    },
+    "business": {
+      "desktop": [
+        "tasks",
+        "calendar",
+        "projects",
+        "files"
+      ],
+      "pins": [
+        "work",
+        "calendar",
+        "mail",
+        "messages",
+        "projects",
+        "files",
+        "notes"
+      ],
+      "background": "module"
+    },
+    "personal": {
+      "desktop": [
+        "notes",
+        "files",
+        "calendar",
+        "storage"
+      ],
+      "pins": [
+        "files",
+        "notes",
+        "calendar",
+        "work",
+        "resources",
+        "trash"
+      ],
+      "background": "calm"
+    },
+    "education": {
+      "desktop": [
+        "calendar",
+        "tasks",
+        "projects",
+        "notes"
+      ],
+      "pins": [
+        "work",
+        "units",
+        "projects",
+        "knowledge",
+        "bibliography",
+        "calendar",
+        "files",
+        "notes"
+      ],
+      "background": "lattice"
+    },
+    "unknown": "empty System default (no widgets, ocinye background, manifest pins) — never Research",
+    "never_pinned": [
+      "administration",
+      "audit",
+      "monitor",
+      "terminal",
+      "browser",
+      "prompt (Nye)"
+    ],
+    "version": 2
+  },
+  "scopes": {
+    "member_layout_current": "MEMBER_ONLY (member_desktop_layouts.person_id)",
+    "member_layout_target": "MEMBER + INSTANCE + DISTRIBUTION (D010, G9-30)",
+    "member_pins_current": "MEMBER_ONLY (member_app_pins.person_id)",
+    "member_pins_target": "MEMBER + INSTANCE + DISTRIBUTION (D010, G9-31)",
+    "member_background": "inside the layout: current MEMBER_ONLY; target Distribution-scoped (follows G9-30)",
+    "instance_default": "NOT_IMPLEMENTED (FG-014)",
+    "restore": "member row deleted → active Distribution default; System when unknown"
+  },
+  "multi_distribution": {
+    "runtime": "D010_REQUIRED",
+    "second_distribution_enablement": "BLOCKED (organisations.profile holds one value; PUT /api/v1/instance/profile replaces it, organisation.manage, audited, not exposed by the Workspace)",
+    "selector": "D010_REQUIRED",
+    "switch": "D010_REQUIRED",
+    "access_endpoints": "D010_REQUIRED",
+    "custom_domains": "D010_REQUIRED",
+    "tls_domains": "D010_REQUIRED",
+    "login_context_selection": "absent (login selects no Unit/Project/Personal Space)"
+  },
+  "icons": {
+    "app_icons": 28,
+    "keep": 18,
+    "refine": 3,
+    "replace": 7,
+    "distribution_icons": 4,
+    "sprite_before": 184,
+    "sprite_after": 198,
+    "added": 14,
+    "removed": 0,
+    "sizes_checked": "16/20/24/32/48 px in the real browser: 160/160 rendered with a glyph inside the box",
+    "guards": [
+      "cada_aplicacao_registada_tem_um_icone_que_existe",
+      "nao_ha_icones_repetidos_entre_aplicacoes",
+      "nenhum_icone_literal_aponta_para_o_vazio",
+      "o_sprite_nao_carrega_nem_executa_nada",
+      "quatro_icones_de_distribuicao"
     ]
   },
+  "code_changes": [
+    "ShellVm.pin_order (dock follows the effective, filtered pin order)",
+    "controllers::desktop: withhold widgets whose apps the member sees none of; KPIs per metric; default_for",
+    "library offers only what would be drawn",
+    "Application::icon() via iconography; KPI units icon org-tree; account menu icons from the map",
+    "tests/common: Sistema::provisionar (fresh Instance through resolve_instance) and descartar"
+  ],
+  "tests": {
+    "d009_journeys": 9,
+    "d009_contracts": 14,
+    "updated": [
+      "d001_journeys",
+      "d002_d001_equivalence (declared D009 normalisations)",
+      "member_desktop_layouts (Core)",
+      "apps.rs and home unit tests"
+    ],
+    "full_run": "workspace + contracts: 28 suites, 643 passed, 0 failed, 0 ignored (before the last 3 tests were added)"
+  },
   "reversion_proofs": {
-    "run": 12,
-    "caught": 12,
-    "note": "R5 (a POSIX hint to files ls) is also neutralised by the Core's visibility filter, so the journey stays green; the contracts unit test cada_sugestao_posix_e_um_comando_registado catches it. Architecture guard: 8 injections, 8 caught (after fixing a test-module stripping gap found by reversion)."
+    "run": 19,
+    "caught": 19,
+    "note": "R2 (no Distribution → Research) was MISSED on the first run: the default choice moved to default_for with a direct test, then caught. R16 reverts both KPI guards together (the Core refuses inactive apps, so either alone is covered by the other)."
   },
   "browser_certification": {
-    "widths": "1440, 924×540, 900, 820, 760, 720, 390 — no horizontal overflow, no spill",
-    "touch_targets_390": "PASS after the address-field fix",
-    "real_keyboard": "Terminal: type/Enter, ↑ history (redacted), Tab completion (listbox, ↓/Enter), exit closes the window; Browser: address + Enter",
-    "pt_en_fr": "PASS (pages and Core-driven blocks, no raw keys)",
-    "web_isolation": "hostile-page.html in the exact WEB_SANDBOX: cookie/localStorage/parent/top SecurityError, no native bridge, Workspace requests fail, Origin null → 403 (via srcdoc: the pane refuses cross-port http frames)",
-    "screen_reader": "NOT_RUN",
-    "desktop_webview": "NOT_CERTIFIED / DESKTOP_RUNTIME_REQUIRED"
+    "instances": "four fresh single-Distribution Instances created with bootstrap-admin --profile; ordinary member created in Administration › Members; Education Collaborator for authority filtering; no data, no AI, no GPU",
+    "widths": "1440×900, 924×540, 900, 820, 760, 720, 390×844 in all four: 0 px horizontal overflow",
+    "touch_targets_390": "Distribution badge 5/5 and Getting Started button 5/5 (44px) by hit-testing after the fix; pre-existing D001 top-bar and widget-tool targets below 44 reported to Design, unchanged by D009",
+    "real_keyboard": "PASS: badge → Getting Started (Enter/Tab/Shift+Tab/Escape, focus visible, reopen) in all four; launcher Enter/Escape with focus return (fixed); customisation, library, Restore preview and Restore confirm by keyboard (row deleted, Anular offered)",
+    "arrows": "launcher has no arrow navigation (not a roving grid)",
+    "pt_en_fr": "PASS in all four; no raw keys",
+    "getting_started_automatic": "NO (closed after first access)",
+    "no_sample_data": "0 workspaces, files, notes, datasets, events, ideas in all four databases",
+    "authority": "Collaborator: pins work/calendar/files/notes, Projects widget hidden and kept, Tasks drawn, /projects 404, no Administration/Audit/Monitor; admin: authority apps in the launcher, never pinned, member_app_pins empty",
+    "screen_reader": "NOT_RUN"
   },
-  "functional_gaps_total": 56,
+  "functional_gaps_total": 41,
   "functional_gaps": {
-    "T-01": {
+    "G9-01": {
       "class": "RESOLVED",
-      "note": "/terminal draws ui::apps::terminal",
-      "security_sensitive": false
+      "security_sensitive": false,
+      "evidence": "WIDGET_KINDS: notice não obrigatório (contracts desktop.rs); core test sem_obrigatorios_um_desktop_vazio_grava"
     },
-    "T-02": {
+    "G9-02": {
       "class": "RESOLVED",
-      "note": "discovery = the Core's help for the person (not an Audience filter in the Workspace)",
-      "security_sensitive": false
+      "security_sensitive": false,
+      "evidence": "WALLPAPERS/Wallpaper com field/module/calm/lattice; journeys verificam data-wall por Distribuição"
     },
-    "T-03": {
-      "class": "ALREADY_IMPLEMENTED",
-      "note": "ocinye-contracts lexer/parser; host syntax 126 proved in d008_journeys",
-      "security_sensitive": true
-    },
-    "T-04": {
-      "class": "ALREADY_IMPLEMENTED",
-      "note": "POST /api/v1/commands/exec → executor → audit",
-      "security_sensitive": true
-    },
-    "T-05": {
-      "class": "RESOLVED",
-      "note": "crate::terminal::localize emits the Design shape",
-      "security_sensitive": false
-    },
-    "T-06": {
-      "class": "RESOLVED",
-      "note": "echo = ocsh::redact(line); JSON and no-JS form; proved by reversion",
-      "security_sensitive": true
-    },
-    "T-07": {
-      "class": "STORAGE_REQUIRED",
-      "note": "history is window memory only",
-      "security_sensitive": true
-    },
-    "T-08": {
-      "class": "RESOLVED",
-      "note": "POSIX_HINTS only name registered commands (test); Core suggests only visible families",
-      "security_sensitive": false
-    },
-    "T-09": {
-      "class": "CORE_CONTRACT_REQUIRED",
-      "note": "no Block::Link yet; links block not reachable",
-      "security_sensitive": true
-    },
-    "T-10": {
-      "class": "CORE_CONTRACT_REQUIRED",
-      "note": "no v1 command needs confirmation; one that did is refused (77) until TERMINAL-11",
-      "security_sensitive": true
-    },
-    "T-11": {
-      "class": "RESOLVED",
-      "note": "user decision: shared governed confirmation, no typed word (ADR-0312 amended)",
-      "security_sensitive": true
-    },
-    "T-12": {
-      "class": "ALREADY_IMPLEMENTED",
-      "note": "plan single use by conditional UPDATE",
-      "security_sensitive": true
-    },
-    "T-13": {
-      "class": "CORE_CONTRACT_REQUIRED",
-      "note": "resource completion",
-      "security_sensitive": true
-    },
-    "T-14": {
-      "class": "CORE_CONTRACT_REQUIRED",
-      "note": "files family and other proposed commands need capabilities",
-      "security_sensitive": false
-    },
-    "T-15": {
+    "G9-03": {
       "class": "DEFERRED",
-      "note": "one session per window",
-      "security_sensitive": false
+      "security_sensitive": true,
+      "evidence": "Predefinição da Instância (FG-014) não existe; INSTANCE_DEFAULT = NOT_IMPLEMENTED; restore_target é o ponto de extensão"
     },
-    "T-16": {
-      "class": "RUNTIME_CONTRACT_REQUIRED",
-      "note": "streaming and Ctrl+C",
-      "security_sensitive": false
-    },
-    "T-17": {
+    "G9-04": {
       "class": "DEFERRED",
-      "note": "session elevation (G-14)",
-      "security_sensitive": true
+      "security_sensitive": false,
+      "evidence": "Proveniência gravada da disposição do membro: STORAGE_REQUIRED, fora da D009"
     },
-    "T-18": {
-      "class": "ALREADY_IMPLEMENTED",
-      "note": "--json / | export json",
-      "security_sensitive": false
+    "G9-05": {
+      "class": "DEFERRED",
+      "security_sensitive": false,
+      "evidence": "Fixações por omissão da Instância: sem modelo"
     },
-    "T-19": {
+    "G9-06": {
       "class": "RESOLVED",
-      "note": "171 obsolete keys removed; exit closes the window",
-      "security_sensitive": false
+      "security_sensitive": false,
+      "evidence": "Fundo de quem nunca personalizou = o da Distribuição (controllers/mod.rs); journeys por Distribuição"
     },
-    "T-20": {
-      "class": "DESKTOP_RUNTIME_REQUIRED",
-      "note": "native clipboard",
-      "security_sensitive": false
+    "G9-07": {
+      "class": "RESOLVED",
+      "security_sensitive": true,
+      "evidence": "Distribuição desconhecida → predefinição do sistema: default_for + testes directos + d009_contracts"
     },
-    "T-21": {
+    "G9-08": {
+      "class": "RESOLVED",
+      "security_sensitive": true,
+      "evidence": "Widget recusado/invisível escondido e mantido na disposição: journey um_widget_escondido_sobrevive_a_gravacao"
+    },
+    "G9-09": {
+      "class": "RESOLVED",
+      "security_sensitive": false,
+      "evidence": "Indicadores largam só a métrica invisível (kpis + widget_shown); journey os_indicadores_largam_so_as_metricas_que_o_membro_nao_ve"
+    },
+    "G9-10": {
+      "class": "RESOLVED",
+      "security_sensitive": true,
+      "evidence": "Biblioteca só oferece o que se desenharia (offered → widget_shown); teste a_biblioteca_so_oferece_o_que_o_membro_ve"
+    },
+    "G9-11": {
+      "class": "RESOLVED",
+      "security_sensitive": false,
+      "evidence": "Application::icon() delega em iconography::app_icon_id; Icon::id() fica só para o vocabulário tipado, sem desenhar ids inexistentes (guarda nenhum_icone_literal_aponta_para_o_vazio)"
+    },
+    "G9-12": {
+      "class": "RESOLVED",
+      "security_sensitive": false,
+      "evidence": "i18n/mod.rs: mod ui_dist"
+    },
+    "G9-13": {
+      "class": "RESOLVED",
+      "security_sensitive": true,
+      "evidence": "Fixação sem autorização/inactiva cai (pinned_visible → ShellVm.pin_order); journey a_autoridade_filtra_fixacoes_e_widgets, rota directa 404"
+    },
+    "G9-14": {
+      "class": "RESOLVED",
+      "security_sensitive": false,
+      "evidence": "Activação por perfil inalterada (a_activacao_nao_mudou)"
+    },
+    "G9-15": {
+      "class": "RESOLVED",
+      "security_sensitive": true,
+      "evidence": "Perfil enum fechado (CHECK, from_str); journeys provisionam pelo resolve_instance"
+    },
+    "G9-16": {
+      "class": "RESOLVED",
+      "security_sensitive": false,
+      "evidence": "Repor = apagar a linha → predefinição da Distribuição activa; journeys"
+    },
+    "G9-17": {
+      "class": "RESOLVED",
+      "security_sensitive": false,
+      "evidence": "Actualização de predefinições não reescreve disposições gravadas"
+    },
+    "G9-18": {
       "class": "HONESTLY_UNAVAILABLE",
-      "note": "operator host console is a separate subsystem, not ocsh",
-      "security_sensitive": true
+      "security_sensitive": false,
+      "evidence": "Avisos institucionais sem fonte no Core: fora das predefinições e da biblioteca"
     },
-    "T-22": {
-      "class": "PARTIAL",
-      "note": "client history capped at 200; on-screen scrollback not capped (clear empties it)",
-      "security_sensitive": false
-    },
-    "T-23": {
+    "G9-19": {
       "class": "DEFERRED",
-      "note": "VisualViewport keyboard handling not implemented; prompt stays above the dock at 390, not tested with a real mobile keyboard",
-      "security_sensitive": false
+      "security_sensitive": false,
+      "evidence": "Sem persistência de visto; painel a pedido (os_primeiros_passos_nao_fingem_memoria)"
     },
-    "T-24": {
-      "class": "RESOLVED",
-      "note": "was not implemented (Core answered pending); now Block::Ask → /ai/prompt; 69 with the typed reason without inference",
-      "security_sensitive": true
-    },
-    "B-01": {
-      "class": "RESOLVED",
-      "note": "registry 27 → 28",
-      "security_sensitive": false
-    },
-    "B-02": {
-      "class": "RESOLVED",
-      "note": "NetworkUse::ClientWeb",
-      "security_sensitive": false
-    },
-    "B-03": {
-      "class": "RESOLVED",
-      "note": "frame-src 'self' https: only on /browser; proved by reversion",
-      "security_sensitive": true
-    },
-    "B-04": {
-      "class": "RESOLVED",
-      "note": "sandboxed iframe, requested address, honest fallback; Web chrome controls wired (Code)",
-      "security_sensitive": true
-    },
-    "B-05": {
-      "class": "WEB_RUNTIME_LIMITATION",
-      "note": "embedding refusal not detectable; fallback always visible",
-      "security_sensitive": false
-    },
-    "B-06": {
-      "class": "WEB_RUNTIME_LIMITATION",
-      "note": "no back/forward/title on the Web",
-      "security_sensitive": false
-    },
-    "B-07": {
-      "class": "DESKTOP_RUNTIME_REQUIRED",
-      "note": "no native shell",
-      "security_sensitive": true
-    },
-    "B-08": {
-      "class": "DESKTOP_RUNTIME_REQUIRED",
-      "note": "no browser.* bridge",
-      "security_sensitive": true
-    },
-    "B-09": {
-      "class": "DESKTOP_RUNTIME_REQUIRED",
-      "note": "no partitions to prove",
-      "security_sensitive": true
-    },
-    "B-10": {
-      "class": "DESKTOP_RUNTIME_REQUIRED",
-      "note": "",
-      "security_sensitive": true
-    },
-    "B-11": {
-      "class": "DESKTOP_RUNTIME_REQUIRED",
-      "note": "",
-      "security_sensitive": true
-    },
-    "B-12": {
-      "class": "DESKTOP_RUNTIME_REQUIRED",
-      "note": "",
-      "security_sensitive": true
-    },
-    "B-13": {
-      "class": "DESKTOP_RUNTIME_REQUIRED",
-      "note": "",
-      "security_sensitive": true
-    },
-    "B-14": {
+    "G9-20": {
       "class": "DEFERRED",
-      "note": "",
-      "security_sensitive": true
+      "security_sensitive": false,
+      "evidence": "Secção Começar na Ajuda: não desenhada nesta revisão"
     },
-    "B-15": {
-      "class": "DESKTOP_RUNTIME_REQUIRED",
-      "note": "Web: denied by construction (allow=\"\")",
-      "security_sensitive": true
+    "G9-21": {
+      "class": "D010_REQUIRED",
+      "security_sensitive": true,
+      "evidence": "Mudar a Distribuição: Core tem PUT /instance/profile (substitui, auditado); Workspace não expõe; efeito sobre disposições por person_id → D010"
     },
-    "B-16": {
+    "G9-22": {
       "class": "DEFERRED",
-      "note": "",
-      "security_sensitive": false
+      "security_sensitive": false,
+      "evidence": "Widget Correio sem caixa: fora das predefinições"
     },
-    "B-17": {
-      "class": "STORAGE_REQUIRED",
-      "note": "",
-      "security_sensitive": true
-    },
-    "B-18": {
-      "class": "DEFERRED",
-      "note": "",
-      "security_sensitive": false
-    },
-    "B-19": {
-      "class": "DESKTOP_RUNTIME_REQUIRED",
-      "note": "",
-      "security_sensitive": true
-    },
-    "B-20": {
-      "class": "EXTERNAL_SERVICE_REQUIRED",
-      "note": "non-addresses say «Não é um endereço»",
-      "security_sensitive": false
-    },
-    "B-21": {
-      "class": "DESKTOP_RUNTIME_REQUIRED",
-      "note": "",
-      "security_sensitive": true
-    },
-    "B-22": {
-      "class": "CORE_CONTRACT_REQUIRED",
-      "note": "no /browser/nye; the Web panel says unavailable",
-      "security_sensitive": true
-    },
-    "B-23": {
-      "class": "PARTIAL",
-      "note": "Web keeps opening external links in a new browser tab; Desktop routing needs the shell",
-      "security_sensitive": true
-    },
-    "B-24": {
-      "class": "DESKTOP_RUNTIME_REQUIRED",
-      "note": "",
-      "security_sensitive": false
-    },
-    "B-25": {
-      "class": "DESKTOP_RUNTIME_REQUIRED",
-      "note": "Web: host shortcuts not intercepted",
-      "security_sensitive": false
-    },
-    "B-26": {
-      "class": "DEFERRED",
-      "note": "",
-      "security_sensitive": false
-    },
-    "B-27": {
+    "G9-23": {
       "class": "HONESTLY_UNAVAILABLE",
-      "note": "",
-      "security_sensitive": false
+      "security_sensitive": false,
+      "evidence": "Um só modo de aparência"
     },
-    "B-28": {
+    "G9-24": {
       "class": "DEFERRED",
-      "note": "menu has no designed markup; hidden on the Web (Code)",
-      "security_sensitive": false
+      "security_sensitive": false,
+      "evidence": "Core profile vs Workspace Distribution: migração de terminologia"
     },
-    "B-29": {
-      "class": "HONESTLY_UNAVAILABLE",
-      "note": "",
-      "security_sensitive": false
-    },
-    "B-30": {
-      "class": "RUNTIME_CONTRACT_REQUIRED",
-      "note": "",
-      "security_sensitive": true
-    },
-    "X-01": {
+    "G9-25": {
       "class": "RESOLVED",
-      "note": "architecture_boundaries.py: no cross-reference, no generic execution layer, no process in ocsh, each client on its route; proved by reversion",
-      "security_sensitive": true
+      "security_sensitive": false,
+      "evidence": "CLAUDE.md §1 regenerado da história e do repository-facts.sh"
     },
-    "X-02": {
-      "class": "DESKTOP_RUNTIME_REQUIRED",
-      "note": "Dedicated",
-      "security_sensitive": false
+    "G9-26": {
+      "class": "RESOLVED",
+      "security_sensitive": false,
+      "evidence": "Testes D001/D002 actualizados às predefinições D009, com normalizações declaradas"
+    },
+    "G9-27": {
+      "class": "RESOLVED",
+      "security_sensitive": true,
+      "evidence": "distribution::parse sobre o enum fechado; valor desconhecido nunca vira caminho nem Research"
+    },
+    "G9-28": {
+      "class": "DEFERRED",
+      "security_sensitive": false,
+      "evidence": "Limpeza de símbolos ot-*/ob-* duplicados: só depois de medir referências; 0 removidos"
+    },
+    "G9-29": {
+      "class": "D010_REQUIRED",
+      "security_sensitive": true,
+      "evidence": "organisations.profile guarda uma; segunda Distribuição BLOCKED"
+    },
+    "G9-30": {
+      "class": "D010_REQUIRED",
+      "security_sensitive": false,
+      "evidence": "Disposição/fundo por membro+Instância+Distribuição; hoje MEMBER_ONLY"
+    },
+    "G9-31": {
+      "class": "D010_REQUIRED",
+      "security_sensitive": false,
+      "evidence": "Fixações por Distribuição; hoje MEMBER_ONLY"
+    },
+    "G9-32": {
+      "class": "D010_REQUIRED",
+      "security_sensitive": false,
+      "evidence": "Predefinição da Instância por (Instância, Distribuição)"
+    },
+    "G9-33": {
+      "class": "D010_REQUIRED",
+      "security_sensitive": true,
+      "evidence": "Pontos de acesso tipados; hoje um OCINYE_WORKSPACE_PUBLIC_URL"
+    },
+    "G9-34": {
+      "class": "D010_REQUIRED",
+      "security_sensitive": true,
+      "evidence": "Anfitrião desconhecido falha fechado"
+    },
+    "G9-35": {
+      "class": "D010_REQUIRED",
+      "security_sensitive": true,
+      "evidence": "Várias origens: origin_is_ours, CSRF, redireccionamentos"
+    },
+    "G9-36": {
+      "class": "D010_REQUIRED",
+      "security_sensitive": true,
+      "evidence": "Domínio próprio, verificação, TLS"
+    },
+    "G9-37": {
+      "class": "D010_REQUIRED",
+      "security_sensitive": true,
+      "evidence": "Activadas ∩ acessíveis; escolha; zero; fixo sem acesso"
+    },
+    "G9-38": {
+      "class": "D010_REQUIRED",
+      "security_sensitive": true,
+      "evidence": "Distribuição activa na sessão + mudança"
+    },
+    "G9-39": {
+      "class": "D010_REQUIRED",
+      "security_sensitive": true,
+      "evidence": "Contexto activo dentro da Distribuição"
+    },
+    "G9-40": {
+      "class": "D010_REQUIRED",
+      "security_sensitive": true,
+      "evidence": "Ligação profunda para outra Distribuição"
+    },
+    "G9-41": {
+      "class": "RESOLVED",
+      "security_sensitive": true,
+      "evidence": "Sessão por anfitrião (cookie host-only): já assim; documentado, não alargado"
     }
   },
   "functional_gaps_by_class": {
-    "RESOLVED": 13,
-    "ALREADY_IMPLEMENTED": 4,
-    "STORAGE_REQUIRED": 2,
-    "CORE_CONTRACT_REQUIRED": 5,
+    "RESOLVED": 18,
     "DEFERRED": 8,
-    "RUNTIME_CONTRACT_REQUIRED": 2,
-    "DESKTOP_RUNTIME_REQUIRED": 14,
-    "HONESTLY_UNAVAILABLE": 3,
-    "PARTIAL": 2,
-    "WEB_RUNTIME_LIMITATION": 2,
-    "EXTERNAL_SERVICE_REQUIRED": 1
+    "HONESTLY_UNAVAILABLE": 2,
+    "D010_REQUIRED": 13
   },
-  "security_sensitive_gaps_total": 30,
+  "security_sensitive_gaps_total": 18,
   "security_sensitive_gaps_open": [
-    "B-07",
-    "B-08",
-    "B-09",
-    "B-10",
-    "B-11",
-    "B-12",
-    "B-13",
-    "B-14",
-    "B-15",
-    "B-17",
-    "B-19",
-    "B-21",
-    "B-22",
-    "B-23",
-    "B-30",
-    "T-07",
-    "T-09",
-    "T-10",
-    "T-13",
-    "T-17",
-    "T-21"
+    "G9-03",
+    "G9-21",
+    "G9-29",
+    "G9-33",
+    "G9-34",
+    "G9-35",
+    "G9-36",
+    "G9-37",
+    "G9-38",
+    "G9-39",
+    "G9-40"
   ],
+  "d010": {
+    "scope_proposal": "docs/ui/D010_SCOPE_PROPOSAL.md",
+    "missing_screen_audit": "docs/ui/missing-screen-audit.md",
+    "proposed_screens": 36,
+    "required_screens": 33,
+    "security_sensitive_screens": 29,
+    "core_gaps": 9,
+    "runtime_gaps": 6,
+    "config_gaps": 4,
+    "package_created": false,
+    "implementation_started": false
+  },
   "adr": [
-    "0623 (Accepted)",
-    "0312 (amended)",
-    "0612 (amended)"
+    "0624 (Accepted, R2 amendment)",
+    "0014 (amended)",
+    "0016 (amended)"
   ],
-  "feedback": "docs/ui/CODE_FEEDBACK.md (D008 section on top)",
+  "feedback": "docs/ui/CODE_FEEDBACK.md (D009 R2 section on top)",
+  "verify_sh": "run on the exact commit that carries this record; the outcome is in the D009 report",
   "deploy": "NOT_PERFORMED",
   "deploy_authorization": "NOT_GIVEN",
   "history": [
+    {
+      "schema_version": 1,
+      "design_revision": "D008",
+      "based_on": "main @ 7a23011 (merge of PR #190, D007 + D007.1); Design observed feat/design-d007 @ b96b931 (same tree)",
+      "repository_head_before": "7a23011",
+      "integrated_on": "2026-09-30",
+      "integration_branch": "feat/design-d008",
+      "integration_status": "INTEGRATED_VISUAL_PARITY_TRUE_ACCESSIBILITY_CERTIFIED_FUNCTIONALLY_CERTIFIED_WEB_RUNTIME; DESKTOP_RUNTIME_REQUIRED",
+      "package": "ocinye-design-complete-D008: 704/704 checksums; cumulative, self-contained; 72/72 reference checks (Design reference only — not Rust, ocsh runtime or Desktop WebView certification)",
+      "application_method": "new files copied (terminal.rs, browser.rs, ui_sys.rs, oc-terminal.js, oc-browser.js, ADR-0623, DESIGN_LOCK and HANDOFF prepends); anchored blocks appended to view_models.rs and oc-apps.css; pub mods, mod ui_sys and GROUPS by hand; D008-ADR-AMENDMENTS.md folded into ADR-0312/0612/0623; the package coverage doc not copied (the repository's is kept and updated)",
+      "raw_build": "compiled first time; clippy clean; 15 Design tests ran, 14 passed as delivered",
+      "code_fix_in_design_file": [
+        "browser.rs test fronteira_de_confianca looked for oc-brw-view, first found in the tabs' aria-controls; now class=\"oc-brw-view\"",
+        "visible() moved from ui::apps::terminal to ui::components (ADR-0623; terminal::visible re-exported)",
+        "oc-browser.js Web: validated address submits GET /browser?url= (server draws the whole trusted chrome); New tab / close tab / Nye / tab select wired on the Web",
+        "oc-apps.css: mobile address field 44 px; menu hidden on the Web (no designed markup)"
+      ],
+      "architectural_decisions": {
+        "high_impact_confirmation": "shared governed confirmation over the frozen plan; no typed word (ADR-0312 §5 superseded, history kept)",
+        "pipe": "kept as closed typed ocsh composition (filter, sort, head, count, export json); never a shell pipe",
+        "terminal_browser": "ADR-0623 Accepted; no shared execution layer; enforced by scripts/architecture_boundaries.py",
+        "desktop_browser": "DESKTOP_RUNTIME_REQUIRED; DESKTOP_WEBVIEW_RUNTIME_VALIDATION = NOT_CERTIFIED (also Dedicated)",
+        "terminal_cleanup": "did-you-mean only registered and visible commands; 171 obsolete catalogue keys removed; exit closes the window",
+        "deploy": "NOT_PERFORMED"
+      },
+      "registry": {
+        "before": 27,
+        "added": [
+          "browser"
+        ],
+        "after": 28,
+        "provisional": [],
+        "terminal": "REGISTERED, real screen",
+        "browser": "REGISTERED, real in the Web runtime; Desktop/Dedicated DESKTOP_RUNTIME_REQUIRED"
+      },
+      "code_changes": [
+        "contracts: ApplicationId::Browser, NetworkUse::ClientWeb, manifest; ocsh POSIX_WORDS/POSIX_HINTS (registered targets only); wire Block::Ask",
+        "Core: nye ask → Block::Ask; did-you-mean filtered to visible families",
+        "Workspace: routes/sys.rs (terminal page, exec JSON + no-JS form, Nye bridge, browser page with its own CSP, ?frame=1 → 204); terminal.rs localize/entry; Screen::Browser; has_screen; shell_page_with (route-scoped client); wm-engine exit → close",
+        "catalogue: 171 obsolete Terminal keys removed; tab/admin-session wording fixed"
+      ],
+      "tests": {
+        "d008_journeys": 9,
+        "d008_contracts": 6,
+        "updated": [
+          "d001_journeys",
+          "d002_journeys",
+          "d007_journeys",
+          "d007_1_journeys",
+          "d007_contracts",
+          "controllers::windows"
+        ]
+      },
+      "reversion_proofs": {
+        "run": 12,
+        "caught": 12,
+        "note": "R5 (a POSIX hint to files ls) is also neutralised by the Core's visibility filter, so the journey stays green; the contracts unit test cada_sugestao_posix_e_um_comando_registado catches it. Architecture guard: 8 injections, 8 caught (after fixing a test-module stripping gap found by reversion)."
+      },
+      "browser_certification": {
+        "widths": "1440, 924×540, 900, 820, 760, 720, 390 — no horizontal overflow, no spill",
+        "touch_targets_390": "PASS after the address-field fix",
+        "real_keyboard": "Terminal: type/Enter, ↑ history (redacted), Tab completion (listbox, ↓/Enter), exit closes the window; Browser: address + Enter",
+        "pt_en_fr": "PASS (pages and Core-driven blocks, no raw keys)",
+        "web_isolation": "hostile-page.html in the exact WEB_SANDBOX: cookie/localStorage/parent/top SecurityError, no native bridge, Workspace requests fail, Origin null → 403 (via srcdoc: the pane refuses cross-port http frames)",
+        "screen_reader": "NOT_RUN",
+        "desktop_webview": "NOT_CERTIFIED / DESKTOP_RUNTIME_REQUIRED"
+      },
+      "functional_gaps_total": 56,
+      "functional_gaps": {
+        "T-01": {
+          "class": "RESOLVED",
+          "note": "/terminal draws ui::apps::terminal",
+          "security_sensitive": false
+        },
+        "T-02": {
+          "class": "RESOLVED",
+          "note": "discovery = the Core's help for the person (not an Audience filter in the Workspace)",
+          "security_sensitive": false
+        },
+        "T-03": {
+          "class": "ALREADY_IMPLEMENTED",
+          "note": "ocinye-contracts lexer/parser; host syntax 126 proved in d008_journeys",
+          "security_sensitive": true
+        },
+        "T-04": {
+          "class": "ALREADY_IMPLEMENTED",
+          "note": "POST /api/v1/commands/exec → executor → audit",
+          "security_sensitive": true
+        },
+        "T-05": {
+          "class": "RESOLVED",
+          "note": "crate::terminal::localize emits the Design shape",
+          "security_sensitive": false
+        },
+        "T-06": {
+          "class": "RESOLVED",
+          "note": "echo = ocsh::redact(line); JSON and no-JS form; proved by reversion",
+          "security_sensitive": true
+        },
+        "T-07": {
+          "class": "STORAGE_REQUIRED",
+          "note": "history is window memory only",
+          "security_sensitive": true
+        },
+        "T-08": {
+          "class": "RESOLVED",
+          "note": "POSIX_HINTS only name registered commands (test); Core suggests only visible families",
+          "security_sensitive": false
+        },
+        "T-09": {
+          "class": "CORE_CONTRACT_REQUIRED",
+          "note": "no Block::Link yet; links block not reachable",
+          "security_sensitive": true
+        },
+        "T-10": {
+          "class": "CORE_CONTRACT_REQUIRED",
+          "note": "no v1 command needs confirmation; one that did is refused (77) until TERMINAL-11",
+          "security_sensitive": true
+        },
+        "T-11": {
+          "class": "RESOLVED",
+          "note": "user decision: shared governed confirmation, no typed word (ADR-0312 amended)",
+          "security_sensitive": true
+        },
+        "T-12": {
+          "class": "ALREADY_IMPLEMENTED",
+          "note": "plan single use by conditional UPDATE",
+          "security_sensitive": true
+        },
+        "T-13": {
+          "class": "CORE_CONTRACT_REQUIRED",
+          "note": "resource completion",
+          "security_sensitive": true
+        },
+        "T-14": {
+          "class": "CORE_CONTRACT_REQUIRED",
+          "note": "files family and other proposed commands need capabilities",
+          "security_sensitive": false
+        },
+        "T-15": {
+          "class": "DEFERRED",
+          "note": "one session per window",
+          "security_sensitive": false
+        },
+        "T-16": {
+          "class": "RUNTIME_CONTRACT_REQUIRED",
+          "note": "streaming and Ctrl+C",
+          "security_sensitive": false
+        },
+        "T-17": {
+          "class": "DEFERRED",
+          "note": "session elevation (G-14)",
+          "security_sensitive": true
+        },
+        "T-18": {
+          "class": "ALREADY_IMPLEMENTED",
+          "note": "--json / | export json",
+          "security_sensitive": false
+        },
+        "T-19": {
+          "class": "RESOLVED",
+          "note": "171 obsolete keys removed; exit closes the window",
+          "security_sensitive": false
+        },
+        "T-20": {
+          "class": "DESKTOP_RUNTIME_REQUIRED",
+          "note": "native clipboard",
+          "security_sensitive": false
+        },
+        "T-21": {
+          "class": "HONESTLY_UNAVAILABLE",
+          "note": "operator host console is a separate subsystem, not ocsh",
+          "security_sensitive": true
+        },
+        "T-22": {
+          "class": "PARTIAL",
+          "note": "client history capped at 200; on-screen scrollback not capped (clear empties it)",
+          "security_sensitive": false
+        },
+        "T-23": {
+          "class": "DEFERRED",
+          "note": "VisualViewport keyboard handling not implemented; prompt stays above the dock at 390, not tested with a real mobile keyboard",
+          "security_sensitive": false
+        },
+        "T-24": {
+          "class": "RESOLVED",
+          "note": "was not implemented (Core answered pending); now Block::Ask → /ai/prompt; 69 with the typed reason without inference",
+          "security_sensitive": true
+        },
+        "B-01": {
+          "class": "RESOLVED",
+          "note": "registry 27 → 28",
+          "security_sensitive": false
+        },
+        "B-02": {
+          "class": "RESOLVED",
+          "note": "NetworkUse::ClientWeb",
+          "security_sensitive": false
+        },
+        "B-03": {
+          "class": "RESOLVED",
+          "note": "frame-src 'self' https: only on /browser; proved by reversion",
+          "security_sensitive": true
+        },
+        "B-04": {
+          "class": "RESOLVED",
+          "note": "sandboxed iframe, requested address, honest fallback; Web chrome controls wired (Code)",
+          "security_sensitive": true
+        },
+        "B-05": {
+          "class": "WEB_RUNTIME_LIMITATION",
+          "note": "embedding refusal not detectable; fallback always visible",
+          "security_sensitive": false
+        },
+        "B-06": {
+          "class": "WEB_RUNTIME_LIMITATION",
+          "note": "no back/forward/title on the Web",
+          "security_sensitive": false
+        },
+        "B-07": {
+          "class": "DESKTOP_RUNTIME_REQUIRED",
+          "note": "no native shell",
+          "security_sensitive": true
+        },
+        "B-08": {
+          "class": "DESKTOP_RUNTIME_REQUIRED",
+          "note": "no browser.* bridge",
+          "security_sensitive": true
+        },
+        "B-09": {
+          "class": "DESKTOP_RUNTIME_REQUIRED",
+          "note": "no partitions to prove",
+          "security_sensitive": true
+        },
+        "B-10": {
+          "class": "DESKTOP_RUNTIME_REQUIRED",
+          "note": "",
+          "security_sensitive": true
+        },
+        "B-11": {
+          "class": "DESKTOP_RUNTIME_REQUIRED",
+          "note": "",
+          "security_sensitive": true
+        },
+        "B-12": {
+          "class": "DESKTOP_RUNTIME_REQUIRED",
+          "note": "",
+          "security_sensitive": true
+        },
+        "B-13": {
+          "class": "DESKTOP_RUNTIME_REQUIRED",
+          "note": "",
+          "security_sensitive": true
+        },
+        "B-14": {
+          "class": "DEFERRED",
+          "note": "",
+          "security_sensitive": true
+        },
+        "B-15": {
+          "class": "DESKTOP_RUNTIME_REQUIRED",
+          "note": "Web: denied by construction (allow=\"\")",
+          "security_sensitive": true
+        },
+        "B-16": {
+          "class": "DEFERRED",
+          "note": "",
+          "security_sensitive": false
+        },
+        "B-17": {
+          "class": "STORAGE_REQUIRED",
+          "note": "",
+          "security_sensitive": true
+        },
+        "B-18": {
+          "class": "DEFERRED",
+          "note": "",
+          "security_sensitive": false
+        },
+        "B-19": {
+          "class": "DESKTOP_RUNTIME_REQUIRED",
+          "note": "",
+          "security_sensitive": true
+        },
+        "B-20": {
+          "class": "EXTERNAL_SERVICE_REQUIRED",
+          "note": "non-addresses say «Não é um endereço»",
+          "security_sensitive": false
+        },
+        "B-21": {
+          "class": "DESKTOP_RUNTIME_REQUIRED",
+          "note": "",
+          "security_sensitive": true
+        },
+        "B-22": {
+          "class": "CORE_CONTRACT_REQUIRED",
+          "note": "no /browser/nye; the Web panel says unavailable",
+          "security_sensitive": true
+        },
+        "B-23": {
+          "class": "PARTIAL",
+          "note": "Web keeps opening external links in a new browser tab; Desktop routing needs the shell",
+          "security_sensitive": true
+        },
+        "B-24": {
+          "class": "DESKTOP_RUNTIME_REQUIRED",
+          "note": "",
+          "security_sensitive": false
+        },
+        "B-25": {
+          "class": "DESKTOP_RUNTIME_REQUIRED",
+          "note": "Web: host shortcuts not intercepted",
+          "security_sensitive": false
+        },
+        "B-26": {
+          "class": "DEFERRED",
+          "note": "",
+          "security_sensitive": false
+        },
+        "B-27": {
+          "class": "HONESTLY_UNAVAILABLE",
+          "note": "",
+          "security_sensitive": false
+        },
+        "B-28": {
+          "class": "DEFERRED",
+          "note": "menu has no designed markup; hidden on the Web (Code)",
+          "security_sensitive": false
+        },
+        "B-29": {
+          "class": "HONESTLY_UNAVAILABLE",
+          "note": "",
+          "security_sensitive": false
+        },
+        "B-30": {
+          "class": "RUNTIME_CONTRACT_REQUIRED",
+          "note": "",
+          "security_sensitive": true
+        },
+        "X-01": {
+          "class": "RESOLVED",
+          "note": "architecture_boundaries.py: no cross-reference, no generic execution layer, no process in ocsh, each client on its route; proved by reversion",
+          "security_sensitive": true
+        },
+        "X-02": {
+          "class": "DESKTOP_RUNTIME_REQUIRED",
+          "note": "Dedicated",
+          "security_sensitive": false
+        }
+      },
+      "functional_gaps_by_class": {
+        "RESOLVED": 13,
+        "ALREADY_IMPLEMENTED": 4,
+        "STORAGE_REQUIRED": 2,
+        "CORE_CONTRACT_REQUIRED": 5,
+        "DEFERRED": 8,
+        "RUNTIME_CONTRACT_REQUIRED": 2,
+        "DESKTOP_RUNTIME_REQUIRED": 14,
+        "HONESTLY_UNAVAILABLE": 3,
+        "PARTIAL": 2,
+        "WEB_RUNTIME_LIMITATION": 2,
+        "EXTERNAL_SERVICE_REQUIRED": 1
+      },
+      "security_sensitive_gaps_total": 30,
+      "security_sensitive_gaps_open": [
+        "B-07",
+        "B-08",
+        "B-09",
+        "B-10",
+        "B-11",
+        "B-12",
+        "B-13",
+        "B-14",
+        "B-15",
+        "B-17",
+        "B-19",
+        "B-21",
+        "B-22",
+        "B-23",
+        "B-30",
+        "T-07",
+        "T-09",
+        "T-10",
+        "T-13",
+        "T-17",
+        "T-21"
+      ],
+      "adr": [
+        "0623 (Accepted)",
+        "0312 (amended)",
+        "0612 (amended)"
+      ],
+      "feedback": "docs/ui/CODE_FEEDBACK.md (D008 section on top)",
+      "deploy": "NOT_PERFORMED",
+      "deploy_authorization": "NOT_GIVEN",
+      "merged": "PR #191, merge ece29e9 (tree = verified 40a6127)"
+    },
     {
       "schema_version": 1,
       "design_revision": "D007",

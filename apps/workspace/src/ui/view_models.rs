@@ -316,6 +316,11 @@ pub struct ShellVm {
     /// D003 · A superfície universal da Nye (Pesquisar · Perguntar · Executar).
     /// `None` = a paleta D001, sem alterações (contrato de regressão D003).
     pub nye: Option<NyeSurfaceVm>,
+    /// Code (D009) · Os ids fixados, pela ordem em que estão fixados (as do
+    /// membro, ou as da Distribuição). A barra desenha as fixações por esta
+    /// ordem; `apps` continua pela ordem do registo (o lançador). Vazio = a
+    /// ordem de `apps` (comportamento anterior).
+    pub pin_order: Vec<&'static str>,
 }
 
 /// Um elemento de um widget da Home.
@@ -348,17 +353,29 @@ pub enum Wallpaper {
     Slate,
     /// Areia (claro).
     Sand,
+    /// D009 · Campo — predefinido de Research.
+    Field,
+    /// D009 · Módulo — predefinido de Business.
+    Module,
+    /// D009 · Calma — predefinido de Personal.
+    Calm,
+    /// D009 · Trama — predefinido de Education.
+    Lattice,
 }
 
 impl Wallpaper {
     /// Todos, pela ordem da escolha.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 10] = [
         Self::Ocinye,
         Self::Dusk,
         Self::Institutional,
         Self::Mist,
         Self::Slate,
         Self::Sand,
+        Self::Field,
+        Self::Module,
+        Self::Calm,
+        Self::Lattice,
     ];
 
     /// O identificador no contrato (`wallpaper`) e em `data-wall`.
@@ -371,6 +388,10 @@ impl Wallpaper {
             Self::Mist => "mist",
             Self::Slate => "slate",
             Self::Sand => "sand",
+            Self::Field => "field",
+            Self::Module => "module",
+            Self::Calm => "calm",
+            Self::Lattice => "lattice",
         }
     }
 
@@ -541,10 +562,14 @@ pub struct DeskWidget {
 /// De onde vem a predefinição que «Repor» aplica (D001.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum DefaultSource {
-    /// A predefinição do sistema para a Distribuição (`registry::system_default`).
-    /// Não houve publicação: `name`, `version` e `published` não se mostram.
+    /// D009 · A predefinição mínima do sistema: só quando a Distribuição não
+    /// se conhece (`distribution::SystemFallback`). Sem widgets.
     #[default]
     System,
+    /// D009 · A predefinição da Distribuição, versionada
+    /// (`distribution::DISTRIBUTION_DEFAULTS_VERSION`). Ninguém a publicou:
+    /// `name` e `published` ficam vazios; `version` mostra-se.
+    Distribution,
     /// Publicada pela administração da Instância (FG-014).
     Instance,
 }

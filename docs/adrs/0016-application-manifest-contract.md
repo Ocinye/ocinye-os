@@ -76,3 +76,11 @@ uma parte, e é exactamente a duplicação que isto fecha.
   seu manifesto.
 - Não há loja, instalação de terceiros nem execução de código não assinado. É
   arquitectura pronta, e não uma plataforma aberta.
+
+## Emenda — D009 (2026-09-30)
+
+`default_pin` do manifesto passa a ser só a predefinição do **sistema** — a que
+vale quando a Distribuição não se conhece. As fixações por Distribuição vivem em
+`experience::distribution` ([ADR-0624](0624-distribution-defaults.md)). A
+iconografia de cada aplicação vive num só mapa, `experience::iconography`
+(apresentação, sem ADR própria).

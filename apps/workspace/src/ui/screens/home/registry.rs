@@ -126,9 +126,13 @@ pub const KINDS: &[KindSpec] = &[
             None,
         )
     },
+    // Code (D009 · G9-18): os avisos não têm fonte no Core (FG-013); oferecê-
+    // los na biblioteca seria oferecer um cartão sempre indisponível. Quem já
+    // o tem na disposição mantém-no e pode retirá-lo (deixou de ser
+    // obrigatório); volta à biblioteca quando houver fonte.
     KindSpec {
+        in_library: false,
         desc_key: "desk.d.notice",
-        mandatory: true,
         subtitle_key: Some("desk.sub.notice"),
         ..k(
             WidgetKind::Notice,
@@ -291,7 +295,9 @@ pub type KpiSpec = (&'static str, &'static str, &'static str, &'static str);
 /// Os indicadores do widget Indicadores, por ordem. O qualificativo concorda com o
 /// número: `tp(q, n)` escolhe `.one`/`.other` («1 activa» / «4 activas»).
 pub const KPIS: &[KpiSpec] = &[
-    ("desk.kpi.units", "desk.kpi.units_q", "units", "/units"),
+    // Code (D009): cada indicador leva o ícone canónico da sua aplicação
+    // (`experience::iconography`); o de Unidades passou a `org-tree`.
+    ("desk.kpi.units", "desk.kpi.units_q", "org-tree", "/units"),
     ("desk.kpi.ideas", "desk.kpi.ideas_q", "idea", "/ideas"),
     (
         "desk.kpi.projects",
@@ -313,6 +319,7 @@ pub fn size_allowed(kind: WidgetKind, w: u8, h: u8) -> bool {
     spec(kind).sizes.contains(&(w, h))
 }
 
+#[cfg(test)]
 fn place(kind: WidgetKind, w: u8, h: u8) -> PlacedWidget {
     PlacedWidget {
         id: kind.as_str().to_owned(),
@@ -323,48 +330,12 @@ fn place(kind: WidgetKind, w: u8, h: u8) -> PlacedWidget {
     }
 }
 
-/// A predefinição do sistema para cada distribuição (antes de o
-/// administrador publicar a sua).
+/// A predefinição de cada Distribuição. D009: vem de
+/// `experience::distribution::DEFAULTS` (configuração de produto tipada e
+/// versionada); o nome fica para as chamadas existentes.
 #[must_use]
 pub fn system_default(d: Distribution) -> Vec<PlacedWidget> {
-    use WidgetKind as K;
-    let list: &[(K, u8, u8)] = match d {
-        Distribution::Research => &[
-            (K::Kpis, 4, 1),
-            (K::Calendar, 1, 2),
-            (K::Notice, 2, 1),
-            (K::Continue, 2, 1),
-            (K::Tasks, 1, 2),
-            (K::Projects, 2, 1),
-            (K::Ideas, 1, 1),
-            (K::Storage, 1, 1),
-        ],
-        Distribution::Business => &[
-            (K::Kpis, 4, 1),
-            (K::Tasks, 1, 2),
-            (K::Notice, 2, 1),
-            (K::Mail, 1, 2),
-            (K::Continue, 2, 1),
-            (K::Calendar, 2, 1),
-            (K::Activity, 2, 2),
-        ],
-        Distribution::Education => &[
-            (K::Calendar, 1, 2),
-            (K::Notice, 2, 1),
-            (K::Tasks, 1, 2),
-            (K::Notes, 2, 1),
-            (K::Files, 2, 1),
-        ],
-        Distribution::Personal => &[
-            (K::Notes, 2, 1),
-            (K::Tasks, 1, 2),
-            (K::Calendar, 1, 2),
-            (K::Notice, 2, 1),
-            (K::Continue, 2, 1),
-            (K::Storage, 1, 1),
-        ],
-    };
-    list.iter().map(|&(kind, w, h)| place(kind, w, h)).collect()
+    crate::experience::distribution::widgets(Some(d))
 }
 
 /// A chave da saudação pela hora local da Instância (0–23):
@@ -499,7 +470,16 @@ mod tests {
 
     #[test]
     fn a_comparacao_ve_o_que_entra_sai_muda_e_se_move() {
-        let def = system_default(Distribution::Research);
+        let def: Vec<_> = [
+            (WidgetKind::Kpis, 4, 1),
+            (WidgetKind::Calendar, 1, 2),
+            (WidgetKind::Notice, 2, 1),
+            (WidgetKind::Tasks, 1, 2),
+            (WidgetKind::Ideas, 1, 1),
+        ]
+        .iter()
+        .map(|&(k, w, h)| place(k, w, h))
+        .collect();
         let mut cur = def.clone();
         cur.retain(|p| p.kind != WidgetKind::Ideas);
         cur.swap(0, 1);

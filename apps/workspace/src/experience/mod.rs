@@ -5,6 +5,8 @@
 //! rotas usam para validar as fixações. Nada aqui desenha.
 
 pub mod apps;
+pub mod distribution;
 pub mod icon;
+pub mod iconography;
 pub mod navigation;
 pub mod shortcuts;
