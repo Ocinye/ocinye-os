@@ -3936,7 +3936,8 @@ async fn upload_avatar(
 
     let mut ficheiro: Option<(String, String, Vec<u8>)> = None;
     while let Ok(Some(field)) = multipart.next_field().await {
-        if field.name() == Some("file") {
+        // `photo` é o nome do campo no ecrã do Design (D007); `file` o antigo.
+        if matches!(field.name(), Some("photo" | "file")) {
             let nome = field.file_name().unwrap_or("fotografia").to_owned();
             let tipo = field
                 .content_type()

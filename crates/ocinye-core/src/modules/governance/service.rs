@@ -24,6 +24,33 @@ pub struct AuditQuery {
     pub since: Option<DateTime<Utc>>,
 }
 
+/// The resource types the audit trail holds, for the filter.
+///
+/// A vocabulary of code, not data: the types are the constants the Core's
+/// writers use. Read with the same authority as the trail itself, and by a
+/// loose index scan over `ix_audit_events_resource` — one probe per distinct
+/// type, however long the trail grows.
+///
+/// # Errors
+///
+/// Returns [`CoreError::NotFound`] when the caller may not read the trail.
+pub async fn audit_resource_types(pool: &PgPool, principal: &Principal) -> CoreResult<Vec<String>> {
+    let ctx = ResourceContext::organisation(ResourceKind::AuditEvent, principal.organisation_id);
+    authorize(principal, Action::ReadAudit, &ctx)
+        .map_err(|(denial, decision)| CoreError::from_denial(denial, &decision))?;
+    Ok(sqlx::query_scalar(
+        "WITH RECURSIVE t AS (
+             SELECT min(resource_type) AS r FROM audit_events
+             UNION ALL
+             SELECT (SELECT min(resource_type) FROM audit_events WHERE resource_type > t.r)
+               FROM t WHERE t.r IS NOT NULL
+         )
+         SELECT r FROM t WHERE r IS NOT NULL LIMIT 200",
+    )
+    .fetch_all(pool)
+    .await?)
+}
+
 /// Read the audit trail.
 ///
 /// Requires the `auditor` role or an administrative role — and grants nothing

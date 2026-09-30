@@ -1013,7 +1013,8 @@ pub fn kind_phrase(kind: &str) -> &'static str {
 }
 
 /// Um evento, com o alvo resolvido agora. Um alvo que deixou de ser visível não
-/// leva título, resumo (que o cita), classificação, nem ambiente.
+/// leva título, classificação, nem ambiente; o resumo gravado pelo Core (que
+/// cita o título de então) nunca se mostra.
 #[must_use]
 pub(crate) fn activity_item(
     e: &Value,
@@ -1049,11 +1050,10 @@ pub(crate) fn activity_item(
     };
     ActivityItemVm {
         actor: rs::opt(e, "actor_name"),
-        summary: if redacted {
-            t(kind_phrase(text(e, "kind"))).to_owned()
-        } else {
-            text(e, "summary").to_owned()
-        },
+        // O que aconteceu diz-se pelo tipo do evento, na língua do membro. O
+        // resumo que o Core grava é prosa numa só língua e cita o título de
+        // então; o título que se mostra é o do alvo relido agora.
+        summary: t(kind_phrase(text(e, "kind"))).to_owned(),
         target: link,
         redacted,
         context: if redacted { None } else { context },
@@ -1218,40 +1218,19 @@ pub fn audit_detail(r: &Value, row: AuditRowVm, target: Option<ResLinkVm>) -> Au
     }
 }
 
-/// Os tipos de recurso que a Auditoria filtra (os que o Core escreve).
-pub const AUDIT_TYPES: &[&str] = &[
-    "ai_agent",
-    "ai_provider",
-    "compute_node",
-    "dataset",
-    "dataset_version",
-    "document",
-    "file",
-    "idea",
-    "mail_message",
-    "note",
-    "person",
-    "project",
-    "research_workspace",
-    "source",
-    "task",
-    "unit",
-    "unit_membership",
-    "workspace_membership",
-];
-
-/// As opções do filtro de tipo.
+/// As opções do filtro de tipo: os tipos que o Core diz que o registo tem
+/// (`GET /audit/resource-types`), nunca uma lista escrita aqui.
 #[must_use]
-pub fn audit_types(selected: Option<&str>) -> Vec<ResOptionVm> {
+pub fn audit_types(known: &[String], selected: Option<&str>) -> Vec<ResOptionVm> {
     let mut out = vec![ResOptionVm {
         value: String::new(),
         label: t("audit.types.all").to_owned(),
         selected: selected.is_none_or(str::is_empty),
     }];
-    out.extend(AUDIT_TYPES.iter().map(|k| ResOptionVm {
-        value: (*k).to_owned(),
-        label: (*k).to_owned(),
-        selected: selected == Some(*k),
+    out.extend(known.iter().map(|k| ResOptionVm {
+        value: k.clone(),
+        label: k.clone(),
+        selected: selected == Some(k.as_str()),
     }));
     out
 }

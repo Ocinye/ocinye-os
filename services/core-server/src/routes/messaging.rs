@@ -244,10 +244,9 @@ async fn one(
             )
         })?;
 
-    let com_papel =
-        ocinye_core::modules::messaging::repository::participant_roles(&state.pool, id)
-            .await
-            .map_err(|error| ApiError::new(error, &ids))?;
+    let com_papel = ocinye_core::modules::messaging::repository::participant_roles(&state.pool, id)
+        .await
+        .map_err(|error| ApiError::new(error, &ids))?;
     let membros: Vec<Uuid> = com_papel.iter().map(|(p, _)| *p).collect();
     let mapa = nomes(&state.pool, &membros)
         .await

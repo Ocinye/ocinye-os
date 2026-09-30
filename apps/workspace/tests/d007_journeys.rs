@@ -176,7 +176,7 @@ async fn o_envio_e_idempotente_e_o_rascunho_sobrevive_a_falha() {
         return;
     };
     let (_, ca) = s.membro_com_sessao(&[TechnicalRole::ResearchMember]).await;
-    let (b, _) = s.membro_com_sessao(&[TechnicalRole::ResearchMember]).await;
+    let (b, cb) = s.membro_com_sessao(&[TechnicalRole::ResearchMember]).await;
     let conv = directa(&s, &ca, b).await;
     // O mesmo envio duas vezes (duplo-clique, nova tentativa): uma mensagem.
     for _ in 0..2 {
@@ -201,6 +201,18 @@ async fn o_envio_e_idempotente_e_o_rascunho_sobrevive_a_falha() {
     assert!(html.contains(r#"value="rascunho-3""#), "a chave mudou");
     assert!(html.contains(r#"data-state="dirty""#));
     assert_eq!(mensagens(&s, conv).await, 2);
+    // Abrir a conversa marca-a como lida: a lista da mesma página já não a
+    // conta por ler.
+    let (_, html) = s.html("/messages", &cb).await;
+    assert!(
+        html.contains("oc-msg-conv__badge"),
+        "havia mensagens por ler"
+    );
+    let (_, html) = s.html(&format!("/messages/{conv}"), &cb).await;
+    assert!(
+        !html.contains("oc-msg-conv__badge"),
+        "a conversa aberta continua por ler"
+    );
 }
 
 #[tokio::test]
@@ -826,6 +838,11 @@ async fn a_auditoria_so_mostra_metadata_da_lista_branca_e_nao_muda() {
     assert!(!reg.contains("<form") && !reg.contains("/export"));
     let app = regiao(&html, r#"data-app="audit""#, "</main>");
     assert!(!app.contains(r#"method="post""#));
+    // O filtro de tipo oferece os tipos que o registo tem, e ignora um forjado.
+    assert!(html.contains(r#"<option value="idea""#));
+    let (status, html2) = s.html("/audit?resource_type=nao_existe%27%3E", &c).await;
+    assert_eq!(status, 200);
+    assert!(!html2.contains(r#"value="nao_existe"#), "um tipo forjado virou opção");
     // Um identificador forjado não abre nada.
     let (status, html) = s.html(&format!("/audit?open={}", Uuid::new_v4()), &c).await;
     assert_eq!(status, 404);
@@ -885,6 +902,8 @@ async fn as_definicoes_so_mudam_o_que_e_do_membro() {
     // A palavra-passe nunca vem preenchida.
     let (_, html) = s.html("/settings/security", &c).await;
     assert!(html.contains(r#"name="current_password""#));
+    // Sem segundo factor exigido, não há botão que leve a lado nenhum.
+    assert!(!html.contains(r#"href="/settings/mfa""#));
     assert!(!html.contains(r#"type="password" value"#));
     // A sessão de outra pessoa não se termina por aqui.
     let _ = form(

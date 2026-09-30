@@ -13,7 +13,9 @@ use crate::extract::CurrentPrincipal;
 use crate::state::AppState;
 
 pub fn routes() -> Router<AppState> {
-    Router::new().route("/audit", get(list_audit))
+    Router::new()
+        .route("/audit", get(list_audit))
+        .route("/audit/resource-types", get(resource_types))
 }
 
 #[derive(Deserialize)]
@@ -63,4 +65,14 @@ async fn list_audit(
     .await?;
 
     Ok(Json(Page::new(records, page, total)))
+}
+
+/// The resource types in the trail, for the filter (D007 · AU-02).
+async fn resource_types(
+    State(state): State<AppState>,
+    CurrentPrincipal(principal): CurrentPrincipal,
+) -> Result<Json<Vec<String>>, ApiError> {
+    Ok(Json(
+        governance::audit_resource_types(&state.pool, &principal).await?,
+    ))
 }

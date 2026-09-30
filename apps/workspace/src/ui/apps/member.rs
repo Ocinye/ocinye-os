@@ -81,7 +81,7 @@ pub fn settings_app(vm: &SettingsVm) -> AnyView {
             </form>
             <section class="oc-res-sec"><h3 class="oc-res-sec__title">{t("org.sec.mfa")}</h3>
                 <p class="oc-res-form__hint">{t(if vm.mfa.0 { "org.sec.mfa.on" } else if vm.mfa.1 { "org.sec.mfa.missing" } else { "org.sec.mfa.off" })}</p>
-                <a class="oc-app-btn" href="/settings/mfa">{icon("shield")}<span>{t(if vm.mfa.0 { "settings.mfa.manage" } else { "settings.mfa.setup" })}</span></a>
+                {(vm.mfa.1 && !vm.mfa.0).then(|| view! { <a class="oc-app-btn" href="/settings/mfa">{icon("shield")}<span>{t("settings.mfa.setup")}</span></a> })}
             </section>
             <section class="oc-res-sec"><h3 class="oc-res-sec__title">{t("org.sessions")}</h3>
                 <ul class="oc-org-list">{vm.sessions.iter().map(|s| view! {

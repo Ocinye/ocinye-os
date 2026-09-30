@@ -379,3 +379,37 @@ async fn o_estado_da_ia_diz_o_motivo_de_cada_capacidade() {
         }
     }
 }
+
+// ── Auditoria ────────────────────────────────────────────────────────────
+
+/// Os tipos do filtro vêm do próprio registo, com a autoridade que o lê: a
+/// quem não lê auditoria, nem os tipos existem.
+#[tokio::test]
+async fn os_tipos_de_recurso_da_auditoria_sao_os_do_registo_e_so_para_quem_o_le() {
+    let Some(pool) = pool().await else { return };
+    let org = organisation(&pool).await;
+    let tipo = format!("tipo_{}", &Uuid::new_v4().simple().to_string()[..8]);
+    sqlx::query(
+        "INSERT INTO audit_events (organisation_id, action, resource_type, outcome)
+         VALUES ($1, 'create', $2, 'success')",
+    )
+    .bind(org)
+    .bind(&tipo)
+    .execute(&pool)
+    .await
+    .expect("registo");
+    let auditor = pessoa(&pool, org, &["auditor"]).await;
+    let tipos = ocinye_core::modules::governance::audit_resource_types(&pool, &auditor)
+        .await
+        .expect("tipos");
+    assert!(tipos.contains(&tipo), "o tipo gravado não aparece");
+    let mut ordenados = tipos.clone();
+    ordenados.sort();
+    ordenados.dedup();
+    assert_eq!(tipos, ordenados, "a lista não é distinta e ordenada");
+    let membro = pessoa(&pool, org, &["research_member"]).await;
+    assert!(matches!(
+        ocinye_core::modules::governance::audit_resource_types(&pool, &membro).await,
+        Err(ocinye_core::CoreError::NotFound(_))
+    ));
+}

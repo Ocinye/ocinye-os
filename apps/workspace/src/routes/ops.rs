@@ -269,9 +269,12 @@ pub(super) async fn messages_thread(
         Err(r) => return *r,
     };
     let id = conversation.to_string();
+    // O fio primeiro: abrir marca a conversa como lida, e a lista lida
+    // depois já não a conta por ler.
+    let thread = thread_of(&state, &w, &id, &q, None).await;
     let mut vm = messages_vm(&state, &w, Some(&id)).await;
     let mut confirm = None;
-    match thread_of(&state, &w, &id, &q, None).await {
+    match thread {
         Ok((th, c)) => {
             vm.thread = Some(th);
             confirm = c;
@@ -1125,10 +1128,17 @@ pub(super) async fn audit_page(
     let quem = caller(&w.member);
     let clock = clock_of(&w.ctx);
     let page = q.page.unwrap_or(1).max(1);
+    // Os tipos que o registo tem, pela mesma autoridade que o lê.
+    let known: Vec<String> = quem
+        .get(&state, "/api/v1/audit/resource-types")
+        .await
+        .ok()
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
     let rtype = q
         .resource_type
         .as_deref()
-        .filter(|t| op::AUDIT_TYPES.contains(t));
+        .filter(|t| known.iter().any(|k| k == t));
     let actor = q.actor.as_deref().and_then(|a| Uuid::parse_str(a).ok());
     let since = q
         .since
@@ -1194,7 +1204,7 @@ pub(super) async fn audit_page(
             let vm = AuditVm {
                 error: None,
                 filter_action: "/audit".to_owned(),
-                types: op::audit_types(rtype),
+                types: op::audit_types(&known, rtype),
                 since: since.unwrap_or_default().to_owned(),
                 actor: None,
                 rows: Vec::new(),
@@ -1288,7 +1298,7 @@ pub(super) async fn audit_page(
     let vm = AuditVm {
         error: None,
         filter_action: "/audit".to_owned(),
-        types: op::audit_types(rtype),
+        types: op::audit_types(&known, rtype),
         since: since.unwrap_or_default().to_owned(),
         actor: actor.map(|_| {
             (
@@ -1475,10 +1485,11 @@ pub(super) async fn settings_apps(
     .await
 }
 
-/// `GET /settings/mfa` — o estado do segundo factor vive na Segurança; os
-/// ecrãs de configuração são os do D001 (`/mfa`), no caminho da entrada.
+/// `GET /settings/mfa` — configurar o segundo factor é o ecrã do D001
+/// (`/mfa`). A Segurança só o oferece a quem o tem exigido e por configurar;
+/// gerir um factor já configurado não tem ecrã (fica por desenhar).
 pub(super) async fn settings_mfa() -> Response {
-    Redirect::to("/settings/security").into_response()
+    Redirect::to("/mfa").into_response()
 }
 
 #[derive(Deserialize)]

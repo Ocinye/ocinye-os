@@ -19,4 +19,4 @@ mod service;
 
 pub use grants::{GrantView, NewGrant};
 pub use model::AuditRecord;
-pub use service::{list_audit, AuditQuery};
+pub use service::{audit_resource_types, list_audit, AuditQuery};
