@@ -82,13 +82,14 @@ async fn com_mfa(s: &Sistema, roles: &[TechnicalRole]) -> (Uuid, String) {
 // O registo
 // ═════════════════════════════════════════════════════════════════════════
 
-/// O registo tem 27 aplicações, sem ids nem rotas repetidos, sem Tarefas,
-/// Histórico ou Browser; e nenhuma, excepto o Terminal, cai em `app_pending`.
+/// O registo tem 28 aplicações (27 depois da D007.1, mais o Browser da D008),
+/// sem ids nem rotas repetidos, sem Tarefas nem Histórico; e nenhuma cai em
+/// `app_pending`.
 #[tokio::test]
-async fn o_registo_tem_27_e_so_o_terminal_esta_pendente() {
+async fn o_registo_tem_28_e_nenhuma_esta_pendente() {
     let apps = ocinye_workspace::experience::apps::APPLICATIONS;
-    assert_eq!(ApplicationId::ALL.len(), 27);
-    assert_eq!(apps.len(), 27);
+    assert_eq!(ApplicationId::ALL.len(), 28);
+    assert_eq!(apps.len(), 28);
     let mut ids = std::collections::BTreeSet::new();
     let mut rotas = std::collections::BTreeSet::new();
     for a in apps {
@@ -114,10 +115,10 @@ async fn o_registo_tem_27_e_so_o_terminal_esta_pendente() {
             );
         }
     }
-    for fora in ["tasks", "history", "browser", "teams"] {
+    for fora in ["tasks", "history", "teams"] {
         assert!(!ids.contains(fora), "{fora} não é uma aplicação registada");
     }
-    for nova in ["monitor", "results", "trash"] {
+    for nova in ["monitor", "results", "trash", "browser"] {
         assert!(ids.contains(nova), "{nova} por registar");
     }
     assert_eq!(pt("nav.audit"), "Registo de auditoria");
@@ -139,17 +140,24 @@ async fn o_registo_tem_27_e_so_o_terminal_esta_pendente() {
     let (status, html) = s.html("/", &c).await;
     assert_eq!(status, 200);
     assert!(html.contains("oc-desk") && !html.contains("oc-pending oc-win__state"));
-    // O Terminal primeiro, numa janela: continua pendente (D008).
-    let (_, html) = s.html("/terminal", &c).await;
-    assert!(
-        html.contains("oc-pending"),
-        "o Terminal deixou de estar pendente"
-    );
-    // As outras 26 pelo corpo da janela (`?frame=1`): a mesa tem um limite de
+    // O Terminal e o Browser pela página (D008): o cliente de cada um só
+    // existe na sua rota, e o `?frame=1` deles não tem corpo.
+    for (rota, raiz) in [
+        ("/terminal", r#"data-oc="term""#),
+        ("/browser", r#"data-oc="brw""#),
+    ] {
+        let (status, html) = s.html(rota, &c).await;
+        assert_eq!(status, 200, "{rota}");
+        assert!(
+            html.contains(raiz) && !html.contains("oc-pending"),
+            "{rota}"
+        );
+    }
+    // As outras 25 pelo corpo da janela (`?frame=1`): a mesa tem um limite de
     // janelas abertas, e o corpo é o que a janela mostraria.
     for a in apps
         .iter()
-        .filter(|a| !matches!(a.id(), "terminal" | "home"))
+        .filter(|a| !matches!(a.id(), "terminal" | "browser" | "home"))
     {
         let mut rota = a.route().to_owned();
         let r = s.get(&rota, &c).send().await.expect("GET");

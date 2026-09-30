@@ -376,13 +376,18 @@ async fn as_aplicacoes_sem_ecra_sao_janelas_honestas_e_as_fechadas_nao_existem()
     // (`d004_journeys.rs`); D005: O Meu Trabalho, Projectos, Ideias, Dados e
     // Conhecimento (`d005_journeys.rs`); D006: Unidades e Administração
     // (`d006_journeys.rs`); D007: as nove da conclusão (`d007_journeys.rs`).
-    // Só o Terminal continua `app_pending` (D008).
-    for rota in ["/terminal"] {
+    // D008: o Terminal e o Browser também — nenhuma aplicação registada fica
+    // `app_pending` (`d008_journeys.rs`).
+    for (rota, raiz) in [
+        ("/terminal", r#"data-oc="term""#),
+        ("/browser", r#"data-oc="brw""#),
+    ] {
         let (status, html) = s.html(rota, &cookie).await;
         assert_eq!(status, 200, "{rota}");
+        assert!(html.contains(raiz), "{rota} sem o ecrã do Design");
         assert!(
-            html.contains("oc-pending oc-win__state"),
-            "{rota} não é app_pending"
+            !html.contains("oc-pending oc-win__state"),
+            "{rota} é app_pending"
         );
         assert!(html.contains(r#"data-oc="win""#), "{rota} sem janela");
     }

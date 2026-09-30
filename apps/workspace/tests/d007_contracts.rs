@@ -235,8 +235,8 @@ fn a_ajuda_nao_le_ficheiros_nem_a_rede() {
     }
 }
 
-/// O registo não mudou: as nove continuam a ter uma janela só, e o Terminal
-/// continua sem ecrã.
+/// O registo não mudou: as nove continuam a ter uma janela só (e, desde a
+/// D008, o Terminal também tem ecrã).
 #[test]
 fn as_nove_sao_de_uma_janela_e_o_terminal_espera() {
     use ocinye_contracts::{application::LaunchPolicy, ApplicationId};
@@ -257,7 +257,7 @@ fn as_nove_sao_de_uma_janela_e_o_terminal_espera() {
             "{id:?}"
         );
     }
-    assert!(!ocinye_workspace::controllers::windows::has_screen(
+    assert!(ocinye_workspace::controllers::windows::has_screen(
         ApplicationId::Terminal
     ));
 }
@@ -284,13 +284,13 @@ fn nao_ha_eliminacao_definitiva_sem_confirmacao() {
     }
 }
 
-/// D007.1 · O registo tem 27 aplicações; o Browser é da D008, e Tarefas e
-/// Histórico não são aplicações.
+/// D007.1 · Tarefas e Histórico não são aplicações; o registo tem o Monitor,
+/// os Resultados e o Lixo (e, desde a D008, o Browser: 28).
 #[test]
 fn o_registo_e_o_da_d007_1() {
     use ocinye_contracts::ApplicationId;
-    assert_eq!(ApplicationId::ALL.len(), 27);
-    for fora in ["browser", "tasks", "history"] {
+    assert_eq!(ApplicationId::ALL.len(), 28);
+    for fora in ["tasks", "history"] {
         assert!(
             fora.parse::<ApplicationId>().is_err(),
             "{fora} está registado"
