@@ -29,6 +29,7 @@ mod ui_base;
 mod ui_nye;
 mod ui_ops;
 mod ui_org;
+mod ui_reg;
 mod ui_research;
 mod ui_shell;
 

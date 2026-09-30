@@ -38,11 +38,14 @@ pub mod ledger;
 pub mod mail;
 pub mod member;
 pub mod messages;
+pub mod monitor;
 pub mod notes;
 pub mod ops;
 pub mod org;
 pub mod projects;
 pub mod res;
+pub mod results;
+pub mod trash;
 pub mod units;
 pub mod work;
 

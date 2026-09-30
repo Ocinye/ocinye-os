@@ -3844,6 +3844,8 @@ pub enum OrgActionKind {
     RemoveUnitMember,
     /// arquivar uma unidade
     ArchiveUnit,
+    /// D007.1 · parar um serviço do runtime (só com inventário tipado e `may_stop`)
+    StopService,
     /// D007 · Sair de uma conversa de grupo (Mensagens).
     LeaveConversation,
     /// D007 · Retirar alguém de uma conversa de grupo (Mensagens).
@@ -3869,6 +3871,7 @@ impl OrgActionKind {
             Self::ChangeUnitRole => "org.act.unit_role",
             Self::RemoveUnitMember => "org.act.unit_remove",
             Self::ArchiveUnit => "org.act.archive_unit",
+            Self::StopService => "org.act.stop_service",
             Self::LeaveConversation => "org.act.msg_leave",
             Self::RemoveParticipant => "org.act.msg_remove",
         }
@@ -3886,6 +3889,7 @@ impl OrgActionKind {
                 | Self::RevokeSession
                 | Self::RemoveUnitMember
                 | Self::ArchiveUnit
+                | Self::StopService
                 | Self::LeaveConversation
                 | Self::RemoveParticipant
         )
@@ -5295,4 +5299,370 @@ pub struct HelpVm {
     pub shortcuts: Vec<HelpShortcutVm>,
     /// Abrir a Nye com a pergunta.
     pub nye: Option<AppNyeVm>,
+}
+
+// ══ D007.1 · Monitor de Actividade · Resultados · Lixo ══════════════════════
+
+/// Um plano de métrica. A lista dos disponíveis vem do Core/runtime
+/// (`available_metric_planes`); a vista nunca a deduz de nomes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MetricPlane {
+    /// Utilização de CPU.
+    Cpu,
+    /// Memória em uso.
+    Memory,
+    /// Disco em uso.
+    Storage,
+    /// Rede.
+    Network,
+    /// Utilização de GPU.
+    Gpu,
+}
+
+impl MetricPlane {
+    /// A chave do rótulo.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Cpu => "mon.plane.cpu",
+            Self::Memory => "mon.plane.memory",
+            Self::Storage => "mon.plane.storage",
+            Self::Network => "mon.plane.network",
+            Self::Gpu => "mon.plane.gpu",
+        }
+    }
+    /// O identificador estável (`?plane=`).
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Cpu => "cpu",
+            Self::Memory => "memory",
+            Self::Storage => "storage",
+            Self::Network => "network",
+            Self::Gpu => "gpu",
+        }
+    }
+}
+
+/// A frescura de uma leitura. O limiar é do Core (o mesmo do heartbeat).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Freshness {
+    /// Reportado dentro do intervalo do heartbeat.
+    Live,
+    /// O último valor é antigo: mostra-se com a hora, nunca como actual.
+    Stale,
+    /// O nó não reporta este valor.
+    Unreported,
+}
+
+/// O consumo de uma fonte (nó) no plano escolhido. Sem identificadores internos
+/// de processo; a ficha do nó é da Computação.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MonitorSampleVm {
+    /// Identificador estável do nó (não é segredo).
+    pub source: String,
+    /// Nome do nó.
+    pub name: String,
+    /// Estado do nó.
+    pub status: NodeStatus,
+    /// Em uso, formatado (`12,4 GB`). `None` = não reportado.
+    pub used: Option<String>,
+    /// Total físico, formatado.
+    pub total: Option<String>,
+    /// 0–100, só com uso e total reportados.
+    pub pct: Option<u8>,
+    /// Hora da leitura (fuso do membro).
+    pub seen: Option<String>,
+    /// Frescura.
+    pub freshness: Freshness,
+    /// A ficha canónica (`/compute/{id}`), se o membro a alcança.
+    pub compute_href: Option<String>,
+}
+
+/// O resumo de `GET /system/operations`: contagens, sem nomes de membros.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MonitorSummaryVm {
+    /// Nós em linha.
+    pub nodes_online: u32,
+    /// Nós registados.
+    pub nodes_total: u32,
+    /// Fornecedores de IA saudáveis.
+    pub providers_healthy: u32,
+    /// Fornecedores de IA registados.
+    pub providers_total: u32,
+    /// Aplicações activas.
+    pub apps_active: u32,
+    /// Aplicações do catálogo.
+    pub apps_total: u32,
+    /// Membros em aviso.
+    pub storage_warning: u32,
+    /// Membros em estado crítico.
+    pub storage_critical: u32,
+    /// Membros acima da quota.
+    pub storage_over: u32,
+    /// Armazenamento pessoal em uso, formatado.
+    pub personal_used: String,
+}
+
+/// Um serviço do runtime (MONITOR-06; ainda sem contrato). Só campos seguros:
+/// nunca linha de comando, variáveis de ambiente, credenciais ou segredos.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MonitorServiceVm {
+    /// Rótulo.
+    pub label: String,
+    /// Estado (`mon.svc.state.*`).
+    pub state: ResStateVm,
+    /// O nó onde corre.
+    pub source: Option<String>,
+    /// O consumo no plano actual, formatado.
+    pub value: Option<String>,
+    /// Protegido (do Core: `may_stop = false`).
+    pub protected: bool,
+    /// O motivo da protecção, quando o Core o dá.
+    pub protection_key: Option<&'static str>,
+    /// «Parar» (`OrgActionKind::StopService`) só com `may_stop = true`.
+    pub stop: Option<OrgActionVm>,
+}
+
+/// O recibo de um pedido de paragem (MONITOR-10). Assíncrono: diz «a parar»
+/// até o Core dizer «parado».
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MonitorReceiptVm {
+    /// Identificador da operação.
+    pub action_id: String,
+    /// O serviço.
+    pub target: String,
+    /// `mon.receipt.stopping` / `mon.receipt.stopped`.
+    pub state_key: &'static str,
+    /// Hora do pedido.
+    pub at: String,
+    /// O registo de auditoria, para quem o pode ver.
+    pub audit_href: Option<String>,
+}
+
+/// Recusas tipadas de uma paragem.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MonitorStopRefusal {
+    /// Serviço protegido (invariante do Core).
+    Protected,
+    /// Deixou de existir antes da confirmação.
+    Gone,
+    /// Mudou de estado.
+    Changed,
+    /// Sem administração da plataforma.
+    Denied,
+}
+
+/// A aplicação Monitor de Actividade.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MonitorVm {
+    /// Carregamento.
+    pub load: AppLoad,
+    /// Recusa ou falha da leitura inteira (sem administração: `PermissionDenied`).
+    pub error: Option<AppError>,
+    /// Hora da leitura.
+    pub read_at: Option<String>,
+    /// Voltar a ler (GET).
+    pub refresh_href: String,
+    /// Resumo.
+    pub summary: Option<MonitorSummaryVm>,
+    /// Os planos suportados, com a ligação de cada um.
+    pub planes: Vec<(MetricPlane, String)>,
+    /// Os planos que os nós não reportam (nomeados, nunca zero).
+    pub unsupported: Vec<MetricPlane>,
+    /// O plano actual (`None` = nenhum suportado).
+    pub plane: Option<MetricPlane>,
+    /// Consumo por nó.
+    pub samples: Vec<MonitorSampleVm>,
+    /// Inventário de serviços (`None` = o runtime não o publica).
+    pub services: Option<Vec<MonitorServiceVm>>,
+    /// Recibo do último pedido.
+    pub receipt: Option<MonitorReceiptVm>,
+    /// Recusa do último pedido.
+    pub refusal: Option<MonitorStopRefusal>,
+    /// Ocinye AI (fornecedores), para quem a abre.
+    pub ai_href: Option<String>,
+    /// Administração › Instância (aplicações), para quem a abre.
+    pub apps_href: Option<String>,
+}
+
+/// `results.status` (0019).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResultStatus {
+    /// draft
+    Draft,
+    /// under_review
+    UnderReview,
+    /// validated
+    Validated,
+    /// superseded
+    Superseded,
+    /// invalidated
+    Invalidated,
+}
+
+/// `result_validations.kind`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValidationKind {
+    /// validation
+    Validation,
+    /// reproduction
+    Reproduction,
+}
+
+/// `result_validations.outcome` (sem valor por omissão de sucesso).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValidationOutcome {
+    /// confirmed
+    Confirmed,
+    /// contradicted
+    Contradicted,
+    /// inconclusive
+    Inconclusive,
+}
+
+/// Uma validação ou reprodução registada.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResultValidationVm {
+    /// Tipo.
+    pub kind: ValidationKind,
+    /// Desfecho.
+    pub outcome: ValidationOutcome,
+    /// Quem registou (nome), se ainda resolvível.
+    pub by: Option<String>,
+    /// Quando.
+    pub at: String,
+    /// Nota (texto simples, escapado).
+    pub note: Option<String>,
+    /// A execução que serviu de prova, se alcançável.
+    pub execution: Option<ResLinkVm>,
+}
+
+/// Um resultado aberto.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResultVm {
+    /// Título.
+    pub title: String,
+    /// Estado.
+    pub status: ResultStatus,
+    /// Classificação.
+    pub class: ResClassification,
+    /// Conclusão (`summary`).
+    pub summary: String,
+    /// Ambiente.
+    pub workspace: Option<ResLinkVm>,
+    /// Projecto.
+    pub project: Option<ResLinkVm>,
+    /// Execução de origem.
+    pub execution: Option<ResLinkVm>,
+    /// Substituído por.
+    pub superseded_by: Option<ResLinkVm>,
+    /// Registado por.
+    pub created_by: Option<String>,
+    /// Registado.
+    pub created: String,
+    /// Actualizado.
+    pub updated: String,
+    /// Validações.
+    pub validations: Vec<ResultValidationVm>,
+    /// Linhagem (`/lineage/result/{id}`), já reautorizada ponta a ponta.
+    pub lineage: Vec<ResLinkVm>,
+    /// `/results/{id}/validate`, quando o Core a oferece a esta pessoa.
+    pub validate_href: Option<String>,
+    /// Perguntar à Nye sobre este resultado.
+    pub nye: Option<AppNyeVm>,
+}
+
+/// A aplicação Resultados.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResultsVm {
+    /// Estados (filtro).
+    pub nav: Vec<AppNavVm>,
+    /// Ambientes do membro (filtro).
+    pub workspaces: Vec<ResOptionVm>,
+    /// Para onde o filtro envia.
+    pub filter_action: String,
+    /// A lista.
+    pub list: ResListVm,
+    /// Painel.
+    pub pane: ResPane,
+    /// Voltar à lista.
+    pub list_href: String,
+    /// O resultado aberto.
+    pub result: Option<ResultVm>,
+    /// Erro do pedido directo.
+    pub result_error: Option<AppError>,
+}
+
+/// O tipo de um item no Lixo (só os que o Core tem com `deleted_at` pessoal).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrashKind {
+    /// Ficheiro pessoal.
+    File,
+    /// Nota pessoal.
+    Note,
+}
+
+/// Um item no Lixo.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrashItemVm {
+    /// Tipo.
+    pub kind: TrashKind,
+    /// Identificador opaco do formulário.
+    pub id: String,
+    /// Nome (escapado).
+    pub name: String,
+    /// Quando foi apagado.
+    pub deleted: String,
+    /// Quem apagou (notas: `deleted_by_id`), se diferente do próprio.
+    pub deleted_by: Option<String>,
+    /// Onde estava (pasta), se ainda existe.
+    pub origin: Option<String>,
+    /// Tamanho (ficheiros).
+    pub size: Option<String>,
+    /// Continua a contar para a quota (ficheiros).
+    pub counts_storage: bool,
+    /// POST de restauro (a rota BFF existente), quando o Core o permite.
+    pub restore_action: Option<String>,
+}
+
+/// O que acabou de acontecer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrashNotice {
+    /// Restaurado.
+    Restored,
+}
+
+/// Recusas tipadas do restauro.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrashRefusal {
+    /// Já não está no Lixo.
+    Gone,
+    /// O Core recusou.
+    Denied,
+    /// O lugar de origem mudou.
+    Conflict,
+}
+
+/// A aplicação Lixo.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrashVm {
+    /// Tudo · Ficheiros · Notas (com contagens do Core).
+    pub nav: Vec<AppNavVm>,
+    /// A lista.
+    pub list: ResListVm,
+    /// Painel.
+    pub pane: ResPane,
+    /// Voltar à lista.
+    pub list_href: String,
+    /// O item aberto.
+    pub item: Option<TrashItemVm>,
+    /// Erro do pedido directo.
+    pub item_error: Option<AppError>,
+    /// Aviso.
+    pub notice: Option<TrashNotice>,
+    /// O nome no aviso.
+    pub notice_name: Option<String>,
+    /// Recusa.
+    pub refusal: Option<TrashRefusal>,
 }

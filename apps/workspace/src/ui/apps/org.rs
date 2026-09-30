@@ -93,6 +93,7 @@ pub fn action(a: &OrgActionVm) -> impl IntoView {
         OrgActionKind::ResetPassword | OrgActionKind::Provision | OrgActionKind::Reissue => "key",
         OrgActionKind::DeleteInvite => "trash",
         OrgActionKind::ArchiveUnit => "archive",
+        OrgActionKind::StopService => "stop",
         OrgActionKind::GrantRole | OrgActionKind::ChangeUnitRole => "edit",
     };
     view! {

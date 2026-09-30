@@ -241,6 +241,10 @@ pub const fn confirm_code(k: OrgActionKind) -> &'static str {
         OrgActionKind::ArchiveUnit => "archive_unit",
         OrgActionKind::LeaveConversation => "msg_leave",
         OrgActionKind::RemoveParticipant => "msg_remove",
+        // Sem inventário de serviços nem operação de paragem no Core (MON-06…
+        // MON-09): o código existe para o vocabulário, e não está em
+        // `ACTION_KINDS`, por isso nenhum endereço abre esta confirmação.
+        OrgActionKind::StopService => "stop_service",
     }
 }
 
@@ -802,7 +806,8 @@ pub fn member_confirm(
         | OrgActionKind::RemoveUnitMember
         | OrgActionKind::ArchiveUnit
         | OrgActionKind::LeaveConversation
-        | OrgActionKind::RemoveParticipant => return None,
+        | OrgActionKind::RemoveParticipant
+        | OrgActionKind::StopService => return None,
     };
     Some(OrgConfirmVm {
         kind,
