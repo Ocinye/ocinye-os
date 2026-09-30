@@ -95,7 +95,7 @@ sem que nada falhe.
   4 serviços (`core-server`, `worker`, `node-agent`, `conversion-runner`) e 1
   aplicação (`apps/workspace`). Uma capacidade WASM fora da workspace do host:
   `wasm/capabilities/bibtex-import`.
-- **Ocinye Core: `IMPLEMENTED` e em produção.** 237 caminhos e 283 operações
+- **Ocinye Core: `IMPLEMENTED` e em produção.** 239 caminhos e 285 operações
   sob `/api/v1`, autorização RBAC + ABAC fail-closed, outbox transaccional,
   auditoria, e um modelo de capacidades do sistema em
   `GET /api/v1/system/capabilities`. Corre em produção atrás da Cloudflare
@@ -284,13 +284,17 @@ sem que nada falhe.
   D005 — Projectos, O Meu Trabalho, Ideias, Dados e Conhecimento
   ([ADR-0621](docs/adrs/0621-research-apps-typed-relations-and-deep-links.md)),
   com relações lidas pela linhagem e as duas pontas autorizadas — estão em
-  `main`. A D006 — Unidades e Administração (Membros, Papéis, Instância), com a
+  `main`, e a D006 — Unidades e Administração (Membros, Papéis, Instância), com a
   credencial temporária só na resposta que a emite e a confirmação partilhada
   das acções privilegiadas
   ([ADR-0111](docs/adrs/0111-organisational-invariants-and-typed-refusals.md))
-  — está no ramo `feat/design-d006`, **por fazer merge**. Equipas não existem:
-  sem domínio, sem desenho, sem aplicação. As aplicações ainda
-  sem ecrã do Design abrem numa janela com o estado `app_pending`:
+  — também (#189). A D007 — Mensagens, IA, Agentes, Computação, Meus Recursos,
+  Actividade, Auditoria, Definições e Ajuda, com a história que relê o alvo, a
+  prova por lista branca e as instruções de um agente só para quem o criou
+  ([ADR-0622](docs/adrs/0622-completion-apps-history-evidence-and-agent-authority.md))
+  — está no ramo `feat/design-d007`, **por fazer merge**. Equipas não existem:
+  sem domínio, sem desenho, sem aplicação. Só o Terminal continua sem ecrã do
+  Design (D008) e abre numa janela com o estado `app_pending`:
   **0 páginas** respondem `503 interface_pending`. **Ainda não deployada:**
   produção (`os.ocinye.com`) continua em `4f8d048`, com a UI anterior ao
   apagamento, por decisão do Fidel, até a um deploy pedido.
@@ -575,7 +579,7 @@ sem que nada falhe.
   leitura de volta. Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **100 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
+- **101 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
   **53 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -592,14 +596,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1670 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1708 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **668 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **689 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
@@ -616,13 +620,13 @@ sem que nada falhe.
 - **Nem todas as aplicações têm ecrã.** Em `main`: a casca, a autenticação, o
   Desktop, as janelas (D001.2.1, D002), a Nye (D003), Ficheiros, Notas,
   Calendário e Correio (D004) e Projectos, O Meu Trabalho, Ideias, Dados e
-  Conhecimento (D005); Unidades e Administração (D006) no ramo
-  `feat/design-d006`, por fazer merge; as outras aplicações abrem numa janela
-  com o estado `app_pending` até o Design as entregar. As viagens de browser com Chrome saíram com a UI antiga; as de HTTP
+  Conhecimento (D005), Unidades e Administração (D006); as nove da conclusão
+  (D007) no ramo `feat/design-d007`, por fazer merge; o Terminal abre numa
+  janela com o estado `app_pending` até à D008. As viagens de browser com Chrome saíram com a UI antiga; as de HTTP
   contra um Core real voltaram (`apps/workspace/tests/d001_journeys.rs`,
   `d002_journeys.rs`, `d003_journeys.rs`, `d003_act_journeys.rs`,
-  `d004_journeys.rs`, `d005_journeys.rs`; e, no ramo da D006,
-  `d006_journeys.rs`). As provas de instalação,
+  `d004_journeys.rs`, `d005_journeys.rs`, `d006_journeys.rs`; e, no ramo da
+  D007, `d007_journeys.rs`). As provas de instalação,
   actualização, restauro e hardware continuam em `NOT_RUN`
   ([apagamento](docs/ui/UI_WIPE_REPORT.md)).
 

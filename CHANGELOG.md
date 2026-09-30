@@ -7,6 +7,27 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
+### Interface D007 — Mensagens, IA, Agentes, Computação, Meus Recursos, Actividade, Auditoria, Definições e Ajuda — 2026-09-30 (ramo `feat/design-d007`, por fazer merge)
+
+- As nove aplicações que eram `app_pending` com o ecrã do Claude Design e dados
+  do Core; só o Terminal fica pendente (D008). Mensagens com histórico, envio
+  idempotente que guarda o rascunho na falha, reacções, leitura, papéis, sair e
+  retirar pela confirmação partilhada; começar conversa indisponível e
+  explicado (a procura no directório saiu). IA como estado do *AI Fabric*, sem
+  conversa, com motivos tipados e fornecedores sem endereço nem segredo.
+  Agentes com criação só nos âmbitos que o Core oferece. Computação só de
+  leitura, sem despacho. Meus Recursos é o armazenamento do próprio.
+  Actividade com cada alvo relido e o que já não se lê redigido. Auditoria só
+  de leitura, metadata por lista branca. Definições da camada do membro. Ajuda
+  de primeira parte com uma lista única de atalhos.
+- **Core (ADR-0622):** papel de cada participante; resposta a mensagem retirada
+  sem excerto; envios com a mesma chave serializados; instruções de um agente
+  só para quem o criou; `GET /ai/agents/capabilities`; motivo por capacidade no
+  estado da IA; `GET /audit/resource-types`.
+- `nav.audit` em português: «Registo de auditoria».
+- 16 viagens HTTP contra um Core real (`apps/workspace/tests/d007_journeys.rs`),
+  8 contratos estáticos e 5 testes do Core (`crates/ocinye-core/tests/d007_contracts.rs`).
+
 ### Interface D006 — Unidades e Administração (Membros, Papéis, Instância) — 2026-09-30 (ramo `feat/design-d006`, por fazer merge)
 
 - Os ecrãs do Claude Design ligados ao Core: roster e membro compostos das
