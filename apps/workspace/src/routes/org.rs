@@ -1092,20 +1092,22 @@ pub(super) async fn admin_instance_page(
     }
     let quem = caller(&w.member);
     let clock = clock_of(&w.ctx);
-    let (org, settings, apps) = (
-        quem.get(&state, "/api/v1/organisation").await,
-        quem.get(&state, "/api/v1/instance/settings").await,
-        quem.get(&state, "/api/v1/instance/applications").await,
-    );
-    let (org, settings, apps) = match (org, settings, apps) {
-        (Ok(o), Ok(s), Ok(a)) => (o, s, a),
-        (Err(ApiFailure::Forbidden | ApiFailure::Denied), _, _)
-        | (_, _, Err(ApiFailure::Forbidden | ApiFailure::Denied)) => {
+    // A marca (pública: nome, língua, perfil) e as aplicações (`organisation.view`)
+    // chegam a quem administra a organização; a configuração completa exige a
+    // administração da plataforma — sem ela, o fuso é o da Instância pelo `/me`
+    // e a última alteração não se mostra (não se inventa).
+    let apps = match quem.get(&state, "/api/v1/instance/applications").await {
+        Ok(a) => a,
+        Err(ApiFailure::Forbidden | ApiFailure::Denied) => {
             return admin_denied(&state, &w, AppError::PermissionDenied)
         }
-        _ => return admin_denied(&state, &w, AppError::Unavailable),
+        Err(_) => return admin_denied(&state, &w, AppError::Unavailable),
     };
-    let locale = text(&settings, "default_locale");
+    let Ok(brand) = quem.get(&state, "/api/v1/instance/branding").await else {
+        return admin_denied(&state, &w, AppError::Unavailable);
+    };
+    let settings = quem.get(&state, "/api/v1/instance/settings").await.ok();
+    let locale = text(&brand, "default_locale");
     let apps_vm = apps
         .get("applications")
         .and_then(Value::as_array)
@@ -1131,11 +1133,18 @@ pub(super) async fn admin_instance_page(
     let mut vm = admin_vm(AdminSection::Instance);
     vm.nav = admin_nav(&w.ctx, AdminSection::Instance);
     vm.instance = Some(OrgInstanceVm {
-        name: text(&org, "name").to_owned(),
-        distribution: distribution(text(&apps, "profile")),
+        name: text(&brand, "name").to_owned(),
+        distribution: distribution(text(&brand, "profile")),
         default_locale: t(&format!("prod.org.locale.{locale}")).to_owned(),
-        timezone: text(&settings, "timezone").to_owned(),
-        updated: instant(&settings, "updated_at").map(|at| rs::day(at, &clock)),
+        timezone: settings
+            .as_ref()
+            .map(|s| text(s, "timezone").to_owned())
+            .filter(|z| !z.is_empty())
+            .unwrap_or_else(|| w.ctx.zone.as_str().to_owned()),
+        updated: settings
+            .as_ref()
+            .and_then(|s| instant(s, "updated_at"))
+            .map(|at| rs::day(at, &clock)),
         apps: apps_vm,
         apps_action: w
             .ctx
