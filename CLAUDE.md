@@ -298,7 +298,12 @@ sem que nada falhe.
   fronteiras sem ponte comum
   ([ADR-0623](docs/adrs/0623-terminal-and-browser-separate-boundaries.md)) —
   está em `main` (#191, merge `ece29e9`); o registo passa a **28
-  aplicações** e **nenhuma fica provisória**. Tarefas é o alias de O Meu
+  aplicações** e **nenhuma fica provisória**. A D009 — pacote R2, um ponto
+  de partida por Distribuição (widgets, fixações, fundo, primeiros passos) e
+  um ícone canónico por aplicação, nada disto autorização
+  ([ADR-0624](docs/adrs/0624-distribution-defaults.md)) — está no ramo
+  `feat/design-d009`; uma Instância continua com **uma** Distribuição
+  (`organisations.profile`), e activar uma segunda fica para a D010. Tarefas é o alias de O Meu
   Trabalho; Histórico não está registado. Equipas não existem: sem domínio,
   sem desenho, sem aplicação. **0 páginas** respondem `503 interface_pending`. **Ainda não deployada:**
   produção (`os.ocinye.com`) continua em `4f8d048`, com a UI anterior ao
@@ -597,7 +602,7 @@ sem que nada falhe.
   leitura de volta. Até à
   primeira execução **agendada** verde depois do deploy, o RPO é *desde o último
   conjunto que alguém produziu*.
-- **102 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
+- **103 ADRs** em `docs/adrs/`, **12 runbooks** em `docs/runbooks/`,
   **53 READMEs**, `docs/` povoado — incluindo
   [`docs/feature-status/`](docs/feature-status/README.md), a matriz factual do
   que existe e do que não existe.
@@ -614,14 +619,14 @@ sem que nada falhe.
   2026-09-26 — treze pushes sem uma execução de testes — e as PRs entraram com
   `gh pr merge --admin`. Repor a protecção é decisão humana (§73); o registo está
   na [linha de base da generalização](docs/audits/pre-generalization-baseline/README.md).
-- **1759 funções de teste** escritas na árvore, e **zero falhas** na última
+- **1796 funções de teste** escritas na árvore, e **zero falhas** na última
   corrida de `./scripts/verify.sh`. Os dois números respondem a perguntas
   diferentes, e por isso são dois: o primeiro é um facto da árvore e sai do
   `repository-facts.sh`; o segundo é o resultado de uma corrida, e a corrida
   conta cada alvo em que um teste é compilado — pelo que o total que ela
   imprime é maior e **não se escreve aqui**. Escreveu-se durante um tempo, e
   derivou três vezes numa sessão sem que nada falhasse.
-  **702 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
+  **712 dessas funções não correm sem base de dados** — vivem em ficheiros que leem
   `OCINYE_TEST_DATABASE_URL`, e o número sai daí, não de uma lista mantida à
   mão. Incluem um guarda que falha se
   alguma permissão do catálogo ficar sem papel que a conceda, o caminho agentic
@@ -644,7 +649,8 @@ sem que nada falhe.
   contra um Core real voltaram (`apps/workspace/tests/d001_journeys.rs`,
   `d002_journeys.rs`, `d003_journeys.rs`, `d003_act_journeys.rs`,
   `d004_journeys.rs`, `d005_journeys.rs`, `d006_journeys.rs`,
-  `d007_journeys.rs`, `d007_1_journeys.rs`, `d008_journeys.rs`). As provas de instalação,
+  `d007_journeys.rs`, `d007_1_journeys.rs`, `d008_journeys.rs`,
+  `d009_journeys.rs`). As provas de instalação,
   actualização, restauro e hardware continuam em `NOT_RUN`
   ([apagamento](docs/ui/UI_WIPE_REPORT.md)).
 

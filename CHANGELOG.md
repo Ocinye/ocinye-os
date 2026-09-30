@@ -7,7 +7,39 @@ Formato: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Não lançado]
 
-### Interface D008 — Ocinye Terminal (ocsh) e Ocinye Browser — 2026-09-30 (ramo `feat/design-d008`, por fazer merge)
+### Interface D009 (pacote R2) — Predefinições por Distribuição e iconografia canónica — 2026-09-30 (ramo `feat/design-d009`)
+
+- **Uma experiência de partida por Distribuição**, tipada em
+  `experience::distribution` (versão 2): Research — Indicadores e Projectos, 8
+  fixações, fundo `field`; Business — Tarefas, Calendário, Projectos,
+  Ficheiros, 7 fixações, `module`; Personal — Notas, Ficheiros, Calendário,
+  Armazenamento, 6 fixações, `calm`; Education — Calendário, Tarefas,
+  Projectos, Notas, 8 fixações, `lattice`. Administração, Auditoria, Monitor,
+  Terminal, Browser e Nye nunca se fixam por omissão. Uma Distribuição
+  desconhecida cai na predefinição vazia do sistema, nunca em Research.
+- **Nada disto é autorização:** a barra segue a ordem fixada, sem o que o
+  membro não abre (a seguinte ocupa o lugar; nada se grava); um widget de que
+  o membro não vê nenhuma aplicação esconde-se e **fica na disposição**; os
+  Indicadores largam só a métrica que o membro não abre; a biblioteca só
+  oferece o que se desenharia. A activação das aplicações não mudou.
+- Os avisos institucionais deixam de ser obrigatórios (sem fonte no Core).
+- **Primeiros passos** no distintivo da Distribuição, a pedido: sem
+  assistente, sem abrir sozinho, sem estado «visto».
+- **Ícones:** um mapa aplicação → ícone para as 28 (18 mantidos, 3 refinados,
+  7 substituídos) e quatro ícones de Distribuição; 14 símbolos novos, nenhum
+  retirado. O distintivo e a entrada mostram o ícone, não «Re»/«Bu».
+- **Acessibilidade:** a 390 px o distintivo recebe o toque em 44 px e «Abrir
+  aplicações» tem 44 de altura; fechar o lançador ou a paleta devolve o foco a
+  quem os abriu.
+- **Arquitectura (R2):** ADR-0624 aceite, com a emenda R2 — uma Instância
+  activa [1..4] Distribuições (alvo); hoje uma só (`organisations.profile`),
+  e activar uma segunda fica bloqueado até à D010. Planeamento da D010 em
+  `docs/ui/D010_SCOPE_PROPOSAL.md` e `docs/ui/missing-screen-audit.md`;
+  nada da D010 foi implementado.
+- 9 viagens HTTP contra Instâncias novas das quatro Distribuições
+  (`d009_journeys.rs`) e 14 guardas estáticas (`d009_contracts.rs`).
+
+### Interface D008 — Ocinye Terminal (ocsh) e Ocinye Browser — 2026-09-30 (PR #191, merge `ece29e9`)
 
 - **Terminal:** o ecrã do Claude Design em `/terminal`, uma sessão por janela;
   a descoberta é a ajuda do Core para a pessoa; a resposta leva a linha

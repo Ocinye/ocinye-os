@@ -109,6 +109,70 @@ de #191); as contagens do `repository-facts.sh` já coincidiam.
   resto tem de continuar byte a byte.
 
 
+## VISUAL (browser real, quatro Instâncias novas)
+
+Uma Instância nova por Distribuição, criada pelo `bootstrap-admin --profile`
+(o caminho de instalação), com um membro comum criado em Administração ›
+Membros e o primeiro acesso feito — sem dados, sem IA, sem GPU.
+
+- **1440×900, 924×540, 900, 820, 760, 720 e 390×844**, nas quatro: sem
+  deslocamento horizontal (0 px), fundo certo (`field`, `module`, `calm`,
+  `lattice`), widgets e fixações da vossa tabela, pela ordem, e estados vazios
+  sem dados de exemplo (0 ambientes, ficheiros, notas, datasets, eventos e
+  ideias nas quatro bases). As 4 unidades de Research são a estrutura inicial
+  do perfil (ADR-0014), não dados de exemplo.
+- **Ícones:** 0 `<use>` partidos em todas as páginas vistas; as 28 aplicações
+  e as 4 Distribuições desenhadas a 16, 20, 24, 32 e 48 px — as 160 com glifo
+  dentro da caixa. A 16 px os ícones de Distribuição guardam a silhueta
+  hexagonal e a marca interior distinta, com menos detalhe dentro.
+- **Distintivo:** o ícone da Distribuição na barra de cima e na entrada
+  (`dist-*`), com o nome no rótulo acessível; nada de «Re»/«Bu».
+- O lançador desenha o ícone canónico em cada ficha e a linha da Distribuição
+  em baixo.
+
+## ACCESSIBILITY
+
+- **Teclado real** (teclas do browser, não eventos sintéticos), nas quatro:
+  Tab até ao distintivo (foco visível), Enter abre os primeiros passos, Tab
+  chega a «Abrir aplicações», Shift+Tab volta, Escape fecha com o foco no
+  distintivo, Enter reabre. Lançador: Enter abre com o foco na pesquisa,
+  Escape fecha. Personalizar: o lápis abre a barra de edição com o foco em
+  «Adicionar widget»; a biblioteca abre e fecha; «Repor predefinição» mostra
+  a proveniência («Predefinição Business do Ocinye OS · Versão 2 · incluída no
+  Ocinye OS») e o que muda («Retira Indicadores»), e repor pelo teclado
+  apagou a linha do membro e voltou à predefinição, com «Anular».
+- **Corrigido pela Code em ficheiros vossos (D001):**
+  - `oc-shell.js` — fechar o lançador ou a paleta largava o foco no `<body>`.
+    Agora volta a quem os abriu, só se estavam abertos e o foco estava dentro.
+  - `oc-shell.css` — a 390 px o distintivo tinha 26×26 de alvo (igual em
+    `main`: a D009 não o encolheu, mas também não chegava a 44). Recebe agora
+    o toque num quadrado de 44 (`::after`, `inset: -9px`), que cabe entre o
+    logótipo e a barra da Nye sem os cobrir; continua com 26 px à vista.
+    «Abrir aplicações» passou de 34 a 44 de altura no móvel. Medido por
+    *hit-testing* (cinco pontos num círculo de 44): 5/5 nos dois, nas quatro
+    Distribuições.
+- **Por corrigir, anterior à D009 (D001, para vós):** a 390 px, a conta
+  (32×32), o microfone da Nye (22×22), as notificações (32×32), o relógio
+  (51×28), o lápis (30×30) e as ferramentas de cada widget (24×24, duas lado a
+  lado) ficam abaixo de 44 por *hit-testing*. Não mudaram na D009; as
+  ferramentas dos widgets precisam de desenho (dois alvos de 44 não cabem onde
+  estão), por isso não se esticaram aqui.
+- O lançador não tem navegação por setas (não é uma grelha com
+  `roving tabindex`); as setas não se prometem ali.
+- `pt`/`en`/`fr`: distintivo, painel, linha do lançador e folha «Repor» nas
+  três, sem chaves cruas. `SCREEN_READER_TEST = NOT_RUN`.
+
+## SECURITY
+
+- A Distribuição não concede nada: um colaborador de Education vê as fixações
+  `work, calendar, files, notes`, o widget de Projectos escondido (e na
+  disposição), Tarefas desenhado, e `/projects` responde 404; o lançador dele
+  não tem Administração, Auditoria nem Monitor. A identidade de administração
+  vê-os no lançador, por autoridade, e nunca fixados (`member_app_pins` vazio
+  para todos; o `/admin` da barra é uma janela aberta, não uma fixação).
+- O sprite novo não carrega nem executa nada (guarda estática); a CSP não
+  mudou.
+
 ---
 
 # CODE_FEEDBACK — revisão D008 (Ocinye Terminal · Ocinye Browser)
