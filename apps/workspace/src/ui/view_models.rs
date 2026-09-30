@@ -316,6 +316,11 @@ pub struct ShellVm {
     /// D003 · A superfície universal da Nye (Pesquisar · Perguntar · Executar).
     /// `None` = a paleta D001, sem alterações (contrato de regressão D003).
     pub nye: Option<NyeSurfaceVm>,
+    /// Code (D009) · Os ids fixados, pela ordem em que estão fixados (as do
+    /// membro, ou as da Distribuição). A barra desenha as fixações por esta
+    /// ordem; `apps` continua pela ordem do registo (o lançador). Vazio = a
+    /// ordem de `apps` (comportamento anterior).
+    pub pin_order: Vec<&'static str>,
 }
 
 /// Um elemento de um widget da Home.

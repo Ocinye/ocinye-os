@@ -654,6 +654,26 @@ async fn content(
     }
 }
 
+/// O mesmo tipo de conteúdo, recusado: `Inactive` quando a aplicação não está
+/// activa na Instância, `Denied` quando o membro não a pode abrir.
+fn withhold(content: &WidgetContent, inactive: bool) -> WidgetContent {
+    fn l<T>(inactive: bool) -> Load<T> {
+        if inactive {
+            Load::Inactive
+        } else {
+            Load::Denied
+        }
+    }
+    match content {
+        WidgetContent::List(_) => WidgetContent::List(l(inactive)),
+        WidgetContent::Continue(_) => WidgetContent::Continue(l(inactive)),
+        WidgetContent::Health(_) => WidgetContent::Health(l(inactive)),
+        WidgetContent::Metrics(_) => WidgetContent::Metrics(l(inactive)),
+        WidgetContent::Count(_) => WidgetContent::Count(l(inactive)),
+        WidgetContent::Storage(_) => WidgetContent::Storage(l(inactive)),
+    }
+}
+
 /// `GET /`: o Desktop do membro, com os dados de cada widget.
 pub async fn desktop(ctx: ShellContext, caller: &Caller<'_>, state: &WorkspaceState) -> DesktopVm {
     // Sem Distribuição (o Core não respondeu a `/organisation`), a da porta; e
@@ -741,6 +761,20 @@ pub async fn desktop(ctx: ShellContext, caller: &Caller<'_>, state: &WorkspaceSt
     .into_iter()
     .filter_map(|(k, c)| c.map(|c| (k, c)))
     .collect();
+
+    // Code (D009 · DIST-14): um widget cuja aplicação este membro não vê — não
+    // activa na Instância ou sem autorização — não se desenha, mesmo quando os
+    // dados vêm (a lista de ambientes de um colaborador, por exemplo). Fica na
+    // disposição, escondido, para que gravar não o apague.
+    let visible =
+        |a: &ocinye_contracts::ApplicationId| ctx.vm.apps.iter().any(|t| t.id == a.as_str());
+    for (k, content) in &mut by_kind {
+        let apps = crate::experience::distribution::widget_apps(*k);
+        if let Some(a) = apps.iter().find(|a| !visible(a)) {
+            let inactive = ctx.viewer.inactive_apps.iter().any(|i| i == a.as_str());
+            *content = withhold(content, inactive);
+        }
+    }
 
     let widgets = placed
         .into_iter()

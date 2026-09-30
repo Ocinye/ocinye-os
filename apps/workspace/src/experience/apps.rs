@@ -26,7 +26,6 @@
 //! registo esconde o que o membro não pode alcançar; a autoridade continua no
 //! Core, que recusa quem escrever a rota à mão (`CLAUDE.md` §4, §59).
 
-use crate::experience::icon::Icon;
 use crate::experience::navigation::{screen_module, screen_permission, CoreStatus, Screen, Viewer};
 
 /// A taxonomia de categorias — metadados de produto, nunca texto traduzido.
@@ -166,10 +165,11 @@ impl Application {
         self.screen.path()
     }
 
-    /// O ícone da ficha.
+    /// O símbolo da ficha no sprite: o mapa canónico (D009 · G9-11). O
+    /// vocabulário `experience::icon::Icon` não nomeia símbolos do sprite.
     #[must_use]
-    pub const fn icon(&self) -> Icon {
-        self.screen.icon()
+    pub fn icon(&self) -> &'static str {
+        crate::experience::iconography::app_icon_id(self.manifest().id)
     }
 
     /// O rótulo no idioma corrente.

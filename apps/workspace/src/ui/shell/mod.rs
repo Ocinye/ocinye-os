@@ -232,9 +232,9 @@ fn top_bar(vm: &ShellVm) -> impl IntoView {
                         </span>
                     </div>
                     <a class="oc-menu__item" role="menuitem" href="/settings">{icon("user")}{t("shell.user.account")}</a>
-                    <a class="oc-menu__item" role="menuitem" href="/settings">{icon("settings")}{t("shell.user.settings")}</a>
+                    <a class="oc-menu__item" role="menuitem" href="/settings">{icon(app_icon("/settings"))}{t("shell.user.settings")}</a>
                     <a class="oc-menu__item" role="menuitem" href="/#appearance" data-oc="appearance-open">{icon("appearance")}{t("shell.user.appearance")}</a>
-                    <a class="oc-menu__item" role="menuitem" href="/help">{icon("help")}{t("shell.user.help")}</a>
+                    <a class="oc-menu__item" role="menuitem" href="/help">{icon(app_icon("/help"))}{t("shell.user.help")}</a>
                     <button type="button" class="oc-menu__item" role="menuitem" aria-disabled="true" aria-describedby="oc-lock-pending">
                         {icon("lock")}{t("shell.user.lock")}<kbd class="oc-menu__kbd" aria-hidden="true">"⌘ L"</kbd>
                     </button>
@@ -280,7 +280,17 @@ fn dock(vm: &ShellVm) -> impl IntoView {
             .as_ref()
             .is_some_and(|wm| wm.windows.iter().any(|w| w.app_id == id))
     };
-    let pinned: Vec<_> = vm.apps.iter().filter(|a| a.pinned).cloned().collect();
+    // Code (D009): as fixações pela ordem fixada (a do membro ou a da
+    // Distribuição), e não pela do registo.
+    let pinned: Vec<_> = if vm.pin_order.is_empty() {
+        vm.apps.iter().filter(|a| a.pinned).cloned().collect()
+    } else {
+        vm.pin_order
+            .iter()
+            .filter_map(|id| vm.apps.iter().find(|a| a.pinned && a.id == *id))
+            .cloned()
+            .collect()
+    };
     let extra: Vec<_> = vm
         .apps
         .iter()

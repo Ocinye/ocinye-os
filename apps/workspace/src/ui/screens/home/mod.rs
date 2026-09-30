@@ -323,6 +323,15 @@ fn widget(w: &DeskWidget) -> impl IntoView {
     }
 }
 
+/// Code (D009 · G9-10): a biblioteca só oferece um widget cujas aplicações
+/// este membro vê (activas na Instância e autorizadas — `shell.apps`). Um
+/// widget que se desenharia escondido não é uma escolha.
+fn offered(vm: &DesktopVm, kind: WidgetKind) -> bool {
+    crate::experience::distribution::widget_apps(kind)
+        .iter()
+        .all(|a| vm.shell.apps.iter().any(|t| t.id == a.as_str()))
+}
+
 fn library(vm: &DesktopVm) -> impl IntoView {
     let present: Vec<WidgetKind> = vm.widgets.iter().map(|w| w.placed.kind).collect();
     view! {
@@ -343,7 +352,7 @@ fn library(vm: &DesktopVm) -> impl IntoView {
                 }).collect_view()}
             </div>
             <ul class="oc-lib">
-                {KINDS.iter().filter(|s| s.in_library && (vm.is_admin || !s.admin_only)).map(|s| {
+                {KINDS.iter().filter(|s| s.in_library && (vm.is_admin || !s.admin_only) && offered(vm, s.kind)).map(|s| {
                     let on = present.contains(&s.kind);
                     let name = t(s.title_key);
                     let search = format!("{} {}", name, t(s.desc_key)).to_lowercase();
@@ -678,6 +687,24 @@ mod tests {
     }
 
     /// D009 · Sem obrigatórios: os avisos retiram-se como os outros.
+    /// Code (D009 · G9-10, G9-18): a biblioteca não oferece widgets de
+    /// aplicações que o membro não vê, nem os avisos sem fonte.
+    #[test]
+    fn a_biblioteca_so_oferece_o_que_o_membro_ve() {
+        let mut v = vm();
+        v.shell.apps.clear();
+        let html = library(&v).to_html();
+        for k in [
+            "projects", "notes", "calendar", "files", "tasks", "kpis", "notice",
+        ] {
+            assert!(
+                !html.contains(&format!(r#"data-kind="{k}""#)),
+                "{k} oferecido sem as suas aplicações"
+            );
+        }
+        assert!(html.contains(r#"data-kind="health""#), "controlo positivo");
+    }
+
     #[test]
     fn os_avisos_ja_nao_sao_obrigatorios() {
         let html = home(&vm()).to_html();

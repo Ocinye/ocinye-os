@@ -126,7 +126,12 @@ pub const KINDS: &[KindSpec] = &[
             None,
         )
     },
+    // Code (D009 · G9-18): os avisos não têm fonte no Core (FG-013); oferecê-
+    // los na biblioteca seria oferecer um cartão sempre indisponível. Quem já
+    // o tem na disposição mantém-no e pode retirá-lo (deixou de ser
+    // obrigatório); volta à biblioteca quando houver fonte.
     KindSpec {
+        in_library: false,
         desc_key: "desk.d.notice",
         subtitle_key: Some("desk.sub.notice"),
         ..k(
@@ -290,7 +295,9 @@ pub type KpiSpec = (&'static str, &'static str, &'static str, &'static str);
 /// Os indicadores do widget Indicadores, por ordem. O qualificativo concorda com o
 /// número: `tp(q, n)` escolhe `.one`/`.other` («1 activa» / «4 activas»).
 pub const KPIS: &[KpiSpec] = &[
-    ("desk.kpi.units", "desk.kpi.units_q", "units", "/units"),
+    // Code (D009): cada indicador leva o ícone canónico da sua aplicação
+    // (`experience::iconography`); o de Unidades passou a `org-tree`.
+    ("desk.kpi.units", "desk.kpi.units_q", "org-tree", "/units"),
     ("desk.kpi.ideas", "desk.kpi.ideas_q", "idea", "/ideas"),
     (
         "desk.kpi.projects",

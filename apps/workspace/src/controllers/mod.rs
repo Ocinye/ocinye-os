@@ -408,6 +408,12 @@ pub async fn shell(
             None,
             false,
         )),
+        // D009 · a ordem da barra é a das fixações (do membro ou da
+        // Distribuição), já filtrada pelo que este membro vê.
+        pin_order: apps::pinned_visible(&pinned, &viewer, core)
+            .into_iter()
+            .map(|a| a.id())
+            .collect(),
     };
 
     Shell::Ready(Box::new(ShellContext {
