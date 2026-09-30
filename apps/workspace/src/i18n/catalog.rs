@@ -604,6 +604,7 @@ pub const GROUPS: &[&[Entry]] = &[
     super::ui_apps::UI_APPS,
     super::ui_research::UI_RESEARCH,
     super::ui_org::UI_ORG,
+    super::ui_ops::UI_OPS,
 ];
 
 /// Um grupo só de teste, para exercitar a queda ao canónico (briefing i18n §77).

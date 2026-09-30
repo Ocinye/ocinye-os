@@ -250,6 +250,16 @@
     });
   }
 
+
+  // ── D007 · medidores (data-pct → --pct, CSSOM), fio de mensagens no fim, ⌘/Ctrl+Enter envia ──
+  function ops(app) {
+    $$('.oc-ops-meter__fill[data-pct]', app).forEach((f) => { f.style.setProperty('--pct', Math.max(0, Math.min(100, Number(f.dataset.pct) || 0)) + '%'); if (f.dataset.after) f.style.setProperty('--after', Math.max(0, Math.min(100, Number(f.dataset.after) || 0)) + '%'); });
+    const sc = app.querySelector('[data-part="msg-scroll"]');
+    if (sc) sc.scrollTop = sc.scrollHeight;
+    const body = app.querySelector('[data-part="msg-body"]');
+    if (body) body.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && body.value.trim() && body.form) { e.preventDefault(); body.form.requestSubmit(); } });
+  }
+
   // D004.1 · D4-J1: idempotente e por raiz — `OcApps.init(root)` liga só as aplicações
   // dentro de `root` (ou `root` ele próprio) e nunca liga a mesma duas vezes.
   const bound = new WeakSet();
@@ -257,7 +267,7 @@
     if (bound.has(app)) return;
     bound.add(app);
     app.setAttribute('data-js', '');
-    drawer(app); docs(app); files(app); calendar(app); reslist(app); credential(app);
+    drawer(app); docs(app); files(app); calendar(app); reslist(app); credential(app); ops(app);
   };
   const init = (root) => {
     const r = root && root.querySelectorAll ? root : document;

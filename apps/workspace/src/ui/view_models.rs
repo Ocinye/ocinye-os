@@ -4481,3 +4481,810 @@ pub struct UnitsVm {
     /// A lista corrente.
     pub list_href: String,
 }
+
+// ═════════════════════════════════════════════════════════════════════════
+// D007 · Conclusão das aplicações: Mensagens · IA · Agentes · Computação ·
+// Meus Recursos · Actividade · Auditoria · Definições · Ajuda. Aditivo.
+//
+// Só estado que o Core/runtime já autorizou. Nenhum VM traz segredo, chave de
+// fornecedor, instruções de sistema, raciocínio de modelo, conteúdo de
+// mensagem fora das Mensagens, nem metadata de auditoria não saneada.
+// ═════════════════════════════════════════════════════════════════════════
+
+// ── Mensagens ──
+
+/// `direct` | `group` (`conversations.kind`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MsgKind {
+    /// Directa, com uma pessoa.
+    Direct,
+    /// Grupo com nome.
+    Group,
+}
+
+/// A presença resolvida pelo tempo real. `None` no VM = tempo real em baixo
+/// (não é «offline»).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MsgPresence {
+    /// online
+    Online,
+    /// away
+    Away,
+    /// offline
+    Offline,
+}
+
+/// Uma conversa na lista.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MsgConvRowVm {
+    /// Nome do grupo ou da pessoa.
+    pub title: String,
+    /// Tipo.
+    pub kind: MsgKind,
+    /// Avatar (pessoa) ou iniciais do grupo.
+    pub avatar: OrgAvatarVm,
+    /// Por ler (`unread`).
+    pub unread: u32,
+    /// Menções por ler.
+    pub mentions: u32,
+    /// Excerto da última mensagem (texto; escapado).
+    pub last: Option<String>,
+    /// Quando (formatado).
+    pub last_at: Option<String>,
+    /// Presença da outra pessoa (directa).
+    pub presence: Option<MsgPresence>,
+    /// `/messages/{id}`.
+    pub href: String,
+    /// Aberta.
+    pub active: bool,
+}
+
+/// Uma reacção agregada.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MsgReactionVm {
+    /// O emoji (texto do membro).
+    pub emoji: String,
+    /// Quantas.
+    pub count: u32,
+    /// Já reagi.
+    pub mine: bool,
+}
+
+/// Uma mensagem.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MsgVm {
+    /// Âncora (`m-…`), para responder e voltar.
+    pub anchor: String,
+    /// Autor.
+    pub author: String,
+    /// Avatar.
+    pub avatar: OrgAvatarVm,
+    /// É minha.
+    pub mine: bool,
+    /// Corpo (texto; `None` = retirada).
+    pub body: Option<String>,
+    /// Quando.
+    pub at: String,
+    /// Editada.
+    pub edited: bool,
+    /// Resposta a (autor, excerto).
+    pub reply: Option<(String, String)>,
+    /// Menciona-me.
+    pub mentions_me: bool,
+    /// Reacções.
+    pub reactions: Vec<MsgReactionVm>,
+    /// POST reagir (`emoji=`), quando se pode.
+    pub react_action: Option<String>,
+    /// GET que prepara a resposta (`?reply=`).
+    pub reply_href: Option<String>,
+    /// Separador de dia antes desta mensagem.
+    pub day: Option<String>,
+}
+
+/// O compositor. O texto volta intacto se o envio falhar.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MsgComposerVm {
+    /// POST `/messages/{id}/send`.
+    pub action: String,
+    /// Texto por enviar.
+    pub body: String,
+    /// A responder a (autor, excerto) + o id opaco.
+    pub reply: Option<(String, String, String)>,
+    /// Cancelar a resposta.
+    pub reply_cancel_href: Option<String>,
+    /// Chave de idempotência (uma por rascunho).
+    pub idempotency_key: String,
+    /// Falhou.
+    pub error: Option<AppError>,
+}
+
+/// Um participante.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MsgMemberVm {
+    /// Nome.
+    pub name: String,
+    /// Papel na conversa, traduzido («Dono», «Administrador», «Membro»).
+    pub role: String,
+    /// Retirar (abre a confirmação D006).
+    pub remove: Option<OrgActionVm>,
+}
+
+/// A conversa aberta.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MsgThreadVm {
+    /// Título.
+    pub title: String,
+    /// Tipo.
+    pub kind: MsgKind,
+    /// Presença (directa).
+    pub presence: Option<MsgPresence>,
+    /// Mensagens, da mais antiga para a mais recente.
+    pub messages: Vec<MsgVm>,
+    /// Mensagens anteriores (`?before=`).
+    pub older_href: Option<String>,
+    /// Estado.
+    pub load: AppLoad,
+    /// Compositor.
+    pub composer: MsgComposerVm,
+    /// Participantes (grupo).
+    pub members: Vec<MsgMemberVm>,
+    /// Sair do grupo (confirmação).
+    pub leave: Option<OrgActionVm>,
+}
+
+/// Nova conversa: directa com pessoa elegível, ou grupo. Candidatos do Core.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MsgNewVm {
+    /// GET pesquisa.
+    pub search_action: String,
+    /// Texto.
+    pub query: String,
+    /// `None` = ainda não pesquisou.
+    pub candidates: Option<Vec<ResOptionVm>>,
+    /// POST `/messages/start`.
+    pub action: String,
+    /// Sem contrato de candidatos: explicado, desactivado.
+    pub unavailable: bool,
+    /// Falha.
+    pub error: Option<AppError>,
+}
+
+/// A aplicação Mensagens.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MessagesVm {
+    /// Conversas.
+    pub conversations: Vec<MsgConvRowVm>,
+    /// Estado da lista.
+    pub load: AppLoad,
+    /// Lista | conversa.
+    pub pane: ResPane,
+    /// Aberta.
+    pub thread: Option<MsgThreadVm>,
+    /// Erro do que foi pedido (não revela nada).
+    pub thread_error: Option<AppError>,
+    /// Nova conversa.
+    pub new: Option<MsgNewVm>,
+    /// «Nova conversa».
+    pub new_href: Option<String>,
+    /// A lista.
+    pub list_href: String,
+}
+
+// ── IA ──
+
+/// Capacidade de inferência (`AiCapability`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AiCap {
+    /// GENERAL
+    General,
+    /// CODING
+    Coding,
+    /// REASONING
+    Reasoning,
+    /// EMBEDDING
+    Embedding,
+}
+
+/// Porque a inferência não serve (`AiReasonCode`, mapeamento explícito).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AiReason {
+    /// AI_NO_PROVIDER_AVAILABLE
+    NoProvider,
+    /// AI_NO_COMPATIBLE_MODEL
+    NoCompatibleModel,
+    /// AI_CAPACITY_UNAVAILABLE
+    CapacityUnavailable,
+    /// AI_MODEL_HARDWARE_NOT_SATISFIED
+    HardwareNotSatisfied,
+    /// AI_PROVIDER_UNHEALTHY
+    ProviderUnhealthy,
+    /// AI_MODEL_LOADING
+    ModelLoading,
+    /// AI_DISABLED_BY_POLICY
+    DisabledByPolicy,
+    /// AI_POLICY_BLOCKED
+    PolicyBlocked,
+    /// Qualquer código que esta versão não conheça: dito como desconhecido.
+    Unknown,
+}
+
+/// Uma capacidade, com o que a serve.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AiCapVm {
+    /// Capacidade.
+    pub cap: AiCap,
+    /// Servida agora.
+    pub available: bool,
+    /// Modelo mapeado.
+    pub model: Option<String>,
+    /// Porque não.
+    pub reason: Option<AiReason>,
+    /// Fornecedor preferido (rótulo) e se há alternativa.
+    pub preferred: Option<String>,
+    /// Pode recorrer a outro candidato.
+    pub fallback: Option<bool>,
+}
+
+/// Um modelo registado (`GET /ai/models`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AiModelVm {
+    /// Nome.
+    pub name: String,
+    /// Versão.
+    pub version: String,
+    /// Fornecedor (rótulo).
+    pub provider: String,
+    /// `local` | `external`.
+    pub local: bool,
+    /// Estado declarado pelo registo (`status`, texto já traduzido).
+    pub status: String,
+    /// Tom do estado.
+    pub tone: ResTone,
+    /// Activo para encaminhamento.
+    pub enabled: bool,
+    /// Capacidades que declara.
+    pub caps: Vec<AiCap>,
+    /// Classificação máxima que pode receber.
+    pub max_class: ResClassification,
+}
+
+/// Um fornecedor, sem credencial.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AiProviderVm {
+    /// Rótulo (texto da administração; escapado).
+    pub label: String,
+    /// Protocolo.
+    pub kind: String,
+    /// Local.
+    pub local: bool,
+    /// Activo.
+    pub enabled: bool,
+    /// Última verificação: saudável.
+    pub healthy: Option<bool>,
+    /// Quando.
+    pub checked: Option<String>,
+    /// Tem credencial por referência (nunca o valor).
+    pub has_credential: bool,
+    /// Activar/desactivar (confirmação), só com autoridade de plataforma.
+    pub toggle: Option<OrgActionVm>,
+}
+
+/// A secção.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AiSection {
+    /// Estado.
+    Overview,
+    /// Modelos.
+    Models,
+    /// Fornecedores e encaminhamento.
+    Providers,
+}
+
+/// A aplicação IA (Ocinye AI Fabric).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AiVm {
+    /// Secção.
+    pub section: AiSection,
+    /// Navegação.
+    pub nav: Vec<AppNavVm>,
+    /// Alguma capacidade servida.
+    pub available: bool,
+    /// Fornecedores saudáveis.
+    pub healthy_providers: u32,
+    /// Mensagem do Core quando nada serve.
+    pub message: Option<String>,
+    /// Por capacidade.
+    pub caps: Vec<AiCapVm>,
+    /// Modelos.
+    pub models: Vec<AiModelVm>,
+    /// Fornecedores (`None` = sem autoridade para os ver).
+    pub providers: Option<Vec<AiProviderVm>>,
+    /// Política: máximo externo (`None` = sem IA externa).
+    pub external_max: Option<Option<ResClassification>>,
+    /// A instalação permite externos.
+    pub installation_external: Option<bool>,
+    /// Estado.
+    pub load: AppLoad,
+    /// Abrir a Nye.
+    pub nye_href: Option<String>,
+}
+
+// ── Agentes ──
+
+/// `AgentState`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AgentStatus {
+    /// Pronto: uma capacidade serve-o agora.
+    Ready,
+    /// Configurado, nada o serve.
+    Configured,
+    /// Desactivado pelo dono.
+    Disabled,
+    /// Arquivado.
+    Archived,
+}
+
+/// `AgentScope`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AgentScopeVm {
+    /// Pessoal.
+    Personal,
+    /// Ambiente.
+    Workspace,
+    /// Unidade.
+    Unit,
+    /// Instituição.
+    Institutional,
+}
+
+/// Um agente aberto.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AgentVm {
+    /// Nome.
+    pub name: String,
+    /// Para que serve.
+    pub purpose: Option<String>,
+    /// Estado.
+    pub status: AgentStatus,
+    /// Capacidade que pede.
+    pub cap: AiCap,
+    /// Âmbito.
+    pub scope: AgentScopeVm,
+    /// Unidade/ambiente, resolvido para quem vê.
+    pub scope_target: Option<ResLinkVm>,
+    /// Tecto de classificação.
+    pub max_class: ResClassification,
+    /// Fontes: bibliografia, documentos, dados.
+    pub sources: (bool, bool, bool),
+    /// As instruções — só para quem o criou.
+    pub instructions: Option<String>,
+    /// Criado por · quando.
+    pub created: String,
+    /// Abrir na Nye (a execução é da Nye/Core).
+    pub nye: Option<AppNyeVm>,
+}
+
+/// Criar um agente (`POST /ai/agents`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AgentFormVm {
+    /// POST.
+    pub action: String,
+    /// Âmbitos que o actor pode criar (permissão por âmbito).
+    pub scopes: Vec<ResOptionVm>,
+    /// Alvos (unidades/ambientes) legíveis.
+    pub targets: Vec<ResOptionVm>,
+    /// Capacidades.
+    pub caps: Vec<ResOptionVm>,
+    /// Classificações.
+    pub classes: Vec<ResOptionVm>,
+    /// Falha.
+    pub error: Option<AppError>,
+}
+
+/// A aplicação Agentes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AgentsVm {
+    /// Lista (título = nome; estado; colunas capacidade, âmbito, criado).
+    pub list: ResListVm,
+    /// Há execução disponível agora.
+    pub execution_available: bool,
+    /// Lista | detalhe.
+    pub pane: ResPane,
+    /// Aberto.
+    pub agent: Option<AgentVm>,
+    /// Erro.
+    pub agent_error: Option<AppError>,
+    /// Criar.
+    pub form: Option<AgentFormVm>,
+    /// «Novo agente».
+    pub new_href: Option<String>,
+    /// A lista.
+    pub list_href: String,
+}
+
+// ── Computação ──
+
+/// `ComputeNodeStatus`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NodeStatus {
+    /// pending_enrollment
+    Pending,
+    /// online
+    Online,
+    /// offline
+    Offline,
+    /// draining
+    Draining,
+    /// retired
+    Retired,
+}
+
+/// Uma linha de capacidade (`CapacityLine`), já formatada. `None` = não reportado.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CapLineVm {
+    /// Rótulo (CPU, Memória, Armazenamento).
+    pub label_key: &'static str,
+    /// Físico.
+    pub physical: Option<String>,
+    /// Reservado para o anfitrião.
+    pub reserved: String,
+    /// Atribuível.
+    pub allocatable: Option<String>,
+    /// Em uso reportado.
+    pub consumed: Option<String>,
+    /// Fracção em uso 0–100, só se o nó reporta físico e uso.
+    pub consumed_pct: Option<u8>,
+}
+
+/// Um nó aberto.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NodeVm {
+    /// Nome.
+    pub name: String,
+    /// Identificador estável (não é segredo).
+    pub identifier: String,
+    /// Estado.
+    pub status: NodeStatus,
+    /// Tipo, traduzido.
+    pub kind: String,
+    /// Local.
+    pub location: Option<String>,
+    /// Controlo institucional, traduzido.
+    pub control: String,
+    /// Residência física, traduzida.
+    pub residency: String,
+    /// Capacidade.
+    pub lines: Vec<CapLineVm>,
+    /// GPUs: contagem · memória.
+    pub gpus: Option<String>,
+    /// Versão do agente do nó.
+    pub agent_version: Option<String>,
+    /// Última vez visto.
+    pub last_seen: Option<String>,
+}
+
+/// A aplicação Computação.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ComputeVm {
+    /// Nós registados.
+    pub registered: u32,
+    /// Em linha.
+    pub online: u32,
+    /// Mensagem do Core com o plano vazio.
+    pub message: Option<String>,
+    /// Nós (título = nome; colunas estado, tipo, GPUs, visto).
+    pub list: ResListVm,
+    /// Lista | detalhe.
+    pub pane: ResPane,
+    /// Aberto.
+    pub node: Option<NodeVm>,
+    /// Erro.
+    pub node_error: Option<AppError>,
+    /// A lista.
+    pub list_href: String,
+}
+
+// ── Meus Recursos ──
+
+/// `StorageState`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StorageStateVm {
+    /// normal
+    Normal,
+    /// warning
+    Warning,
+    /// critical
+    Critical,
+    /// over_quota
+    OverQuota,
+}
+
+/// Uma parte do direito (`EntitlementPart`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EntPartVm {
+    /// `profile` | `override` | `temporary`, traduzido.
+    pub source: String,
+    /// Quantidade formatada.
+    pub quantity: String,
+    /// Caduca.
+    pub expires: Option<String>,
+    /// Nota (código do perfil ou motivo).
+    pub note: String,
+}
+
+/// A aplicação Meus Recursos: o que posso consumir e o que consumo.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResourcesVm {
+    /// Estado.
+    pub load: AppLoad,
+    /// Usado.
+    pub used: String,
+    /// Reservado por envios em curso.
+    pub reserved: String,
+    /// Limite (`None` = ainda sem limite resolvido).
+    pub limit: Option<String>,
+    /// Disponível.
+    pub available: String,
+    /// 0–100 do limite.
+    pub used_pct: Option<u8>,
+    /// 0–100 reservado.
+    pub reserved_pct: Option<u8>,
+    /// Estado.
+    pub state: StorageStateVm,
+    /// Direito efectivo.
+    pub entitlement: String,
+    /// As partes que o explicam.
+    pub parts: Vec<EntPartVm>,
+    /// Abrir Ficheiros.
+    pub files_href: Option<String>,
+}
+
+// ── Actividade ──
+
+/// Um evento. `target: None` + `redacted` = o alvo já não é visível.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActivityItemVm {
+    /// Quem (nome histórico).
+    pub actor: Option<String>,
+    /// O que (resumo do Core; texto).
+    pub summary: String,
+    /// O alvo, se o Core o resolve agora para quem vê.
+    pub target: Option<ResLinkVm>,
+    /// Alvo já sem acesso.
+    pub redacted: bool,
+    /// Ambiente (resolvido agora).
+    pub context: Option<String>,
+    /// Classificação.
+    pub class: ResClassification,
+    /// Quando.
+    pub at: String,
+    /// Dia (separador).
+    pub day: Option<String>,
+}
+
+/// A aplicação Actividade.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActivityVm {
+    /// Filtro de ambiente (opções legíveis).
+    pub workspaces: Vec<ResOptionVm>,
+    /// Eventos.
+    pub items: Vec<ActivityItemVm>,
+    /// Estado.
+    pub load: AppLoad,
+    /// Paginação.
+    pub page: AppPageVm,
+    /// Recusa da aplicação.
+    pub error: Option<AppError>,
+}
+
+// ── Auditoria ──
+
+/// `outcome`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuditOutcome {
+    /// success
+    Success,
+    /// denied
+    Denied,
+    /// failure
+    Failure,
+}
+
+/// Um registo de auditoria.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuditRowVm {
+    /// Data e hora precisas no fuso do membro.
+    pub at: String,
+    /// A mesma em UTC ISO-8601 (`datetime`).
+    pub at_utc: String,
+    /// Actor (nome histórico) · `None` = sistema.
+    pub actor: Option<String>,
+    /// Identidade privilegiada, em nome de.
+    pub on_behalf: Option<String>,
+    /// Acção (código estável).
+    pub action: String,
+    /// Tipo de recurso (código estável).
+    pub resource_type: String,
+    /// Resultado.
+    pub outcome: AuditOutcome,
+    /// Classificação no momento.
+    pub class: Option<ResClassification>,
+    /// Abrir o detalhe.
+    pub href: String,
+    /// Aberto.
+    pub active: bool,
+    /// Filtrar por este actor (`?actor=`).
+    pub actor_filter_href: Option<String>,
+}
+
+/// O detalhe: só campos seguros.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuditDetailVm {
+    /// A linha.
+    pub row: AuditRowVm,
+    /// Correlação (logs).
+    pub correlation: Option<String>,
+    /// Metadata por lista branca de chaves (chave, valor).
+    pub metadata: Vec<(String, String)>,
+    /// Campos omitidos por não estarem na lista branca.
+    pub omitted: u32,
+    /// O recurso, se o Core o resolve para quem vê.
+    pub target: Option<ResLinkVm>,
+}
+
+/// A aplicação Auditoria.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuditVm {
+    /// Recusa (sem audit.view): nada mais.
+    pub error: Option<AppError>,
+    /// GET dos filtros.
+    pub filter_action: String,
+    /// Tipos de recurso conhecidos.
+    pub types: Vec<ResOptionVm>,
+    /// Desde (data).
+    pub since: String,
+    /// Filtro de actor activo (nome), com limpar.
+    pub actor: Option<(String, String)>,
+    /// Linhas (servidor pagina).
+    pub rows: Vec<AuditRowVm>,
+    /// Estado.
+    pub load: AppLoad,
+    /// Paginação.
+    pub page: AppPageVm,
+    /// Lista | detalhe.
+    pub pane: ResPane,
+    /// Aberto.
+    pub detail: Option<AuditDetailVm>,
+    /// A lista.
+    pub list_href: String,
+}
+
+// ── Definições ──
+
+/// A secção.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SettingsSection {
+    /// Conta e avatar.
+    Account,
+    /// Idioma e fuso.
+    Language,
+    /// Palavra-passe, segundo factor, sessões.
+    Security,
+    /// Aplicações fixadas.
+    Apps,
+}
+
+/// Uma sessão própria.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OwnSessionVm {
+    /// Agente resumido.
+    pub agent: String,
+    /// Última actividade.
+    pub seen: String,
+    /// Esta.
+    pub current: bool,
+    /// Terminar.
+    pub revoke_action: Option<String>,
+}
+
+/// Uma aplicação fixável.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PinVm {
+    /// id.
+    pub id: String,
+    /// Rótulo.
+    pub label: String,
+    /// Ícone.
+    pub icon: &'static str,
+    /// Fixada.
+    pub pinned: bool,
+}
+
+/// A aplicação Definições (só a camada do membro).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SettingsVm {
+    /// Secção.
+    pub section: SettingsSection,
+    /// Navegação.
+    pub nav: Vec<AppNavVm>,
+    /// O que acabou de guardar.
+    pub saved: bool,
+    /// Falha.
+    pub error: Option<AppError>,
+    /// Conta: nome, endereço, estado, avatar.
+    pub name: String,
+    /// Endereço.
+    pub email: String,
+    /// Avatar.
+    pub avatar: OrgAvatarVm,
+    /// Presets do produto (id, rótulo, selecionado).
+    pub presets: Vec<ResOptionVm>,
+    /// Idioma: pt/en/fr (valor, rótulo nativo, actual).
+    pub locales: Vec<ResOptionVm>,
+    /// Fuso da Instância (herdado, só leitura).
+    pub timezone: String,
+    /// Segundo factor: configurado / exigido.
+    pub mfa: (bool, bool),
+    /// Palavra-passe mudada em.
+    pub password_changed: Option<String>,
+    /// Sessões próprias.
+    pub sessions: Vec<OwnSessionVm>,
+    /// Aplicações fixáveis.
+    pub pins: Vec<PinVm>,
+    /// Origem das fixadas: `member` | `instance` | `product`, traduzida.
+    pub pins_source: String,
+}
+
+// ── Ajuda ──
+
+/// Um tópico: gerado do registo de aplicações ou do conjunto de atalhos.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HelpTopicVm {
+    /// Título.
+    pub title: String,
+    /// Ícone.
+    pub icon: &'static str,
+    /// Categoria (traduzida).
+    pub category: String,
+    /// Descrição do registo.
+    pub body: String,
+    /// Abrir a aplicação (se o membro a vê).
+    pub open_href: Option<String>,
+    /// Âncora.
+    pub anchor: String,
+}
+
+/// Um atalho declarado pelo runtime.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HelpShortcutVm {
+    /// Teclas («⌘K»).
+    pub keys: String,
+    /// O que faz.
+    pub what: String,
+}
+
+/// A secção.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HelpSection {
+    /// As aplicações.
+    Apps,
+    /// Atalhos.
+    Shortcuts,
+}
+
+/// A aplicação Ajuda (conteúdo de primeira parte, versionado com o código).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HelpVm {
+    /// Secção.
+    pub section: HelpSection,
+    /// Navegação.
+    pub nav: Vec<AppNavVm>,
+    /// Pesquisa (`None` = sem campo).
+    pub query: Option<String>,
+    /// Tópicos (filtrados no servidor).
+    pub topics: Vec<HelpTopicVm>,
+    /// Atalhos.
+    pub shortcuts: Vec<HelpShortcutVm>,
+    /// Abrir a Nye com a pergunta.
+    pub nye: Option<AppNyeVm>,
+}

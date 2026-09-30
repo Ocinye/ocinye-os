@@ -1,3 +1,43 @@
+# HANDOFF — Ocinye OS canonical UI · Design revision D007
+
+Cumulative: D001 → D006 unchanged plus D007. Observed repository: `feat/design-d006` @ `89404f76b630b07af522f9e206f105fde3b1a55a` (Code's D006 integration in progress; not merged to main). The D007-touched files in `implementation/` are taken from that tree.
+
+**PROCESS.** Do **not** integrate D007 until D006 is certified, verify.sh PASS, pushed, PR green and **merged into main**. Then branch from current `origin/main` (not the Design-observed branch), apply, and: compare with merged D006, verify checksums, cargo fmt, cargo check, cargo clippy, cargo test (all new Design tests). After certification: verify.sh PASS → push → PR → CI green → merge → **STOP**. DEPLOY = NOT_PERFORMED · DEPLOY_AUTHORIZATION = NOT_GIVEN.
+
+# D007 · Conclusão das aplicações
+
+Nine registered apps get a real surface. Terminal/ocsh and Browser are D008. No Teams, no standalone Members.
+
+| App | Route · gate | Repository truth used | Design |
+|---|---|---|---|
+| Mensagens | `/messages` · messaging.use | conversations direct/group, roles owner/administrator/member, unread + mentions, history `?before`, send (idempotency, reply, mentions), read, members add/remove, reactions, presence; no attachments, no edit/delete route | list · thread · composer (draft kept on failure, ⌘/Ctrl+Enter) · reply · reactions toggle · people · new conversation (governed candidates or `unavailable`) |
+| IA | `/ai` · ai.use | `/ai/status` (available, providers, per-capability status, message), `/ai/models`, `/ai/providers` (label, kind, residency, enabled, health, secret by reference), `/ai/policy` | Estado · Modelos · Fornecedores. **Not a chat**; «Abrir a Nye». Reasons mapped from AiReasonCode |
+| Agentes | `/ai/agents` · agents.view | Agent (name, purpose, instructions, one capability, scope personal/workspace/unit/institutional, max classification, source flags, derived state ready/configured/disabled/archived); create by scope permission | list · detail (authority boundary note) · create · instructions only for the creator |
+| Computação | `/compute` · compute.view | status (registered, online, message), nodes (status pending/online/offline/draining/retired, kind, control, residency, GPUs, capacity lines); **no job dispatch** | nodes · node capacity (numbers only when reported) · «sem despacho» |
+| Meus Recursos | `/resources` · any member | `/resources/me`: storage used/reserved/limit/available/state + entitlement parts (ADR-0108) | the member's own consumption picture, not a resource index |
+| Actividade | `/activity` · organisation.view | activity_entries (actor, kind, subject, summary, classification, workspace) | chronological feed; target re-resolved; redacted if no longer visible |
+| Auditoria | `/audit` · audit.view | AuditRecord (occurred_at, actor + privileged/on-behalf, action, resource, outcome success/denied/failure, classification, correlation, bounded metadata); filters resource_type/resource_id/actor/since; page | table · detail with allow-listed metadata · no mutation/export |
+| Definições | `/settings` · any member | language cookie (pt/en/fr), pins save/reset, avatar initials/preset/photo, password, MFA (D001 screens), own sessions; timezone is Instance-only | Conta · Idioma e fuso · Segurança · Aplicações |
+| Ajuda | `/help` · any member | no content system | first-party: app guide from the registry + declared shortcuts; scoped search; Nye handoff |
+
+## Shared (`ui/apps/ops.rs`, additive)
+`meter` (bar only with physical+consumed; --pct via CSSOM), `plane` (calm platform state), `outcome_tag`, `presence` (absent ≠ offline), `agent_state`/`node_state`/`storage_state`, `cap_key`, `reason_key`. Privileged actions reuse the D006 confirmation (`org::confirm`).
+
+## Code tasks
+1. Wire `mod ui_ops;` + `super::ui_ops::UI_OPS` in GROUPS (apply.sh). `pub mod fabric; ledger; member; messages; ops;` are in `ui/apps/mod.rs`. Tests: messages ×1, fabric ×2, ledger ×2, member ×2.
+2. Replace the `app_page` handlers for the nine routes with the view functions; SingleInstance navigation stays in the window; `?frame=1` + `OcApps.init(root)`.
+3. Adapters per FUNCTIONAL_GAPS D007 (21 ADAPTER_REQUIRED). Explicit enum mapping; unknown AiReasonCode → `AiReason::Unknown`.
+4. Never put in a VM: provider secret/endpoint, agent instructions for non-creators, message bodies outside Messages, non-allow-listed audit metadata.
+5. Recommended (Code-owned catalogue): `nav.audit` pt «Registo de auditoria» (today «Audit Log» in pt).
+
+## Security tests for Code
+Messages: forged conversation id, cross-member conversation, recipient enumeration via `/messages/people`, hostile body/title (fixtures included), direct deep link. AI: no secret/endpoint in HTML, direct route auth, no prompt field, no authority from model status. Agents: capability ≠ authorization, forged agent id, instructions hidden from non-creators, no DB/FS/shell/network/secret surface. Compute: no command field, forged node id, no host/Docker/SSH data. Resources: only own picture, no client-chosen person. Activity: revoked target redacted, cross-context, no message content. Audit: audit.view on direct URL, secret-like metadata never rendered, no mutation, pagination, historical actor. Settings: only member-owned settings, forged Instance setting rejected, no generic key/value. Help: escaped search, no local file read, external links external.
+
+## Real-browser checks for Code
+1440/924/390 and ~720/760/820/900 for all nine; real keyboard (Tab, Shift+Tab, ↑↓ Home End in lists, Enter, Esc, ⌘/Ctrl+Enter in composer); frame-loaded windows; no-inference mode; pt/en/fr; D001–D006 regression.
+
+---
+
 # HANDOFF — Ocinye OS canonical UI · Design revision D006
 
 Cumulative: D001 → D005 unchanged plus D006. Supersedes D005. Observed repository: `feat/design-d005` @ `f94b79370ad2c8f3d60ec5d33d5a4650392a34c2` (D005 integrated by Code; merge to `main` not observed). `implementation/` = that tree's files for everything D006 touches, plus D006. Not reset.
