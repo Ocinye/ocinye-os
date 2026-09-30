@@ -1,3 +1,16 @@
+# DESIGN_LOCK — Design revision D006
+
+Locked (D006-owned, additive; D001–D005 locks unchanged):
+- `ui/apps/org.rs` — account status tag, role tag (single tone, no hierarchy), unit role/status tags, avatar, refusal, notice, action link, **shared privileged confirmation** (`confirm`), **once-only credential** (`credential_once`).
+- `ui/apps/units.rs` — Unidades: list · detail · members · governed add-member picker · create/edit (code immutable) · archive via confirmation.
+- `ui/apps/admin.rs` — Administração: Membros roster and member detail (account, units, environments, roles, explicit grants, permission sources, security, sessions) · Novo membro · credential screen · Papéis catalogue · Instância.
+- CSS: the `D006` block of `oc-apps.css` (`.oc-org-*`). JS: `credential` and `confirmDlg` in `oc-apps.js`, bound by `OcApps.init(root)`.
+- Copy: `i18n/ui_org.rs` (pt canonical, en, fr).
+
+Rules locked with them: no action without a Core flag; no free-form role; candidates only from the Core; the secret only in the POST response that issued it; focus starts on Cancelar; no permission matrix; no Teams UI until a Team domain exists; no Distribution change in D006.
+
+---
+
 # DESIGN_LOCK — Design revision D005
 
 New locks (Design-owned): `ui/apps/{res,projects,work,ideas,datasets,knowledge}.rs`, D005 block of `view_models.rs`, D005 block of `oc-apps.css`, `reslist` in `oc-apps.js`, `i18n/ui_research.rs`. Locked patterns: list | detail two panes (1180 px of window), title column never yields, `data-prio` column order, transitions only from the Core list, closing an idea requires a reason, promotion keeps the idea, dataset versions ≠ file versions, no dataset content preview, source text labelled as data, http(s)-only external links, resource link = canonical deep link.

@@ -87,6 +87,24 @@ trancada como uma sem administrador nenhum. A contagem exclui a pessoa cuja
 saída se pondera, e a pergunta é directa — «se tiro esta, sobra alguém?».
 Provado em `crates/ocinye-core/tests/privileged_identity.rs`.
 
+A guarda toma uma tranca consultiva por instituição antes de contar: dois
+administradores a retirarem o papel um ao outro ao mesmo tempo esperam um pelo
+outro, e o segundo lê o que o primeiro gravou
+([ADR-0111](../adrs/0111-organisational-invariants-and-typed-refusals.md)).
+
+### A última pessoa que gere uma unidade não sai
+
+Gerir os membros de uma unidade vem de ser gestor dela; sem gestor vivo, a
+unidade fica sem quem a governe. `organisation::service::ensure_keeps_a_manager`
+recusa **retirar** e **despromover** (o `upsert` com o papel de membro) o último
+gestor vivo — um gestor retirado fica na tabela como memória, e não conta — e
+tranca a unidade antes de contar. Provado, com as duas corridas simultâneas, em
+`crates/ocinye-core/tests/organisation_invariants.rs`.
+
+Estas recusas, e a de auto-bloqueio, levam um motivo estável no envelope de
+erro (`details.reason`: `last_platform_admin`, `last_unit_manager`,
+`self_lockout`), para um cliente as explicar sem ler a mensagem.
+
 ### Memberships contextuais
 
 - **Unidade:** `manager` ou `member`.

@@ -1,3 +1,74 @@
+# HANDOFF — Ocinye OS canonical UI · Design revision D006
+
+Cumulative: D001 → D005 unchanged plus D006. Supersedes D005. Observed repository: `feat/design-d005` @ `f94b79370ad2c8f3d60ec5d33d5a4650392a34c2` (D005 integrated by Code; merge to `main` not observed). `implementation/` = that tree's files for everything D006 touches, plus D006. Not reset.
+
+**PROCESS RULE.** Claude Code must not start integrating D006 until D005 is merged into `main`. Then: rebase this package's patch on `main`, fmt/build/clippy/tests, `verify.sh`, push, PR, CI green, merge, **STOP**. Merge is not deployment authorisation; production deployment always needs explicit user authorisation. Nothing in this package deploys.
+
+# D006 · Organização · pertença · administração — Unidades · Administração (Membros · Papéis · Instância)
+
+**Core governs; applications implement.** The UI is never the authority for identity, membership, authorisation, roles, invariants, invitations or audit. It renders Core-authorised state and sends the typed POSTs the BFF already has.
+
+## Repository truth this is built on
+| Domain | Core (tables · routes) | What the design shows |
+|---|---|---|
+| Member (conta) | `people` (full_name, display_name, email, institutional_position, status `invited/active/suspended/disabled`, identity_kind, avatar_kind, created_at, last_seen_at) · `GET /administration/members` (MembersManage) · `/people` (MembersView, shared directory) | Administração › Membros: roster, member detail |
+| Member creation | `POST /administration/members` → account `invited` + **temporary credential returned once** (docs/identity); `provision`, `password-reset` return the same once-only credential | «Novo membro» form → credential screen shown once. **No email sent** (none exists) |
+| Token invitations | `invitations` (status pending/accepted/revoked/expired, token digest only) · `POST /invitations`, `/invitations/accept` — no list, revoke or read | Not designed (M-22). `invited` is shown as the account status «Convidado» |
+| Account status | `POST /administration/members/{id}/status` {status, reason ≥ 4}; suspend/disable revoke all sessions immediately; self-lockout refused; last usable `platform_admin` refused (`ensure_not_sole_platform_admin`) | Suspender · Desactivar · Reactivar through the shared confirmation, reason required |
+| Delete | `DELETE /administration/members/{id}` only for a never-activated account (`may_be_deleted`) | «Apagar acesso não usado»; a used account is disabled, never deleted |
+| Roles | 8 system `TechnicalRole`s defined in code (`GET /administration/roles`, permissions per role, `system: true`); custom roles PLANNED; grant/revoke `/people/{id}/roles` (platform administration); explicit grants (`/administration/grants`, reason ≥ 8); `GET …/access` explains the source of each permission | Papéis: read-only catalogue (no matrix, no editor). Member: roles held (+ revoke), grant role, explicit grants (+ revoke), «Porque tem este acesso» |
+| Position | `InstitutionalPosition` (9), grants nothing (ADR-0100) | shown + changeable when `may_change_position` |
+| Security | `GET …/security`: has password, temporary credential expiry/expired, MFA required/enrolled, last sign-in, failures, live sessions (agent, IP prefix); revoke one session | Segurança da conta; never a verifier, hash, token or session id |
+| Unit | `units` (code immutable, name, description, research_areas, status active/archived, flat) · `unit_memberships` (manager/member, revoked not deleted) · list/get(+`may_manage_members`)/create(+code suggestion; creator becomes manager)/update/archive · members add(upsert)/revoke (last manager refused) | App Unidades: Activas · Arquivadas, detail, members, create/edit, archive |
+| Team | **nothing** — no table, contract or registry entry | **Not designed.** TEAMS-01…10 = CORE_CONTRACT_REQUIRED (T-01) |
+| Instance | `organisations` (name, profile), `instance_settings` (default_locale, timezone, default_pins, logo), `instance_applications` (explicit decisions over the profile) | Instância: name, Distribution (read-only), language, timezone, application decisions (`save_instance`) |
+
+App Registry (`experience/apps.rs`): `units` → `/units` (`units.view`), `administration` → `/admin` (`members.manage`, keywords include «membros»). Both SingleInstance. **No change** made. A standalone Members directory would need a registry entry (APP_REGISTRY_CHANGE_REQUIRED, deferred, M-24).
+
+## Shared pieces (`ui/apps/org.rs`) — additive
+- `status_tag(OrgAccountStatus)` — text + icon + tone (invited neutral/clock, active done/check, suspended attention/lock, disabled closed/minus).
+- `role_tag(OrgTechRole)` — translated label + stable id in mono. **One tone for every role**: the Core does not rank them, the view does not suggest a hierarchy.
+- `unit_role_tag`, `unit_status_tag`, `avatar(&OrgAvatarVm)` (initials from the Code's existing initials rule; image only from a Core-served URL, never external).
+- `refusal(OrgRefusal)` — self-lockout, last platform admin, last unit manager, cannot grant unheld, not deletable, stale, option unavailable; says what to do next; reveals nothing new.
+- `notice(OrgNotice)` — one status line after a successful POST (not a toast).
+- `action(&OrgActionVm)` — a link that opens the confirmation (`?confirm=<kind>`, GET). It never executes.
+- `confirm(&OrgConfirmVm)` — **SHARED_CONFIRMATION_EXTENSION**. One privileged confirmation for all D006 actions, drawn by the route after the shell like `wm::dirty_close` and `nye::confirm_dialog`, on the same `.oc-overlay/.oc-dialog` primitive. Title names the target («Suspender a conta de Marta Quintas»); facts: target, where, current → proposed; consequence copy is the Core's documented semantics; reason field only when the Core requires (`Required(min)`) or accepts it (`Optional`); note «O Core volta a verificar…». Focus starts on **Cancelar**; the button that removes access is `oc-btn-line--danger` and never focused by default; Tab/Shift+Tab stay inside; Esc = Cancelar; a second submit is blocked (`aria-busy`). Confirmation is not authorisation.
+- `credential_once(&OrgCredentialOnceVm)` — the **only** VM carrying a secret. `type="password"` by default; Mostrar/Esconder (`aria-pressed`) and Copiar (`navigator.clipboard`, announced) in `oc-apps.js`; nothing is stored. Facts: nothing was sent; it only lets the person sign in and set their own password; if lost, reset — it is never recoverable. «Já entreguei» returns to the member.
+
+## Applications
+- `units::app(&UnitsVm)` — `res::list` (title = name; code and state in the title cell; column «Áreas» leaves first) · `two_pane` · detail (code, name, state, edit/archive/Nye only when given, areas, description, members with role; change role/remove only when `may_manage`; «Acrescentar membro» governed picker) · form (create: code suggestion marked indicative; edit: code read-only, never an input).
+- `admin::app(&AdminVm)` — whole-app `error` renders **only** the error (no nav, no data). Membros: roster table (identity column = avatar + name + state + address, never yields; Posição p1, Unidades p2, Registo p3, Última actividade p4 leave by container width) · member detail · «Novo membro» · credential screen. Papéis: system catalogue. Instância: information + application decisions (`apps_action: None` = read-only).
+
+## The governed picker (units add member)
+Native controls only: a search field (`GET …?candidate_q=`) and a `fieldset` of radios for the **Core-supplied** candidates (no custom combobox, no static `<select>` of the Instance). States: not searched (`None`), no results, results, unavailable (`unavailable: true` while the candidates contract is missing — U-09 — shown with its reason, not as a dead control). Forging `person_id` must still fail in the Core.
+
+## Code tasks (first gate: compile)
+1. **Wire** `mod ui_org;` in `i18n/mod.rs` and `super::ui_org::UI_ORG` in `catalog.rs` GROUPS (`apply.sh` does it). `pub mod admin; pub mod org; pub mod units;` are in `ui/apps/mod.rs`. New tests: `org::tests` ×5, `admin::tests` ×5, `units::tests` ×5. Rust was **not compiled** here.
+2. **Routes** (existing paths, rendering only): `/units`, `/units/{id}`, `/units/new`, `/units/{id}/edit` → `units::app`; `/admin`, `/admin/members/{id}`, `/admin/members/new`, `/admin/instance` → `admin::app`. Add `/admin/roles` (A-03) and a POST for unit archive (U-08). Each `?confirm=<kind>` renders the same page plus `org::confirm` after the shell. POSTs stay the existing ones; on Core refusal re-render the confirmation with `refusal`; on success redirect with a notice key.
+3. **Once-only credential.** `create_member`, `member_reset_password`, `provision_member` are `interface_pending()` today. Render `credential_once` directly in the POST response (no redirect carrying the secret), `Cache-Control: no-store`, no logging, no storage. Never put the secret in a URL, a cookie, a flash message or any other VM.
+4. **Available actions.** Use the Core's flags (`may_manage_account`, `may_be_provisioned`, `may_be_deleted`, `may_change_position`, `may_manage_roles`, `may_manage_grants`, `may_manage_members`) and the account status (M-10 adapter rule). Never offer suspend/disable on `is_self`; never offer revoking one's own `platform_admin`.
+5. **Enumeration.** Roster only through `/administration/members` (MembersManage). Unit members only from `/units/{id}/members`. Member links from Unidades only when the viewer holds MembersManage. No endpoint beyond these is enumerated to fill a picker.
+6. **Fail closed.** Direct URL without authority → `AdminVm.error = Some(PermissionDenied|NotFound)`; lost mid-session → `Revoked`. Nothing protected is rendered first. Re-read after every POST (no cached authority).
+7. **Dates/timezone.** All timestamps in the member/Instance timezone (`/me.timezone`), not the browser's. The Top Bar timezone issue is untouched.
+8. **Dirty close.** New member and unit forms are `data-oc="app-doc"`; completed privileged actions never use dirty-close.
+
+## Security tests Code must run (not done here)
+member enumeration (roster without MembersManage; `/people` scope) · cross-unit access (manage members of a unit one does not manage) · forged `person_id` / `unit_id` / `role` / `grant_id` / `session_id` · role not returned by the Core (no free-form role) · self-lockout (suspend/disable self, revoke own last platform_admin) · last platform admin and last unit manager (revoke **and** demotion through upsert, U-12) · stale privilege (demoted admin keeps an open window; next request fails closed) · credential secrecy (never in logs, audit, HTML other than the POST response, caches, URLs) · direct `/admin/*` URLs · unauthorised organisational relationships (workspace titles in member detail resolved with the viewer's authority, M-05).
+
+## Real-browser checks Code must run
+keyboard (Tab/Shift+Tab, lists ↑/↓/Home/End, picker radios, confirmation trap + Esc, focus return) · mobile targets ≥ 44 at 390×844 · responsive columns at ~720/760/820/900 · frame-loaded windows (`OcApps.init(root)` binds the confirmation and credential inside `root`) · pt/en/fr · screen reader (NOT_RUN here).
+
+## Reference
+`reference/d006/fixture.html?state=<id>` (index without `state`); `window.__fx(state, vp, lang)` redraws without reload. Data is fictional; Papéis permission lists in the fixture are illustrative (the product reads `GET /administration/roles`).
+
+## Nye
+Units: `AppNyeVm` (`units.nye`) using the existing D003 `unit` reference. Members and Administration: **none**. Nye never assigns roles, creates members, changes status or membership.
+
+## Frozen
+D001–D005 visuals and contracts; Window Manager; App Registry; Top Bar timezone; Distribution (shown, not changed).
+
+---
+
 # HANDOFF — Ocinye OS canonical UI · Design revision D005
 
 Cumulative: D001 → D004.1 unchanged plus D005. Supersedes D004.1. Observed repository: `feat/design-d004` @ `6eeade4bc5cff79ac7d1ffc5a98267fc6b2c005e` (D004.1 certified). `implementation/` = that tree + D005. Not reset.
