@@ -12,6 +12,7 @@
 
 pub mod desktop;
 pub mod nye;
+pub mod org;
 pub mod panels;
 pub mod productivity;
 pub mod research;

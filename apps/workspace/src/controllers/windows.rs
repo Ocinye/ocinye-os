@@ -230,6 +230,8 @@ pub fn has_screen(app: ApplicationId) -> bool {
             | ApplicationId::Ideas
             | ApplicationId::Datasets
             | ApplicationId::Knowledge
+            | ApplicationId::Units
+            | ApplicationId::Administration
     )
 }
 

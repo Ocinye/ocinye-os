@@ -109,7 +109,7 @@ pub const ROUTES: &[&str] = &[
     "/units/code-suggestion",
     "/units/{unit_id}",
     "/units/{unit_id}/edit",
-    "/units/{unit_id}/members",
+    "/units/{unit_id}/archive",
     "/workspaces/{workspace_id}/members",
     "/workspaces/{workspace_id}/members/remove",
     "/units/{unit_id}/members/role",
@@ -211,23 +211,17 @@ pub const ROUTES: &[&str] = &[
     "/activity",
     "/admin",
     "/admin/instance",
+    "/admin/roles",
     "/admin/monitor",
     "/admin/members/new",
     "/admin/members/{person_id}",
     "/admin/members/{person_id}/position",
     "/admin/members/{person_id}/delete",
     "/admin/members/{person_id}/provision",
-    "/admin/members/{person_id}/units",
-    "/admin/members/{person_id}/units/{unit_id}/role",
-    "/admin/members/{person_id}/units/{unit_id}/remove",
-    "/admin/members/{person_id}/workspaces",
-    "/admin/members/{person_id}/workspaces/{workspace_id}/role",
-    "/admin/members/{person_id}/workspaces/{workspace_id}/remove",
     "/admin/members/{person_id}/reset-password",
     "/admin/members/{person_id}/status",
     "/admin/members/{person_id}/roles",
     "/admin/members/{person_id}/roles/{role}/revoke",
-    "/admin/members/{person_id}/grants",
     "/admin/members/{person_id}/grants/{grant_id}/revoke",
     "/admin/members/{person_id}/sessions/{session_id}/revoke",
     "/wm",
@@ -330,13 +324,15 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/mail/{mailbox_id}", get(mail_mailbox))
         .route("/mail/{mailbox_id}/sync", post(mail_sync))
         // Investigação
-        .route("/units", get(units))
+        // D006 · Unidades (`routes/org.rs`).
+        .route("/units", get(org::units_page))
         .route("/units/code-suggestion", get(unit_code_suggestion))
-        .route("/units/{unit_id}", get(unit_detail))
+        .route("/units/{unit_id}", get(org::unit_page))
         .route(
             "/units/{unit_id}/edit",
-            get(edit_unit_form).post(update_unit),
+            get(org::unit_edit_page).post(org::unit_update),
         )
+        .route("/units/{unit_id}/archive", post(org::unit_archive))
         // Gerir quem pertence a uma unidade. Três operações, três caminhos: uma
         // pertença é autoridade, e cada alteração dela é um acto próprio.
         .route(
@@ -347,9 +343,13 @@ pub fn router(state: WorkspaceState) -> Router {
             "/workspaces/{workspace_id}/members/remove",
             post(workspace_member_remove),
         )
-        .route("/units/{unit_id}/members", post(unit_member_add))
-        .route("/units/{unit_id}/members/role", post(unit_member_role))
-        .route("/units/{unit_id}/members/remove", post(unit_member_remove))
+        // Acrescentar um membro não tem rota: não há contrato de candidatos
+        // elegíveis (U-09), e o ecrã explica-o em vez de enumerar pessoas.
+        .route("/units/{unit_id}/members/role", post(org::unit_member_role))
+        .route(
+            "/units/{unit_id}/members/remove",
+            post(org::unit_member_remove),
+        )
         .route("/ideas", get(research::ideas_page))
         .route("/calendar", get(productivity::calendar_page))
         .route(
@@ -435,7 +435,7 @@ pub fn router(state: WorkspaceState) -> Router {
             "/me/files/{version_id}/preview",
             get(preview_personal_note_file),
         )
-        .route("/units/new", get(new_unit_form).post(create_unit))
+        .route("/units/new", get(org::unit_new_page).post(org::unit_create))
         .route("/projects/new", get(research::project_new_entry))
         .route("/bibliography/new", get(research::bibliography_new_entry))
         .route(
@@ -630,61 +630,49 @@ pub fn router(state: WorkspaceState) -> Router {
         .route("/compute", get(compute))
         // Institucional
         .route("/activity", get(activity))
-        .route("/admin", get(admin))
-        .route("/admin/instance", get(admin_instance).post(save_instance))
-        .route("/admin/members/new", get(new_member).post(create_member))
-        .route("/admin/members/{person_id}", get(member_detail))
+        // D006 · Administração (`routes/org.rs`). Só as operações que um ecrã
+        // do Design usa: atribuir unidades e ambientes a partir do membro, e
+        // criar grants explícitos, não têm ecrã (M-17), e não têm rota.
+        .route("/admin", get(org::admin_page))
+        .route("/admin/roles", get(org::admin_roles_page))
+        .route(
+            "/admin/instance",
+            get(org::admin_instance_page).post(org::admin_instance_save),
+        )
+        .route(
+            "/admin/members/new",
+            get(org::admin_new_page).post(org::admin_create_member),
+        )
+        .route("/admin/members/{person_id}", get(org::admin_member_page))
         .route(
             "/admin/members/{person_id}/position",
-            post(member_set_position),
+            post(org::admin_position),
         )
-        .route("/admin/members/{person_id}/delete", post(member_delete))
+        .route("/admin/members/{person_id}/delete", post(org::admin_delete))
         .route(
             "/admin/members/{person_id}/provision",
-            post(provision_member),
-        )
-        .route("/admin/members/{person_id}/units", post(member_unit_assign))
-        .route(
-            "/admin/members/{person_id}/units/{unit_id}/role",
-            post(member_unit_role),
-        )
-        .route(
-            "/admin/members/{person_id}/units/{unit_id}/remove",
-            post(member_unit_remove),
-        )
-        .route(
-            "/admin/members/{person_id}/workspaces",
-            post(member_workspace_assign),
-        )
-        .route(
-            "/admin/members/{person_id}/workspaces/{workspace_id}/role",
-            post(member_workspace_role),
-        )
-        .route(
-            "/admin/members/{person_id}/workspaces/{workspace_id}/remove",
-            post(member_workspace_remove),
+            post(org::admin_provision),
         )
         .route(
             "/admin/members/{person_id}/reset-password",
-            post(member_reset_password),
+            post(org::admin_reset_password),
         )
-        .route("/admin/members/{person_id}/status", post(member_set_status))
-        .route("/admin/members/{person_id}/roles", post(member_role_grant))
+        .route("/admin/members/{person_id}/status", post(org::admin_status))
+        .route(
+            "/admin/members/{person_id}/roles",
+            post(org::admin_role_grant),
+        )
         .route(
             "/admin/members/{person_id}/roles/{role}/revoke",
-            post(member_role_revoke),
-        )
-        .route(
-            "/admin/members/{person_id}/grants",
-            post(member_grant_create),
+            post(org::admin_role_revoke),
         )
         .route(
             "/admin/members/{person_id}/grants/{grant_id}/revoke",
-            post(member_grant_revoke),
+            post(org::admin_grant_revoke),
         )
         .route(
             "/admin/members/{person_id}/sessions/{session_id}/revoke",
-            post(member_session_revoke),
+            post(org::admin_session_revoke),
         )
         // O Gestor de Janelas (D002).
         .route("/wm", get(wm_list).post(wm_open))
@@ -1089,30 +1077,6 @@ fn current_member(state: &WorkspaceState, headers: &HeaderMap) -> Option<Member>
     })
 }
 
-/// Obtém um valor do Core, devolvendo `Null` quando um painel isolado falha.
-///
-/// Um ecrã com vários painéis deve continuar a renderizar quando um deles não
-/// carrega; o painel mostra o seu próprio estado vazio.
-/// Obtém um valor do Core, distinguindo recusa de ausência.
-///
-/// [`optional`] engole tudo em `Null`, o que é certo para um painel isolado
-/// dentro de um ecrã e **errado** para o conteúdo principal: um 403 ou 404
-/// renderizado como lista vazia diz «não existe nenhum» a quem apenas não pode
-/// ver (briefing §57).
-async fn required(
-    state: &WorkspaceState,
-    member: &Member,
-    path: &str,
-) -> Result<Value, ApiFailure> {
-    api::get::<Value>(
-        state,
-        &member.session.access_token,
-        &member.correlation_id,
-        path,
-    )
-    .await
-}
-
 async fn optional(state: &WorkspaceState, member: &Member, path: &str) -> Value {
     api::get::<Value>(
         state,
@@ -1462,6 +1426,14 @@ async fn pending_page(
                     return Redirect::to(&q.href).into_response();
                 }
                 ctx.vm.wm = controllers::windows::view(&state.sessions, &member.session_id, &ctx);
+                // Uma rota sem ecrã numa aplicação que já tem outros (o Monitor
+                // na Administração): a janela desta rota é o `app_pending`, e
+                // não um corpo a carregar.
+                if let Some(wm) = ctx.vm.wm.as_mut() {
+                    for w in wm.windows.iter_mut().filter(|w| w.href == q.href) {
+                        w.content = ui::view_models::WindowContent::Pending;
+                    }
+                }
             }
             let dialog = q
                 .close
@@ -2923,17 +2895,8 @@ async fn mail_disconnect(
 // ── Listas ───────────────────────────────────────────────────────────────
 
 /// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn units(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Units).await
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
 async fn agents(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
     app_page(&state, &headers, Screen::Agents).await
-}
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn admin(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Admin).await
 }
 /// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
 async fn audit(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
@@ -2941,467 +2904,6 @@ async fn audit(State(state): State<WorkspaceState>, headers: HeaderMap) -> Respo
 }
 
 // ── Administração de membros ─────────────────────────────────────────────
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn new_member(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Admin).await
-}
-
-/// Acção retirada no apagamento da UI; espera o Claude Design.
-///
-/// Produz um segredo que se mostra uma única vez; sem ecrã, perdia-se.
-async fn create_member() -> Response {
-    interface_pending()
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn member_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Admin).await
-}
-
-/// Corpo do formulário de atribuição de unidade a um membro.
-#[derive(serde::Deserialize)]
-struct AtribuirUnidadeForm {
-    unit_id: String,
-    role: String,
-}
-
-/// Corpo do formulário de alteração de papel numa unidade.
-#[derive(serde::Deserialize)]
-struct PapelUnidadeForm {
-    role: String,
-}
-
-/// `POST /admin/members/{person_id}/units` — o administrador atribui uma
-/// unidade a este membro. A operação bate no Core, que reautoriza o **actor**
-/// (não o membro aqui aberto) sobre a gestão de membros dessa unidade.
-async fn member_unit_assign(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(person_id): Path<String>,
-    axum::extract::Form(form): axum::extract::Form<AtribuirUnidadeForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let destino = format!("/admin/members/{person_id}");
-    let body = serde_json::json!({ "person_id": person_id, "role": form.role });
-    let path = format!("/api/v1/units/{}/members", form.unit_id);
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &path,
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// `POST /admin/members/{person_id}/units/{unit_id}/role` — altera o papel do
-/// membro na unidade. É um `upsert`: o Core aceita o mesmo membro com o papel
-/// novo.
-async fn member_unit_role(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path((person_id, unit_id)): Path<(String, String)>,
-    axum::extract::Form(form): axum::extract::Form<PapelUnidadeForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let destino = format!("/admin/members/{person_id}");
-    let body = serde_json::json!({ "person_id": person_id, "role": form.role });
-    let path = format!("/api/v1/units/{unit_id}/members");
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &path,
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// `POST /admin/members/{person_id}/units/{unit_id}/remove` — remove a pertença
-/// do membro à unidade. A linha fica: que alguém pertenceu é memória
-/// institucional.
-async fn member_unit_remove(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path((person_id, unit_id)): Path<(String, String)>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let destino = format!("/admin/members/{person_id}");
-    let path = format!("/api/v1/units/{unit_id}/members/{person_id}");
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &path,
-        &serde_json::json!({}),
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// Corpo do formulário de atribuição de research workspace a um membro.
-#[derive(serde::Deserialize)]
-struct AtribuirWorkspaceForm {
-    workspace_id: String,
-    role: String,
-}
-
-/// `POST /admin/members/{person_id}/workspaces` — atribui um research workspace
-/// ao membro. Reautorizado no Core sobre o **actor**; administrar a pertença
-/// não concede leitura do conteúdo do workspace.
-async fn member_workspace_assign(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(person_id): Path<String>,
-    axum::extract::Form(form): axum::extract::Form<AtribuirWorkspaceForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let destino = format!("/admin/members/{person_id}");
-    let body = serde_json::json!({ "person_id": person_id, "role": form.role });
-    let path = format!("/api/v1/workspaces/{}/members", form.workspace_id);
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &path,
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// `POST /admin/members/{person_id}/workspaces/{workspace_id}/role` — altera o
-/// papel do membro no workspace (upsert).
-async fn member_workspace_role(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path((person_id, workspace_id)): Path<(String, String)>,
-    axum::extract::Form(form): axum::extract::Form<PapelUnidadeForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let destino = format!("/admin/members/{person_id}");
-    let body = serde_json::json!({ "person_id": person_id, "role": form.role });
-    let path = format!("/api/v1/workspaces/{workspace_id}/members");
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &path,
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// `POST /admin/members/{person_id}/workspaces/{workspace_id}/remove` — remove a
-/// pertença do membro ao workspace.
-async fn member_workspace_remove(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path((person_id, workspace_id)): Path<(String, String)>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let destino = format!("/admin/members/{person_id}");
-    let path = format!("/api/v1/workspaces/{workspace_id}/members/{person_id}");
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &path,
-        &serde_json::json!({}),
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// Corpo do formulário de alteração de estado da conta.
-#[derive(serde::Deserialize)]
-struct EstadoContaForm {
-    status: String,
-    reason: String,
-}
-
-/// `POST /admin/members/{person_id}/status` — suspende, desactiva ou reactiva.
-///
-/// A autoridade é reautorizada no Core, que também recusa auto-bloqueio e
-/// deixar a instituição sem administrador capaz de entrar. A recusa volta ao
-/// detalhe, com a razão à vista.
-async fn member_set_status(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(person_id): Path<String>,
-    axum::extract::Form(form): axum::extract::Form<EstadoContaForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let destino = format!("/admin/members/{person_id}");
-    let path = format!("/api/v1/administration/members/{person_id}/status");
-    let body = serde_json::json!({ "status": form.status, "reason": form.reason });
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &path,
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// Corpo do formulário de posição institucional.
-#[derive(serde::Deserialize)]
-struct PosicaoForm {
-    /// Código da posição, ou vazio para limpar.
-    #[serde(default)]
-    position: String,
-}
-
-/// `POST /admin/members/{person_id}/position` — define, muda ou limpa a posição
-/// institucional.
-///
-/// A posição é registo, não acesso (ADR-0100): esta operação não toca em papéis
-/// nem permissões. A autoridade é reautorizada no Core; a recusa volta ao
-/// detalhe, com a razão à vista.
-async fn member_set_position(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(person_id): Path<String>,
-    axum::extract::Form(form): axum::extract::Form<PosicaoForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let destino = format!("/admin/members/{person_id}");
-    let path = format!("/api/v1/administration/members/{person_id}/position");
-    let body = serde_json::json!({ "position": form.position });
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &path,
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// `POST /admin/members/{person_id}/delete` — apaga um convite por aceitar.
-///
-/// Um formulário HTML não fala `DELETE`; o Core, sim — e o verbo certo viaja
-/// daqui para lá. Só um convite que ninguém aceitou e que nunca foi usado se
-/// apaga; para uma conta já usada o Core recusa, e a razão («desactive, que
-/// preserva a autoria») volta ao detalhe. No sucesso, o membro deixou de
-/// existir: reencaminha-se para a lista, e não para um detalhe que seria 404.
-async fn member_delete(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(person_id): Path<String>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let path = format!("/api/v1/administration/members/{person_id}");
-    match api::delete(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &path,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to("/admin").into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// Acção retirada no apagamento da UI; espera o Claude Design.
-///
-/// Produz um segredo que se mostra uma única vez; sem ecrã, perdia-se.
-async fn member_reset_password() -> Response {
-    interface_pending()
-}
-
-/// Corpo do formulário de concessão de papel técnico.
-#[derive(serde::Deserialize)]
-struct PapelTecnicoForm {
-    role: String,
-    reason: String,
-}
-
-/// `POST /admin/members/{person_id}/roles` — concede um papel técnico.
-async fn member_role_grant(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(person_id): Path<String>,
-    axum::extract::Form(form): axum::extract::Form<PapelTecnicoForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let destino = format!("/admin/members/{person_id}");
-    let path = format!("/api/v1/people/{person_id}/roles");
-    let body = serde_json::json!({ "role": form.role, "reason": form.reason });
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &path,
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// `POST /admin/members/{person_id}/roles/{role}/revoke` — revoga um papel.
-///
-/// Um formulário HTML não fala `DELETE`; o Core, sim. O verbo certo viaja daqui
-/// para o Core, com o papel no corpo — retirar o último Platform Admin é
-/// recusado lá, e a razão volta ao detalhe.
-async fn member_role_revoke(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path((person_id, role)): Path<(String, String)>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let destino = format!("/admin/members/{person_id}");
-    let path = format!("/api/v1/people/{person_id}/roles");
-    let body = serde_json::json!({ "role": role });
-    match api::delete_with_body(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &path,
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// Corpo do formulário de concessão de grant explícito.
-#[derive(serde::Deserialize)]
-struct GrantForm {
-    permission: String,
-    scope: String,
-    reason: String,
-}
-
-/// `POST /admin/members/{person_id}/grants` — concede um grant explícito.
-async fn member_grant_create(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(person_id): Path<String>,
-    axum::extract::Form(form): axum::extract::Form<GrantForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let destino = format!("/admin/members/{person_id}");
-    let body = serde_json::json!({
-        "subject_id": person_id,
-        "permission": form.permission,
-        "scope": form.scope,
-        "reason": form.reason,
-    });
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/administration/grants",
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// Corpo do formulário de revogação de grant.
-#[derive(serde::Deserialize)]
-struct RevogarGrantForm {
-    reason: String,
-}
-
-/// `POST /admin/members/{person_id}/grants/{grant_id}/revoke` — revoga um grant.
-async fn member_grant_revoke(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path((person_id, grant_id)): Path<(String, String)>,
-    axum::extract::Form(form): axum::extract::Form<RevogarGrantForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let destino = format!("/admin/members/{person_id}");
-    let path = format!("/api/v1/administration/grants/{grant_id}");
-    let body = serde_json::json!({ "reason": form.reason });
-    match api::delete_with_body(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &path,
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// `POST /admin/members/{person_id}/sessions/{session_id}/revoke` — revoga **uma**
-/// sessão de um membro. O Core reautoriza o actor e valida que a sessão pertence
-/// ao membro (anti-IDOR); a recusa volta ao detalhe.
-async fn member_session_revoke(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path((person_id, session_id)): Path<(String, String)>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let destino = format!("/admin/members/{person_id}");
-    let path = format!("/api/v1/administration/members/{person_id}/sessions/{session_id}/revoke");
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &path,
-        &serde_json::json!({}),
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&destino).into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
-/// Acção retirada no apagamento da UI; espera o Claude Design.
-///
-/// Produz um segredo que se mostra uma única vez; sem ecrã, perdia-se.
-async fn provision_member() -> Response {
-    interface_pending()
-}
 
 /// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
 async fn bibliography_tools(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
@@ -3416,11 +2918,6 @@ async fn review_bibliography() -> Response {
 }
 
 // ── Investigação ─────────────────────────────────────────────────────────
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn unit_detail(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Units).await
-}
 
 // ── Ciência ──────────────────────────────────────────────────────────────
 
@@ -4564,101 +4061,6 @@ async fn settings_apps(State(state): State<WorkspaceState>, headers: HeaderMap) 
     app_page(&state, &headers, Screen::Settings).await
 }
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn admin_instance(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Admin).await
-}
-
-/// Grava o perfil e o estado de cada aplicação opcional que mudou.
-///
-/// O corpo traz `profile` e um `app:<id>` por aplicação opcional, com
-/// `profile`, `active` ou `inactive`. Só se envia ao Core o que mudou; o Core
-/// valida os identificadores, recusa as essenciais e reautoriza tudo.
-async fn save_instance(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    corpo: axum::body::Bytes,
-) -> Response {
-    let Some(member) = membro_ou_recusa(&state, &headers) else {
-        return Redirect::to("/login").into_response();
-    };
-    let actual = match required(&state, &member, "/api/v1/instance/applications").await {
-        Ok(payload) => payload,
-        Err(failure) => return failure_response(&failure),
-    };
-
-    let mut perfil: Option<String> = None;
-    let mut pedidos: Vec<(String, Option<bool>)> = Vec::new();
-    for (chave, valor) in url::form_urlencoded::parse(&corpo) {
-        if chave == "profile" {
-            perfil = Some(valor.into_owned());
-        } else if let Some(id) = chave.strip_prefix("app:") {
-            // O id entra no caminho de um pedido ao Core: só um id que o registo
-            // conhece, nunca o texto do formulário tal como veio (um `../` levaria
-            // o pedido a outra rota).
-            if experience::apps::by_id(id).is_none() {
-                continue;
-            }
-            let pedido = match valor.as_ref() {
-                "active" => Some(true),
-                "inactive" => Some(false),
-                _ => None,
-            };
-            pedidos.push((id.to_owned(), pedido));
-        }
-    }
-
-    // O perfil primeiro: as aplicações «como o perfil» leem o novo.
-    if let Some(perfil) =
-        perfil.filter(|p| actual.get("profile").and_then(Value::as_str) != Some(p))
-    {
-        if let Err(failure) = api::put(
-            &state,
-            &member.session.access_token,
-            &member.correlation_id,
-            "/api/v1/instance/profile",
-            &serde_json::json!({ "profile": perfil }),
-        )
-        .await
-        {
-            return failure_response(&failure);
-        }
-    }
-
-    let estado_de = |id: &str| -> Option<Option<bool>> {
-        actual
-            .get("applications")
-            .and_then(Value::as_array)?
-            .iter()
-            .find(|a| a.get("id").and_then(Value::as_str) == Some(id))
-            .map(|a| {
-                if a.get("explicit").and_then(Value::as_bool) == Some(true) {
-                    a.get("active").and_then(Value::as_bool)
-                } else {
-                    None
-                }
-            })
-    };
-    for (id, pedido) in pedidos {
-        if estado_de(&id) == Some(pedido) {
-            continue;
-        }
-        if let Err(failure) = api::put(
-            &state,
-            &member.session.access_token,
-            &member.correlation_id,
-            &format!("/api/v1/instance/applications/{id}"),
-            &serde_json::json!({ "active": pedido }),
-        )
-        .await
-        {
-            return failure_response(&failure);
-        }
-    }
-
-    Redirect::to("/admin/instance?ok=1").into_response()
-}
-
 /// Grava o conjunto de aplicações fixadas, ou repõe as predefinições.
 ///
 /// O corpo traz uma `pinned` por caixa marcada (`x-www-form-urlencoded` com
@@ -5151,59 +4553,6 @@ async fn revoke_session(
     }
 }
 
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn new_unit_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Units).await
-}
-
-#[derive(Deserialize)]
-struct NewUnitForm {
-    name: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    research_areas: String,
-}
-
-/// Split a comma-separated research-areas field into a clean list.
-fn parse_research_areas(raw: &str) -> Vec<String> {
-    raw.split(',')
-        .map(str::trim)
-        .filter(|a| !a.is_empty())
-        .map(ToOwned::to_owned)
-        .collect()
-}
-
-async fn create_unit(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Form(form): Form<NewUnitForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    // No `code`: the Core generates it from the name. Sending an empty one would
-    // be an explicit empty code, which is a different thing.
-    let body = serde_json::json!({
-        "name": form.name,
-        "description": blank_to_none(form.description),
-        "research_areas": parse_research_areas(&form.research_areas),
-    });
-
-    match api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        "/api/v1/units",
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to("/units").into_response(),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => failure_response(&failure),
-    }
-}
-
 /// `GET /units/code-suggestion?name=…` — proxy to the Core's code preview.
 ///
 /// The browser reaches only the Workspace origin (`connect-src 'self'`), so the
@@ -5236,54 +4585,6 @@ async fn unit_code_suggestion(
         Ok(value) => Json(value).into_response(),
         Err(ApiFailure::Unauthorised) => StatusCode::UNAUTHORIZED.into_response(),
         Err(_) => StatusCode::BAD_GATEWAY.into_response(),
-    }
-}
-
-/// Sem ecrã entregue pelo Design: a janela `app_pending` na casca (D001).
-async fn edit_unit_form(State(state): State<WorkspaceState>, headers: HeaderMap) -> Response {
-    app_page(&state, &headers, Screen::Units).await
-}
-
-#[derive(Deserialize)]
-struct EditUnitForm {
-    name: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    research_areas: String,
-    // Round-trips for the read-only display only; never sent to the Core. Lets
-    // an error re-render show the code without a second fetch.
-}
-
-/// `POST /units/{id}/edit` — apply the edit through the Core's `PUT /units/{id}`.
-///
-/// The code is not sent: it is immutable, and the Core ignores it anyway.
-async fn update_unit(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(unit_id): Path<Uuid>,
-    Form(form): Form<EditUnitForm>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let body = serde_json::json!({
-        "name": form.name.clone(),
-        "description": blank_to_none(form.description.clone()),
-        "research_areas": parse_research_areas(&form.research_areas),
-    });
-
-    match api::put(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/units/{unit_id}"),
-        &body,
-    )
-    .await
-    {
-        Ok(_) => Redirect::to(&format!("/units/{unit_id}")).into_response(),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(failure) => failure_response(&failure),
     }
 }
 
@@ -8157,10 +7458,6 @@ fn de_volta_ao_ambiente(workspace_id: Uuid, sufixo: &str) -> Response {
     Redirect::to(&format!("/workspaces/{workspace_id}?{sufixo}")).into_response()
 }
 
-fn de_volta_a_unidade(unit_id: Uuid, sufixo: &str) -> Response {
-    Redirect::to(&format!("/units/{unit_id}?{sufixo}")).into_response()
-}
-
 /// Traduz a recusa do Core no motivo que a interface mostra.
 fn motivo_da_recusa(failure: &ApiFailure) -> &'static str {
     match failure {
@@ -8230,86 +7527,6 @@ async fn workspace_member_remove(
         Err(falha) => {
             de_volta_ao_ambiente(workspace_id, &format!("erro={}", motivo_da_recusa(&falha)))
         }
-    }
-}
-
-async fn unit_member_add(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(unit_id): Path<Uuid>,
-    Form(form): Form<MembroDaUnidade>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let resultado = api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/units/{unit_id}/members"),
-        &serde_json::json!({
-            "person_id": form.person_id,
-            "role": if form.role.is_empty() { "member" } else { &form.role },
-        }),
-    )
-    .await;
-
-    match resultado {
-        Ok(_) => de_volta_a_unidade(unit_id, "ok=adicionado"),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(falha) => de_volta_a_unidade(unit_id, &format!("erro={}", motivo_da_recusa(&falha))),
-    }
-}
-
-/// Alterar o papel é a mesma operação que acrescentar: o Core faz upsert.
-///
-/// Não há aqui um caminho de escrita paralelo — seria uma segunda autoridade
-/// com outro nome.
-async fn unit_member_role(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(unit_id): Path<Uuid>,
-    Form(form): Form<MembroDaUnidade>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-
-    let resultado = api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/units/{unit_id}/members"),
-        &serde_json::json!({ "person_id": form.person_id, "role": form.role }),
-    )
-    .await;
-
-    match resultado {
-        Ok(_) => de_volta_a_unidade(unit_id, "ok=papel"),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(falha) => de_volta_a_unidade(unit_id, &format!("erro={}", motivo_da_recusa(&falha))),
-    }
-}
-
-async fn unit_member_remove(
-    State(state): State<WorkspaceState>,
-    headers: HeaderMap,
-    Path(unit_id): Path<Uuid>,
-    Form(form): Form<MembroDaUnidade>,
-) -> Response {
-    let member = member_or_login!(state, headers);
-    let person_id = form.person_id;
-
-    let resultado = api::post(
-        &state,
-        &member.session.access_token,
-        &member.correlation_id,
-        &format!("/api/v1/units/{unit_id}/members/{person_id}"),
-        &serde_json::json!({}),
-    )
-    .await;
-
-    match resultado {
-        Ok(_) => de_volta_a_unidade(unit_id, "ok=removido"),
-        Err(ApiFailure::Unauthorised) => Redirect::to("/login").into_response(),
-        Err(falha) => de_volta_a_unidade(unit_id, &format!("erro={}", motivo_da_recusa(&falha))),
     }
 }
 
@@ -8439,5 +7656,6 @@ mod carregamento_tests {
 }
 
 // D004 · As aplicações de produtividade. Declarado no fim: usa `member_or_login!`.
+mod org;
 mod productivity;
 mod research;
